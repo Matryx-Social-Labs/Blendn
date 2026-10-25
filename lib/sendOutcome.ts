@@ -16,6 +16,13 @@ import { userMessage } from './userMessage'
  * screens once flattened every refusal into one generic line, and a muted user
  * retried forever.
  */
+/**
+ * Your own message, removed by moderation after it was delivered (a room's `chat:messageDeleted`, a DM's
+ * `private:message_removed`): the bubble becomes the dashed placeholder, and a toast (a live region, announced on iOS)
+ * says so, so a screen-reader user is told the bubble changed. Like the withheld send's.
+ */
+export const REMOVED_AFTER_DELIVERY = 'Your message was removed by moderation.'
+
 export type SendOutcome =
   | { kind: 'sent' }
   | { kind: 'withheld' }

@@ -31,7 +31,8 @@ jest.mock('../lib/apiClient', () => ({
     revealInConversation: jest.fn(),
   },
 }))
-const mockLive: { onMessage?: (data: unknown) => void }[] = []
+const mockLive: { onMessage?: (data: unknown) => void; onRemoved?: (data: { conversationId: string; messageId: string }) => void }[] = []
+const mockToast = jest.fn()
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
@@ -50,7 +51,7 @@ const mockAuth: { user: { id: string; image?: string | null } } = { user: { id: 
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: () => {} }))
-jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../components/RealtimeStatusBanner', () => () => null)
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
@@ -459,5 +460,51 @@ describe('a jump from one open DM to another (RC drive 2 D-E, privacy)', () => {
     await view.unmount()
     expect(draftOf(dmThread('c1', 'u-a'))).toBe('only for zoe')
     expect(draftOf(dmThread('c2', 'u-a'))).toBe('kai’s own')
+  })
+})
+
+/*
+ * Audit M4 + the server's `private:message_removed` (to both participants): a DM removed by moderation after delivery
+ * turns into the dashed placeholder for its sender, with the toast (a live region) saying so; for the other person it
+ * goes, as a re-read would have it. Driven with a mocked socket event.
+ */
+describe('a DM removed by moderation after it was delivered', () => {
+  const mine = { ...theirs, id: 'm2', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: 'My number is …' }
+  const minePhoto = { ...mine, id: 'm3', text: null, mediaUrl: 'https://cdn.blendn.app/dm/p.jpg', mediaType: 'image' }
+  const remove = async (messageId: string) => {
+    await act(async () => mockLive.forEach((h) => h.onRemoved?.({ conversationId: 'c1', messageId })))
+    await flush()
+  }
+
+  it('yours: the dashed placeholder, and the toast says so', async () => {
+    api.getConversationMessages.mockResolvedValue(page([theirs, mine]) as never)
+    await open()
+    await remove('m2')
+    expect(screen.getByTestId('dm-bubble-m2-bubble').props.accessibilityLabel).toMatch(/^You, This message was removed by moderation, /)
+    expect(screen.getByTestId('dm-bubble-m2-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('My number is …')).toBeNull()
+    expect(mockToast).toHaveBeenCalledWith('Your message was removed by moderation.', 'info')
+  })
+
+  it('your photo: the photo-sized frame with the shield, read as a removed photo (round 4 #37)', async () => {
+    api.getConversationMessages.mockResolvedValue(page([theirs, minePhoto]) as never)
+    await open()
+    await remove('m3')
+    const frame = screen.getByTestId('dm-photo-m3-bubble')
+    expect(frame.props.accessibilityLabel).toMatch(/^You, Photo removed by moderation, /)
+    expect(StyleSheet.flatten(frame.props.style)).toMatchObject({ width: 220, height: 160 })
+    expect(imageUris()).not.toContain(minePhoto.mediaUrl)
+  })
+
+  it('theirs: it goes, and nothing is said; a second removal of yours says nothing again', async () => {
+    api.getConversationMessages.mockResolvedValue(page([theirs, mine]) as never)
+    await open()
+    expect(screen.getByTestId('dm-bubble-m1-bubble')).toBeTruthy()
+    await remove('m1')
+    expect(screen.queryByTestId('dm-bubble-m1-bubble')).toBeNull()
+    expect(mockToast).not.toHaveBeenCalled()
+    await remove('m2')
+    await remove('m2')
+    expect(mockToast).toHaveBeenCalledTimes(1)
   })
 })

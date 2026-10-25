@@ -9,6 +9,8 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
  */
 let mockParams: Record<string, string> = { id: 'g1' }
 const mockMessage: Array<(d: { message: Record<string, unknown> }) => void> = []
+const mockDeleted: ((d: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void)[] = []
+const mockToast = jest.fn()
 const mockMuted: Array<(d: { userId: string; muted: boolean; reason?: string }) => void> = []
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -55,7 +57,10 @@ jest.mock('../lib/socketClient', () => {
     },
     subscribeToChatTyping: noop,
     subscribeToChatReaction: noop,
-    subscribeToChatMessageDeleted: noop,
+    subscribeToChatMessageDeleted: (_room: string, cb: never) => {
+      mockDeleted.push(cb)
+      return () => {}
+    },
     subscribeToChatMemberBanned: noop,
     subscribeToChatMemberLeft: noop,
     subscribeToChatMemberMuted: (_room: string, cb: never) => {
@@ -71,7 +76,7 @@ jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => ({ state: 'connected', connected: true }) }))
 jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/chat/RoomGuidelinesBanner', () => ({ RoomGuidelinesBanner: () => null }))
-jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
 
 /* eslint-disable import/first */
@@ -121,6 +126,7 @@ beforeEach(() => {
   resetRoomMembership()
   mockMuted.length = 0
   mockMessage.length = 0
+  mockDeleted.length = 0
   mockParams = { id: 'g1' }
   mockAuth.user = { id: 'u-a', name: 'Asha' }
   api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [eventRow] } } as never)
@@ -458,5 +464,35 @@ describe('an event’s room before it opens (D-7: NOT_OPEN_YET)', () => {
     expect(screen.getByText('You’re not in this room')).toBeTruthy()
     expect(screen.queryByText('Not open yet')).toBeNull()
     expect(screen.queryByLabelText(/^Opens in/)).toBeNull()
+  })
+})
+
+/*
+ * Audit M4 (a11y-motion 2026-10-24): your own message removed by moderation after it was delivered becomes the dashed
+ * placeholder and a toast (a live region, announced on iOS) says so; nobody else's removal says anything.
+ */
+describe('a message removed by moderation after it was delivered', () => {
+  const mine = { id: 'm2', user_id: 'u-a', user: { id: 'u-a', name: 'Asha' }, content: 'Meet by the stairs', type: 'text', created_at: '2026-10-15T19:01:00.000Z' }
+  const remove = async (messageId: string, userId: string) => {
+    await act(async () => mockDeleted.forEach((cb) => cb({ chatGroupId: 'g1', messageId, moderation: true, userId })))
+    await flush()
+  }
+
+  it('yours: the placeholder, read without a stray full stop, and the toast', async () => {
+    api.getChatMessages.mockResolvedValue(page([theirs, mine]) as never)
+    await open()
+    await remove('m2', 'u-a')
+    expect(screen.getByTestId('bubble-m2-bubble').props.accessibilityLabel).toMatch(/^You, This message was removed by moderation, /)
+    expect(screen.getByTestId('bubble-m2-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('Meet by the stairs')).toBeNull()
+    expect(mockToast).toHaveBeenCalledWith('Your message was removed by moderation.', 'info')
+  })
+
+  it('theirs: it goes, and nothing is said', async () => {
+    await open()
+    expect(screen.getByTestId('bubble-m1')).toBeTruthy()
+    await remove('m1', 'h-cosmic')
+    expect(screen.queryByTestId('bubble-m1')).toBeNull()
+    expect(mockToast).not.toHaveBeenCalledWith('Your message was removed by moderation.', 'info')
   })
 })

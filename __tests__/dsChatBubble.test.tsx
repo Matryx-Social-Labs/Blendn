@@ -9,14 +9,14 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, processColor, StyleSheet } from 'react-native'
 import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 
 import * as Reanimated from 'react-native-reanimated'
 
 import { ChatBubble, PRESS_DELAY_MS, type ChatBubbleProps } from '../components/ds/ChatBubble'
-import { avatarOf, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
+import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
 import { COLOR, FONT_FAMILY, MATERIAL } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { CONTROL_FONT_CAP } from '../components/ds/shared'
@@ -201,13 +201,34 @@ describe('<ChatBubble>', () => {
     expect(onReactionPress).toHaveBeenCalledWith('🔥')
   })
 
-  it('removed: keeps its place, dashed and italic; no hold, no swipe', async () => {
+  it('removed: keeps its place in the DS dashed frame, italic; no hold, no swipe', async () => {
     const onLongPress = jest.fn()
     await render(bubble({ removed: true, onLongPress, onReply: jest.fn() }))
-    expect(flat('b-bubble')).toMatchObject({ borderStyle: 'dashed', backgroundColor: 'transparent' })
+    expect(flat('b-bubble')).toMatchObject({ backgroundColor: 'transparent' })
+    // No border dash (per platform, and solid on Android with any per-side width): the SVG frame's 6 4 at 1.5 in inputBorder.
+    expect(flat('b-bubble').borderStyle).toBeUndefined()
+    await fireEvent(screen.getByTestId('b-dashed', { includeHiddenElements: true }), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 240, height: 44 } } })
+    type Node = { props?: Record<string, unknown>; children?: (Node | string)[] | null }
+    const find = (n: Node | string | null | undefined): Node | undefined =>
+      !n || typeof n === 'string' ? undefined : n.props?.strokeDasharray !== undefined ? n : (n.children ?? []).map(find).find(Boolean)
+    const rect = find(screen.toJSON() as Node)?.props ?? {}
+    // As the SVG host receives them: the dash split, the colour processed.
+    expect(rect).toMatchObject({ strokeDasharray: ['6', '4'], strokeWidth: 1.5, stroke: { payload: processColor(COLOR.inputBorder) }, fill: null, width: 238.5, height: 42.5 })
+    expect(Number(rect.rx)).toBeCloseTo(BUBBLE.radius - 0.75)
     expect(screen.getByText('This message was removed by moderation.', { includeHiddenElements: true })).toBeTruthy()
+    // L9: read without the full stop before the time.
+    expect(message().props.accessibilityLabel).toBe('Cosmic Panda, This message was removed by moderation, 9:38 PM')
     await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }, { state: State.ACTIVE }, { state: State.END }]))
     expect(onLongPress).not.toHaveBeenCalled()
+  })
+
+  it('a removed photo, the sender’s view (round 4 #37): 220×160 in the dashed frame, a shield, “Removed by moderation”', async () => {
+    await render(bubble({ mine: true, text: undefined, removed: 'photo', surface: 'dm' }))
+    expect(flat('b-bubble')).toMatchObject({ width: 220, height: 160, backgroundColor: 'transparent' })
+    expect(screen.getByTestId('b-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('Removed by moderation', { includeHiddenElements: true })).toBeTruthy()
+    expect(message().props.accessibilityLabel).toBe('You, Photo removed by moderation, 9:38 PM')
+    expect(message().props.accessibilityActions).toEqual([])
   })
 
   it('not sent: the line under it; a tap retries with H.send; the server’s reason when it gave one', async () => {

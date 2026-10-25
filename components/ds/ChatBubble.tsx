@@ -22,6 +22,7 @@ import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { measureAnchor } from './anchor'
+import { DashedFrame } from './DashedFrame'
 import { Avatar } from './Avatar'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
 import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, reactionName, REPLY_SWIPE, replyOffset, timeFont, type ChatPerson, type Rect, type TextPart } from './chatShared'
@@ -42,6 +43,8 @@ const FAILED_OPACITY = 0.7
 const EMOJI_ONLY_TYPE = { fontSize: 32, lineHeight: 40 }
 /** The page's photo in a bubble. */
 const PHOTO = { width: 220, height: 160 }
+/** The removed message's words, said and shown (Flow 5 #11; round 4 #37 for a photo). */
+const REMOVED_WORDS = { text: 'This message was removed by moderation', photo: 'Photo removed by moderation', photoShown: 'Removed by moderation' }
 /** R3-D5 5.9: a 44 pt ring with a 3 pt stroke; the veil is the photo dimmed to 65%. */
 const RING = { size: SIZE.circleButton, stroke: 3 }
 const VEIL_ALPHA = 0.35
@@ -74,8 +77,11 @@ export type ChatBubbleProps = {
   receipt?: Receipt
   /** Offline: "Waiting for connection" with a clock, never a spinner (R3-D5 5.8). */
   waiting?: boolean
-  /** Removed by moderation: keeps its place, dashed; no menu, no swipe. */
-  removed?: boolean
+  /**
+   * Removed by moderation: keeps its place in the DS dashed frame; no menu, no swipe. `'photo'`: a photo's, the
+   * sender's view (round 4 #37): the photo-sized frame with a shield and "Removed by moderation".
+   */
+  removed?: boolean | 'photo'
   /** Not sent: `true` for "Not sent · Tap to retry", or the line the server's reason gives. */
   failed?: boolean | string
   onRetry?: () => void
@@ -224,7 +230,8 @@ function ChatBubbleBase(props: ChatBubbleProps) {
         styles.bubble,
         emoji && styles.bare,
         photo && styles.photoBubble,
-        removed && styles.removed,
+        // The dash is DashedFrame's (SVG): a border dash differs per platform, and draws solid on Android with any per-side width.
+        removed === 'photo' && styles.removedPhoto,
         { backgroundColor: removed || emoji ? 'transparent' : mine ? COLOR.surfaceRaised : COLOR.surfaceSunken },
         mine ? { borderBottomRightRadius: tail } : { borderBottomLeftRadius: tail },
         failed && styles.failedBubble,
@@ -342,10 +349,12 @@ function Message({
 }) {
   const bold = useBoldText()
   const parts = removed || photo ? [] : linkParts(text)
+  const removedPhoto = removed === 'photo'
   const links = onLinkPress ? parts.filter((p): p is TextPart & { url: string } => !!p.url) : []
 
-  // The room frame's words (Flow 5 #11): it was moderation, and it says so.
-  const content = removed ? 'This message was removed by moderation.' : photo ? 'Photo' : text
+  // The room frame's words (Flow 5 #11): it was moderation, and it says so. Said without the full stop, which a
+  // screen reader read as ".," before the time.
+  const content = removed ? REMOVED_WORDS[removedPhoto ? 'photo' : 'text'] : photo ? 'Photo' : text
   const label = `${failed ? 'Not sent' : mine ? 'You' : sender.name}${failed ? ':' : ','} ${content}, ${time}${
     receipt ? `, ${RECEIPT_WORD[receipt]}` : ''
   }${waiting ? ', waiting for connection' : ''}`
@@ -398,8 +407,16 @@ function Message({
       onBlur={onBlur}
       style={style}
     >
+      {removed ? <DashedFrame radius={BUBBLE.radius} testID={testID && `${testID}-dashed`} /> : null}
       {replyTo && !removed ? <ReplyPreview name={replyTo.name} text={replyTo.text} onPress={replyTo.onPress} /> : null}
-      {photo && !removed ? (
+      {removedPhoto ? (
+        <>
+          <Icon name="shield" size={ICON.control} color={COLOR.textSecondary} />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centred]}>
+            {REMOVED_WORDS.photoShown}
+          </Text>
+        </>
+      ) : photo && !removed ? (
         <View>
           <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" accessible={false} />
           {photo.progress !== undefined ? <UploadRing progress={photo.progress} /> : null}
@@ -411,7 +428,7 @@ function Message({
           style={[emoji ? EMOJI_ONLY_TYPE : font('body', bold), removed ? styles.removedText : styles.primary]}
         >
           {removed
-            ? content
+            ? `${content}.`
             : parts.map(({ text: words, url }, i) =>
                 url ? (
                   <Text key={i} onPress={() => onLinkPress?.(url)} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.link}>
@@ -547,7 +564,14 @@ const styles = StyleSheet.create({
   bubble: { borderRadius: BUBBLE.radius, paddingVertical: SPACE.sm, paddingHorizontal: SPACE.md },
   bare: { paddingVertical: 0, paddingHorizontal: 0 },
   photoBubble: { padding: SPACE.xs },
-  removed: { borderWidth: 1, borderStyle: 'dashed', borderColor: COLOR.textTertiary },
+  removedPhoto: {
+    width: PHOTO.width,
+    height: PHOTO.height,
+    padding: SPACE.md,
+    gap: SPACE.xs + SPACE.xxs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   failedBubble: { opacity: FAILED_OPACITY },
   photo: { width: PHOTO.width, height: PHOTO.height, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface },
   veil: { borderRadius: RADIUS.rowInCard, backgroundColor: tint(COLOR.ink, VEIL_ALPHA), alignItems: 'center', justifyContent: 'center' },
@@ -559,4 +583,5 @@ const styles = StyleSheet.create({
   tertiary: { color: COLOR.textTertiary },
   destructive: { color: COLOR.destructive },
   removedText: { color: COLOR.textSecondary, fontStyle: 'italic' },
+  centred: { textAlign: 'center' },
 })

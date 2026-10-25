@@ -60,7 +60,7 @@ import { pickImage, uploadChatPhoto } from '../../lib/photoUtils'
 import { queryCache } from '../../lib/queryCache'
 import { RECEIPT_POLL_MS, receiptFor } from '../../lib/receipts'
 import { messageReportStep, showConversationOptions } from '../../lib/safetyUtils'
-import { sendOutcome } from '../../lib/sendOutcome'
+import { REMOVED_AFTER_DELIVERY, sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
 import {
   markPrivateMessagesRead,
@@ -70,6 +70,7 @@ import {
   subscribeToDelivered,
   type PrivateMessageCallback,
   type PrivateReadCallback,
+  type PrivateRemovedCallback,
   type PrivateTypingCallback,
 } from '../../lib/socketClient'
 import { clockTime } from '../../lib/time'
@@ -402,7 +403,21 @@ function PrivateChatInner() {
     }
     // Their reveal as it lands (RC drive D3): the conversation is re-read, so "You can both see each other" appears in place.
     const onRevealed = () => setRevealAttempt((x) => x + 1)
-    const u1 = subscribeToConversation(conversation, { onMessage, onTyping, onRead, onRevealed })
+    /*
+     * Removed by moderation after it was delivered: yours becomes the dashed placeholder (a photo keeps the photo's
+     * frame) and the toast says so to a screen reader; theirs simply goes, as a re-read would have it. The room's rule.
+     */
+    const onRemoved: PrivateRemovedCallback = (data) => {
+      const target = messagesRef.current.find((m) => m.id === data.messageId)
+      // Not here, or already the placeholder (withheld at send): nothing changes, so nothing is said.
+      if (!target || target.removed) return
+      const mine = target.senderId === myId
+      setMessages((prev) =>
+        mine ? prev.map((m) => (m.id === data.messageId ? { ...m, removed: true, text: null, replyTo: null } : m)) : prev.filter((m) => m.id !== data.messageId)
+      )
+      if (mine) showToast(REMOVED_AFTER_DELIVERY, 'info')
+    }
+    const u1 = subscribeToConversation(conversation, { onMessage, onTyping, onRead, onRevealed, onRemoved })
     // ✓✓ delivered as their app gets them (SCRUM-408).
     const u2 = subscribeToDelivered((d) => {
       if (d.conversationId !== conversation) return
@@ -414,7 +429,7 @@ function PrivateChatInner() {
       u2()
       if (otherTypingTimeoutRef.current) clearTimeout(otherTypingTimeoutRef.current)
     }
-  }, [conversationId, conversation, myId, markArriving])
+  }, [conversationId, conversation, myId, markArriving, messagesRef, showToast])
 
   useEffect(() => {
     if (!conversationId) return

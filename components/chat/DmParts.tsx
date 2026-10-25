@@ -222,6 +222,15 @@ export const DmMessageRow = memo(function DmMessageRow({
     // Yours rise from the composer (#12); theirs arrive with a 12 pt rise and a fade (#13, opacity only under Reduce Motion).
     animateIn: animate ? (mine ? ('send' as const) : ('arrive' as const)) : undefined,
   }
+  // A photo removed by moderation, as its sender sees it (round 4 #37): the photo-sized dashed frame, never a text pill.
+  // Its caption went with it.
+  if (item.removed && (photoUri || item.mediaType === 'image')) {
+    return (
+      <View style={first ? styles.runStart : styles.inRun}>
+        <ChatBubble {...shared} removed="photo" testID={`dm-photo-${item.id}`} first={first} last={last} receipt={receipt ?? undefined} />
+      </View>
+    )
+  }
   return (
     <View style={first ? styles.runStart : styles.inRun}>
       {photoUri && !item.removed ? (
