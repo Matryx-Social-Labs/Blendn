@@ -5,7 +5,8 @@
  * empty, failed and ended states.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
-import { StyleSheet } from 'react-native'
+import { chatHeaderBottom } from '../components/chat/ChatHeader'
+import { FlatList, StyleSheet } from 'react-native'
 
 let mockParams: Record<string, string> = { conversationId: 'c1' }
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -30,10 +31,15 @@ jest.mock('../lib/apiClient', () => ({
     revealInConversation: jest.fn(),
   },
 }))
+const mockLive: { onMessage?: (data: unknown) => void }[] = []
+const mockToast = jest.fn()
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
-    subscribeToConversation: noop,
+    subscribeToConversation: (_c: string, handlers: { onMessage?: (data: unknown) => void }) => {
+      mockLive.push(handlers)
+      return () => {}
+    },
     subscribeToDelivered: noop,
     startPrivateTyping: jest.fn(),
     stopPrivateTyping: jest.fn(),
@@ -45,8 +51,10 @@ const mockAuth: { user: { id: string; image?: string | null } } = { user: { id: 
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: () => {} }))
-jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../components/RealtimeStatusBanner', () => () => null)
+let mockToastInset = 0
+jest.mock('../components/toastDock', () => ({ ...jest.requireActual('../components/toastDock'), useToastInset: () => mockToastInset }))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
 }))
@@ -99,7 +107,9 @@ const open = async () => {
 beforeEach(() => {
   jest.clearAllMocks()
   clearOutbox()
+  mockLive.length = 0
   mockParams = { conversationId: 'c1' }
+  mockToastInset = 0
   mockAuth.user = { id: 'u-a' }
   api.getConversation.mockResolvedValue({ success: true, data: anonymous } as never)
   api.getConversationMessages.mockResolvedValue(page([theirs]) as never)
@@ -133,11 +143,23 @@ it('shows B nothing of A’s unsent DM, and B never sends it', async () => {
   expect(api.sendPrivateMessage).not.toHaveBeenCalled()
 })
 
+describe('a warning before contact details in a DM (5.10)', () => {
+  it('says it will send — a DM is flagged, never removed — and keeps Send enabled', async () => {
+    await open()
+    await act(async () => fireEvent.changeText(screen.getByLabelText('Message'), 'call me on 9876543210'))
+    expect(screen.getByText(/This looks like a phone number\. It will send\./)).toBeTruthy()
+    expect(screen.queryByText(/removed/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Send' }).props.accessibilityState).toMatchObject({ disabled: false })
+    await act(async () => fireEvent.changeText(screen.getByLabelText('Message'), 'see you there'))
+    expect(screen.queryByText(/This looks like/)).toBeNull()
+  })
+})
+
 describe('the reveal bar', () => {
   it('both anonymous: Show them and Ask them; asking turns it to Asked', async () => {
     api.requestReveal.mockResolvedValue({ success: true } as never)
     await open()
-    expect(screen.getByText('You’re both anonymous here')).toBeTruthy()
+    expect(screen.getByText('Both anonymous')).toBeTruthy()
     expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
     await act(async () => fireEvent.press(screen.getByLabelText('Ask them')))
     await flush()
@@ -149,15 +171,118 @@ describe('the reveal bar', () => {
   it('you revealed: they can see you, and there is nothing to press', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: { ...anonymous, youRevealed: true } } as never)
     await open()
-    expect(screen.getByText('They can see your name. You can’t see theirs yet.')).toBeTruthy()
+    expect(screen.getByText('They see you · you don’t see them')).toBeTruthy()
     expect(screen.queryByLabelText('Show them who you are')).toBeNull()
   })
 
   it('both revealed: no bar, and the line says so', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: named } as never)
     await open()
-    expect(screen.getByText('You can both see each other')).toBeTruthy()
+    expect(screen.getByText('You see each other')).toBeTruthy()
     expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+  })
+})
+
+// C30 (DS-17's caller half): "Message Mika Sengupta-Rao" wrapped the placeholder to two lines. A real name is its
+// first name; a pseudonym is whole, never "Message Arctic". Negative control: the full name fails the first case.
+describe('the composer’s placeholder', () => {
+  it('a real name: the first name only', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: { ...named, otherUser: { ...named.otherUser, name: 'Mika Sengupta-Rao' } } } as never)
+    await open()
+    expect(screen.getByPlaceholderText('Message Mika')).toBeTruthy()
+  })
+
+  it('a pseudonym: whole', async () => {
+    await open()
+    expect(screen.getByPlaceholderText('Message Arctic Falcon')).toBeTruthy()
+  })
+})
+
+describe('the reveal strip is not over the thread (TG-04, RC audit C6)', () => {
+  it('the feed’s window starts under the strip’s measured height, so the match card is never behind it', async () => {
+    await open()
+    const H = 260
+    await act(async () => fireEvent(screen.getByTestId('dm-reveal-strip'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 360, height: H } } }))
+    const window = StyleSheet.flatten(screen.getByTestId('dm-feed').props.style)
+    expect(window.marginTop).toBeGreaterThanOrEqual(chatHeaderBottom(0) + H)
+  })
+})
+
+describe('the reveal panel folds away (drive: it stayed over the thread on Android)', () => {
+  const feed = () => screen.getByTestId('dm-feed')
+  const touch = () => act(async () => fireEvent(feed(), 'touchEnd'))
+  // Where the first message starts: the window's top (under the strip, TG-04) plus the content's padding.
+  const padding = () =>
+    (StyleSheet.flatten(feed().props.style).marginTop as number) +
+    ((feed().props.contentContainerStyle as { paddingTop?: number }[]).flat().map((x) => x?.paddingTop).find((x) => x !== undefined) ?? 0)
+
+  it('a touch on the thread folds it, and the feed gives its room back', async () => {
+    await open()
+    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    await touch()
+    await flush()
+    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    // The header still says where things stand.
+    expect(screen.getByText('Both anonymous')).toBeTruthy()
+  })
+
+  it('a scroll folds it when the finger lifts', async () => {
+    await open()
+    await act(async () => fireEvent(feed(), 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 }, contentSize: { width: 393, height: 2000 }, layoutMeasurement: { width: 393, height: 800 }, velocity: { x: 0, y: 0 } } }))
+    await flush()
+    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+  })
+
+  it('nothing moves while the finger is down: the first tap on a message is not cancelled by the feed shifting', async () => {
+    await open()
+    // The panel's height is measured on layout; give it one so the feed has something to give back.
+    let panel = screen.getByTestId('dm-reveal').parent
+    while (panel && !panel.props.onLayout) panel = panel.parent
+    await act(async () => panel!.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 150 } } }))
+    const before = padding()
+    await act(async () => fireEvent(feed(), 'touchStart'))
+    await act(async () => fireEvent(feed(), 'touchMove'))
+    await flush()
+    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(padding()).toBe(before)
+    // The press lands on the message first, and only then does the panel fold.
+    await act(async () => fireEvent(feed(), 'touchEnd'))
+    await flush()
+    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(padding()).toBeLessThan(before as number)
+  })
+
+  it('the header’s face and line bring it back: there is still one reveal control', async () => {
+    await open()
+    await touch()
+    await flush()
+    await act(async () => fireEvent.press(screen.getByLabelText('Arctic Falcon')))
+    await flush()
+    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+  })
+
+  it('a new state brings it back: they asked, or you did', async () => {
+    api.requestReveal.mockResolvedValue({ success: true } as never)
+    await open()
+    await touch()
+    await flush()
+    await act(async () => fireEvent.press(screen.getByLabelText('Arctic Falcon')))
+    await flush()
+    await act(async () => fireEvent.press(screen.getByLabelText('Ask them')))
+    await flush()
+    expect(screen.getByText('Asked · they’ll decide in their own time')).toBeTruthy()
+    await touch()
+    await flush()
+    expect(screen.queryByText('Asked · they’ll decide in their own time')).toBeNull()
+  })
+
+  it('once both have revealed there is no panel to fold and the header is their profile', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: named } as never)
+    await open()
+    await touch()
+    await flush()
+    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.getByLabelText('Mika')).toBeTruthy()
   })
 })
 
@@ -183,6 +308,25 @@ describe('the thread’s states', () => {
     await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
     await flush()
     expect(api.sendPrivateMessage).toHaveBeenCalledWith('c1', expect.objectContaining({ text: 'Hey 👋' }))
+  })
+
+  // RC drive 3 D-A: at AX XXXL the opener and Say hi outgrow the frame, and following the end hid the opener's top under the
+  // reveal bar on open. An empty thread opens at its start; a thread with a message still follows its end.
+  it.each([
+    ['empty: opens at its start (the opener), not pinned to its end', [], 0],
+    ['with a message: follows its end', [theirs], 1],
+  ])('%s', async (_name, messages, calls) => {
+    const scrollToEnd = jest.fn()
+    const responder = jest.spyOn(FlatList.prototype, 'getScrollResponder').mockReturnValue({ scrollToEnd } as never)
+    try {
+      api.getConversationMessages.mockResolvedValue(page(messages) as never)
+      await open()
+      scrollToEnd.mockClear()
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'contentSizeChange', 393, 1400))
+      expect(scrollToEnd).toHaveBeenCalledTimes(calls)
+    } finally {
+      responder.mockRestore()
+    }
   })
 
   it('a read that fails says so and offers to try again', async () => {
@@ -213,7 +357,8 @@ describe('the composer rides the keyboard', () => {
     const frame = screen.getByTestId('chat-keyboard-dock-frame')
     // Its parent is the avoider's own View — the one that takes the keyboard's padding.
     const avoider = frame.parent
-    expect(StyleSheet.flatten(avoider?.props.style)).toHaveProperty('paddingBottom')
+    // The avoider is the keyboard library's (jest draws it as a plain View): `padding` is its own animated style, in the real one.
+    expect(avoider?.props.testID).not.toBe('chat-keyboard-frame')
     expect(avoider?.parent?.props.testID).toBe('chat-keyboard-frame')
     expect(within(frame).getByTestId('dm-composer')).toBeTruthy()
   })
@@ -243,4 +388,147 @@ describe('the receipt catches up with a read the socket never announced', () => 
     expect(screen.getByText('Read', { includeHiddenElements: true })).toBeTruthy()
     spy.mockRestore()
   })
+})
+
+describe('a message that arrives rises (#13), only for a reader at the end', () => {
+  const deliver = (id: string) => {
+    const message = { id, conversationId: 'c1', senderId: 'u-c', sender: { id: 'u-c', name: null, image: null }, text: `hi ${id}`, isRead: false, createdAt: '2026-10-15T19:05:00.000Z' }
+    mockLive.forEach((h) => h.onMessage?.({ message }))
+  }
+  const scrollTo = (y: number) =>
+    act(async () =>
+      fireEvent.scroll(screen.getByTestId('dm-feed'), {
+        nativeEvent: { contentOffset: { y }, contentSize: { height: 4000, width: 400 }, layoutMeasurement: { height: 800, width: 400 } },
+      })
+    )
+  type Host = { props?: Record<string, unknown>; parent: Host | null }
+  const enteringOf = (text: string) => {
+    let node = screen.getByText(text) as unknown as Host | null
+    while (node && !node.props?.entering) node = node.parent
+    return node?.props?.entering
+  }
+
+  it('at the end: theirs has an entering animation, the history does not', async () => {
+    await open()
+    await scrollTo(3200)
+    await act(async () => deliver('m2'))
+    await flush()
+    expect(enteringOf('hi m2')).toBeDefined()
+    expect(enteringOf('See you at the bar?')).toBeUndefined()
+  })
+
+  it('reading back: it just appears', async () => {
+    await open()
+    await scrollTo(0)
+    await act(async () => deliver('m3'))
+    await flush()
+    expect(enteringOf('hi m3')).toBeUndefined()
+  })
+})
+
+describe('a conversation that fails to load (r7 M10)', () => {
+  it('is the DS failure state: no "Chat" posing as a person, and no composer under it', async () => {
+    api.getConversation.mockResolvedValue({ success: false, error: 'offline' } as never)
+    api.getConversationMessages.mockRejectedValue(new Error('offline'))
+    await open()
+    expect(screen.getByTestId('dm-failed')).toBeTruthy()
+    expect(screen.queryByText('Chat')).toBeNull()
+    expect(screen.getByText('Conversation')).toBeTruthy()
+    expect(screen.queryByTestId('dm-composer')).toBeNull()
+  })
+
+  it('Try again brings the composer back once the thread loads', async () => {
+    api.getConversation.mockResolvedValue({ success: true, data: anonymous } as never)
+    api.getConversationMessages.mockRejectedValueOnce(new Error('offline'))
+    await open()
+    expect(screen.queryByTestId('dm-composer')).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
+    await flush()
+    expect(screen.getByTestId('dm-composer')).toBeTruthy()
+  })
+})
+
+describe('a jump from one open DM to another (RC drive 2 D-E, privacy)', () => {
+  it('never saves DM 1’s text as DM 2’s draft, and DM 2 shows its own', async () => {
+    const { draftOf, setDraft } = jest.requireActual('../lib/chatOutbox') as typeof import('../lib/chatOutbox')
+    setDraft(dmThread('c2', 'u-a'), 'kai’s own')
+    const view = await render(<PrivateChat />)
+    await flush()
+    await act(async () => fireEvent.changeText(screen.getByLabelText('Message'), 'only for zoe'))
+    // A push or deep link: the same screen instance, a new conversationId (router.push / replace).
+    mockParams = { conversationId: 'c2' }
+    await view.rerender(<PrivateChat />)
+    await flush()
+    expect(screen.getByLabelText('Message').props.value).toBe('kai’s own')
+    await view.unmount()
+    expect(draftOf(dmThread('c1', 'u-a'))).toBe('only for zoe')
+    expect(draftOf(dmThread('c2', 'u-a'))).toBe('kai’s own')
+  })
+})
+
+/*
+ * Audit M4: a DM is never removed after delivery (one that fails moderation is stored hidden and never sent), so the
+ * two cases are a send withheld by moderation (the dashed placeholder and the toast) and, in the history, your own
+ * photo that was withheld: the sender's view is the 220x160 dashed frame (round 4 #37), never a text-sized pill.
+ */
+describe('a DM withheld by moderation', () => {
+  it('withheld at send: the dashed placeholder, and the toast says so', async () => {
+    api.getConversationMessages.mockResolvedValue(page([]) as never)
+    api.sendPrivateMessage.mockResolvedValue({ success: true, data: { id: 'm2', moderation_hidden: true } } as never)
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
+    expect(screen.getByTestId('dm-bubble-m2-bubble').props.accessibilityLabel).toMatch(/^You, This message was removed by moderation, /)
+    expect(screen.getByTestId('dm-bubble-m2-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(mockToast).toHaveBeenCalledWith('That message wasn’t delivered.', 'info')
+  })
+
+  it('your withheld photo: the photo-sized frame with the shield, read as a removed photo (round 4 #37)', async () => {
+    const minePhoto = { ...theirs, id: 'm3', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: null, mediaUrl: 'https://cdn.blendn.app/dm/p.jpg', mediaType: 'image', moderation_hidden: true }
+    api.getConversationMessages.mockResolvedValue(page([theirs, minePhoto]) as never)
+    await open()
+    const frame = screen.getByTestId('dm-photo-m3-bubble')
+    expect(frame.props.accessibilityLabel).toMatch(/^You, Photo removed by moderation, /)
+    expect(StyleSheet.flatten(frame.props.style)).toMatchObject({ width: 220, height: 160 })
+    expect(screen.getByText('Removed by moderation', { includeHiddenElements: true })).toBeTruthy()
+    expect(imageUris()).not.toContain(minePhoto.mediaUrl)
+  })
+
+  /*
+   * rc8 #2: the placeholder lasted only the session, because the history left the hidden message out. Once the server
+   * returns your own hidden DM (`moderation_hidden: true`, text null, as the room does), a reload keeps it. A withheld
+   * message was never sent, so it carries no receipt and the thread does not poll for one: the receipt stays on your
+   * last message that went. Negative control: with `lastMineId` counting removed messages, the "Sent" under the
+   * placeholder and the poll fail it.
+   */
+  it('after a reload, your withheld message is still the dashed placeholder, with no receipt and no poll for one (rc8 #2)', async () => {
+    const polls: Array<() => void> = []
+    const realSetInterval = global.setInterval
+    const spy = jest.spyOn(global, 'setInterval').mockImplementation(((fn: () => void, ms?: number) => {
+      if (ms === RECEIPT_POLL_MS) polls.push(fn)
+      return realSetInterval(() => {}, 1e9)
+    }) as typeof setInterval)
+    const read = { id: 'm4', conversationId: 'c1', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: 'On my way', isRead: true, createdAt: '2026-10-15T19:04:00.000Z' }
+    const withheld = { ...read, id: 'm5', text: null, isRead: false, createdAt: '2026-10-15T19:05:00.000Z', moderation_hidden: true }
+    api.getConversationMessages.mockResolvedValue(page([withheld, read, theirs]) as never)
+    await open()
+    expect(screen.getByTestId('dm-bubble-m5-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByTestId('dm-bubble-m5-bubble').props.accessibilityLabel).not.toMatch(/Sent|Delivered|Read/)
+    expect(screen.getByTestId('dm-bubble-m4-bubble').props.accessibilityLabel).toMatch(/Read$/)
+    expect(polls).toHaveLength(0)
+    spy.mockRestore()
+  })
+})
+
+// rc8 #5: on Android the snackbar stands on the composer, and with the keyboard up it covered the withheld placeholder's
+// second line. The feed adds the toast's room under its newest row while one shows. Negative control: without
+// `toastInset` in the feed's padding it fails.
+it('the feed makes room under the newest row for the Android snackbar over the composer (rc8 #5)', async () => {
+  const bottom = () => StyleSheet.flatten(screen.getByTestId('dm-feed').props.contentContainerStyle).paddingBottom as number
+  await open()
+  const without = bottom()
+  await screen.unmount()
+  mockToastInset = 70
+  await open()
+  expect(bottom()).toBe(without + 70)
 })

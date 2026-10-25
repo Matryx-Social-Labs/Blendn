@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { CONTROL, ICON, TYPE } from '../lib/theme'
+import { ICON, SIZE, TYPE } from '../lib/design/tokens'
 
 /**
  * The Scene's CTA — the numbers, and the structural rules behind them.
@@ -17,19 +17,16 @@ const SRC = () =>
 /** Any repo file, by path segments. */
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 
-const PREVIEW = () =>
-  readFileSync(join(__dirname, '..', 'app', 'preview', 'scene.tsx'), 'utf8')
-
 describe('the CTA pays for its own height', () => {
   it('SCENE_CTA_HEIGHT is the sum of what is actually in the pill', () => {
     const src = SRC()
     // The pill is the scale's primary-action height, holding a navigation-size
     // icon beside the button role's own line — all three from the tokens.
-    expect(src).toContain('SCENE_CTA_HEIGHT = CONTROL.lg')
-    expect(src).toContain('SCENE_CTA_ICON = ICON.lg')
+    expect(src).toContain('SCENE_CTA_HEIGHT = SIZE.primary')
+    expect(src).toContain('SCENE_CTA_ICON = ICON.nav')
     expect(src).toContain('ctaLabel: { ...TYPE.button }')
-    const height = CONTROL.lg
-    const icon = ICON.lg
+    const height = SIZE.primary
+    const icon = ICON.nav
     const lineHeight = TYPE.button.lineHeight
     const padding = Number(/paddingVertical: (\d+),/.exec(src.slice(src.indexOf('ctaFill:')))?.[1])
 
@@ -37,19 +34,15 @@ describe('the CTA pays for its own height', () => {
     const border = 2
     expect(border + padding * 2 + Math.max(icon, lineHeight)).toBe(height)
 
-    /*
-     * And the icon must not be the thing setting the height. The frame's 40pt
-     * icon is exactly why the pill was 74 — a 40 beside a 28pt line drives the
-     * box on its own, and 74 of pill on top of a ~88pt tab bar was a fifth of
-     * the screen given over to chrome.
-     */
-    expect(icon).toBeLessThanOrEqual(lineHeight)
+    // The pill is bordered padding around the taller of the 24 pt glyph and the button role's line: 56, not the frame's 74.
+    expect(Math.max(icon, lineHeight)).toBe(icon)
   })
 
-  it('the ScrollView reserves the pill plus its gutter', () => {
+  it('the ScrollView reserves the dock by its measured height', () => {
     // Anything pinned over a scroll has to pay for its own height in the
-    // content inset, or it silently eats the end of the page.
-    expect(PREVIEW()).toContain('SCENE_CTA_HEIGHT')
+    // content inset, or it silently eats the end of the page. The dock reports it (`ds/Dock`).
+    expect(DETAIL()).toContain('paddingBottom: ctaDockHeight + SPACE.xl')
+    expect(DETAIL()).toContain('<Dock floating onHeight={setCtaDockHeight}')
   })
 })
 
@@ -80,7 +73,7 @@ describe('"I’m going" → "You’re going" is one sequence (A78, Prompt 10)', 
   })
 
   it('carries the check on "You’re going" and no glyph on "I’m going"', () => {
-    expect(DETAIL()).toContain("ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'waitlisted' ? 'time-outline' : ctaState === 'rsvp' ? null")
+    expect(DETAIL()).toMatch(/ctaState === 'rsvpd'\s*\? 'check'\s*: ctaState === 'waitlisted'\s*\? 'clock'\s*: ctaState === 'rsvp' \|\| ctaState === 'cancelled'\s*\? null/)
   })
 })
 
@@ -97,7 +90,7 @@ describe('what the button says', () => {
      * rather than greying out: a finished event is somebody looking for one.
      */
     expect(src).toContain('const disabled = !onPress')
-    expect(src).toContain(`ended: "See what's on tonight"`)
+    expect(src).toContain(`ended: "See what’s on tonight"`)
   })
 })
 
@@ -138,7 +131,7 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     const table = cta.slice(0, cta.indexOf('}'))
     expect(table).toContain('Blend in')
     expect(table).not.toContain('Blend&apos;n')
-    expect(table).not.toContain("Blend'n")
+    expect(table).not.toContain("Blend’n")
   })
 
   it('has one pill and no tray behind it', () => {
@@ -215,7 +208,7 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     // The whole point of the swap. If this fails, something has grown a
     // parallel Scene again — which is how the last one went unnoticed.
     const detail = DETAIL()
-    for (const c of ['SceneHero', 'SceneCTA', 'SceneGallery', 'SceneLocationCard']) {
+    for (const c of ['SceneHero', 'SceneBar', 'SceneCTA', 'SceneGallery', 'AmenityGrid', 'Dock']) {
       expect(detail).toContain(c)
     }
   })
@@ -227,19 +220,24 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
  *
  * Every number is from `get_design_context`, not from the render.
  */
-const SECTIONS = () => SRC()
 const HERO = () =>
   readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneHero.tsx'), 'utf8')
 
-describe('the amenity tiles match 1141:4917', () => {
-  it('are at least 126 tall, so the pair cannot go ragged or clip', () => {
-    // `grid-rows-[126px]`. Content-sized, the two agreed only while their text
-    // wrapped identically. A floor, not a fixed height: the row stretches both
-    // tiles to the taller one, and large text grows the tile instead of clipping.
-    expect(SECTIONS()).toMatch(/AMENITY_TILE_MIN_HEIGHT = 126[\s\S]*minHeight: AMENITY_TILE_MIN_HEIGHT/)
-    expect(SECTIONS()).not.toMatch(/\n\s+height: 126/)
+describe('the facts are the design system\'s tiles', () => {
+  it('draw Doors, Where, the crowd and the Door as an AmenityGrid, then the organiser\'s own', () => {
+    // 2 x 2 at 76 pt (`AmenityTile`), folding past seven: not a hand-built grid of our own.
+    const detail = DETAIL()
+    expect(detail).toContain('<AmenityGrid tiles={tiles}')
+    for (const label of ["'WHERE'", "'ENTRY'"]) expect(detail).toContain(`label: ${label}`)
+    // Doors is named through `doorsLabel` (NEXT DOORS between days), and a run's today reads TODAY (RC drive 2 D-9).
+    expect(detail).toContain("'NEXT DOORS' : 'DOORS'")
+    expect(detail).toContain("label: 'TODAY'")
+    expect(detail).toContain('...amenities.map(')
   })
 
+  it('Where opens the map, as a tile that pushes', () => {
+    expect(DETAIL()).toMatch(/label: 'WHERE'[^\n]*onPress: openInMaps/)
+  })
 })
 
 describe('the accessibility gaps docs/SCENE.md recorded', () => {
@@ -253,41 +251,13 @@ describe('the accessibility gaps docs/SCENE.md recorded', () => {
     expect(HERO()).toContain('maxFontSizeMultiplier={1.2}')
   })
 
-  it('caps the amenity tiles, which live in a fixed box', () => {
-    expect(SECTIONS()).toContain('maxFontSizeMultiplier={1.5}')
-  })
-
   it('gives the hero caption one grouped announcement', () => {
     // Ungrouped it reads as four fragments, two of which are icon-plus-text
     // pairs with stops that announce nothing.
     const hero = HERO()
     expect(hero).toContain('accessibilityRole="header"')
-    expect(hero).toContain('[title, dateLabel, timeLabel, scarcity]')
+    expect(hero).toContain('[title, whenSpoken ?? when, ...pills.map((p) => p.text), place]')
   })
-
-  it('stops the avatar row announcing the creatures', () => {
-    /*
-     * Unlabelled, a screen reader says "butterfly, turtle, fox" — worse than
-     * silence, because it is confidently wrong about what is on screen. The
-     * count is the whole message, read with its heading ("Going, 12").
-     */
-    expect(SECTIONS()).toContain('accessibilityLabel={`${label}, ${count}`}')
-    expect(SECTIONS()).toMatch(/style=\{styles\.stack\}\s*\n\s*accessibilityElementsHidden/)
-  })
-})
-
-describe('the attendee discs carry a creature, not a letter', () => {
-  it('never draws initial here', () => {
-    /*
-     * `.initial` is `seed[0]` and the seed is the *event* id, so all three
-     * discs showed the same letter — a row reading "T T T". A varied letter
-     * would be worse: a letter reads as somebody's initial, and the faces were
-     * removed from this stack precisely because a face is identity.
-     */
-    expect(SECTIONS()).not.toContain('avatarInitial')
-    expect(SECTIONS()).toContain('const { colors, character } = pseudonymAvatar')
-  })
-
 })
 
 describe('the Scene is a full-screen route', () => {

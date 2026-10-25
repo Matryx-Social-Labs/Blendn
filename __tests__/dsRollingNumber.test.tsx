@@ -110,3 +110,45 @@ it('at large text the digits stop at their role’s cap, so the column never cli
   await render(<RollingNumber value={15} preview={{ from: 14, q: 0.5 }} testID="n" />)
   expect(screen.getByTestId('n-0-out', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.numericDisplay)
 })
+
+describe('the button role and grouping (the filter sheet’s "Show 6,422 places")', () => {
+  it('role="button" is the button’s own Satoshi 700 at 16/20, tabular, capped with the control (a mono count sat larger and higher beside the label)', async () => {
+    await render(<RollingNumber value={42} role="button" />)
+    expect(StyleSheet.flatten(all('4')[0].props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[700], fontSize: 16, lineHeight: 20, fontVariant: ['tabular-nums'] })
+    expect(all('4')[0].props.maxFontSizeMultiplier).toBe(1.3)
+  })
+
+  it('grouping puts a static comma every three digits from the right, read as "6,422"', async () => {
+    await render(<RollingNumber value={6422} role="button" grouping testID="n" />)
+    expect(screen.getByTestId('n-comma-3', { includeHiddenElements: true })).toBeTruthy()
+    expect(all(',')).toHaveLength(1)
+    expect(screen.getByLabelText('6,422')).toBeTruthy()
+  })
+
+  it('the comma comes AFTER the thousands digit, never before the first ("Show 1,533 places", not "Show ,1533")', async () => {
+    const order = async (value: number) => {
+      await render(<RollingNumber value={value} grouping testID="n" />)
+      return screen.getAllByText(/^[0-9,]$/, { includeHiddenElements: true }).map((n) => n.props.children).join('')
+    }
+    expect(await order(1533)).toBe('1,533')
+    expect(await order(6422)).toBe('6,422')
+    expect(await order(12345)).toBe('12,345')
+    expect(await order(123456)).toBe('123,456')
+    expect(await order(1234567)).toBe('1,234,567')
+    expect(await order(999)).toBe('999')
+  })
+
+  it('grouping adds nothing under four digits, and two commas at seven', async () => {
+    await render(<RollingNumber value={422} grouping />)
+    expect(all(',')).toHaveLength(0)
+    await render(<RollingNumber value={1234567} grouping />)
+    expect(all(',')).toHaveLength(2)
+  })
+
+  it('the comma never rolls: a changed digit rolls beside it and the comma stays', async () => {
+    await render(<RollingNumber value={6422} grouping testID="n" />)
+    await screen.rerender(<RollingNumber value={6423} grouping testID="n" />)
+    expect(screen.queryByTestId('n-comma-3-out', { includeHiddenElements: true })).toBeNull()
+    expect(all(',')).toHaveLength(1)
+  })
+})

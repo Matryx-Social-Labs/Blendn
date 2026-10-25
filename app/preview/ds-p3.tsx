@@ -528,7 +528,7 @@ function BanterRow({ title, preview, time }: { title: string; preview: string; t
 
 function Swipes() {
   return (
-    <Section title="SwipeRow" note="H.detent as it crosses halfway; the actions are also the row's accessibility actions">
+    <Section title="SwipeRow" note="H.detent as it crosses halfway; the actions are also the row’s accessibility actions">
       {SWIPES.map(([label, actions, open]) => (
         <Cell key={label} label={label} testID={`ds-swiperow-${label.split(' ')[0]}`}>
           <SwipeRow actions={actions} open={open} onPress={noop} accessibilityLabel={`Priya, see you by the stairs?, now`}>

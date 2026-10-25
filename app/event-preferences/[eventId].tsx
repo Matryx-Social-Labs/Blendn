@@ -1,43 +1,43 @@
-import { Ionicons } from '@expo/vector-icons'
+import { TopBar } from '../../components/ds/TopBar'
+import { useTopBarOverlay } from '../../lib/useTopBarState'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native'
-// The library one, like every other screen: react-native's own SafeAreaView
-// left the Save button under the home indicator on an iPhone 17 Pro, where
-// taps on its centre are the system's, not ours (SCRUM-201).
-import { SafeAreaView } from 'react-native-safe-area-context'
-import Animated from 'react-native-reanimated'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated, { LinearTransition } from 'react-native-reanimated'
 
-import ScalePress from '../../components/motion/ScalePress'
-import { EmberButton } from '../../components/onboarding/EmberControls'
+import { Avatar } from '../../components/ds/Avatar'
+import { Button } from '../../components/ds/Button'
+import { Dock } from '../../components/ds/Dock'
+import { Orbs } from '../../components/ds/Orbs'
+import { RadioCard } from '../../components/ds/RadioCard'
+import { SectionHeader } from '../../components/ds/SectionHeader'
+import { SettingsRow } from '../../components/ds/SettingsRow'
+import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
-import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
 import { intentAnswered } from '../../lib/checkIn'
-import { Logger } from '../../lib/logger'
-import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
-import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, SWITCH_COLORS, TYPE } from '../../lib/theme'
-import { useAuth } from '../../lib/useAuth'
+import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
+import { Logger } from '../../lib/logger'
+import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
+import { useAuth } from '../../lib/useAuth'
+import { RouteModal } from '../../components/system/RouteModal'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
- * Why you are here tonight, and whether people can see who you are.
+ * Why you are here tonight, and whether people can see who you are (Flow 3 `prefs`).
  *
  * `DESIGN_HANDOFF.md` calls the reveal control "the single most important new
  * screen", because it is the counterpart to the whole pseudonymity model.
  *
- * ## The layout (no longer a placeholder, 2026-09-28)
+ * ## Two questions, one primary
  *
- * Built to sit beside the rate and forgot-password screens: a close button,
- * two questions as `title`s over `body` explanations, and one accent — Save,
- * pinned under the scroll so it is always in reach and never under the home
- * indicator. Intent options are rows that fill `textPrimary` when chosen (the
- * system's selected treatment). "Just here for the event" stands apart behind
- * an "OR", because choosing it clears the others and that should be visible
- * before it happens. Reveal is a `surface` card with a switch, plain and
- * unweighted: off is not an unfinished state, so nothing about it nags.
+ * A glass close at the top, the first question as the screen's `title`, the second under a `SectionHeader`,
+ * and Save docked on a glass bar so it is always in reach and never under the home indicator. Reveal is two
+ * `RadioCard`s (Anonymous, Named) with the face each would show; the intents are `RadioCard`s too, each one
+ * `deselectable` since a tap on a chosen intent clears it. "Just here for the event" stands apart behind an
+ * "or", because choosing it clears the others and that should be visible before it happens.
  *
  * ## The two things this sets
  *
@@ -71,15 +71,9 @@ const INTENTS: { value: Intent; label: string; hint: string }[] = [
   { value: 'just_here', label: 'Just here for the event', hint: 'Not looking to meet anyone' },
 ]
 
-/*
- * A choice eases its fill rather than snapping, as on the rate screen. The
- * `transition` shorthand string, not `transitionProperty` & co. (AGENTS.md).
- */
-const EASE = `cubic-bezier(${MOTION_EASING.entrance.join(', ')})`
-const FILL_TRANSITION = { transition: `background-color ${MOTION_DURATION.fast}ms ${EASE}` }
-const LABEL_TRANSITION = { transition: `color ${MOTION_DURATION.fast}ms ${EASE}` }
+const AVATAR = 56
 
-export default function EventPreferences() {
+function EventPreferencesContent() {
   // `revealed` arrives from the status chip, which already knows it. There is
   // no GET for per-event preferences, and adding a round trip to learn
   // something the caller is holding would be the wrong trade.
@@ -98,19 +92,23 @@ export default function EventPreferences() {
    * leads, and the answer is saved as the default in the same write.
    */
   const askIntent = askIntentParam === '1'
-  // A check-in waits for this question before its room shows (lib/checkIn.ts).
-  useEffect(() => (askIntent ? intentAnswered : undefined), [askIntent])
+  // A check-in waits for this question before its room shows (lib/checkIn.ts). Closed for a link, the wait has already
+  // settled `abandoned` before this unmounts; this says `closed` only for the person's own way out (save, ×, back).
+  useEffect(() => (askIntent ? () => intentAnswered('closed') : undefined), [askIntent])
   const { showToast } = useToast()
   const { user } = useAuth()
+  const bar = useTopBarOverlay()
+  const reduceMotion = useReducedMotion()
+  const bold = useBoldText()
 
   const [intent, setIntent] = useState<Intent[]>([])
   /*
-   * Whether the intent chips have been touched at all.
+   * Whether the intent cards have been touched at all.
    *
    * There is no GET for per-event preferences, so this screen opens with an
    * empty selection regardless of what the person actually chose. Sending that
    * empty array on save would wipe their intent for the event every time they
-   * opened this screen to change the reveal switch — a silent reset triggered
+   * opened this screen to change the reveal — a silent reset triggered
    * by looking. `undefined` means "leave it alone" server-side, so the intent
    * is only sent once somebody has expressed one here.
    */
@@ -118,13 +116,15 @@ export default function EventPreferences() {
   const [revealed, setRevealed] = useState(initialRevealed === '1')
   const [rememberReveal, setRememberReveal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [dockHeight, setDockHeight] = useState(0)
 
   /*
-   * Revealing shows a name and a photo. If there is neither, the switch would
-   * turn on and show nothing — and the person would reasonably conclude the
-   * feature is broken rather than that their profile is empty.
+   * Revealing shows a name and a photo. If there is neither, choosing Named would
+   * show nothing — and the person would reasonably conclude the feature is
+   * broken rather than that their profile is empty.
    */
   const [canReveal, setCanReveal] = useState<RevealReadiness | null>(null)
+  const [photo, setPhoto] = useState<string | null>(null)
   // Dating is 18+. The server refuses it (403) on this write as everywhere
   // else; hiding the card for a minor turns that refusal into a card they
   // never see rather than an error on the way into their first room.
@@ -138,13 +138,10 @@ export default function EventPreferences() {
       .then((res) => {
         if (cancelled || !res.success || !res.data) return
         const age = res.data.profile?.age
+        const photos: string[] = Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : []
         setUnder18(typeof age === 'number' && age < 18)
-        setCanReveal(
-          revealReadiness({
-            name: res.data.profile?.name || res.data.name,
-            photos: Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : [],
-          })
-        )
+        setPhoto(typeof photos[0] === 'string' ? photos[0] : null)
+        setCanReveal(revealReadiness({ name: res.data.profile?.name || res.data.name, photos }))
       })
       .catch(() => {
         // Fail open on the *gate*, not on the reveal: an unreachable profile
@@ -161,6 +158,12 @@ export default function EventPreferences() {
     setIntentTouched(true)
     setIntent((prev) => toggleIntent(prev, value))
   }, [])
+
+  /** Back, or the event itself when this was opened cold (a link or a push) with nothing behind it. */
+  const leave = useCallback(() => {
+    if (router.canGoBack()) router.back()
+    else router.replace({ pathname: '/event/[id]', params: { id: String(eventId) } } as never)
+  }, [eventId])
 
   const save = useCallback(async () => {
     if (!eventId || saving) return
@@ -183,127 +186,112 @@ export default function EventPreferences() {
       if (!res.success) {
         // The server's sentence when it has one — "Dating is for 18+" is
         // actionable; "could not save" is not.
-        showToast(res.error || 'Could not save. Try again.', 'error')
+        showToast(res.error || 'Could not save. Try again.', 'error', { haptic: 'error' })
         return
       }
-      router.back()
+      leave()
     } catch (e) {
       Logger.error('match', 'Failed to save match preferences', { error: e })
-      showToast('Could not save. Try again.', 'error')
+      showToast('Could not save. Try again.', 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }
-  }, [askIntent, eventId, intent, intentTouched, rememberReveal, revealed, saving, showToast])
+  }, [askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, showToast])
 
   const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
   const lookingIntents = intents.filter((i) => i.value !== 'just_here')
   const justHere = intents.find((i) => i.value === 'just_here')
 
-  const intentOption = (opt: (typeof INTENTS)[number]) => {
-    const selected = intent.includes(opt.value)
-    return (
-      <ScalePress
-        key={opt.value}
-        onPress={() => onToggleIntent(opt.value)}
-        accessibilityRole="button"
-        accessibilityLabel={`${opt.label}. ${opt.hint}`}
-        accessibilityState={{ selected }}
-      >
-        <Animated.View style={[styles.option, selected && styles.optionSelected, FILL_TRANSITION]}>
-          <View style={styles.optionText}>
-            <Animated.Text style={[styles.optionLabel, selected && styles.onSelected, LABEL_TRANSITION]}>
-              {opt.label}
-            </Animated.Text>
-            <Animated.Text style={[styles.optionHint, selected && styles.onSelected, LABEL_TRANSITION]}>
-              {opt.hint}
-            </Animated.Text>
-          </View>
-          {selected ? <Ionicons name="checkmark" size={ICON.md} color={EMBER.bg} /> : null}
-        </Animated.View>
-      </ScalePress>
-    )
-  }
+  const intentOption = (opt: (typeof INTENTS)[number]) => (
+    <RadioCard
+      key={opt.value}
+      title={opt.label}
+      hint={opt.hint}
+      selected={intent.includes(opt.value)}
+      deselectable
+      onPress={() => onToggleIntent(opt.value)}
+      testID={`prefs-intent-${opt.value}`}
+    />
+  )
+
+  const blocked = canReveal ? !canReveal.ok : false
+  const namedHint = blocked
+    ? `Add ${canReveal?.missing} to your profile first. That’s what other people would see.`
+    : 'People here see your name and photo.'
+  // Layout glides when the "future events" row arrives; Reduce Motion cuts (U-L11).
+  const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 
   const revealBlock = (
-    <View style={styles.section}>
-      <View style={styles.headline}>
-        <Text variant="title" accessibilityRole="header">
-          Can people see who you are?
-        </Text>
-        <Text variant="body" color={EMBER.textSecondary}>
-          By default you appear as a made-up name, and people see what you have in common
-          rather than who you are. Turning this on shows your real name and photo to people
-          in this room.
-        </Text>
-      </View>
-
-      <View style={styles.card}>
-        <View style={styles.switchRow}>
-          <View style={styles.switchText}>
-            <Text variant="bodyStrong">Show my name and photo here</Text>
-            <Text variant="meta" color={EMBER.textSecondary}>
-              This event only. It does not change anything anywhere else.
-            </Text>
-          </View>
-          <Switch
-            value={revealed}
-            onValueChange={setRevealed}
-            disabled={canReveal ? !canReveal.ok : false}
-            accessibilityLabel="Show my real name and photo at this event"
-            {...SWITCH_COLORS}
-          />
+    <Animated.View layout={glide} style={styles.section}>
+      {askIntent ? (
+        <SectionHeader
+          title="Can people see who you are?"
+          caption="By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your real name and photo to people in this room."
+        />
+      ) : (
+        <View style={styles.headline}>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
+            Can people see who you are?
+          </Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+            By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your real name and photo to people in this room.
+          </Text>
         </View>
-
-        {revealed && (
-          <Animated.View entering={fadeInFast} style={[styles.switchRow, styles.switchRowDivided]}>
-            <Text variant="bodyStrong" style={styles.switchText}>
-              Do this at future events too
-            </Text>
-            <Switch
-              value={rememberReveal}
-              onValueChange={setRememberReveal}
-              accessibilityLabel="Show my name and photo at future events too"
-              {...SWITCH_COLORS}
-            />
-          </Animated.View>
-        )}
-      </View>
-
-      {canReveal && !canReveal.ok && (
-        /*
-         * Names what is missing, because "disabled" on its own is the least
-         * useful state in an interface. `matching.ts` shows the real name and
-         * photo and nothing else, so these two fields are literally all that
-         * revealing exposes — and with neither, turning it on would show
-         * nothing at all.
-         */
-        <Text variant="meta" color={EMBER.textSecondary}>
-          Add {canReveal.missing} to your profile first — that&apos;s what other people
-          would see.
-        </Text>
       )}
-    </View>
+      <View style={styles.pair} accessibilityRole="radiogroup">
+        <RadioCard
+          title="Anonymous"
+          hint="Nobody here sees your name or photo."
+          avatar={<Avatar kind="creature" pseudonym={String(eventId)} /* the made-up face is seeded on the event, never on the person (lib/pseudonymAvatar.ts) */ size={AVATAR} ring={COLOR.surface} />}
+          selected={!revealed}
+          onPress={() => setRevealed(false)}
+          testID="prefs-anonymous"
+        />
+        <RadioCard
+          title="Named"
+          hint={namedHint}
+          avatar={photo ? <Avatar kind="photo" uri={photo} size={AVATAR} ring={COLOR.surface} /> : undefined}
+          icon={photo ? undefined : 'user'}
+          selected={revealed}
+          disabled={blocked}
+          onPress={() => setRevealed(true)}
+          testID="prefs-named"
+        />
+      </View>
+      {revealed ? (
+        <Animated.View entering={reduceMotion ? undefined : fadeInFast}>
+          <SettingsRow
+            icon="history"
+            title="Do this at future events too"
+            trail="switch"
+            value={rememberReveal}
+            onValueChange={setRememberReveal}
+            testID="prefs-remember"
+          />
+        </Animated.View>
+      ) : null}
+    </Animated.View>
   )
 
   const intentBlock = (
     <View style={styles.section}>
-      <View style={styles.headline}>
-        <Text variant="title" accessibilityRole="header">
-          {askIntent ? 'Why do you go out?' : 'Why are you here tonight?'}
-        </Text>
-        <Text variant="body" color={EMBER.textSecondary}>
-          {askIntent
-            ? "It shapes who you're introduced to. We'll remember this for future events — change it any time from your profile."
-            : 'Just for this event. It overrides your usual answer for tonight without changing it.'}
-        </Text>
-      </View>
-
+      {askIntent ? (
+        <View style={styles.headline}>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
+            Why do you go out?
+          </Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+            It shapes who you’re introduced to. We’ll remember this for future events; change it any time from your profile.
+          </Text>
+        </View>
+      ) : (
+        <SectionHeader title="Why are you here tonight?" caption="Just for this event. It overrides your usual answer for tonight without changing it." />
+      )}
       <View style={styles.options}>{lookingIntents.map(intentOption)}</View>
-
       {justHere ? (
         <>
-          {/* Exclusive of the rows above: choosing it clears them, so it stands apart. */}
-          <Text variant="label" color={EMBER.textTertiary} style={styles.or}>
+          {/* Exclusive of the cards above: choosing it clears them, so it stands apart. */}
+          <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.or]}>
             OR
           </Text>
           {intentOption(justHere)}
@@ -312,114 +300,73 @@ export default function EventPreferences() {
     </View>
   )
 
+  const needsAnswer = askIntent && intent.length === 0
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.topBar}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
-        >
-          <Ionicons name="close" size={ICON.lg} color={EMBER.textPrimary} />
-        </Pressable>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+    <View style={styles.screen}>
+      <Orbs set="feed" />
+      <ScrollView
+        testID="prefs-scroll"
+        {...bar.scrollProps}
+        contentContainerStyle={[styles.scroll, { paddingTop: bar.contentTop + SPACE.md, paddingBottom: dockHeight + SPACE.xl }]}
+        scrollIndicatorInsets={{ top: bar.indicatorTop }}
+        showsVerticalScrollIndicator={false}
+      >
         {/*
-          * Reveal leads, intent follows — and that ordering is a decision.
+          * Reveal leads, intent follows — unless intent is the question that brought them here (`askIntent`).
           *
-          * This screen is reached from the anonymity chip ("You're anonymous
-          * here"), and landing on "Why are you here tonight?" answers a
-          * question nobody asked. Tapping a control about being named should
-          * put the control about being named first.
-          *
-          * It is also the more per-event of the two now. Intent has a
-          * person-level default set once on `about-you`, so what appears below
-          * is an *override* for tonight. Reveal has no equivalent — it is
-          * deliberately decided per room, every room, because being visible at
-          * a work meetup is not being visible at a club.
-          */}
-        {/*
-          * Reveal leads, intent follows — unless intent is the question that
-          * brought them here. See `askIntent`.
+          * This screen is reached from the anonymity chip ("You're anonymous here"), and landing on "Why are you
+          * here tonight?" answers a question nobody asked. It is also the more per-event of the two: intent has a
+          * person-level default set once, so what appears below is an override for tonight. Reveal has no
+          * equivalent — it is deliberately decided per room, every room.
           */}
         {askIntent ? intentBlock : revealBlock}
-        <View style={styles.divider} />
+        <View accessibilityElementsHidden importantForAccessibility="no" style={styles.divider} />
         {askIntent ? revealBlock : intentBlock}
       </ScrollView>
-
-      {/* Pinned under the scroll, not at its end: with four intent rows it fell below the fold. */}
-      <View style={styles.footer}>
-        {/*
-          The first-door answer cannot be nothing: an empty save would write
-          an empty default and the board would still refuse them.
-        */}
-        <EmberButton
-          label="Save"
-          onPress={() => void save()}
-          disabled={askIntent && intent.length === 0}
-          busy={saving}
-          accessibilityHint={askIntent && intent.length === 0 ? 'Choose an answer first' : undefined}
-        />
+      {/*
+        The bar over the scroll (Flow 3 `prefs`: a ✕ and nothing else), so the copy passes under glass when it scrolls and never
+        under the ✕ or, on Android, the status bar. Last of the page's pieces in the tree but first to be read: the page is
+        modal, and Close is the first thing a screen reader should land on.
+      */}
+      <View style={bar.barPin} pointerEvents="box-none">
+        <TopBar close state={bar.state} onBack={leave} testID="prefs-top" />
       </View>
-    </SafeAreaView>
+      {/* Docked, not at the end of the scroll: with four intents it fell below the fold. The first-door answer cannot be nothing: an empty save would write an empty default. */}
+      <Dock floating onHeight={setDockHeight} testID="prefs-dock">
+        <Button
+          label="Save"
+          kind="primary"
+          onPress={() => void save()}
+          disabled={needsAnswer}
+          loading={saving}
+          accessibilityHint={needsAnswer ? 'Choose an answer first' : undefined}
+          testID="prefs-save"
+        />
+      </Dock>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  topBar: {
-    height: CONTROL.md,
-    paddingHorizontal: GUTTER - SPACE.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconButton: { width: CONTROL.md, height: CONTROL.md, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: OPACITY.pressed },
-  scroll: { paddingHorizontal: GUTTER, paddingTop: SPACE.lg, paddingBottom: SPACE.xxl },
-
+  screen: { flex: 1, backgroundColor: COLOR.ink },
+  scroll: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
   section: { gap: SPACE.lg },
   headline: { gap: SPACE.sm },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: EMBER.separator,
-    marginVertical: SPACE.xxl,
-  },
-
+  pair: { flexDirection: 'row', gap: SPACE.md },
   options: { gap: SPACE.md },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    padding: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surface,
-  },
-  // The system's selected treatment: `textPrimary` fill, `bg` text.
-  optionSelected: { backgroundColor: EMBER.textPrimary },
-  optionText: { flex: 1, gap: SPACE.xxs },
-  optionLabel: { ...TYPE.bodyStrong, color: EMBER.textPrimary },
-  optionHint: { ...TYPE.meta, color: EMBER.textSecondary },
-  onSelected: { color: EMBER.bg },
-  or: { textAlign: 'center' },
-
-  // `surface` on the `bg` page; the off track is `textTertiary`, so it shows.
-  card: {
-    backgroundColor: EMBER.surface,
-    borderRadius: EMBER_RADIUS.md,
-    paddingHorizontal: SPACE.lg,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: SPACE.md,
-    paddingVertical: SPACE.lg,
-  },
-  switchRowDivided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: EMBER.separator },
-  switchText: { flex: 1, gap: SPACE.xxs },
-
-  footer: { paddingHorizontal: GUTTER, paddingTop: SPACE.md, paddingBottom: SPACE.lg },
+  or: { textAlign: 'center', color: COLOR.textTertiary },
+  divider: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
+  ink: { color: COLOR.textPrimary },
+  secondary: { color: COLOR.textSecondary },
 })
+
+/** Violet world: one hue on this screen (`HueProvider`). */
+export default function EventPreferences() {
+  return (
+    <HueProvider value="violet">
+      <RouteModal>
+        <EventPreferencesContent />
+      </RouteModal>
+    </HueProvider>
+  )
+}

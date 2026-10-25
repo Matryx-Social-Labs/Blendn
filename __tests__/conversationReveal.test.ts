@@ -4,6 +4,9 @@ import {
   revealConfirmation,
   revealView,
   type ConversationRevealState,
+  revealPanelKey,
+  ANON_LINE_MAX,
+  REVEAL_LINE_MAX,
 } from '../lib/conversationReveal'
 
 /*
@@ -25,17 +28,29 @@ const state = (over: Partial<ConversationRevealState> = {}): ConversationRevealS
 })
 
 describe('revealView (Flow 5 DM #01–#05)', () => {
+  it('both revealed: no bar, unless the server offers Add friend, which keeps the bar as `both`', () => {
+    const both = state({ youRevealed: true, theyRevealed: true })
+    expect(revealView(both).bar).toBeNull()
+    expect(revealView(both, false, true)).toEqual({ bar: 'both', line: { seen: true, text: 'You see each other' }, nudge: null })
+  })
+
+  it('an offer changes nothing before you have both revealed, or for a conversation that was never pseudonymous', () => {
+    expect(revealView(state({ youRevealed: true }), false, true).bar).toBe('youOnly')
+    expect(revealView(state({ theyRevealed: true }), false, true).bar).toBe('theyOnly')
+    expect(revealView(state({ pseudonymous: false }), false, true).bar).toBeNull()
+  })
+
   it('shows nothing on a conversation that was never pseudonymous', () => {
     // An accepted message request has shown real names since it existed.
     expect(revealView(state({ pseudonymous: false }))).toEqual({ bar: null, line: null, nudge: null })
   })
 
   it('both anonymous: Show them and Ask them, and the eye-off line', () => {
-    expect(revealView(state())).toEqual({ bar: 'none', line: { seen: false, text: 'You’re both anonymous here' }, nudge: null })
+    expect(revealView(state())).toEqual({ bar: 'none', line: { seen: false, text: 'Both anonymous' }, nudge: null })
   })
 
   it('once you ask, the Asked state — never a declined one', () => {
-    expect(revealView(state(), true)).toEqual({ bar: 'asked', line: { seen: false, text: 'You’re both anonymous here · asked' }, nudge: null })
+    expect(revealView(state(), true)).toEqual({ bar: 'asked', line: { seen: false, text: 'Both anonymous · asked' }, nudge: null })
   })
 
   it('surfaces that they asked, without making it a demand', () => {
@@ -46,13 +61,13 @@ describe('revealView (Flow 5 DM #01–#05)', () => {
 
   it('they revealed, you have not: Show them, and their side seen', () => {
     expect(revealView(state({ theyRevealed: true })).bar).toBe('theyOnly')
-    expect(revealView(state({ theyRevealed: true })).line?.text).toBe('You can see their name. They can’t see yours.')
+    expect(revealView(state({ theyRevealed: true })).line?.text).toBe('You see them · they don’t see you')
   })
 
   it('you revealed, they have not: no button, they decide', () => {
     const v = revealView(state({ youRevealed: true, revealRequested: true }))
     expect(v.bar).toBe('youOnly')
-    expect(v.line?.text).toBe('They can see your name. You can’t see theirs yet.')
+    expect(v.line?.text).toBe('They see you · you don’t see them')
     // Nothing left for you to answer.
     expect(v.nudge).toBeNull()
   })
@@ -60,7 +75,7 @@ describe('revealView (Flow 5 DM #01–#05)', () => {
   it('both revealed: the bar goes for good and the line says so', () => {
     expect(revealView(state({ youRevealed: true, theyRevealed: true }))).toEqual({
       bar: null,
-      line: { seen: true, text: 'You can both see each other' },
+      line: { seen: true, text: 'You see each other' },
       nudge: null,
     })
   })
@@ -97,7 +112,7 @@ describe('leaveConfirmation', () => {
      */
     const c = leaveConfirmation('Priya Raman', true)
     expect(c.body).toContain("already know")
-    expect(c.body.toLowerCase()).toContain("doesn't undo that")
+    expect(c.body.toLowerCase()).toContain("doesn’t undo that")
   })
 
   it('says the softer true thing before a reveal', () => {
@@ -148,4 +163,41 @@ describe('the blur derivative is small enough to be a blur', () => {
     expect(BLUR_WIDTH).toBeGreaterThan(0)
     expect(BLUR_WIDTH).toBeLessThanOrEqual(64)
   })
+})
+
+describe('the reveal panel’s key (what a fold is remembered against)', () => {
+  it('is the state plus whether somebody asked, and null with no panel', () => {
+    expect(revealPanelKey(null)).toBeNull()
+    expect(revealPanelKey({ bar: null, nudge: null })).toBeNull()
+    expect(revealPanelKey({ bar: 'none', nudge: null })).toBe('none:')
+    expect(revealPanelKey({ bar: 'none', nudge: 'Mika asked to know who you are' })).toBe('none:Mika asked to know who you are')
+  })
+
+  it('changes with the state and with a new ask, so a fold does not outlive what it folded', () => {
+    expect(revealPanelKey({ bar: 'none', nudge: null })).not.toBe(revealPanelKey({ bar: 'asked', nudge: null }))
+    expect(revealPanelKey({ bar: 'none', nudge: null })).not.toBe(revealPanelKey({ bar: 'none', nudge: 'x' }))
+  })
+})
+
+// TG-17 (C25): the header's line truncated beside the face. Negative control: the old sentences (up to 49) fail.
+it('every header line fits the header: short, each side said once', () => {
+  const base = { pseudonymous: true, youRevealed: false, theyRevealed: false, revealRequested: false, displayName: 'Plover' }
+  const lines = [
+    revealView({ ...base }),
+    revealView({ ...base }, true),
+    revealView({ ...base, youRevealed: true }),
+    revealView({ ...base, theyRevealed: true }),
+    revealView({ ...base, youRevealed: true, theyRevealed: true }),
+  ].map((v) => v.line?.text ?? '')
+  for (const line of lines) expect(line.length).toBeLessThanOrEqual(REVEAL_LINE_MAX)
+})
+
+// rc9 D2: at 1.3 text on 360 dp the header's line had room for 16 characters and read "You’re both ano…". Negative control: the old
+// "You’re both anonymous here" (26) fails.
+it('the anonymous header line fits one line at 1.3 text on a 360 dp phone', () => {
+  const base = { pseudonymous: true, youRevealed: false, theyRevealed: false, revealRequested: false, displayName: 'Plover' }
+  const lead = revealView({ ...base }).line?.text ?? ''
+  expect(lead.length).toBeLessThanOrEqual(ANON_LINE_MAX)
+  // Once asked there is a second clause; the lead still reads whole before it.
+  expect(revealView({ ...base }, true).line?.text.startsWith(lead)).toBe(true)
 })

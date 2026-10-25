@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Chip } from './Chip'
 import { font, useBoldText } from './shared'
 
@@ -39,7 +39,7 @@ export function OverlapLine({
   const shown = labels.slice(0, revealed ? LABELS_AFTER_REVEAL : LABELS_BEFORE_REVEAL)
   return (
     <View testID={testID} style={styles.column}>
-      <Text style={[font('bodyStrong', bold), styles.ink]}>{line}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{line}</Text>
       {shown.length ? (
         <View style={styles.labels}>
           {shown.map((l) => (

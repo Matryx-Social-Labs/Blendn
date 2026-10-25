@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, ICON, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { font, useBoldText } from './shared'
@@ -76,7 +76,7 @@ export function Facepile({
           </View>
         ))}
       </View>
-      {trailing ? <Text style={[font('meta', bold), styles.more]}>{trailing}</Text> : null}
+      {trailing ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.more]}>{trailing}</Text> : null}
     </View>
   )
 }

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Image as ExpoImage } from 'expo-image'
-import { Image, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 
 import { Logger } from '../lib/logger'
-import { EMBER, EMBER_RADIUS } from '../lib/theme'
+import { hostOf } from '../lib/urlHost'
+import { COLOR, RADIUS } from '../lib/design/tokens'
+import { CategoryPlate } from './ds/EventCard'
 
-const monogram = require('../assets/logo/monogram-gradient.png')
 
 interface EventCoverProps {
   /** The poster to draw, or null for the placeholder. */
@@ -18,6 +19,8 @@ interface EventCoverProps {
    * loads afresh — with no frame of stale placeholder in between.
    */
   retry?: number
+  /** The event's category slug: with no picture, its plate carries the category's glyph (D8; a calendar with none). */
+  category?: string
 }
 
 /**
@@ -27,12 +30,12 @@ interface EventCoverProps {
  * event without a cover and a cover that failed to load both drew a dark 180 px
  * box above the title (SCRUM-286). On 2026-09-24 that was every card on
  * staging: the seed's image host began bot-checking the phone (SCRUM-285).
- * Either way this draws the brand mark on the surface colour instead.
+ * Either way this draws the event's plate instead (rc7 ruling 5: one no-cover look everywhere).
  *
  * Nothing is drawn on the picture any more — the words sit under it — so there
  * is no darkening layer either.
  */
-export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }: EventCoverProps) {
+export function EventCover({ uri, height, radius = RADIUS.rowInCard, retry = 0, category }: EventCoverProps) {
   const attempt = `${uri}#${retry}`
   const [failedAttempt, setFailedAttempt] = useState<string | null>(null)
 
@@ -58,7 +61,7 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }:
           onError={() => {
             // Said out loud: a host that starts refusing the app (SCRUM-285) is
             // otherwise a screen of quiet placeholders.
-            Logger.warn('general', 'Event cover failed to load', { uri })
+            Logger.warn('general', 'Event cover failed to load', { host: hostOf(uri) })
             setFailedAttempt(attempt)
           }}
           style={StyleSheet.absoluteFill}
@@ -70,33 +73,21 @@ export function EventCover({ uri, height, radius = EMBER_RADIUS.md, retry = 0 }:
     )
   }
 
+  // No picture: the event's plate (rc7 ruling 5), category or not; never the faint logo.
   return (
     <View testID="event-cover-placeholder" style={[styles.placeholder, corners, { height }]}>
-      <Image
-        testID="event-cover-mark"
-        source={monogram}
-        style={[styles.mark, { width: markSize(height), height: markSize(height) }]}
-        resizeMode="contain"
-        accessible={false}
-        accessibilityIgnoresInvertColors
-      />
+      <CategoryPlate category={category} size={height} testID="event-cover-plate" />
     </View>
   )
 }
 
-/** The placeholder's logo mark: faint, so it reads as a mark and not as content. */
-const MARK_OPACITY = 0.35
-/** 72pt on the 180pt card, and the same share of a smaller box (a list row's thumb). */
-const markSize = (height: number) => Math.min(72, Math.round(height * 0.4))
-
 const styles = StyleSheet.create({
-  frame: { width: '100%', backgroundColor: EMBER.surface, overflow: 'hidden' },
+  frame: { width: '100%', backgroundColor: COLOR.surface, overflow: 'hidden' },
   placeholder: {
     width: '100%',
-    backgroundColor: EMBER.surface,
+    overflow: 'hidden',
+    backgroundColor: COLOR.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Faint, so it reads as a mark and not as content.
-  mark: { opacity: MARK_OPACITY },
 })

@@ -19,9 +19,11 @@
  * `MAP_THEME`. Nothing here knows where anybody may check in
  * (`__tests__/homeMap.test.ts` reads it to be sure).
  */
+import { DURATION, REDUCE_MOTION } from './design/tokens'
 import { liveNowLabel, type LiveNow } from './home'
 import { featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
+import { calendarDate, eventClock } from './time'
 
 export type Ring = number[][]
 export type LngLat = [number, number]
@@ -192,6 +194,60 @@ export function nearestTo<T extends { at: LngLat }>(items: T[], [lng, lat]: LngL
   return [...items].sort((a, b) => d(a) - d(b)).slice(0, max)
 }
 
+/* -------------------------------------------------------------------------- */
+/* Chips on the screen                                                         */
+/* -------------------------------------------------------------------------- */
+
+/** A box on the map view, in points from its top left. */
+export type Box = { left: number; top: number; right: number; bottom: number }
+
+/** A caption at 12 pt is about this wide per character (Satoshi, average); a name is measured by it, since the chip is laid out natively. */
+const CHIP_CHAR_PX = 7
+/** The chip's own padding and border, the venue glyph and its gap. */
+const CHIP_PAD_PX = 2 * 8 + 2
+const CHIP_GLYPH_PX = 16 + 4
+/** Two caption lines and the 4 pt padding above and below; the stem under it is `STEM_PX`. */
+const CHIP_BODY_PX = 2 * 16 + 2 * 4
+const CHIP_STEM_PX = 12
+/** Air kept between two chips, and between a chip and anything else on the map. */
+export const CHIP_AIR_PX = 6
+
+/** The size a chip will draw at, from its words: the name and the line, the glyph a venue has, never past `maxWidthPx`. */
+export function chipSizePx(chip: { title: string; line: string; kind: string }): { width: number; height: number } {
+  const text = Math.max(chip.title.length, chip.line.length) * CHIP_CHAR_PX
+  const width = Math.min(MAP_THEME.chip.maxWidthPx, text + CHIP_PAD_PX + (chip.kind === 'venue' ? CHIP_GLYPH_PX : 0))
+  return { width: Math.ceil(width), height: CHIP_BODY_PX + CHIP_STEM_PX }
+}
+
+/** Where a chip draws: centred on the roof's point, standing `lift` above it (the marker's bottom anchor and offset). */
+export function chipBox(screen: [number, number], lift: number, size: { width: number; height: number }): Box {
+  const bottom = screen[1] - lift
+  return { left: screen[0] - size.width / 2, right: screen[0] + size.width / 2, top: bottom - size.height, bottom }
+}
+
+export const boxesCollide = (a: Box, b: Box, air = 0): boolean =>
+  a.left < b.right + air && a.right > b.left - air && a.top < b.bottom + air && a.bottom > b.top - air
+
+const inside = (box: Box, zone: Box): boolean => box.left >= zone.left && box.right <= zone.right && box.top >= zone.top && box.bottom <= zone.bottom
+
+/**
+ * The chips that may be drawn, nearest first: each one must lie wholly inside the visible window (below the top chrome,
+ * above the drawer, off the screen edge less the gutter), clear of everything else the map carries (`blocked`: the person's dot) and
+ * of the chips already kept. A name that cannot be placed is dropped, and the next nearest takes its place: two names on one
+ * spot, a name under the capsule or the bell, or half off the screen are worse than one fewer name.
+ */
+export function pickChips<T>(candidates: { item: T; box: Box }[], zone: Box, blocked: Box[], max: number): T[] {
+  const kept: { item: T; box: Box }[] = []
+  for (const c of candidates) {
+    if (kept.length >= max) break
+    if (!inside(c.box, zone)) continue
+    if (blocked.some((b) => boxesCollide(c.box, b, CHIP_AIR_PX))) continue
+    if (kept.some((k) => boxesCollide(c.box, k.box, CHIP_AIR_PX))) continue
+    kept.push(c)
+  }
+  return kept.map((k) => k.item)
+}
+
 /**
  * The lit building a tap landed on. A tap's box holds every building around
  * it, lit or not, in no useful order: the first is usually an unlit
@@ -221,7 +277,7 @@ export type BandFeature = {
 export type GlowFeature = {
   type: 'Feature'
   geometry: { type: 'Point'; coordinates: LngLat }
-  properties: { id: string; kind: string; color: string; pulse: boolean; opacity: number }
+  properties: { id: string; kind: string; color: string; beacon: boolean }
 }
 
 /**
@@ -257,16 +313,15 @@ export function bandsFor(p: LitPlace): BandFeature[] {
 }
 
 /**
- * The ground glow at a pin: every lit place has one. A live event's breathes;
- * a beacon's is stronger (a pillar is thin, its foot carries it); a lit
- * building's is still.
+ * The ground glow at a pin: every lit place has one, and none of them moves (motion #42:
+ * "No pulse"). A beacon's is stronger (a pillar is thin, its foot carries it) than a lit
+ * building's; which of the two layers draws it is `beacon`.
  */
 export function glowFor(p: LitPlace): GlowFeature {
-  const pulse = p.kind === 'event' && p.live
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: p.at },
-    properties: { id: p.id, kind: p.kind, color: MAP_THEME[p.kind].glow, pulse, opacity: p.building ? MAP_THEME.glow.still : MAP_THEME.glow.beacon },
+    properties: { id: p.id, kind: p.kind, color: MAP_THEME[p.kind].glow, beacon: !p.building },
   }
 }
 
@@ -304,16 +359,12 @@ export function chipLiftPx(topM: number, view: { zoom: number; pitch: number; la
 /* Motion                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** Whether a live glow may breathe: in view, motion allowed, and something live to breathe. */
-export function glowBreathes(s: { visible: boolean; reduceMotion: boolean; anyLive: boolean }): boolean {
-  return s.visible && !s.reduceMotion && s.anyLive
-}
-
-/** The live glow's opacity: steady unless breathing, then this half-period's end. */
-export function glowOpacity(phase: 'steady' | 'low' | 'high'): number {
-  const { steady, pulseLow, pulseHigh } = MAP_THEME.glow
-  if (phase === 'steady') return steady
-  return phase === 'high' ? pulseHigh : pulseLow
+/**
+ * How the lit layers arrive (motion #42): once, over `long`, when there is something to light; a 200 ms fade under Reduce
+ * Motion. Nothing on the map pulses, so nothing outlives the first fade.
+ */
+export function litFade(reduceMotion: boolean): { duration: number; delay: number } {
+  return { duration: reduceMotion ? REDUCE_MOTION.duration.long : DURATION.long, delay: 0 }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -331,21 +382,26 @@ function startLabel(startsAt: string | null, now: number, forSpeech: boolean): s
   const start = startsAt ? new Date(startsAt) : null
   if (!start || Number.isNaN(start.getTime())) return null
   const far = start.getTime() - now > WEEKDAY_ONLY_MS
-  const day = start.toLocaleDateString('en-IN', { weekday: 'short', ...(far ? { day: 'numeric', month: 'short' } : {}), timeZone: EVENT_TIME_ZONE })
-  const time = start.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', timeZone: EVENT_TIME_ZONE })
+  // No year: the chip's line is a pin's width, and an event a year off is not on the map (review L6).
+  const day = calendarDate(start, { weekday: far ? true : 'only', year: false, timeZone: EVENT_TIME_ZONE })
+  // Named when the phone is not in India: "8 PM IST" (the zone-name rule, `eventClock`).
+  const time = eventClock(start, EVENT_TIME_ZONE)
   return forSpeech ? `${day} ${time}` : `${day} · ${time}`
 }
 
-/** The chip's second line: "LIVE ●", the start ("Fri · 8:00 pm", with the date past six days), or a venue's bucket ("10–19 live"). */
+/** The chip's second line: "LIVE ●", the start ("Fri · 8 PM", with the date past six days), or a venue's bucket ("10–19 live"; nothing below 5). */
 export function chipLine(p: ChipSource, now: number = Date.now()): string {
-  if (p.kind === 'venue') return liveNowLabel(p.bucket)
+  if (p.kind === 'venue') return liveNowLabel(p.bucket) ?? ''
   if (p.live) return 'LIVE ●'
   return startLabel(p.startsAt, now, false) ?? ''
 }
 
 /** What a screen reader says for a chip: plain words, no symbols. */
 export function chipSpeech(p: ChipSource & { title: string }, now: number = Date.now()): string {
-  if (p.kind === 'venue') return `${p.title}, ${liveNowLabel(p.bucket).toLowerCase()}`
+  if (p.kind === 'venue') {
+    const label = liveNowLabel(p.bucket)
+    return label ? `${p.title}, ${label.toLowerCase()}` : p.title
+  }
   if (p.live) return `${p.title}, live now`
   const start = startLabel(p.startsAt, now, true)
   return start ? `${p.title}, starts ${start}` : p.title

@@ -1,10 +1,12 @@
-import type { Ref } from 'react'
+import { useEffect, type Ref } from 'react'
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { Avatar } from './Avatar'
 import { Disc, type DiscProps } from './Disc'
@@ -21,6 +23,17 @@ const TABS: readonly { key: Tab; label: string; icon: IconName }[] = [
 
 /** Android's indicator: a 56 × 32 pill at 10% white behind the glyph (§13), not iOS's whole-tab capsule. */
 const INDICATOR = { width: SIZE.primary, height: SIZE.tag, alpha: 0.1 } as const
+
+/** The slot each tab sits in: the disc owns the middle one (2). */
+const SLOT: Record<Tab, number> = { pulse: 0, going: 1, banter: 3, me: 4 }
+
+/**
+ * Where the selection pill's left edge is, in the row's own space: its slot's centre, less half the pill, after the row's
+ * 4 pt of padding (a positioned child ignores padding, so it is added here).
+ */
+export function pillX(tab: Tab, cell: number, pillWidth: number) {
+  return SPACE.xs + cell * (SLOT[tab] + 0.5) - pillWidth / 2
+}
 
 /**
  * The bar's geometry. The capsule sits 16 pt in from each edge with 4 pt of
@@ -81,6 +94,21 @@ export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 't
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { cell } = tabBarGeometry(useWindowDimensions().width)
+  const reduceMotion = useReducedMotion()
+
+  /*
+   * One pill, not one per tab (DS #2): it slides to the new tab on M.snap, and a second tap mid-flight retargets it from
+   * where it is. Under Reduce Motion it jumps (the crossfade of the content stays; that is the screen's). Android's is
+   * the 56 × 32 indicator behind the glyph. The selected glyph and label still change at t0, in the tab itself.
+   */
+  const pillWidth = SIZE.primary
+  const target = pillX(selected, cell, pillWidth)
+  const x = useSharedValue(target)
+  useEffect(() => {
+    if (x.get() === target) return
+    x.set(reduceMotion ? target : withSpring(target, SPRING.snap))
+  }, [target, reduceMotion, x])
+  const slide = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }))
 
   const tab = ({ key, label, icon }: (typeof TABS)[number]) => {
     const on = key === selected
@@ -95,9 +123,14 @@ export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 't
           accessibilityRole="tab"
           accessibilityLabel={label}
           accessibilityState={{ selected: on }}
+          /*
+           * The label is capped at CONTROL_FONT_CAP, as UIKit's own tab bar is; at the accessibility sizes a long-press shows
+           * the large content viewer (the glyph and the name, big), as it does there (D2). iOS only; a no-op on Android.
+           */
+          accessibilityShowsLargeContentViewer
+          accessibilityLargeContentTitle={label}
           style={styles.tab}
         >
-          {on ? <View testID={`${testID}-${key}-pill`} style={android ? styles.indicator : styles.pill} /> : null}
           {key === 'me' && mePhoto ? (
             <Avatar kind="photo" uri={mePhoto} size={ICON.nav} ring={on ? COLOR.textPrimary : undefined} testID={`${testID}-me-avatar`} />
           ) : (
@@ -119,6 +152,7 @@ export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 't
       {/* Behind, not around: the disc's check-in label rises above the bar and must not be clipped. */}
       <Material role="bar" style={[StyleSheet.absoluteFill, styles.round]} />
       <View testID={`${testID}-row`} accessibilityRole="tablist" style={styles.row}>
+        <Animated.View testID={`${testID}-pill`} pointerEvents="none" style={[android ? styles.indicator : styles.pill, slide]} />
         {TABS.slice(0, 2).map(tab)}
         <View testID={`${testID}-disc-slot`} style={[styles.slot, { width: cell }]}>
           {/* Sized by the disc, not the slot: what the centre button's coach mark frames. */}
@@ -147,10 +181,19 @@ const styles = StyleSheet.create({
   // The middle slot is a tab slot's width; the disc keeps its 56 pt, centred in it.
   slot: { height: SIZE.disc, alignItems: 'center', justifyContent: 'center' },
   tab: { width: SIZE.primary, maxWidth: '100%', height: SIZE.primary, alignItems: 'center', justifyContent: 'center', gap: SPACE.xxs },
-  pill: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.capsule, backgroundColor: COLOR.tabCapsule },
+  pill: {
+    position: 'absolute',
+    left: 0,
+    top: (SIZE.tabBar - SIZE.primary) / 2,
+    width: SIZE.primary,
+    height: SIZE.primary,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.tabCapsule,
+  },
   indicator: {
     position: 'absolute',
-    top: SPACE.xxs,
+    left: 0,
+    top: (SIZE.tabBar - SIZE.primary) / 2 + SPACE.xxs,
     width: INDICATOR.width,
     height: INDICATOR.height,
     borderRadius: RADIUS.capsule,

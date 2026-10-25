@@ -6,6 +6,8 @@ import { badgeLabel, notificationAge } from '../lib/notificationFormat'
 const SRC = () => readFileSync(join(__dirname, '..', 'lib', 'notifications.ts'), 'utf8')
 const BELL = () =>
   readFileSync(join(__dirname, '..', 'components', 'pulse', 'NotificationBell.tsx'), 'utf8')
+/** The Notifications screen's data (the bell opens that screen; the rows live there). */
+const FEED = () => readFileSync(join(__dirname, '..', 'lib', 'useNotificationFeed.ts'), 'utf8')
 
 /**
  * Declarations only.
@@ -136,7 +138,7 @@ describe('every kind the server can send goes somewhere', () => {
   })
 })
 
-describe('the bell reuses the push switch rather than copying it', () => {
+describe('the Notifications screen reuses the push switch rather than copying it', () => {
   it('calls navigateFromNotificationData', () => {
     /*
      * A bell row and a tapped push describe the same event and carry the same
@@ -144,10 +146,10 @@ describe('the bell reuses the push switch rather than copying it', () => {
      * two places to add a case, and the one nobody remembered would quietly
      * open the wrong screen.
      */
-    const bell = BELL()
-    expect(bell).toContain('navigateFromNotificationData')
-    // No second switch on `kind` in the component.
-    expect(bell).not.toMatch(/switch\s*\(\s*item\.kind/)
+    const feed = FEED()
+    expect(feed).toContain('navigateFromNotificationData')
+    // No second switch on `kind` where a row is opened.
+    expect(feed).not.toMatch(/switch\s*\(\s*item\.kind/)
   })
 
   it('marks everything read on open, not per row', () => {
@@ -157,10 +159,17 @@ describe('the bell reuses the push switch rather than copying it', () => {
      * leaves a badge lit after you have read everything in it, which teaches
      * people to ignore the badge.
      */
-    expect(BELL()).toContain('.markNotificationsRead()')
-    // And reloads only once the mark-read has settled: fired together, the
-    // reload came back with the pre-read count and relit the badge.
-    expect(BELL()).toMatch(/\.markNotificationsRead\(\)[\s\S]{0,300}\.finally\(\(\) => void load\(\)\)/)
+    expect(FEED()).toContain('.markNotificationsRead()')
+    // The bell only counts and opens; it never marks. And the screen does not reload the
+    // list after marking: the rows that were unseen stay New for the visit (the snapshot),
+    // and the bell re-reads its count when the tab is looked at again.
+    expect(BELL()).not.toContain('markNotificationsRead')
+    expect(FEED()).not.toMatch(/\.markNotificationsRead\(\)[\s\S]{0,300}\.finally/)
+  })
+
+  it('clears the badge on the tap, before the screen has asked the server anything', () => {
+    // Optimistic: opening is what "seen" means, and the round trip is the slowest part of it.
+    expect(BELL()).toMatch(/setUnread\(0\)\s*\n\s*router\.push\('\/notifications'\)/)
   })
 
   it('does not poll, but does look when you look', () => {
@@ -211,5 +220,84 @@ describe('a notification about a person opens the person, not a place', () => {
     const src = codeOnly(SRC())
     const branch = src.slice(src.indexOf("case 'match'"))
     expect(branch.slice(0, branch.indexOf('break'))).toContain("target = '/(tabs)/chat'")
+  })
+})
+
+describe('a tapped push lands where the request is answered (Flow 9, motion #50)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const loadLib = () => {
+    jest.resetModules()
+    jest.doMock('expo-notifications', () => ({ setNotificationHandler: jest.fn() }))
+    jest.doMock('expo-device', () => ({}))
+    jest.doMock('expo-constants', () => ({}))
+    jest.doMock('../lib/apiClient', () => ({ apiClient: {}, TokenStorage: {} }))
+    jest.doMock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
+    const open = jest.fn()
+    jest.doMock('../lib/pendingRoute', () => ({ openWhenReady: open }))
+    const setParams = jest.fn()
+    jest.doMock('expo-router', () => ({ router: { push: jest.fn(), setParams }, useFocusEffect: jest.fn() }))
+    return {
+      lib: require('../lib/notifications') as typeof import('../lib/notifications'),
+      banners: require('../lib/inAppBanners') as typeof import('../lib/inAppBanners'),
+      open,
+      setParams,
+    }
+  }
+
+  it('sends each request kind to the Notifications screen with the ids that name its row', () => {
+    const { lib } = loadLib()
+    expect(lib.landingTarget({ type: 'friend_request', requestId: 'r1' })).toEqual({ pathname: '/notifications', params: { type: 'friend_request', requestId: 'r1' } })
+    expect(lib.landingTarget({ type: 'crew_invite', crewId: 'c1' })).toEqual({ pathname: '/notifications', params: { type: 'crew_invite', crewId: 'c1' } })
+    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r2' })).toEqual({
+      pathname: '/notifications',
+      params: { type: 'board_request', eventId: 'e1', requestId: 'r2' },
+    })
+    expect(lib.landingTarget({ type: 'reveal_request', conversationId: 'v1' })).toEqual({ pathname: '/notifications', params: { type: 'reveal_request', conversationId: 'v1' } })
+    expect(lib.landingTarget({ type: 'message_request', requestId: 'm1' })).toMatchObject({ pathname: '/notifications' })
+  })
+
+  it('leaves every other kind going to its destination, and a request’s own View/Join too', () => {
+    const { lib } = loadLib()
+    expect(lib.landingTarget({ type: 'match', conversationId: 'c' })).toEqual(lib.notificationTarget({ type: 'match', conversationId: 'c' }))
+    expect(lib.landingTarget({ type: 'event_update', eventId: 'e' })).toEqual(lib.notificationTarget({ type: 'event_update', eventId: 'e' }))
+    // The row's View/Join goes through `navigateFromNotificationData`: the destination, not back to the feed (that would loop).
+    expect(lib.notificationTarget({ type: 'crew_invite', crewId: 'c1' })).toMatchObject({ pathname: '/crews/invite/[crewId]' })
+    expect(lib.landingTarget(undefined)).toBeNull()
+  })
+
+  it('opens it when ready, for a banner or a warm tap (landFromNotificationData) and not through the destination switch', () => {
+    const { lib, open } = loadLib()
+    lib.landFromNotificationData({ type: 'friend_request', requestId: 'r1' })
+    expect(open).toHaveBeenCalledWith({ pathname: '/notifications', params: { type: 'friend_request', requestId: 'r1' } })
+    lib.navigateFromNotificationData({ type: 'friend_request', requestId: 'r1' })
+    expect(open).toHaveBeenLastCalledWith('/friends/add')
+  })
+
+  it('with the Notifications screen already open, updates its params in place instead of stacking a second one', () => {
+    const { lib, banners, open, setParams } = loadLib()
+    const release = banners.claimBannerHost('notifications')
+    lib.landFromNotificationData({ type: 'crew_invite', crewId: 'c2' })
+    expect(open).not.toHaveBeenCalled()
+    expect(setParams).toHaveBeenCalledTimes(1)
+    // The new target, the old ids cleared, and a stamp so a tap on the same row lands again.
+    expect(setParams.mock.calls[0][0]).toMatchObject({ type: 'crew_invite', crewId: 'c2', requestId: undefined, eventId: undefined, conversationId: undefined })
+    expect(typeof setParams.mock.calls[0][0].at).toBe('string')
+    // A kind that goes elsewhere still goes there, from the screen too.
+    lib.landFromNotificationData({ type: 'match', conversationId: 'v' })
+    expect(open).toHaveBeenCalledTimes(1)
+    release()
+    // Once it is not in front, it opens as before.
+    lib.landFromNotificationData({ type: 'friend_request', requestId: 'r1' })
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(setParams).toHaveBeenCalledTimes(1)
+  })
+
+  it('the cold start and the warm tap both land, and so does the banner', () => {
+    const src = SRC()
+    const listener = src.slice(src.indexOf('export function setupNotificationResponseListener'))
+    expect(listener.match(/landFromNotificationData\(data\)/g)).toHaveLength(2)
+    expect(listener).not.toMatch(/navigateFromNotificationData/)
+    const banner = readFileSync(join(__dirname, '..', 'components', 'notifications', 'ForegroundBanners.tsx'), 'utf8')
+    expect(banner).toContain('landFromNotificationData(banner.data)')
   })
 })

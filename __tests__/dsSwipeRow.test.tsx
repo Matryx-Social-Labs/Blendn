@@ -1,7 +1,7 @@
 /*
  * <SwipeRow> (guidelines/components/SwipeRow.html, ROUND3 D 5.11): a row
  * dragged left reveals 72 pt actions under it; it settles open past halfway
- * and springs back short of it on M.snap; H.detent as it crosses halfway;
+ * and springs back short of it on M.snap; H.threshold as it crosses halfway;
  * the actions are the row's custom actions, so nobody has to swipe; Reduce
  * Motion snaps without the spring.
  */
@@ -44,13 +44,32 @@ const drag = (to: number, velocityX = 0) =>
   )
 const offset = () => (Reanimated.getAnimatedStyle(screen.getByTestId('s-row')) as { transform: { translateX: number }[] }).transform[0].translateX
 
-let detent: jest.SpyInstance
+let detent: jest.SpyInstance // H.threshold: a gesture crossing its line
 beforeEach(() => {
   reduceMotion.mockReturnValue(false)
-  detent = jest.spyOn(H, 'detent').mockImplementation(() => {})
+  detent = jest.spyOn(H, 'threshold').mockImplementation(() => {})
 })
 
 describe('<SwipeRow>', () => {
+  it('a hold opens the same tray with H.longPress, once, and does not open the thread', async () => {
+    const onPress = jest.fn()
+    const onOpenChange = jest.fn()
+    const longPress = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+    await render(row({ onPress, onOpenChange }))
+    const el = screen.getByRole('button', { name: 'Bass Thursday, Brave Turtle: that drop though, Tuesday' })
+    await act(async () => fireEvent(el, 'longPress'))
+    expect(longPress).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).toHaveBeenLastCalledWith(true)
+    expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('an open row ignores a second hold: no second cue', async () => {
+    const longPress = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+    await render(row({ open: true }))
+    await act(async () => fireEvent(screen.getByRole('button', { name: /Bass Thursday/ }), 'longPress'))
+    expect(longPress).not.toHaveBeenCalled()
+  })
+
   it('one element: the row, with its actions in the rotor', async () => {
     const mute = jest.fn()
     await render(row({ actions: actions(mute) }))
@@ -71,7 +90,7 @@ describe('<SwipeRow>', () => {
     })
   })
 
-  it('past halfway: H.detent once, and it settles open on M.snap', async () => {
+  it('past halfway: H.threshold once, and it settles open on M.snap', async () => {
     const onOpenChange = jest.fn()
     await render(row({ onOpenChange }))
     await drag(-(W / 2 + 10))
@@ -145,5 +164,51 @@ describe('<SwipeRow>', () => {
     await drag(-(W / 2 + 10))
     expect(withSpring).not.toHaveBeenCalled()
     expect(offset()).toBe(-W)
+  })
+})
+
+
+describe('the release keeps the flick’s speed (audit M15)', () => {
+  it('a fling hands its velocity to the spring, and the re-render that follows does not restart it', async () => {
+    const onOpenChange = jest.fn()
+    await render(row({ onOpenChange }))
+    withSpring.mockClear()
+    // A fast flick that did not even reach halfway still opens: speed decides.
+    await drag(-60, -1500)
+    expect(withSpring).toHaveBeenCalledWith(-W, expect.objectContaining({ velocity: -1500 }))
+    // The owner's answer re-renders the row; its effect asks for the same rest and must not spring again from nothing.
+    expect(withSpring.mock.calls.filter(([to]) => to === -W)).toHaveLength(1)
+  })
+
+  it('an owner who refuses (open stays false) still gets it sprung back', async () => {
+    const onOpenChange = jest.fn()
+    await render(row({ open: false, onOpenChange }))
+    withSpring.mockClear()
+    await drag(-(W / 2 + 10))
+    const springs = withSpring.mock.calls.map(([to]) => to)
+    expect(springs[0]).toBe(-W)
+    expect(springs).toContain(0)
+  })
+
+  it('pulling past the closed edge stretches a little and pulls back, never a wall', async () => {
+    await render(row())
+    withSpring.mockClear()
+    await act(async () =>
+      fireGestureHandler(getByGestureTestId('s-swipe'), [
+        { state: State.BEGAN, translationX: 0 },
+        { state: State.ACTIVE, translationX: 0 },
+        { state: State.ACTIVE, translationX: 80 },
+      ])
+    )
+    expect(offset()).toBeGreaterThan(0)
+    expect(offset()).toBeLessThan(80)
+  })
+
+  it('crosses its threshold with H.threshold, once per crossing, and never H.detent', async () => {
+    const wrongOne = jest.spyOn(H, 'detent').mockImplementation(() => {})
+    await render(row())
+    await drag(-(W / 2 + 10))
+    expect(detent).toHaveBeenCalledTimes(1)
+    expect(wrongOne).not.toHaveBeenCalled()
   })
 })

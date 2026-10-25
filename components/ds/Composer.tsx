@@ -5,11 +5,13 @@ import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useToastDock } from '../toastDock'
 import { Button } from './Button'
 import { ReplyPreview } from './ReplyPreview'
-import { focusRing, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { SystemNotice } from './SystemNotice'
+import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 /** The server's limit, enforced here so the count that stops you is the one that would refuse you. */
 const MAX_LENGTH = 1000
@@ -71,6 +73,11 @@ export type ComposerProps = {
   reason?: string
   /** `ratelimited` only, when the server sends retryAfter: "0:12", ticked by the screen. */
   countdown?: string
+  /**
+   * A line of advice above the field while the text looks like contact details (5.10): an info row, never a lock,
+   * and Send stays enabled. Announced politely as it appears.
+   */
+  warning?: string | null
   /** `notcheckedin`: the one action (I'm going). */
   action?: { label: string; onPress: () => void; loading?: boolean }
   placeholder?: string
@@ -111,6 +118,7 @@ export function Composer({
   onRetry,
   reason,
   countdown,
+  warning,
   action,
   placeholder = 'Say something to the room',
   onFocus,
@@ -120,8 +128,13 @@ export function Composer({
 }: ComposerProps) {
   const contrast = useIncreaseContrast()
   useStateChange(state, reason)
+  useAnnounceWarning(warning)
+  const gone = state === 'banned' || state === 'left' || state === 'ended'
+  // The Android snackbar stands above the composer while it is drawn.
+  const [height, setHeight] = useState(0)
+  useToastDock(gone ? 0 : height)
 
-  if (state === 'banned' || state === 'left' || state === 'ended') return null
+  if (gone) return null
   const locked = state !== 'normal' && state !== 'failed'
   const shape: StyleProp<ViewStyle> = [
     styles.bar,
@@ -130,7 +143,12 @@ export function Composer({
   ]
 
   return (
-    <View testID={testID}>
+    <View testID={testID} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
+      {warning && !locked ? (
+        <View accessibilityLiveRegion="polite" style={styles.warning}>
+          <SystemNotice text={warning} icon="info" testID={testID && `${testID}-warning`} />
+        </View>
+      ) : null}
       <Material role="bar" style={shape}>
         {locked ? (
           <LockedRow state={state} reason={reason} countdown={countdown} action={action} />
@@ -184,6 +202,19 @@ function useStateChange(state: ComposerState, reason?: string) {
   }, [state])
 }
 
+/**
+ * The warning appearing is announced (iOS has no live regions; Android reads the row's own): once as it goes from nothing to a
+ * sentence, not on every keystroke while it stays, and again if it goes and returns.
+ */
+function useAnnounceWarning(warning: string | null | undefined) {
+  const had = useRef(false)
+  useEffect(() => {
+    const has = !!warning
+    if (has && !had.current && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(warning)
+    had.current = has
+  }, [warning])
+}
+
 function Field({
   value,
   onChangeText,
@@ -222,6 +253,9 @@ function Field({
           placeholder={placeholder}
           placeholderTextColor={COLOR.textSecondary}
           accessibilityLabel="Message"
+          // The field is a control, as a TextField's input is: one line centred on the Send disc, five lines then it scrolls.
+          // Uncapped it drew typed text at 53 pt over two lines (RC drive 3 D-B), so it stops at the control cap.
+          maxFontSizeMultiplier={CONTROL_FONT_CAP}
           style={[font('body', bold), styles.field]}
         />
         <View style={pressed && !android && styles.pressedIos}>
@@ -248,7 +282,7 @@ function Field({
         </View>
       </View>
       {value.length >= COUNT_FROM ? (
-        <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.counter]}>{MAX_LENGTH - value.length} left</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.counter]}>{MAX_LENGTH - value.length} left</Text>
       ) : null}
     </>
   )
@@ -265,7 +299,7 @@ function Failed({ onRetry }: { onRetry?: () => void }) {
       style={[styles.failed, { minHeight: minTarget() }]}
     >
       <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-      <Text style={[font('caption', bold), styles.destructive]}>Not sent · Tap to retry</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.destructive]}>Not sent · Tap to retry</Text>
     </Pressable>
   )
 }
@@ -289,9 +323,9 @@ function LockedRow({ state, reason, countdown, action }: { state: Locked } & Pic
           <Icon name={icon} size={ICON.control} />
         </View>
         <View style={styles.words}>
-          <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.primary]}>{title}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.primary]}>{title}</Text>
           {body ? (
-            <Text style={[font('meta', bold), styles.secondary]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
               {body}
               {clock ? ' You can post again in ' : null}
               {clock ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.primary]}>{clock}</Text> : null}
@@ -300,7 +334,7 @@ function LockedRow({ state, reason, countdown, action }: { state: Locked } & Pic
         </View>
       </View>
       {state === 'notcheckedin' && action ? (
-        <Button kind="strong" size="sm" label={action.label} loading={action.loading} onPress={action.onPress} />
+        <Button kind="lit" size="sm" label={action.label} loading={action.loading} onPress={action.onPress} />
       ) : null}
     </View>
   )
@@ -308,6 +342,7 @@ function LockedRow({ state, reason, countdown, action }: { state: Locked } & Pic
 
 const styles = StyleSheet.create({
   bar: { overflow: 'hidden' },
+  warning: { marginBottom: SPACE.sm },
   row: {
     minHeight: SIZE.input,
     flexDirection: 'row',

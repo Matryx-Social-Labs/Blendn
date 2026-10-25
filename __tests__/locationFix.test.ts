@@ -116,7 +116,7 @@ describe('getCurrentLocation', () => {
     const buttons = t.showTray.mock.calls[0][2] as { label: string; kind?: string }[]
     expect(buttons.map((b) => [b.label, b.kind])).toEqual([
       ['Not now', 'tertiary'],
-      ['Open Settings', 'strong'],
+      ['Open Settings', 'lit'],
     ])
   })
 

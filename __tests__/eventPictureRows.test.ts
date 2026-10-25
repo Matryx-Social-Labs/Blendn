@@ -5,18 +5,17 @@ import { join } from 'path'
  * SCRUM-480 was SCRUM-286 coming back. The fix lived in a component, and the
  * screens stopped using it: the Going rows moved to a card whose thumb drew
  * nothing when a cover was missing. `upcomingCardCover.test.tsx` guards the
- * card; this guards the screens, so a row cannot quietly stop going through
+ * Going's card; this guards the screens, so a row cannot quietly stop going through
  * it, or stop retrying on a pull, again.
  */
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 
 const SCREENS: Array<{ file: string[]; counter: string; bump: RegExp }> = [
   { file: ['app', '(tabs)', 'going.tsx'], counter: 'refreshCount', bump: /setRefreshCount\(/ },
-  { file: ['app', '(tabs)', 'events.tsx'], counter: 'pulls', bump: /setPulls\(\(n\) => n \+ 1\)/ },
 ]
 
-/** Every row's opening element, props included: `<UpcomingCard …>` on the Pulse, `<GoingRow …>` (the ds EventCard row) on Going. */
-const cards = (src: string) => src.match(/<(?:UpcomingCard|GoingRow)\b[\s\S]*?\n\s*\/?>/g) ?? []
+/** Every row's opening element, props included: `<GoingRow …>` (the ds EventCard row) on Going. */
+const cards = (src: string) => src.match(/<GoingRow\b[\s\S]*?\n\s*\/?>/g) ?? []
 
 /** Index of the `)` that closes the `(` at `open`. */
 function closing(src: string, open: number): number {
@@ -45,7 +44,9 @@ describe.each(SCREENS)('$file.2', ({ file, counter, bump }) => {
     const found = cards(src)
     expect(found.length).toBeGreaterThan(0)
     for (const card of found) {
-      expect(card).toMatch(/(?:imageUrl|cover)=\{\w+\.cover_image_url\}/)
+      // A visit to a place (Going › Past) is the place's type art, not an event's cover.
+      if (card.includes('plate=')) expect(card).not.toMatch(/\bcover=/)
+      else expect(card).toMatch(/(?:imageUrl|cover)=\{\w+\.cover_image_url\}/)
       expect(card).toContain(`retry={${counter}}`)
     }
   })
@@ -67,5 +68,20 @@ describe.each(SCREENS)('$file.2', ({ file, counter, bump }) => {
     expect(enclosed).toBeGreaterThan(0)
     // A stale closure keeps retry at its first value: the pull never retries.
     expect(stale).toEqual([])
+  })
+})
+
+describe('the Pulse', () => {
+  const src = read('app', '(tabs)', 'events.tsx')
+  it('draws every row through the DS EventCard (its thumb is the quiet square when a cover is missing or fails)', () => {
+    expect(src).not.toContain('UpcomingCard')
+    // Search results and Nearby-style rows are the EventCard itself; Everything else is `MoreRow`, which wraps it.
+    expect(src).toMatch(/<EventCard\b/)
+    expect(src).toMatch(/<MoreRow\b/)
+    expect(read('components', 'pulse', 'MoreRow.tsx')).toMatch(/<EventCard\b/)
+  })
+  it('bumps the pull count on a refresh, which re-asks the sections', () => {
+    expect(src).toMatch(/setPulls\(\(n\) => n \+ 1\)/)
+    expect(src).toMatch(/sectionsKey = `[^`]*\$\{pulls\}`/)
   })
 })

@@ -1,16 +1,18 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { useState } from 'react'
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { AppHeader } from '../../components/AppHeader'
-import { IncomingRequestRow } from '../../components/friends/IncomingRequestRow'
-import { PersonRowSkeleton } from '../../components/friends/PersonRow'
-import { LoadError } from '../../components/LoadError'
-import { Text } from '../../components/ui/Text'
-import { EMBER, GUTTER, ICON, SPACE } from '../../lib/theme'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { TopBar } from '../../components/ds/TopBar'
+import { IncomingRequestRow, RequestSkeleton } from '../../components/friends/IncomingRequestRow'
+import { PagedFooter } from '../../components/friends/PagedFooter'
+import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
+import { COLOR, SPACE } from '../../lib/design/tokens'
+import { groupedCount } from '../../lib/friendsHere'
 import { useFriendRequests } from '../../lib/useFriendRequests'
+import { useTopBarState } from '../../lib/useTopBarState'
+import { HueProvider } from '../../components/ds/shared'
 
 /**
  * People asking to be your friend — what "Requests" on the Me tab and at the
@@ -18,11 +20,16 @@ import { useFriendRequests } from '../../lib/useFriendRequests'
  *
  * Incoming only. Your own sent requests live on Add friends beside your link,
  * where you would go to send one. Accept and Not now behave exactly as they do
- * there (`useFriendRequests`).
+ * there (`useFriendRequests`). A page at a time by the server's cursor, windowed:
+ * the cards' heights follow the type size, so there is no `getItemLayout`, only
+ * the window.
  */
-export default function FriendRequestsScreen() {
-  const { incoming, loaded, failed, load, respond, busy } = useFriendRequests()
+function FriendRequestsScreenContent() {
+  const { incoming, incomingTotal, incomingPage, loaded, failed, load, loadMore, respond, busy } = useFriendRequests()
   const [refreshing, setRefreshing] = useState(false)
+  const bar = useTopBarState()
+  const insets = useSafeAreaInsets()
+  const offline = useOffline()
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -31,22 +38,31 @@ export default function FriendRequestsScreen() {
   }
 
   const empty = failed ? (
-    <LoadError title="Your requests didn't load" onRetry={() => void onRefresh()} retrying={refreshing} />
+    <StateScreen
+      icon="cloud-off"
+      title="Your requests didn’t load"
+      body="Check your connection and try again."
+      actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
+    />
   ) : (
-    <View style={styles.empty}>
-      <Ionicons name="person-add-outline" size={ICON.lg} color={EMBER.textTertiary} />
-      <Text variant="title" style={styles.center}>No requests</Text>
-      <Text variant="body" color={EMBER.textSecondary} style={styles.center}>
-        When somebody opens your link and asks to be your friend, they&apos;ll be here.
-      </Text>
-    </View>
+    <StateScreen
+      icon="user-plus"
+      title="No requests"
+      body="When somebody opens your link and asks to be your friend, they’ll be here."
+    />
   )
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="Requests" onBack={() => router.back()} />
+    <View style={styles.container}>
+      {/* The server's count of everyone waiting, never the rows loaded (D-LM2). */}
+      <TopBar title="Requests" sub={incomingTotal > 0 ? requestsWaiting(incomingTotal) : undefined} state={bar.state} onBack={() => router.back()} />
+      {offline ? (
+        <View style={styles.offline}>
+          <OfflineStrip offline />
+        </View>
+      ) : null}
       {!loaded && !failed ? (
-        <PersonRowSkeleton />
+        <RequestSkeleton />
       ) : (
         <FlatList
           data={incoming}
@@ -58,21 +74,42 @@ export default function FriendRequestsScreen() {
               onRespond={(action) => void respond(item, action)}
             />
           )}
-          contentContainerStyle={incoming.length ? styles.list : styles.emptyList}
+          testID="requests-list"
+          onEndReachedThreshold={1.5}
+          onEndReached={() => void loadMore('incoming')}
+          initialNumToRender={6}
+          windowSize={7}
+          removeClippedSubviews
+          ListFooterComponent={
+            <PagedFooter loading={incomingPage.loadingMore} failed={incomingPage.moreFailed} onRetry={() => void loadMore('incoming')} testID="requests-more" />
+          }
+          contentContainerStyle={[incoming.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
           ListEmptyComponent={empty}
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={EMBER.textSecondary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
           showsVerticalScrollIndicator={false}
+          {...bar.scrollProps}
         />
       )}
-    </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  list: { paddingHorizontal: GUTTER, paddingVertical: SPACE.sm },
-  emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: GUTTER },
-  empty: { alignItems: 'center', gap: SPACE.lg },
-  center: { textAlign: 'center' },
+  offline: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm, gap: SPACE.md },
+  emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function FriendRequestsScreen() {
+  return (
+    <HueProvider value="rose">
+      <FriendRequestsScreenContent />
+    </HueProvider>
+  )
+}
+
+/** "60 waiting", "1,204 waiting": the Requests title's sub line. */
+export const requestsWaiting = (n: number) => `${groupedCount(n)} waiting`

@@ -23,7 +23,7 @@ jest.mock('../lib/useOnboarding', () => ({
 }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u_1' } }) }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
-jest.mock('../lib/photoUtils', () => ({ selectAndUploadPhoto: jest.fn() }))
+jest.mock('../lib/photoUtils', () => ({ selectAndUploadPhoto: jest.fn(), loadPulledPhotos: jest.fn(async () => ({ pulled: [], live: null })) }))
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react')
   const { View } = require('react-native')

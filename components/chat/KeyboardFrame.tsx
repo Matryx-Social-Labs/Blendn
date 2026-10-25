@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { KeyboardAvoidingView, StyleSheet, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 
 import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
 
@@ -25,6 +26,12 @@ import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
  * Android: SDK 57 is edge-to-edge, where `adjustResize` no longer resizes the
  * window; `padding` is applied there too (lib/keyboard.ts), so this is the
  * only thing moving the dock.
+ *
+ * The avoiding view is react-native-keyboard-controller's (its provider wraps
+ * the app in app/_layout.tsx), not React Native's: it follows the keyboard's
+ * real frame, so on iOS the dock rides an interactive dismiss (the list's
+ * `keyboardDismissMode="interactive"`) instead of waiting for the keyboard to
+ * finish, where React Native's only reacts to the start and end events.
  */
 export function KeyboardFrame({ children }: { children: ReactNode }) {
   const outer = useRef<View>(null)

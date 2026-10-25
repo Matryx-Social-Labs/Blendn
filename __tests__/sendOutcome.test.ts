@@ -29,21 +29,21 @@ describe('sendOutcome', () => {
   })
 
   it.each([
-    ['USER_MUTED', "You're muted in this room."],
+    ['USER_MUTED', "You’re muted in this room."],
     ['CHAT_CLOSED', 'This chat has closed.'],
     ['SPAM_BLOCKED', 'Slow down a little.'],
-  ])("keeps the server's own sentence for %s", (errorCode, error) => {
+  ])("keeps the server’s own sentence for %s", (errorCode, error) => {
     expect(sendOutcome({ success: false, error, errorCode })).toEqual({ kind: 'failed', reason: error })
   })
 
-  it("replaces a developer's message with the app's own sentence", () => {
+  it("replaces a developer’s message with the app’s own sentence", () => {
     expect(sendOutcome({ success: false, error: 'Network request failed' })).toEqual({
       kind: 'failed',
-      reason: "Couldn't send. Try again.",
+      reason: "Couldn’t send. Try again.",
     })
     expect(sendOutcome({ success: false, error: 'Invalid input: expected string', errorCode: 'VALIDATION' })).toEqual({
       kind: 'failed',
-      reason: "Couldn't send. Try again.",
+      reason: "Couldn’t send. Try again.",
     })
   })
 

@@ -77,12 +77,12 @@ describe('the sign-in screen gets the wait', () => {
     })
   })
 
-  it("keeps the server's sentence for a wrong password", async () => {
+  it("keeps the server’s sentence for a wrong password", async () => {
     mockApi.signInWithEmail.mockResolvedValueOnce({ success: false, error: 'Invalid email or password' })
     await expect(signInWithEmail('a@b.co', 'pw')).resolves.toMatchObject({ error: 'Invalid email or password' })
   })
 
-  it("keeps the server's sentence for every other refusal", async () => {
+  it("keeps the server’s sentence for every other refusal", async () => {
     mockApi.signUp.mockResolvedValueOnce({ success: false, error: 'That email is already registered.' })
     await expect(signUp('a@b.co', 'pw')).resolves.toMatchObject({ error: 'That email is already registered.' })
   })
@@ -100,7 +100,7 @@ describe('Google, Apple and the reset link get the wait too', () => {
       'Too many reset requests. Try again in 15 minutes.'
     )
     expect(forgotPasswordMessage({ error: 'Enter a valid email' })).toBe('Enter a valid email')
-    expect(forgotPasswordMessage({})).toBe("Couldn't send the reset link. Try again.")
+    expect(forgotPasswordMessage({})).toBe("Couldn’t send the reset link. Try again.")
   })
 
   it('the screens and the social wrappers pass the wait on', () => {
@@ -109,7 +109,7 @@ describe('Google, Apple and the reset link get the wait too', () => {
     expect(read('app/forgot-password.tsx')).toContain('setError(forgotPasswordMessage(result))')
     expect(read('app/sign-in.tsx')).toContain('setError(result.error ||')
     const carried =
-      "return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, retryAfter: result.retryAfter }"
+      "return { success: false, error: result.error || 'Sign in failed', errorCode: result.errorCode, reasonCode: result.reasonCode, retryAfter: result.retryAfter }"
     expect(read('lib/useAuth.ts').split(carried).length - 1).toBe(2)
   })
 })

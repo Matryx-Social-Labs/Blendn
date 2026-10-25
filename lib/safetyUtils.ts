@@ -1,5 +1,6 @@
 import { leaveConfirmation } from './conversationReveal'
 import { apiClient } from './apiClient'
+import type { FriendAction } from './friendOffer'
 import { Logger } from './logger'
 import { showSheet, type Sheet, type SheetAction, type SheetOutcome } from './sheet'
 
@@ -141,6 +142,14 @@ const failed = (serverSays: string | undefined, fallback: string): SheetOutcome 
   return { ok: false, error: `${said}${/[.!?]$/.test(said) ? '' : '.'} Try again.` }
 }
 
+/** The options' friend row: what to draw, and the ask it runs. A refusal comes back as its sentence, which the sheet shows under the row. */
+export type FriendRow = { action: FriendAction; ask: () => Promise<{ ok: true } | { ok: false; error: string }> }
+
+const friendRow = ({ action, ask }: FriendRow): SheetAction =>
+  action.disabled
+    ? { label: action.label, accessibilityLabel: action.accessibilityLabel, icon: action.icon, disabled: true, then: () => {} }
+    : { label: action.label, icon: action.icon, variant: 'primary', run: ask }
+
 /**
  * A conversation's ⋮ menu: the ordinary things first, leaving one step in.
  *
@@ -155,11 +164,13 @@ export const showConversationOptions = (
   conversationId: string,
   displayName: string,
   theyKnowYou: boolean,
-  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void } = {}
+  opts: { onLeft?: () => void; fromMatch?: boolean; onViewProfile?: () => void; friend?: FriendRow } = {}
 ): void => {
   const fromMatch = opts.fromMatch ?? true
   const actions: SheetAction[] = []
   if (opts.onViewProfile) actions.push({ label: 'View profile', icon: 'user', then: opts.onViewProfile })
+  // After a match where you both revealed (SCRUM-750): Add friend is lit, Requested a quiet state. Busy, the row spins in place.
+  if (opts.friend) actions.push(friendRow(opts.friend))
   actions.push({
     label: fromMatch ? 'Unmatch…' : 'End conversation…',
     icon: 'heart-off',
@@ -168,7 +179,7 @@ export const showConversationOptions = (
   })
   actions.push({ label: 'Cancel', cancel: true })
   // The design's options sheet (Flow 5 DM #20): rows, the destructive one in red.
-  showSheet({ kind: 'actions', title: displayName, layout: 'rows', actions })
+  showSheet({ kind: 'actions', hue: 'rose', title: displayName, layout: 'rows', actions })
 }
 
 /**
@@ -210,7 +221,9 @@ export const leaveConversationSheet = (
 ): Sheet => {
   const copy = leaveConfirmation(displayName, theyKnowYou, fromMatch)
   const verb = fromMatch ? 'Unmatch' : 'End conversation'
-  const done = fromMatch ? `Unmatched ${displayName}` : 'Conversation ended'
+  // What happened, by what was done: a block says the block (RC drive 4 D-12 read "Unmatched Eli Rc." after Block and report).
+  const doneFor = (action: 'unmatch' | 'block') =>
+    action === 'block' ? `${displayName} is blocked` : fromMatch ? `Unmatched ${displayName}` : 'Conversation ended'
 
   const leave = async (
     action: 'unmatch' | 'block',
@@ -220,13 +233,15 @@ export const leaveConversationSheet = (
       action,
       ...(report ? { report } : {}),
     })
-    if (!result.success) return failed(result.error, "Couldn't do that.")
+    if (!result.success) return failed(result.error, "Couldn’t do that.")
     onLeft?.()
+    const done = doneFor(action)
     return { ok: true, toast: report ? `${done}. ${REPORTED}` : done }
   }
 
   const reportStep = (action: 'unmatch' | 'block', title: string): Sheet => ({
     kind: 'reasons',
+    hue: 'rose',
     title,
     message: `Why are you reporting ${displayName}?`,
     about: displayName,
@@ -237,6 +252,7 @@ export const leaveConversationSheet = (
 
   return {
     kind: 'actions',
+    hue: 'rose',
     title: copy.title,
     message: copy.body,
     actions: [
@@ -266,6 +282,7 @@ export const showUserSafetyActions = (
 ): void => {
   showSheet({
     kind: 'actions',
+    hue: 'rose',
     title: userName,
     message: 'Blocking hides you from each other. A report goes to our team, and they are not told who sent it.',
     actions: [
@@ -279,15 +296,16 @@ export const showUserSafetyActions = (
 /** Block one person, confirmed: from a profile's sheet, or a chat message's Block… (R3-D5 5.1, 5.2). */
 export const blockStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
   kind: 'actions',
+  hue: 'rose',
   title: `Block ${userName}?`,
-  message: "They won't be able to see your profile or message you, and you won't see each other in rooms.",
+  message: "They won’t be able to see your profile or message you, and you won’t see each other in rooms.",
   actions: [
     {
       label: 'Block',
       variant: 'destructive',
       run: async () => {
         const result = await blockUser(userId)
-        if (!result.success) return failed(result.message, "Couldn't block them.")
+        if (!result.success) return failed(result.message, "Couldn’t block them.")
         onComplete?.()
         return { ok: true, toast: `${userName} is blocked` }
       },
@@ -299,6 +317,7 @@ export const blockStep = (userName: string, userId: string, onComplete?: () => v
 /** A person's report step, for a sheet that is already open (a message request's "More"). */
 export const userReportStep = (userName: string, userId: string, onComplete?: () => void): Sheet => ({
   kind: 'reasons',
+  hue: 'rose',
   title: `Report ${userName}`,
   message: `Why are you reporting ${userName}?`,
   about: userName,
@@ -306,7 +325,7 @@ export const userReportStep = (userName: string, userId: string, onComplete?: ()
   submitLabel: 'Send report',
   run: async (reason, description) => {
     const result = await reportUser(userId, reason as ReportType, description)
-    if (!result.success) return failed(result.message, "Couldn't send your report.")
+    if (!result.success) return failed(result.message, "Couldn’t send your report.")
     onComplete?.()
     return { ok: true, toast: REPORTED }
   },
@@ -333,6 +352,7 @@ export const messageReportStep = (
   opts: { about?: string; onComplete?: () => void } = {}
 ): Sheet => ({
   kind: 'reasons',
+  hue: 'rose',
   title: 'Report this message',
   message: `Our team reads every report. ${opts.about ? `${opts.about} isn’t` : 'Nobody is'} told who sent it.`,
   about: opts.about,
@@ -340,7 +360,7 @@ export const messageReportStep = (
   submitLabel: 'Send report',
   run: async (reason, description) => {
     const result = await reportMessage(messageId, messageType, reason as MessageReportType, description)
-    if (!result.success) return failed(result.message, "Couldn't send your report.")
+    if (!result.success) return failed(result.message, "Couldn’t send your report.")
     opts.onComplete?.()
     return { ok: true, toast: REPORTED }
   },
@@ -409,9 +429,9 @@ export const showEventReportOptions = (
 ): void => {
   const reasons: { value: EventReportType; label: string }[] = [
     { value: 'misleading_listing', label: 'Misleading or inaccurate listing' },
-    { value: 'unsafe_venue', label: "The venue doesn't feel safe" },
+    { value: 'unsafe_venue', label: "The venue doesn’t feel safe" },
     { value: 'organiser_conduct', label: 'Concerns about the organiser' },
-    { value: 'not_real', label: "This doesn't look like a real event" },
+    { value: 'not_real', label: "This doesn’t look like a real event" },
     { value: 'other', label: 'Something else' },
   ]
 
@@ -423,7 +443,7 @@ export const showEventReportOptions = (
     submitLabel: 'Send report',
     run: async (reason, description) => {
       const result = await reportEvent(eventId, reason as EventReportType, description)
-      if (!result.success) return failed(result.message, "Couldn't send your report.")
+      if (!result.success) return failed(result.message, "Couldn’t send your report.")
       onComplete?.()
       /*
        * No promise about what happens to the event. A report is read by a
@@ -459,6 +479,7 @@ export const ROOM_REPORT_REASONS: { value: RoomReportType; label: string }[] = [
 export const showRoomReportOptions = (chatGroupId: string, onComplete?: () => void): void => {
   showSheet({
     kind: 'reasons',
+    hue: 'rose',
     title: 'Report this room',
     message: 'For what no single message shows. Our team reads every report.',
     reasons: ROOM_REPORT_REASONS,
@@ -466,10 +487,10 @@ export const showRoomReportOptions = (chatGroupId: string, onComplete?: () => vo
     run: async (reason, description) => {
       try {
         const result = await apiClient.reportChatGroup(chatGroupId, reason, description)
-        if (!result.success) return failed(result.error, "Couldn't send your report.")
+        if (!result.success) return failed(result.error, "Couldn’t send your report.")
       } catch (error) {
         Logger.error('general', 'Error reporting room', { error })
-        return failed(undefined, "Couldn't send your report.")
+        return failed(undefined, "Couldn’t send your report.")
       }
       onComplete?.()
       return { ok: true, toast: REPORTED }
@@ -485,8 +506,8 @@ export type BoardTarget =
 /** A board report refused for volume says so, rather than "try again" into the same wall. */
 const boardReportFailed = (result: { error?: string; errorCode?: string }): SheetOutcome =>
   result.errorCode === 'RATE_LIMITED'
-    ? { ok: false, error: "You've sent a lot of reports. Try again later." }
-    : failed(result.error, "Couldn't send your report.")
+    ? { ok: false, error: "You’ve sent a lot of reports. Try again later." }
+    : failed(result.error, "Couldn’t send your report.")
 
 /**
  * Report or block somebody on the board — from a post's ⋯ or an ask's More.
@@ -510,7 +531,7 @@ export const boardSafetySheet = (target: BoardTarget, name: string, onBlocked: (
 const boardBlockStep = (target: BoardTarget, name: string, onBlocked: () => void): Sheet => ({
   kind: 'actions',
   title: `Block ${name}?`,
-  message: "Their posts and asks leave your boards, and you won't see each other in rooms or messages. They aren't told.",
+  message: "Their posts and asks leave your boards, and you won’t see each other in rooms or messages. They aren’t told.",
   actions: [
     {
       label: 'Block',
@@ -520,7 +541,7 @@ const boardBlockStep = (target: BoardTarget, name: string, onBlocked: () => void
           target.kind === 'post'
             ? await apiClient.blockBoardPost(target.eventId, target.postId)
             : await apiClient.blockBoardRequest(target.requestId)
-        if (!result.success) return failed(result.error, "Couldn't block them.")
+        if (!result.success) return failed(result.error, "Couldn’t block them.")
         onBlocked()
         return { ok: true, toast: `${name} is blocked` }
       },
@@ -531,7 +552,7 @@ const boardBlockStep = (target: BoardTarget, name: string, onBlocked: () => void
 
 const boardReportStep = (target: BoardTarget, name: string): Sheet => ({
   kind: 'reasons',
-  title: target.kind === 'post' ? 'Report this post' : `Report ${name}'s ask`,
+  title: target.kind === 'post' ? 'Report this post' : `Report ${name}’s ask`,
   message: target.kind === 'post' ? 'Why are you reporting this post?' : 'Why are you reporting this ask?',
   reasons: MESSAGE_REPORT_REASONS,
   submitLabel: 'Send report',

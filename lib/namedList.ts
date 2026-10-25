@@ -19,11 +19,24 @@ export type NamedList<K extends string> =
   | Record<string, unknown>[]
   | ({ [P in K]: Record<string, unknown>[] } & Record<string, unknown>)
 
+/*
+ * The cursor `/conversations` will send beside its rows (blendn-admin feat/redesign-sv-a), kept off the rows themselves
+ * so the seven call sites that read an array are untouched: `conversationsCursor(rows)` reads what this call saw.
+ */
+const cursors = new WeakMap<object, string>()
+
+/** The next-page cursor the response that produced `rows` carried, or null (none sent, or no more). */
+export const conversationsCursor = (rows: readonly unknown[] | undefined | null): string | null => (rows ? (cursors.get(rows) ?? null) : null)
+
 export function namedList<K extends string>(
   res: ApiResponse<NamedList<K>>,
   key: K
 ): ApiResponse<Record<string, unknown>[]> {
   const body = res.data
   const rows = Array.isArray(body) ? body : body?.[key]
+  if (Array.isArray(rows) && !Array.isArray(body) && body) {
+    const meta = ((body as Record<string, unknown>).pagination ?? body) as { hasMore?: unknown; nextCursor?: unknown }
+    if (meta.hasMore !== false && typeof meta.nextCursor === 'string' && meta.nextCursor) cursors.set(rows, meta.nextCursor)
+  }
   return { ...res, data: Array.isArray(rows) ? rows : undefined }
 }

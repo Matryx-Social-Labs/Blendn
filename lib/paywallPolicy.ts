@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { Logger } from './logger'
+import { dateIn, hourIn } from './time'
 
 /**
  * When the Blendn+ paywall may open by itself (plan v1 "Upgrade prompts",
@@ -51,8 +52,10 @@ export const EMPTY_MEMORY: PaywallMemory = { shown: {}, dismissed: {} }
 /** The night an instant belongs to: its local date, with 00:00–05:59 counted as the night before. */
 export function nightOf(ms: number): string {
   const d = new Date(ms)
-  if (d.getHours() < NIGHT_RESETS_AT_HOUR) d.setDate(d.getDate() - 1)
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
+  const [y, m, day] = dateIn(d)
+  // A calendar date, not an instant: UTC only does the day arithmetic.
+  const night = new Date(Date.UTC(y, m, hourIn(d) < NIGHT_RESETS_AT_HOUR ? day - 1 : day))
+  return `${night.getUTCFullYear()}-${night.getUTCMonth() + 1}-${night.getUTCDate()}`
 }
 
 /**

@@ -13,7 +13,9 @@ appId: com.matryxsociallabs.blendn
 - tapOn: "you@example.com"
 - inputText: ${EMAIL}
 - runFlow: keyboard-done.yaml
-- tapOn: "Your password"
+# The password field draws its own placeholder, hidden from accessibility (r7 H3): tap the input itself.
+- tapOn:
+    id: "sign-in-password-input"
 - inputText: ${PASSWORD}
 - runFlow: keyboard-done.yaml
 - tapOn:

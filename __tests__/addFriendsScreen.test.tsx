@@ -9,6 +9,8 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
+const mockAsk = jest.fn()
+jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: (...a: unknown[]) => mockAsk(...a), useStillHere: () => () => true }))
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useFocusEffect: (effect: () => void) => {
@@ -35,11 +37,10 @@ jest.mock('../lib/apiClient', () => ({
 }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-// ProfileSections pulls expo-video in through the hero; only the heading is used here.
-jest.mock('../components/profile/ProfileSections', () => {
-  const React = require('react')
-  const { Text } = require('react-native')
-  return { ProfileHeading: (p: { title: string }) => React.createElement(Text, null, p.title) }
+jest.mock('../components/ds/Orbs', () => ({ Orbs: () => null }))
+jest.mock('../lib/useAuth', () => {
+  const auth = { user: { id: 'u_me', name: 'Sam' } }
+  return { useAuth: () => auth }
 })
 jest.mock('../components/OptimizedImage', () => {
   const React = require('react')
@@ -74,7 +75,7 @@ it('accepts exactly the request tapped, and takes only it off the list', async (
   await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledWith('req-ben', 'accept'))
   await waitFor(() => expect(screen.queryByLabelText('Accept Ben')).toBeNull())
   expect(screen.getByLabelText('Accept Cam')).toBeTruthy()
-  expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success')
+  expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success', { haptic: 'success' })
 })
 
 it('"Not now" dismisses, quietly', async () => {
@@ -105,7 +106,7 @@ it('keeps the row and says so when the answer fails', async () => {
 
   fireEvent.press(await screen.findByLabelText('Accept Ben'))
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn't go through. Try again.", 'error'))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn’t go through. Try again.", 'error', { haptic: 'error' }))
   expect(screen.getByLabelText('Accept Ben')).toBeTruthy()
 })
 

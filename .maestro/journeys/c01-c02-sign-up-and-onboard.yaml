@@ -51,7 +51,9 @@ tags:
 - tapOn: "you@example.com"
 - inputText: ${NEW_EMAIL}
 - runFlow: ../subflows/field-done.yaml
-- tapOn: "At least 12 characters"
+# The password field draws its own placeholder, hidden from accessibility (r7 H3): tap the input itself.
+- tapOn:
+    id: "sign-in-password-input"
 - inputText: ${NEW_PASSWORD}
 - runFlow: ../subflows/field-done.yaml
 - tapOn: "You must be 18 or over"
@@ -136,7 +138,7 @@ tags:
     visible: "Edit my details"
     timeout: 20000
 - takeScreenshot: c02-ready
-- tapOn: "Start Blend'n"
+- tapOn: "Start Blend’n"
 # onboarded is true from here; the invite screen comes after it.
 - extendedWaitUntil:
     visible: "Share my link"

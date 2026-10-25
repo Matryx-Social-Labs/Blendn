@@ -2,12 +2,16 @@ import { useState } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
-import { Icon, type IconName } from '../ui/Icon'
+import { Glyph } from '../ui/Glyph'
+import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, PRESS, RADIUS, SIZE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY } from '../../lib/theme'
-import { focusRing, IC_HAIRLINE, PRESSED_WASH, useIncreaseContrast } from './shared'
+import { chipRest, focusRing, IC_HAIRLINE, PRESSED_WASH, useGround, useIncreaseContrast, useSelection } from './shared'
+
+/** The lit disc's rim, as the lit button's and the selected chip's. */
+const LIT_RIM = 1
 
 export type IconButtonProps = {
   icon: IconName
@@ -28,8 +32,10 @@ export type IconButtonProps = {
 /**
  * The glass circle (DESIGN-BRIEF §12, guidelines/components/IconButton.html):
  * 44 pt on iOS, 48 dp on Android, a 24 pt outlined glyph. Navigation (back,
- * close, share) is silent; a toggle plays `H.select` and, when selected, flips
- * to a white disc with an ink glyph (§4.7). Never two touching: 8 pt apart.
+ * close, share) is silent; a toggle plays `H.select` and, when selected, lights in its screen's hue (direction C: no white
+ * selection): the hue's fill, a 1 pt rim in its edge, the glyph in its light tone, playing its verb once (DS #15: Like pops).
+ * Over a photo (`media`) the selected disc stays white with an ink glyph: a hue on a photo is not legible (§4.7). Never two
+ * touching: 8 pt apart.
  *
  * Press: iOS scales 0.97; Android ripples and squares to a 12 dp corner.
  * Disabled dims the glyph, not the circle: glass never fades (§5.2 rule 6).
@@ -59,10 +65,17 @@ export function IconButton({
   const round = android ? RADIUS.circleButtonAndroid : RADIUS.circleButton
   const radius = android && pressed ? RADIUS.pressedAndroid : round
   const shape = { width: size, height: size, borderRadius: radius }
+  const sel = useSelection()
+  const white = tier === 'media'
+  // On a surface card (`GroundProvider value="surface"`) glass has nothing to refract and drew no disc (C20, the request
+  // card's "…" on iOS): the circle is solid there, in the card's chip tone, on both platforms.
+  const onCard = useGround() === 'surface' && tier === 'control'
+  const glyphColor = !selected ? COLOR.textPrimary : white ? COLOR.selectionInk : sel.glyph
+  const disc = white ? styles.selected : { backgroundColor: sel.fill, borderWidth: LIT_RIM, borderColor: sel.edge, borderRadius: radius }
 
   const glyph = (
     <View testID={testID && `${testID}-glyph`} style={disabled && { opacity: OPACITY.disabled }}>
-      <Icon name={icon} color={selected ? COLOR.selectionInk : COLOR.textPrimary} />
+      <Glyph name={icon} color={glyphColor} play={selected} />
     </View>
   )
 
@@ -87,15 +100,18 @@ export function IconButton({
         accessibilityState={{ disabled, selected }}
         style={[shape, styles.clip]}
       >
+        {/* The disc and the glass swap under the glyph, which stays one mounted node: a glyph remounted by the swap could
+            never see `selected` rise, and so never pop. */}
         {selected ? (
-          <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, styles.center, styles.selected]}>
-            {glyph}
-          </View>
+          <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, disc]} />
+        ) : onCard ? (
+          <View testID={testID && `${testID}-disc`} style={[StyleSheet.absoluteFill, { backgroundColor: chipRest('surface'), borderRadius: radius }]} />
         ) : (
-          <Material role={tier} style={[StyleSheet.absoluteFill, styles.center, { borderRadius: radius }]}>
-            {glyph}
-          </Material>
+          <Material role={tier} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
         )}
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.center]}>
+          {glyph}
+        </View>
         {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
         {previewState === 'pressed' && android ? <View style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
         {contrast ? (

@@ -16,8 +16,9 @@ jest.mock('../lib/logger', () => ({
 jest.mock('@sentry/react-native', () => ({ setUser: jest.fn() }))
 jest.mock('../lib/notifications', () => ({}))
 jest.mock('../lib/socketClient', () => ({ socketClient: { disconnect: jest.fn() } }))
+jest.mock('../lib/fetchTimeout', () => ({ ...jest.requireActual('../lib/fetchTimeout'), REQUEST_TIMEOUT_MS: 50 }))
 
-import { apiClient } from '../lib/apiClient'
+import { apiClient, TokenStorage } from '../lib/apiClient'
 import { signOut } from '../lib/useAuth'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -31,5 +32,13 @@ describe('signOut', () => {
   it('reports the failure the server returned, after clearing local state', async () => {
     api.signOut.mockResolvedValue({ success: false, error: 'offline' } as never)
     await expect(signOut()).resolves.toEqual({ success: false, error: 'offline' })
+  })
+})
+
+describe('a keychain that never answers (SCRUM-733)', () => {
+  it('does not keep somebody in the session they asked to leave: the clear is bounded and sign-out returns', async () => {
+    api.signOut.mockResolvedValue({ success: false, error: 'This is taking too long.' } as never)
+    ;(TokenStorage.clearAll as jest.Mock).mockReturnValueOnce(new Promise(() => {}))
+    await expect(signOut()).resolves.toEqual({ success: false, error: 'This is taking too long.' })
   })
 })

@@ -75,11 +75,12 @@ describe('<ShareSheet>', () => {
     expect(screen.getByText('This is what they’ll see')).toBeTruthy()
   })
 
-  it('four actions, WhatsApp first on the white disc', async () => {
+  it('four actions, WhatsApp first on the lit disc (direction C: never the white one)', async () => {
     await render(sheet())
     const names = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel)
     expect(names.slice(-4)).toEqual(['WhatsApp', 'Instagram Story', 'Copy link', 'More…'])
-    expect(flat('s-whatsapp-disc').backgroundColor).toBe(COLOR.selectionFill)
+    expect(flat('s-whatsapp-disc')).toMatchObject({ backgroundColor: COLOR.selectionEmberFill, borderWidth: 1, borderColor: COLOR.brandOrange })
+    expect(flat('s-story-disc').backgroundColor).toBe(COLOR.surface)
   })
 
   it('the message sent with the link', async () => {
@@ -138,6 +139,7 @@ describe('<ShareSheet>', () => {
   it('a venue and an invite', async () => {
     await render(sheet({ share: { kind: 'venue', name: 'Toit', typeLabel: 'Brewery', area: 'Indiranagar', url: 'https://www.blendn.app/v/9c1e' } }))
     expect(screen.getByText('Brewery · Indiranagar')).toBeTruthy()
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet({ share: { kind: 'invite', url: 'https://www.blendn.app/f/abc' } }))
     expect(screen.getByText('Your invite to Blend’n')).toBeTruthy()
     expect(screen.getByText('A link only you can send · no name on the card')).toBeTruthy()

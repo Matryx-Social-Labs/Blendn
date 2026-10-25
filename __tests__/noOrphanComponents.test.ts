@@ -59,34 +59,13 @@ const KNOWN_ORPHANS: Record<string, string> = {
    * purpose (Phase 1, the foundation: no screen changes). Each entry goes with
    * the first screen that adopts it.
    */
-  'VenuePlate.tsx': 'redesign P5 set; the art for a place with no next event (Places tiles and rows, the venue hero) adopts it with the Places redesign',
   /* The P0 system components (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   /* The P1 inputs (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
-  'DateField.tsx': 'redesign P1 input; the onboarding basics step (date of birth) adopts it (Flow 2, ROUND3 B4)',
-  'LookingForCard.tsx': 'redesign P1 input; the onboarding preferences step adopts it in place of LookingForCards (Flow 2)',
-  'ProgressBar.tsx': 'redesign P1 input; the onboarding header adopts it (Flow 2)',
   /* P5, sets and moments (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
-  'MomentReady.tsx': 'redesign P5 moment (Flow 2); /onboarding/ready plays it on the server’s yes with the onboarding redesign',
   /* The P3 chat and gesture components (ROUND3 B4), built ahead of Flow 5; the room and the DM adopt them, the Banter takes SwipeRow. */
-  'PollBubble.tsx': 'redesign P3 component; the organiser poll in the room — the room says a poll as a notice until a `poll` message carries its poll id (server; docs/CHAT.md) (Flow 15 #8)',
   /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
-  'AmenityTile.tsx': 'redesign P2 (AmenityTile, AmenityGrid); the Scene bento and the venue page’s Good to know adopt it in place of SceneAmenity (Flow 3)',
-  'ds/DayHeading.tsx': 'redesign P2; replaces components/ui/DayHeading on the Pulse’s Upcoming (Flow 3). Going draws its day groups at the heading’s 20 (flow4.js `dayH`), so it uses SectionHeader',
-  'MapCard.tsx': 'redesign P2 (MapCard, MapPin, MapCluster); the Scene and venue page’s map band, then the home map’s pins (Flows 3, 11)',
   /* P4, the rest of R2-D0 (ROUND3 B4), built ahead of Flows 9–16; each goes with the first flow that adopts it. */
-  'RevealSheet.tsx': 'redesign P4 component (RevealSheet, RevealSide); the Blend room adopts it with the Crews redesign (Flow 10 · 10.9)',
-  'GoLiveSheet.tsx': 'redesign P4 component; replaces the Go Live sheet on the venue page with the Places-live redesign (Flow 11 · 11.2)',
-  'SessionSheet.tsx': 'redesign P4 component; opens from the live pill with the Places-live redesign (Flow 11 · 11.3)',
-  'ExpiryPrompt.tsx': 'redesign P4 component (ExpiryPrompt, NotLiveNotice); replaces LiveAtVenue’s expiry prompt with the Places-live redesign (Flow 11 · 11.4)',
-  'OverlapLine.tsx': 'redesign P4 component; the PersonCard and crew card face line adopt it with Matching v2 in the Room (Flow 14 · 14.1)',
-  'TonightSheet.tsx': 'redesign P4 component; the contextual Blend’n+ sheet the client builds next (ROUND3 G2, Flow 12 · 12.1)',
-  'PlanCard.tsx': 'redesign P4 component (PlanCard, NightPassRow, PlanList); replaces the plan rows in app/plus.tsx with the Blend’n+ redesign (Flow 12)',
-  'NeverForSalePanel.tsx': 'redesign P4 component; the Blend’n+ page adopts it before the plans (Flow 12 · 12.2)',
-  'ManageStatusRow.tsx': 'redesign P4 component; Manage (Settings › Blend’n+) adopts it with the Blend’n+ redesign (Flow 12 · 12.3)',
   'OfferCard.tsx': 'redesign P4 component; replaces the offer screen’s card with the Regulars redesign and the Passes & offers list (Flow 13, ROUND3 G3)',
-  'ShareSheet.tsx': 'redesign P4 component; replaces the plain-text share with the share tray once links ship (Flow 16 · 16.1)',
-  'LinkPreviewCard.tsx': 'redesign P4 component; drawn by ShareSheet (on this ledger); the OG image itself is the server’s (Flow 16 · 16.2)',
-  'StoryCard.tsx': 'redesign P4 component; the Instagram Story share adopts it with a view-capture module (Flow 16 · 16.3)',
 }
 
 const sources = walk(join(ROOT, 'app'))

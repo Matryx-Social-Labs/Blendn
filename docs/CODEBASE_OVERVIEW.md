@@ -104,14 +104,13 @@ blendn/
 │   │   ├── ScalePress.tsx          # Haptic pressable with scale anim
 │   │   └── FadeInUp.tsx
 │   ├── ActionTray.tsx
-│   ├── AppHeader.tsx
 │   ├── ErrorBoundary.tsx
 │   ├── EventCard.tsx
 │   ├── LazyWrapper.tsx
 │   ├── NearbyEventCard.tsx
 │   ├── OnboardingProgressBar.tsx
 │   ├── OptimizedImage.tsx          # expo-image wrapper
-│   ├── PhotoLightbox.tsx
+│   ├── profile/PhotoViewer.tsx
 │   ├── PhotoManager.tsx
 │   ├── RealtimeStatusBanner.tsx
 │   ├── Skeleton.tsx                # Loading shimmer
@@ -419,10 +418,9 @@ In-flight dedup prevents overlapping fetches.
 | `FadeInUp` | `components/motion/FadeInUp.tsx` | Animated entrance wrapper |
 | `Skeleton` | `components/Skeleton.tsx` | Loading shimmer placeholder |
 | `Toast` | `components/Toast.tsx` | Global toast notification system |
-| `AppHeader` | `components/AppHeader.tsx` | Reusable screen header |
 | `RealtimeStatusBanner` | `components/RealtimeStatusBanner.tsx` | Socket connection status indicator |
 | `PhotoManager` | `components/PhotoManager.tsx` | Photo upload/manage UI |
-| `PhotoLightbox` | `components/PhotoLightbox.tsx` | Full-screen photo viewer |
+| `PhotoViewer` | `components/profile/PhotoViewer.tsx` | Full-screen paged photo viewer (travels from the thumbnail) |
 | `ActionTray` | `components/ActionTray.tsx` | Bottom action sheet |
 | `ErrorBoundary` | `components/ErrorBoundary.tsx` | React error boundary at root |
 | `VirtualizedList` | `components/VirtualizedList.tsx` | Performance-optimized list wrapper |

@@ -8,7 +8,7 @@
  * screen takes its word, and still reads the lists when an older server sends
  * none.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
 let mockParams: { id: string; eventId?: string; pseudonym?: string; roomSeed?: string } = { id: 'rh_ben', eventId: 'e1' }
 const mockUser = { id: 'u_me' }
@@ -29,12 +29,13 @@ jest.mock('../lib/apiClient', () => ({
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
     likeAtEvent: jest.fn(),
+    respondToMessageRequest: jest.fn(),
   },
 }))
 jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-jest.mock('../components/PhotoLightbox', () => () => null)
+jest.mock('../components/profile/PhotoViewer', () => ({ PhotoViewer: () => null }))
 jest.mock('../components/Skeleton', () => ({ SkeletonBlock: () => null, SkeletonLine: () => null }))
 // Open, it is one button that sends "hi" — enough to drive what the screen does with the answer.
 jest.mock('../components/grid/ConnectSheet', () => ({
@@ -53,36 +54,37 @@ jest.mock('../components/ds/MomentMatch', () => ({
     return React.createElement(Pressable, { onPress: p.onSayHi }, React.createElement(Text, null, `You and ${p.name} matched`))
   },
 }))
+jest.mock('../components/profile/ProfileHeroStage', () => {
+  const React = require('react')
+  const { Text } = require('react-native')
+  return {
+    heroHeightFor: (w: number) => Math.round(w * 1.3),
+    ProfileHeroStage: (p: { name: string; age?: number | null }) => React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name),
+  }
+})
 jest.mock('../components/profile/ProfileSections', () => {
   const React = require('react')
-  const { Pressable, Text, View } = require('react-native')
+  const { Text, View } = require('react-native')
   const stub = (label: string) => (p: { title?: string }) => React.createElement(Text, null, p.title ?? label)
+  // The real `ProfileBody` (the one body both profile pages draw, D26) over the stubbed pieces is not possible across a module
+  // boundary, so the real module is kept and only its leaf pieces below stand in where a test reads them.
   return {
-    ProfileHero: (p: { title: string }) => React.createElement(Text, null, p.title),
+    ...jest.requireActual('../components/profile/ProfileSections'),
+    SECTION_GAP: 28,
+    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
     ProfileBio: stub('bio'),
     ProfileDetail: stub('detail'),
     ProfileGallery: stub('gallery'),
-    ProfileHeading: stub('heading'),
     ProfileInterests: stub('interests'),
-    ProfileActions: (p: { label: string; hint?: string | null; onPress: () => void; disabled?: boolean; onLike?: () => void }) =>
-      React.createElement(
-        View,
-        null,
-        React.createElement(
-          Pressable,
-          { onPress: p.onPress, disabled: p.disabled },
-          React.createElement(Text, null, p.label)
-        ),
-        p.hint ? React.createElement(Text, null, p.hint) : null,
-        p.onLike ? React.createElement(Pressable, { onPress: p.onLike }, React.createElement(Text, null, 'Like')) : null
-      ),
   }
 })
 
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
 import { showUserSafetyActions } from '../lib/safetyUtils'
-import UserProfile from '../app/user/[id]'
+import UserProfile, { SELF_PREVIEW, stillAnonymous } from '../app/user/[id]'
+import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
+import { COLOR, MAX_FONT_SCALE } from '../lib/design/tokens'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
@@ -122,7 +124,7 @@ describe('with the server’s `connection`', () => {
     await render(<UserProfile />)
 
     expect(await screen.findByText('Requested')).toBeTruthy()
-    expect(screen.getByText('Request sent — you can chat once they accept.')).toBeTruthy()
+    expect(screen.getByText('Request sent. You can chat once they accept.')).toBeTruthy()
     expect(api.getMessageRequests).not.toHaveBeenCalled()
   })
 
@@ -144,7 +146,7 @@ describe('with the server’s `connection`', () => {
     await render(<UserProfile />)
 
     expect(await screen.findByText('Connect')).toBeTruthy()
-    expect(screen.getByText('Send a request to start chatting.')).toBeTruthy()
+    expect(screen.getByText('Connect sends a request and reveals your name and photo.')).toBeTruthy()
     expect(api.getConversations).not.toHaveBeenCalled()
   })
 })
@@ -211,7 +213,7 @@ describe('Connect', () => {
     fireEvent.press(await screen.findByText('Connect'))
     fireEvent.press(await screen.findByText('Send request'))
 
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Your request didn't send. Try again.", 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Your request didn’t send. Try again.", 'error', { haptic: 'error' }))
     expect(screen.getByText('Connect')).toBeTruthy()
     expect(screen.queryByText('Requested')).toBeNull()
     // The sheet stays open, with the message in it.
@@ -249,7 +251,7 @@ describe('Connect', () => {
     api.createMessageRequest.mockResolvedValue({ success: false, error: 'exists', errorCode: 'CONFLICT' })
     await render(<UserProfile />)
 
-    expect(await screen.findByText('Slow Kite')).toBeTruthy()
+    expect(await screen.findByText('Slow Kite, 27')).toBeTruthy()
     fireEvent.press(await screen.findByText('Connect'))
     fireEvent.press(await screen.findByText('Send request'))
 
@@ -295,7 +297,7 @@ describe('when the profile does not load', () => {
     api.getProfile.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
     await render(<UserProfile />)
 
-    expect(await screen.findByText("This profile didn't load")).toBeTruthy()
+    expect(await screen.findByText('This profile didn’t load')).toBeTruthy()
     api.getPublicProfile.mockResolvedValueOnce({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
     fireEvent.press(screen.getByText('Try again'))
     expect(await screen.findByText('Connect')).toBeTruthy()
@@ -306,7 +308,7 @@ describe('when the profile does not load', () => {
     api.getProfile.mockResolvedValue({ success: false, error: 'No internet connection.' })
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByLabelText('Go back'))
+    fireEvent.press(await screen.findByLabelText('Back'))
     expect(router.back).toHaveBeenCalled()
   })
 
@@ -315,7 +317,7 @@ describe('when the profile does not load', () => {
     api.getProfile.mockResolvedValue({ success: false, error: 'User not found', errorCode: 'NOT_FOUND' })
     await render(<UserProfile />)
 
-    expect(await screen.findByText("This profile isn't available.")).toBeTruthy()
+    expect(await screen.findByText('This profile isn’t available.')).toBeTruthy()
     expect(screen.queryByText('Try again')).toBeNull()
   })
 })
@@ -333,11 +335,11 @@ describe('identity fails closed (the server’s `identityVisible`, nothing else)
     // Titled by the room's pseudonym, never by the name that leaked through.
     expect(await screen.findByText('Cosmic Panda')).toBeTruthy()
     expect(screen.queryByText('Ben')).toBeNull()
-    // One bio block only: the "Still anonymous" note, not theirs.
-    expect(screen.queryAllByText('bio')).toHaveLength(1)
+    // Nothing of theirs is drawn: the note says why, in the pseudonym's name.
+    expect(screen.queryByText('bio')).toBeNull()
     expect(screen.queryByText('detail')).toBeNull()
     expect(screen.queryByText('gallery')).toBeNull()
-    expect(screen.getByText('Still anonymous')).toBeTruthy()
+    expect(screen.getByText(stillAnonymous('Cosmic Panda'))).toBeTruthy()
   })
 
   it('treats identityVisible: false the same, and never titles anybody "Attendee"', async () => {
@@ -371,7 +373,7 @@ describe('identity fails closed (the server’s `identityVisible`, nothing else)
     await render(<UserProfile />)
 
     expect(await screen.findByText('Ben, 29')).toBeTruthy()
-    expect(screen.getByText('bio')).toBeTruthy()
+    expect(screen.getByText('Hi')).toBeTruthy()
   })
 })
 
@@ -383,4 +385,151 @@ it('leaves the profile after blocking from it', async () => {
   const onBlock = (showUserSafetyActions as jest.Mock).mock.calls[0][2]
   onBlock()
   expect(router.back).toHaveBeenCalled()
+})
+
+describe('a request they sent you, opened from their profile (R4.1 6.2)', () => {
+  const RECEIVED = { ...BEN, id: 'u_ben', connection: { conversationId: null, request: 'received' as const } }
+  const pending = [{ id: 'req-1', senderId: 'u_ben', message: 'Saw you at Toit. Coffee?', status: 'pending' }]
+
+  beforeEach(() => {
+    mockParams = { id: 'u_ben' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: RECEIVED })
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: pending } } as never)
+  })
+
+  it('shows who asked and their note verbatim, with Decline and Accept in the tray', async () => {
+    await render(<UserProfile />)
+    expect(await screen.findByText('Ben wants to message you')).toBeTruthy()
+    expect(screen.getByText('Saw you at Toit. Coffee?')).toBeTruthy()
+    expect(screen.getByLabelText('Accept Ben’s request')).toBeTruthy()
+    expect(screen.getByLabelText('Decline Ben’s request')).toBeTruthy()
+    // The tray is theirs: no Like and no Connect beside it.
+    expect(screen.queryByText('Connect')).toBeNull()
+  })
+
+  it('Accept answers that request, says success once, and opens the chat', async () => {
+    api.respondToMessageRequest.mockResolvedValue({ success: true, data: { success: true, status: 'accepted', conversationId: 'conv-5', sender: { id: 'u_ben', name: 'Ben', avatar: null } } })
+    await render(<UserProfile />)
+    await fireEvent.press(await screen.findByLabelText('Accept Ben’s request'))
+    await waitFor(() => expect(api.respondToMessageRequest).toHaveBeenCalledWith('req-1', 'accept'))
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ params: expect.objectContaining({ conversationId: 'conv-5' }) })))
+  })
+
+  it('Decline answers it and leaves nothing to offer, since a pair has one request for all time', async () => {
+    api.respondToMessageRequest.mockResolvedValue({ success: true, data: { success: true, status: 'declined', conversationId: null, sender: { id: 'u_ben', name: 'Ben', avatar: null } } })
+    await render(<UserProfile />)
+    await fireEvent.press(await screen.findByLabelText('Decline Ben’s request'))
+    await waitFor(() => expect(api.respondToMessageRequest).toHaveBeenCalledWith('req-1', 'decline'))
+    expect(await screen.findByText('Declined')).toBeTruthy()
+    expect(screen.queryByText('Ben wants to message you')).toBeNull()
+  })
+
+  it('a refused answer says so and keeps the prompt', async () => {
+    api.respondToMessageRequest.mockResolvedValue({ success: false, error: 'nope' })
+    await render(<UserProfile />)
+    await fireEvent.press(await screen.findByLabelText('Accept Ben’s request'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn’t accept that request. Try again.", 'error', { haptic: 'error' }))
+    expect(screen.getByText('Ben wants to message you')).toBeTruthy()
+  })
+
+  it('stays Requested when the request cannot be matched (a room handle)', async () => {
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [{ ...pending[0], senderId: 'u_other' }] } } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText('Requested')).toBeTruthy()
+    expect(screen.queryByText('Ben wants to message you')).toBeNull()
+  })
+})
+
+describe('their badges', () => {
+  // profile-badges.itest.ts: `{ kind, label }[]`, top-level on `GET /users/:id` beside `friend`, for whoever may see who they are;
+  // the key is absent otherwise. The page reads them from that one answer and asks nothing more.
+  const NIGHTS = [{ kind: 'nights_out', label: '5+ nights this month' }]
+  const connection = { conversationId: null, request: null }
+  const openWith = async (users: Record<string, unknown>) => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection, ...users } } as never)
+    await render(<UserProfile />)
+    await screen.findByText('Connect')
+  }
+
+  it('reads them from the one answer, and asks nothing more', async () => {
+    await openWith({ friend: { state: 'none', canAdd: true }, badges: NIGHTS })
+    expect(await screen.findByLabelText('Badge: 5+ nights this month')).toBeTruthy()
+    expect(api.getPublicProfile).toHaveBeenCalledTimes(1)
+    expect(api.getProfile).not.toHaveBeenCalled()
+  })
+
+  it('a missing `badges` is none: nothing drawn, and nothing more asked', async () => {
+    await openWith({ friend: { state: 'none', canAdd: true } })
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+    expect(api.getProfile).not.toHaveBeenCalled()
+  })
+
+  it('draws nothing for none earned, or for a `badges` that is not a list', async () => {
+    await openWith({ badges: [] })
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+    await screen.unmount()
+    await openWith({ badges: 'nights_out' })
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+  })
+
+  it('draws none for somebody still anonymous to you, whatever the payload carries', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', name: 'Amber Fox', identityVisible: false, badges: NIGHTS } })
+    await render(<UserProfile />)
+    await screen.findByText('Connect')
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+    expect(api.getProfile).not.toHaveBeenCalled()
+  })
+
+  it('a late answer for somebody the page has moved on from is not drawn on the next person', async () => {
+    let answerBen: (v: unknown) => void = () => {}
+    api.getPublicProfile.mockImplementation(((id: string) =>
+      id === 'rh_ben' ? new Promise((r) => (answerBen = r)) : Promise.resolve({ success: true, data: { ...BEN, id, name: 'Cleo', connection } })) as never)
+    const view = await render(<UserProfile />)
+    mockParams = { id: 'rh_cleo', eventId: 'e1' }
+    await view.rerender(<UserProfile />)
+    await screen.findByText('Cleo')
+    await act(async () => answerBen({ success: true, data: { ...BEN, connection, badges: NIGHTS } }))
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+  })
+})
+
+/*
+ * D-M12 / D-LM4 / D-LM12: a revealed profile with nothing filled in says so (it was a black void above the dock); your own
+ * page says it is how others see you, with Edit; the dock's note is capped at the meta role.
+ * Negative control: without `ProfileBody`'s empty line, the self line or the note's cap, these fail.
+ */
+describe('one profile body', () => {
+  it('a revealed profile with no sections says "Nothing here yet", and the dock note is capped', async () => {
+    mockParams = { id: 'u_ben' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, bio: '', photos: [], connection: { conversationId: 'c1', request: null } } })
+    await render(<UserProfile />)
+    expect(await screen.findByText(PROFILE_EMPTY)).toBeTruthy()
+    expect(screen.getByText('You can message each other.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+  })
+
+  it('an unrevealed profile lets its note explain the absence: no "Nothing here yet"', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', identityVisible: false } })
+    await render(<UserProfile />)
+    expect(await screen.findByText(/hasn’t revealed who they are yet/)).toBeTruthy()
+    expect(screen.queryByText(PROFILE_EMPTY)).toBeNull()
+  })
+
+  it('your own profile says it is how others see you, with Edit', async () => {
+    mockParams = { id: 'u_me' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_me', isOwnProfile: true } })
+    await render(<UserProfile />)
+    expect(await screen.findByText(SELF_PREVIEW)).toBeTruthy()
+    fireEvent.press(screen.getByTestId('profile-self-edit'))
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+  })
+
+  it('your own profile is the violet world (you), not rose: its Edit is lit violet (rc7 D11)', async () => {
+    mockParams = { id: 'u_me' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_me', isOwnProfile: true } })
+    await render(<UserProfile />)
+    await screen.findByText(SELF_PREVIEW)
+    const fills = JSON.stringify(screen.toJSON())
+    expect(fills).toContain(COLOR.selectionVioletFill)
+    expect(fills).not.toContain(COLOR.selectionRoseFill)
+  })
 })

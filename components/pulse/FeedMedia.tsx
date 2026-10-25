@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
-import Animated, { Easing, FadeIn, ReduceMotion, useReducedMotion } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, ReduceMotion } from 'react-native-reanimated'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { MOTION_DURATION, MOTION_EASING } from '../../lib/motion'
+import { DURATION, EASING } from '../../lib/design/tokens'
 import { useLatest } from '../../lib/useLatest'
 import { OptimizedImage } from '../OptimizedImage'
 import { FeedVideo } from './FeedVideo'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * How long a still holds before the card moves on.
@@ -25,9 +26,9 @@ const IMAGE_DWELL_MS = 4000
  * register as a crossfade, a small fraction of the dwell. Kept under Reduce
  * Motion — nothing moves, and a fade is gentler than the cut it replaces.
  */
-const FRAME_FADE_MS = MOTION_DURATION.slow
+const FRAME_FADE_MS = DURATION.medium
 const frameIn = FadeIn.duration(FRAME_FADE_MS)
-  .easing(Easing.bezier(...MOTION_EASING.entrance))
+  .easing(Easing.bezier(...EASING.entrance))
   .reduceMotion(ReduceMotion.Never)
 
 /**

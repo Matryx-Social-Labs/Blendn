@@ -127,7 +127,7 @@ const ROWS: [string, NotificationRowProps][] = [
 function Notifications() {
   const request = { visual: { type: 'photo' as const, uri: PHOTO }, title: 'Priya wants to be friends', context: 'From Vinyl Night · 2h' }
   const actions = [
-    { label: 'Accept', kind: 'strong' as const, onPress: noop },
+    { label: 'Accept', kind: 'lit' as const, icon: 'user-check' as const, onPress: noop },
     { label: 'Not now', kind: 'secondary' as const, onPress: noop },
   ]
   return (
@@ -170,7 +170,7 @@ function LiveRequest() {
         doneText="You’re in the car"
         ground={COLOR.surface}
         actions={[
-          { label: 'Join', kind: 'strong', onPress: () => setState('pending') },
+          { label: 'Join', kind: 'lit', icon: 'users', onPress: () => setState('pending') },
           { label: 'View', kind: 'secondary', onPress: noop },
         ]}
       />

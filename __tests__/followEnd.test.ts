@@ -49,7 +49,7 @@ describe('followEnd', () => {
 })
 
 describe('scrollListToEnd', () => {
-  it("asks the ScrollView, not FlatList's estimate", () => {
+  it("asks the ScrollView, not FlatList’s estimate", () => {
     const native = { scrollToEnd: jest.fn() }
     const list = { getScrollResponder: () => native, scrollToEnd: jest.fn() }
     scrollListToEnd(list as never, true)
@@ -68,7 +68,9 @@ describe('both chat screens use it', () => {
   ])('%s/%s/%s', (...p) => {
     const src = read(...p)
     expect(src).toMatch(/useFollowEnd\(/)
-    expect(src).toMatch(/onContentSizeChange=\{follow\.onContentSizeChange\}/)
+    // The DM hands it over only while the thread has rows (RC drive 3 D-A: an empty thread opens at its opener).
+    expect(src).toMatch(/onContentSizeChange=\{(?:follow\.onContentSizeChange|followFeed)\}/)
+    expect(src).toMatch(/follow\.onContentSizeChange/)
     // The timer that measured half a list.
     expect(src).not.toMatch(/setTimeout\(\(\) => scrollToBottom\(false\), 50\)/)
   })

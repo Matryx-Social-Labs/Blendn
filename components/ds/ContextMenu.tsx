@@ -7,8 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import type { ChatReaction } from '../../lib/chatReactions'
-import { COLOR, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { useClosedByLink, useTurnGate, useTurnWatch } from '../../lib/modalTurn'
 import { tint } from '../../lib/theme'
 import type { Rect } from './chatShared'
 import { ReactionBar, reactionBarWidth } from './ReactionBar'
@@ -21,6 +22,8 @@ const MENU_RADIUS = 20
 const LIFT = 1.03
 const DIM = 0.55
 const SPRING_FROM = 0.9
+/** The menu's drift on the way out. */
+const EXIT_DROP = 8
 
 export type MenuItem = {
   icon: IconName
@@ -160,8 +163,11 @@ export function placeLongPress({
  * (the bar springs itself). Reduce Motion: no lift and no spring; the dim
  * fades. Glass never fades (§5.2 rule 6), so the menu appears in place.
  *
+ * Exit (#6): the dim fades and the menu fades and drops 8 pt over `quick`; the
+ * Modal stays mounted for it. Reduce Motion: the fade alone.
+ *
  * ponytail: iOS's 6 pt blur behind the dim is not drawn (Material is the only
- * blur and has no backdrop role); no exit animation (it unmounts).
+ * blur and has no backdrop role).
  */
 export function LongPressMenu({ visible, anchor, side, items, reactions, onClose, children, testID }: LongPressMenuProps) {
   const window = useWindowDimensions()
@@ -170,6 +176,8 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   const lift = useSharedValue(reduceMotion ? 1 : PRESS.scale)
   const pop = useSharedValue(reduceMotion ? 1 : SPRING_FROM)
   const dim = useSharedValue(0)
+  /** 0 while it is up, 1 as it leaves (DS #6 exit: a quick fade with an 8 pt drop). */
+  const leave = useSharedValue(0)
   const estimate = items.length * SIZE.control
   const [menuHeight, setMenuHeight] = useState(estimate)
   /*
@@ -179,7 +187,15 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
    */
   const [kept, setKept] = useState(anchor)
   if (anchor && anchor !== kept) setKept(anchor)
-  const shown = visible && !!anchor
+  // One Modal on screen at a time on iOS (lib/modalTurn): asked for, it waits for the screen, like the Sheet.
+  const gate = useTurnGate(visible && !!anchor)
+  const shown = gate.allowed
+  // A link closes an open menu, as it does a sheet (lib/pendingRoute `onClosingForLink`): nothing it offers applies there.
+  useClosedByLink(visible && !!anchor, onClose)
+  // The Modal stays up for the exit and goes after it (state adjusted in render), like the Sheet.
+  const [mounted, setMounted] = useState(shown)
+  if (shown && !mounted) setMounted(true)
+  const turn = useTurnWatch(gate, mounted)
   // Each open starts from this menu's own estimate, not the last one's measure (state adjusted in render).
   const [openedFor, setOpenedFor] = useState(shown)
   if (shown !== openedFor) {
@@ -191,21 +207,32 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
 
   useEffect(() => {
     if (!shown) {
-      // Back to where an open starts, so the next one's first frame is right.
-      dim.set(0)
-      lift.set(reduceMotion ? 1 : PRESS.scale)
-      pop.set(reduceMotion ? 1 : SPRING_FROM)
-      return
+      // Out over `quick` on the exit curve: the dim fades, the menu fades and drops 8 pt (Reduce Motion: the fade alone).
+      const out = { duration: DURATION.quick, easing: Easing.bezier(...EASING.exit) }
+      dim.set(withTiming(0, out))
+      leave.set(withTiming(1, out))
+      const timer = setTimeout(() => {
+        setMounted(false)
+        // Back to where an open starts, so the next one's first frame is right.
+        leave.set(0)
+        lift.set(reduceMotion ? 1 : PRESS.scale)
+        pop.set(reduceMotion ? 1 : SPRING_FROM)
+      }, DURATION.quick)
+      return () => clearTimeout(timer)
     }
+    leave.set(0)
     dim.set(withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.gentle) }))
     if (reduceMotion) return
     lift.set(withSequence(withTiming(PRESS.scale, { duration: 0 }), withSpring(LIFT, SPRING.settle)))
     pop.set(withSequence(withTiming(SPRING_FROM, { duration: 0 }), withSpring(1, SPRING.snap)))
-  }, [shown, reduceMotion, dim, lift, pop])
+  }, [shown, reduceMotion, dim, leave, lift, pop])
 
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.get() }))
-  const liftStyle = useAnimatedStyle(() => ({ transform: [{ scale: lift.get() }] }))
-  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.get() }] }))
+  const popStyle = useAnimatedStyle(() => ({
+    opacity: 1 - leave.get(),
+    transform: [{ translateY: reduceMotion ? 0 : EXIT_DROP * leave.get() }, { scale: pop.get() }],
+  }))
+  const itemStyle = useAnimatedStyle(() => ({ opacity: 1 - leave.get(), transform: [{ scale: lift.get() }] }))
 
   const frame = anchor ?? kept
   // Never opened: nothing to keep mounted.
@@ -232,13 +259,17 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
   return (
     <Modal
       testID={testID && `${testID}-modal`}
-      visible={shown}
+      visible={mounted && !turn.refused}
       transparent
       animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose}
-      onDismiss={dismissed}
+      onShow={turn.onShow}
+      onDismiss={() => {
+        turn.onDismiss()
+        dismissed()
+      }}
     >
       {/* A Modal is its own native root: the bar's scrub needs its own root view. */}
       <GestureHandlerRootView style={styles.fill}>
@@ -254,7 +285,7 @@ export function LongPressMenu({ visible, anchor, side, items, reactions, onClose
           </Animated.View>
           <Animated.View
             testID={testID && `${testID}-item`}
-            style={[styles.place, { top: at.item, left: frame.x, width: frame.width, transformOrigin: `${side} center` }, liftStyle]}
+            style={[styles.place, { top: at.item, left: frame.x, width: frame.width, transformOrigin: `${side} center` }, itemStyle]}
           >
             {children}
           </Animated.View>

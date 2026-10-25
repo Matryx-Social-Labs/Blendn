@@ -1,12 +1,14 @@
 import { Asset } from 'expo-asset';
-import { router, Stack, usePathname, type Href } from "expo-router";
+import { router, Stack, useNavigationContainerRef, usePathname, useSegments, type Href } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef, useState } from 'react';
-import { Appearance, BackHandler, Platform, StyleSheet, View } from 'react-native';
+import { useNavigationReady } from '../lib/useNavigationReady';
+import { Appearance, AppState, BackHandler, Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
+import { rootTextSizeLayout } from '../components/TextSizeBoundary';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { IntroAnimation } from '../components/IntroAnimation';
 import { ToastProvider } from '../components/Toast';
 import {
     initializePushNotifications,
@@ -15,15 +17,20 @@ import {
 } from '../lib/notifications';
 import { initSocketWithAppState, cleanup as cleanupSocket, disconnect as disconnectSocket } from '../lib/socketClient';
 import { ONBOARDING_ROUTES, mayParticipate, resumeStep } from '../lib/onboarding';
-import { openWhenReady, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
+import { ReducedMotionFollower, useReducedMotion } from '../lib/motion';
+import { refreshPhoneZone } from '../lib/time';
+import { openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
 import { hasDeclinedPush } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { LiveAtVenue } from '../components/LiveAtVenue';
 import { notePathname } from '../lib/paywall';
 import { SheetHost } from '../components/SheetHost';
+import { ShareHost } from '../components/share/ShareHost';
 import { useAuth } from '../lib/useAuth';
-import { EMBER } from '../lib/theme';
+import { useUpdateRequired } from '../lib/updateRequired';
+import { UpdateRequiredScreen } from '../components/system/UpdateRequiredScreen';
+import { COLOR } from '../lib/design/tokens';
 import { handleAndroidBack } from '../lib/androidBack';
 import { CoachMarkHost } from '../components/ds/CoachMarkHost';
 import { initSentry, Sentry } from '../lib/sentry';
@@ -36,8 +43,8 @@ initSentry();
 /*
  * Tell the OS what the app already is.
  *
- * There is no light theme: `EMBER` is a dark palette and all 73 stylesheets
- * hardcode it. But `UIUserInterfaceStyle` is `Automatic` in the committed
+ * There is no light theme: the design tokens (`COLOR`, lib/design/tokens.ts) are
+ * a dark palette and every screen draws from them. But `UIUserInterfaceStyle` is `Automatic` in the committed
  * Info.plist and Android's `AppTheme` derives from a DayNight parent, so every
  * surface iOS and Android draw *for* us followed the phone's setting instead —
  * and on a phone set to light that means a white alert on a black screen.
@@ -71,21 +78,32 @@ Appearance.setColorScheme('dark');
 SplashScreen.preventAutoHideAsync().catch(() => {});
 SplashScreen.setOptions({ fade: true, duration: 200 });
 
-const LOGO_ASSET = require('../assets/logo/monogram-gradient.png');
+const LOGO_ASSET = require('../assets/logo/monogram-gradient-centred.png');
 const PLACEHOLDER_ASSET = require('../assets/images/icon.png');
-// Preloaded with the rest, so the splash hands over to a decoded animation
-// rather than to an empty frame that pops in a moment later.
-const INTRO_ASSET = require('../assets/logo/intro.webp');
 
 function RootLayout() {
   const { user, loading, isNewAccount, unreachable } = useAuth();
+  // The server no longer serves this build: one screen over everything, with the store button (Flow 15 15.14).
+  const updateRequired = useUpdateRequired();
   const pathname = usePathname();
+  // The route as a pattern (`/f/[token]`), for the crash report: the pathname itself carries tokens and ids.
+  const segments = useSegments();
   // The paywall never arrives by itself over onboarding, a check-in or a chat (lib/paywall.ts).
   useEffect(() => notePathname(pathname), [pathname]);
   const lastRedirectRef = useRef<string | null>(null);
+  // No redirect before the root navigator can take it: an Android font-size relaunch mounts this signed in (RC drive 2 D-1).
+  const navigationReady = useNavigationReady();
+  // What a link or a tap closes before it opens: a modal route that is up (lib/pendingRoute `dismissModals`).
+  const navigationRef = useNavigationContainerRef();
+  useEffect(() => {
+    setLinkNavigator(navigationRef);
+    return () => setLinkNavigator(null);
+  }, [navigationRef]);
   const pushInitRef = useRef<boolean>(false);
   const isNavigatingRef = useRef<boolean>(false);
-  const routeTransition = Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
+  // Reduce Motion: every push is the system cross-fade (DS #3 rm), not a slide across the screen.
+  const reduceMotion = useReducedMotion();
+  const routeTransition = reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'ios_from_right' : 'slide_from_right';
   const [imagesReady, setImagesReady] = useState(false);
 
   /*
@@ -103,7 +121,6 @@ function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(EMBER_FONT_MODULES);
   const fontsReady = fontsLoaded || !!fontError;
   const assetsReady = imagesReady && fontsReady;
-  const [showIntro, setShowIntro] = useState(true);
 
   /*
    * This used to fire and gate nothing — `Asset.loadAsync(...).catch(() => {})`,
@@ -124,7 +141,7 @@ function RootLayout() {
      * on this promise, and 388 KB of local images resolves long before auth
      * does.
      */
-    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, INTRO_ASSET, ...ONBOARDING_IMAGES])
+    Asset.loadAsync([LOGO_ASSET, PLACEHOLDER_ASSET, ...ONBOARDING_IMAGES])
       // ...then warm `expo-image`'s cache with the same files, because that is
       // the one the onboarding screens actually read from. Downloading is not
       // decoding, and the two libraries do not share a cache.
@@ -196,6 +213,14 @@ function RootLayout() {
     };
   }, []);
 
+  // The phone's zone may have moved while the app was away (R6-7): re-read it on the way back.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshPhoneZone();
+    });
+    return () => sub.remove();
+  }, []);
+
   // Socket connection management
   useEffect(() => {
     if (loading) return;
@@ -216,6 +241,14 @@ function RootLayout() {
 
   useEffect(() => {
     if (loading) {
+      setRouteReady(false);
+      return;
+    }
+    /*
+     * Every branch below may navigate (`replaceIfNeeded`, the held route's push): not until the navigator is mounted. And
+     * a tap that arrives meanwhile is held, not pushed: the module's "ready" outlives the relaunch's old tree.
+     */
+    if (!navigationReady) {
       setRouteReady(false);
       return;
     }
@@ -442,7 +475,7 @@ function RootLayout() {
     // replaceIfNeeded is redefined every render; adding it here would rerun
     // this effect (and its routing decisions) on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading, pathname, isNewAccount, unreachable]);
+  }, [user, loading, pathname, isNewAccount, unreachable, navigationReady]);
 
   /*
    * Android hardware back, registered ONCE.
@@ -511,20 +544,18 @@ function RootLayout() {
   if (!fontsReady) return null;
 
   return (
-    <ErrorBoundary
-      onError={(error, errorInfo, errorId) => {
-        Sentry.captureException(error, {
-          // The id the crash screen shows and puts in the support email.
-          tags: { context: 'root-error-boundary', error_id: errorId },
-          extra: { componentStack: errorInfo.componentStack },
-        })
-      }}
-    >
+    /*
+      The last resort: every screen has its own boundary (`rootTextSizeLayout`, `textSizeLayout`), so this one catches what
+      is outside them (the tab bar, the hosts). It reports the route's pattern, and going somewhere else clears it.
+    */
+    <ErrorBoundary route={`/${segments.join('/')}`} resetKey={pathname}>
       {/*
         Outermost, so every screen and the toast layer sit inside it. Without
         it, a `GestureDetector` anywhere in the app silently does nothing.
       */}
       <GestureHandlerRootView style={styles.gestureRoot}>
+      {/* The keyboard's real frame, frame by frame, including an interactive dismiss (KeyboardFrame reads it). */}
+      <KeyboardProvider>
       <ToastProvider>
         <View style={styles.root}>
           {/*
@@ -532,36 +563,17 @@ function RootLayout() {
             (`Appearance.setColorScheme('dark')` above).
           */}
           <StatusBar style="light" />
-          {/*
-            * Rendered last in the tree but drawn on top, so it covers whatever
-            * the router settles on. Deliberately not a gate — auth and routing
-            * both resolve underneath while it plays, and it is simply removed
-            * when done. It never delays a signed-in user.
-            *
-            * `assetsReady` gates the *mount*, though, and that is not the same
-            * thing as gating startup. The intro used to mount on the first
-            * render, which is before the native splash has been dismissed —
-            * so its timers ran while the splash was still covering it, and on
-            * a slow cold start the animation was already partway through by
-            * the time anyone could see it. It survived because the old asset
-            * opened on a static monogram identical to the splash, so the
-            * frames being eaten were indistinguishable from the splash
-            * itself. The asset now opens by drawing that monogram, and eaten
-            * frames would mean the logo appearing half-drawn.
-            *
-            * Same condition `hideAsync` waits on, and it flips in the render
-            * before the effect fires, so the overlay is up before the splash
-            * begins fading out. Nothing shows between them.
-            */}
-          {showIntro && assetsReady && (
-            <IntroAnimation onDone={() => setShowIntro(false)} />
-          )}
+          {/* Reduce Motion switched mid-session: every Reanimated default follows it from then on (audit M1). */}
+          <ReducedMotionFollower />
+          {/* No launch animation (owner, 2026-10-21): the static native splash hands straight to the first screen. */}
           <Stack
+            // Each screen laid out afresh when the text size changes (RC drive D2); nested navigators wrap their own.
+            screenLayout={rootTextSizeLayout}
             screenOptions={{
               // Every pushed screen sits on the same flat surface as the root.
               // This was `#000000`, so a push revealed a different black than
               // the tab underneath it.
-              contentStyle: { backgroundColor: EMBER.bg },
+              contentStyle: { backgroundColor: COLOR.ink },
               animation: routeTransition,
             }}
           >
@@ -578,6 +590,8 @@ function RootLayout() {
         */}
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
       <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+      {/* The unmatched route draws its own screen: without this the native stack titled it "+not-found" in a white header. */}
+      <Stack.Screen name="+not-found" options={{ headerShown: false }} />
       <Stack.Screen
         name="(tabs)"
         options={{ 
@@ -677,9 +691,12 @@ function RootLayout() {
            * the right with an × where every pushed screen has a back chevron,
            * and the edge-swipe dismissed a screen that looked like it had to
            * be closed.
+           *
+           * Full screen, because the frame is (Flow 3 `prefs`: the ✕ under a status bar): a page sheet drew the top inset a
+           * second time inside itself, so the ✕ landed 62 pt into the sheet, and on Android the dock lost the bottom inset.
            */
-          presentation: 'modal',
-          animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
+          presentation: 'fullScreenModal',
+          animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom',
         }}
       />
       <Stack.Screen 
@@ -707,25 +724,34 @@ function RootLayout() {
       */}
       <Stack.Screen name="preview" options={{ headerShown: false }} />
       <Stack.Screen name="nearby-events" options={{ headerShown: false }} />
+      {/* Notifications (the bell opens it) and its settings, from the ⋯ and from Settings. */}
+      <Stack.Screen name="notifications" options={{ headerShown: false }} />
+      <Stack.Screen name="message-requests" options={{ headerShown: false }} />
+      <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
+      <Stack.Screen name="muted-rooms" options={{ headerShown: false }} />
       {/* Settings' About and Contact support. */}
       <Stack.Screen name="about" options={{ headerShown: false }} />
       <Stack.Screen name="support" options={{ headerShown: false }} />
+      <Stack.Screen name="tips" options={{ headerShown: false }} />
       {/* Friends. Declared so none of them inherits the native header. */}
       <Stack.Screen name="friends/index" options={{ headerShown: false }} />
       <Stack.Screen name="friends/add" options={{ headerShown: false }} />
       <Stack.Screen name="friends/requests" options={{ headerShown: false }} />
       <Stack.Screen name="friends/[userId]" options={{ headerShown: false }} />
+      {/* See all friends here, from the Room's Friends here section (rose, a pushed screen). */}
+      <Stack.Screen name="room/friends-here" options={{ headerShown: false }} />
       {/* A room's info, from the options button in its header. */}
       <Stack.Screen name="chat-info/[id]" options={{ headerShown: false }} />
       {/* Placeholder screen: logic complete, design provisional (docs/PLACEHOLDER_SCREENS.md §6). */}
       <Stack.Screen name="board/[eventId]" options={{ headerShown: false }} />
       {/* Matching v2's about-you fields, reached from Edit profile (step 10, docs/PLACEHOLDER_SCREENS.md §15). */}
       <Stack.Screen name="edit-about-you" options={{ headerShown: false }} />
-      {/* Crews and Blends (step 9). Placeholder screens (docs/PLACEHOLDER_SCREENS.md §14). */}
+      {/* Crews and Blends (Flow 10). */}
       <Stack.Screen name="crews/index" options={{ headerShown: false }} />
-      <Stack.Screen name="crews/new" options={{ headerShown: false }} />
+      {/* Make a crew is a sheet over Crews (Flow 10 · 10.2): the route is transparent and draws the sheet itself. */}
+      <Stack.Screen name="crews/new" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }} />
+      <Stack.Screen name="crews/invite/[crewId]" options={{ headerShown: false }} />
       <Stack.Screen name="crews/[crewId]" options={{ headerShown: false }} />
-      <Stack.Screen name="blend/[blendId]" options={{ headerShown: false }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}
       <Stack.Screen name="venue/[id]" options={{ headerShown: false }} />
       {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §16). */}
@@ -733,9 +759,16 @@ function RootLayout() {
       {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
       <Stack.Screen
         name="plus"
-        options={{ headerShown: false, presentation: 'modal', animation: Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
+        options={{ headerShown: false, presentation: 'fullScreenModal', animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
       />
-      <Stack.Screen name="f/[token]"options={{ headerShown: false, presentation: 'modal', animation: 'slide_from_bottom' }} />
+      {/*
+        Manage (Settings › Blend'n+). Declared here, not by the screen: it said `<Stack.Screen options={{ headerShown: false }} />`
+        itself, a new object every render. From the tabs that settled; over the paywall (a modal, which makes the stack lay
+        out every route above it as one too) each `setOptions` re-rendered it into the next, and "Maximum update depth
+        exceeded" took the app down to the root boundary (RC drive 5; `__tests__/plusManageOverPlus.test.tsx`).
+      */}
+      <Stack.Screen name="plus-manage" options={{ headerShown: false }} />
+      <Stack.Screen name="f/[token]" options={{ headerShown: false, presentation: 'modal', animation: reduceMotion ? 'fade' : 'slide_from_bottom' }} />
           </Stack>
           {/*
             Watches whether somebody is still at the event they checked into,
@@ -748,6 +781,11 @@ function RootLayout() {
             Gated on a signed-in user: with nobody signed in there is no
             check-in to watch, and the fence lookup would 401 on a timer.
           */}
+          {updateRequired ? (
+            <View style={StyleSheet.absoluteFill}>
+              <UpdateRequiredScreen />
+            </View>
+          ) : null}
           {user ? <PresenceMonitor /> : null}
           {/* Your Go Live at a place: its pings, the expiry prompt, and `live:ended` (step 5). */}
           {user ? <LiveAtVenue /> : null}
@@ -757,6 +795,8 @@ function RootLayout() {
             finished step can say what it did.
           */}
           <SheetHost />
+          {/* The share tray and the Story sheet, for whoever calls `openShare` (lib/shareTray.ts). */}
+          <ShareHost />
           {/*
             Last, so nothing in the app draws over it (Android elevation
             included): every coach mark and its dim (components/ds/CoachMarkHost).
@@ -764,6 +804,7 @@ function RootLayout() {
           <CoachMarkHost />
         </View>
       </ToastProvider>
+      </KeyboardProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
@@ -787,6 +828,6 @@ const styles = StyleSheet.create({
      * The frame is flat `#0F0E0E`. A gradient here is one more surface than the
      * design has.
      */
-    backgroundColor: EMBER.bg,
+    backgroundColor: COLOR.ink,
   },
 })

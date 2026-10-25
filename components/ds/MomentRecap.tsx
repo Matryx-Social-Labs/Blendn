@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { useEffect, type ReactNode } from 'react'
 import { AccessibilityInfo, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated'
@@ -5,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, NUMERIC, RADIUS, SIZE, SPACE, STAGGER } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { OfflineBanner } from '../OfflineBanner'
 import { timeSpentLabel } from '../../lib/roomRecap'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
@@ -37,6 +39,11 @@ export type MomentRecapProps = {
   rated: boolean
   /** Rate who you met, or the night when you matched with nobody: never a dead end. */
   onRate: () => void
+  /**
+   * "People from tonight" (Flow 4 R4.1 4.5): the read-only deck of who was here, until the room's chat closes. Given
+   * only when there is a deck to open; absent, the row is absent and never explained.
+   */
+  onPeople?: () => void
   /** Back to tonight. */
   onBack: () => void
   /** The overlay's close (chevron down), when the Recap is inside it. */
@@ -57,9 +64,11 @@ export type MomentRecapProps = {
  * on open; Rate is the screen's primary (`H.primary`). Announced once, read
  * face (decorative) → title → tiles → actions.
  *
+ * Offline: the same banner Tonight and the Room use, above the face; the page keeps what it had.
+ *
  * Reduce Motion: fade only.
  */
-export function MomentRecap({ face, title, venue, minutes, matches, rated, onRate, onBack, onClose, paused = false, testID }: MomentRecapProps) {
+export function MomentRecap({ face, title, venue, minutes, matches, rated, onRate, onPeople, onBack, onClose, paused = false, testID }: MomentRecapProps) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -83,11 +92,13 @@ export function MomentRecap({ face, title, venue, minutes, matches, rated, onRat
       <Orbs set="brand" paused={paused} />
       <Grain />
       {onClose ? (
-        <View style={[styles.close, { top: insets.top + SPACE.sm }]}>
+        <View style={[styles.close, { top: barTop(insets.top) }]}>
           <IconButton icon="chevron-down" accessibilityLabel="Close" onPress={onClose} testID={testID && `${testID}-close`} />
         </View>
       ) : null}
       <View style={[styles.body, { paddingTop: insets.top + SIZE.circleButton + SPACE.xl }]}>
+        {/* Flow 4 R4.1 · Flow 15 #16: the night is read, so it stays; the banner says what it is showing (the frame shifts the page 60 pt). */}
+        <OfflineBanner text="Offline. Showing what loaded last." testID={testID && `${testID}-offline`} />
         <Block {...blocks(0)} style={styles.head}>
           <Avatar {...face} size={FACE} ring={COLOR.ink} testID={testID && `${testID}-face`} />
           <View style={styles.titles}>
@@ -125,6 +136,7 @@ export function MomentRecap({ face, title, venue, minutes, matches, rated, onRat
         ) : (
           <Button label={matches > 0 ? 'Rate who you met' : 'Rate the night'} onPress={onRate} testID={testID && `${testID}-rate`} />
         )}
+        {onPeople ? <Button label="People from tonight" kind="secondary" onPress={onPeople} testID={testID && `${testID}-people`} /> : null}
         <Button label="Back to tonight" kind="secondary" onPress={onBack} testID={testID && `${testID}-back`} />
       </Block>
     </View>

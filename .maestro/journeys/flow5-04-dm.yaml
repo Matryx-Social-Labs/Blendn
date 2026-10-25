@@ -45,6 +45,6 @@ tags:
 - takeScreenshot: flow5-04-reveal-confirm
 - tapOn: "Show them"
 - extendedWaitUntil:
-    visible: ".*(They can see your name|You can both see each other|Not yet).*"
+    visible: ".*(They see you|You see each other|You can both see each other|Not yet).*"
     timeout: 15000
 - takeScreenshot: flow5-04-revealed

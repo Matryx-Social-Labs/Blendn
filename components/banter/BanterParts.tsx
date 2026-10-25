@@ -1,20 +1,23 @@
+import { BAR_BOTTOM, barCircle, barHeight, barTop } from '../../lib/barGeometry'
 import { useBanterPress } from './pressGuard'
 import { Image } from 'expo-image'
 import type { ReactNode } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { FadeOut, ZoomIn } from 'react-native-reanimated'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { COLOR, DURATION, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
-import { chatClock } from '../../lib/time'
+import { clockTime, unbroken } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { IconButton } from '../ds/IconButton'
-import { Badge, monoCaption, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
+import { CategoryPlate } from '../ds/EventCard'
+import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { glassContentsIn, glassRiseIn } from '../motion/presence'
@@ -53,13 +56,16 @@ export function BanterHeader({
 }) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
+  const android = Platform.OS === 'android'
   return (
-    <Material role="bar" style={[styles.header, { paddingTop: insets.top + SPACE.sm }]}>
-      <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold), styles.ink, styles.grow]}>
+    // The height is the one the list below is laid out from (`banterHeaderHeight`), so it cannot drift from it.
+    // `-bar`: the visual checker reads rows scrolling under it as the design, not an overlap (rc7: "Farah Shah" over "Banter").
+    <Material role="bar" testID="banter-bar" style={[styles.header, { paddingTop: barTop(insets.top), height: banterHeaderHeight(insets.top, android) }]}>
+      <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={titleScaleCap(android)} style={[font('display', bold), styles.ink, styles.grow]}>
         Banter
       </Text>
       <View style={styles.actions}>
-        <View style={styles.bell}>{bell}</View>
+        {bell}
         <IconButton icon="search" accessibilityLabel="Search conversations" selected={searching} onPress={onSearch} testID="banter-search-toggle" />
         <IconButton icon="check-check" accessibilityLabel="Mark all read" disabled={!canMarkAll} onPress={onMarkAll} testID="banter-mark-all" />
       </View>
@@ -67,8 +73,11 @@ export function BanterHeader({
   )
 }
 
-/** The header's height under the status bar: the frames' 116 on a 402 pt iPhone. */
-export const banterHeaderHeight = (insetTop: number) => insetTop + SPACE.sm + SIZE.circleButton + SPACE.md
+/** The header's height under the status bar: the frames' 116 on a 402 pt iPhone, 120 on Android's 48 dp circles. */
+export const banterHeaderHeight = (insetTop: number, android: boolean) => barHeight(insetTop, android)
+
+/** The title grows with the text size only as far as its line still fits the circle row (40 pt in 44, 48 on Android), so the header's height holds. */
+export const titleScaleCap = (android: boolean) => barCircle(android) / TYPE.display.lineHeight
 
 /**
  * The room you're standing in (Flow 5 #03): its cover full-bleed under a
@@ -99,6 +108,9 @@ export function LiveHero({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
+  const largeText = useLargeText()
+  const twoLines = useTwoLineNames()
+  const reduceMotion = useReducedMotion()
   return (
     <Pressable
       testID={testID}
@@ -107,7 +119,12 @@ export function LiveHero({
       accessibilityLabel={[title, 'live', here ? 'You’re here' : count ? `${count} in the room` : null, unread ? `${unread} new` : null, line].filter(Boolean).join(', ')}
       style={({ pressed }) => [styles.hero, pressed && styles.pressed]}
     >
-      {coverUrl ? <Image source={{ uri: coverUrl }} recyclingKey={coverUrl} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : null}
+      {/* No cover is the plate in the Banter's hue, as the Scene and Room info draw it (D8, D31): never a flat grey card. */}
+      {coverUrl ? (
+        <Image source={{ uri: coverUrl }} recyclingKey={coverUrl} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} />
+      ) : (
+        <CategoryPlate testID={testID && `${testID}-plate`} />
+      )}
       <PhotoScrim style={styles.heroScrim} />
       <View style={styles.heroTop}>
         <TimeBadge when="Live" />
@@ -118,27 +135,27 @@ export function LiveHero({
         ) : null}
       </View>
       {unread ? (
-        <View style={styles.heroBadge}>
+        <Animated.View style={styles.heroBadge} exiting={leaves(reduceMotion)}>
           <Badge text={`${unread} new`} size={22} />
-        </View>
+        </Animated.View>
       ) : null}
       <View style={styles.heroFoot}>
         <View style={styles.grow}>
-          <Text numberOfLines={1} style={[font('heading', bold), styles.ink]}>
+          <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
             {title}
           </Text>
           {line ? (
-            <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+            <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
               {line}
             </Text>
           ) : null}
         </View>
         {here ? (
-          <Text style={[font('meta', bold), styles.ink]}>You’re here</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>You’re here</Text>
         ) : count ? (
           <View style={styles.heroCount}>
             <RollingNumber value={count} role="title" />
-            <Text style={[font('caption', bold), styles.ink]}>in the room</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.ink]}>in the room</Text>
           </View>
         ) : null}
       </View>
@@ -162,7 +179,10 @@ export function BlendLiveCard({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
-  const closes = closesAt ? hourLabel(closesAt) : null
+  const twoLines = useTwoLineNames()
+  const reduceMotion = useReducedMotion()
+  // "4 AM": a Blend's closing hour, the app's one clock, kept in one piece when the line wraps (rc7 D13).
+  const closes = closesAt ? unbroken(clockTime(closesAt)) : null
   return (
     <Pressable
       onPress={onPress}
@@ -172,24 +192,27 @@ export function BlendLiveCard({
     >
       <PairEmblem seeds={seeds} ring={COLOR.surface} />
       <View style={styles.grow}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
           {title}
         </Text>
         <View style={styles.inline}>
           <PresenceDot kind="live" />
-          <Text style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.shrink]}>
             {closes ? 'Open now · closes ' : 'Open now'}
-            {closes ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{closes}</Text> : null}
+            {/* The close time is a tag: it stops at the control cap, so "4 AM" never outgrows its line (TG-03). */}
+            {closes ? <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink]}>{closes}</Text> : null}
           </Text>
         </View>
       </View>
-      {unread ? <Badge text={`${unread} new`} size={22} /> : null}
+      {unread ? (
+        <Animated.View exiting={leaves(reduceMotion)}>
+          <Badge text={`${unread} new`} size={22} />
+        </Animated.View>
+      ) : null}
     </Pressable>
   )
 }
 
-/** "4 AM": a Blend's closing hour, as the frames write it. */
-export const hourLabel = (iso: string) => chatClock(iso).replace(':00 ', ' ')
 
 /**
  * A request that needs an answer (Flow 5 #05, R3-0 C11, R2-D2 #02): a solid
@@ -230,56 +253,71 @@ export function RequestCard({
   onMore = useBanterPress(onMore)
   onOpen = useBanterPress(onOpen)
   const bold = useBoldText()
+  const largeText = useLargeText()
+  const twoLines = useTwoLineNames()
   return (
-    <View testID={testID} style={styles.request}>
-      <View style={styles.requestHead}>
-        <Pressable
-          onPress={onOpen}
-          disabled={!onOpen}
-          accessibilityRole={onOpen ? 'button' : 'text'}
-          accessibilityLabel={`${name}. ${note}`}
-          accessibilityHint={onOpen ? 'Opens their profile' : undefined}
-          style={styles.requestWho}
-        >
-          {face}
-          <View style={styles.grow}>
-            <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
-              {name}
-            </Text>
-            <Text numberOfLines={2} style={[font('meta', bold), styles.secondary]}>
-              {note}
-            </Text>
-          </View>
-        </Pressable>
-        <Text style={[monoCaption(bold), styles.tertiary]}>{time}</Text>
-        {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
+    // The card is a surface: its "…" draws the solid disc in the card's chip tone, not glass with nothing to refract (C20).
+    <GroundProvider value="surface">
+      <View testID={testID} style={styles.request}>
+        <View style={styles.requestHead}>
+          <Pressable
+            onPress={onOpen}
+            disabled={!onOpen}
+            accessibilityRole={onOpen ? 'button' : 'text'}
+            accessibilityLabel={`${name}. ${note}`}
+            accessibilityHint={onOpen ? 'Opens their profile' : undefined}
+            style={styles.requestWho}
+          >
+            {face}
+            <View style={styles.grow}>
+              {/*
+                Reading text, as a Banter row's (D2): each grows to its role's cap and, at the accessibility sizes, doubles its lines
+                rather than cut the name to "Arn…" (RC drive 5: uncapped, the name was 61 pt on one line).
+              */}
+              <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+                {name}
+              </Text>
+              <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+                {note}
+              </Text>
+            </View>
+          </Pressable>
+          {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. */}
+          <TimeTag time={time} />
+          {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
+        </View>
+        <View style={styles.requestActions}>
+          <Button
+            kind="secondary"
+            size="md"
+            label="Decline"
+            accessibilityLabel={`Decline the ${accept === 'Join' ? 'invite to' : 'request from'} ${name}`}
+            disabled={pending}
+            onPress={onDecline}
+            style={styles.grow}
+            testID={testID && `${testID}-decline`}
+          />
+          {/* Its H.success comes with the server's answer (Flow 5 #05), so no press haptic. */}
+          <Button
+            kind="lit"
+            size="md"
+            icon={accept === 'Join' ? 'users' : 'user-check'}
+            label={accept}
+            accessibilityLabel={accept === 'Join' ? `Join ${name}` : `Accept the request from ${name}`}
+            loading={pending}
+            pressHaptic={false}
+            onPress={onAccept}
+            style={styles.grow}
+            testID={testID && `${testID}-accept`}
+          />
+        </View>
+        {foot ? (
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+            {foot}
+          </Text>
+        ) : null}
       </View>
-      <View style={styles.requestActions}>
-        <Button
-          kind="secondary"
-          size="md"
-          label="Decline"
-          accessibilityLabel={`Decline the ${accept === 'Join' ? 'invite to' : 'request from'} ${name}`}
-          disabled={pending}
-          onPress={onDecline}
-          style={styles.grow}
-          testID={testID && `${testID}-decline`}
-        />
-        {/* Its H.success comes with the server's answer (Flow 5 #05), so no press haptic. */}
-        <Button
-          kind="strong"
-          size="md"
-          label={accept}
-          accessibilityLabel={accept === 'Join' ? `Join ${name}` : `Accept the request from ${name}`}
-          loading={pending}
-          pressHaptic={false}
-          onPress={onAccept}
-          style={styles.grow}
-          testID={testID && `${testID}-accept`}
-        />
-      </View>
-      {foot ? <Text style={[font('meta', bold), styles.secondary]}>{foot}</Text> : null}
-    </View>
+    </GroundProvider>
   )
 }
 
@@ -341,6 +379,10 @@ export function BanterRow({
 }) {
   onPress = useBanterPress(onPress)
   const bold = useBoldText()
+  const largeText = useLargeText()
+  const twoLines = useTwoLineNames()
+  const sel = useSelection()
+  const reduceMotion = useReducedMotion()
   return (
     <Pressable
       testID={testID}
@@ -354,21 +396,24 @@ export function BanterRow({
       <RowAvatar face={face} />
       <View style={styles.rowText}>
         <View style={styles.inline}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
+          {/*
+            Reading text, not a control (D2): it grows to its cap like the line under it, and at the accessibility sizes takes
+            two lines rather than one word. Capped at 1.3 it read smaller than its own preview ("Crashing…" over a 1.3× title).
+          */}
+          <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
             {title}
           </Text>
           {muted ? <Icon name="bell-off" size={ICON.inline} color={COLOR.textSecondary} /> : null}
         </View>
-        <Line line={line} unread={unread} />
+        <Line line={line} unread={unread} lines={largeText ? 2 : 1} />
       </View>
       <View style={styles.rowEnd}>
-        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), unread ? styles.ink : styles.tertiary]}>
-          {time}
-        </Text>
+        <TimeTag time={time} ink={unread} />
         <View style={styles.dotSlot}>
           {unread ? (
-            <Animated.View entering={ZoomIn.duration(DURATION.quick)} exiting={FadeOut.duration(DURATION.quick)}>
-              <PresenceDot kind="unread" />
+            <Animated.View entering={reduceMotion ? undefined : dotIn} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}>
+              {/* The world's light, as Notifications draws it (D28): white is for counts. */}
+              <PresenceDot kind="unread" color={sel.glyph} testID={testID && `${testID}-dot`} />
             </Animated.View>
           ) : null}
         </View>
@@ -377,13 +422,48 @@ export function BanterRow({
   )
 }
 
+/**
+ * A row's time, a tag beside its control (it stops at the control cap): a word in the sans ("Yesterday", "Tue", "now",
+ * "Oct"), a run with digits in Geist Mono ("10h", "4"), so one column never sets "Yesterday" in mono beside a sans "7h"
+ * and no space takes a mono cell (RC audit C17, C16).
+ */
+export function TimeTag({ time, ink = false }: { time: string; ink?: boolean }) {
+  const bold = useBoldText()
+  return (
+    // A time with digits is Geist Mono, its spaces in the brand face (`MonoRun`, DS-09: "1:12 PM" never reads
+    // double-spaced); a word ("Yesterday") is the sans.
+    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[/\d/.test(time) ? monoCaption(bold) : font('caption', bold), ink ? styles.ink : styles.tertiary]}>
+      {/\d/.test(time) ? <MonoRun text={time} /> : time}
+    </Text>
+  )
+}
+
+/** #29: the unread pill leaves as a fade over `quick`; Reduce Motion: it is simply gone. */
+const leaves = (reduceMotion: boolean) => (reduceMotion ? undefined : FadeOut.duration(DURATION.quick))
+
+/**
+ * DS #28: the unread dot appears 0.8 → 1 with a fade over quick: never from nothing (the stock zoom starts at scale 0). Under Reduce
+ * Motion it is simply there.
+ */
+export const dotIn = () => {
+  'worklet'
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: 0.8 }] },
+    animations: {
+      opacity: withTiming(1, { duration: DURATION.quick }),
+      transform: [{ scale: withTiming(1, { duration: DURATION.quick, easing: Easing.bezier(...EASING.snapOut) }) }],
+    },
+  }
+}
+
 /** How a row is read: "{title}, {line}, {time}, unread". */
 export function rowLabel(title: string, line: RowLine, time: string, unread: boolean, muted = false) {
   const said = line.kind === 'failed' ? 'Not sent, tap to retry' : line.kind === 'draft' ? `Draft, ${line.text}` : line.text
   return [title, muted ? 'muted' : null, said, time, unread ? 'unread' : null].filter(Boolean).join(', ')
 }
 
-function Line({ line, unread }: { line: RowLine; unread: boolean }) {
+/** A row's second line: one line, or two at the accessibility sizes (`lines`), at the reading cap; it never clips. */
+function Line({ line, unread, lines }: { line: RowLine; unread: boolean; lines: number }) {
   const bold = useBoldText()
   if (line.kind === 'chip') {
     return (
@@ -400,7 +480,7 @@ function Line({ line, unread }: { line: RowLine; unread: boolean }) {
     return (
       <View style={styles.inline}>
         <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-        <Text numberOfLines={1} style={[font('meta', bold), styles.ink]}>
+        <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
           Not sent · Tap to retry
         </Text>
       </View>
@@ -408,14 +488,18 @@ function Line({ line, unread }: { line: RowLine; unread: boolean }) {
   }
   if (line.kind === 'draft') {
     return (
-      <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
-        <Text style={font('meta', bold, FONT_FAMILY.brand[500])}>Draft · </Text>
+      <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={font('meta', bold, FONT_FAMILY.brand[500])}>Draft · </Text>
         {line.text}
       </Text>
     )
   }
   return (
-    <Text numberOfLines={1} style={[font('meta', bold, unread ? FONT_FAMILY.brand[500] : undefined), unread ? styles.ink : styles.secondary]}>
+    <Text
+      numberOfLines={lines}
+      maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
+      style={[font('meta', bold, unread ? FONT_FAMILY.brand[500] : undefined), unread ? styles.ink : styles.secondary]}
+    >
       {line.text}
     </Text>
   )
@@ -491,7 +575,7 @@ export function NewAbovePill({ top, onPress }: { top: number; onPress: () => voi
         <Material role="control" style={styles.newPill}>
           <Animated.View entering={glassContentsIn} style={styles.newPillContents}>
             <Icon name="arrow-up" size={ICON.inline} />
-            <Text style={[font('caption', bold), styles.ink]}>New</Text>
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>New</Text>
           </Animated.View>
         </Material>
       </Pressable>
@@ -511,17 +595,9 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
     paddingLeft: SPACE.gutter,
     paddingRight: SPACE.lg,
-    paddingBottom: SPACE.md,
+    paddingBottom: BAR_BOTTOM,
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  bell: {
-    width: SIZE.circleButton,
-    height: SIZE.circleButton,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.chipFillOnGlass,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   grow: { flex: 1, minWidth: 0 },
   shrink: { flexShrink: 1 },
   ink: { color: COLOR.textPrimary },
@@ -530,15 +606,16 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
   inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   centre: { alignItems: 'center', justifyContent: 'center' },
-  hero: { height: HERO_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.surface },
+  // A floor, not a height: at AX the title takes two lines and the foot grows the card (TG-03).
+  hero: { minHeight: HERO_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.ink, justifyContent: 'flex-end' },
   heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '80%' },
   heroTop: { position: 'absolute', left: SPACE.md, top: SPACE.md, flexDirection: 'row', gap: SPACE.xs },
   heroBadge: { position: 'absolute', right: SPACE.lg, top: SPACE.md },
+  // In the flow, under the Live badge's row (its top, the tag, a gap), so a grown title pushes the card down, never under the badge.
   heroFoot: {
-    position: 'absolute',
-    left: SPACE.lg,
-    right: SPACE.lg,
-    bottom: SPACE.md,
+    marginTop: SPACE.md + SIZE.tag + SPACE.sm,
+    marginHorizontal: SPACE.lg,
+    marginBottom: SPACE.md,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: SPACE.md,

@@ -27,8 +27,10 @@ describe('Edit profile', () => {
     const src = read('app/edit-profile.tsx')
     // usePreventRemove covers the header's back, the swipe and Android's back alike.
     expect(src).toContain('usePreventRemove(dirty && !leaving,')
-    expect(src).toContain('title="Discard changes?"')
-    expect(src).toContain("{ label: 'Keep editing', onPress: () => setDiscardOpen(false) }")
+    // The app's one sheet: Discard is its destructive confirm (the one destructive tick), Keep editing its Cancel.
+    expect(src).toContain("title: 'Discard changes?'")
+    expect(src).toContain("{ label: 'Discard', variant: 'destructive', then: discardChanges }")
+    expect(src).toContain("{ label: 'Keep editing', cancel: true }")
     // A save moves the baseline, so the OK after "Profile Updated" leaves without asking.
     expect(src).toContain('setSavedSnapshot(currentSnapshot)')
   })
@@ -38,18 +40,18 @@ describe('the crash screen', () => {
   const src = read('components/ErrorBoundary.tsx')
 
   it('shows the raw error in development builds only', () => {
-    expect(src).toContain('{__DEV__ && this.state.error?.message ? (')
+    expect(src).toContain('{__DEV__ && error?.message ? (')
     expect(src).not.toContain("'Error Details'")
   })
 
   it('contacts support for real, with the error id', () => {
-    expect(src).toContain('supportMailto({ subject: "Blend\'n crashed", userId: user?.id, errorId: this.state.errorId })')
-    // The same id goes to Sentry, so the email and the report can be matched.
-    expect(read('app/_layout.tsx')).toContain("tags: { context: 'root-error-boundary', error_id: errorId }")
+    expect(src).toContain('supportMailto({ subject: "Blend’n crashed", userId: user?.id, errorId: this.state.errorId })')
+    // The same id goes to Sentry, so the email and the report can be matched (every boundary reports itself, with its route).
+    expect(src).toContain("tags: { context: 'error-boundary', error_id: errorId, route }")
   })
 
   it('keeps Try again', () => {
-    expect(src).toContain('onPress={this.resetErrorBoundary}')
+    expect(src).toContain('onPress: this.resetErrorBoundary')
   })
 })
 
@@ -68,7 +70,7 @@ describe('the support address', () => {
   })
 
   it('drafts an email carrying the version, the phone, the account and the error', () => {
-    const url = supportMailto({ subject: "Blend'n crashed", userId: 'u_me', errorId: 'E-1' })
+    const url = supportMailto({ subject: "Blend’n crashed", userId: 'u_me', errorId: 'E-1' })
     expect(url.startsWith(`mailto:${SUPPORT_EMAIL}?subject=`)).toBe(true)
     const body = decodeURIComponent(url.split('&body=')[1])
     expect(body).toContain('App: 1.4.0 (118)')
@@ -89,7 +91,9 @@ describe('gone, or just not loaded', () => {
   it('is how blocked users tells a failure from an empty list', () => {
     // safetyUtils.getBlockedUsers answers a failure with [], which drew "No Blocked Users".
     const src = read('app/blocked-users.tsx')
-    expect(src).toContain('apiClient.getBlockedUsers()')
+    // The page read (lib/blockedUsersPage.ts) keeps a failure a failure; the screen never uses the one that answers [].
+    expect(src).toContain('fetchBlockedPage(')
+    expect(read('lib/blockedUsersPage.ts')).toContain('{ ok: false')
     expect(src).not.toContain('getBlockedUsers,')
   })
 })

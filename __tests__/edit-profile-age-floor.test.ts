@@ -23,12 +23,12 @@ import {
 describe('the account floor is 18', () => {
   it('is one number and one sentence', () => {
     expect(ACCOUNT_MIN_AGE).toBe(18)
-    expect(ADULTS_ONLY).toBe("Blend'n is for people 18 and over.")
+    expect(ADULTS_ONLY).toBe("Blend’n is for people 18 and over.")
   })
 
   it('sign-up requires an age, and refuses under 18 with the reason', () => {
-    expect(accountAgeError('', { required: true })).toBe("Enter your age. Blend'n is for people 18 and over.")
-    expect(accountAgeError('  ', { required: true })).toBe("Enter your age. Blend'n is for people 18 and over.")
+    expect(accountAgeError('', { required: true })).toBe("Enter your age. Blend’n is for people 18 and over.")
+    expect(accountAgeError('  ', { required: true })).toBe("Enter your age. Blend’n is for people 18 and over.")
     expect(accountAgeError('17', { required: true })).toBe(ADULTS_ONLY)
     expect(accountAgeError('13', { required: true })).toBe(ADULTS_ONLY)
     expect(accountAgeError('18', { required: true })).toBeNull()
@@ -125,12 +125,12 @@ describe('one age rule for every form that takes an age', () => {
 
   it('tells "The basics" why Continue is off: under 18, or not a usable date', () => {
     const src = read('app/onboarding/basics.tsx')
-    // Announced as it appears (a live region), so the attributes may grow.
-    expect(src).toMatch(/isUnderAccountAge\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}[^>]*>\{ADULTS_ONLY\}<\/Text>/)
+    // The date field announces its own sentence as it appears (assertive, with the ring), so the screen only chooses it.
+    expect(src).toContain('const underAge = isUnderAccountAge(dateOfBirth)')
+    expect(src).toContain('const dateError = underAge ? ADULTS_ONLY : notADate ? NOT_A_DATE : undefined')
+    expect(src).toContain("const NOT_A_DATE = 'That is not a date we recognise.'")
     // `!dateOfBirth` is never true once the boxes are full, so 30 February showed nothing.
-    expect(src).toMatch(
-      /dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\) \? \(\s*<Text style=\{styles\.error\}[^>]*>That is not a date we recognise\.<\/Text>/
-    )
+    expect(src).toMatch(/const notADate = !underAge && !!dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\)/)
     expect(src).not.toMatch(/&& !dateOfBirth \? \(/)
     // The two cases are disjoint: an impossible date is never "under 18".
     expect(isUnderAccountAge('2010-02-30')).toBe(false)
@@ -149,10 +149,10 @@ describe('one age rule for every form that takes an age', () => {
     const refused = src.slice(src.indexOf('if (errors.name || errors.age)')).slice(0, 900)
     // To the Basic Information card's own offset, not 0 (the photo grid)...
     expect(refused).toMatch(/scrollRef\.current\?\.scrollTo\(\{ *y: *basicInfoY\.current/)
-    expect(src).toMatch(/onLayout=\{\(e\) => \{ basicInfoY\.current = e\.nativeEvent\.layout\.y \}\}>\s*<Text style=\{styles\.cardTitle\}>BASIC INFORMATION/)
+    expect(src).toContain('<EditCard title="Basic information" onLayout={(y) => (basicInfoY.current = y)}>')
     // ...and focus on the field to fix, not left on Save.
     expect(refused).toContain('(errors.name ? nameInputRef : ageInputRef).current?.focus()')
-    expect(src).toMatch(/ref=\{nameInputRef\}\s*accessibilityLabel="Name"/)
-    expect(src).toMatch(/ref=\{ageInputRef\}\s*accessibilityLabel="Age"/)
+    expect(src).toMatch(/label="Name"\s*inputRef=\{nameInputRef\}/)
+    expect(src).toMatch(/label="Age"\s*inputRef=\{ageInputRef\}/)
   })
 })

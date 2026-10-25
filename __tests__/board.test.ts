@@ -77,7 +77,7 @@ describe('the order a board reads in', () => {
   })
 })
 
-describe("an offer's spaces", () => {
+describe("an offer’s spaces", () => {
   it('counts them, says full at zero, and says nothing for a post that is not an offer', () => {
     expect(spacesLabel(2)).toBe('2 spaces left')
     expect(spacesLabel(1)).toBe('1 space left')
@@ -124,7 +124,7 @@ describe('BD-CU01: a refusal says which gate, in the server’s words', () => {
     ['FORBIDDEN', 'You have 5 asks waiting for an answer. Give them a moment.'],
     ['FORBIDDEN', 'You have sent a lot of requests this week. Try again in a few days.'],
     ['FORBIDDEN', 'The board closes when the doors open — the room is open instead'],
-    ['FORBIDDEN', "Finish setting up your profile first. Blend'n is for people 18 and over."],
+    ['FORBIDDEN', "Finish setting up your profile first. Blend’n is for people 18 and over."],
     ['AGE_RESTRICTED', 'This event is 21+. Add your age to your profile to check in.'],
     ['NOT_FOUND', 'That post is no longer on the board'],
     ['RATE_LIMITED', 'Too many requests'],
@@ -135,7 +135,7 @@ describe('BD-CU01: a refusal says which gate, in the server’s words', () => {
   })
 
   it('passes a moderation refusal (422, no code) through too', () => {
-    const error = "This looks like a phone number. The board is anonymous, so contact details can't go on it."
+    const error = "This looks like a phone number. The board is anonymous, so contact details can’t go on it."
     expect(boardMessage({ error }, 'fallback')).toBe(error)
   })
 
@@ -341,7 +341,8 @@ describe('crash reports never pair a person with a board', () => {
   it('is wired into every place Sentry sends a URL', () => {
     const sentry = readFileSync(join(__dirname, '..', 'lib/sentry.ts'), 'utf8')
     for (const hook of ['beforeBreadcrumb', 'beforeSend', 'beforeSendTransaction']) expect(sentry).toContain(hook)
-    expect(sentry.match(/scrubBoardUrl\(/g)?.length).toBeGreaterThanOrEqual(4)
+    // Through the one scrubber every hook uses (`scrubReportText`); `__tests__/sentryScrub.test.ts` drives the hooks.
+    expect(sentry).toContain('return scrubBoardUrl(text)')
   })
 })
 

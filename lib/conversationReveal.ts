@@ -42,25 +42,45 @@ export interface ConversationRevealState {
  *   server keeps no "you asked"), the Asked state; there is no declined state.
  * - They revealed, you haven't: Show them, and their name.
  * - You revealed, they haven't: no button; they decide.
- * - Both revealed: the bar is gone for good and the header becomes a button.
+ * - Both revealed: the bar is gone for good and the header becomes a button, except while the server offers "Add friend":
+ *   the bar stays as `both`, the one action left.
  * - An accepted message request was never pseudonymous: no bar, no line.
  */
 export type RevealView = {
-  bar: 'none' | 'youOnly' | 'theyOnly' | 'asked' | null
+  bar: 'none' | 'youOnly' | 'theyOnly' | 'asked' | 'both' | null
   line: { seen: boolean; text: string } | null
   nudge: string | null
 }
 
-export function revealView(state: ConversationRevealState, askedHere = false): RevealView {
+/**
+ * What the reveal panel is showing, as a key: its state and whether somebody asked. Folding the panel away
+ * is remembered against this key, so a new state (you asked, they revealed) or a new nudge ("{name} asked
+ * to know who you are") brings it back, and the same one stays folded. Null when there is no panel.
+ */
+export function revealPanelKey(view: Pick<RevealView, 'bar' | 'nudge'> | null): string | null {
+  return view?.bar ? `${view.bar}:${view.nudge ?? ''}` : null
+}
+
+/** The header's line under the name: short enough for one line beside the face at 360 (TG-17, C25), each side said once. */
+export const REVEAL_LINE_MAX = 33
+
+/** The anonymous state's line is the one most people see, so it is short enough for one line at 1.3 text on a 360 dp phone ("You’re both ano…", rc9 D2). */
+export const ANON_LINE_MAX = 16
+
+export function revealView(state: ConversationRevealState, askedHere = false, friendOffered = false): RevealView {
   if (!state.pseudonymous) return { bar: null, line: null, nudge: null }
-  if (state.youRevealed && state.theyRevealed) return { bar: null, line: { seen: true, text: 'You can both see each other' }, nudge: null }
+  if (state.youRevealed && state.theyRevealed) {
+    // Both can see each other: the bar is gone for good, unless the server offers to add them as a friend (SCRUM-750), which is the one
+    // thing left to say. It goes again once asked.
+    return { bar: friendOffered ? 'both' : null, line: { seen: true, text: 'You see each other' }, nudge: null }
+  }
   // Being asked is the only signal the other person can send: surfaced, never a demand, never counted.
   const nudge = !state.youRevealed && state.revealRequested ? `${state.displayName} asked to know who you are` : null
-  if (state.youRevealed) return { bar: 'youOnly', line: { seen: false, text: 'They can see your name. You can’t see theirs yet.' }, nudge: null }
-  if (state.theyRevealed) return { bar: 'theyOnly', line: { seen: false, text: 'You can see their name. They can’t see yours.' }, nudge }
+  if (state.youRevealed) return { bar: 'youOnly', line: { seen: false, text: 'They see you · you don’t see them' }, nudge: null }
+  if (state.theyRevealed) return { bar: 'theyOnly', line: { seen: false, text: 'You see them · they don’t see you' }, nudge }
   return askedHere
-    ? { bar: 'asked', line: { seen: false, text: 'You’re both anonymous here · asked' }, nudge }
-    : { bar: 'none', line: { seen: false, text: 'You’re both anonymous here' }, nudge }
+    ? { bar: 'asked', line: { seen: false, text: 'Both anonymous · asked' }, nudge }
+    : { bar: 'none', line: { seen: false, text: 'Both anonymous' }, nudge }
 }
 
 /**
@@ -104,8 +124,8 @@ export function leaveConfirmation(
     // "Unmatch" is the wrong verb for two people who never matched.
     title: fromMatch ? `Unmatch ${displayName}?` : `End the conversation with ${displayName}?`,
     body: theyKnowYou
-      ? `The conversation closes for both of you and you won't see each other in rooms again. They already know your name and photos — ${fromMatch ? 'unmatching' : 'ending it'} doesn't undo that.`
-      : "The conversation closes for both of you and you won't see each other in rooms again. They never saw your name.",
+      ? `The conversation closes for both of you and you won’t see each other in rooms again. They already know your name and photos — ${fromMatch ? 'unmatching' : 'ending it'} doesn’t undo that.`
+      : "The conversation closes for both of you and you won’t see each other in rooms again. They never saw your name.",
   }
 }
 

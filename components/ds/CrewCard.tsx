@@ -1,8 +1,10 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import Animated, { withSpring, withTiming } from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useReducedMotion } from '../../lib/motion'
 import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './AchievementBadge'
 import { Button } from './Button'
 import { Chip } from './Chip'
@@ -52,6 +54,7 @@ export function CrewCard({
   overlap,
   like,
   compact = false,
+  onSheet = false,
   onPress,
   onMore,
   testID,
@@ -61,6 +64,11 @@ export function CrewCard({
   overlap?: string | null
   like?: CrewLike
   compact?: boolean
+  /**
+   * A preview on a sheet (Make a crew, Flow 10 · 10.2): 8% white on iOS glass,
+   * sunken on Android's solid sheet, the frame's `field_bg`. Not for lists.
+   */
+  onSheet?: boolean
   /** Opens the crew's sheet. */
   onPress?: () => void
   /** The ⋯: report or hide. */
@@ -75,7 +83,15 @@ export function CrewCard({
   const slop = (minTarget() - MORE) / 2
 
   return (
-    <View testID={testID} style={[styles.card, { borderRadius: compact ? RADIUS.sheet : RADIUS.card }, contrast && IC_HAIRLINE]}>
+    <View
+      testID={testID}
+      style={[
+        styles.card,
+        { borderRadius: compact ? RADIUS.sheet : RADIUS.card },
+        onSheet && { backgroundColor: Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass },
+        contrast && IC_HAIRLINE,
+      ]}
+    >
       <Pressable
         onPress={onPress}
         disabled={!onPress}
@@ -90,12 +106,17 @@ export function CrewCard({
             <CountTicks size={crew.size} here={here} />
           </View>
           <View style={styles.text}>
-            <Text style={[font(compact ? 'heading' : 'title', bold), styles.ink, onMore ? styles.clearMore : null]}>{crew.name}</Text>
-            <Text style={[font('meta', bold), { color: detail }]}>
+            <Text
+              maxFontSizeMultiplier={MAX_FONT_SCALE[compact ? 'heading' : 'title']}
+              style={[font(compact ? 'heading' : 'title', bold), styles.ink, onMore ? styles.clearMore : null]}
+            >
+              {crew.name}
+            </Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
               {here ? `Crew of ${crew.size} · ${here} here now` : `Crew of ${crew.size}`}
             </Text>
             {crew.bio ? (
-              <Text numberOfLines={2} style={[font(compact ? 'meta' : 'body', bold), styles.ink]}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={2} style={[font(compact ? 'meta' : 'body', bold), styles.ink]}>
                 {crew.bio}
               </Text>
             ) : null}
@@ -107,13 +128,13 @@ export function CrewCard({
             {crew.tags.map((t) => (
               <Chip key={t} label={t} variant="outline" />
             ))}
-            {crew.intent ? <Text style={[font('meta', bold), { color: detail }]}>{crew.intent}</Text> : null}
+            {crew.intent ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>{crew.intent}</Text> : null}
           </View>
         ) : null}
         {overlap ? (
           <View style={styles.overlap}>
             <Icon name="sparkles" size={ICON.inline} />
-            <Text style={[font('meta', bold), styles.ink, styles.text]}>{overlap}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.text]}>{overlap}</Text>
           </View>
         ) : null}
       </Pressable>
@@ -134,19 +155,43 @@ export function CrewCard({
   )
 }
 
+/**
+ * DS #15: Like becomes Liked at t0 (the swap), then M.pop 0.85 → 1 over the new plate. Never from nothing (0.85, not 0), and
+ * under Reduce Motion a 180 ms fade in place. The haptic is the press-in's own (`H.like`).
+ */
+export const popIn = (reduceMotion: boolean) => () => {
+  'worklet'
+  return {
+    initialValues: { opacity: reduceMotion ? 0 : 1, transform: [{ scale: reduceMotion ? 1 : 0.85 }] },
+    animations: {
+      opacity: withTiming(1, { duration: 180 }),
+      transform: [{ scale: withSpring(1, SPRING.pop) }],
+    },
+  }
+}
+
 function LikeButton({ like }: { like: CrewLike }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const reduceMotion = useReducedMotion()
   if (!like.liked) return <Button kind="primary" label={like.as ? `Like for ${like.as}` : 'Like'} pressHaptic={H.like} onPress={like.onPress} />
   const text = like.as ? `Liked for ${like.as}` : 'Liked'
   // Settled: words in the button's place, not a button (a second like does nothing, §10.2).
   return (
-    <View accessible accessibilityRole="text" accessibilityLabel={text} style={[styles.liked, contrast && IC_HAIRLINE]}>
+    <Animated.View
+      testID="crew-liked"
+      entering={popIn(reduceMotion)}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={text}
+      style={[styles.liked, contrast && IC_HAIRLINE]}
+    >
       <Icon name="check" size={ICON.control} active />
-      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
+      {/* A legal 32-character crew name at 1.3× wraps to a second line rather than clipping in the plate. */}
+      <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink, styles.likedText]}>
         {text}
       </Text>
-    </View>
+    </Animated.View>
   )
 }
 
@@ -189,10 +234,13 @@ export function CrewRow({
     >
       <CrewEmblem seed={emblemSeed} size={EMBLEM.row} />
       <View style={styles.text}>
-        <Text numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+        {/* A 32-character name takes two lines rather than "The Midnight Vin…"; the row's height is a minimum. */}
+        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
           {name}
         </Text>
-        <Text style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{line}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+          {line}
+        </Text>
       </View>
       {badge ? (
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -215,7 +263,9 @@ const styles = StyleSheet.create({
   clearMore: { paddingRight: MORE },
   meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm },
   liked: {
-    height: SIZE.primary,
+    minHeight: SIZE.primary,
+    paddingHorizontal: SPACE.lg,
+    paddingVertical: SPACE.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -223,6 +273,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.button,
     backgroundColor: COLOR.surface,
   },
+  likedText: { flexShrink: 1, textAlign: 'center' },
   overlap: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   more: {
     position: 'absolute',

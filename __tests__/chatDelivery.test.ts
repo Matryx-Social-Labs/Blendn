@@ -88,6 +88,6 @@ describe('day headings', () => {
       (m) => m.created_at
     )
     expect(rows.map((r) => r.kind)).toEqual(['separator', 'message', 'message', 'separator', 'message'])
-    expect(rows[0]).toEqual({ kind: 'separator', id: 'sep-2020-2-4', label: 'Mar 4, 2020' })
+    expect(rows[0]).toEqual({ kind: 'separator', id: 'sep-2020-2-4', label: '4 Mar 2020' })
   })
 })

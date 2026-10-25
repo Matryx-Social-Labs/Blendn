@@ -18,6 +18,11 @@ export type AvatarProps = {
   size: number
   /** The 2 pt cut-out ring, in the colour behind the avatar: `COLOR.ink` on the page, `COLOR.surface` in a card. */
   ring?: string
+  /**
+   * A second 2 pt ring outside `ring`, in a world's edge colour: a request's face on Notifications. It sits outside the cut-out,
+   * so the face is still cut from its ground.
+   */
+  halo?: string
   /** Only when no name is beside it: the name (or pseudonym, or crew name) read instead of the picture. */
   label?: string
   testID?: string
@@ -54,7 +59,7 @@ function Plate({ colors, testID }: { colors: readonly [string, string]; testID?:
  * No haptic.
  */
 export function Avatar(props: AvatarProps) {
-  const { size, ring, label, testID } = props
+  const { size, ring, halo, label, testID } = props
   const contrast = useIncreaseContrast()
   const ringColor = contrast ? MATERIAL.hairlineIncreaseContrast : ring
 
@@ -63,16 +68,32 @@ export function Avatar(props: AvatarProps) {
     ? { accessible: true, accessibilityLabel: name }
     : { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const }
 
+  const crew = props.kind === 'crew'
+  const radius = crew ? Math.round(size * CREW_CORNER) : RADIUS.capsule
+  // Outside the cut-out when there is one, else outside the face.
+  const haloReach = SPACE.xxs * (ringColor ? 2 : 1)
+  const haloRing = halo ? (
+    <View
+      testID={testID && `${testID}-halo`}
+      pointerEvents="none"
+      style={[
+        styles.halo,
+        { top: -haloReach, bottom: -haloReach, left: -haloReach, right: -haloReach, borderColor: halo, borderRadius: crew ? radius + haloReach : radius },
+      ]}
+    />
+  ) : null
+
   if (props.kind === 'creature') {
     return (
       <View testID={testID} style={{ width: size, height: size }} {...a11y}>
+        {haloRing}
         <Creature {...creatureFor(props.pseudonym)} size={size} ring={ringColor} />
       </View>
     )
   }
-  const radius = props.kind === 'crew' ? Math.round(size * CREW_CORNER) : RADIUS.capsule
   return (
     <View testID={testID} style={{ width: size, height: size }} {...a11y}>
+      {haloRing}
       {ringColor ? (
         <View
           testID={testID && `${testID}-ring`}
@@ -95,5 +116,6 @@ export function Avatar(props: AvatarProps) {
 
 const styles = StyleSheet.create({
   ring: { position: 'absolute', top: -SPACE.xxs, bottom: -SPACE.xxs, left: -SPACE.xxs, right: -SPACE.xxs },
+  halo: { position: 'absolute', borderWidth: SPACE.xxs },
   body: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
 })

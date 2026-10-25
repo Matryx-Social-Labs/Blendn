@@ -6,6 +6,15 @@ import { Logger } from './logger'
 export const COMMUNITY_GUIDELINES_URL = 'https://www.blendn.app/community-guidelines'
 
 /**
+ * The in-app disclosure that what people post goes to a third-party AI for moderation (App Review 5.1.2(i)): room
+ * messages, board posts and photos are checked by OpenAI's moderation API (blendn-admin `lib/moderation/`).
+ *
+ * DRAFT, awaiting the owner's approval: the wording lives here and only here. Shown where people first post, the
+ * room chat's guidelines banner (`components/chat/RoomGuidelinesBanner.tsx`), linked to the privacy policy.
+ */
+export const AI_MODERATION_NOTICE = 'Messages, posts and photos are checked automatically for safety, including by OpenAI.'
+
+/**
  * Whether this person has put away the guidelines banner in this room.
  *
  * Per room, because the ask belongs to walking into a new room of strangers: a

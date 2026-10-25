@@ -3,6 +3,12 @@ import { fireEvent, render, screen } from '@testing-library/react-native'
 import { StyleSheet } from 'react-native'
 
 import { EventCover } from '../components/EventCover'
+import { COLOR } from '../lib/design/tokens'
+
+jest.mock('../components/ui/Icon', () => {
+  const { View } = jest.requireActual('react-native')
+  return { Icon: ({ name, size, color }: { name: string; size: number; color: string }) => <View testID={`icon-${name}`} size={size} color={color} /> }
+})
 
 /*
  * SCRUM-286. The Going card's image was `source={{ uri: cover || '' }}` with no
@@ -51,15 +57,29 @@ describe('EventCover', () => {
     expect(await screen.findByTestId('event-cover-image')).toBeTruthy()
   })
 
-  it('keeps the mark to the same share of a small box, a list row thumb (SCRUM-480)', async () => {
-    const markWidth = () =>
-      StyleSheet.flatten(screen.getByTestId('event-cover-mark').props.style).width
-    const { rerender } = await render(<EventCover uri={null} height={180} />)
-    expect(markWidth()).toBe(72)
-    await rerender(<EventCover uri={null} height={96} />)
-    expect(markWidth()).toBe(38)
-    // And never larger than it is on the card.
-    await rerender(<EventCover uri={null} height={240} />)
-    expect(markWidth()).toBe(72)
+  it('with no picture and no category draws the plate with a calendar, not the faint logo (rc7 ruling 5)', async () => {
+    await render(<EventCover uri={null} height={96} />)
+    expect(StyleSheet.flatten(screen.getByTestId('event-cover-plate', { includeHiddenElements: true }).props.style).backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(screen.getByTestId('icon-calendar', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByTestId('event-cover-mark', { includeHiddenElements: true })).toBeNull()
+  })
+
+})
+
+describe('EventCover with a category (D8)', () => {
+  const hidden = { includeHiddenElements: true }
+
+  it('with no photograph draws the category plate, not the faint logo', async () => {
+    await render(<EventCover uri={null} height={180} category="music" />)
+    expect(StyleSheet.flatten(screen.getByTestId('event-cover-plate', hidden).props.style).backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(screen.getByTestId('icon-music-2', hidden)).toBeTruthy()
+    expect(screen.queryByTestId('event-cover-mark', hidden)).toBeNull()
+    expect(StyleSheet.flatten(screen.getByTestId('event-cover-placeholder', hidden).props.style).height).toBe(180)
+  })
+
+  it('a photograph that fails falls back to the plate', async () => {
+    await render(<EventCover uri="https://dead.test/c.jpg" height={180} category="sports" />)
+    fireEvent(screen.getByTestId('event-cover-image'), 'error', { nativeEvent: { error: '401' } })
+    expect(await screen.findByTestId('icon-trophy', hidden)).toBeTruthy()
   })
 })

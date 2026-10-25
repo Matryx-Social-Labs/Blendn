@@ -4,10 +4,10 @@
  * draw that `design/tokens.json` does not carry yet (each named here once, with
  * the page it comes from, rather than as a literal in a component).
  */
-import { useEffect, useState } from 'react'
-import { AccessibilityInfo, Platform, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
+import { createContext, useContext, useEffect, useState } from 'react'
+import { AccessibilityInfo, I18nManager, Platform, useWindowDimensions, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
 
-import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, REDUCE_MOTION, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 
 /**
@@ -17,6 +17,61 @@ import { tint } from '../../lib/theme'
  * reading-text cap.
  */
 export const CONTROL_FONT_CAP = 1.3
+
+/**
+ * The accessibility text sizes start here (RC drive D2): iOS's largest standard size is 1.35× body (xxxLarge, 23 pt), its
+ * first accessibility size 1.65× (AX Medium, 28 pt), up to AX XXXL. React Native scales every text by the category's own
+ * multiplier, and AX XXXL's is 3.571 (`RCTAccessibilityManager.mm`), not body's 53/17: the harness renders at 3.571.
+ *
+ * The rule per role, past it: reading text (body, meta, a row's lines) keeps growing to its `MAX_FONT_SCALE` and WRAPS: a
+ * one- or two-line clamp is lifted (`useLargeText`), and a row's height is a `minHeight`, never a `height`. Headings and page
+ * titles stop at their `MAX_FONT_SCALE`. Controls and tab labels stop at `CONTROL_FONT_CAP`, and the tab bar offers the large
+ * content viewer instead.
+ */
+export const AX_FONT_SCALE = 1.5
+
+/** The phone is at an accessibility text size: clamped lines open up, and layouts that sit side by side may stack. */
+export function useLargeText(): boolean {
+  return useWindowDimensions().fontScale >= AX_FONT_SCALE
+}
+
+/**
+ * From this font scale a name or title beside a fixed trailing column (a time, a ⋯, a count) takes two lines rather than be
+ * cut to a few letters. The AX flag (1.5) came too late: at Android's 1.3 request rows read "Arnav G…" (rc7 D10).
+ */
+export const TWO_LINE_NAMES_FROM = 1.2
+
+/** Whether a name beside a fixed trailing column may take two lines at this text size. */
+export function useTwoLineNames(): boolean {
+  return useWindowDimensions().fontScale >= TWO_LINE_NAMES_FROM
+}
+
+/** The narrowest a line of text may be made beside a trailing piece, in ems of its role: about a dozen characters. */
+export const MIN_MEASURE_EM = 6
+/** At or below this width (dp), or past this font scale, a line beside a trailing piece can run short; wider and smaller, it never does. */
+export const ROOMY_WIDTH = 375
+export const ROOMY_FONT_SCALE = 1.15
+
+/**
+ * A text column's measure beside a trailing piece (a button, a "from your friends"), at the scale it is drawn, as the style
+ * that holds it: the two sit in a row that wraps, so when the text's measure and the piece do not both fit, the piece moves
+ * under the text instead of squeezing it. With `flex: 1` (a zero basis) beside a piece that never shrinks, 360 dp at 1.3 left
+ * the text one word per line ("You're / anony / mous", "Make / a / crew": RC drive 3).
+ *
+ * Both a basis and a minimum, because the basis alone is not always read: when the text is the row's only child that can
+ * both grow and shrink, Yoga sets its basis to 0 without looking at the style (`computeFlexBasisForChildren`, its
+ * single-flex-child shortcut), the line never breaks, and the text is squeezed anyway. That is what the Banner did on a
+ * 360 dp Android phone at 1.3 (RC drive 5): its action never shrinks. SettingsRow's accessory shrinks, so it never took the
+ * shortcut. A minimum is read on every path.
+ */
+export function useMinMeasure(role: keyof typeof TYPE, cap: number = MAX_FONT_SCALE[role]): { flexBasis: number; minWidth: number } {
+  const { fontScale, width } = useWindowDimensions()
+  // A phone of ordinary width at an ordinary size always has the room: a zero basis keeps the row side by side, as it was. Six
+  // ems there left ~5 pt to spare at 390, so Bold Text would have dropped "from your friends" under its title (review MEDIUM-4).
+  // Exclusive: 375 dp (an iPhone SE or mini) is where the squeeze starts, so it takes the measure (review R7).
+  const measure = width > ROOMY_WIDTH && fontScale <= ROOMY_FONT_SCALE ? 0 : Math.round(MIN_MEASURE_EM * TYPE[role].fontSize * Math.min(fontScale, cap))
+  return { flexBasis: measure, minWidth: measure }
+}
 
 /** A spinner replaces a label only after this grace: a quick answer never flashes one (motion #45). */
 export const SPINNER_GRACE_MS = 300
@@ -123,3 +178,92 @@ export function focusRing(radius: number): ViewStyle[] {
 export function announceOutcome(text: string) {
   if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text)
 }
+
+/**
+ * What a control sits on (prompt 13 §0): the ink page, a surface card, or glass (a Sheet on iOS, the home drawer). Chip and
+ * SegmentedControl read it, so a call site never passes a fill.
+ */
+export type Ground = 'ink' | 'surface' | 'glass'
+const GroundContext = createContext<Ground>('ink')
+export const GroundProvider = GroundContext.Provider
+export const useGround = () => useContext(GroundContext)
+/** The resting fill of a chip on this ground. */
+export const chipRest = (ground: Ground) => (ground === 'glass' ? COLOR.chipFillOnGlass : ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)
+/** A SegmentedControl's track: solid even on glass (§12). */
+export const trackFill = (ground: Ground) => (ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)
+
+/**
+ * A CSS transition over `quick` on the gentle curve for the given properties (Reanimated 4: off the JS thread, interruptible,
+ * and never played on mount). The way a two-state flip crosses without a shared value: a fill, an opacity, a ring.
+ */
+export const quickTransition = (...properties: string[]): ViewStyle =>
+  ({ transition: properties.map((property) => `${property} ${DURATION.quick}ms cubic-bezier(${EASING.gentle.join(', ')})`).join(', ') }) as unknown as ViewStyle
+
+/**
+ * The hue of the world a screen is in (foundations, direction C "Lit from behind"): ember out there (Discover, the default),
+ * rose together, violet you. One per screen, from `<HueProvider>` at the screen's root, never nested: Chip, SegmentedControl
+ * and (later) RadioCard and ProgressBar light in it. The gradient stays the mark's and the one primary button's.
+ */
+export type Hue = 'ember' | 'rose' | 'violet'
+/** `flare` is the hue at 42% over `surface`: the light a lit button pours in on press and holds while busy. */
+export type Selection = { fill: string; edge: string; glyph: string; flare: string }
+export const SELECTION: Record<Hue, Selection> = {
+  ember: { fill: COLOR.selectionEmberFill, edge: COLOR.brandOrange, glyph: COLOR.selectionEmberGlyph, flare: COLOR.selectionEmberFlare },
+  rose: { fill: COLOR.selectionRoseFill, edge: COLOR.brandRose, glyph: COLOR.selectionRoseGlyph, flare: COLOR.selectionRoseFlare },
+  violet: { fill: COLOR.selectionVioletFill, edge: COLOR.brandViolet, glyph: COLOR.selectionVioletGlyph, flare: COLOR.selectionVioletFlare },
+}
+const HueContext = createContext<Hue>('ember')
+export const HueProvider = HueContext.Provider
+export const useHue = () => useContext(HueContext)
+export const useSelection = (): Selection => SELECTION[useHue()]
+
+/**
+ * Geist Mono at 15/20, tabular: the value the Flow 7 frames draw in a chip or a card (the version, the OS, the account,
+ * the support address). The type scale has mono at 12 and 40 only, so this is the one design exception, named once here.
+ */
+export const monoValue = (bold: boolean) => ({
+  ...font('meta', bold, FONT_FAMILY.mono[500]),
+  // design-exception: Geist Mono at 15, the Flow 7 chip and card values (no mono role between 12 and 40)
+  fontSize: 15,
+  fontVariant: ['tabular-nums' as const],
+})
+
+/**
+ * The light that pours in from the leading edge and drains back (Chip's selection, Button's press flare). Each state's style
+ * carries its own `transition`, so the pour and the drain have different curves (CSS transitions, Reanimated 4: off the JS
+ * thread, retargeted from the presented value on a quick re-press, and never played on mount). Under Reduce Motion nothing
+ * translates: the opacity crosses over the Reduce Motion `quick`.
+ *
+ * Pouring in: the slide over `slideMs` on `curve`, the fade over `fadeMs`. Draining: both over `quick`, the slide on `standard`.
+ */
+const bezier = (curve: readonly number[]) => `cubic-bezier(${curve.join(', ')})`
+const asStyle = (style: object) => style as unknown as ViewStyle
+const GENTLE = bezier(EASING.gentle)
+/**
+ * Off the leading edge: the left in a left-to-right layout, the right under RTL (`I18nManager.isRTL` is fixed for the app's life;
+ * a change of direction reloads it, so reading it when the styles are made is enough).
+ */
+const lightOffX = () => (I18nManager.isRTL ? '101%' : '-101%')
+export function pourStyles(slideMs: number, fadeMs: number, curve: readonly number[]) {
+  const reduced = `opacity ${REDUCE_MOTION.duration.quick}ms ${GENTLE}`
+  return {
+    pour: asStyle({ opacity: 1, transform: [{ translateX: '0%' }], transition: `transform ${slideMs}ms ${bezier(curve)}, opacity ${fadeMs}ms ${GENTLE}` }),
+    drain: asStyle({
+      opacity: 0,
+      transform: [{ translateX: lightOffX() }],
+      transition: `transform ${DURATION.quick}ms ${bezier(EASING.standard)}, opacity ${DURATION.quick}ms ${GENTLE}`,
+    }),
+    pourReduced: asStyle({ opacity: 1, transition: reduced }),
+    drainReduced: asStyle({ opacity: 0, transition: reduced }),
+  }
+}
+
+/** The hue's light as a chip, a settings tile or a switch's glyph tile takes it: in over `base` on `entrance`, back over `quick`. */
+export const LIGHT = pourStyles(DURATION.base, DURATION.quick, EASING.entrance)
+
+/**
+ * An Android scroll's edge fade at its end and none at its start. RN 0.86's scroll views draw the start's fade at a constant
+ * strength (`ReactScrollView#getTopFadingEdgeStrength`), scrolled or not, so a bare number dimmed the first row at rest
+ * (rc7 D7).
+ */
+export const FADE_END_ONLY = { start: 0, end: SPACE.xxxl }

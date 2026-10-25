@@ -121,4 +121,44 @@ describe('<SessionSheet>', () => {
     expect(destructive).toHaveBeenCalledTimes(1)
     expect(onEnd).toHaveBeenCalledTimes(1)
   })
+  it('Leave (startConfirming) opens on R12’s “Stop being live at ‹place›?”; Stay, or a swipe, closes the sheet rather than falling back to the session', async () => {
+    const time = { kind: 'minutes' as const, left: 32, until: '21:50' }
+    const onClose = jest.fn()
+    const onEnd = jest.fn()
+    const { rerender } = await render(<SessionSheet {...base} onClose={onClose} onEnd={onEnd} visible={false} startConfirming time={time} />)
+    await rerender(<SessionSheet {...base} onClose={onClose} onEnd={onEnd} visible startConfirming time={time} />)
+    expect(screen.getByRole('header', { name: 'Stop being live at Toit?' })).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Stay' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(onClose).toHaveBeenCalledTimes(2)
+    await fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
+    expect(onEnd).toHaveBeenCalledTimes(1)
+    // Each open starts there again; the pill’s open starts on the session, whose End keeps its own words.
+    await rerender(<SessionSheet {...base} visible={false} startConfirming time={time} />)
+    await rerender(<SessionSheet {...base} visible startConfirming time={time} />)
+    expect(screen.getByRole('header', { name: 'Stop being live at Toit?' })).toBeTruthy()
+    await rerender(<SessionSheet {...base} visible={false} time={time} />)
+    await rerender(<SessionSheet {...base} visible time={time} />)
+    expect(screen.getByRole('header', { name: 'Live at Toit' })).toBeTruthy()
+  })
+
+  it('while it ends the button reads “Stopping…” and holds', async () => {
+    await render(<SessionSheet {...base} visible startConfirming ending time={{ kind: 'minutes', left: 32, until: '21:50' }} />)
+    const stop = screen.getByRole('button', { name: 'Stopping…' })
+    expect(stop.props.accessibilityState).toMatchObject({ busy: true })
+  })
+
+  it('with no end to count to (no expiry, not a stay) it says only that you are live, and End still confirms', async () => {
+    await render(<SessionSheet {...base} time={null} />)
+    expect(screen.getByLabelText('Live')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'End' }))
+    expect(screen.getByRole('header', { name: 'End your live time at Toit?' })).toBeTruthy()
+  })
+
+  it('Stay with no hard end sent says nothing about one', async () => {
+    await render(<SessionSheet {...base} time={{ kind: 'stay' }} />)
+    expect(screen.getByLabelText('Staying')).toBeTruthy()
+    expect(screen.getByText('As long as you’re at Toit · up to 4 hours')).toBeTruthy()
+  })
 })

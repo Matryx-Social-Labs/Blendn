@@ -6,7 +6,7 @@
  * each is a branch a source grep would pass by name alone.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Linking } from 'react-native'
+import { Linking, View } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -31,11 +31,12 @@ jest.mock('react-native-safe-area-context', () => {
 const mockAuth = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({
   useAuth: () => mockAuth,
+  refreshAuthUser: jest.fn(),
   signOut: jest.fn(),
   deleteAccount: jest.fn(),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn() },
+  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), getMyPlus: jest.fn(), queuedRequest: jest.fn(), getChatGroups: jest.fn() },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => null),
@@ -44,12 +45,18 @@ jest.mock('../lib/notifications', () => ({
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+jest.mock('../lib/appleRevocation', () => ({ ...jest.requireActual('../lib/appleRevocation'), appleCodeForDeletion: jest.fn() }))
 
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
-import SettingsScreen from '../app/settings'
+import SettingsScreen, { ONLINE_STATUS_HINT } from '../app/settings'
+import { SheetHost } from '../components/SheetHost'
+import { closeSheet } from '../lib/sheet'
+import { H } from '../lib/haptics'
 import { apiClient } from '../lib/apiClient'
+import { resetMutedRooms } from '../lib/mutedRooms'
 import { deleteAccount, signOut } from '../lib/useAuth'
+import { APPLE_UNLINK_HINT, appleCodeForDeletion } from '../lib/appleRevocation'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const plusStatus = (o: Partial<{ active: boolean; gated: boolean; source: 'apple' | 'google' | 'grant' | null }> = {}) => ({
@@ -61,12 +68,26 @@ const plusStatus = (o: Partial<{ active: boolean; gated: boolean; source: 'apple
   ...o,
 })
 const permissions = Notifications.getPermissionsAsync as jest.Mock
+jest.mock('../lib/haptics', () => ({ H: { destructive: jest.fn(), toggle: jest.fn(), error: jest.fn(), primary: jest.fn(), success: jest.fn() } }))
+
+/** The screen with the app's one sheet host beside it, as the root layout mounts them. */
+const Screen = () => (
+  <View>
+    <SettingsScreen />
+    <SheetHost />
+  </View>
+)
+afterEach(async () => {
+  await act(async () => closeSheet())
+})
 
 beforeEach(() => {
   jest.clearAllMocks()
+  resetMutedRooms()
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   api.updateProfile.mockResolvedValue({ success: true } as never)
   api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
+  ;(api.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [] } })
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
   ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
     Promise.resolve({ success: true, data: { enabled: init?.method === 'PUT' ? JSON.parse(String(init.body)).enabled : true } })
@@ -75,7 +96,7 @@ beforeEach(() => {
 
 describe('Sign out', () => {
   it('asks before signing out, and Cancel keeps you in', async () => {
-    await render(<SettingsScreen />)
+    await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: 'Sign out' }))
 
     expect(await screen.findByText('Sign out?')).toBeTruthy()
@@ -86,7 +107,7 @@ describe('Sign out', () => {
 
   it('signs out from the tray', async () => {
     ;(signOut as jest.Mock).mockResolvedValue({ success: true })
-    await render(<SettingsScreen />)
+    await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: 'Sign out' }))
     // The tray's own button, not the row that opened it.
     await screen.findByText('Sign out?')
@@ -97,52 +118,100 @@ describe('Sign out', () => {
   })
 })
 
-describe('Push notifications', () => {
-  it('shows off when the phone blocks them, whatever the account says', async () => {
-    permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
-    await render(<SettingsScreen />)
+it('plays H.primary once, on the Sign out confirm and not when the sheet opens (frame 11), and never the destructive tick', async () => {
+  ;(signOut as jest.Mock).mockResolvedValue({ success: true })
+  await render(<Screen />)
+  fireEvent.press(await screen.findByRole('button', { name: 'Sign out' }))
+  await screen.findByText('Sign out?')
+  expect(H.primary).not.toHaveBeenCalled()
+  const buttons = screen.getAllByText('Sign out')
+  const confirm = buttons[buttons.length - 1]
+  // The cue is on press-in, not on release.
+  await act(async () => fireEvent(confirm, 'pressIn'))
+  expect(H.primary).toHaveBeenCalledTimes(1)
+  fireEvent.press(confirm)
 
-    expect(await screen.findByText("Off in your phone's settings.")).toBeTruthy()
-    const toggle = screen.getByRole('switch', { name: 'Push notifications' })
-    expect(toggle.props.accessibilityState.checked).toBe(false)
+  await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1))
+  expect(H.primary).toHaveBeenCalledTimes(1)
+  expect(H.destructive).not.toHaveBeenCalled()
+})
+
+describe('Notifications row', () => {
+  it('opens Notification settings, where the push switch now lives (the Settings screen has no switch of its own)', async () => {
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: /^Notifications/ }))
+    expect(router.push).toHaveBeenCalledWith('/notification-settings')
+    expect(screen.queryByRole('switch', { name: /^Push notifications/ })).toBeNull()
   })
 
-  it('explains, and offers Settings, instead of saving a switch nothing will deliver on', async () => {
-    permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
-    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue()
-    await render(<SettingsScreen />)
-    await screen.findByText("Off in your phone's settings.")
-
-    fireEvent.press(screen.getByRole('switch', { name: 'Push notifications' }))
-
-    expect(await screen.findByText('Notifications are off')).toBeTruthy()
-    expect(api.updateProfile).not.toHaveBeenCalled()
-    fireEvent.press(screen.getByText('Open Settings'))
-    expect(openSettings).toHaveBeenCalled()
+  it('says On when nothing is muted (frame 01)', async () => {
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Notifications, On' })).toBeTruthy()
   })
 
-  it('saves as before when the phone allows them', async () => {
-    await render(<SettingsScreen />)
-    const toggle = () => screen.getByRole('switch', { name: 'Push notifications' })
-    await waitFor(() => expect(toggle().props.accessibilityState).toMatchObject({ checked: true, disabled: false }))
+  it('says how many rooms are muted (frame 02)', async () => {
+    const mute = { muted: true, until: null }
+    ;(api.getChatGroups as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { groups: [{ id: 'a', event: { title: 'A' }, mute }, { id: 'b', event: { title: 'B' }, mute }, { id: 'c', event: { title: 'C' } }] },
+    })
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Notifications, 2 rooms muted' })).toBeTruthy()
+  })
+})
 
-    // The row is the target: a tap anywhere on it flips the switch.
-    fireEvent.press(toggle())
+it('Help has Tips, which opens the screen that lists every coach-mark sentence (R4-2)', async () => {
+  await render(<Screen />)
+  fireEvent.press(await screen.findByRole('button', { name: 'Tips' }))
+  expect(router.push).toHaveBeenCalledWith('/tips')
+})
 
-    await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', expect.objectContaining({ push_enabled: false })))
-    expect(screen.queryByText('Notifications are off')).toBeNull()
+describe('the muted count is the truth, or says it is not all of it', () => {
+  const mute = { muted: true, until: null }
+  it('the server’s own count wins when it sends one', async () => {
+    ;(api.queuedRequest as jest.Mock).mockImplementation((url: string) =>
+      Promise.resolve(url.includes('notification-preferences') ? { success: true, data: { mutedRooms: 41 } } : { success: false, errorCode: 'NOT_FOUND' })
+    )
+    ;(api.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [{ id: 'a', event: { title: 'A' }, mute }] } })
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Notifications, 41 rooms muted' })).toBeTruthy()
+  })
+
+  it('a scan that lost a page says "N+", never a quietly short count', async () => {
+    ;(api.queuedRequest as jest.Mock).mockImplementation(() => Promise.resolve({ success: false, errorCode: 'NOT_FOUND' }))
+    ;(api.getChatGroups as jest.Mock).mockResolvedValue({
+      success: true,
+      data: { groups: [{ id: 'a', event: { title: 'A' }, mute }], pagination: { hasMore: true } },
+    })
+    await render(<Screen />)
+    expect(await screen.findByRole('button', { name: 'Notifications, 1+ rooms muted' })).toBeTruthy()
+  })
+})
+
+describe('How you match row (Flow 14 · 14.4)', () => {
+  it('sits beside Notifications and opens the about-you fields', async () => {
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'How you match, What matching reads' }))
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/edit-about-you', params: { from: 'settings' } })
+    expect(screen.getByText('Notifications & matching')).toBeTruthy()
   })
 })
 
 it('offers Try again when the settings did not load, and it works', async () => {
-  api.getProfile.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
-  await render(<SettingsScreen />)
+  // Every read fails (the Settings read and the Notifications hint's push read both ask), until the connection is back.
+  api.getProfile.mockResolvedValue({ success: false, error: 'No internet connection.' })
+  await render(<Screen />)
 
-  expect(await screen.findByText("Your settings didn't load. Pull down or try again.")).toBeTruthy()
+  expect(await screen.findByText("Your settings didn’t load. Pull down or try again.")).toBeTruthy()
+  // The switches hold still until it works (frame 06).
+  expect(screen.getByRole('switch', { name: 'Read receipts' }).props.accessibilityState.disabled).toBe(true)
+  const before = api.getProfile.mock.calls.length
+  api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
 
-  await waitFor(() => expect(screen.queryByText("Your settings didn't load. Pull down or try again.")).toBeNull())
-  expect(api.getProfile).toHaveBeenCalledTimes(2)
+  await waitFor(() => expect(screen.queryByText("Your settings didn’t load. Pull down or try again.")).toBeNull())
+  // The Settings read and the Notifications hint's push read each ask once at the start; Try again asks again.
+  expect(api.getProfile.mock.calls.length).toBeGreaterThan(before)
 })
 
 describe('Delete account', () => {
@@ -158,7 +227,7 @@ describe('Delete account', () => {
 
   it('asks twice, then says the account was deleted once it was', async () => {
     ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
-    await render(<SettingsScreen />)
+    await render(<Screen />)
     await openTray()
 
     fireEvent.press(lastButton('Delete account'))
@@ -172,7 +241,7 @@ describe('Delete account', () => {
 
   it('keeps the tray open with the reason when deleting fails, and offers Try again', async () => {
     ;(deleteAccount as jest.Mock).mockResolvedValue({ success: false, error: 'Server said no.' })
-    await render(<SettingsScreen />)
+    await render(<Screen />)
     await openTray()
     fireEvent.press(lastButton('Delete account'))
     fireEvent.press(await screen.findByRole('button', { name: 'Delete my account' }))
@@ -182,8 +251,55 @@ describe('Delete account', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 
+  // Negative control: with app/settings.tsx at 7521c4c0 (no Apple step), all three fail.
+  describe('an Apple account (5.1.1(v): its Apple grant is revoked)', () => {
+    const asApple = (method: 'apple' | 'password') => {
+      ;(mockAuth.user as { signInMethod?: string }).signInMethod = method
+    }
+    afterEach(() => {
+      delete (mockAuth.user as { signInMethod?: string }).signInMethod
+    })
+    const confirm = async () => {
+      await render(<Screen />)
+      await openTray()
+      fireEvent.press(lastButton('Delete account'))
+      fireEvent.press(await screen.findByRole('button', { name: 'Delete my account' }))
+    }
+
+    it('asks Apple for a fresh code and sends it with the delete', async () => {
+      asApple('apple')
+      ;(appleCodeForDeletion as jest.Mock).mockResolvedValue('c0de')
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+      await confirm()
+      await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
+      expect(appleCodeForDeletion).toHaveBeenCalledTimes(1)
+      expect(deleteAccount).toHaveBeenCalledWith('c0de')
+    })
+
+    it('still deletes when the Apple sheet is cancelled, and says how to remove Blend’n from Apple ID', async () => {
+      asApple('apple')
+      ;(appleCodeForDeletion as jest.Mock).mockResolvedValue(null)
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+      await confirm()
+      await waitFor(() =>
+        expect(mockShowToast).toHaveBeenCalledWith(`Your account has been deleted. ${APPLE_UNLINK_HINT}`, 'success')
+      )
+      expect(deleteAccount).toHaveBeenCalledWith(undefined)
+      expect(APPLE_UNLINK_HINT).toBe('You can also remove Blend’n from Apple ID › Sign in with Apple.')
+    })
+
+    it('never opens the Apple sheet for an account that is not Apple', async () => {
+      asApple('password')
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+      await confirm()
+      await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
+      expect(appleCodeForDeletion).not.toHaveBeenCalled()
+      expect(deleteAccount).toHaveBeenCalledWith(undefined)
+    })
+  })
+
   it('Cancel deletes nothing', async () => {
-    await render(<SettingsScreen />)
+    await render(<Screen />)
     await openTray()
     fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
     expect(deleteAccount).not.toHaveBeenCalled()
@@ -194,11 +310,11 @@ describe('Delete account', () => {
     ['google', 'Google Play'],
   ] as const)('says to cancel a %s subscription first, with Manage subscription (review H1)', async (source, store) => {
     const opened = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
-    await render(<SettingsScreen />)
+    await render(<Screen />)
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ active: true, source }) } as never)
     await openTray()
     expect(
-      await screen.findByText(`Cancel Blendn+ in your ${store} subscriptions first. Deleting your account doesn't cancel it.`)
+      await screen.findByText(`Cancel Blend’n+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`)
     ).toBeTruthy()
     fireEvent.press(screen.getByRole('button', { name: 'Manage subscription' }))
     await waitFor(() => expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/(apps\.apple\.com|play\.google\.com)\//)))
@@ -206,12 +322,12 @@ describe('Delete account', () => {
   })
 
   it('says nothing about the store for a grant, or no Plus', async () => {
-    await render(<SettingsScreen />)
+    await render(<Screen />)
     for (const data of [plusStatus({ active: true, source: 'grant' }), plusStatus()]) {
       api.getMyPlus.mockResolvedValue({ success: true, data } as never)
       await openTray()
       await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-      expect(screen.queryByText(/Deleting your account doesn't cancel it/)).toBeNull()
+      expect(screen.queryByText(/Deleting your account doesn’t cancel it/)).toBeNull()
       fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
     }
   })
@@ -220,23 +336,23 @@ describe('Delete account', () => {
 describe('Blendn+ row (review H2)', () => {
   it('in a launch season says it is free and opens an info tray that sells nothing', async () => {
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
-    await render(<SettingsScreen />)
-    fireEvent.press(await screen.findByRole('button', { name: 'Blendn+ · free during launch in your city' }))
-    expect(await screen.findByText('Blendn+ is free here for now')).toBeTruthy()
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Free during launch in your city/ }))
+    expect(await screen.findByText('Blend’n+ is free here for now')).toBeTruthy()
     expect(router.push).not.toHaveBeenCalled()
   })
 
   it('where it is sold, opens the paywall', async () => {
-    await render(<SettingsScreen />)
+    await render(<Screen />)
     await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-    fireEvent.press(await screen.findByRole('button', { name: 'Blendn+' }))
+    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, See plans/ }))
     await waitFor(() => expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/plus' })))
   })
 })
 
 it('reports a sign-out the server did not hear about', async () => {
   ;(signOut as jest.Mock).mockResolvedValue({ success: false })
-  await render(<SettingsScreen />)
+  await render(<Screen />)
   fireEvent.press(await screen.findByRole('button', { name: 'Sign out' }))
   await screen.findByText('Sign out?')
   const buttons = screen.getAllByText('Sign out')
@@ -245,19 +361,52 @@ it('reports a sign-out the server did not hear about', async () => {
   await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/^Signed out on this phone/), 'info'))
 })
 
-it('says which setting did not save, as a toast', async () => {
+it('says which setting did not save, as a toast that plays the one error haptic', async () => {
   api.updateProfile.mockResolvedValue({ success: false, error: 'nope' } as never)
-  await render(<SettingsScreen />)
+  await render(<Screen />)
   const toggle = () => screen.getByRole('switch', { name: 'Read receipts' })
   await waitFor(() => expect(toggle().props.accessibilityState.disabled).toBe(false))
   fireEvent.press(toggle())
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't save “Read receipts”. Try again.", 'error'))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save “Read receipts”. Try again.", 'error', { haptic: 'error' }))
+})
+
+it('sends ONLY the switch that was changed: the other three are never sent from a stale screen (consent)', async () => {
+  // The screen holds friendsSeeMe false (cached, or read before the one-time ask turned it on elsewhere).
+  api.getProfile.mockResolvedValue({
+    success: true,
+    data: { profile: { push_enabled: true, show_online: true, read_receipts: true, share_location: true, friends_see_me_in_rooms: false } },
+  } as never)
+  await render(<Screen />)
+  const toggle = () => screen.getByRole('switch', { name: 'Read receipts' })
+  await waitFor(() => expect(toggle().props.accessibilityState.disabled).toBe(false))
+  fireEvent.press(toggle())
+
+  await waitFor(() => expect(api.updateProfile).toHaveBeenCalledTimes(1))
+  expect(api.updateProfile).toHaveBeenCalledWith('u_me', { read_receipts: false })
+  expect(Object.keys(api.updateProfile.mock.calls[0][1] as object)).toEqual(['read_receipts'])
+})
+
+it('each switch sends its own column, and only that', async () => {
+  api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true, friends_see_me_in_rooms: false } } } as never)
+  await render(<Screen />)
+  const friends = () => screen.getByRole('switch', { name: /^Friends can see I’m here/ })
+  await waitFor(() => expect(friends().props.accessibilityState.disabled).toBe(false))
+  fireEvent.press(friends())
+  await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('u_me', { friends_see_me_in_rooms: true }))
+})
+
+// D-L24: the sub names what the switch does now. Negative control: the static "Off: …" sub fails the On half.
+it('"Show online status" says what On means while it is on', async () => {
+  api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true, show_online: true } } } as never)
+  await render(<Screen />)
+  const labels = () => screen.queryAllByRole('switch', { includeHiddenElements: true }).map((n) => String(n.props.accessibilityLabel))
+  await waitFor(() => expect(labels()).toContain(`Show online status, ${ONLINE_STATUS_HINT.on}`))
 })
 
 it('opens About and Contact support', async () => {
-  await render(<SettingsScreen />)
-  fireEvent.press(await screen.findByRole('button', { name: "About Blend'n" }))
+  await render(<Screen />)
+  fireEvent.press(await screen.findByRole('button', { name: 'About Blend’n' }))
   expect(router.push).toHaveBeenCalledWith('/about')
   fireEvent.press(screen.getByRole('button', { name: 'Contact support' }))
   expect(router.push).toHaveBeenCalledWith('/support')

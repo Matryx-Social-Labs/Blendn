@@ -179,7 +179,7 @@ describe('a library that will not open', () => {
   it('says so in a toast, not an alert', async () => {
     picker.launchImageLibraryAsync.mockRejectedValue(new Error('boom'))
     await expect(pickImage('library')).resolves.toBeNull()
-    expect(toast).toHaveBeenCalledWith("Your photos didn't open. Try again.", 'error')
+    expect(toast).toHaveBeenCalledWith("Your photos didn’t open. Try again.", 'error')
   })
 })
 
@@ -200,7 +200,7 @@ describe('reorderPhotos tells the rest of the app the photos changed', () => {
     expect(refreshAuthUser).toHaveBeenCalledTimes(1)
   })
 
-  it("on refusal: returns the server's sentence and touches neither", async () => {
+  it("on refusal: returns the server’s sentence and touches neither", async () => {
     api.updateProfile.mockResolvedValue({ success: false, error: 'That looks like a blank image.' } as never)
     await expect(reorderPhotos('u1', ['https://cdn/x.jpg'])).resolves.toEqual({ ok: false, error: 'That looks like a blank image.' })
     expect(queryCache.invalidate).not.toHaveBeenCalled()

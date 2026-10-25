@@ -1,7 +1,10 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { barTop } from '../../lib/barGeometry'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { EMBER, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { COLOR, RADIUS, SIZE, SPACE as DS_SPACE, TYPE as DS_TYPE } from '../../lib/design/tokens'
+import { GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { Material } from '../ui/Material'
 
 /** Frame `1141:4819`: the bar is 64 tall, below the status bar. */
 export const TOP_BAR_HEIGHT = 64
@@ -11,7 +14,7 @@ export const TOP_BAR_HEIGHT = 64
  *
  * ## An overlay, not a header component
  *
- * It sits at `top: 0` over the feed as an opaque `EMBER.bg` band — no blur —
+ * It sits at `top: 0` over the feed as an opaque `COLOR.ink` band — no blur —
  * and the feed scrolls **under** it. The bar this replaced
  * reserved its own height and sat above a bordered panel, which is half of why
  * the old Pulse read as a page inside a page. Nothing here occupies layout;
@@ -59,8 +62,15 @@ export const TOP_BAR_HEIGHT = 64
 export function PulseTopBar({
   leading,
   actions,
-  title = "Blend'n",
+  title = "Blend’n",
+  floating = false,
 }: {
+  /**
+   * Home's frame (Flow 3 discovery, guidelines/flow-3/flow3.js): no band at all. The map runs under the status bar and the
+   * wordmark floats on it as a glass capsule (44 pt iOS · 48 dp Android, 700 20/24) 16 pt in from each edge, the bell
+   * beside it as a glass circle. The opaque band stays for screens whose content scrolls under the bar (the Scene).
+   */
+  floating?: boolean
   leading?: React.ReactNode
   actions?: React.ReactNode
   /**
@@ -81,11 +91,12 @@ export function PulseTopBar({
     <View
       style={[
         styles.bar,
-        { paddingTop: insets.top, height: insets.top + TOP_BAR_HEIGHT },
+        floating && styles.floatingBar,
+        { paddingTop: barTop(insets.top), height: insets.top + TOP_BAR_HEIGHT },
       ]}
       pointerEvents={interactive ? 'box-none' : 'none'}
     >
-      <View style={styles.row} pointerEvents={interactive ? 'box-none' : 'none'}>
+      <View style={[styles.row, floating && styles.floatingRow]} pointerEvents={interactive ? 'box-none' : 'none'}>
         {/*
           Frame: the left group is the glyph and the wordmark together, 16pt
           apart, starting at x=24. With no leading glyph the wordmark simply
@@ -98,9 +109,17 @@ export function PulseTopBar({
             accent belongs to at most one thing per screen, and that is the
             screen's own call — not a label the bar prints on every screen.
           */}
-          <Text style={styles.wordmark} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
-            {title}
-          </Text>
+          {floating ? (
+            <Material role="control" style={styles.capsule}>
+              <Text style={styles.capsuleWordmark} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+                {title}
+              </Text>
+            </Material>
+          ) : (
+            <Text style={styles.wordmark} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
+              {title}
+            </Text>
+          )}
         </View>
         <View style={styles.actions} pointerEvents={interactive ? 'box-none' : 'none'}>
           {actions}
@@ -119,7 +138,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
     // The page colour, opaque. The frame's 80% fill under a 12pt blur is
     // glass (tasks/lessons.md); the feed now passes under a flat band.
-    backgroundColor: EMBER.bg,
+    backgroundColor: COLOR.ink,
   },
   row: {
     height: TOP_BAR_HEIGHT,
@@ -132,4 +151,15 @@ const styles = StyleSheet.create({
   leadingGroup: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
   wordmark: { ...TYPE.button },
+  floatingBar: { backgroundColor: 'transparent' },
+  // The capsule and the bell start at the safe-area top (Flow 3 `home`: top 62 under a 59 pt status bar), not centred in the band under it.
+  floatingRow: { paddingHorizontal: DS_SPACE.lg, alignItems: 'flex-start' },
+  capsule: {
+    height: Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton,
+    paddingHorizontal: DS_SPACE.lg,
+    borderRadius: RADIUS.capsule,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  capsuleWordmark: { ...DS_TYPE.heading, color: COLOR.textPrimary },
 })

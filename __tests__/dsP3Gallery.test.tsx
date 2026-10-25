@@ -4,7 +4,7 @@
  * composer, a hold opens the menu, a reaction lands and closes it, Send adds
  * the message.
  */
-import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
 import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
@@ -71,7 +71,8 @@ describe('the gallery, app/preview/ds-p3', () => {
     )
     expect(screen.getByTestId('ds-demo-menu-menu')).toBeTruthy()
     await fireEvent.press(screen.getAllByRole('button', { name: 'React, heart' })[0])
-    expect(screen.queryByTestId('ds-demo-menu-menu')).toBeNull()
+    // The menu leaves over `quick` and the Modal goes after it.
+    await waitFor(() => expect(screen.queryByTestId('ds-demo-menu-menu')).toBeNull())
     expect(within(screen.getByTestId('ds-demo-feed')).getByRole('button', { name: 'heart, 1, including you' })).toBeTruthy()
 
     const field = screen.getAllByLabelText('Message')[0]

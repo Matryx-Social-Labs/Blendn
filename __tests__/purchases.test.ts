@@ -45,7 +45,7 @@ describe('the key', () => {
     expect(rc.configure).not.toHaveBeenCalled()
     expect(await m.canBuyAs('u1')).toBe(false)
     expect(await m.loadPlusOffers()).toEqual([])
-    expect(await m.restore('u1')).toEqual({ kind: 'failed', message: "Purchases aren't available yet." })
+    expect(await m.restore('u1')).toEqual({ kind: 'failed', message: "Purchases aren’t available yet." })
     expect(await m.manageSubscriptionUrl('ios')).toBe('https://apps.apple.com/account/subscriptions')
     expect(await m.manageSubscriptionUrl('android')).toBe(
       'https://play.google.com/store/account/subscriptions?package=com.matryxsociallabs.blendn'
@@ -139,9 +139,9 @@ describe('what is sold', () => {
       pkg('$rc_three_month', '₹499.00'),
     ])
     expect(offers.map((o) => [o.title, o.length, o.price])).toEqual([
-      ['Blendn+ · Monthly', '1 month, renews monthly', '₹199.00'],
-      ['Blendn+ · 3 months', '3 months, renews every 3 months', '₹499.00'],
-      ['Blendn+ · Yearly', '1 year, renews yearly', '₹1,499.00'],
+      ['Blend’n+ · Monthly', '1 month, renews monthly', '₹199.00'],
+      ['Blend’n+ · 3 months', '3 months, renews every 3 months', '₹499.00'],
+      ['Blend’n+ · Yearly', '1 year, renews yearly', '₹1,499.00'],
       ['Night Pass · 24 hours', '24 hours, does not renew', '₹49.00'],
     ])
   })
@@ -185,7 +185,7 @@ describe('buying and restoring say what happened, nothing more', () => {
   it.each([
     ['6', /already have this/, true],
     ['7', /belongs to another Blendn account/, undefined],
-    ['3', /aren't allowed on this device/, undefined],
+    ['3', /aren’t allowed on this device/, undefined],
     ['10', /No connection/, undefined],
   ])('says what code %s means (review MEDIUM)', async (code, words, manage) => {
     const { m, rc } = await asU1()
@@ -209,6 +209,61 @@ describe('buying and restoring say what happened, nothing more', () => {
     expect(await m.restore('u1')).toEqual({ kind: 'nothing' })
     rc.restorePurchases.mockResolvedValueOnce({ entitlements: { active: { plus: {} } }, activeSubscriptions: ['plus_monthly'] })
     expect(await m.restore('u1')).toEqual({ kind: 'restored' })
+  })
+
+  it('restore: RevenueCat answering with no entitlements at all is "nothing", not a throw', async () => {
+    const { m, rc } = await asU1()
+    rc.restorePurchases.mockResolvedValueOnce({})
+    expect(await m.restore('u1')).toEqual({ kind: 'nothing' })
+    rc.restorePurchases.mockResolvedValueOnce(undefined)
+    expect(await m.restore('u1')).toEqual({ kind: 'nothing' })
+  })
+
+  it('restore: a store that never answers ends in words after 20 s, never a spinner', async () => {
+    jest.useFakeTimers()
+    try {
+      const { m, rc } = await asU1()
+      rc.restorePurchases.mockReturnValueOnce(new Promise(() => {}))
+      const done = m.restore('u1')
+      await jest.advanceTimersByTimeAsync(m.RESTORE_TIMEOUT_MS)
+      expect(await done).toEqual({ kind: 'failed', message: m.RESTORE_SILENT })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('restore: an answer that lands after the 20 s message is handed on, not dropped', async () => {
+    jest.useFakeTimers()
+    try {
+      const { m, rc } = await asU1()
+      let land: (v: unknown) => void = () => {}
+      rc.restorePurchases.mockReturnValueOnce(new Promise((r) => { land = r }))
+      const late = jest.fn()
+      const done = m.restore('u1', late)
+      await jest.advanceTimersByTimeAsync(m.RESTORE_TIMEOUT_MS)
+      expect(await done).toEqual({ kind: 'failed', message: m.RESTORE_SILENT })
+      expect(late).not.toHaveBeenCalled()
+      land({ entitlements: { active: { plus: {} } }, activeSubscriptions: ['plus_monthly'] })
+      await jest.advanceTimersByTimeAsync(0)
+      expect(late).toHaveBeenCalledWith({ kind: 'restored' })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('restore: an answer in time is never also handed on late', async () => {
+    const { m } = await asU1()
+    const late = jest.fn()
+    expect(await m.restore('u1', late)).toEqual({ kind: 'nothing' })
+    expect(late).not.toHaveBeenCalled()
+  })
+
+  it('restore: an error from the store is a failure with words', async () => {
+    const { m, rc } = await asU1()
+    rc.restorePurchases.mockRejectedValueOnce({ code: '10' })
+    expect(await m.restore('u1')).toMatchObject({ kind: 'failed', message: expect.stringMatching(/connection/i) })
+    rc.restorePurchases.mockRejectedValueOnce(new Error('boom'))
+    expect(await m.restore('u1')).toEqual({ kind: 'failed', message: "Couldn’t reach the store. Try again." })
   })
 
   it('Manage: RevenueCat\'s management URL when it is a store\'s own page — anything else is ignored (review LOW)', async () => {

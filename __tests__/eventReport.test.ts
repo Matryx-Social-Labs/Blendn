@@ -26,7 +26,8 @@ describe("reporting an event", () => {
      * satisfied it. The same mistake was in the edit that added the button:
      * it reported success on the strength of the import it had just written.
      */
-    expect(DETAIL).toMatch(/onPress=\{\(\) => showEventReportOptions\(/)
+    // In the ⋯ menu's Report item (the frame draws Report inside ⋯, not as a fourth circle).
+    expect(DETAIL).toMatch(/label: 'Report this event', onPress: \(\) => showEventReportOptions\(/)
   })
 
   it("asks reasons that are about an event, not about a person", () => {

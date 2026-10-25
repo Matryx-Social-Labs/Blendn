@@ -1,18 +1,7 @@
 import { useState } from 'react'
-import {
-  KeyboardAvoidingView,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, OPACITY, SPACE, TYPE } from '../../lib/theme'
-import { KEYBOARD_BEHAVIOR } from '../../lib/keyboard'
-import { RisingSheet, SheetModal } from '../motion/RisingSheet'
-import { Grabber } from '../ui/Grabber'
+import { Sheet } from '../ds/Sheet'
+import { TextArea } from '../ds/TextField'
 
 /**
  * Sending a connection request — the message, and what it costs you.
@@ -58,7 +47,7 @@ export function connectDisclosure(displayName: string, theyAreRevealed: boolean)
   const them = displayName.trim() || 'They'
   return theyAreRevealed
     ? `${them} will see your name and photo.`
-    : `${them} will see your name and photo. You'll still see them as ${them} until they choose to reveal.`
+    : `${them} will see your name and photo. You’ll still see them as ${them} until they choose to reveal.`
 }
 
 export function ConnectSheet({
@@ -77,146 +66,45 @@ export function ConnectSheet({
   onSend: (message: string) => void
   onDismiss: () => void
 }) {
-  const insets = useSafeAreaInsets()
   const [message, setMessage] = useState('')
 
   const trimmed = message.trim()
-  const remaining = CONNECT_MESSAGE_MAX - message.length
   /* Required, not optional — the server refuses an empty one either way. */
   const canSend = trimmed.length > 0 && message.length <= CONNECT_MESSAGE_MAX && !sending
 
   return (
-    <SheetModal
+    <Sheet
+      testID="connect-sheet"
       visible={visible}
-      onRequestClose={onDismiss}
-      accessibilityViewIsModal
+      onClose={onDismiss}
+      icon="message-circle"
+      title={`Connect with ${displayName}`}
+      /*
+       * Above the field, not in a confirmation after it. Somebody who has typed a paragraph has already decided; the cost
+       * belongs before the effort, where it can still change the answer.
+       */
+      body={connectDisclosure(displayName, theyAreRevealed)}
+      actions={[
+        { label: 'Send request', kind: 'primary', onPress: () => onSend(message), loading: sending, disabled: !canSend },
+        { label: 'Cancel', kind: 'tertiary', onPress: onDismiss },
+      ]}
     >
-      <Pressable style={styles.scrim} onPress={onDismiss} accessibilityLabel="Cancel" />
-
-      <KeyboardAvoidingView behavior={KEYBOARD_BEHAVIOR}>
-        <RisingSheet style={[styles.sheet, { paddingBottom: insets.bottom + SPACE.xl }]}>
-          <Grabber style={styles.grabber} />
-
-          <Text style={styles.title} accessibilityRole="header" maxFontSizeMultiplier={1.4}>
-            Connect with {displayName}
-          </Text>
-
-          {/*
-            Above the field, not in a confirmation after it. Somebody who has
-            typed a paragraph has already decided; the cost belongs before the
-            effort, where it can still change the answer.
-          */}
-          <Text style={styles.disclosure} maxFontSizeMultiplier={1.4}>
-            {connectDisclosure(displayName, theyAreRevealed)}
-          </Text>
-
-          <TextInput
-            value={message}
-            onChangeText={setMessage}
-            placeholder="Why do you want to talk?"
-            placeholderTextColor={EMBER.textPlaceholder}
-            multiline
-            maxLength={CONNECT_MESSAGE_MAX}
-            style={styles.input}
-            accessibilityLabel="Your message"
-            accessibilityHint="Required. They see this before deciding whether to accept."
-            maxFontSizeMultiplier={1.4}
-          />
-
-          <View style={styles.meta}>
-            {/*
-              A reason, not a formality. The recipient decides on this sentence
-              alone -- "Someone wants to connect" is a coin flip.
-            */}
-            <Text style={styles.hint} maxFontSizeMultiplier={1.3}>
-              They see this before deciding.
-            </Text>
-            <Text
-              style={[styles.counter, remaining < 40 && styles.counterLow]}
-              maxFontSizeMultiplier={1.3}
-              /* Announced only when it starts to matter, not on every keystroke. */
-              accessibilityLiveRegion={remaining < 40 ? 'polite' : 'none'}
-            >
-              {remaining}
-            </Text>
-          </View>
-
-          <Pressable
-            onPress={() => onSend(trimmed)}
-            disabled={!canSend}
-            accessibilityRole="button"
-            accessibilityLabel={`Send a connection request to ${displayName}`}
-            accessibilityState={{ disabled: !canSend }}
-            style={({ pressed }) => [
-              styles.send,
-              !canSend && styles.sendOff,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text
-              style={[styles.sendLabel, !canSend && styles.sendLabelOff]}
-              maxFontSizeMultiplier={1.3}
-            >
-              {sending ? 'Sending…' : 'Send request'}
-            </Text>
-          </Pressable>
-
-          {/*
-            Stated once, plainly. It is the strongest protection in the feature
-            and the only one with a consequence the sender should weigh.
-          */}
-          <Text style={styles.footnote} maxFontSizeMultiplier={1.3}>
-            You can only send one request to someone.
-          </Text>
-        </RisingSheet>
-      </KeyboardAvoidingView>
-    </SheetModal>
+      {/*
+        A reason, not a formality. The recipient decides on this sentence alone -- "Someone wants to connect" is a coin flip.
+        One-shot: the strongest protection in the feature and the only one with a consequence the sender should weigh.
+      */}
+      <TextArea
+        value={message}
+        onChangeText={setMessage}
+        placeholder="Why do you want to talk?"
+        limit={CONNECT_MESSAGE_MAX}
+        hint="They see this before deciding. You can only send one request to someone."
+        minHeight={SHEET_FIELD_MIN}
+        testID="connect-message"
+      />
+    </Sheet>
   )
 }
 
-/** The note grows from about three lines to about seven, then scrolls. */
-const NOTE_MIN_HEIGHT = 108
-const NOTE_MAX_HEIGHT = 200
-
-const styles = StyleSheet.create({
-  // Transparent: `SheetModal` draws the dim and fades it on its own.
-  scrim: { flex: 1 },
-  sheet: {
-    backgroundColor: EMBER.bg,
-    borderTopLeftRadius: EMBER_RADIUS.lg,
-    borderTopRightRadius: EMBER_RADIUS.lg,
-    paddingHorizontal: GUTTER,
-    paddingTop: SPACE.md,
-    gap: SPACE.md,
-  },
-  grabber: { marginBottom: SPACE.md },
-  title: { ...TYPE.title },
-  disclosure: { ...TYPE.body, color: EMBER.textSecondary },
-  input: {
-    ...TYPE.body,
-    minHeight: NOTE_MIN_HEIGHT,
-    maxHeight: NOTE_MAX_HEIGHT,
-    borderRadius: EMBER_RADIUS.lg,
-    backgroundColor: EMBER.surfaceSunken,
-    padding: SPACE.lg,
-    textAlignVertical: 'top',
-  },
-  meta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  hint: { ...TYPE.meta, color: EMBER.textTertiary },
-  counter: { ...TYPE.meta, color: EMBER.textTertiary },
-  counterLow: { color: EMBER.textPrimary },
-  send: {
-    minHeight: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: SPACE.lg,
-    marginTop: SPACE.xs,
-    backgroundColor: EMBER.accent,
-  },
-  sendOff: { backgroundColor: EMBER.surface },
-  pressed: { opacity: OPACITY.pressed },
-  sendLabel: { ...TYPE.button, color: EMBER.onGradient },
-  sendLabelOff: { color: EMBER.textTertiary },
-  footnote: { ...TYPE.meta, color: EMBER.textTertiary, textAlign: 'center' },
-})
+/** Flow 6 `user` 08: the field is 72 tall, a line and a half; it grows with what is typed. */
+const SHEET_FIELD_MIN = 72

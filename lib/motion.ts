@@ -9,23 +9,61 @@
  * shorten, rises and drift go to zero, the shake stops. Read it through
  * `useMotion()`, never by checking the setting and picking numbers inline.
  * Kept under Reduce Motion: the hold (its speed is information), drags,
- * press feedback and every haptic.
+ * press feedback, every haptic, and the Spinner (a wait is state, not
+ * decoration; it is hidden from screen readers, and the Loader announces the
+ * wait). A programmatic scroll is `animated: !reduceMotion`
+ * (`__tests__/reduceMotionScrolls.test.ts`), and so is a CSS transition's
+ * duration, which Reanimated 4.5 does not reduce itself.
  */
 
-import { useReducedMotion } from 'react-native-reanimated'
+import { createElement, useSyncExternalStore } from 'react'
+import { AccessibilityInfo } from 'react-native'
+// The one place Reanimated's hook is read: everywhere else imports `useReducedMotion` from here (eslint.config.js bans the other).
+import { ReducedMotionConfig, ReduceMotion, useReducedMotion as reanimatedAtLaunch } from 'react-native-reanimated'
 
 import { DURATION, EASING, ORBS, PRESS, REDUCE_MOTION, RISE, SHAKE, SPRING, STAGGER } from './design/tokens'
 
 export { DURATION, EASING, PRESS, SPRING, STAGGER }
 
-/**
- * The system Reduce Motion setting.
- *
- * ponytail: Reanimated's, read once at launch, as every animated component
- * here already reads it. Swap for an AccessibilityInfo listener if a change
- * mid-session must apply without a restart.
+/*
+ * Reduce Motion, followed live (audit M1). Reanimated's own hook is a constant read at launch, so somebody who turns the
+ * setting on mid-session (typically because the motion is making them unwell) kept every loop and spring until a
+ * restart. The launch value is still Reanimated's (synchronous, so the first frame is already right); a change is the
+ * system's `reduceMotionChanged`, held here once for the whole app and shared by every reader.
  */
-export { useReducedMotion }
+let changedTo: boolean | null = null
+const readers = new Set<() => void>()
+let listening: { remove: () => void } | null = null
+
+function follow(onChange: () => void) {
+  readers.add(onChange)
+  listening ??= AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => {
+    changedTo = on
+    readers.forEach((read) => read())
+  })
+  return () => {
+    readers.delete(onChange)
+    if (readers.size) return
+    listening?.remove()
+    listening = null
+  }
+}
+
+/** The system Reduce Motion setting, now: re-renders its reader when it changes. */
+export function useReducedMotion(): boolean {
+  const atLaunch = reanimatedAtLaunch()
+  return useSyncExternalStore(follow, () => changedTo ?? atLaunch)
+}
+
+/**
+ * Mounted once, at the root: once the setting has changed mid-session, every Reanimated animation left on its default
+ * (`ReduceMotion.System`, which reads a value Reanimated set at launch) follows it too. Not mounted before a change, so
+ * the launch value stays Reanimated's own and a dev build does not warn that it was overwritten.
+ */
+export function ReducedMotionFollower() {
+  const changed = useSyncExternalStore(follow, () => changedTo)
+  return changed === null ? null : createElement(ReducedMotionConfig, { mode: changed ? ReduceMotion.Always : ReduceMotion.Never })
+}
 
 /** The motion values to use, with Reduce Motion's table laid over the base one. */
 export function motionTokens(reduceMotion: boolean) {

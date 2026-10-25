@@ -10,6 +10,8 @@ import { StyleSheet } from 'react-native'
  */
 let mockParams: Record<string, string> = { id: 'g1' }
 const mockMessage: Array<(d: { message: Record<string, unknown> }) => void> = []
+const mockDeleted: ((d: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void)[] = []
+const mockToast = jest.fn()
 const mockMuted: Array<(d: { userId: string; muted: boolean; reason?: string }) => void> = []
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -19,6 +21,12 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true },
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockParams,
+  // The room reads a Blend's chrome on focus; a room that is not a Blend's reads nothing.
+  useIsFocused: () => true,
+  useFocusEffect: (effect: () => void) => {
+    const { useEffect } = require('react')
+    useEffect(effect, [effect])
+  },
 }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-video', () => ({ useVideoPlayer: () => ({ addListener: () => ({ remove: () => {} }), play: () => {} }), VideoView: () => null }))
@@ -35,11 +43,14 @@ jest.mock('../lib/apiClient', () => ({
     sendChatMessage: jest.fn(),
     reactToChatMessage: jest.fn(),
     rejoinChatGroup: jest.fn(),
+    getEventChat: jest.fn(),
   },
 }))
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
+    subscribeToEventCheckIn: noop,
+    subscribeToEventCheckOut: noop,
     subscribeToLiveEnded: noop,
     subscribeToChatMessage: (_room: string, cb: never) => {
       mockMessage.push(cb)
@@ -47,7 +58,10 @@ jest.mock('../lib/socketClient', () => {
     },
     subscribeToChatTyping: noop,
     subscribeToChatReaction: noop,
-    subscribeToChatMessageDeleted: noop,
+    subscribeToChatMessageDeleted: (_room: string, cb: never) => {
+      mockDeleted.push(cb)
+      return () => {}
+    },
     subscribeToChatMemberBanned: noop,
     subscribeToChatMemberLeft: noop,
     subscribeToChatMemberMuted: (_room: string, cb: never) => {
@@ -63,14 +77,15 @@ jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => ({ state: 'connected', connected: true }) }))
 jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/chat/RoomGuidelinesBanner', () => ({ RoomGuidelinesBanner: () => null }))
-jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
-jest.mock('../components/ActionTray', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
+let mockToastInset = 0
+jest.mock('../components/toastDock', () => ({ ...jest.requireActual('../components/toastDock'), useToastInset: () => mockToastInset }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
 
 /* eslint-disable import/first */
 import GroupChat from '../app/chat/[id]'
 import { apiClient } from '../lib/apiClient'
-import { clearOutbox, keepFailed, roomThread } from '../lib/chatOutbox'
+import { clearOutbox, draftOf, failedOf, keepFailed, roomThread } from '../lib/chatOutbox'
 import { resetRoomMembership } from '../lib/roomMembership'
 /* eslint-enable import/first */
 
@@ -114,7 +129,9 @@ beforeEach(() => {
   resetRoomMembership()
   mockMuted.length = 0
   mockMessage.length = 0
+  mockDeleted.length = 0
   mockParams = { id: 'g1' }
+  mockToastInset = 0
   mockAuth.user = { id: 'u-a', name: 'Asha' }
   api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [eventRow] } } as never)
   api.getChatMessages.mockResolvedValue(page([theirs]) as never)
@@ -196,6 +213,20 @@ describe('the feed’s states', () => {
     expect(screen.queryByLabelText('Message')).toBeNull()
   })
 
+  it('a bare link to a room nobody knows the kind of: "This room has closed", never the event sentence (drive 4 D-5)', async () => {
+    // Arrange: a closed crew's or Blend's room by a link with no kind, and no row in the Banter (it is gone from it).
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [] } } as never)
+    api.getChatMessages.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Chat group not found' } as never)
+
+    // Act
+    await open()
+
+    // Assert
+    expect(screen.getByText('This room has closed')).toBeTruthy()
+    expect(screen.queryByText(/The event ended/)).toBeNull()
+    expect(screen.queryByLabelText('Message')).toBeNull()
+  })
+
   it('removed: the server’s sentence, and no composer', async () => {
     api.getChatMessages.mockResolvedValue({ success: false, errorCode: 'USER_BANNED', error: 'The organiser removed you from this chat.' } as never)
     await open()
@@ -227,6 +258,45 @@ describe('a send the server refuses', () => {
     await send('hello')
     expect(screen.getByLabelText(`${title}. ${error}`)).toBeTruthy()
     expect(screen.queryByLabelText('Message')).toBeNull()
+  })
+})
+
+it('TG-02: a room the organiser locked opens read-only, before any send', async () => {
+  api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, status: 'locked' }] } } as never)
+  await open()
+  expect(screen.getByLabelText('Read only. The organiser locked posting in this room.')).toBeTruthy()
+  expect(screen.queryByLabelText('Message')).toBeNull()
+  expect(screen.queryByLabelText('Send')).toBeNull()
+  expect(api.sendChatMessage).not.toHaveBeenCalled()
+})
+
+describe('a room that will not take a send again (drive 4 D-6)', () => {
+  it.each([
+    ['CHAT_LOCKED', 'This chat has been locked by the organiser'],
+    ['CHAT_CLOSED', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
+  ])('%s: no "Not sent · Tap to retry" under the read-only bar, and nothing kept for the Banter', async (errorCode, error) => {
+    // Arrange: a send that failed earlier is still held for this room.
+    keepFailed(roomThread('g1', 'u-a'), [{ message_id: 'temp-old', sender_id: 'u-a', sender_name: 'You', message_text: 'earlier', message_type: 'text', created_at: '2026-10-15T18:00:00.000Z', failed: true }])
+    api.sendChatMessage.mockResolvedValue({ success: false, errorCode, error } as never)
+    await open()
+    expect(screen.getByLabelText(/^Not sent: earlier/)).toBeTruthy()
+
+    // Act: the send that finds the room locked.
+    await send('hello')
+
+    // Assert: the lock says why; no bubble promises a retry, and the Banter holds no "Not sent" for it.
+    expect(screen.queryByLabelText('Message')).toBeNull()
+    expect(screen.queryByLabelText(/^Not sent/)).toBeNull()
+    expect(failedOf(roomThread('g1', 'u-a'))).toEqual([])
+    // What was typed is not lost: the last of it is the thread's draft (review LOW-3).
+    expect(draftOf(roomThread('g1', 'u-a'))).toBe('hello')
+  })
+
+  it('a mute is not that: the refused bubble stays, to retry once it lifts', async () => {
+    api.sendChatMessage.mockResolvedValue({ success: false, errorCode: 'USER_MUTED', error: 'You have been muted in this chat' } as never)
+    await open()
+    await send('hello')
+    expect(screen.getByLabelText(/^Not sent: hello/)).toBeTruthy()
   })
 })
 
@@ -266,6 +336,43 @@ describe('the newest chip counts a message once', () => {
   })
 })
 
+describe('a message that arrives rises (#13), only for a reader at the end', () => {
+  const deliver = (id: string) => {
+    const message = { id, userId: 'u-c', userName: 'Cosmic Panda', content: `hi ${id}`, type: 'text', createdAt: '2026-10-15T19:05:00.000Z' }
+    mockMessage.forEach((cb) => cb({ message }))
+  }
+  const scrollTo = (y: number) =>
+    act(async () =>
+      fireEvent.scroll(screen.getByTestId('room-feed'), {
+        nativeEvent: { contentOffset: { y }, contentSize: { height: 4000, width: 400 }, layoutMeasurement: { height: 800, width: 400 } },
+      })
+    )
+  type Host = { props?: Record<string, unknown>; parent: Host | null }
+  const enteringOf = (text: string) => {
+    const row = screen.getByText(text)
+    let node = row as unknown as Host | null
+    while (node && !node.props?.entering) node = node.parent
+    return node?.props?.entering
+  }
+
+  it('at the end: the new message has an entering animation, the history does not', async () => {
+    await open()
+    await scrollTo(3200)
+    await act(async () => deliver('m2'))
+    await flush()
+    expect(enteringOf('hi m2')).toBeDefined()
+    expect(enteringOf('Anyone near the stage?')).toBeUndefined()
+  })
+
+  it('reading back: a new message just appears (the list never moves under the reader)', async () => {
+    await open()
+    await scrollTo(0)
+    await act(async () => deliver('m3'))
+    await flush()
+    expect(enteringOf('hi m3')).toBeUndefined()
+  })
+})
+
 describe('the composer rides the keyboard', () => {
   /*
    * The floating dock is absolutely positioned. Directly inside the
@@ -278,8 +385,170 @@ describe('the composer rides the keyboard', () => {
     const frame = screen.getByTestId('chat-keyboard-dock-frame')
     // Its parent is the avoider's own View — the one that takes the keyboard's padding.
     const avoider = frame.parent
-    expect(StyleSheet.flatten(avoider?.props.style)).toHaveProperty('paddingBottom')
+    // The avoider is the keyboard library's (jest draws it as a plain View): `padding` is its own animated style, in the real one.
+    expect(avoider?.props.testID).not.toBe('chat-keyboard-frame')
     expect(avoider?.parent?.props.testID).toBe('chat-keyboard-frame')
     expect(within(frame).getByTestId('room-composer')).toBeTruthy()
+  })
+})
+
+describe('a jump from one open room to another (RC drive 2 D-E)', () => {
+  it('never saves room 1’s text as room 2’s draft, and room 2 shows its own', async () => {
+    const { draftOf, setDraft } = jest.requireActual('../lib/chatOutbox') as typeof import('../lib/chatOutbox')
+    setDraft(roomThread('g2', 'u-a'), 'crew’s own')
+    const view = await render(<GroupChat />)
+    await act(async () => fireEvent.changeText(screen.getByLabelText('Message'), 'only for g1'))
+    mockParams = { id: 'g2' }
+    await view.rerender(<GroupChat />)
+    expect(screen.getByLabelText('Message').props.value).toBe('crew’s own')
+    await view.unmount()
+    expect(draftOf(roomThread('g1', 'u-a'))).toBe('only for g1')
+    expect(draftOf(roomThread('g2', 'u-a'))).toBe('crew’s own')
+  })
+})
+
+describe('an event’s room before it opens (D-7: NOT_OPEN_YET)', () => {
+  const HOUR = 3_600_000
+  const notMember = { success: false, errorCode: 'FORBIDDEN', error: 'You are not a member of this chat group' }
+  const notYet = (ms: number) => ({ success: false, errorCode: 'CHAT_CLOSED', reasonCode: 'NOT_OPEN_YET', error: 'This chat opens 24 hours before the event starts.', opensAt: new Date(Date.now() + ms).toISOString(), chatGroupId: 'g1' })
+
+  beforeEach(() => jest.useFakeTimers({ now: Date.parse('2026-10-20T10:00:00.000Z'), doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate', 'clearImmediate'] }))
+  afterEach(() => jest.useRealTimers())
+
+  it('someone going, before the window: the countdown to the server’s opensAt, never an error', async () => {
+    api.getChatMessages.mockResolvedValue(notMember as never)
+    api.getEventChat.mockResolvedValue(notYet(52 * HOUR) as never)
+    await open()
+    expect(api.getEventChat).toHaveBeenCalledWith('e1')
+    expect(screen.getByText('Not open yet')).toBeTruthy()
+    expect(screen.getByText(/The room opens in 2 days 4 hours\./)).toBeTruthy()
+    expect(screen.getByLabelText('Opens in 2 days 4 hours')).toBeTruthy()
+    expect(screen.queryByText(/not in this room/)).toBeNull()
+    expect(screen.queryByText(/Couldn’t load/)).toBeNull()
+  })
+
+  it('it ticks down, and at zero "Open the room" asks the door again and opens it', async () => {
+    api.getChatMessages.mockResolvedValueOnce(notMember as never)
+    api.getEventChat.mockResolvedValueOnce(notYet(90_000) as never)
+    await open()
+    expect(screen.getByLabelText('Opens in 2 minutes')).toBeTruthy()
+    await act(async () => jest.advanceTimersByTime(60_000))
+    expect(screen.getByLabelText('Opens in 1 minute')).toBeTruthy()
+    await act(async () => jest.advanceTimersByTime(60_000))
+    expect(screen.getByText('The room is open')).toBeTruthy()
+
+    // The window is open: the door joins, the room reads.
+    api.getEventChat.mockResolvedValue({ success: true, data: { chatGroupId: 'g1' } } as never)
+    api.getChatMessages.mockResolvedValue(page([theirs]) as never)
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Open the room' })))
+    await flush()
+    expect(screen.getByText('Anyone near the stage?')).toBeTruthy()
+  })
+
+  it('a crafted link’s opensAt never counts down for someone the door refuses (review LOW)', async () => {
+    mockParams = { id: 'g1', eventId: 'e1', opensAt: new Date(Date.now() + 5 * HOUR).toISOString() }
+    api.getChatMessages.mockResolvedValue(notMember as never)
+    api.getEventChat.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'RSVP to this event to join the chat' } as never)
+    await open()
+    expect(screen.getByText('You’re not in this room')).toBeTruthy()
+    expect(screen.queryByText('Not open yet')).toBeNull()
+  })
+
+  it('a member served the room sees the room, whatever a link’s opensAt said', async () => {
+    mockParams = { id: 'g1', eventId: 'e1', opensAt: new Date(Date.now() + 5 * HOUR).toISOString() }
+    await open()
+    expect(screen.getByText('Anyone near the stage?')).toBeTruthy()
+    expect(screen.queryByText('Not open yet')).toBeNull()
+  })
+
+  it('someone the server only refused (not going, or an older server’s bare 403): no countdown, as before', async () => {
+    api.getChatMessages.mockResolvedValue(notMember as never)
+    api.getEventChat.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: 'RSVP to this event to join the chat' } as never)
+    await open()
+    expect(screen.getByText('You’re not in this room')).toBeTruthy()
+    expect(screen.queryByText('Not open yet')).toBeNull()
+    expect(screen.queryByLabelText(/^Opens in/)).toBeNull()
+  })
+})
+
+/*
+ * Audit M4 (a11y-motion 2026-10-24): your own message removed by moderation after it was delivered becomes the dashed
+ * placeholder and a toast (a live region, announced on iOS) says so; nobody else's removal says anything.
+ */
+describe('a message removed by moderation after it was delivered', () => {
+  const mine = { id: 'm2', user_id: 'u-a', user: { id: 'u-a', name: 'Asha' }, content: 'Meet by the stairs', type: 'text', created_at: '2026-10-15T19:01:00.000Z' }
+  const remove = async (messageId: string, userId: string) => {
+    await act(async () => mockDeleted.forEach((cb) => cb({ chatGroupId: 'g1', messageId, moderation: true, userId })))
+    await flush()
+  }
+
+  it('yours: the placeholder, read without a stray full stop, and the toast', async () => {
+    api.getChatMessages.mockResolvedValue(page([theirs, mine]) as never)
+    await open()
+    await remove('m2', 'u-a')
+    expect(screen.getByTestId('bubble-m2-bubble').props.accessibilityLabel).toMatch(/^You, This message was removed by moderation, /)
+    expect(screen.getByTestId('bubble-m2-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('Meet by the stairs')).toBeNull()
+    expect(mockToast).toHaveBeenCalledWith('Your message was removed by moderation.', 'info')
+  })
+
+  it('theirs: it goes, and nothing is said', async () => {
+    await open()
+    expect(screen.getByTestId('bubble-m1')).toBeTruthy()
+    await remove('m1', 'h-cosmic')
+    expect(screen.queryByTestId('bubble-m1')).toBeNull()
+    expect(mockToast).not.toHaveBeenCalledWith('Your message was removed by moderation.', 'info')
+  })
+})
+
+// rc8 #5, the room's half: the snackbar over the composer covered the newest row; the feed makes room while one shows.
+// Negative control: without `toastInset` in the feed's padding it fails.
+it('the feed makes room under the newest row for the Android snackbar over the composer (rc8 #5)', async () => {
+  const bottom = () => StyleSheet.flatten(screen.getByTestId('room-feed').props.contentContainerStyle).paddingBottom as number
+  await open()
+  const without = bottom()
+  await screen.unmount()
+  mockToastInset = 70
+  await open()
+  expect(bottom()).toBe(without + 70)
+})
+
+/*
+ * rc8 #6: a link with no `kind` (a push carries only the id) read "Event chat", and a closed Blend opened by link read
+ * "Your Blend": the room's kind and name came from the opener or the Banter's list, and a closed room is in neither. The
+ * server's refusal names them to somebody who was in the room (`reasonCode: ROOM_CLOSED`, `roomKind`, `roomName`), and
+ * until something says what the room is, the header does not call it an event's. Negative control: with the screen at
+ * 917aac91, both fail.
+ */
+describe('rc8 #6: a room opened by a bare link', () => {
+  const closedBlend = { success: false, error: 'Chat group not found', errorCode: 'NOT_FOUND', reasonCode: 'ROOM_CLOSED', roomKind: 'blend', roomName: 'Crew Nebula × Crew Orbit' }
+
+  it('a closed Blend the list no longer has: its stored name and the Blend’s closed state, never "Event chat"', async () => {
+    mockParams = { id: 'g9' }
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
+    api.getChatMessages.mockResolvedValue(closedBlend as never)
+    await open()
+    expect(screen.getAllByText('Crew Nebula × Crew Orbit').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Blend/)).toBeTruthy()
+    expect(screen.queryByText('Event chat')).toBeNull()
+    expect(screen.queryByText('Your Blend')).toBeNull()
+  })
+
+  it('a closed Blend opened by its own link (`kind=blend&blendId=`): its stored name, not "Your Blend"', async () => {
+    mockParams = { id: 'g9', kind: 'blend', blendId: 'b9' }
+    jest.spyOn(require('../lib/crewsApi').crewsApi, 'blends').mockResolvedValue({ success: true, data: { blends: [] } })
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
+    api.getChatMessages.mockResolvedValue(closedBlend as never)
+    await open()
+    expect(screen.getAllByText('Crew Nebula × Crew Orbit').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Your Blend')).toBeNull()
+  })
+
+  it('before anything says what room it is, the header does not call it an event’s', async () => {
+    mockParams = { id: 'g9' }
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
+    api.getChatMessages.mockReturnValue(new Promise(() => {}) as never)
+    await open()
+    expect(screen.queryByText('Event chat')).toBeNull()
   })
 })

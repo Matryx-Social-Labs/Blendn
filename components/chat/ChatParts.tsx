@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { BUBBLE } from '../ds/chatShared'
 import { PresenceDot } from '../ds/MonoFamily'
@@ -37,7 +37,7 @@ export function CountLine({ count }: { count: number }) {
     <>
       <PresenceDot kind="live" size={HEADER_DOT} />
       <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
-        <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count}</Text> in the room
+        <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count.toLocaleString('en-US')}</Text> in the room
       </Text>
     </>
   )
@@ -56,7 +56,7 @@ export function LoadOlder({ busy, onPress }: { busy: boolean; onPress: () => voi
       hitSlop={SPACE.sm}
       style={styles.loadOlder}
     >
-      <Text style={[font('label', bold), styles.ink]}>{busy ? 'LOADING…' : 'LOAD OLDER MESSAGES'}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.ink]}>{busy ? 'LOADING…' : 'LOAD OLDER MESSAGES'}</Text>
     </Pressable>
   )
 }
@@ -99,7 +99,7 @@ export function JustMutedLine() {
   return (
     <View style={styles.justMuted} accessible accessibilityLiveRegion="polite">
       <Icon name="mic-off" size={ICON.inline} color={COLOR.textTertiary} />
-      <Text style={[font('caption', bold), styles.tertiary]}>Just now · the organiser muted you</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>Just now · the organiser muted you</Text>
     </View>
   )
 }

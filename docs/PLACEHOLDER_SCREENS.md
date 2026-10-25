@@ -103,7 +103,7 @@ the last is a screen:
 2. **Handoff** — held until assets are decoded, never until auth resolves. Auth
    is a network round trip and gating on it means a frozen splash for the length
    of a request.
-3. **Intro animation** (`components/IntroAnimation.tsx`, 1.29s) — the monogram
+3. **Intro animation: removed 2026-10-21 (owner).** The static native splash now hands straight to the first screen. History: (`components/IntroAnimation.tsx`, 1.29s) — the monogram
    slides left and the wordmark writes on. An **overlay, not a gate**: routing
    and auth resolve underneath.
 4. Whatever the router settled on, revealed by a 260ms fade.

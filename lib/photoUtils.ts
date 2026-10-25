@@ -6,10 +6,14 @@ import * as ImagePicker from 'expo-image-picker'
 import { Linking } from 'react-native'
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
+import { hasRepositionHost, requestReposition } from './photoReposition'
+import { pulledPhotos, type PulledPhoto } from './photoStates'
+import { unseenPulled } from './pulledNotices'
 import { queryCache } from './queryCache'
 import { refreshAuthUser } from './useAuth'
-import { sheetClosed, showSheet } from './sheet'
+import { showSheet } from './sheet'
 import { toast } from './toast'
+import { holdTurnWhile } from './modalTurn'
 
 export interface PhotoUploadResult {
   success: boolean
@@ -69,14 +73,15 @@ export interface PhotoOptions {
  * legacy UIImagePickerController (losing the privacy picker) whose small
  * "Move and Scale" step testers read as "no crop". Worse, the square it
  * enforced is the wrong shape for where the photo is shown — the profile
- * hero is `PROFILE_HERO_ASPECT = 751/390`, a tall portrait, so a square lost
+ * hero is `PROFILE_HERO_ASPECT = 1.3` tall to wide, a portrait, so a square lost
  * the height the main surface needs and `cover` then cropped the sides too.
  *
  * The reference apps auto-fit to their card ratio (Tinder: 4:5 portrait,
  * 1080×1350 recommended) and, where they let you adjust, do it in-app after
  * upload rather than in the OS picker. Every surface here already renders
  * with `contentFit="cover"`, so the crop happens per surface at render;
- * an in-app reposition step is the design task, not the picker's editor.
+ * the in-app reposition step (`selectPhoto`, `components/profile/Reposition`) is where the person frames the main one,
+ * not the picker's editor.
  *
  * `width` only: expo-image-manipulator keeps the ratio when one dimension is
  * given and STRETCHES when both are — the old 800×800 squashed any photo
@@ -123,12 +128,12 @@ const ensureCameraPermission = async (): Promise<PermissionOutcome> => {
  * These were `Alert.alert`s: a light system box on a dark app, buttons in a
  * different order on each platform (Android puts index 2 in the bold
  * positive slot and ignores `style: 'cancel'`), and no way to say which option
- * was the one most people want. The `ActionTray` draws every option in the
+ * was the one most people want. The one sheet draws every option in the
  * order given, on both platforms.
  *
- * Waits for the sheet to be off screen before resolving: every choice here
- * opens the camera or the photo picker next, and iOS drops a presentation
- * made while the sheet's Modal is still fading (`sheetClosed`).
+ * Every choice here opens the camera or the photo picker next, and iOS drops a
+ * presentation made while the sheet's Modal is still fading: the picker waits
+ * for the sheet's own onDismiss (`holdTurnWhile`, lib/modalTurn).
  */
 function choose<T>(
   title: string,
@@ -140,11 +145,12 @@ function choose<T>(
     const settle = (value: T | null) => {
       if (settled) return
       settled = true
-      if (value === null) resolve(null)
-      else void sheetClosed().then(() => resolve(value))
+      // The picker or camera it opens waits for the sheet's own onDismiss (`holdTurnWhile`), not a flat fade.
+      resolve(value)
     }
     showSheet({
       kind: 'actions',
+      hue: 'violet',
       title,
       message,
       onDismiss: () => settle(null),
@@ -213,11 +219,12 @@ export const pickImage = async (
 
   if (source === 'library') {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions(finalOptions))
+      // Waits for the source sheet to have gone and holds the screen while the picker is up (lib/modalTurn).
+      const result = await holdTurnWhile(() => ImagePicker.launchImageLibraryAsync(pickerOptions(finalOptions)), { afterClosing: true })
       return result.canceled ? null : result
     } catch (error) {
       Logger.error('profile', 'Error picking image from library', { error })
-      toast("Your photos didn't open. Try again.", 'error')
+      toast("Your photos didn’t open. Try again.", 'error')
       return null
     }
   }
@@ -228,7 +235,7 @@ export const pickImage = async (
     if (permission !== 'granted') {
       fallback = permission
     } else {
-      const result = await ImagePicker.launchCameraAsync(pickerOptions(finalOptions))
+      const result = await holdTurnWhile(() => ImagePicker.launchCameraAsync(pickerOptions(finalOptions)), { afterClosing: true })
       return result.canceled ? null : result
     }
   } catch (error) {
@@ -283,7 +290,8 @@ export const uploadPhoto = async (
   uri: string,
   userId: string,
   fileName?: string,
-  folder: 'profile' | 'chat' | 'events' = 'profile'
+  folder: 'profile' | 'chat' | 'events' = 'profile',
+  onProgress?: (fraction: number) => void
 ): Promise<PhotoUploadResult> => {
   try {
     // Process the image first
@@ -298,7 +306,7 @@ export const uploadPhoto = async (
     const finalFileName = fileName || `${folder}_${timestamp}.${fileExtension}`
 
     // Upload to Tigris via admin backend
-    const result = await uploadToTigris(processedUri, finalFileName, folder)
+    const result = await uploadToTigris(processedUri, finalFileName, folder, onProgress)
 
     if (!result.success) {
       Logger.error('profile', 'Photo upload failed', { error: result.error })
@@ -355,7 +363,8 @@ export const uploadChatPhoto = async (
 const uploadToTigris = async (
   uri: string,
   fileName: string,
-  folder: 'profile' | 'chat' | 'events'
+  folder: 'profile' | 'chat' | 'events',
+  onProgress?: (fraction: number) => void
 ): Promise<PhotoUploadResult> => {
   try {
     // Get presigned URL from admin backend
@@ -371,16 +380,24 @@ const uploadToTigris = async (
     const { uploadUrl, publicUrl } = presignedResult.data
 
     // Upload directly to Tigris using the presigned URL
-    const result = await FileSystem.uploadAsync(uploadUrl, uri, {
-      httpMethod: 'PUT',
+    const options = {
+      httpMethod: 'PUT' as const,
       headers: {
         'Content-Type': 'image/jpeg',
       },
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    })
+    }
+    // With a listener the upload is a task that reports its progress (the onboarding tile's ring); without, as it was.
+    const result = onProgress
+      ? await FileSystem.createUploadTask(uploadUrl, uri, options, ({ totalBytesSent, totalBytesExpectedToSend }) => {
+          if (totalBytesExpectedToSend > 0) onProgress(totalBytesSent / totalBytesExpectedToSend)
+        }).uploadAsync()
+      : await FileSystem.uploadAsync(uploadUrl, uri, options)
+    if (!result) return { success: false, error: 'Upload failed' }
 
     if (result.status < 200 || result.status >= 300) {
-      Logger.error('profile', 'Tigris upload error', { status: result.status, body: result.body })
+      // The status only: the storage service's body can echo the signed URL it refused (review MED-1).
+      Logger.error('profile', 'Tigris upload error', { status: result.status })
       return { success: false, error: `Upload failed with status ${result.status}` }
     }
 
@@ -429,7 +446,7 @@ export const validatePhoto = (imageInfo: ImagePicker.ImagePickerAsset): { valid:
   // Check dimensions (minimum size)
   const minDimension = 200
   if (imageInfo.width < minDimension || imageInfo.height < minDimension) {
-    return { valid: false, error: 'Photo must be at least 200x200 pixels' }
+    return { valid: false, error: 'Photo must be at least 200 × 200 pixels.' }
   }
 
   return { valid: true }
@@ -482,7 +499,7 @@ export const cachePhoto = async (url: string): Promise<string | null> => {
       return localPath
     }
   } catch (error) {
-    Logger.error('profile', 'photoUtils: Cache error', { error, url })
+    Logger.error('profile', 'photoUtils: Cache error', { error })
   }
   
   return null
@@ -494,7 +511,7 @@ const cleanupCache = async () => {
     const cacheKeys = keys.filter(key => key.startsWith(CACHE_KEY_PREFIX))
     
     let totalSize = 0
-    const entries: Array<{ key: string; entry: PhotoCacheEntry }> = []
+    const entries: { key: string; entry: PhotoCacheEntry }[] = []
     
     for (const key of cacheKeys) {
       const cached = await AsyncStorage.getItem(key)
@@ -578,7 +595,7 @@ export const verifyPhoto = async (imageUri: string): Promise<PhotoVerificationRe
       quality,
       issues
     }
-  } catch (error) {
+  } catch {
     return {
       isValid: false,
       hasFace: false,
@@ -712,13 +729,16 @@ export const reorderPhotos = async (
 /**
  * Get user's profile photos with metadata
  */
-export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => {
+/**
+ * Your photos, or `null` when they could not be read. A failed read is not an empty list: with no photos drawn, "Add photo" would
+ * write a one-photo list over the ones the server still has.
+ */
+export const loadUserPhotos = async (userId: string): Promise<ProfilePhoto[] | null> => {
   try {
     const result = await apiClient.getProfile(userId)
 
-    if (!result.success || !result.data?.profile?.photos) {
-      return []
-    }
+    if (!result.success) return null
+    if (!result.data?.profile?.photos) return []
 
     const photos = result.data.profile.photos as string[]
     return photos.map((url: string, index: number) => ({
@@ -729,53 +749,161 @@ export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => 
     }))
   } catch (error) {
     Logger.error('profile', 'photoUtils: Get photos error', { error, userId })
-    return []
+    return null
+  }
+}
+
+/** What your own profile says about your photos: the ones moderation pulled, and the ones that are up (`null` when the read failed). */
+export type OwnPhotoStates = { pulled: PulledPhoto[]; live: string[] | null }
+
+/**
+ * The photos moderation took down in the last seven days (`photo_states`, your own profile only), newest first, less the ones already
+ * dismissed or replaced (`lib/pulledNotices.ts`), and the photos that are up (`photos`). Read after `loadUserPhotos`, whose request it
+ * shares through the profile cache. A failed read or an older server is none pulled and `live: null`: the grid then draws what it always did.
+ */
+export const loadPulledPhotos = async (userId: string): Promise<OwnPhotoStates> => {
+  try {
+    const result = await apiClient.getProfile(userId)
+    if (!result.success) return { pulled: [], live: null }
+    const photos = result.data?.profile?.photos
+    return {
+      pulled: await unseenPulled(userId, pulledPhotos(result.data?.profile?.photo_states)),
+      live: Array.isArray(photos) ? (photos as string[]) : null,
+    }
+  } catch (error) {
+    Logger.warn('profile', 'photoUtils: Get pulled photos error', { error })
+    return { pulled: [], live: null }
+  }
+}
+
+export const getUserPhotos = async (userId: string): Promise<ProfilePhoto[]> => (await loadUserPhotos(userId)) ?? []
+
+/** What choosing a photo came to: the file to upload, or why there is none (a cancelled picker is not a failure). */
+export type PhotoSelection = { ok: true; uri: string } | { ok: false; cancelled?: boolean; error?: string }
+
+/** What the reposition step came to: the file to go on with, back to the source sheet, or the person stopped. */
+type Repositioned = { kind: 'ready'; uri: string } | { kind: 'again' } | { kind: 'cancel' }
+
+/** The re-encoded copy the step works on is at most this long on its long side: a 48 MP original is not decoded into a view or cropped at full size. */
+export const FIT_LONG_SIDE = 2560
+
+/** The resize that brings a photo to `FIT_LONG_SIDE` on its long side, or none when it already is. One dimension, so the ratio is kept. */
+export const fitResize = (width: number, height: number): ImageManipulator.Action[] =>
+  Math.max(width, height) <= FIT_LONG_SIDE ? [] : [{ resize: width >= height ? { width: FIT_LONG_SIDE } : { height: FIT_LONG_SIDE } }]
+
+/** A file this step made and no longer needs. A failure to delete is not worth saying. */
+const discard = (uri: string) => {
+  void FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {})
+}
+
+/**
+ * The reposition step (Flow 6 · 6.3 #08): drag and pinch the photo in the frame it is cropped to, Use photo or Choose another.
+ *
+ * The photo is re-encoded once first, down to `FIT_LONG_SIDE`, and the step shows, and crops, that file: what the manipulator decoded
+ * is the pixels the frame is laid over, so a photo carrying an EXIF turn is not cropped at the wrong place on a phone that reads it
+ * differently from the picker. (The long side is judged on the size the picker reported; a picker that reports an unturned size for
+ * a turned photo would resize the short side. The picker applies the turn on both platforms today.) A screen with nowhere to ask
+ * (`hasRepositionHost`) carries on with the photo as picked, and so does a photo that cannot be re-encoded: this step never stops
+ * somebody adding a photo. The copy it made is deleted when it is done with it.
+ */
+const repositionPhoto = async (picked: { uri: string; width: number; height: number }, main: boolean): Promise<Repositioned> => {
+  const original = picked.uri
+  if (!hasRepositionHost()) return { kind: 'ready', uri: original }
+  let fitted: { uri: string; width: number; height: number; main: boolean }
+  try {
+    const out = await ImageManipulator.manipulateAsync(original, fitResize(picked.width, picked.height), { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG })
+    fitted = { uri: out.uri, width: out.width, height: out.height, main }
+  } catch (error) {
+    Logger.warn('profile', 'photoUtils: Could not prepare the photo to reposition', { error })
+    return { kind: 'ready', uri: original }
+  }
+  const answer = await requestReposition(fitted)
+  if (answer.kind === 'again' || answer.kind === 'cancel') {
+    discard(fitted.uri)
+    return { kind: answer.kind }
+  }
+  if (answer.kind === 'skip') {
+    discard(fitted.uri)
+    return { kind: 'ready', uri: original }
+  }
+  try {
+    const cropped = await ImageManipulator.manipulateAsync(fitted.uri, [{ crop: answer.rect }], { compress: 0.92, format: ImageManipulator.SaveFormat.JPEG })
+    discard(fitted.uri)
+    return { kind: 'ready', uri: cropped.uri }
+  } catch (error) {
+    Logger.warn('profile', 'photoUtils: Could not crop the photo', { error })
+    return { kind: 'ready', uri: fitted.uri }
+  }
+}
+
+/**
+ * Choose a photo: the source sheet, the picker, the size and type check, the quality check, and the reposition step.
+ * Nothing is uploaded, so a caller can show the tile while it does, and keep the file to try again when it fails.
+ * "Choose another" on the reposition step is the source sheet again.
+ */
+export const selectPhoto = async ({ main = true }: { main?: boolean } = {}): Promise<PhotoSelection> => {
+  try {
+    for (;;) {
+      // Show source selection
+      const source = await showPhotoSourceActionSheet()
+      if (!source) {
+        return { ok: false, cancelled: true, error: 'User cancelled' }
+      }
+
+      // Pick image
+      const imageResult = await pickImage(source)
+      if (!imageResult || imageResult.canceled) {
+        return { ok: false, cancelled: true, error: 'No image selected' }
+      }
+
+      const asset = imageResult.assets[0]
+
+      // Validate image
+      const validation = validatePhoto(asset)
+      if (!validation.valid) {
+        // Returned, not shown: both callers say why a photo was not added,
+        // and an alert here as well made it two messages for one refusal.
+        return { ok: false, error: validation.error }
+      }
+
+      // Verify photo quality (optional)
+      const verification = await verifyPhoto(asset.uri)
+      if (!verification.isValid && verification.issues.length > 0) {
+        Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
+      }
+
+      const repositioned = await repositionPhoto(asset, main)
+      if (repositioned.kind === 'again') continue
+      if (repositioned.kind === 'cancel') return { ok: false, cancelled: true, error: 'No image selected' }
+      return { ok: true, uri: repositioned.uri }
+    }
+  } catch (error) {
+    Logger.error('profile', 'photoUtils: Photo selection error', { error })
+    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' }
   }
 }
 
 /**
  * Complete photo selection and upload flow
  */
-export const selectAndUploadPhoto = async (userId: string): Promise<PhotoUploadResult> => {
+export const selectAndUploadPhoto = async (
+  userId: string,
+  hooks: { onPicked?: (uri: string) => void; onProgress?: (fraction: number) => void; main?: boolean } = {}
+): Promise<PhotoUploadResult & { uri?: string }> => {
+  const selection = await selectPhoto({ main: hooks.main })
+  if (!selection.ok) return { success: false, cancelled: selection.cancelled ? true : undefined, error: selection.error }
+  hooks.onPicked?.(selection.uri)
   try {
-    // Show source selection
-    const source = await showPhotoSourceActionSheet()
-    if (!source) {
-      return { success: false, cancelled: true, error: 'User cancelled' }
-    }
-
-    // Pick image
-    const imageResult = await pickImage(source)
-    if (!imageResult || imageResult.canceled) {
-      return { success: false, cancelled: true, error: 'No image selected' }
-    }
-
-    const asset = imageResult.assets[0]
-    
-    // Validate image
-    const validation = validatePhoto(asset)
-    if (!validation.valid) {
-      // Returned, not shown: both callers say why a photo was not added,
-      // and an alert here as well made it two messages for one refusal.
-      return { success: false, error: validation.error }
-    }
-
-    // Verify photo quality (optional)
-    const verification = await verifyPhoto(asset.uri)
-    if (!verification.isValid && verification.issues.length > 0) {
-      Logger.warn('profile', 'photoUtils: Photo verification issues', { issues: verification.issues })
-    }
-
-    // Upload image
-    return await uploadPhoto(asset.uri, userId)
+    // Upload image; the file comes back with the answer, so a failed tile can try it again.
+    return { ...(await uploadPhoto(selection.uri, userId, undefined, 'profile', hooks.onProgress)), uri: selection.uri }
   } catch (error) {
     Logger.error('profile', 'photoUtils: Photo selection error', { error })
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
-} 
+}
 
 /**
  * Build an optimised Supabase render URL for a public image URL.

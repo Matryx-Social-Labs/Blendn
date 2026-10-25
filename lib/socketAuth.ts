@@ -12,7 +12,7 @@
  *
  * The obvious fix is to make `auth` function-valued so it is re-read per
  * attempt. **That alone changes nothing.** `TokenStorage.getAccessToken()` is a
- * bare SecureStore read:
+ * bare storage read (memory, else the keychain):
  *
  *     static async getAccessToken(): Promise<string | null> {
  *       return this.secureGet(ACCESS_TOKEN_KEY)

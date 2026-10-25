@@ -44,6 +44,8 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 )
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 jest.mock('../lib/paywall', () => ({ notePathname: jest.fn() }))
+// The router test harness stubs Reanimated, which has no Reduce Motion hook; the root layout reads it for its transitions.
+jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => false }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => {}),
   removePushTokenFromProfile: jest.fn(async () => {}),
@@ -61,7 +63,6 @@ jest.mock('../lib/sentry', () => ({
 jest.mock('../lib/onboardingStorage', () => ({ readOnboarding: jest.fn(async () => null) }))
 jest.mock('../lib/pushDecline', () => ({ hasDeclinedPush: jest.fn(async () => false) }))
 jest.mock('../lib/onboardingAssets', () => ({ ONBOARDING_IMAGES: [], prefetchOnboardingImages: jest.fn() }))
-jest.mock('../components/IntroAnimation', () => ({ IntroAnimation: () => null }))
 jest.mock('../components/PresenceMonitor', () => ({ PresenceMonitor: () => null }))
 jest.mock('../components/LiveAtVenue', () => ({ LiveAtVenue: () => null }))
 jest.mock('../components/SheetHost', () => ({ SheetHost: () => null }))
@@ -150,7 +151,7 @@ describe('signed out with the app still open (SCRUM-616)', () => {
   })
 
   it.each([
-    ["an event's public link", EVENT_LINK],
+    ["an event’s public link", EVENT_LINK],
     ['a friend invite', INVITE_LINK],
   ])('%s opened next goes to the entry screen and is held for after sign-in', async (_, link) => {
     const r = await renderSignedInOnSettings()

@@ -1,3 +1,4 @@
+import { barTop } from '../../lib/barGeometry'
 import { Image } from 'expo-image'
 import { useCallback, useEffect, useState } from 'react'
 import { Modal, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
@@ -6,12 +7,13 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTim
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR, EASING, FONT_FAMILY, MATERIAL, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, EASING, FONT_FAMILY, MATERIAL, RADIUS, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { useQueuedModal } from '../../lib/modalTurn'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { avatarOf, BUBBLE, timeFont, type ChatPerson, type Rect } from './chatShared'
 import { IconButton } from './IconButton'
-import { font, useBoldText, useScreenReader } from './shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useScreenReader } from './shared'
 
 /** Pinch stops at 4×; a screen reader's Zoom in goes to 2×. */
 const MAX_ZOOM = 4
@@ -192,21 +194,25 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
   }))
   const shown = chrome || screenReader
 
+  // One Modal on screen at a time on iOS (lib/modalTurn).
+  const turn = useQueuedModal(visible, { closeForLink: onClose })
   return (
     <Modal
       testID={testID && `${testID}-modal`}
-      visible={visible}
+      visible={turn.visible}
       transparent
       animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onClose}
+      onShow={turn.onShow}
+      onDismiss={turn.onDismiss}
     >
       <GestureHandlerRootView style={styles.fill}>
         <View style={styles.fill} accessibilityViewIsModal onAccessibilityEscape={onClose}>
           <Animated.View style={[StyleSheet.absoluteFill, styles.ink, inkStyle]} />
           {shown ? (
-            <View style={[styles.chrome, { top: insets.top + SPACE.sm, left: SPACE.lg }]}>
+            <View style={[styles.chrome, { top: barTop(insets.top), left: SPACE.lg }]}>
               <IconButton icon="x" tier="media" accessibilityLabel="Close" onPress={onClose} />
             </View>
           ) : null}
@@ -234,7 +240,7 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
           {shown ? (
             <>
               {onMore ? (
-                <View style={[styles.chrome, { top: insets.top + SPACE.sm, right: SPACE.lg }]}>
+                <View style={[styles.chrome, { top: barTop(insets.top), right: SPACE.lg }]}>
                   <IconButton icon="ellipsis" tier="media" accessibilityLabel="More" onPress={onMore} />
                 </View>
               ) : null}
@@ -244,10 +250,10 @@ export function ImageViewer({ visible, uri, sender, time, onClose, onMore, from,
                 style={[styles.chrome, styles.foot, { bottom: insets.bottom + SPACE.xl }]}
               >
                 <Avatar {...avatarOf(sender, BUBBLE.avatar)} />
-                <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.name]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.name]}>
                   {sender.name}
                 </Text>
-                <Text style={timeFont(bold)}>{time}</Text>
+                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={timeFont(bold)}>{time}</Text>
               </View>
             </>
           ) : null}

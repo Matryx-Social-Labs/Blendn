@@ -77,7 +77,7 @@ describe('leave and rejoin', () => {
     expect(result).toMatchObject({ success: false, errorCode: 'CHAT_CLOSED', error: 'This chat has closed.' })
   })
 
-  it("carries the room id on the event chat's LEFT_ROOM, so the app can offer the rejoin", async () => {
+  it("carries the room id on the event chat’s LEFT_ROOM, so the app can offer the rejoin", async () => {
     server(() =>
       json(403, { success: false, error: 'You left this room.', errorCode: 'LEFT_ROOM', chatGroupId: 'g9' })
     )
@@ -150,7 +150,7 @@ describe('the signed-out invite preview', () => {
   })
 
   it('carries a dead link as NOT_FOUND', async () => {
-    server(() => json(404, { success: false, error: "This invite link doesn't work any more", errorCode: 'NOT_FOUND' }))
+    server(() => json(404, { success: false, error: "This invite link doesn’t work any more", errorCode: 'NOT_FOUND' }))
     const result = await apiClient.getFriendInvitePreview('dead')
     expect(result).toMatchObject({ success: false, errorCode: 'NOT_FOUND' })
   })

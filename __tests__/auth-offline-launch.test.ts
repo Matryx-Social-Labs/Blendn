@@ -15,9 +15,13 @@ jest.mock('../lib/apiClient', () => ({
   },
   TokenStorage: {
     getAccessToken: jest.fn(),
+    getRefreshToken: jest.fn(),
     getUser: jest.fn(),
     setUser: jest.fn().mockResolvedValue(undefined),
     clearAll: jest.fn().mockResolvedValue(undefined),
+    // No sign-out recorded on this phone (Opus review M2): the launch reads the keychain.
+    signedOutHere: jest.fn().mockResolvedValue(false),
+    forgetSignedOut: jest.fn().mockResolvedValue(undefined),
   },
 }))
 jest.mock('../lib/logger', () => ({
@@ -61,7 +65,7 @@ describe('a launch that cannot reach the server', () => {
     expect(markSessionExpired).not.toHaveBeenCalled()
   })
 
-  it("says it can't reach Blend'n when there is no stored user, and still signs nobody out", async () => {
+  it("says it can’t reach Blend’n when there is no stored user, and still signs nobody out", async () => {
     api.getSession.mockResolvedValue(OFFLINE as never)
     api.refreshSessionOutcome.mockResolvedValue('failed')
     store.getUser.mockResolvedValue(null)

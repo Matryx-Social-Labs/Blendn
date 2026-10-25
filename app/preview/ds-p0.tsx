@@ -93,10 +93,13 @@ function Cell({ label, testID, children, style }: { label: string; testID: strin
   )
 }
 
-const KINDS: ButtonKind[] = ['primary', 'strong', 'secondary', 'tertiary', 'destructive']
+const KINDS: ButtonKind[] = ['primary', 'lit', 'strong', 'secondary', 'tertiary', 'destructive']
 const SIZES: ButtonSize[] = ['lg', 'md', 'sm']
+/** A lit action is never 56 pt: that is the primary's. */
+const sizesOf = (kind: ButtonKind) => (kind === 'lit' ? SIZES.filter((size) => size !== 'lg') : SIZES)
 const LABEL: Record<ButtonKind, string> = {
   primary: 'I’m going',
+  lit: 'Accept',
   strong: 'Open Settings',
   secondary: 'Not now',
   tertiary: 'Skip',
@@ -117,17 +120,17 @@ function Buttons() {
       <Section title="Button · kinds × sizes" note="56 the screen primary · 48 a dock secondary · 36 a row action">
         {KINDS.map((kind) => (
           <Cell key={kind} label={kind} testID={`ds-button-${kind}`}>
-            {SIZES.map((size) => (
-              <Button key={size} testID={`ds-button-${kind}-${size}`} kind={kind} size={size} label={LABEL[kind]} onPress={() => {}} />
+            {sizesOf(kind).map((size) => (
+              <Button key={size} testID={`ds-button-${kind}-${size}`} kind={kind} size={size} icon={kind === 'lit' ? 'user-check' : undefined} label={LABEL[kind]} onPress={() => {}} />
             ))}
           </Cell>
         ))}
       </Section>
-      {(['primary', 'strong', 'secondary'] as const).map((kind) => (
+      {(['primary', 'lit', 'strong', 'secondary'] as const).map((kind) => (
         <Section key={kind} title={`Button · states · ${kind}`} note="refused plays H.error and shakes as it mounts">
           {STATES.map(([state, props]) => (
             <Cell key={state} label={state} testID={`ds-button-${kind}-state-${state}`}>
-              <Button kind={kind} label={LABEL[kind]} onGlass={kind === 'secondary'} onPress={() => {}} {...props} />
+              <Button kind={kind} size={kind === 'lit' ? 'md' : undefined} label={LABEL[kind]} onGlass={kind === 'secondary'} onPress={() => {}} {...props} />
             </Cell>
           ))}
         </Section>

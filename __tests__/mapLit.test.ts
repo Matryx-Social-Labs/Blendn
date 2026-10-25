@@ -4,6 +4,11 @@ import { join } from 'path'
 import { litPlaceFor, pinsFor, type Pin } from '../lib/homeMap'
 import {
   bandsFor,
+  boxesCollide,
+  chipBox,
+  chipSizePx,
+  pickChips,
+  type Box,
   chipLiftPx,
   chipLine,
   chipSpeech,
@@ -11,9 +16,8 @@ import {
   colourAt,
   dedupeLit,
   footprintKey,
-  glowBreathes,
   glowFor,
-  glowOpacity,
+  litFade,
   glowRadius,
   litTopM,
   nearestTo,
@@ -25,6 +29,7 @@ import {
 } from '../lib/mapLit'
 import { buildingHeights, CITY_BUILDINGS, cityColour, EMBER_MAP_STYLE, LABELS_FROM_LAYER_ID } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
+import { refreshPhoneZone } from '../lib/time'
 import { EMBER } from '../lib/theme'
 
 /**
@@ -52,7 +57,7 @@ const square = (d: number, x = 0) =>
 const building = (over: Partial<LitBuilding> = {}): LitBuilding => ({ key: footprintKey([square(10)]), footprint: [square(10)], featureId: null, height: 5, base: 0, ...over })
 const place = (over: Partial<LitPlace>): LitPlace => ({ id: 'p', kind: 'event', live: false, at: [LNG, LAT], building: building(), ...over })
 
-describe("a lit building is drawn around the city's own, never on it", () => {
+describe("a lit building is drawn around the city’s own, never on it", () => {
   it('moves every edge of a square out by the outset, whichever way the ring winds', () => {
     expect(toM(outsetRing(square(10), 0.5))).toEqual([
       [-0.5, -0.5],
@@ -74,7 +79,7 @@ describe("a lit building is drawn around the city's own, never on it", () => {
     ])
   })
 
-  it("moves an L-shape's inner corner out of the building, not into it", () => {
+  it("moves an L-shape’s inner corner out of the building, not into it", () => {
     // Scaling from the centre pulled this corner (4,4) inwards and the city's walls showed through.
     const l = ringM([
       [0, 0],
@@ -162,7 +167,7 @@ describe('which building a pin lights, or a beacon (the beacon choice)', () => {
     expect(lit.building).toMatchObject({ footprint: [square(10)], featureId: null, height: 22, base: 3, key: footprintKey([square(10)]) })
   })
 
-  it("never lights by a merged tile's id; lights by id only where the tiles give each building its own (stage 2)", () => {
+  it("never lights by a merged tile’s id; lights by id only where the tiles give each building its own (stage 2)", () => {
     expect(litPlaceFor(pin, drawn(7)).building?.featureId).toBeNull()
     expect(litPlaceFor(pin, drawn(7), true).building).toMatchObject({ featureId: 7, key: 'id:7' })
   })
@@ -254,13 +259,15 @@ describe('a live event wins at its venue', () => {
 })
 
 describe('the ground glow', () => {
-  it('lies under every lit place: breathing for a live event, stronger at a beacon, still at a building', () => {
-    expect(glowFor(place({ live: true })).properties).toMatchObject({ pulse: true, color: MAP_THEME.event.glow })
-    expect(glowFor(place({ live: false })).properties).toMatchObject({ pulse: false, opacity: MAP_THEME.glow.still })
-    expect(glowFor(place({ live: false, building: null })).properties).toMatchObject({ pulse: false, opacity: MAP_THEME.glow.beacon })
+  it('lies under every lit place: stronger at a beacon, still at a building, and never pulsing', () => {
+    expect(glowFor(place({ live: true })).properties).toMatchObject({ beacon: false, color: MAP_THEME.event.glow })
+    expect(glowFor(place({ live: true, building: null })).properties).toMatchObject({ beacon: true })
     expect(MAP_THEME.glow.beacon).toBeGreaterThan(MAP_THEME.glow.still)
-    // A venue never breathes, live or not, and glows rose.
-    expect(glowFor(place({ kind: 'venue', live: true })).properties).toMatchObject({ pulse: false, color: MAP_THEME.venue.glow })
+    // A venue glows rose, live or not.
+    expect(glowFor(place({ kind: 'venue', live: true })).properties).toMatchObject({ beacon: false, color: MAP_THEME.venue.glow })
+    // "No pulse" (motion #42): a live place's glow is the same feature as a quiet one's.
+    expect(glowFor(place({ live: true })).properties).toEqual({ ...glowFor(place({ live: false })).properties })
+    expect(Object.keys(MAP_THEME.glow)).not.toEqual(expect.arrayContaining(['pulseLow', 'pulseHigh', 'periodMs', 'breatheForMs']))
   })
 
   it('sits on the public pin', () => {
@@ -276,22 +283,36 @@ describe('the ground glow', () => {
     expect(MAP_THEME.glow.maxZoom).toBeLessThanOrEqual(18)
   })
 
-  it('breathes 0.15 ↔ 0.35 only in view, with motion allowed and something live, and only for a few seconds', () => {
-    expect(glowBreathes({ visible: true, reduceMotion: false, anyLive: true })).toBe(true)
-    expect(glowBreathes({ visible: true, reduceMotion: true, anyLive: true })).toBe(false)
-    expect(glowBreathes({ visible: false, reduceMotion: false, anyLive: true })).toBe(false)
-    expect(glowBreathes({ visible: true, reduceMotion: false, anyLive: false })).toBe(false)
-    expect([glowOpacity('low'), glowOpacity('high')]).toEqual([0.15, 0.35])
-    expect(MAP_THEME.glow.breatheForMs).toBeLessThanOrEqual(5000)
-  })
-
-  it('holds a steady 0.3 when not breathing (WCAG 2.2.2)', () => {
-    expect(glowOpacity('steady')).toBe(0.3)
-    expect(MAP_THEME.glow.periodMs).toBe(1600)
+  it('the lit layers arrive once over long, and over 200 ms under Reduce Motion', () => {
+    expect(litFade(false)).toEqual({ duration: 520, delay: 0 })
+    expect(litFade(true)).toEqual({ duration: 200, delay: 0 })
   })
 })
 
 describe('chips above the roofs', () => {
+  // A phone in India: the chip's clock is its own, so unnamed. A phone elsewhere names it (the zone-name rule, below).
+  const zone = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'Asia/Kolkata'
+    refreshPhoneZone()
+  })
+  afterAll(() => {
+    process.env.TZ = zone
+    refreshPhoneZone()
+  })
+
+  it('name India’s zone on a phone that is not there: "Fri · 8 PM IST" (RC 7, the zone-name rule)', () => {
+    process.env.TZ = 'America/Los_Angeles'
+    refreshPhoneZone()
+    try {
+      const now = Date.UTC(2026, 9, 9, 6, 0)
+      expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM IST')
+    } finally {
+      process.env.TZ = 'Asia/Kolkata'
+      refreshPhoneZone()
+    }
+  })
+
   it('rise with the roof and the tilt, and clear a flat view by the gap', () => {
     const view = { zoom: 16, pitch: 55, latitude: LAT }
     expect(chipLiftPx(50, view)).toBeGreaterThan(chipLiftPx(15, view))
@@ -307,20 +328,22 @@ describe('chips above the roofs', () => {
     expect(nearestTo(items, [LNG, LAT], 2).map((i) => i.id)).toEqual(['centre', 'near'])
   })
 
-  it("say LIVE for a live event, its start in India's time otherwise, and a venue's bucket, never a number", () => {
+  it("say LIVE for a live event, its start in India’s time otherwise, and a venue’s bucket, never a number", () => {
     const now = Date.UTC(2026, 9, 9, 6, 0) // Fri 9 Oct, 11:30 IST
     expect(chipLine({ kind: 'event', live: true, startsAt: null, bucket: null }, now)).toBe('LIVE ●')
-    // Fri 9 Oct 14:30Z is 8:00 pm in India, whatever the phone's zone.
-    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toMatch(/^Fri · 8:00\s?pm$/i)
+    // Fri 9 Oct 14:30Z is 8 PM in India, whatever the phone's zone.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM')
     expect(chipLine({ kind: 'event', live: false, startsAt: 'garbage', bucket: null }, now)).toBe('')
+    // Past six days, the date; never the year, even across New Year (review L6): the line is a pin's width.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2027-01-02T14:30:00Z', bucket: null }, Date.UTC(2026, 11, 22, 6))).toBe('Sat 2 Jan · 8 PM')
     expect(chipLine({ kind: 'venue', live: true, startsAt: null, bucket: '10-19' }, now)).toBe('10–19 live')
-    expect(chipLine({ kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('Under 5 live')
+    expect(chipLine({ kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('')
   })
 
-  it("put a late-night start on India's day, not UTC's", () => {
+  it("put a late-night start on India’s day, not UTC’s", () => {
     const now = Date.UTC(2026, 9, 9, 6, 0)
-    // Fri 9 Oct 20:00Z is Sat 10 Oct, 1:30 am in India.
-    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T20:00:00Z', bucket: null }, now)).toMatch(/^Sat · 1:30\s?am$/i)
+    // Fri 9 Oct 20:00Z is Sat 10 Oct, 1:30 AM in India.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T20:00:00Z', bucket: null }, now)).toBe('Sat · 1:30 AM')
   })
 
   it('name the date for a start more than six days off, so "Fri" is never the wrong Friday', () => {
@@ -332,13 +355,13 @@ describe('chips above the roofs', () => {
   it('read as plain words to a screen reader (review M5)', () => {
     const now = Date.UTC(2026, 9, 9, 6, 0)
     expect(chipSpeech({ title: 'Design Week', kind: 'event', live: true, startsAt: null, bucket: null }, now)).toBe('Design Week, live now')
-    expect(chipSpeech({ title: 'Lupa', kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('Lupa, under 5 live')
-    expect(chipSpeech({ title: 'Jazz', kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toMatch(/^Jazz, starts Fri 8:00\s?pm$/i)
+    expect(chipSpeech({ title: 'Lupa', kind: 'venue', live: false, startsAt: null, bucket: 'quiet' }, now)).toBe('Lupa')
+    expect(chipSpeech({ title: 'Jazz', kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Jazz, starts Fri 8 PM')
     expect(chipSpeech({ title: 'Jazz', kind: 'event', live: true, startsAt: null, bucket: null }, now)).not.toMatch(/●/)
   })
 })
 
-describe("the map theme is the one place for the map's look", () => {
+describe("the map theme is the one place for the map’s look", () => {
   const read = (rel: string) =>
     readFileSync(join(__dirname, '..', rel), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -459,5 +482,83 @@ describe("the map theme is the one place for the map's look", () => {
       paint: { 'fill-extrusion-opacity': 1, 'fill-extrusion-color': cityColour(), 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 0] },
     })
     expect(cityColour()).toEqual(['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 0], ...MAP_THEME.city.ramp.flat()])
+  })
+})
+
+
+describe('chips on the screen (visual QA r5: they sat under the capsule and the bell, on the dot, on each other, and off the edge)', () => {
+  // A 402 x 874 phone: the top chrome ends at 126, the drawer starts at 560, the side gutter is 16.
+  const ZONE: Box = { left: 16, right: 402 - 16, top: 126, bottom: 560 }
+  const chip = (id: string, x: number, y: number, o: { lift?: number; title?: string; line?: string } = {}) => {
+    const c = { id, title: o.title ?? 'Toit', line: o.line ?? 'Live', kind: 'event' }
+    return { item: id, box: chipBox([x, y], o.lift ?? 20, chipSizePx(c)) }
+  }
+
+  it('a chip stands centred on its roof, raised by its lift, as the marker draws it', () => {
+    expect(chipBox([200, 300], 20, { width: 100, height: 52 })).toEqual({ left: 150, right: 250, top: 228, bottom: 280 })
+  })
+
+  it('sizes a chip from its words, never past the chip’s own maximum, a venue wider by its glyph', () => {
+    const short = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' })
+    const venue = chipSizePx({ title: 'Toit', line: 'Live', kind: 'venue' })
+    const long = chipSizePx({ title: 'A name that goes on and on and on and on and on and on and on', line: '', kind: 'event' })
+    expect(venue.width).toBeGreaterThan(short.width)
+    expect(long.width).toBe(MAP_THEME.chip.maxWidthPx)
+    expect(short.height).toBeGreaterThanOrEqual(MAP_THEME.chip.minTouchPx)
+  })
+
+  it('keeps the nearest first and up to the maximum', () => {
+    const picked = pickChips([chip('a', 100, 300), chip('b', 300, 300), chip('c', 200, 450), chip('d', 120, 500), chip('e', 300, 500)], ZONE, [], 4)
+    expect(picked).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('drops a chip under the top chrome (the capsule and the bell) and takes the next nearest instead', () => {
+    // 'a' is nearest but its box starts above 126: under the glass capsule. 'b' fits.
+    const picked = pickChips([chip('a', 200, 150), chip('b', 200, 400)], ZONE, [], 4)
+    expect(picked).toEqual(['b'])
+  })
+
+  it('drops a chip half off the screen (Android: "…s Table at Lupa" cut at the left edge) and one over the drawer', () => {
+    expect(pickChips([chip('left', 30, 300, { title: 'Chef’s Table at Lupa', line: 'Today · 3:00' })], ZONE, [], 4)).toEqual([])
+    expect(pickChips([chip('right', 390, 300)], ZONE, [], 4)).toEqual([])
+    expect(pickChips([chip('low', 200, 600)], ZONE, [], 4)).toEqual([])
+  })
+
+  it('drops a chip that lands on another (NYX Lounge Cafe on a ghost capsule), keeping the nearer one', () => {
+    const picked = pickChips([chip('near', 200, 300), chip('on-it', 210, 306), chip('apart', 200, 470)], ZONE, [], 4)
+    expect(picked).toEqual(['near', 'apart'])
+  })
+
+  it('keeps air between two chips: touching is a collision', () => {
+    const a = chip('a', 100, 300)
+    const b = { item: 'b', box: { ...a.box, left: a.box.right + 2, right: a.box.right + 60 } }
+    expect(boxesCollide(a.box, b.box, 6)).toBe(true)
+    expect(boxesCollide(a.box, b.box)).toBe(false)
+    expect(pickChips([a, b], ZONE, [], 4)).toEqual(['a'])
+  })
+
+  it('drops a chip that covers the person’s dot', () => {
+    const dot: Box = { left: 178, right: 222, top: 378, bottom: 422 }
+    expect(pickChips([chip('over', 200, 440, { lift: 40 }), chip('clear', 100, 300)], ZONE, [dot], 4)).toEqual(['clear'])
+  })
+
+  it('no chip box is ever outside the zone or on another, whatever the pins (property over a grid of positions)', () => {
+    const grid = Array.from({ length: 12 }, (_, i) => Array.from({ length: 12 }, (_, j) => chip(`${i}-${j}`, i * 36, 90 + j * 44))).flat()
+    const picked = pickChips(grid, ZONE, [], 4)
+    const boxes = picked.map((id) => grid.find((g) => g.item === id)!.box)
+    for (const b of boxes) expect(b.left >= ZONE.left && b.right <= ZONE.right && b.top >= ZONE.top && b.bottom <= ZONE.bottom).toBe(true)
+    boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => expect(boxesCollide(a, b)).toBe(false)))
+    expect(picked.length).toBeLessThanOrEqual(4)
+  })
+})
+
+describe('the home map hands the lighting pass what the person can see', () => {
+  it('passes the visible window (under the chrome, over the drawer) and their fix, and the pass picks chips through pickChips', () => {
+    const map = readFileSync(join(__dirname, '..', 'components', 'home', 'HomeMap.tsx'), 'utf8')
+    expect(map).toMatch(/visible: \{ top: padding\.top, bottom: height - padding\.bottom \}/)
+    expect(map).toMatch(/userAt: center \? \[center\.longitude, center\.latitude\] : null/)
+    const hook = readFileSync(join(__dirname, '..', 'components', 'home', 'useMapLighting.ts'), 'utf8')
+    expect(hook).toContain('pickChips(')
+    expect(hook).toContain('m.project(c.at)')
   })
 })

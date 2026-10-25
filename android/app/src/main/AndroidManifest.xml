@@ -44,6 +44,13 @@
     <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyBcN3jJIX9EwsN_o9MhQGCTeJz6aBS7Sik"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
+    <!--
+      expo-location's library manifest declares its background-location foreground service. The app asks for
+      foreground location only and never starts location updates through a task (no expo-task-manager, no
+      startLocationUpdatesAsync; __tests__/storeReviewNative.test.ts), so the service is never started, and
+      declaring it would only invite Play's foreground-service and background-location declarations.
+    -->
+    <service android:name="expo.modules.location.services.LocationTaskService" tools:node="remove"/>
     <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize|assetsPaths" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
@@ -62,6 +69,8 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="/f/"/>
         <data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="/event/"/>
+        <data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="/e/"/>
+        <data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="/v/"/>
       </intent-filter>
       <intent-filter data-generated="true">
         <action android:name="android.intent.action.VIEW"/>

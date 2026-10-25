@@ -7,11 +7,13 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
 
 import { PollBubble, type PollOption } from '../components/ds/PollBubble'
-import { FONT_FAMILY, MATERIAL } from '../lib/design/tokens'
+import { CONTROL_FONT_CAP, HueProvider } from '../components/ds/shared'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { AX_XXXL, uncapped } from './helpers/ax'
 
 const Q = 'Encore: one more or call it?'
 const counted: PollOption[] = [
@@ -99,5 +101,34 @@ describe('<PollBubble>', () => {
     await render(<PollBubble question={Q} options={counted} testID="p" />)
     await act(async () => {})
     expect(StyleSheet.flatten(screen.getByTestId('p').props.style).borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('the pick in the screen’s hue, and the type at its caps (B-R5, B-R6)', () => {
+  it('your pick is lit as a chip is, in the hue: the rim and the fill, never a white rim', async () => {
+    await render(
+      <HueProvider value="rose">
+        <PollBubble question={Q} options={counted} picked={0} testID="p" />
+      </HueProvider>
+    )
+    const picked = StyleSheet.flatten(options()[0].props.style)
+    expect(picked.borderColor).toBe(COLOR.brandRose)
+    expect(picked.backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(picked.borderColor).not.toBe(COLOR.textPrimary)
+    const other = StyleSheet.flatten(options()[1].props.style)
+    expect(other.backgroundColor).toBe(COLOR.surface)
+  })
+
+  it('at AX XXXL the options stop at the control cap, the question and the foot at their roles’ caps', async () => {
+    const window = Dimensions.get('window')
+    try {
+      await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
+      await render(<PollBubble question={Q} options={counted} picked={0} closed testID="p" />)
+      expect(screen.getByText('One more').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+      expect(screen.getByText(Q).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
+      expect(uncapped(screen.toJSON())).toEqual([])
+    } finally {
+      Dimensions.set({ window, screen: window })
+    }
   })
 })

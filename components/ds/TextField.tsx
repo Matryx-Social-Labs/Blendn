@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { monoCaption } from './MonoFamily'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 /*
  * One field everywhere (ROUND3 B4, the R3 ruling): the sign-in form's solid
@@ -20,9 +20,45 @@ const AREA_MIN_HEIGHT = 160
 /** Characters as a person (and Postgres `char_length`) counts them: an emoji is one. */
 const count = (value: string) => [...value].length
 
-/** The label above a field: Geist Mono, uppercase, textSecondary (white under Increase Contrast). */
+/** One ref callback that keeps the field's own ref and hands the node to the caller's. */
+function joinRefs(own: { current: TextInput | null }, theirs?: Ref<TextInput>) {
+  return (node: TextInput | null) => {
+    own.current = node
+    if (typeof theirs === 'function') theirs(node)
+    else if (theirs) (theirs as { current: TextInput | null }).current = node
+  }
+}
+
+/** The label above a field: Geist Mono, uppercase, textSecondary (white under Increase Contrast), 4 pt in like the field's text (`inputs.js textField`). Every label has this one inset. */
 export function FieldLabel({ text, bold, contrast }: { text: string; bold: boolean; contrast: boolean }) {
-  return <Text style={[font('label', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{text}</Text>
+  // A field's name grows to its role's cap (MAX_FONT_SCALE.label): uncapped, EMAIL drew at 3.1x over a 1.3x input (RC drive 2 D-8).
+  return (
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.label, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+      {text}
+    </Text>
+  )
+}
+
+/**
+ * A field's label and its counter (DS-07), one header for TextArea, ChipSet and the photo grid. Side by side, they keep a
+ * gap, the label shrinks and wraps, and the row wraps before the counter is pushed off the edge; at the accessibility
+ * sizes the counter goes under the label, at its end ("A LINE ABOUT THE CREW 0/14" clipped at AX XXXL, RC drive 5 D-3;
+ * "LANGUAGES YOU SPEAK0 of 5", D-M6; "PHOTOS1 of 6", D-M7). A string label is drawn as the FieldLabel; a node as given
+ * (it brings its own `flexShrink`).
+ *
+ * Counters: "n of max" for things picked, "n/max" for characters.
+ */
+export function FieldHeader({ label, counter, testID }: { label?: ReactNode; counter?: ReactNode; testID?: string }) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  const large = useLargeText()
+  return (
+    <View testID={testID} style={[styles.labelRow, large ? styles.stacked : styles.spread]}>
+      {typeof label === 'string' ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : (label ?? <View />)}
+      {/* Stacked, the label keeps the start like every other field's and only the counter goes to the end (rc7 D6). */}
+      {large && counter ? <View style={styles.counterEnd}>{counter}</View> : counter}
+    </View>
+  )
 }
 
 /**
@@ -39,12 +75,12 @@ export function FieldNotes({ error, hint, bold }: { error?: string; hint?: strin
       {error ? (
         <View style={styles.note}>
           <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-          <Text accessibilityLiveRegion="assertive" style={[font('meta', bold), styles.noteText, { color: COLOR.destructive }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="assertive" style={[font('meta', bold), styles.noteText, { color: COLOR.destructive }]}>
             {error}
           </Text>
         </View>
       ) : null}
-      {hint ? <Text style={[font('meta', bold), styles.hint]}>{hint}</Text> : null}
+      {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.hint]}>{hint}</Text> : null}
     </>
   )
 }
@@ -97,6 +133,8 @@ type FieldProps = Omit<
   limit?: number
   /** The design gallery only: draws focus with no keyboard. */
   previewState?: 'focused'
+  /** The text input itself, for a form that moves focus from one field to the next. */
+  inputRef?: Ref<TextInput>
   testID?: string
 }
 
@@ -124,14 +162,18 @@ export function TextField({
   hint,
   disabled = false,
   limit,
+  measure = count,
   secure = false,
   defaultRevealed = false,
   previewState,
+  inputRef,
   testID,
   onFocus,
   onBlur,
   ...rest
 }: FieldProps & {
+  /** How the limit counts, when the server's rule is not characters: `(v) => v.length` for a zod `max()` (UTF-16 units). */
+  measure?: (value: string) => number
   /** A password: dots, and the eye. */
   secure?: boolean
   /** Start with the password shown (the eye "on"). */
@@ -142,7 +184,14 @@ export function TextField({
   const focus = useFocus({ onFocus, onBlur })
   const input = useRef<TextInput>(null)
   const [revealed, setRevealed] = useState(defaultRevealed)
-  const dots = secure && !revealed && value.length > 0
+  /*
+   * A masked field is Geist Mono whether or not it holds anything, and draws its placeholder itself, in Satoshi (r7 H3).
+   * The native field used to switch family with the value (Mono for dots, Satoshi empty) and draw the placeholder in
+   * whatever font it was left with: after iOS's Strong Password sheet filled it and was dismissed, that was Courier.
+   * Now nothing about the native field changes as the sheet fills and empties it, and it draws no placeholder at all.
+   */
+  const masked = secure && !revealed
+  const ownPlaceholder = secure && !value && rest.placeholder ? rest.placeholder : null
   const eye = minTarget()
 
   return (
@@ -158,23 +207,37 @@ export function TextField({
       >
         <TextInput
           {...rest}
-          ref={input}
+          placeholder={secure ? undefined : rest.placeholder}
+          ref={joinRefs(input, inputRef)}
           testID={testID && `${testID}-input`}
           value={value}
           onChangeText={onChangeText}
           onFocus={focus.onFocus}
           onBlur={focus.onBlur}
           editable={!disabled}
-          secureTextEntry={secure && !revealed}
+          secureTextEntry={masked}
           placeholderTextColor={COLOR.textTertiary}
           selectionColor={COLOR.textPrimary}
           cursorColor={COLOR.textPrimary}
           maxFontSizeMultiplier={CONTROL_FONT_CAP}
           accessibilityLabel={label ?? rest.placeholder}
-          accessibilityHint={spokenHint(error, value, limit, hint)}
+          accessibilityHint={spokenHint(error, value, limit, hint, measure)}
           accessibilityState={{ disabled }}
-          style={[dots ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, styles.line, dots && styles.dots]}
+          style={[masked ? font('body', bold, FONT_FAMILY.mono[500]) : font('body', bold), styles.input, styles.line, masked && styles.dots]}
         />
+        {ownPlaceholder ? (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.placeholder, { paddingRight: eye + SPACE.sm }]}>
+            <Text
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+              numberOfLines={1}
+              maxFontSizeMultiplier={CONTROL_FONT_CAP}
+              style={[font('body', bold), { color: COLOR.textTertiary }]}
+            >
+              {ownPlaceholder}
+            </Text>
+          </View>
+        ) : null}
         {limit !== undefined ? (
           <Text
             accessibilityElementsHidden
@@ -182,7 +245,7 @@ export function TextField({
             style={[monoCaption(bold), { color: error ? COLOR.destructive : COLOR.textTertiary }]}
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
           >
-            {`${count(value)}/${limit}`}
+            {`${measure(value)}/${limit}`}
           </Text>
         ) : null}
         {secure ? (
@@ -214,7 +277,7 @@ export function TextField({
  * 160 pt minimum (`minHeight` for a one-liner such as a crew's line), and the
  * counter in the label row in Geist Mono, amber in the last 40 characters.
  * Nothing buzzes near the cap; the amber is the signal. It grows with its
- * text, so nothing is capped.
+ * text, so its text stops at the body role's cap and wraps (no one-line control cap).
  */
 export function TextArea({
   label,
@@ -227,6 +290,7 @@ export function TextArea({
   measure = count,
   minHeight = AREA_MIN_HEIGHT,
   previewState,
+  inputRef,
   testID,
   onFocus,
   onBlur,
@@ -241,11 +305,12 @@ export function TextArea({
   const focus = useFocus({ onFocus, onBlur })
   const input = useRef<TextInput>(null)
   const near = limit !== undefined && limit - measure(value) < COUNTER_WARN_AT
+  const over = limit !== undefined && measure(value) > limit
 
   let counter: ReactNode = null
   if (limit !== undefined) {
     counter = (
-      <Text accessibilityElementsHidden importantForAccessibility="no" style={[monoCaption(bold), { color: near ? COLOR.warning : COLOR.textTertiary }]}>
+      <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), { color: over ? COLOR.destructive : near ? COLOR.warning : COLOR.textTertiary }]}>
         {`${measure(value)}/${limit}`}
       </Text>
     )
@@ -253,16 +318,11 @@ export function TextArea({
 
   return (
     <View testID={testID} style={[styles.field, disabled && { opacity: OPACITY.disabled }]}>
-      {label || counter ? (
-        <View style={[styles.labelRow, styles.spread]}>
-          {label ? <FieldLabel text={label} bold={bold} contrast={contrast} /> : <View />}
-          {counter}
-        </View>
-      ) : null}
+      {label || counter ? <FieldHeader label={label} counter={counter} testID={testID && `${testID}-label-row`} /> : null}
       <Pressable testID={testID && `${testID}-box`} accessible={false} onPress={() => input.current?.focus()} disabled={disabled} style={[styles.area, { minHeight }]}>
         <TextInput
           {...rest}
-          ref={input}
+          ref={joinRefs(input, inputRef)}
           testID={testID && `${testID}-input`}
           multiline
           value={value}
@@ -274,6 +334,8 @@ export function TextArea({
           selectionColor={COLOR.textPrimary}
           cursorColor={COLOR.textPrimary}
           textAlignVertical="top"
+          // Reading text in a box that grows with it: the body role's cap, not the one-line control cap (RC drive 3 D-B).
+          maxFontSizeMultiplier={MAX_FONT_SCALE.body}
           accessibilityLabel={label ?? rest.placeholder}
           accessibilityHint={spokenHint(error, value, limit, hint, measure)}
           accessibilityState={{ disabled }}
@@ -294,8 +356,12 @@ export function TextArea({
 
 const styles = StyleSheet.create({
   field: { gap: SPACE.sm },
-  labelRow: { paddingHorizontal: SPACE.xs },
-  spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  label: { paddingLeft: SPACE.xs, flexShrink: 1 },
+  /** The counter under the label, at its end, as the field's own counter sits. */
+  stacked: { gap: SPACE.xxs },
+  counterEnd: { alignSelf: 'flex-end' },
+  labelRow: { paddingRight: SPACE.xs },
+  spread: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', gap: SPACE.sm },
   box: {
     height: SIZE.input,
     borderRadius: RADIUS.capsule,
@@ -310,6 +376,8 @@ const styles = StyleSheet.create({
   /** Grows from its content (basis auto) past the minimum; `flex: 1` would pin it at the minimum. */
   grow: { flexGrow: 1 },
   dots: { letterSpacing: SPACE.xxs },
+  /** A masked field's own placeholder, where the native one would sit: the box's left padding, centred in its height. */
+  placeholder: { justifyContent: 'center', paddingLeft: SPACE.xl },
   eye: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   area: {
     borderRadius: RADIUS.sheet,

@@ -4,13 +4,14 @@
  * (step 5 review).
  *
  * Two shapes arrive: a `GET /chat/groups` row (`name`, `event.kind`,
- * `event.venueId`, `memberCount`) and a `GET /checkins/active` entry (`kind`,
+ * `event.venueId`, `hereCount`) and a `GET /checkins/active` entry (`kind`,
  * `venueId`, `event.venueName`).
  */
 export type RoomLike = {
   kind?: string | null
   name?: string | null
   venueId?: string | null
+  hereCount?: unknown
   memberCount?: unknown
   event?: { kind?: string | null; title?: string | null; venueName?: string | null; venueId?: string | null } | null
 }
@@ -34,13 +35,19 @@ export function roomDisplayTitle(room: RoomLike | null | undefined): string | nu
 }
 
 /**
- * How many are in the room, or null. Never for a place's room: an exact count
- * that moves as people go live and expire is the differencing the venue's
- * bucket exists to stop (D-19) — whatever an older server still sends.
+ * How many are in the room, or null: `hereCount`, the people checked in now —
+ * the Room's own number, so the Banter, the chat header and Room info say what
+ * the Room says (RC drive 3: 482, 515 and 450 for one room). An older server
+ * sends only `memberCount`, which counted everybody ever in the room; it is
+ * the fallback until that server is gone.
+ *
+ * Never for a place's room: an exact count that moves as people go live and
+ * expire is the differencing the venue's bucket exists to stop (D-19) —
+ * whatever an older server still sends.
  */
-export function roomMemberCount(room: RoomLike | null | undefined): number | null {
+export function roomHereCount(room: RoomLike | null | undefined): number | null {
   if (!room || isPlaceRoom(room)) return null
-  const count = Number(room.memberCount)
+  const count = Number(room.hereCount ?? room.memberCount)
   return Number.isFinite(count) && count > 0 ? count : null
 }
 

@@ -1,38 +1,41 @@
 import { useEffect, useState } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
-import { OptimizedImage } from '../OptimizedImage'
-import { Text } from '../ui/Text'
+import { Avatar } from '../ds/Avatar'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { Icon } from '../ui/Icon'
 import { apiClient } from '../../lib/apiClient'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { isGone } from '../../lib/loadFailure'
 import { pendingInviteToken } from '../../lib/pendingRoute'
-import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
 
-/** The avatar's box and its decode hint. */
+/** The avatar's box: the pill is 48 tall, the face 32 with 8 around it (Flow 1 `pendingInvite`). */
 const AVATAR = 32
+const PILL_HEIGHT = 48
+/** What the pill says of a link that no longer works. */
+export const DEAD_INVITE_LINE = 'That invite link has expired.'
 
-/** The line beside the face. A name the server sent, or nobody. */
-export function pendingInviteLine(name: string): string {
-  return `Sign in to accept ${name}'s invite`
+/** The line beside the face. The landing says whose; the sign-in form adds what to do. */
+export function pendingInviteLine(name: string, signIn: boolean): string {
+  return signIn ? `${name} invited you. Sign in to accept.` : `${name} invited you`
 }
 
 type Preview = { kind: 'from'; name: string; photoUrl: string | null } | { kind: 'dead' }
 
 /**
- * Whose invite is waiting, on the welcome and sign-in screens.
+ * Whose invite is waiting, on the landing and the sign-in form (Flow 1 landing 02 · 10, sign-in 13).
  *
- * Signed out, an invite link (`/f/<token>`) is held until sign-in and the
- * guard shows the welcome screen instead (`app/_layout.tsx`). Without this
- * the link looked like it had simply opened the app. The public preview gives
- * a first name and a photo — nothing more, since whoever holds a forwarded
- * link has agreed to nothing yet.
+ * Signed out, an invite link (`/f/<token>`) is held until sign-in and the guard shows the landing instead
+ * (`app/_layout.tsx`). Without this the link looked like it had simply opened the app. The public preview gives a first name
+ * and a photo, nothing more, since whoever holds a forwarded link has agreed to nothing yet.
  *
- * A link that doesn't work says so now rather than after the sign-up it
- * seemed to promise. Any other failure (offline, rate limited) draws nothing:
- * the link still opens after sign-in, and a line about a failure would be
+ * A link that does not work says so now, in the same pill, rather than after the sign-up it seemed to promise. Any other
+ * failure (offline, rate limited) draws nothing: the link still opens after sign-in, and a line about a failure would be
  * about the wrong thing.
  */
-export function PendingInvite() {
+export function PendingInvite({ signIn = false }: { signIn?: boolean }) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
   const [token] = useState(() => pendingInviteToken())
   const [preview, setPreview] = useState<Preview | null>(null)
 
@@ -57,43 +60,48 @@ export function PendingInvite() {
 
   if (!preview) return null
 
+  const pill = [styles.pill, contrast ? IC_HAIRLINE : styles.edge]
+
   if (preview.kind === 'dead') {
     return (
-      <Text variant="meta" style={styles.center} maxFontSizeMultiplier={1.4}>
-        This invite link doesn&apos;t work any more. Ask for a new one once you&apos;re in.
-      </Text>
+      <View testID="pending-invite-dead" accessible accessibilityLabel={DEAD_INVITE_LINE} style={pill}>
+        <Icon name="link-2-off" size={ICON.control} color={COLOR.textSecondary} />
+        <Text style={[font('meta', bold), styles.line]} maxFontSizeMultiplier={1.4}>
+          {DEAD_INVITE_LINE}
+        </Text>
+      </View>
     )
   }
 
   return (
-    <View style={styles.row} accessible accessibilityLabel={pendingInviteLine(preview.name)}>
+    <View testID="pending-invite" accessible accessibilityLabel={pendingInviteLine(preview.name, signIn)} style={pill}>
       {preview.photoUrl ? (
-        <OptimizedImage source={preview.photoUrl} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
+        <Avatar kind="photo" uri={preview.photoUrl} size={AVATAR} />
       ) : (
-        <View style={[styles.avatar, styles.avatarEmpty]}>
-          <Text variant="caption">{(preview.name[0] ?? '?').toUpperCase()}</Text>
-        </View>
+        <Avatar kind="creature" pseudonym={preview.name} size={AVATAR} />
       )}
-      <Text variant="bodyStrong" style={styles.text} numberOfLines={2} maxFontSizeMultiplier={1.4}>
-        {pendingInviteLine(preview.name)}
+      <Text style={[font('meta', bold), styles.line, styles.fill]} numberOfLines={2} maxFontSizeMultiplier={1.4}>
+        <Text style={font('meta', bold, FONT_FAMILY.brand[700])}>{preview.name}</Text>
+        {signIn ? ' invited you. Sign in to accept.' : ' invited you'}
       </Text>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  row: {
+  pill: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'center',
-    gap: SPACE.sm,
+    gap: SPACE.md,
+    minHeight: PILL_HEIGHT,
     paddingVertical: SPACE.sm,
-    paddingHorizontal: SPACE.md,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
+    paddingLeft: SPACE.sm,
+    paddingRight: SPACE.lg,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.scrim,
   },
-  avatar: { width: AVATAR, height: AVATAR, borderRadius: EMBER_RADIUS.pill },
-  avatarEmpty: { backgroundColor: EMBER.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
-  text: { flexShrink: 1 },
-  center: { textAlign: 'center' },
+  edge: { borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairlineStrong },
+  line: { color: COLOR.textPrimary },
+  fill: { flexShrink: 1 },
 })

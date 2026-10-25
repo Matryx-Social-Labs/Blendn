@@ -44,6 +44,16 @@ export const COLOR = {
   destructiveTint: 'rgba(255,90,79,0.16)',
   selectionFill: '#FFFFFF',
   selectionInk: '#0D0C0C',
+  selectionInkSecondary: 'rgba(13,12,12,0.60)',
+  selectionEmberFill: '#552D21',
+  selectionEmberGlyph: '#FF8A5C',
+  selectionEmberFlare: '#7A3622',
+  selectionRoseFill: '#4C3036',
+  selectionRoseGlyph: '#EB8EA1',
+  selectionRoseFlare: '#653A43',
+  selectionVioletFill: '#433247',
+  selectionVioletGlyph: '#B58FD0',
+  selectionVioletFlare: '#523A5A',
   tabCapsule: 'rgba(255,255,255,0.22)',
   switchOffTrack: '#959090',
   chipFillOnGlass: 'rgba(255,255,255,0.08)',
@@ -92,7 +102,7 @@ export const MATERIAL = {
   blurTintBar: 'rgba(13,12,12,0.86)',
   blurTintSheet: 'rgba(13,12,12,0.94)',
   blurRadius: 24,
-  solidBar: 'rgba(26,24,24,0.94)',
+  solidBar: '#1A1818',
   solidControl: '#242121',
   solidSheet: '#242121',
   solidTopHairline: 'rgba(255,255,255,0.10)',
@@ -209,7 +219,7 @@ export const TYPE = {
 /** How far each role may grow with the phone’s text size. */
 export const MAX_FONT_SCALE = {
   moment: 1.3,
-  display: 2,
+  display: 1.5,
   title: 2,
   heading: 2,
   button: 2,
@@ -335,9 +345,13 @@ export const DURATION = {
   medium: 320,
   long: 520,
   moment: 1000,
-  ambientA: 28000,
-  ambientB: 36000,
+  ambientA: 9000,
+  ambientB: 11600,
   hold: 900,
+  toastDwell: 5000,
+  toastDwellAction: 10000,
+  spinnerPeriod: 900,
+  loaderMorph: 320,
 } as const
 
 /** Cubic-bezier control points, for `Easing.bezier(...)`. */
@@ -360,6 +374,16 @@ export const STAGGER = {
   itemsMax: 8,
 } as const
 
+/** The glyph verbs’ numbers (Glyph.tsx): the pop’s start scale, the hop in pt, the spin and tilt in degrees, the flicker’s dips and steps (fractions of `DURATION.medium`). */
+export const GLYPH = {
+  popFrom: 0.85,
+  hop: 4,
+  spin: 180,
+  tilt: 14,
+  flickerDips: [0.35, 0.6],
+  flickerSteps: [0.25, 0.1875, 0.25, 0.3125],
+} as const
+
 export const PRESS = {
   scale: 0.97,
   scaleDisc: 0.9,
@@ -372,7 +396,7 @@ export const RISE = {
 } as const
 
 export const ORBS = {
-  drift: 24,
+  drift: 40,
   scaleMin: 0.96,
   scaleMax: 1.04,
 } as const

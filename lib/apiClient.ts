@@ -3,26 +3,36 @@
  * Replaces direct Supabase calls with admin backend API calls
  */
 
+import { roundCoordinate } from './coordinates'
 import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
 import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
 import type { PlusStatus } from './plus'
+import { noteBlocked } from './blockEpoch'
+import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
-import { type ResponseHead, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError } from './fetchTimeout'
+import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError, settleWithin } from './fetchTimeout'
 import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
-import type { Friend, FriendInvite, FriendPerson, FriendProfile, FriendRequest, FriendState } from './friends'
+import { noteFriendGone } from './friendsGone'
+import { FRIENDS_PAGE } from './friendsPaging'
+import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, FriendsPayload, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
+import { reasonOf, SESSION_END_CODES } from './sessionEnd'
+import { appVersionNumber } from './appVersion'
+import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
+import { onCriticalPath } from './criticalPath'
 import { noteServerDate } from './serverClock'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
+import { SEARCH_TOO_SHORT, searchTermOf } from './searchTerm'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -32,6 +42,13 @@ const REQUESTS_SWR_TTL = 30 * 1000
 const CHECKINS_SWR_TTL = 30 * 1000
 const CATEGORIES_SWR_TTL = 10 * 60 * 1000
 const PARTICIPANTS_SWR_TTL = 30 * 1000
+/**
+ * The oldest a cached answer is still shown while a fresh one is fetched. The cache is in memory for the app's life and an
+ * expired entry was served at any age: a room's roster read hours earlier came back once as the room's people (rc7: iOS
+ * Room info listed only the organiser of a room of 426, on an app left running through the drive). Past this, a read
+ * waits for the server.
+ */
+export const SWR_STALE_LIMIT_MS = 5 * 60 * 1000
 
 if (!API_BASE_URL) {
   throw new Error(
@@ -44,6 +61,12 @@ if (!API_BASE_URL) {
 const ACCESS_TOKEN_KEY = 'blendn_access_token'
 const REFRESH_TOKEN_KEY = 'blendn_refresh_token'
 const USER_KEY = 'blendn_user'
+/**
+ * "Signed out on this phone", in AsyncStorage (Opus review M2). AsyncStorage is its own native module, off Expo's shared
+ * queue: written at sign-out before any await, it lands even when SecureStore's deletes are queued behind a stuck call and
+ * the app is killed before they run. The launch honours it before restoring anything (`useAuth.initializeAuth`).
+ */
+const SIGNED_OUT_KEY = 'blendn_signed_out'
 
 // Secure storage options
 const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
@@ -63,6 +86,9 @@ const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
  * Priority values: lower number = higher priority (auth=1, mutations=3, queries=5).
  * Debounce: batch rapid simultaneous enqueues into a single processing tick.
  */
+/** A page by the cursor the page before it handed over (keyset), or by number while the server has none. */
+const pageQuery = (page: number, cursor?: string | null): string => (cursor ? `cursor=${encodeURIComponent(cursor)}` : `page=${page}`)
+
 class RequestQueue {
   private queue: Array<{
     request: () => Promise<unknown>
@@ -202,8 +228,12 @@ const requestQueue = new RequestQueue()
 /** `?a=1&b=2` from the fields that are set, or '' when none are. */
 function toQuery(params: object = {}): string {
   const searchParams = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null) searchParams.append(key, String(value))
+  for (const [key, raw] of Object.entries(params)) {
+    // A `search` the server would refuse (under 2 characters, admin #751) is no search: never sent (`searchTermOf`).
+    const value = key === 'search' ? searchTermOf(typeof raw === 'string' ? raw : null) : raw
+    if (value === undefined || value === null) continue
+    // A position never leaves in a URL at more than ~110 m (`lib/coordinates.ts`): the server logs query strings.
+    searchParams.append(key, (key === 'lat' || key === 'lon') && typeof value === 'number' ? String(roundCoordinate(value)) : String(value))
   }
   const query = searchParams.toString()
   return query ? `?${query}` : ''
@@ -220,17 +250,85 @@ function warnUnencryptedWebStorage(): void {
   Logger.warn('auth', 'Storing auth tokens in unencrypted AsyncStorage on web — expo-secure-store is unsupported on this platform')
 }
 
+/** A keychain call slower than this is logged (`keychain:slow`): the drive reads it from `log stream`. */
+export const KEYCHAIN_SLOW_MS = 2000
+/** A token refresh slower than this is logged (`refresh:slow`). */
+export const REFRESH_SLOW_MS = 5000
+
+function noteKeychain(op: 'get' | 'set', key: string, started: number): void {
+  const ms = Date.now() - started
+  if (ms > KEYCHAIN_SLOW_MS) Logger.warn('auth', 'keychain:slow', { op, key, ms })
+}
+
+/** What a bounded keychain read or refresh gives when it does not finish in time: never `null`, which reads as "signed out". */
+export const TIMED_OUT = Symbol('timed out')
+/**
+ * A token read, on the fetch's own deadline. SecureStore runs on a native queue other modules share (SCRUM-754, SCRUM-733),
+ * and a read stuck behind them held a request (and its queue slot) for good. Timed out is not `null`: a caller that treated it
+ * as "no token" would clear the session and sign the person out over a slow keychain.
+ */
+const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => settleWithin<T | typeof TIMED_OUT>(work, REQUEST_TIMEOUT_MS, TIMED_OUT)
+
+/**
+ * Which session the keychain holds: bumped by a stored sign-in (`keepSession`) and by every way out (`signOut`,
+ * `signOutEverywhere`, `deleteAccount`). Work that started in one session never writes into the next (Opus review H1): a
+ * refresh in flight across a sign-out does not store the rotated tokens (which would sign the old account back in on the
+ * next launch, or overwrite the next account's).
+ */
+let sessionEpoch = 0
+/**
+ * A session begins, or the last one ends. Exported for the launch's signed-out marker (`useAuth.initializeAuth`), which
+ * clears the keychain outside this module (re-review L2).
+ */
+export const nextSession = (): number => ++sessionEpoch
+
+/*
+ * Why the reads stay on SecureStore's async API (RC drive D1). expo-secure-store's async functions have no `.runOnQueue`, so
+ * they share Expo's one serial `AsyncFunctionQueue` with every module, the notification-permission read included. Its sync
+ * API (`getItem` / `setItem`, native `getValueWithKeySync`) runs on the JS thread and never touches that queue: the one
+ * supported way off it, without patching the module. Not taken: a keychain call on the JS thread freezes the UI for as long
+ * as `securityd` takes, which trades a stuck sign-out for a frozen app, and there is no sync delete. The queue is protected
+ * instead: permission reads wait for the critical path (`lib/criticalPath`), are made once and bounded (`lib/pushStatus`).
+ *
+ * And the session is kept in memory (RC drive 2 D-A): once the queue was stuck anyway (`usernotificationsd` wedged, a
+ * permission read made after the grace), every authed request's token read waited behind it, and Me, Banter and Going all
+ * read "Couldn't load". The keychain is read once, at the launch's restore, and written at sign-in and refresh; after that
+ * every read is answered from memory, and the keychain is only persistence. Writes and deletes set memory before they are
+ * queued, so memory is always the newest word: a sign-out empties it at once, whatever the queue is doing.
+ */
 // Token Storage
 class TokenStorage {
+  /**
+   * What the keychain holds, as this process last read or wrote it. A key not here has not been read yet; `null` is known
+   * empty. Only a read that succeeded fills it: a keychain that failed (locked, say) is asked again next time.
+   */
+  private static memory = new Map<string, string | null>()
+
+  /** A new process (tests' relaunch): memory is gone, the keychain is what is left. */
+  static forgetMemory(): void {
+    this.memory.clear()
+  }
+
   private static async secureGet(key: string): Promise<string | null> {
+    if (this.memory.has(key)) return this.memory.get(key) ?? null
+    const value = await this.readStored(key)
+    // A write or a clear while the read was out is newer than what it found, and stays. The caller still gets what was
+    // read: sign-out queues its reads ahead of its deletes so that the POST carries the session it is ending.
+    if (value !== undefined && !this.memory.has(key)) this.memory.set(key, value)
+    return value ?? null
+  }
+
+  /** The stored value, or `undefined` when the read failed (the fallback's answer, never remembered). */
+  private static async readStored(key: string): Promise<string | null | undefined> {
     if (Platform.OS === 'web') {
       warnUnencryptedWebStorage()
       try {
         return await AsyncStorage.getItem(key)
       } catch {
-        return null
+        return undefined
       }
     }
+    const started = Date.now()
     try {
       return await SecureStore.getItemAsync(key, SECURE_OPTIONS)
     } catch (error) {
@@ -238,19 +336,24 @@ class TokenStorage {
       // log it so it's visible in Sentry rather than silently swallowed.
       Logger.warn('auth', 'SecureStore read failed, falling back to AsyncStorage', { key, error })
       try {
-        return await AsyncStorage.getItem(key)
+        // A value written there by a failed keychain write is real; nothing there says nothing about the keychain.
+        return (await AsyncStorage.getItem(key)) ?? undefined
       } catch {
-        return null
+        return undefined
       }
+    } finally {
+      noteKeychain('get', key, started)
     }
   }
 
   private static async secureSet(key: string, value: string): Promise<void> {
+    this.memory.set(key, value)
     if (Platform.OS === 'web') {
       warnUnencryptedWebStorage()
       await AsyncStorage.setItem(key, value)
       return
     }
+    const started = Date.now()
     try {
       await SecureStore.setItemAsync(key, value, SECURE_OPTIONS)
       // Clear from AsyncStorage if it was there
@@ -260,10 +363,13 @@ class TokenStorage {
     } catch (error) {
       Logger.warn('auth', 'SecureStore write failed, falling back to AsyncStorage', { key, error })
       await AsyncStorage.setItem(key, value)
+    } finally {
+      noteKeychain('set', key, started)
     }
   }
 
   private static async secureRemove(key: string): Promise<void> {
+    this.memory.set(key, null)
     if (Platform.OS !== 'web') {
       try {
         await SecureStore.deleteItemAsync(key, SECURE_OPTIONS)
@@ -312,6 +418,27 @@ class TokenStorage {
       this.secureRemove(REFRESH_TOKEN_KEY),
       this.secureRemove(USER_KEY),
     ])
+  }
+
+  /** Mark this phone signed out (M2): called before any await at sign-out, so the write is issued whatever follows. */
+  static markSignedOut(): void {
+    AsyncStorage.setItem(SIGNED_OUT_KEY, '1').catch(() => {})
+  }
+
+  /** Whether a sign-out here may not have reached the keychain. Unreadable reads as no: never a reason to sign anyone out. */
+  static async signedOutHere(): Promise<boolean> {
+    try {
+      return (await AsyncStorage.getItem(SIGNED_OUT_KEY)) === '1'
+    } catch {
+      return false
+    }
+  }
+
+  /** The keychain is known clear, or holds a newer session: the marker goes. */
+  static async forgetSignedOut(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(SIGNED_OUT_KEY)
+    } catch {}
   }
 
   static async setTokens(accessToken: string, refreshToken: string): Promise<void> {
@@ -484,6 +611,23 @@ export interface DmReplyQuote {
   unavailable: boolean
 }
 
+/** `GET /work-fields`: the coarse fields, and what someone does within each (the server's curated list, never free text). */
+export interface WorkFieldsResponse {
+  workFields: { slug: string; label: string }[]
+  expertiseByField?: Record<string, { slug: string; label: string }[]>
+  maxExpertise?: number
+}
+
+/**
+ * A block that went through moves `lib/blockEpoch`, so every list loaded a page at a time starts over from the server,
+ * which now leaves that person out. Here, in the client, so no route to a block (a card, a profile, a board post or ask,
+ * a message request, a conversation) can forget it.
+ */
+function noteBlockedOn<T extends { success: boolean }>(result: T): T {
+  if (result.success) noteBlocked()
+  return result
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean
   data?: T
@@ -499,6 +643,12 @@ export interface ApiResponse<T = unknown> {
    */
   errorCode?: string
   /**
+   * The specific reason, when the server names one beside an `errorCode` that keeps its old value for builds in the
+   * field: `ACCOUNT_SUSPENDED`, `ACCOUNT_STAFF`, `ACCOUNT_DELETED`, `PROFILE_INCOMPLETE`, `AGE_UNKNOWN`, `PASSWORD_RESET`,
+   * `SESSION_REVOKED_ELSEWHERE`. Read `reasonCode ?? errorCode` (`reasonOf`, `lib/sessionEnd.ts`).
+   */
+  reasonCode?: string
+  /**
    * Seconds until a `RATE_LIMITED` refusal lifts. `lib/rate-limit.ts` on the
    * server computes it and sends it both in the body and as `Retry-After`;
    * without it a screen that wants to disable a control has to guess how long
@@ -511,11 +661,21 @@ export interface ApiResponse<T = unknown> {
    * the rejoin (`rejoinChatGroup`) without a second lookup.
    */
   chatGroupId?: string
+  /** When an event's room opens: `GET /events/:eventId/chat` answers NOT_OPEN_YET (reasonCode) with it, to someone entitled. */
+  opensAt?: string
   /**
    * The event a refusal hands off to. Go Live answers `EVENT_LIVE_HERE` with
    * it (`POST /venues/:venueId/live`): check in to that event instead.
    */
   eventId?: string
+  /** The form field a refusal is about (`name`, `bio` on a crew); absent when it is the form's. */
+  field?: string
+  /**
+   * A room that has closed, as the server names it to somebody who was in it (`ROOM_CLOSED` on the room's history, rc8
+   * #6): its kind and its stored name, so a bare link to a closed Blend or crew chat is not called an event's room.
+   */
+  roomKind?: string
+  roomName?: string
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -545,6 +705,9 @@ export interface FriendInvitePreview {
 
 
 
+/** One opening in a venue's week (`GET /venues/:venueId` `hours`). */
+export type VenueOpening = { day: number; open: string; close: string }
+
 export interface AuthUser {
   id: string
   email: string
@@ -552,6 +715,8 @@ export interface AuthUser {
   image: string | null
   emailVerified: string | null
   createdAt: string
+  /** What the account can sign in with, from `GET /auth/session` (the sign-in and refresh shapes do not carry it). */
+  signInMethod?: 'password' | 'google' | 'apple'
   profile: {
     phone: string | null
     name: string | null
@@ -567,7 +732,8 @@ export interface AuthUser {
 export interface PaginationMeta {
   page: number
   limit: number
-  total: number
+  /** What the server sends: the count for these params, whatever the page. */
+  totalCount: number
   totalPages: number
   hasMore?: boolean
 }
@@ -592,9 +758,29 @@ export interface EventApiItem {
    * older server; null when every day is cancelled.
    */
   session?: { startTime: string; endTime: string } | null
+  /**
+   * What moved under the people who had heard of the event (blendn-admin #716, `lib/event-change.ts`): when, which, and what
+   * the time and place were before. null, [] and null for an event that has not changed. All absent from an older server
+   * (`parseEventChange`).
+   */
+  changedAt?: string | null
+  changedFields?: Array<'time' | 'venue' | 'cancelled'>
+  changedFrom?: { startTime?: string; endTime?: string; venueName?: string | null; address?: string | null } | null
+  /**
+   * The days of the run and where `session` is in it (`parseEventDays`, blendn-admin #724): `days` is at most 31 of them from
+   * `daysFrom` (1-based), while `dayCount` and `dayNumber` are the whole run. Absent from an older server.
+   */
+  days?: Array<{ date: string; startTime: string; endTime: string; cancelled: boolean; cancelledAt?: string | null }>
+  dayCount?: number
+  daysFrom?: number
+  dayNumber?: number | null
   timezone: string
   status: string
   visibility: string
+  /** The organiser's age floor (the detail route sends it): the Scene's Door tile and its "21+" pill. Absent from an older server. */
+  minAge?: number | null
+  /** `open`, `guest_list`, `members_only` or `invite_only` (`lib/scarcity.ts`). Absent from an older server. */
+  doorPolicy?: string | null
   venueName: string | null
   venue_name?: string | null
   /**
@@ -617,6 +803,11 @@ export interface EventApiItem {
   checkInRadius: number
   check_in_radius?: number
   isFeatured: boolean
+  /**
+   * The placement behind a featured event (BUILD-SPEC C1): `promoted` (a paid placement) is labelled "Promoted", `editorial` is not.
+   * Absent from a server that does not send it: `isFeatured` (the admin toggle) is all there is.
+   */
+  featured?: { kind: 'promoted' | 'editorial'; rank: number; by?: string | null } | null
   isRecurring: boolean
   externalLink: string | null
   createdAt: string
@@ -756,9 +947,23 @@ export interface VenueListItem {
   venueTypeLabel: string
   /** Kilometres from the `lat`/`lon` sent, or null. */
   distance: number | null
+  /** The neighbourhood (§C4), named on a row's line in place of the street address. Absent from a server that does not send it. */
+  area?: string | null
   upcomingEventCount: number
   /** How many are live here, as a bucket and never a number (D-19); null for somebody the venue page would refuse. */
   liveNow: 'quiet' | '5-9' | '10-19' | '20+' | null
+  /**
+   * Which stratum the server put the venue in (`?order=live`): live now, open tonight (an event tonight OR
+   * its hours cover today) or quiet. Absent from a server that does not send it: the client then judges by
+   * `liveNow` and `nextEvent` alone.
+   */
+  tier?: 'live' | 'open' | 'quiet'
+  /**
+   * Tonight's opening hours (§C6): wall-clock "HH:MM" strings in the venue's timezone ("18:00", "01:30"; a close at or
+   * before the open is past midnight). "Open till" / "Opens" on an Open tonight card.
+   * Absent from a server that does not send it: the card then shows its event line, or nothing.
+   */
+  tonight?: { opensAt: string; closesAt: string } | null
   nextEvent: {
     id: string
     title: string
@@ -766,12 +971,27 @@ export interface VenueListItem {
     coverImageUrl: string | null
     startTime: string
     endTime: string
+    /** The event's IANA zone (admin #749): its time is said in it. Absent from an older server: the phone's. */
+    timezone?: string | null
   } | null
 }
 
 export interface VenuesListResponse {
   venues: VenueListItem[]
-  pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean }
+  /**
+   * `order: 'live'` is the server saying it honoured `?order=live`: live now, then open tonight, then the
+   * rest, so the strata are all in the first pages. Absent from a server that does not know it.
+   */
+  pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean; order?: string }
+  /** Read too where a server echoes it beside the list rather than in its paging. */
+  order?: string
+}
+
+/** A page of a venue's coming events — `GET /api/mobile/venues/:venueId/upcoming`. */
+export interface VenueUpcomingPage {
+  /** As `VenueDetail`'s `upcoming`: no going count (SCRUM-743; admin `lib/venue-upcoming.ts` sends none). */
+  events: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string | null; timezone?: string | null }[]
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
 }
 
 /** One venue — `GET /api/mobile/venues/:venueId`, as the place screen reads it. */
@@ -783,9 +1003,36 @@ export interface VenueDetail {
     city: string | null
     latitude: number | null
     longitude: number | null
+    /** The venue_type key ("pub_bar"): which plate the page draws when tonight has no cover. */
+    venueType?: string | null
     venueTypeLabel: string
     /** False: "Own this place? Claim it" applies. */
     claimed: boolean
+    /*
+     * Not sent yet (the design's ⚑ fields, guidelines/places/fullpages.js). The
+     * page draws each only when it is here and says nothing when it is not:
+     * see docs/PLACES.md for the shapes asked of the server.
+     */
+    /** A fire-safety number: stated as a size, never as scarcity. */
+    capacity?: number | null
+    /** The venue day starts at this local hour; "Reset 06:00". */
+    dayResetHour?: number | null
+    /**
+     * The week's opening hours as the server sends them (`venues.hours`, `lib/venue-hours.ts`): one row per opening,
+     * `day` 0 (Sunday) to 6, wall-clock "HH:MM" in the venue's own timezone, a close at or before the open is past
+     * midnight. Null: not given. Read through `tonightOpening`.
+     */
+    hours?: VenueOpening[] | null
+    /** The owner's words about the place. */
+    description?: string | null
+    /** Good to know: the names of what the owner ticked (the server sends `string[]`, no ids). */
+    amenities?: string[] | null
+    /** Upcoming events here, soonest first: the server's first few (the page shows three), as it sends them, no going count; the rest are `getVenueUpcoming`'s. */
+    upcoming?: { id: string; title: string; slug?: string | null; coverImageUrl?: string | null; startTime: string; endTime?: string | null; timezone?: string | null }[] | null
+    /** How many there are in all, whatever `upcoming` holds. Absent from a server that does not send it. */
+    upcomingTotal?: number | null
+    /** Where `getVenueUpcoming` resumes after `upcoming`; null when `upcoming` is all of them. */
+    upcomingNextCursor?: string | null
   }
   live: {
     /** Whether going live here would be accepted now, the fence aside. */
@@ -800,13 +1047,15 @@ export interface VenueDetail {
     stay?: boolean
     venueDayId?: string | null
     chatGroupId?: string | null
+    /** A "stay" window's hard end (4 hours from its start, cut at the day's reset); not sent yet. */
+    stayUntil?: string | null
   }
   /**
    * The public claim page, when the place is unclaimed and the server offers
    * one (`{ url }`, built on the dashboard host). Read through `claimUrlFrom`.
    */
   claim?: { url?: unknown } | null
-  tonight: { id: string; title: string; startTime: string; endTime: string } | null
+  tonight: { id: string; title: string; startTime: string; endTime: string; coverImageUrl?: string | null; timezone?: string | null } | null
 }
 
 /** `POST /api/mobile/venues/:venueId/live` — your window at a place. */
@@ -860,6 +1109,13 @@ export interface UserProfileData {
    * otherwise, and from an older server.
    */
   connection?: { conversationId: string | null; request: 'sent' | 'received' | null }
+  /**
+   * Whether to offer "Add friend" (SCRUM-750): `{ state, canAdd }`, read through `parseFriendOffer`. Top-level beside the
+   * profile, as `badges` is: the profile page reads both from this one request.
+   */
+  friend?: unknown
+  /** Their badges (`{ kind, label }[]`), top-level beside `friend` for whoever may see who they are; read through `parseBadges`. */
+  badges?: unknown
   /** Nested profile object from /api/mobile/profiles/[userId] */
   profile?: {
     /*
@@ -875,6 +1131,8 @@ export interface UserProfileData {
      */
     intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
     work_field?: string | null
+    /** Your own profile only: the slugs you picked within the field (the route sends labels to everyone else). */
+    expertise?: string[]
     gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
     orientations?: string[]
     interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
@@ -898,6 +1156,16 @@ export interface UserProfileData {
      * says so (SCRUM-141).
      */
     show_online?: boolean
+    /**
+     * `GET /profiles/:id` (blendn-admin #716): what check-ins earned, for you and for anyone who may see who you are. Absent when
+     * the person turned badges off, for a viewer the profile is anonymous to, and from an older server (`parseBadges`).
+     */
+    badges?: Badge[]
+    /**
+     * Your own profile only: `photos` in order, each `pulled: false`, then the photos moderation took down in the last 7 days,
+     * `pulled: true` with `url: null` (the object is withdrawn) and `was_main`. Absent from an older server (`pulledPhotos`).
+     */
+    photo_states?: Array<{ url: string | null; pulled: boolean; pulled_at: string | null; was_main: boolean }>
     created_at?: string
     updated_at?: string
   }
@@ -996,14 +1264,37 @@ export type RefreshOutcome = 'ok' | 'rejected' | 'failed'
  */
 /** What a request that failed for no reason we can name says to a person. */
 const GENERIC_FAILURE_MESSAGE = 'Something went wrong. Try again.'
+/** An authed request with no session behind it (signed out, or the session it was made in has ended). */
+const NOT_SIGNED_IN_MESSAGE = 'You’re not signed in.'
 
 export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
+/** The whole refresh: the keychain read and the fetch, each on the fetch deadline. */
+export const REFRESH_DEADLINE_MS = 2 * REQUEST_TIMEOUT_MS
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
 let rejectedReason: string | undefined
+/** The refresh's `errorCode` when it is one of the reasons the server names (`lib/sessionEnd.ts`), 401 or 403. */
+let rejectedCode: string | undefined
 
 // API Client Class
+/** The Android channel set this build creates (lib/notifications): 2 = the Flow 9 channels. Bump with the set. */
+export const PUSH_CHANNEL_SET = 2
+
+/**
+ * The first page each paged list asks for (admin #724: `?limit=` 1-100, `pagination.nextCursor` for the next). With no
+ * `limit` and no `cursor` the server answers in its legacy mode for installed builds; new code always says how many.
+ * Friends and the requests page on by `pagination.nextCursor` (`lib/friendsPaging.ts`); `count` stays the whole list.
+ */
+export const LIST_PAGE = { conversations: CONVERSATIONS_PAGE, friends: FRIENDS_PAGE, friendRequests: 50, blocked: 100 } as const
+
+/**
+ * Said on every request, from the one constant the push token posts: a build that knows `event_changed` declares it, and
+ * `GET /notifications` serves a build that does not the old `event_update` row so its tap opens the event (blendn-admin #716,
+ * SCRUM-739). Web sends it too: the server's CORS allow-list names `X-Channel-Set`.
+ */
+export const CHANNEL_SET_HEADER = { 'X-Channel-Set': String(PUSH_CHANNEL_SET) } as const
+
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
@@ -1044,11 +1335,11 @@ class ApiClientClass {
     return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}`
   }
 
-  private getCached<T>(key: string): { data: ApiResponse<T>; isFresh: boolean } | null {
+  private getCached<T>(key: string): { data: ApiResponse<T>; isFresh: boolean; tooOld: boolean } | null {
     const entry = this.responseCache.get(key)
     if (!entry) return null
     const age = Date.now() - entry.timestamp
-    return { data: entry.data as ApiResponse<T>, isFresh: age < entry.ttl }
+    return { data: entry.data as ApiResponse<T>, isFresh: age < entry.ttl, tooOld: age > SWR_STALE_LIMIT_MS }
   }
 
   /**
@@ -1203,6 +1494,7 @@ class ApiClientClass {
       if (response.ok) {
         return { success: true } as ApiResponse<T>
       }
+      if (isUpdateRefusal(response.status, undefined)) markUpdateRequired()
       return { success: false, error: this.buildErrorMessage(response, null, endpoint) }
     }
 
@@ -1220,18 +1512,34 @@ class ApiClientClass {
     }
 
     if (!response.ok) {
+      // A build the server no longer serves: the whole app says so (Flow 15 15.14), not this one screen.
+      if (
+        isUpdateRefusal(
+          response.status,
+          reasonOf({
+            errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : undefined,
+            reasonCode: typeof parsed.reasonCode === 'string' ? parsed.reasonCode : undefined,
+          })
+        )
+      )
+        markUpdateRequired()
       return {
         success: false,
         // Carried through so a screen can branch on the reason rather than
         // guess from the sentence. See ApiResponse.errorCode.
         errorCode: typeof parsed.errorCode === 'string' ? parsed.errorCode : undefined,
+        ...(typeof parsed.reasonCode === 'string' ? { reasonCode: parsed.reasonCode } : {}),
         // Body first, then the header, because only the body survives a proxy
         // that strips Retry-After.
         retryAfter: typeof parsed.retryAfter === 'number'
           ? parsed.retryAfter
           : Number(response.headers.get('Retry-After')) || undefined,
         ...(typeof parsed.chatGroupId === 'string' ? { chatGroupId: parsed.chatGroupId } : {}),
+        ...(typeof parsed.opensAt === 'string' ? { opensAt: parsed.opensAt } : {}),
         ...(typeof parsed.eventId === 'string' ? { eventId: parsed.eventId } : {}),
+        ...(typeof parsed.field === 'string' ? { field: parsed.field } : {}),
+        ...(typeof parsed.roomKind === 'string' ? { roomKind: parsed.roomKind } : {}),
+        ...(typeof parsed.roomName === 'string' ? { roomName: parsed.roomName } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
@@ -1259,13 +1567,22 @@ class ApiClientClass {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build, which has no native build number to judge (the server's CORS allow-list names this header and `X-Channel-Set`, so a preflight is no reason).
+      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+      ...CHANNEL_SET_HEADER,
       ...(options.headers as Record<string, string>),
     }
 
+    // The session this request was made in, and whether it carried a token at all (M1): see the 401 below.
+    const epoch = sessionEpoch
+    let sentToken = false
     if (requireAuth) {
-      const accessToken = await TokenStorage.getAccessToken()
+      const accessToken = await withinDeadline(TokenStorage.getAccessToken())
+      // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
+      if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`
+        sentToken = true
       }
     }
 
@@ -1293,9 +1610,16 @@ class ApiClientClass {
 
         // Handle 401 - try to refresh token
         if (response.status === 401 && requireAuth) {
+          /*
+           * Not this request's session to refresh or to end (Opus review M1): it ended while the request was out (a sign-out
+           * the person chose, another sign-in), or the request carried no token because nobody is signed in. Either way a
+           * refusal here is not a session the server ended, and must never write "You were signed out".
+           */
+          if (epoch !== sessionEpoch || !sentToken) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
           const refreshed = await this.refreshTokens()
           if (refreshed === 'ok') {
-            const newAccessToken = await TokenStorage.getAccessToken()
+            const newAccessToken = await withinDeadline(TokenStorage.getAccessToken())
+            if (newAccessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
             if (newAccessToken) {
               headers['Authorization'] = `Bearer ${newAccessToken}`
             }
@@ -1308,8 +1632,9 @@ class ApiClientClass {
             return { success: false, error: TIMEOUT_MESSAGE }
           }
           await TokenStorage.clearAll()
-          markSessionExpired(rejectedReason)
+          markSessionExpired(rejectedReason, rejectedCode)
           rejectedReason = undefined
+          rejectedCode = undefined
           return { success: false, error: 'Session expired. Please sign in again.' }
         }
 
@@ -1371,9 +1696,14 @@ class ApiClientClass {
     }
 
     // Store promise BEFORE any await so concurrent callers see it immediately.
-    const p: Promise<RefreshOutcome> = (async () => {
+    const started = Date.now()
+    // The session this refresh is for: once it has ended (a sign-out, another sign-in), what it gets is not stored (H1).
+    const epoch = sessionEpoch
+    const work: Promise<RefreshOutcome> = (async () => {
       try {
-        const refreshToken = await TokenStorage.getRefreshToken()
+        const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
+        // A keychain that did not answer is not a missing token: 'failed', tried again, never the sign-out a 'rejected' is.
+        if (refreshToken === TIMED_OUT) return 'failed'
         if (!refreshToken) {
           return 'rejected'
         }
@@ -1384,7 +1714,7 @@ class ApiClientClass {
         // whole app until it is killed.
         const { response, body: raw } = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...CHANNEL_SET_HEADER },
           body: JSON.stringify({ refreshToken }),
         })
 
@@ -1395,8 +1725,23 @@ class ApiClientClass {
           // in the attendee app. Keep the sentence for the entry screen.
           if (response.status === 403) {
             try {
-              const body = JSON.parse(raw) as { error?: unknown }
+              const body = JSON.parse(raw) as { error?: unknown; errorCode?: unknown; reasonCode?: unknown }
               if (typeof body?.error === 'string') rejectedReason = body.error
+              const code = reasonOf({
+                errorCode: typeof body?.errorCode === 'string' ? body.errorCode : undefined,
+                reasonCode: typeof body?.reasonCode === 'string' ? body.reasonCode : undefined,
+              })
+              if (code) rejectedCode = code
+            } catch {}
+          } else if (response.status === 401) {
+            // A 401's sentence ("Invalid or expired refresh token") is not for a person; only a named reason is kept.
+            try {
+              const body = JSON.parse(raw) as { errorCode?: unknown; reasonCode?: unknown }
+              const code = reasonOf({
+                errorCode: typeof body?.errorCode === 'string' ? body.errorCode : undefined,
+                reasonCode: typeof body?.reasonCode === 'string' ? body.reasonCode : undefined,
+              })
+              if (code && code in SESSION_END_CODES) rejectedCode = code
             } catch {}
           }
           return 'rejected'
@@ -1405,7 +1750,17 @@ class ApiClientClass {
         const data: ApiResponse<{ accessToken: string; refreshToken: string }> = JSON.parse(raw)
 
         if (data.success && data.data) {
-          await TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken)
+          if (epoch !== sessionEpoch) {
+            // The session it was for is over: storing these would sign that account back in. Not a refusal either.
+            Logger.info('api', 'refresh:stale', { reason: 'session ended while it was in flight' })
+            return 'failed'
+          }
+          /*
+           * In memory now, before anything else runs, so every request from here sends them; the keychain is written behind
+           * (RC drive 2 D-A). Awaited, a native queue stuck behind another module failed the refresh and every request after.
+           */
+          void TokenStorage.setTokens(data.data.accessToken, data.data.refreshToken).catch((error) =>
+            Logger.warn('auth', 'Refreshed tokens not persisted', { error }))
           return 'ok'
         }
 
@@ -1415,12 +1770,23 @@ class ApiClientClass {
         return 'failed'
       }
     })()
+    /*
+     * Bounded as a whole: the token read, the fetch and the write each on its deadline, and the lot within REFRESH_DEADLINE_MS.
+     * A refresh that hung kept `refreshPromise` set, and every later 401 joined the dead promise for good. Timed out it is
+     * 'failed' and the promise is released (below); the work, if it ever lands, still stores what the server sent.
+     */
+    // On the critical path (D1): no notification-permission read is queued ahead of the token write.
+    const p: Promise<RefreshOutcome> = onCriticalPath(() => settleWithin(work, REFRESH_DEADLINE_MS, 'failed'))
 
     refreshPromise = p
 
     // Reset flags after all awaiting callers have received the result (next microtask).
     p.finally(() => {
       refreshPromise = null
+    })
+    p.then((outcome) => {
+      const ms = Date.now() - started
+      if (ms > REFRESH_SLOW_MS) Logger.warn('api', 'refresh:slow', { ms, outcome })
     })
 
     p.then((outcome) => {
@@ -1482,7 +1848,8 @@ class ApiClientClass {
     const key = this.buildRequestKey(endpoint, {}, true)
     const cached = this.getCached<T>(key)
 
-    if (cached) {
+    // Too old to show even for a moment: asked again and awaited, as if never cached (`SWR_STALE_LIMIT_MS`).
+    if (cached && !cached.tooOld) {
       if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl)
       return cached.data
     }
@@ -1500,8 +1867,14 @@ class ApiClientClass {
   /** Store the tokens and user of a successful sign-in or sign-up. */
   private async keepSession(result: ApiResponse<AuthResult>): Promise<ApiResponse<AuthResult>> {
     if (result.success && result.data) {
+      // A new session: a refresh still in flight from the last one does not store over it (H1).
+      nextSession()
+      // Nothing cached, or still in flight, from before this sign-in is served to it.
+      this.clearResponseCache()
       await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
       await TokenStorage.setUser(result.data.user)
+      // Only once this session is in the keychain: dropped earlier, a kill before the writes land restored the last one (M2).
+      await TokenStorage.forgetSignedOut()
     }
     return result
   }
@@ -1603,13 +1976,18 @@ class ApiClientClass {
     )
   }
 
-  async deleteAccount(): Promise<ApiResponse<{ deleted: boolean }>> {
+  /** `appleAuthorizationCode`: a fresh Sign in with Apple code, so the server can revoke the Apple grant (lib/appleRevocation). */
+  async deleteAccount(appleAuthorizationCode?: string): Promise<ApiResponse<{ deleted: boolean }>> {
     const result = await this.request<{ deleted: boolean }>('/api/mobile/account', {
       method: 'DELETE',
+      ...(appleAuthorizationCode ? { body: JSON.stringify({ appleAuthorizationCode }) } : {}),
     })
 
     if (result.success) {
-      await TokenStorage.clearAll()
+      nextSession()
+      TokenStorage.markSignedOut()
+      // Bounded like sign-out's (D1): a keychain stuck behind another native call clears when it frees.
+      await withinDeadline(TokenStorage.clearAll())
       requestQueue.clear()
       // Same reason as signOut(): the response cache is not per user, and a
       // stale entry is served before it is corrected. Deletion is the more
@@ -1638,36 +2016,120 @@ class ApiClientClass {
    * a re-registration on their other device is cheaper than a stranger reading
    * their DMs.
    */
-  async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
-    const refreshToken = await TokenStorage.getRefreshToken()
+  /**
+   * Every session this account has, this one too (`POST /auth/signout` naming no refresh token). Unlike `signOut`, nothing
+   * is cleared until the server has said it ended them: a phone that could not reach the server is still signed in
+   * everywhere, and says so rather than looking signed out.
+   */
+  async signOutEverywhere(): Promise<ApiResponse<void>> {
     const result = await this.request<void>('/api/mobile/auth/signout', {
       method: 'POST',
-      body: JSON.stringify({
-        refreshToken: revokeAll ? undefined : refreshToken,
-        pushToken: getPushTokenRef() ?? undefined,
-      }),
+      body: JSON.stringify({ pushToken: getPushTokenRef() ?? undefined }),
     })
-
+    if (!result.success) return result
+    nextSession()
+    TokenStorage.markSignedOut()
     setPushTokenRef(null)
     await TokenStorage.clearAll()
     requestQueue.clear()
-    /*
-     * Drop the cached responses too.
-     *
-     * `clearResponseCache` had no callers, so after signing out the map still
-     * held the previous user's response bodies -- their conversations, their
-     * matches, their profile -- in memory, keyed by endpoint. The next person to
-     * use the device signs in, hits the same endpoint, and `getCached` returns
-     * whatever is under that key.
-     *
-     * The TTL is not a defence: an expired entry is served as stale-while-
-     * revalidate rather than dropped, so it is returned first and corrected
-     * afterwards. Same shape as the push tokens above -- state that outlives the
-     * session it belongs to.
-     */
     this.clearResponseCache()
-
     return result
+  }
+
+  /**
+   * Sign out: always finishes, and always clears this phone (SCRUM-733: a restored session spun for minutes on a keychain
+   * read before the POST, and the sheet could not be left).
+   *
+   * The keychain is read and cleared FIRST, then the server is told (RC drive D1 security review). SecureStore runs its
+   * calls in the order they are made, so queuing the two token reads and then the deletes in one go means the reads still
+   * get the tokens, and the deletes are queued before the network is touched: an app killed during the POST relaunches
+   * signed out, never back into the session the person left. A sign-in after this queues its writes after the deletes, so
+   * it is never wiped. The POST carries the tokens it read (a 401 refreshes with them, unstored).
+   *
+   * Each read is bounded. When the refresh token does not come back, the server is not asked (without it, the POST would
+   * end every session, not this one) and the result says the server did not confirm.
+   */
+  async signOut(revokeAll: boolean = false): Promise<ApiResponse<void>> {
+    nextSession()
+    // First, and before any await (M2): if the keychain deletes below never run, the next launch still knows.
+    TokenStorage.markSignedOut()
+    /*
+     * The push token rides in the POST, and nothing else may use it (Opus review M1): the root layout's sign-out
+     * `removePushTokenFromProfile` ran with the ref still set, 401'd with no token, and its refresh found none, so a sign-out
+     * the person chose came back as "You were signed out". Taken now, before any await.
+     */
+    const pushToken = getPushTokenRef() ?? undefined
+    setPushTokenRef(null)
+    /*
+     * Drop the cached responses and the queued requests now. `clearResponseCache` also stops a read already in flight
+     * from refilling the cache with this account's data for the next one (its epoch).
+     */
+    requestQueue.clear()
+    this.clearResponseCache()
+    const accessRead = withinDeadline(TokenStorage.getAccessToken())
+    const refreshRead = withinDeadline(TokenStorage.getRefreshToken())
+    const cleared = withinDeadline(TokenStorage.clearAll())
+    const [accessToken, refreshToken] = await Promise.all([accessRead, refreshRead])
+    let result: ApiResponse<void>
+    if ((refreshToken === TIMED_OUT && !revokeAll) || accessToken === TIMED_OUT) {
+      result = { success: false, error: TIMEOUT_MESSAGE }
+    } else if (!accessToken) {
+      // Nothing stored: there is no session here for the server to end.
+      result = { success: true }
+    } else {
+      const held = refreshToken === TIMED_OUT ? null : refreshToken
+      // Everywhere names no refresh token (the server then ends every session), but an expired access token still refreshes with it (L2).
+      result = await this.postSignOut(accessToken, held, !revokeAll, pushToken)
+    }
+    await cleared
+    return result
+  }
+
+  /**
+   * `POST /auth/signout` with tokens already read: an expired access token is refreshed once with `refreshToken`, unstored.
+   * `name`: the body names the refresh token (this session only); off for sign out everywhere, which still refreshes with it.
+   */
+  private async postSignOut(accessToken: string, refreshToken: string | null, name: boolean, pushToken: string | undefined): Promise<ApiResponse<void>> {
+    const endpoint = '/api/mobile/auth/signout'
+    const send = (access: string, refresh: string | null) =>
+      fetchWithTimeout(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+          ...CHANNEL_SET_HEADER,
+          Authorization: `Bearer ${access}`,
+        },
+        body: JSON.stringify({ refreshToken: name ? refresh ?? undefined : undefined, pushToken }),
+      })
+    try {
+      let { response, body } = await send(accessToken, refreshToken)
+      if (response.status === 401 && refreshToken) {
+        const fresh = await this.refreshUnstored(refreshToken)
+        // The refresh rotated the token: the one to end now is the new one.
+        if (fresh) ({ response, body } = await send(fresh.accessToken, fresh.refreshToken))
+      }
+      return await this.parseResponse<void>(response, body, endpoint)
+    } catch (error) {
+      if (isTimeoutError(error)) return { success: false, error: TIMEOUT_MESSAGE }
+      return { success: false, error: GENERIC_FAILURE_MESSAGE }
+    }
+  }
+
+  /** A refresh whose tokens are only for the caller: never stored, never the shared `refreshTokens`. */
+  private async refreshUnstored(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null> {
+    try {
+      const { response, body } = await fetchWithTimeout(`${this.baseUrl}/api/mobile/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...CHANNEL_SET_HEADER },
+        body: JSON.stringify({ refreshToken }),
+      })
+      if (!response.ok) return null
+      const data = JSON.parse(body) as ApiResponse<{ accessToken: string; refreshToken: string }>
+      return data.success && data.data ? data.data : null
+    } catch {
+      return null
+    }
   }
 
   async getSession(): Promise<ApiResponse<AuthUser>> {
@@ -1716,12 +2178,19 @@ class ApiClientClass {
     sortOrder?: 'asc' | 'desc'
     include?: string
     interestedPreviewLimit?: number
+    /** At most five published, public, age-gated, not-ended events, in the server's `featured.rank` order (BUILD-SPEC C1). */
+    featured?: boolean
   }, options?: { force?: boolean }): Promise<ApiResponse<EventsListResponse>> {
     const endpoint = `/api/mobile/events${toQuery(params)}`
-    if (options?.force) {
-      return this.queuedRequest<EventsListResponse>(endpoint)
+    const result = options?.force
+      ? await this.queuedRequest<EventsListResponse>(endpoint)
+      : await this.cachedRequest<EventsListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
+    // A search the server still found too short (its count and ours disagreed) is no search, never an error state: the
+    // normal list, asked again without it.
+    if (!result.success && result.reasonCode === SEARCH_TOO_SHORT && params?.search !== undefined) {
+      return this.getEvents({ ...params, search: undefined }, options)
     }
-    return this.cachedRequest<EventsListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
+    return result
   }
 
   /**
@@ -1730,7 +2199,7 @@ class ApiClientClass {
    * event's card names the venue instead.
    */
   async getVenues(
-    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance' },
+    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live'; search?: string; radius?: number },
     options?: { force?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
     const endpoint = `/api/mobile/venues${toQuery(params)}`
@@ -1741,6 +2210,13 @@ class ApiClientClass {
   /** One venue — `GET /venues/:venueId`. Not cached: it carries the live count. */
   async getVenue(venueId: string): Promise<ApiResponse<VenueDetail>> {
     return this.queuedRequest<VenueDetail>(`/api/mobile/venues/${encodeURIComponent(venueId)}`)
+  }
+
+  /** The rest of a venue's coming events, a page at a time, soonest first: `cursor` is the last page's `nextCursor`. */
+  async getVenueUpcoming(venueId: string, cursor?: string | null, limit = 20): Promise<ApiResponse<VenueUpcomingPage>> {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (cursor) params.set('cursor', cursor)
+    return this.queuedRequest<VenueUpcomingPage>(`/api/mobile/venues/${encodeURIComponent(venueId)}/upcoming?${params}`)
   }
 
   /**
@@ -1805,8 +2281,8 @@ class ApiClientClass {
   ): Promise<ApiResponse<EventApiItem>> {
     const searchParams = new URLSearchParams()
     if (params) {
-      if (params.lat !== undefined) searchParams.append('lat', String(params.lat))
-      if (params.lon !== undefined) searchParams.append('lon', String(params.lon))
+      if (params.lat !== undefined) searchParams.append('lat', String(roundCoordinate(params.lat)))
+      if (params.lon !== undefined) searchParams.append('lon', String(roundCoordinate(params.lon)))
       if (params.include) searchParams.append('include', params.include)
       if (params.interestedLimit !== undefined) {
         searchParams.append('interestedLimit', String(params.interestedLimit))
@@ -1952,52 +2428,16 @@ class ApiClientClass {
     return this.queuedRequest<MyEventRating>(`/api/mobile/events/${encodeURIComponent(eventId)}/rating`)
   }
 
-  // === ORGANIZER ENDPOINTS ===
-
-  async updateEvent(
-    eventId: string,
-    data: { title?: string; description?: string; shortDescription?: string; status?: string }
-  ): Promise<ApiResponse<EventApiItem>> {
-    return this.queuedRequest<EventApiItem>(
-      `/api/mobile/events/${eventId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-      },
-      true,
-      2
-    )
-  }
-
-  async deleteEvent(eventId: string): Promise<ApiResponse<{ success: boolean }>> {
-    return this.queuedRequest<{ success: boolean }>(
-      `/api/mobile/events/${eventId}`,
-      { method: 'DELETE' },
-      true,
-      2
-    )
-  }
-
-  async sendAnnouncement(
-    eventId: string,
-    content: string
-  ): Promise<ApiResponse<{ id: string }>> {
-    return this.queuedRequest<{ id: string }>(
-      `/api/mobile/events/${eventId}/announce`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ content }),
-      },
-      true,
-      2
-    )
-  }
-
   // === PROFILE ENDPOINTS ===
 
-  async getProfile(userId: string): Promise<ApiResponse<UserProfileData>> {
+  /**
+   * `cache: false` reads fresh and leaves the cache alone: the cache holds one profile, and reading somebody else's must not
+   * replace your own.
+   */
+  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<UserProfileData>> {
+    const useCache = options.cache !== false
     // Check cache first for instant response
-    const cached = ProfileCache.get(userId)
+    const cached = useCache ? ProfileCache.get(userId) : null
     if (cached) {
       return { success: true, data: cached }
     }
@@ -2005,7 +2445,7 @@ class ApiClientClass {
     const result = await this.queuedRequest<UserProfileData>(`/api/mobile/profiles/${userId}`)
 
     // Cache successful responses
-    if (result.success && result.data) {
+    if (useCache && result.success && result.data) {
       ProfileCache.set(userId, result.data)
     }
 
@@ -2077,6 +2517,8 @@ class ApiClientClass {
       interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
       /** A slug from `getWorkFields()`, never free text. */
       work_field?: string | null
+      /** Up to `maxExpertise` slugs from `getWorkFields().expertiseByField[work_field]`; the server prunes any that leave their field. */
+      expertise?: string[]
       /*
        * The four preference columns, named exactly as the route validates them.
        *
@@ -2201,8 +2643,8 @@ class ApiClientClass {
    * way `getProfileInterests` is wrapped. This was typed as the array and the
    * Going tab mapped over the envelope (SCRUM-175).
    */
-  async getUserFavorites(userId: string): Promise<ApiResponse<SavedEventsPayload>> {
-    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites`)
+  async getUserFavorites(userId: string, page = 1, limit = 20, cursor?: string | null): Promise<ApiResponse<SavedEventsPayload>> {
+    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites?${pageQuery(page, cursor)}&limit=${limit}`)
   }
 
   /**
@@ -2210,13 +2652,13 @@ class ApiClientClass {
    * there is no way to ask for somebody else's. A server older than this route
    * answers 404, which the Going tab reads as "no section", not as a failure.
    */
-  async getMyRsvps(): Promise<ApiResponse<RsvpEventsPayload>> {
-    return this.queuedRequest<RsvpEventsPayload>('/api/mobile/me/rsvps?limit=50')
+  async getMyRsvps(page = 1, cursor?: string | null): Promise<ApiResponse<RsvpEventsPayload>> {
+    return this.queuedRequest<RsvpEventsPayload>(`/api/mobile/me/rsvps?${pageQuery(page, cursor)}&limit=50`)
   }
 
   /** The events you attended, most recent first. `/me`-scoped, like the above. */
-  async getMyAttendance(limit = 10): Promise<ApiResponse<AttendancePayload>> {
-    return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}`)
+  async getMyAttendance(limit = 10, page = 1, cursor?: string | null): Promise<ApiResponse<AttendancePayload>> {
+    return this.queuedRequest<AttendancePayload>(`/api/mobile/me/attendance?limit=${limit}&${pageQuery(page, cursor)}`)
   }
 
   /** Whether you have Blendn+ — the server's answer, the only one that unlocks anything. Never cached. */
@@ -2329,6 +2771,24 @@ class ApiClientClass {
     // force bypasses the cache rather than being passed into it.
     if (options?.force) return this.queuedRequest<{ matches: MatchCard[] }>(endpoint)
     return this.cachedRequest<{ matches: MatchCard[] }>(endpoint, 30_000)
+  }
+
+  /**
+   * Your friends who are here and let friends see them (`GET /events/:id/friends-here`, plans/friends-in-room.md 4.3).
+   * `order=recent` is the Room's first page (last DM, then arrival); `order=name` pages A to Z by `cursor` and filters by `q`.
+   * Real ids and names, never room handles. An older server answers 404: the caller shows no section.
+   */
+  async getFriendsHere(
+    eventId: string,
+    options: { order?: 'recent' | 'name'; limit?: number; cursor?: string | null; q?: string } = {}
+  ): Promise<ApiResponse<{ friends: { userId: string; name: string; photo: string | null }[]; total: number; nextCursor: string | null }>> {
+    const params = new URLSearchParams()
+    if (options.order) params.set('order', options.order)
+    if (options.limit) params.set('limit', String(options.limit))
+    if (options.cursor) params.set('cursor', options.cursor)
+    if (options.q) params.set('q', options.q)
+    const query = params.toString()
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/friends-here${query ? `?${query}` : ''}`)
   }
 
   /**
@@ -2634,8 +3094,8 @@ class ApiClientClass {
     )
   }
 
-  async getWorkFields(): Promise<ApiResponse<{ workFields: { slug: string; label: string }[] }>> {
-    return this.cachedRequest<{ workFields: { slug: string; label: string }[] }>(
+  async getWorkFields(): Promise<ApiResponse<WorkFieldsResponse>> {
+    return this.cachedRequest<WorkFieldsResponse>(
       '/api/mobile/work-fields',
       CATEGORIES_SWR_TTL
     )
@@ -2651,7 +3111,9 @@ class ApiClientClass {
       '/api/mobile/notifications/token',
       {
         method: 'POST',
-        body: JSON.stringify({ token, platform }),
+        // `channelSet` tells the server this install created the Flow 9 Android channels (matches, crew, after-the-night);
+        // without it the server keeps sending the old ones, so a push never lands in a channel this build lacks.
+        body: JSON.stringify({ token, platform, channelSet: PUSH_CHANNEL_SET }),
       },
       true,
       2 // High priority
@@ -2735,7 +3197,7 @@ class ApiClientClass {
   // === PRIVATE CONVERSATIONS ===
 
   async getConversations(options?: { force?: boolean }): Promise<ApiResponse<Array<Record<string, unknown>>>> {
-    const endpoint = '/api/mobile/conversations'
+    const endpoint = `/api/mobile/conversations?limit=${LIST_PAGE.conversations}`
     if (options?.force) {
       return namedList(await this.queuedRequest<NamedList<'conversations'>>(endpoint), 'conversations')
     }
@@ -2773,6 +3235,11 @@ class ApiClientClass {
     theyRevealed?: boolean
     /** Whether they asked you to. There is no "declined". */
     revealRequested?: boolean
+    /**
+     * Whether to offer "Add friend" (SCRUM-750). Read it through `parseFriendOffer`; absent from a server that does not
+     * send it. `otherUser.id` is a handle until they reveal: only an offer with `canAdd` makes it a real id.
+     */
+    friend?: unknown
     createdAt: string
     lastMessageAt: string | null
   }>> {
@@ -2828,12 +3295,14 @@ class ApiClientClass {
       report?: { reason: string; description?: string; messageId?: string }
     } = {}
   ): Promise<ApiResponse<{ closed: boolean; blocked: boolean; reported: boolean }>> {
-    return this.queuedRequest(
+    const result = await this.queuedRequest<{ closed: boolean; blocked: boolean; reported: boolean }>(
       `/api/mobile/conversations/${conversationId}/leave`,
       { method: 'POST', body: JSON.stringify({ action: options.action ?? 'unmatch', ...options }) },
       true,
       3
     )
+    if (options.action === 'block') noteBlockedOn(result)
+    return result
   }
 
   async getConversationMessages(
@@ -3052,7 +3521,12 @@ class ApiClientClass {
     conversationId: string | null
     sender: { id: string; name: string | null; avatar: string | null }
   }>> {
-    return this.queuedRequest(
+    const result = await this.queuedRequest<{
+      success: boolean
+      status: string
+      conversationId: string | null
+      sender: { id: string; name: string | null; avatar: string | null }
+    }>(
       `/api/mobile/message-requests/${requestId}/respond`,
       {
         method: 'POST',
@@ -3061,14 +3535,22 @@ class ApiClientClass {
       true,
       2
     )
+    if (action === 'block') noteBlockedOn(result)
+    return result
   }
 
   // === FRIENDS ===
   // No search, by design: see lib/friends.ts. Reads go through `queuedRequest`
   // uncached — these lists change the moment someone taps Accept.
 
-  async getFriends(): Promise<ApiResponse<{ friends: Friend[]; count: number }>> {
-    return this.queuedRequest('/api/mobile/friends')
+  /**
+   * A page of your friends: the first with no cursor, the next with the last page's `pagination.nextCursor`. `count` is the whole
+   * list. `q` (1-40 characters) keeps the friends a word of whose name starts with it, and `count` is then the filtered total; a
+   * server that does not know `q` ignores it (`localSearch`).
+   */
+  async getFriends(cursor?: string | null, q?: string | null): Promise<ApiResponse<FriendsPayload>> {
+    const more = `${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+    return this.queuedRequest(`/api/mobile/friends?limit=${LIST_PAGE.friends}${more}`)
   }
 
   async getFriend(userId: string): Promise<ApiResponse<FriendProfile>> {
@@ -3114,8 +3596,13 @@ class ApiClientClass {
     return this.queuedRequest(`/api/mobile/friends/invite/${encodeURIComponent(token)}/preview`, {}, false)
   }
 
-  async getFriendRequests(): Promise<ApiResponse<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }>> {
-    return this.queuedRequest('/api/mobile/friends/requests')
+  /**
+   * Both sides' first page, or (`page`) one side's next: `?list=incoming|outgoing&cursor=` answers only that array, its
+   * `pagination` named by side.
+   */
+  async getFriendRequests(page?: { side: 'incoming' | 'outgoing'; cursor: string }): Promise<ApiResponse<FriendRequestsPayload>> {
+    const side = page ? `&list=${page.side}&cursor=${encodeURIComponent(page.cursor)}` : ''
+    return this.queuedRequest(`/api/mobile/friends/requests?limit=${LIST_PAGE.friendRequests}${side}`)
   }
 
   async sendFriendRequest(
@@ -3226,11 +3713,13 @@ class ApiClientClass {
   }
 
   async blockBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ blocked: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/block`,
-      { method: 'POST' },
-      true,
-      2
+    return noteBlockedOn(
+      await this.queuedRequest<{ blocked: boolean }>(
+        `/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}/block`,
+        { method: 'POST' },
+        true,
+        2
+      )
     )
   }
 
@@ -3247,23 +3736,30 @@ class ApiClientClass {
   }
 
   async blockBoardRequest(requestId: string): Promise<ApiResponse<{ blocked: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/board/requests/${encodeURIComponent(requestId)}/block`,
-      { method: 'POST' },
-      true,
-      2
+    return noteBlockedOn(
+      await this.queuedRequest<{ blocked: boolean }>(
+        `/api/mobile/board/requests/${encodeURIComponent(requestId)}/block`,
+        { method: 'POST' },
+        true,
+        2
+      )
     )
   }
 
   // === SAFETY ENDPOINTS ===
 
   async blockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
-    return this.queuedRequest(
-      `/api/mobile/users/${userId}/block`,
-      { method: 'POST' },
-      true,
-      2
+    const result = noteBlockedOn(
+      await this.queuedRequest<{ blocked: boolean }>(
+        `/api/mobile/users/${userId}/block`,
+        { method: 'POST' },
+        true,
+        2
+      )
     )
+    // A block severs a friendship: Friends drops them from pages it read earlier, whichever screen the block came from.
+    if (result.success) noteFriendGone(userId)
+    return result
   }
 
   async unblockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
@@ -3284,7 +3780,7 @@ class ApiClientClass {
       blocked_at: string
     }>
   }>> {
-    return this.queuedRequest('/api/mobile/users/blocked', undefined, true, 4)
+    return this.queuedRequest(`/api/mobile/users/blocked?limit=${LIST_PAGE.blocked}`, undefined, true, 4)
   }
 
   async reportUser(
@@ -3354,6 +3850,8 @@ class ApiClientClass {
   }
 
   clearResponseCache() {
+    // A read that started before the clear (another account's, at sign-out) must not refill the cache after it.
+    this.cacheEpoch++
     this.responseCache.clear()
     this.inFlight.clear()
     Logger.info('api', 'Response cache cleared')

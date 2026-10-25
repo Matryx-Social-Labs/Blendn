@@ -122,3 +122,16 @@ it('stops delivering to a subscriber that unsubscribed', async () => {
   s.fire('private:message', message)
   expect(onMessage).not.toHaveBeenCalled()
 })
+
+it('their reveal (`private:revealed`, RC drive D3) reaches only that conversation’s onRevealed', async () => {
+  const s = await connected()
+  const onRevealed = jest.fn()
+  const onRead = jest.fn()
+  subscribeToConversation('c1', { onRevealed, onRead })
+  s.fire('private:revealed', { conversationId: 'other' })
+  s.fire('private:revealed', {})
+  expect(onRevealed).not.toHaveBeenCalled()
+  s.fire('private:revealed', { conversationId: 'c1' })
+  expect(onRevealed.mock.calls).toEqual([[{ conversationId: 'c1' }]])
+  expect(onRead).not.toHaveBeenCalled()
+})

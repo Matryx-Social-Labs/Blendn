@@ -122,3 +122,18 @@ export function heroPillLabel({
   }
   return scarcityLabel({ maxCapacity, currentCapacity, goingCount })
 }
+
+/** The Door tile's words for an organiser's policy ("Guest list"), or null for an open door. Never enforced: a description. */
+const DOOR_WORDS: Record<Exclude<DoorPolicy, 'open'>, string> = {
+  guest_list: 'Guest list',
+  members_only: 'Members only',
+  invite_only: 'Invite only',
+}
+export function doorWords(doorPolicy?: string | null): string | null {
+  return doorPolicy ? (DOOR_WORDS[doorPolicy as Exclude<DoorPolicy, 'open'>] ?? null) : null
+}
+
+/** A pill's words as the frame sets them: "Full", "8 spots left" (the labels above are uppercased for the old pill). */
+export function pillWords(label: string): string {
+  return label.charAt(0) + label.slice(1).toLowerCase()
+}

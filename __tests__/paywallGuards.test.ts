@@ -74,13 +74,13 @@ describe('MN-G03: Blendn+ is never sold outside the stores', () => {
     expect(deps.filter((d) => /razorpay/i.test(d) || d === '@revenuecat/purchases-js')).toEqual([])
   })
 
-  it("no RevenueCat web checkout: a package's webCheckoutUrl is never read", () => {
+  it("no RevenueCat web checkout: a package’s webCheckoutUrl is never read", () => {
     const hits = SOURCES.filter((f) => /webCheckoutUrl|purchases-js['"]/.test(read(f)))
     expect(hits.map((f) => relative(ROOT, join(ROOT, f)))).toEqual([])
   })
 })
 
-describe("the server's RevenueCat secret key never ships (review LOW)", () => {
+describe("the server’s RevenueCat secret key never ships (review LOW)", () => {
   /** A RevenueCat secret API key: `sk_` and a long token. The public keys are `appl_` / `goog_`. */
   const SECRET_KEY = /\bsk_[A-Za-z0-9]{12,}/
 

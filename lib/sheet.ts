@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { useSyncExternalStore } from 'react'
-import { Platform } from 'react-native'
 
+import type { ButtonKind } from '../components/ds/Button'
+import type { Hue } from '../components/ds/shared'
 import type { IconName } from '../components/ui/Icon'
 
 /**
@@ -13,7 +14,7 @@ import type { IconName } from '../components/ui/Icon'
  * Android draws at most three and drops the rest without a word, so "Block and
  * report", "Hate speech" and "Other" simply did not exist on half the phones —
  * the report reasons most likely to be needed were the ones cut. This is an
- * `ActionTray`, which draws every option on both platforms.
+ * one sheet, which draws every option on both platforms.
  *
  * ## Why a store, not a hook
  *
@@ -41,9 +42,20 @@ export type SheetOutcome =
 
 export type SheetAction = {
   label: string
-  variant?: 'primary' | 'secondary' | 'destructive'
+  /** `tertiary`: a quiet text action beside the sheet's real choices ("What's kept"), drawn as Cancel is. */
+  variant?: 'primary' | 'secondary' | 'tertiary' | 'destructive'
   /** A row's glyph, in a `rows` sheet (the DM's options). */
   icon?: IconName
+  /** A state, not an action ("Requested"): the row is drawn quiet and does nothing. */
+  disabled?: boolean
+  /** What a screen reader says of a row whose visible words are shorter ("Requested" is "Friend request sent"). */
+  accessibilityLabel?: string
+  /**
+   * The haptic this action plays on press-in when the frame names one that its kind does not carry: `H.primary` on a
+   * Sign out the sheet draws as the white affirmative, `H.destructive` on a Delete that only leads to its confirm.
+   * Omitted: the kind's own (a destructive button plays `H.destructive`, a step that only leads on plays none).
+   */
+  pressHaptic?: () => void
 } & (
   | { cancel: true }
   /** Another step, drawn in place of this one. */
@@ -54,7 +66,13 @@ export type SheetAction = {
   | { then: () => void }
 )
 
-export type ActionSheet = {
+/**
+ * The world the sheet is asked from (foundations C): the host is mounted app-level, outside every screen's
+ * `HueProvider`, so a caller names its screen's hue and the sheet's affirmative lights in it. Omitted: ember.
+ */
+type InWorld = { hue?: Hue }
+
+export type ActionSheet = InWorld & {
   kind: 'actions'
   title: string
   message?: string
@@ -77,7 +95,7 @@ export type ActionSheet = {
   onDismiss?: () => void
 }
 
-export type ReasonSheet = {
+export type ReasonSheet = InWorld & {
   kind: 'reasons'
   title: string
   message?: string
@@ -98,6 +116,9 @@ const listeners = new Set<() => void>()
 
 const emit = () => listeners.forEach((listener) => listener())
 
+/** Whether a sheet is on screen: a caller that would replace it (an unprompted ask) must not. */
+export const isSheetOpen = (): boolean => state.sheet !== null
+
 /** Open a sheet, or replace the one that is open. */
 export function showSheet(sheet: Sheet): void {
   state = { sheet, key: state.key + 1 }
@@ -117,22 +138,6 @@ export function dismissSheet(): void {
   if (sheet?.kind === 'actions') sheet.onDismiss?.()
 }
 
-/**
- * Resolves once a closing sheet is off screen on iOS.
- *
- * iOS will not present a native view controller — the photo picker, the
- * camera — while a `Modal` is still fading out; the presentation is dropped
- * without an error. A flow that closes the sheet and then opens the picker
- * waits for this first. Android starts an activity over a closing dialog
- * without complaint, so there it is immediate.
- */
-export function sheetClosed(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, Platform.OS === 'ios' ? SHEET_FADE_MS : 0))
-}
-
-/** The Modal's fade (`animationType="fade"`), with a frame to spare. */
-const SHEET_FADE_MS = 350
-
 const subscribe = (listener: () => void) => {
   listeners.add(listener)
   return () => {
@@ -146,3 +151,7 @@ const snapshot = () => state
 export function useSheet(): State {
   return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
+
+/** The kind a tray button draws as in the DS Sheet: its own, else the one its variant stands for (nothing named is the secondary). */
+export const trayKind = (b: { kind?: ButtonKind; variant?: 'primary' | 'secondary' | 'destructive' }): ButtonKind =>
+  b.kind ?? (b.variant === 'primary' ? 'primary' : b.variant === 'destructive' ? 'destructive' : 'secondary')

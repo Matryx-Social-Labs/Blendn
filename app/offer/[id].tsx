@@ -1,49 +1,73 @@
-import { Ionicons } from '@expo/vector-icons'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native'
-import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { AppHeader } from '../../components/AppHeader'
-import ScalePress from '../../components/motion/ScalePress'
+import { Button } from '../../components/ds/Button'
+import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
+import { font, useBoldText } from '../../components/ds/shared'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { DoorTicket, OfferHeader, RegularAsk, RegularOff, RegularOn } from '../../components/offer/OfferSections'
+import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
-import { PlaceholderBanner } from '../../components/ui/PlaceholderBanner'
-import { Text } from '../../components/ui/Text'
+import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import {
+  maybeLaterKey,
+  regularsActive,
+  nextRefreshMs,
+  OFFER_REPORT_REASONS,
+  offersApi,
+  passView,
+  validUntil,
+  type OfferReportReason,
+  type OpenedOffer,
+  type RegularPrefs,
+} from '../../lib/offers'
+import { serverNow, serverOffset } from '../../lib/serverClock'
+import { showSheet, type Sheet } from '../../lib/sheet'
 
-import ActionTray from '../../components/ActionTray'
-import { codeIsFresh, codeLife, knownLine, maybeLaterKey, nextRefreshMs, offersApi, offerStateLine, spacedCode, type OfferReportReason, type OpenedOffer, type RegularPrefs } from '../../lib/offers'
-import { serverNow } from '../../lib/serverClock'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, tint } from '../../lib/theme'
+/** The ticket's height while it loads, so the page does not jump when it lands. */
+const TICKET_SKELETON = 480
+const COACH_TEXT = 'Show this to the staff. They type the code and tap Redeemed. It works once, today.'
+
+/** `gone`: not yours to open (404), nothing to retry. `failed`: the read did not work, with the server's own words if it gave any. */
+type Failure = { kind: 'gone' } | { kind: 'failed'; detail: string | null }
 
 /**
- * An offer and its door pass — PLACEHOLDER DESIGN (plan v2 step 12;
- * docs/PLACEHOLDER_SCREENS.md §16).
+ * An offer and its door pass (Flow 13 · 13.2, R3-G, R4-D13; plan v2 step 12;
+ * guidelines/flow-13/flow13.js `pass`).
  *
  * Opened from the push or the bell. The place and its words come from the
  * server here, never from the push (a lock screen names nothing). While the
  * offer can be used, the pass is live: the server's six-character code, a
- * clock that runs, a bar that drains to the code's next turn and a pulse — so a
+ * ring that drains to the code's next turn, a disc that pours — so a
  * screenshot is visibly dead, and its code stops working within a minute.
- * Staff type the code on their screen and tap "Redeemed"; this screen asks
- * the server again before each turn and shows "Redeemed" when it says so.
+ * Staff type the code on their screen and tap "Redeemed"; this screen asks the
+ * server again before each turn and shows "Redeemed" when it says so.
  *
- * Below, once: "Let <place> know you're a regular?" — yes sends `known: true`;
- * "Maybe later" sends nothing (RG-I02).
+ * Below, once: "Let <place> know you're a regular" — yes sends `known: true`;
+ * "Not now" sends nothing (RG-I02). Report this offer and Stop offers from
+ * <place> are under the ⋯.
  */
 export default function OfferScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const focused = useIsFocused()
+  const insets = useSafeAreaInsets()
   const { showToast } = useToast()
   const [offer, setOffer] = useState<OpenedOffer | null>(null)
-  const [failed, setFailed] = useState<string | null>(null)
+  const [failure, setFailure] = useState<Failure | null>(null)
+  /** The last read failed: a stale code then says it needs a connection, not that a fresh one is coming. */
+  const [lastReadFailed, setLastReadFailed] = useState(false)
   const [prefs, setPrefs] = useState<RegularPrefs | null>(null)
-  /** "Maybe later" for this place, remembered on this phone (L9): null while it is being read. */
+  /** "Not now" for this place, remembered on this phone (L9): null while it is being read. */
   const [later, setLater] = useState<boolean | null>(null)
+  /** They turned the yes off here: the card does not come straight back this visit. */
+  const [turnedOff, setTurnedOff] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [reporting, setReporting] = useState(false)
 
   const seq = useRef(0)
   /** Bumped by every answer, good or bad, so the refresh below re-arms even when the code has not turned yet. */
@@ -57,15 +81,18 @@ export default function OfferScreen() {
         if (mine !== seq.current) return
         if (res.success && res.data) {
           setOffer(res.data.offer)
-          setFailed(null)
+          setFailure(null)
+          setLastReadFailed(false)
         } else {
-          setFailed(res.errorCode === 'NOT_FOUND' ? 'This offer isn\'t yours to open.' : res.error || "This offer didn't load.")
+          setLastReadFailed(true)
+          setFailure(res.errorCode === 'NOT_FOUND' ? { kind: 'gone' } : { kind: 'failed', detail: res.error || null })
         }
       })
       .catch((error) => {
         if (mine !== seq.current) return
         Logger.warn('offers', 'Offer load threw', { error: String(error) })
-        setFailed("This offer didn't load.")
+        setLastReadFailed(true)
+        setFailure({ kind: 'failed', detail: null })
       })
       .finally(() => {
         if (mine === seq.current) setAnswers((n) => n + 1)
@@ -105,221 +132,172 @@ export default function OfferScreen() {
       .catch(() => {})
   }, [venueId])
 
-  const savePrefs = async (body: Parameters<typeof offersApi.setPrefs>[1], saved?: string) => {
-    if (!venueId || saving) return
+  /** Whether the change landed; a refusal is a toast in the server's words. */
+  const savePrefs = async (body: Parameters<typeof offersApi.setPrefs>[1], saved?: string): Promise<boolean> => {
+    if (!venueId || saving) return false
     setSaving(true)
     try {
       const res = await offersApi.setPrefs(venueId, body)
       if (res.success && res.data) {
         setPrefs(res.data)
         if (saved) showToast(saved, 'success')
-      } else showToast(res.error || "That didn't save. Try again.", 'error')
+        return true
+      }
+      showToast(res.error || "That didn’t save. Try again.", 'error', { haptic: 'error' })
+      return false
     } finally {
       setSaving(false)
     }
   }
 
-  const sayYes = () => savePrefs({ known: true })
+  const sayYes = () => void savePrefs({ known: true })
+  const turnOff = async () => {
+    if (await savePrefs({ known: false })) setTurnedOff(true)
+  }
 
-  const maybeLater = () => {
+  const notNow = () => {
     setLater(true)
     if (venueId) AsyncStorage.setItem(maybeLaterKey(venueId), '1').catch(() => {})
   }
 
-  // "Stop offers from <place>", beside the pass (review M6): the same switch as on the place's page.
+  // "Stop offers from <place>" (review M6): the same switch as on the place's page.
   const stopOffers = () =>
-    savePrefs(
+    void savePrefs(
       { offersMuted: true },
       `No more offers from ${offer?.venue.name ?? 'this place'}. Turn them back on from its page.`
     )
 
-  const report = async (reason: OfferReportReason) => {
-    setReporting(false)
-    if (!id) return
-    const res = await offersApi.report(id, reason)
-    if (res.success) showToast('Reported. Thanks — we look at every report.', 'success')
-    else showToast(res.error || "That report didn't go through. Try again.", 'error')
+  /** Report this offer: the reason, an optional note for "Something else", then Send report (R13). */
+  const reportStep = (): Sheet => ({
+    kind: 'reasons',
+    title: 'Report this offer',
+    message: "What’s wrong with it? We look at every report; the place isn’t told who sent it.",
+    reasons: OFFER_REPORT_REASONS.map(({ value, label }) => ({ value, label })),
+    submitLabel: 'Send report',
+    run: async (reason, note) => {
+      if (!id) return { ok: false, error: "That report didn’t go through. Try again." }
+      const res = await offersApi.report(id, reason as OfferReportReason, note)
+      return res.success
+        ? { ok: true, toast: 'Reported. Thanks — we look at every report.' }
+        : { ok: false, error: res.error || "That report didn’t go through. Try again." }
+    },
+  })
+
+  const openMore = () => {
+    if (!offer) return
+    showSheet({
+      kind: 'actions',
+      layout: 'rows',
+      title: `${offer.venue.name}’s offer`,
+      actions: [
+        { label: 'Report this offer', icon: 'flag', next: reportStep },
+        ...(prefs && !prefs.offersMuted ? [{ label: `Stop offers from ${offer.venue.name}`, icon: 'bell-off' as const, then: stopOffers }] : []),
+        { label: 'Cancel', cancel: true },
+      ],
+    })
   }
 
-  const stateLine = offer ? offerStateLine(offer.state, offer.venue.name) : null
+  // Deferred feature: nothing about being a regular shows unless the server says it is live here.
+  const regulars = regularsActive(prefs)
+  const ask = regulars && !!offer && !!prefs && !prefs.known && later === false && !turnedOff
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="Offer" onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <PlaceholderBanner />
+    <View style={styles.screen}>
+      <OfferHeader onBack={() => router.back()} onMore={offer ? openMore : undefined} moreLabel={offer ? `${offer.venue.name}’s offer, more` : 'More'} />
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xxl }]} showsVerticalScrollIndicator={false}>
         {offer ? (
-          <View style={styles.body}>
-            <Text variant="meta">{offer.venue.name}</Text>
-            <Text variant="title" accessibilityRole="header">
-              {offer.text}
-            </Text>
-            <Text variant="meta">
-              Until {new Date(offer.endsAt).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}
-            </Text>
-
-            {offer.state === 'live' && offer.pass ? (
-              <DoorPass code={offer.pass.code} rotatesAt={offer.pass.rotatesAt} venueName={offer.venue.name} />
-            ) : (
-              <View style={styles.panel} accessibilityLiveRegion="polite">
-                <Ionicons
-                  name={offer.state === 'redeemed' ? 'checkmark-circle' : 'time-outline'}
-                  size={ICON.lg}
-                  color={offer.state === 'redeemed' ? EMBER.success : EMBER.textSecondary}
-                />
-                <Text variant="bodyStrong">{stateLine}</Text>
-              </View>
-            )}
-
-            {prefs && !prefs.offersMuted ? (
-              <Pressable onPress={stopOffers} disabled={saving} accessibilityRole="button" style={styles.quiet}>
-                <Text variant="meta">{`Stop offers from ${offer.venue.name}`}</Text>
-              </Pressable>
-            ) : null}
-
-            {prefs && !prefs.known && later === false ? (
-              <View style={styles.panel}>
-                <Text variant="bodyStrong">{`Let ${offer.venue.name} know you're a regular?`}</Text>
-                <Text variant="meta">{`${knownLine(prefs, offer.venue.name)} You can take it back on the place's page.`}</Text>
-                <View style={styles.row}>
-                  <ScalePress style={styles.secondary} onPress={sayYes} disabled={saving} accessibilityRole="button" accessibilityState={{ busy: saving }}>
-                    <Text variant="button">Yes, let them know</Text>
-                  </ScalePress>
-                  <Pressable onPress={maybeLater} accessibilityRole="button" style={styles.quiet}>
-                    <Text variant="meta">Maybe later</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-            {prefs?.known ? <Text variant="meta">{`${offer.venue.name} knows you're a regular.`}</Text> : null}
-
-            <Pressable onPress={() => router.push(`/venue/${offer.venue.id}` as never)} accessibilityRole="link" style={styles.quiet}>
-              <Text variant="meta" color={EMBER.textPrimary} style={styles.underline}>{`See ${offer.venue.name}`}</Text>
-            </Pressable>
-            <Pressable onPress={() => setReporting(true)} accessibilityRole="button" style={styles.quiet}>
-              <Text variant="meta">Report this offer</Text>
-            </Pressable>
-          </View>
-        ) : failed ? (
-          <View style={styles.body} accessibilityLiveRegion="polite">
-            <Text variant="heading">{failed}</Text>
-            <ScalePress style={styles.panel} onPress={load} accessibilityRole="button" accessibilityLabel="Try again">
-              <Text variant="bodyStrong">Try again</Text>
-            </ScalePress>
-          </View>
+          <>
+            <PassBody offer={offer} lastReadFailed={lastReadFailed} focused={focused} />
+            {ask && prefs ? <RegularAsk venueName={offer.venue.name} prefs={prefs} saving={saving} onYes={sayYes} onLater={notNow} /> : null}
+            {regulars && prefs?.known ? <RegularOn venueName={offer.venue.name} saving={saving} onOff={() => void turnOff()} /> : null}
+            {regulars && turnedOff && !prefs?.known ? <RegularOff venueName={offer.venue.name} /> : null}
+            <Button kind="tertiary" label={`See ${offer.venue.name}`} onPress={() => router.push(`/venue/${offer.venue.id}` as never)} />
+          </>
+        ) : failure ? (
+          <StateScreen
+            icon={failure.kind === 'gone' ? 'ticket' : 'cloud-off'}
+            title={failure.kind === 'gone' ? 'This offer isn’t yours to open' : 'This offer didn’t load'}
+            body={failure.kind === 'gone' ? undefined : failure.detail ?? 'Check your connection and try again.'}
+            actions={
+              failure.kind === 'gone'
+                ? [{ label: 'Go back', kind: 'secondary', onPress: () => router.back() }]
+                : [{ label: 'Try again', onPress: load }]
+            }
+            testID="offer-failed"
+          />
         ) : (
-          <ActivityIndicator color={EMBER.textSecondary} accessibilityLabel="Loading the offer" />
+          <View accessible accessibilityLabel="Loading the offer">
+            <SkeletonBlock width="100%" height={TICKET_SKELETON} borderRadius={RADIUS.card} />
+          </View>
         )}
       </ScrollView>
-      <ActionTray
-        visible={reporting}
-        title="Report this offer"
-        message="What's wrong with it? We look at every report; the place isn't told who sent it."
-        buttons={[
-          { label: 'Offensive', onPress: () => void report('offensive') },
-          { label: 'Misleading', onPress: () => void report('misleading') },
-          { label: 'Spam', onPress: () => void report('spam') },
-          { label: 'Feels unsafe', onPress: () => void report('unsafe') },
-          { label: 'Something else', onPress: () => void report('other') },
-          { label: 'Cancel', onPress: () => setReporting(false) },
-        ]}
-        onClose={() => setReporting(false)}
-        layout="stack"
-        size="expanded"
-      />
-    </SafeAreaView>
+    </View>
   )
 }
 
 /**
- * The pass, a leaf that ticks itself once a second (so the screen above does
- * not re-render every second): the server's code, the time now, a bar that
- * drains to the code's next turn, and a pulse. With reduced motion the pulse
- * holds still; the clock and the bar still move.
+ * The ticket and the sentence under it, a leaf that ticks itself once a second
+ * (so the screen above does not re-render every second): the face of the pass
+ * depends on whether the code is still fresh. A code past its turn with no
+ * fresh one is hidden, never shown stale (L2).
  */
-function DoorPass({ code, rotatesAt, venueName }: { code: string; rotatesAt: string; venueName: string }) {
+function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; lastReadFailed: boolean; focused: boolean }) {
+  const bold = useBoldText()
   const [now, setNow] = useState(serverNow)
   useEffect(() => {
     const timer = setInterval(() => setNow(serverNow()), 1000)
     return () => clearInterval(timer)
   }, [])
-  const reduceMotion = useReducedMotion()
-  const pulse = useSharedValue(1)
+  const view = passView(offer, now, lastReadFailed)
+
+  // The ring counts down on this phone's clock; the turn is the server's, so move it by the skew.
+  const turn = offer.pass && view.door === 'live' ? Date.parse(offer.pass.rotatesAt) - serverOffset() : undefined
+
+  // The staff's redeem arrives from the server: the one success haptic (R3-G), and the first-time note is spent.
+  const previous = useRef(offer.state)
   useEffect(() => {
-    if (reduceMotion) return
-    pulse.set(withRepeat(withTiming(0.35, { duration: 900 }), -1, true))
-  }, [pulse, reduceMotion])
-  const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.get() }))
-  const clock = new Date(now).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+    if (previous.current !== 'redeemed' && offer.state === 'redeemed') {
+      H.success()
+      markCoachUsed('door_pass')
+    }
+    previous.current = offer.state
+  }, [offer.state])
+
+  // The first time a pass is live: what the staff do with the code (once ever, via the coach mark).
+  const codeRow = useRef<View>(null)
+  const coach = useCoachMark('door_pass', { ready: view.door === 'live' })
+  useCoachMarkSpot(coach.visible, {
+    target: codeRow,
+    text: COACH_TEXT,
+    place: 'above',
+    radius: RADIUS.rowInCard,
+    onDismiss: coach.dismiss,
+    onLost: coach.lose,
+    testID: 'door-pass-coach',
+  })
 
   return (
-    <View
-      style={styles.pass}
-      accessible
-      accessibilityRole="text"
-      accessibilityLabel={
-        codeIsFresh(rotatesAt, now)
-          ? `Door pass for ${venueName}. Code ${code.split('').join(' ')}. Show it to the staff.`
-          : `Door pass for ${venueName}. Getting a fresh code.`
-      }
-    >
-      <View style={styles.row}>
-        <Animated.View style={[styles.liveDot, pulseStyle]} />
-        <Text variant="label" color={EMBER.onGradient}>
-          {`LIVE PASS · ${clock}`}
-        </Text>
-      </View>
-      {/* A code past its turn with no fresh one is hidden, never shown stale (L2). */}
-      {codeIsFresh(rotatesAt, now) ? (
-        // design-exception: the code is read across a door, so it is set wider than any role.
-        <Text variant="display" color={EMBER.onGradient} style={styles.code}>
-          {spacedCode(code)}
-        </Text>
-      ) : (
-        <Text variant="bodyStrong" color={EMBER.onGradient}>
-          Getting a fresh code…
-        </Text>
-      )}
-      <View style={styles.track}>
-        <View style={[styles.bar, { width: `${Math.round(codeLife(rotatesAt, now) * 100)}%` }]} />
-      </View>
-      <Text variant="meta" color={EMBER.onGradient}>
-        Show this at the door. Staff type the code and tap Redeemed.
+    <>
+      <DoorTicket
+        venueName={offer.venue.name}
+        offerText={offer.text}
+        until={validUntil(offer.endsAt)}
+        endsAt={offer.endsAt}
+        view={view}
+        code={view.door === 'live' ? offer.pass?.code : undefined}
+        rotatesAt={turn}
+        active={focused}
+        codeRef={codeRow}
+      />
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.foot]}>
+        {view.foot}
       </Text>
-    </View>
+    </>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xl },
-  body: { gap: SPACE.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' },
-  panel: {
-    gap: SPACE.sm,
-    padding: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  pass: { gap: SPACE.md, padding: SPACE.xl, borderRadius: EMBER_RADIUS.lg, backgroundColor: EMBER.accent, alignItems: 'center' },
-  // design-exception: wide tracking so six characters read as two groups at arm's length.
-  code: { letterSpacing: 6, textAlign: 'center' },
-  track: { alignSelf: 'stretch', height: SPACE.xs, borderRadius: EMBER_RADIUS.pill, backgroundColor: tint(EMBER.onGradient, 0.25) },
-  bar: { height: SPACE.xs, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.onGradient },
-  liveDot: { width: SPACE.sm, height: SPACE.sm, borderRadius: EMBER_RADIUS.pill, backgroundColor: EMBER.onGradient },
-  // Bordered, not filled: the pass is this screen's one accent.
-  secondary: {
-    minHeight: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    backgroundColor: tint(EMBER.textPrimary, 0.06),
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.lg,
-  },
-  quiet: { minHeight: CONTROL.md, justifyContent: 'center', alignSelf: 'flex-start' },
-  underline: { textDecorationLine: 'underline' },
+  screen: { flex: 1, backgroundColor: COLOR.ink },
+  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SPACE.lg },
+  foot: { color: COLOR.textSecondary, textAlign: 'center' },
 })

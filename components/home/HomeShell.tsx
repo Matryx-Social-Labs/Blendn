@@ -1,16 +1,20 @@
 import { useIsFocused } from 'expo-router'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AccessibilityInfo, Dimensions, Keyboard, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AccessibilityInfo, Dimensions, Keyboard, Platform, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
+import { Chip } from '../ds/Chip'
+import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
-import { DRAWER_SEGMENTED_HEIGHT, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { COLOR } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
-import { EMBER, EMBER_RADIUS, SPACE } from '../../lib/theme'
+import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
+import type { NearPin } from '../../lib/placesPane'
 import { HomeDrawer } from './HomeDrawer'
 import { HomeMap } from './HomeMap'
 import { PlacesList } from './PlacesList'
@@ -29,11 +33,17 @@ export interface HomeBrowse {
    * they stand ("Use my current location", the switch banner): the map shows them.
    */
   cityPick: { n: number; here: boolean }
+  /** The Pulse's one-line summary, kept at peek ("3 live now · 14 on tonight"); null while there is nothing to say. */
+  peekLine?: string | null
   /** Ask for the phone's position: the Pulse's own location flow (the OS ask, or its "Turn on location" tray). Settles when it does. */
   requestLocation: () => void | Promise<void>
+  /** Open the Pulse's city picker: Places' empty city offers it ("Change city"). */
+  openCityPicker: () => void
 }
 
 type Segment = 'events' | 'places'
+
+const NO_PINS: NearPin[] = []
 
 /**
  * Off the list, nothing closes the keyboard by itself: the list does it for
@@ -52,7 +62,7 @@ const dismissKeyboard = () => Keyboard.dismiss()
  *
  * ## The top bar
  *
- * `PulseTopBar` floats over the map holding the wordmark and the bell, and the
+ * `PulseTopBar` floats over the map holding the wordmark and the bell (glass, no band: Flow 3's frame), and the
  * drawer's `full` stops under it, so the bell is always reachable. It reserves
  * no height: the map runs under it edge to edge.
  */
@@ -65,20 +75,7 @@ export function HomeShell({
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
   const focused = useIsFocused()
-  const points = useMemo(
-    () => drawerSnapPoints({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom) }),
-    [height, insets.top, insets.bottom]
-  )
-  const [snap, setSnap] = useState<DrawerSnap>('half')
-  // The drawer's top edge as it moves; "my location" rides on it.
-  const drawerTop = useSharedValue(points[snap])
-  // The map's own height: the screen less the tab bar. The map waits for it, so its first frame is centred.
-  const [mapHeight, setMapHeight] = useState<number | null>(null)
-  const onLayout = (e: LayoutChangeEvent) => setMapHeight(e.nativeEvent.layout.height)
-  const restore = useRef<DrawerSnap | null>(null)
   const [segment, setSegment] = useState<Segment>('events')
-  const [placesOpened, setPlacesOpened] = useState(false)
-  const [screenReader, setScreenReader] = useState(false)
   const [browse, setBrowse] = useState<HomeBrowse>({
     city: null,
     location: null,
@@ -86,8 +83,36 @@ export function HomeShell({
     cityCentre: null,
     cityPick: { n: 0, here: false },
     requestLocation: () => {},
+    openCityPicker: () => {},
+    peekLine: null,
   })
 
+  /** Places' one-line summary, kept at peek (null while nothing is known: no room is made for a line that is not there). */
+  const [placesLine, setPlacesLine] = useState<string | null>(null)
+  const peekText = segment === 'places' ? placesLine : (browse.peekLine ?? null)
+  const peekExtra = peekText ? DRAWER_PEEK_LINE : 0
+  const points = useMemo(
+    () => drawerSnapPoints({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom), peekExtra }),
+    [height, insets.top, insets.bottom, peekExtra]
+  )
+  const [snap, setSnap] = useState<DrawerSnap>('half')
+  // The drawer's top edge as it moves; "my location" rides on it.
+  const drawerTop = useSharedValue(points[snap])
+  // The map's own height: the screen less the tab bar. The map waits for it, so its first frame is centred.
+  const [mapHeight, setMapHeight] = useState<number | null>(null)
+  const onLayout = (e: LayoutChangeEvent) => setMapHeight(e.nativeEvent.layout.height)
+  // The map's native surface is created one paint after the drawer and its skeleton, so a slow device shows them, not ink.
+  const mapPainted = useAfterFirstPaint()
+  const restore = useRef<DrawerSnap | null>(null)
+  const [placesOpened, setPlacesOpened] = useState(false)
+  /** Places' numbered pins, and the count "Show on map" bumps to make the map fit them. */
+  const [nearPinList, setNearPinList] = useState<NearPin[]>(NO_PINS)
+  const [fitNear, setFitNear] = useState(0)
+  const showNearOnMap = useCallback(() => {
+    setSnap('half')
+    setFitNear((n) => n + 1)
+  }, [])
+  const [screenReader, setScreenReader] = useState(false)
   /*
    * With a screen reader the list is the screen: open it, and take the map out
    * of the reading order (it says nothing the list does not). Followed live,
@@ -156,7 +181,7 @@ export function HomeShell({
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
-        {mapHeight !== null ? (
+        {mapHeight !== null && mapPainted ? (
           <HomeMap
             center={browse.location}
             cityCentre={browse.cityCentre}
@@ -172,39 +197,42 @@ export function HomeShell({
             focused={focused}
             // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
             glowVisible={focused && snap !== 'full' && !screenReader}
+            // Places' five pins, at peek and half only: the full drawer covers the map.
+            nearPins={segment === 'places' && snap !== 'full' ? nearPinList : NO_PINS}
+            fitNear={fitNear}
           />
         ) : null}
       </View>
-      <PulseTopBar actions={<NotificationBell />} />
+      <PulseTopBar floating actions={<NotificationBell />} />
       <HomeDrawer
         y={drawerTop}
         points={points}
         snap={snap}
         onSnap={onSnap}
         onChromeTouch={dismissKeyboard}
+        peek={
+          peekExtra ? (
+            <Text variant="meta" color={COLOR.textPrimary} numberOfLines={1} testID="home-peek-line">
+              {peekText}
+            </Text>
+          ) : null
+        }
         header={
-          <View style={styles.segmented} accessibilityRole="tablist">
-            {(['events', 'places'] as const).map((s) => (
-              <Pressable
-                key={s}
-                onPress={() => choose(s)}
-                style={[styles.segment, segment === s && styles.segmentOn]}
-                accessibilityRole="tab"
-                accessibilityLabel={s === 'events' ? 'Events' : 'Places'}
-                accessibilityState={{ selected: segment === s }}
-              >
-                <Text variant="bodyStrong" color={segment === s ? EMBER.bg : EMBER.textSecondary}>
-                  {s === 'events' ? 'Events' : 'Places'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          // The pane's title is the switch: words, tap only (a drag would compete with the drawer's and the map's gestures). The
+          // city lives in the same row, so neither pane draws a title of its own.
+          <TitleTabs
+            items={SEGMENT_LABELS}
+            selected={segment === 'events' ? 0 : 1}
+            onChange={(i) => choose(i === 0 ? 'events' : 'places')}
+            trailing={<Chip label={browse.city ?? 'Choose city'} icon="map-pin" onPress={browse.openCityPicker} testID="home-city" />}
+            testID="home-segmented"
+          />
         }
       >
         <View style={[styles.pane, segment !== 'events' && styles.hidden]}>{events}</View>
         {placesOpened ? (
           <View style={[styles.pane, segment !== 'places' && styles.hidden]}>
-            <PlacesList browse={browse} active={focused && segment === 'places'} />
+            <PlacesList browse={browse} active={focused && segment === 'places'} onSummary={setPlacesLine} onNearPins={setNearPinList} onShowNearOnMap={showNearOnMap} />
           </View>
         ) : null}
       </HomeDrawer>
@@ -212,18 +240,10 @@ export function HomeShell({
   )
 }
 
+const SEGMENT_LABELS = ['Events', 'Places'] as const
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: EMBER.bg },
-  // 44pt segments inside a 4pt inset.
-  segmented: {
-    flexDirection: 'row',
-    height: DRAWER_SEGMENTED_HEIGHT,
-    padding: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: EMBER_RADIUS.pill },
-  segmentOn: { backgroundColor: EMBER.textPrimary },
+  root: { flex: 1, backgroundColor: COLOR.ink },
   pane: { flex: 1 },
   hidden: { display: 'none' },
 })

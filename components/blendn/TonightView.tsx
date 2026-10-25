@@ -3,8 +3,10 @@ import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
-import { clockTime, startsLabel } from '../../lib/roomMoments'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { distanceText } from '../../lib/placesPane'
+import { startsLabel } from '../../lib/roomMoments'
+import { calendarDaysBetween, eventClock } from '../../lib/time'
 import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
 import { Banner } from '../ds/Banner'
 import type { PourFrame as PassFrame } from '../ds/MomentPour'
@@ -31,16 +33,9 @@ const STATE_TOP = SPACE.xxxl + SPACE.xl
 /** Below this a card stops reading as a card; the page scrolls instead. */
 const MIN_CARD = 280
 
-function distanceText(km: number | null) {
-  if (km === null || !Number.isFinite(km)) return undefined
-  return km < 1 ? `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m` : `${km.toFixed(1)} km`
-}
-
-/** Today, by the phone's clock: the "You're going · 9 PM" ribbon is for tonight only (Flow 4 Tonight #05). */
-function startsToday(iso: string, now: number) {
-  const d = new Date(iso)
-  const today = new Date(now)
-  return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate()
+/** Today where the event is: the "You're going · 9 PM" ribbon is for tonight only (Flow 4 Tonight #05), its night (R6-4). */
+function startsToday(iso: string, now: number, timeZone?: string | null) {
+  return calendarDaysBetween(new Date(now), new Date(iso), timeZone ?? undefined) === 0
 }
 
 /** A Tonight event as the deck's hero card: "In 25 min", "9 going", "at {venue} · 1.2 km", the saved ribbon. */
@@ -49,10 +44,12 @@ export function deckEvent(e: TonightEvent, now: number): DeckEvent {
     title: e.title,
     time: startsLabel(e, now).text,
     venue: e.venue,
-    distance: distanceText(e.distanceKm),
+    distance: distanceText(e.distanceKm) ?? undefined,
     going: e.goingCount ?? undefined,
     cover: e.photo,
-    saved: e.going && startsToday(e.startsAt, now) ? clockTime(new Date(e.startsAt).getTime()) : undefined,
+    category: e.category,
+    // The event's clock, named when its zone is not the phone's: "9 PM IST" on a Berlin phone (R6-4).
+    saved: e.going && startsToday(e.startsAt, now, e.timeZone) ? eventClock(e.startsAt, e.timeZone) : undefined,
   }
 }
 
@@ -182,7 +179,7 @@ export function TonightView({
         >
           <View style={styles.head} onLayout={(e) => setHeadHeight(Math.ceil(e.nativeEvent.layout.height))}>
             <View style={styles.titleRow}>
-              <Text accessibilityRole="header" style={[font('display', bold), styles.ink]}>
+              <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>
                 Tonight
               </Text>
               {list.length > 0 ? (
@@ -194,12 +191,12 @@ export function TonightView({
                   testID="tonight-see-all"
                   style={styles.seeAll}
                 >
-                  <Text style={[font('button', bold), styles.secondary]}>See all</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('button', bold), styles.secondary]}>See all</Text>
                   <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
                 </Pressable>
               ) : null}
             </View>
-            <Text style={[font('meta', bold), styles.secondary]}>{sub}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{sub}</Text>
             {onRoomRetry ? (
               <Banner kind="info" text="Couldn’t check your room. You can still browse tonight." action={{ label: 'Try again', onPress: onRoomRetry }} testID="tonight-room-error" />
             ) : null}
@@ -273,7 +270,7 @@ export function TonightView({
         <View testID="tonight-approximate" style={[styles.passDock, { paddingBottom: bottomInset + SPACE.md }]}>
           <View style={styles.approx}>
             <Icon name="locate-off" size={ICON.control} color={COLOR.textPrimary} />
-            <Text style={[font('meta', bold), styles.ink, styles.grow]}>No pass without precise location</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.grow]}>No pass without precise location</Text>
             <Pressable
               onPress={() => void Linking.openSettings().catch(() => {})}
               hitSlop={(minTarget() - SPACE.xl) / 2}
@@ -281,7 +278,7 @@ export function TonightView({
               accessibilityLabel="Turn on Precise Location"
               testID="tonight-approximate-turn-on"
             >
-              <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Turn on</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>Turn on</Text>
             </Pressable>
           </View>
         </View>

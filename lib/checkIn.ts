@@ -3,10 +3,12 @@ import { Platform } from 'react-native'
 import { apiClient } from './apiClient'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
 import { forgetEventDetailCache } from './eventDetailCache'
+import { reasonOf } from './sessionEnd'
 import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
 import { hasSeenPublicCheckInWarning, markPublicCheckInWarningSeen } from './roomVisibilityStorage'
+import { onClosingForLink } from './linkClosers'
 
 /**
  * Checking in and out, once.
@@ -80,7 +82,7 @@ export type CheckInOutcome =
   | {
       kind: 'refused'
       refusal: CheckInRefusal
-      /** The server's code, when it sent one (`isExpectedRefusal`). */
+      /** The server's reason, when it sent one: `reasonCode ?? errorCode` (`isExpectedRefusal`). */
       errorCode?: string
       /** Refused only because they already are — treat as checked in. */
       alreadyCheckedIn: boolean
@@ -115,8 +117,8 @@ export async function submitCheckIn(
     if (alreadyCheckedIn) checkInChanged(eventId)
     return {
       kind: 'refused',
-      refusal: checkInRefusal(result.errorCode, result.error),
-      errorCode: result.errorCode,
+      refusal: checkInRefusal(reasonOf(result), result.error),
+      errorCode: reasonOf(result),
       alreadyCheckedIn,
     }
   }
@@ -130,24 +132,40 @@ export async function submitCheckIn(
   }
 }
 
-let intentClosed: (() => void) | null = null
+/**
+ * How the "Why do you go out?" screen went. `closed`: saved, or dismissed by the person (×, back): the room comes next.
+ * `abandoned`: taken down by something else — a link or a tap closing it to go elsewhere, or a newer check-in asking
+ * again: the room must not be pushed over where they went (review MED-2, RC drive 6).
+ */
+export type IntentOutcome = 'closed' | 'abandoned'
+
+let intentClosed: ((outcome: IntentOutcome) => void) | null = null
 
 /**
  * Settles when the "Why do you go out?" screen asked after a check-in has
  * gone, saved or dismissed: the check-in waits for it before the room shows
  * (Flow 4 Tonight #14: the pour, then the sheet, then the Room).
+ *
+ * While it waits it listens for a link closing the modals (`onClosingForLink`), and settles `abandoned` right then,
+ * before the screen unmounts: the screen's unmount says `closed` only when nothing has settled it first.
  */
-export function untilIntentAnswered(): Promise<void> {
-  intentClosed?.()
+export function untilIntentAnswered(): Promise<IntentOutcome> {
+  intentClosed?.('abandoned')
   return new Promise((resolve) => {
-    intentClosed = resolve
+    let off = () => {}
+    const settle = (outcome: IntentOutcome) => {
+      off()
+      if (intentClosed === settle) intentClosed = null
+      resolve(outcome)
+    }
+    intentClosed = settle
+    off = onClosingForLink(() => settle('abandoned'))
   })
 }
 
-/** The intent screen calls this as it goes. */
-export function intentAnswered(): void {
-  intentClosed?.()
-  intentClosed = null
+/** The intent screen calls this as it goes: `closed`, unless a link or a newer check-in settled the wait first. */
+export function intentAnswered(outcome: IntentOutcome = 'closed'): void {
+  intentClosed?.(outcome)
 }
 
 /** "Why do you go out?" — the preferences screen with the intent leading. */

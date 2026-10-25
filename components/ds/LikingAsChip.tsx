@@ -71,7 +71,7 @@ export function LikingAsChip({
         ) : (
           <Avatar kind="creature" pseudonym={pseudonym} size={FACE} />
         )}
-        <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
+        <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.name]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
           {name}
         </Text>
         <Icon name="chevron-down" size={ICON.inline} color={contrast ? COLOR.textPrimary : COLOR.textSecondary} />
@@ -87,7 +87,8 @@ export function LikingAsChip({
 }
 
 const styles = StyleSheet.create({
-  slot: { alignSelf: 'flex-start' },
+  slot: { alignSelf: 'flex-start', minWidth: 0, maxWidth: '100%' },
+  name: { flexShrink: 1 },
   pressedIos: { transform: [{ scale: PRESS.scale }] },
   chip: {
     height: SIZE.tag,
@@ -96,6 +97,8 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     paddingLeft: SPACE.xs,
     paddingRight: SPACE.md,
+    minWidth: 0,
+    maxWidth: '100%',
     backgroundColor: COLOR.surfaceRaised,
     overflow: 'hidden',
   },

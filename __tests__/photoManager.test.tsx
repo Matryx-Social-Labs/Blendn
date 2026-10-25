@@ -12,6 +12,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import type { ActionSheet, Sheet } from '../lib/sheet'
 
 const mockShowToast = jest.fn()
+jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 const mockShowSheet = jest.fn<void, [Sheet]>()
 jest.mock('../lib/sheet', () => ({ showSheet: (s: Sheet) => mockShowSheet(s) }))
@@ -19,9 +20,11 @@ jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null })
 jest.mock('../lib/photoUtils', () => ({
   cachePhoto: jest.fn(async () => null),
   deletePhoto: jest.fn(async () => undefined),
-  getUserPhotos: jest.fn(),
+  loadUserPhotos: jest.fn(),
+  loadPulledPhotos: jest.fn(async () => ({ pulled: [], live: null })),
   reorderPhotos: jest.fn(),
   selectAndUploadPhoto: jest.fn(),
+  uploadPhoto: jest.fn(),
 }))
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -32,9 +35,9 @@ const PhotoManager = require('../components/PhotoManager').default
 const photo = (n: number) => ({ id: `p${n}`, url: `https://cdn/p${n}.jpg`, order: n, isPrimary: n === 0 })
 
 async function mount(count: number, maxPhotos?: number) {
-  photoUtils.getUserPhotos.mockResolvedValue(Array.from({ length: count }, (_, i) => photo(i)))
+  photoUtils.loadUserPhotos.mockResolvedValue(Array.from({ length: count }, (_, i) => photo(i)))
   await render(<PhotoManager userId="u1" maxPhotos={maxPhotos} />)
-  await waitFor(() => expect(screen.queryByText('Loading photos...')).toBeNull())
+  await waitFor(() => expect(screen.queryByTestId('photos-loading')).toBeNull())
 }
 
 describe('PhotoManager', () => {
@@ -42,15 +45,22 @@ describe('PhotoManager', () => {
     photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, error: 'Upload failed with status 502' })
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn't upload that photo. Try again.", 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Couldn’t upload that photo. Try again.", 'error', { haptic: 'error' }))
     expect(mockShowSheet).not.toHaveBeenCalled()
   })
 
-  it("passes the picker's own sentence through, finished", async () => {
+  it("passes the picker’s own sentence through, finished", async () => {
     photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, error: 'Photo must be less than 5MB' })
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Photo must be less than 5MB.', 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Photo must be less than 5MB.', 'error', { haptic: 'error' }))
+  })
+
+  it('tells the reposition step it is the main photo only when it is the first one', async () => {
+    photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, cancelled: true, error: 'cancelled' })
+    await mount(1)
+    await fireEvent.press(screen.getByLabelText('Add photo'))
+    await waitFor(() => expect(photoUtils.selectAndUploadPhoto).toHaveBeenCalledWith('u1', expect.objectContaining({ main: false })))
   })
 
   it('stays quiet when the picker is cancelled', async () => {
@@ -66,7 +76,7 @@ describe('PhotoManager', () => {
     photoUtils.reorderPhotos.mockResolvedValue({ ok: false, error: 'That looks like a blank image.' })
     await mount(1)
     await fireEvent.press(screen.getByLabelText('Add photo'))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image.', 'error'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That looks like a blank image.', 'error', { haptic: 'error' }))
     expect(screen.queryByLabelText(/Photo 2 of 2/)).toBeNull()
   })
 
@@ -94,13 +104,13 @@ describe('PhotoManager', () => {
   })
 
   it('a failed removal keeps the file and says so', async () => {
-    photoUtils.reorderPhotos.mockResolvedValue({ ok: false, error: "Couldn't save your photos. Try again." })
+    photoUtils.reorderPhotos.mockResolvedValue({ ok: false, error: "Couldn’t save your photos. Try again." })
     await mount(2)
     await fireEvent.press(screen.getByLabelText('Remove photo 1'))
     const remove = (mockShowSheet.mock.calls[0][0] as ActionSheet).actions[0] as unknown as { then: () => Promise<void> }
     await act(() => remove.then())
     expect(photoUtils.deletePhoto).not.toHaveBeenCalled()
-    expect(mockShowToast).toHaveBeenCalledWith("Couldn't save your photos. Try again.", 'error')
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save your photos. Try again.", 'error', { haptic: 'error' })
   })
 
   it('a full grid is an info toast, not a popup', async () => {
@@ -128,13 +138,29 @@ describe('no Alert.alert in the UI', () => {
       .map((p) => relative(ROOT, p))
     expect(offenders).toEqual([])
   })
+})
 
-  it("deleting an event asks on the app's sheet", () => {
-    const src = readFileSync(join(ROOT, 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
-    const body = src.slice(src.indexOf('const handleDeleteEvent'), src.indexOf('const openInMaps'))
-    expect(body).toContain('showSheet(')
-    expect(body).toContain("title: 'Delete this event?'")
-    expect(body).toContain("label: 'Delete event'")
-    expect(body).toMatch(/run: async/)
+describe('the Photos header (D-M7: "PHOTOS1 of 6 · saved as you go" touched at 360 dp and 1.3)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Dimensions, StyleSheet } = require('react-native') as typeof import('react-native')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SPACE } = require('../lib/design/tokens') as typeof import('../lib/design/tokens')
+  const window = Dimensions.get('window')
+  const at = (width: number, fontScale: number) => act(async () => Dimensions.set({ window: { ...window, width, fontScale }, screen: { ...window, width, fontScale } }))
+  afterEach(() => Dimensions.set({ window, screen: window }))
+  const header = () => StyleSheet.flatten(screen.getByTestId('photos-header', { includeHiddenElements: true }).props.style)
+
+  it('at 360 dp and 1.3: a gap, a row that wraps, a label that shrinks; the counter reads "n of max"', async () => {
+    await at(360, 1.3)
+    await mount(1, 6)
+    expect(header()).toMatchObject({ flexDirection: 'row', gap: SPACE.sm, flexWrap: 'wrap' })
+    expect(StyleSheet.flatten(screen.getByText('Photos').props.style).flexShrink).toBe(1)
+    expect(screen.getByText(/^1 of 6/)).toBeTruthy()
+  })
+
+  it('at AX XXXL the counter stacks under the label', async () => {
+    await at(402, 3.571)
+    await mount(1, 6)
+    expect(header().flexDirection).not.toBe('row')
   })
 })

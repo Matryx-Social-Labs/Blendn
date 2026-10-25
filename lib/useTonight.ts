@@ -8,7 +8,9 @@ import { readStoredCity } from './cityStorage'
 import { liveWindow } from './eventSession'
 import { getDistanceKm } from './geo'
 import { Logger } from './logger'
+import { printable } from './pulseSections'
 import { pickTonight } from './roomMoments'
+import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
 import { getRoomSignal, publishRoomSignal, subscribeRoomSignal } from './roomSignal'
 import { useLiveSync } from './useLiveSync'
 
@@ -33,6 +35,8 @@ export interface TonightEvent {
   photo: string | null
   startsAt: string
   endsAt: string
+  /** The event's own zone (IANA): its clock and its day are said there, not in the phone's (R6-4). */
+  timeZone?: string | null
   distanceKm: number | null
   /** Inside now: the room preview's count when it answered, else the feed's. */
   hereCount: number
@@ -43,6 +47,8 @@ export interface TonightEvent {
   tasteMatchCount: number | null
   /** RSVPs, for the card's "N going" pill (Flow 4 Tonight #06); null until the detail answers (the list carries none). */
   goingCount: number | null
+  /** The event's category slug, for its plate when it has no cover (rc7 ruling 5); absent from an older server. */
+  category?: string
 }
 
 /** What Tonight can say about your location (Flow 4 Tonight #10, R3-D4 4.7). */
@@ -70,14 +76,21 @@ const PREVIEW_TOP = 3
 /** The Pulse's page size, so the query — and so the cache entry — is the same. */
 const PULSE_PAGE = 20
 
+type QuietCoords = PreciseFix & { approximate: boolean }
+
 /** A fix only if the person already said yes. Never prompts. */
-async function quietLocation(): Promise<{ coords: { latitude: number; longitude: number } | null; location: TonightLocation }> {
+async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
   try {
     const permission = await Location.getForegroundPermissionsAsync()
     if (permission.status !== 'granted') return { coords: null, location: 'off' }
     const location = permission.ios?.accuracy === 'reduced' ? 'approximate' : 'on'
-    const last = await Location.getLastKnownPositionAsync()
-    return { coords: last?.coords ? { latitude: last.coords.latitude, longitude: last.coords.longitude } : null, location }
+    const last = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS, requiredAccuracy: FIX_REQUIRED_ACCURACY_M })
+    return {
+      coords: last?.coords
+        ? { ...fixOf(last), approximate: location === 'approximate' }
+        : null,
+      location,
+    }
   } catch {
     return { coords: null, location: 'on' }
   }
@@ -104,6 +117,7 @@ function toTonight(
     photo: e.cover_image_url,
     startsAt: live.start_time,
     endsAt: live.end_time ?? e.end_time,
+    timeZone: e.timezone,
     distanceKm,
     // Inside now (the Room's rule), never everybody who came; 0 from an older server.
     hereCount: e.here_count ?? 0,
@@ -111,8 +125,9 @@ function toTonight(
     capacity: e.max_capacity > 0 ? e.max_capacity : null,
     going: e.is_favorited || goingIds.has(e.id),
     tasteMatchCount: null,
-    // The list's `goingCount` (RSVPs), the same number as the detail's `stats.rsvpCount`.
-    goingCount: e.going_count,
+    // The list's `goingCount` (RSVPs), the same number as the detail's `stats.rsvpCount`; under five it is not said.
+    goingCount: printable(e.going_count),
+    category: e.category_group || undefined,
   }
 }
 
@@ -163,7 +178,7 @@ export function useTonight(): TonightState {
      * city feed has no distances, and publishing from it would clear an
      * "inside" the Pulse had correctly worked out.
      */
-    if (coords) publishRoomSignal(result.data)
+    if (coords) publishRoomSignal(result.data, Date.now(), coords)
 
     const goingIds = new Set<string>(
       (rsvps?.data?.events ?? []).filter((e) => e.rsvpStatus === 'going').map((e) => e.id)

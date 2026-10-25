@@ -3,8 +3,8 @@
  * one hold in the product. 900 ms; the gradient fill translates in over the
  * surfaceSunken track with the label drawn twice; H.tick at 25 / 50 / 75%,
  * H.commit at 100% (the outcome's H.success / H.error is the caller's, on the
- * server's answer); a release rewinds silently on M.settle (Reduce Motion cuts
- * it; the fill itself keeps its speed). A refusal: the destructive ring, #20,
+ * server's answer); a release rewinds silently on M.settle (Reduce Motion changes
+ * neither the rewind nor the fill: DS #8 "Identical"). A refusal: the destructive ring, #20,
  * H.error. A screen reader gets one strong button: a double-tap confirms.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
@@ -151,13 +151,16 @@ describe('the hold', () => {
     expect(Reanimated.withSpring).not.toHaveBeenCalled()
   })
 
-  it('Reduce Motion: the rewind cuts', async () => {
+  it('Reduce Motion: a cancelled hold still settles back on M.settle (DS #8 “Identical”), never snaps empty', async () => {
     reduceMotion.mockReturnValue(true)
     await draw()
     await hold('begin')
     jest.mocked(Reanimated.withSpring).mockClear()
     await hold('release')
-    expect(Reanimated.withSpring).not.toHaveBeenCalled()
+    expect(Reanimated.withSpring).toHaveBeenCalledWith(
+      0,
+      expect.objectContaining({ stiffness: SPRING.settle.stiffness, damping: SPRING.settle.damping, reduceMotion: Reanimated.ReduceMotion.Never })
+    )
   })
 })
 
@@ -198,13 +201,13 @@ describe('states', () => {
     expect(Reanimated.withTiming).not.toHaveBeenCalled()
   })
 
-  it('refused under Reduce Motion: the drain cuts; H.error still plays', async () => {
+  it('refused under Reduce Motion: the drain still settles (M.settle, kept); H.error plays', async () => {
     reduceMotion.mockReturnValue(true)
     await draw({ busy: true })
     jest.mocked(Reanimated.withSpring).mockClear()
     await screen.rerender(<HoldToConfirm label="Hold to blend in" onConfirm={jest.fn()} refused testID="h" />)
     expect(haptics.error).toHaveBeenCalledTimes(1)
-    expect(Reanimated.withSpring).not.toHaveBeenCalled()
+    expect(Reanimated.withSpring).toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.settle.stiffness, reduceMotion: Reanimated.ReduceMotion.Never }))
   })
 
   it('confirmed (#9, the Flow 4 prototype): the fill stays full and the label reads “You’re in”; nothing to hold, no haptic', async () => {

@@ -1,37 +1,38 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
-import { useState } from 'react'
-import {
-  ActivityIndicator,
-  Dimensions,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native'
+import { useEffect, useState } from 'react'
+import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 
-import { OptimizedImage } from '../../components/OptimizedImage'
+import { font, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
+import { PhotoTile, PulledPhotoTile, MAIN_RATIO } from '../../components/onboarding/PhotoTile'
+import { photoNote, readyPhotos, withMainFirst, withoutPulledDraftPhotos, type PhotoTile as Tile } from '../../components/onboarding/photoTiles'
+import { Icon } from '../../components/ui/Icon'
+import { COLOR, DURATION, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SPACE, SPRING } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
+import { motionTokens, useReducedMotion } from '../../lib/motion'
+import ScalePress from '../../components/motion/ScalePress'
+import { RepositionHost } from '../../components/profile/Reposition'
+import { loadPulledPhotos, selectPhoto, uploadPhoto } from '../../lib/photoUtils'
+import { mainWasPulled, type PulledPhoto } from '../../lib/photoStates'
+import { markPulledSeen } from '../../lib/pulledNotices'
+import { SUPPORT_EMAIL } from '../../lib/support'
 import { useAuth } from '../../lib/useAuth'
-import { selectAndUploadPhoto } from '../../lib/photoUtils'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, tint, TYPE } from '../../lib/theme'
 import { useOnboarding } from '../../lib/useOnboarding'
-import Animated, { Easing, FadeOut, LinearTransition, useReducedMotion } from 'react-native-reanimated'
-import { MOTION_DURATION } from '../../lib/motion'
 
 /**
- * Step seven — photos.
+ * Step seven: photos.
  *
  * Six slots, and every one of them optional. This is the highest-friction thing
  * the flow asks for, and refusing to let anyone in without a photo loses more
  * people than the empty avatars cost.
  *
- * `selectAndUploadPhoto` is reused rather than reimplemented: it already does
- * the source sheet, the camera permission (the library needs none — see
- * `pickImage`), validation, a quality check, and the presigned upload. Writing a second upload path here would be a second
- * thing to keep in step with Tigris.
+ * `selectPhoto` and `uploadPhoto` are reused rather than reimplemented: they already do the source sheet, the camera
+ * permission (the library needs none — see `pickImage`), validation, a quality check, and the presigned upload. Writing a
+ * second upload path here would be a second thing to keep in step with Tigris. They are the two halves of
+ * `selectAndUploadPhoto`, split so the tile can be on screen, with its progress, while the upload runs, and so a failed
+ * upload keeps the file for Retry.
  *
  * **Photos only, not video.** The frame's caption offers "JPG, PNG and MP4 up
  * to 20MB", and the upload path is images end to end — `pickImage` asks the picker for
@@ -53,80 +54,59 @@ import { MOTION_DURATION } from '../../lib/motion'
  * so in words rather than relying on anyone guessing.
  *
  * The current main photo is unmistakable three ways at once: it is the big
- * slot, it carries a ring, and it is labelled. One of those alone is a
- * decoration; together they are a state. Removing moved to its own corner
+ * slot, it carries a ring, and it is labelled. Removing moved to its own corner
  * target, because a single tap cannot mean both "choose this" and "delete this".
+ *
+ * ## The pulled photo
+ *
+ * The design draws a fourth tile state, "This photo was removed. Add a different one.", for a photo moderation took down
+ * after it was added. The server says which photos it pulled (`photo_states`, blendn-admin #716) on your own `GET /profiles/:id`,
+ * which onboarding's draft does not read, so this screen reads it too: an empty tile with a shield for each pulled one, and the draft
+ * reconciled with the photos that are up (`withoutPulledDraftPhotos`), so Continue never sends a pulled URL back.
  */
 
 const SLOTS = 6
-
 const GRID_GAP = SPACE.lg
-const SLOT = Math.floor((Dimensions.get('window').width - GUTTER * 2 - GRID_GAP) / 2)
+const WELL = 48
+const HINTS_ACROSS = 5
+const HINT_GAP = SPACE.sm
 
-/**
- * A plus drawn as two rectangles, not as a glyph.
- *
- * This has now been "centred" twice and been wrong twice, for two different
- * reasons. First it shared a centred block with a caption, so the block was
- * centred and the plus rode above it. Then it was alone and still off, because
- * an icon font centres by *font metrics* — the glyph sits inside a line box
- * with ascender and descender space, `includeFontPadding` adds more on Android,
- * and none of that is symmetrical around the mark you actually see.
- *
- * Two rectangles have no metrics to argue with. The parent centres a
- * fixed-size square, and the bars are centred inside it by construction, so
- * this is exact on every platform and cannot drift when the icon set changes.
- */
-function Plus({ size = 28, thickness = 2 }: { size?: number; thickness?: number }) {
-  const bar = {
-    position: 'absolute' as const,
-    backgroundColor: EMBER.textSecondary,
-    borderRadius: thickness,
-  }
-  return (
-    /*
-     * Fills the slot and centres inside itself, rather than being a child the
-     * slot centres.
-     *
-     * The slot already says `alignItems: center, justifyContent: center`, and
-     * the plus still landed at the bottom edge on a device — so something about
-     * the parent's box is not what it reads as. Rather than keep guessing at
-     * which of `aspectRatio`, the wrapping row, or a stale Fast Refresh style
-     * is responsible, this stops depending on the parent at all: an absolute
-     * fill has one possible size, and the bars centre within that.
-     *
-     * `pointerEvents="none"` so covering the slot does not swallow the tap that
-     * opens the picker.
-     */
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <View
-          style={{
-            width: CONTROL.md,
-            height: CONTROL.md,
-            borderRadius: EMBER_RADIUS.pill,
-            backgroundColor: EMBER.surface,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={[bar, { width: size, height: thickness }]} />
-            <View style={[bar, { width: thickness, height: size }]} />
-          </View>
-        </View>
-      </View>
-    </View>
-  )
-}
+let tileKey = 0
+const nextKey = () => `tile-${++tileKey}`
 
 function MediaScreenInner() {
   const { user } = useAuth()
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('media')
-
-  const [photos, setPhotos] = useState<string[]>([])
-  const [uploadingSlot, setUploadingSlot] = useState<number | null>(null)
   const { showToast } = useToast()
+  const reduceMotion = useReducedMotion()
+  const bold = useBoldText()
+  const window = useWindowDimensions()
+  const slot = Math.floor((window.width - SPACE.gutter * 2 - GRID_GAP) / 2)
+  /** The small places still free past the add well: five across, so all six places read at a glance (audit A11). */
+  const hintSlot = Math.floor((window.width - SPACE.gutter * 2 - HINT_GAP * (HINTS_ACROSS - 1)) / HINTS_ACROSS)
+
+  const [tiles, setTiles] = useState<Tile[]>([])
+  /** The photos moderation took down since they were added (`photo_states`, your own profile): empty tiles with a shield, until dismissed or replaced. */
+  const [pulled, setPulled] = useState<PulledPhoto[]>([])
+  /** The photos that are up, once any has been pulled: the draft may still list a pulled one, and Continue must not send it. */
+  const [liveOnly, setLiveOnly] = useState<string[] | null>(null)
+  const userId = user?.id
+  useEffect(() => {
+    if (!loaded || !userId) return
+    let alive = true
+    void loadPulledPhotos(userId).then((own) => {
+      if (!alive) return
+      setPulled(own.pulled)
+      // Reconciled only when something was pulled: the draft is otherwise what it was, and a failed read (no list) judges nothing.
+      if (own.pulled.length > 0 && own.live) {
+        setLiveOnly(own.live)
+        setTiles((current) => withoutPulledDraftPhotos(current, own.live as string[]))
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [loaded, userId])
 
   /*
    * The draft's photos, whenever they change: once it has loaded, and again
@@ -137,29 +117,66 @@ function MediaScreenInner() {
   const [shown, setShown] = useState<string[] | undefined>(undefined)
   if (loaded && draft.photos !== shown) {
     setShown(draft.photos)
-    setPhotos(draft.photos ?? [])
+    setTiles(withoutPulledDraftPhotos((draft.photos ?? []).map((url) => ({ key: url, state: 'ready' as const, url })), liveOnly ?? (draft.photos ?? [])))
   }
 
-  const add = async (slot: number) => {
-    if (!user?.id || uploadingSlot !== null) return
-    setUploadingSlot(slot)
-    const result = await selectAndUploadPhoto(user.id)
-    setUploadingSlot(null)
+  // The empty tiles never take the well's slot: the last one is always the way to add.
+  const pulledShown = pulled.slice(0, Math.max(0, SLOTS - 1 - tiles.length))
+  const hints = Math.max(0, SLOTS - tiles.length - pulledShown.length - (tiles.length < SLOTS ? 1 : 0))
+  const uploading = tiles.some((tile) => tile.state === 'uploading')
+  const replace = (key: string, next: Tile) => setTiles((current) => current.map((tile) => (tile.key === key ? next : tile)))
+
+  /** Upload a chosen file into its tile, with the ring following it; a failure keeps the file under Retry. */
+  const upload = async (key: string, uri: string) => {
+    if (!user?.id) return
+    replace(key, { key, state: 'uploading', uri, progress: 0 })
+    const result = await uploadPhoto(uri, user.id, undefined, 'profile', (progress) =>
+      setTiles((current) => current.map((tile) => (tile.key === key && tile.state === 'uploading' ? { ...tile, progress } : tile)))
+    )
+    if (result.success && result.url) {
+      replace(key, { key, state: 'ready', url: result.url })
+      return
+    }
+    // The tile says it did not get there, with Retry; the one error haptic answers it.
+    replace(key, { key, state: 'failed', uri })
+    H.error()
+  }
+
+  const add = async () => {
+    if (!user?.id || uploading || tiles.length >= SLOTS) return
+    const picked = await selectPhoto({ main: tiles.length === 0 })
     // A cancelled picker is not a failure. Anything else says why, in the
     // validator's or the server's words ("Photo must be less than 5MB"); it
     // used to say nothing, and the empty slot looked like a tap that missed.
-    if (result.success && result.url) setPhotos((current) => [...current, result.url!])
-    else if (!result.cancelled) showToast(result.error || "That photo wasn't added. Try again.", 'error')
+    if (!picked.ok) {
+      if (!picked.cancelled) showToast(picked.error || "That photo wasn’t added. Try again.", 'error', { haptic: 'error' })
+      return
+    }
+    // A different photo stands in for the first removed one: its notice is done.
+    const replaced = pulled[0]
+    if (replaced) {
+      setPulled((current) => current.filter((p) => p !== replaced))
+      void markPulledSeen(user.id, replaced)
+    }
+    const key = nextKey()
+    setTiles((current) => [...current, { key, state: 'uploading', uri: picked.uri, progress: 0 }])
+    await upload(key, picked.uri)
   }
 
-  const reduceMotion = useReducedMotion()
-
-  const remove = (index: number) =>
-    setPhotos((current) => current.filter((_, i) => i !== index))
+  const remove = (key: string) => setTiles((current) => current.filter((tile) => tile.key !== key))
 
   /** Move a photo to the front. `photos[0]` is what everyone else sees. */
-  const makePrimary = (index: number) =>
-    setPhotos((current) => [current[index], ...current.filter((_, i) => i !== index)])
+  const makePrimary = (key: string) => {
+    // A choice between photos changes: the selection tick.
+    H.select()
+    setTiles((current) => withMainFirst(current, key))
+  }
+
+  // The tiles glide to their places as one is made main or removed; Reduce Motion lets them land.
+  const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping)
+  const leave = reduceMotion ? undefined : FadeOut.duration(DURATION.quick)
+  // A photo lands with a fade (Reduce Motion: its own shorter one), so adding one is seen, not a tile appearing.
+  const enter = FadeIn.duration(motionTokens(reduceMotion).duration.base)
 
   return (
     <OnboardingScreen
@@ -169,182 +186,107 @@ function MediaScreenInner() {
       subtitle="Up to six. Recent photos where your face is clear work best."
       ctaLabel="Continue"
       ctaBusy={saving}
-      onContinue={() => void commit({ photos })}
-      secondaryLabel="Skip for now"
+      ctaDisabled={uploading}
+      onContinue={() => void commit({ photos: readyPhotos(tiles) })}
+      secondaryLabel="Skip"
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      {/*
-        Only as many slots as are useful: every photo so far, plus one empty
-        one to add the next. Six empty dashed squares made the screen twice as
-        tall as it needed to be and most of that height was nothing.
-      */}
+      {mainWasPulled(pulled) ? (
+        <View testID="media-main-pulled" style={styles.mainPulled}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noteStrong]}>
+            {tiles.length > 0 ? 'Your main photo was removed. The next one is your main photo now.' : 'Your main photo was removed.'}
+          </Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
+        </View>
+      ) : (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
+      )}
+      {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
+      <RepositionHost />
+
+      {/* Every photo so far, plus one well to add the next. Six empty squares made the screen twice as tall as it needed to be. */}
       <View style={styles.grid}>
-        {photos.map((url, index) => {
-          const primary = index === 0
+        {tiles.map((tile, index) => (
+          <PhotoTile
+            key={tile.key}
+            tile={tile}
+            index={index}
+            slot={slot}
+            onMakeMain={() => makePrimary(tile.key)}
+            onRemove={() => remove(tile.key)}
+            onRetry={() => (tile.state === 'failed' ? void upload(tile.key, tile.uri) : undefined)}
+            retryDisabled={uploading}
+            animation={{ layout: glide, exiting: leave, entering: enter }}
+          />
+        ))}
 
-          return (
-            /*
-             * "Make main" moves the photo to the front and grows it; removing
-             * one lets the rest slide up. Both animate (250ms ease-in-out) so
-             * you can see where your photo went instead of it teleporting.
-             * The tiles hold one image and no shadow, which keeps the layout
-             * transition cheap. Reduce Motion: they simply land.
-             */
-            <AnimatedPressable
-              key={url}
-              layout={reduceMotion ? undefined : TILE_MOVE}
-              exiting={reduceMotion ? undefined : TILE_OUT}
-              onPress={() => (primary ? undefined : makePrimary(index))}
-              disabled={uploadingSlot !== null || primary}
+        {pulledShown.map((notice, k) => (
+          <PulledPhotoTile
+            key={`pulled-${notice.pulledAt ?? k}`}
+            slot={slot}
+            disabled={uploading}
+            onAdd={() => void add()}
+            onDismiss={() => {
+              setPulled((current) => current.filter((p) => p !== notice))
+              if (userId) void markPulledSeen(userId, notice)
+            }}
+          />
+        ))}
+
+        {tiles.length < SLOTS ? (
+          <Animated.View layout={glide} style={[styles.well, tiles.length === 0 ? [styles.wide, { height: Math.round(slot * MAIN_RATIO) }] : { width: slot, height: slot }]}>
+            <ScalePress
+              onPress={() => void add()}
+              disabled={uploading}
+              pressedScale={Platform.OS === 'android' ? 1 : PRESS.scale}
+              android_ripple={{ color: PRESSED_WASH.android }}
               accessibilityRole="button"
-              accessibilityLabel={
-                primary ? 'Your main photo' : `Make photo ${index + 1} your main photo`
-              }
-              style={[styles.slot, primary && styles.slotPrimary, primary && styles.slotChosen]}
+              accessibilityLabel={tiles.length === 0 ? 'Add your main photo' : 'Add a photo'}
+              accessibilityState={{ disabled: uploading }}
+              style={styles.wellPress}
             >
-              {/*
-                Same reasoning as the summary card's avatar: the grid draws
-                uploads at roughly a third of the screen, and RN's Image would
-                decode each at full resolution and keep it in a cache the rest
-                of the app does not share. Six photos is six full-size bitmaps
-                for six thumbnails.
-              */}
-              <OptimizedImage
-                source={url}
-                style={styles.photo}
-                width={SLOT}
-                height={SLOT}
-                contentFit="cover"
-              />
+              <View style={styles.wellDisc}>
+                <Icon name="plus" size={ICON.nav} color={COLOR.textPrimary} />
+              </View>
+              {/* The first place is the main one (A11): it says so before anything is in it. */}
+              {tiles.length === 0 ? (
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
+                  Main photo
+                </Text>
+              ) : null}
+            </ScalePress>
+          </Animated.View>
+        ) : null}
 
-              {primary ? (
-                <>
-                  {/* A scrim under the label, so it survives a bright photo. */}
-                  <LinearGradient
-                    colors={[EMBER.bgClear, tint(EMBER.bg, 0.85)]}
-                    style={styles.primaryScrim}
-                    pointerEvents="none"
-                  />
-                  <View style={styles.primaryTag}>
-                    <Text style={styles.primaryTagText}>MAIN PHOTO</Text>
-                  </View>
-                </>
-              ) : (
-                /*
-                 * The prompt lives on the photos that are *not* chosen, which
-                 * is where the action is. Putting it on the main one would
-                 * label the thing that has nothing left to do.
-                 */
-                <View style={styles.makeMain}>
-                  <Text style={styles.makeMainText}>Make main</Text>
-                </View>
-              )}
-
-              {/*
-                Remove is its own hit target now that tapping the photo means
-                "make this the main one". A single tap cannot mean both.
-              */}
-              <Pressable
-                onPress={() => remove(index)}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove photo ${index + 1}`}
-                style={styles.removeBadge}
-              >
-                <Ionicons name="close" size={ICON.sm} color={EMBER.textPrimary} />
-              </Pressable>
-            </AnimatedPressable>
-          )
-        })}
-
-        {photos.length < SLOTS ? (
-          <Pressable
-            onPress={() => void add(photos.length)}
-            disabled={uploadingSlot !== null}
-            accessibilityRole="button"
-            accessibilityLabel={photos.length === 0 ? 'Add your main photo' : 'Add a photo'}
-            style={[styles.slot, photos.length === 0 && styles.slotPrimary, styles.slotEmpty]}
-          >
-            {uploadingSlot !== null ? <ActivityIndicator color={EMBER.textSecondary} /> : <Plus />}
-          </Pressable>
+        {/*
+         * The places left past the add well, small and quiet: the six are seen at once without six large wells making the
+         * step twice as tall. Decorative: the well above is the one way to add, and says so.
+         */}
+        {hints > 0 ? (
+          <Animated.View layout={glide} style={styles.hints} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            {Array.from({ length: hints }, (_, i) => (
+              <View key={i} testID={`media-slot-hint-${i}`} style={[styles.hint, { width: hintSlot, height: hintSlot }]} />
+            ))}
+          </Animated.View>
         ) : null}
       </View>
-
-      <Text style={styles.note}>
-        {photos.length === 0
-          ? 'Your main photo is the one people see on your profile and in messages. Add up to 6.'
-          : photos.length === 1
-            ? 'This is your main photo. Add more and you can pick a different one.'
-            : 'Tap any photo to make it your main one. JPG and PNG, up to 6.'}
-      </Text>
     </OnboardingScreen>
   )
 }
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable)
-const TILE_MOVE = LinearTransition.duration(250).easing(Easing.bezier(0.77, 0, 0.175, 1))
-const TILE_OUT = FadeOut.duration(MOTION_DURATION.fast)
-
 const styles = StyleSheet.create({
+  note: { color: COLOR.textSecondary },
+  noteStrong: { color: COLOR.textPrimary },
+  mainPulled: { gap: SPACE.xs },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
-  slot: {
-    // Explicit, for the reason `LookingForCards` explains: a slot holding only
-    // absolutely-positioned children has no intrinsic height, and `aspectRatio`
-    // against a percentage width does not reliably supply one.
-    width: SLOT,
-    height: SLOT,
-    borderRadius: EMBER_RADIUS.card,
-    backgroundColor: EMBER.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  slotPrimary: { width: '100%', height: Math.round(SLOT * 1.55) },
-  // The ring is the third signal, after size and the label. Any one of them
-  // alone reads as decoration; together they read as a state.
-  slotChosen: { borderWidth: 2, borderColor: EMBER.textPrimary },
-  slotEmpty: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: EMBER.separator,
-    backgroundColor: 'transparent',
-  },
-  photo: { width: '100%', height: '100%' },
-
-  primaryScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 88 },
-  makeMain: {
-    position: 'absolute',
-    bottom: SPACE.sm,
-    alignSelf: 'center',
-    paddingHorizontal: SPACE.sm,
-    paddingVertical: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.scrim,
-  },
-  makeMainText: { ...TYPE.caption, color: EMBER.textPrimary },
-  primaryTag: {
-    position: 'absolute',
-    left: SPACE.md,
-    bottom: SPACE.md,
-    paddingHorizontal: SPACE.sm,
-    paddingVertical: SPACE.xs,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.textPrimary,
-  },
-  primaryTagText: { ...TYPE.caption, color: EMBER.bg },
-  removeBadge: {
-    position: 'absolute',
-    top: SPACE.md,
-    right: SPACE.md,
-    width: ICON.lg,
-    height: ICON.lg,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.scrim,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  note: { ...TYPE.meta, color: EMBER.textTertiary },
+  muted: { color: COLOR.textSecondary },
+  wide: { width: '100%' },
+  well: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surfaceSunken, borderWidth: 1, borderColor: COLOR.hairlineStrong, overflow: 'hidden' },
+  wellPress: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: SPACE.md },
+  hints: { width: '100%', flexDirection: 'row', gap: HINT_GAP },
+  hint: { borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceSunken, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
+  wellDisc: { width: WELL, height: WELL, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, alignItems: 'center', justifyContent: 'center' },
 })
 
 

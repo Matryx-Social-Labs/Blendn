@@ -9,6 +9,7 @@
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, StyleSheet, View } from 'react-native'
+import * as Reanimated from 'react-native-reanimated'
 
 import { DoorCode, VenuePass } from '../components/ds/VenuePass'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, TYPE } from '../lib/design/tokens'
@@ -16,7 +17,13 @@ import { H } from '../lib/haptics'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false) }
+  return {
+    ...actual,
+    __esModule: true,
+    useReducedMotion: jest.fn(() => false),
+    withTiming: jest.fn(actual.withTiming),
+    cancelAnimation: jest.fn(actual.cancelAnimation),
+  }
 })
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
@@ -127,6 +134,46 @@ describe('<DoorCode>', () => {
     expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
     await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 50_000} active={false} />)
     expect(announce).not.toHaveBeenCalled()
+  })
+
+  describe('the ring drains on the UI thread', () => {
+    beforeEach(() => {
+      jest.mocked(Reanimated.withTiming).mockClear()
+      jest.mocked(Reanimated.cancelAnimation).mockClear()
+    })
+
+    it('one linear run to the turn: 12 s left is a 12 000 ms timing to empty, kept under Reduce Motion', async () => {
+      jest.useFakeTimers({ now: NOW })
+      ;(Reanimated.useReducedMotion as jest.Mock).mockReturnValue(true)
+      await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 12_000} />)
+      expect(Reanimated.withTiming).toHaveBeenCalledWith(0, expect.objectContaining({ duration: 12_000, reduceMotion: Reanimated.ReduceMotion.Never }))
+      ;(Reanimated.useReducedMotion as jest.Mock).mockReturnValue(false)
+    })
+
+    it('a new code restarts it from its own turn', async () => {
+      jest.useFakeTimers({ now: NOW })
+      await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 12_000} />)
+      jest.mocked(Reanimated.withTiming).mockClear()
+      await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 30_000} />)
+      expect(Reanimated.withTiming).toHaveBeenCalledWith(0, expect.objectContaining({ duration: 30_000 }))
+    })
+
+    it('React is not woken for the ring: the only interval is the seconds beside it, once a second', async () => {
+      jest.useFakeTimers({ now: NOW })
+      const interval = jest.spyOn(global, 'setInterval')
+      await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 12_000} />)
+      const delays = interval.mock.calls.map((c) => c[1])
+      expect(delays.length).toBeGreaterThan(0)
+      expect(delays.every((d) => d === 1000)).toBe(true)
+      interval.mockRestore()
+    })
+
+    it('covered by another screen (`active` false): it stops draining', async () => {
+      jest.useFakeTimers({ now: NOW })
+      await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 12_000} active={false} />)
+      expect(Reanimated.cancelAnimation).toHaveBeenCalled()
+      expect(Reanimated.withTiming).not.toHaveBeenCalled()
+    })
   })
 
   it('offline: no code, the wifi-off well and the sentence that says why', async () => {

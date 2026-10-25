@@ -4,6 +4,7 @@ import { join } from 'path'
 import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../lib/pulseFeed'
 
 const pulse = readFileSync(join(__dirname, '..', 'app/(tabs)/events.tsx'), 'utf8')
+const empty = readFileSync(join(__dirname, '..', 'components/pulse/PulseEmpty.tsx'), 'utf8')
 
 describe('the Pulse feed pages', () => {
   it('appends a page without repeating a row already on screen', () => {
@@ -68,15 +69,17 @@ describe('the Pulse empty states', () => {
   })
 
   it('offers exactly one way out of a filtered miss: Clear filters', () => {
-    const branch = pulse.slice(pulse.indexOf("emptyKind === 'filters' ? ("))
-    const clearFilters = branch.slice(0, branch.indexOf(') : ('))
+    const branch = empty.slice(empty.indexOf("kind === 'filters'"))
+    const clearFilters = branch.slice(0, branch.indexOf('        : ['))
     expect(clearFilters).toContain('Clear filters')
-    expect(clearFilters).toContain('setFilters(NO_FILTERS)')
     expect(clearFilters).not.toContain('Change city')
+    // And the screen's answer to it takes every filter off.
+    expect(pulse).toContain('setFilters(NO_FILTERS)')
   })
 
   it('shows a failed first load as an error, not as an empty city', () => {
-    expect(pulse).toContain("events.length === 0 && !!netError")
-    expect(pulse).toContain("Couldn&apos;t load events")
+    expect(pulse).toContain('events.length === 0 && !!netError')
+    expect(pulse).toContain('<PulseLoadFailed')
+    expect(empty).toContain('Couldn’t load events')
   })
 })

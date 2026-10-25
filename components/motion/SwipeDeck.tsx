@@ -7,7 +7,6 @@ import Animated, {
   interpolate,
   useAnimatedReaction,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withDelay,
   withSequence,
@@ -17,6 +16,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 import { H } from '../../lib/haptics'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * Where each depth sits in the fan, front first. Four entries: the front card,

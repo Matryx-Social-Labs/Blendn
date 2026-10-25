@@ -31,9 +31,10 @@ describe('reasonLine', () => {
   })
 
   it('then plans, then history, in the Grid card order', () => {
-    expect(reasonLine({ sharedPlans: 2, sharedEvents: 3 }, NOW)).toBe('Going to 2 more together')
-    expect(reasonLine({ sharedEvents: 3, interests: ['Jazz'] }, NOW)).toBe('Both at 3 nights before')
-    expect(reasonLine({ sharedEvents: 1 }, NOW)).toBe('Both at 1 night before')
+    expect(reasonLine({ sharedPlans: 2, sharedEvents: 3 }, NOW)).toBe('2 plans in common')
+    expect(reasonLine({ sharedPlans: 1 }, NOW)).toBe('1 plan in common')
+    expect(reasonLine({ sharedEvents: 3, interests: ['Jazz'] }, NOW)).toBe('Both at 3 nights')
+    expect(reasonLine({ sharedEvents: 1 }, NOW)).toBe('Both at 1 night')
   })
 
   it('never claims two people met', () => {
@@ -79,8 +80,11 @@ describe('reasonLine', () => {
       reasonLine({ sharedWorkField: true, workField: 'Architecture and urban planning' }, NOW),
     ]
     for (const line of lines) expect(line.length).toBeLessThanOrEqual(REASON_MAX)
-    expect(reasonLine({ sharedPlans: 12 }, NOW)).toBe('Both going to 12 more')
-    expect(reasonLine({ interests: ['Classical and Carnatic'] }, NOW)).toBe('1 shared · Classical an…')
+    // Under every face at 360 dp (RC audit B-R7): the longest fixed line, the same words as the overlap line.
+    expect(REASON_MAX).toBeLessThanOrEqual('Both open to dating'.length)
+    expect(reasonLine({ sharedPlans: 12 }, NOW)).toBe('12 plans in common')
+    expect(reasonLine({ sharedEvents: 99 }, NOW)).toBe('Both at 99 nights')
+    expect(reasonLine({ interests: ['Classical and Carnatic'] }, NOW)).toBe('1 shared · Classic…')
   })
 
   it('ignores blank interest names rather than printing an empty label', () => {
@@ -190,19 +194,28 @@ describe('who is here now', () => {
 
   it('calls the grid "Everyone here" only while everyone in it is', () => {
     const head = (people: { insideNow?: boolean }[]) => everyoneHead(people, { hasMore: false, hereCount: 9 })
-    expect(head([here('a'), here('b')])).toEqual({ title: 'Everyone here', count: 2 })
-    expect(head([])).toEqual({ title: 'Everyone here', count: 0 })
+    // "Everyone here" is the room's number (9), not the faces drawn: friends and "show online" off are counted, not listed.
+    expect(head([here('a'), here('b')])).toEqual({ title: 'Everyone here', count: 9 })
+    expect(head([])).toEqual({ title: 'Everyone here', count: 9 })
     expect(head([here('a'), left('b')])).toEqual({ title: 'Everyone who came', count: 2 })
   })
 
-  it("gives the room's number only where it is the right kind of number", () => {
+  it("gives the room’s number only where it is the right kind of number", () => {
     // With more to load, the number is the room's count of people inside:
     // true of "Everyone here", the wrong number for "Everyone who came".
-    expect(everyoneHead([here('a')], { hasMore: true, hereCount: 30 })).toEqual({ title: 'Everyone here', count: 29 })
+    expect(everyoneHead([here('a')], { hasMore: true, hereCount: 30 })).toEqual({ title: 'Everyone here', count: 30 })
     expect(everyoneHead([here('a'), left('b')], { hasMore: true, hereCount: 30 })).toEqual({
       title: 'Everyone who came',
       count: 0,
     })
+  })
+})
+
+describe('one number for the room (RC drive 3)', () => {
+  it('says the Room’s number, you included: 483, not 482 (minus you) or the 100 faces loaded', () => {
+    const faces = Array.from({ length: 100 }, (_, i) => ({ id: `p${i}`, insideNow: true }))
+    expect(everyoneHead(faces, { hasMore: true, hereCount: 483 })).toEqual({ title: 'Everyone here', count: 483 })
+    expect(everyoneHead(faces, { hasMore: false, hereCount: 483 })).toEqual({ title: 'Everyone here', count: 483 })
   })
 })
 

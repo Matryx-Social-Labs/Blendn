@@ -151,6 +151,7 @@ function build(json) {
     DURATION: camelKeys(omit(motion.durations, ['hold-staff'])),
     EASING: Object.fromEntries(Object.entries(motion.easings).map(([k, v]) => [camel(k), bezier(v)])),
     STAGGER: camelKeys(motion.staggers),
+    GLYPH: motion.glyph,
     PRESS: camelKeys(motion.press),
     RISE: camelKeys(motion.rise),
     ORBS: camelKeys(motion.orbs),
@@ -178,6 +179,7 @@ const DOCS = {
   MAX_FONT_SCALE: 'How far each role may grow with the phone’s text size.',
   SPRING: 'The seven springs (§9.2), mass 1, one table for both platforms.',
   DURATION: 'Durations in ms. `hold` keeps its speed under Reduce Motion: the hold’s speed is information. The export’s `hold-staff` is dropped: ROUND3 G3 removed the staff hold (staff type the door pass’s rotating code).',
+  GLYPH: 'The glyph verbs’ numbers (Glyph.tsx): the pop’s start scale, the hop in pt, the spin and tilt in degrees, the flicker’s dips and steps (fractions of `DURATION.medium`).',
   EASING: 'Cubic-bezier control points, for `Easing.bezier(...)`.',
   REDUCE_MOTION: 'The Reduce Motion values, kept apart so nothing reads them as the defaults (ROUND3 B1). Read through `motionTokens(reduceMotion)` in `lib/motion.ts`.',
 }

@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons'
 import {
   GeoJSONSource,
   Layer,
@@ -9,10 +8,10 @@ import {
   type VectorSourceRef,
 } from '@maplibre/maplibre-react-native'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { AccessibilityInfo, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
+import { Platform, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
-import { glowBreathes, glowOpacity, glowRadius, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
+import { glowRadius, litFade, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
 import {
   CITY_BUILDINGS,
   LABELS_FROM_LAYER_ID,
@@ -21,7 +20,9 @@ import {
   type OwnBuildingState,
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { EMBER, EMBER_RADIUS, ICON, SPACE } from '../../lib/theme'
+import { useReducedMotion } from '../../lib/motion'
+import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
 import type { Chip, Collection, LitState } from './useMapLighting'
 
@@ -150,6 +151,7 @@ export const LitBuildings = memo(function LitBuildings({
   /** The city's buildings layer showing: the copies go over it. */
   over: string
 }) {
+  const { opacity, transition } = useLitFade(data.features.length > 0)
   return (
     <GeoJSONSource id="lit-buildings" data={data} onPress={onPress}>
       <Layer
@@ -161,7 +163,8 @@ export const LitBuildings = memo(function LitBuildings({
           'fill-extrusion-color': ['get', 'color'],
           'fill-extrusion-height': ['get', 'height'],
           'fill-extrusion-base': ['get', 'base'],
-          'fill-extrusion-opacity': 1,
+          'fill-extrusion-opacity': opacity,
+          'fill-extrusion-opacity-transition': transition,
           // Each band is one solid colour: the foot-to-crown step is the gradient.
           'fill-extrusion-vertical-gradient': false,
         }}
@@ -170,59 +173,40 @@ export const LitBuildings = memo(function LitBuildings({
   )
 })
 
-/** Reduce Motion, followed live: it is switched on and off mid-session (review M4). */
-export function useReduceMotion(): boolean {
-  const [on, setOn] = useState(false)
+/**
+ * The lit layers' one fade-in (motion #42): 0 until there is something to light, then 1 for good, so the layer arrives
+ * over `long` (200 ms under Reduce Motion) the first time and is never faded again. `opacity` is a constant a paint
+ * transition can carry; a data-driven one is not transitioned by the map.
+ */
+function useLitFade(hasData: boolean) {
+  const reduceMotion = useReducedMotion()
+  const [arrived, setArrived] = useState(false)
+  // A frame after the first data is drawn at 0, so the transition has a start to run from.
   useEffect(() => {
-    let alive = true
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((value) => {
-        if (alive) setOn(value)
-      })
-      .catch((error) => Logger.warn('general', 'Could not read Reduce Motion', { error: String(error) }))
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setOn)
-    return () => {
-      alive = false
-      sub.remove()
-    }
-  }, [])
-  return on
+    if (!hasData) return
+    const frame = requestAnimationFrame(() => setArrived(true))
+    return () => cancelAnimationFrame(frame)
+  }, [hasData])
+  return { opacity: arrived ? 1 : 0, transition: litFade(reduceMotion) }
 }
 
 /**
- * The glow on the ground under every lit place, under the buildings. A live
- * event's breathes by flipping its opacity every half period and letting the
- * paint transition carry it — no per-frame JavaScript — for
- * `MAP_THEME.glow.breatheForMs` after the places change, then holds steady, so
- * the map stops redrawing (review H2, WCAG 2.2.2). It holds steady at once with
- * Reduce Motion, or with the map out of view.
+ * The glow on the ground under every lit place, under the buildings. It does not pulse (motion #42: "No pulse"): each
+ * glow arrives with the layers' one fade and holds still, so the map redraws nothing while it is looked at (WCAG 2.2.2).
+ * Two layers, a building's and a beacon's, because a paint transition needs a constant opacity.
+ *
+ * `visible` is HomeMap's, from when the glow breathed; it no longer changes anything.
  */
 export const GroundGlow = memo(function GroundGlow({
   data,
-  visible,
   under,
 }: {
   data: Collection<GlowFeature>
-  visible: boolean
+  visible?: boolean
   /** The city's buildings layer showing: the glow goes under it. */
   under: string
 }) {
-  const reduceMotion = useReduceMotion()
-  const breathing = glowBreathes({ visible, reduceMotion, anyLive: data.features.some((f) => f.properties.pulse) })
-  const [phase, setPhase] = useState<'steady' | 'low' | 'high'>('steady')
-  const { periodMs, breatheForMs } = MAP_THEME.glow
-  useEffect(() => {
-    if (!breathing) return
-    const tick = setInterval(() => setPhase((p) => (p === 'high' ? 'low' : 'high')), periodMs / 2)
-    const stop = setTimeout(() => {
-      clearInterval(tick)
-      setPhase('steady')
-    }, breatheForMs)
-    return () => {
-      clearInterval(tick)
-      clearTimeout(stop)
-    }
-  }, [breathing, data, periodMs, breatheForMs])
+  const { opacity, transition } = useLitFade(data.features.length > 0)
   const look: NonNullable<CircleLayerSpecification['paint']> = {
     'circle-color': ['get', 'color'],
     'circle-radius': GLOW_RADIUS,
@@ -230,6 +214,7 @@ export const GroundGlow = memo(function GroundGlow({
     // Flat on the ground, shrinking into the distance like the ground does.
     'circle-pitch-alignment': 'map',
     'circle-pitch-scale': 'map',
+    'circle-opacity-transition': transition,
   }
   return (
     <GeoJSONSource id="lit-glow" data={data}>
@@ -237,15 +222,15 @@ export const GroundGlow = memo(function GroundGlow({
         id="glow-still"
         type="circle"
         beforeId={under}
-        filter={['!=', ['get', 'pulse'], true]}
-        paint={{ ...look, 'circle-opacity': ['get', 'opacity'] }}
+        filter={['!=', ['get', 'beacon'], true]}
+        paint={{ ...look, 'circle-opacity': opacity * MAP_THEME.glow.still }}
       />
       <Layer
-        id="glow-live"
+        id="glow-beacon"
         type="circle"
         beforeId={under}
-        filter={['==', ['get', 'pulse'], true]}
-        paint={{ ...look, 'circle-opacity': glowOpacity(breathing ? phase : 'steady'), 'circle-opacity-transition': { duration: periodMs / 2, delay: 0 } }}
+        filter={['==', ['get', 'beacon'], true]}
+        paint={{ ...look, 'circle-opacity': opacity * MAP_THEME.glow.beacon }}
       />
     </GeoJSONSource>
   )
@@ -256,13 +241,30 @@ export const Chips = memo(function Chips({ chips, onOpen }: { chips: Chip[]; onO
   return (
     <>
       {chips.map((chip) => (
-        <Marker key={chip.id} id={`chip-${chip.id}`} lngLat={chip.at} anchor="bottom" offset={[0, -chip.lift]} onPress={() => onOpen(chip.kind, chip.id)}>
+        <Marker
+          key={chip.id}
+          id={`chip-${chip.id}`}
+          lngLat={chip.at}
+          anchor="bottom"
+          offset={[0, -chip.lift]}
+          onPress={() => onOpen(chip.kind, chip.id)}
+          {...annotationTitle(chip.speech)}
+        >
           <MapChip chip={chip} onOpen={onOpen} />
         </Marker>
       ))}
     </>
   )
 })
+
+/**
+ * What VoiceOver reads a map annotation as (audit M3). On iOS MapLibre draws each `Marker` as an `MLNAnnotationView`, an
+ * accessible button labelled by its annotation's title, which hides the RN view inside it: without a title VoiceOver read
+ * "button" five to eight times on the Places map, and the chip's own label never reached it. A title shows no callout
+ * here (`annotationCanShowCallout` needs a callout child). Android draws the RN view itself, so its own label stands.
+ * Not in `MarkerProps`' type (iOS passes every prop on to the annotation), hence the spread.
+ */
+export const annotationTitle = (label: string): object => (Platform.OS === 'ios' ? { title: label } : {})
 
 /**
  * One chip: "LIVE ●" or the start for an event, a glyph and the bucket for a
@@ -280,13 +282,13 @@ function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id
       onAccessibilityTap={() => onOpen(chip.kind, chip.id)}
     >
       <View style={[styles.chip, { borderColor: look.crown }]}>
-        {chip.kind === 'venue' ? <Ionicons name="storefront-outline" size={ICON.sm} color={look.crown} /> : null}
+        {chip.kind === 'venue' ? <Icon name="map-pin" size={ICON.inline} color={look.crown} /> : null}
         <View style={styles.chipText}>
-          <Text variant="caption" color={EMBER.textPrimary} numberOfLines={1}>
+          <Text variant="caption" color={COLOR.textPrimary} numberOfLines={1}>
             {chip.title}
           </Text>
           {chip.line ? (
-            <Text variant="caption" color={chip.live && chip.kind === 'event' ? look.crown : EMBER.textSecondary} numberOfLines={1}>
+            <Text variant="caption" color={chip.live && chip.kind === 'event' ? look.crown : COLOR.textSecondary} numberOfLines={1}>
               {chip.line}
             </Text>
           ) : null}
@@ -306,9 +308,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.xs,
     paddingHorizontal: SPACE.sm,
     maxWidth: MAP_THEME.chip.maxWidthPx,
-    borderRadius: EMBER_RADIUS.pill,
+    borderRadius: RADIUS.capsule,
     borderWidth: StyleSheet.hairlineWidth * 2,
-    backgroundColor: EMBER.bg,
+    backgroundColor: COLOR.ink,
   },
   // Lets a long name shrink to the chip's width and end in an ellipsis.
   chipText: { flexShrink: 1 },

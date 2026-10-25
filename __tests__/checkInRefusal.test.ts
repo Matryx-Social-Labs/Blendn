@@ -12,7 +12,7 @@ import { checkInRefusal, CHECK_IN_CODES } from "../lib/checkInRefusal"
  * written against the server's *real* sentence rather than a convenient one.
  */
 const REAL_OUT_OF_RANGE =
-  "You're about 45m outside the check-in area. Move closer to the venue and try again."
+  "You’re about 45m outside the check-in area. Move closer to the venue and try again."
 
 describe("a refused check-in", () => {
   it("offers directions when the person is in the wrong place", () => {
@@ -20,7 +20,7 @@ describe("a refused check-in", () => {
     expect(r.offerDirections).toBe(true)
   })
 
-  it("passes the server's shortfall through instead of recomputing it", () => {
+  it("passes the server’s shortfall through instead of recomputing it", () => {
     /*
      * The dead branch built its own sentence from `distance_meters` and
      * `required_radius`, neither of which the server sends — so it would have
@@ -67,7 +67,7 @@ describe("a refused check-in", () => {
     }
   })
 
-  it("still shows the server's sentence when the code is unknown or absent", () => {
+  it("still shows the server’s sentence when the code is unknown or absent", () => {
     /*
      * One refusal — "Event is at full capacity" — ships with no code at all,
      * and the server's sentence is always more specific than a generic one.
@@ -103,10 +103,10 @@ describe("the screen consults the code, not the sentence", () => {
   const helper = read("lib/checkIn.ts")
 
   it("dispatches the refusal on errorCode", () => {
-    expect(helper).toContain("checkInRefusal(result.errorCode")
+    expect(helper).toContain("checkInRefusal(reasonOf(result)")
   })
 
-  it("classifies no refusal by matching the server's prose", () => {
+  it("classifies no refusal by matching the server’s prose", () => {
     // The producer, not the consumer: `.includes(` on an error string at all.
     for (const file of ["lib/checkIn.ts", "lib/useCheckInFlow.ts", "components/screens/EventDetailScreen.tsx", "app/(tabs)/events.tsx"]) {
       expect(read(file)).not.toMatch(/result\.error\?\.includes\(/)
@@ -122,5 +122,45 @@ describe("the screen consults the code, not the sentence", () => {
   it("the pass gives the shared flow its map", () => {
     // Every check-in is the Blend'n pass's now (the event page opens it): Open Maps goes to the event.
     expect(read("components/blendn/BlendnScreen.tsx")).toContain("onOpenMaps: () => insideEvent && router.push({ pathname: '/event/[id]'")
+  })
+})
+
+describe('the refusals with a fix (Flow 15 15.22)', () => {
+  it('an unfinished profile and an age that is not on file carry a fix; an age that is known and too low does not', () => {
+    expect(checkInRefusal('FORBIDDEN', 'Finish setting up your profile first.').fix).toEqual({ kind: 'finish_profile', label: 'Finish profile' })
+    expect(checkInRefusal('PROFILE_INCOMPLETE', undefined).fix?.kind).toBe('finish_profile')
+    expect(checkInRefusal('AGE_RESTRICTED', 'This event is 18+. Add your age to your profile to check in.').fix).toEqual({ kind: 'add_age', label: 'Add your age' })
+    expect(checkInRefusal('AGE_RESTRICTED', 'Blend’n is for people 18 and over. Add your date of birth to your profile to go live.').fix?.kind).toBe('add_age')
+    expect(checkInRefusal('AGE_UNKNOWN', undefined).fix?.kind).toBe('add_age')
+    expect(checkInRefusal('AGE_RESTRICTED', 'This event is 21+.').fix).toBeUndefined()
+  })
+
+  it('the words are the frame’s, not the server’s: the client owns what is offered', () => {
+    expect(checkInRefusal('FORBIDDEN', 'x')).toMatchObject({
+      title: 'Finish your profile first',
+      message: 'People in the room see your name or a creature. Add a name and a photo, then hold to check in.',
+    })
+    expect(checkInRefusal('AGE_UNKNOWN', 'x')).toMatchObject({
+      title: 'Add your age to check in',
+      message: 'Events on Blend’n are 18+. Add your date of birth once; nobody else ever sees it.',
+    })
+  })
+})
+
+describe('eventLoadFailure (Flow 15 #9, #10)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { eventLoadFailure } = require('../lib/eventLinkRefusal') as typeof import('../lib/eventLinkRefusal')
+
+  it('tells a gone event, a minor, an unknown age, an unfinished profile, a broken link and a dropped connection apart', () => {
+    expect(eventLoadFailure({ errorCode: 'NOT_FOUND' })).toBe('notFound')
+    expect(eventLoadFailure({ error: 'Event not found' })).toBe('notFound')
+    expect(eventLoadFailure({ errorCode: 'AGE_RESTRICTED', error: 'This event is 21+.' })).toBe('minor')
+    expect(eventLoadFailure({ errorCode: 'AGE_RESTRICTED', error: 'This event is 18+. Add your age to your profile to check in.' })).toBe('age_unknown')
+    expect(eventLoadFailure({ errorCode: 'AGE_UNKNOWN' })).toBe('age_unknown')
+    expect(eventLoadFailure({ errorCode: 'FORBIDDEN' })).toBe('profile')
+    expect(eventLoadFailure({ errorCode: 'PROFILE_INCOMPLETE' })).toBe('profile')
+    expect(eventLoadFailure({ errorCode: 'VALIDATION_FAILED' })).toBe('broken')
+    expect(eventLoadFailure({ error: 'No internet connection.' })).toBe('network')
+    expect(eventLoadFailure({})).toBe('network')
   })
 })

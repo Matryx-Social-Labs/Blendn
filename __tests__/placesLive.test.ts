@@ -122,8 +122,8 @@ describe('a refused Go Live on screen (PL-CU01)', () => {
     const seePlus = jest.fn()
     showGoLiveRefusal(goLiveRefusal('PLUS_REQUIRED', 'Staying live is part of Blendn+.'), place, { showTray, closeTray: jest.fn(), seePlus })
     const [title, , buttons] = showTray.mock.calls[0]
-    expect(title).toBe('Staying live is part of Blendn+')
-    ;(buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blendn+')?.onPress()
+    expect(title).toBe('Staying live is part of Blend’n+')
+    ;(buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blend’n+')?.onPress()
     expect(seePlus).toHaveBeenCalledTimes(1)
   })
 })
@@ -145,10 +145,10 @@ describe('the screens read the server', () => {
     expect(VENUE).not.toMatch(/Polygon|Circle|geofence/)
   })
 
-  it("a place's room reads every refusal through roomRefusalState: on load, on send and on a reaction", () => {
+  it("a place’s room reads every refusal through roomRefusalState: on load, on send and on a reaction", () => {
     // The map itself is table-tested in placeRoom.test.ts; this pins that the room uses it at all three doors.
     expect(CHAT.match(/roomRefusalState\(result\.errorCode\)/g)?.length).toBe(3)
-    expect(CHAT).toContain("{ kind: 'not_live' }")
+    expect(CHAT).toMatch(/kind: 'not_live', reason: endedReason/)
     expect(read('components/chat/RoomFeed.tsx')).toContain("case 'not_live':")
     expect(CHAT).toContain('subscribeToLiveEnded(')
   })
@@ -156,18 +156,21 @@ describe('the screens read the server', () => {
   it('names and counts a room through the one rule, in all three places that draw a room (H5)', () => {
     // The rule is table-tested with the real row shape in placeRoom.test.ts; these pin that it is used.
     expect(read('lib/useBanterInbox.ts')).toContain('event_title: roomDisplayTitle(room) ||')
-    expect(read('lib/useBanterInbox.ts')).toContain('participant_count: roomMemberCount(room) ?? 0')
+    expect(read('lib/useBanterInbox.ts')).toContain('participant_count: roomHereCount(room) ?? 0')
     // The room and Room info read their row through one reader (lib/roomRow.ts).
-    expect(read('lib/roomRow.ts')).toContain('memberCount: roomMemberCount(room)')
+    expect(read('lib/roomRow.ts')).toContain('hereCount: roomHereCount(room)')
     expect(read('lib/roomRow.ts')).toContain('const title = roomDisplayTitle(room) ||')
     expect(CHAT).toContain('useRoomRow(')
     expect(read('lib/activeRoom.ts')).toContain('eventTitle: roomDisplayTitle(checkin)')
   })
 
-  it('the expiry prompt offers the free extension and a real "stay", no locked placeholder (step 11)', () => {
-    expect(LIVE).toContain("label: 'Extend 45 min · free'")
-    expect(LIVE).toContain("label: stayLabel, onPress: goLiveWith(STAY_CHOICE, 'stay')")
-    expect(LIVE).toContain("'Stay live till I leave · Blendn+'")
-    expect(LIVE).not.toMatch(/locked|showPlusPlaceholder/i)
+  it('the expiry prompt is the design’s ExpiryPrompt: the free 45 minutes and a real "stay", no locked placeholder (step 11, Flow 11 · 11.4)', () => {
+    const prompt = read('components/ds/ExpiryPrompt.tsx')
+    expect(LIVE).toContain('<ExpiryPrompt')
+    expect(LIVE).toContain('onExtend={goLiveWith(EXTEND_CHOICE')
+    expect(LIVE).toContain("goLiveWith(STAY_CHOICE, 'stay')")
+    expect(prompt).toContain("'Extend 45 min — free'")
+    expect(prompt).toContain('Stay while you’re here')
+    expect(LIVE).not.toMatch(/\blocked\b|showPlusPlaceholder/i)
   })
 })

@@ -16,6 +16,13 @@ import { userMessage } from './userMessage'
  * screens once flattened every refusal into one generic line, and a muted user
  * retried forever.
  */
+/**
+ * Your own room message, removed by moderation after it was delivered (`chat:messageDeleted`): the bubble becomes the
+ * dashed placeholder, and a toast (a live region, announced on iOS) says so, so a screen-reader user is told the bubble
+ * changed. A DM is never removed after delivery: one that fails moderation is withheld at send (`withheld`).
+ */
+export const REMOVED_AFTER_DELIVERY = 'Your message was removed by moderation.'
+
 export type SendOutcome =
   | { kind: 'sent' }
   | { kind: 'withheld' }
@@ -27,7 +34,7 @@ export function sendOutcome(result: {
   error?: string | null
   errorCode?: string | null
 }): SendOutcome {
-  if (!result.success) return { kind: 'failed', reason: userMessage(result, "Couldn't send. Try again.") }
+  if (!result.success) return { kind: 'failed', reason: userMessage(result, "Couldn’t send. Try again.") }
   const hidden = (result.data as { moderation_hidden?: boolean } | undefined)?.moderation_hidden
   return hidden ? { kind: 'withheld' } : { kind: 'sent' }
 }

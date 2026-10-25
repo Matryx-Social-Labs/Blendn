@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
 
 /** What no plan buys (Flow 12 `NEVER`): the product's promise. */
@@ -25,16 +25,16 @@ export function NeverForSalePanel({ items = NEVER_FOR_SALE, testID }: { items?: 
   const contrast = useIncreaseContrast()
   return (
     <View testID={testID} style={[styles.card, contrast && IC_HAIRLINE]}>
-      <Text accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
         Never for sale, on any plan
       </Text>
       <View testID={testID && `${testID}-list`} accessibilityRole="list" style={styles.list}>
         {items.map((item) => (
           <View key={item} style={styles.line}>
-            <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[font('body', bold), styles.dash]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[font('body', bold), styles.dash]}>
               —
             </Text>
-            <Text style={[font('body', bold), styles.ink, styles.fill]}>{item}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.fill]}>{item}</Text>
           </View>
         ))}
       </View>

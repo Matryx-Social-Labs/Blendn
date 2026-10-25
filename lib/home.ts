@@ -1,10 +1,10 @@
 /**
  * The home screen's pure parts: where the drawer rests, and how a place reads
- * in the Places list (plan v2 step 2). Separate from the components so they run
+ * in the Places list (plan v2 step 2; the list's own strata are `lib/placesPane.ts`). Separate from the components so they run
  * in a plain node test.
  */
 
-import { nextUpLabel } from './pulse'
+import { SIZE } from './design/tokens'
 
 export type DrawerSnap = 'full' | 'half' | 'peek'
 
@@ -13,8 +13,8 @@ export const DRAWER_SNAPS: readonly DrawerSnap[] = ['full', 'half', 'peek']
 
 /** The handle's touch target: 44pt tall, the platform minimum (step 2 review). */
 export const DRAWER_HANDLE_HEIGHT = 44
-/** The Events | Places control: 44pt segments inside a 4pt inset. */
-export const DRAWER_SEGMENTED_HEIGHT = 52
+/** The drawer's title tabs, Events | Places: one 48 pt row. */
+export const DRAWER_SEGMENTED_HEIGHT = SIZE.control
 /** Space under the control, before the pane. */
 const DRAWER_HEADER_GAP = 8
 
@@ -23,6 +23,9 @@ const DRAWER_HEADER_GAP = 8
  * left showing at `peek`, so the control can always be reached.
  */
 export const DRAWER_HEADER_HEIGHT = DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT + DRAWER_HEADER_GAP
+
+/** The one-line summary Places keeps at `peek` under the control ("3 places live · 31 open tonight"): a 20 pt line and its 8 pt margin. */
+export const DRAWER_PEEK_LINE = 28
 
 /**
  * How far ahead a release is projected, in seconds of its velocity. A flick
@@ -43,9 +46,11 @@ export function drawerSnapPoints(screen: {
   topChrome: number
   /** Where the tab bar's top edge is (`tabBarTop`). */
   tabBarTop: number
+  /** Extra room at `peek` for a summary line under the control (`DRAWER_PEEK_LINE`); none for a pane without one. */
+  peekExtra?: number
 }): Record<DrawerSnap, number> {
   const full = screen.topChrome
-  const peek = Math.max(full, screen.tabBarTop - DRAWER_HEADER_HEIGHT)
+  const peek = Math.max(full, screen.tabBarTop - DRAWER_HEADER_HEIGHT - (screen.peekExtra ?? 0))
   const half = Math.min(peek, Math.max(full, Math.round(screen.height / 2)))
   return { full, half, peek }
 }
@@ -116,38 +121,23 @@ export const DRAWER_SNAP_LABEL: Record<DrawerSnap, string> = {
 /** The server's live-count bucket (`GET /venues`, D-19). Never a number. */
 export type LiveNow = 'quiet' | '5-9' | '10-19' | '20+'
 
-/**
- * How many are live at a place, as the list says it. `quiet` is fewer than 5,
- * none included — the dashboard's wording (`liveCountLabel`), so the two never
- * describe one room differently.
- */
-export function liveNowLabel(bucket: LiveNow | null | undefined): string {
+// Owner ruling 2026-10-18: no "Under 5 live" — below 5 shows nothing.
+/** The number a live bucket shows ("5–9"); null for `quiet` (fewer than 5) and for an older server that sends none. */
+export function liveNowWord(bucket: LiveNow | null | undefined): string | null {
   switch (bucket) {
     case '5-9':
-      return '5–9 live'
+      return '5–9'
     case '10-19':
-      return '10–19 live'
+      return '10–19'
     case '20+':
-      return '20+ live'
+      return '20+'
     default:
-      return 'Under 5 live'
+      return null
   }
 }
 
-/**
- * The venue's event tonight, or null when its next event is another day.
- * "Happening now · Jazz Night", "Tonight · 9:00 PM · Jazz Night".
- */
-export function tonightLine(
-  next: { title: string; startTime: string; endTime: string } | null | undefined,
-  now: Date = new Date()
-): string | null {
-  if (!next) return null
-  const start = new Date(next.startTime)
-  const end = new Date(next.endTime)
-  if (Number.isNaN(start.getTime())) return null
-  const running = start <= now && now < end
-  // Today by the calendar, not by what the label happens to say.
-  const today = start.getFullYear() === now.getFullYear() && start.getMonth() === now.getMonth() && start.getDate() === now.getDate()
-  return running || today ? `${nextUpLabel(next.startTime, next.endTime, now)} · ${next.title}` : null
+/** How many are live at a place, as the list says it ("5–9 live"), or null when it shows nothing. */
+export function liveNowLabel(bucket: LiveNow | null | undefined): string | null {
+  const word = liveNowWord(bucket)
+  return word ? `${word} live` : null
 }

@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import { CHECK_IN_CODES } from './checkInRefusal'
-import { liveNowLabel, type LiveNow } from './home'
 import { Logger } from './logger'
+import { hourIn } from './time'
 
 /**
  * Go Live at a place (plan v2 step 5): the windows, the countdown, the expiry
@@ -18,31 +18,10 @@ import { Logger } from './logger'
 /** What `POST /venues/:venueId/live` accepts besides where you are. Anything else is a 400. */
 export type GoLiveChoice = { minutes: 20 | 45 | 60 } | { stay: true }
 
-/** The Go Live sheet, top to bottom. */
-export const GO_LIVE_CHOICES: readonly { choice: GoLiveChoice; label: string }[] = [
-  { choice: { minutes: 20 }, label: '20 minutes' },
-  { choice: { minutes: 45 }, label: '45 minutes' },
-  { choice: { minutes: 60 }, label: 'An hour' },
-  // The server decides whether "stay" is Blendn+'s (`PLUS_REQUIRED`): in a city's launch season it is everyone's.
-  // It holds only while the app pings from inside the place, and it pings in the foreground.
-  { choice: { stay: true }, label: 'Stay while Blendn is open here' },
-]
-
-export function choiceLabel(choice: GoLiveChoice): string {
-  return GO_LIVE_CHOICES.find((c) => sameChoice(c.choice, choice))?.label ?? ''
-}
-
-function sameChoice(a: GoLiveChoice, b: GoLiveChoice): boolean {
-  return 'stay' in a ? 'stay' in b : 'minutes' in b && a.minutes === b.minutes
-}
-
-/** The expiry prompt shows this long before the window ends. */
-export const EXPIRY_PROMPT_LEAD_MS = 5 * 60_000
-
-/** What the expiry prompt's free extension asks for. Going live again while live extends, never shortens. */
+/** What the expiry prompt's free extension asks for (Extend 45 min — free). Going live again while live extends, never shortens. */
 export const EXTEND_CHOICE: GoLiveChoice = { minutes: 45 }
 
-/** What the expiry prompt's "Stay live till I leave" asks for: Blendn+'s where the server gates it. */
+/** What the expiry prompt's Stay row asks for: Blendn+'s where the server gates it. */
 export const STAY_CHOICE: GoLiveChoice = { stay: true }
 
 /** Milliseconds left in a window, never below 0; null with no window to count. */
@@ -64,57 +43,22 @@ export function countdownLabel(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 
-/** The countdown for a screen reader: whole minutes, never ticking seconds. */
-export function countdownSpoken(ms: number): string {
-  const minutes = Math.ceil(Math.max(0, ms) / 60_000)
-  if (minutes <= 1) return 'Less than a minute left'
-  if (minutes < 60) return `${minutes} minutes left`
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return `${h} hour${h > 1 ? 's' : ''}${m ? ` ${m} minutes` : ''} left`
-}
-
-/**
- * How long until the expiry prompt should show, or null when it never should:
- * no window, a window already over, a "stay" window (it follows the person,
- * so it is not about to end because time passed), or one already asked about
- * tonight. 0 means now.
- */
-export function promptDelayMs(
-  window: { expiresAt: string | null | undefined; stay: boolean },
-  now: number,
-  alreadyPrompted: boolean
-): number | null {
-  if (window.stay || alreadyPrompted) return null
-  const left = remainingMs(window.expiresAt, now)
-  if (left === null || left === 0) return null
-  return Math.max(0, left - EXPIRY_PROMPT_LEAD_MS)
-}
-
-/**
- * How many are live here, as the place screen says it. A bucket, never a
- * number (D-19): a count that moved from 4 to 5 as you watched would tell you
- * somebody just walked in. The server's figure never counts the caller, so a
- * person who is live reads it as the others. Null for a viewer the server
- * gives no figure (not onboarded, no known adult age).
- */
-export function liveCountLine(bucket: LiveNow | null | undefined, youAreLive: boolean): string | null {
-  if (bucket === null) return null
-  const label = liveNowLabel(bucket) // "Under 5 live", "5–9 live", …
-  if (!youAreLive) return `${label} here`
-  return `You and ${label.replace(/ live$/, '').replace(/^Under/, 'under')} others`
-}
-
 /** What the place screen offers, from `live` on `GET /venues/:venueId`. */
 export type VenueAction =
   | { kind: 'live' }
   | { kind: 'goLive' }
   /** A real event has the place: check in to it instead (`EVENT_LIVE_HERE`). */
   | { kind: 'handoff'; eventId: string }
-  /** Going live here would be refused for a reason that is not yours to fix. */
-  | { kind: 'closed'; message: string }
+  /**
+   * Going live here would be refused for a reason that is not yours to fix. `reason` says why when the server's code
+   * tells us (audit C8: the sentence alone gave no reason); null when it does not, and no time is ever invented.
+   */
+  | { kind: 'closed'; message: string; reason: string | null }
 
-export const NO_AREA_MESSAGE = "This place has no check-in area yet, so you can't go live here."
+/** The dock's sentence when going live is not possible here (Flow 11 `SRV.noArea`). */
+export const NO_AREA_MESSAGE = "You can’t go live here yet."
+/** Why: nobody has drawn the place's check-in area (`no_check_in_area`), so there is nowhere to be "here". */
+export const NO_AREA_REASON = 'This place has no check-in area yet.'
 
 export function venueAction(live: {
   open: boolean
@@ -126,8 +70,8 @@ export function venueAction(live: {
   if (live.youAreLive) return { kind: 'live' }
   if (live.closedReason === 'event_live_here' && live.eventId) return { kind: 'handoff', eventId: live.eventId }
   if (live.open) return { kind: 'goLive' }
-  if (live.closedReason === 'no_check_in_area') return { kind: 'closed', message: NO_AREA_MESSAGE }
-  return { kind: 'closed', message: "You can't go live here right now." }
+  if (live.closedReason === 'no_check_in_area') return { kind: 'closed', message: NO_AREA_MESSAGE, reason: NO_AREA_REASON }
+  return { kind: 'closed', message: "You can’t go live here right now.", reason: null }
 }
 
 /** Codes `POST /venues/:venueId/live` answers with besides the check-in door's (blendn-admin/docs/API.md). */
@@ -150,14 +94,17 @@ export const GO_LIVE_CODES = {
  */
 export type RefusalAction = 'directions' | 'retry' | 'add_age'
 
+/** Which of Flow 11's refusal sheets a refusal is drawn on (11-1, 11.2). */
+export type RefusalReason = 'notHere' | 'gps' | 'timeout' | 'rate' | 'noArea' | 'age' | 'notFound' | 'other'
+
 export type GoLiveRefusal =
   /** A sheet that sends you to the event's check-in — a state, never an error toast (PL-CU01). */
   | { kind: 'handoff'; eventId: string; message: string }
   /** "Stay" while Blendn+ gates it (`PLUS_REQUIRED`): the paywall, not a failure. */
   | { kind: 'plus' }
-  | { kind: 'refused'; title: string; message: string; offerDirections: boolean; action?: RefusalAction }
+  | { kind: 'refused'; reason: RefusalReason; title: string; message: string; offerDirections: boolean; action?: RefusalAction }
 
-const GENERIC = "We couldn't make you live here. Please try again."
+const GENERIC = "We couldn’t make you live here. Please try again."
 
 /** "1 minute", "45 seconds" — for a rate limit's wait. */
 function waitLabel(seconds: number): string {
@@ -185,33 +132,36 @@ export function goLiveRefusal(
     case GO_LIVE_CODES.EVENT_LIVE_HERE:
       return eventId
         ? { kind: 'handoff', eventId, message }
-        : { kind: 'refused', title: 'An event has this place', message, offerDirections: false }
+        : { kind: 'refused', reason: 'other', title: 'An event has this place', message, offerDirections: false }
     case GO_LIVE_CODES.PLUS_REQUIRED:
       return { kind: 'plus' }
     case CHECK_IN_CODES.OUT_OF_RANGE:
-      return { kind: 'refused', title: 'Not quite there yet', message, offerDirections: true, action: 'directions' }
+      return { kind: 'refused', reason: 'notHere', title: 'Not quite there yet', message, offerDirections: true, action: 'directions' }
     case GO_LIVE_CODES.GPS_TOO_VAGUE:
-      return { kind: 'refused', title: 'GPS signal too weak', message, offerDirections: false, action: 'retry' }
+      return { kind: 'refused', reason: 'gps', title: 'GPS signal too weak', message, offerDirections: false, action: 'retry' }
     case GO_LIVE_CODES.NO_CHECK_IN_AREA:
-      return { kind: 'refused', title: 'No check-in area here', message, offerDirections: false }
+      return { kind: 'refused', reason: 'noArea', title: 'No check-in area here', message, offerDirections: false }
+    case CHECK_IN_CODES.AGE_UNKNOWN:
     case CHECK_IN_CODES.AGE_RESTRICTED:
-      return { kind: 'refused', title: 'Not open to you', message, offerDirections: false, action: 'add_age' }
+      return { kind: 'refused', reason: 'age', title: 'Not open to you', message, offerDirections: false, action: 'add_age' }
+    case CHECK_IN_CODES.PROFILE_INCOMPLETE:
     case GO_LIVE_CODES.FORBIDDEN:
-      return { kind: 'refused', title: 'Finish your profile first', message, offerDirections: false }
+      return { kind: 'refused', reason: 'age', title: 'Finish your profile first', message, offerDirections: false }
     case GO_LIVE_CODES.NOT_FOUND:
-      return { kind: 'refused', title: "This place isn't available", message, offerDirections: false }
+      return { kind: 'refused', reason: 'notFound', title: "This place isn’t available", message, offerDirections: false }
     case GO_LIVE_CODES.RATE_LIMITED:
       return {
         kind: 'refused',
+        reason: 'rate',
         title: 'Too many tries',
         message: retryAfter && retryAfter > 0 ? `Try again in ${waitLabel(retryAfter)}.` : message,
         offerDirections: false,
       }
     case undefined:
       // No code: a timeout, no network, a 5xx. It may have landed — the caller re-reads.
-      return { kind: 'refused', title: "Couldn't go live", message, offerDirections: false, action: 'retry' }
+      return { kind: 'refused', reason: 'timeout', title: "Couldn’t go live", message, offerDirections: false, action: 'retry' }
     default:
-      return { kind: 'refused', title: "Couldn't go live", message, offerDirections: false }
+      return { kind: 'refused', reason: 'other', title: "Couldn’t go live", message, offerDirections: false }
   }
 }
 
@@ -223,11 +173,11 @@ export function liveEndedMessage(reason: string, venueName: string | null): stri
   const at = venueName ? ` at ${venueName}` : ''
   switch (reason) {
     case 'expired':
-      return `You're no longer live${at}.`
+      return `You’re no longer live${at}.`
     case 'event_started':
       return `An event just started${at}. Check in to it to join its room.`
     case 'left_area':
-      return `You left${venueName ? ` ${venueName}` : ' the place'}, so you're no longer live.`
+      return `You left${venueName ? ` ${venueName}` : ' the place'}, so you’re no longer live.`
     default:
       return null
   }
@@ -267,10 +217,49 @@ export async function readLiveSession(userId: string | null | undefined): Promis
   }
 }
 
+/*
+ * The venue days this account has gone live on, the last two. The expiry
+ * prompt never offers Blendn+ on a person's first Go Live (Flow 11 · 11.4:
+ * "never on a first Go Live"), and "first" is the first venue day, not the
+ * first window: an extension on the same night is still the first.
+ * ponytail: a phone that went live before this was kept counts as new once.
+ */
+const DAYS_KEY = 'blendn.goLive.days'
+type LiveDays = { userId: string; days: string[] }
+
+async function readLiveDays(userId: string): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(DAYS_KEY)
+    const parsed = raw ? (JSON.parse(raw) as LiveDays) : null
+    return parsed?.userId === userId && Array.isArray(parsed.days) ? parsed.days : []
+  } catch (error) {
+    Logger.warn('events', 'Could not read the live days', { error: String(error) })
+    return []
+  }
+}
+
+/** A Go Live happened on this venue day. */
+export async function noteGoLiveDay(userId: string, venueDayId: string): Promise<void> {
+  const days = await readLiveDays(userId)
+  if (days[0] === venueDayId) return
+  try {
+    await AsyncStorage.setItem(DAYS_KEY, JSON.stringify({ userId, days: [venueDayId, ...days.filter((d) => d !== venueDayId)].slice(0, 2) } satisfies LiveDays))
+  } catch (error) {
+    // Lost, a later night may count as a first one: one fewer offer, never one too many.
+    Logger.warn('events', 'Could not remember the live day', { error: String(error) })
+  }
+}
+
+/** Whether this account went live on some other venue day before `venueDayId`. */
+export async function hasGoneLiveBefore(userId: string, venueDayId: string): Promise<boolean> {
+  return (await readLiveDays(userId)).some((d) => d !== venueDayId)
+}
+
 /** After a Go Live. The same venue day keeps its `prompted`: the prompt shows at most once a night (PL-M02). */
 export async function rememberLiveSession(next: Omit<LiveSession, 'prompted'>): Promise<void> {
   const current = await readLiveSession(next.userId)
   const sameDay = current?.venueDayId === next.venueDayId
+  await noteGoLiveDay(next.userId, next.venueDayId)
   await writeLiveSession({
     ...next,
     prompted: sameDay ? current.prompted : false,
@@ -289,10 +278,33 @@ export async function noteLiveDayEnd(userId: string, venueDayId: string, dayEnds
   if (current?.venueDayId === venueDayId && current.dayEndsAt !== dayEndsAt) await writeLiveSession({ ...current, dayEndsAt })
 }
 
+/*
+ * When this phone last went live itself, wherever the button was (the place page, the expiry prompt): a "stay" that is
+ * not one any more right after is our own doing, not Blend'n+ lapsing (`ownGoLiveWithin`).
+ */
+let lastOwnGoLiveAt = 0
+export function noteOwnGoLive(at: number = Date.now()): void {
+  lastOwnGoLiveAt = at
+}
+export const ownGoLiveWithin = (ms: number): boolean => Date.now() - lastOwnGoLiveAt <= ms
+
+/** The local hour a venue day resets at, from the day's own end (`dayEndsAt`); null until the active check-in has said it. */
+export function resetHourOf(session: Pick<LiveSession, 'dayEndsAt'> | null | undefined): number | null {
+  const at = session?.dayEndsAt ? new Date(session.dayEndsAt) : null
+  return at && !Number.isNaN(at.getTime()) ? hourIn(at) : null
+}
+
+/** "6", "noon", "1 pm": when tomorrow's room opens, as the room's own sentence says it ("Tomorrow's opens at 6."). */
+export function opensAtWords(hour: number): string {
+  if (hour === 0) return 'midnight'
+  if (hour === 12) return 'noon'
+  return hour < 12 ? String(hour) : `${hour - 12} pm`
+}
+
 /** At sign-out: the next account on this phone starts with nothing. */
 export async function clearLiveSession(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(LIVE_KEY)
+    await AsyncStorage.multiRemove([LIVE_KEY, DAYS_KEY])
   } catch (error) {
     Logger.warn('events', 'Could not clear the live session', { error: String(error) })
   }

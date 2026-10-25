@@ -1,5 +1,5 @@
 import type { VenueListItem } from '../lib/apiClient'
-import { initialPlaces, mayLoadMore, placesKey, placesReducer, type PlacesState } from '../lib/places'
+import { initialPlaces, mayLoadMore, placesKey, placesReducer, uniqueById, type PlacesState } from '../lib/places'
 
 /** The Places list's loading rules (lib/places.ts; step 2 review). */
 
@@ -87,5 +87,65 @@ describe('the Places list loads', () => {
     expect(placesKey('Bengaluru', { latitude: 12.97131, longitude: 77.59422 })).toBe(
       placesKey('Bengaluru', { latitude: 12.97139, longitude: 77.59431 })
     )
+  })
+})
+
+describe('a server that orders live first', () => {
+  it('the first page says so; later pages keep it; a list for another key forgets it', () => {
+    let s = placesReducer(initialPlaces(KEY), { type: 'loaded', key: KEY, page: 1, venues: [], hasMore: true, orderedLive: true })
+    expect(s.orderedLive).toBe(true)
+    s = placesReducer(s, { type: 'loaded', key: KEY, page: 2, venues: [], hasMore: true })
+    expect(s.orderedLive).toBe(true)
+    s = placesReducer(s, { type: 'loaded', key: KEY, page: 1, venues: [], hasMore: true })
+    expect(s.orderedLive).toBe(false)
+  })
+
+  it('the type chip is part of what the list is of', () => {
+    expect(placesKey('Bengaluru', null, 'brewery')).not.toBe(placesKey('Bengaluru', null))
+  })
+})
+
+describe('a venue that goes live between page loads is listed once (order=live)', () => {
+  const v = (id: string, name = id) => ({ id, name }) as never
+
+  it('across pages the first occurrence wins, position and all', () => {
+    let s = placesReducer(initialPlaces(KEY), { type: 'loaded', key: KEY, page: 1, venues: [v('a'), v('b', 'first b')], hasMore: true })
+    s = placesReducer(s, { type: 'loaded', key: KEY, page: 2, venues: [v('b', 'second b'), v('c')], hasMore: true })
+    expect(s.venues.map((x) => x.id)).toEqual(['a', 'b', 'c'])
+    expect((s.venues[1] as unknown as { name: string }).name).toBe('first b')
+  })
+
+  it('and within one page, including the first', () => {
+    const s = placesReducer(initialPlaces(KEY), { type: 'loaded', key: KEY, page: 1, venues: [v('a'), v('a', 'again'), v('b')], hasMore: true })
+    expect(s.venues.map((x) => x.id)).toEqual(['a', 'b'])
+    const t = placesReducer(s, { type: 'loaded', key: KEY, page: 2, venues: [v('c'), v('c'), v('a')], hasMore: false })
+    expect(t.venues.map((x) => x.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('uniqueById does not mutate what it is given', () => {
+    const input = [v('a'), v('a')]
+    uniqueById(input)
+    expect(input).toHaveLength(2)
+  })
+})
+
+describe('what the stat line and the offline banner read', () => {
+  const v = (id: string) => ({ id }) as never
+  it('keeps the server’s total and when page 1 arrived; a later page updates the total, never the time', () => {
+    let s = placesReducer(initialPlaces(KEY), { type: 'loaded', key: KEY, page: 1, venues: [v('a')], hasMore: true, total: 6422, at: 1000 })
+    expect(s).toMatchObject({ total: 6422, readAt: 1000 })
+    s = placesReducer(s, { type: 'loaded', key: KEY, page: 2, venues: [v('b')], hasMore: true, total: 6423, at: 2000 })
+    expect(s).toMatchObject({ total: 6423, readAt: 1000 })
+    // A page that does not say keeps what was known.
+    s = placesReducer(s, { type: 'loaded', key: KEY, page: 3, venues: [v('c')], hasMore: false })
+    expect(s.total).toBe(6423)
+    expect(initialPlaces(KEY)).toMatchObject({ total: null, readAt: null })
+  })
+
+  it('a search or a radius is a different list', () => {
+    const base = placesKey('Bengaluru', null)
+    expect(placesKey('Bengaluru', null, null, 'toit')).not.toBe(base)
+    expect(placesKey('Bengaluru', null, null, null, 5)).not.toBe(base)
+    expect(placesKey('Bengaluru', null, null, 'toit', 5)).not.toBe(placesKey('Bengaluru', null, null, 'toit', 2))
   })
 })

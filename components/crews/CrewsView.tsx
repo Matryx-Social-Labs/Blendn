@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import {
+  blendWith,
   CREW_REPORT_REASONS,
   crewMessage,
   likeAs,
@@ -14,6 +15,7 @@ import {
   type CrewsAtEvent,
 } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
+import { isOrganiserSuspended } from '../../lib/noLongerAvailable'
 import { showSheet } from '../../lib/sheet'
 import type { TellState } from '../ds/CrewStrip'
 import { useToast } from '../Toast'
@@ -25,6 +27,7 @@ export type CrewsHere =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'not_here' }
+  | { status: 'gone' }
   | { status: 'ready'; data: CrewsAtEvent; offset: number }
 
 /*
@@ -60,7 +63,7 @@ export function useCrewsHere(eventId: string | null) {
     if (crews.success && crews.data) setMine(crews.data.crews)
     else setMine((prev) => prev ?? [])
     if (!page.success || !page.data) {
-      setState({ status: page.errorCode === 'NOT_CHECKED_IN' ? 'not_here' : 'error' })
+      setState({ status: isOrganiserSuspended(page) ? 'gone' : page.errorCode === 'NOT_CHECKED_IN' ? 'not_here' : 'error' })
       return
     }
     const data = page.data
@@ -137,6 +140,7 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
   return new Promise((resolve) =>
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title,
       message: 'Your crew chat says who liked on its behalf.',
       onDismiss: () => resolve(null),
@@ -178,7 +182,7 @@ export function useCrewActions(
       return
     }
     setTold((t) => ({ ...t, [crew.crewId]: 'no' }))
-    showToast(crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'), 'error')
+    showToast(crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'), 'error', { haptic: 'error' })
   }
 
   const like = async (card: CrewCard) => {
@@ -200,7 +204,7 @@ export function useCrewActions(
       const result = await crewsApi.likeCrew(eventId, card.crewId, asCrewId ?? undefined)
       setLiking(null)
       if (!result.success || !result.data) {
-        showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error')
+        showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error', { haptic: 'error' })
         if (result.errorCode === 'NOT_FOUND') void reload()
         return
       }
@@ -208,8 +212,8 @@ export function useCrewActions(
       if (result.data.blend) {
         if (onBlend) onBlend(result.data.blend, card, asCrewId ?? null)
         else {
-          showToast("It's a Blend", 'success')
-          openBlend(result.data.blend, `Blend with ${card.name}`)
+          showToast("It’s a Blend", 'success')
+          openBlend(result.data.blend, blendWith(card.name))
         }
       }
     } finally {
@@ -220,6 +224,7 @@ export function useCrewActions(
   const report = (card: CrewCard) =>
     showSheet({
       kind: 'reasons',
+      hue: 'rose',
       title: `Report ${card.name}`,
       message: 'What’s wrong with this crew’s name or bio? Nobody in the crew is told who reported it.',
       reasons: CREW_REPORT_REASONS.map((r) => ({ value: r.value, label: r.label })),
@@ -301,7 +306,7 @@ export function useOpenToCrews(eventId: string, checkInKey: string) {
     setBusy(false)
     if (!result.success || !result.data) {
       setValue(before)
-      showToast(crewMessage(result, 'card', 'Couldn’t save that. Try again.'), 'error')
+      showToast(crewMessage(result, 'card', 'Couldn’t save that. Try again.'), 'error', { haptic: 'error' })
       return
     }
     openToCrewsByCheckIn.set(key, result.data.openToCrews)

@@ -54,17 +54,20 @@ describe('a removed message is a placeholder, not a blank', () => {
     expect(readFileSync(join(__dirname, '..', 'lib', 'roomMessages.ts'), 'utf8')).toMatch(/removed: Boolean\(msg\.moderation_hidden\)/)
   })
 
-  it("keeps your own live removal as a placeholder and drops everyone else's", () => {
+  it("keeps your own live removal as a placeholder and drops everyone else’s", () => {
     expect(chatSource).toMatch(/const ownRemoval = data\.moderation && data\.userId && data\.userId === currentUser\?\.id/)
     expect(chatSource).toMatch(/\{ \.\.\.m, removed: true, message_text: '' \}/)
   })
 
   it('the bubble says so, in its own style, with no actions', () => {
-    expect(bubble).toContain('This message was removed by moderation.')
+    // Said without a full stop before the time (a11y audit L9); drawn with one.
+    expect(bubble).toContain("text: 'This message was removed by moderation'")
     // No hold (so no menu) and no swipe on a removed message.
     expect(bubble).toContain('.enabled(!!onLongPress && !removed)')
     expect(bubble).toContain('.enabled(!!onReply && !removed && !failed)')
-    expect(bubble).toMatch(/removed: \{[^}]*borderStyle: 'dashed'/)
+    // Dashed by the DS frame (SVG), never a border dash, which draws solid on Android with any per-side width.
+    expect(bubble).toContain('{removed ? <DashedFrame radius={BUBBLE.radius}')
+    expect(bubble).not.toContain("borderStyle: 'dashed'")
   })
 })
 

@@ -9,7 +9,7 @@ import { act, render } from '@testing-library/react-native'
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getActiveCheckins: jest.fn(), getEvent: jest.fn() } }))
 jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn() }))
-jest.mock('../components/ActionTray', () => ({ __esModule: true, default: () => null }))
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }))
 jest.mock('expo-location', () => ({ getForegroundPermissionsAsync: jest.fn(), getCurrentPositionAsync: jest.fn(), Accuracy: { Balanced: 3 } }))
 
 /* eslint-disable import/first */

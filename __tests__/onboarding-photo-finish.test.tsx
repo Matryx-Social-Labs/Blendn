@@ -145,7 +145,7 @@ describe('finishing', () => {
     })
 
     expect(outcome).toBe(false)
-    expect(mockShowToast).toHaveBeenCalledWith('That photo did not finish uploading', 'error')
+    expect(mockShowToast).toHaveBeenCalledWith('That photo did not finish uploading', 'error', { haptic: 'error' })
     expect(clearOnboarding).not.toHaveBeenCalled()
   })
 
@@ -157,7 +157,7 @@ describe('finishing', () => {
       await result.current.finish()
     })
 
-    expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/could not finish setting up your profile/i), 'error')
+    expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/could not finish setting up your profile/i), 'error', { haptic: 'error' })
   })
 
   it('says so when it throws, and not for a second tap that was refused', async () => {
@@ -178,6 +178,6 @@ describe('finishing', () => {
     })
     expect(await first).toBe(false)
     expect(mockShowToast).toHaveBeenCalledTimes(1)
-    expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/could not finish setting up your profile/i), 'error')
+    expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/could not finish setting up your profile/i), 'error', { haptic: 'error' })
   })
 })

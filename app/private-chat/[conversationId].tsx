@@ -1,6 +1,7 @@
+import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, StyleSheet, View } from 'react-native'
+import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -13,25 +14,28 @@ import { Avatar } from '../../components/ds/Avatar'
 import { ChatBubble } from '../../components/ds/ChatBubble'
 import type { Rect } from '../../components/ds/chatShared'
 import { Composer } from '../../components/ds/Composer'
+import { contactWarning } from '../../lib/contactWarning'
 import { LongPressMenu, type MenuItem } from '../../components/ds/ContextMenu'
 import type { Face } from '../../components/ds/Facepile'
 import { Grain } from '../../components/ds/Grain'
 import { ImageViewer } from '../../components/ds/ImageViewer'
-import { Orbs } from '../../components/ds/Orbs'
-import { RevealBar } from '../../components/ds/RevealBar'
+import { RevealBar, YOU } from '../../components/ds/RevealBar'
+import { HueProvider } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TypingIndicator } from '../../components/ds/TypingIndicator'
 import { DayPill, UnreadDivider as UnreadRule } from '../../components/ds/UnreadDivider'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
+import { useToastInset } from '../../components/toastDock'
 import { apiClient } from '../../lib/apiClient'
+import { scheduleIconBadgeRefresh } from '../../lib/appBadge'
 import { runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
-import { dmThread, draftOf, failedOf, keepFailed, setDraft } from '../../lib/chatOutbox'
+import { dmThread, failedOf, keepFailed, useThreadDraft } from '../../lib/chatOutbox'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { newClientId } from '../../lib/clientId'
-import { revealView, type ConversationRevealState } from '../../lib/conversationReveal'
+import { revealPanelKey, revealView, type ConversationRevealState } from '../../lib/conversationReveal'
 import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import {
   directHeaderAvatar,
@@ -43,6 +47,7 @@ import {
   settleDirectMessage,
   type PrivateMessage,
 } from '../../lib/directThread'
+import { friendAction, parseFriendOffer, type FriendOffer } from '../../lib/friendOffer'
 import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
@@ -68,13 +73,15 @@ import {
   type PrivateReadCallback,
   type PrivateTypingCallback,
 } from '../../lib/socketClient'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { withDaySeparators, withUnreadDivider, type UnreadDivider } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
+import { useFriendAsk } from '../../lib/useFriendAsk'
 import { useComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
+import { firstNameOf } from '../../lib/friendsHere'
 import { isOffline, useWaitingSends } from '../../lib/useWaitingSends'
 import { userMessage } from '../../lib/userMessage'
 
@@ -113,8 +120,11 @@ function PrivateChatInner() {
    * server answers "not found" for both and never says which (SCRUM-165).
    */
   const [ended, setEnded] = useState(false)
-  // A suggested opener (the match moment's "Try …") fills the composer once; nothing sends until you do.
-  const [newMessage, setNewMessage] = useState(() => draftParam(draft) || draftOf(thread))
+  /*
+   * A suggested opener (the match moment's "Try …") fills the composer once; nothing sends until you do. What you typed
+   * wins over it (Opus review M4): it is stored as you type, so a remount (a text-size change) shows your edits.
+   */
+  const [newMessage, setNewMessage] = useThreadDraft(thread, draftParam(draft))
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   // The message the next send replies to (SCRUM-409).
@@ -138,6 +148,8 @@ function PrivateChatInner() {
   const [revealFailed, setRevealFailed] = useState(false)
   const [revealAttempt, setRevealAttempt] = useState(0)
   const [otherId, setOtherId] = useState<string | null>(null)
+  /** The server's offer to add them as a friend (SCRUM-750): `canAdd` only once you have both revealed. */
+  const [friend, setFriend] = useState<FriendOffer | null>(null)
   /** Their photo as the server resolves it: `null` until they reveal. */
   const [otherImage, setOtherImage] = useState<string | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -146,7 +158,11 @@ function PrivateChatInner() {
   const [picked, setPicked] = useState<string | null>(null)
   const [dockHeight, setDockHeight] = useState<number>(SIZE.input)
   const [barHeight, setBarHeight] = useState(0)
+  /** The reveal panel the person folded away (`revealPanelKey`): the feed is theirs again until it changes. */
+  const [foldedPanel, setFoldedPanel] = useState<string | null>(null)
   const { showToast } = useToast()
+  // Android: the snackbar over the composer covers the newest row (the withheld placeholder it explains); the feed makes room (rc8 #5).
+  const toastInset = useToastInset()
 
   useEffect(() => {
     if (!conversationId) return
@@ -157,6 +173,7 @@ function PrivateChatInner() {
       setRevealFailed(false)
       setOtherId(r.data.otherUser?.id || null)
       setOtherImage(r.data.otherUser?.image || null)
+      setFriend(parseFriendOffer(r.data.friend))
       setReveal({
         displayName: r.data.otherUser?.name || 'Someone',
         youRevealed: r.data.youRevealed ?? false,
@@ -171,6 +188,16 @@ function PrivateChatInner() {
       live = false
     }
   }, [conversationId, conversation, revealAttempt])
+
+  // Their reveal as it lands, so Add friend turns on without leaving the thread: the socket's `private:revealed` (below), this
+  // push, and `useLiveSync` for a socket that was down.
+  useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((n) => {
+      const data = n.request.content.data
+      if (data?.type === 'reveal' && data.conversationId === conversation) setRevealAttempt((x) => x + 1)
+    })
+    return () => sub.remove()
+  }, [conversation])
 
   const flatListRef = useRef<FlatList<ChatListItem>>(null)
   const isAtBottomRef = useRef(true)
@@ -188,12 +215,37 @@ function PrivateChatInner() {
 
   // Their profile, only once they are a name to you: an accepted request, or a match who revealed.
   const profileId = otherId || idParam(otherUserId) || undefined
+  const theirRealName = !!reveal && (reveal.pseudonymous === false || reveal.theyRevealed)
   const openProfile =
-    reveal && (reveal.pseudonymous === false || reveal.theyRevealed) && profileId
+    theirRealName && profileId
       ? () => router.push({ pathname: '/user/[id]', params: { id: String(profileId) } } as never)
       : undefined
-  const name = reveal?.displayName || nameParam(otherUserName) || 'Chat'
-  const view = reveal ? revealView(reveal, asked) : null
+  // Nobody is called "Chat" (r7 M10: a failed thread titled itself "Chat" and offered "Message Chat"): with no name yet, the
+  // conversation is the title, as the ended state's is.
+  const name = reveal?.displayName || nameParam(otherUserName) || 'Conversation'
+  /*
+   * Add friend (SCRUM-750): a lit action while the server offers it (`canAdd`, which is only true once you have both revealed), a
+   * quiet "Requested" once asked. `otherId` is a handle until they reveal, so the ask never carries one (`useFriendAsk` refuses one
+   * too). Already friends: nothing, there is nothing left to do.
+   */
+  const friendAsk = useFriendAsk(name)
+  const friendNow = friendAction(friend)
+  const friendOffered = friendNow?.lit === true
+  const view = reveal ? revealView(reveal, asked, friendOffered) : null
+  /** `inline`: from the options sheet, which shows a refusal under its row instead of a toast. */
+  const addFriend = async (inline: boolean): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const result = await friendAsk.ask(otherId, { inline })
+    if (!result.ok) return result
+    setFriend(result.offer)
+    return { ok: true }
+  }
+  const panelKey = revealPanelKey(view)
+  const panelOpen = !ended && panelKey !== null && foldedPanel !== panelKey
+  // The thread folds the panel away when a touch or a drag ENDS, never while the finger is down: folding on touch-start moves the
+  // feed under the finger and Android cancels the press, so the first tap on a message was eaten. The header's reveal line brings it back.
+  const foldPanel = () => {
+    if (panelOpen) setFoldedPanel(panelKey)
+  }
 
   /* Ask them: the Asked state on the server's yes. No haptic (Flow 5 DM annotation). */
   const askThem = () => {
@@ -203,7 +255,7 @@ function PrivateChatInner() {
       .requestReveal(conversation)
       .then((r) => {
         if (r.success) setAsked(true)
-        else showToast(userMessage(r, "Couldn't ask them. Try again."), 'error')
+        else showToast(userMessage(r, "Couldn’t ask them. Try again."), 'error', { haptic: 'error' })
       })
       .finally(() => setRevealBusy(false))
   }
@@ -223,8 +275,10 @@ function PrivateChatInner() {
           H.success()
           setRevealSheet(null)
           setReveal((prev) => (prev ? { ...prev, youRevealed: true } : prev))
+          // Their reveal may already be in: your reveal is what can turn Add friend on, and only the server says so.
+          setRevealAttempt((n) => n + 1)
         } else {
-          setRevealSheet({ notYet: userMessage(r, "Couldn't reveal. Try again.") })
+          setRevealSheet({ notYet: userMessage(r, "Couldn’t reveal. Try again.") })
         }
       })
       .finally(() => setRevealBusy(false))
@@ -312,13 +366,15 @@ function PrivateChatInner() {
   useEffect(() => {
     if (!myId || !conversationId || messages.length === 0) return
     const unreadIds = messages.filter((m) => !m.isRead && m.senderId !== myId && !isLocalMessage(m)).map((m) => m.id)
-    if (unreadIds.length > 0) markPrivateMessagesRead(conversation, unreadIds)
+    if (unreadIds.length > 0) {
+      markPrivateMessagesRead(conversation, unreadIds)
+      // A socket read has no answer to wait for: the icon is re-read once the server has had a moment.
+      scheduleIconBadgeRefresh()
+    }
   }, [messages, myId, conversationId, conversation])
 
-  // This phone's unsent messages stay where the thread (and the Banter) can find them; the draft too.
+  // This phone's unsent messages stay where the thread (and the Banter) can find them; the draft is kept as it is typed.
   useEffect(() => keepFailed(thread, messages.filter((m) => m.failed || m.waiting)), [messages, thread])
-  const draftRef = useLatest(newMessage)
-  useEffect(() => () => setDraft(thread, draftRef.current), [thread, draftRef])
 
   const subscribeToMessages = useCallback(() => {
     if (!conversationId) return () => {}
@@ -327,7 +383,8 @@ function PrivateChatInner() {
       setMessages((prev) => {
         if (prev.some((m) => m.id === data.message.id)) return prev
         // Your own send echoed before the request resolved is still yours; the first into an empty thread takes over from Say hi.
-        if (prev.length === 0 || data.message.senderId === myId) markArriving(data.message.id)
+        // Theirs rise too (DS #13) when you are at the bottom; read back, nothing moves: the chip counts it.
+        if (prev.length === 0 || data.message.senderId === myId || isAtBottomRef.current) markArriving(data.message.id)
         return [...prev, directMessageFrom(data.message)]
       })
       setIsOtherTyping(false)
@@ -346,7 +403,9 @@ function PrivateChatInner() {
       if (data.readBy === myId) return
       setMessages((prev) => prev.map((m) => (data.messageIds.includes(m.id) ? { ...m, isRead: true } : m)))
     }
-    const u1 = subscribeToConversation(conversation, { onMessage, onTyping, onRead })
+    // Their reveal as it lands (RC drive D3): the conversation is re-read, so "You can both see each other" appears in place.
+    const onRevealed = () => setRevealAttempt((x) => x + 1)
+    const u1 = subscribeToConversation(conversation, { onMessage, onTyping, onRead, onRevealed })
     // ✓✓ delivered as their app gets them (SCRUM-408).
     const u2 = subscribeToDelivered((d) => {
       if (d.conversationId !== conversation) return
@@ -414,7 +473,7 @@ function PrivateChatInner() {
     } catch (error) {
       Logger.warn('private-chat', 'send failed', { error })
       fail()
-      showToast("Couldn't send. Try again.", 'error')
+      showToast("Couldn’t send. Try again.", 'error')
     }
   }
 
@@ -479,8 +538,14 @@ function PrivateChatInner() {
     () => withUnreadDivider(withDaySeparators(messages, (m) => m.createdAt), unread?.firstId, unread?.count ?? 0),
     [messages, unread]
   )
-  /* Your last message carries the receipt, under it (Flow 5 DM #12–#13); never in a room. */
-  const lastMineId = useMemo(() => [...messages].reverse().find((m) => m.senderId === myId && !isLocalMessage(m))?.id, [messages, myId])
+  /*
+   * Your last message carries the receipt, under it (Flow 5 DM #12–#13); never in a room. One moderation withheld was
+   * never sent, so it is skipped: "Sent" under the placeholder was untrue, and it kept the thread polling (rc8 #2).
+   */
+  const lastMineId = useMemo(
+    () => [...messages].reverse().find((m) => m.senderId === myId && !isLocalMessage(m) && !m.removed)?.id,
+    [messages, myId]
+  )
 
   /*
    * Your last message not yet Read: re-read the thread now and then while
@@ -584,11 +649,27 @@ function PrivateChatInner() {
 
   const socketStatus = useLiveSync({
     enabled: !!authUser && !!conversationId && !ended,
-    onSync: () => loadMessages(),
+    onSync: () => {
+      // Their reveal changes the conversation, not its messages: with pushes off this is how it arrives.
+      setRevealAttempt((x) => x + 1)
+      return loadMessages()
+    },
     domains: ['chat'],
     syncOnReconnect: true,
     disconnectedIntervalMs: 15000,
   })
+
+  /* The options keep the way back to Add friend after the card is folded away, and say "Requested" once asked. */
+  const friendRow =
+    friendNow && friendNow.kind !== 'friends'
+      ? {
+          action: friendNow,
+          ask: () => {
+            if (friendNow.kind === 'accept') H.primary()
+            return addFriend(true)
+          },
+        }
+      : undefined
 
   /* The options: the conversation's own sheet (lib/safetyUtils), or why it can't open yet. */
   const openOptions = () => {
@@ -597,10 +678,12 @@ function PrivateChatInner() {
         onLeft: () => router.back(),
         fromMatch: reveal.fromMatch ?? true,
         onViewProfile: openProfile,
+        friend: friendRow,
       })
     }
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title: revealFailed ? 'Couldn’t load this conversation' : 'Still loading',
       message: revealFailed
         ? 'Its options need the conversation details, which did not load.'
@@ -637,15 +720,22 @@ function PrivateChatInner() {
   const youFace: Face = reveal?.youRevealed && authUser?.image ? { kind: 'photo', uri: authUser.image } : { kind: 'creature', pseudonym: 'You' }
   // Photos once you can both see each other, or the conversation never hid anyone (R9, admin #697).
   const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))
-  const top = chatHeaderBottom(insets.top)
+  const { fontScale } = useWindowDimensions()
+  const top = chatHeaderBottom(insets.top, fontScale)
   // The feed starts under the reveal bar while there is one.
-  const barSpace = !ended && view?.bar ? barHeight : 0
+  const barSpace = panelOpen ? barHeight : 0
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
   const lock = composer.lock
+  const feed = loading && !messages.length ? [] : chatItems
+  /*
+   * An empty thread is not followed to its end: there is no newest message to keep in view, and at AX XXXL the opener and
+   * Say hi outgrow the frame, so pinning the end hid the opener's faces and "You both said" under the reveal bar on open
+   * (RC drive 3 D-A). It opens at its start; the first message (Say hi included) follows the end as before.
+   */
+  const followFeed = feed.length ? follow.onContentSizeChange : undefined
 
   return (
     <View style={styles.screen}>
-      <Orbs set="brand" paused={keyboardUp} />
       <Grain />
       <KeyboardFrame>
         {ended ? (
@@ -663,14 +753,16 @@ function PrivateChatInner() {
             <FlatList
               ref={flatListRef}
               testID="dm-feed"
-              data={loading && !messages.length ? [] : chatItems}
+              data={feed}
               keyExtractor={(item) => item.id}
               renderItem={renderChatItem}
-              style={[styles.fill, chatFeedFrame(insets.top).style]}
-              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top, barSpace).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              style={[styles.fill, chatFeedFrame(insets.top, barSpace, fontScale).style]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md + toastInset }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
+              onTouchEnd={foldPanel}
+              onScrollEndDrag={foldPanel}
               maxToRenderPerBatch={12}
               windowSize={10}
               initialNumToRender={25}
@@ -716,7 +808,7 @@ function PrivateChatInner() {
                   <SayHi line={emptyThreadLine(reveal?.displayName, nameParam(otherUserName) ?? null)} onPress={() => void send('Hey 👋')} />
                 )
               }
-              onContentSizeChange={follow.onContentSizeChange}
+              onContentSizeChange={followFeed}
               onScrollToIndexFailed={(info) => {
                 // Not measured yet: get close by the average row, then land on it.
                 flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false })
@@ -743,22 +835,28 @@ function PrivateChatInner() {
                 }}
               />
             ) : null}
-            <View style={[styles.dock, { paddingBottom: dockBottom }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height - dockBottom)}>
-              <Composer
-                testID="dm-composer"
-                value={newMessage}
-                onChangeText={onChangeText}
-                onSend={sendTyped}
-                state={lock?.state ?? 'normal'}
-                reason={lock?.reason}
-                countdown={composer.countdown}
-                reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
-                onCancelReply={() => setReplyingTo(null)}
-                placeholder={`Message ${name}`}
-                onAttach={photosAllowed ? () => void attach() : undefined}
-                onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
-              />
-            </View>
+            {/* A thread that failed to load is the DS failure state alone: no live composer under it (r7 M10). */}
+            {loadError && !messages.length ? null : (
+              <View style={[styles.dock, { paddingBottom: dockBottom }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height - dockBottom)}>
+                <Composer
+                  testID="dm-composer"
+                  value={newMessage}
+                  onChangeText={onChangeText}
+                  onSend={sendTyped}
+                  state={lock?.state ?? 'normal'}
+                  reason={lock?.reason}
+                  countdown={composer.countdown}
+                  // Advice, never a gate: a DM goes through flagged, so its sentence does not say "removed" (lib/contactWarning).
+                  warning={contactWarning(newMessage, 'dm')}
+                  reply={replyingTo ? { name: replyingTo.senderId === myId ? 'yourself' : name, text: quoteText(quoteFrom(replyingTo)) } : null}
+                  onCancelReply={() => setReplyingTo(null)}
+                  // A real name by its first name, so the placeholder holds one line (C30); a pseudonym is whole ("Arctic Falcon").
+                  placeholder={`Message ${theirRealName ? firstNameOf(name) : name}`}
+                  onAttach={photosAllowed ? () => void attach() : undefined}
+                  onFocus={() => setTimeout(() => scrollToBottom(false), 120)}
+                />
+              </View>
+            )}
           </>
         )}
       </KeyboardFrame>
@@ -775,24 +873,31 @@ function PrivateChatInner() {
         onBack={() => router.back()}
         moreLabel="Conversation options"
         onMore={openOptions}
-        onIdentity={ended ? undefined : openProfile}
-        identityHint="Opens their profile"
+        // Their name once they are one; until then the face and the reveal line reopen a panel that was folded away.
+        onIdentity={ended ? undefined : (openProfile ?? (panelKey !== null && !panelOpen ? () => setFoldedPanel(null) : undefined))}
+        identityHint={openProfile ? 'Opens their profile' : 'Shows the reveal options'}
       />
       {/* The reveal stays in view under the header while either of you is a pseudonym; the feed starts below it. */}
-      {!ended && view?.bar ? (
+      {panelOpen && view?.bar ? (
         <Animated.View
           key={view.bar}
           entering={revealIn}
           exiting={revealOut}
+          testID="dm-reveal-strip"
           onLayout={(e) => setBarHeight(e.nativeEvent.layout.height)}
           style={[styles.reveal, { top }]}
         >
           <RevealBar
             state={view.bar}
-            you={{ face: youFace, name: reveal?.youRevealed ? authUser?.name?.split(' ')[0] || 'You' : 'anonymous' }}
+            you={{ face: youFace, name: reveal?.youRevealed ? authUser?.name?.split(' ')[0] || YOU : YOU }}
             them={{ face: themFace, name }}
             onShow={() => setRevealSheet('confirm')}
             onAsk={askThem}
+            friend={
+              view.bar === 'both' && friendNow
+                ? { label: friendNow.label, accept: friendNow.kind === 'accept', busy: friendAsk.busy, onPress: () => void addFriend(false) }
+                : undefined
+            }
             testID="dm-reveal"
           />
           {view.nudge ? <NudgeLine text={view.nudge} /> : null}
@@ -815,7 +920,7 @@ function PrivateChatInner() {
             mine={menu.message.senderId === myId}
             sender={{ name }}
             text={menu.message.text || (menu.message.mediaUrl ? 'Photo' : '')}
-            time={chatClock(menu.message.createdAt)}
+            time={clockTime(menu.message.createdAt)}
           />
         ) : null}
       </LongPressMenu>
@@ -825,7 +930,7 @@ function PrivateChatInner() {
         visible={!!viewer}
         uri={viewer ? viewer.message.mediaUrl || viewer.message.localUri || '' : ''}
         sender={{ name: viewer && viewer.message.senderId === myId ? 'You' : name }}
-        time={viewer ? chatClock(viewer.message.createdAt) : ''}
+        time={viewer ? clockTime(viewer.message.createdAt) : ''}
         from={viewer?.from}
         onClose={() => setViewer(null)}
         // Theirs can be reported from the viewer (#33); yours has nothing to report.
@@ -882,12 +987,19 @@ const styles = StyleSheet.create({
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
  * `ScreenProfiler` is the children untouched in production — see its header.
+ *
+ * Rose world: a private chat is together, so one hue on this screen (`HueProvider`): Say hi, the reveal bar and the reveal
+ * sheets light in it.
  */
 export default function PrivateChat() {
-  if (!idParam(useLocalSearchParams().conversationId)) return <BrokenLink />
+  const id = idParam(useLocalSearchParams().conversationId)
+  if (!id) return <BrokenLink />
   return (
     <ScreenProfiler id="dm">
-      <PrivateChatInner />
+      <HueProvider value="rose">
+        {/* Keyed by the conversation (RC drive 2 D-E): a link from one open DM to another is a new thread, not this one's state. */}
+        <PrivateChatInner key={id} />
+      </HueProvider>
     </ScreenProfiler>
   )
 }

@@ -9,14 +9,15 @@ import { eventFromApi } from '../lib/api'
 import {
   DRAWER_HANDLE_HEIGHT,
   DRAWER_HEADER_HEIGHT,
+  DRAWER_PEEK_LINE,
   DRAWER_SEGMENTED_HEIGHT,
   drawerContentHeight,
   drawerSnapPoints,
   liveNowLabel,
+  liveNowWord,
   settleSnap,
   snapOnKeyboard,
   stepSnap,
-  tonightLine,
 } from '../lib/home'
 import { placeLabel } from '../lib/pulse'
 
@@ -68,12 +69,12 @@ describe('the drawer, wired to the screen (step 2 review)', () => {
 
   it('gives the handle and each segment a 44pt target', () => {
     expect(DRAWER_HANDLE_HEIGHT).toBeGreaterThanOrEqual(44)
-    // Two segments inside a 4pt inset.
-    expect(DRAWER_SEGMENTED_HEIGHT - 8).toBeGreaterThanOrEqual(44)
+    // The title tabs' 48: each word is a 48 pt target.
+    expect(DRAWER_SEGMENTED_HEIGHT).toBe(48)
     expect(DRAWER_HEADER_HEIGHT).toBeGreaterThanOrEqual(DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT)
   })
 
-  it("sizes the pane to what shows, so a list's last row is reachable at half", () => {
+  it("sizes the pane to what shows, so a list’s last row is reachable at half", () => {
     expect(drawerContentHeight(points, 'half', PHONE.height)).toBe(PHONE.height - points.half - DRAWER_HEADER_HEIGHT)
     expect(drawerContentHeight(points, 'full', PHONE.height)).toBeGreaterThan(drawerContentHeight(points, 'half', PHONE.height))
     expect(drawerContentHeight(points, 'peek', PHONE.height)).toBeGreaterThanOrEqual(0)
@@ -90,24 +91,29 @@ describe('the drawer, wired to the screen (step 2 review)', () => {
 })
 
 describe('a place in the list', () => {
-  it('says how many are live as a bucket, never a number under five (D-19)', () => {
-    expect(liveNowLabel('quiet')).toBe('Under 5 live')
+  it('says how many are live as a bucket, never a number (D-19)', () => {
     expect(liveNowLabel('5-9')).toBe('5–9 live')
     expect(liveNowLabel('10-19')).toBe('10–19 live')
     expect(liveNowLabel('20+')).toBe('20+ live')
-    // An older server with no field reads as quiet, not as nothing or zero.
-    expect(liveNowLabel(undefined)).toBe('Under 5 live')
   })
 
-  it("names tonight's event, and nothing when the next one is another day", () => {
-    const now = new Date(2026, 9, 2, 18, 0)
-    const at = (h: number, dayOffset = 0) => new Date(2026, 9, 2 + dayOffset, h, 0).toISOString()
-    expect(tonightLine({ title: 'Jazz Night', startTime: at(21), endTime: at(23) }, now)).toMatch(/^Tonight · .* · Jazz Night$/)
-    expect(tonightLine({ title: 'Jazz Night', startTime: at(17), endTime: at(23) }, now)).toBe('Happening now · Jazz Night')
-    expect(tonightLine({ title: 'Brunch', startTime: at(11, 1), endTime: at(14, 1) }, now)).toBeNull()
-    // Running since yesterday is still on now: by the clock, not by what a label says.
-    expect(tonightLine({ title: 'Festival', startTime: at(20, -1), endTime: at(23) }, now)).toBe('Happening now · Festival')
-    expect(tonightLine(null, now)).toBeNull()
+  it('under five shows no live label at all, and an older server with no field shows none either', () => {
+    expect(liveNowLabel('quiet')).toBeNull()
+    expect(liveNowLabel(undefined)).toBeNull()
+    expect(liveNowLabel(null)).toBeNull()
+    expect(liveNowWord('quiet')).toBeNull()
+    expect(liveNowWord('5-9')).toBe('5–9')
+  })
+})
+
+describe('the peek line makes room only when a pane has one', () => {
+  const screen = { height: 800, topChrome: 100, tabBarTop: 700 }
+  it('peek rises by the line; full and half do not move', () => {
+    const plain = drawerSnapPoints(screen)
+    const withLine = drawerSnapPoints({ ...screen, peekExtra: DRAWER_PEEK_LINE })
+    expect(withLine.peek).toBe(plain.peek - DRAWER_PEEK_LINE)
+    expect(withLine.full).toBe(plain.full)
+    expect(withLine.half).toBe(plain.half)
   })
 })
 
@@ -118,7 +124,7 @@ describe('"at <Venue>" on an event card (HM-U08)', () => {
     )
   })
 
-  it("falls back to the organiser's words, then the city, when the server names no venue (disputed, archived, none)", () => {
+  it("falls back to the organiser’s words, then the city, when the server names no venue (disputed, archived, none)", () => {
     expect(placeLabel({ venue: null, venue_name: 'Some rooftop', city: 'Bengaluru' })).toBe('Some rooftop')
     expect(placeLabel({ venue: null, venue_name: '', city: 'Bengaluru' })).toBe('Bengaluru')
     expect(placeLabel({ venue_name: '  ', city: null })).toBeNull()
@@ -155,5 +161,20 @@ describe('Places takes the server at its word (HM-CU04)', () => {
     // One rule, `lib/venue-visibility.ts`. A second copy here is how the list and the map come to disagree.
     const src = read('components/home/PlacesList.tsx')
     expect(src).not.toMatch(/Date\.now\(|new Date\(|startTime|endTime/)
+  })
+})
+
+describe('the Events | Places switch is the drawer’s title tabs, tap only', () => {
+  const shell = read('components/home/HomeShell.tsx')
+
+  it('uses TitleTabs, which has no drag (it would compete with the drawer and map gestures), with the city chip trailing', () => {
+    expect(shell).toMatch(/<TitleTabs[\s\S]*?testID="home-segmented"/)
+    expect(shell).toContain('testID="home-city"')
+    expect(shell).toContain('onPress={browse.openCityPicker}')
+    expect(shell).not.toMatch(/SegmentedControl|draggable/)
+  })
+
+  it('keeps no segment of its own, and plays no haptic of its own (the control plays H.select)', () => {
+    expect(shell).not.toMatch(/styles\.segment|segmentOn|EMBER_RADIUS|H\.select/)
   })
 })

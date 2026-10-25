@@ -43,7 +43,7 @@ describe('feedPoster', () => {
       .toBe('a.jpg')
   })
 
-  it("uses a video's thumbnail when there is no image at all", () => {
+  it("uses a video’s thumbnail when there is no image at all", () => {
     // An event whose only upload is a clip still has something to draw while
     // the player warms up.
     expect(feedPoster([video()], null)).toBe('https://cdn.example/poster.jpg')
@@ -170,7 +170,7 @@ describe('a hero clip restarts when the carousel comes back to it', () => {
   )
 
   it('mounts the clip only while it is the page in view', () => {
-    expect(heroSrc).toContain('item.kind === \'video\' && i === index ?')
+    expect(heroSrc).toContain('item.kind === \'video\' && i === index && mountClip ?')
     // The preload window that let a finished player survive the page.
     expect(heroSrc).not.toContain('Math.abs(i - index) <= 1')
   })

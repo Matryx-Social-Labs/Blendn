@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { GradientFill } from '../ui/GradientFill'
-import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { DiscMark } from './DiscMark'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
@@ -29,6 +29,16 @@ const DOT: Record<Tone, string> = { ok: COLOR.live, warn: COLOR.warning, info: C
 const DOT_SIZE = SPACE.sm
 /** The Plus mark: the monogram in white on the brand gradient, 40 pt, the mark at half. */
 const MARK = SIZE.control - SPACE.sm
+
+/** The Plus mark: the monogram in white on the brand gradient; `size` is the disc, the mark at half. */
+export function PlusMark({ size = MARK }: { size?: number }) {
+  return (
+    <View style={[styles.mark, { width: size, height: size }]}>
+      <GradientFill gradient="brand" style={StyleSheet.absoluteFill} />
+      <DiscMark height={size / 2} fill="white" />
+    </View>
+  )
+}
 
 /**
  * What is true about Blend'n+, in one card (guidelines/components/ManageStatusRow.html,
@@ -62,17 +72,14 @@ export function ManageStatusRow({
     <View testID={testID} style={[styles.card, contrast && IC_HAIRLINE]}>
       <View accessible accessibilityLabel={`${title}. ${sentence}`} style={styles.gap}>
         <View style={styles.head}>
-          <View style={styles.mark}>
-            <GradientFill gradient="brand" style={StyleSheet.absoluteFill} />
-            <DiscMark height={MARK / 2} fill="white" />
-          </View>
-          <Text style={[font('heading', bold), styles.title]}>{title}</Text>
+          <PlusMark />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.title]}>{title}</Text>
           <View testID={testID && `${testID}-dot`} style={[styles.dot, { backgroundColor: DOT[tone] }]} />
         </View>
-        <Text style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sentence}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sentence}</Text>
       </View>
       {tone === 'warn' ? (
-        <Button kind="strong" size="md" label={store === 'android' ? 'Fix it in Google Play' : 'Fix it in the App Store'} onPress={onFix} />
+        <Button kind="lit" size="md" label={store === 'android' ? 'Fix it in Google Play' : 'Fix it in the App Store'} onPress={onFix} />
       ) : null}
     </View>
   )
@@ -82,7 +89,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   gap: { gap: SPACE.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  mark: { width: MARK, height: MARK, borderRadius: RADIUS.capsule, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  mark: { borderRadius: RADIUS.capsule, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   title: { flex: 1, color: COLOR.textPrimary },
   dot: { width: DOT_SIZE, height: DOT_SIZE, borderRadius: RADIUS.capsule },
 })

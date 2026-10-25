@@ -8,7 +8,6 @@ import Animated, {
   ReduceMotion,
   useAnimatedScrollHandler,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
@@ -20,7 +19,9 @@ import { scheduleOnRN } from 'react-native-worklets'
 import { COLOR, EASING, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { Grain } from '../ds/Grain'
 import { Orbs } from '../ds/Orbs'
+import { useSelection } from '../ds/shared'
 import { GradientFill } from '../ui/GradientFill'
+import { useReducedMotion } from '../../lib/motion'
 
 /** Past this, a slow drag closes. */
 const CLOSE_DISTANCE = 140
@@ -116,6 +117,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
 }>(function RoomStage({ onClosed, children }, ref) {
   const { width, height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
+  const sel = useSelection()
   const reduceMotion = useReducedMotion()
   const origin = centreButtonOrigin(width, height, insets.bottom)
   // Big enough to cover the farthest corner from the button.
@@ -225,10 +227,11 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
           </Animated.View>
         </Animated.View>
         <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.page, pageStyle]}>
-            {/* L0: the brand orbs and the grain behind Tonight and the Room (Flow 4). */}
+          {/* VoiceOver's two-finger Z closes it as the pull-down does (audit L5). */}
+          <Animated.View testID="room-stage-page" onAccessibilityEscape={close} style={[styles.page, pageStyle]}>
+            {/* L0: the orbs and the grain behind Tonight and the Room (Flow 4), the glow in the screen's hue (TG-14, B-R8). */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              <Orbs set="brand" />
+              <Orbs set="brand" tint={sel.edge} testID="stage-orbs" />
               <Grain />
             </View>
             {children}

@@ -30,6 +30,11 @@ describe('<SearchField>', () => {
     expect(input().props.placeholderTextColor).toBe(COLOR.textPlaceholder)
   })
 
+  it('holds at most 100 characters, the server’s bound on a search (admin #751)', async () => {
+    await draw()
+    expect(input().props.maxLength).toBe(100)
+  })
+
   it('is a search field named by its scope', async () => {
     await draw()
     expect(input().props.accessibilityRole).toBe('search')

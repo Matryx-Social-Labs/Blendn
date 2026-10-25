@@ -69,7 +69,9 @@ export function templateType(role: keyof typeof TYPE, k: number, family: string 
 }
 
 export const dateLine = (d: ShareEvent['date']) => `${d.day} ${d.num} ${d.month} · ${d.time}`
-export const placeLine = (e: Pick<ShareEvent, 'venue' | 'area' | 'unlisted'>) => (e.unlisted ? e.area : `${e.venue} · ${e.area}`)
+/** The parts that exist, joined: a venue with no area (or an area with no venue) never leaves a dangling separator. */
+export const joinParts = (parts: (string | null | undefined)[], separator: string) => parts.filter(Boolean).join(separator)
+export const placeLine = (e: Pick<ShareEvent, 'venue' | 'area' | 'unlisted'>) => (e.unlisted ? e.area : joinParts([e.venue, e.area], ' · '))
 
 /**
  * A cover that is never cropped: contained on a blurred, darkened copy of
@@ -128,7 +130,7 @@ export function LinkPreviewCard({ preview, width, radius = RADIUS.thumb, testID 
     >
       {preview.template === 'event' && preview.event.cover ? <E1 event={preview.event} cover={preview.event.cover} k={k} testID={testID} /> : null}
       {preview.template === 'event' && !preview.event.cover ? <E2 event={preview.event} k={k} /> : null}
-      {preview.template === 'venue' ? <Venue name={preview.name} sub={`${preview.typeLabel} · ${preview.area}`} k={k} /> : null}
+      {preview.template === 'venue' ? <Venue name={preview.name} sub={joinParts([preview.typeLabel, preview.area], ' · ')} k={k} /> : null}
       {preview.template === 'invite' ? <Centre title="You’re invited to Blend’n" sub="A friend wants to add you." k={k} /> : null}
       {preview.template === 'app' ? <Centre title="Blend’n" sub="Meet who’s there on the night." k={k} /> : null}
     </View>

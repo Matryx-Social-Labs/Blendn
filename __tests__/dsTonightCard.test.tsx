@@ -10,8 +10,9 @@ import { StyleSheet } from 'react-native'
 import { getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
-import { TonightCard } from '../components/ds/TonightCard'
+import { TONIGHT_SCRIM_FOOT, TonightCard } from '../components/ds/TonightCard'
 import { COLOR, RADIUS, SPRING } from '../lib/design/tokens'
+import { tint } from '../lib/theme'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-reanimated', () => {
@@ -179,5 +180,25 @@ describe('a screen reader', () => {
     expect(onIndexChange).toHaveBeenCalledTimes(1)
     await act(async () => deck.props.onAccessibilityAction({ nativeEvent: { actionName: 'activate' } }))
     expect(onOpen).toHaveBeenCalledWith(0)
+  })
+})
+
+/*
+ * TG-14 (B-R9): a bright cover thinned the words at the card's foot. Tonight's scrim meets solid ink there. Negative
+ * control: without `scrimFoot` the foot is PhotoScrim's 0.88 and the first expect fails.
+ */
+describe('the scrim carries the words over any cover', () => {
+  const channel = (c: number) => (c / 255 <= 0.03928 ? c / 255 / 12.92 : ((c / 255 + 0.055) / 1.055) ** 2.4)
+  const luminance = ([r, g, b]: number[]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+  const rgb = (hex: string) => [0, 2, 4].map((i) => parseInt(hex.slice(1 + i, 3 + i), 16))
+
+  it('ends in solid ink, so white words at the foot hold 4.5:1 over a white photograph', async () => {
+    await draw({ events: [{ ...EVENT('Vinyl Night'), cover: 'https://cdn.blendn.app/bright.jpg' }] })
+    const colors = screen.getByTestId('t-card-scrim', { includeHiddenElements: true }).props.colors as string[]
+    expect(colors[colors.length - 1]).toBe(tint(COLOR.ink, TONIGHT_SCRIM_FOOT))
+    // The foot over pure white: ink at the foot's alpha, composited.
+    const over = rgb(COLOR.ink).map((c) => c * TONIGHT_SCRIM_FOOT + 255 * (1 - TONIGHT_SCRIM_FOOT))
+    const [hi, lo] = [luminance(rgb(COLOR.textPrimary)), luminance(over)].sort((x, y) => y - x)
+    expect((hi + 0.05) / (lo + 0.05)).toBeGreaterThanOrEqual(4.5)
   })
 })

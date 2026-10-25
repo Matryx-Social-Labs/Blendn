@@ -1,7 +1,18 @@
+import { barHeight, barTop } from '../../lib/barGeometry'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BackHandler, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeInUp, FadeOut, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import { BackHandler, Platform, StyleSheet, Text, View } from 'react-native'
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInUp,
+  FadeOut,
+  ReduceMotion,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
@@ -9,12 +20,15 @@ import { apiClient } from '../../lib/apiClient'
 import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
-import { COLOR, DURATION, EASING, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import type { TrayButton, TrayExtra } from '../../lib/locationFix'
-import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { overlapOf } from '../../lib/overlapLine'
+import { useRoomCancelled } from '../../lib/useRoomCancelled'
+import { useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
+import { useOffline } from '../OfflineBanner'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
-import { markRoomLeft } from '../../lib/roomMembership'
+import { eventRoomDoor } from '../../lib/eventRoomDoor'
 import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
 import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
@@ -37,21 +51,25 @@ import { MomentPour, ORBS_LIFT_MS, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
 import { Sheet } from '../ds/Sheet'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Toast, type ToastKind } from '../ds/Toast'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import ScalePress from '../motion/ScalePress'
+import { Material } from '../ui/Material'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { faceOf, RoomSkeleton, useNow } from './RoomSections'
-import { RoomStage } from './RoomStage'
+import { FriendsHere } from './FriendsHere'
+import { RoomCancelled } from './RoomCancelled'
+import { RoomStage, useStage } from './RoomStage'
 import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { parseBadges } from '../../lib/profileBadges'
 import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
 /** Under the top bar's 44 pt circles: Flow 4 sets the title 70 below the safe area (124 on a 54 pt status bar). */
-const TOP_CHROME = SPACE.sm + SIZE.circleButton + SPACE.lg + SPACE.xxs
+const TOP_CHROME = SIZE.circleButton + SPACE.lg + SPACE.xxs
 /** #9: the Room's crossfade (D.base) and its sections (+60, 28 apart, D.base each), done: nothing lands on it before. */
 const ROOM_ARRIVAL_MS = DURATION.base + 60 + 2 * 28 + DURATION.base
 
@@ -78,7 +96,7 @@ const glassContentsIn = FadeIn.duration(DURATION.base).easing(gentle)
 /** A first line built from what you share — something to say that isn't "hey". */
 export function openerFor(p: RoomPerson): string {
   const interest = p.interests[0]
-  if (interest) return `You're into ${interest.toLowerCase()} too — how did you get into it?`
+  if (interest) return `You’re into ${interest.toLowerCase()} too — how did you get into it?`
   if (p.sharedPlans > 0) return 'Looks like we’re going to the same things — which one are you most excited about?'
   if (p.sharedWorkField && p.workField) return `Another ${p.workField} person — what are you working on?`
   return 'What brought you here tonight?'
@@ -93,6 +111,7 @@ function chooseAs(crews: CrewsAtEvent['myCrews'], title: string): Promise<string
   return new Promise((resolve) =>
     showSheet({
       kind: 'actions',
+      hue: 'rose',
       title,
       message: 'Your crew chat says who liked on its behalf.',
       onDismiss: () => resolve(undefined),
@@ -137,15 +156,36 @@ export function BlendnScreen() {
     return () => sub.remove()
   }, [close])
 
+  // The Room is people: the rose world, one hue for the whole screen (People | Crews, the chips, the sheets).
   return (
-    <RoomStage ref={stage} onClosed={blendnClosed}>
-      <BlendnContent onClose={close} />
-    </RoomStage>
+    <HueProvider value="rose">
+      <RoomStage ref={stage} onClosed={blendnClosed}>
+        <BlendnContent onClose={close} />
+      </RoomStage>
+    </HueProvider>
   )
+}
+
+/**
+ * Whether the page under the floating bar has scrolled off its top (Tonight's list or the Room's): the stage's own offset,
+ * mirrored into state only as it crosses 0, so a scroll re-renders nothing else.
+ */
+function useScrolledPast(): boolean {
+  const { scrollY } = useStage()
+  const [scrolled, setScrolled] = useState(false)
+  useAnimatedReaction(
+    () => scrollY.get() > 0,
+    (now, before) => {
+      if (now !== before) scheduleOnRN(setScrolled, now)
+    }
+  )
+  return scrolled
 }
 
 function BlendnContent({ onClose }: { onClose: () => void }) {
   const insets = useSafeAreaInsets()
+  const scrolled = useScrolledPast()
+  const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const room = useRoom()
@@ -153,10 +193,27 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const waves = useRoomWaves()
   const { user } = useAuth()
   const now = useNow(15_000)
+  // R4: the event was cancelled while you were inside; the server has checked you out.
+  const { cancelled, dismiss: dismissCancelled } = useRoomCancelled(room.event)
 
   // --- a toast of the overlay's own (refusals off the card, crew likes) --------
   const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string } | null>(null)
   const say = useCallback((text: string, kind: ToastKind = 'info') => setToast({ key: Date.now(), kind, text }), [])
+
+  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them.
+  const offline = useOffline()
+  const friendsHere = useFriendsHere(room.event?.id ?? null, room.status === 'ready')
+  const refreshFriends = friendsHere.refresh
+  const friendChat = useMessageFriend(
+    useCallback(
+      (text: string) => {
+        say(text, 'error')
+        // They may have gone (an unfriend, a block, a check-out): read again.
+        void refreshFriends()
+      },
+      [say, refreshFriends]
+    )
+  )
 
   /*
    * The end of the night. Kept as a snapshot rather than derived: the sweeper
@@ -674,26 +731,19 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
 
   // --- the room chat ----------------------------------------------------------
   const openChat = useCallback(async () => {
-    let id = chatGroupId
-    if (!id && eventId) {
-      try {
-        const r = await apiClient.getEventChat(eventId)
-        id = (r.success && (r.data?.chatGroupId ?? r.data?.id)) || null
-        // Left it: the chat opens on "You left this room" and its Rejoin.
-        if (!id && r.errorCode === 'LEFT_ROOM' && r.chatGroupId) {
-          markRoomLeft(r.chatGroupId)
-          id = r.chatGroupId
-        }
-      } catch (e) {
-        Logger.warn('chat', 'room chat lookup failed', { error: e })
-      }
+    if (!chatGroupId && eventId) {
+      // Not open yet, for someone going or saved (D-7): the room's countdown, never an error (`eventRoomDoor`).
+      const door = await eventRoomDoor(eventId, eventTitle)
+      if (door.kind === 'say') say(door.line)
+      // A push, not a replace: the room is an overlay under the stack, so the chat lands on top and Back returns here.
+      else router.push({ pathname: '/chat/[id]', params: door.params } as never)
+      return
     }
-    if (!id) {
+    if (!chatGroupId) {
       say('The chat for this event is not open yet.')
       return
     }
-    // A push, not a replace: the room is an overlay under the stack, so the chat lands on top and Back returns here.
-    router.push({ pathname: '/chat/[id]', params: { id: String(id), roomName: eventTitle || 'Event chat', eventTitle } as never })
+    router.push({ pathname: '/chat/[id]', params: { id: String(chatGroupId), roomName: eventTitle || 'Event chat', eventTitle } as never })
   }, [chatGroupId, eventId, eventTitle, say])
 
   // --- waves to you (SCRUM-630); a blocked or reported person's are dropped at the source (`ignoreWavesFrom`) ---
@@ -714,6 +764,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const visibility: Visibility = bannerState(controls.revealed, controls.listed, controls.readiness.ok)
 
   // --- the card's variant and state ------------------------------------------------
+  const cardOverlap = cardPerson ? overlapOf(cardPerson) : null
   const cardVariant: PersonVariant = !cardPerson ? 'thin' : cardPerson.matched ? 'matched' : cardPerson.insideNow ? 'here' : 'was'
   const refusal = card ? refusals[card.id] : undefined
   /** The chip shows a definite answer only: hidden while there is nothing to choose between (solo), or a like would still ask. */
@@ -750,8 +801,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           // Under a Room it is already faded out by `tonightFadeStyle`: an exit would start it again from 1, over the Room.
           exiting={showRoom ? undefined : FadeOut.duration(DURATION.base)}
           pointerEvents={mode === 'room' ? 'none' : 'auto'}
-          accessibilityElementsHidden={mode === 'room'}
-          importantForAccessibility={mode === 'room' ? 'no-hide-descendants' : 'auto'}
+          accessibilityElementsHidden={mode === 'room' || !!cancelled}
+          importantForAccessibility={mode === 'room' || cancelled ? 'no-hide-descendants' : 'auto'}
         >
           <TonightView
             events={tonightEvents}
@@ -795,8 +846,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           entering={pourEntrance ? undefined : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
           exiting={FadeOut.duration(DURATION.quick)}
           pointerEvents={mode === 'room' ? 'auto' : 'none'}
-          accessibilityElementsHidden={mode !== 'room'}
-          importantForAccessibility={mode === 'room' ? 'auto' : 'no-hide-descendants'}
+          // Under the cancelled card the Room is not there for a screen reader: a swipe never walks past it.
+          accessibilityElementsHidden={mode !== 'room' || !!cancelled}
+          importantForAccessibility={mode === 'room' && !cancelled ? 'auto' : 'no-hide-descendants'}
         >
           <RoomView
             title={room.event.title}
@@ -831,6 +883,17 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             view={gridView}
             onView={setGridView}
             crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} actions={crewActions} />}
+            friendsPresent={friendsHere.total > 0 && friendsHere.friends.length > 0}
+            friendsHere={
+              <FriendsHere
+                friends={friendsHere.friends}
+                total={friendsHere.total}
+                opening={friendChat.opening}
+                offline={offline}
+                onMessage={(f) => void friendChat.message(f)}
+                onSeeAll={() => router.push({ pathname: '/room/friends-here', params: { eventId: eventId ?? '' } } as never)}
+              />
+            }
             crewsHead={
               eventId ? (
                 <CrewsHead
@@ -875,8 +938,19 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       ) : null}
 
       {/* The bar floats over every mode, so closing is always in the same place (the Recap draws its own). */}
+      {/*
+       * Scrolled, the bar glass sits behind the floating chrome from the screen's top, as TopBar's `scrolled` does (TG-01):
+       * without it, the faces and the hero ran under the close, Check out and the status bar. Mounted, not faded: glass
+       * never fades (§5.2 rule 6), so Reduce Motion has nothing to change. Increase Contrast adds the hairline.
+       */}
+      {mode === 'ended' || !scrolled ? null : (
+        <View testID="blendn-bar" pointerEvents="none" style={[styles.barGlass, { height: barHeight(insets.top, Platform.OS === 'android') }]}>
+          <Material role="bar" style={StyleSheet.absoluteFill} />
+          {contrast ? <View testID="blendn-bar-contrast" style={styles.contrast} /> : null}
+        </View>
+      )}
       {mode === 'ended' ? null : (
-        <View style={[styles.topBar, { top: insets.top + SPACE.sm }]} pointerEvents="box-none">
+        <View style={[styles.topBar, { top: barTop(insets.top) }]} pointerEvents="box-none">
           <IconButton icon="chevron-down" accessibilityLabel="Close Blend’n" onPress={onClose} testID="blendn-close" />
           {mode === 'room' && room.event ? (
             <Animated.View entering={reduceMotion ? undefined : glassRise} style={styles.topActions}>
@@ -932,8 +1006,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           name: cardPerson?.name ?? card?.name ?? '',
           age: cardPerson?.age,
           reason: cardPerson ? (cardPerson.matched ? 'You matched' : reasonLine(cardPerson)) : undefined,
-          reasons: cardPerson ? reasonLines(cardPerson) : undefined,
+          // The line says overlaps[0]; the panel keeps the rest, never the same sentence twice.
+          reasons: cardPerson ? reasonLines(cardPerson).filter((r) => r !== cardOverlap?.line) : undefined,
+          overlap: cardOverlap ?? undefined,
           chips: cardPerson ? [...cardPerson.interests.slice(0, 8), ...(cardPerson.sign ? [cardPerson.sign] : [])] : undefined,
+          badges: parseBadges(cardPerson?.badges)?.map((b) => b.kind),
         }}
         liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
         requested={!!cardPerson?.requested}
@@ -981,6 +1058,22 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           }
         }}
       />
+
+      {cancelled ? (
+        <RoomCancelled
+          title={cancelled.title}
+          onSeeTonight={() => {
+            dismissCancelled()
+            void room.refresh()
+            void tonight.refresh()
+          }}
+          onClose={() => {
+            dismissCancelled()
+            onClose()
+          }}
+          testID="room-cancelled"
+        />
+      ) : null}
 
       {/*
         Faces only where they have been earned (D · 4.4): theirs is a photo only
@@ -1032,7 +1125,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         actions={tray.buttons.map((b) => ({ label: b.label, onPress: b.onPress, loading: b.loading, disabled: b.disabled, kind: b.kind ?? (b.variant === 'primary' ? 'primary' : b.variant === 'destructive' ? 'destructive' : 'secondary') }))}
         testID="blendn-tray"
       >
-        {tray.extra?.detail ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
+        {tray.extra?.detail ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
       </Sheet>
 
       <Sheet
@@ -1067,6 +1160,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  barGlass: { position: 'absolute', top: 0, left: 0, right: 0 },
+  contrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   checkOut: {
     height: SIZE.tag,
     paddingHorizontal: SPACE.md,

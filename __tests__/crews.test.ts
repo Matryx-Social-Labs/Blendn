@@ -5,36 +5,30 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 
 import {
   BLEND_CLOSED_LINE,
-  COLLAGE_MAX,
   CREW_GONE_LINE,
   CREW_REMOVED_LINE,
   OPEN_TO_CREWS_HELPER,
   CREW_MAX_TAGS,
   CREW_REPORT_REASONS,
-  NO_CONSENT,
   blendSides,
   blendTitle,
+  blendWith,
   closesLine,
   consentBody,
   createCrewBody,
   crewMessage,
   crewRoomTitle,
   crewRoomsFrom,
+  systemPreview,
   crewsThatMayLikePeople,
   friendsToInvite,
-  sizeLine,
-  visibleInvites,
   defaultRoomName,
-  hereLine,
   hereNowLine,
-  invitedLine,
   likeAs,
   mergeCrewPage,
   nextCrewOffset,
-  revealCountLine,
   roomClosedLine,
   roomKindParam,
-  sideView,
   toggleTag,
   type Blend,
   type BlendPerson,
@@ -77,8 +71,8 @@ describe('what a refusal says (code → copy)', () => {
       'A crew has at most 12 people.'
     )
     expect(
-      crewMessage({ error: "That's enough new crews for today — try again tomorrow.", errorCode: 'RATE_LIMITED' }, 'create', 'x')
-    ).toBe("That's enough new crews for today — try again tomorrow.")
+      crewMessage({ error: "That’s enough new crews for today — try again tomorrow.", errorCode: 'RATE_LIMITED' }, 'create', 'x')
+    ).toBe("That’s enough new crews for today — try again tomorrow.")
     // A 400 refusal of the name or bio carries no errorCode at all.
     expect(crewMessage({ error: 'A phone number. A crew card is shown to people you haven’t met…' }, 'create', 'x')).toBe(
       'A phone number. A crew card is shown to people you haven’t met…'
@@ -136,8 +130,7 @@ describe('a crew or Blend room that is over', () => {
 
 describe('consent and anonymity', () => {
   it('nothing is consented until the person ticks it', () => {
-    expect(NO_CONSENT).toEqual({ consented: false, keepMeAnonymous: false })
-    expect(consentBody(NO_CONSENT)).toBeNull()
+    expect(consentBody({ consented: false, keepMeAnonymous: false })).toBeNull()
     expect(consentBody({ consented: false, keepMeAnonymous: true })).toBeNull()
   })
 
@@ -152,7 +145,7 @@ describe('the create body', () => {
   const agreed = { consented: true, keepMeAnonymous: true }
 
   it('is refused without consent, and never carries revealConsent: false', () => {
-    const body = createCrewBody(form, NO_CONSENT)
+    const body = createCrewBody(form, { consented: false, keepMeAnonymous: false })
     expect(body).toEqual({ problem: expect.stringMatching(/reveal/) })
   })
 
@@ -170,6 +163,12 @@ describe('the create body', () => {
 
   it('leaves an empty bio out', () => {
     expect(createCrewBody({ ...form, bio: '   ' }, agreed)).not.toHaveProperty('bio')
+  })
+
+  it('sends "Here for" when one is chosen, and nothing when none is', () => {
+    expect(createCrewBody({ ...form, intent: ['friendship', 'dating'] }, agreed)).toHaveProperty('intent', ['friendship', 'dating'])
+    expect(createCrewBody({ ...form, intent: [] }, agreed)).not.toHaveProperty('intent')
+    expect(createCrewBody(form, agreed)).not.toHaveProperty('intent')
   })
 
   it('holds the name to 2–32 characters as a person counts them', () => {
@@ -203,27 +202,8 @@ describe('the create body', () => {
 })
 
 describe('lines', () => {
-  it('an invite says how many you asked, never who got one', () => {
-    expect(invitedLine(1)).toBe('Asked 1 friend')
-    expect(invitedLine(3)).toBe('Asked 3 friends')
-    expect(invitedLine(0)).toBeNull()
-    expect(invitedLine(Number.NaN)).toBeNull()
-  })
-
-  it('"We’re here" the second time tells nobody, and says so', () => {
-    expect(hereLine({ repeated: false })).toBe('Told your crew you’re here 👋')
-    expect(hereLine({ repeated: true })).toBe('Your crew already knows you’re here tonight')
-  })
-
   it('a card is counts', () => {
     expect(hereNowLine({ presentCount: 3, size: 5 })).toBe('Here now · 3 of 5')
-  })
-
-  it('"N revealed · M keep it private", and nothing before a reveal', () => {
-    expect(revealCountLine(0, 2)).toBeNull()
-    expect(revealCountLine(4, 0)).toBe('4 revealed')
-    expect(revealCountLine(4, 1)).toBe('4 revealed · 1 keeps it private')
-    expect(revealCountLine(3, 2)).toBe('3 revealed · 2 keep it private')
   })
 
   it('the Blend’s clock', () => {
@@ -249,52 +229,7 @@ const side = (over: Partial<BlendSide>): BlendSide => ({
   ...over,
 })
 
-describe('a side of a Blend: the menagerie, then the collage', () => {
-  it('anonymous: every person a pseudonym tile, no count line', () => {
-    const view = sideView(side({ people: [person({ userId: 'a' }), person({ userId: 'b', pseudonym: 'Quiet Otter' })] }))
-    expect(view.mode).toBe('menagerie')
-    expect(view.faces).toEqual([])
-    expect(view.tiles.map((p) => p.pseudonym)).toEqual(['Cosmic Panda', 'Quiet Otter'])
-    expect(view.countLine).toBeNull()
-  })
-
-  it('revealed: the revealed are faces, and whoever kept themselves anonymous stays a tile', () => {
-    const view = sideView(
-      side({
-        revealed: 2,
-        keptPrivate: 1,
-        people: [
-          person({ userId: 'a', name: 'Ananya', photo: 'a.jpg' }),
-          person({ userId: 'b', name: 'Rohan', photo: 'r.jpg' }),
-          person({ userId: 'c', pseudonym: 'Velvet Heron' }),
-        ],
-      })
-    )
-    expect(view.mode).toBe('collage')
-    expect(view.faces.map((p) => p.name)).toEqual(['Ananya', 'Rohan'])
-    expect(view.tiles.map((p) => p.pseudonym)).toEqual(['Velvet Heron'])
-    expect(view.countLine).toBe('2 revealed · 1 keeps it private')
-  })
-
-  it('a photo without a name is not a reveal: it stays a tile', () => {
-    const view = sideView(side({ people: [person({ userId: 'a', photo: 'leak.jpg' })] }))
-    expect(view.mode).toBe('menagerie')
-    expect(view.tiles).toHaveLength(1)
-  })
-
-  it('the collage draws four faces, then "+N"', () => {
-    const people = Array.from({ length: 6 }, (_, i) => person({ userId: `p${i}`, name: `N${i}` }))
-    const view = sideView(side({ people }))
-    expect(view.faces).toHaveLength(COLLAGE_MAX)
-    expect(view.more).toBe(2)
-  })
-
-  it('one person’s side is named by their first name once revealed, else their pseudonym', () => {
-    expect(sideView(side({ kind: 'person', name: null, people: [person({})] })).title).toBe('Cosmic Panda')
-    expect(sideView(side({ kind: 'person', name: null, people: [person({ name: 'Kavya' })] })).title).toBe('Kavya')
-    expect(sideView(side({ kind: 'person', revealed: 1, people: [person({ name: 'Kavya' })] })).countLine).toBeNull()
-  })
-
+describe('a Blend’s sides', () => {
   it('yours is the side with your own id; the title is theirs', () => {
     const blend: Blend = {
       blendId: 'b1',
@@ -305,7 +240,24 @@ describe('a side of a Blend: the menagerie, then the collage', () => {
     }
     expect(blendSides(blend, 'me').mine?.name).toBe('Two')
     expect(blendSides(blend, 'me').theirs?.name).toBe('Five')
+    // One name on every surface (TG-11): the other side's name as given, never "Crew " before it.
     expect(blendTitle(blend, 'me')).toBe('Blend with Five')
+    expect(blendTitle({ ...blend, sides: [blend.sides[0], { ...blend.sides[1], name: 'RC4 Crew Y' }] }, 'me')).toBe(blendWith('RC4 Crew Y'))
+  })
+
+  it('one person’s side is named by their first name once revealed, else their pseudonym; a solo person is not "Crew"', () => {
+    const solo = (name: string | null): Blend => ({
+      blendId: 'b',
+      chatGroupId: 'g',
+      eventId: 'e',
+      closesAt: '2026-10-10T05:00:00Z',
+      sides: [side({ name: 'Two', mine: true, people: [person({ userId: 'me' })] }), side({ kind: 'person', name: null, people: [person({ name })] })],
+    })
+    expect(blendTitle(solo(null), 'me')).toBe('Blend with Cosmic Panda')
+    expect(blendTitle(solo('Kavya'), 'me')).toBe('Blend with Kavya')
+    const alone: Blend = { ...solo(null), sides: [side({ kind: 'person', name: null, mine: true, people: [person({ userId: 'me' })] }), side({ name: 'Nebula' })] }
+    expect(blendTitle(alone, 'me')).toBe('Blend with Nebula')
+    expect(blendTitle({ ...alone, sides: [alone.sides[0]] }, 'me')).toBe('Your Blend')
   })
 })
 
@@ -364,30 +316,17 @@ describe('the Crews view: paging and liking', () => {
 })
 
 describe('pass 2 (review of #369)', () => {
-  it('C1: a crew is made with at least one friend asked, and a crew of one says it is waiting', () => {
+  it('C1: a crew is made with at least one friend asked', () => {
     const body = createCrewBody(
       { name: 'Two', bio: '', tags: [], openToSolo: false, inviteUserIds: [] },
       { consented: true, keepMeAnonymous: false }
     )
     expect(body).toEqual({ problem: 'Pick at least one friend to ask.' })
-    expect(sizeLine(1)).toBe('Crew of 1 until a friend accepts')
-    expect(sizeLine(2)).toBe('Crew of 2')
   })
 
   it('M10: a ban closes the room — a Blend as closed, a crew chat as you being out of it', () => {
     expect(roomClosedLine('blend', 'USER_BANNED')).toBe(BLEND_CLOSED_LINE)
     expect(roomClosedLine('crew', 'USER_BANNED')).toBe(CREW_REMOVED_LINE)
-  })
-
-  it('H3: your own side of a Blend is a count and you — no tile per crewmate, no "keeps it private"', () => {
-    const view = sideView(
-      side({ mine: true, count: 3, revealed: null, keptPrivate: null, people: [person({ userId: 'me', name: 'Dara' })] })
-    )
-    expect(view.mode).toBe('mine')
-    expect(view.faces).toEqual([])
-    expect(view.tiles).toEqual([])
-    expect(view.countLine).toBe('You and 2 of your crew here')
-    expect(sideView(side({ mine: true, count: 1, revealed: null, keptPrivate: null })).countLine).toBe('Just you here')
   })
 
   it('H3: yours is the side the server marks mine, even when your id is not on it', () => {
@@ -417,11 +356,6 @@ describe('pass 2 (review of #369)', () => {
       { isFriend: false, name: 'Meera', photo: null },
     ]
     expect(friendsToInvite(friends, members).map((f) => f.userId)).toEqual(['u-kavya', 'u-kavya2', 'u-meera'])
-  })
-
-  it('H4: an invite that answered 404 stays off the screen', () => {
-    const invites = [{ crewId: 'a' }, { crewId: 'b' }]
-    expect(visibleInvites(invites, new Set(['a']))).toEqual([{ crewId: 'b' }])
   })
 
   it('M7: the open-to-crews copy says what the server does — nobody is told, it lets crews like you', () => {
@@ -469,7 +403,11 @@ describe('crew pushes land where they mean something, and name nobody', () => {
   })
 
   it('an invite opens the crews screen', () => {
-    expect(notificationTarget({ type: 'crew_invite', crewId: 'c1' })).toBe('/crews')
+    expect(notificationTarget({ type: 'crew_invite', crewId: 'c1' })).toEqual({
+      pathname: '/crews/invite/[crewId]',
+      params: { crewId: 'c1' },
+    })
+    expect(notificationTarget({ type: 'crew_invite' })).toBe('/crews')
   })
 
   it('"We’re here" opens the crew’s chat, where its line is', () => {
@@ -486,5 +424,24 @@ describe('crew pushes land where they mean something, and name nobody', () => {
       params: { id: 'g1', kind: 'blend', blendId: 'b1' },
     })
     expect(notificationTarget({ type: 'blend' })).toBe('/(tabs)/chat')
+  })
+})
+
+describe('systemPreview (TG-10, S-7)', () => {
+  const last = (content: string, type?: string) => ({ content, ...(type ? { type } : null), user: { id: 'u', name: 'Rohan' } })
+  it('a system like names who; any other system line is its words; a person’s message is null', () => {
+    expect(systemPreview(last('liked Crew Nebula for the crew', 'system'), 'You')).toBe('You liked Crew Nebula for the crew')
+    expect(systemPreview(last('The Blend closed', 'system'), 'Rohan')).toBe('The Blend closed')
+    expect(systemPreview(last('liked Crew Nebula for the crew', 'text'), 'You')).toBeNull()
+  })
+  it('a server with no type falls back to the like’s words', () => {
+    expect(systemPreview(last('liked Two for the crew'), 'Rohan')).toBe('Rohan liked Two for the crew')
+    expect(systemPreview(last('hello'), 'Rohan')).toBeNull()
+    expect(systemPreview(null, 'You')).toBeNull()
+  })
+  it('crewRoomsFrom keeps the type when the server sends one', () => {
+    const rows = crewRoomsFrom({ rooms: [{ id: 'r', kind: 'crew', lastMessage: { content: 'x', type: 'system', user: { id: 'u' } } }] })
+    expect(rows[0].lastMessage?.type).toBe('system')
+    expect(crewRoomsFrom({ rooms: [{ id: 'r', kind: 'crew', lastMessage: { content: 'x', user: { id: 'u' } } }] })[0].lastMessage).not.toHaveProperty('type')
   })
 })

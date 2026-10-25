@@ -21,7 +21,8 @@ import {
 import { Logger } from '../../lib/logger'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
-import { CONTROL, EMBER, OPACITY, SPACE } from '../../lib/theme'
+import { COLOR } from '../../lib/design/tokens'
+import { CONTROL, OPACITY, SPACE } from '../../lib/theme'
 import { BoardMark } from './BoardSections'
 import { useBanterPress } from '../banter/pressGuard'
 
@@ -157,7 +158,7 @@ export function BoardRequestsSection({
     }
     if (action !== 'accept') restore(request, side, at)
     // Withdrawing is yours alone and nothing hangs on it: the row coming back is the answer.
-    if (action !== 'withdraw') showToast(boardMessage(result, `Couldn't ${action} that. Try again.`), 'error')
+    if (action !== 'withdraw') showToast(boardMessage(result, `Couldn’t ${action} that. Try again.`), 'error', { haptic: 'error' })
   }
 
   /** Report or block the asker, by the ask: the board never names anybody to the client. */
@@ -236,7 +237,7 @@ function OutgoingRow({
     <View style={styles.outRow}>
       <BoardMark seed={boardMarkSeed(request.counterpart, request.event.id, request.id)} />
       <View style={styles.outText}>
-        <Text variant="body" color={EMBER.textSecondary}>
+        <Text variant="body" color={COLOR.textSecondary}>
           You asked {request.counterpart} · {request.event.title}
         </Text>
         <Text variant="meta">{line}</Text>
@@ -250,7 +251,7 @@ function OutgoingRow({
           accessibilityState={{ disabled: busy, busy }}
           style={({ pressed }) => [styles.withdraw, (pressed || busy) && styles.pressed]}
         >
-          <Text variant="button" color={EMBER.textSecondary}>
+          <Text variant="button" color={COLOR.textSecondary}>
             Withdraw
           </Text>
         </Pressable>

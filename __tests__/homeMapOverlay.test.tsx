@@ -108,9 +108,16 @@ describe('MapCredit', () => {
   it('fades out, or with Reduce Motion simply goes', async () => {
     await render(<MapCredit text={text} top={100} gestures={0} />)
     expect(JSON.stringify(screen.toJSON())).toContain(`opacity ${MAP_THEME.credit.fadeMs}ms`)
-    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true)
+    await screen.unmount()
+    // Switched on mid-session: lib/motion follows the system's change (audit M1).
+    let emit: (on: boolean) => void = () => {}
+    jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation(((name: string, handler: (on: boolean) => void) => {
+      if (name === 'reduceMotionChanged') emit = handler
+      return { remove: () => {} }
+    }) as never)
     await render(<MapCredit text={text} top={100} gestures={0} />)
-    await act(async () => {})
+    await act(async () => emit(true))
     expect(JSON.stringify(screen.toJSON())).not.toContain('ms ease-out')
+    await act(async () => emit(false))
   })
 })

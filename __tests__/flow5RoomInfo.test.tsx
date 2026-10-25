@@ -4,6 +4,8 @@
  * read, the muted hero, and the Mute and Leave sheets.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { AX_XXXL, atScale, clipped, resetScale, subtree, uncapped } from './helpers/ax'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
 
 let mockParams: Record<string, string> = { id: 'g1' }
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -18,14 +20,32 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn(), journey: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-a' } }) }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getChatGroups: jest.fn(), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn() },
+  apiClient: { getChatGroups: jest.fn(), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), getVenue: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn() },
 }))
-jest.mock('../lib/socketClient', () => ({ subscribeToChatMemberLeft: () => () => {} }))
+/** The event's checkout listeners: Room info's count follows the server's recount. */
+const mockCheckOut: ((data: { hereCount?: number }) => void)[] = []
+jest.mock('../lib/socketClient', () => ({
+  subscribeToChatMemberLeft: () => () => {},
+  subscribeToEventCheckIn: () => () => {},
+  subscribeToEventCheckOut: (_event: string, cb: (data: { hereCount?: number }) => void) => {
+    mockCheckOut.push(cb)
+    return () => {}
+  },
+}))
+// The card's own block flow is SenderCard's; this room only needs to hear that somebody was blocked.
+const mockCard: { props?: { sender: unknown; onBlocked: (id: string) => void } } = {}
+jest.mock('../components/chat/SenderCard', () => ({
+  SenderCard: (props: { sender: unknown; onBlocked: (id: string) => void }) => {
+    mockCard.props = props
+    return null
+  },
+}))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 
 /* eslint-disable import/first */
 import RoomInfo from '../app/chat-info/[id]'
 import { apiClient } from '../lib/apiClient'
+import { noteBlocked } from '../lib/blockEpoch'
 import { resetRoomMembership } from '../lib/roomMembership'
 /* eslint-enable import/first */
 
@@ -106,6 +126,8 @@ it('Mute opens the four choices; Leave is apart and asks first', async () => {
   for (const label of ['For 1 hour', 'For 8 hours', 'Until tomorrow', 'Until I turn it back on']) expect(screen.getByText(label)).toBeTruthy()
   await act(async () => fireEvent.press(screen.getByLabelText('Cancel')))
   await act(async () => fireEvent.press(screen.getByTestId('info-leave')))
+  // One sheet on screen at a time (lib/modalTurn): Leave rises once Mute has gone, here on the fallback (no onDismiss in tests).
+  for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
   expect(screen.getByText('Leave this room?')).toBeTruthy()
   expect(api.leaveChatGroup).not.toHaveBeenCalled()
 })
@@ -116,8 +138,211 @@ describe('nothing collides with the clock or the back button (drive 2)', () => {
     const { StyleSheet } = require('react-native')
     const { SIZE, SPACE } = require('../lib/design/tokens')
     const shield = StyleSheet.flatten(screen.getByTestId('info-status-shield').props.style)
-    // The inset (whatever the device's) plus the back button's row.
-    expect(shield.height).toBeGreaterThanOrEqual(SPACE.sm + SIZE.circleButton + SPACE.sm)
+    // The inset (whatever the device's), the back button's row and the 10 pt the glass reaches under it.
+    expect(shield.height).toBeGreaterThanOrEqual(SIZE.circleButton + SPACE.sm + SPACE.xxs)
     expect(screen.getByText('ORGANISER').props.numberOfLines).toBe(1)
+  })
+})
+
+describe('the hero with no cover, and the rows’ edge (r7 M6, L1)', () => {
+  const { StyleSheet } = require('react-native')
+  const { COLOR, SPACE } = require('../lib/design/tokens')
+
+  it('a room with no cover draws the plate in the room’s hue on ink: never a flat grey band, never the brand orbs (D31)', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, event: { ...eventRow.event, coverImageUrl: null } }] } } as never)
+    await open()
+    const plate = screen.getByTestId('info-hero-plate', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(plate.props.style).backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(StyleSheet.flatten(screen.getByTestId('info-hero', { includeHiddenElements: true }).props.style).backgroundColor).toBe(COLOR.ink)
+  })
+
+  it('with a cover, the photograph and no plate', async () => {
+    await open()
+    expect(imageUris()).toContain(COVER)
+    expect(screen.queryByTestId('info-hero-plate', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('Leave room’s words start on the rows’ text edge (SettingsRow’s 16 pt from the glyph)', async () => {
+    await open()
+    let node = screen.getByText('Leave room').parent
+    while (node && StyleSheet.flatten(node.props.style)?.minHeight === undefined) node = node.parent
+    expect(StyleSheet.flatten(node!.props.style).gap).toBe(SPACE.lg)
+  })
+})
+
+describe('a room of thousands (large data)', () => {
+  const page = (from: number, n: number, totalCount: number) => ({
+    success: true,
+    data: { participants: Array.from({ length: n }, (_, i) => ({ userId: `u-${from + i}`, name: `Fox ${from + i}`, role: 'member' })), totalCount },
+  })
+  const list = () => screen.getByTestId('info-list')
+  const reachEnd = async () => act(async () => fireEvent(list(), 'endReached'))
+
+  it('never mounts a page of 100 at once, and says the truthful total, not what has loaded', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, memberCount: 5000 }] } } as never)
+    api.getChatParticipants.mockResolvedValue(page(0, 100, 5000) as never)
+    await open()
+    // The hero's line and the heading both say it, grouped (WP2's SectionHeader groups a count in thousands).
+    expect(screen.getAllByText('5,000').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('In the room, 5,000')).toBeTruthy()
+    const mounted = screen.queryAllByTestId(/^info-member-/).length
+    expect(mounted).toBeGreaterThan(0)
+    // Six rows of four: the first window, not the page (without windowSize and initialNumToRender it is 40).
+    expect(mounted).toBeLessThanOrEqual(24)
+  })
+
+  it('asks for the next page from where the list stands as the end comes near, one at a time', async () => {
+    api.getChatParticipants.mockResolvedValueOnce(page(0, 100, 250) as never).mockResolvedValueOnce(page(100, 100, 250) as never)
+    await open()
+    expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 0 })
+    await reachEnd()
+    expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 100 })
+    expect(api.getChatParticipants).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops asking once everybody is here', async () => {
+    api.getChatParticipants.mockResolvedValue(page(0, 3, 3) as never)
+    await open()
+    await reachEnd()
+    expect(api.getChatParticipants).toHaveBeenCalledTimes(1)
+  })
+
+  it('a later page that fails keeps who is shown and offers its own retry', async () => {
+    api.getChatParticipants.mockResolvedValueOnce(page(0, 100, 250) as never).mockResolvedValueOnce({ success: false, error: 'offline' } as never)
+    await open()
+    await reachEnd()
+    expect(screen.getByTestId('info-members-more-failed')).toBeTruthy()
+    expect(screen.queryByText('Couldn’t load who’s in this room')).toBeNull()
+    // The list does not hammer a failing page on every scroll event.
+    await reachEnd()
+    expect(api.getChatParticipants).toHaveBeenCalledTimes(2)
+    api.getChatParticipants.mockResolvedValueOnce(page(100, 100, 250) as never)
+    await act(async () => fireEvent.press(screen.getByTestId('info-members-more-failed')))
+    expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 100 })
+    expect(screen.queryByTestId('info-members-more-failed')).toBeNull()
+  })
+
+  it('draws no presence: a person is a creature and a name', async () => {
+    api.getChatParticipants.mockResolvedValue(page(0, 5, 5) as never)
+    await open()
+    expect(screen.queryByText(/online|active now|here now/i)).toBeNull()
+  })
+
+  it('says no count under five', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, memberCount: 3 }] } } as never)
+    await open()
+    expect(screen.queryByText(/in the room/)).toBeNull()
+    expect(screen.queryByLabelText(/^In the room, /)).toBeNull()
+  })
+})
+
+describe('one number for the room (RC drive 3)', () => {
+  const page = (n: number, totalCount: number) => ({
+    success: true,
+    data: { participants: Array.from({ length: n }, (_, i) => ({ userId: `u-${i}`, name: `Fox ${i}`, role: 'member' })), totalCount },
+  })
+
+  it('says the Room’s number on both lines: not the 515 members, not the 450 listed', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, hereCount: 483, memberCount: 515 }] } } as never)
+    api.getChatParticipants.mockResolvedValue(page(100, 450) as never)
+    await open()
+    expect(screen.getByLabelText('In the room, 483')).toBeTruthy()
+    expect(screen.getAllByText('483').length).toBe(2)
+    expect(screen.queryByText('515')).toBeNull()
+    expect(screen.queryByText('450')).toBeNull()
+  })
+
+  it('follows the server’s recount as people check out', async () => {
+    mockCheckOut.length = 0
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, hereCount: 483 }] } } as never)
+    api.getChatParticipants.mockResolvedValue(page(100, 450) as never)
+    await open()
+    await act(async () => mockCheckOut.forEach((cb) => cb({ hereCount: 482 })))
+    expect(screen.getByLabelText('In the room, 482')).toBeTruthy()
+  })
+})
+
+describe('a place’s room (C5, 5-2)', () => {
+  const placeRow = { id: 'g1', name: 'Toit', memberCount: 3, event: { id: 'd1', kind: 'venue_day', venueId: 'v1', title: 'Venue day · Toit · 2026-10-22' } }
+  beforeEach(() => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [placeRow] } } as never)
+    api.getVenue.mockResolvedValue({ success: true, data: { live: { liveNow: '5-9' } } } as never)
+  })
+
+  it('is titled for the place and says a bucket, never the exact count', async () => {
+    await open()
+    expect(screen.getByText('Toit · tonight')).toBeTruthy()
+    expect(screen.getByText('5–9')).toBeTruthy()
+    expect(screen.queryByText('3')).toBeNull()
+    // Its people are not counted in the section heading either.
+    expect(screen.queryByLabelText(/^In the room, \d/)).toBeNull()
+  })
+
+  it('leaving says what it does to tonight, and that going live again brings you back', async () => {
+    await open()
+    expect(screen.getByText('You leave Toit’s room for tonight. Go live again any time you’re here.')).toBeTruthy()
+  })
+
+  it('below five live it says nothing rather than "Under 5"', async () => {
+    api.getVenue.mockResolvedValue({ success: true, data: { live: { liveNow: 'quiet' } } } as never)
+    await open()
+    expect(screen.queryByText(/in the room/)).toBeNull()
+  })
+})
+
+describe('a block takes the person off the list (safety)', () => {
+  it('removes them from what is loaded, and the next page asks from where the list now stands', async () => {
+    const page = (from: number, n: number, totalCount: number) => ({
+      success: true,
+      data: { participants: Array.from({ length: n }, (_, i) => ({ userId: `u-${from + i}`, name: `Fox ${from + i}`, role: 'member' })), totalCount },
+    })
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, memberCount: 250 }] } } as never)
+    api.getChatParticipants.mockResolvedValueOnce(page(0, 100, 250) as never).mockResolvedValueOnce(page(101, 100, 249) as never)
+    await open()
+    await act(async () => fireEvent.press(screen.getByTestId('info-member-u-1')))
+    await act(async () => mockCard.props!.onBlocked('u-1'))
+    expect(screen.queryByTestId('info-member-u-1')).toBeNull()
+    // Off the list, and still in the room: the count is the room's, as the Room and the chat say it (RC drive 3).
+    expect(screen.getByLabelText('In the room, 250')).toBeTruthy()
+    await act(async () => fireEvent(screen.getByTestId('info-list'), 'endReached'))
+    // 99 held now, and the server's own list no longer has them: the next page starts at 99.
+    expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 99 })
+  })
+})
+
+it('a block made anywhere reads the roster again from the start (H2)', async () => {
+  await open()
+  api.getChatParticipants.mockClear()
+  api.getChatParticipants.mockResolvedValue({ success: true, data: { participants: [{ userId: 'u-a', name: 'Cosmic Panda', role: 'member' }], totalCount: 1 } } as never)
+  await act(async () => noteBlocked())
+  expect(api.getChatParticipants).toHaveBeenCalledWith('g1', { limit: 100, offset: 0 })
+  expect(screen.queryByLabelText('Amber Fox, Organiser')).toBeNull()
+})
+
+it('lists its rows by fixed layout once the header is measured, and not before (getItemLayout)', async () => {
+  await open()
+  expect(screen.getByTestId('info-list').props.getItemLayout).toBeUndefined()
+  await act(async () => fireEvent(screen.getByTestId('info-header'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 400, height: 700 } } }))
+  const layout = screen.getByTestId('info-list').props.getItemLayout as (d: unknown, i: number) => { length: number; offset: number; index: number }
+  const first = layout(null, 0)
+  const third = layout(null, 2)
+  expect(first.offset).toBe(700)
+  expect(third.offset - first.offset).toBe(2 * first.length)
+})
+
+describe('at AX XXXL (TG-03)', () => {
+  beforeEach(() => atScale(AX_XXXL))
+  afterEach(resetScale)
+
+  it('a 483-person room with a long name: the title and its count line stop at their caps, and the hero grows', async () => {
+    const title = 'The Very Long Saturday Night Vinyl and Natural Wine Social at the Old Brewery'
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, name: title, event: { ...eventRow.event, title } }] } } as never)
+    api.getChatParticipants.mockResolvedValue({ ...crowd, data: { ...crowd.data, totalCount: 483 } } as never)
+    await open()
+    const hero = subtree(screen.toJSON() as never, 'info-hero')
+    expect(uncapped(hero)).toEqual([])
+    expect(clipped(hero)).toEqual([])
+    expect(screen.getByRole('header', { name: title }).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.title)
+    expect(uncapped(subtree(screen.toJSON() as never, 'info-leave'))).toEqual([])
   })
 })

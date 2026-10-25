@@ -6,11 +6,11 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet, Text } from 'react-native'
 
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
-import { PRESSED_WASH } from '../components/ds/shared'
-import { COLOR, ICON, MATERIAL, SPACE } from '../lib/design/tokens'
+import { HueProvider, PRESSED_WASH, SELECTION } from '../components/ds/shared'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -57,10 +57,63 @@ describe('<SettingsRow>', () => {
     expect(toggle).toHaveBeenCalledWith(true)
   })
 
-  it('draws the P1 Toggle: on is the white track with the ink thumb (F1)', async () => {
-    await render(push())
-    expect(flat('r-toggle-on').backgroundColor).toBe(COLOR.selectionFill)
-    expect(flat('r-toggle-thumb-ink').backgroundColor).toBe(COLOR.selectionInk)
+  it('draws the P1 Toggle: on is the hue’s edge track under the white thumb', async () => {
+    await render(<HueProvider value="violet">{push()}</HueProvider>)
+    expect(flat('r-toggle-on').backgroundColor).toBe(COLOR.brandViolet)
+    expect(flat('r-toggle-thumb').backgroundColor).toBe(COLOR.textPrimary)
+  })
+
+  describe('the glyph tile of a switch row', () => {
+    const tile = (value: boolean) => (
+      <HueProvider value="violet">
+        <SettingsRow icon="bell" title="Push notifications" trail="switch" value={value} onValueChange={jest.fn()} testID="r" />
+      </HueProvider>
+    )
+
+    it('is 32 pt, thumb-cornered, on surfaceRaised', async () => {
+      await render(tile(false))
+      expect(flat('r-tile')).toMatchObject({ width: 32, height: 32, borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceRaised, overflow: 'hidden' })
+    })
+
+    it('lights in the hue only when the switch is on: the light is poured in and the glyph takes the hue’s tone', async () => {
+      await render(tile(false))
+      expect(flat('r-tile-light')).toMatchObject({ backgroundColor: SELECTION.violet.fill, opacity: 0 })
+      expect(JSON.stringify(screen.toJSON())).not.toContain(SELECTION.violet.glyph)
+      await render(tile(true))
+      expect(flat('r-tile-light')).toMatchObject({ backgroundColor: SELECTION.violet.fill, opacity: 1 })
+      expect(JSON.stringify(screen.toJSON())).toContain(SELECTION.violet.glyph)
+    })
+
+    it('a chevron or external row has no tile: a plain glyph', async () => {
+      await render(<SettingsRow icon="shield" title="Blocked users" trail="chevron" onPress={jest.fn()} testID="r" />)
+      expect(screen.queryByTestId('r-tile', { includeHiddenElements: true })).toBeNull()
+    })
+
+    it('a row with its own leading mark keeps it, with no tile', async () => {
+      await render(<SettingsRow leading={<Text>L</Text>} icon="bell" title="Crew" trail="switch" value onValueChange={jest.fn()} testID="r" />)
+      expect(screen.queryByTestId('r-tile', { includeHiddenElements: true })).toBeNull()
+    })
+
+    it('the group’s hairline starts at the text edge of the row below it: past the 32 pt tile, or the 20 pt glyph', async () => {
+      // Side by side: below the accessibility sizes (jest's window is at 2, where a switch row stacks; axTextSize covers that).
+      const window = Dimensions.get('window')
+      const screenSize = Dimensions.get('screen')
+      Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...screenSize, fontScale: 1 } })
+      try {
+        await render(
+          <SettingsGroup testID="g">
+            <SettingsRow icon="bell" title="A" trail="switch" value={false} onValueChange={jest.fn()} />
+            <SettingsRow icon="bell" title="B" trail="switch" value={false} onValueChange={jest.fn()} />
+            <SettingsRow icon="shield" title="C" trail="chevron" onPress={jest.fn()} />
+          </SettingsGroup>
+        )
+        const lines = screen.getAllByTestId('g-hairline', { includeHiddenElements: true })
+        expect(StyleSheet.flatten(lines[0].props.style).marginLeft).toBe(SPACE.lg + 32 + SPACE.lg)
+        expect(StyleSheet.flatten(lines[1].props.style).marginLeft).toBe(SPACE.lg + ICON.control + SPACE.lg)
+      } finally {
+        Dimensions.set({ window, screen: screenSize })
+      }
+    })
   })
 
   it('the row’s press reaches the toggle: its thumb widens under the finger', async () => {
@@ -159,5 +212,32 @@ describe('<SettingsGroup>', () => {
     const line = StyleSheet.flatten(screen.getAllByTestId('g-hairline', { includeHiddenElements: true })[0].props.style)
     expect(line).toMatchObject({ height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast })
     expect(flat('g-card').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('a leading mark and an accessory (Flow 6: Crews, Friend requests)', () => {
+  it('draws the leading mark in place of the glyph, and says the whole sentence', async () => {
+    await render(
+      <SettingsGroup>
+        <SettingsRow leading={<Text testID="emblems">E</Text>} title="Crews" label="Crews, 2, 1 invite waiting" accessory={<Text testID="count">2</Text>} trail="chevron" onPress={() => {}} />
+      </SettingsGroup>
+    )
+    expect(screen.getByTestId('emblems')).toBeTruthy()
+    expect(screen.getByLabelText('Crews, 2, 1 invite waiting').props.accessibilityRole).toBe('button')
+    // The accessory is decorative: the label carries it.
+    expect(screen.getByTestId('count', { includeHiddenElements: true }).parent?.props.accessibilityElementsHidden).toBe(true)
+  })
+})
+
+describe('the group label is words, so it is set in the brand face, not Geist Mono (DS-09, D-L26: "DANGER  ZONE")', () => {
+  it('Satoshi in the label role (uppercase, tracked), not mono', async () => {
+    await render(
+      <SettingsGroup title="Danger zone" danger>
+        <SettingsRow icon="trash" title="Delete account" trail="chevron" onPress={jest.fn()} />
+      </SettingsGroup>
+    )
+    const label = StyleSheet.flatten(screen.getByRole('header', { name: 'Danger zone' }).props.style)
+    expect(label.fontFamily).toBe(FONT_FAMILY.brand[700])
+    expect(label).toMatchObject({ textTransform: 'uppercase', fontSize: TYPE.label.fontSize })
   })
 })

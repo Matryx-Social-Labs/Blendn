@@ -4,16 +4,16 @@ import { StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeOut } from 'react-native-reanimated'
 
 import { revealConfirmation } from '../../lib/conversationReveal'
-import { COLOR, DURATION, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { PrivateMessage } from '../../lib/directThread'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { ChatBubble } from '../ds/ChatBubble'
 import type { Rect } from '../ds/chatShared'
 import type { Face } from '../ds/Facepile'
 import type { Receipt } from '../ds/ReceiptMark'
-import { font, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { Sheet } from '../ds/Sheet'
 import { TextField } from '../ds/TextField'
 import { Icon } from '../ui/Icon'
@@ -39,10 +39,10 @@ export function MatchOpenerCard({ you, them, title, body }: { you: Face; them: F
           <Avatar size={OPENER_FACE} ring={COLOR.surface} {...them} />
         </View>
       </View>
-      <Text accessibilityRole="header" style={[font('heading', bold), styles.ink, styles.centre]}>
+      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink, styles.centre]}>
         {title}
       </Text>
-      <Text style={[font('meta', bold), styles.secondary, styles.centre]}>{body}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>{body}</Text>
     </View>
   )
 }
@@ -52,8 +52,8 @@ export function SayHi({ line, onPress }: { line: string | null; onPress: () => v
   const bold = useBoldText()
   return (
     <Animated.View exiting={FadeOut.duration(DURATION.quick)} style={styles.sayHi}>
-      {line ? <Text style={[font('meta', bold), styles.secondary]}>{line}</Text> : null}
-      <Button kind="secondary" size="md" label="Say hi" onPress={onPress} accessibilityHint="Sends “Hey 👋”" testID="dm-say-hi" />
+      {line ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{line}</Text> : null}
+      <Button kind="lit" size="md" icon="hand" label="Say hi" onPress={onPress} accessibilityHint="Sends “Hey 👋”" testID="dm-say-hi" />
     </Animated.View>
   )
 }
@@ -96,7 +96,7 @@ export function PhotoPreviewSheet({
     >
       {uri || shownFor ? <Image source={{ uri: (uri || shownFor) as string }} contentFit="cover" style={styles.preview} accessibilityLabel="The photo you picked" /> : null}
       <TextField value={caption} onChangeText={setCaption} placeholder="Add a caption" />
-      <Text style={[font('meta', bold), styles.secondary]}>Re-encoded on your phone before upload: no location data leaves it.</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Re-encoded on your phone before upload: no location data leaves it.</Text>
     </Sheet>
   )
 }
@@ -107,7 +107,8 @@ export function RevealLine({ seen, text }: { seen: boolean; text: string }) {
   return (
     <>
       <Icon name={seen ? 'eye' : 'eye-off'} size={ICON.inline} color={COLOR.textSecondary} />
-      <Text numberOfLines={1} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+      {/* In the header's capsule, a box of fixed height: it stops at the control cap, as the name above it does (RC drive 2 D-3). */}
+      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
         {text}
       </Text>
     </>
@@ -117,12 +118,12 @@ export function RevealLine({ seen, text }: { seen: boolean; text: string }) {
 /** "{name} asked to know who you are", under the bar (Flow 5 DM #02). */
 export function NudgeLine({ text }: { text: string }) {
   const bold = useBoldText()
-  return <Text style={[font('meta', bold), styles.ink, styles.centre]}>{text}</Text>
+  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.centre]}>{text}</Text>
 }
 
 /**
  * Showing them who you are (Flow 5 DM #06–#07): the confirm says it can't be
- * undone before the tap — Show them is the strong white, never the gradient
+ * undone before the tap — Show them is lit in the screen's rose, never the gradient
  * (Send is this screen's primary), and its haptic is the server's H.success.
  * Refused for want of a photo, Not yet says the server's sentence.
  */
@@ -151,7 +152,7 @@ export function RevealSheets({
         title={copy.title}
         body={copy.body}
         actions={[
-          { label: copy.confirm, kind: 'strong', onPress: onShow, loading: busy, pressHaptic: false },
+          { label: copy.confirm, kind: 'lit', onPress: onShow, loading: busy, pressHaptic: false },
           { label: 'Not now', kind: 'tertiary', onPress: onClose },
         ]}
         testID="dm-reveal-sheet"
@@ -163,7 +164,7 @@ export function RevealSheets({
         title="Not yet"
         body={sheet && sheet !== 'confirm' ? sheet.notYet : undefined}
         actions={[
-          { label: 'Add a photo', kind: 'strong', onPress: onAddPhoto },
+          { label: 'Add a photo', kind: 'lit', onPress: onAddPhoto },
           { label: 'Close', kind: 'tertiary', onPress: onClose },
         ]}
         testID="dm-not-yet"
@@ -202,7 +203,7 @@ export const DmMessageRow = memo(function DmMessageRow({
   first: boolean
   last: boolean
   receipt?: Receipt | null
-  /** Your own send, rising from the composer (#12). */
+  /** Rises into place: your own send (#12), or somebody's that arrived while you were at the bottom (#13). */
   animate: boolean
   handlers: DmRowHandlers
 }) {
@@ -212,13 +213,23 @@ export const DmMessageRow = memo(function DmMessageRow({
     surface: 'dm' as const,
     mine,
     sender: { name: mine ? 'You' : name },
-    time: chatClock(item.createdAt),
+    time: clockTime(item.createdAt),
     removed: item.removed,
     failed: item.failed ? item.failedLine || true : false,
     onRetry: () => handlers.retry(item),
     onReply: item.failed || item.removed || item.waiting || item.id.startsWith('local-') ? undefined : () => handlers.reply(item),
     onLongPress: item.removed ? undefined : (anchor: Rect) => handlers.menu(item, anchor),
-    animateIn: animate ? ('send' as const) : undefined,
+    // Yours rise from the composer (#12); theirs arrive with a 12 pt rise and a fade (#13, opacity only under Reduce Motion).
+    animateIn: animate ? (mine ? ('send' as const) : ('arrive' as const)) : undefined,
+  }
+  // A photo removed by moderation, as its sender sees it (round 4 #37): the photo-sized dashed frame, never a text pill.
+  // Its caption went with it.
+  if (item.removed && (photoUri || item.mediaType === 'image')) {
+    return (
+      <View style={first ? styles.runStart : styles.inRun}>
+        <ChatBubble {...shared} removed="photo" testID={`dm-photo-${item.id}`} first={first} last={last} receipt={receipt ?? undefined} />
+      </View>
+    )
   }
   return (
     <View style={first ? styles.runStart : styles.inRun}>

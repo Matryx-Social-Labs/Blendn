@@ -11,9 +11,14 @@
  */
 
 import { fnv1a } from './pseudonymAvatar'
+import { clockTime, eventClock } from './time'
 
-/** A reason line has to fit under a face in a three-column grid. */
-export const REASON_MAX = 24
+/**
+ * A reason line has to fit under a face in a three-column grid: at 24 almost every one was cut ("Both at 1 night bef…",
+ * RC audit B-R7). 19 is the longest fixed sentence, "Both open to dating", which is the same words as the card's overlap
+ * line (`lib/overlapLine.ts`); counts take their short phrasing well under it.
+ */
+export const REASON_MAX = 19
 
 /** "Just walked in" for this long after a check-in. */
 export const JUST_ARRIVED_MS = 10 * 60_000
@@ -42,11 +47,6 @@ export interface ReasonSource {
  */
 function fit(text: string, max = REASON_MAX): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`
-}
-
-/** The long phrasing when it fits, else the short one, else cut. */
-function shortest(long: string, short: string): string {
-  return long.length <= REASON_MAX ? long : fit(short)
 }
 
 /**
@@ -85,17 +85,13 @@ export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: stri
 export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
   if (p.sharedIntents?.includes('dating')) return 'Both open to dating'
 
-  // Counts get a shorter phrasing rather than an ellipsis once they reach two
-  // digits: "Going to 12 more togeth…" cuts the only word that explains it.
+  // Counts take the short phrasing, which fits at every count a person has: an ellipsis would cut the only word that
+  // explains it ("Going to 12 more togeth…").
   const plans = p.sharedPlans ?? 0
-  if (plans > 0) return shortest(`Going to ${plans} more together`, `Both going to ${plans} more`)
+  if (plans > 0) return fit(`${plans} ${plans === 1 ? 'plan' : 'plans'} in common`)
 
   const history = p.sharedEvents ?? 0
-  if (history > 0) {
-    return history === 1
-      ? 'Both at 1 night before'
-      : shortest(`Both at ${history} nights before`, `Both at ${history} nights`)
-  }
+  if (history > 0) return fit(`Both at ${history} ${history === 1 ? 'night' : 'nights'}`)
 
   const interests = (p.interests ?? []).filter((s) => s.trim().length > 0)
   if (interests.length > 0) {
@@ -140,10 +136,16 @@ export function hereNowStack<T extends { id: string; insideNow?: boolean }>(
 /**
  * The face grid's heading and its number.
  *
- * "Everyone here" stops being true once somebody in it has left. With more to
- * load, the number is the room's count of people inside — right under
- * "Everyone here", the wrong kind of number under "Everyone who came", which
- * then shows none (0 hides it).
+ * "Everyone here" is the room's number, inside now (`hereCount`, you
+ * included): the one the Room's headline, the chat header and Room info all
+ * say (RC drive 3 had 482, 515 and 450 for one room of 483). Not the faces
+ * loaded, and not the room minus you — the grid leaves out friends (their own
+ * section) and "show online" off (counted, not listed), so its length was
+ * never the room.
+ *
+ * "Everyone here" stops being true once somebody in it has left: then it is
+ * "Everyone who came", counted by its faces only when they are all loaded
+ * (the room's number is the wrong kind of number there, so none: 0 hides it).
  */
 export function everyoneHead(
   people: readonly { insideNow?: boolean }[],
@@ -151,7 +153,7 @@ export function everyoneHead(
 ): { title: string; count: number } {
   const allHere = people.every((p) => p.insideNow !== false)
   if (!allHere) return { title: 'Everyone who came', count: hasMore ? 0 : people.length }
-  return { title: 'Everyone here', count: hasMore ? Math.max(hereCount - 1, people.length) : people.length }
+  return { title: 'Everyone here', count: hereCount }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -253,14 +255,8 @@ export type StartsKind = 'live' | 'soon' | 'later' | 'ended'
 /** Under this, "In 25 min"; from here on, the clock time. */
 const SOON_MS = 60 * 60_000
 
-/** "8:30 PM", or "9 PM" on the hour, in local time. Built by hand: `Intl` time formats vary by engine. */
-export function clockTime(ms: number): string {
-  const d = new Date(ms)
-  const h24 = d.getHours()
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
-  const m = d.getMinutes()
-  return `${h12}${m ? `:${String(m).padStart(2, '0')}` : ''} ${h24 < 12 ? 'AM' : 'PM'}`
-}
+/** The app's one clock, "8:30 PM" / "9 PM" (`lib/time`), re-exported for the date grammar's callers here. */
+export { clockTime }
 
 /**
  * The time badge on a Tonight card, in the design's one date grammar
@@ -271,7 +267,7 @@ export function clockTime(ms: number): string {
  * says nothing.
  */
 export function startsLabel(
-  { startsAt, endsAt }: { startsAt?: string | null; endsAt?: string | null },
+  { startsAt, endsAt, timeZone }: { startsAt?: string | null; endsAt?: string | null; timeZone?: string | null },
   now: number
 ): { kind: StartsKind; text: string } {
   const start = startsAt ? new Date(startsAt).getTime() : NaN
@@ -283,7 +279,8 @@ export function startsLabel(
 
   const until = start - now
   if (until < SOON_MS) return { kind: 'soon', text: `In ${Math.max(1, Math.ceil(until / 60_000))} min` }
-  return { kind: 'later', text: clockTime(start) }
+  // The event's own clock, named when it is not the phone's (RC drive 5 D-4; admin #749 sends the zone).
+  return { kind: 'later', text: eventClock(start, timeZone) }
 }
 
 /* -------------------------------------------------------------------------- */

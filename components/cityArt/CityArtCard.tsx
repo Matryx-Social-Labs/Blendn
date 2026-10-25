@@ -10,28 +10,38 @@
  * drawn at an exact size rather than stretched — a stretched skyline is a
  * blurry one.
  */
-import { Ionicons } from '@expo/vector-icons'
 import React, { useState } from 'react'
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
-import { SCENE_PALETTES, type CityArtInfo } from '../../lib/cityArt'
-import { EMBER, EMBER_FONTS, EMBER_RADIUS, ICON, SPACE, TYPE } from '../../lib/theme'
+import { type CityArtInfo } from '../../lib/cityArt'
+import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { CheckDisc } from '../ds/RadioCard'
+import { CONTROL_FONT_CAP, font, useBoldText, useSelection } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
+import { PhotoScrim } from '../ui/GradientFill'
 import { CityScene, useSceneTime } from './CityScene'
 
-function useWidth() {
-  const [width, setWidth] = useState(0)
+function useSize() {
+  const [size, setSize] = useState({ width: 0, height: 0 })
   const onLayout = (e: LayoutChangeEvent) => {
-    const w = Math.round(e.nativeEvent.layout.width)
-    setWidth((prev) => (prev === w ? prev : w))
+    const width = Math.round(e.nativeEvent.layout.width)
+    const height = Math.round(e.nativeEvent.layout.height)
+    setSize((prev) => (prev.width === width && prev.height === height ? prev : { width, height }))
   }
-  return [width, onLayout] as const
+  return [size, onLayout] as const
 }
+
+/**
+ * The skyline card is 140 tall (Flow 3 `city`) at rest, and grows when its label does: a minimum, never a height (the
+ * row rule, components/ds/shared.ts). The banner takes its own height from the caller.
+ */
+const CARD_HEIGHT = 140
+const PILL_HEIGHT = 28
 
 interface CardProps {
   /** The server's spelling, shown as-is — it is what the list is keyed by. */
   city: string
   art: CityArtInfo
-  /** What the city holds, from `cityCountLabel`: "12 events", or "1206 places" for a city with no events. */
+  /** What the city holds, from `cityCountLabel`: "12 events", or "1,206 places" for a city with no events. */
   countLabel: string
   active: boolean
   /** The device is in this city. */
@@ -39,42 +49,56 @@ interface CardProps {
   onPress: () => void
 }
 
+/**
+ * A picker row for a city that has art (Flow 3 `city`, R4.1 3-6): the skyline, the name over it and the city's own
+ * script beside its count, "You're here" as a white pill when the phone is in it. The chosen city wears the DS
+ * selection mark in the screen's hue: the ring and the check disc.
+ */
 export function CityArtCard({ city, art, countLabel, active, here, onPress }: CardProps) {
-  const [width, onLayout] = useWidth()
+  const bold = useBoldText()
+  const sel = useSelection()
+  const [{ width, height }, onLayout] = useSize()
   const tod = useSceneTime(art.timeZone)
-  const ink = SCENE_PALETTES[tod].ink
-  const events = countLabel
 
   return (
     <ScalePress
       onPress={onPress}
       haptic={false}
-      pressedScale={0.98}
-      style={[styles.card, active && styles.cardActive]}
+      pressedScale={0.97}
+      style={styles.card}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
-      accessibilityLabel={`${city}${here ? ', your current location' : ''}, ${events}`}
+      accessibilityLabel={`${city}${here ? ', your current location' : ''}, ${countLabel}`}
     >
-      <View style={styles.art} onLayout={onLayout}>
-        <CityScene city={art.key} width={width} height={Math.round(width * 0.5)} tod={tod} />
-        <View style={styles.label} pointerEvents="none">
-          <Text style={[styles.name, { color: ink }]} numberOfLines={1}>{city}</Text>
-          <Text style={[styles.script, { color: ink }]}>{art.script}</Text>
+      <View testID="city-art-frame" style={styles.art} onLayout={onLayout}>
+        {/* The scene fills whatever the label leaves it, drawn at the card's measured size (it keeps its ground, CityScene). */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <CityScene city={art.key} width={width} height={Math.max(height, CARD_HEIGHT)} tod={tod} />
         </View>
-        {active ? (
-          <View style={styles.check}>
-            <Ionicons name="checkmark" size={ICON.sm} color={EMBER.onGradient} />
-          </View>
-        ) : null}
-      </View>
-      <View style={styles.meta}>
-        <Text style={styles.count}>{events}</Text>
+        {/*
+         * The label sits in the flow at the foot, over a scrim: the skyline is busiest at its foot, and over a day sky the
+         * scene's own ink read under the towers (audit A5). White on the scrim reads at every time of day. Capped at
+         * CONTROL_FONT_CAP: the card is a control (a picker row), and the card grows rather than slicing it (A4).
+         */}
+        <View testID="city-art-label" style={styles.label} pointerEvents="none">
+          <PhotoScrim testID="city-art-scrim" style={StyleSheet.absoluteFill} />
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('heading', bold), styles.onScrim]} numberOfLines={1}>
+            {city}
+          </Text>
+          {/* The script line is system-drawn: neither app family carries Kannada or Devanagari. */}
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.script, styles.onScrim]} numberOfLines={2}>
+            {[art.script, countLabel].join(' · ')}
+          </Text>
+        </View>
         {here ? (
-          <View style={styles.here}>
-            <Ionicons name="navigate" size={ICON.sm} color={EMBER.textSecondary} />
-            <Text style={styles.count}>You&rsquo;re here</Text>
+          <View style={[styles.here, active && styles.hereBesideCheck]}>
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.onWhite]}>
+              You’re here
+            </Text>
           </View>
         ) : null}
+        <CheckDisc selected={active} testID="city-art-check" />
+        {active ? <View pointerEvents="none" style={[styles.ring, { borderColor: sel.edge }]} /> : null}
       </View>
     </ScalePress>
   )
@@ -82,7 +106,7 @@ export function CityArtCard({ city, art, countLabel, active, here, onPress }: Ca
 
 /** The scene alone, cropped to a strip: sky gives way before the street does. */
 export function CityArtBanner({ art, height }: { art: CityArtInfo; height: number }) {
-  const [width, onLayout] = useWidth()
+  const [{ width }, onLayout] = useSize()
   return (
     <View style={[styles.banner, { height }]} onLayout={onLayout}>
       <CityScene city={art.key} width={width} height={height} />
@@ -90,49 +114,29 @@ export function CityArtBanner({ art, height }: { art: CityArtInfo; height: numbe
   )
 }
 
-/** The city's name in its own script sits a step behind the English name, over the art. */
+/** The city's name in its own script sits a step behind the English name, over the art (white at 75% on the scrim's foot: 9:1). */
 const SCRIPT_OPACITY = 0.75
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: EMBER_RADIUS.md,
-    overflow: 'hidden',
-    backgroundColor: EMBER.surfaceSunken,
-    marginBottom: SPACE.sm,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  cardActive: { borderColor: EMBER.accent },
-  art: { width: '100%' },
-  label: { position: 'absolute', left: SPACE.lg, top: SPACE.md, right: SPACE.xxxl },
-  name: { ...TYPE.title, fontFamily: EMBER_FONTS.displayExtraBold },
-  // The script line is system-drawn: neither app family carries Kannada or Devanagari.
-  script: { ...TYPE.meta, fontFamily: undefined, opacity: SCRIPT_OPACITY },
-  check: {
+  card: { borderRadius: RADIUS.mediaInCard, overflow: 'hidden', backgroundColor: COLOR.surface, marginBottom: SPACE.md },
+  art: { width: '100%', minHeight: CARD_HEIGHT, justifyContent: 'flex-end' },
+  // The scrim's clear head runs up into the sky; the right inset clears the check disc and the pill's column.
+  label: { paddingLeft: SPACE.lg, paddingRight: SPACE.xxxl, paddingTop: SPACE.xxl, paddingBottom: SPACE.md, gap: SPACE.xxs },
+  onScrim: { color: COLOR.textPrimary },
+  script: { fontFamily: undefined, opacity: SCRIPT_OPACITY },
+  here: {
     position: 'absolute',
-    top: SPACE.md,
     right: SPACE.md,
-    width: 24,
-    height: 24,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-    alignItems: 'center',
+    top: SPACE.md,
+    minHeight: PILL_HEIGHT,
     justifyContent: 'center',
+    paddingHorizontal: SPACE.md,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.textPrimary,
   },
-  meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-  },
-  count: { ...TYPE.meta },
-  here: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  banner: {
-    alignSelf: 'stretch',
-    borderRadius: EMBER_RADIUS.lg,
-    overflow: 'hidden',
-    backgroundColor: EMBER.surfaceSunken,
-    marginBottom: SPACE.lg,
-  },
+  // The check disc owns the corner (24 pt, 10 in): the pill steps left of it.
+  hereBesideCheck: { right: SPACE.md + 24 + SPACE.sm },
+  onWhite: { color: COLOR.ink },
+  ring: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.mediaInCard, borderWidth: SPACE.xxs },
+  banner: { alignSelf: 'stretch', borderRadius: RADIUS.mediaInCard, overflow: 'hidden', backgroundColor: COLOR.surface, marginBottom: SPACE.lg },
 })

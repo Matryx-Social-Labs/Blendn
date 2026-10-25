@@ -4,6 +4,7 @@ import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text as RNText, Vie
 
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
+import { GlyphWell } from '../ds/StateScreen'
 import { RadioCard } from '../ds/RadioCard'
 import { Sheet } from '../ds/Sheet'
 import { Stepper } from '../ds/Stepper'
@@ -11,9 +12,10 @@ import { TextArea } from '../ds/TextField'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
-import { BOARD_MAX_POST_LENGTH, boardMarkSeed, spacesLabel, type BoardPost } from '../../lib/board'
-import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE } from '../../lib/design/tokens'
-import { EMBER, EMBER_RADIUS, ICON, OPACITY } from '../../lib/theme'
+import { BOARD_MAX_POST_LENGTH, boardMarkSeed, spacesLabel } from '../../lib/board'
+import type { BoardPostView } from '../../lib/chatPaging'
+import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { ICON, OPACITY } from '../../lib/theme'
 
 /**
  * The board's pieces (Flow 4 Board, flow4.js `post` and `board`). The rules
@@ -66,12 +68,12 @@ export function BoardEntry({ onPress }: { onPress: () => void }) {
       accessibilityLabel="The Board. Going alone? See who is looking for company, or offer a space."
       style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
     >
-      <Ionicons name="people-outline" size={ICON.lg} color={EMBER.textPrimary} />
+      <Ionicons name="people-outline" size={ICON.lg} color={COLOR.textPrimary} />
       <View style={styles.entryText}>
         <Text variant="bodyStrong">The Board</Text>
-        <Text variant="meta">Going alone? See who&apos;s looking for company — or offer a space.</Text>
+        <Text variant="meta">Going alone? See who’s looking for company — or offer a space.</Text>
       </View>
-      <Ionicons name="chevron-forward" size={ICON.md} color={EMBER.textSecondary} />
+      <Ionicons name="chevron-forward" size={ICON.md} color={COLOR.textSecondary} />
     </Pressable>
   )
 }
@@ -108,16 +110,21 @@ export const BoardPostCard = memo(function BoardPostCard({
   onAsk,
   onTakeDown,
   onMore,
+  onWriteNew,
 }: {
-  post: BoardPost
+  post: BoardPostView
   eventId: string
   ask: AskState
-  onAsk: (post: BoardPost) => void
-  onTakeDown: (post: BoardPost) => void
+  onAsk: (post: BoardPostView) => void
+  onTakeDown: (post: BoardPostView) => void
   /** Report or block the author — anybody's post but yours. */
-  onMore: (post: BoardPost) => void
+  onMore: (post: BoardPostView) => void
+  /** From a post that was taken down: the composer. */
+  onWriteNew?: () => void
 }) {
   const bold = useBoldText()
+  // Yours, and moderation took it down (SV9): the card says so and why, in place of the post.
+  if (post.mine && post.takenDown) return <TakenDownCard onWriteNew={onWriteNew} />
   const offer = post.kind === 'offer'
   const spaces = offer ? spacesLabel(post.spacesLeft) : null
   const kindWord = offer ? 'Offering' : post.kind === 'seeking' ? 'Looking' : 'Saying'
@@ -127,14 +134,14 @@ export const BoardPostCard = memo(function BoardPostCard({
     <View style={styles.byline}>
       <BoardMark seed={boardMarkSeed(post.author, eventId, post.id)} size={offer ? MARK.offer : MARK.seeking} />
       <View style={styles.bylineText}>
-        <RNText style={[font('bodyStrong', bold), styles.ink]}>{post.author}</RNText>
-        <RNText style={[font('meta', bold), styles.secondary]}>{post.mine ? `${kindWord} · yours` : kindWord}</RNText>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{post.author}</RNText>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{post.mine ? `${kindWord} · yours` : kindWord}</RNText>
       </View>
       {post.mine ? null : (
         <Pressable
           onPress={() => onMore(post)}
           accessibilityRole="button"
-          accessibilityLabel={`More options for ${post.author}'s post`}
+          accessibilityLabel={`More options for ${post.author}’s post`}
           style={({ pressed }) => [styles.more, pressed && styles.pressed]}
         >
           <Icon name="ellipsis" size={DS_ICON.control} color={COLOR.textSecondary} />
@@ -155,20 +162,53 @@ export const BoardPostCard = memo(function BoardPostCard({
     <View style={offer ? styles.offer : styles.seeking}>
       {offer ? byline : null}
       {spaces ? <SpacesLine spacesLeft={post.spacesLeft} label={spaces} full={full} /> : null}
-      <RNText style={[font('body', bold), styles.ink]}>{post.body}</RNText>
+      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{post.body}</RNText>
       {offer ? null : byline}
       {footer}
     </View>
   )
 })
 
+/**
+ * "Your post was taken down." (Flow 4 · 4.10 frame 36): a solid card with the 56 pt well, the reason, and one text
+ * action that opens the composer. No haptic, nothing said to anybody who asked: their row just goes. Drawn from the
+ * server's `takenDown` list on the board's first page (lib/chatPaging.ts `goneFrom`): yours alone, so the card never draws for
+ * anybody else's post, and on a server that sends none it never draws.
+ */
+function TakenDownCard({ onWriteNew }: { onWriteNew?: () => void }) {
+  const bold = useBoldText()
+  return (
+    <View testID="board-taken-down" accessibilityLiveRegion="polite" style={styles.takenDown}>
+      <GlyphWell icon="shield" />
+      <View style={styles.takenDownText}>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Your post was taken down.</RNText>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>It didn’t meet the community guidelines.</RNText>
+        {onWriteNew ? (
+          <Pressable
+            testID="board-taken-down-write"
+            onPress={onWriteNew}
+            accessibilityRole="button"
+            accessibilityLabel="Write a new post"
+            hitSlop={(minTarget() - SPACE.xl) / 2}
+            style={({ pressed }) => [styles.takenDownAction, pressed && styles.pressed]}
+          >
+            <RNText maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+              Write a new post
+            </RNText>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  )
+}
+
 /** "2 spaces left": the count in Geist Mono at the title's size, the words in the title; "Full" in textSecondary. */
 function SpacesLine({ spacesLeft, label, full }: { spacesLeft: number | null; label: string; full: boolean }) {
   const bold = useBoldText()
-  if (full || spacesLeft === null) return <RNText style={[font('title', bold), styles.secondary]}>{label}</RNText>
+  if (full || spacesLeft === null) return <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.secondary]}>{label}</RNText>
   const count = String(spacesLeft)
   return (
-    <RNText style={[font('title', bold), styles.ink]}>
+    <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
       <RNText style={[font('title', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{count}</RNText>
       {label.slice(count.length)}
     </RNText>
@@ -179,7 +219,7 @@ function MineFooter({ count, onTakeDown }: { count: number; onTakeDown: () => vo
   const bold = useBoldText()
   return (
     <View style={styles.footer}>
-      <RNText style={[font('meta', bold), styles.secondary, styles.footerLine]}>
+      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.footerLine]}>
         {count === 0 ? 'Nobody has asked yet' : `${count} asked. Answer in the Banter.`}
       </RNText>
       <Pressable
@@ -201,7 +241,7 @@ function MineFooter({ count, onTakeDown }: { count: number; onTakeDown: () => vo
  * Ask, then the answer in place.
  *
  * No confirm dialog: the ask is the moment somebody feels most exposed, and a
- * "Are you sure?" says it is dangerous. A strong neutral (white), not the
+ * "Are you sure?" says it is dangerous. A lit action in the event's hue, not the
  * gradient; no press haptic, `H.success` when the ask is recorded (the
  * screen's). The button holds a spinner while the request is out, then the
  * card says what happened. A refusal is the server's sentence, destructive.
@@ -210,24 +250,25 @@ function AskFooter({ ask, full, author, onAsk }: { ask: AskState; full: boolean;
   const bold = useBoldText()
   if (ask.kind === 'settled') {
     return (
-      <RNText accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
+      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
         {ask.line}
       </RNText>
     )
   }
-  if (full) return <RNText style={[font('meta', bold), styles.secondary]}>No spaces left</RNText>
+  if (full) return <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>No spaces left</RNText>
 
   return (
     <View style={styles.footer}>
       {ask.kind === 'refused' ? (
-        <RNText accessibilityLiveRegion="polite" style={[font('meta', bold), styles.refused, styles.footerLine]}>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.refused, styles.footerLine]}>
           {ask.line}
         </RNText>
       ) : null}
       <Button
         label="Ask to join"
-        kind="strong"
+        kind="lit"
         size="md"
+        icon="hand-heart"
         pressHaptic={false}
         loading={ask.kind === 'asking'}
         onPress={onAsk}
@@ -327,7 +368,7 @@ export function BoardComposer({
         />
         {kind === 'offer' ? (
           <View style={styles.spacesRow}>
-            <RNText style={[font('bodyStrong', bold), styles.ink, styles.footerLine]}>Spaces</RNText>
+            <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.footerLine]}>Spaces</RNText>
             <Stepper label="Spaces" value={spaces} onChange={setSpaces} min={1} max={MAX_SPACES} onGlass={Platform.OS === 'ios'} disabled={posting} />
           </View>
         ) : null}
@@ -348,8 +389,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.lg,
     padding: SPACE.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
+    borderRadius: RADIUS.rowInCard,
+    backgroundColor: COLOR.surfaceSunken,
   },
   entryText: { flex: 1, gap: SPACE.xxs },
 
@@ -357,6 +398,10 @@ const styles = StyleSheet.create({
   offer: { gap: SPACE.sm + SPACE.xxs, padding: SPACE.lg, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
   // A seeking: no panel, words first.
   seeking: { gap: SPACE.sm + SPACE.xxs, paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
+
+  takenDown: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.lg, padding: SPACE.lg, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
+  takenDownText: { flex: 1, gap: SPACE.xs },
+  takenDownAction: { alignSelf: 'flex-start', marginTop: SPACE.xs },
 
   byline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs },
   bylineText: { flex: 1 },

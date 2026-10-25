@@ -168,7 +168,7 @@ export function isSettled(result: Refusal): boolean {
  * the line follows `live` and nothing else.
  */
 export function outgoingLine(request: Pick<BoardRequest, 'live' | 'status'>): string {
-  if (request.status === 'accepted') return "They said yes — you're in each other's chats"
+  if (request.status === 'accepted') return "They said yes — you’re in each other’s chats"
   if (request.live) return WAITING_LINE
   return request.status === 'withdrawn' ? 'You withdrew this' : CLOSED_LINE
 }

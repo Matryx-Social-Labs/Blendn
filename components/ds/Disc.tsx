@@ -22,7 +22,7 @@ import { roomButtonAccessibilityLabel, type RoomButtonTarget } from '../../lib/r
 import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
 import { Material } from '../ui/Material'
-import { BrandGradient, DiscMark, MONOGRAM_ASPECT } from './DiscMark'
+import { BrandGradient, DiscMark, MONOGRAM_OPTICAL_ASPECT } from './DiscMark'
 import { DISC_FRAMES, discLook, discReentry, discTransition, type DiscChannel, type DiscFrame, type DiscStep } from './discMotion'
 
 export type DiscProps = {
@@ -41,8 +41,9 @@ const R = SIZE.disc / 2
 
 /** The mark is half the disc. Its ink sits 10% of its width left of its box's centre and 2.75% below (the B's bowl), so the box is nudged to put the ink on the disc's centre. */
 const MARK_HEIGHT = SIZE.disc / 2
-const MARK_WIDTH = MARK_HEIGHT * MONOGRAM_ASPECT
-const MARK_LEFT = R - MARK_WIDTH / 2 + 0.1 * MARK_WIDTH
+// The optical box already carries the nudge this used to add by hand (+10% of the width): centre it exactly.
+const MARK_WIDTH = MARK_HEIGHT * MONOGRAM_OPTICAL_ASPECT
+const MARK_LEFT = R - MARK_WIDTH / 2
 const MARK_TOP = R - MARK_HEIGHT / 2 - 0.0275 * MARK_HEIGHT
 
 /** (b)'s ring: 1.5pt, 1pt outside the disc, drawn on clockwise from 12 o'clock. Disc and ring fit the 64pt bar. */
@@ -65,7 +66,7 @@ const MARKER_X = R + R * Math.sin(MARKER_ANGLE)
 const MARKER_Y = R - R * Math.cos(MARKER_ANGLE)
 
 /** (c)'s label, with the venue its pill shows, so the name a screen reader or Voice Control has matches the words on screen. */
-const checkInLabel = (venue: string) => `You're at ${venue}. Check in to see who else is here`
+const checkInLabel = (venue: string) => `You’re at ${venue}. Check in to see who else is here`
 
 /** (c)'s label sits this far either side of the disc at most; a long venue is truncated. */
 const LABEL_REACH = SPACE.xxxl * 2
@@ -131,7 +132,7 @@ export function Disc({ target, onPress, venue, testID = 'disc' }: DiscProps) {
     play(v, discTransition(from, look, reduceMotion))
     // Politely: queued behind whatever is being read, not over it.
     if (look === 'c') {
-      AccessibilityInfo.announceForAccessibilityWithOptions(`You're at ${venue ?? 'an event'}. Check in from the Blend'n button.`, { queue: true })
+      AccessibilityInfo.announceForAccessibilityWithOptions(`You’re at ${venue ?? 'an event'}. Check in from the Blend’n button.`, { queue: true })
     }
   }, [look, reduceMotion, v, venue])
 

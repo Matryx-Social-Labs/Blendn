@@ -5,7 +5,7 @@ import Animated from 'react-native-reanimated'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SPACE } from '../../lib/theme'
 import { Text } from '../ui/Text'
-import { useReduceMotion } from './MapLitLayers'
+import { useReducedMotion } from '../../lib/motion'
 
 const FADE = { transition: `opacity ${MAP_THEME.credit.fadeMs}ms ease-out` }
 
@@ -20,7 +20,7 @@ const FADE = { transition: `opacity ${MAP_THEME.credit.fadeMs}ms ease-out` }
  * appeared puts it away.
  */
 export function MapCredit({ text, top, gestures }: { text: string; top: number; gestures: number }) {
-  const reduceMotion = useReduceMotion()
+  const reduceMotion = useReducedMotion()
   // The credit as last put up: its line, the gesture count then, and whether its seconds are up.
   const [shown, setShown] = useState({ text, gestures, timedOut: false })
   // A new line is a new credit: up again (set during render, React's way to keep state from a prop).

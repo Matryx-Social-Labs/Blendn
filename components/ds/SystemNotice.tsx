@@ -1,8 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
-import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
 /**
  * The room narrating something nobody needs to act on (the SystemNotice page,
@@ -12,7 +12,7 @@ import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '
 export function SystemLine({ text, testID }: { text: string; testID?: string }) {
   const bold = useBoldText()
   return (
-    <Text testID={testID} style={[font('meta', bold), styles.line]}>
+    <Text testID={testID} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.line]}>
       {text}
     </Text>
   )
@@ -48,7 +48,7 @@ export function SystemNotice({ text, icon, kind = 'info', action, testID }: Syst
     >
       <Icon name={icon ?? (kind === 'warn' ? 'triangle-alert' : 'info')} size={ICON.control} />
       <View style={styles.body}>
-        <Text accessibilityLabel={kind === 'warn' ? `Warning: ${text}` : undefined} style={[font('meta', bold), styles.text]}>
+        <Text accessibilityLabel={kind === 'warn' ? `Warning: ${text}` : undefined} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.text]}>
           {text}
         </Text>
         {action ? (
@@ -58,7 +58,9 @@ export function SystemNotice({ text, icon, kind = 'info', action, testID }: Syst
             onPress={action.onPress}
             style={styles.action}
           >
-            <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.text]}>{action.label}</Text>
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.text]}>
+              {action.label}
+            </Text>
           </Pressable>
         ) : null}
       </View>

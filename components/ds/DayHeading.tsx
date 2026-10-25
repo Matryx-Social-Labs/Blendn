@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { font, useBoldText } from './shared'
 
 /**
@@ -32,8 +32,8 @@ export function DayHeading({
       accessibilityLabel={accessibilityLabel ?? (weekday ? `${date}, ${weekday}` : date)}
       style={styles.row}
     >
-      <Text style={[font('bodyStrong', bold, FONT_FAMILY.brand[700]), styles.date]}>{date}</Text>
-      {weekday ? <Text style={[font('meta', bold), styles.weekday]}>{weekday}</Text> : null}
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold, FONT_FAMILY.brand[700]), styles.date]}>{date}</Text>
+      {weekday ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.weekday]}>{weekday}</Text> : null}
     </View>
   )
 }

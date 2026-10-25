@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { roomStateFrom, roomStateLine } from '../lib/roomState'
+import { roomLockedIn, roomStateFrom, roomStateLine } from '../lib/roomState'
 
 /*
  * A muted member's room stays in the list, with a reason (SCRUM-178).
@@ -36,5 +36,20 @@ describe('the Banter list', () => {
     expect(src).toContain('const stateLine = roomStateLine(c.room_state)')
     expect(src).toContain("line: state ?? lineFor(")
     expect(readFileSync(join(__dirname, '..', 'lib', 'useBanterInbox.ts'), 'utf8')).toContain('room_state: roomStateFrom(room)')
+  })
+})
+
+describe('roomLockedIn (TG-02: a locked room opens read-only)', () => {
+  it('finds the room in either list and reads its own status, a mute or not', () => {
+    const payload = {
+      groups: [{ id: 'g1', status: 'locked', membership: { status: 'muted' } }, { id: 'g2', status: 'active' }],
+      rooms: [{ id: 'c1', kind: 'crew', status: 'locked' }],
+    }
+    expect(roomLockedIn(payload, 'g1')).toBe(true)
+    expect(roomLockedIn(payload, 'c1')).toBe(true)
+    expect(roomLockedIn(payload, 'g2')).toBe(false)
+    expect(roomLockedIn(payload, 'nope')).toBe(false)
+    expect(roomLockedIn([{ chat_room_id: 'g3', status: 'locked' }], 'g3')).toBe(true)
+    expect(roomLockedIn(null, 'g1')).toBe(false)
   })
 })

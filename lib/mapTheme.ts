@@ -171,14 +171,6 @@ export const MAP_THEME = {
     still: 0.3,
     /** A beacon's glow, still: a pillar is thin, its foot carries it. */
     beacon: 0.5,
-    /** A live event's glow breathes between these, through paint transitions. */
-    pulseLow: 0.15,
-    pulseHigh: 0.35,
-    periodMs: 1600,
-    /** It breathes this long after the view or the places change, then holds steady (WCAG 2.2.2; the map stops redrawing). */
-    breatheForMs: 5000,
-    /** Reduced motion, out of view, or done breathing. */
-    steady: 0.3,
   },
 
   /** Below the buildings' zoom, a pin is a dot (and a venue's glow steps with its bucket). */

@@ -22,7 +22,7 @@ const NAMES = [...source.matchAll(/^ {2}'?([a-z0-9-]+)'?: \w+,$/gm)].map((m) => 
 describe('<Icon>', () => {
   it('maps every name in the inventory to a Lucide glyph that renders', async () => {
     // One map entry per imported glyph: a key the scrape misses is a key nobody tested.
-    expect(NAMES).toHaveLength([...source.matchAll(/^import \w+ from 'lucide-react-native\/icons\//gm)].length)
+    expect(NAMES).toHaveLength([...source.matchAll(/^import \w+(?:, \{ __iconData as \w+ \})? from 'lucide-react-native\/icons\//gm)].length)
     for (const name of NAMES) {
       await render(<Icon name={name} />)
     }

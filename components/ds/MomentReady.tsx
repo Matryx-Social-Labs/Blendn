@@ -6,13 +6,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLOR, DURATION, MAX_FONT_SCALE, SPACE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
-import { DiscMark, MONOGRAM_ASPECT } from './DiscMark'
+import { DiscMark, MONOGRAM_OPTICAL_ASPECT } from './DiscMark'
 import { fade, MomentStage, spring, useBeats } from './MomentStage'
 import { font, minTarget, useBoldText } from './shared'
 
 /** flow2.js `ready`: the mark at 120 over a 35% scrim. */
 const MARK_HEIGHT = 120
-const MARK_WIDTH = MARK_HEIGHT * MONOGRAM_ASPECT
+const MARK_WIDTH = MARK_HEIGHT * MONOGRAM_OPTICAL_ASPECT
 const SCRIM = 0.35
 /** Flow 2: the mark assembles on `M.pop` from 80 ms (0.6 → 1, a circle opening on it), so it completes at ~530 ms. */
 const MARK_AT = 80

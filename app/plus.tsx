@@ -1,24 +1,48 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { AccessibilityInfo, Platform, ScrollView, StyleSheet, View } from 'react-native'
 
-import { AppHeader } from '../components/AppHeader'
-import ScalePress from '../components/motion/ScalePress'
+import { Banner } from '../components/ds/Banner'
+import { Spinner } from '../components/ds/Loader'
+import { ManageStatusRow } from '../components/ds/ManageStatusRow'
+import { NeverForSalePanel } from '../components/ds/NeverForSalePanel'
+import { Grain } from '../components/ds/Grain'
+import { NightPassRow, PlanCard, PlanList } from '../components/ds/PlanCard'
+import { HueProvider } from '../components/ds/shared'
+import { StateScreen } from '../components/ds/StateScreen'
+import { openStoreSubscriptions } from '../components/plus/storeActions'
+import { StoreErrorSheet, type StoreError } from '../components/plus/StoreErrorSheet'
+import { PlusActions, PlusFooter, PlusHeader, PlusHeading, PlusHero, PlusNote, useHeaderHeight, WhatYouGet } from '../components/plus/PlusSections'
 import { useToast } from '../components/Toast'
-import { PlaceholderBanner } from '../components/ui/PlaceholderBanner'
-import { Text } from '../components/ui/Text'
 import { apiClient } from '../lib/apiClient'
-import { BLENDN_LINKS } from '../lib/links'
+import { COLOR, SPACE } from '../lib/design/tokens'
+import { H } from '../lib/haptics'
+import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { isPaywallTrigger } from '../lib/paywallPolicy'
-import { PLUS_FEATURES, plusStatusLine, waitForPlus, type PlusStatus } from '../lib/plus'
-import { buyPackage, canBuyAs, loadPlusOffers, manageSubscriptionUrl, purchasesAvailable, restore, type PlusOffer } from '../lib/purchases'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../lib/theme'
+import {
+  ctaParts,
+  defaultPick,
+  dockMode,
+  isNightPass,
+  planRowFor,
+  planSubline,
+  PLUS_FEATURES,
+  taxLine,
+  waitForPlus,
+  type PlusStatus,
+} from '../lib/plus'
+import { manageCard } from '../lib/plusManage'
+import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
 import { useAuth } from '../lib/useAuth'
 import { notePaywallClosed, notePaywallEvent } from '../lib/paywall'
+import { useTopBarState } from '../lib/useTopBarState'
+import { RouteModal } from '../components/system/RouteModal'
+import { holdLinks } from '../lib/pendingRoute'
 
 type Phase = 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
+
+/** `loading` until the server answers; `failed` when it could not (no status, no launch line, no plans — it says so). */
+type StatusLoad = 'loading' | 'ok' | 'failed'
 
 /** Said aloud as the screen's state changes: iOS VoiceOver ignores `accessibilityLiveRegion`. */
 const say = (text: string) => AccessibilityInfo.announceForAccessibility(text)
@@ -30,30 +54,45 @@ const say = (text: string) => AccessibilityInfo.announceForAccessibility(text)
  */
 const GATED_TRIGGERS = new Set(['go_live_expiry', 'recap'])
 
+const LAUNCH_LINE = "Blend’n+ is free during launch in your city. Staying live and your full night history are everyone’s for now — nothing to buy."
+
 /**
- * Blendn+ — PLACEHOLDER DESIGN (plan v2 step 11; docs/PLACEHOLDER_SCREENS.md §13).
+ * Blend'n+ — the page (Flow 12 · 12.2, R3-G, R4-D12; guidelines/flow-12/flow12.js `page`).
  *
- * What Plus is, the store's packages at the store's prices, and the way out
- * ("Not now"). Opened through `lib/paywall.ts`, whose policy decides when
- * it may arrive by itself. The store sells; the **server** unlocks: after a
- * purchase or a restore this asks `GET /me/plus` until the webhook has landed,
- * and never reads RevenueCat to decide what you have. The buy buttons stay off
- * unless RevenueCat's user is this account (`canBuyAs`) — never anonymous.
+ * What Plus is, the plans at the store's prices, and the way out ("Not now").
+ * Opened through `lib/paywall.ts`, whose policy decides when it may arrive by
+ * itself. The store sells; the **server** unlocks: after a purchase or a restore
+ * this asks `GET /me/plus` until the webhook has landed, and never reads
+ * RevenueCat to decide what you have. The buy button stays off unless
+ * RevenueCat's user is this account (`canBuyAs`) — never anonymous.
+ *
+ * The purchase sheet itself (App Store / Google Play) is the OS's: OS chrome,
+ * not tokens (Prompt 10). The app draws nothing there and plays no haptic while
+ * it is up; it draws the outcome — a tray for a store error, a toast for a
+ * restore, the dock for the wait.
  */
-export default function PlusScreen() {
+function PlusScreenContent() {
   const params = useLocalSearchParams<{ trigger?: string }>()
   const trigger = isPaywallTrigger(params.trigger) ? params.trigger : 'profile'
   const { user } = useAuth()
   const userId = user?.id ?? null
   const { showToast } = useToast()
+  const headerHeight = useHeaderHeight()
+  const bar = useTopBarState()
 
   const [status, setStatus] = useState<PlusStatus | null>(null)
+  const [statusLoad, setStatusLoad] = useState<StatusLoad>('loading')
   /** undefined: loading; null: the store could not be reached; []: nothing to sell. */
   const [offers, setOffers] = useState<PlusOffer[] | null | undefined>(undefined)
   const [buyable, setBuyable] = useState(false)
   const [busy, setBusy] = useState<'buy' | 'restore' | null>(null)
+  // A link or a tap that arrives mid-purchase or mid-restore waits for it, rather than closing the page under the store.
+  useEffect(() => (busy ? holdLinks() : undefined), [busy])
   const [phase, setPhase] = useState<Phase>('idle')
-  const [notice, setNotice] = useState<{ text: string; manage?: boolean } | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
+  /** What Restore found, in the dock until the next tap: a toast alone is gone in three seconds. */
+  const [notice, setNotice] = useState<string | null>(null)
+  const [dockHeight, setDockHeight] = useState(0)
   /** What happened here, so closing after a purchase is not logged as a dismissal. */
   const outcome = useRef<'purchased' | 'pending' | 'restored' | null>(null)
   /** A tap guard that holds within one frame — state would let a double tap through. */
@@ -67,7 +106,8 @@ export default function PlusScreen() {
     return () => {
       mounted.current = false
       if (!outcome.current) notePaywallEvent('dismissed', trigger)
-      notePaywallClosed()
+      // Bought or restored here: the people who waited on it (the expiry prompt) hear it was done, not declined.
+      notePaywallClosed(outcome.current ? 'done' : 'dismissed')
     }
   }, [trigger])
 
@@ -87,15 +127,28 @@ export default function PlusScreen() {
     fetchOffers()
   }
 
-  useEffect(() => {
+  const loadStatus = useCallback(() => {
     apiClient
       .getMyPlus()
       .then((res) => {
-        if (mounted.current && res.success && res.data) setStatus(res.data)
+        if (!mounted.current) return
+        if (res.success && res.data) setStatus(res.data)
+        setStatusLoad(res.success && res.data ? 'ok' : 'failed')
       })
-      .catch(() => {})
+      .catch(() => {
+        if (mounted.current) setStatusLoad('failed')
+      })
+  }, [])
+
+  useEffect(() => {
+    loadStatus()
     fetchOffers()
-  }, [fetchOffers])
+  }, [loadStatus, fetchOffers])
+  const retryAll = () => {
+    setStatusLoad('loading')
+    loadStatus()
+    retryOffers()
+  }
 
   const confirm = async () => {
     setPhase('confirming')
@@ -107,12 +160,20 @@ export default function PlusScreen() {
       granted = null
     } finally {
       if (mounted.current) {
-        if (granted) setStatus(granted)
+        if (granted) {
+          setStatus(granted)
+          H.success()
+        }
         setPhase(granted ? 'done' : 'slow')
-        say(granted ? "You're in." : 'Taking longer than usual.')
+        say(granted ? "You’re in." : 'Taking longer than usual.')
       }
     }
   }
+
+  /** A purchase the store refused, in its words (review MED-C: drawn by this page, not the root sheet). */
+  const [storeError, setStoreError] = useState<StoreError | null>(null)
+  const open = (url: string) => openInApp(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
+  const manage = () => void openStoreSubscriptions(() => showToast("That page didn’t open. Try again.", 'error'))
 
   const buy = async (offer: PlusOffer) => {
     if (working.current || !buyable) return
@@ -125,7 +186,7 @@ export default function PlusScreen() {
       if (!mounted.current) return
       if (result.kind === 'cancelled') return
       if (result.kind === 'failed') {
-        setNotice({ text: result.message, manage: result.manage })
+        setStoreError({ message: result.message, manage: result.manage })
         say(result.message)
         return
       }
@@ -144,214 +205,207 @@ export default function PlusScreen() {
     }
   }
 
+  /** What a restore's answer does: words for nothing or a failure, the server's confirmation for a find. */
+  const settleRestore = async (result: RestoreOutcome) => {
+    if (result.kind === 'nothing' || result.kind === 'failed') {
+      const text = result.kind === 'nothing' ? 'No purchases to restore' : result.message
+      setNotice(text)
+      if (result.kind === 'failed') showToast(text, 'error', { haptic: 'error' })
+      else showToast(text, 'info')
+      say(text)
+      return
+    }
+    setNotice(null)
+    outcome.current = 'restored'
+    notePaywallEvent('restored', trigger)
+    showToast('Restored', 'success')
+    await confirm()
+  }
+
   const restoreAll = async () => {
     if (working.current || !buyable) return
     working.current = true
     setBusy('restore')
     setNotice(null)
     try {
-      const result = await restore(userId)
+      const result = await restore(userId, (late) => {
+        // The store answered after we had said it did not: say what it said.
+        if (mounted.current) void settleRestore(late)
+      })
       if (!mounted.current) return
-      if (result.kind === 'nothing' || result.kind === 'failed') {
-        const text = result.kind === 'nothing' ? 'No purchases to restore' : result.message
-        setNotice({ text })
-        say(text)
-        return
-      }
-      outcome.current = 'restored'
-      notePaywallEvent('restored', trigger)
-      await confirm()
+      await settleRestore(result)
     } finally {
       working.current = false
       if (mounted.current) setBusy(null)
     }
   }
 
-  const open = (url: string) => Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
-  const manage = async () => open(await manageSubscriptionUrl())
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/events' as never))
 
-  const statusLine = plusStatusLine(status)
   // Never sell what is free: plans only in a gated moment, or where the server says Plus is for sale (review H2).
   const forSale = GATED_TRIGGERS.has(trigger) || status?.gated === true
+  const launch = !forSale && status !== null
   const sellable = purchasesAvailable() && buyable && (offers?.length ?? 0) > 0
   // Anything bought or restored moves the phase on (pending, confirming, …): from then the way out is Done.
   const finished = phase !== 'idle'
+  // What you have, in Manage's words (one card, one set of sentences); nothing for a launch season, which is the banner's.
+  const card = status?.active ? manageCard(status, Platform.OS === 'android' ? 'android' : 'ios') : null
+  const failed = !forSale && statusLoad === 'failed'
+  const pick = offers?.find((o) => o.pkg.identifier === picked) ?? offers?.find((o) => o.pkg.identifier === defaultPick(offers ?? []))
+  // A subscriber manages in the store (12.2 #06): the plans stay drawn, but nothing is pickable and no pick plays a haptic.
+  const managing = dockMode(status) === 'manage'
+  // No buy dock when the page failed, nor when the store could not be reached for prices: it would offer a button with nothing behind it.
+  const dockShown = !failed && !(forSale && offers === null)
+  const locked = !sellable || busy !== null || finished || managing
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AppHeader title="Blendn+" rightTextButton={{ label: finished ? 'Done' : 'Not now', onPress: close }} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <PlaceholderBanner />
+  const plans = (list: PlusOffer[]) => {
+    const subs = list.filter((o) => !isNightPass(o))
+    const night = list.filter(isNightPass)
+    return (
+      <PlanList testID="plus-plans" apartFrom={subs.length && night.length ? subs.length : undefined}>
+        {[
+          ...subs.map((offer) => (
+            <PlanCard
+              key={offer.pkg.identifier}
+              testID={`plan-${offer.pkg.identifier}`}
+              name={planRowFor(offer)?.name ?? offer.title}
+              per={planRowFor(offer)?.per}
+              sub={planSubline(offer, list) ?? undefined}
+              price={offer.price}
+              selected={pick?.pkg.identifier === offer.pkg.identifier}
+              disabled={locked}
+              onPress={() => setPicked(offer.pkg.identifier)}
+            />
+          )),
+          ...night.map((offer) => (
+            <NightPassRow
+              key={offer.pkg.identifier}
+              testID={`plan-${offer.pkg.identifier}`}
+              price={offer.price}
+              selected={pick?.pkg.identifier === offer.pkg.identifier}
+              disabled={locked}
+              onPress={() => setPicked(offer.pkg.identifier)}
+            />
+          )),
+        ]}
+      </PlanList>
+    )
+  }
 
-        {statusLine ? (
-          <View style={styles.statusPill} accessibilityRole="text">
-            <Text variant="label" color={EMBER.onGradient}>{statusLine}</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.card}>
-          {PLUS_FEATURES.map((f, i) => (
-            <View key={f.title}>
-              {i > 0 ? <View style={styles.divider} /> : null}
-              <View style={styles.row} accessible accessibilityLabel={`${f.title}. ${f.detail}`}>
-                <Ionicons name={f.icon} size={ICON.md} color={EMBER.textPrimary} />
-                <View style={styles.rowText}>
-                  <Text variant="bodyStrong">{f.title}</Text>
-                  <Text variant="meta">{f.detail}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {!forSale && status ? (
-          <Text variant="bodyStrong">
-            {"Blendn+ is free during launch in your city. Staying live and your full night history are everyone's for now — nothing to buy."}
-          </Text>
-        ) : null}
-
-        {phase === 'confirming' ? (
-          <View style={styles.inline} accessibilityLiveRegion="polite">
-            <ActivityIndicator color={EMBER.textSecondary} />
-            <Text variant="meta">Confirming with the store…</Text>
-          </View>
-        ) : phase === 'slow' ? (
-          <Text variant="meta" accessibilityLiveRegion="polite">
-            {"Taking longer than usual — it'll unlock as soon as the store confirms."}
-          </Text>
-        ) : phase === 'pending' ? (
-          <Text variant="meta" accessibilityLiveRegion="polite">
-            {"Your payment is pending. Blendn+ unlocks once your bank or the store confirms it — that can take a while. You can close this; we'll pick it up when it does."}
-          </Text>
-        ) : phase === 'done' ? (
-          <Text variant="bodyStrong" accessibilityLiveRegion="polite">{"You're in."}</Text>
-        ) : null}
-
-        {/*
-          Listed and buyable even with Blendn+ already on (a grant, a Night Pass):
-          App Review signs in with a granted account and must be able to buy
-          every product (guideline 2.1(b)); the status line says what you have.
-        */}
-        {!forSale ? null : offers === undefined ? (
-          <ActivityIndicator color={EMBER.textSecondary} accessibilityLabel="Loading prices" />
-        ) : offers === null ? (
+  const plansSection = () => {
+    // Listed and buyable even with Blendn+ already on (a grant, a Night Pass): App Review signs in with a granted account and must be able to buy every product (guideline 2.1(b)); the status card says what you have.
+    if (!forSale) return statusLoad === 'loading' ? <PricesLoading /> : null
+    if (offers === undefined) return <PricesLoading />
+    return (
+      <View style={styles.section}>
+        <PlusHeading>Plans</PlusHeading>
+        {offers === null ? (
           <View style={styles.inline}>
-            <Text variant="meta">{"Couldn't load prices."}</Text>
-            <Pressable onPress={retryOffers} accessibilityRole="button" style={styles.quiet}>
-              <Text variant="meta" style={styles.underline}>Try again</Text>
-            </Pressable>
+            <StateScreen
+              icon="cloud-off"
+              title="Couldn’t load prices"
+              body="Check your connection and try again."
+              actions={[{ label: 'Try again', kind: 'lit', onPress: retryOffers }]}
+              testID="plus-prices-failed"
+            />
           </View>
         ) : (
-          <View style={styles.offers}>
-            {offers.map((offer) => {
-              const disabled = !sellable || busy !== null
-              return (
-                <ScalePress
-                  key={offer.pkg.identifier}
-                  style={[styles.offer, disabled && styles.dimmed]}
-                  onPress={() => void buy(offer)}
-                  disabled={disabled}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${offer.title}, ${offer.length}, ${offer.price}`}
-                  accessibilityState={{ disabled, busy: busy === 'buy' }}
-                >
-                  <View style={styles.rowText}>
-                    <Text variant="bodyStrong">{offer.title}</Text>
-                    <Text variant="meta">{offer.length}</Text>
-                  </View>
-                  {/* App Store 3.1.2: the billed amount is the most prominent thing on the row. */}
-                  <Text variant="heading">{offer.price}</Text>
-                </ScalePress>
-              )
-            })}
-            {!sellable ? <Text variant="meta">{"Purchases aren't available yet."}</Text> : null}
-          </View>
+          <>
+            {plans(offers)}
+            {offers.some(isNightPass) ? <PlusNote text="Night Pass is a one-off, not a subscription." /> : null}
+            {!sellable ? <PlusNote text="Purchases aren’t available yet." /> : null}
+          </>
         )}
+      </View>
+    )
+  }
 
-        {notice ? (
-          <View style={styles.inline}>
-            <Text variant="bodyStrong" accessibilityLiveRegion="polite">{notice.text}</Text>
-            {notice.manage ? (
-              <Pressable onPress={() => void manage()} accessibilityRole="button" style={styles.quiet}>
-                <Text variant="meta" style={styles.underline}>Manage subscription</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-
-        {/* App Store 3.1.2: what renews, how to cancel, and the terms — beside the buttons. */}
-        {forSale ? (
-          <Text variant="caption" color={EMBER.textSecondary}>
-            Subscriptions renew automatically at the price shown until you cancel, at least 24 hours before the period
-            ends. Cancel any time in your App Store or Google Play account settings. The Night Pass is a one-time purchase
-            for 24 hours and does not renew.
-          </Text>
-        ) : null}
-        <View style={styles.links}>
-          <Pressable onPress={() => void open(BLENDN_LINKS.terms)} accessibilityRole="link" style={styles.quiet}>
-            <Text variant="meta" style={styles.underline}>Terms of Use</Text>
-          </Pressable>
-          <Pressable onPress={() => void open(BLENDN_LINKS.privacy)} accessibilityRole="link" style={styles.quiet}>
-            <Text variant="meta" style={styles.underline}>Privacy Policy</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.links}>
-          <Pressable
-            onPress={() => void restoreAll()}
-            // Off while buying, restoring or confirming either: `busy` holds until the confirmation ends.
-            disabled={!buyable || busy !== null}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !buyable || busy !== null, busy: busy === 'restore' }}
-            style={[styles.quiet, (!buyable || busy !== null) && styles.dimmed]}
-          >
-            <Text variant="meta">{busy === 'restore' ? 'Restoring…' : 'Restore purchases'}</Text>
-          </Pressable>
-          <Pressable onPress={() => void manage()} accessibilityRole="button" style={styles.quiet}>
-            <Text variant="meta">Manage subscription</Text>
-          </Pressable>
-        </View>
+  return (
+    <View style={styles.screen}>
+      <Grain />
+      {/* First in the tree for the focus order (it draws over the scroll by zIndex). */}
+      <PlusHeader done={finished} onClose={close} state={bar.state === 'rest' ? 'rest' : 'scrolled'} />
+      <ScrollView
+        testID="plus-scroll"
+        contentContainerStyle={[styles.content, { paddingTop: headerHeight + SPACE.sm, paddingBottom: (dockShown ? dockHeight : 0) + SPACE.xl }]}
+        showsVerticalScrollIndicator={false}
+        {...bar.scrollProps}
+      >
+        <PlusHero />
+        {failed ? (
+          <StateScreen
+            icon="cloud-off"
+            title="Couldn’t load Blend’n+"
+            body="Check your connection and try again."
+            actions={[{ label: 'Try again', onPress: retryAll }]}
+            testID="plus-status-failed"
+          />
+        ) : (
+          <>
+            {card ? <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} testID="plus-status" /> : null}
+            {launch ? <Banner kind="info" text={LAUNCH_LINE} testID="plus-launch" /> : null}
+            <WhatYouGet features={PLUS_FEATURES} />
+            <NeverForSalePanel />
+            {plansSection()}
+          </>
+        )}
+        {/* Restore and Manage stay even when the status could not be read: they do not depend on it. */}
+        <PlusFooter
+          forSale={forSale}
+          tax={taxLine(offers)}
+          restoreDisabled={!buyable || busy !== null}
+          restoring={busy === 'restore'}
+          onTerms={() => void open(BLENDN_LINKS.terms)}
+          onPrivacy={() => void open(BLENDN_LINKS.privacy)}
+          onRestore={() => void restoreAll()}
+          onManage={() => manage()}
+        />
       </ScrollView>
-    </SafeAreaView>
+      {dockShown ? (
+        <PlusActions
+          onHeight={setDockHeight}
+          phase={phase}
+          restoring={busy === 'restore'}
+          notice={notice}
+          action={launch ? 'launch' : managing ? 'manage' : forSale ? 'buy' : 'none'}
+          cta={ctaParts(pick)}
+          disabled={locked || !pick}
+          // While the store prices load the button holds with a spinner (after the grace), never a bare dead button.
+          buying={busy === 'buy' || (forSale && offers === undefined)}
+          onBuy={() => pick && void buy(pick)}
+          onManage={() => manage()}
+        />
+      ) : null}
+      {/* Drawn here, so it presents from the paywall (inside its RouteModal): the root sheet would wait behind it. */}
+      <StoreErrorSheet error={storeError} onClose={() => setStoreError(null)} onManage={manage} />
+    </View>
+  )
+}
+
+/** Violet world: Blendn+ is yours, not an outing: one hue on this screen (`HueProvider`), so the plan's radio and the dock agree. */
+export default function PlusScreen() {
+  return (
+    <HueProvider value="violet">
+      <RouteModal>
+        <PlusScreenContent />
+      </RouteModal>
+    </HueProvider>
+  )
+}
+
+/** "Loading prices" — a spinner on a plan-sized row, so the page does not jump when the plans land. */
+function PricesLoading() {
+  return (
+    <View style={styles.loading} accessible accessibilityLabel="Loading prices">
+      <Spinner size={20} />
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  content: { paddingHorizontal: GUTTER, paddingVertical: SPACE.lg, gap: SPACE.xl },
-  statusPill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: SPACE.md,
-    minHeight: CONTROL.sm,
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-  },
-  card: {
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, padding: SPACE.lg },
-  rowText: { flex: 1, gap: SPACE.xs },
-  divider: { height: 1, backgroundColor: EMBER.separator, marginLeft: SPACE.lg + ICON.md + SPACE.md },
-  inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  offers: { gap: SPACE.md },
-  offer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    padding: SPACE.lg,
-    minHeight: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.md,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    backgroundColor: EMBER.surface,
-  },
-  dimmed: { opacity: OPACITY.disabled },
-  links: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xl },
-  quiet: { minHeight: CONTROL.md, justifyContent: 'center' },
-  underline: { textDecorationLine: 'underline' },
+  screen: { flex: 1, backgroundColor: COLOR.ink },
+  content: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
+  section: { gap: SPACE.md },
+  inline: { alignItems: 'center' },
+  loading: { height: SPACE.xxxl + SPACE.xl, alignItems: 'center', justifyContent: 'center' },
 })
