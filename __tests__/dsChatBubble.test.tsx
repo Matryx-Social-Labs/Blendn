@@ -27,6 +27,10 @@ jest.mock('react-native-reanimated', () => {
   return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withDelay: jest.fn(actual.withDelay) }
 })
 
+// A test renderer lays nothing out: the screen reader's menu is measured from here.
+const FRAME = { x: 16, y: 300, width: 240, height: 44 }
+jest.mock('../components/ds/anchor', () => ({ measureAnchor: (_node: unknown, then: (r: typeof FRAME) => void) => then(FRAME) }))
+
 const PANDA = { name: 'Cosmic Panda' }
 const bubble = (props: Partial<ChatBubbleProps> = {}) => (
   <ChatBubble mine={false} sender={PANDA} text="Rumours side two. Fight me." time="9:38 PM" testID="b" {...props} />
@@ -304,6 +308,25 @@ describe('<ChatBubble>', () => {
     await fireEvent(message(), 'accessibilityAction', { nativeEvent: { actionName: 'Report…' } })
     expect(onReply).toHaveBeenCalledTimes(1)
     expect(report).toHaveBeenCalledTimes(1)
+  })
+
+  it('H1: a screen reader opens the same menu the hold does (More options), at the bubble’s frame, and the card (View profile)', async () => {
+    const onLongPress = jest.fn()
+    const onSenderPress = jest.fn()
+    await render(bubble({ onLongPress, onSenderPress, onReply: jest.fn() }))
+    expect(message().props.accessibilityActions.map((a: { name: string }) => a.name).slice(0, 3)).toEqual(['Reply', 'More options', 'View profile'])
+    await fireEvent(message(), 'accessibilityAction', { nativeEvent: { actionName: 'More options' } })
+    expect(onLongPress).toHaveBeenCalledWith(FRAME)
+    expect(haptic.longPress).toHaveBeenCalledTimes(1)
+    await fireEvent(message(), 'accessibilityAction', { nativeEvent: { actionName: 'View profile' } })
+    expect(onSenderPress).toHaveBeenCalledTimes(1)
+  })
+
+  it('H1: no menu handler, no More options; a removed message offers neither', async () => {
+    await render(bubble({ onSenderPress: jest.fn() }))
+    expect(message().props.accessibilityActions.map((a: { name: string }) => a.name)).toEqual(['View profile'])
+    await screen.rerender(bubble({ removed: true, onLongPress: jest.fn(), onSenderPress: jest.fn() }))
+    expect(message().props.accessibilityActions).toEqual([])
   })
 
   it('a screen reader reacts from the bubble: the six as actions, landing with H.reaction', async () => {

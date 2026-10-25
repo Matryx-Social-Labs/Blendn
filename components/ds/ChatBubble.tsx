@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { memo, useCallback, useState, type ComponentProps } from 'react'
+import { memo, useCallback, useRef, useState, type ComponentProps } from 'react'
 import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type GestureResponderEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Circle } from 'react-native-svg'
@@ -21,6 +21,7 @@ import { MonoRun } from './MonoFamily'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
+import { measureAnchor } from './anchor'
 import { Avatar } from './Avatar'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
 import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, reactionName, REPLY_SWIPE, replyOffset, timeFont, type ChatPerson, type Rect, type TextPart } from './chatShared'
@@ -86,7 +87,7 @@ export type ChatBubbleProps = {
   onSenderPress?: () => void
   /** A link: the screen's domain sheet, never a preview. */
   onLinkPress?: (url: string) => void
-  /** The menu's items, for a screen reader (Copy, Report…): the hold is a shortcut. */
+  /** Extra screen-reader actions. The menu itself is "More options" (whenever `onLongPress` is set), so its items need not be repeated here. */
   actions?: { label: string; onPress: () => void }[]
   /** Only for a message that has just landed in front of you, never history. */
   animateIn?: 'send' | 'arrive'
@@ -127,8 +128,10 @@ function entering(kind: 'send' | 'arrive', reduceMotion: boolean) {
  * haptic on arrival. Android: no ripple on a bubble.
  *
  * Read as one element per message, "{name}, {text}, {time}", the reply as its
- * hint; Reply, the menu's items and each link are its accessibility actions,
- * so neither gesture is the only way. The name is a button to their card.
+ * hint; Reply, "More options" (the same menu the hold opens, at the bubble's
+ * frame), "View profile" (the creature's card), the reactions and each link
+ * are its accessibility actions, so no gesture is the only way. The name is a
+ * button to their card.
  * Text scales freely; the width holds. Increase Contrast: the 50% hairline.
  */
 /**
@@ -190,7 +193,7 @@ function useBubbleGestures({ onLongPress, onReply, removed, failed, testID }: Pi
     opacity: interpolate(dx.get(), [0, REPLY_SWIPE.trigger / 2], [0, 1], 'clamp'),
     transform: [{ scale: interpolate(dx.get(), [0, REPLY_SWIPE.trigger], [0.6, 1], 'clamp') }],
   }))
-  return { hold, swipe, size, pressStyle, swipeStyle, glyphStyle }
+  return { hold, swipe, size, pressStyle, swipeStyle, glyphStyle, openMenu }
 }
 
 function ChatBubbleBase(props: ChatBubbleProps) {
@@ -200,7 +203,10 @@ function ChatBubbleBase(props: ChatBubbleProps) {
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
   const [focused, setFocused] = useState(false)
-  const { hold, swipe, size, pressStyle, swipeStyle, glyphStyle } = useBubbleGestures(props)
+  const { hold, swipe, size, pressStyle, swipeStyle, glyphStyle, openMenu } = useBubbleGestures(props)
+  const holdArea = useRef<View>(null)
+  // A screen reader's "More options": the hold's own path, measured from the bubble rather than from a finger.
+  const onMore = props.onLongPress && !removed ? () => measureAnchor(holdArea.current, openMenu) : undefined
 
   const room = surface === 'room' && !mine
   const emoji = !removed && !photo && !replyTo && emojiOnly(text)
@@ -209,6 +215,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
   const bubble = (
     <Message
       {...props}
+      onMore={onMore}
       emoji={emoji}
       size={() => size.get()}
       onFocus={() => setFocused(true)}
@@ -255,6 +262,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
             {room ? <SenderAvatar sender={sender} last={last} onPress={onSenderPress} testID={testID && `${testID}-avatar`} /> : null}
             <GestureDetector gesture={hold}>
               <Animated.View
+                ref={holdArea}
                 testID={testID && `${testID}-hold-area`}
                 onLayout={(e) => size.set({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
                 style={[styles.shrink, previewState === 'pressed' ? styles.pressed : pressStyle]}
@@ -315,6 +323,8 @@ function Message({
   reactions = [],
   onReactionPress,
   actions = [],
+  onMore,
+  onSenderPress,
   testID,
   emoji,
   size,
@@ -322,6 +332,8 @@ function Message({
   onBlur,
   style,
 }: ChatBubbleProps & {
+  /** "More options": the hold's menu, for a screen reader. */
+  onMore?: () => void
   emoji: boolean
   size: () => { width: number; height: number }
   onFocus: () => void
@@ -338,15 +350,18 @@ function Message({
     receipt ? `, ${RECEIPT_WORD[receipt]}` : ''
   }${waiting ? ', waiting for connection' : ''}`
   /*
-   * Everything the gestures and the menu offer, as actions: Reply, the six
-   * reactions (the bar is behind a hold), the menu's items, each link. A
-   * removed message offers nothing; one not sent offers no Reply.
+   * Everything the gestures offer, as actions: Reply, the hold's menu (Report,
+   * Block, Copy, their card: a safety path, so never gesture-only), the
+   * creature's card, the six reactions (the bar is behind a hold), each link.
+   * A removed message offers nothing; one not sent offers no Reply.
    */
   const yours = new Set(reactions.filter((r) => r.mine).map((r) => r.emoji))
   const named: [string, () => void][] = removed
     ? []
     : [
         ...(onReply && !failed ? [['Reply', onReply] as [string, () => void]] : []),
+        ...(onMore ? [['More options', onMore] as [string, () => void]] : []),
+        ...(onSenderPress ? [['View profile', onSenderPress] as [string, () => void]] : []),
         ...(onReactionPress && !failed
           ? CHAT_REACTIONS.map((e): [string, () => void] => [
               `${yours.has(e) ? 'Take back' : 'React,'} ${reactionName(e)}`,
