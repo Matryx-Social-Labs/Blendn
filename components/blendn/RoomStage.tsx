@@ -227,7 +227,8 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
           </Animated.View>
         </Animated.View>
         <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.page, pageStyle]}>
+          {/* VoiceOver's two-finger Z closes it as the pull-down does (audit L5). */}
+          <Animated.View testID="room-stage-page" onAccessibilityEscape={close} style={[styles.page, pageStyle]}>
             {/* L0: the orbs and the grain behind Tonight and the Room (Flow 4), the glow in the screen's hue (TG-14, B-R8). */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               <Orbs set="brand" tint={sel.edge} testID="stage-orbs" />

@@ -22,6 +22,7 @@ import { Material } from '../ui/Material'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { PresentsHere, useClosedByLink, useTurnGate, useTurnWatch } from '../../lib/modalTurn'
+import { openerNow, returnFocus } from '../../lib/focusReturn'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { notifySheetDismissed } from '../../lib/sheetDismissed'
 import { OPACITY, tint } from '../../lib/theme'
@@ -513,8 +514,11 @@ function useSheetMotion({
  * 200 ms. Glass never fades (§5.2 rule 6), so the sheet itself appears in
  * place. Increase Contrast: the 50% hairline and the body in white.
  *
- * ponytail: focus is not handed back to the opener on close (the opener
- * knows what it was); the material does not grow more opaque near full height.
+ * A screen reader's focus goes to the title on open and back to the control
+ * that opened it once it has gone (WCAG 2.4.3, lib/focusReturn); VoiceOver's
+ * two-finger Z closes it as the scrim does.
+ *
+ * ponytail: the material does not grow more opaque near full height.
  */
 export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, body, icon, actions = [], detents, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
   const android = Platform.OS === 'android'
@@ -603,9 +607,20 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
     detentHeight: heights.length ? heights[heights.length - 1] : null,
   })
   const opening = detents ? stops.indexOf(detents[0]) : 0
-  const dismissed = useRef(onDismissed)
+  const onDismissedLatest = useRef(onDismissed)
   useEffect(() => {
-    dismissed.current = onDismissed
+    onDismissedLatest.current = onDismissed
+  })
+  // The control that opened it, taken as it is asked for; focus goes back there once it has gone (audit L6).
+  const opener = useRef<ReturnType<typeof openerNow>>(null)
+  useEffect(() => {
+    if (wanted) opener.current = openerNow()
+  }, [wanted])
+  // Called once it has gone, whichever way (iOS's onDismiss, Android's motion end, or never shown).
+  const dismissed = useRef(() => {
+    onDismissedLatest.current?.()
+    returnFocus(opener.current)
+    opener.current = null
   })
   const ios = Platform.OS === 'ios'
   const { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
@@ -783,7 +798,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
           >
             <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={dismissible ? requestClose : undefined} />
           </Animated.View>
-          <Animated.View testID={testID && `${testID}-place`} accessibilityViewIsModal style={placeStyle}>
+          <Animated.View testID={testID && `${testID}-place`} accessibilityViewIsModal onAccessibilityEscape={requestClose} style={placeStyle}>
             <Material
               testID={testID}
               role="sheet"
