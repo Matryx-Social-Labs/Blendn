@@ -8,7 +8,8 @@ module.exports = defineConfig([
     ignores: ['dist/*'],
   },
   {
-    // Reanimated's hook is read once at launch; lib/motion's follows the setting live (a11y audit M1).
+    // Reanimated's hook is read once at launch; lib/motion's follows the setting live (a11y audit M1). Tests mock it.
+    files: ['app/**', 'components/**', 'lib/**'],
     rules: {
       'no-restricted-imports': [
         'error',
