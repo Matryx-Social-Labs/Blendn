@@ -27,6 +27,7 @@ import { profileFormErrors } from '../lib/onboarding'
 import { counterLimit, limitErrors, PROFILE_LIMITS, serverLength } from '../lib/profileLimits'
 import { normaliseIntents, toggleIntent } from '../lib/intents'
 import { SettingsRow } from '../components/ds/SettingsRow'
+import { useReducedMotion } from '../lib/motion'
 
 interface UserProfile {
   id: string
@@ -80,6 +81,7 @@ function formSnapshot(f: {
 
 function EditProfileContent() {
   const { user: authUser } = useAuth()
+  const reduceMotion = useReducedMotion()
   const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -370,7 +372,7 @@ function EditProfileContent() {
       // Both fields are in the Basic Information card. From anywhere lower down
       // a refused Save looked like a dead button, so bring the card into view —
       // its own offset, not 0, which is the photo grid for anyone with photos.
-      scrollRef.current?.scrollTo({ y: basicInfoY.current, animated: true })
+      scrollRef.current?.scrollTo({ y: basicInfoY.current, animated: !reduceMotion })
       // The field says its own error to a screen reader (TextField's assertive note); put focus on the
       // field that needs fixing rather than leaving it on Save.
       ;(errors.name ? nameInputRef : ageInputRef).current?.focus()

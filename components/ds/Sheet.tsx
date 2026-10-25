@@ -529,6 +529,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   const window = useWindowDimensions()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const reduceMotion = useReducedMotion()
   const titleRef = useRef<ComponentRef<typeof Text>>(null)
   /** The modal root's height: the real visible area (the whole screen on Android, translucent bars). */
   const [rootHeight, setRootHeight] = useState<number | null>(null)
@@ -573,12 +574,12 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
       if (!input || !inner) return
       input.measureLayout(
         inner,
-        (_x, y, _w, h) => content.current?.scrollTo({ y: fieldScroll(y, h, contentHeight.current, contentSize.current), animated: true }),
+        (_x, y, _w, h) => content.current?.scrollTo({ y: fieldScroll(y, h, contentHeight.current, contentSize.current), animated: !reduceMotion }),
         () => {}
       )
     })
     return () => cancelAnimationFrame(frame)
-  }, [keyboardUp, keyboardHeight])
+  }, [keyboardUp, keyboardHeight, reduceMotion])
 
   const busy = actions.some((a) => a.loading)
   // A lit action is never 56 pt (the primary's): a sheet with one stacks all of its actions at 48.

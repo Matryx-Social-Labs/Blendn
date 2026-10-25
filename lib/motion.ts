@@ -9,7 +9,11 @@
  * shorten, rises and drift go to zero, the shake stops. Read it through
  * `useMotion()`, never by checking the setting and picking numbers inline.
  * Kept under Reduce Motion: the hold (its speed is information), drags,
- * press feedback and every haptic.
+ * press feedback, every haptic, and the Spinner (a wait is state, not
+ * decoration; it is hidden from screen readers, and the Loader announces the
+ * wait). A programmatic scroll is `animated: !reduceMotion`
+ * (`__tests__/reduceMotionScrolls.test.ts`), and so is a CSS transition's
+ * duration, which Reanimated 4.5 does not reduce itself.
  */
 
 import { createElement, useSyncExternalStore } from 'react'

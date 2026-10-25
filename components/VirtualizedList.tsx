@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useImperativeHandle, useMemo, useRef } from 'react'
 import { FlatList, FlatListProps, ListRenderItem } from 'react-native'
 import { Logger } from '../lib/logger'
+import { useReducedMotion } from '../lib/motion'
 
 interface VirtualizedListProps<T> extends Omit<FlatListProps<T>, 'renderItem' | 'getItemLayout'> {
   data: T[]
@@ -33,6 +34,7 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
   } = props
 
   const listRef = useRef<FlatList<T>>(null)
+  const reduceMotion = useReducedMotion()
   // Hands the caller the same FlatList instance `listRef` holds, whether its
   // ref is an object or a callback. React re-runs this if the ref changes.
   useImperativeHandle(forwardedRef, () => listRef.current as FlatList<T>, [])
@@ -63,9 +65,9 @@ export const VirtualizedList = memo(<T extends unknown>(props: VirtualizedListPr
     // Attempt to scroll to the nearest measured frame
     listRef.current?.scrollToIndex({
       index: Math.min(info.index, info.highestMeasuredFrameIndex),
-      animated: true
+      animated: !reduceMotion
     })
-  }, [])
+  }, [reduceMotion])
 
   /*
    * One FlatList, one shape, whatever the data. This used to return one of two FlatLists by

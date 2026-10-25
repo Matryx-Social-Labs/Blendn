@@ -204,9 +204,9 @@ function RatePeersContent() {
   // it, the form scrolls to its end so the note sits above the keys.
   const peerScroll = useRef<ScrollView>(null)
   useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', () => peerScroll.current?.scrollToEnd({ animated: true }))
+    const sub = Keyboard.addListener('keyboardDidShow', () => peerScroll.current?.scrollToEnd({ animated: !reduceMotion }))
     return () => sub.remove()
-  }, [])
+  }, [reduceMotion])
 
   // The chip and the card play the selection tick themselves: one event, one haptic.
   const chooseRating = useCallback((n: number) => setRating(n), [])
