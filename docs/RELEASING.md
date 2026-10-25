@@ -1563,3 +1563,16 @@ a failure is recognisable instead of a judgement call.
 
 Step 3 is manual on purpose. It is the one point where somebody should look at
 what is about to reach the public.
+
+### iPhone only for v1.0 (revisitable)
+
+`ios.supportsTablet` is `false` in `app.json`, and `TARGETED_DEVICE_FAMILY` is
+`1` in `ios/blendn.xcodeproj/project.pbxproj`. Both, because `ios/` is
+committed and EAS never runs prebuild. Nothing has been QA'd at iPad sizes, and
+App Review runs iPhone apps on iPad (2.4.1), so v1.0 ships iPhone-only: on an
+iPad it runs in iPhone compatibility mode, and App Store Connect asks for no
+iPad screenshots.
+
+This is a v1.0 decision, not a permanent one. To ship on iPad later: drive every
+screen at iPad sizes in both orientations, set both values back (`true`,
+`"1,2"`), update `__tests__/storeReviewNative.test.ts`, and add iPad screenshots.

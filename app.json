@@ -9,7 +9,7 @@
     "scheme": "blendn",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.matryxsociallabs.blendn",
       "usesAppleSignIn": true,
       "associatedDomains": ["applinks:www.blendn.app"],
