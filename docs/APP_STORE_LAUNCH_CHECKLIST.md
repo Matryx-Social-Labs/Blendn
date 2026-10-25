@@ -83,7 +83,7 @@ Last audited: 2026-06-28
 
 ### 10. App Store Connect listing metadata
 - [ ] Not started
-- **Scope:** Screenshots (per device size), app preview video (optional), description, keywords, support URL, marketing URL, age rating questionnaire (relevant given chat + photos + location — likely needs 17+ or similar given user-generated content and meeting-strangers risk), export compliance (encryption usage declaration).
+- **Scope:** Screenshots (per device size), app preview video (optional), description, keywords, support URL, marketing URL, age rating questionnaire (18+: the app is strictly 18+, and there is no 17+ tier any more; answers in `docs/RELEASING.md` § What step 3 has to say), export compliance (encryption usage declaration).
 - Status: Not started — out of codebase scope, needs to be done directly in App Store Connect.
 
 ### 11. Data collection / App Privacy ("nutrition label") disclosure

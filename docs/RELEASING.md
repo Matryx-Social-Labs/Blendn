@@ -1557,12 +1557,56 @@ a failure is recognisable instead of a judgement call.
 1. Merge `stage` → `prod`.
 2. Wait for the workflow. The build appears in App Store Connect.
 3. In ASC: create the version, attach screenshots and release notes, answer App
-   Privacy, set the age rating (**17+**, which dating features force), and add
-   the review demo account (`npm run seed:review` in `blendn-admin`).
+   Privacy, set the age rating (**18+**, below), and add the review demo account
+   (`npm run seed:review` in `blendn-admin`).
 4. Submit for review.
 
 Step 3 is manual on purpose. It is the one point where somebody should look at
 what is about to reach the public.
+
+### What step 3 has to say (app-review-readiness audit, 2026-10-24)
+
+- **Age rating: 18+.** There is no 17+ any more; Apple's tiers are now
+  4+/9+/13+/16+/18+. The app is strictly 18+ (DOB gate in onboarding, enforced
+  on the server too), with dating preferences, user-generated content, chat and
+  real-world meetups. Questionnaire: user-generated content Yes; messaging and
+  chat Yes; mature or suggestive themes Infrequent (dating); location shared
+  with other users No (it never is); gambling, violence, medical None; age
+  assurance: the in-app DOB gate. Override to 18+, and mark it not made for kids.
+  The tier names changed in 2025: check the wording in ASC when you fill it in.
+- **App Privacy.** Nothing is used for tracking. Linked to the user, for App
+  Functionality unless noted: Contact Info (name, email); Location (precise for
+  check-in and while in a room, coarse for city demand); Sensitive Info (sexual
+  orientation, from dating preferences); User Content (photos, room messages and
+  DMs, board posts, bios and crew names, customer support); Identifiers (user
+  ID); Purchases (purchase history, via RevenueCat; see In-app purchases above);
+  Usage Data (product interaction, also for Analytics); Diagnostics (crash,
+  performance and other diagnostic data, Sentry); Other Data (date of birth,
+  gender). Tracking: No.
+- **Third-party AI.** Messages, posts and photos are checked by OpenAI for
+  safety. The label has no field for it; the privacy policy says so, and the
+  app must too, where people first post (5.1.2(i)).
+- **Privacy report.** After archiving, Xcode › Organizer › Generate Privacy
+  Report, and keep the PDF with the submission.
+- **URLs.** Privacy `https://www.blendn.app/privacy`. Support needs a real page.
+  Terms (EULA): the in-app Terms link and the paywall's must resolve before
+  submission, and the URL goes in the description or the custom EULA field.
+- **The review account** is an email account: tell the reviewer to use
+  "Continue with email". Re-run `seed:review` the day before submitting. The
+  App Review notes must say how the reviewer reaches the Room (check-in is
+  GPS-validated) and where Blend'n+ is sold.
+- **In-app purchases.** Attach the four products to the version only when the
+  review account can see the plans and a sandbox purchase is credited to it.
+  Otherwise submit without them.
+- **iPad:** none (below), so no iPad screenshots.
+- **Accessibility Nutrition Labels.** Claim Larger Text, Dark Interface,
+  Sufficient Contrast and Reduced Motion. Differentiate Without Color after a
+  quick check of the Room and the plans. Not VoiceOver, Voice Control or
+  Captions until each has been driven end to end.
+- **Google Play, same day.** Data safety mirrors App Privacy, with deletion at
+  `https://www.blendn.app/delete-account`. Target audience 18+. Foreground
+  service: none (the manifest removes expo-location's, see
+  `__tests__/storeReviewNative.test.ts`). Ads: No.
 
 ### iPhone only for v1.0 (revisitable)
 
