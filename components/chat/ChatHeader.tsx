@@ -1,6 +1,6 @@
 import { barTop } from '../../lib/barGeometry'
 import type { ReactNode } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -30,15 +30,26 @@ export const CHAT_CAPSULE = {
   mutedIcon: 14,
 } as const
 
-/** The capsule's height on this platform: the builder's 56 (iOS) or 60 (Android). */
-export const chatCapsuleHeight = () => (Platform.OS === 'android' ? CHAT_CAPSULE.heightAndroid : SIZE.input)
+/** The two-line name over the one-line subtitle, at the builder's line heights: what the capsule's text needs at the default size. */
+const TEXT_BLOCK = 2 * CHAT_CAPSULE.title.lineHeight + CHAT_CAPSULE.subtitle.lineHeight
+
+/**
+ * The capsule's height on this platform: the builder's 56 (iOS) or 60 (Android) at the default text size, and taller by
+ * the text block's growth as the text size grows (the header stops growing with it at `CONTROL_FONT_CAP`), so a name
+ * that wraps to two lines keeps its subtitle. `fontScale`: the window's (`useWindowDimensions`); the screens that place
+ * things under the capsule pass the same one, so the feed starts where the capsule ends.
+ */
+export function chatCapsuleHeight(fontScale = 1) {
+  const base = Platform.OS === 'android' ? CHAT_CAPSULE.heightAndroid : SIZE.input
+  return base + Math.round((Math.min(Math.max(fontScale, 1), CONTROL_FONT_CAP) - 1) * TEXT_BLOCK)
+}
 
 /** The capsule's top edge: a step under the status bar (Flow 5 frames: 56 on a 402 pt iPhone, 52 on Android). */
 const capsuleTop = (insetTop: number) => barTop(insetTop)
 
 /** Where a screen's content starts under the capsule: its bottom edge, then 12 (the frames' 124). */
-export function chatHeaderBottom(insetTop: number) {
-  return capsuleTop(insetTop) + chatCapsuleHeight() + SPACE.md
+export function chatHeaderBottom(insetTop: number, fontScale = 1) {
+  return capsuleTop(insetTop) + chatCapsuleHeight(fontScale) + SPACE.md
 }
 
 /**
@@ -53,9 +64,9 @@ export function chatHeaderBottom(insetTop: number) {
  * only room at rest, and a feed that follows its end scrolled the match card
  * and the empty state up behind the opaque strip (RC audit C3, C6).
  */
-export function chatFeedFrame(insetTop: number, extra = 0) {
+export function chatFeedFrame(insetTop: number, extra = 0, fontScale = 1) {
   const strip = extra > 0 ? SPACE.md + extra : 0
-  return { style: { marginTop: capsuleTop(insetTop) + chatCapsuleHeight() + strip }, paddingTop: SPACE.md }
+  return { style: { marginTop: capsuleTop(insetTop) + chatCapsuleHeight(fontScale) + strip }, paddingTop: SPACE.md }
 }
 
 /**
@@ -96,6 +107,7 @@ export function ChatHeader({
   testID?: string
 }) {
   const insets = useSafeAreaInsets()
+  const { fontScale } = useWindowDimensions()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
@@ -105,7 +117,7 @@ export function ChatHeader({
       {leading}
       <View style={styles.titles}>
         <View style={styles.titleRow}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), CHAT_CAPSULE.title, styles.title]}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), CHAT_CAPSULE.title, styles.title]}>
             {title}
           </Text>
           {muted ? (
@@ -121,7 +133,7 @@ export function ChatHeader({
 
   return (
     <View testID={testID} pointerEvents="box-none" style={[styles.place, { top: capsuleTop(insets.top) }]}>
-      <Material testID={testID && `${testID}-capsule`} role="bar" style={[styles.capsule, { height: chatCapsuleHeight() }, contrast && IC_HAIRLINE]}>
+      <Material testID={testID && `${testID}-capsule`} role="bar" style={[styles.capsule, { height: chatCapsuleHeight(fontScale) }, contrast && IC_HAIRLINE]}>
         <ScalePress
           testID={testID && `${testID}-back`}
           onPress={onBack}

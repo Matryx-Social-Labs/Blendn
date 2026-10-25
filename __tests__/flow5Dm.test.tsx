@@ -159,7 +159,7 @@ describe('the reveal bar', () => {
   it('both anonymous: Show them and Ask them; asking turns it to Asked', async () => {
     api.requestReveal.mockResolvedValue({ success: true } as never)
     await open()
-    expect(screen.getByText('You’re both anonymous here')).toBeTruthy()
+    expect(screen.getByText('Both anonymous')).toBeTruthy()
     expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
     await act(async () => fireEvent.press(screen.getByLabelText('Ask them')))
     await flush()
@@ -223,7 +223,7 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await flush()
     expect(screen.queryByLabelText('Show them who you are')).toBeNull()
     // The header still says where things stand.
-    expect(screen.getByText('You’re both anonymous here')).toBeTruthy()
+    expect(screen.getByText('Both anonymous')).toBeTruthy()
   })
 
   it('a scroll folds it when the finger lifts', async () => {

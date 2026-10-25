@@ -223,7 +223,7 @@ function GroupChatInner() {
   const [closedLine, setClosedLine] = useState<string | null>(null)
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(roomId)
-  const top = chatHeaderBottom(insets.top)
+  const top = chatHeaderBottom(insets.top, window.fontScale)
   /* A Blend's sides sit above the feed in this same room, not on a page of their own (Flow 10 · 10.9). */
   const blendRoom = useBlendRoom(roomKind === 'blend' ? (blendIdParam ?? null) : null, top)
   // A Blend not listed to you any more after being listed is closed for you: its clock, or a block across its sides refused your door.
@@ -978,7 +978,7 @@ function GroupChatInner() {
               data={loading && !messages.length ? [] : chatItems}
               renderItem={renderChatItem}
               keyExtractor={(item) => (item.kind === 'separator' ? item.id : item.message_id)}
-              style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace).style]}
+              style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace, window.fontScale).style]}
               contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md + toastInset }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"

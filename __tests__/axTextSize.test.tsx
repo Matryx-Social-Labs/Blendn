@@ -145,7 +145,7 @@ describe('at AX XXXL (fontScale 3.571)', () => {
         <ChatHeader
           title="Tumbling Moose"
           leading={<View />}
-          subtitle={<RevealLine seen={false} text="You’re both anonymous here" />}
+          subtitle={<RevealLine seen={false} text="Both anonymous" />}
           onBack={jest.fn()}
           onMore={jest.fn()}
           moreLabel="More"
@@ -155,7 +155,7 @@ describe('at AX XXXL (fontScale 3.571)', () => {
         <NudgeLine text="Tumbling Moose asked to know who you are" />
       </View>
     )
-    expect(screen.getByText('You’re both anonymous here').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+    expect(screen.getByText('Both anonymous').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
     expect(screen.getByText('You both said yes.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.heading)
     expect(screen.getByText('Say hi to Tumbling Moose.').props.numberOfLines).toBeUndefined()
     expect(clipped(screen.toJSON())).toEqual([])

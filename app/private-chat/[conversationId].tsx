@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, StyleSheet, View } from 'react-native'
+import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -720,7 +720,8 @@ function PrivateChatInner() {
   const youFace: Face = reveal?.youRevealed && authUser?.image ? { kind: 'photo', uri: authUser.image } : { kind: 'creature', pseudonym: 'You' }
   // Photos once you can both see each other, or the conversation never hid anyone (R9, admin #697).
   const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))
-  const top = chatHeaderBottom(insets.top)
+  const { fontScale } = useWindowDimensions()
+  const top = chatHeaderBottom(insets.top, fontScale)
   // The feed starts under the reveal bar while there is one.
   const barSpace = panelOpen ? barHeight : 0
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
@@ -755,7 +756,7 @@ function PrivateChatInner() {
               data={feed}
               keyExtractor={(item) => item.id}
               renderItem={renderChatItem}
-              style={[styles.fill, chatFeedFrame(insets.top, barSpace).style]}
+              style={[styles.fill, chatFeedFrame(insets.top, barSpace, fontScale).style]}
               contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md + toastInset }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"

@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, useWindowDimensions, View } from 'react-native'
 import Animated, { FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -195,6 +195,7 @@ export function RoomOutside({
   onOpenRoom?: () => void
 }) {
   const insets = useSafeAreaInsets()
+  const { fontScale } = useWindowDimensions()
   const back = [{ label: 'Back', kind: 'secondary' as const, onPress: onBack }]
   switch (outside.kind) {
     case 'closed': {
@@ -202,7 +203,7 @@ export function RoomOutside({
       const gone = goneKindFor(outside.line)
       if (gone) {
         return (
-          <View style={[styles.gone, { paddingTop: chatHeaderBottom(insets.top) + SPACE.lg }]}>
+          <View style={[styles.gone, { paddingTop: chatHeaderBottom(insets.top, fontScale) + SPACE.lg }]}>
             <GoneCard kind={gone} onBack={onBack} testID="room-gone-card" />
           </View>
         )

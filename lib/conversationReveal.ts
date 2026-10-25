@@ -64,6 +64,9 @@ export function revealPanelKey(view: Pick<RevealView, 'bar' | 'nudge'> | null): 
 /** The header's line under the name: short enough for one line beside the face at 360 (TG-17, C25), each side said once. */
 export const REVEAL_LINE_MAX = 33
 
+/** The anonymous state's line is the one most people see, so it is short enough for one line at 1.3 text on a 360 dp phone ("You’re both ano…", rc9 D2). */
+export const ANON_LINE_MAX = 16
+
 export function revealView(state: ConversationRevealState, askedHere = false, friendOffered = false): RevealView {
   if (!state.pseudonymous) return { bar: null, line: null, nudge: null }
   if (state.youRevealed && state.theyRevealed) {
@@ -76,8 +79,8 @@ export function revealView(state: ConversationRevealState, askedHere = false, fr
   if (state.youRevealed) return { bar: 'youOnly', line: { seen: false, text: 'They see you · you don’t see them' }, nudge: null }
   if (state.theyRevealed) return { bar: 'theyOnly', line: { seen: false, text: 'You see them · they don’t see you' }, nudge }
   return askedHere
-    ? { bar: 'asked', line: { seen: false, text: 'You’re both anonymous · asked' }, nudge }
-    : { bar: 'none', line: { seen: false, text: 'You’re both anonymous here' }, nudge }
+    ? { bar: 'asked', line: { seen: false, text: 'Both anonymous · asked' }, nudge }
+    : { bar: 'none', line: { seen: false, text: 'Both anonymous' }, nudge }
 }
 
 /**

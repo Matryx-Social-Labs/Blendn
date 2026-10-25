@@ -5,6 +5,7 @@ import {
   revealView,
   type ConversationRevealState,
   revealPanelKey,
+  ANON_LINE_MAX,
   REVEAL_LINE_MAX,
 } from '../lib/conversationReveal'
 
@@ -45,11 +46,11 @@ describe('revealView (Flow 5 DM #01–#05)', () => {
   })
 
   it('both anonymous: Show them and Ask them, and the eye-off line', () => {
-    expect(revealView(state())).toEqual({ bar: 'none', line: { seen: false, text: 'You’re both anonymous here' }, nudge: null })
+    expect(revealView(state())).toEqual({ bar: 'none', line: { seen: false, text: 'Both anonymous' }, nudge: null })
   })
 
   it('once you ask, the Asked state — never a declined one', () => {
-    expect(revealView(state(), true)).toEqual({ bar: 'asked', line: { seen: false, text: 'You’re both anonymous · asked' }, nudge: null })
+    expect(revealView(state(), true)).toEqual({ bar: 'asked', line: { seen: false, text: 'Both anonymous · asked' }, nudge: null })
   })
 
   it('surfaces that they asked, without making it a demand', () => {
@@ -189,4 +190,14 @@ it('every header line fits the header: short, each side said once', () => {
     revealView({ ...base, youRevealed: true, theyRevealed: true }),
   ].map((v) => v.line?.text ?? '')
   for (const line of lines) expect(line.length).toBeLessThanOrEqual(REVEAL_LINE_MAX)
+})
+
+// rc9 D2: at 1.3 text on 360 dp the header's line had room for 16 characters and read "You’re both ano…". Negative control: the old
+// "You’re both anonymous here" (26) fails.
+it('the anonymous header line fits one line at 1.3 text on a 360 dp phone', () => {
+  const base = { pseudonymous: true, youRevealed: false, theyRevealed: false, revealRequested: false, displayName: 'Plover' }
+  const lead = revealView({ ...base }).line?.text ?? ''
+  expect(lead.length).toBeLessThanOrEqual(ANON_LINE_MAX)
+  // Once asked there is a second clause; the lead still reads whole before it.
+  expect(revealView({ ...base }, true).line?.text.startsWith(lead)).toBe(true)
 })
