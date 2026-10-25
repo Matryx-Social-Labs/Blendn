@@ -512,3 +512,43 @@ it('the feed makes room under the newest row for the Android snackbar over the c
   await open()
   expect(bottom()).toBe(without + 70)
 })
+
+/*
+ * rc8 #6: a link with no `kind` (a push carries only the id) read "Event chat", and a closed Blend opened by link read
+ * "Your Blend": the room's kind and name came from the opener or the Banter's list, and a closed room is in neither. The
+ * server's refusal names them to somebody who was in the room (`reasonCode: ROOM_CLOSED`, `roomKind`, `roomName`), and
+ * until something says what the room is, the header does not call it an event's. Negative control: with the screen at
+ * 917aac91, both fail.
+ */
+describe('rc8 #6: a room opened by a bare link', () => {
+  const closedBlend = { success: false, error: 'Chat group not found', errorCode: 'NOT_FOUND', reasonCode: 'ROOM_CLOSED', roomKind: 'blend', roomName: 'Crew Nebula × Crew Orbit' }
+
+  it('a closed Blend the list no longer has: its stored name and the Blend’s closed state, never "Event chat"', async () => {
+    mockParams = { id: 'g9' }
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
+    api.getChatMessages.mockResolvedValue(closedBlend as never)
+    await open()
+    expect(screen.getAllByText('Crew Nebula × Crew Orbit').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Blend/)).toBeTruthy()
+    expect(screen.queryByText('Event chat')).toBeNull()
+    expect(screen.queryByText('Your Blend')).toBeNull()
+  })
+
+  it('a closed Blend opened by its own link (`kind=blend&blendId=`): its stored name, not "Your Blend"', async () => {
+    mockParams = { id: 'g9', kind: 'blend', blendId: 'b9' }
+    jest.spyOn(require('../lib/crewsApi').crewsApi, 'blends').mockResolvedValue({ success: true, data: { blends: [] } })
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
+    api.getChatMessages.mockResolvedValue(closedBlend as never)
+    await open()
+    expect(screen.getAllByText('Crew Nebula × Crew Orbit').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Your Blend')).toBeNull()
+  })
+
+  it('before anything says what room it is, the header does not call it an event’s', async () => {
+    mockParams = { id: 'g9' }
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
+    api.getChatMessages.mockReturnValue(new Promise(() => {}) as never)
+    await open()
+    expect(screen.queryByText('Event chat')).toBeNull()
+  })
+})

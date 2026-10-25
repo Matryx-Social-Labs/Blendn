@@ -285,6 +285,9 @@ export function roomClosedLine(kind: 'crew' | 'blend', errorCode: string | null 
   return errorCode === 'NOT_FOUND' ? CREW_GONE_LINE : null
 }
 
+/** The header's name for a room nothing has said the kind of yet (a bare link, a push), never "Event chat" (rc8 #6). */
+export const UNKNOWN_ROOM_NAME = 'Chat'
+
 /** The header's name for a room opened without one (from a push, say). */
 export function defaultRoomName(kind: 'crew' | 'blend' | null): string {
   return kind === 'crew' ? 'Crew chat' : kind === 'blend' ? 'Your Blend' : 'Event chat'

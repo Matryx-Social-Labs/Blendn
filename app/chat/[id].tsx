@@ -37,7 +37,7 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
 import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
-import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
+import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam, UNKNOWN_ROOM_NAME } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -152,7 +152,9 @@ function GroupChatInner() {
    * never supplies an image — `blendn://chat/x?eventImage=…` is anybody's link,
    * and drawing it fetched a host the server never named (Flow 5 security review).
    */
-  const roomName = roomInfo.title || nameParam(params.roomName)
+  /* A closed room as its history's refusal names it (rc8 #6): neither the opener nor the Banter's list has one. */
+  const [told, setTold] = useState<{ kind: string | null; name: string | null } | null>(null)
+  const roomName = roomInfo.title || nameParam(params.roomName) || told?.name
   const eventTitle = roomInfo.title || nameParam(params.eventTitle)
   const eventImage = roomInfo.image
   const { user: authUser, loading: authLoading } = useAuth()
@@ -206,14 +208,14 @@ function GroupChatInner() {
   const openedFromPlace = idParam(params.venueId)
   const venueId = openedFromPlace ?? roomInfo.venueId ?? null
   /* A crew's or a Blend's room (step 9), told by the opener; null for an event's. */
-  const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? null
+  const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? roomKindParam(told?.kind) ?? null
   const eventRoom = roomKind === null
   /*
    * Known to be an event's room: its row names the event, or an event opener said so. A bare link or a push carries no
    * kind, and a closed crew's or Blend's room answers it with the same 404 an event's does: that one is not told it was
    * an event (RC drive 4 D-5).
    */
-  const eventKnown = eventRoom && (!!roomInfo.eventId || !!nameParam(params.eventTitle))
+  const eventKnown = eventRoom && (!!roomInfo.eventId || !!nameParam(params.eventTitle) || told?.kind === 'event')
   /* Back, or — opened from a push with nothing underneath — the Banter. */
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))
   const crewIdParam = idParam(params.crewId) ?? roomInfo.crewId
@@ -354,8 +356,12 @@ function GroupChatInner() {
         }
 
         const result = await apiClient.getChatMessages(roomId, { limit: 50 })
+        // A closed room the link did not name: the server's refusal says what it was, to somebody who was in it (rc8 #6).
+        const toldKind = result.success ? null : roomKindParam(result.roomKind)
+        if (!result.success && (result.roomKind || result.roomName)) setTold({ kind: result.roomKind ?? null, name: nameParam(result.roomName) ?? null })
+        const kind = roomKind ?? toldKind
         // Not while this phone knows you left: a Blend answers a leaver's read with the 403 it gives somebody it took out.
-        const closed = !result.success && roomKind && !left ? roomClosedLine(roomKind, result.errorCode) : null
+        const closed = !result.success && kind && !left ? roomClosedLine(kind, result.errorCode) : null
         if (closed) return setClosedLine(closed)
         if (!result.success && result.errorCode === 'USER_BANNED') return setRemovedLine(result.error || null)
         if (!result.success && result.errorCode === 'NOT_FOUND' && eventRoom) return setGone(true)
@@ -926,7 +932,11 @@ function GroupChatInner() {
     }, 2000)
   }
 
-  const name = roomName || defaultRoomName(roomKind)
+  /*
+   * Unnamed, the kind's own word, once something has said what the room is; a bare link or a push says nothing, and is
+   * not called an event's room until it is known to be one (rc8 #6).
+   */
+  const name = roomName || (roomKind !== null || eventKnown ? defaultRoomName(roomKind) : UNKNOWN_ROOM_NAME)
   // Most rooms are named for their event: then the line is the live count (dot, Geist Mono), else the event's title.
   // Five and up, as every people count says it (the owner's floor): under that the line is the event's title, or nothing.
   const line = roomSubtitle(name, eventTitle || undefined, printable(hereCount))

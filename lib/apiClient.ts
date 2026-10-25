@@ -670,6 +670,12 @@ export interface ApiResponse<T = unknown> {
   eventId?: string
   /** The form field a refusal is about (`name`, `bio` on a crew); absent when it is the form's. */
   field?: string
+  /**
+   * A room that has closed, as the server names it to somebody who was in it (`ROOM_CLOSED` on the room's history, rc8
+   * #6): its kind and its stored name, so a bare link to a closed Blend or crew chat is not called an event's room.
+   */
+  roomKind?: string
+  roomName?: string
   errors?: Array<{ path: string; message: string }>
 }
 
@@ -1532,6 +1538,8 @@ class ApiClientClass {
         ...(typeof parsed.opensAt === 'string' ? { opensAt: parsed.opensAt } : {}),
         ...(typeof parsed.eventId === 'string' ? { eventId: parsed.eventId } : {}),
         ...(typeof parsed.field === 'string' ? { field: parsed.field } : {}),
+        ...(typeof parsed.roomKind === 'string' ? { roomKind: parsed.roomKind } : {}),
+        ...(typeof parsed.roomName === 'string' ? { roomName: parsed.roomName } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),
         errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
       }
