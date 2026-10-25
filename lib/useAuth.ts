@@ -712,11 +712,11 @@ export const refreshAuthUser = async (): Promise<void> => {
   }
 }
 
-export const deleteAccount = async (): Promise<{ success: boolean; error?: string }> => {
+export const deleteAccount = async (appleAuthorizationCode?: string): Promise<{ success: boolean; error?: string }> => {
   try {
     Logger.info('auth', 'Deleting account...')
 
-    const result = await apiClient.deleteAccount()
+    const result = await apiClient.deleteAccount(appleAuthorizationCode)
 
     if (!result.success) {
       Logger.error('auth', 'Account deletion failed', { error: result.error })

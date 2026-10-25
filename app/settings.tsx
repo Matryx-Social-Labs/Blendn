@@ -19,6 +19,7 @@ import { showSheet, type Sheet } from '../lib/sheet'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 import { apiClient } from '../lib/apiClient'
 import { useAuthMethod } from '../lib/authMethod'
+import { APPLE_UNLINK_HINT, appleCodeForDeletion } from '../lib/appleRevocation'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
 import { passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
@@ -290,7 +291,10 @@ function SettingsScreenContent() {
         run: async () => {
           setDeleting(true)
           try {
-            const result = await deleteAccount()
+            // An Apple account's grant is revoked with a fresh code from the Apple sheet; without one it is deleted anyway (5.1.1(v)).
+            const apple = authMethod === 'apple'
+            const appleCode = apple ? await appleCodeForDeletion() : null
+            const result = await deleteAccount(appleCode ?? undefined)
             if (!result.success) {
               setDeleting(false)
               return { ok: false, error: result.error || "Your account wasn’t deleted. Try again." }
@@ -300,7 +304,8 @@ function SettingsScreenContent() {
              * The toast sits above the navigator, so it lands there too: without it
              * the account vanished with no word that deleting it had worked.
              */
-            return { ok: true, toast: 'Your account has been deleted.' }
+            const deleted = 'Your account has been deleted.'
+            return { ok: true, toast: apple && !appleCode ? `${deleted} ${APPLE_UNLINK_HINT}` : deleted }
           } catch {
             setDeleting(false)
             return { ok: false, error: "Your account wasn’t deleted. Check your connection and try again." }
@@ -309,7 +314,7 @@ function SettingsScreenContent() {
       },
       { label: 'Cancel', cancel: true },
     ],
-  }), [])
+  }), [authMethod])
 
   const explainDeleteSheet = useCallback(
     (storePlus: PlusStatus['source'] | null): Sheet => {

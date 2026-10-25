@@ -45,6 +45,7 @@ jest.mock('../lib/notifications', () => ({
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+jest.mock('../lib/appleRevocation', () => ({ ...jest.requireActual('../lib/appleRevocation'), appleCodeForDeletion: jest.fn() }))
 
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
@@ -55,6 +56,7 @@ import { H } from '../lib/haptics'
 import { apiClient } from '../lib/apiClient'
 import { resetMutedRooms } from '../lib/mutedRooms'
 import { deleteAccount, signOut } from '../lib/useAuth'
+import { APPLE_UNLINK_HINT, appleCodeForDeletion } from '../lib/appleRevocation'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const plusStatus = (o: Partial<{ active: boolean; gated: boolean; source: 'apple' | 'google' | 'grant' | null }> = {}) => ({
@@ -247,6 +249,53 @@ describe('Delete account', () => {
     expect(await screen.findByText('Server said no.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  // Negative control: with app/settings.tsx at 7521c4c0 (no Apple step), all three fail.
+  describe('an Apple account (5.1.1(v): its Apple grant is revoked)', () => {
+    const asApple = (method: 'apple' | 'password') => {
+      ;(mockAuth.user as { signInMethod?: string }).signInMethod = method
+    }
+    afterEach(() => {
+      delete (mockAuth.user as { signInMethod?: string }).signInMethod
+    })
+    const confirm = async () => {
+      await render(<Screen />)
+      await openTray()
+      fireEvent.press(lastButton('Delete account'))
+      fireEvent.press(await screen.findByRole('button', { name: 'Delete my account' }))
+    }
+
+    it('asks Apple for a fresh code and sends it with the delete', async () => {
+      asApple('apple')
+      ;(appleCodeForDeletion as jest.Mock).mockResolvedValue('c0de')
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+      await confirm()
+      await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
+      expect(appleCodeForDeletion).toHaveBeenCalledTimes(1)
+      expect(deleteAccount).toHaveBeenCalledWith('c0de')
+    })
+
+    it('still deletes when the Apple sheet is cancelled, and says how to remove Blend’n from Apple ID', async () => {
+      asApple('apple')
+      ;(appleCodeForDeletion as jest.Mock).mockResolvedValue(null)
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+      await confirm()
+      await waitFor(() =>
+        expect(mockShowToast).toHaveBeenCalledWith(`Your account has been deleted. ${APPLE_UNLINK_HINT}`, 'success')
+      )
+      expect(deleteAccount).toHaveBeenCalledWith(undefined)
+      expect(APPLE_UNLINK_HINT).toBe('You can also remove Blend’n from Apple ID › Sign in with Apple.')
+    })
+
+    it('never opens the Apple sheet for an account that is not Apple', async () => {
+      asApple('password')
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+      await confirm()
+      await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
+      expect(appleCodeForDeletion).not.toHaveBeenCalled()
+      expect(deleteAccount).toHaveBeenCalledWith(undefined)
+    })
   })
 
   it('Cancel deletes nothing', async () => {
