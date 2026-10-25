@@ -3,7 +3,8 @@ import { Platform, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent
 import { KeyboardAwareScrollView, KeyboardEvents, KeyboardStickyView, type KeyboardAwareScrollViewRef } from 'react-native-keyboard-controller'
 
 import { Dock } from '../ds/Dock'
-import { MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { SolidBarFade } from '../ui/GradientFill'
+import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { useKeyboardGone } from '../../lib/keyboard'
 
 /** Room kept under the focused field for its hint (two or three lines of small print), over the dock, at the default size. */
@@ -43,6 +44,16 @@ export function bottomOffsetFor(dockHeight: number, scrollHeight: number, hintRo
  */
 export const EXTRA_SCROLL_ROOM = HINT_ROOM
 
+/** Overflow under this counts as the content's end. */
+const END_SLOP = 1
+
+/**
+ * Whether the scroll has more under its foot. At the largest type a form cannot fit above its dock, and the line the
+ * foot cuts reads as a defect ("ioin.", rc9 D3) unless the page says it goes on: a fade into the page at the foot.
+ */
+export const moreBelow = (contentHeight: number, scrollHeight: number, offsetY: number) =>
+  scrollHeight > 0 && contentHeight - scrollHeight - offsetY > END_SLOP
+
 type DockProps = Omit<ComponentProps<typeof Dock>, 'children' | 'onHeight'>
 
 /**
@@ -70,6 +81,13 @@ export function KeyboardPage({
 }) {
   const [dockHeight, setDockHeight] = useState(0)
   const [scrollHeight, setScrollHeight] = useState(0)
+  // Refs, not state: a scroll frame must not re-render the page. Only the fade's yes/no is state, and React drops a repeat.
+  const measured = useRef({ content: 0, scroll: 0, offset: 0 })
+  const [fade, setFade] = useState(false)
+  const measure = (change: Partial<typeof measured.current>) => {
+    measured.current = { ...measured.current, ...change }
+    setFade(moreBelow(measured.current.content, measured.current.scroll, measured.current.offset))
+  }
   const scroll = useRef<KeyboardAwareScrollViewRef>(null)
   // The Strong Password sheet closes without the hide the library listens for (RC drive 2 D-4): the page rests then.
   const keyboardGone = useKeyboardGone()
@@ -81,26 +99,44 @@ export function KeyboardPage({
     const sub = KeyboardEvents.addListener('keyboardDidShow', () => scroll.current?.assureFocusedInputVisible?.())
     return () => sub.remove()
   }, [])
-  const onLayout = (e: LayoutChangeEvent) => setScrollHeight(e.nativeEvent.layout.height)
+  const onLayout = (e: LayoutChangeEvent) => {
+    setScrollHeight(e.nativeEvent.layout.height)
+    measure({ scroll: e.nativeEvent.layout.height })
+  }
+  const { onScroll, onContentSizeChange } = scrollProps
   // The hint's room, and the scroll room that lets the last field's hint reach it (EXTRA_SCROLL_ROOM's reasoning, scaled).
   const hintRoom = hintRoomFor(useWindowDimensions().fontScale)
   return (
     <View style={styles.fill}>
-      <KeyboardAwareScrollView
-        ref={scroll}
-        onLayout={onLayout}
-        style={styles.fill}
-        keyboardShouldPersistTaps="handled"
-        // Drag the form down to put the keyboard away, as in Messages.
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        showsVerticalScrollIndicator={false}
-        enabled={!keyboardGone}
-        bottomOffset={bottomOffsetFor(dockHeight, scrollHeight, hintRoom)}
-        extraKeyboardSpace={EXTRA_SCROLL_ROOM - HINT_ROOM + hintRoom}
-        {...scrollProps}
-      >
-        {children}
-      </KeyboardAwareScrollView>
+      <View style={styles.fill}>
+        <KeyboardAwareScrollView
+          ref={scroll}
+          onLayout={onLayout}
+          style={styles.fill}
+          keyboardShouldPersistTaps="handled"
+          // Drag the form down to put the keyboard away, as in Messages.
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+          enabled={!keyboardGone}
+          bottomOffset={bottomOffsetFor(dockHeight, scrollHeight, hintRoom)}
+          extraKeyboardSpace={EXTRA_SCROLL_ROOM - HINT_ROOM + hintRoom}
+          scrollEventThrottle={16}
+          {...scrollProps}
+          onScroll={(e) => {
+            measure({ offset: e.nativeEvent.contentOffset.y })
+            onScroll?.(e)
+          }}
+          onContentSizeChange={(w, h) => {
+            measure({ content: h })
+            onContentSizeChange?.(w, h)
+          }}
+        >
+          {children}
+        </KeyboardAwareScrollView>
+        {fade ? (
+          <SolidBarFade testID="keyboard-page-fade" color={COLOR.ink} pointerEvents="none" style={styles.fade} />
+        ) : null}
+      </View>
       <KeyboardStickyView testID="keyboard-page-dock-frame" enabled={!keyboardGone}>
         <Dock {...dockProps} onHeight={setDockHeight}>
           {dock}
@@ -110,4 +146,7 @@ export function KeyboardPage({
   )
 }
 
-const styles = StyleSheet.create({ fill: { flex: 1 } })
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: SPACE.xl },
+})
