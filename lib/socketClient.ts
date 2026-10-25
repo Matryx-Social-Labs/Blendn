@@ -139,11 +139,6 @@ export interface ServerToClientEvents {
    * re-reads the conversation, which is what says who can see whom.
    */
   "private:revealed": (data: { conversationId: string }) => void
-  /**
-   * A DM message removed by moderation after it was delivered (blendn-admin, to both participants). Yours becomes the
-   * placeholder; theirs goes, as a re-read would have it.
-   */
-  "private:message_removed": (data: { conversationId: string; messageId: string }) => void
   // Moderation events
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
@@ -239,7 +234,6 @@ type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] ext
 type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
 type PrivateRevealedCallback = (data: ServerToClientEvents["private:revealed"] extends (data: infer D) => void ? D : never) => void
-export type PrivateRemovedCallback = (data: ServerToClientEvents["private:message_removed"] extends (data: infer D) => void ? D : never) => void
 type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
 type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
 type EventCancelledCallback = (data: ServerToClientEvents["event:cancelled"] extends (data: infer D) => void ? D : never) => void
@@ -337,7 +331,6 @@ export interface ConversationHandlers {
   onTyping?: PrivateTypingCallback
   onRead?: PrivateReadCallback
   onRevealed?: PrivateRevealedCallback
-  onRemoved?: PrivateRemovedCallback
 }
 const conversationSubscriptions = new Map<string, Set<ConversationHandlers>>()
 const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
@@ -822,13 +815,6 @@ function setupSocketHandlers(sock: TypedSocket): void {
   sock.on("private:revealed", (data) => {
     if (typeof data?.conversationId !== "string") return
     conversationSubscriptions.get(data.conversationId)?.forEach((h) => h.onRevealed?.(data))
-  })
-
-  /* Keyed by the payload too: the DM open on it turns your message into the placeholder, or drops theirs. */
-  sock.on("private:message_removed", (data) => {
-    if (typeof data?.conversationId !== "string" || typeof data.messageId !== "string") return
-    markDomainsDirty(["chat"])
-    conversationSubscriptions.get(data.conversationId)?.forEach((h) => h.onRemoved?.(data))
   })
 }
 

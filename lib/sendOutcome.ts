@@ -17,9 +17,9 @@ import { userMessage } from './userMessage'
  * retried forever.
  */
 /**
- * Your own message, removed by moderation after it was delivered (a room's `chat:messageDeleted`, a DM's
- * `private:message_removed`): the bubble becomes the dashed placeholder, and a toast (a live region, announced on iOS)
- * says so, so a screen-reader user is told the bubble changed. Like the withheld send's.
+ * Your own room message, removed by moderation after it was delivered (`chat:messageDeleted`): the bubble becomes the
+ * dashed placeholder, and a toast (a live region, announced on iOS) says so, so a screen-reader user is told the bubble
+ * changed. A DM is never removed after delivery: one that fails moderation is withheld at send (`withheld`).
  */
 export const REMOVED_AFTER_DELIVERY = 'Your message was removed by moderation.'
 

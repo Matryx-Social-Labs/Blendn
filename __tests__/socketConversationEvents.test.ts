@@ -135,16 +135,3 @@ it('their reveal (`private:revealed`, RC drive D3) reaches only that conversatio
   expect(onRevealed.mock.calls).toEqual([[{ conversationId: 'c1' }]])
   expect(onRead).not.toHaveBeenCalled()
 })
-
-it('a DM removed by moderation (`private:message_removed`, audit M4) reaches only that conversation’s onRemoved', async () => {
-  const s = await connected()
-  const onRemoved = jest.fn()
-  const onMessage = jest.fn()
-  subscribeToConversation('c1', { onRemoved, onMessage })
-  s.fire('private:message_removed', { conversationId: 'other', messageId: 'm1' })
-  s.fire('private:message_removed', { conversationId: 'c1' })
-  expect(onRemoved).not.toHaveBeenCalled()
-  s.fire('private:message_removed', { conversationId: 'c1', messageId: 'm1' })
-  expect(onRemoved.mock.calls).toEqual([[{ conversationId: 'c1', messageId: 'm1' }]])
-  expect(onMessage).not.toHaveBeenCalled()
-})

@@ -31,7 +31,7 @@ jest.mock('../lib/apiClient', () => ({
     revealInConversation: jest.fn(),
   },
 }))
-const mockLive: { onMessage?: (data: unknown) => void; onRemoved?: (data: { conversationId: string; messageId: string }) => void }[] = []
+const mockLive: { onMessage?: (data: unknown) => void }[] = []
 const mockToast = jest.fn()
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
@@ -464,47 +464,30 @@ describe('a jump from one open DM to another (RC drive 2 D-E, privacy)', () => {
 })
 
 /*
- * Audit M4 + the server's `private:message_removed` (to both participants): a DM removed by moderation after delivery
- * turns into the dashed placeholder for its sender, with the toast (a live region) saying so; for the other person it
- * goes, as a re-read would have it. Driven with a mocked socket event.
+ * Audit M4: a DM is never removed after delivery (one that fails moderation is stored hidden and never sent), so the
+ * two cases are a send withheld by moderation (the dashed placeholder and the toast) and, in the history, your own
+ * photo that was withheld: the sender's view is the 220x160 dashed frame (round 4 #37), never a text-sized pill.
  */
-describe('a DM removed by moderation after it was delivered', () => {
-  const mine = { ...theirs, id: 'm2', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: 'My number is …' }
-  const minePhoto = { ...mine, id: 'm3', text: null, mediaUrl: 'https://cdn.blendn.app/dm/p.jpg', mediaType: 'image' }
-  const remove = async (messageId: string) => {
-    await act(async () => mockLive.forEach((h) => h.onRemoved?.({ conversationId: 'c1', messageId })))
-    await flush()
-  }
-
-  it('yours: the dashed placeholder, and the toast says so', async () => {
-    api.getConversationMessages.mockResolvedValue(page([theirs, mine]) as never)
+describe('a DM withheld by moderation', () => {
+  it('withheld at send: the dashed placeholder, and the toast says so', async () => {
+    api.getConversationMessages.mockResolvedValue(page([]) as never)
+    api.sendPrivateMessage.mockResolvedValue({ success: true, data: { id: 'm2', moderation_hidden: true } } as never)
     await open()
-    await remove('m2')
+    await act(async () => fireEvent.press(screen.getByLabelText(/Say hi/)))
+    await flush()
     expect(screen.getByTestId('dm-bubble-m2-bubble').props.accessibilityLabel).toMatch(/^You, This message was removed by moderation, /)
     expect(screen.getByTestId('dm-bubble-m2-dashed', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.queryByText('My number is …')).toBeNull()
-    expect(mockToast).toHaveBeenCalledWith('Your message was removed by moderation.', 'info')
+    expect(mockToast).toHaveBeenCalledWith('That message wasn’t delivered.', 'info')
   })
 
-  it('your photo: the photo-sized frame with the shield, read as a removed photo (round 4 #37)', async () => {
+  it('your withheld photo: the photo-sized frame with the shield, read as a removed photo (round 4 #37)', async () => {
+    const minePhoto = { ...theirs, id: 'm3', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: null, mediaUrl: 'https://cdn.blendn.app/dm/p.jpg', mediaType: 'image', moderation_hidden: true }
     api.getConversationMessages.mockResolvedValue(page([theirs, minePhoto]) as never)
     await open()
-    await remove('m3')
     const frame = screen.getByTestId('dm-photo-m3-bubble')
     expect(frame.props.accessibilityLabel).toMatch(/^You, Photo removed by moderation, /)
     expect(StyleSheet.flatten(frame.props.style)).toMatchObject({ width: 220, height: 160 })
+    expect(screen.getByText('Removed by moderation', { includeHiddenElements: true })).toBeTruthy()
     expect(imageUris()).not.toContain(minePhoto.mediaUrl)
-  })
-
-  it('theirs: it goes, and nothing is said; a second removal of yours says nothing again', async () => {
-    api.getConversationMessages.mockResolvedValue(page([theirs, mine]) as never)
-    await open()
-    expect(screen.getByTestId('dm-bubble-m1-bubble')).toBeTruthy()
-    await remove('m1')
-    expect(screen.queryByTestId('dm-bubble-m1-bubble')).toBeNull()
-    expect(mockToast).not.toHaveBeenCalled()
-    await remove('m2')
-    await remove('m2')
-    expect(mockToast).toHaveBeenCalledTimes(1)
   })
 })
