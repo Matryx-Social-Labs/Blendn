@@ -8,7 +8,7 @@ import {
   type VectorSourceRef,
 } from '@maplibre/maplibre-react-native'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
+import { Platform, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
 import { glowRadius, litFade, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
@@ -241,13 +241,30 @@ export const Chips = memo(function Chips({ chips, onOpen }: { chips: Chip[]; onO
   return (
     <>
       {chips.map((chip) => (
-        <Marker key={chip.id} id={`chip-${chip.id}`} lngLat={chip.at} anchor="bottom" offset={[0, -chip.lift]} onPress={() => onOpen(chip.kind, chip.id)}>
+        <Marker
+          key={chip.id}
+          id={`chip-${chip.id}`}
+          lngLat={chip.at}
+          anchor="bottom"
+          offset={[0, -chip.lift]}
+          onPress={() => onOpen(chip.kind, chip.id)}
+          {...annotationTitle(chip.speech)}
+        >
           <MapChip chip={chip} onOpen={onOpen} />
         </Marker>
       ))}
     </>
   )
 })
+
+/**
+ * What VoiceOver reads a map annotation as (audit M3). On iOS MapLibre draws each `Marker` as an `MLNAnnotationView`, an
+ * accessible button labelled by its annotation's title, which hides the RN view inside it: without a title VoiceOver read
+ * "button" five to eight times on the Places map, and the chip's own label never reached it. A title shows no callout
+ * here (`annotationCanShowCallout` needs a callout child). Android draws the RN view itself, so its own label stands.
+ * Not in `MarkerProps`' type (iOS passes every prop on to the annotation), hence the spread.
+ */
+export const annotationTitle = (label: string): object => (Platform.OS === 'ios' ? { title: label } : {})
 
 /**
  * One chip: "LIVE ●" or the start for an event, a glyph and the bucket for a

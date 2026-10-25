@@ -6,6 +6,7 @@ import { Badge } from '../ds/MonoFamily'
 import { COLOR, DURATION, SPACE } from '../../lib/design/tokens'
 import { getDistanceKm } from '../../lib/geo'
 import type { NearPin } from '../../lib/placesPane'
+import { annotationTitle } from './MapLitLayers'
 
 /**
  * A pin this close to your fix is drawn lifted clear of the you-dot, which the map draws over every marker (rc7 D16: the
@@ -20,8 +21,9 @@ const FADE_IN = FadeIn.duration(DURATION.quick)
 
 /**
  * Places' five nearest, numbered as their rows are (B4): the design system's `Badge` (white, ink digits, Geist
- * Mono 700) with a scrim ring, so it reads on any map ground. Decorative: the rows carry the words, so the map
- * stays out of the reading order. Fades in over `DURATION.quick`; Reduce Motion is the same fade (a fade is not
+ * Mono 700) with a scrim ring, so it reads on any map ground. The rows carry the words (they are the list a screen
+ * reader uses), so the badge inside is hidden; on iOS the annotation itself is a button VoiceOver always lands on, so
+ * it is named as its row is numbered: "1, Toit" (audit M3). Fades in over `DURATION.quick`; Reduce Motion is the same fade (a fade is not
  * movement).
  */
 export const NearPins = memo(function NearPins({ pins, you = null }: { pins: NearPin[]; you?: { latitude: number; longitude: number } | null }) {
@@ -29,7 +31,14 @@ export const NearPins = memo(function NearPins({ pins, you = null }: { pins: Nea
   return (
     <>
       {pins.map((pin) => (
-        <Marker key={pin.id} id={`near-${pin.id}`} lngLat={[pin.lon, pin.lat]} anchor="center" offset={nearYou(pin) ? [0, -LIFT_NEAR_YOU] : undefined}>
+        <Marker
+          key={pin.id}
+          id={`near-${pin.id}`}
+          lngLat={[pin.lon, pin.lat]}
+          anchor="center"
+          offset={nearYou(pin) ? [0, -LIFT_NEAR_YOU] : undefined}
+          {...annotationTitle(`${pin.n}, ${pin.name}`)}
+        >
           <Animated.View entering={FADE_IN} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID={`near-pin-${pin.n}`}>
             <Badge text={pin.n} size={22} ring={COLOR.scrim} />
           </Animated.View>
