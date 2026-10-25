@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import { readdirSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 
 /**
@@ -9,6 +9,16 @@ import { join } from 'path'
  */
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 const expoConfig = () => JSON.parse(read('app.json')).expo
+
+/** Every source file under `dir`, relative to the repo root. */
+function walk(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(join(__dirname, '..', dir))) {
+    const rel = join(dir, entry)
+    if (statSync(join(__dirname, '..', rel)).isDirectory()) walk(rel, out)
+    else if (/\.(ts|tsx|js|jsx)$/.test(entry)) out.push(rel)
+  }
+  return out
+}
 
 describe('iPhone only for v1.0 (2.4.1: nothing has been QA’d at iPad sizes)', () => {
   it('app.json does not support tablets', () => {
@@ -40,5 +50,34 @@ describe('no Face ID purpose string (5.1.1(ii): the app never uses Face ID)', ()
   it('the app never asks secure-store for biometrics', () => {
     expect(read('lib/apiClient.ts')).toContain('requireAuthentication: false')
     expect(read('lib/apiClient.ts')).not.toContain('requireAuthentication: true')
+  })
+})
+
+describe('no location foreground service on Android (Play: FGS and background-location declarations)', () => {
+  /*
+   * expo-location's library manifest declares LocationTaskService (`foregroundServiceType="location"`), and the
+   * manifest merger copies it into the app unless the app's manifest removes it. Only task-based location updates
+   * start it (`startLocationUpdatesAsync` with expo-task-manager); the app watches location in the foreground only.
+   */
+  const SERVICE = 'expo.modules.location.services.LocationTaskService'
+
+  it('the app manifest removes it from the merge', () => {
+    expect(read('android/app/src/main/AndroidManifest.xml')).toContain(`<service android:name="${SERVICE}" tools:node="remove"/>`)
+  })
+
+  it('still names the service expo-location declares, so the removal is not a no-op', () => {
+    const library = read('node_modules/expo-location/android/src/main/AndroidManifest.xml')
+    expect(library).toContain('android:name=".services.LocationTaskService"')
+    expect(read('node_modules/expo-location/android/build.gradle')).toContain('namespace "expo.modules.location"')
+  })
+
+  it('nothing starts it: no task-based location updates and no foreground-service permission', () => {
+    const pkg = JSON.parse(read('package.json'))
+    expect({ ...pkg.dependencies, ...pkg.devDependencies }).not.toHaveProperty('expo-task-manager')
+    const starters = [...walk('app'), ...walk('lib'), ...walk('components')].filter((f) =>
+      /startLocationUpdatesAsync|startGeofencingAsync/.test(read(f))
+    )
+    expect(starters).toEqual([])
+    expect(read('android/app/src/main/AndroidManifest.xml')).not.toContain('android.permission.FOREGROUND_SERVICE')
   })
 })
