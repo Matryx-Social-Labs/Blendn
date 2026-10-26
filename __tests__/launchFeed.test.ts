@@ -52,6 +52,11 @@ describe('Pulse launch', () => {
     expect(src).toMatch(/lat: roundCoord\(userLocation\?\.latitude\), lon: roundCoord\(userLocation\?\.longitude\) \}/)
   })
 
+  it('a failed or cleared cities request still lets the feed start (review MEDIUM)', () => {
+    // A permission prompt makes the app 'inactive', which clears the queue: the request rejects.
+    expect(src).toMatch(/apiClient\.getEventCities\(\)\.catch\(\(\) => \(\{ success: false as const \}\)\)/)
+  })
+
   it('starts the weekend / featured / for-you requests with the feed, not after the city list', () => {
     expect(src).toMatch(/const sectionRequestsOn = !!user && !authLoading && feedCityReady/)
   })

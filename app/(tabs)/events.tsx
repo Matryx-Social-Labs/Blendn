@@ -1070,10 +1070,12 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         setSelection((current) => current ?? stored)
         setFeedCityReady(true)
       }
-      const response = await apiClient.getEventCities()
+      // A rejection (a permission prompt makes the app 'inactive', which clears the queue) is
+      // a failed list, not a stop: the feed must still start (`feedCityReady` below).
+      const response = await apiClient.getEventCities().catch(() => ({ success: false as const }))
       if (cancelled) return
 
-      const available = response.success && response.data ? response.data.cities : []
+      const available = response.success && 'data' in response && response.data ? response.data.cities : []
       setCityOptions(available)
       setSelection((current) =>
         // Never overwrite a choice the user made while this was in flight.
