@@ -86,7 +86,7 @@ const mockRoom = {
   refresh: jest.fn(async () => {}),
   retry: jest.fn(),
   clearMatch: jest.fn(),
-  connect: jest.fn(async () => true),
+  connect: jest.fn(async (): Promise<{ stands: boolean; refusal?: string }> => ({ stands: true })),
   loadMore: jest.fn(async () => {}),
 }
 jest.mock('../lib/useRoom', () => {
@@ -259,6 +259,30 @@ describe('like and wave refusals (R3-D4 4.3)', () => {
     expect(screen.getByTestId('person-card-card-hand-waving', HIDDEN)).toBeTruthy()
     await act(async () => answer({ kind: 'sent' }))
     expect(screen.getByLabelText('Waved')).toBeTruthy()
+  })
+})
+
+describe('a refused message request (TEXT_NOT_ALLOWED)', () => {
+  const sendFromCard = async () => {
+    await drawRoom()
+    await openFromGrid(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Message' }))
+    await cardGone()
+    await fireEvent.changeText(screen.getByTestId('connect-message', HIDDEN), 'find me at https://x.example')
+    await act(async () => fireEvent.press(screen.getByText('Send request')))
+  }
+
+  it('says the server’s sentence, not the generic line', async () => {
+    mockRoom.connect.mockResolvedValue({ stands: false, refusal: 'Links and numbers can’t go in a first note.' })
+    await sendFromCard()
+    expect(screen.getByText('Links and numbers can’t go in a first note.')).toBeTruthy()
+    expect(screen.queryByText('Couldn’t send the request. Try again.')).toBeNull()
+  })
+
+  it('keeps the generic line for a failure the server did not name', async () => {
+    mockRoom.connect.mockResolvedValue({ stands: false })
+    await sendFromCard()
+    expect(screen.getByText('Couldn’t send the request. Try again.')).toBeTruthy()
   })
 })
 

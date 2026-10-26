@@ -34,6 +34,7 @@ import { parseBadges } from '../../lib/profileBadges'
 import { incomingRequestFrom } from '../../lib/friends'
 import { isGone } from '../../lib/loadFailure'
 import { Logger } from '../../lib/logger'
+import { requestTextRefusal } from '../../lib/requestRefusal'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
@@ -476,7 +477,7 @@ function UserProfileInner() {
         setConnectOpen(false)
       } else {
         Logger.warn('profile', 'connect request failed', { error: result.error })
-        showToast("Your request didn’t send. Try again.", 'error', { haptic: 'error' })
+        showToast(requestTextRefusal(result) ?? "Your request didn’t send. Try again.", 'error', { haptic: 'error' })
       }
     } catch (e) {
       Logger.error('profile', 'connect request error', { error: e })

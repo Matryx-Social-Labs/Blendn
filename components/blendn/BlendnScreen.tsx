@@ -1051,8 +1051,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           setConnecting(true)
           try {
             // Closed only once the request stands; a failure keeps the sheet and the note, and says so.
-            if (await room.connect(connectTo.id, message)) setConnectTo(null)
-            else say('Couldn’t send the request. Try again.', 'error')
+            const sent = await room.connect(connectTo.id, message)
+            if (sent.stands) setConnectTo(null)
+            else say(sent.refusal ?? 'Couldn’t send the request. Try again.', 'error')
           } finally {
             setConnecting(false)
           }

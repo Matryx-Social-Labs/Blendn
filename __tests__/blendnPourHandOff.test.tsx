@@ -52,7 +52,7 @@ jest.mock('../lib/useRoom', () => {
   const none = {
     status: 'none', event: null, people: [], arrivals: [], hereCount: 0, hasMore: false, loadingMore: false,
     checkedInAt: null, revealed: false, chatGroupId: null, match: null, wave: null, error: null, connection: 'connected',
-    clearMatch: () => {}, connect: async () => ({}), loadMore: async () => {}, retry: () => {}, like: async () => ({ kind: 'liked' }),
+    clearMatch: () => {}, connect: async () => ({ stands: true }), loadMore: async () => {}, retry: () => {}, like: async () => ({ kind: 'liked' }),
     sendWave: async () => ({ kind: 'sent' }), remove: () => {}, refresh: async () => {},
   }
   let state: Record<string, unknown> = none
