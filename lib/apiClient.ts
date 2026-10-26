@@ -2801,13 +2801,15 @@ class ApiClientClass {
   async getPresignedUploadUrl(
     filename: string,
     contentType: string,
-    folder: 'profile' | 'chat' | 'events' = 'profile'
+    folder: 'profile' | 'chat' | 'events' = 'profile',
+    /** Bytes the PUT will carry: signed into the URL, so the upload cannot be larger. */
+    size?: number
   ): Promise<ApiResponse<{ uploadUrl: string; publicUrl: string; key?: string }>> {
     return this.queuedRequest<{ uploadUrl: string; publicUrl: string; key?: string }>(
       '/api/mobile/uploads/presigned-url',
       {
         method: 'POST',
-        body: JSON.stringify({ filename, contentType, folder }),
+        body: JSON.stringify({ filename, contentType, folder, size }),
       },
       true,
       3
