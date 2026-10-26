@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { AppState } from 'react-native'
 import { apiClient, AuthUser, nextSession, TokenStorage } from './apiClient'
 import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
@@ -9,6 +8,7 @@ import { Logger } from './logger'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
+import { queryCache } from './queryCache'
 import { clearRoomSignal } from './roomSignal'
 import { resetRoomMembership } from './roomMembership'
 import { forgetRosters } from './rosterMemory'
@@ -72,41 +72,10 @@ const UNINITIALIZED: AuthState = {
 let globalAuthState: AuthState = { ...UNINITIALIZED }
 
 let authStateListeners: ((state: AuthState) => void)[] = []
-// `ReturnType<typeof setInterval>`, not `NodeJS.Timeout`: in React Native the
-// timer id is a number, and whether TypeScript agrees depends on whether
-// `@types/node` happens to be in scope — which varies between a fresh clone and
-// one that has run `pod install`. That made the same source typecheck on one
-// machine and fail on another. This form is correct under either resolution.
-let sessionCheckInterval: ReturnType<typeof setInterval> | null = null
 /** How the last session read failed, for the can't-reach screen: the server said it is being worked on, or it said nothing. */
 let lastSessionFailure: { errorCode?: string; reasonCode?: string; retryAfter?: number } | null = null
 let isInitializing = false // Prevent concurrent initialization
 let initializationPromise: Promise<AuthState> | null = null // Promise-based wait instead of polling
-let appStateListenerRegistered = false
-let isAppActive = AppState.currentState === 'active'
-
-const registerAppStateListener = () => {
-  if (appStateListenerRegistered) return
-
-  try {
-    AppState.addEventListener('change', (state) => {
-      isAppActive = state === 'active'
-      if (!isAppActive) {
-        Logger.info('auth', 'App backgrounded; pausing session refresh')
-        stopSessionRefresh()
-        return
-      }
-
-      if (globalAuthState.user) {
-        Logger.info('auth', 'App foregrounded; resuming session refresh')
-        startSessionRefresh()
-      }
-    })
-    appStateListenerRegistered = true
-  } catch (error) {
-    Logger.warn('auth', 'Failed to register AppState listener', { error })
-  }
-}
 
 // Update global state and notify listeners
 const updateAuthState = (newState: Partial<AuthState>) => {
@@ -132,8 +101,6 @@ const initializeAuth = async (): Promise<AuthState> => {
   if (globalAuthState.initialized) {
     return globalAuthState
   }
-
-  registerAppStateListener()
 
   // Prevent concurrent initialization - use Promise instead of polling
   if (isInitializing && initializationPromise) {
@@ -257,15 +224,14 @@ const signInVerified = async (user: AuthUser, message: string) => {
   })
   // In memory at once, the keychain behind (D-A): a stuck native queue does not hold the launch's restore open.
   void TokenStorage.setUser(user).catch(() => {})
-  startSessionRefresh()
 }
 
 /**
  * The server could not be reached. The session is not over.
  *
  * Signed in as the user stored at the last sign-in, and the tokens are left
- * alone: `apiClient` retries the refresh in the background, the ten-minute
- * refresh keeps trying, and the next request that needs it tries again. With
+ * alone: `apiClient` retries the refresh in the background, and the next
+ * request that needs it refreshes first (see `freshAccessToken`). With
  * no stored user there is nobody to carry on as, so the entry screen says it
  * cannot reach Blend'n and offers Try again rather than a sign-in.
  */
@@ -281,7 +247,6 @@ const keepStoredSession = async () => {
       loading: false,
       initialized: true,
     })
-    startSessionRefresh()
     return
   }
   Logger.warn('auth', 'Could not reach the server and no user is stored')
@@ -304,7 +269,6 @@ const resetLocalSession = () => {
   void forgetAuthMethod()
   // The icon's number was the last account's: the next person to open the app on this phone does not inherit it.
   void setAppIconBadge(0)
-  stopSessionRefresh()
   /*
    * The centre button's cache is per-account.
    *
@@ -321,6 +285,8 @@ const resetLocalSession = () => {
    */
   clearOutbox()
   resetRoomMembership()
+  // The cached DM threads are per account, and the next one on this phone has no use for them.
+  queryCache.invalidate('private_messages_')
   /*
    * And the rooms' rosters and the events' details this account read: both are keyed by event, not by account, so the next
    * person to sign in on the phone was served the last one's roster and `userStatus` (going, checked in) until they expired
@@ -374,29 +340,6 @@ const registerSessionExpiredListener = () => {
   })
 }
 registerSessionExpiredListener()
-
-// Start periodic session refresh (every 10 minutes)
-const startSessionRefresh = () => {
-  stopSessionRefresh()
-  if (!isAppActive) {
-    Logger.debug('auth', 'Skipping session refresh start; app not active')
-    return
-  }
-  sessionCheckInterval = setInterval(
-    async () => {
-      Logger.debug('auth', 'Periodic session refresh check')
-      await apiClient.refreshSession()
-    },
-    10 * 60 * 1000
-  ) // 10 minutes
-}
-
-const stopSessionRefresh = () => {
-  if (sessionCheckInterval) {
-    clearInterval(sessionCheckInterval)
-    sessionCheckInterval = null
-  }
-}
 
 // Hook for React components
 export function useAuth(): AuthState {
@@ -468,8 +411,6 @@ export const signInWithGoogle = async (
         isNewAccount: isNewUser === true,
       })
 
-      startSessionRefresh()
-
       return { success: true, isNewUser }
     } else {
       Logger.error('auth', 'Google sign in failed', { error: result.error })
@@ -510,8 +451,6 @@ export const signInWithApple = async (
         isNewAccount: isNewUser === true,
       })
 
-      startSessionRefresh()
-
       return { success: true, isNewUser }
     } else {
       Logger.error('auth', 'Apple sign in failed', { error: result.error })
@@ -550,8 +489,6 @@ export const signInWithEmail = async (
         // Signing in is never creating; say so rather than inherit the flag.
         isNewAccount: false,
       })
-
-      startSessionRefresh()
 
       return { success: true }
     } else {
@@ -602,8 +539,6 @@ export const signUp = async (
         // Always true here: this endpoint only ever creates.
         isNewAccount: true,
       })
-
-      startSessionRefresh()
 
       return { success: true }
     } else {
@@ -746,7 +681,6 @@ export const clearNewAccountFlag = () => {
 
 // Cleanup function for app shutdown
 export const cleanupAuth = () => {
-  stopSessionRefresh()
   authStateListeners = []
   globalAuthState = { ...UNINITIALIZED }
 }

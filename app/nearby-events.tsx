@@ -17,6 +17,7 @@ import { getEvents as fetchEventsApi, type BlendnEvent } from '../lib/api'
 import { apiClient } from '../lib/apiClient'
 import { readStoredCity } from '../lib/cityStorage'
 import { COLOR, RADIUS, SPACE, STAGGER } from '../lib/design/tokens'
+import { EVENT_DETAIL_QUERY } from '../lib/eventDetailQuery'
 import { getDistanceKm } from '../lib/geo'
 import { isAbortedFix, roughFix, type FixAsk } from '../lib/locationFix'
 import { mergeEventPage, pageHasMore } from '../lib/pulseFeed'
@@ -270,12 +271,8 @@ export default function NearbyEventsScreen() {
 
   const handleEventPress = useCallback(
     (event: BlendnEvent) => {
-      apiClient
-        .getEvent(event.id, {
-          lat: userLocation?.latitude,
-          lon: userLocation?.longitude,
-        })
-        .catch(() => {})
+      // The page's own query (lib/eventDetailQuery.ts), so the warm is the key the page reads.
+      apiClient.getEvent(event.id, { ...EVENT_DETAIL_QUERY }).catch(() => {})
 
       if (event.cover_image_url) {
         const hero = getOptimizedImageUrl(event.cover_image_url, {
@@ -303,7 +300,7 @@ export default function NearbyEventsScreen() {
       })
       router.push({ pathname: '/event/[id]', params: { id: event.id, seed } as never })
     },
-    [userLocation]
+    []
   )
 
   const renderItem = useCallback(
