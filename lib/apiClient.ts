@@ -409,6 +409,8 @@ class TokenStorage {
   }
 
   static async setRefreshToken(token: string): Promise<void> {
+    // A token stored is a token not yet refused (`refusedRefreshToken`).
+    refusedRefreshToken = null
     return this.secureSet(REFRESH_TOKEN_KEY, token)
   }
 
@@ -1305,6 +1307,12 @@ let lastProactiveRefreshAt = 0
  */
 const FAILED_REFRESH_COOLDOWN_MS = 10_000
 let lastRefreshFailedAt = 0
+/**
+ * The refresh token the server last refused (401/403). It is dead: a launch that
+ * refreshed it ahead of `/auth/session` asked again from that request's 401 and
+ * sent it twice (drive 2026-10-27). Asked about it again, the answer is the same.
+ */
+let refusedRefreshToken: string | null = null
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
@@ -1769,7 +1777,7 @@ class ApiClientClass {
         const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
         // A keychain that did not answer is not a missing token: 'failed', tried again, never the sign-out a 'rejected' is.
         if (refreshToken === TIMED_OUT) return 'failed'
-        if (!refreshToken) {
+        if (!refreshToken || refreshToken === refusedRefreshToken) {
           return 'rejected'
         }
 
@@ -1809,6 +1817,7 @@ class ApiClientClass {
               if (code && code in SESSION_END_CODES) rejectedCode = code
             } catch {}
           }
+          refusedRefreshToken = refreshToken
           return 'rejected'
         }
 
