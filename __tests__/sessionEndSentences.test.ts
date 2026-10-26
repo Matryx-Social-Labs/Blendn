@@ -11,7 +11,7 @@ import { accountRefusalOf, classifySessionEnd } from '../lib/sessionEnd'
 
 /** admin `lib/mobile-auth.ts:149-154` (SUSPENDED_MESSAGE, STAFF_MESSAGE) and `app/api/mobile/auth/{google,apple}/route.ts:98,100`. */
 const SERVER = {
-  suspended: "This account has been suspended. Contact support@blendn.app if you think that's a mistake.",
+  suspended: "This account has been suspended. Contact support@blendn.app if you think that’s a mistake.",
   staff: 'This app is for attendees. Organizers, venue owners and sponsors sign in at the dashboard.',
   deleted: 'Account not found',
 } as const
@@ -41,6 +41,6 @@ maybe('the server still says them: a copy edit there fails here, loudly', () => 
   expect(src).toContain(SERVER.suspended)
   expect(src).toContain(SERVER.staff)
   for (const route of ['google', 'apple']) {
-    expect(text(`app/api/mobile/auth/${route}/route.ts`)).toContain('errorResponse("Account not found", 401)')
+    expect(text(`app/api/mobile/auth/${route}/route.ts`)).toContain('errorResponse("Account not found", 401')
   }
 })
