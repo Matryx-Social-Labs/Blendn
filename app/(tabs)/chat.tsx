@@ -428,7 +428,7 @@ function ChatInner() {
               muted={roomMuted(c.chat_room_id)}
               line={
                 c.room_state === 'locked'
-                  ? 'Locked by the organiser · read only'
+                  ? 'Locked by the organizer · read only'
                   : c.last_message && c.last_message !== SPONSORED
                     ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name })
                     : null

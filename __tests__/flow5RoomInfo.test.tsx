@@ -101,7 +101,7 @@ it('draws the server’s cover and title, never an image or a name from the rout
 
 it('the crowd: creatures with their role badges, and you as "You"', async () => {
   await open()
-  expect(screen.getByLabelText('Amber Fox, Organiser')).toBeTruthy()
+  expect(screen.getByLabelText('Amber Fox, Organizer')).toBeTruthy()
   expect(screen.getByLabelText('Quiet Otter, Moderator')).toBeTruthy()
   expect(screen.getByLabelText('You')).toBeTruthy()
 })
@@ -140,7 +140,7 @@ describe('nothing collides with the clock or the back button (drive 2)', () => {
     const shield = StyleSheet.flatten(screen.getByTestId('info-status-shield').props.style)
     // The inset (whatever the device's), the back button's row and the 10 pt the glass reaches under it.
     expect(shield.height).toBeGreaterThanOrEqual(SIZE.circleButton + SPACE.sm + SPACE.xxs)
-    expect(screen.getByText('ORGANISER').props.numberOfLines).toBe(1)
+    expect(screen.getByText('ORGANIZER').props.numberOfLines).toBe(1)
   })
 })
 
@@ -316,7 +316,7 @@ it('a block made anywhere reads the roster again from the start (H2)', async () 
   api.getChatParticipants.mockResolvedValue({ success: true, data: { participants: [{ userId: 'u-a', name: 'Cosmic Panda', role: 'member' }], totalCount: 1 } } as never)
   await act(async () => noteBlocked())
   expect(api.getChatParticipants).toHaveBeenCalledWith('g1', { limit: 100, offset: 0 })
-  expect(screen.queryByLabelText('Amber Fox, Organiser')).toBeNull()
+  expect(screen.queryByLabelText('Amber Fox, Organizer')).toBeNull()
 })
 
 it('lists its rows by fixed layout once the header is measured, and not before (getItemLayout)', async () => {

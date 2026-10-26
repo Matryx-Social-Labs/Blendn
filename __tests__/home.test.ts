@@ -124,7 +124,7 @@ describe('"at <Venue>" on an event card (HM-U08)', () => {
     )
   })
 
-  it("falls back to the organiser’s words, then the city, when the server names no venue (disputed, archived, none)", () => {
+  it("falls back to the organizer’s words, then the city, when the server names no venue (disputed, archived, none)", () => {
     expect(placeLabel({ venue: null, venue_name: 'Some rooftop', city: 'Bengaluru' })).toBe('Some rooftop')
     expect(placeLabel({ venue: null, venue_name: '', city: 'Bengaluru' })).toBe('Bengaluru')
     expect(placeLabel({ venue_name: '  ', city: null })).toBeNull()

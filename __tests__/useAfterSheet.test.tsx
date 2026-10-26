@@ -61,7 +61,7 @@ describe('the event screen wires it', () => {
   const src = readFileSync(join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8')
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-  it('opens nothing over a sheet that is still leaving: no afterSheet and no tray (an organiser\'s sheets are the dashboard\'s now)', () => {
+  it('opens nothing over a sheet that is still leaving: no afterSheet and no tray (an organizer\'s sheets are the dashboard\'s now)', () => {
     // iOS drops a modal presented over one that is leaving; a toast needs no wait.
     expect(code).not.toContain('afterSheet(')
     expect(code).not.toContain('showTray(')

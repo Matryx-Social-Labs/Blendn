@@ -8,7 +8,7 @@ import { eventDetailBlocks } from '../lib/eventDetails'
  * "[object Object]" under a heading like "Wheelchair access".
  */
 describe('eventDetailBlocks', () => {
-  it('builds the blocks an organiser filled in, in reading order', () => {
+  it('builds the blocks an organizer filled in, in reading order', () => {
     const blocks = eventDetailBlocks({
       houseRules: 'Over 18s only after 10pm.',
       cancellationPolicy: 'Free cancellation up to 24 hours before doors.',
@@ -31,7 +31,7 @@ describe('eventDetailBlocks', () => {
     ])
   })
 
-  it('is empty when the organiser filled in nothing', () => {
+  it('is empty when the organizer filled in nothing', () => {
     expect(eventDetailBlocks({})).toEqual([])
     expect(eventDetailBlocks(null)).toEqual([])
     expect(eventDetailBlocks(undefined)).toEqual([])

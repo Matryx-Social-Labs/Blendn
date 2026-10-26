@@ -71,13 +71,22 @@ describe('IncomingRequestRow (D-M5, D-LM2)', () => {
   })
 
   it('shows how long ago they asked, as a tag in Geist Mono at the control cap ("3h")', async () => {
-    await at(402, 1)
-    await render(<IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />)
-    const time = screen.getByTestId('request-age', hidden)
-    expect(time.props.children).toBe('3h')
-    expect(time.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
-    expect(StyleSheet.flatten(time.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
-    expect(screen.getByText(person.name).props.numberOfLines).toBe(1)
+    // Midday, so three hours ago is still today: run between 00:00 and 03:00 it read "Yesterday".
+    const noon = new Date()
+    noon.setHours(12, 0, 0, 0)
+    jest.useFakeTimers({ now: noon, advanceTimers: true })
+    try {
+      await at(402, 1)
+      const createdAt = new Date(noon.getTime() - 3 * 3600_000).toISOString()
+      await render(<IncomingRequestRow request={{ ...request, createdAt }} busy={false} onRespond={jest.fn()} />)
+      const time = screen.getByTestId('request-age', hidden)
+      expect(time.props.children).toBe('3h')
+      expect(time.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+      expect(StyleSheet.flatten(time.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
+      expect(screen.getByText(person.name).props.numberOfLines).toBe(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('a day-word age ("Yesterday") is set in the sans, not mono', async () => {

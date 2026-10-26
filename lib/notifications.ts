@@ -133,7 +133,7 @@ export async function ensureNotificationChannels(): Promise<void> {
     Notifications.setNotificationChannelAsync('events', {
       ...base,
       name: 'Events',
-      description: 'Changes to events you are going to, reminders and organiser announcements',
+      description: 'Changes to events you are going to, reminders and organizer announcements',
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: PUBLIC,
     }),

@@ -105,7 +105,7 @@ is where it stops driving the height and the label does, and the pill lands at
 ### 2. No scarcity claim the product cannot back
 
 The frame draws **LIMITED ACCESS** on every event. Nothing supports it: the only
-thing an organiser is asked is `max_capacity`, whose own placeholder reads
+thing an organizer is asked is `max_capacity`, whose own placeholder reads
 "Unlimited if blank" — a fire-safety number, not a claim about exclusivity. A
 500-person warehouse night has a capacity and is not exclusive.
 
@@ -261,7 +261,7 @@ The frame draws one CTA. These exist and had to go somewhere:
 |---|---|---|
 | RSVP | the CTA, before the doors | it is the same slot at an earlier hour, not a second action |
 | Check out | the room's top bar | one tap from the CTA, then a confirm |
-| Announce / delete | a small organiser column, bottom right | shown only to an organiser; not in any frame |
+| Announce / delete | a small organizer column, bottom right | shown only to an organizer; not in any frame |
 | Android announcement composer | a modal | `Alert.prompt` is iOS-only, so on Android this **is** the feature |
 
 An overflow `···` was briefly added to the top bar for RSVP. It was wrong twice:
@@ -274,7 +274,7 @@ the screen.
 
 1. **The pre-doors CTA has no frame.** *I'm going* / *You're going* were derived,
    not designed.
-2. **The organiser column has no frame.** Two round buttons stacked bottom-right.
+2. **The organizer column has no frame.** Two round buttons stacked bottom-right.
 3. **The coverless hero has no frame.** Currently a flat dark panel.
 4. **Amenities need a payload before they can be drawn**, and then a decision on
    what happens with one amenity, or five, when the frame draws exactly two.

@@ -17,7 +17,7 @@ emblems, Blend sides); its pure helpers `components/banter/inbox.ts`.
 | | |
 |---|---|
 | **Header** | Bar glass: "Banter", then the bell (Notifications), search, Mark all read (dimmed when no DM is unread). Search opens a field under it that filters in place. |
-| **Live now** | The room you're standing in as the hero: its cover under a scrim, a still Live badge, a rolling "N in the room", the last line — or "Locked by the organiser · read only". An open Blend under it: the two sides' emblems, "Open now · closes 4 AM". |
+| **Live now** | The room you're standing in as the hero: its cover under a scrim, a still Live badge, a rolling "N in the room", the last line — or "Locked by the organizer · read only". An open Blend under it: the two sides' emblems, "Open now · closes 4 AM". |
 | **Requests** | Solid cards that need an answer: the asker, their note verbatim (two lines), the time, ⋯ (Block · Report · Cancel), then Decline and Accept at 48 — Decline first. Accept's `H.success` comes with the server's answer and opens the DM. A crew invite is the same card with Join (the consent screen) and Decline. The Board's asks sit beside them. |
 | **Crews** | Crew chats, each its emblem in a rounded square. |
 | **People** | DMs, round: a photo once they're a name to you, else their creature. "Mark all read" on the heading. "Asked to reveal names" is a chip until you open the thread. |

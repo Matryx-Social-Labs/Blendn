@@ -747,7 +747,7 @@ Name them exactly like this; the code will use these names. Every component need
 - `ReactionBar`: six emoji, anchored to the bubble.
 - `ReactionPill`.
 - `SystemNotice`: day separators and room narration.
-- `BroadcastNotice`: announcement (organiser identity) / sponsored (labelled, optional media).
+- `BroadcastNotice`: announcement (organizer identity) / sponsored (labelled, optional media).
 - `TypingIndicator`.
 - `ReplyPreview`, attached to the composer.
 - `UnreadDivider`.

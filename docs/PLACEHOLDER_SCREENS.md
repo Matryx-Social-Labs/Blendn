@@ -618,15 +618,15 @@ public claim page in the browser — `https://<dashboard host>/claim/<eventId>`.
 - **The server decides whether it shows.** `GET /events/:eventId` sends
   `claim: { url }` only for a curated, unclaimed event; otherwise `null`. Never
   show it from anything the app infers (the host name "Blendn" is not the
-  rule: a legacy event with no organiser reads the same).
+  rule: a legacy event with no organizer reads the same).
 - **Open the URL as given.** It is built on the dashboard host for the
   environment the app is talking to. The API host has no page there, and a
   hard-coded host sends staging users to production.
-- **It leaves the app, on purpose.** The app refuses organiser and venue
+- **It leaves the app, on purpose.** The app refuses organizer and venue
   accounts, and the claim page needs no account. Filing there grants nothing:
   a person reviews every claim. Say nothing that promises ownership.
 - **Quiet.** Most people reading this screen are attendees; the line is for the
-  one organiser in a thousand who finds their own event. Never a button, never
+  one organizer in a thousand who finds their own event. Never a button, never
   in the CTA dock.
 
 ### Open for design

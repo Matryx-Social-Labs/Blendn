@@ -17,7 +17,7 @@ export function roomStateFrom(room: { membership?: { status?: string } | null; s
 
 export function roomStateLine(state: RoomState): string | null {
   if (state === 'muted') return 'Muted — you can read, not post'
-  if (state === 'locked') return 'Locked by the organiser — read only'
+  if (state === 'locked') return 'Locked by the organizer — read only'
   return null
 }
 

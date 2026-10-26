@@ -32,7 +32,7 @@ describe('reading a link', () => {
     expect(parseLink(inviteLink(TOKEN))).toEqual({ kind: 'invite', id: TOKEN })
   })
 
-  it('takes the bare domain, the app scheme, a bare path, the organiser QR path and a query string', () => {
+  it('takes the bare domain, the app scheme, a bare path, the organizer QR path and a query string', () => {
     expect(parseLink(`https://blendn.app/e/${ID}`)).toEqual({ kind: 'event', id: ID })
     expect(parseLink(`blendn://e/${ID}`)).toEqual({ kind: 'event', id: ID })
     expect(parseLink(`blendn:///v/${ID}`)).toEqual({ kind: 'venue', id: ID })

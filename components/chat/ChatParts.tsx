@@ -99,7 +99,7 @@ export function JustMutedLine() {
   return (
     <View style={styles.justMuted} accessible accessibilityLiveRegion="polite">
       <Icon name="mic-off" size={ICON.inline} color={COLOR.textTertiary} />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>Just now · the organiser muted you</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>Just now · the organizer muted you</Text>
     </View>
   )
 }

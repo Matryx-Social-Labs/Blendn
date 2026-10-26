@@ -115,7 +115,7 @@ Sources:
 | event_update (starts soon) | "Starts at 9:00 pm" | dot | the Scene |
 | event_update (event took over a venue you were live at) | "An event started at {venue}" | dot | the Scene, ready to check in |
 | event_update (no longer available) | "{event} is no longer available" | dot | the "No longer available" landing (Flow 15) |
-| announcement | "From the organiser: {first line}" | dot | the event room |
+| announcement | "From the organizer: {first line}" | dot | the event room |
 | waitlist_promoted | "You're in: a place opened up" | dot | the Scene |
 | rating_request | "How was {event}?" | dot | Rate |
 
@@ -164,7 +164,7 @@ Sources:
 | event_update (cancelled) | {event} / "This event has been cancelled" | "Event cancelled" / "{event} on Sat 4 Oct won't go ahead." |
 | event_update (reminder) | {event} / "Starting in ~60 minutes at {venue}" | "Starts at 9:00 pm" / "{event} at {venue}, {area}." (absolute time: notifications are read late) |
 | event_update (took over a venue) | "Blend'n" / "An event just started here — tap to check in" | "An event started here" / "Check in to join the people there." (no "tap to") |
-| announcement | "📢 {event}" / {text} | "From the organiser" / "{event}: {text}" (no emoji) |
+| announcement | "📢 {event}" / {text} | "From the organizer" / "{event}: {text}" (no emoji) |
 | waitlist_promoted | "You're in" / "A place opened up at {event}." | keep |
 | rating_request | {event} / with a mutual like: "The night's over. Rate the people you met — only you see what you say."; otherwise "How was it? Tap to rate the night." | Two variants, as today: "How was the night?" / "Rate the people you met at {event}. Only you see what you say." **or** "How was the night?" / "How was {event}? Only you see what you say." Delivered quietly (passive) |
 | message_request accepted | "Message request accepted 🎉" / "{real name} accepted your message request" | "Request accepted" / "You can message them now." |
@@ -799,7 +799,7 @@ Sources: plan v2 §8; `docs/API.md` "Matching inputs on the profile", "Expertise
 | # | State | Today | Design |
 |---|---|---|---|
 | 1 | **Account suspended** ("This account has been suspended. Contact support@blendn.app if you think that's a mistake.") | One red line under the sign-in buttons, which stay offered | A full screen: the sentence, a tappable support email, the appeal path, **no sign-in buttons** |
-| 2 | **Staff account** ("This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard.") | Inline line; on a cold start the sentence is lost | A screen with a link to the dashboard |
+| 2 | **Staff account** ("This app is for attendees. Organizers, venue owners and sponsors sign in at the dashboard.") | Inline line; on a cold start the sentence is lost | A screen with a link to the dashboard |
 | 3 | **Deleted account** (the server never confirms deletion) | "Couldn't sign in with Google. Please try again." forever | Neutral copy that stops inviting retries: "We couldn't sign you in with that account" + Support |
 | 4 | **Signed out mid-use** | "Session expired…", then a small notice | A reason-aware notice on the landing (signed out elsewhere / password reset / suspended) |
 | 5 | **Removed from a room** (`USER_BANNED`) / **Go Live ended** (`NOT_LIVE`) / **room gone** (404) | All show "Couldn't load this chat / Check your connection" | Three full-room states with the right action (none / **Go live again** / back) |
@@ -807,7 +807,7 @@ Sources: plan v2 §8; `docs/API.md` "Matching inputs on the profile", "Expertise
 | 7 | **Every composer reason**, including `not_open_yet` ("This chat opens 24 hours before the event starts"), `not_live`, `hidden`, `archived` | Two reasons share one line | One state each (extends Flow 5) |
 | 8 | **Pre-event room** (served: opens 24h before, for going/saved) | Not shown anywhere | A countdown header ("Opens in 3h 20m") and its two refusals |
 | 9 | **Event links refused**: age-gated, unfinished profile, broken link | "Check your connection" | **Age-gated** (with "Add your age" when unknown: the one fixable refusal), **Finish your profile**, **This link is broken** |
-| 10 | **Event no longer available** (the organiser was suspended) and **cancelled** | "Event not found" / a plain Scene | A calm "No longer available" landing; a designed Cancelled Scene |
+| 10 | **Event no longer available** (the organizer was suspended) and **cancelled** | "Event not found" / a plain Scene | A calm "No longer available" landing; a designed Cancelled Scene |
 | 11 | **"This isn't here any more"**: a crew dissolved, a Blend closed, a conversation ended (**remove its composer**), a venue gone, rating unavailable | Assorted raw errors | One pattern, with per-object copy |
 | 12 | **Unknown links**; **links tapped while signed out** | The built-in "Unmatched Route"; links dropped | A branded not-found screen; "Sign in to open this", holding the link through sign-in |
 | 13 | **Can't reach Blend'n / maintenance** (5xx on a cold start with a stored session) | The app opens to tabs where everything fails | A full screen that keeps the session and retries |
@@ -817,13 +817,13 @@ Sources: plan v2 §8; `docs/API.md` "Matching inputs on the profile", "Expertise
 | 17 | **Polls in a room** (served; no component) | Not rendered | A poll bubble: open, voted, closed. **Withheld counts**: "Fewer than 5" and "Results when it closes" (`null` means withheld, never zero). The 409 sentences |
 | 18 | **Waved** (`WAVE_TOO_SOON`) | A disabled button, no text | A still "Waved" state on the card |
 | 19 | **Friend link refused** (unfinished profile, rate limit) | "This link didn't open" | "Finish your profile to add friends"; a rate-limit state |
-| 20 | **Live Activity / Android ongoing notification** while checked in or live (**sketch, later**) | — | Counts only, never names, never organiser text, never promotions, no action buttons (Flow 11.3) |
+| 20 | **Live Activity / Android ongoing notification** while checked in or live (**sketch, later**) | — | Counts only, never names, never organizer text, never promotions, no action buttons (Flow 11.3) |
 | 21 | **Realtime cut by the server** (a refused socket join, or eviction on deletion or suspension) | Logged only; later "Live updates paused." | A reasoned state, not "paused" |
 | 22 | **Check-in refusals with a fix** (unfinished profile, unknown age) | A tray with no action | Tray actions: **Finish profile**, **Add your age** |
 
 **Don't design these (the server never sends them, or the product cut them):** "event full" at the door (capacity never refuses), `ALREADY_CHECKED_IN`, a profile-strength meter, phone OTP, "Create", "Circles", friends-here faces, a `@handle`, a "who's interested" list.
 
-**Decide, then draw or delete:** organiser tools on the Scene (Edit / Announce / Delete, reachable by an attendee who also organises); the `/preview` screens being reachable in production; `goals` / `looking_for` (edited, read by nothing); conversation pinning (no rail exists).
+**Decide, then draw or delete:** organizer tools on the Scene (Edit / Announce / Delete, reachable by an attendee who also organises); the `/preview` screens being reachable in production; `goals` / `looking_for` (edited, read by nothing); conversation pinning (no rail exists).
 
 ---
 
@@ -917,7 +917,7 @@ Sources: [`research/round2/research-sharing-og-push.md`](./research/round2/resea
   3. date and time in Geist Mono ("SAT 04 OCT · 9:00 PM IST")
   4. venue name and area (linking to `/v/<uuid>`)
   5. an "18+" chip
-  6. the organiser (confirm against the "labels-only hosts" ruling)
+  6. the organizer (confirm against the "labels-only hosts" ruling)
   7. the short description
   8. **Open in Blend'n** (primary)
   9. **Get it on Google Play**, then the App Store (Play first: ~93% of traffic is Android)
@@ -947,7 +947,7 @@ Sources: [`research/round2/research-sharing-og-push.md`](./research/round2/resea
 - **Draw:** "You were sent Neon Nights" as a one-time banner on the Pulse after onboarding (Android), and a link to an event that is no longer available (Flow 15 #10).
 
 ### Open questions for the owner
-1. Show the organiser's name on public pages, given the "labels-only hosts" ruling?
+1. Show the organizer's name on public pages, given the "labels-only hosts" ruling?
 2. Are the store listings public yet? That decides whether the Smart App Banner and store badges can ship.
 3. Is there a Meta developer app? Native Instagram Story sharing (with a sticker) needs one. Until then, the Story card is shared as an image.
 

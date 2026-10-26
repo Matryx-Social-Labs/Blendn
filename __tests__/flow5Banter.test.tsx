@@ -137,7 +137,7 @@ it('draws Live now, Requests, People and Past rooms, with a request’s note ver
 
 it('says a locked room’s state as a chip, not as its last message', async () => {
   await open()
-  expect(screen.getByText(/Locked by the organiser/)).toBeTruthy()
+  expect(screen.getByText(/Locked by the organizer/)).toBeTruthy()
   expect(screen.queryByText(/Thanks all/)).toBeNull()
 })
 

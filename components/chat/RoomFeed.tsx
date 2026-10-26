@@ -216,7 +216,7 @@ export function RoomOutside({
           variant="screen"
           icon="door-closed"
           title="You were removed from this room"
-          body={outside.line || 'The organiser removed you. You can read nothing more here tonight, and no one is told.'}
+          body={outside.line || 'The organizer removed you. You can read nothing more here tonight, and no one is told.'}
           testID="room-removed"
         />
       )

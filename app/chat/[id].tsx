@@ -517,7 +517,7 @@ function GroupChatInner() {
         // No organiser in a crew's room: its own sentence, the one a later read gives (10-9 · 23).
         const crewLine = roomKind ? roomClosedLine(roomKind, 'USER_BANNED') : null
         if (crewLine) setClosedLine(crewLine)
-        else setRemovedLine('The organiser has removed you from this room.')
+        else setRemovedLine('The organizer has removed you from this room.')
       }),
       // A mute arriving live flips the composer in place, with a "Just now" line (R2-D2 #06).
       subscribeToChatMemberMuted(roomId, (data) => {

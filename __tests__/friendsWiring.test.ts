@@ -65,7 +65,7 @@ describe('an invite link', () => {
   })
 })
 
-describe('an event\'s public link (https://www.blendn.app/event/<id>, the organiser\'s QR code)', () => {
+describe('an event\'s public link (https://www.blendn.app/event/<id>, the organizer\'s QR code)', () => {
   it('opened while signed out is held and opened once they are in, like an invite', () => {
     const layout = read('app/_layout.tsx')
     const signedOut = layout.slice(layout.indexOf('if (!user) {'), layout.indexOf('removePushTokenFromProfile().catch'))
@@ -125,7 +125,7 @@ describe('the links open the app', () => {
     expect(read('ios/blendn/Info.plist')).toMatch(/<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>blendn<\/string>/)
   })
 
-  it('on Android, verified, for /f/, /event/ (the organiser’s QR code), /e/ and /v/ only, the same in app.json and the committed manifest', () => {
+  it('on Android, verified, for /f/, /event/ (the organizer’s QR code), /e/ and /v/ only, the same in app.json and the committed manifest', () => {
     const manifest = read('android/app/src/main/AndroidManifest.xml')
     const verified = manifest.match(/<intent-filter android:autoVerify="true">([\s\S]*?)<\/intent-filter>/g) ?? []
     expect(verified).toHaveLength(1)

@@ -71,7 +71,7 @@ export function RoomCancelled({
           <StateScreen
             icon="calendar-x"
             title={said}
-            body="The organiser called it off. You’re checked out."
+            body="The organizer called it off. You’re checked out."
             actions={[
               {
                 label: "See what’s on tonight",

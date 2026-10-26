@@ -62,7 +62,7 @@ const event = (startH: number, endH: number, day = 0) => ({
 })
 
 describe('a type a guest reads (GO-13, D24)', () => {
-  it('"other" is "Venue": the organiser-facing "Something else" never reaches a guest', () => {
+  it('"other" is "Venue": the organizer-facing "Something else" never reaches a guest', () => {
     expect(guestTypeLabel({ venueType: 'other', venueTypeLabel: 'Something else' })).toBe('Venue')
     expect(guestTypeLabel({ venueType: null, venueTypeLabel: 'Something else' })).toBe('Venue')
     expect(guestTypeLabel({ venueType: 'brewery', venueTypeLabel: 'Brewery' })).toBe('Brewery')

@@ -54,15 +54,15 @@ describe('refusalPlace (R3-D5 5.4)', () => {
     expect(refusalPlace('RATE_LIMITED', 'Too many requests')).toBe('slow')
   })
   it('anything else is not a spam refusal', () => {
-    expect(refusalPlace('USER_MUTED', 'The organiser has muted you in this room.')).toBeNull()
+    expect(refusalPlace('USER_MUTED', 'The organizer has muted you in this room.')).toBeNull()
     expect(refusalPlace(undefined, undefined)).toBeNull()
   })
 })
 
 describe('broadcastParts — the server’s prefix is never shown (R3-D5 5.6)', () => {
   const { broadcastParts } = jest.requireActual('../lib/chatFeed') as typeof import('../lib/chatFeed')
-  it('reads the organiser out of an announcement', () => {
-    expect(broadcastParts('announcement', '📢 [Announcement from Toit]\nLast call for the terrace', 'Organiser')).toEqual({
+  it('reads the organizer out of an announcement', () => {
+    expect(broadcastParts('announcement', '📢 [Announcement from Toit]\nLast call for the terrace', 'Organizer')).toEqual({
       from: 'Toit',
       text: 'Last call for the terrace',
     })

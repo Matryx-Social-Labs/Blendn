@@ -72,7 +72,7 @@ The owner asked for the recommendations to be taken (2026-10-09). "As drawn" mea
 
 | # | Question | Ruling | Frames |
 |---|---|---|---|
-| S1 | The organiser's name on public pages | **The organisation's name only** ("Hosted by Toit Live"), never a person's; "Added by Blend'n" when the platform added it. | As drawn. |
+| S1 | The organizer's name on public pages | **The organisation's name only** ("Hosted by Toit Live"), never a person's; "Added by Blend'n" when the platform added it. | As drawn. |
 | S2 | Store badges and the Smart App Banner | **Hidden until the store listings are public.** Until then the page has "Open in Blend'n" only. | Flow 16: a "listings not public" variant of each page. |
 | S3 | A Meta app for native Story stickers | **Not now.** The Story card goes out as an image with the link copied first, as drawn. | As drawn. |
 
@@ -80,7 +80,7 @@ The owner asked for the recommendations to be taken (2026-10-09). "As drawn" mea
 
 | # | Item | Ruling |
 |---|---|---|
-| D1 | Organiser tools on the Scene | **Deleted** from the attendee app. Organisers use the dashboard. |
+| D1 | Organizer tools on the Scene | **Deleted** from the attendee app. Organizers use the dashboard. |
 | D2 | `/preview` screens in production | **Dev builds only.** |
 | D3 | `goals` / `looking_for` (edited, read by nothing) | **One field: intent.** Onboarding's "Looking for" tiles become the intent matching reads: Dating · Friendship · Networking · Just here for the event. Travel and Open go; `goals` leaves the edit screens. |
 | D4 | Conversation pinning | **Cut.** |
@@ -275,7 +275,7 @@ The project holds the full Satoshi package (`uploads/Satoshi_Complete/`, 60 file
 | 1 | Flow 5 room feed; Flow 4 Room (beside the facepile and in the dock) | "Priya walked in" | **Delete everywhere.** No server line exists in the feed, and a name at the moment someone arrives ties them to the door, even for people who hid themselves. Arrivals are the count step and the grid (#25). |
 | 2 | Flow 5 closed composer | "The night's over. The room stays readable until 06:00." | "This chat has closed. Event chats stay open for 24 hours after the event ends." (server copy). 06:00 is the venue-day reset only. |
 | 3 | Flow 5 composer | "Check in to post" + Check in | The server's `NOT_CHECKED_IN` is "RSVP to this event to join the chat" (server copy), with an **I'm going** chip (Flow 15 #8's shape). |
-| 4 | Flow 5 muted composer | Own copy + "posting comes back in 43 min" | Organiser: "The organiser has muted you in this room." Automatic: "You are muted in this room. Your messages have been flagged for policy violations." (server copy). No countdown (R11). |
+| 4 | Flow 5 muted composer | Own copy + "posting comes back in 43 min" | Organizer: "The organizer has muted you in this room." Automatic: "You are muted in this room. Your messages have been flagged for policy violations." (server copy). No countdown (R11). |
 | 5 | Banter | A muted DM row | **Delete.** DMs can't be muted. |
 | 6 | Flow 5 bubbles | An "edited" option | **Delete.** Nothing edits or unsends. |
 | 7 | Flow 10 Blend room | A feed line "Nebula · 3 revealed · 1 keeps it private" | No server row: a toast plus each side's header line (10.9). |
@@ -366,7 +366,7 @@ Copy: "It's mutual" · "You and {name} matched · {reason}", where {name} is the
 **4.6 · The event was cancelled while you're inside** (needs server, F)
 - **The Room:** crossfades to a calm solid card:
   - title "{Event} was cancelled";
-  - body "The organiser called it off. You're checked out.";
+  - body "The organizer called it off. You're checked out.";
   - **See what's on tonight** (strong-neutral, to Tonight) · Close.
 - **The disc:** drains live → idle on `M.settle`.
 - **Haptic:** none; it's unsolicited, like the auto-checkout notice.

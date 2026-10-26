@@ -123,7 +123,7 @@ it('a missing event is the calm "No longer available" landing (Flow 15 #10), wit
   expect(mockRouter.back).toHaveBeenCalled()
 })
 
-describe('the organiser was suspended (Flow 15 #10, SCRUM-749)', () => {
+describe('the organizer was suspended (Flow 15 #10, SCRUM-749)', () => {
   // blendn-admin #716, event-changed-scene.itest.ts: the 404 keeps `errorCode: NOT_FOUND` and says why in `reasonCode`.
   const suspended = { success: false, errorCode: 'NOT_FOUND', reasonCode: 'ORGANISER_SUSPENDED', error: 'Event not found' }
 
@@ -445,7 +445,7 @@ describe('the ⋯ menu', () => {
     expect(showEventReportOptions).toHaveBeenCalledWith('Vinyl Night', 'e1')
   })
 
-  it('the organiser gets the same menu: no Edit, Announce or Delete on the Scene (they are the dashboard\'s, owner ruling D3)', async () => {
+  it('the organizer gets the same menu: no Edit, Announce or Delete on the Scene (they are the dashboard\'s, owner ruling D3)', async () => {
     api.getEvent.mockResolvedValue(detail({ organizer: { id: 'me', name: 'Me' } }) as never)
     await open()
     await fireEvent.press(await screen.findByRole('button', { name: 'More options' }))
@@ -455,7 +455,7 @@ describe('the ⋯ menu', () => {
     expect(screen.queryByRole('button', { name: 'Delete event' })).toBeNull()
   })
 
-  it('the screen carries no organiser sheet, state or handler any more', () => {
+  it('the screen carries no organizer sheet, state or handler any more', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'screens', 'EventDetailScreen.tsx'), 'utf8') as string
     expect(src).not.toMatch(/AnnouncementSheet|EditEventSheet|isOrganizer|sendAnnouncement|updateEvent|deleteEvent/)
     expect(require('fs').existsSync(require('path').join(__dirname, '..', 'components', 'scene', 'EventSheets.tsx'))).toBe(false)

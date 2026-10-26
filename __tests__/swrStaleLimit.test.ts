@@ -42,18 +42,18 @@ const names = async (room: string) => ((await apiClient.getChatParticipants(room
 
 it('within the limit: the last answer at once, refreshed behind it (stale-while-revalidate, as before)', async () => {
   const room = '00000000-0000-4000-8000-000000000001'
-  roster = ['Organiser']
-  expect(await names(room)).toEqual(['Organiser'])
-  roster = ['Organiser', 'Stellar Wave']
+  roster = ['Organizer']
+  expect(await names(room)).toEqual(['Organizer'])
+  roster = ['Organizer', 'Stellar Wave']
   now += 60_000
-  expect(await names(room)).toEqual(['Organiser'])
+  expect(await names(room)).toEqual(['Organizer'])
 })
 
 it('past the limit: the read waits for the server, so an hours-old roster is never shown as the room', async () => {
   const room = '00000000-0000-4000-8000-000000000002'
-  roster = ['Organiser']
-  expect(await names(room)).toEqual(['Organiser'])
-  roster = ['Organiser', 'Stellar Wave', 'Silent Parrot']
+  roster = ['Organizer']
+  expect(await names(room)).toEqual(['Organizer'])
+  roster = ['Organizer', 'Stellar Wave', 'Silent Parrot']
   now += SWR_STALE_LIMIT_MS + 1
-  expect(await names(room)).toEqual(['Organiser', 'Stellar Wave', 'Silent Parrot'])
+  expect(await names(room)).toEqual(['Organizer', 'Stellar Wave', 'Silent Parrot'])
 })

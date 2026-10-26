@@ -913,7 +913,7 @@ Material layers for the glass redesign:
 
 ## 8. Product rules, collected (a redesign must keep these unless the owner reverses them)
 
-- 18+ only. Hosts are organisers.
+- 18+ only. Hosts are organizers.
 - Two mutually exclusive modes; the centre button is the mode switch and a status indicator, and **every state goes somewhere real** (`docs/NAVIGATION.md:28-46`, `104-106`).
 - Live outranks check-in, which outranks today. Today counts **saved** events only. The check-in offer has no margin; the server is the gate.
 - Checking in puts you on a roster, so it needs a deliberate act (the hold) and the a11y label states the consequence.

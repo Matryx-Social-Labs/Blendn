@@ -284,7 +284,7 @@ This section answers Q3.
 - **Implication: the title must be safe to show to anyone holding the phone.**
 - Users can also choose "Hide sensitive content" or "Don't show notifications" ([Google Help](https://support.google.com/android/answer/9079661?hl=en)).
 
-**4.2.4 Grouping, cooldown and organiser features.**
+**4.2.4 Grouping, cooldown and organizer features.**
 - Since Android 7, four or more ungrouped notifications are auto-grouped. Use groups only if the children are complete and individually actionable. Otherwise update the existing notification or use MessagingStyle ([Android groups](https://developer.android.com/develop/ui/views/notifications/group)).
 - Android 16 **forces** per-app bundling: "all notifications from a single app will be bundled together" ([Android Authority, 2025-06-10](https://www.androidauthority.com/android-16-force-group-notifications-3565400/), SECONDARY). Every push must therefore stand alone.
 - **Notification cooldown** (Android 16; it was in an Android 15 DP and then removed):
@@ -489,7 +489,7 @@ This section answers Q6.
 | event_changed | cover + clock/pin | "New start time: 9:30 pm" / "New venue: {venue}" | event · "Updated 2×" · time | dot | event |
 | event_cancelled | desaturated cover + ✕ | "Cancelled: {event}" | date of the event | dot | event (in its cancelled state) |
 | starts_soon | cover + clock | "Starts at 9:00 pm" | event · venue | dot | event |
-| announcement | cover + megaphone | "{Organiser label}: {first line}" | event · time | dot | event room |
+| announcement | cover + megaphone | "{Organizer label}: {first line}" | event · time | dot | event room |
 | waitlist_promoted | cover | "You're in: a place opened up" | event · time | dot | event |
 | rating_request | cover + star | "How was {event}?" | time | dot | `/rate/[eventId]` |
 
@@ -504,7 +504,7 @@ This section answers Q6.
    - Reveals, which are personal moments.
    - "It's a Blend", which is rare and celebratory.
    - Cancellations.
-   - Organiser announcements, each of which is distinct content. This matches the server, which stacks them and never replaces them (`deliveryFor`).
+   - Organizer announcements, each of which is distinct content. This matches the server, which stacks them and never replaces them (`deliveryFor`).
 3. **Event logistics collapse per event.** This mirrors the push `collapseId event:{id}`.
    - Changed and starts-soon rows for one event are one row showing the **latest** state, with "Updated N×" in the context line.
    - A cancellation replaces that row, and cancelled always wins.
@@ -569,7 +569,7 @@ This section answers Q6.
 
 1. **Two lanes.**
    - **Person-lane** kinds (friend, match, reveal, board, message request, crew) name **no person and no place** in the title or body. This holds even after a reveal (§0.6).
-   - **Event-lane** kinds (changed, cancelled, starts soon, announcement, waitlist, rating) name the **event in the body**, never a person. The organiser speaks as the event.
+   - **Event-lane** kinds (changed, cancelled, starts soon, announcement, waitlist, rating) name the **event in the body**, never a person. The organizer speaks as the event.
    - DMs and room replies keep today's convention: thread name plus a preview.
 2. **The title is a generic kind phrase of 30 characters or fewer.** It must be safe on a lock screen, because Android PRIVATE shows the title. Put event names in the body, which also keeps them out of the 30-character title budget. Some event names are sensitive themselves (a queer night, a support group).
 3. **The body is one complete sentence.** The first 40 characters carry the meaning; the whole body is about 80 or fewer.
@@ -612,7 +612,7 @@ This section answers Q6.
 | event_changed (both) | New time and venue | {Event}: 9:30 pm at {Venue}, {Area}. | Event update | as above | `events` | collapse `event:{id}` | yes, if today |
 | event_cancelled | Event cancelled | {Event} on Sat 4 Oct won't go ahead. | Event update | A; **TS** if start ≤ 60 min away | `events` | collapse `event:{id}` | yes |
 | starts_soon | Starts at 9:00 pm | {Event} at {Venue}, {Area}. | Event update | **TS** | `events` | collapse `event:{id}` | yes, unless on the event page |
-| announcement | From the organiser | {Event}: {text, clipped to ~100}. | Event update | A | `events` | thread `event:{id}`, stacked (exists) | no |
+| announcement | From the organizer | {Event}: {text, clipped to ~100}. | Event update | A | `events` | thread `event:{id}`, stacked (exists) | no |
 | waitlist_promoted | You're in | A place opened up at {Event}. | Event update | A | `events` | thread `event:{id}` | no |
 | rating_request (peers) | How was the night? | Rate the people you met at {Event}. Only you see what you say. | Rating | **P** | `later` | collapse `rate:{id}` (exists) | no |
 | rating_request (event) | How was the night? | Rate {Event}. Only you see it. | Rating | **P** | `later` | collapse `rate:{id}` | no |
@@ -631,7 +631,7 @@ Importance is fixed at creation, so the existing IDs keep their importance. Name
 |---|---|---|---|---|---|---|
 | `messages` | existing (HIGH) | **Messages** (was "Messages and people") | Direct messages and message requests | HIGH (fixed) | DM, message request, accepted | as created (user's setting) |
 | `rooms` | existing (DEFAULT) | Room replies | When someone replies to you in an event room | DEFAULT (fixed) | room reply | as created |
-| `events` | existing (HIGH) | **Event updates** | Time or venue changes, cancellations, start reminders and organiser posts for events you're going to | HIGH (fixed) | changed, cancelled, starts soon, announcement, waitlist | as created |
+| `events` | existing (HIGH) | **Event updates** | Time or venue changes, cancellations, start reminders and organizer posts for events you're going to | HIGH (fixed) | changed, cancelled, starts soon, announcement, waitlist | as created |
 | `people` | **new** | Matches and friends | Matches, reveals, friend requests and replies to your board posts | HIGH | friend_*, match, reveal_*, board_* | PRIVATE |
 | `crew` | **new** | Your crew | Crew invites, when your crew arrives, and Blends | HIGH | crew_invite, we_are_here, its_a_blend | PRIVATE |
 | `later` | **new** | After the night | A nudge to rate an event you went to | **LOW** (no sound, no pop-up) | rating_request | PRIVATE |

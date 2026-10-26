@@ -111,7 +111,7 @@ describe('the app answers to the links it sends', () => {
     expect(read('app/+native-intent.tsx')).toMatch(/nativeIntentPath/)
   })
 
-  it('Android verifies /e/, /v/, /f/ and the organiser’s /event/ on www; iOS asks about WhatsApp', () => {
+  it('Android verifies /e/, /v/, /f/ and the organizer’s /event/ on www; iOS asks about WhatsApp', () => {
     const app = JSON.parse(read('app.json')).expo
     const prefixes = app.android.intentFilters.flatMap((f: { data: { host?: string; pathPrefix?: string }[] }) => f.data.filter((d) => d.host === 'www.blendn.app').map((d) => d.pathPrefix))
     expect(prefixes).toEqual(expect.arrayContaining(['/e/', '/v/', '/f/', '/event/']))
