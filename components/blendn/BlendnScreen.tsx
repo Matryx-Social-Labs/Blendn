@@ -537,6 +537,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const card = open ?? shownCard
   const [connectTo, setConnectTo] = useState<OpenCard | null>(null)
   const [connecting, setConnecting] = useState(false)
+  const [connectError, setConnectError] = useState<string | undefined>()
   // The Room's coach mark: once the pour has handed off, with nothing over the Room; never to someone already shown.
   /*
    * The Room has finished arriving (#9's crossfade and its sections), so a
@@ -1045,15 +1046,21 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         displayName={connectTo?.name ?? ''}
         theyAreRevealed={Boolean(room.people.find((p) => p.id === connectTo?.id)?.photo)}
         sending={connecting}
-        onDismiss={() => setConnectTo(null)}
+        error={connectError}
+        onDismiss={() => {
+          setConnectTo(null)
+          setConnectError(undefined)
+        }}
         onSend={async (message) => {
           if (!connectTo) return
           setConnecting(true)
+          setConnectError(undefined)
           try {
             // Closed only once the request stands; a failure keeps the sheet and the note, and says so.
             const sent = await room.connect(connectTo.id, message)
             if (sent.stands) setConnectTo(null)
-            else say(sent.refusal ?? 'Couldn’t send the request. Try again.', 'error')
+            // In the sheet, under the note: the sheet's scrim dims a toast behind it.
+            else setConnectError(sent.refusal ?? 'Couldn’t send the request. Try again.')
           } finally {
             setConnecting(false)
           }

@@ -178,6 +178,7 @@ function UserProfileInner() {
     scrollY.set(e.contentOffset.y)
   })
   const [connectSending, setConnectSending] = useState(false)
+  const [connectError, setConnectError] = useState<string | undefined>()
   // A request they sent you, found in your pending ones: their note, and the answer in flight (R4.1 6.2).
   const [incoming, setIncoming] = useState<{ id: string; note: string | null } | null>(null)
   const [answering, setAnswering] = useState<'accept' | 'decline' | null>(null)
@@ -459,6 +460,7 @@ function UserProfileInner() {
   const sendConnect = useCallback(async (message: string) => {
     if (!profile) return
     setConnectSending(true)
+    setConnectError(undefined)
     try {
       const result = await apiClient.createMessageRequest(profile.user_id, message)
       /*
@@ -477,11 +479,14 @@ function UserProfileInner() {
         setConnectOpen(false)
       } else {
         Logger.warn('profile', 'connect request failed', { error: result.error })
-        showToast(requestTextRefusal(result) ?? "Your request didn’t send. Try again.", 'error', { haptic: 'error' })
+        // In the sheet, under the note: the sheet's scrim dims a toast behind it.
+        setConnectError(requestTextRefusal(result) ?? "Your request didn’t send. Try again.")
+        H.error()
       }
     } catch (e) {
       Logger.error('profile', 'connect request error', { error: e })
-      showToast("Your request didn’t send. Try again.", 'error', { haptic: 'error' })
+      setConnectError("Your request didn’t send. Try again.")
+      H.error()
     } finally {
       setConnectSending(false)
     }
@@ -781,8 +786,12 @@ function UserProfileInner() {
         displayName={heroTitle}
         theyAreRevealed={revealed}
         sending={connectSending}
+        error={connectError}
         onSend={sendConnect}
-        onDismiss={() => setConnectOpen(false)}
+        onDismiss={() => {
+          setConnectOpen(false)
+          setConnectError(undefined)
+        }}
       />
 
       <PhotoViewer

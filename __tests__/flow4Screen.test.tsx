@@ -279,6 +279,16 @@ describe('a refused message request (TEXT_NOT_ALLOWED)', () => {
     expect(screen.queryByText('Couldn’t send the request. Try again.')).toBeNull()
   })
 
+  it('says it in the sheet, under the note, until the note is edited', async () => {
+    mockRoom.connect.mockResolvedValue({ stands: false, refusal: 'Links and numbers can’t go in a first note.' })
+    await sendFromCard()
+    // The sheet is still open with the sentence in it (a toast sat behind its scrim, drive 2026-10-27).
+    expect(screen.getByTestId('connect-message', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('Links and numbers can’t go in a first note.')).toBeTruthy()
+    await fireEvent.changeText(screen.getByTestId('connect-message', HIDDEN), 'Loved the talk, want to compare notes?')
+    expect(screen.queryByText('Links and numbers can’t go in a first note.')).toBeNull()
+  })
+
   it('keeps the generic line for a failure the server did not name', async () => {
     mockRoom.connect.mockResolvedValue({ stands: false })
     await sendFromCard()
