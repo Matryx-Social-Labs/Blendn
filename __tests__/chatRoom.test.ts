@@ -60,7 +60,7 @@ describe('a paid message cannot be mistaken for the room’s own voice', () => {
     expect(codeOnly(read('components/ds/BroadcastNotice.tsx'))).toContain("`${announcement ? 'Announcement' : 'Sponsored'} · ${from}`.toUpperCase()")
   })
 
-  it('lifts the organiser out of the announcement’s prefix, and never prints the sponsored one', () => {
+  it('lifts the organizer out of the announcement’s prefix, and never prints the sponsored one', () => {
     const src = codeOnly(read('lib/chatFeed.ts'))
     expect(src).toContain('const BROADCAST_HEAD = ')
     expect(src).toContain("kind === 'sponsored' ? 'Partner' : fallbackFrom")

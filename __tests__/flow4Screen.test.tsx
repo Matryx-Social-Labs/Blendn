@@ -468,7 +468,7 @@ describe('the event cancelled while you are inside (R4)', () => {
     await drawRoom()
     await emit('e1')
     expect(await screen.findByText('Vinyl Night was cancelled')).toBeTruthy()
-    expect(screen.getByText('The organiser called it off. You’re checked out.')).toBeTruthy()
+    expect(screen.getByText('The organizer called it off. You’re checked out.')).toBeTruthy()
     expect(screen.getByTestId('room-cancelled').props.accessibilityViewIsModal).toBe(true)
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'See what’s on tonight' }))

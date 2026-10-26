@@ -61,13 +61,13 @@ LongPressMenu · ReactionFlight · SenderCard
 - **Withheld by moderation** at send: the dashed placeholder in its place and a
   toast — never a modal.
 - **The composer** says why it can't post, in the server's words: muted
-  (organiser or automatic, never a countdown — R11), locked, closed, not open
+  (organizer or automatic, never a countdown — R11), locked, closed, not open
   yet, hidden, "Slow down a moment" with the server's `retryAfter` counted down,
   and "RSVP to this event to join the chat" with **I'm going**. A mute that
   arrives while you're here (`chat:memberMuted`) flips it in place with "Just
-  now · the organiser muted you".
+  now · the organizer muted you".
 - **Not in the room:** left / not a member (Rejoin), not live (Go live again),
-  removed by the organiser (the server's sentence, no action), gone (404, Back),
+  removed by the organizer (the server's sentence, no action), gone (404, Back),
   a closed crew chat or Blend (Back). Each replaces the feed and the composer.
 - **Links** are tappable and open through a sheet that names the host, never
   a preview (R10). The host is the parsed URL's (`linkHost`), never the link's
@@ -86,7 +86,7 @@ LongPressMenu · ReactionFlight · SenderCard
 The cover as a scrimmed hero (a still Live badge, the bell-slash chip and
 "Muted until …" when you muted it, the title, the count); Mute · Community
 guidelines · Report this room as rows; "In the room" as a crowd of creatures
-with Organiser / Moderator badges, each opening their card (5.12); Leave apart,
+with Organizer / Moderator badges, each opening their card (5.12); Leave apart,
 in the danger zone. Mute is yours alone (`H.select` on the pick); Leave says it
 is undone by checking in again. A place's room (R4-D5 5-2) is "‹place› · tonight",
 its size the place's bucket ("5–9"), never the exact total, and Leave says to go

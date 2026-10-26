@@ -36,7 +36,7 @@ export function accountStateCopy(kind: AccountRefusal, sentence?: string): Accou
       return {
         icon: 'briefcase',
         title: 'Sign in at the dashboard',
-        body: sentence?.trim() || 'This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard.',
+        body: sentence?.trim() || 'This app is for attendees. Organizers, venue owners and sponsors sign in at the dashboard.',
         note: DASHBOARD_HOST,
       }
     case 'deleted':

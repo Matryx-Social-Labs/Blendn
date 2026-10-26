@@ -469,7 +469,7 @@ function GoingScreenInner() {
               row.title,
               when,
               place,
-              cancelled ? 'Cancelled by the organiser' : waitlisted ? 'On the waitlist' : moved,
+              cancelled ? 'Cancelled by the organizer' : waitlisted ? 'On the waitlist' : moved,
             ].filter(Boolean).join(', ')}
             accessibilityHint="Opens the event"
           >

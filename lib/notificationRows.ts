@@ -184,7 +184,7 @@ function fallbackCopy(item: NotificationItem, when: string): { title: string; co
     case 'event_cancelled':
       return { title: item.body || item.title, context: joinLine(item.title, when) }
     case 'announcement':
-      return { title: item.body ? `From the organiser: ${item.body}` : item.title, context: joinLine(eventName(item.title), when) }
+      return { title: item.body ? `From the organizer: ${item.body}` : item.title, context: joinLine(eventName(item.title), when) }
     case 'waitlist_promoted':
       return { title: 'You’re in: a place opened up', context: joinLine(WAITLIST_VENUE.exec(item.body)?.[1], when) }
     case 'rating_request':

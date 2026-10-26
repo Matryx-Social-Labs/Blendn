@@ -213,7 +213,7 @@ describe('the days of a run (GET /events/:id, #716 and the #724 window)', () => 
   })
 })
 
-describe('the organiser was suspended (SCRUM-749)', () => {
+describe('the organizer was suspended (SCRUM-749)', () => {
   // event-changed-scene.itest.ts: `withReason` and `plain`.
   const withReason = { success: false, errorCode: 'NOT_FOUND', reasonCode: 'ORGANISER_SUSPENDED', error: 'Event not found' }
   const plain = { success: false, error: 'Event not found', errorCode: 'NOT_FOUND' }

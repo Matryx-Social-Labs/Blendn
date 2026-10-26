@@ -96,7 +96,7 @@ describe('<RoomCancelled>', () => {
     const onClose = jest.fn()
     await render(<RoomCancelled title="Vinyl Night" onSeeTonight={onSeeTonight} onClose={onClose} testID="c" />)
     expect(screen.getByText('Vinyl Night was cancelled')).toBeTruthy()
-    expect(screen.getByText('The organiser called it off. You’re checked out.')).toBeTruthy()
+    expect(screen.getByText('The organizer called it off. You’re checked out.')).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'See what’s on tonight' }))
     await fireEvent.press(screen.getByRole('button', { name: 'Close' }))
     expect(onSeeTonight).toHaveBeenCalledTimes(1)

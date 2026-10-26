@@ -206,7 +206,7 @@ describe('Google', () => {
 
 describe('the account states (Flow 15 15.1 to 15.4)', () => {
   const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that’s a mistake."
-  const STAFF = 'This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard.'
+  const STAFF = 'This app is for attendees. Organizers, venue owners and sponsors sign in at the dashboard.'
 
   beforeEach(() => setAccountState(null))
 

@@ -37,7 +37,7 @@ describe('at AX XXXL (TG-03)', () => {
   beforeEach(() => atScale(AX_XXXL))
   afterEach(resetScale)
 
-  it('a long organiser name takes two lines at the meta cap; "here now" is capped too', async () => {
+  it('a long organizer name takes two lines at the meta cap; "here now" is capped too', async () => {
     const host = 'The Bangalore Natural Wine and Vinyl Appreciation Society'
     await render(<SceneByline host={host} hereNow={483} />)
     expect(uncapped(screen.toJSON() as never)).toEqual([])

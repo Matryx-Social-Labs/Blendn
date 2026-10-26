@@ -224,7 +224,7 @@ const HERO = () =>
   readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneHero.tsx'), 'utf8')
 
 describe('the facts are the design system\'s tiles', () => {
-  it('draw Doors, Where, the crowd and the Door as an AmenityGrid, then the organiser\'s own', () => {
+  it('draw Doors, Where, the crowd and the Door as an AmenityGrid, then the organizer\'s own', () => {
     // 2 x 2 at 76 pt (`AmenityTile`), folding past seven: not a hand-built grid of our own.
     const detail = DETAIL()
     expect(detail).toContain('<AmenityGrid tiles={tiles}')

@@ -127,7 +127,7 @@ describe('a row from the stored push, which names nobody', () => {
       context: 'Vinyl Night · 5 min ago',
     })
     expect(rowFor(item({ id: 'b', kind: 'announcement', title: '📢 Vinyl Night', body: 'Doors at 9, not 8:30' }), NOW)).toMatchObject({
-      title: 'From the organiser: Doors at 9, not 8:30',
+      title: 'From the organizer: Doors at 9, not 8:30',
       context: 'Vinyl Night · 5 min ago',
     })
     expect(rowFor(item({ id: 'c', kind: 'waitlist_promoted', title: 'You’re in', body: 'A place opened up at Toit.' }), NOW)).toMatchObject({

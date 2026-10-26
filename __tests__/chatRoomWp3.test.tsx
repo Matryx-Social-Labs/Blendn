@@ -238,22 +238,22 @@ describe('closed and removed rooms of a crew or a Blend (C3, C4)', () => {
   })
 
   it('being removed from a crew’s chat is its own line, not the card', async () => {
-    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(refuse('USER_BANNED', 'The organiser removed you.'))
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(refuse('USER_BANNED', 'The organizer removed you.'))
     await render(<GroupChat />)
     await flush()
     expect(screen.getByText('You’re no longer in this crew’s chat')).toBeTruthy()
     expect(screen.queryByTestId('room-gone-card')).toBeNull()
   })
 
-  it('removed live from a crew says the crew’s sentence, not the organiser’s', async () => {
+  it('removed live from a crew says the crew’s sentence, not the organizer’s', async () => {
     await render(<GroupChat />)
     await flush()
     await act(async () => mockBanned.forEach((f) => f({ userId: 'u1', banned: true })))
     expect(screen.getByText('You’re no longer in this crew’s chat')).toBeTruthy()
-    expect(screen.queryByText(/organiser/)).toBeNull()
+    expect(screen.queryByText(/organizer/)).toBeNull()
   })
 
-  it('removed live from an event room still says the organiser did', async () => {
+  it('removed live from an event room still says the organizer did', async () => {
     mockParams = { id: 'g1' }
     ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] } })
     await render(<GroupChat />)
@@ -354,7 +354,7 @@ describe('polls in the feed are read only once seen (M6)', () => {
     })
     ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue({
       success: true,
-      data: { messages: [{ id: 'poll-1', userId: 'u-org', user: { name: 'Organiser' }, content: 'Which set first?', type: 'poll', pollId: 'p1', createdAt: '2026-10-22T20:00:00.000Z' }], pagination: { hasMore: false, nextCursor: null } },
+      data: { messages: [{ id: 'poll-1', userId: 'u-org', user: { name: 'Organizer' }, content: 'Which set first?', type: 'poll', pollId: 'p1', createdAt: '2026-10-22T20:00:00.000Z' }], pagination: { hasMore: false, nextCursor: null } },
     })
     const queued = (apiClient as unknown as { queuedRequest: jest.Mock }).queuedRequest
     queued.mockClear()

@@ -98,8 +98,8 @@ export const NowSection = memo(function NowSection({ section, onSeeAll, ...rest 
 /** Why the section exists, in the owner's words once approved (BUILD-SPEC A3: the copy needs owner approval). */
 export const WHY_THESE = {
   title: 'Why you’re seeing these',
-  body: 'Featured events are picked by Blend’n or paid for by the organiser. Never more than five, and the order changes every day.',
-  promoted: 'The organiser paid for this place.',
+  body: 'Featured events are picked by Blend’n or paid for by the organizer. Never more than five, and the order changes every day.',
+  promoted: 'The organizer paid for this place.',
   picked: 'Picked by Blend’n.',
 } as const
 

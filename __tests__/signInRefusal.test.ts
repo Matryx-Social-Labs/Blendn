@@ -12,7 +12,7 @@ import { socialSignInMessage } from '../lib/signInRefusal'
  * the sentence all along.
  */
 const STAFF =
-  'This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard.'
+  'This app is for attendees. Organizers, venue owners and sponsors sign in at the dashboard.'
 const SUSPENDED =
   "This account has been suspended. Contact support@blendn.app if you think that’s a mistake."
 

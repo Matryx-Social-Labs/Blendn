@@ -430,7 +430,7 @@ export const showEventReportOptions = (
   const reasons: { value: EventReportType; label: string }[] = [
     { value: 'misleading_listing', label: 'Misleading or inaccurate listing' },
     { value: 'unsafe_venue', label: "The venue doesn’t feel safe" },
-    { value: 'organiser_conduct', label: 'Concerns about the organiser' },
+    { value: 'organiser_conduct', label: 'Concerns about the organizer' },
     { value: 'not_real', label: "This doesn’t look like a real event" },
     { value: 'other', label: 'Something else' },
   ]

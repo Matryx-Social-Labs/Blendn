@@ -1150,7 +1150,7 @@ export default function EventDetail() {
 
         <Animated.View layout={glide} style={styles.content}>
           <OfflineBanner text="Offline. Showing what you had." testID="scene-offline" />
-          {cancelled ? <Banner kind="offline" text="Cancelled. The organiser called this one off. Your RSVP is released." testID="scene-cancelled" /> : null}
+          {cancelled ? <Banner kind="offline" text="Cancelled. The organizer called this one off. Your RSVP is released." testID="scene-cancelled" /> : null}
           {waitlisted && !cancelled ? <Banner kind="paused" text="On the waitlist. You’ll be first in line in the order you joined." testID="scene-waitlisted" /> : null}
           {/* Keyed by state, so the tick-over is a new banner: announced (iOS) and read (Android's live region) as news. */}
           {roomLine ? (

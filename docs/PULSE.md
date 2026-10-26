@@ -68,13 +68,13 @@ Invites. Two changes need nothing from the server and are built:
   event. The description and the "Details" button are gone — the event page
   has both.
 - **Featured puts its words under the photo, not on it.** None of the strong
-  references print text on an organiser's photograph behind a scrim. The photo
+  references print text on an organizer's photograph behind a scrim. The photo
   is square (a 4:5 photo plus the words no longer fits above the tab bar), and
   `featuredCardLayout` budgets the two-line title and meta line
   (`FEATURED_BODY_HEIGHT`) into the fit.
 
 Not built, because the events response doesn't carry the data: "By {host}"
-with the organiser's avatar, a stack of attendee faces beside the joined count,
+with the organizer's avatar, a stack of attendee faces beside the joined count,
 and a live "● 18 checked in now" line for events in progress (the thing no
 event app in the research could show, and Blendn can, from check-ins).
 
@@ -434,7 +434,7 @@ including, always, the first one anybody sees after we launch in their city. No
 line reads as "this has not started filling up", which is the true statement.
 
 Same rule for the venue: the old featured card printed *"Venue to be announced"*,
-which is a **claim** — it says the organiser has not chosen one, when what
+which is a **claim** — it says the organizer has not chosen one, when what
 actually happened is that the response did not carry the field. Absent data gets
 no sentence.
 

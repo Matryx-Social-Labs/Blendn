@@ -24,7 +24,7 @@ describe('roomStateFrom', () => {
 describe('roomStateLine', () => {
   it('says what the person can and cannot do', () => {
     expect(roomStateLine('muted')).toBe('Muted — you can read, not post')
-    expect(roomStateLine('locked')).toBe('Locked by the organiser — read only')
+    expect(roomStateLine('locked')).toBe('Locked by the organizer — read only')
     expect(roomStateLine(null)).toBeNull()
   })
 })

@@ -55,7 +55,7 @@ most fully drawn — but rename to the product's own vocabulary (Pulse, Explore,
 Create, Circles, Me), and settle what **Create** does before shipping it.
 
 **"Create" is the open one.** Attendees cannot create events; that is an
-organiser action on the dashboard. Either the button is organiser-only, or it
+organizer action on the dashboard. Either the button is organizer-only, or it
 creates something else, or it goes.
 
 ---
@@ -238,7 +238,7 @@ with tax, refunds and a provider — not a line on a card.
 ### 7. "Open Bar / Premium Spirits", "Pro Photo / Digital Gallery" — amenities
 
 Two chips on The Scene. No amenities or perks model. Small to add as a
-free-text list on the event; worth confirming it is wanted before the organiser
+free-text list on the event; worth confirming it is wanted before the organizer
 form grows a field.
 
 ### 8. "LIMITED ACCESS" badge — probably capacity, possibly visibility

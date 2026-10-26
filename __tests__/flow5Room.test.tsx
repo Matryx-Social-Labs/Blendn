@@ -228,10 +228,10 @@ describe('the feed’s states', () => {
   })
 
   it('removed: the server’s sentence, and no composer', async () => {
-    api.getChatMessages.mockResolvedValue({ success: false, errorCode: 'USER_BANNED', error: 'The organiser removed you from this chat.' } as never)
+    api.getChatMessages.mockResolvedValue({ success: false, errorCode: 'USER_BANNED', error: 'The organizer removed you from this chat.' } as never)
     await open()
     expect(screen.getByText('You were removed from this room')).toBeTruthy()
-    expect(screen.getByText('The organiser removed you from this chat.')).toBeTruthy()
+    expect(screen.getByText('The organizer removed you from this chat.')).toBeTruthy()
     expect(screen.queryByLabelText('Message')).toBeNull()
   })
 })
@@ -248,7 +248,7 @@ describe('a send the server refuses', () => {
 
   it.each([
     ['USER_MUTED', 'You have been muted in this chat', 'Muted'],
-    ['CHAT_LOCKED', 'This chat has been locked by the organiser', 'Read only'],
+    ['CHAT_LOCKED', 'This chat has been locked by the organizer', 'Read only'],
     ['CHAT_CLOSED', 'This chat opens 24 hours before the event starts.', 'Not open yet'],
     ['CHAT_CLOSED', 'This event is no longer available.', 'This room is hidden'],
     ['NOT_CHECKED_IN', 'RSVP to this event to chat', 'RSVP to this event to join the chat'],
@@ -261,10 +261,10 @@ describe('a send the server refuses', () => {
   })
 })
 
-it('TG-02: a room the organiser locked opens read-only, before any send', async () => {
+it('TG-02: a room the organizer locked opens read-only, before any send', async () => {
   api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, status: 'locked' }] } } as never)
   await open()
-  expect(screen.getByLabelText('Read only. The organiser locked posting in this room.')).toBeTruthy()
+  expect(screen.getByLabelText('Read only. The organizer locked posting in this room.')).toBeTruthy()
   expect(screen.queryByLabelText('Message')).toBeNull()
   expect(screen.queryByLabelText('Send')).toBeNull()
   expect(api.sendChatMessage).not.toHaveBeenCalled()
@@ -272,7 +272,7 @@ it('TG-02: a room the organiser locked opens read-only, before any send', async 
 
 describe('a room that will not take a send again (drive 4 D-6)', () => {
   it.each([
-    ['CHAT_LOCKED', 'This chat has been locked by the organiser'],
+    ['CHAT_LOCKED', 'This chat has been locked by the organizer'],
     ['CHAT_CLOSED', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
   ])('%s: no "Not sent · Tap to retry" under the read-only bar, and nothing kept for the Banter', async (errorCode, error) => {
     // Arrange: a send that failed earlier is still held for this room.
@@ -308,7 +308,7 @@ it('a mute that lands while you are here flips the composer, and says it just ha
   expect(screen.getByLabelText('Message')).toBeTruthy()
   await act(async () => mockMuted.forEach((f) => f({ userId: 'u-a', muted: true })))
   expect(screen.queryByLabelText('Message')).toBeNull()
-  expect(screen.getByText('Just now · the organiser muted you')).toBeTruthy()
+  expect(screen.getByText('Just now · the organizer muted you')).toBeTruthy()
 })
 
 describe('the newest chip counts a message once', () => {

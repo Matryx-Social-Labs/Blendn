@@ -175,7 +175,7 @@ describe('the notice belongs to one session end', () => {
 })
 
 describe('the reason is typed (Flow 15 15.1 to 15.4)', () => {
-  const STAFF = 'This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard.'
+  const STAFF = 'This app is for attendees. Organizers, venue owners and sponsors sign in at the dashboard.'
 
   it('a suspension through the real refresh path is read once as suspended, with the sentence', async () => {
     await TokenStorage.setTokens('access-1', 'refresh-1')

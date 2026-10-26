@@ -1544,7 +1544,7 @@ Two logins, because the product has two faces:
 | The dashboard | `roomseed-organiser@blendn.invalid` at `staging-dashboard.blendn.app` |
 
 Both come from `blendn-admin` `npm run seed:room`, and the password is whatever
-`SEED_ROOM_PASSWORD` was set to on that run. The organiser account is a verified
+`SEED_ROOM_PASSWORD` was set to on that run. The organizer account is a verified
 organisation owning the seeded event, so the dashboard is **editable**, not just
 visible.
 

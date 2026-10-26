@@ -152,7 +152,7 @@ describe('the room you are standing in', () => {
   })
 
   it('says a locked room as a status, not as speech (Flow 5 #08)', () => {
-    expect(SCREEN()).toContain("'Locked by the organiser · read only'")
+    expect(SCREEN()).toContain("'Locked by the organizer · read only'")
     expect(SCREEN()).toContain("const stateLine = roomStateLine(c.room_state)")
     expect(SCREEN()).toContain("{ kind: 'chip', icon: c.room_state === 'locked' ? 'lock' : 'mic-off', text: stateLine, warn: c.room_state === 'locked' }")
   })

@@ -19,7 +19,7 @@ The Pulse and The Banter actually agree on the **shape** — five slots, raised
 centre — so the conflict was narrower than it looked. What none of them survive
 is the built app:
 
-- **`Create` is not an attendee action.** Events are authored on the organiser
+- **`Create` is not an attendee action.** Events are authored on the organizer
   dashboard.
 - **`Circles` is the social graph**, and there is no friends model in the schema.
 - **Neither bar has a slot for Chat or Match**, both of which are built and are

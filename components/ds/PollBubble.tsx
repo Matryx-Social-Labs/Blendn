@@ -66,12 +66,12 @@ function footLine(options: PollOption[], picked: number | undefined, closed: boo
  * ("One more, 7 votes"), then the foot line. No long-press menu. Increase
  * Contrast: the hairline.
  */
-export function PollBubble({ question, options, picked, closed = false, onVote, from = 'the organiser', withheldLine, previewPressed, testID }: PollBubbleProps) {
+export function PollBubble({ question, options, picked, closed = false, onVote, from = 'the organizer', withheldLine, previewPressed, testID }: PollBubbleProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const shown = (picked !== undefined || closed) && options.some((o) => o.votes !== undefined)
   const total = options.reduce((sum, o) => sum + (o.votes ?? 0), 0)
-  const head = from === 'the organiser' ? 'Organiser' : from
+  const head = from === 'the organizer' ? 'Organizer' : from
 
   return (
     <View testID={testID} style={[styles.bubble, contrast && IC_HAIRLINE]}>

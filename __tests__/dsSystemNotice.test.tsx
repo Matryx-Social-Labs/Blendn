@@ -64,11 +64,11 @@ describe('at AX XXXL (DS-22 sweep: SystemLine had no cap)', () => {
       await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
       await render(
         <View>
-          <SystemLine text="The organiser locked the room" />
+          <SystemLine text="The organizer locked the room" />
           <SystemNotice text="Messages here are moderated." kind="warn" action={{ label: 'Read the guidelines', onPress: jest.fn() }} />
         </View>
       )
-      expect(screen.getByText('The organiser locked the room').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+      expect(screen.getByText('The organizer locked the room').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
       expect(screen.getByText('Read the guidelines').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
       expect(uncapped(screen.toJSON())).toEqual([])
     } finally {

@@ -525,7 +525,7 @@ Read docs/redesign/ROUND3.md parts A, B and C. Do these, in order, and show me e
 1. The token export (B1). Declare every Reduce Motion value as its own token in :root (e.g. --dur-quick-reduce-motion, @kind other). Make the prefers-reduced-motion block alias them with no @kind annotation, or move it to styles.css. Use 160ms, not 0, for the faded durations, and --shake-distance-reduce-motion: 0 instead of zeroing --dur-medium. Then show me _ds_manifest.json: --rise-list must read 8px, --dur-base 220ms and --orb-drift 24px, with the -reduce-motion tokens listed beside them. (--dur-quick can't show the bug: its Reduce Motion value is 160ms too.)
 2. The missing tokens (B2): the 0.80 bar and sheet tint, the 0.86 blur tier, --dur-hold 900ms, the creature palettes (8), the venue-type plates and the map ramps.
 3. tokens/tokens.json (B3), generated from the CSS: base motion values plus a separate Reduce Motion table, the seven springs as {stiffness, damping, mass: 1}, the type roles, the corrected kinds.
-4. The rulings (A1–A4). Make the copy changes and removals their "Frames" column names, before and after side by side. Where it says "As drawn", change nothing. Draw no new frames here: N3, S2, C1 and C4 are drawn by R3-D9, R3-D12/16 and R3-D10. A5–A7 change frames only through the C rows and the R3-D prompts that cite them, except: remove any drawn organiser tools on the Scene (D1), goals on the profile edit screens (D3) and conversation pinning (D4).
+4. The rulings (A1–A4). Make the copy changes and removals their "Frames" column names, before and after side by side. Where it says "As drawn", change nothing. Draw no new frames here: N3, S2, C1 and C4 are drawn by R3-D9, R3-D12/16 and R3-D10. A5–A7 change frames only through the C rows and the R3-D prompts that cite them, except: remove any drawn organizer tools on the Scene (D1), goals on the profile edit screens (D3) and conversation pinning (D4).
 5. The corrections (C, rows 1–21). Before and after.
 6. The type floor (B8), the annotations (B9) and the rule drift (B10). List each change.
 7. The project's records (B11). Renumber the duplicate decisions. Add log entries for Flows 13 and 14 and the deltas. Register the delta canvases as cards. Update github.md.
@@ -770,7 +770,7 @@ Each one goes inside the Round 2 delta wrapper. The rows are in [`ROUND4.md`](./
 - the 5.9 leftover: the two photo refusals as drawn frames.
 
 **R4-D3 · Flow 3 (discovery):**
-- every Flow 3 row in A.1: the Scene's organiser-written sections (house rules, FAQ, accessibility, cancellations) as attendee-facing text, the report-event reasons, the map's name chips, locate button and credits, and the city skyline art;
+- every Flow 3 row in A.1: the Scene's organizer-written sections (house rules, FAQ, accessibility, cancellations) as attendee-facing text, the report-event reasons, the map's name chips, locate button and credits, and the city skyline art;
 - the Flow 3 toasts and trays in A.2.
 
 **R4-D6 · Flow 6 (people and profile):**

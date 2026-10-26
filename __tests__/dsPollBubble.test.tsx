@@ -93,7 +93,7 @@ describe('<PollBubble>', () => {
 
   it('reads as one poll: who it is from, then the question', async () => {
     await render(<PollBubble question={Q} options={counted} />)
-    expect(screen.getByLabelText(`Poll from the organiser: ${Q}`)).toBeTruthy()
+    expect(screen.getByLabelText(`Poll from the organizer: ${Q}`)).toBeTruthy()
   })
 
   it('Increase Contrast: the hairline on the bubble', async () => {
