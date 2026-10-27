@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, AppState, Linking, Platform, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { OfflineBanner } from '../../components/OfflineBanner'
 import { AmenityGrid } from '../../components/ds/AmenityTile'
 import { GoLiveSheet, type GoLiveChoice as DialChoice } from '../../components/ds/GoLiveSheet'
 import { IconButton } from '../../components/ds/IconButton'
@@ -497,6 +498,8 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         />
         <PageWash color={washColor(venueHero(detail))} pointerEvents="none" style={styles.wash} />
         <View style={styles.body}>
+          {/* Reads stay (the cached place); the dock's writes say why they wait. Flow 15 #15 · #16. */}
+          <OfflineBanner text="Offline. Showing what you had." testID="venue-offline" />
           {action.kind === 'handoff' ? (
             <EventOnCard tonight={tonight?.id === action.eventId ? tonight : null} now={now} onPress={() => openEvent(action.eventId)} />
           ) : action.kind === 'live' ? (

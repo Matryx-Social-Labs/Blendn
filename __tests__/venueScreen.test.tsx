@@ -71,6 +71,7 @@ import { apiClient } from '../lib/apiClient'
 import { openBlendn } from '../lib/blendnOverlay'
 import { checkOutOf } from '../lib/checkIn'
 import { NO_AREA_REASON } from '../lib/goLive'
+import { markOffline, markOnline } from '../lib/networkStatus'
 import { H } from '../lib/haptics'
 import { openInMaps } from '../lib/openInMaps'
 import { openTonight } from '../lib/paywall'
@@ -188,6 +189,19 @@ describe('before it is drawn', () => {
     expect(screen.queryByTestId('venue-live-pill')).toBeNull()
     await act(async () => { releaseOld(venue({ live: liveOver() })) })
     expect(screen.queryByTestId('venue-live-pill')).toBeNull()
+  })
+})
+
+describe('offline (OUT-06)', () => {
+  it('says it is offline over the place it still shows, and nothing while online', async () => {
+    await mount()
+    expect(screen.queryByTestId('venue-offline')).toBeNull()
+    await act(async () => markOffline())
+    expect(screen.getByTestId('venue-offline')).toBeTruthy()
+    expect(screen.getByText('Offline. Showing what you had.')).toBeTruthy()
+    expect(screen.getByRole('header', { name: /The Humming Tree/ })).toBeTruthy()
+    await act(async () => markOnline())
+    expect(screen.queryByTestId('venue-offline')).toBeNull()
   })
 })
 
