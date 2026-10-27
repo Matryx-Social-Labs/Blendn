@@ -223,6 +223,15 @@ describe('<Disc>', () => {
     expect(screen.getByRole('button').props.accessibilityLabel).toBe(label)
   })
 
+  it('(c) inside two fences says how many, to the eye and to a screen reader (BAR-06)', async () => {
+    await draw('c', { here: 2 })
+    expect(screen.getByText('Check in · 2 here', HIDDEN)).toBeTruthy()
+    expect(screen.queryByText('Check in · Toit', HIDDEN)).toBeNull()
+    expect(screen.getByRole('button').props.accessibilityLabel).toBe('You’re at 2 events. Check in to see who else is here')
+    await draw('c', { here: 1 })
+    expect(screen.getByText('Check in · Toit', HIDDEN)).toBeTruthy()
+  })
+
   it('(c) wears “Check in · {venue}” above the disc; no other state does', async () => {
     await draw('c')
     expect(screen.getByText('Check in · Toit', HIDDEN)).toBeTruthy()

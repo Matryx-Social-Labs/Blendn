@@ -1,4 +1,4 @@
-import { pickInsideEvent, pickTodayEvents, type PreciseFix, type RoomButtonEvent } from './roomButton'
+import { pickInsideEvents, pickTodayEvents, venueNameOf, type PreciseFix, type RoomButtonEvent } from './roomButton'
 
 /**
  * What the centre button knows, published by whoever already knows it.
@@ -20,10 +20,12 @@ interface RoomSignal {
   insideEventId: string | null
   /** The inside event's venue: the disc's (c) label reads "Check in · {venue}" (Flow 4 T10). */
   insideVenue: string | null
+  /** How many running events' fences you are inside; over one, the disc says "Check in · 2 here" (BAR-06). */
+  insideCount: number
   todayEventIds: string[]
 }
 
-const EMPTY: RoomSignal = { insideEventId: null, insideVenue: null, todayEventIds: [] }
+const EMPTY: RoomSignal = { insideEventId: null, insideVenue: null, insideCount: 0, todayEventIds: [] }
 let _signal: RoomSignal = EMPTY
 const _listeners = new Set<() => void>()
 
@@ -44,15 +46,18 @@ export function publishRoomSignal(
   now: number = Date.now(),
   at?: PreciseFix | null
 ): void {
-  const insideEventId = pickInsideEvent(events, now, at)
+  const inside = pickInsideEvents(events, now, at)
+  const insideEventId = inside[0] ?? null
   const next: RoomSignal = {
     insideEventId,
-    insideVenue: events.find((e) => e.id === insideEventId)?.venue_name ?? null,
+    insideVenue: venueNameOf(events.find((e) => e.id === insideEventId) ?? {}),
+    insideCount: inside.length,
     todayEventIds: pickTodayEvents(events, now),
   }
   if (
     next.insideEventId === _signal.insideEventId &&
     next.insideVenue === _signal.insideVenue &&
+    next.insideCount === _signal.insideCount &&
     next.todayEventIds.length === _signal.todayEventIds.length &&
     next.todayEventIds.every((id, i) => id === _signal.todayEventIds[i])
   ) {

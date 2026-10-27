@@ -14,6 +14,12 @@ type EventPayload = NonNullable<
   Awaited<ReturnType<typeof apiClient.getEvents>>["data"]
 >["events"][number]
 
+/** SV-2's `rsvpStatus`, read through a narrow cast until `lib/apiClient.ts` declares it (SYS-19). */
+const rsvpStatusOf = (e: object): string | null => {
+  const v = (e as { rsvpStatus?: unknown }).rsvpStatus
+  return typeof v === 'string' ? v : null
+}
+
 /**
  * One server event, in the shape the app holds.
  *
@@ -75,6 +81,8 @@ export function eventFromApi(e: EventPayload) {
       /** The server's placement, once it sends one (C1): `kind` decides "Promoted". */
       featured: e.featured ?? null,
       is_favorited: e.isFavorited === true,
+      /** "going" / "maybe" / …, from a server that sends it (SV-2); null from an older one. Read through a cast until the payload type declares it. */
+      rsvp_status: rsvpStatusOf(e),
       favorite_count: typeof e.favoriteCount === 'number' ? e.favoriteCount : 0,
       user_checkin: e.userCheckin || null,
     }

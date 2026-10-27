@@ -8,6 +8,8 @@ import {
   roomButtonAccessibilityLabel,
   roomButtonGlow,
   pickInsideEvent,
+  pickInsideEvents,
+  venueNameOf,
   pickTodayEvents,
   roomButtonTarget,
   fixOf,
@@ -430,5 +432,57 @@ describe('the callers hand the centre button the precise fix (SCRUM-744)', () =>
     publishRoomSignal([event], now, { latitude: 12.9693, longitude: 77.59, accuracy: 15, timestamp: now })
     expect(getRoomSignal().insideEventId).toBe('door')
     clearRoomSignal()
+  })
+})
+
+describe('the centre button’s data wiring (BAR-03, 05, 06, 08, 09)', () => {
+  const now = new Date(2026, 9, 24, 15, 0, 0).getTime()
+  const base = { start_time: iso(now - HOUR), end_time: iso(now + HOUR), latitude: 12.97, longitude: 77.59 }
+  // ~0.0018 deg of latitude is ~200 m.
+  const fix = (accuracy = 10) => ({ latitude: 12.97 + 0.0018, longitude: 77.59, accuracy, timestamp: now })
+
+  it('BAR-03: a 260 m outline fence judges a fix 200 m out as inside; a 100 m default does not', () => {
+    expect(pickInsideEvent([{ id: 'big', ...base, check_in_radius: 260 }], now, fix())).toBe('big')
+    expect(pickInsideEvent([{ id: 'small', ...base, check_in_radius: 100 }], now, fix())).toBeNull()
+  })
+
+  it('BAR-05: going counts as yours without a save; maybe does not', () => {
+    const tonight = { start_time: iso(now + HOUR), end_time: iso(now + 2 * HOUR) }
+    expect(pickTodayEvents([{ id: 'g', ...tonight, rsvp_status: 'going' }], now)).toEqual(['g'])
+    expect(pickTodayEvents([{ id: 'm', ...tonight, rsvp_status: 'maybe' }], now)).toEqual([])
+    expect(pickTodayEvents([{ id: 'n', ...tonight }], now)).toEqual([])
+  })
+
+  it('BAR-06: two fences give both, the one you said you are going to first, and a count', () => {
+    const near = { id: 'near', ...base, check_in_radius: 300, is_favorited: false }
+    const mine = { id: 'mine', ...base, latitude: 12.9702, check_in_radius: 300, rsvp_status: 'going' }
+    expect(pickInsideEvents([near, mine], now, fix())).toEqual(['mine', 'near'])
+    expect(pickInsideEvent([near, mine], now, fix())).toBe('mine')
+    // Neither yours: the nearer centre first.
+    expect(pickInsideEvents([{ ...mine, rsvp_status: null }, near], now, fix())).toEqual(['mine', 'near'])
+  })
+
+  it('BAR-08: the linked venue’s name, else the free-text one, and a blank is not a name', () => {
+    expect(venueNameOf({ venue: { name: 'Toit' }, venue_name: '' })).toBe('Toit')
+    expect(venueNameOf({ venue: null, venue_name: ' Toit ' })).toBe('Toit')
+    expect(venueNameOf({ venue: { name: ' ' }, venue_name: '' })).toBeNull()
+  })
+
+  it('BAR-08 and 06: the signal names the linked venue when the free text is empty, and counts the fences', () => {
+    const { publishRoomSignal, getRoomSignal, clearRoomSignal } = require('../lib/roomSignal') as typeof import('../lib/roomSignal')
+    const e = { id: 'a', ...base, check_in_radius: 300, venue: { name: 'Toit' }, venue_name: '' }
+    clearRoomSignal()
+    publishRoomSignal([e, { ...e, id: 'b' }], now, fix())
+    expect(getRoomSignal()).toMatchObject({ insideVenue: 'Toit', insideCount: 2 })
+    clearRoomSignal()
+  })
+
+  it('BAR-09: tonight is the event’s day, not the phone’s', () => {
+    // 17:30Z on the 24th is 23:00 on the 24th in Kolkata and 07:30 on the 24th in Honolulu; the event starts at 19:00Z.
+    const at = Date.parse('2026-10-24T17:30:00Z')
+    const event = { id: 'k', start_time: '2026-10-24T19:00:00Z', end_time: '2026-10-24T22:00:00Z', is_favorited: true }
+    // Kolkata: 00:30 on the 25th, a different day from now. Honolulu: 09:00 on the 24th, the same day.
+    expect(pickTodayEvents([{ ...event, timezone: 'Asia/Kolkata' }], at)).toEqual([])
+    expect(pickTodayEvents([{ ...event, timezone: 'Pacific/Honolulu' }], at)).toEqual(['k'])
   })
 })

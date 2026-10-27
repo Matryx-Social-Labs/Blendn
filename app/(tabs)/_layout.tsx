@@ -62,6 +62,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     badge: 0,
   })
   const [venue, setVenue] = useState<string | null>(null)
+  const [insideCount, setInsideCount] = useState(0)
   // Your face on Me: the session's `profile.photos`, re-read after every photo save and on foreground (`refreshAuthUser`).
   const mePhoto = myMainPhoto(useAuth().user)
   // The Banter dot: the same counts as the Pulse's bell, one read for both (`lib/inboxBadge`).
@@ -133,6 +134,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     const recompute = () => {
       const signal = getRoomSignal()
       setVenue(signal.insideVenue)
+      setInsideCount(signal.insideCount)
       // SCRUM-630: waves are heard while you are checked in, overlay open or not.
       listenForWaves(activeEventId)
       setLiveHint(activeEventId !== null)
@@ -227,7 +229,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
       <TabBar
         selected={TAB_OF[state.routes[state.index]?.name] ?? 'pulse'}
         onSelect={select}
-        disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined }}
+        disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined, here: insideCount }}
         mePhoto={mePhoto ?? undefined}
         banterUnread={banter}
         discRef={discRef}
