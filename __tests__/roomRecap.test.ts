@@ -1,4 +1,4 @@
-import { endsAtMs, roomRecap, timeSpentLabel } from '../lib/roomRecap'
+import { endsAtMs, recapPeopleOpen, roomRecap, timeSpentLabel } from '../lib/roomRecap'
 
 const END = '2026-09-28T23:00:00Z'
 const endMs = Date.parse(END)
@@ -52,5 +52,19 @@ describe('roomRecap', () => {
   it('leaves the time out rather than inventing one', () => {
     expect(roomRecap({ event, checkedInAt: null, people: [] }, endMs)?.timeSpent).toBeNull()
     expect(roomRecap({ event, checkedInAt: null, people: [] }, endMs)?.minutes).toBeNull()
+  })
+})
+
+describe('recapPeopleOpen (ROOM-06): People from tonight until the chat closes', () => {
+  const DAY = 24 * 60 * 60_000
+  it('offered from the end until 24 hours after, and not before or after', () => {
+    expect(recapPeopleOpen(END, endMs - 1)).toBe(false)
+    expect(recapPeopleOpen(END, endMs)).toBe(true)
+    expect(recapPeopleOpen(END, endMs + DAY - 1)).toBe(true)
+    expect(recapPeopleOpen(END, endMs + DAY)).toBe(false)
+  })
+  it('an unknown end is never offered', () => {
+    expect(recapPeopleOpen(null, endMs)).toBe(false)
+    expect(recapPeopleOpen('nope', endMs)).toBe(false)
   })
 })

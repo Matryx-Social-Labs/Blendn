@@ -112,7 +112,7 @@ export interface RoomState {
   settled: boolean
   /** The dock's first read of the room chat, fetched with the room so the dock opens on its real last line. */
   chatHistory: ChatHistory | null
-  event: { id: string; title: string; startsAt?: string; endsAt?: string } | null
+  event: { id: string; title: string; startsAt?: string; endsAt?: string; venueName?: string | null } | null
   checkedInAt: string | null
   /**
    * Whether *you* are named in this room — never anyone else's state. From
@@ -353,6 +353,7 @@ export function useRoom(): RoomState & RoomActions {
               title: remembered.eventTitle ?? first?.event?.title ?? '',
               startsAt: first?.event?.startTime,
               endsAt: first?.event?.endTime,
+              venueName: first?.event?.venueName,
             }
             eventRef.current = seeded
             setEvent(seeded)
@@ -439,6 +440,7 @@ export function useRoom(): RoomState & RoomActions {
           title: outcome.eventTitle ?? checkin?.event?.title ?? '',
           startsAt: checkin?.event?.startTime,
           endsAt: checkin?.event?.endTime,
+          venueName: checkin?.event?.venueName,
         }
 
         const changedRoom = eventRef.current?.id !== outcome.eventId
@@ -449,7 +451,8 @@ export function useRoom(): RoomState & RoomActions {
           prev.id === next.id &&
           prev.title === next.title &&
           prev.startsAt === next.startsAt &&
-          prev.endsAt === next.endsAt
+          prev.endsAt === next.endsAt &&
+          prev.venueName === next.venueName
             ? prev
             : next
         )

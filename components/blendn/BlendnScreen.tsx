@@ -29,7 +29,7 @@ import { useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
 import { useOffline } from '../OfflineBanner'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
-import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
+import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
 import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
@@ -52,6 +52,7 @@ import { MomentBlend, type BlendCrew, type BlendPerson } from '../ds/MomentBlend
 import { MomentMatch } from '../ds/MomentMatch'
 import { MomentPour, ORBS_LIFT_MS, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
+import { PeopleFromTonight } from './PeopleFromTonight'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
 import { Sheet } from '../ds/Sheet'
 import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
@@ -226,6 +227,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    */
   const [recap, setRecap] = useState<Recap | null>(null)
   const [dismissedRecap, setDismissedRecap] = useState<string | null>(null)
+  const [peopleOpen, setPeopleOpen] = useState(false)
   const endedRecap =
     room.status === 'ready' && room.event ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now) : null
   if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) setRecap(endedRecap)
@@ -783,6 +785,8 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
           <MomentRecap
             face={myFace}
             title={recap.title}
+            venue={room.event?.venueName}
+            onPeople={room.event && room.people.length > 0 && recapPeopleOpen(room.event.endsAt, now) ? () => setPeopleOpen(true) : undefined}
             minutes={recap.minutes}
             matches={recap.matched}
             rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
@@ -794,6 +798,11 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
             onClose={onClose}
             testID="room-recap"
           />
+          {peopleOpen ? (
+            <Animated.View style={styles.layer} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
+              <PeopleFromTonight people={room.people} onBack={() => setPeopleOpen(false)} />
+            </Animated.View>
+          ) : null}
         </Animated.View>
       ) : mode === 'loading' ? (
         <RoomSkeleton topInset={topInset} />
