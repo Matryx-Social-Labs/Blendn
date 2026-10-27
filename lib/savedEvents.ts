@@ -11,6 +11,7 @@
 import { sessionFromApi, type EventSession } from './eventSession'
 import type { ChangedField } from './eventChange'
 import { feedPoster, type EventMediaItem } from './feedMedia'
+import { BOARD_ENABLED, boardClosed } from './board'
 import { groupByDay } from './pulse'
 
 export interface SavedEventRow {
@@ -75,7 +76,7 @@ export interface SavedEventsPayload {
     changedFields?: ChangedField[] | null
     /** Both list routes send it (`/me/rsvps`, `/users/:id/favorites`). */
     timezone?: string | null
-    /** The favourites route sends it; `/me/rsvps` not yet (server need). */
+    /** Both list routes send it. */
     categories?: ListCategories
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
@@ -112,6 +113,14 @@ export function changedTag(row: Pick<SavedEventRow, 'changed' | 'status'>): 'New
   return row.changed?.includes('venue') ? 'New venue' : null
 }
 
+/**
+ * Does a night you are going to (or saved) offer the Board? The Scene's own gate (`EventDetailScreen`): before the run's
+ * first doors, and not called off. The run's start, not today's session: the server closes the board at the first doors.
+ */
+export function boardOpenFor(row: Pick<SavedEventRow, 'start_time' | 'status'>, now: number = Date.now()): boolean {
+  return BOARD_ENABLED && !boardClosed(row.start_time, now) && row.status !== 'cancelled'
+}
+
 // ---------------------------------------------------------------------------
 // The rest of the Going tab: what you are going to, and what you went to.
 // ---------------------------------------------------------------------------
@@ -146,19 +155,19 @@ export interface AttendancePayload {
     attendedAt: string
     /** The event's IANA zone (admin #749): its day is said in it. Absent from an older server: the phone's. */
     timezone?: string | null
-    /** Read under the list routes' name when the attendance route sends it (not yet: server need). */
+    /** The attendance route sends it under the list routes' name. */
     categories?: ListCategories
     /** `venue_day` is a visit to a place you went live at; its `title` is bookkeeping, its `venue_name` the place (blendn-admin D-6). */
     kind?: 'event' | 'venue_day'
     /**
-     * How long you were there, in minutes, and the place's own id (for its page): neither is on the route yet, so a visit says
-     * its date alone and opens nothing until they are. Read from these names when the server sends them.
+     * How long you were there, in minutes, and the place's own id (for its page): the route sends both for a visit (a venue
+     * day) and null for an event. An older server omits them, and a visit then says its date alone and opens nothing.
      */
     stay_minutes?: number | null
     venue_id?: string | null
     /** `venue_type` (a plate's type, when the server says what kind of place it was). */
     venue_type?: string | null
-    /** When you rated the night, or null: sent by the list once the server has it (absent today, and then each row is asked). */
+    /** When you rated the night, or null: the route sends it. An older server omits it, and then each row is asked. */
     ratedAt?: string | null
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }

@@ -199,12 +199,12 @@ describe('a night that moved, and the row\'s ⋯', () => {
     expect(screen.getAllByText(/^New /)).toHaveLength(2)
   })
 
-  it('the ⋯ opens the row\'s actions in the app\'s Sheet: Share, Directions, Add to calendar, Cancel', async () => {
+  it('the ⋯ opens the row\'s actions in the app\'s Sheet: Share, Directions, Add to calendar, The Board, Cancel', async () => {
     await open()
     await fireEvent.press((await screen.findAllByLabelText(/^More about Event b/))[0])
     const sheet = (showSheet as jest.Mock).mock.calls[0][0]
     expect(sheet.title).toBe('Event b')
-    expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['Share', 'Directions', 'Add to calendar', 'Cancel'])
+    expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['Share', 'Directions', 'Add to calendar', 'The Board', 'Cancel'])
     expect(router.push).not.toHaveBeenCalled()
   })
 })
@@ -324,7 +324,9 @@ describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
   ]
   type Node = { type: string; props: Record<string, unknown>; children: (Node | string)[] | null }
   const uncapped = (n: Node, found: string[] = []): string[] => {
-    if (n.type === 'Text') return n.props.maxFontSizeMultiplier ? found : [...found, JSON.stringify(n.children)]
+    // An icon font's glyph is a private-use character in a Text; it does not scale with the type size, so it needs no cap.
+    const glyph = n.children?.length === 1 && typeof n.children[0] === 'string' && /^[\uE000-\uF8FF]$/u.test(n.children[0])
+    if (n.type === 'Text') return n.props.maxFontSizeMultiplier || glyph ? found : [...found, JSON.stringify(n.children)]
     return (n.children ?? []).reduce<string[]>((acc, c) => (typeof c === 'object' ? uncapped(c, acc) : acc), found)
   }
 
@@ -378,5 +380,52 @@ describe('the category plate (GO-14, DS-12 wiring, audit C10)', () => {
     await open()
     expect(await screen.findByTestId('event-cover-plate', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getAllByTestId('going-row-b-plate', { includeHiddenElements: true })).toHaveLength(1)
+  })
+})
+
+describe('the Board from Going (OUT-02, decision E2)', () => {
+  const hours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString()
+  const labels = (sheet: { actions: { label: string }[] }) => sheet.actions.map((a) => a.label)
+  // The first RSVP is Next up (it has no ⋯); the second is a list row.
+  const two = (over: object) => [{ ...upcoming('a', over), rsvpStatus: 'going' }, { ...upcoming('b', over), rsvpStatus: 'going' }]
+  const rsvps = (events: object[]) =>
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events, pagination: page(1, events.length, false) } } as never)
+  const trayOf = async (title: RegExp) => {
+    await fireEvent.press((await screen.findAllByLabelText(title))[0])
+    return (showSheet as jest.Mock).mock.calls[0][0]
+  }
+
+  it('before doors: the Next-up card carries the Scene\'s Board row, and a row\'s tray the action; both open the Board', async () => {
+    rsvps(two({}))
+    await open()
+    await fireEvent.press(await screen.findByLabelText(/^The Board\./))
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'a' } })
+
+    const sheet = await trayOf(/^More about Event b/)
+    expect(labels(sheet)).toContain('The Board')
+    sheet.actions.find((a: { label: string }) => a.label === 'The Board').then()
+    expect(router.push).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'b' } })
+  })
+
+  it('a saved night offers it in the tray too', async () => {
+    api.getUserFavorites.mockResolvedValue({ success: true, data: { events: [upcoming('s')], pagination: page(1, 1, false) } } as never)
+    await open()
+    expect(labels(await trayOf(/^More about Event s/))).toContain('The Board')
+  })
+
+  it('after doors: neither the card row nor the tray action', async () => {
+    rsvps(two({ startTime: hours(-1), endTime: hours(2) }))
+    await open()
+    await screen.findByTestId('going-next')
+    expect(screen.queryByLabelText(/^The Board\./)).toBeNull()
+    expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Board')
+  })
+
+  it('a cancelled night: neither', async () => {
+    rsvps(two({ status: 'cancelled' }))
+    await open()
+    await screen.findByTestId('going-next')
+    expect(screen.queryByLabelText(/^The Board\./)).toBeNull()
+    expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Board')
   })
 })
