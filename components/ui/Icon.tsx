@@ -86,11 +86,13 @@ import HeartOff from 'lucide-react-native/icons/heart-off'
 import Hourglass from 'lucide-react-native/icons/hourglass'
 import IdCard from 'lucide-react-native/icons/id-card'
 import Image from 'lucide-react-native/icons/image'
+import ImageOff from 'lucide-react-native/icons/image-off'
 import Images from 'lucide-react-native/icons/images'
 import Info from 'lucide-react-native/icons/info'
 import KeyRound from 'lucide-react-native/icons/key-round'
 import Link from 'lucide-react-native/icons/link'
 import Link2Off from 'lucide-react-native/icons/link-2-off'
+import Locate from 'lucide-react-native/icons/locate'
 import LocateOff from 'lucide-react-native/icons/locate-off'
 import Lock from 'lucide-react-native/icons/lock'
 import LogOut from 'lucide-react-native/icons/log-out'
@@ -138,6 +140,7 @@ import Shirt from 'lucide-react-native/icons/shirt'
 import Shuffle from 'lucide-react-native/icons/shuffle'
 import SlidersHorizontal from 'lucide-react-native/icons/sliders-horizontal'
 import Smartphone from 'lucide-react-native/icons/smartphone'
+import Store from 'lucide-react-native/icons/store'
 import Sparkles from 'lucide-react-native/icons/sparkles'
 import Ticket from 'lucide-react-native/icons/ticket'
 import Timer from 'lucide-react-native/icons/timer'
@@ -246,11 +249,13 @@ const ICONS = {
   hourglass: Hourglass,
   'id-card': IdCard,
   image: Image,
+  'image-off': ImageOff,
   images: Images,
   info: Info,
   'key-round': KeyRound,
   link: Link,
   'link-2-off': Link2Off,
+  locate: Locate,
   'locate-off': LocateOff,
   lock: Lock,
   'log-out': LogOut,
@@ -297,11 +302,14 @@ const ICONS = {
   shuffle: Shuffle,
   'sliders-horizontal': SlidersHorizontal,
   smartphone: Smartphone,
+  store: Store,
   sparkles: Sparkles,
   ticket: Ticket,
   timer: Timer,
   toilet: Toilet,
   trash: Trash,
+  // The frames' name for it: Lucide 1.x calls `trash-2` `trash`, so both names draw the one glyph (SYS-13).
+  'trash-2': Trash,
   trees: Trees,
   'tree-palm': TreePalm,
   'triangle-alert': TriangleAlert,

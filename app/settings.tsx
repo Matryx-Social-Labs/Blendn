@@ -284,7 +284,7 @@ function SettingsScreenContent() {
   const confirmDeleteSheet = useCallback((): Sheet => ({
     kind: 'actions',
     hue: 'violet',
-    icon: 'trash',
+    icon: 'trash-2',
     title: 'Delete your account for good?',
     message: 'This can’t be undone. You’d need a new account to use Blend’n again.',
     actions: [
@@ -326,7 +326,7 @@ function SettingsScreenContent() {
       return {
         kind: 'actions',
         hue: 'violet',
-        icon: 'trash',
+        icon: 'trash-2',
         title: 'Delete your account?',
         message:
           'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires.',
@@ -567,7 +567,7 @@ function SettingsScreenContent() {
         */}
         <SettingsGroup title="Danger zone" danger>
           <SettingsRow
-            icon="trash"
+            icon="trash-2"
             title={deleting ? 'Deleting account…' : 'Delete account'}
             trail={deleting ? 'none' : 'chevron'}
             busy={deleting}
