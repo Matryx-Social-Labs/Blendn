@@ -55,11 +55,13 @@ describe('submitCheckIn', () => {
   it('reads intentNeeded and revealSuggestion off a success', async () => {
     mockApi.checkIn.mockResolvedValue({
       success: true,
-      data: { checkInId: 'c1', intentNeeded: true, revealSuggestion: true },
+      // The route's real shape (events/[eventId]/checkin/route.ts): `checkIn.id`, and `left` named for "You left {A}."
+      data: { checkIn: { id: 'c1', status: 'checked_in' }, intentNeeded: true, revealSuggestion: true, left: [{ eventId: 'e0', kind: 'event', name: 'Vinyl Night' }] },
     })
     expect(await submitCheckIn('e1', at)).toEqual({
       kind: 'checkedIn',
       checkInId: 'c1',
+      left: ['Vinyl Night'],
       askIntent: true,
       revealSuggestion: true,
     })

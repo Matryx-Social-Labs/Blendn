@@ -4,6 +4,7 @@ import { apiClient } from './apiClient'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
 import { forgetEventDetailCache } from './eventDetailCache'
 import { reasonOf } from './sessionEnd'
+import { leftNames } from './leftRooms'
 import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
@@ -74,6 +75,8 @@ export type CheckInOutcome =
   | {
       kind: 'checkedIn'
       checkInId?: string
+      /** The rooms this took you out of, by name, for "You left {A}." (SCRUM-635). Empty when you were in none. */
+      left: string[]
       /** No `intent_default` yet: ask "Why do you go out?" after the tray. */
       askIntent: boolean
       /** `reveal_by_default` is set: offer to show their name, never apply it. */
@@ -126,7 +129,9 @@ export async function submitCheckIn(
   checkInChanged(eventId)
   return {
     kind: 'checkedIn',
-    checkInId: result.data?.checkInId,
+    // The route's shape is `checkIn: { id }`; `checkInId` was never on it (ROOM-11).
+    checkInId: (result.data as { checkIn?: { id?: string } } | undefined)?.checkIn?.id,
+    left: leftNames(result.data),
     askIntent: result.data?.intentNeeded === true,
     revealSuggestion: result.data?.revealSuggestion === true,
   }

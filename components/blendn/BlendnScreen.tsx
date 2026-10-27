@@ -356,7 +356,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     onCheckedIn: (outcome) => {
       if (outcome.kind !== 'checkedIn') return
       const from = switchFromNow.current
-      leftRoom.current = from && insideEventNow.current ? { title: from.title, toId: insideEventNow.current.id } : null
+      // The server names the room it took you out of (`left`); the screen's own switch is the fallback for an older one.
+      const leftTitle = outcome.left[0] ?? from?.title
+      leftRoom.current = leftTitle && insideEventNow.current ? { title: leftTitle, toId: insideEventNow.current.id } : null
       setPourEntrance(true)
       setPourPlaying(true)
       setPourStill(false)

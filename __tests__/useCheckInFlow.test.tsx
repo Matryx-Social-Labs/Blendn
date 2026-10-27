@@ -49,6 +49,7 @@ const fresh = (o: Partial<Extract<CheckInOutcome, { kind: 'checkedIn' }>> = {}):
   checkInId: 'c1',
   askIntent: false,
   revealSuggestion: false,
+  left: [],
   ...o,
 })
 

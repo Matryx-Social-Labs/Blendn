@@ -215,7 +215,6 @@ interface CheckInStatus {
    * attended from somebody who merely opened the page.
    */
   status?: string | null
-  check_in_id?: string
   checked_in_at?: string
   distance_meters?: number
   event_title?: string
@@ -381,7 +380,6 @@ export default function EventDetail() {
         success: true,
         checked_in: d.userStatus.isCheckedIn || false,
         status: d.userStatus.checkInStatus ?? null,
-        check_in_id: d.userStatus.checkInId,
       })
       setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
     }
