@@ -28,10 +28,12 @@ import SignIn from '../app/sign-in'
 import { forgetHeldForm } from '../lib/heldSignInForm'
 
 let error: jest.SpyInstance
+let success: jest.SpyInstance
 beforeEach(() => {
   jest.clearAllMocks()
   jest.useFakeTimers()
   error = jest.spyOn(H, 'error').mockImplementation(() => {})
+  success = jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(H, 'primary').mockImplementation(() => {})
   jest.spyOn(H, 'select').mockImplementation(() => {})
   ;(useLocalSearchParams as jest.Mock).mockReturnValue({})
@@ -144,6 +146,18 @@ describe('the server answers', () => {
     expect(mockSignIn).toHaveBeenCalledWith('sam@example.com', 'correct horse battery', expect.any(Object))
     expect(screen.queryByTestId('sign-in-error')).toBeNull()
     expect(error).not.toHaveBeenCalled()
+  })
+
+  it('plays H.success once on the server\'s yes, and never on a refusal (OUT-04)', async () => {
+    mockSignIn.mockResolvedValue({ success: true })
+    await fill()
+    await submit()
+    expect(success).toHaveBeenCalledTimes(1)
+
+    jest.clearAllMocks()
+    mockSignIn.mockResolvedValue({ success: false, error: 'Invalid email or password' })
+    await submit()
+    expect(success).not.toHaveBeenCalled()
   })
 
   it('stays busy after success, until the root layout replaces the screen (no idle form for the blank frame)', async () => {
