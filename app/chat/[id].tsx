@@ -74,7 +74,7 @@ import {
 import { clockTime } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
-import { isReadOnlyLock, lockFor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
+import { isReadOnlyLock, lockFor, lockFromDoor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
@@ -276,19 +276,34 @@ function GroupChatInner() {
    * A room the organiser locked opens read-only (TG-02): its row in the Banter's list says so (`status`, the same cached
    * read as `useRoomRow`). Before, the lock was learnt only from a send it refused, so it opened with a live composer.
    */
-  const applyLock = composer.apply
+  /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
+  const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
+  /*
+   * A room muted for you, locked by the organiser or closed opens read-only (TG-02, ROOM-05): an event's room asks its
+   * own door, which says so by `status` and `write.reason`; before, the lock was learnt from a send it refused, and the
+   * Banter's row (page 1 of a cached list) said it first. Any other room's lock is on its row in that list.
+   */
+  const setComposerLock = composer.setLock
   useEffect(() => {
     if (!chatRoomId) return
     let live = true
-    void apiClient.getChatGroups().then((result) => {
-      if (live && result.success && roomLockedIn(result.data, roomId)) applyLock('CHAT_LOCKED')
-    })
+    if (roomEventId) {
+      void Promise.resolve()
+        .then(() => apiClient.getEventChat(roomEventId))
+        .then((door) => {
+          const next = live && door?.success ? lockFromDoor(door.data) : null
+          if (next) setComposerLock(next)
+        })
+        .catch(() => {})
+    } else {
+      void apiClient.getChatGroups().then((result) => {
+        if (live && result.success && roomLockedIn(result.data, roomId)) setComposerLock({ state: 'locked' })
+      })
+    }
     return () => {
       live = false
     }
-  }, [chatRoomId, roomId, applyLock])
-  /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
-  const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
+  }, [chatRoomId, roomId, roomEventId, setComposerLock])
   const { showToast } = useToast()
   // Android: the snackbar over the composer covers the newest row (the withheld placeholder it explains); the feed makes room (rc8 #5).
   const toastInset = useToastInset()
@@ -556,7 +571,7 @@ function GroupChatInner() {
       }
       // Every answer re-decides the lock: a refusal sets it, a send that got through lifts it.
       const place = result.success ? null : refusalPlace(result.errorCode, result.error)
-      if (place !== 'links') composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error)
+      if (place !== 'links') composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error, result.success ? null : result.reasonCode)
       if (result.success) setJustMuted(false)
       const closed = !result.success && roomKind ? roomClosedLine(roomKind, result.errorCode) : null
       if (closed) setClosedLine(closed)
@@ -657,7 +672,7 @@ function GroupChatInner() {
     const reactRefused = roomRefusalState(result.errorCode)
     if (reactRefused === 'left') markRoomLeft(roomId)
     else if (reactRefused === 'not_live') setNotLive(true)
-    else if (lockFor(result.errorCode)) composer.apply(result.errorCode, undefined, result.error)
+    else if (lockFor(result.errorCode, undefined, result.reasonCode)) composer.apply(result.errorCode, undefined, result.error, result.reasonCode)
     showToast(userMessage(result, "Couldn’t add your reaction. Try again."), 'error', { haptic: 'error' })
   }
 

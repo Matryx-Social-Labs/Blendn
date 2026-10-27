@@ -335,7 +335,7 @@ describe('the send button does not pretend the message is still in flight', () =
     // A rate limit lifts on its own; the server says when, and the clock counts it down.
     expect(lock).toContain('retryAfter ?? DEFAULT_WAIT_S')
     // Every answer re-decides it: a send that got through lifts it.
-    expect(ROOM()).toContain('composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error)')
+    expect(ROOM()).toContain('composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error, result.success ? null : result.reasonCode)')
     expect(ROOM()).toContain('countdown={composer.countdown}')
   })
 
