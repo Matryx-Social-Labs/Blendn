@@ -12,7 +12,7 @@ beforeEach(() => mockRequest.mockReset())
 it('reads the public share without a session and names the event and its day', async () => {
   mockRequest.mockResolvedValue({ success: true, data: { available: true, event: { title: 'Neon Nights', startsAt: '2026-10-04T16:00:00.000Z', timezone: 'Asia/Kolkata' } } })
   await render(<HeldLink eventId="e1" />)
-  expect(await screen.findByText('Neon Nights · Sat 4 Oct · held for you')).toBeTruthy()
+  expect(await screen.findByText('Neon Nights · Sun 4 Oct · held for you')).toBeTruthy()
   expect(mockRequest).toHaveBeenCalledWith('/api/public/share/events/e1', {}, false)
 })
 
