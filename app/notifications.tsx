@@ -174,7 +174,7 @@ function NotificationsScreenContent() {
           ? CLEAR_OVER_REQUESTS
           : 'This clears the list. Nothing is sent to anyone.',
       actions: [
-        { label: 'Clear all', variant: 'destructive', then: () => void feed.clear() },
+        { label: 'Clear all', variant: 'primary', then: () => void feed.clear() },
         { label: 'Cancel', cancel: true },
       ],
     })
