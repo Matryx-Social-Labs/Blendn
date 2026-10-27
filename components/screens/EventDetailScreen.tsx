@@ -1212,6 +1212,18 @@ export default function EventDetail() {
               ) : null}
 
               {/*
+                The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
+                the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
+                neither. Not on a cancelled night. The run's start, not today's session: the server closes the board at the first doors.
+                Behind BOARD_ENABLED until the board's safety half ships (lib/board.ts).
+              */}
+              {event && BOARD_ENABLED && !cancelled && !boardClosed(event.start_time) ? (
+                <FadeInUp delay={SECTION_DELAY[1]}>
+                  <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
+                </FadeInUp>
+              ) : null}
+
+              {/*
                 What the organiser actually wrote: house rules, FAQ, accessibility, and the rest. Accessibility is
                 the one somebody needs *before* deciding whether they can come. `eventDetailBlocks` has already
                 dropped anything malformed, so an empty list means the organiser wrote nothing; wrapped only when
@@ -1233,18 +1245,6 @@ export default function EventDetail() {
               {attendeeBlock.count > 0 ? (
                 <FadeInUp delay={SECTION_DELAY[3]}>
                   <SceneAttendees count={attendeeBlock.count} label={attendeeBlock.label} seed={event?.id || 'scene'} />
-                </FadeInUp>
-              ) : null}
-
-              {/*
-                The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
-                the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
-                neither. The run's start, not today's session: the server closes the board at the first doors.
-                Behind BOARD_ENABLED until the board's safety half ships (lib/board.ts).
-              */}
-              {event && BOARD_ENABLED && !boardClosed(event.start_time) ? (
-                <FadeInUp delay={SECTION_DELAY[3]}>
-                  <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
                 </FadeInUp>
               ) : null}
 
