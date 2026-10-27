@@ -25,7 +25,7 @@ import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, 
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { reasonOf, SESSION_END_CODES } from './sessionEnd'
-import { appVersionNumber } from './appVersion'
+import { appBuildNumber, appVersionNumber } from './appVersion'
 import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { onCriticalPath } from './criticalPath'
@@ -1343,6 +1343,12 @@ export const LIST_PAGE = { conversations: CONVERSATIONS_PAGE, friends: FRIENDS_P
  */
 export const CHANNEL_SET_HEADER = { 'X-Channel-Set': String(PUSH_CHANNEL_SET) } as const
 
+/** `X-App-Build` and `X-App-Platform`: the build number the server's per-build minimum judges (SYS-14). Nothing when the build has no plain number. */
+function buildHeaders(): Record<string, string> {
+  const build = appBuildNumber()
+  return build ? { 'X-App-Build': build, 'X-App-Platform': Platform.OS } : {}
+}
+
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
@@ -1646,7 +1652,7 @@ class ApiClientClass {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build, which has no native build number to judge (the server's CORS allow-list names this header and `X-Channel-Set`, so a preflight is no reason).
-      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber(), ...buildHeaders() } : {}),
       ...CHANNEL_SET_HEADER,
       ...(options.headers as Record<string, string>),
     }
@@ -2178,7 +2184,7 @@ class ApiClientClass {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber(), ...buildHeaders() } : {}),
           ...CHANNEL_SET_HEADER,
           Authorization: `Bearer ${access}`,
         },
