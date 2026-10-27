@@ -6,11 +6,17 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
 
 import { AmenityGrid, AmenityTile } from '../components/ds/AmenityTile'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SPACE, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+
+// The jest preset starts at fontScale 2, an accessibility size (AX_FONT_SCALE): these tests are the default size's layout.
+// The accessibility sizes are __tests__/axTextSize.test.tsx's.
+const defaultWindow = Dimensions.get('window')
+beforeEach(() => Dimensions.set({ window: { ...defaultWindow, fontScale: 1 }, screen: { ...defaultWindow, fontScale: 1 } }))
+afterAll(() => Dimensions.set({ window: defaultWindow, screen: defaultWindow }))
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const style = (t: string) => StyleSheet.flatten(screen.getByText(t, { includeHiddenElements: true }).props.style)
@@ -74,7 +80,15 @@ describe('<AmenityGrid>', () => {
     await render(<AmenityGrid tiles={tiles(8)} />)
     expect(screen.getByText('Amenity 5')).toBeTruthy()
     expect(screen.queryByText('Amenity 6')).toBeNull()
-    await fireEvent.press(screen.getByRole('button', { name: 'AND MORE, +3 more' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'MORE, +3' }))
     expect(screen.getByText('Amenity 8')).toBeTruthy()
+  })
+
+  it('the fold says "more" once: the label MORE over the count "+3" in Geist Mono (B-S13)', async () => {
+    await render(<AmenityGrid tiles={tiles(8)} testID="g" />)
+    expect(screen.getByText('MORE')).toBeTruthy()
+    const count = screen.getByText('+3')
+    expect(StyleSheet.flatten(count.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
+    expect(screen.queryByText(/more/)).toBeNull()
   })
 })

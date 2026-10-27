@@ -12,7 +12,7 @@ describe('askAboutNight', () => {
     expect(askAboutNight({ success: true, data: { rating: 3 } }, undefined)).toBe(false)
   })
 
-  it("falls back to the event's userStatus when your rating could not be read", () => {
+  it("falls back to the event’s userStatus when your rating could not be read", () => {
     expect(askAboutNight({ success: false }, 5)).toBe(false)
     expect(askAboutNight({ success: false }, undefined)).toBe(true)
     expect(askAboutNight(null, null)).toBe(true)

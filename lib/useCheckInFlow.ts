@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
-import { afterTrayDismissed } from '../components/ActionTray'
+import { afterSheetDismissed } from './sheetDismissed'
 import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { markCheckIn } from './checkInTiming'
@@ -107,7 +107,7 @@ export function useCheckInFlow({
     closeTray()
     releaseHold()
   }
-  /** The tray's own close (its backdrop): the caller's `ActionTray onClose`, so an open offer counts as "no". */
+  /** The tray's own close (its backdrop): the caller's sheet `onClose`, so an open offer counts as "no". */
   const dismissTray = () => {
     revealAnswer.current?.(false)
     revealAnswer.current = null
@@ -118,19 +118,34 @@ export function useCheckInFlow({
   const getCurrentLocation = () => getLocationFix({ showTray, closeTray: closeTrayAndRelease, onRetry: () => void start() })
 
   /**
-   * A refusal sheet's actions (Flow 4 Tonight #16–#22): Open Maps (strong) and
+   * A refusal sheet's actions (Flow 4 Tonight #16–#22): Open Maps (lit) and
    * Close where a map can fix it; Try again (primary) and Close for a failure
    * on our side; otherwise one Close.
    */
   const refusalButtons = (refusal: CheckInRefusal, errorCode: string | undefined): TrayButton[] => {
     const close = { label: 'Close', onPress: closeTray }
+    if (refusal.fix) {
+      // Finish profile, Add your age (Flow 15 15.22): the fix is the primary, "Not now" the text beside it. Both are Edit profile.
+      return [
+        { label: 'Not now', onPress: closeTray, kind: 'tertiary' },
+        {
+          label: refusal.fix.label,
+          variant: 'primary',
+          kind: 'primary',
+          onPress: () => {
+            closeTray()
+            router.push('/edit-profile' as never)
+          },
+        },
+      ]
+    }
     if (refusal.offerDirections) {
       return [
         { ...close, kind: 'tertiary' },
         {
           label: 'Open Maps',
           variant: 'primary',
-          kind: 'strong',
+          kind: 'lit',
           onPress: () => {
             closeTray()
             onOpenMaps?.()
@@ -228,7 +243,8 @@ export function useCheckInFlow({
           await onEnterRoom?.()
           return 'checkedIn'
         }
-        H.error({ blocking: true })
+        // A refusal with a fix carries no haptic of its own (Flow 15 15.22: "a refusal never carries a haptic; the fix does").
+        if (!refusal.fix) H.error({ blocking: true })
         showTray(refusal.title, refusal.message, refusalButtons(refusal, outcome.errorCode), { icon: refusal.icon })
         return 'refused'
       } else {
@@ -282,10 +298,11 @@ export function useCheckInFlow({
         }
         if (askIntent) {
           // iOS drops a push made while a tray is still leaving.
-          if (trayShown) await afterTrayDismissed()
+          if (trayShown) await afterSheetDismissed()
           const answered = untilIntentAnswered()
           router.push(askIntentRoute(eventId))
-          await answered
+          // Closed for a link (or asked again): they went elsewhere, so the room is not pushed over it. Still checked in.
+          if ((await answered) === 'abandoned') return 'checkedIn'
         }
         await onEnterRoom?.()
         return 'checkedIn'

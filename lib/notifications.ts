@@ -3,11 +3,13 @@ import * as Device from 'expo-device'
 import * as Notifications from 'expo-notifications'
 import { Platform } from 'react-native'
 import { useCallback } from 'react'
-import { useFocusEffect, type Href } from 'expo-router'
+import { router, useFocusEffect, type Href } from 'expo-router'
 import { openWhenReady } from './pendingRoute'
 import { apiClient, TokenStorage } from './apiClient'
+import { bannerPresentation, isOnNotificationsScreen } from './inAppBanners'
 import { Logger } from './logger'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
+import { notePushPermission, readPushPermission, whenPermissionReadable } from './pushStatus'
 
 /**
  * The conversation or room on screen, spelled the way the server spells a
@@ -50,19 +52,37 @@ function threadOf(data: Record<string, unknown> | undefined): string | null {
   return null
 }
 
-// How a push that arrives while the app is open is shown.
+/**
+ * Whether a push is about the conversation or room on screen: it is not shown over what you are reading.
+ * The in-app banner host asks the same question.
+ */
+export function isOnScreenThread(data: Record<string, unknown> | undefined): boolean {
+  const thread = threadOf(data)
+  return thread !== null && thread === activeThread
+}
+
+/**
+ * How a push that arrives while the app is open is shown.
+ *
+ * Nothing for the thread you are reading. Otherwise it is the in-app capsule (`lib/inAppBanners`, Flow 9 · 9.4)
+ * where the tabs are showing, nothing for the kinds that only fill the bell, and the system's banner
+ * everywhere else: a pushed screen over the tabs, or a kind with no capsule.
+ */
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
-    const thread = threadOf(notification.request.content.data)
-    const onScreen = thread !== null && thread === activeThread
+    const data = notification.request.content.data
+    const system = !isOnScreenThread(data) && bannerPresentation(data) === 'system'
     return {
-      shouldShowBanner: !onScreen,
-      shouldShowList: !onScreen,
-      shouldPlaySound: !onScreen,
+      shouldShowBanner: system,
+      shouldShowList: system,
+      shouldPlaySound: system,
       shouldSetBadge: false,
     }
   },
 })
+
+/** What Android lists for the `default` channel. */
+export const DEFAULT_CHANNEL_NAME = 'Other notifications'
 
 /**
  * The Android channels the server sends on — `deliveryFor` in blendn-admin's
@@ -79,24 +99,65 @@ Notifications.setNotificationHandler({
  */
 export async function ensureNotificationChannels(): Promise<void> {
   const base = { vibrationPattern: [0, 250, 250, 250], lightColor: '#FF6B6B' }
+  /*
+   * Flow 9 · 9.5 (Android): people and crew are private on the lock screen (the notification shows "Contents
+   * hidden" there), events are shown, and "After the night" is low. `lockscreenVisibility` is as the channel is
+   * created, like importance. The three new channels (`matches`, `crew`, `after-the-night`) are for Notification
+   * settings' rows to open; a push reaches them only when the server sends their id (`channelId`, see the
+   * server contract in the Flow 9 report): until then `messages` stays what carries people and `events` the rest.
+   */
+  const PRIVATE = Notifications.AndroidNotificationVisibility.PRIVATE
+  const PUBLIC = Notifications.AndroidNotificationVisibility.PUBLIC
   await Promise.all([
     Notifications.setNotificationChannelAsync('messages', {
       ...base,
       name: 'Messages and people',
       description: 'Direct messages, friend requests and matches',
       importance: Notifications.AndroidImportance.HIGH,
+      lockscreenVisibility: PRIVATE,
+    }),
+    Notifications.setNotificationChannelAsync('matches', {
+      ...base,
+      name: 'Matches and friends',
+      description: 'Friend requests, matches and reveals',
+      importance: Notifications.AndroidImportance.HIGH,
+      lockscreenVisibility: PRIVATE,
+    }),
+    Notifications.setNotificationChannelAsync('crew', {
+      ...base,
+      name: 'Your crew',
+      description: 'Crew invites, “we’re here” and Blends',
+      importance: Notifications.AndroidImportance.HIGH,
+      lockscreenVisibility: PRIVATE,
     }),
     Notifications.setNotificationChannelAsync('events', {
       ...base,
       name: 'Events',
-      description: 'Changes to events you are going to, reminders and organiser announcements',
+      description: 'Changes to events you are going to, reminders and organizer announcements',
       importance: Notifications.AndroidImportance.HIGH,
+      lockscreenVisibility: PUBLIC,
     }),
     Notifications.setNotificationChannelAsync('rooms', {
       ...base,
       name: 'Room replies',
       description: 'Someone replied to you in an event room',
       importance: Notifications.AndroidImportance.DEFAULT,
+      lockscreenVisibility: PRIVATE,
+    }),
+    Notifications.setNotificationChannelAsync('after-the-night', {
+      ...base,
+      name: 'After the night',
+      description: 'Rate the night, and what comes after it',
+      importance: Notifications.AndroidImportance.LOW,
+      lockscreenVisibility: PRIVATE,
+    }),
+    // The server already sends offers on this id (`deliveryFor`); an install without it filed them under "Miscellaneous".
+    Notifications.setNotificationChannelAsync('offers', {
+      ...base,
+      name: 'Offers from places',
+      description: 'Offers from places you keep going back to',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      lockscreenVisibility: PRIVATE,
     }),
   ])
 }
@@ -110,10 +171,12 @@ export async function registerForPushNotificationsAsync(
   let token: string | null = null
 
   if (Platform.OS === 'android') {
-    // `default` carries only a payload with no type; kept because installs
-    // already have it and nothing can lower its importance now.
+    // `default` carries a push with no payload (the server's `deliveryFor`), so it stays, and installs already have it
+    // (its importance can no longer be lowered). Its name is what Android lists in the app's settings: it was the bare
+    // id, a stray lowercase "default" beside the named channels. A name can be changed after creation; this renames it.
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
+      name: DEFAULT_CHANNEL_NAME,
+      description: 'Notifications that are none of the other kinds',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF6B6B',
@@ -122,7 +185,15 @@ export async function registerForPushNotificationsAsync(
   }
 
   if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync()
+    const existing = await readPushPermission()
+    // The read did not answer (D1): the native queue is stuck, and asking or registering would only queue behind it.
+    if (existing === 'unavailable') {
+      Logger.warn('notifications', 'Push permission unavailable; registering when it answers')
+      // When it does answer (M3), register then. Never with the OS dialog: a prompt minutes later, out of context, is not one.
+      whenPermissionReadable('register', () => void initializePushNotifications({ prompt: false }))
+      return null
+    }
+    const existingStatus = existing.status
     let finalStatus = existingStatus
 
     if (existingStatus !== 'granted') {
@@ -130,8 +201,9 @@ export async function registerForPushNotificationsAsync(
         Logger.info('notifications', 'Push declined during onboarding; not asking')
         return null
       }
-      const { status } = await Notifications.requestPermissionsAsync()
-      finalStatus = status
+      const answer = await Notifications.requestPermissionsAsync()
+      notePushPermission(answer)
+      finalStatus = answer.status
     }
 
     if (finalStatus !== 'granted') {
@@ -317,6 +389,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
      */
     case 'event_checkin':
     case 'event_update':
+    case 'event_changed':
+    case 'event_cancelled':
     case 'event_reminder':
     case 'event':
     case 'waitlist_promoted': {
@@ -357,7 +431,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
      * the crew's chat, where its line is; a Blend opens its room.
      */
     case 'crew_invite': {
-      target = '/crews'
+      // An invite always lands on its own screen, never one tap from joined (Flow 10 · 10.3).
+      target = data.crewId ? { pathname: '/crews/invite/[crewId]', params: { crewId: String(data.crewId) } } : '/crews'
       break
     }
     case 'crew_here': {
@@ -426,6 +501,44 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
   return target
 }
 
+/**
+ * The kinds that are asked something, whose push lands on the Notifications screen (Flow 9 · 9.2, motion #50):
+ * the request is answered there, where Accept and Decline are, and the screen scrolls to it and washes it.
+ * (A row's own View/Join, on that screen, goes to `notificationTarget`: the destination, not the feed.)
+ */
+const LANDS_IN_THE_FEED = ['friend_request', 'crew_invite', 'reveal_request', 'board_request', 'message_request']
+const LANDING_KEYS = ['requestId', 'crewId', 'eventId', 'conversationId'] as const
+
+/** Where a tapped push or banner goes: the Notifications screen with its payload ids for a request kind, otherwise the destination. */
+export function landingTarget(data: Record<string, any> | undefined): Href | null {
+  const type = data?.type
+  if (!data || typeof type !== 'string' || !LANDS_IN_THE_FEED.includes(type)) return notificationTarget(data)
+  const params: Record<string, string> = { type }
+  for (const key of LANDING_KEYS) if (typeof data[key] === 'string') params[key] = data[key]
+  return { pathname: '/notifications', params }
+}
+
+/** A tapped push (cold start, warm) or banner: the landing. */
+export function landFromNotificationData(data: Record<string, any> | undefined) {
+  try {
+    const target = landingTarget(data)
+    if (!target) return
+    /*
+     * Already on the Notifications screen: a second instance would stack on it. Its params change in place
+     * (the ones the new target does not name are cleared, `at` makes a tap on the same row new), and the
+     * screen lands again on the new row.
+     */
+    if (isOnNotificationsScreen() && typeof target === 'object' && 'pathname' in target && target.pathname === '/notifications') {
+      const params: Record<string, string | undefined> = Object.fromEntries(LANDING_KEYS.map((k) => [k, undefined]))
+      router.setParams({ ...params, ...(target.params as Record<string, string>), at: String(Date.now()) })
+      return
+    }
+    openWhenReady(target)
+  } catch (e) {
+    Logger.warn('notifications', 'Failed to land from notification', { error: e })
+  }
+}
+
 // Navigate based on notification payload data
 export function navigateFromNotificationData(data: Record<string, any> | undefined) {
   try {
@@ -445,7 +558,7 @@ export function setupNotificationResponseListener(
     if (response) {
       Logger.debug('notifications', 'Cold-start notification tap', { id: response.notification.request.identifier })
       const data = response.notification.request.content.data
-      navigateFromNotificationData(data)
+      landFromNotificationData(data)
     }
   }).catch(() => {})
 
@@ -454,7 +567,7 @@ export function setupNotificationResponseListener(
     Logger.debug('notifications', 'Notification tapped', { id: response.notification.request.identifier })
     onNotificationResponse?.(response)
     const data = response.notification.request.content.data
-    navigateFromNotificationData(data)
+    landFromNotificationData(data)
   })
 
   return subscription

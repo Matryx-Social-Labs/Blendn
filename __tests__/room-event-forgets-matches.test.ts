@@ -59,7 +59,7 @@ describe('forgetEventMatches', () => {
     }) as typeof fetch
   })
 
-  it("makes the room's next unforced read ask the server", async () => {
+  it("makes the room’s next unforced read ask the server", async () => {
     await apiClient.getEventMatches('e1', { limit: 20 })
     await apiClient.getEventMatches('e1', { limit: 20 })
     expect(asked).toEqual(['/api/mobile/events/e1/matches?limit=20'])
@@ -82,7 +82,7 @@ describe('forgetEventMatches', () => {
   })
 
   // Its "here now" is the same question as a number (SCRUM-617).
-  it("drops the room's preview with it, and only that room's", async () => {
+  it("drops the room’s preview with it, and only that room’s", async () => {
     await apiClient.getRoomPreview('e6')
     await apiClient.getRoomPreview('e66')
     asked.length = 0
@@ -150,7 +150,7 @@ describe('a read in flight at the event', () => {
     expect(pending).toHaveLength(2)
   })
 
-  it("drops the old answer even when it lands after the event's read is done", async () => {
+  it("drops the old answer even when it lands after the event’s read is done", async () => {
     const before = apiClient.getEventMatches('e4', { limit: 20 })
     await settle()
     apiClient.forgetEventMatches('e4')
@@ -168,7 +168,7 @@ describe('a read in flight at the event', () => {
   })
 })
 
-describe("SWR's background refresh in flight at the event", () => {
+describe("SWR’s background refresh in flight at the event", () => {
   type Pending = { answer: (body: unknown) => void }
   const pending: Pending[] = []
   const settle = () => new Promise((r) => setTimeout(r, 30))

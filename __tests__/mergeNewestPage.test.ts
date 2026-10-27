@@ -25,7 +25,7 @@ describe('mergeNewestPage', () => {
     expect(out.keptOlder).toBe(true)
   })
 
-  it("takes the page's copy of a message it carries — ticks and edits change", () => {
+  it("takes the page’s copy of a message it carries — ticks and edits change", () => {
     const held = [m('1'), { id: '2', local: false, stale: true } as M]
     const out = merge(held, [m('2')])
     expect(out.items[1]).not.toHaveProperty('stale')

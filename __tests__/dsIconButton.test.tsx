@@ -6,12 +6,15 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import * as Reanimated from 'react-native-reanimated'
 
 import { IconButton } from '../components/ds/IconButton'
+import { GroundProvider, HueProvider } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
+jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
   return {
@@ -76,8 +79,18 @@ describe('<IconButton>', () => {
     expect(select).toHaveBeenCalledTimes(1)
   })
 
-  it('selected flips polarity: a white disc, the glyph in ink (§4.7)', async () => {
-    await draw({ icon: 'bookmark', accessibilityLabel: 'Saved', selected: true })
+  it('selected lights in the screen’s hue, never white (direction C): the fill, a 1 pt rim, the light glyph', async () => {
+    await render(
+      <HueProvider value="rose">
+        <IconButton icon="search" accessibilityLabel="Search" selected onPress={jest.fn()} testID="i" />
+      </HueProvider>
+    )
+    expect(flat('i-selected')).toMatchObject({ backgroundColor: COLOR.selectionRoseFill, borderWidth: 1, borderColor: COLOR.brandRose })
+    expect(flat('i-selected').backgroundColor).not.toBe(COLOR.selectionFill)
+  })
+
+  it('over a photo (media) the selected disc stays white with an ink glyph (§4.7): a hue on a photo is not legible', async () => {
+    await draw({ icon: 'heart', accessibilityLabel: 'Saved', selected: true, tier: 'media' })
     expect(flat('i-selected').backgroundColor).toBe(COLOR.selectionFill)
   })
 
@@ -110,5 +123,73 @@ describe('<IconButton>', () => {
     await draw()
     await act(async () => {})
     expect(flat('i-contrast').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('the pop (DS #15)', () => {
+  const reduceMotion = Reanimated.useReducedMotion as jest.Mock
+  const toggle = (selected: boolean) => (
+    <IconButton icon="heart" accessibilityLabel="Like" selected={selected} onPress={jest.fn()} testID="i" />
+  )
+
+  it('a toggle pops its glyph once when it is switched on, with H.select once', async () => {
+    reduceMotion.mockReturnValue(false)
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await render(toggle(false))
+    await fireEvent.press(screen.getByTestId('i'))
+    await screen.rerender(toggle(true))
+    expect(select).toHaveBeenCalledTimes(1)
+    expect(spring).toHaveBeenCalledTimes(1)
+    spring.mockRestore()
+  })
+
+  it('switched off, or mounted on, it plays nothing; and Reduce Motion plays nothing', async () => {
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    reduceMotion.mockReturnValue(false)
+    await render(toggle(true))
+    await screen.rerender(toggle(false))
+    expect(spring).not.toHaveBeenCalled()
+    reduceMotion.mockReturnValue(true)
+    await screen.rerender(toggle(true))
+    expect(spring).not.toHaveBeenCalled()
+    spring.mockRestore()
+  })
+
+  it('a button that is not a toggle never animates', async () => {
+    const spring = jest.spyOn(Reanimated, 'withSpring')
+    await render(<IconButton icon="heart" accessibilityLabel="Like" testID="i" />)
+    expect(spring).not.toHaveBeenCalled()
+    spring.mockRestore()
+  })
+})
+
+describe('on a surface card (C20: the request card’s "…" showed no disc on iOS: control glass over an opaque card)', () => {
+  const hidden = { includeHiddenElements: true }
+
+  it.each(['ios', 'android'] as const)('%s: a solid disc in the card’s chip tone, not glass', async (os) => {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+    try {
+      await render(
+        <GroundProvider value="surface">
+          <IconButton icon="ellipsis" accessibilityLabel="More" onPress={jest.fn()} testID="i" />
+        </GroundProvider>
+      )
+      expect(StyleSheet.flatten(screen.getByTestId('i-disc', hidden).props.style).backgroundColor).toBe(COLOR.surfaceSunken)
+      expect(screen.queryByTestId('glass', hidden)).toBeNull()
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+    }
+  })
+
+  it('on the page it is glass, as before; selected on a card it is lit, as before', async () => {
+    await render(<IconButton icon="ellipsis" accessibilityLabel="More" onPress={jest.fn()} testID="i" />)
+    expect(screen.queryByTestId('i-disc', hidden)).toBeNull()
+    await render(
+      <GroundProvider value="surface">
+        <IconButton icon="bookmark" accessibilityLabel="Saved" selected onPress={jest.fn()} testID="i" />
+      </GroundProvider>
+    )
+    expect(screen.getByTestId('i-selected', hidden)).toBeTruthy()
+    expect(screen.queryByTestId('i-disc', hidden)).toBeNull()
   })
 })

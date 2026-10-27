@@ -7,14 +7,14 @@ describe('Nearby events', () => {
   const SRC = read('app', 'nearby-events.tsx')
 
   it('says the day as well as the time on each card', () => {
-    // "9:00 PM" alone could be any night; Going's saved rows say both.
-    expect(SRC).toContain('`${featuredDateLabel(item.start_time)} · ${timeLabel(item.start_time)}`')
+    // "9:00 PM" alone could be any night; the card's time is the one date grammar (`cardTime`: "Sat · 10:30 PM").
+    expect(SRC).toContain('homeCardProps(')
     expect(SRC).not.toContain('formatTimeRange(')
   })
 
   it('tells a failed location fix apart from an empty city, with a Try again', () => {
     expect(SRC).toContain('Location unavailable')
-    expect(SRC).toMatch(/onPress=\{retryLocation\}/)
+    expect(SRC).toMatch(/onPress: retryLocation/)
   })
 
   it('tries again on returning from Settings while denied, without re-prompting', () => {
@@ -41,8 +41,10 @@ describe('Connect in the room', () => {
 
   it('checks the answer, says so on failure, and always stops the spinner', () => {
     const onSend = SCREEN.slice(SCREEN.indexOf('onSend={async'), SCREEN.indexOf('<MomentMatch'))
-    expect(onSend).toMatch(/if \(await room\.connect\(connectTo\.id, message\)\) setConnectTo\(null\)/)
-    expect(onSend).toContain("say('Couldn’t send the request. Try again.', 'error')")
+    expect(onSend).toMatch(/const sent = await room\.connect\(connectTo\.id, message\)\s*if \(sent\.stands\) setConnectTo\(null\)/)
+    // The server's sentence when it named one (TEXT_NOT_ALLOWED), else the generic line: in the sheet, under the note.
+    expect(onSend).toContain("setConnectError(sent.refusal ?? 'Couldn’t send the request. Try again.')")
+    expect(SCREEN).toMatch(/<ConnectSheet[\s\S]{0,400}error=\{connectError\}/)
     expect(onSend).toMatch(/finally \{\s*setConnecting\(false\)/)
   })
 

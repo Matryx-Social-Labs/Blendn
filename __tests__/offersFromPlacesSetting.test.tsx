@@ -47,7 +47,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShow
 
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
-import SettingsScreen from '../app/settings'
+import SettingsScreen from '../app/notification-settings'
 import { apiClient } from '../lib/apiClient'
 import { deleteAccount, signOut } from '../lib/useAuth'
 
@@ -69,19 +69,20 @@ beforeEach(() => {
   api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus() } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
   ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
-    Promise.resolve({ success: true, data: { enabled: init?.method === 'PUT' ? JSON.parse(String(init.body)).enabled : true } })
+    // A place has regulars on for this person: the row is drawn only then (D21, YOU-04).
+    Promise.resolve({ success: true, data: init?.method === 'PUT' ? { enabled: JSON.parse(String(init.body)).enabled } : { enabled: true, regulars: { active: true } } })
   )
 })
 
 describe('Offers from places (step 12 review M6)', () => {
   it('shows what the server keeps, and turning it off sends exactly that', async () => {
     await render(<SettingsScreen />)
-    const row = await screen.findByLabelText('Offers from places')
-    await waitFor(() => expect(screen.getByLabelText('Offers from places').props.accessibilityState).toMatchObject({ checked: true }))
-    await act(async () => { fireEvent.press(screen.getByLabelText('Offers from places')) })
+    const row = await screen.findByLabelText(/^Offers from places/)
+    await waitFor(() => expect(screen.getByLabelText(/^Offers from places/).props.accessibilityState).toMatchObject({ checked: true }))
+    await act(async () => { fireEvent.press(screen.getByLabelText(/^Offers from places/)) })
     void row
     expect(api.queuedRequest).toHaveBeenLastCalledWith('/api/mobile/me/offers', { method: 'PUT', body: '{"enabled":false}' }, true, 2)
-    expect(screen.getByLabelText('Offers from places').props.accessibilityState).toMatchObject({ checked: false })
+    expect(screen.getByLabelText(/^Offers from places/).props.accessibilityState).toMatchObject({ checked: false })
   })
 })
 

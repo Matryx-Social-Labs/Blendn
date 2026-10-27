@@ -61,3 +61,33 @@ describe('<Avatar>', () => {
     expect(flat('a-ring').backgroundColor).toBe(MATERIAL.hairlineIncreaseContrast)
   })
 })
+
+describe('<Avatar halo>', () => {
+  // An earlier test turns Increase Contrast on (its ring is then white at 50%); these draw the ordinary cut-out.
+  beforeEach(() => {
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(false)
+  })
+
+  it('a photo takes a second 2 pt ring in the halo colour, outside the 2 pt cut-out', async () => {
+    await render(<Avatar kind="photo" uri="https://x/y.jpg" size={40} ring={COLOR.surface} halo={COLOR.brandRose} testID="a" />)
+    expect(flat('a-ring')).toMatchObject({ top: -2, backgroundColor: COLOR.surface })
+    expect(flat('a-halo')).toMatchObject({ top: -4, left: -4, borderWidth: 2, borderColor: COLOR.brandRose, borderRadius: RADIUS.capsule })
+  })
+
+  it('with no cut-out it hugs the face', async () => {
+    await render(<Avatar kind="photo" uri="https://x/y.jpg" size={40} halo={COLOR.brandRose} testID="a" />)
+    expect(flat('a-halo')).toMatchObject({ top: -2, borderColor: COLOR.brandRose })
+  })
+
+  it('a creature takes it too, and a crew’s corners follow the square', async () => {
+    await render(<Avatar kind="creature" pseudonym="Night Cat" size={40} ring={COLOR.ink} halo={COLOR.brandRose} testID="a" />)
+    expect(flat('a-halo')).toMatchObject({ top: -4, borderColor: COLOR.brandRose })
+    await render(<Avatar kind="crew" plate={CREATURE_PALETTES[3]} size={56} halo={COLOR.brandRose} testID="b" />)
+    expect(flat('b-halo').borderRadius).toBe(Math.round(56 * 0.3) + 2)
+  })
+
+  it('no halo, no ring: nothing is drawn', async () => {
+    await render(<Avatar kind="photo" uri="https://x/y.jpg" size={40} testID="a" />)
+    expect(screen.queryByTestId('a-halo', { includeHiddenElements: true })).toBeNull()
+  })
+})

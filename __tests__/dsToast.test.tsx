@@ -11,13 +11,13 @@ import * as Reanimated from 'react-native-reanimated'
 
 import { Toast, toastDwell } from '../components/ds/Toast'
 import { TAB_BAR_HINT_RISE } from '../components/ds/TabBar'
-import { COLOR, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, DURATION, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring) }
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring), withTiming: jest.fn(actual.withTiming) }
 })
 jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
@@ -28,6 +28,8 @@ jest.mock('expo-glass-effect', () => {
   }
 })
 
+/** The safe-area mock has no insets. */
+const INSET_BOTTOM = 0
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
@@ -46,6 +48,37 @@ beforeEach(() => {
   announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
 })
 afterEach(() => jest.useRealTimers())
+
+describe('the success check draws (foundations)', () => {
+  it('success is a drawn circle-check; error and info stay still', async () => {
+    await render(<Toast kind="success" text="Saved to Going" onDismiss={jest.fn()} testID="t" />)
+    expect(screen.getByTestId('t-glyph', { includeHiddenElements: true })).toBeTruthy()
+    await render(<Toast kind="error" text="Couldn’t save" onDismiss={jest.fn()} testID="e" />)
+    expect(screen.queryByTestId('e-glyph', { includeHiddenElements: true })).toBeNull()
+    await render(<Toast kind="info" text="Copied" onDismiss={jest.fn()} testID="i" />)
+    expect(screen.queryByTestId('i-glyph', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('it strokes in as the toast appears, on the frame H.success plays, and not for an error', async () => {
+    const stroke = jest.spyOn(Reanimated, 'withDelay')
+    await render(<Toast kind="success" text="Saved to Going" onDismiss={jest.fn()} testID="t" />)
+    expect(haptic.success).toHaveBeenCalledTimes(1)
+    // circle-check is two strokes, one delay each.
+    expect(stroke).toHaveBeenCalledTimes(2)
+    stroke.mockClear()
+    await render(<Toast kind="error" text="Couldn’t save" onDismiss={jest.fn()} testID="e" />)
+    expect(stroke).not.toHaveBeenCalled()
+    stroke.mockRestore()
+  })
+
+  it('Reduce Motion: the check stands drawn, nothing strokes in', async () => {
+    reduceMotion.mockReturnValue(true)
+    const stroke = jest.spyOn(Reanimated, 'withDelay')
+    await render(<Toast kind="success" text="Saved to Going" onDismiss={jest.fn()} testID="t" />)
+    expect(stroke).not.toHaveBeenCalled()
+    stroke.mockRestore()
+  })
+})
 
 describe('toastDwell', () => {
   it('is at least 5 s, plus 1 s per 8 words', () => {
@@ -77,6 +110,23 @@ describe('<Toast>', () => {
     // Over the bar and over the centre button's check-in pill, which rises 36 above it (drive 3).
     expect(TAB_BAR_HINT_RISE).toBe(36)
     expect(flat('t').bottom).toBe(SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md)
+  })
+
+  it('Android: no dock sits at the bottom inset + 16; a dock of 100 lifts it to + 116; the tab roots are unchanged', async () => {
+    on('android')
+    await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} testID="t" />)
+    expect(flat('t').bottom).toBe(INSET_BOTTOM + SPACE.lg)
+    await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} dock={100} testID="d" />)
+    expect(flat('d').bottom).toBe(INSET_BOTTOM + 100 + SPACE.lg)
+    await render(<Toast kind="error" text="Couldn’t save." onDismiss={jest.fn()} aboveTabBar dock={100} testID="r" />)
+    expect(flat('r').bottom).toBe(INSET_BOTTOM + SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md)
+  })
+
+  it('reports its laid-out height, so a screen can leave room under it', async () => {
+    const onHeight = jest.fn()
+    await render(<Toast kind="info" text="Saved" onDismiss={jest.fn()} onHeight={onHeight} testID="t" />)
+    await act(async () => fireEvent(screen.getByTestId('t'), 'layout', { nativeEvent: { layout: { width: 300, height: 52, x: 0, y: 0 } } }))
+    expect(onHeight).toHaveBeenCalledWith(52)
   })
 
   it.each([
@@ -172,5 +222,53 @@ describe('<Toast>', () => {
     reduceMotion.mockReturnValue(true)
     await render(<Toast kind="info" text="Hi" onDismiss={jest.fn()} />)
     expect(Reanimated.withSpring).not.toHaveBeenCalled()
+  })
+
+  describe('#19: it fades as it enters and leaves, on both platforms (the Toast page: "+ fade")', () => {
+    const withTiming = Reanimated.withTiming as jest.Mock
+    beforeEach(() => withTiming.mockClear())
+    const fadedIn = (duration: number) => withTiming.mock.calls.some(([to, cfg]) => to === 1 && cfg.duration === duration)
+    const fadedOut = () => withTiming.mock.calls.some(([to, cfg]) => to === 0 && cfg.duration === 160)
+
+    it('iOS: opacity starts at 0 and fades in over quick, on the gentle curve', async () => {
+      await render(<Toast kind="info" text="Hi" onDismiss={jest.fn()} testID="t" />)
+      expect(fadedIn(160)).toBe(true)
+    })
+
+    it('Android: the same', async () => {
+      on('android')
+      await render(<Toast kind="info" text="Hi" onDismiss={jest.fn()} testID="t" />)
+      expect(fadedIn(160)).toBe(true)
+    })
+
+    it.each(['ios', 'android'] as const)('%s: it fades out over quick when it leaves', async (os) => {
+      on(os)
+      await render(<Toast kind="info" text="Hi" action={{ label: 'Undo', onPress: () => {} }} onDismiss={jest.fn()} />)
+      withTiming.mockClear()
+      await fireEvent.press(screen.getByRole('button', { name: 'Undo' }))
+      expect(fadedOut()).toBe(true)
+    })
+
+    it.each(['ios', 'android'] as const)('%s, Reduce Motion: no move, a fade in place over 200, and out over quick', async (os) => {
+      on(os)
+      reduceMotion.mockReturnValue(true)
+      ;(Reanimated.withSpring as jest.Mock).mockClear()
+      const onDismiss = jest.fn()
+      await render(<Toast kind="info" text="Hi" action={{ label: 'Undo', onPress: () => {} }} onDismiss={onDismiss} />)
+      expect(Reanimated.withSpring).not.toHaveBeenCalled()
+      expect(fadedIn(200)).toBe(true)
+      withTiming.mockClear()
+      await fireEvent.press(screen.getByRole('button', { name: 'Undo' }))
+      expect(fadedOut()).toBe(true)
+      // It stays for the length of the fade, not a frame: iOS used to vanish at once.
+      expect(onDismiss).not.toHaveBeenCalled()
+      await advance(200)
+      expect(onDismiss).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('takes its dwell from the design tokens', () => {
+    expect(DURATION.toastDwell).toBe(5000)
+    expect(DURATION.toastDwellAction).toBe(10000)
   })
 })

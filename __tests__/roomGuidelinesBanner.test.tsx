@@ -7,7 +7,8 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Linking, StyleSheet } from 'react-native'
+import { StyleSheet } from 'react-native'
+import * as WebBrowser from 'expo-web-browser'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -32,6 +33,7 @@ jest.mock('react-native-safe-area-context', () => {
 const mockAuth = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({
   useAuth: () => mockAuth,
+  refreshAuthUser: jest.fn(),
   signOut: jest.fn(),
   deleteAccount: jest.fn(),
 }))
@@ -48,7 +50,8 @@ jest.mock('../lib/notifications', () => ({
 
 import SettingsScreen from '../app/settings'
 import { RoomGuidelinesBanner } from '../components/chat/RoomGuidelinesBanner'
-import { COMMUNITY_GUIDELINES_URL, roomGuidelinesKey } from '../lib/communityGuidelines'
+import { AI_MODERATION_NOTICE, COMMUNITY_GUIDELINES_URL, roomGuidelinesKey } from '../lib/communityGuidelines'
+import { BLENDN_LINKS } from '../lib/links'
 
 const BANNER = 'room-guidelines-banner'
 
@@ -66,8 +69,6 @@ async function openRoom(userId: string, chatRoomId: string) {
 
 beforeEach(async () => {
   await AsyncStorage.clear()
-  jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
-  jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true)
 })
 
 it('links to the published page', () => {
@@ -82,13 +83,38 @@ it('shows on the first open of a room', async () => {
   expect(screen.getByRole('button', { name: 'Got it' })).toBeTruthy()
 })
 
-it('"community guidelines" in the copy is the one link: white, underlined, and it opens the page', async () => {
+it('"community guidelines" in the copy is a link: white, underlined, and it opens the page', async () => {
   await openRoom('u_me', 'room_a')
   const words = screen.getByText('community guidelines')
   expect(StyleSheet.flatten(words.props.style)).toMatchObject({ color: '#FFFFFF', textDecorationLine: 'underline' })
-  expect(screen.getAllByRole('link')).toHaveLength(1)
+  // Two links: the guidelines and, with the AI-moderation notice, the privacy policy.
+  expect(screen.getAllByRole('link')).toHaveLength(2)
   await fireEvent.press(words)
-  expect(Linking.openURL).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL)
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object))
+})
+
+// App Review 5.1.2(i): what people post goes to OpenAI for moderation, said where they first post. The wording is a
+// DRAFT for the owner, in one constant. Negative control: the banner at bd019b3b (no notice) fails it.
+describe('the AI-moderation notice', () => {
+  it('says, in the one constant, that posts are checked by OpenAI', () => {
+    expect(AI_MODERATION_NOTICE).toBe('Messages, posts and photos are checked automatically for safety, including by OpenAI.')
+  })
+
+  it('is in the banner, read whole by a screen reader, and opens the privacy policy', async () => {
+    await openRoom('u_me', 'room_a')
+    const notice = screen.getByRole('link', { name: `${AI_MODERATION_NOTICE} Privacy policy` })
+    expect(screen.getByText(new RegExp(AI_MODERATION_NOTICE.replace(/[.]/g, '\\.')))).toBeTruthy()
+    const words = screen.getByText('privacy policy')
+    expect(StyleSheet.flatten(words.props.style)).toMatchObject({ color: '#FFFFFF', textDecorationLine: 'underline' })
+    await fireEvent.press(notice)
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(BLENDN_LINKS.privacy, expect.any(Object))
+  })
+
+  it('goes with the banner: once per room, like the ask', async () => {
+    await AsyncStorage.setItem(roomGuidelinesKey('u_me', 'room_a'), 'dismissed')
+    await openRoom('u_me', 'room_a')
+    expect(screen.queryByText(new RegExp('including by OpenAI'))).toBeNull()
+  })
 })
 
 it('is centred, the copy unchanged (owner override of room #04)', async () => {
@@ -111,7 +137,7 @@ it('"Got it" hides it, and it stays hidden when that room opens again', async ()
   expect(screen.queryByTestId(BANNER)).toBeNull()
 })
 
-it("shows again in a different event's room", async () => {
+it("shows again in a different event’s room", async () => {
   await AsyncStorage.setItem(roomGuidelinesKey('u_me', 'room_a'), 'dismissed')
   await openRoom('u_me', 'room_b')
   expect(screen.getByTestId(BANNER)).toBeTruthy()
@@ -132,7 +158,7 @@ it('shows when the stored flag cannot be read — the safe direction', async () 
 it('the link opens the guidelines', async () => {
   await openRoom('u_me', 'room_a')
   await fireEvent.press(screen.getByRole('link', { name: 'Community guidelines' }))
-  expect(Linking.openURL).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL)
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object))
   // Reading the rules is not agreeing to them: the banner stays.
   expect(screen.getByTestId(BANNER)).toBeTruthy()
 })
@@ -140,6 +166,6 @@ it('the link opens the guidelines', async () => {
 // A link: it opens a web page, and says so with its role and its open-outline mark.
 it('the Settings row opens the same page', async () => {
   await render(<SettingsScreen />)
-  await fireEvent.press(await screen.findByRole('link', { name: 'Community guidelines' }))
-  await waitFor(() => expect(Linking.openURL).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL))
+  await fireEvent.press(await screen.findByRole('link', { name: /^Community guidelines/ }))
+  await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
 })

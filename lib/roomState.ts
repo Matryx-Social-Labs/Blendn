@@ -17,6 +17,20 @@ export function roomStateFrom(room: { membership?: { status?: string } | null; s
 
 export function roomStateLine(state: RoomState): string | null {
   if (state === 'muted') return 'Muted — you can read, not post'
-  if (state === 'locked') return 'Locked by the organiser — read only'
+  if (state === 'locked') return 'Locked by the organizer — read only'
   return null
+}
+
+/**
+ * Whether room `roomId` in a `GET /chat/groups` payload is locked by its organiser: read-only for everyone until it is
+ * reopened. The room opens on this (TG-02); before, the lock was learnt only from a send it refused, so a locked room
+ * opened with a live composer. Its own status, not `roomStateFrom`: a mute must not hide a lock.
+ */
+export function roomLockedIn(payload: unknown, roomId: string): boolean {
+  const data = payload as Record<string, unknown> | unknown[] | null
+  if (!data) return false
+  const lists = Array.isArray(data) ? [data] : [data.groups, data.rooms, data.data].filter(Array.isArray)
+  const rows = (lists as Record<string, unknown>[][]).flat()
+  const room = rows.find((g) => String(g.id ?? g.chat_room_id ?? g.chatRoomId ?? '') === roomId)
+  return room?.status === 'locked'
 }

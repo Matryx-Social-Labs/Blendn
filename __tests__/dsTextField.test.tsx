@@ -9,7 +9,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, TextInput } from 'react-native'
 
 import { TextArea, TextField } from '../components/ds/TextField'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -103,16 +103,44 @@ describe('<TextField>', () => {
     expect(screen.getByRole('button', { name: 'Hide password' })).toBeTruthy()
   })
 
+  it('secure: the dots keep Geist Mono and the placeholder Satoshi through the Strong Password sheet (r7 H3)', async () => {
+    // iOS's sheet fills the field and, dismissed, empties it again; the placeholder came back in Courier. The native field
+    // changed font with the value then (Mono for dots, Satoshi empty), and drew the placeholder in whatever font it was left.
+    const placeholder = 'At least 12 characters'
+    const props = { label: 'Password', secure: true, placeholder }
+    const family = () => StyleSheet.flatten(input().props.style).fontFamily
+    const shown = () => screen.queryByText(placeholder, { includeHiddenElements: true })
+
+    const view = await render(field({ ...props, value: '' }))
+    expect(family()).toBe(FONT_FAMILY.mono[500])
+    expect(input().props.placeholder).toBeUndefined()
+    expect(StyleSheet.flatten(shown()!.props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[400], color: COLOR.textTertiary })
+    expect(input().props.accessibilityLabel).toBe('Password')
+
+    await view.rerender(field({ ...props, value: 'Xa9q-Lm2p-Rt7w' }))
+    expect(family()).toBe(FONT_FAMILY.mono[500])
+    expect(shown()).toBeNull()
+
+    await view.rerender(field({ ...props, value: '' }))
+    expect(family()).toBe(FONT_FAMILY.mono[500])
+    expect(StyleSheet.flatten(shown()!.props.style).fontFamily).toBe(FONT_FAMILY.brand[400])
+  })
+
+  it('a plain field keeps the native placeholder', async () => {
+    await render(field())
+    expect(input().props.placeholder).toBe('you@example.com')
+  })
+
   it('a counter inside the box counts characters, not UTF-16 units, and reads as the hint', async () => {
     await render(field({ label: 'Crew name', value: 'Neb🌌', limit: 32 }))
     expect(screen.getByText('4/32', { includeHiddenElements: true })).toBeTruthy()
     expect(input().props.accessibilityHint).toBe('4 of 32 characters')
   })
 
-  it('caps the value at 1.3× inside the fixed 56 pt; the label scales freely', async () => {
+  it('caps the value at 1.3× inside the fixed 56 pt; the label grows to its role’s cap, never past it (RC drive 2 D-8)', async () => {
     await render(field())
     expect(input().props.maxFontSizeMultiplier).toBe(1.3)
-    expect(screen.getByText('Email').props.maxFontSizeMultiplier).toBeUndefined()
+    expect(screen.getByText('Email').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.label)
   })
 
   it('previewState focused draws the focus ring with no keyboard', async () => {
@@ -148,17 +176,24 @@ describe('<TextArea>', () => {
     expect(StyleSheet.flatten(screen.getByText('472/500', { includeHiddenElements: true }).props.style).color).toBe(COLOR.warning)
   })
 
+  it('the counter turns red over the cap, and is still amber at it', async () => {
+    await render(area({ value: 'x'.repeat(500) }))
+    expect(StyleSheet.flatten(screen.getByText('500/500', { includeHiddenElements: true }).props.style).color).toBe(COLOR.warning)
+    await render(area({ value: 'x'.repeat(501) }))
+    expect(StyleSheet.flatten(screen.getByText('501/500', { includeHiddenElements: true }).props.style).color).toBe(COLOR.destructive)
+  })
+
   it('never truncates at the cap: the Save button refuses instead', async () => {
     await render(area())
     expect(input().props.maxLength).toBeUndefined()
   })
 
-  it('grows with its text (flex-grow from its content, never basis 0) and scales it freely', async () => {
+  it('grows with its text (flex-grow from its content, never basis 0), its text to the body role’s cap (RC drive 3 D-B)', async () => {
     await render(area())
     expect(StyleSheet.flatten(input().props.style)).toMatchObject({ flexGrow: 1 })
     expect(StyleSheet.flatten(input().props.style).flexBasis).toBeUndefined()
     expect(StyleSheet.flatten(input().props.style).flex).toBeUndefined()
-    expect(input().props.maxFontSizeMultiplier).toBeUndefined()
+    expect(input().props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
   })
 
   it('error: the ring and the sentence; focus: the 2 pt white ring', async () => {
@@ -185,5 +220,21 @@ describe('the accessibility settings', () => {
     await render(field({ value: 'sam@blendn.app' }))
     await act(async () => {})
     expect(StyleSheet.flatten(input().props.style).fontFamily).toBe(FONT_FAMILY.brand[700])
+  })
+})
+
+describe('one label, one inset', () => {
+  it('a field, an area and a chip set start their labels 4 pt in, at the same edge', async () => {
+    const { ChipSet } = require('../components/ds/ChipSet') as typeof import('../components/ds/ChipSet')
+    await render(
+      <>
+        <TextField label="Email" value="" onChangeText={jest.fn()} />
+        <TextArea label="About me" value="" onChangeText={jest.fn()} />
+        <ChipSet label="THIS OR THAT" items={[{ key: 'a', label: 'A' }]} selection="single" selected={[]} onToggle={jest.fn()} />
+      </>,
+    )
+    for (const text of ['Email', 'About me', 'THIS OR THAT']) {
+      expect(StyleSheet.flatten(screen.getByText(text).props.style).paddingLeft).toBe(SPACE.xs)
+    }
   })
 })

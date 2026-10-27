@@ -1,6 +1,5 @@
 import * as Location from 'expo-location'
 import { Linking, Platform } from 'react-native'
-import type { ActionTrayButton } from '../components/ActionTray'
 import type { ButtonKind } from '../components/ds/Button'
 import type { IconName } from '../components/ui/Icon'
 import { markCheckIn, type FixSource } from './checkInTiming'
@@ -87,6 +86,58 @@ export function firstGoodFix(
   })
 }
 
+/** A list sorted by distance takes a fix this old: a few minutes' walk does not reorder a city's events. */
+export const ROUGH_FIX_MAX_AGE_MS = 5 * 60_000
+/** A fix refused before the deadline is asked again this soon. */
+const ROUGH_FIX_RETRY_MS = 1_000
+
+const timedOutError = () => Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })
+
+/** `work`, or a timeout at `ms`: `getCurrentPositionAsync` has no deadline of its own. */
+function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(timedOutError()), ms)
+  })
+  return Promise.race([work, deadline]).finally(() => clearTimeout(timer))
+}
+
+/**
+ * Where you are, roughly, for a list sorted by distance (Nearby): the phone's last fix if it is recent, else a new one,
+ * asked again until the deadline when it is refused early. Rejects only when Location Services are off, or at the
+ * deadline.
+ *
+ * A first ask with nothing cached is refused at once on iOS (CoreLocation's "location unknown": it is still looking),
+ * and Nearby said "Location unavailable" over a fix that came a second later (RC drive 4 D-10). That refusal is not
+ * the answer; the deadline is.
+ */
+/** Set `aborted` to stop a `roughFix` that nobody waits for any more (the screen left, a second Try again). */
+export type FixAsk = { aborted: boolean }
+export const isAbortedFix = (error: unknown) => (error as { code?: string } | null)?.code === 'E_LOCATION_ABORTED'
+const abortedError = () => Object.assign(new Error('Location ask abandoned'), { code: 'E_LOCATION_ABORTED' })
+
+export async function roughFix(deadlineMs: number = LOCATION_FIX_TIMEOUT_MS, ask: FixAsk = { aborted: false }): Promise<Location.LocationObject> {
+  const last = await Promise.resolve()
+    .then(() => Location.getLastKnownPositionAsync({ maxAge: ROUGH_FIX_MAX_AGE_MS }))
+    .catch(() => null)
+  if (last) return last
+  const services = await Promise.resolve()
+    .then(() => Location.hasServicesEnabledAsync())
+    .catch(() => true)
+  if (!services) throw Object.assign(new Error('Location services are off'), { code: 'E_LOCATION_SERVICES_DISABLED' })
+  const deadline = Date.now() + deadlineMs
+  for (;;) {
+    if (ask.aborted) throw abortedError()
+    try {
+      return await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), Math.max(0, deadline - Date.now()))
+    } catch (error) {
+      if (ask.aborted) throw abortedError()
+      if (deadline - Date.now() <= ROUGH_FIX_RETRY_MS) throw error
+      await new Promise((resolve) => setTimeout(resolve, ROUGH_FIX_RETRY_MS))
+    }
+  }
+}
+
 /**
  * The fix asked for when the pass showed, so the hold does not start one cold.
  * Pending or done, the hold reuses it rather than asking a second time.
@@ -125,16 +176,22 @@ async function freshFix(maxAccuracyM: number): Promise<{ fix: Location.LocationO
 }
 
 /**
- * A tray button. `kind` is the redesign's (`<Sheet>`, Flow 4 Tonight #15–#26:
- * Open Settings is the strong neutral, Not now and Cancel are text); a screen
- * still on `ActionTray` reads `variant` and ignores it.
+ * A tray button. `kind` is the design's (`<Sheet>`, Flow 4 Tonight #15–#26: Open Settings is lit, Not
+ * now and Cancel are text); a tray that names only a `variant` gets the kind it stands for (`trayKind`).
  */
-export type TrayButton = ActionTrayButton & { kind?: ButtonKind }
+export type TrayButton = {
+  label: string
+  onPress: () => void
+  variant?: 'primary' | 'secondary' | 'destructive'
+  kind?: ButtonKind
+  loading?: boolean
+  disabled?: boolean
+}
 
 /** What a redesigned tray draws besides its words: the glyph well, a Geist Mono path line (R3-D4 4.7). */
 export type TrayExtra = { icon?: IconName; detail?: string }
 
-/** The screen's tray, as `EventDetailScreen` and `ActionTray` define it; the Blend'n overlay draws it as a `<Sheet>`. */
+/** The screen's tray, as `EventDetailScreen` defines it; the Blend'n overlay and Go Live draw it as a `<Sheet>`. */
 export type ShowTray = (title: string, message: string, buttons?: TrayButton[], extra?: TrayExtra) => void
 
 export type CheckInTrays = {
@@ -196,7 +253,7 @@ export async function getCurrentLocation({
     {
       label: 'Open Settings',
       variant: 'primary',
-      kind: 'strong',
+      kind: 'lit',
       onPress: () => {
         closeTray()
         Linking.openSettings().catch(() => {})

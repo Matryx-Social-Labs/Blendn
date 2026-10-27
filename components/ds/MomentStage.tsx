@@ -3,6 +3,7 @@ import { AccessibilityInfo, Modal, Pressable, StyleSheet, View } from 'react-nat
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { COLOR, EASING, SPRING } from '../../lib/design/tokens'
+import { useQueuedModal } from '../../lib/modalTurn'
 import { tint } from '../../lib/theme'
 import { Grain } from './Grain'
 import { Orbs, type OrbSet } from './Orbs'
@@ -111,6 +112,12 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
   const orbStyle = useAnimatedStyle(() => ({ opacity: orbsOpacity ? orbsOpacity.get() : 1 }))
   const ink = reduceTransparency && scrimAlpha > 0 ? COLOR.ink : tint(COLOR.ink, scrimAlpha)
+  /*
+   * One Modal on screen at a time on iOS (lib/modalTurn). A link closes a moment that can be closed (`onBack`: the match
+   * and the Blend, whose moment is already recorded, so it is not shown again); one with only a skip (onboarding's
+   * Ready, whose skip navigates) stays, and the link waits behind it like any other route.
+   */
+  const turn = useQueuedModal(modal, { closeForLink: onBack })
 
   const stage = (
     <View
@@ -139,7 +146,17 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
 
   if (!modal) return stage
   return (
-    <Modal testID={testID && `${testID}-modal`} visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={onBack ?? onSkip}>
+    <Modal
+      testID={testID && `${testID}-modal`}
+      visible={turn.visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={onBack ?? onSkip}
+      onShow={turn.onShow}
+      onDismiss={turn.onDismiss}
+    >
       {stage}
     </Modal>
   )

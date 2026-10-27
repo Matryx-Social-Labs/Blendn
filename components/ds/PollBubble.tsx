@@ -2,11 +2,11 @@ import { Platform, StyleSheet, Text, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { tint } from '../../lib/theme'
 import { BUBBLE, plural } from './chatShared'
-import { font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 /** The page's option rows: 12 pt corners, a 6% white bar, an 18 pt ring at 50% (drawn at the 20 pt glyph size). */
 const OPTION_RADIUS = 12
@@ -30,6 +30,11 @@ export type PollBubbleProps = {
   onVote?: (index: number) => void
   /** Who asked, as the label names them. */
   from?: string
+  /**
+   * The server's own words for counts it withheld under the floor ("Results appear once more people vote"). Given, the
+   * options draw no per-option "Fewer than 5" and the foot says this: the number five is the server's to name, not ours.
+   */
+  withheldLine?: string
   /** The design gallery only: draws the option at this index pressed. */
   previewPressed?: number
   testID?: string
@@ -38,11 +43,11 @@ export type PollBubbleProps = {
 /** Every count is known: only then is there a total, and are there bars (never a zero, never a partial 100%). */
 const counted = (options: PollOption[]) => options.every((o) => typeof o.votes === 'number')
 
-function footLine(options: PollOption[], picked: number | undefined, closed: boolean, total: number) {
+function footLine(options: PollOption[], picked: number | undefined, closed: boolean, total: number, withheldLine?: string) {
   if (closed) return counted(options) ? `Closed · ${plural(total, 'vote')}` : 'Closed'
   if (picked === undefined) return 'Tap to vote · you can change it until it closes'
   if (options.every((o) => o.votes === undefined)) return 'Results appear when the poll closes'
-  if (!counted(options)) return 'Counts show once 5 or more people vote'
+  if (!counted(options)) return withheldLine ?? 'Counts show once 5 or more people vote'
   return plural(total, 'vote')
 }
 
@@ -61,27 +66,29 @@ function footLine(options: PollOption[], picked: number | undefined, closed: boo
  * ("One more, 7 votes"), then the foot line. No long-press menu. Increase
  * Contrast: the hairline.
  */
-export function PollBubble({ question, options, picked, closed = false, onVote, from = 'the organiser', previewPressed, testID }: PollBubbleProps) {
+export function PollBubble({ question, options, picked, closed = false, onVote, from = 'the organizer', withheldLine, previewPressed, testID }: PollBubbleProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const shown = (picked !== undefined || closed) && options.some((o) => o.votes !== undefined)
   const total = options.reduce((sum, o) => sum + (o.votes ?? 0), 0)
-  const head = from === 'the organiser' ? 'Organiser' : from
+  const head = from === 'the organizer' ? 'Organizer' : from
 
   return (
     <View testID={testID} style={[styles.bubble, contrast && IC_HAIRLINE]}>
       <View accessible accessibilityLabel={`Poll from ${from}: ${question}`} style={styles.words}>
         <View style={styles.head}>
           <Icon name="chart-column" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             Poll · {head}
-            {closed ? <Text style={styles.primary}> · Closed</Text> : null}
+            {closed ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.primary}> · Closed</Text> : null}
           </Text>
         </View>
-        <Text style={[font('bodyStrong', bold), styles.primary]}>{question}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.primary]}>
+          {question}
+        </Text>
       </View>
       {options.map(({ label, votes }, i) => {
-        const count = shown && votes !== undefined ? (votes === null ? 'Fewer than 5' : String(votes)) : null
+        const count = shown && votes !== undefined ? (votes === null ? (withheldLine ? null : 'Fewer than 5') : String(votes)) : null
         return (
           <Option
             key={i}
@@ -104,7 +111,7 @@ export function PollBubble({ question, options, picked, closed = false, onVote, 
           />
         )
       })}
-      <Text style={[font('meta', bold), styles.foot]}>{footLine(options, picked, closed, total)}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{footLine(options, picked, closed, total, withheldLine)}</Text>
     </View>
   )
 }
@@ -133,6 +140,9 @@ function Option({
 }) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
+  // Your pick is lit as a chip is, in the screen's hue (rim and fill), never a white rim: the ReactionBar is the one white pick.
+  const sel = useSelection()
+  const lit = mark === 'check'
   return (
     <View style={pressed && !android && styles.pressedIos}>
       <ScalePress
@@ -142,12 +152,19 @@ function Option({
         accessibilityRole="radio"
         accessibilityLabel={spoken ? `${label}, ${spoken}` : label}
         accessibilityState={{ checked: mark === 'check', disabled: closed }}
-        style={[styles.option, { minHeight: minTarget() }, mark === 'check' && styles.picked, pressed && android && styles.pressedAndroid]}
+        style={[styles.option, { minHeight: minTarget() }, lit && { borderColor: sel.edge, backgroundColor: sel.fill }, pressed && android && styles.pressedAndroid]}
       >
         {bar ? <View testID={testID} style={[styles.bar, { width: bar }]} /> : null}
-        {mark === 'check' ? <Icon name="check" size={ICON.control} /> : <View style={mark === 'ring' ? styles.ring : styles.ringSpace} />}
-        <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.label]}>{label}</Text>
-        {count ? <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.count]}>{count}</Text> : null}
+        {lit ? <Icon name="check" size={ICON.control} color={sel.glyph} /> : <View style={mark === 'ring' ? styles.ring : styles.ringSpace} />}
+        {/* An option labels a control: it stops at the control cap, as the count beside it. */}
+        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.label]}>
+          {label}
+        </Text>
+        {count ? (
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.count]}>
+            {count}
+          </Text>
+        ) : null}
       </ScalePress>
     </View>
   )
@@ -176,7 +193,6 @@ const styles = StyleSheet.create({
     borderWidth: RING_WIDTH,
     borderColor: 'transparent',
   },
-  picked: { borderColor: COLOR.textPrimary },
   pressedIos: { transform: [{ scale: PRESS.scale }] },
   pressedAndroid: { backgroundColor: PRESSED_WASH.android },
   bar: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: tint(COLOR.textPrimary, BAR_ALPHA) },

@@ -19,6 +19,12 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true },
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockParams,
+  // The room reads a Blend's chrome on focus; a room that is not a Blend's reads nothing.
+  useIsFocused: () => true,
+  useFocusEffect: (effect: () => void) => {
+    const { useEffect } = require('react')
+    useEffect(effect, [effect])
+  },
 }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-video', () => ({ useVideoPlayer: () => ({ addListener: () => ({ remove: () => {} }), play: () => {} }), VideoView: () => null }))
@@ -40,6 +46,8 @@ jest.mock('../lib/apiClient', () => ({
 jest.mock('../lib/socketClient', () => {
   const noop = () => () => {}
   return {
+    subscribeToEventCheckIn: noop,
+    subscribeToEventCheckOut: noop,
     subscribeToLiveEnded: (cb: never) => {
       mockEnded.push(cb)
       return () => {}
@@ -67,7 +75,6 @@ jest.mock('../lib/useLiveSync', () => ({ useLiveSync: (opts: { enabled?: boolean
 jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
 jest.mock('../components/chat/RoomGuidelinesBanner', () => ({ RoomGuidelinesBanner: () => null }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
-jest.mock('../components/ActionTray', () => ({ __esModule: true, default: () => null }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
 
 /* eslint-disable import/first */
@@ -76,7 +83,7 @@ import GroupChat from '../app/chat/[id]'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
 
-const refused = { success: false, errorCode: 'NOT_LIVE', error: "You’re not live here any more. Go live at the venue to join today's room." }
+const refused = { success: false, errorCode: 'NOT_LIVE', error: "You’re not live here any more. Go live at the venue to join today’s room." }
 const served = { success: true, data: { messages: [], pagination: { hasMore: false, nextCursor: null } } }
 const placeRow = { id: 'g1', name: 'Cubbon Park Bandstand', memberCount: null, event: { id: 'day-1', kind: 'venue_day', venueId: 'v1', title: 'Venue day · Cubbon Park Bandstand · 2026-10-09' } }
 
@@ -102,18 +109,18 @@ it('the window ends: the room becomes "not live", and comes back — socket rejo
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(refused)
   await act(async () => mockEnded.forEach((f) => f({ eventId: 'day-1', reason: 'expired' })))
   await flush()
-  expect(screen.getByText("You’re not live here any more")).toBeTruthy()
+  expect(screen.getByText('Not live here any more')).toBeTruthy()
   // Out of the room: no live sync (and no socket join) for a room that refuses you (X3).
   expect(mockLiveSync.mock.calls[mockLiveSync.mock.calls.length - 1][0].enabled).toBe(false)
 
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served)
   await act(async () => mockChanged.forEach((f) => f()))
   await flush()
-  expect(screen.queryByText("You’re not live here any more")).toBeNull()
+  expect(screen.queryByText('Not live here any more')).toBeNull()
   expect(mockRejoin).toHaveBeenCalledWith('g1')
 })
 
-it("another place's window ending leaves this room alone (L2)", async () => {
+it("another place’s window ending leaves this room alone (L2)", async () => {
   ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served)
   await render(<GroupChat />)
   await flush()

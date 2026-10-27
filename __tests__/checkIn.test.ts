@@ -215,7 +215,7 @@ describe('every check-out goes through checkOutOf', () => {
     expect(src).not.toContain('apiClient.checkOut(')
   })
 
-  it("and the Blend'n room checks out through useRoomControls, not around it", () => {
+  it("and the Blend’n room checks out through useRoomControls, not around it", () => {
     const src = readFileSync(join(__dirname, '..', 'components', 'blendn', 'BlendnScreen.tsx'), 'utf8')
     expect(src).toContain('controls.checkOut()')
     expect(src).not.toContain('apiClient.checkOut(')

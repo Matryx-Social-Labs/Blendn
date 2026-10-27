@@ -20,3 +20,13 @@ export function receiptFor(
 
 /** How often an open thread re-reads while your last message waits for Read (see the DM screen). */
 export const RECEIPT_POLL_MS = 20_000
+
+/**
+ * How many of the newest messages a receipt poll has to read to include yours:
+ * your last message and everything after it. Usually one, where it was fifty.
+ * Unknown (not in the list) reads a full page.
+ */
+export function receiptPollLimit(ids: readonly string[], lastMineId: string | undefined, page: number): number {
+  const at = lastMineId ? ids.indexOf(lastMineId) : -1
+  return at < 0 ? page : Math.min(page, ids.length - at)
+}

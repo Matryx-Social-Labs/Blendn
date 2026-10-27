@@ -7,7 +7,7 @@
  * that and links to the published page for the rest.
  */
 import { fireEvent, render, screen } from '@testing-library/react-native'
-import { Linking } from 'react-native'
+import * as WebBrowser from 'expo-web-browser'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -30,6 +30,7 @@ jest.mock('react-native-safe-area-context', () => {
 const mockAuth = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({
   useAuth: () => mockAuth,
+  refreshAuthUser: jest.fn(),
   signOut: jest.fn(),
   deleteAccount: jest.fn(),
 }))
@@ -39,16 +40,24 @@ jest.mock('../lib/apiClient', () => ({
     getMyPlus: jest.fn(async () => ({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })),
   },
 }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(),
   removePushTokenFromProfile: jest.fn(),
 }))
 
+import { View } from 'react-native'
 import SettingsScreen from '../app/settings'
+import { SheetHost } from '../components/SheetHost'
 
 it('says what is kept, and links to the page that lists it', async () => {
-  jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
-  await render(<SettingsScreen />)
+  await render(
+    <View>
+      <SettingsScreen />
+      <SheetHost />
+    </View>
+  )
 
   fireEvent.press(await screen.findByRole('button', { name: 'Delete account' }))
 
@@ -56,6 +65,6 @@ it('says what is kept, and links to the page that lists it', async () => {
   expect(message.props.children).toMatch(/180 days/)
   expect(screen.queryByText(/personal info/)).toBeNull()
 
-  fireEvent.press(screen.getByRole('button', { name: "What's kept" }))
-  expect(Linking.openURL).toHaveBeenCalledWith('https://www.blendn.app/delete-account')
+  fireEvent.press(screen.getByRole('button', { name: 'What’s kept' }))
+  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://www.blendn.app/delete-account', expect.any(Object))
 })

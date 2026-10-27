@@ -15,7 +15,7 @@
  * the API client.
  */
 
-import { MONTHS } from './time'
+import { dateIn, MONTHS } from './time'
 
 export type FriendState = 'self' | 'friends' | 'requested' | 'incoming' | 'none'
 
@@ -33,6 +33,31 @@ export interface FriendRequest {
   id: string
   person: FriendPerson
   createdAt: string
+}
+
+/** The server's page meta (admin #724). Absent on an older server: read as one page, the whole list. */
+export interface PageMeta {
+  limit: number
+  hasMore: boolean
+  nextCursor: string | null
+  totalCount: number
+}
+
+/** `GET /friends`: a page of `friends`, and `count`, the whole list. */
+export interface FriendsPayload {
+  friends: Friend[]
+  count: number
+  pagination?: PageMeta
+}
+
+/**
+ * `GET /friends/requests`: a page of each side, `pagination` named by side. A call with `?list=` answers only that side's array
+ * (read it through `requestsPageFrom`, which does not trust the other to be there).
+ */
+export interface FriendRequestsPayload {
+  incoming: FriendRequest[]
+  outgoing: FriendRequest[]
+  pagination?: { incoming?: PageMeta; outgoing?: PageMeta }
 }
 
 export interface FriendProfile {
@@ -80,21 +105,21 @@ export function inviteCta(state: FriendState): { label: string; action: 'ask' | 
 export function inviteLine(state: FriendState): string {
   switch (state) {
     case 'self':
-      return 'This is your own invite link.'
+      return 'This is your own invite link. Share it with the people you want here.'
     case 'friends':
-      return "You're friends."
+      return 'You’re friends.'
     case 'requested':
-      return "Your request is waiting. You'll hear when they accept."
+      return 'Your request is waiting. You’ll hear when they accept.'
     case 'incoming':
       return 'They asked to be your friend.'
     case 'none':
-      return "Wants you as a friend on Blend'n."
+      return 'Wants you as a friend on Blend’n.'
   }
 }
 
 /** What goes out with a shared link. Short: it lands in somebody else's chat. */
 export function inviteMessage(url: string): string {
-  return `Add me on Blend'n: ${url}`
+  return `Add me on Blend’n: ${url}`
 }
 
 /**
@@ -103,8 +128,28 @@ export function inviteMessage(url: string): string {
  * A fixed list rather than `toLocaleDateString`: ICU spells September "Sept"
  * in en-GB on one engine and "Sep" on another, and Hermes carries its own.
  */
+/** "Friends since " and "Mar 2026" apart, for the screens that set the date in Geist Mono; `date` is null when there is none to show. */
+export function friendsSinceParts(iso: string): { words: string; date: string | null } {
+  const label = friendsSinceLabel(iso)
+  const words = 'Friends since '
+  return label.startsWith(words) ? { words, date: label.slice(words.length) } : { words: label, date: null }
+}
+
 export function friendsSinceLabel(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return 'Friends'
-  return `Friends since ${MONTHS[date.getMonth()]} ${date.getFullYear()}`
+  const [y, m] = dateIn(date)
+  return `Friends since ${MONTHS[m]} ${y}`
+}
+
+/**
+ * The request `senderId` sent you, among your pending ones: its id and the note as they wrote it, or null. Matched on the sender's
+ * real id, so a profile opened by a room handle finds none and stays "Requested" (the server names nobody before a reveal).
+ */
+export function incomingRequestFrom(
+  requests: readonly { id: string; senderId?: string; message?: string | null; status?: string }[],
+  senderId: string
+): { id: string; note: string | null } | null {
+  const found = requests.find((r) => String(r.senderId ?? '').trim() === senderId && String(r.status ?? 'pending').toLowerCase() === 'pending')
+  return found ? { id: found.id, note: found.message?.trim() || null } : null
 }

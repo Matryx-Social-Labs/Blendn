@@ -5,6 +5,7 @@
  * failed read with a retry; the latest tap wins; a page from before a reload
  * never lands on top of it; a failed page says so and offers the retry.
  */
+import { StyleSheet } from 'react-native'
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native'
 
 jest.mock('expo-router', () => ({
@@ -28,6 +29,7 @@ jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
+import { router } from 'expo-router'
 import { CrewsFoot, CrewsHead } from '../components/blendn/RoomCrews'
 import { useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
 import { OPEN_TO_CREWS_LABEL, type CrewCard, type CrewsAtEvent } from '../lib/crews'
@@ -106,6 +108,29 @@ describe('"Open to joining a crew tonight" (M7, M11)', () => {
     expect(api.openToCrews).toHaveBeenCalledTimes(2)
     await act(async () => answer({ success: true, data: { openToCrews: true } }))
     expect(toggle().props.accessibilityState).toEqual({ checked: true, disabled: false })
+  })
+})
+
+describe('no crew yet (10-7 · 16)', () => {
+  it('a solo person who is open to joining, with nobody to like, is told to make one from their friends, and it opens Make a crew', async () => {
+    api.crewsAt.mockResolvedValue(page([], false))
+    api.openToCrews.mockResolvedValue({ success: true, data: { openToCrews: true } })
+    await render(<Harness checkInKey="ci-none" />)
+    await waitFor(() => screen.getByText('No crew yet — make one from your friends.'))
+    const line = screen.getByTestId('room-no-crew')
+    // M9: a full target tall, with a hint, and a chevron: it reads as the way to Make a crew.
+    expect(StyleSheet.flatten(line.props.style).minHeight).toBeGreaterThanOrEqual(44)
+    expect(line.props.accessibilityHint).toBe('Opens Make a crew')
+    await fireEvent.press(line)
+    expect(router.push).toHaveBeenCalledWith('/crews/new')
+  })
+
+  it('not open to joining: the line about the switch, never "No crew yet"', async () => {
+    api.crewsAt.mockResolvedValue(page([], false))
+    api.openToCrews.mockResolvedValue({ success: true, data: { openToCrews: false } })
+    await render(<Harness checkInKey="ci-off" />)
+    await waitFor(() => screen.getByText(/Turn on “Open to joining a crew tonight”/))
+    expect(screen.queryByText('No crew yet — make one from your friends.')).toBeNull()
   })
 })
 

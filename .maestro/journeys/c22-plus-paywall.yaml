@@ -79,7 +79,7 @@ tags:
 - extendedWaitUntil:
     visible: "Not now"
     timeout: 30000
-- assertVisible: "Stay live while I'm here"
+- assertVisible: "Stay live while you’re there"
 - assertVisible: "Your full night history"
 - assertVisible: "Restore purchases"
 - assertVisible: "Terms of Use"

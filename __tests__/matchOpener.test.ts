@@ -160,7 +160,7 @@ describe('the moment paints without a second request', () => {
   })
 })
 
-describe("the match moment's opener becomes a draft, never a message", () => {
+describe("the match moment’s opener becomes a draft, never a message", () => {
   it('reads the draft param: a string, not blank, not repeated', () => {
     expect(draftParam('What brought you here tonight?')).toBe('What brought you here tonight?')
     expect(draftParam(undefined)).toBe('')
@@ -179,8 +179,10 @@ describe("the match moment's opener becomes a draft, never a message", () => {
 
   it('the DM fills its composer once, on mount, and does not send it', () => {
     const dm = DM()
-    // The route's opener first; else the draft this phone kept for the thread (R3-D5 5.8).
-    expect(dm).toContain('useState(() => draftParam(draft) || draftOf(thread))')
+    // What this phone kept for the thread first (a remount must not put the opener back over it, Opus review M4); else
+    // the route's opener (R3-D5 5.8).
+    // `useThreadDraft` gives the stored draft first and the opener only when there is none (__tests__/threadDraft).
+    expect(dm).toContain('useThreadDraft(thread, draftParam(draft))')
     // Read once, as the initial state: no effect re-applies it, and it never
     // reaches the send path on its own.
     expect(dm.match(/\bdraft\b/g)).toHaveLength(2)

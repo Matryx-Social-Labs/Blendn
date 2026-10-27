@@ -6,11 +6,12 @@ import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { NotificationIllustration } from '../../components/onboarding/PermissionIllustration'
 import { askOsPermission } from '../../lib/onboarding'
 import { clearPushDeclined, markPushDeclined } from '../../lib/pushDecline'
+import { notePushPermission, readPushPermission } from '../../lib/pushStatus'
 import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
- * Step two — notifications.
+ * Step two: notifications.
  *
  * A permission screen, which means the button does not grant anything: it opens
  * the OS dialog, and the OS decides. What this screen is actually for is being
@@ -22,7 +23,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * `push_enabled` records the answer either way. Someone who declines has said
  * something, and the profile should say it rather than keep the default.
  */
-const SETTINGS_HINT = "Blend'n uses notifications to know when someone nearby wants to connect."
+const SETTINGS_HINT = 'Blend’n uses notifications to know when someone nearby wants to connect.'
 
 export default function NotificationsScreen() {
   const { saving, commit, goBack } = useOnboarding('notifications')
@@ -43,8 +44,16 @@ export default function NotificationsScreen() {
   const ask = async () => {
     setAsking(true)
     const { granted, blocked } = await askOsPermission(
-      () => Notifications.getPermissionsAsync(),
-      async () => (await Notifications.requestPermissionsAsync()).granted
+      // The bounded read (D1). One that did not answer goes straight to the OS dialog, which does not hold the queue.
+      async () => {
+        const p = await readPushPermission({ fresh: true })
+        return p === 'unavailable' ? { granted: false, canAskAgain: true } : p
+      },
+      async () => {
+        const answer = await Notifications.requestPermissionsAsync()
+        notePushPermission(answer)
+        return answer.granted
+      }
     )
     setAsking(false)
 
@@ -87,6 +96,7 @@ export default function NotificationsScreen() {
       <NotificationIllustration />
       <SettingsTray
         visible={settingsPrompt}
+        icon="bell-off"
         hint={SETTINGS_HINT}
         onClose={() => setSettingsPrompt(false)}
         onNotNow={() => {

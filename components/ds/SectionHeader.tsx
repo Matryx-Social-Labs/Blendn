@@ -1,12 +1,19 @@
 import { useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { PresenceDot } from './MonoFamily'
-import { focusRing, font, minTarget, useBoldText } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, minTarget, useBoldText, useLargeText, useSelection } from './shared'
 
-export type SectionAction = { label: string; onPress: () => void; busy?: boolean }
+/** The lit count's capsule, as `Badge` at size 22. */
+const CAPSULE = 22
+
+/** `accessibilityLabel` only when the words on screen are not enough alone ("See all" says how many); it starts with the label. */
+export type SectionAction = { label: string; onPress: () => void; busy?: boolean; accessibilityLabel?: string }
+
+/** A count in thousands is grouped ("1,204"): it reads at a glance and never wraps the header. */
+const grouped = (n: number) => n.toLocaleString('en-US')
 
 /**
  * How every section inside a screen starts (guidelines/components/SectionHeader.html):
@@ -21,10 +28,14 @@ export type SectionAction = { label: string; onPress: () => void; busy?: boolean
  *
  * Screen reader: a heading "{title}, {N}", then the action as its own button.
  * The page's count is 18 pt, between roles: it is drawn at the heading's 20.
+ *
+ * `countStyle="lit"` (a screen's own list, in its world): the count is a 22 pt capsule in the hue's fill with its 1 pt edge, the
+ * number white in Geist Mono 700 12/16, `Badge`'s geometry. The reader still hears "{title}, {N}".
  */
 export function SectionHeader({
   title,
   count,
+  countStyle = 'plain',
   action,
   live = false,
   caption,
@@ -33,6 +44,8 @@ export function SectionHeader({
 }: {
   title: string
   count?: number
+  /** `plain`: "· N" in textSecondary. `lit`: a capsule in the screen's hue (`HueProvider`). */
+  countStyle?: 'plain' | 'lit'
   action?: SectionAction
   /** The live dot before the title ("Live now"). */
   live?: boolean
@@ -41,9 +54,11 @@ export function SectionHeader({
   testID?: string
 }) {
   const bold = useBoldText()
+  const largeText = useLargeText()
+  const sel = useSelection()
   const [focused, setFocused] = useState(false)
   const slop = (minTarget() - TYPE.meta.lineHeight) / 2
-  const heading = count == null ? title : `${title}, ${count}`
+  const heading = count == null ? title : `${title}, ${grouped(count)}`
 
   return (
     <View style={styles.block}>
@@ -54,13 +69,20 @@ export function SectionHeader({
               <PresenceDot kind="live" testID={testID && `${testID}-live`} />
             </View>
           ) : null}
-          <Text numberOfLines={1} style={[font('heading', bold), styles.title]}>
+          {/* A heading stops at its cap and, at the accessibility sizes, wraps in full ("Finish your pro…" at AX XXXL, D2). */}
+          <Text numberOfLines={largeText ? undefined : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.title]}>
             {title}
           </Text>
-          {count != null ? (
+          {count != null && countStyle === 'lit' ? (
+            <View testID={testID && `${testID}-count`} style={[styles.capsule, { backgroundColor: sel.fill, borderColor: sel.edge }]}>
+              <Text style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.capsuleText, styles.tabular]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+                {grouped(count)}
+              </Text>
+            </View>
+          ) : count != null ? (
             <>
-              <Text style={[font('heading', bold), styles.muted]}>·</Text>
-              <Text style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{count}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.muted]}>·</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{grouped(count)}</Text>
             </>
           ) : null}
         </View>
@@ -76,11 +98,13 @@ export function SectionHeader({
                   disabled={action.busy}
                   hitSlop={{ top: slop, bottom: slop }}
                   accessibilityRole="button"
-                  accessibilityLabel={action.label}
+                  accessibilityLabel={action.accessibilityLabel ?? action.label}
                   accessibilityState={{ disabled: !!action.busy, busy: !!action.busy }}
                   style={[styles.actionBox, { minWidth: minTarget() }, action.busy && styles.busy]}
                 >
-                  <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action]}>{action.label}</Text>
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action]}>
+                    {action.label}
+                  </Text>
                 </Pressable>
                 {focused
                   ? focusRing(RADIUS.thumb).map((ring, i) => (
@@ -93,20 +117,36 @@ export function SectionHeader({
           </View>
         ) : null}
       </View>
-      {caption ? <Text style={[font('meta', bold), styles.muted]}>{caption}</Text> : null}
+      {caption ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{caption}</Text> : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   block: { gap: SPACE.xs },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: SPACE.md },
-  left: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs, flexShrink: 1 },
+  // The title is never given up for a slot: when the two do not fit, the slot wraps under it instead.
+  row: { flexDirection: 'row', flexWrap: 'wrap', rowGap: SPACE.xs, columnGap: SPACE.md, justifyContent: 'space-between' },
+  left: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs, flexShrink: 0, maxWidth: '100%' },
   dot: { alignSelf: 'center', marginRight: SPACE.xs },
-  title: { color: COLOR.textPrimary, flexShrink: 1 },
+  title: { color: COLOR.textPrimary, flexShrink: 0 },
   muted: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },
-  right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 0 },
+  /**
+   * `Badge`'s 22: a pill that grows with a large count, a 1 pt edge inside it. 6 a side, so one digit (Geist Mono 12, ~7.5 wide)
+   * plus the padding and the edge stays inside the 22 and draws a circle; at 8 a side a single digit made a lozenge.
+   */
+  capsule: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: CAPSULE,
+    minWidth: CAPSULE,
+    paddingHorizontal: SPACE.xs + SPACE.xxs,
+    borderRadius: RADIUS.capsule,
+    borderWidth: 1,
+  },
+  capsuleText: { color: COLOR.textPrimary },
+  right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 1, minWidth: 0, marginLeft: 'auto' },
   action: { color: COLOR.textPrimary },
   /** A short action ("Edit") still reaches the 44 / 48 width; the label sits at the right edge. */
   actionBox: { alignItems: 'flex-end' },

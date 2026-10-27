@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import { useKeyboardContext } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { Icon, type IconName } from '../ui/Icon'
+import { Glyph } from '../ui/Glyph'
+import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
@@ -22,8 +24,8 @@ const LOOK: Record<ToastKind, { icon: IconName; tint?: string }> = {
 }
 
 /** #19: dwell ≥5 s, +1 s per 8 words, ≥10 s with Undo or a screen reader. */
-const DWELL_MS = 5000
-const LONG_DWELL_MS = 10000
+const DWELL_MS = DURATION.toastDwell
+const LONG_DWELL_MS = DURATION.toastDwellAction
 const WORDS_PER_EXTRA_SECOND = 8
 /** #19: enters from 16 pt away, leaves with an 8 pt drift; a swipe this far or this fast dismisses. */
 const ENTER_DISTANCE = 16
@@ -89,8 +91,14 @@ export type ToastProps = {
   onDismiss: () => void
   /** Android: sit above the floating tab bar. */
   aboveTabBar?: boolean
+  /** Android, off the tab roots: the height of the bottom dock or composer to sit above (0 when there is none). */
+  dock?: number
+  /** Told the toast's laid-out height, so a screen can leave room under it (`useToastInset`). */
+  onHeight?: (height: number) => void
   /** No outcome haptic: Copy (C20), or when the action already played one. */
   silent?: boolean
+  /** Which outcome haptic to play as it appears; the kind's own when omitted. */
+  haptic?: 'success' | 'error'
   testID?: string
 }
 
@@ -99,19 +107,23 @@ export type ToastProps = {
  * dismiss. `leave` plays the exit once, then calls `onDismiss`.
  */
 function useToastMotion(onDismiss: () => void) {
+  // The keyboard's own frame (read from the context, not `useReanimatedKeyboardAnimation`, which flips Android's input mode).
+  const kb = useKeyboardContext().reanimated
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
   /** The side it comes from and leaves by: −1 the top (iOS), +1 the bottom (Android). */
   const side = android ? 1 : -1
   const offset = useSharedValue(reduceMotion ? 0 : side * ENTER_DISTANCE)
-  const opacity = useSharedValue(android ? 0 : 1)
+  // #19 is "translateY −16 → 0 + fade", and the Toast page "Reduce Motion: a fade in place": it fades in on both platforms.
+  const opacity = useSharedValue(0)
   const height = useSharedValue(0)
 
   useEffect(() => {
     if (!reduceMotion) offset.set(withSpring(0, SPRING.snap))
-    const fade = { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.entrance) }
-    if (android) opacity.set(withTiming(1, fade))
+    // The fade is quicker than the move it rides with (`quick`); under Reduce Motion it is the whole entrance, over `base` (200).
+    const fade = { duration: reduceMotion ? motionTokens(true).duration.base : DURATION.quick, easing: Easing.bezier(...EASING.gentle) }
+    opacity.set(withTiming(1, fade))
     // Once, as it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -123,7 +135,8 @@ function useToastMotion(onDismiss: () => void) {
     setGone(true)
     // Outward from wherever it is: a swipe has already moved it.
     if (!reduceMotion) offset.set(withTiming(android ? offset.get() + EXIT_DRIFT : -(height.get() + insets.top + SPACE.sm), exit))
-    if (android) opacity.set(withTiming(0, exit))
+    // Out on both platforms; under Reduce Motion it is the whole exit, in place.
+    opacity.set(withTiming(0, exit))
     // `exit` is rebuilt each render from `reduceMotion`, which is listed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gone, android, reduceMotion, insets.top, offset, opacity, height])
@@ -133,7 +146,7 @@ function useToastMotion(onDismiss: () => void) {
   useEffect(() => {
     dismiss.current = onDismiss
   })
-  const exitMs = reduceMotion && !android ? 0 : exit.duration
+  const exitMs = exit.duration
   useEffect(() => {
     if (!gone) return
     const timer = setTimeout(() => dismiss.current(), exitMs)
@@ -150,7 +163,11 @@ function useToastMotion(onDismiss: () => void) {
       else offset.set(withSpring(0, SPRING.snap))
     })
 
-  const motion = useAnimatedStyle(() => ({ opacity: opacity.get(), transform: [{ translateY: offset.get() }] }))
+  // On Android the snackbar stands on the keyboard when one is up, frame by frame; the bottom inset is already under it.
+  const motion = useAnimatedStyle(() => ({
+    opacity: opacity.get(),
+    transform: [{ translateY: offset.get() - (android ? Math.max(0, -kb.height.get() - insets.bottom) : 0) }],
+  }))
   return { leave, swipe, motion, height }
 }
 
@@ -165,12 +182,12 @@ function useToastMotion(onDismiss: () => void) {
  * read once; never takes focus. Dwell per #19, held while touched. Swipe up
  * (iOS) or down (Android) dismisses.
  *
- * Motion #19: enters 16 pt on `M.snap`, leaves `quick`. The iOS capsule is
- * glass, which never fades (§5.2 rule 6), so it moves without a fade and
- * leaves by sliding out; Android's solid snackbar fades too. Reduce Motion:
- * no movement; Android fades in place, iOS appears and goes.
+ * Motion #19: enters 16 pt on `M.snap` with a fade, leaves over `quick`
+ * (iOS slides out as it fades; Android drifts 8 pt). The Toast page says
+ * "+ fade" and wins over the general rule that glass never fades. Reduce
+ * Motion: no movement, a fade in place on both platforms.
  */
-export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = false, silent = false, testID }: ToastProps) {
+export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = false, dock = 0, onHeight, silent = false, haptic, testID }: ToastProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const screenReader = useScreenReader()
@@ -179,16 +196,22 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
   const { leave, swipe, motion, height } = useToastMotion(onDismiss)
   const dwell = useDwell(toastDwell(text, { action: !!action, screenReader }), leave)
 
+  // Success draws its check on the frame the haptic plays: `Glyph` plays on a false → true, so it is lit as the toast mounts.
+  const [lit, setLit] = useState(false)
   useEffect(() => {
-    if (!silent && kind !== 'info') H[kind]()
-    if (!android) AccessibilityInfo.announceForAccessibility(action ? `${text}. ${action.label} is available.` : text)
+    const played = haptic ?? (kind === 'info' ? undefined : kind)
+    if (!silent && played) H[played]()
+    // `Glyph` plays on the edge false → true after mount, so a mounted toast is lit once, on the frame the haptic plays.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLit(true)
+    if (!android) AccessibilityInfo.announceForAccessibility(action ? `${text.replace(/[.!?]$/, '')}. ${action.label} is available.` : text)
     // Once, as it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const place = android
     ? // Above the bar and above the check-in pill that rises from it (drive 3: the pill covered the snackbar's second line).
-      { bottom: insets.bottom + (aboveTabBar ? SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md : SPACE.lg) }
+      { bottom: insets.bottom + (aboveTabBar ? SPACE.tabBarBottomGapAndroid + SIZE.tabBar + TAB_BAR_HINT_RISE + SPACE.md : dock + SPACE.lg) }
     : { top: insets.top + SPACE.sm }
   const look = LOOK[kind]
   const radius = android ? RADIUS.pressedAndroid : RADIUS.sheet
@@ -196,8 +219,8 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
   const content = (
     <>
       {look.tint ? <View testID={testID && `${testID}-tint`} style={[StyleSheet.absoluteFill, { backgroundColor: look.tint }]} /> : null}
-      <Icon name={look.icon} size={ICON.control} />
-      <Text style={[font('meta', bold, android ? undefined : FONT_FAMILY.brand[500]), styles.text]}>{text}</Text>
+      <Glyph name={look.icon} size={ICON.control} play={kind === 'success' ? lit : undefined} testID={testID && `${testID}-glyph`} />
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, android ? undefined : FONT_FAMILY.brand[500]), styles.text]}>{text}</Text>
       {action ? (
         <Pressable
           accessibilityRole="button"
@@ -207,7 +230,7 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
             leave()
           }}
         >
-          <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action, !android && styles.underline]}>{action.label}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action, !android && styles.underline]}>{action.label}</Text>
         </Pressable>
       ) : null}
     </>
@@ -218,7 +241,10 @@ export function Toast({ kind = 'info', text, action, onDismiss, aboveTabBar = fa
       <Animated.View
         testID={testID}
         accessibilityLiveRegion={kind === 'error' ? 'assertive' : 'polite'}
-        onLayout={(e) => height.set(e.nativeEvent.layout.height)}
+        onLayout={(e) => {
+          height.set(e.nativeEvent.layout.height)
+          onHeight?.(e.nativeEvent.layout.height)
+        }}
         onTouchStart={dwell.pause}
         onTouchEnd={dwell.resume}
         onTouchCancel={dwell.resume}

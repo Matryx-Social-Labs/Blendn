@@ -22,11 +22,10 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 /** Files that render `OptimizedImage` inside a virtualised list. */
 const LIST_SURFACES = [
   ['components', 'pulse', 'FeedMedia.tsx'],
-  ['components', 'pulse', 'UpcomingCard.tsx'],
+  // Every Pulse, Nearby and Going card and row draws its cover through the DS EventCard.
+  ['components', 'ds', 'EventCard.tsx'],
   // Every Going and Pulse row's thumb draws through it (SCRUM-480).
   ['components', 'EventCover.tsx'],
-  // The Blend'n room's face grid is a FlatList; every face draws through `Face`.
-  ['components', 'blendn', 'Face.tsx'],
   ['components', 'blendn', 'TonightView.tsx'],
   ['app', '(tabs)', 'events.tsx'],
   ['app', '(tabs)', 'chat.tsx'],

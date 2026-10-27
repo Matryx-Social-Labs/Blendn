@@ -6,6 +6,8 @@
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
+const mockAsk = jest.fn()
+jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: (...a: unknown[]) => mockAsk(...a), useStillHere: () => () => true }))
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useFocusEffect: (effect: () => void) => {
@@ -37,7 +39,7 @@ jest.mock('../components/OptimizedImage', () => {
 })
 
 import { apiClient } from '../lib/apiClient'
-import FriendRequestsScreen from '../app/friends/requests'
+import FriendRequestsScreen, { requestsWaiting } from '../app/friends/requests'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'req-ben', person: { userId: 'u_ben', name: 'Ben', photo: null }, createdAt: '2026-09-27T20:00:00Z' }
@@ -53,17 +55,29 @@ it('accepts from the list', async () => {
 
   await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledWith('req-ben', 'accept'))
   expect(await screen.findByText('No requests')).toBeTruthy()
-  expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success')
+  expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success', { haptic: 'success' })
+  expect(mockAsk).toHaveBeenCalledWith({ stillHere: expect.any(Function) })
 })
 
 it('does not call a failed load "No requests"', async () => {
   api.getFriendRequests.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
   await render(<FriendRequestsScreen />)
 
-  expect(await screen.findByText("Your requests didn't load")).toBeTruthy()
+  expect(await screen.findByText("Your requests didn’t load")).toBeTruthy()
   expect(screen.queryByText('No requests')).toBeNull()
 
   api.getFriendRequests.mockResolvedValueOnce({ success: true, data: { incoming: [BEN], outgoing: [] } })
   fireEvent.press(screen.getByText('Try again'))
   expect(await screen.findByLabelText('Accept Ben')).toBeTruthy()
+})
+
+// D-LM2: the title says how many are waiting, the server's count, not the rows loaded. Negative control: no `sub` fails it.
+it('says how many are waiting under the title: the server’s count, not the page', async () => {
+  api.getFriendRequests.mockResolvedValue({
+    success: true,
+    data: { incoming: [BEN], outgoing: [], pagination: { incoming: { totalCount: 60, hasMore: true, nextCursor: 'c1' }, outgoing: { totalCount: 0 } } },
+  } as never)
+  await render(<FriendRequestsScreen />)
+  expect(await screen.findByText('60 waiting')).toBeTruthy()
+  expect(requestsWaiting(1204)).toBe('1,204 waiting')
 })

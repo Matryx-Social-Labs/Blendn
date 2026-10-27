@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
 /**
  * What a thread holds only on this phone: the draft left in its composer and
@@ -27,6 +27,8 @@ export type Thread = string | null
 
 export const roomThread = (chatGroupId: string, userId: string | null | undefined): Thread => (userId ? `${userId}:room:${chatGroupId}` : null)
 export const dmThread = (conversationId: string, userId: string | null | undefined): Thread => (userId ? `${userId}:dm:${conversationId}` : null)
+/** Make a crew's draft: one per account, kept when a link closed the sheet (review LOW), given back when it opens again. */
+export const crewDraftThread = (userId: string | null | undefined): Thread => (userId ? `${userId}:crew:new` : null)
 
 type State = { drafts: ReadonlyMap<string, string>; failed: ReadonlyMap<string, readonly unknown[]> }
 
@@ -34,8 +36,8 @@ let state: State = { drafts: new Map(), failed: new Map() }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((listener) => listener())
 
-/** The composer's text as you leave the thread. Empty forgets it. */
-export function setDraft(thread: Thread, text: string): void {
+/** A thread's draft. Empty forgets it. `quiet`: stored, nobody told yet (a keystroke; the Banter hears when you leave). */
+export function setDraft(thread: Thread, text: string, quiet = false): void {
   if (!thread) return
   const draft = text.trim() ? text : ''
   if ((state.drafts.get(thread) ?? '') === draft) return
@@ -43,7 +45,35 @@ export function setDraft(thread: Thread, text: string): void {
   if (draft) drafts.set(thread, draft)
   else drafts.delete(thread)
   state = { ...state, drafts }
-  emit()
+  if (!quiet) emit()
+}
+
+/**
+ * A composer's text, owned by the thread it was typed in (RC drive 2 D-B, D-E).
+ *
+ * It was screen state saved to the outbox on unmount, under whatever thread the screen held by then. Two ways that broke:
+ * - a remount (`TextSizeBoundary`, a text-size change) renders the new screen BEFORE the old one's unmount runs, so the
+ *   new composer read the outbox before the draft was in it, and showed the placeholder over a draft it held;
+ * - a deep link or a push from one open DM to another reuses the screen with a new id: the state kept DM 1's text, and the
+ *   unmount saved it as DM 2's draft.
+ * So every keystroke is stored at once, under the thread captured when it was typed, and a screen given another thread
+ * shows that thread's draft. `fallback`: what an empty draft shows (the match opener), never stored until edited.
+ */
+export function useThreadDraft(thread: Thread, fallback = ''): [string, (text: string) => void] {
+  const [held, setHeld] = useState(() => ({ thread, text: draftOf(thread) || fallback }))
+  // Another thread on the same screen: its own draft, adjusted during render so DM 1's text is never drawn under DM 2.
+  const current = held.thread === thread ? held : { thread, text: draftOf(thread) || fallback }
+  if (current !== held) setHeld(current)
+  const setText = useCallback(
+    (text: string) => {
+      setHeld({ thread, text })
+      setDraft(thread, text, true)
+    },
+    [thread],
+  )
+  // Leaving the thread: the Banter's rows re-read the drafts once, not per keystroke.
+  useEffect(() => () => emit(), [thread])
+  return [current.text, setText]
 }
 
 export function draftOf(thread: Thread): string {

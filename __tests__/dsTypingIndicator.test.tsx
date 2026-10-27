@@ -14,7 +14,7 @@ import { H } from '../lib/haptics'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withRepeat: jest.fn(actual.withRepeat) }
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withRepeat: jest.fn(actual.withRepeat), cancelAnimation: jest.fn(actual.cancelAnimation) }
 })
 
 const reduceMotion = Reanimated.useReducedMotion as jest.Mock
@@ -58,5 +58,29 @@ describe('<TypingIndicator>', () => {
     expect(withRepeat).not.toHaveBeenCalled()
     const opacity = (i: number) => StyleSheet.flatten(screen.getByTestId(`t-dot-${i}`, { includeHiddenElements: true }).props.style).opacity
     expect([opacity(0), opacity(1), opacity(2)]).toEqual([0.4, 0.7, 1])
+  })
+})
+
+
+describe('the loop runs only while somebody types (audit M8, DS #14)', () => {
+  const cancel = Reanimated.cancelAnimation as jest.Mock
+  beforeEach(() => {
+    withRepeat.mockClear()
+    cancel.mockClear()
+  })
+
+  it('with nobody typing it starts nothing', async () => {
+    await render(<TypingIndicator people={[]} testID="t" />)
+    expect(withRepeat).not.toHaveBeenCalled()
+  })
+
+  it('starts when somebody types, once, and stops when they stop', async () => {
+    const view = await render(<TypingIndicator people={[]} testID="t" />)
+    await view.rerender(<TypingIndicator people={[PANDA]} testID="t" />)
+    expect(withRepeat).toHaveBeenCalledTimes(1)
+    await view.rerender(<TypingIndicator people={[PANDA, { name: 'Quiet Heron' }]} testID="t" />)
+    expect(withRepeat).toHaveBeenCalledTimes(1)
+    await view.rerender(<TypingIndicator people={[]} testID="t" />)
+    expect(cancel).toHaveBeenCalled()
   })
 })

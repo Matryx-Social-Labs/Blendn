@@ -1,7 +1,11 @@
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
+import { badgeFadeIn, badgeIn, badgeOut } from '../motion/presence'
+import { RollingNumber } from './RollingNumber'
 import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shared'
 
 /*
@@ -14,6 +18,50 @@ import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shar
 
 /** Geist Mono 500 at 12/16, tabular: a count or a time on the floor. TextField's counter uses it too. */
 export const monoCaption = (bold: boolean) => ({ ...font('caption', bold, FONT_FAMILY.mono[500]), fontVariant: ['tabular-nums' as const] })
+
+/**
+ * A mono run's separators in the brand face: the " · " divider ("Sun · 3:30 PM") and every plain space ("1:12 PM",
+ * "Oct 2026"). A mono space is a full cell, so set in Geist Mono they read double-spaced: "Sun  ·  3:30  PM" (C16, C17,
+ * D-L1). Inside a mono `Text`; the digits and words between them stay mono.
+ *
+ * `struck` (a cancelled night) strikes each run between the dividers and never the divider itself, which a strike
+ * turns into a dash: "Sun - 2:30 PM" (B-S16). The `Text` around it must not be struck.
+ */
+export function MonoRun({ text, struck = false }: { text: string; struck?: boolean }) {
+  return (
+    <>
+      {text.split(DIVIDER).map((part, i) =>
+        // `split` with a group keeps the dividers at the odd indices.
+        i % 2 ? (
+          <Text key={i} style={styles.divider}>
+            {part}
+          </Text>
+        ) : struck && part ? (
+          <Text key={i} style={styles.struck}>
+            {spaced(part)}
+          </Text>
+        ) : (
+          <Fragment key={i}>{spaced(part)}</Fragment>
+        )
+      )}
+    </>
+  )
+}
+const DIVIDER = /( · )/
+const SPACE_RUN = /( )/
+
+/** A run's plain spaces in the brand face, the words between them left as they are. */
+function spaced(run: string) {
+  return run.split(SPACE_RUN).map((part, i) =>
+    i % 2 ? (
+      <Text key={i} style={styles.divider}>
+        {part}
+      </Text>
+    ) : (
+      part
+    )
+  )
+}
 
 /** A count's horizontal padding: 5 in the 18 pt pill, 8 in the 22. */
 const BADGE_PAD = { 18: SPACE.xs, 22: SPACE.sm } as const
@@ -34,24 +82,46 @@ function Ring({ color, testID, children }: { color?: string; testID?: string; ch
  * dot plus a number. Folded into its parent for a screen reader: the parent's
  * label says it ("Banter, 3 new").
  */
-export function Badge({ text, size = 18, ring, testID }: { text: string | number; size?: 18 | 22; ring?: string; testID?: string }) {
+export function Badge({
+  text,
+  size = 18,
+  ring,
+  arrive = false,
+  testID,
+}: {
+  text: string | number
+  size?: 18 | 22
+  ring?: string
+  /** A count that appears while you watch (the bell, a filter count, "n new" in a dock): it arrives and leaves over `quick`. Off for a row that is simply drawn, so scrolling never pops. */
+  arrive?: boolean
+  testID?: string
+}) {
   const bold = useBoldText()
+  const reduceMotion = useReducedMotion()
+  // A count rolls its changing digit (DS #26); "9+", "99+" and "3 new" are words and never roll.
+  const rolls = typeof text === 'number' && Number.isInteger(text) && text >= 0
   return (
-    <Ring color={ring} testID={testID && `${testID}-ring`}>
-      <View
-        testID={testID}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        style={[styles.badge, { height: size, minWidth: size, paddingHorizontal: BADGE_PAD[size] }]}
-      >
-        <Text
-          style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.badgeText]}
-          maxFontSizeMultiplier={CONTROL_FONT_CAP}
+    // DS #28, the badge's own: with `arrive`, it arrives (0.8 → 1, fading in) and leaves (a fade) over `quick`, so no caller
+    // animates it. Without, it is just drawn: a row scrolling in or a screen's first paint never pops.
+    <Animated.View entering={arrive ? (reduceMotion ? badgeFadeIn : badgeIn) : undefined} exiting={arrive ? badgeOut : undefined}>
+      <Ring color={ring} testID={testID && `${testID}-ring`}>
+        <View
+          testID={testID}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          // `minHeight`: at a large text size the digit's line grows past 18 and the pill grows with it, never clipping it.
+          style={[styles.badge, { minHeight: size, minWidth: size, paddingHorizontal: BADGE_PAD[size] }]}
         >
-          {String(text)}
-        </Text>
-      </View>
-    </Ring>
+          {rolls ? (
+            <RollingNumber value={text} role="badge" color={COLOR.ink} testID={testID && `${testID}-count`} />
+          ) : (
+            <Text style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.badgeText]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+              {String(text)}
+            </Text>
+          )}
+        </View>
+      </Ring>
+    </Animated.View>
   )
 }
 
@@ -62,14 +132,27 @@ const DOT = { unread: 10, live: 8 } as const
  * A dot. A trait of its row, not an element: the row's label says "unread" or
  * "live". `ring` cuts it out of a face (`size` 12 there).
  */
-export function PresenceDot({ kind = 'unread', size = DOT[kind], ring, testID }: { kind?: 'unread' | 'live'; size?: number; ring?: string; testID?: string }) {
+export function PresenceDot({
+  kind = 'unread',
+  size = DOT[kind],
+  ring,
+  color,
+  testID,
+}: {
+  kind?: 'unread' | 'live'
+  size?: number
+  ring?: string
+  /** The unread dot in a world's light tone (a notification row: `useSelection().glyph`), instead of white. */
+  color?: string
+  testID?: string
+}) {
   return (
     <View
       testID={testID}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={[
-        { width: size, height: size, borderRadius: RADIUS.capsule, backgroundColor: kind === 'live' ? COLOR.live : COLOR.textPrimary },
+        { width: size, height: size, borderRadius: RADIUS.capsule, backgroundColor: kind === 'live' ? COLOR.live : (color ?? COLOR.textPrimary) },
         ring ? { borderWidth: SPACE.xxs, borderColor: ring } : null,
       ]}
     />
@@ -111,14 +194,23 @@ export function LivePill({ text, testID }: { text: string; testID?: string }) {
 }
 
 /** "Live" with the dot, or a time or countdown in Geist Mono tabular ("9 PM", "In 25 min"). */
-export function TimeBadge({ when, testID }: { when: string; testID?: string }) {
+export function TimeBadge({
+  when,
+  struck = false,
+  testID,
+}: {
+  when: string
+  /** A cancelled night: the time is struck, never the middot (B-S16). */
+  struck?: boolean
+  testID?: string
+}) {
   const bold = useBoldText()
   const live = when === 'Live'
   return (
     <ScrimPill testID={testID}>
       {live ? <PresenceDot kind="live" testID={testID && `${testID}-dot`} /> : null}
       <Text style={[live ? font('caption', bold) : monoCaption(bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-        {when}
+        {live ? when : <MonoRun text={when} struck={struck} />}
       </Text>
     </ScrimPill>
   )
@@ -140,7 +232,7 @@ export function spokenPrice(amount: string, per?: string) {
 
 /**
  * A price: Geist Mono 700, tabular, the ₹ in the string, an optional unit.
- * Scales freely (no fixed box). Inherits nothing: `color` defaults to white.
+ * Grows with the reader's type (no fixed box) to its role's cap (DS-22). Inherits nothing: `color` defaults to white.
  */
 export function Price({
   amount,
@@ -158,13 +250,15 @@ export function Price({
   const bold = useBoldText()
   return (
     <View testID={testID} accessible accessibilityLabel={spokenPrice(amount, per)} style={styles.price}>
-      <Text style={[font(PRICE_ROLE[size], bold, FONT_FAMILY.mono[700]), styles.tabular, { color }]}>{amount}</Text>
-      {per ? <Text style={[font(UNIT_ROLE[size], bold, FONT_FAMILY.brand[400]), styles.unit]}>{per}</Text> : null}
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE[PRICE_ROLE[size]]} style={[font(PRICE_ROLE[size], bold, FONT_FAMILY.mono[700]), styles.tabular, { color }]}>{amount}</Text>
+      {per ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE[UNIT_ROLE[size]]} style={[font(UNIT_ROLE[size], bold, FONT_FAMILY.brand[400]), styles.unit]}>{per}</Text> : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  divider: { fontFamily: FONT_FAMILY.brand[500] },
+  struck: { textDecorationLine: 'line-through', textDecorationColor: COLOR.textSecondary },
   ring: { padding: SPACE.badgeRing, borderRadius: RADIUS.capsule },
   badge: { borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: COLOR.ink, fontVariant: ['tabular-nums'] },

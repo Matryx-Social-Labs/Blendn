@@ -28,6 +28,8 @@ it('the rate screen marks the night on either kind of rating, and says "You rate
 })
 
 it('Going swaps its Past row action for "Rated", and the Recap reads it too', () => {
-  expect(read('app', '(tabs)', 'going.tsx')).toMatch(/isNightRated\(row\.id\) \? \(\s*<RowNote text="Rated" \/>/)
+  const going = read('app', '(tabs)', 'going.tsx')
+  expect(going).toMatch(/trailing=\{isNightRated\(row\.id\) \? <RowNote text="Rated" \/> : undefined\}/)
+  expect(going).toMatch(/below=\{\s*isNightRated\(row\.id\) \? undefined : \(/)
   expect(read('components', 'blendn', 'BlendnScreen.tsx')).toContain('rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}')
 })

@@ -1,74 +1,51 @@
-import { Ionicons } from '@expo/vector-icons'
-import { LinearGradient } from 'expo-linear-gradient'
-import React, { memo } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { memo } from 'react'
+import { StyleSheet, Text, View } from 'react-native'
 
-import { EMBER, EMBER_RADIUS, SPACE, tint } from '../../lib/theme'
+import { Icon } from '../ui/Icon'
+import { PhotoScrim } from '../ui/GradientFill'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
-import { Text } from '../ui/Text'
 
-/** Portrait, so two and a bit fit across a phone and the rail reads as scrollable. */
-export const MEMORY_W = 148
-export const MEMORY_H = 188
+/** Flow 6 `memoryTile`: 140 tall, the ink fade over its lower 60%. */
+export const MEMORY_HEIGHT = 140
+const FADE = '60%'
 
 /**
- * An event you went to, as a photo tile for the Me tab's Recent rail.
- *
- * Days' event tiles, turned to face the past: the cover fills the tile, an
- * eyebrow says how long ago it was ("3 WEEKS AGO"), and the title sits on a
- * page-coloured scrim at the foot. The scrim is the one gradient a photo may
- * have (docs/DESIGN_SYSTEM.md, "Surfaces are flat").
- *
- * With no cover it's a `surface` tile with a calendar glyph: the words still
- * sit in the same place, so a row of mixed tiles lines up.
+ * A night you went to, as a photo tile in Nights out (Flow 6 `me`): the cover fills the tile at radius 24, the ink fade carries the
+ * words at its foot, the day above the title. With no cover it is a `surface` tile with a calendar glyph, so a row of mixed tiles
+ * lines up. The glyph is centred in the room above the words, in the flow, not over the whole tile: centred over the tile, a
+ * two-line title brought the day up through it (RC drive 3, "THU 22 OCT" under the glyph). Both lines stop at the control cap, so
+ * the words at their tallest leave the glyph its room at every text size (__tests__/memoryTile.test.tsx). Fills the width its grid gives it; a tap
+ * opens the event, silently.
  */
-function MemoryTileImpl({
-  title,
-  imageUrl,
-  ago,
-  onPress,
-}: {
-  title: string
-  imageUrl: string | null
-  /** From `agoLabel`, already uppercase. */
-  ago: string
-  onPress: () => void
-}) {
+function MemoryTileImpl({ title, imageUrl, when, onPress, testID }: { title: string; imageUrl: string | null; when: string; onPress: () => void; testID?: string }) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
   return (
     <ScalePress
+      testID={testID}
       onPress={onPress}
       haptic={false}
       accessibilityRole="button"
-      accessibilityLabel={`${title}, ${ago.toLowerCase()}`}
+      accessibilityLabel={`${title}, ${when}`}
+      accessibilityHint="Opens the event"
       style={styles.tile}
     >
       {imageUrl ? (
-        <OptimizedImage
-          source={imageUrl}
-          recyclingKey={imageUrl}
-          style={StyleSheet.absoluteFill as never}
-          width={MEMORY_W}
-          height={MEMORY_H}
-          contentFit="cover"
-        />
+        <OptimizedImage source={imageUrl} recyclingKey={imageUrl} style={StyleSheet.absoluteFill as never} width={SPACE.xxxl * 4} height={MEMORY_HEIGHT} contentFit="cover" />
       ) : (
-        <View style={styles.blank}>
-          {/* design-exception: a decorative glyph standing in for a missing cover, not a control icon */}
-          <Ionicons name="calendar-outline" size={28} color={EMBER.textTertiary} />
+        <View testID={testID && `${testID}-blank`} style={styles.blank}>
+          <Icon name="calendar-check" size={ICON.nav} color={COLOR.textTertiary} />
         </View>
       )}
-      <LinearGradient
-        pointerEvents="none"
-        colors={[EMBER.bgClear, tint(EMBER.bg, 0.85)]}
-        locations={[0.35, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.words}>
-        <Text variant="label" color={EMBER.textSecondary} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-          {ago}
+      <PhotoScrim contrast={contrast} pointerEvents="none" style={styles.fade} />
+      <View testID={testID && `${testID}-words`} style={styles.words}>
+        <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.ink]}>
+          {when}
         </Text>
-        <Text variant="bodyStrong" numberOfLines={2} maxFontSizeMultiplier={1.2}>
+        <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
           {title}
         </Text>
       </View>
@@ -79,14 +56,9 @@ function MemoryTileImpl({
 export const MemoryTile = memo(MemoryTileImpl)
 
 const styles = StyleSheet.create({
-  tile: {
-    width: MEMORY_W,
-    height: MEMORY_H,
-    borderRadius: EMBER_RADIUS.lg,
-    overflow: 'hidden',
-    backgroundColor: EMBER.surface,
-    justifyContent: 'flex-end',
-  },
-  blank: { ...StyleSheet.absoluteFill, alignItems: 'center', paddingTop: SPACE.xxl },
-  words: { padding: SPACE.md, gap: SPACE.xxs },
+  tile: { height: MEMORY_HEIGHT, borderRadius: RADIUS.mediaInCard, overflow: 'hidden', backgroundColor: COLOR.surface, justifyContent: 'flex-end' },
+  blank: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: FADE },
+  words: { paddingHorizontal: SPACE.md, paddingBottom: SPACE.md, gap: SPACE.xxs },
+  ink: { color: COLOR.textPrimary },
 })

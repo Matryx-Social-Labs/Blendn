@@ -7,13 +7,12 @@ import { checkOutOf } from '../lib/checkIn'
 import { getDistanceMetres } from '../lib/geo'
 import { Logger } from '../lib/logger'
 import {
-  PRESENCE_COPY,
   SAMPLE_INTERVAL_MS,
   presenceAction,
   trimSamples,
   type PresenceSample,
 } from '../lib/presence'
-import ActionTray from './ActionTray'
+import { PresenceSheets } from './PresenceSheets'
 
 interface Fence {
   eventId: string
@@ -219,48 +218,21 @@ export function PresenceMonitor() {
   }, [fence, checkOut])
 
   return (
-    <>
-      <ActionTray
-        visible={asking}
-        title={PRESENCE_COPY.ask.title}
-        message={PRESENCE_COPY.ask.body}
-        // Not dismissible. Tapping the backdrop to make it go away would read as
-        // "I'm still here" while recording nothing, so the reprieve would never
-        // start and the same prompt would return two minutes later.
-        dismissible={false}
-        onClose={() => {}}
-        buttons={[
-          {
-            label: PRESENCE_COPY.ask.stay,
-            variant: 'primary',
-            onPress: () => {
-              saidStillHereAtRef.current = Date.now()
-              askingRef.current = false
-              setAsking(false)
-            },
-          },
-          {
-            label: PRESENCE_COPY.ask.leave,
-            variant: 'secondary',
-            onPress: () => {
-              askingRef.current = false
-              setAsking(false)
-              // Not automatic: they said so, so they do not need telling.
-              if (fence) void checkOut(fence.eventId, false)
-            },
-          },
-        ]}
-      />
-
-      <ActionTray
-        visible={autoNotice}
-        title={PRESENCE_COPY.autoCheckedOut.title}
-        message={PRESENCE_COPY.autoCheckedOut.body}
-        onClose={() => setAutoNotice(false)}
-        buttons={[
-          { label: 'Got it', variant: 'primary', onPress: () => setAutoNotice(false) },
-        ]}
-      />
-    </>
+    <PresenceSheets
+      asking={asking}
+      onStay={() => {
+        saidStillHereAtRef.current = Date.now()
+        askingRef.current = false
+        setAsking(false)
+      }}
+      onLeave={() => {
+        askingRef.current = false
+        setAsking(false)
+        // Not automatic: they said so, so they do not need telling.
+        if (fence) void checkOut(fence.eventId, false)
+      }}
+      notice={autoNotice}
+      onNoticeDone={() => setAutoNotice(false)}
+    />
   )
 }

@@ -60,7 +60,7 @@ describe('a paid message cannot be mistaken for the room’s own voice', () => {
     expect(codeOnly(read('components/ds/BroadcastNotice.tsx'))).toContain("`${announcement ? 'Announcement' : 'Sponsored'} · ${from}`.toUpperCase()")
   })
 
-  it('lifts the organiser out of the announcement’s prefix, and never prints the sponsored one', () => {
+  it('lifts the organizer out of the announcement’s prefix, and never prints the sponsored one', () => {
     const src = codeOnly(read('lib/chatFeed.ts'))
     expect(src).toContain('const BROADCAST_HEAD = ')
     expect(src).toContain("kind === 'sponsored' ? 'Partner' : fallbackFrom")
@@ -161,7 +161,7 @@ describe('the Me tab is your profile, with no separate preview', () => {
   /*
    * It was a control panel whose Preview button opened `app/user/[id].tsx` in
    * its `'self'` mode. Two screens for one person was one too many: the
-   * parts only Preview had (bio, work, gallery) now render here, through the
+   * parts only Preview had (bio, interests) now render here, through the
    * same `ProfileSections` pieces that screen uses.
    */
   const OWN = () => codeOnly(read('app/(tabs)/profile.tsx'))
@@ -171,42 +171,36 @@ describe('the Me tab is your profile, with no separate preview', () => {
     expect(src).not.toContain("pathname: '/user/[id]'")
     expect(src).not.toMatch(/>Preview</)
     expect(src).toContain('<ProfileBio')
-    expect(src).toContain('<ProfileDetail')
-    expect(src).toContain('<ProfileGallery')
-    expect(src).toContain('<PhotoLightbox')
+    expect(src).toContain('<ProfileInterests')
+    expect(src).toContain('<PhotoViewer')
   })
 
-  it('offers Edit profile and Settings, with Settings last', () => {
+  it('offers Edit profile and Settings, Settings in the bar as a circle (Flow 6 me)', () => {
     const src = OWN()
     expect(src).toContain("router.push('/edit-profile')")
     expect(src).toContain("router.push('/settings')")
-    const content = src.slice(src.indexOf('const renderContent'))
-    expect(content.indexOf("router.push('/settings')")).toBeGreaterThan(content.indexOf('title="Recent"'))
+    expect(src).toContain("router.push('/friends/add')")
+    expect(src).toContain("label: 'Settings'")
   })
 
-  it('puts the header flat on the page: one display line, and one compact Edit pill with no accent', () => {
-    const src = OWN()
-    expect(src.match(/variant="display"/g)).toHaveLength(1)
-    expect(src).toMatch(/button: \{[^}]*height: CONTROL\.sm[^}]*backgroundColor: EMBER\.surface,/)
-    // One way into Edit profile: the sections carry no EDIT links of their own.
-    expect(src).not.toContain('actionLabel="EDIT"')
-    // The old identity card sat on `surfaceMedia`; the header has no card now.
-    expect(src).not.toContain('surfaceMedia')
+  it('puts the header flat on the page: one display line, and Edit profile as the DS lit button', () => {
+    const me = codeOnly(read('components/profile/MeSections.tsx'))
+    expect(me.match(/font\('display'/g)).toHaveLength(2)
+    expect(me).toContain('<Button kind="lit" size="md" icon="pencil" label="Edit profile"')
+    expect(OWN()).not.toContain('surfaceMedia')
   })
 
-  it('has left APP_COLORS behind', () => {
-    // It was the last screen in the app still on the old theme.
+  it('has left APP_COLORS and lib/theme behind', () => {
     expect(OWN()).not.toContain('APP_COLORS.')
+    expect(OWN()).not.toContain("lib/theme'")
   })
 
-  it('lists what is missing as rows, never a meter, with the photo row the only accent', () => {
+  it('lists what is missing as rows, never a meter, with Add a photo the one gradient primary', () => {
     const src = OWN()
     expect(src).toContain('profileGaps(')
-    expect(src).not.toMatch(/percent|progress|completeness/i)
-    // The error state's Retry is its own screen; on the panel the one accent is the photo row's icon.
-    const content = src.slice(src.indexOf('const renderContent'), src.indexOf('const styles'))
-    expect(content.match(/EMBER\.accent/g)).toHaveLength(1)
-    expect(content).toContain("gap.key === 'photo' ? EMBER.accent")
+    expect(src).not.toMatch(/percent|\bprogress\b|completeness/i)
+    expect(src).toContain('<Button kind="primary" icon="camera" label="Add a photo"')
+    expect(src).not.toContain('EMBER.accent')
   })
 
   it('shows counts in one container, opens Going from them, and hides a role you do not have', () => {
@@ -215,25 +209,23 @@ describe('the Me tab is your profile, with no separate preview', () => {
      * something you failed to do rather than a role you do not have.
      */
     const src = OWN()
-    expect(src).toContain('stats.eventsOrganized > 0')
-    expect(src).toContain('label="Attended" onPress={openGoing}')
-    expect(src).toContain('label="Saved" onPress={openGoing}')
+    const me = codeOnly(read('components/profile/MeSections.tsx'))
+    expect(me).toContain('hosted > 0')
+    expect(me).toContain('label="Nights" onPress={onGoing}')
+    expect(me).toContain('label="Saved" onPress={onGoing}')
     expect(src).toContain("router.navigate('/going')")
-    expect(src).toContain('backgroundColor: EMBER.separator')
   })
 
-  it('lists recent events from the same attendance route and helper as Going', () => {
+  it('lists nights from the same attendance route and helper as Going', () => {
     /*
      * `/me/attendance` through `pastEventRows`, so the Me tab and Going's Past
      * section cannot disagree about what counts as past. Its own request, not
-     * awaited by the profile load, and a failure only leaves Recent out.
+     * awaited by the profile load, and a failure puts a notice on Nights out.
      */
     const src = OWN()
-    // Enough of it to fill Nights out's twelve weeks, not just the Recent rail.
     expect(src).toContain('apiClient.getMyAttendance(ATTENDANCE_LIMIT)')
     expect(src).toContain('pastEventRows(result.data.events)')
-    // Past events as a rail of photo tiles: memories, not a schedule.
-    expect(src).toContain('<MemoryTile')
+    expect(codeOnly(read('components/profile/NightsOut.tsx'))).toContain('<MemoryTile')
     expect(src).not.toContain('onToggleFavorite')
     expect(src).toContain("pathname: '/event/[id]'")
     expect(src).not.toMatch(/await loadRecent|Promise\.all/)
@@ -246,7 +238,7 @@ describe('the Me tab is your profile, with no separate preview', () => {
      * `looking_for` were mapped from a response that never carries them.
      */
     const src = OWN()
-    expect(src).not.toMatch(/@blendn|handle|username/i)
+    expect(src).not.toMatch(/@blendn|\bhandle\b|username/i)
     expect(src).not.toMatch(/\bPRO\b/)
     expect(src).not.toMatch(/CIRCLE PRESENCE/i)
     expect(src).not.toMatch(/goals|looking_for/)
@@ -263,13 +255,13 @@ describe('a photo you can tap actually opens', () => {
      */
     const src = codeOnly(read('app/user/[id].tsx'))
     expect(src).toContain('onPressPhoto=')
-    expect(src).toContain('<PhotoLightbox')
+    expect(src).toContain('<PhotoViewer')
   })
 
   it('offsets the index past the hero photo', () => {
     // The gallery is `photos.slice(1)`, so without `+1` every tap opened the
-    // photo before the one you touched.
-    expect(codeOnly(read('app/user/[id].tsx'))).toContain('setLightboxIndex(i + 1)')
+    // photo before the one you touched. The body is shared (`ProfileBody`, D26), so the offset lives there.
+    expect(codeOnly(read('components/profile/ProfileSections.tsx'))).toContain('onPressPhoto(i + 1, from)')
   })
 })
 
@@ -291,7 +283,8 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
   it('shows a receipt only under your own last message', () => {
     const src = DM()
     expect(src).toContain('receipt={mine && item.id === lastMineId ? receiptFor(item, myId) : null}')
-    expect(src).toContain('!isLocalMessage(m))?.id')
+    // Never a message that was not sent: one still on this phone, or one moderation withheld (rc8 #2).
+    expect(src).toContain('!isLocalMessage(m) && !m.removed)?.id')
   })
 
   it('keeps receipts out of the room', () => {

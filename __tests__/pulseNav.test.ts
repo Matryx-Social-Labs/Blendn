@@ -73,10 +73,12 @@ describe('the stylesheet, frame 1141:4643', () => {
     return src.slice(src.indexOf('const styles = StyleSheet.create({'))
   }
 
-  it('the gutter is applied once, on the scroll content', () => {
+  it('the scroll content has no gutter of its own: each row carries it, so the rails and the Set list can bleed', () => {
     const sheet = SHEET()
-    const hits = sheet.match(/paddingHorizontal: MAIN_PADDING_HORIZONTAL/g) || []
-    expect(hits).toHaveLength(1)
+    expect(sheet).toMatch(/listContainer: \{\}/)
+    expect(sheet).not.toContain('MAIN_PADDING_HORIZONTAL')
+    // The rows that sit inside the gutter say so once each, in the token.
+    expect(sheet.match(/paddingHorizontal: SPACE\.gutter/g)?.length).toBeGreaterThanOrEqual(4)
   })
 
   it('has no key nothing uses', () => {
@@ -122,7 +124,9 @@ describe('a tap outside the search closes the keyboard', () => {
     expect(list).toContain('keyboardShouldPersistTaps="handled"')
     expect(list).toContain('keyboardDismissMode="on-drag"')
     // Nested in the list: left at the default it would eat a featured card's first tap.
-    const row = src.slice(src.search(/<FlatList\s+horizontal/), src.indexOf('renderItem={({ item, index })'))
+    // Every rail is a horizontal list of its own; left at the default each would eat a card's first tap.
+    const rails = stripComments(read('components/pulse/Rail.tsx'))
+    const row = rails.slice(rails.search(/<FlatList\s+testID/), rails.indexOf('initialNumToRender'))
     expect(row).toContain('keyboardShouldPersistTaps="handled"')
   })
 
@@ -137,5 +141,34 @@ describe('a tap outside the search closes the keyboard', () => {
     expect(shell).toMatch(/style=\{StyleSheet\.absoluteFill\}\s+onTouchStart=\{dismissKeyboard\}/)
     expect(shell).toContain('onChromeTouch={dismissKeyboard}')
     expect(stripComments(read('components/home/HomeDrawer.tsx'))).toContain('<View style={styles.header} onTouchStart={onChromeTouch}>')
+  })
+})
+
+describe('the sticky search', () => {
+  it('the search is data row 0, pinned under the title header, and is in the list in every state (loading too)', () => {
+    const src = SCREEN()
+    // The title header is cell 0, the search (row 0) cell 1.
+    expect(src).toContain('const STICKY_SEARCH = [1]')
+    expect(src).toContain('stickyHeaderIndices={STICKY_SEARCH}')
+    expect(src).toContain("const LEAD: PulseRow[] = [{ kind: 'search', key: 'search' }, { kind: 'body', key: 'body' }]")
+    // Loading shows the lead rows only: the field outlives the thing it searches.
+    expect(src).toContain('showLoadingSkeleton ? LEAD : [...LEAD, ...rows]')
+  })
+
+  it('the header holds only the banners: no title (the drawer’s tabs name the pane) and the search is not in ListHeaderComponent', () => {
+    const src = SCREEN()
+    const header = src.slice(src.indexOf('ListHeaderComponent={'), src.indexOf('</PulseSlots.Provider>'))
+    expect(header).toContain('{banners}')
+    expect(header).not.toContain('pulseTitle')
+    expect(header).not.toContain('searchNode')
+    expect(header).not.toContain('<PulseSearch')
+  })
+
+  it('a keystroke re-renders the search and body rows (context), not every card (renderRow does not close over them)', () => {
+    const src = SCREEN()
+    const render = src.slice(src.indexOf('const renderRow = useCallback'), src.indexOf('const keyExtractor'))
+    expect(render).not.toContain('searchNode')
+    expect(render).not.toContain('bodyNode')
+    expect(render).toContain('<PulseSlot slot={item.kind} />')
   })
 })

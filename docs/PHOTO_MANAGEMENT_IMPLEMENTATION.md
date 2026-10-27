@@ -50,8 +50,10 @@ scores harm, not subject matter: a photo of a dog passes cleanly.
 a mirror the server writes from it — so the match card, the DM avatar and the
 profile cannot disagree.
 
-`PhotoManager` shows a **Make main** control on every non-primary tile; it
-reorders the array and saves through `PUT /profiles`. Provider avatars from
+`PhotoManager` reorders by **drag** (a long press lifts a tile, `H.drag`; the first
+slot is the main photo) and, for a screen reader, by each photo's actions (Make main
+photo, Move earlier, Move later). Either way it reorders the array and saves once
+through `PUT /profiles`. Provider avatars from
 Google are no longer taken at signup: an avatar is not a choice, and it had
 never been through the gates above.
 

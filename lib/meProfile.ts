@@ -7,7 +7,7 @@
  * value that is missing drops its part rather than printing a placeholder.
  */
 
-import { MONTHS } from './time'
+import { calendarDate, dateIn, dayKeyIn, instantIn, MONTHS, startOfDayIn, weekdayIn } from './time'
 
 /** Interest names from a profile payload: plain strings, or `{ id, name, slug, icon }` objects. */
 export const interestNames = (raw: unknown): string[] =>
@@ -28,7 +28,19 @@ function memberDate(memberSince: string | null | undefined): Date | null {
 /** "Joined Mar 2025", or null when the date is missing or unreadable. */
 export function joinedLabel(memberSince: string | null | undefined): string | null {
   const d = memberDate(memberSince)
-  return d ? `Joined ${MONTHS[d.getMonth()]} ${d.getFullYear()}` : null
+  return d ? `Joined ${monthYear(d)}` : null
+}
+
+/** "Mar 2025": the date alone, for the screen that draws it in Geist Mono. */
+export function joinedDate(memberSince: string | null | undefined): string | null {
+  const d = memberDate(memberSince)
+  return d ? monthYear(d) : null
+}
+
+/** "Mar 2025", on the phone's calendar. */
+function monthYear(d: Date): string {
+  const [y, m] = dateIn(d)
+  return `${MONTHS[m]} ${y}`
 }
 
 /** "Bengaluru · Joined Mar 2025", dropping whichever part is missing. */
@@ -74,16 +86,13 @@ export const NIGHTS_WEEKS = 12
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** Local midnight of the Monday on or before `d`. */
-function mondayOf(d: Date): Date {
-  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  m.setDate(m.getDate() - ((m.getDay() + 6) % 7))
-  return m
+/** The phone's midnight of the Monday on or before `d`, `days` on (negative for back). */
+function mondayOf(d: Date, days = 0): Date {
+  const [y, m, day] = dateIn(d)
+  return new Date(instantIn(y, m, day - ((weekdayIn(d) + 6) % 7) + days))
 }
 
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-}
+const dayKey = (d: Date): string => dayKeyIn(d)
 
 export interface NightCell {
   /** Local midnight of the day. */
@@ -122,9 +131,7 @@ export function nightsGrid(
     byDay.set(k, [...(byDay.get(k) ?? []), e.id])
   }
 
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const first = mondayOf(now)
-  first.setDate(first.getDate() - (NIGHTS_WEEKS - 1) * 7)
+  const today = startOfDayIn(now)
 
   const weeks: NightCell[][] = []
   const monthLabels: (string | null)[] = []
@@ -133,11 +140,12 @@ export function nightsGrid(
     const week: NightCell[] = []
     let label: string | null = null
     for (let d = 0; d < 7; d++) {
-      const date = new Date(first.getFullYear(), first.getMonth(), first.getDate() + w * 7 + d)
-      const future = date.getTime() > today.getTime()
+      const date = mondayOf(now, (w - (NIGHTS_WEEKS - 1)) * 7 + d)
+      const future = date.getTime() > today
       const eventIds = future ? [] : byDay.get(dayKey(date)) ?? []
       if (eventIds.length) nights++
-      if ((w === 0 && d === 0) || date.getDate() === 1) label = MONTHS[date.getMonth()].toUpperCase()
+      const [, month, dayOfMonth] = dateIn(date)
+      if ((w === 0 && d === 0) || dayOfMonth === 1) label = MONTHS[month].toUpperCase()
       week.push({ date, eventIds, future })
     }
     weeks.push(week)
@@ -158,7 +166,96 @@ export function agoLabel(startTime: string, now: Date = new Date()): string {
   if (weeks <= 0) return 'THIS WEEK'
   if (weeks === 1) return 'LAST WEEK'
   if (weeks < 8) return `${weeks} WEEKS AGO`
-  const months = (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth()
+  const [nowY, nowM] = dateIn(now)
+  const [startY, startM] = dateIn(start)
+  const months = (nowY - startY) * 12 + nowM - startM
   if (months < 12) return `${months} MONTHS AGO`
   return months < 24 ? 'LAST YEAR' : `${Math.floor(months / 12)} YEARS AGO`
+}
+
+/** "Fri 3 Oct": the eyebrow on a night's tile (Flow 6 `me`), in the event's own day when its zone is known. Empty when the date is unreadable. */
+export function nightLabel(startTime: string, timeZone?: string | null): string {
+  const d = new Date(startTime)
+  // No year: the tile has room for "THU 22 OCT" and no more, and Nights out is the last twelve weeks.
+  return calendarDate(d, { weekday: true, year: false, timeZone: timeZone ?? undefined })
+}
+
+/** How many nights the Me tab's grid shows (Flow 6 `me`: two rows of three). */
+export const NIGHT_TILES = 6
+
+/** Where the attendance request stands, as the screen knows it. */
+export type NightsStatus = 'loading' | 'ready' | 'failed'
+
+/**
+ * What Nights out draws (Flow 6 `me` 04 · 05 · 06): a skeleton grid while the first load runs, the tiles when it has answered,
+ * the tiles with a notice and Try again when a refresh failed (it keeps the last good list), and an invitation, never a grid,
+ * for someone with no night yet. A load that failed with nothing to show says so and offers Try again, without tiles. Pure, so the
+ * choice between them is testable.
+ *
+ * "No night yet" is the count's word, never the list's (D-H1): a free account sees its latest 3 nights and `lockedCount` more
+ * are with Blend'n+, and those 3 can be nights that haven't ended (the list keeps ended ones only). So an empty list under a
+ * count above 0 is `locked` when the server kept nights back, `pending` when the nights it has are still going, and `first`
+ * only when the count is 0 (or unknown, from a server that sends none).
+ */
+export type NightsView =
+  | { kind: 'loading' }
+  | { kind: 'first' }
+  | { kind: 'failed' }
+  | { kind: 'locked'; total: number }
+  | { kind: 'pending'; total: number }
+  /**
+   * `locked`: the older nights kept behind Blend'n+, said under the tiles (S-1: a free account sees its latest 3 ended).
+   * `running`: nights the count has that the grid doesn't yet, because they haven't ended (RC 7: "4 NIGHTS" over one tile).
+   * `ended`: every night that has ended, since you joined, the locked ones included: with `running`, the NIGHTS stat
+   * (rc7: the line counted the shown tiles in 12 weeks, "3 nights out" under 46).
+   */
+  | { kind: 'tiles'; failed: boolean; ended: number; locked: number; running: number }
+
+export function nightsView(
+  status: NightsStatus,
+  rows: readonly { id: string; start_time: string }[],
+  lockedCount: number = 0,
+  total: number | null = null,
+  running: number = 0
+): NightsView {
+  if (rows.length > 0) {
+    const stillGoing = Math.max(0, running)
+    return {
+      kind: 'tiles',
+      failed: status === 'failed',
+      // The stat's nights less those still going; an older server with no total: the ended nights listed.
+      ended: total !== null ? Math.max(rows.length, total - stillGoing) : rows.length,
+      locked: Math.max(0, lockedCount),
+      running: stillGoing,
+    }
+  }
+  if (status === 'loading') return { kind: 'loading' }
+  if (status === 'failed') return { kind: 'failed' }
+  const count = Math.max(total ?? 0, lockedCount)
+  if (lockedCount > 0) return { kind: 'locked', total: count }
+  return count > 0 ? { kind: 'pending', total: count } : { kind: 'first' }
+}
+
+/**
+ * What `/me/attendance` says beyond its rows: the nights kept behind Blend'n+, every night (the shown ones plus those), and
+ * the nights it lists that haven't ended (S-1 lists them; the grid keeps ended ones only, `pastEventRows`).
+ */
+export interface NightsCounts {
+  locked: number
+  /** Null from a server that sends no pagination. */
+  total: number | null
+  /** Listed nights still going: in `total`, not yet on the grid. */
+  running: number
+}
+
+export function nightsCounts(
+  payload: { pagination?: { totalCount: number }; lockedCount?: number; events?: readonly { end_time: string }[] } | null | undefined,
+  now: number = Date.now()
+): NightsCounts {
+  const locked = Math.max(0, payload?.lockedCount ?? 0)
+  // `totalCount` is the nights the list may show (the server's `visible`); the locked ones are on top of it.
+  const shown = payload?.pagination?.totalCount
+  // The complement of `pastEventRows`' "ended": an end not before now (the newest nights, so always on the first page).
+  const running = (payload?.events ?? []).filter((e) => !(new Date(e.end_time).getTime() < now)).length
+  return { locked, total: typeof shown === 'number' ? shown + locked : null, running }
 }

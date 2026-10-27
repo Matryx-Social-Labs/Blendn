@@ -4,17 +4,19 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTim
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
+import { AchievementBadge, type AchievementKind } from './AchievementBadge'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { InterestChip } from './Chip'
 import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
 import { PresenceDot } from './MonoFamily'
+import { OverlapLine, type OverlapLabel } from './OverlapLine'
 import { Sheet } from './Sheet'
-import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 import { StateScreen } from './StateScreen'
 
 /** ROUND3 D · 4.1: here now · was here · pre-event room · matched · friend · unavailable · thin. */
@@ -33,6 +35,14 @@ export type PersonCardPerson = {
   /** Every reason, in the server's order: the panel. */
   reasons?: string[]
   chips?: string[]
+  /**
+   * Matching v2 (Flow 14 · 14.1): the server's strongest overlap as one line,
+   * and the shared labels under it (2 before a reveal, 4 after). Absent or
+   * `line: null` draws no line, and the plain `chips` stay.
+   */
+  overlap?: { line: string | null; labels: OverlapLabel[] }
+  /** What their check-ins earned, as the server budgeted it for this card (none in a small room). Read-only pills after the chips. */
+  badges?: AchievementKind[]
 }
 
 export type PersonCardContentProps = {
@@ -142,6 +152,9 @@ export function PersonCardContent({
     if (refusalText) AccessibilityInfo.announceForAccessibility(refusalText)
   }, [refusalText])
   const panel = Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
+  /** Liked and Waved are lit, never white (direction C: no white selection): the hue's fill, its 1 pt rim, the glyph in its light tone. */
+  const sel = useSelection()
+  const lit = { backgroundColor: sel.fill, borderColor: sel.edge }
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const { name, age } = person
   const id = (part: string) => testID && `${testID}-${part}`
@@ -163,7 +176,9 @@ export function PersonCardContent({
   const presence =
     variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : variant === 'here' || (here && variant !== 'thin') ? 'Here now' : null
   const heading = [name, age, line, presence?.toLowerCase()].filter((p) => p != null && p !== '').join(', ')
-  const showReasons = !thin && variant !== 'pre' && !!person.reasons?.length
+  // The panel never opens on the reason already under the name (B-R13): the server's top reason is both.
+  const panelReasons = person.reasons?.[0] === person.reason ? (person.reasons?.slice(1) ?? []) : (person.reasons ?? [])
+  const showReasons = !thin && variant !== 'pre' && panelReasons.length > 0
   const note =
     variant === 'pre'
       ? PRE_EVENT
@@ -205,7 +220,7 @@ export function PersonCardContent({
       <View ref={headRef} accessible accessibilityRole="header" accessibilityLabel={heading} style={styles.head}>
         <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} {...person.face} />
         <View style={styles.headText}>
-          <Text style={[font('title', bold), styles.ink]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
             {name}
             {age ? (
               <>
@@ -217,7 +232,7 @@ export function PersonCardContent({
           {line ? (
             <View style={styles.inline}>
               {variant === 'friend' ? <Icon name="user-check" size={ICON.inline} color={COLOR.textSecondary} /> : null}
-              <Text style={[font('meta', bold), { color: quiet }]}>{line}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: quiet }]}>{line}</Text>
             </View>
           ) : null}
           {presence ? (
@@ -229,7 +244,7 @@ export function PersonCardContent({
               ) : (
                 <PresenceDot kind="live" testID={id('presence-dot')} />
               )}
-              <Text style={[font('caption', bold), { color: quiet }]}>{presence}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), { color: quiet }]}>{presence}</Text>
             </View>
           ) : null}
         </View>
@@ -237,16 +252,23 @@ export function PersonCardContent({
 
       {showReasons ? (
         <View testID={id('reasons')} style={[styles.reasons, { backgroundColor: panel }]}>
-          {person.reasons!.map((r) => (
+          {panelReasons.map((r) => (
             <View key={r} style={styles.reason}>
               <Icon name="check" size={ICON.inline} color={COLOR.textSecondary} />
-              <Text style={[font('body', bold), styles.ink, styles.shrink]}>{r}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.shrink]}>{r}</Text>
             </View>
           ))}
         </View>
       ) : null}
 
-      {!thin && person.chips?.length ? (
+      {!thin && person.overlap?.line ? (
+        <OverlapLine
+          line={person.overlap.line}
+          labels={person.overlap.labels}
+          revealed={variant === 'matched' || variant === 'friend'}
+          testID={id('overlap')}
+        />
+      ) : !thin && person.chips?.length ? (
         <View style={styles.chips}>
           {person.chips.map((c) => (
             <InterestChip key={c} label={c} />
@@ -254,9 +276,17 @@ export function PersonCardContent({
         </View>
       ) : null}
 
+      {!thin && person.badges?.length ? (
+        <View testID={id('badges')} style={styles.chips}>
+          {person.badges.map((kind) => (
+            <AchievementBadge key={kind} kind={kind} />
+          ))}
+        </View>
+      ) : null}
+
       <View testID={id('actions')} style={styles.actions}>
         {variant === 'matched' ? (
-          <Button label="Say hi" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
+          <Button label="Say hi" size="md" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
         ) : variant === 'here' || variant === 'was' ? (
           isLiked ? (
             <Animated.View
@@ -265,16 +295,17 @@ export function PersonCardContent({
               accessibilityRole="button"
               accessibilityLabel="Liked"
               accessibilityState={{ selected: true }}
-              style={[styles.pill, styles.grow, styles.liked, likedStyle]}
+              style={[styles.pill, styles.grow, styles.lit, lit, likedStyle]}
             >
-              <Icon name="heart" size={ICON.control} color={COLOR.ink} active />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
+              <Icon name="heart" size={ICON.control} color={sel.glyph} active />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
                 Liked
               </Text>
             </Animated.View>
           ) : crewLike ? (
             <Button
               label={`Like for ${crewLike.name}`}
+              size="md"
               leading={crewLike.emblemSeed ? <CrewEmblem seed={crewLike.emblemSeed} size={ICON.nav} /> : undefined}
               icon={crewLike.emblemSeed ? undefined : 'heart'}
               pressHaptic={false}
@@ -289,6 +320,7 @@ export function PersonCardContent({
           ) : (
             <Button
               label="Like"
+              size="md"
               icon="heart"
               pressHaptic={false}
               accessibilityHint="They’re only told if they like you back."
@@ -304,9 +336,9 @@ export function PersonCardContent({
 
         {variant === 'here' ? (
           isWaved ? (
-            <View testID={id('waved')} accessible accessibilityLabel="Waved" style={[styles.pill, styles.liked]}>
-              <Icon name="check" size={ICON.control} color={COLOR.ink} active />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.onWhite]}>
+            <View testID={id('waved')} accessible accessibilityLabel="Waved" accessibilityState={{ selected: true }} style={[styles.pill, styles.lit, lit]}>
+              <Icon name="check" size={ICON.control} color={sel.glyph} active />
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
                 Waved
               </Text>
             </View>
@@ -339,8 +371,9 @@ export function PersonCardContent({
         ) : (
           <Button
             label="Message"
-            kind="secondary"
-            onGlass
+            kind="lit"
+            size="md"
+            icon="message-circle"
             accessibilityHint={variant === 'friend' ? undefined : 'Sends a request, which shows them your name and photo.'}
             onPress={onMessage}
             style={styles.grow}
@@ -366,12 +399,12 @@ export function PersonCardContent({
 
       {refusal ? (
         <View style={styles.refusal}>
-          <Text style={[font('meta', bold), styles.ink, styles.shrink]}>{refusal.text}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.shrink]}>{refusal.text}</Text>
           {refusal.action ? <TextAction label={refusal.action.label} onPress={refusal.action.onPress} testID={id('refusal-action')} /> : null}
         </View>
       ) : null}
 
-      {note ? <Text style={[font('caption', bold), styles.note, { color: quiet }]}>{note}</Text> : null}
+      {note ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.note, { color: quiet }]}>{note}</Text> : null}
 
       <View style={styles.center}>
         <TextAction label="View profile" onPress={onViewProfile} testID={id('view-profile')} />
@@ -455,7 +488,7 @@ function TextAction({ label, onPress, testID }: { label: string; onPress?: () =>
       accessibilityLabel={label}
       style={[styles.textAction, { minHeight: minTarget() }]}
     >
-      <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{label}</Text>
     </Control>
   )
 }
@@ -499,18 +532,18 @@ const styles = StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
-  onWhite: { color: COLOR.ink },
   tabular: { fontVariant: ['tabular-nums'] },
   shrink: { flexShrink: 1 },
   reasons: { borderRadius: RADIUS.rowInCard, paddingVertical: SPACE.xs },
   reason: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginTop: SPACE.sm },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.sm },
   grow: { flexGrow: 1 },
   end: { marginLeft: 'auto' },
-  circle: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
+  /** The action row is one height, 48 (`SIZE.control`): the Like and Message buttons at `md`, these pills and circles. */
+  circle: { width: SIZE.control, height: SIZE.control, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
   pill: {
-    height: SIZE.primary,
+    height: SIZE.control,
     borderRadius: RADIUS.capsule,
     flexDirection: 'row',
     alignItems: 'center',
@@ -518,7 +551,7 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     paddingHorizontal: SPACE.lg,
   },
-  liked: { backgroundColor: COLOR.textPrimary },
+  lit: { borderWidth: 1 },
   refusal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
   note: { textAlign: 'center' },
   center: { alignItems: 'center' },

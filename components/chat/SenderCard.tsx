@@ -5,12 +5,14 @@ import { apiClient } from '../../lib/apiClient'
 import type { RoomAttendee } from '../../lib/activeRoom'
 import { Logger } from '../../lib/logger'
 import { likeRefusal } from '../../lib/likeRefusal'
+import { overlapOf } from '../../lib/overlapLine'
 import { reasonLine } from '../../lib/roomMoments'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { attendeeFromMatch } from '../../lib/roomLive'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { PersonCard, type PersonState } from '../ds/PersonCard'
 import { ConnectSheet } from '../grid/ConnectSheet'
+import { askPushInContext } from '../../lib/pushAsk'
 
 /** Somebody in a room's chat, as their message names them: the room's handle and pseudonym. */
 export type Sender = { id: string; name: string }
@@ -93,6 +95,7 @@ export function SenderCard({
       return
     }
     const conversationId = result.data?.mutual ? result.data.conversationId : undefined
+    if (!conversationId) void askPushInContext('like')
     if (conversationId) {
       onClose()
       router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId } } as never)
@@ -130,6 +133,7 @@ export function SenderCard({
           age: attendee?.age,
           reason: attendee ? reasonLine(attendee) : undefined,
           chips: card?.sharedInterests,
+          overlap: card ? overlapOf({ overlaps: card.overlaps, sharedIntents: card.sharedIntents, interests: card.sharedInterests, sign: card.sign }) : undefined,
         }}
         variant={card ? (card.insideNow === false ? 'was' : 'here') : 'thin'}
         state={state}

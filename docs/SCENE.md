@@ -105,7 +105,7 @@ is where it stops driving the height and the label does, and the pill lands at
 ### 2. No scarcity claim the product cannot back
 
 The frame draws **LIMITED ACCESS** on every event. Nothing supports it: the only
-thing an organiser is asked is `max_capacity`, whose own placeholder reads
+thing an organizer is asked is `max_capacity`, whose own placeholder reads
 "Unlimited if blank" — a fire-safety number, not a claim about exclusivity. A
 500-person warehouse night has a capacity and is not exclusive.
 
@@ -202,14 +202,22 @@ the screen reporting emptiness for a night that has not happened.
 
 - **Before `start_time`:** *Going* with the RSVP count, or *Interested* with the
   saved count when nobody has RSVP'd. A real number beats a dash.
-- **After:** *Attendees* with the check-in count.
+- **While it runs:** *Here now* with the check-in count.
+- **After:** *Went* with the check-in count.
+- **Cancelled:** no people tile at all; there is nobody to count.
+
+One word per state, the same in the tile and in the section heading (TG-05, D17;
+`crowdWord` in `EventDetailScreen.tsx`).
 
 ---
 
 ## The coverless case
 
-An event with no cover and no media renders the hero as a dark panel
-(`EMBER.surfaceSunken`) with the title and gradient on it.
+An event with no cover and no media draws its category plate (`CategoryPlate`,
+D8, TG-06): the category's glyph in the screen's hue on the hue's fill, or the
+fill alone when the category has none. The title and pills sit on it as they sit
+on a photograph. The hero reads the slug from `categories[0].slug`
+(`category_slug` on the screen's event).
 
 It previously fell back to `assets/images/icon.png` — a square app icon, drawn
 with `contentFit: 'cover'` into a 440×647 box, so it filled two thirds of the
@@ -253,7 +261,7 @@ The frame draws one CTA. These exist and had to go somewhere:
 |---|---|---|
 | RSVP | the CTA, before the doors | it is the same slot at an earlier hour, not a second action |
 | Check out | the room's top bar | one tap from the CTA, then a confirm |
-| Announce / delete | a small organiser column, bottom right | shown only to an organiser; not in any frame |
+| Announce / delete | a small organizer column, bottom right | shown only to an organizer; not in any frame |
 | Android announcement composer | a modal | `Alert.prompt` is iOS-only, so on Android this **is** the feature |
 
 An overflow `···` was briefly added to the top bar for RSVP. It was wrong twice:
@@ -266,7 +274,7 @@ the screen.
 
 1. **The pre-doors CTA has no frame.** *I'm going* / *You're going* were derived,
    not designed.
-2. **The organiser column has no frame.** Two round buttons stacked bottom-right.
+2. **The organizer column has no frame.** Two round buttons stacked bottom-right.
 3. **The coverless hero has no frame.** Currently a flat dark panel.
 4. **Amenities need a payload before they can be drawn**, and then a decision on
    what happens with one amenity, or five, when the frame draws exactly two.

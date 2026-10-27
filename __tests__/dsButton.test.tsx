@@ -5,12 +5,13 @@
  * accessibility matrix.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import React from 'react'
+import React, { Profiler } from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { Button } from '../components/ds/Button'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
+import { HueProvider, SELECTION, type Hue } from '../components/ds/shared'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -52,6 +53,15 @@ afterEach(() => jest.useRealTimers())
 const draw = (props: Partial<React.ComponentProps<typeof Button>> = {}) =>
   render(<Button label="I’m going" onPress={jest.fn()} testID="b" {...props} />)
 
+describe('a price after the label', () => {
+  it('sets the amount in Geist Mono and the unit small, and reads as the whole it is given', async () => {
+    await draw({ label: 'Start Blend’n+ —', price: { amount: '₹199', per: '/ month' }, accessibilityLabel: 'Start Blend’n+ — ₹199 / month' })
+    expect(screen.getByLabelText('Start Blend’n+ — ₹199 / month')).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByText('₹199').props.style).fontFamily).toMatch(/mono/i)
+    expect(screen.getByText('/ month', { exact: false })).toBeTruthy()
+  })
+})
+
 describe('kinds and sizes', () => {
   it.each([
     ['lg', SIZE.primary],
@@ -76,6 +86,22 @@ describe('kinds and sizes', () => {
     expect(flat('b').backgroundColor).toBe(COLOR.destructiveFill)
   })
 
+  it('a small tertiary is the label alone on the gutter: no side padding, the hit area reaches out instead', async () => {
+    await draw({ kind: 'tertiary', size: 'sm' })
+    expect(flat('b').paddingHorizontal).toBe(0)
+    expect(screen.getByTestId('b').props.hitSlop).toMatchObject({ left: SPACE.lg, right: SPACE.lg, top: 4, bottom: 4 })
+    // A filled small button keeps its pad; a large tertiary is untouched.
+    await draw({ kind: 'secondary', size: 'sm' })
+    expect(flat('b').paddingHorizontal).toBe(SPACE.lg)
+  })
+
+  it('muted sets a tertiary label in textSecondary, and only a tertiary', async () => {
+    await draw({ kind: 'tertiary', muted: true })
+    expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.textSecondary)
+    await draw({ kind: 'primary', muted: true })
+    expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.textOnGradient)
+  })
+
   it('a 36 pt row action reaches the target through slop above and below', async () => {
     await draw({ size: 'sm' })
     expect(screen.getByTestId('b').props.hitSlop).toEqual({ top: 4, bottom: 4 })
@@ -88,6 +114,95 @@ describe('kinds and sizes', () => {
     expect(flat('b').backgroundColor).toBe(MATERIAL.fillOnGlass)
     await draw({ kind: 'secondary', size: 'sm' })
     expect(flat('b').backgroundColor).toBe(COLOR.surfaceRaised)
+  })
+})
+
+describe('kind lit: a positive action inside a hue world', () => {
+  const HUES: Hue[] = ['ember', 'rose', 'violet']
+  const drawLit = (hue: Hue, props: Partial<React.ComponentProps<typeof Button>> = {}) =>
+    render(
+      <HueProvider value={hue}>
+        <Button label="Accept" kind="lit" size="sm" icon="user-check" onPress={jest.fn()} testID="b" {...props} />
+      </HueProvider>
+    )
+  const transform = (id: string) => JSON.stringify(flat(id).transform ?? [])
+
+  it.each(HUES)('under %s: the fill, the 1 pt rim, a white label and the glyph in the hue are its own', async (hue) => {
+    await drawLit(hue)
+    expect(flat('b').backgroundColor).toBe(SELECTION[hue].fill)
+    expect(flat('b-rim')).toMatchObject({ borderWidth: 1, borderColor: SELECTION[hue].edge })
+    expect(StyleSheet.flatten(screen.getByText('Accept').props.style).color).toBe(COLOR.textPrimary)
+    expect(JSON.stringify(screen.toJSON())).toContain(SELECTION[hue].glyph)
+  })
+
+  it('uses the flare tokens, one per hue, and the rim is the brand colour', async () => {
+    await drawLit('rose')
+    expect(flat('b-flare').backgroundColor).toBe(COLOR.selectionRoseFlare)
+    expect(flat('b-rim').borderColor).toBe(COLOR.brandRose)
+  })
+
+  it('rests with the flare drained, pours it in on press-in over press, and drains it over quick on release', async () => {
+    await drawLit('rose')
+    expect(flat('b-flare').opacity).toBe(0)
+    expect(transform('b-flare')).toContain('-101%')
+    const transition = () => String(StyleSheet.flatten(screen.getByTestId('b-flare').props.jestInlineStyle).transition)
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    expect(flat('b-flare').opacity).toBe(1)
+    expect(transform('b-flare')).toContain('0%')
+    expect(transform('b-flare')).not.toContain('-101%')
+    expect(transition()).toBe('transform 100ms cubic-bezier(0.23, 1, 0.32, 1), opacity 100ms cubic-bezier(0.33, 1, 0.68, 1)')
+    await fireEvent(screen.getByTestId('b'), 'pressOut')
+    expect(flat('b-flare').opacity).toBe(0)
+    expect(transition()).toBe('transform 160ms cubic-bezier(0.2, 0, 0, 1), opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+  })
+
+  it('busy holds the flare, and the spinner is the hue’s glyph tone after the 300 ms grace', async () => {
+    jest.useFakeTimers()
+    await drawLit('violet', { loading: true })
+    expect(flat('b-flare').opacity).toBe(1)
+    expect(screen.queryByTestId('b-spinner', { includeHiddenElements: true })).toBeNull()
+    await act(async () => jest.advanceTimersByTime(300))
+    const arc = StyleSheet.flatten(screen.getByTestId('b-spinner', { includeHiddenElements: true }).props.style)
+    expect(arc.borderTopColor).toBe(COLOR.selectionVioletGlyph)
+    expect(screen.getByTestId('b').props.accessibilityState).toMatchObject({ busy: true })
+  })
+
+  it('Reduce Motion: the flare never translates, it crosses over opacity', async () => {
+    reduceMotion.mockReturnValue(true)
+    await drawLit('rose')
+    expect(transform('b-flare')).not.toContain('translateX')
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    expect(transform('b-flare')).not.toContain('translateX')
+    expect(flat('b-flare').opacity).toBe(1)
+    expect(String(StyleSheet.flatten(screen.getByTestId('b-flare').props.jestInlineStyle).transition)).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+  })
+
+  it('plays no press haptic unless a page names one', async () => {
+    await drawLit('rose')
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    for (const spy of Object.values(haptics)) expect(spy).not.toHaveBeenCalled()
+    await drawLit('rose', { pressHaptic: H.primary })
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    expect(haptics.primary).toHaveBeenCalledTimes(1)
+  })
+
+  it('the other kinds draw no flare and no rim', async () => {
+    await draw({ kind: 'secondary' })
+    expect(screen.queryByTestId('b-flare')).toBeNull()
+    expect(screen.queryByTestId('b-rim')).toBeNull()
+  })
+
+  it('warns once in development that lit is never lg', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    await drawLit('rose', { size: 'lg' })
+    await drawLit('rose', { size: 'lg' })
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes('never size="lg"'))).toHaveLength(1)
+    warn.mockRestore()
+  })
+
+  it('a small lit button still takes the caller’s alignSelf', async () => {
+    await drawLit('rose', { style: { alignSelf: 'center' } })
+    expect(StyleSheet.flatten(screen.getByTestId('b').parent?.props.style).alignSelf).toBe('center')
   })
 })
 
@@ -145,6 +260,16 @@ describe('states', () => {
     expect(flat('b').opacity).toBe(OPACITY.disabled)
     await fireEvent.press(screen.getByTestId('b'))
     expect(onPress).not.toHaveBeenCalled()
+  })
+
+  it('enabled ↔ disabled crosses over quick on the gentle curve, so a count arriving or a field becoming valid never snaps', async () => {
+    await draw()
+    expect(flat('b').opacity).toBe(1)
+    const transition = (id: string) => String(StyleSheet.flatten(screen.getByTestId(id).props.jestInlineStyle).transition)
+    expect(transition('b')).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+    await screen.rerender(<Button label="I’m going" onPress={jest.fn()} disabled testID="b" />)
+    expect(flat('b').opacity).toBe(OPACITY.disabled)
+    expect(transition('b')).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
   })
 
   it('loading: busy at once, the spinner only after 300 ms, the label kept for width and name', async () => {
@@ -231,5 +356,76 @@ describe('accessibility settings', () => {
     await draw({ kind: 'primary' })
     await act(async () => {})
     expect(screen.queryByTestId('b-contrast')).toBeNull()
+  })
+})
+
+describe('a count in the label ("Show {n} places")', () => {
+  it('the words, the rolling number (grouped, mono) and the words after; read as the whole sentence once settled', async () => {
+    jest.useFakeTimers()
+    await render(<Button label="Show {n} places" count={6422} testID="b" />)
+    expect(screen.getByText('Show')).toBeTruthy()
+    expect(screen.getByText('places')).toBeTruthy()
+    expect(screen.getByTestId('b-count')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show 6,422 places' })).toBeTruthy()
+    await screen.rerender(<Button label="Show {n} places" count={212} testID="b" />)
+    // Still rolling: the screen reader keeps the last settled sentence, then the new one.
+    expect(screen.getByRole('button', { name: 'Show 6,422 places' })).toBeTruthy()
+    await act(async () => jest.advanceTimersByTime(400))
+    expect(screen.getByRole('button', { name: 'Show 212 places' })).toBeTruthy()
+    expect(screen.getByTestId('b').props.accessibilityLiveRegion).toBe('polite')
+  })
+
+  it('without a count the label is a plain label and nothing is a live region', async () => {
+    await render(<Button label="Show places" testID="b" />)
+    expect(screen.getByTestId('b').props.accessibilityLiveRegion).toBeUndefined()
+    expect(screen.queryByTestId('b-count')).toBeNull()
+  })
+})
+
+describe('a small button’s placement', () => {
+  const place = async (style?: object) => {
+    await render(<Button size="sm" kind="secondary" label="Withdraw" style={style} testID="b" />)
+  }
+  const wrapperStyle = () => {
+    const wrapper = screen.getByTestId('b').parent
+    return StyleSheet.flatten(wrapper?.props.style)
+  }
+
+  it('hugs its label (flex-start) when the caller says nothing', async () => {
+    await place()
+    expect(wrapperStyle().alignSelf).toBe('flex-start')
+  })
+
+  it('takes the caller’s alignSelf instead, so a row can centre it', async () => {
+    await place({ alignSelf: 'center' })
+    expect(wrapperStyle().alignSelf).toBe('center')
+  })
+
+  it('leaves a large button to its parent', async () => {
+    await render(<Button label="Share" testID="b" />)
+    expect(wrapperStyle().alignSelf).toBeUndefined()
+  })
+})
+
+describe('the press state is the lit flare’s alone (L3)', () => {
+  const commits = async (kind: 'primary' | 'secondary' | 'lit') => {
+    let count = 0
+    await render(
+      <Profiler id="b" onRender={() => (count += 1)}>
+        <Button kind={kind} size="sm" label="Go" onPress={jest.fn()} testID="b" />
+      </Profiler>
+    )
+    const before = count
+    await fireEvent(screen.getByTestId('b'), 'pressIn')
+    await fireEvent(screen.getByTestId('b'), 'pressOut')
+    return count - before
+  }
+
+  it.each(['primary', 'secondary'] as const)('a %s press re-renders nothing', async (kind) => {
+    expect(await commits(kind)).toBe(0)
+  })
+
+  it('a lit press does: its flare pours and drains', async () => {
+    expect(await commits('lit')).toBeGreaterThan(0)
   })
 })

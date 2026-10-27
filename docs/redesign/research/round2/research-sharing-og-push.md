@@ -246,9 +246,9 @@ Add a 2 px inner border at 8 % white so the card edge survives on dark chat wall
 | **Luma** | **Generated** 800×420 JPEG, 33 KB. Wordmark, title, "RSVP" pill on a colour taken from the cover; square cover on the right. Luma states it "generates it … from your event's cover image and name … colors are picked from the cover photo's palette" [V: [help](https://help.luma.com/p/updating-social-images)] | `<title> · Luma` / event description | Title and cover | Date, host, guests (in the card) | `apple-itunes-app` with `app-argument=luma://event/evt-…` |
 | | | | | The **public page** shows "80 Going" plus featured guests (`show_guest_list:true`). This is the anti-pattern for Blend'n | |
 | **Partiful** | The host's raw poster, `?w=400&h=400&fit=clip` (square) | `<title> \| Partiful` / description | Poster | Date and guests are not in the OG. Hosts can hide the guest list and the "# Going" count [V: [help](https://help.partiful.com/en-us/articles/15525441-can-i-hide-the-guest-list-or-guest-count-on-the-party-page)] | `apple-itunes-app` with an **App Clip** |
-| **Eventbrite** | Organiser banner cropped 940×470 (2:1) | Title / description | Banner | Attendees | `twitter:label1 Where` + address, `label2 When` + date. `twitter:app:url:*` deep links carry a referrer param |
+| **Eventbrite** | Organizer banner cropped 940×470 (2:1) | Title / description | Banner | Attendees | `twitter:label1 Where` + address, `label2 When` + date. `twitter:app:url:*` deep links carry a referrer param |
 | **DICE** | imgix crop of a square poster to 1200×630 (`rect=0,216,1080,648`). **The crop cut off the artist name**: only "JW Marriott Prestige / March 15" survives [M, viewed] | Title + date + venue + "\| DICE" | Crop of the poster | Attendees | `al:ios/android` App Links, `apple-itunes-app` with an https `app-argument` |
-| **District (Zomato)** | Organiser horizontal cover. Declares 658×360, actually serves **1600×900, 244 KB** [M] | Title / "Buy Tickets for …!" | Cover | Attendees | — |
+| **District (Zomato)** | Organizer horizontal cover. Declares 658×360, actually serves **1600×900, 244 KB** [M] | Title / "Buy Tickets for …!" | Cover | Attendees | — |
 | **BookMyShow** | UNVERIFIED (403) | — | — | — | — |
 | **Airbnb** | Listing photo, 720 w, no text | "Apartment in … · ★4.94 · 1 bedroom" | Place | **Host identity** | `twitter:app:*` |
 | **Spotify** | Square 640×640 artwork, `twitter:card=summary` | Title / "Artist · Album · Song · 1987" | Art | — | The IG Stories share has a "Play on Spotify" link [V: [Spotify](https://artists.spotify.com/blog/we've-made-it-easier-to-share-spotify-to-instagram-stories)] |
@@ -436,7 +436,7 @@ Action behaviour:
 - Rooms and messages, board posts
 - Check-ins, live venue presence and live buckets
 - Who is going
-- Private events: no share icon. Organisers invite through the product.
+- Private events: no share icon. Organizers invite through the product.
 
 **Never generate "I'm here" content.**
 - No share prompt is triggered by check-in.
@@ -548,7 +548,7 @@ Use UUIDs, not `slug`, because `slug` is the guessable `slugify(title)` [C] and 
 | Private | "An invite-only event on Blend'n. Open the app to see it if you're invited." **No title, date or venue.** | Generic app card | noindex | 200 (the same body for any private id) |
 | Cancelled | Full info plus a "Cancelled" ribbon | Card with "CANCELLED" over the date block; `og:title` "Cancelled: …"; JSON-LD `EventCancelled` | as visibility | 200 |
 | Ended (`completed` or past `end_time`) | "This event has ended", plus the venue's upcoming public events | Card unchanged (old chats keep it anyway) | as visibility | 200 |
-| Draft, deleted, suspended organiser, or unknown id | "This event isn't available", plus the app CTA. **Identical for all four**, so it cannot be used to test whether an id exists | App card | noindex | 404 |
+| Draft, deleted, suspended organizer, or unknown id | "This event isn't available", plus the app CTA. **Identical for all four**, so it cannot be used to test whether an id exists | App card | noindex | 404 |
 
 **Content order (mobile-first, dark):**
 1. Cover, *contained* (never cropped), in the cover's aspect ratio up to 4:5.
@@ -556,7 +556,7 @@ Use UUIDs, not `slug`, because `slug` is the guessable `slugify(title)` [C] and 
 3. Date and time in Geist Mono: `SAT 04 OCT · 9:00 PM IST`.
 4. Venue name and area, with a link to `/v/<id>` when `venue_id` is set.
 5. "18+" chip, and price in ₹ (Geist Mono) if the product carries one.
-6. Organiser name. Organisers are public entities per the product rulings; confirm the "labels-only hosts" ruling before showing it.
+6. Organizer name. Organizers are public entities per the product rulings; confirm the "labels-only hosts" ruling before showing it.
 7. `short_description`.
 8. Primary CTA **"Open in Blend'n"**. Secondary: **Get it on Google Play**, then App Store. Play goes first because ~93 % of traffic is Android.
 9. One line of value: "See who's into it — privately — in the app." **No numbers.**
@@ -566,7 +566,7 @@ Use UUIDs, not `slug`, because `slug` is the guessable `slugify(title)` [C] and 
 - Live buckets
 - Chat or rooms, crews
 - Any avatar or creature
-- The organiser's people (staff and team members)
+- The organizer's people (staff and team members)
 
 **Venue page `/v/<uuid>`:**
 - Name, `venue_type`, area and city, address.
@@ -756,7 +756,7 @@ Copy and levels come from `research-notifications.md` §8.7. TS = time-sensitive
 | crew_invite / we_are_here / its_a_blend | Standard; `we_are_here` is TS (sibling) | Default, `crew` PRIVATE | — | — | — (no location detail beyond "your crew's here") |
 | **starts_soon** | **TS** (within the HIG's "within an hour"; the reminder is at 60 min [C]) | BigPicture | **Cover** (public and unlisted events) | — | "Directions" (opens maps) and "Check in" (deep link straight to the check-in sheet). Both go somewhere other than the tap target, the event page, so they are not duplicates [V rule]. ≤2 actions |
 | event_changed / cancelled | A, or TS within 60 min (sibling) | Default | — | — | — |
-| announcement | A, never TS (an organiser post can be promotional; the HIG bans TS for marketing [V]) | Default | — | — | — |
+| announcement | A, never TS (an organizer post can be promotional; the HIG bans TS for marketing [V]) | Default | — | — | — |
 | **waitlist_promoted** | A | BigPicture | **Cover** | — | "View" opens the event. That is the tap target, so on Android omit it and keep the tap |
 | rating_request | **Passive** | Default, `later` LOW | — | — | — |
 
@@ -925,7 +925,7 @@ Friend invite: the existing `inviteMessage(url)` [C].
 | Question | Why it matters |
 |---|---|
 | Are the iOS App Store and Play listings public? | Smart Banner and store badges. The memory notes TestFlight and Play internal |
-| Is the organiser name shown on public pages? | The "labels-only hosts" ruling, 2026-10-01 |
+| Is the organizer name shown on public pages? | The "labels-only hosts" ruling, 2026-10-01 |
 | Does a Meta developer app exist? | It is needed for IG Stories |
 | What to do about the Satoshi files in the public admin repo | Licence |
 

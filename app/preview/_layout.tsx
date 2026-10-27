@@ -1,5 +1,7 @@
 import { Redirect, Stack } from 'expo-router'
 
+import { textSizeLayout } from '../../components/TextSizeBoundary'
+
 /**
  * The fixture harnesses, as plain routes.
  *
@@ -20,5 +22,5 @@ import { Redirect, Stack } from 'expo-router'
  */
 export default function PreviewLayout() {
   if (!__DEV__) return <Redirect href="/" />
-  return <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
+  return <Stack screenLayout={textSizeLayout} screenOptions={{ headerShown: false, animation: 'fade' }} />
 }

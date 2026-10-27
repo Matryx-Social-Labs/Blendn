@@ -1,27 +1,39 @@
-import { useEffect } from 'react'
-import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
-import { OPACITY } from '../../lib/theme'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { Button } from './Button'
+import { MonoRun } from './MonoFamily'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
-export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility'
+export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
 
 const LOOK: Record<BannerKind, { fill: string; icon: IconName }> = {
   offline: { fill: COLOR.destructiveTint, icon: 'cloud-off' },
   paused: { fill: COLOR.warningTint, icon: 'circle-pause' },
   info: { fill: COLOR.surface, icon: 'info' },
   visibility: { fill: COLOR.surface, icon: 'eye' },
+  // A form the server refused (Flow 1 sign-in 08 · 10 · 12, forgot 06 · 07): the destructive tint, the alert glyph (a clock for a wait).
+  error: { fill: COLOR.destructiveTint, icon: 'circle-alert' },
 }
+
+/**
+ * Whose action is lit: an offer inside the screen's world (Turn on, Show who I am). Offline, paused and error are a problem
+ * being reported on a tinted strip: their action (Retry, Resume) is the quiet `secondary`, so the hue never cheers a failure.
+ */
+const LIT_KINDS: ReadonlySet<BannerKind> = new Set(['info', 'visibility'])
 
 export type BannerProps = {
   kind: BannerKind
   text: string
+  /** Drawn in Geist Mono right after `text` (a time: "since 9:41"). */
+  mono?: string
   /** The kind's own glyph unless given. */
   icon?: IconName
-  action?: { label: string; onPress: () => void }
-  /** The action is in flight: dimmed and held. */
+  /** A 36 pt button (`icon`: its leading glyph, 16 pt): lit in the screen's hue on `info` and `visibility`, `secondary` on the others. */
+  action?: { label: string; onPress: () => void; icon?: IconName }
+  /** The action is in flight: the button holds its flare and, after 300 ms, shows its spinner. */
   busy?: boolean
   testID?: string
 }
@@ -34,43 +46,73 @@ export type BannerProps = {
  *
  * No haptic: a banner arrives unsolicited, and its action's haptic belongs to
  * the action. A system banner is announced politely when it appears; the
- * VisibilityBanner is read in place. Text scales freely; past 1.3× the action
- * wraps under the sentence. Increase Contrast adds the 50% hairline.
+ * VisibilityBanner is read in place. On `info` and `visibility` the action is a `lit` Button in the screen's hue; on offline, paused
+ * and error it is `secondary` (`LIT_KINDS`). Text scales freely; past 1.3× the action
+ * wraps under the sentence, and below it too whenever the sentence beside it would be narrower than its measure
+ * (`useMinMeasure`: 360 dp at 1.3 drew "You're / anony / mous" beside Show who I am, RC drive 3). Increase Contrast adds the
+ * 50% hairline.
  */
-export function Banner({ kind, text, icon, action, busy = false, testID }: BannerProps) {
+export function Banner({ kind, text, mono, icon, action, busy = false, testID }: BannerProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { fontScale } = useWindowDimensions()
   const announced = kind !== 'visibility'
   const wrapped = fontScale > CONTROL_FONT_CAP
+  const measure = useMinMeasure('meta')
+  /*
+   * Beside its action the banner is laid out as it always was, centred (review R6). Once the action is under the sentence
+   * (past 1.3x, or wrapped there by the measure, which only layout can say), everything hangs from the sentence's first
+   * line: a centred glyph floated beside the gap between the two (review L9).
+   */
+  const [textHeight, setTextHeight] = useState(0)
+  const [slotTop, setSlotTop] = useState(0)
+  const under = !!action && (wrapped || (textHeight > 0 && slotTop >= textHeight))
+  const line = TYPE.meta.lineHeight * fontScale
 
+  // The mono part is read with the sentence the first time; a count that ticks beneath it (a wait: 0:52) never re-announces.
+  const monoNow = useRef(mono)
   useEffect(() => {
-    if (announced && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text)
+    monoNow.current = mono
+  })
+  useEffect(() => {
+    if (announced && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(monoNow.current ? `${text} ${monoNow.current}` : text)
   }, [announced, text])
 
   return (
     <View
       testID={testID}
-      style={[styles.banner, { backgroundColor: LOOK[kind].fill }, contrast && IC_HAIRLINE, wrapped && styles.wrapped]}
+      accessibilityRole={kind === 'error' ? 'alert' : undefined}
+      style={[styles.banner, { backgroundColor: LOOK[kind].fill }, under && styles.top, contrast && IC_HAIRLINE]}
     >
-      <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
-      <Text accessibilityLiveRegion={announced ? 'polite' : 'none'} style={[font('meta', bold), styles.text]}>
-        {text}
-      </Text>
-      {action ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: busy, busy }}
-          disabled={busy}
-          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
-          onPress={action.onPress}
-          style={[busy && { opacity: OPACITY.disabled }, wrapped && styles.under]}
+      <View testID={testID && `${testID}-glyph`} style={under ? [styles.glyph, { height: line }] : undefined}>
+        <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
+      </View>
+      {/* The sentence and its action in a row that wraps: the action goes under the sentence rather than squeeze it. */}
+      <View testID={testID && `${testID}-body`} style={[styles.body, under && styles.top]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
+          testID={testID && `${testID}-text`}
+          accessibilityLiveRegion={kind === 'error' ? 'assertive' : announced ? 'polite' : 'none'}
+          onLayout={(e) => setTextHeight(e.nativeEvent.layout.height)}
+          style={[font('meta', bold), styles.text, measure]}
         >
-          <Text numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.action]}>
-            {action.label}
-          </Text>
-        </Pressable>
-      ) : null}
+          {mono ? (
+            <>
+              {`${text} `}
+              {/* Through MonoRun: a Geist Mono space is a full cell, so "24 Oct 9 PM" set plain reads double-spaced (DS-09). */}
+              <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>
+                <MonoRun text={mono} />
+              </Text>
+            </>
+          ) : (
+            text
+          )}
+        </Text>
+        {action ? (
+          <View testID={testID && `${testID}-slot`} onLayout={(e) => setSlotTop(e.nativeEvent.layout.y)} style={wrapped ? styles.under : undefined}>
+            <Button kind={LIT_KINDS.has(kind) ? 'lit' : 'secondary'} size="sm" icon={action.icon} label={action.label} loading={busy} onPress={action.onPress} testID={testID && `${testID}-action`} />
+          </View>
+        ) : null}
+      </View>
     </View>
   )
 }
@@ -131,8 +173,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.md,
   },
-  wrapped: { flexWrap: 'wrap' },
-  text: { flex: 1, color: COLOR.textPrimary },
-  under: { flexBasis: '100%', paddingLeft: ICON.control + SPACE.md },
-  action: { color: COLOR.textPrimary },
+  /** The action is under the sentence: hang from its first line. */
+  top: { alignItems: 'flex-start' },
+  glyph: { justifyContent: 'center' },
+  body: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.md },
+  text: { flexGrow: 1, flexShrink: 1, color: COLOR.textPrimary },
+  under: { flexBasis: '100%' },
 })

@@ -12,6 +12,7 @@ import { AccessibilityInfo } from 'react-native'
 
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
 import { openBlendn } from '../lib/blendnOverlay'
+import { apiClient } from '../lib/apiClient'
 import { crewsApi } from '../lib/crewsApi'
 import { listenForWaves } from '../lib/roomWaves'
 import { showUserSafetyActions } from '../lib/safetyUtils'
@@ -37,13 +38,25 @@ jest.mock('expo-router', () => ({
 }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me', name: 'Sam Rao', image: null } }) }))
-jest.mock('../lib/apiClient', () => ({ apiClient: new Proxy({}, { get: () => jest.fn(async () => ({ success: true, data: [] })) }) }))
+// One stable mock per method, so a test can set what it answers (a bare list is "nothing" to the callers that expect more).
+jest.mock('../lib/apiClient', () => {
+  const fns: Record<string, jest.Mock> = {}
+  return { apiClient: new Proxy({}, { get: (_t, name: string) => (fns[name] ??= jest.fn(async () => ({ success: true, data: [] }))) }) }
+})
 jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn(), sheetClosed: async () => {} }))
 const mockWaveListeners = new Set<(d: unknown) => void>()
+const mockCancelledListeners = new Set<(d: { eventId: string }) => void>()
 jest.mock('../lib/socketClient', () => ({
   connect: jest.fn(),
   subscribeToChatMessage: () => () => {},
+  subscribeToLiveEnded: () => () => {},
+  subscribeToEventCancelled: (_id: string, fn: (d: { eventId: string }) => void) => {
+    mockCancelledListeners.add(fn)
+    return () => mockCancelledListeners.delete(fn)
+  },
+  subscribeToRoomFriends: () => () => {},
+  subscribeConnectionStatus: () => () => {},
   subscribeToRoomWave: (fn: (d: unknown) => void) => {
     mockWaveListeners.add(fn)
     return () => mockWaveListeners.delete(fn)
@@ -53,11 +66,13 @@ jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => 'online', subs
 jest.mock('../lib/crewsApi', () => ({
   crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), here: jest.fn(), likeCrew: jest.fn(), likePersonAsCrew: jest.fn(), report: jest.fn() },
 }))
+const mockScrollY = jest.requireActual('react-native-reanimated').makeMutable(0)
 jest.mock('../components/blendn/RoomStage', () => {
   const { forwardRef } = jest.requireActual('react')
   return {
     RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
     useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+    useStage: () => ({ scrollY: mockScrollY, pan: {} }),
   }
 })
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
@@ -71,7 +86,7 @@ const mockRoom = {
   refresh: jest.fn(async () => {}),
   retry: jest.fn(),
   clearMatch: jest.fn(),
-  connect: jest.fn(async () => true),
+  connect: jest.fn(async (): Promise<{ stands: boolean; refusal?: string }> => ({ stands: true })),
   loadMore: jest.fn(async () => {}),
 }
 jest.mock('../lib/useRoom', () => {
@@ -247,6 +262,40 @@ describe('like and wave refusals (R3-D4 4.3)', () => {
   })
 })
 
+describe('a refused message request (TEXT_NOT_ALLOWED)', () => {
+  const sendFromCard = async () => {
+    await drawRoom()
+    await openFromGrid(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Message' }))
+    await cardGone()
+    await fireEvent.changeText(screen.getByTestId('connect-message', HIDDEN), 'find me at https://x.example')
+    await act(async () => fireEvent.press(screen.getByText('Send request')))
+  }
+
+  it('says the server’s sentence, not the generic line', async () => {
+    mockRoom.connect.mockResolvedValue({ stands: false, refusal: 'Links and numbers can’t go in a first note.' })
+    await sendFromCard()
+    expect(screen.getByText('Links and numbers can’t go in a first note.')).toBeTruthy()
+    expect(screen.queryByText('Couldn’t send the request. Try again.')).toBeNull()
+  })
+
+  it('says it in the sheet, under the note, until the note is edited', async () => {
+    mockRoom.connect.mockResolvedValue({ stands: false, refusal: 'Links and numbers can’t go in a first note.' })
+    await sendFromCard()
+    // The sheet is still open with the sentence in it (a toast sat behind its scrim, drive 2026-10-27).
+    expect(screen.getByTestId('connect-message', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('Links and numbers can’t go in a first note.')).toBeTruthy()
+    await fireEvent.changeText(screen.getByTestId('connect-message', HIDDEN), 'Loved the talk, want to compare notes?')
+    expect(screen.queryByText('Links and numbers can’t go in a first note.')).toBeNull()
+  })
+
+  it('keeps the generic line for a failure the server did not name', async () => {
+    mockRoom.connect.mockResolvedValue({ stands: false })
+    await sendFromCard()
+    expect(screen.getByText('Couldn’t send the request. Try again.')).toBeTruthy()
+  })
+})
+
 describe('Block and Report wait for the card to have left', () => {
   it('⋯ closes the card, then opens the safety sheet once it is gone; either removes them', async () => {
     await drawRoom()
@@ -360,5 +409,132 @@ describe('the Match, the Recap, the room’s error', () => {
     await drawRoom()
     expect(screen.getByText('Couldn’t check your room. You can still browse tonight.')).toBeTruthy()
     expect(screen.queryByText('Network request failed')).toBeNull()
+  })
+})
+
+/* ---------------------------------------------------------------------------------------------- */
+/* Friends here (plans/friends-in-room.md C1) and the event cancelled while you are inside (R4)    */
+/* ---------------------------------------------------------------------------------------------- */
+
+const friends = (names: string[], total = names.length) => ({
+  success: true,
+  data: { friends: names.map((name, i) => ({ userId: `f${i}`, name, photo: null })), total, nextCursor: null },
+})
+const mockFriendsHere = apiClient.getFriendsHere as unknown as jest.Mock
+const mockOpenFriend = apiClient.openFriendConversation as unknown as jest.Mock
+
+describe('Friends here in the Room', () => {
+  it('is a section above Meet next: the count, three rows, "1 more here", and Message opens the friend chat by real id', async () => {
+    mockFriendsHere.mockResolvedValue(friends(['Asha Menon', 'Rohan Iyer', 'Meera Krishnan', 'Aarav Gupta']))
+    mockOpenFriend.mockResolvedValue({ success: true, data: { conversationId: 'c1' } })
+    await drawRoom()
+    expect(await screen.findByText('Asha Menon')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Friends here, 4' })).toBeTruthy()
+    expect(screen.getByText('1 more here')).toBeTruthy()
+    // The friend is a row here, never a face in the grid.
+    expect(screen.queryByTestId('room-face-friend', HIDDEN)).toBeNull()
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Message Rohan Iyer' }))
+    })
+    expect(mockOpenFriend).toHaveBeenCalledWith('f1')
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/private-chat/[conversationId]',
+      params: { conversationId: 'c1', otherUserName: 'Rohan Iyer', otherUserId: 'f1' },
+    })
+  })
+
+  it('See all pushes the pushed screen, for this event', async () => {
+    mockFriendsHere.mockResolvedValue(friends(['A', 'B', 'C', 'D'], 60))
+    await drawRoom()
+    await act(async () => {
+      fireEvent.press((await screen.findAllByRole('button', { name: 'See all 60 friends here' }))[0])
+    })
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/room/friends-here', params: { eventId: 'e1' } })
+  })
+
+  it('no friends: no section at all', async () => {
+    mockFriendsHere.mockResolvedValue(friends([]))
+    await drawRoom()
+    expect(screen.queryByText('Friends here')).toBeNull()
+  })
+
+  it('an older server (no route): no section, and the room is untouched', async () => {
+    mockFriendsHere.mockResolvedValue({ success: false, error: 'Not found' })
+    await drawRoom()
+    expect(screen.queryByText('Friends here')).toBeNull()
+    expect(screen.getByTestId('room-face-0')).toBeTruthy()
+  })
+
+  it('a failed chat says so with the first name and reads again', async () => {
+    mockFriendsHere.mockResolvedValue(friends(['Asha Menon']))
+    mockOpenFriend.mockResolvedValue({ success: false })
+    await drawRoom()
+    mockFriendsHere.mockClear()
+    await act(async () => {
+      fireEvent.press(await screen.findByRole('button', { name: 'Message Asha Menon' }))
+    })
+    expect(await screen.findByText("Couldn’t open your chat with Asha. Try again.")).toBeTruthy()
+    expect(mockFriendsHere).toHaveBeenCalled()
+  })
+
+  it('nobody else but a friend: the empty state says nobody NEW', async () => {
+    mockSetRoom(ready({ people: [], hereCount: 1 }))
+    mockFriendsHere.mockResolvedValue(friends(['Asha Menon']))
+    await drawRoom()
+    expect(await screen.findByText('No one new here yet')).toBeTruthy()
+    expect(screen.queryByText('Nobody else is here yet')).toBeNull()
+    mockFriendsHere.mockResolvedValue(friends([]))
+  })
+
+  it('nobody at all: the empty state is the old one', async () => {
+    mockSetRoom(ready({ people: [], hereCount: 1 }))
+    mockFriendsHere.mockResolvedValue(friends([]))
+    await drawRoom()
+    expect(screen.getByText('Nobody else is here yet')).toBeTruthy()
+  })
+})
+
+describe('the event cancelled while you are inside (R4)', () => {
+  const emit = (eventId: string) => act(async () => mockCancelledListeners.forEach((fn) => fn({ eventId })))
+
+  it('event:cancelled makes the Room a calm card with the two ways out; it is modal', async () => {
+    mockFriendsHere.mockResolvedValue(friends([]))
+    await drawRoom()
+    await emit('e1')
+    expect(await screen.findByText('Vinyl Night was cancelled')).toBeTruthy()
+    expect(screen.getByText('The organizer called it off. You’re checked out.')).toBeTruthy()
+    expect(screen.getByTestId('room-cancelled').props.accessibilityViewIsModal).toBe(true)
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'See what’s on tonight' }))
+    })
+    expect(screen.queryByText('Vinyl Night was cancelled')).toBeNull()
+  })
+
+  it('another event’s cancellation changes nothing here', async () => {
+    mockFriendsHere.mockResolvedValue(friends([]))
+    await drawRoom()
+    await emit('someone-else')
+    expect(screen.queryByText('Vinyl Night was cancelled')).toBeNull()
+  })
+})
+
+describe('the floating bar (TG-01)', () => {
+  afterEach(() => mockScrollY.set(0))
+
+  it('takes the bar glass once the page scrolls, and drops it back at the top', async () => {
+    await drawRoom()
+    expect(screen.queryByTestId('blendn-bar')).toBeNull()
+    await act(async () => mockScrollY.set(120))
+    expect(screen.getByTestId('blendn-bar')).toBeTruthy()
+    await act(async () => mockScrollY.set(0))
+    expect(screen.queryByTestId('blendn-bar')).toBeNull()
+  })
+
+  it('Increase Contrast draws the hairline under it', async () => {
+    jest.spyOn(AccessibilityInfo, 'isHighTextContrastEnabled').mockResolvedValue(true)
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
+    await drawRoom()
+    await act(async () => mockScrollY.set(120))
+    expect(screen.getByTestId('blendn-bar-contrast')).toBeTruthy()
   })
 })

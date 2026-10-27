@@ -32,7 +32,7 @@ describe('an onboarding save that fails stays on the step', () => {
   it('says what failed and does not advance', () => {
     const failed = commit.indexOf('if (failure) {')
     expect(failed).toBeGreaterThan(-1)
-    expect(commit.slice(failed)).toMatch(/if \(failure\) \{\s*showToast\(failure, 'error'\)\s*return false\s*\}/)
+    expect(commit.slice(failed)).toMatch(/if \(failure\) \{\s*showToast\(failure, 'error', \{ haptic: 'error' \}\)\s*return false\s*\}/)
     expect(commit.indexOf('advanceTo(after)')).toBeGreaterThan(failed)
   })
 
@@ -58,7 +58,8 @@ describe('a way out of onboarding', () => {
   it('offers sign-out on the first step and beside the under-18 message', () => {
     const basics = read('app/onboarding/basics.tsx')
     expect(basics).toContain('secondaryLabel="Not you? Sign out"')
-    expect(basics).toMatch(/\{isUnderAccountAge\(dateOfBirth\) \? \(\s*<Pressable\s*onPress=\{\(\) => setConfirmSignOut\(true\)\}/)
+    expect(basics).toMatch(/\{underAge \? \(\s*<Button\s+label="Sign out"[\s\S]*?onPress=\{\(\) => setConfirmSignOut\(true\)\}/)
+    expect(basics).toContain('const underAge = isUnderAccountAge(dateOfBirth)')
     expect(basics).toContain('await signOut()')
   })
 })
@@ -78,7 +79,7 @@ describe('the sign-in screens', () => {
   it('link the Terms and the Privacy Policy from one list', () => {
     expect(read('app/index.tsx')).toContain('<LegalLine')
     expect(read('app/sign-in.tsx')).toContain('<LegalLine')
-    expect(read('app/settings.tsx')).toContain("import { BLENDN_LINKS } from '../lib/links'")
+    expect(read('app/settings.tsx')).toContain("import { BLENDN_LINKS, openInApp } from '../lib/links'")
     expect(read('components/LegalLine.tsx')).toMatch(/BLENDN_LINKS\.terms[\s\S]*BLENDN_LINKS\.privacy/)
   })
 
@@ -95,6 +96,6 @@ describe('the sign-in screens', () => {
     expect(forgot).toContain("Linking.openURL('message:')")
     expect(forgot).toContain("Linking.openURL('mailto:')")
     // Resend waits out the cooldown, and is busy (so also off) while a request runs.
-    expect(forgot).toMatch(/disabled=\{cooldown > 0\}\s*busy=\{busy\}/)
+    expect(forgot).toMatch(/disabled=\{cooldown > 0\}\s*loading=\{busy\}/)
   })
 })

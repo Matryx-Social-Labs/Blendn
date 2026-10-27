@@ -4,13 +4,13 @@ import Animated, { FadeIn } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
-import { LinkPreviewCard, type LinkPreview, type ShareEvent } from './LinkPreviewCard'
+import { joinParts, LinkPreviewCard, type LinkPreview, type ShareEvent } from './LinkPreviewCard'
 import { monoCaption } from './MonoFamily'
 import { Sheet } from './Sheet'
-import { announceOutcome, CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { announceOutcome, CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 export type ShareTarget =
   | { kind: 'event'; event: ShareEvent }
@@ -28,7 +28,7 @@ function previewOf(share: ShareTarget): LinkPreview {
   return { template: 'invite' }
 }
 
-const placeOf = (e: ShareEvent) => (e.unlisted ? e.area : `${e.venue}, ${e.area}`)
+const placeOf = (e: ShareEvent) => (e.unlisted ? e.area : joinParts([e.venue, e.area], ', '))
 
 /**
  * Sharing shows you the card before anyone else sees it
@@ -54,6 +54,7 @@ export function ShareSheet({
   onStory,
   onCopy,
   onMore,
+  onDismissed,
   testID,
 }: {
   visible: boolean
@@ -66,6 +67,8 @@ export function ShareSheet({
   onStory: () => void
   onCopy: () => void
   onMore: () => void
+  /** Once the tray has left the screen: a sheet that follows it (the Story options) waits for this. */
+  onDismissed?: () => void
   testID?: string
 }) {
   const bold = useBoldText()
@@ -87,7 +90,7 @@ export function ShareSheet({
     share.kind === 'event'
       ? [share.event.title, share.event.dateText, placeOf(share.event)].filter(Boolean).join(', ')
       : share.kind === 'venue'
-        ? `${share.name}, ${share.typeLabel}, ${share.area}`
+        ? joinParts([share.name, share.typeLabel, share.area], ', ')
         : 'Your invite to Blend’n'
 
   const actions: { id: string; label: string; icon: IconName; onPress: () => void; haptic?: () => void; strong?: boolean; live?: boolean }[] = [
@@ -110,23 +113,23 @@ export function ShareSheet({
   ]
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Share" testID={testID}>
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} title="Share" testID={testID}>
       <View accessible accessibilityLabel={`This is what they’ll see: ${spoken}`} style={styles.preview}>
         <View style={[styles.cardEdge, contrast && IC_HAIRLINE]}>
           <LinkPreviewCard preview={previewOf(share)} width={width - 2 * SPACE.gutter} radius={RADIUS.rowInCard} />
         </View>
-        <Text style={[font('caption', bold, FONT_FAMILY.brand[400]), styles.centre, { color: COLOR.textTertiary }]}>This is what they’ll see</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[400]), styles.centre, { color: COLOR.textTertiary }]}>This is what they’ll see</Text>
       </View>
       <View style={styles.titleBlock}>
-        <Text style={[font('heading', bold), styles.ink]}>{title}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>{title}</Text>
         {share.kind === 'event' ? (
-          <Text style={[font('meta', bold), { color: detail }]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
             {share.event.dateText ? <Text style={[monoCaption(bold), styles.ink]}>{share.event.dateText}</Text> : null}
             {` · ${placeOf(share.event)}`}
           </Text>
         ) : (
-          <Text style={[font('meta', bold), { color: detail }]}>
-            {share.kind === 'venue' ? `${share.typeLabel} · ${share.area}` : 'A link only you can send · no name on the card'}
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
+            {share.kind === 'venue' ? joinParts([share.typeLabel, share.area], ' · ') : 'A link only you can send · no name on the card'}
           </Text>
         )}
       </View>
@@ -137,9 +140,9 @@ export function ShareSheet({
       </View>
       {share.kind === 'event' && share.event.url ? (
         <View style={styles.message}>
-          <Text style={[font('label', bold), { color: COLOR.textTertiary }]}>MESSAGE SENT WITH THE LINK</Text>
-          <Text style={[font('meta', bold), { color: detail }]}>{`${share.event.title}${share.event.dateText ? ` · ${share.event.dateText}` : ''}\n${placeOf(share.event)}`}</Text>
-          <Text style={[monoCaption(bold), styles.ink]}>{share.event.url}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: COLOR.textTertiary }]}>MESSAGE SENT WITH THE LINK</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>{`${share.event.title}${share.event.dateText ? ` · ${share.event.dateText}` : ''}\n${placeOf(share.event)}`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.ink]}>{share.event.url}</Text>
         </View>
       ) : null}
     </Sheet>
@@ -166,11 +169,13 @@ function ShareAction({
 }) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
+  // The positive one (WhatsApp) and the outcome (Copied) are lit in the share's world, never the white disc (direction C).
+  const sel = useSelection()
   return (
     <ScalePress testID={testID} onPress={onPress} haptic={haptic} accessibilityRole="button" accessibilityLabel={label} style={styles.action}>
-      <View testID={testID && `${testID}-disc`} style={[styles.disc, strong ? styles.strongDisc : styles.plainDisc]}>
+      <View testID={testID && `${testID}-disc`} style={[styles.disc, strong ? [styles.litDisc, { backgroundColor: sel.fill, borderColor: sel.edge }] : styles.plainDisc]}>
         <Animated.View key={icon} entering={reduceMotion ? undefined : FadeIn.duration(motionTokens(reduceMotion).duration.base)}>
-          <Icon name={icon} size={ICON.nav} color={strong ? COLOR.selectionInk : COLOR.textPrimary} />
+          <Icon name={icon} size={ICON.nav} color={strong ? sel.glyph : COLOR.textPrimary} />
         </Animated.View>
       </View>
       <Text
@@ -194,7 +199,7 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: SPACE.sm },
   action: { flex: 1, alignItems: 'center', gap: SPACE.sm },
   disc: { width: DISC, height: DISC, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
-  strongDisc: { backgroundColor: COLOR.selectionFill },
+  litDisc: { borderWidth: 1 },
   plainDisc: { backgroundColor: COLOR.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
   actionLabel: { color: COLOR.textSecondary, textAlign: 'center' },
   message: { borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceSunken, padding: SPACE.md, gap: SPACE.xs },

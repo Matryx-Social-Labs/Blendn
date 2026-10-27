@@ -52,7 +52,7 @@ jest.mock('../lib/useRoom', () => {
   const none = {
     status: 'none', event: null, people: [], arrivals: [], hereCount: 0, hasMore: false, loadingMore: false,
     checkedInAt: null, revealed: false, chatGroupId: null, match: null, wave: null, error: null, connection: 'connected',
-    clearMatch: () => {}, connect: async () => ({}), loadMore: async () => {}, retry: () => {}, like: async () => ({ kind: 'liked' }),
+    clearMatch: () => {}, connect: async () => ({ stands: true }), loadMore: async () => {}, retry: () => {}, like: async () => ({ kind: 'liked' }),
     sendWave: async () => ({ kind: 'sent' }), remove: () => {}, refresh: async () => {},
   }
   let state: Record<string, unknown> = none
@@ -118,11 +118,13 @@ jest.mock('../components/blendn/TonightView', () => {
     },
   }
 })
+const mockScrollY = jest.requireActual('react-native-reanimated').makeMutable(0)
 jest.mock('../components/blendn/RoomStage', () => {
   const { forwardRef } = jest.requireActual('react')
   return {
     RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
     useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+    useStage: () => ({ scrollY: mockScrollY, pan: {} }),
   }
 })
 jest.mock('../components/blendn/RoomSections', () => ({

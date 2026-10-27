@@ -65,7 +65,7 @@ describe('an invite link', () => {
   })
 })
 
-describe('an event\'s public link (https://www.blendn.app/event/<id>, the organiser\'s QR code)', () => {
+describe('an event\'s public link (https://www.blendn.app/event/<id>, the organizer\'s QR code)', () => {
   it('opened while signed out is held and opened once they are in, like an invite', () => {
     const layout = read('app/_layout.tsx')
     const signedOut = layout.slice(layout.indexOf('if (!user) {'), layout.indexOf('removePushTokenFromProfile().catch'))
@@ -89,12 +89,12 @@ describe('a friend\'s profile', () => {
 })
 
 describe('the Me tab', () => {
-  it('counts friends and opens the list, and has an Add friends pill beside Edit', () => {
+  it('counts friends and opens the list, and has Add friends as a bar circle beside Settings', () => {
     const src = read('app/(tabs)/profile.tsx')
-    expect(src).toContain('<Stat value={friendsCount} label="Friends" onPress={openFriends} hint="Opens your friends" />')
+    expect(read('components/profile/MeSections.tsx')).toContain('<Stat value={friends} label="Friends" onPress={onFriends} hint="Opens your friends" />')
     expect(src).toContain("const openFriends = () => router.push('/friends')")
     expect(src).toContain("router.push('/friends/add')")
-    expect(src).toContain('accessibilityLabel="Add friends"')
+    expect(src).toContain("label: 'Add friends'")
   })
 })
 
@@ -102,7 +102,9 @@ describe('the in-rooms switch', () => {
   it('is off by default and saved under the name the API reads', () => {
     const src = read('app/settings.tsx')
     expect(src).toMatch(/friendsSeeMe: false,/)
-    expect(src).toContain('friends_see_me_in_rooms: next.friendsSeeMe')
+    // The column name the API reads, sent alone when it is the switch that changed (see settingsAccount.test).
+    expect(src).toMatch(/friendsSeeMe: 'friends_see_me_in_rooms'/)
+    expect(src).toContain('{ [PREFERENCE_COLUMN[key]]: next[key] }')
     expect(src).toContain('toBoolean(profile.friends_see_me_in_rooms, DEFAULT_PREFERENCES.friendsSeeMe)')
   })
 })
@@ -114,17 +116,21 @@ describe('the links open the app', () => {
     expect(JSON.parse(read('app.json')).expo.ios.associatedDomains).toEqual(['applinks:www.blendn.app'])
   })
 
+  it('on iOS, may ask whether WhatsApp is installed, from the committed Info.plist as well as app.json', () => {
+    expect(read('ios/blendn/Info.plist')).toMatch(/<key>LSApplicationQueriesSchemes<\/key>\s*<array>\s*<string>whatsapp<\/string>/)
+  })
+
   it('on iOS, from the web page\'s "Open in Blend\'n" button', () => {
     // `blendn://` was in app.json and never reached the committed Info.plist.
     expect(read('ios/blendn/Info.plist')).toMatch(/<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>blendn<\/string>/)
   })
 
-  it('on Android, verified, for /f/ and /event/ only, the same in app.json and the committed manifest', () => {
+  it('on Android, verified, for /f/, /event/ (the organizer’s QR code), /e/ and /v/ only, the same in app.json and the committed manifest', () => {
     const manifest = read('android/app/src/main/AndroidManifest.xml')
     const verified = manifest.match(/<intent-filter android:autoVerify="true">([\s\S]*?)<\/intent-filter>/g) ?? []
     expect(verified).toHaveLength(1)
     const manifestPaths = [...(verified[0] ?? '').matchAll(/<data android:scheme="https" android:host="www.blendn.app" android:pathPrefix="([^"]+)"\/>/g)].map((m) => m[1])
-    expect(manifestPaths).toEqual(['/f/', '/event/'])
+    expect(manifestPaths).toEqual(['/f/', '/event/', '/e/', '/v/'])
     const filters = JSON.parse(read('app.json')).expo.android.intentFilters
     expect(filters).toContainEqual(
       expect.objectContaining({
@@ -132,6 +138,8 @@ describe('the links open the app', () => {
         data: [
           { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/f/' },
           { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/event/' },
+          { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/e/' },
+          { scheme: 'https', host: 'www.blendn.app', pathPrefix: '/v/' },
         ],
       })
     )

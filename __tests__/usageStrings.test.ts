@@ -24,7 +24,7 @@ function plistString(key: string): string | undefined {
 
 describe('iOS purpose strings', () => {
   it('carries NSMotionUsageDescription, which expo-location makes Apple require', () => {
-    expect(plistString('NSMotionUsageDescription')).toMatch(/^Blend'n /)
+    expect(plistString('NSMotionUsageDescription')).toMatch(/^Blend’n /)
   })
 
   it('ships every usage string app.json declares, word for word', () => {

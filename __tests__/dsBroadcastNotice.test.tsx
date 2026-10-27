@@ -64,7 +64,7 @@ describe('spokenDuration', () => {
 })
 
 describe('<BroadcastNotice>', () => {
-  it('an announcement: surface, the organiser named in the label, read as one', async () => {
+  it('an announcement: surface, the organizer named in the label, read as one', async () => {
     await render(<BroadcastNotice kind="announcement" from="Toit" text="Last call for the terrace." time="10:02 PM" testID="b" />)
     expect(flat('b').backgroundColor).toBe(COLOR.surface)
     expect(screen.getByText('ANNOUNCEMENT · TOIT', { includeHiddenElements: true })).toBeTruthy()

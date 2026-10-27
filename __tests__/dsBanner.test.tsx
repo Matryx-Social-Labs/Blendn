@@ -9,9 +9,10 @@ import React from 'react'
 import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
 import { Banner, VisibilityBanner } from '../components/ds/Banner'
-import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
+import { HueProvider, SELECTION } from '../components/ds/shared'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
-import { OPACITY } from '../lib/theme'
+import { monoRunSpaces } from './helpers/ax'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style)
 
@@ -31,6 +32,17 @@ describe('<Banner>', () => {
     expect(flat('b')).toMatchObject({ backgroundColor: fill, borderRadius: RADIUS.rowInCard })
   })
 
+  it('draws a mono suffix after the sentence in Geist Mono, and announces both', async () => {
+    await render(<Banner kind="offline" text="Offline. Showing what loaded last at" mono="9:41 PM" testID="b" />)
+    expect(screen.getByText('9:41 PM', { exact: false }).props.style).toMatchObject({ fontFamily: FONT_FAMILY.mono[500] })
+    expect(announce).toHaveBeenCalledWith('Offline. Showing what loaded last at 9:41 PM')
+  })
+
+  it('sets the mono run through MonoRun: its spaces in the brand face, never a full Geist Mono cell (R6-5, DS-09)', async () => {
+    await render(<Banner kind="info" icon="clock" text="Room opens" mono="Sat 24 Oct 9 PM" testID="b" />)
+    expect(monoRunSpaces(screen.toJSON() as never, 'Sat 24 Oct 9 PM', FONT_FAMILY.mono[500])).toEqual(Array(4).fill(FONT_FAMILY.brand[500]))
+  })
+
   it('is announced politely when it arrives, and plays no haptic', async () => {
     const spies = Object.keys(H).map((k) => jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {}))
     await render(<Banner kind="offline" text="Offline. Showing what loaded last." />)
@@ -38,7 +50,7 @@ describe('<Banner>', () => {
     for (const spy of spies) expect(spy).not.toHaveBeenCalled()
   })
 
-  it('its action is a button; busy dims it and holds it', async () => {
+  it('its action is a lit Button in the screen’s hue, with the glyph the caller names; busy holds it', async () => {
     const onPress = jest.fn()
     await render(<Banner kind="info" text="Dating is on for this event." action={{ label: 'Change', onPress }} />)
     await fireEvent.press(screen.getByRole('button', { name: 'Change' }))
@@ -46,8 +58,45 @@ describe('<Banner>', () => {
 
     await render(<Banner kind="info" text="Dating is on for this event." action={{ label: 'Change', onPress }} busy />)
     const action = screen.getByRole('button', { name: 'Change' })
-    expect(action.props.accessibilityState).toMatchObject({ disabled: true, busy: true })
-    expect(StyleSheet.flatten(action.props.style).opacity).toBe(OPACITY.disabled)
+    expect(action.props.accessibilityState).toMatchObject({ busy: true })
+    await fireEvent.press(action)
+    expect(onPress).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['ember', 'rose', 'violet'] as const)('the action is a lit Button under %s: the hue’s fill and rim, a white label, the named glyph', async (hue) => {
+    await render(
+      <HueProvider value={hue}>
+        <Banner kind="info" text="Push is off." action={{ label: 'Turn on', icon: 'bell', onPress: jest.fn() }} testID="b" />
+      </HueProvider>
+    )
+    expect(flat('b-action').backgroundColor).toBe(SELECTION[hue].fill)
+    expect(flat('b-action-rim').borderColor).toBe(SELECTION[hue].edge)
+    expect(StyleSheet.flatten(screen.getByText('Turn on').props.style).color).toBe(COLOR.textPrimary)
+    expect(JSON.stringify(screen.toJSON())).toContain(SELECTION[hue].glyph)
+  })
+
+  it.each(['offline', 'paused', 'error'] as const)('%s: a problem being reported, so its action is the quiet secondary, never lit', async (kind) => {
+    await render(
+      <HueProvider value="rose">
+        <Banner kind={kind} text="Something is wrong." action={{ label: 'Retry', onPress: jest.fn() }} testID="b" />
+      </HueProvider>
+    )
+    expect(flat('b-action').backgroundColor).toBe(COLOR.surfaceRaised)
+    expect(screen.queryByTestId('b-action-rim', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it.each(['info', 'visibility'] as const)('%s: an offer in the world, so its action is lit', async (kind) => {
+    await render(
+      <HueProvider value="rose">
+        <Banner kind={kind} text="Push is off." action={{ label: 'Turn on', onPress: jest.fn() }} testID="b" />
+      </HueProvider>
+    )
+    expect(flat('b-action').backgroundColor).toBe(COLOR.selectionRoseFill)
+  })
+
+  it('a banner without an action draws no button', async () => {
+    await render(<Banner kind="offline" text="Offline." testID="b" />)
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('Increase Contrast adds the 50% hairline', async () => {
@@ -57,14 +106,15 @@ describe('<Banner>', () => {
     expect(flat('b').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
   })
 
-  it('past 1.3× text the action wraps under the sentence', async () => {
+  it('past 1.3× text the action wraps under the sentence (and, below it, whenever the sentence would lose its measure: axTextSize)', async () => {
     // The React Native jest preset starts at fontScale 2.
     const window = Dimensions.get('window')
     Dimensions.set({ window: { ...window, fontScale: 1 } })
     await render(<Banner kind="info" text="Dating is on." action={{ label: 'Change', onPress: jest.fn() }} testID="b" />)
-    expect(flat('b').flexWrap).toBeUndefined()
+    expect(flat('b-body').flexWrap).toBe('wrap')
+    expect(flat('b-slot')?.flexBasis).toBeUndefined()
     await act(async () => Dimensions.set({ window: { ...window, fontScale: 2 } }))
-    expect(flat('b').flexWrap).toBe('wrap')
+    expect(flat('b-slot').flexBasis).toBe('100%')
     await act(async () => Dimensions.set({ window }))
   })
 })

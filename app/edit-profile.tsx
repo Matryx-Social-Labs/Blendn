@@ -1,36 +1,33 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router, useNavigation } from 'expo-router'
 import { usePreventRemove, type NavigationAction } from 'expo-router/react-navigation'
-import React, { useEffect, useRef, useState } from 'react'
-import {
-  AccessibilityInfo,
-  KeyboardAvoidingView,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import ActionTray from '../components/ActionTray'
-import { AppHeader } from '../components/AppHeader'
+import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { font, HueProvider, useBoldText } from '../components/ds/shared'
+import { TextArea, TextField } from '../components/ds/TextField'
+import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
+import { RepositionHost } from '../components/profile/Reposition'
+import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
+import { TagsField } from '../components/profile/TagsField'
 import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
-import { InterestPicker } from '../components/InterestPicker'
+import { InterestPicker, MAX_INTERESTS } from '../components/InterestPicker'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { useToast } from '../components/Toast'
 import { queryCache } from '../lib/queryCache'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../lib/theme'
+import { showSheet } from '../lib/sheet'
+import { useTopBarState } from '../lib/useTopBarState'
+import { COLOR, FONT_FAMILY, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { useAuth, refreshAuthUser } from '../lib/useAuth'
 import { KEYBOARD_BEHAVIOR } from '../lib/keyboard'
 import { profileFormErrors } from '../lib/onboarding'
+import { counterLimit, limitErrors, PROFILE_LIMITS, serverLength } from '../lib/profileLimits'
 import { normaliseIntents, toggleIntent } from '../lib/intents'
+import { SettingsRow } from '../components/ds/SettingsRow'
+import { useReducedMotion } from '../lib/motion'
 
 interface UserProfile {
   id: string
@@ -50,13 +47,9 @@ interface UserProfile {
   looking_for?: string[]
 }
 
-type TagInputMode = 'goal' | 'lookingFor'
-
-/** The add-a-tag sheet's words, per field. */
-const TAG_INPUT: Record<TagInputMode, { title: string; placeholder: string }> = {
-  goal: { title: 'Add goal', placeholder: 'What are you looking for?' },
-  lookingFor: { title: 'Add preference', placeholder: 'What type of person are you looking for?' },
-}
+const AGE_DIGITS = 3
+/** D20 (D-M14): the free occupation field, named for what it is and who sees it; the matching chip is "What do you do?". */
+export const JOB_TITLE_LABEL = 'Job title · shown once you reveal'
 
 /**
  * Everything the form edits, as one comparable string.
@@ -78,6 +71,7 @@ function formSnapshot(f: {
   lookingFor: string[]
   intents: string[]
   workField: string | null
+  expertise: string[]
   gender: string | null
   orientations: string[]
   interestedIn: string[]
@@ -85,8 +79,9 @@ function formSnapshot(f: {
   return JSON.stringify({ ...f, interestIds: [...f.interestIds].sort() })
 }
 
-export default function EditProfile() {
+function EditProfileContent() {
   const { user: authUser } = useAuth()
+  const reduceMotion = useReducedMotion()
   const { showToast } = useToast()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -123,6 +118,24 @@ export default function EditProfile() {
   const [intents, setIntents] = useState<Intent[]>([])
   const [workField, setWorkField] = useState<string | null>(null)
   const [workFields, setWorkFields] = useState<{ slug: string; label: string }[]>([])
+  // Step 2 of the field of work: what they do within it (14.3, served by `GET /work-fields`).
+  const [expertise, setExpertise] = useState<string[]>([])
+  const [expertiseByField, setExpertiseByField] = useState<Record<string, { slug: string; label: string }[]>>({})
+  const [maxExpertise, setMaxExpertise] = useState(3)
+  /** The fields of work could not be read: the heading says so, and its line reads them again (6-3). */
+  const [workFieldsFailed, setWorkFieldsFailed] = useState(false)
+  const [workFieldsRetrying, setWorkFieldsRetrying] = useState(false)
+  const loadWorkFields = useCallback(async () => {
+    const fields = await apiClient.getWorkFields()
+    if (fields.success && fields.data?.workFields) {
+      setWorkFields(fields.data.workFields)
+      setExpertiseByField(fields.data.expertiseByField ?? {})
+      if (fields.data.maxExpertise) setMaxExpertise(fields.data.maxExpertise)
+      setWorkFieldsFailed(false)
+    } else {
+      setWorkFieldsFailed(true)
+    }
+  }, [])
   const [gender, setGender] = useState<Gender | null>(null)
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [interestedIn, setInterestedIn] = useState<Gender[]>([])
@@ -130,10 +143,11 @@ export default function EditProfile() {
   const [matchingAtLoad, setMatchingAtLoad] = useState<{
     intents: Intent[]
     workField: string | null
+    expertise: string[]
     gender: Gender | null
     orientations: Orientation[]
     interestedIn: Gender[]
-  }>({ intents: [], workField: null, gender: null, orientations: [], interestedIn: [] })
+  }>({ intents: [], workField: null, expertise: [], gender: null, orientations: [], interestedIn: [] })
 
   /*
    * The age dating is offered on: the one being typed in this form when it is a
@@ -147,9 +161,6 @@ export default function EditProfile() {
   const onToggleIntent = (value: Intent) => setIntents((prev) => toggleIntent(prev, value))
   const [nameError, setNameError] = useState<string | null>(null)
   const [ageError, setAgeError] = useState<string | null>(null)
-  const [tagModalVisible, setTagModalVisible] = useState(false)
-  const [tagInputValue, setTagInputValue] = useState('')
-  const [tagInputMode, setTagInputMode] = useState<TagInputMode>('goal')
   const scrollRef = useRef<ScrollView>(null)
   const basicInfoY = useRef(0)
   const nameInputRef = useRef<TextInput>(null)
@@ -166,21 +177,39 @@ export default function EditProfile() {
    */
   const navigation = useNavigation()
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null)
-  const [discardOpen, setDiscardOpen] = useState(false)
   const [leaving, setLeaving] = useState<NavigationAction | null>(null)
   const pendingLeave = useRef<NavigationAction | null>(null)
   const currentSnapshot = formSnapshot({
     name, age, location, phone, occupation, education, bio, interestIds, goals, lookingFor,
-    intents, workField, gender, orientations, interestedIn,
+    intents, workField, expertise, gender, orientations, interestedIn,
   })
   const dirty = savedSnapshot !== null && currentSnapshot !== savedSnapshot
 
-  usePreventRemove(dirty && !leaving, ({ data }) => {
-    pendingLeave.current = data.action
-    setDiscardOpen(true)
-  })
+  const bar = useTopBarState()
+  const insets = useSafeAreaInsets()
+  const offline = useOffline()
+  // A photo is in the hand: the page does not scroll under it.
+  const [dragging, setDragging] = useState(false)
 
   // Discard lifts the guard first, then replays the exit that was stopped.
+  const discardChanges = () => setLeaving(pendingLeave.current)
+
+  usePreventRemove(dirty && !leaving, ({ data }) => {
+    pendingLeave.current = data.action
+    // The app's one sheet: Discard is the destructive confirm, so it plays the one destructive tick like every other.
+    showSheet({
+      kind: 'actions',
+      hue: 'violet',
+      icon: 'triangle-alert',
+      title: 'Discard changes?',
+      message: "You have edits that aren’t saved. Leave now and they’re gone.",
+      actions: [
+        { label: 'Discard', variant: 'destructive', then: discardChanges },
+        { label: 'Keep editing', cancel: true },
+      ],
+    })
+  })
+
   useEffect(() => {
     if (leaving) navigation.dispatch(leaving)
   }, [leaving, navigation])
@@ -195,11 +224,6 @@ export default function EditProfile() {
   useEffect(() => {
     if (leaveAfterSave && !dirty) router.back()
   }, [leaveAfterSave, dirty])
-
-  const discardChanges = () => {
-    setDiscardOpen(false)
-    setLeaving(pendingLeave.current)
-  }
 
   // Declared inside the effect: it sets state only after its requests return.
   useEffect(() => {
@@ -271,17 +295,20 @@ export default function EditProfile() {
         const p2 = profileData.profile
         const loadedIntents = normaliseIntents((p2?.intent_default || []) as Intent[])
         const loadedWorkField = p2?.work_field ?? null
+        const loadedExpertise = Array.isArray(p2?.expertise) ? (p2.expertise as string[]) : []
         const loadedGender = (p2?.gender ?? null) as Gender | null
         const loadedOrientations = (p2?.orientations || []) as Orientation[]
         const loadedInterestedIn = (p2?.interested_in || []) as Gender[]
         setIntents(loadedIntents)
         setWorkField(loadedWorkField)
+        setExpertise(loadedExpertise)
         setGender(loadedGender)
         setOrientations(loadedOrientations)
         setInterestedIn(loadedInterestedIn)
         setMatchingAtLoad({
           intents: loadedIntents,
           workField: loadedWorkField,
+          expertise: loadedExpertise,
           gender: loadedGender,
           orientations: loadedOrientations,
           interestedIn: loadedInterestedIn,
@@ -300,17 +327,17 @@ export default function EditProfile() {
           lookingFor: combinedProfile.looking_for || [],
           intents: loadedIntents,
           workField: loadedWorkField,
+          expertise: loadedExpertise,
           gender: loadedGender,
           orientations: loadedOrientations,
           interestedIn: loadedInterestedIn,
         }))
 
-        const fields = await apiClient.getWorkFields()
-        if (fields.success && fields.data?.workFields) setWorkFields(fields.data.workFields)
+        await loadWorkFields()
 
       } catch (error) {
         Logger.error('profile', 'EditProfile: Load profile error', { error })
-        showToast("Couldn't load your profile. Try again.", 'error')
+        showToast("Couldn’t load your profile. Try again.", 'error')
       } finally {
         setLoading(false)
       }
@@ -319,43 +346,21 @@ export default function EditProfile() {
     if (authUser) {
       loadProfile()
     }
-  }, [authUser, showToast])
+  }, [authUser, showToast, loadWorkFields])
 
-  const openTagInput = (mode: TagInputMode) => {
-    setTagInputMode(mode)
-    setTagInputValue('')
-    setTagModalVisible(true)
+  /** A new field clears what they do within the old one, silently: the server prunes the same way, so a stale chip never saves. */
+  const changeWorkField = (slug: string | null) => {
+    setWorkField(slug)
+    const keep = new Set((slug ? expertiseByField[slug] : [])?.map((e) => e.slug))
+    setExpertise((prev) => prev.filter((e) => keep.has(e)))
   }
 
-  const closeTagModal = () => {
-    setTagModalVisible(false)
-    setTagInputValue('')
-  }
-
-  const submitTagInput = () => {
-    const value = tagInputValue.trim()
-    if (!value) return
-
-    if (tagInputMode === 'goal') {
-      if (!goals.includes(value)) {
-        setGoals(prev => [...prev, value])
-      }
-    } else if (tagInputMode === 'lookingFor') {
-      if (!lookingFor.includes(value)) {
-        setLookingFor(prev => [...prev, value])
-      }
-    }
-
-    /*
-     * There is no `interest` branch any more. Interests are picked from the
-     * server's taxonomy rather than typed, so `TagInputMode` covers only the
-     * two fields that are still free text.
-     */
-    closeTagModal()
-  }
+  /** Never cut for the person: a value over the server's cap stays on screen with its count, and Save waits. */
+  const overCap = limitErrors({ name, location, occupation, education, phone, bio })
+  const overCapped = Object.keys(overCap).length > 0
 
   const handleSave = async () => {
-    if (!authUser) return
+    if (!authUser || overCapped) return
 
     const trimmedName = name.trim()
     const errors = profileFormErrors({ name, age, storedAge: profile?.age ?? null })
@@ -367,10 +372,9 @@ export default function EditProfile() {
       // Both fields are in the Basic Information card. From anywhere lower down
       // a refused Save looked like a dead button, so bring the card into view —
       // its own offset, not 0, which is the photo grid for anyone with photos.
-      scrollRef.current?.scrollTo({ y: basicInfoY.current, animated: true })
-      // The red text under the field is silent to a screen reader; say it, and
-      // put focus on the field that needs fixing rather than leaving it on Save.
-      AccessibilityInfo.announceForAccessibility((errors.name ?? errors.age) as string)
+      scrollRef.current?.scrollTo({ y: basicInfoY.current, animated: !reduceMotion })
+      // The field says its own error to a screen reader (TextField's assertive note); put focus on the
+      // field that needs fixing rather than leaving it on Save.
       ;(errors.name ? nameInputRef : ageInputRef).current?.focus()
       return
     }
@@ -404,6 +408,7 @@ export default function EditProfile() {
       const savedIntents = mayDate(liveAge) ? intents : intents.filter((i) => i !== 'dating')
       if (!same(savedIntents, matchingAtLoad.intents)) updateData.intent_default = savedIntents
       if (workField !== matchingAtLoad.workField) updateData.work_field = workField
+      if (!same(expertise, matchingAtLoad.expertise)) updateData.expertise = expertise
       /*
        * The dating three are sent only while dating is ticked -- untick it and
        * they stop being asked, so continuing to write them would keep
@@ -460,244 +465,77 @@ export default function EditProfile() {
        * returns to already shows the change. The baseline moved above, so
        * the leave guard lets this through without asking.
        */
-      showToast('Profile saved', 'success')
+      showToast('Profile saved', 'success', { haptic: 'success' })
       setLeaveAfterSave(true)
 
     } catch (error) {
       Logger.error('profile', 'EditProfile: Save profile error', { error })
       // Never the thrown message: it is the server's or the client's wording
       // for a developer ("Failed to update profile"), not for the person.
-      showToast("Couldn't save your profile. Try again.", 'error')
+      showToast("Couldn’t save your profile. Try again.", 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }
   }
 
-  const renderTags = (
-    items: string[],
-    onRemove: (item: string) => void,
-    onAdd: () => void,
-    addLabel: string
-  ) => (
-    <View style={styles.tagsContainer}>
-      {items.map((item) => (
-        // The item is the key: add is guarded against duplicates, and an
-        // index key hands the next chip the removed one's identity.
-        <TouchableOpacity
-          key={item}
-          style={styles.tag}
-          onPress={() => onRemove(item)}
-          accessibilityRole="button"
-          accessibilityLabel={`Remove ${item}`}
-        >
-          <Text style={styles.tagText}>{item}</Text>
-          <Ionicons name="close" size={ICON.sm} color={EMBER.textSecondary} />
-        </TouchableOpacity>
-      ))}
-      <TouchableOpacity style={styles.addTag} onPress={onAdd} accessibilityRole="button" accessibilityLabel={addLabel}>
-        <Ionicons name="add" size={ICON.sm} color={EMBER.textPrimary} />
-        <Text style={styles.addTagText}>{addLabel}</Text>
-      </TouchableOpacity>
-    </View>
-  )
-
   const isLoading = loading
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <View style={styles.container}>
+      {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
+      <RepositionHost />
       <KeyboardAvoidingView
         style={styles.container}
-        // `undefined` on Android: the window already resizes for the keyboard
-        // (adjustResize), and 'height' on top of it double-compensated — the
-        // same fix components/onboarding/OnboardingScreen.tsx carries.
+        // 'padding' on both platforms (lib/keyboard.ts): an edge-to-edge Android window ignores adjustResize, so the
+        // content has to move itself out from under the keyboard.
         behavior={KEYBOARD_BEHAVIOR}
       >
-        <AppHeader
+        <TopBar
           title="Edit profile"
+          state={bar.state}
           onBack={() => router.back()}
-          rightTextButton={{ label: 'Save', onPress: handleSave, loading: saving, disabled: saving }}
+          save={{ onPress: handleSave, saving, disabled: saving || offline || overCapped }}
+          testID="edit-profile-top"
         />
 
         <ScrollView
           ref={scrollRef}
+          testID="edit-profile-scroll"
           style={styles.content}
+          // The foot clears the home indicator, or Android's navigation bar; the keyboard is the KeyboardAvoidingView's.
+          contentContainerStyle={[styles.column, { paddingBottom: insets.bottom + SPACE.xxl }]}
+          scrollEnabled={!dragging}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          {...bar.scrollProps}
         >
-          {/* Photos Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>PHOTOS</Text>
-            {isLoading ? (
-              <SkeletonBlock width={'100%'} height={160} borderRadius={EMBER_RADIUS.md} />
-            ) : authUser ? (
-              <PhotoManager userId={authUser.id} maxPhotos={6} />
-            ) : null}
-          </View>
+          <OfflineStrip offline={offline} />
 
-          {/* Basic Info Card */}
-          <View style={styles.card} onLayout={(e) => { basicInfoY.current = e.nativeEvent.layout.y }}>
-            <Text style={styles.cardTitle}>BASIC INFORMATION</Text>
-            {isLoading ? (
-              <>
-                <SkeletonLine width={'30%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} style={{ marginBottom: SPACE.lg }} />
-                <SkeletonLine width={'20%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} style={{ marginBottom: SPACE.lg }} />
-                <SkeletonLine width={'25%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} style={{ marginBottom: SPACE.lg }} />
-                <SkeletonLine width={'22%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={CONTROL.lg} borderRadius={EMBER_RADIUS.pill} />
-              </>
-            ) : (
-              <>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>NAME *</Text>
-                  <TextInput
-                    ref={nameInputRef}
-                    accessibilityLabel="Name"
-                    style={[styles.input, nameError && styles.inputError]}
-                    value={name}
-                    onChangeText={(value) => {
-                      setName(value)
-                      if (nameError && value.trim()) setNameError(null)
-                    }}
-                    placeholder="Enter your name"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    maxLength={50}
-                  />
-                  {!!nameError && <Text style={styles.errorText}>{nameError}</Text>}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>AGE</Text>
-                  <TextInput
-                    ref={ageInputRef}
-                    accessibilityLabel="Age"
-                    style={[styles.input, ageError && styles.inputError]}
-                    value={age}
-                    onChangeText={(value) => {
-                      const sanitized = value.replace(/[^0-9]/g, '')
-                      setAge(sanitized)
-                      if (ageError && sanitized) setAgeError(null)
-                    }}
-                    placeholder="Enter your age"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    keyboardType="numeric"
-                    maxLength={3}
-                  />
-                  {!!ageError && <Text style={styles.errorText}>{ageError}</Text>}
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>LOCATION</Text>
-                  <TextInput
-                    accessibilityLabel="Location"
-                    style={styles.input}
-                    value={location}
-                    onChangeText={setLocation}
-                    placeholder="City, State"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    maxLength={100}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>OCCUPATION</Text>
-                  <TextInput
-                    accessibilityLabel="Occupation"
-                    style={styles.input}
-                    value={occupation}
-                    onChangeText={setOccupation}
-                    placeholder="e.g. Software Engineer"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    maxLength={100}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>EDUCATION</Text>
-                  <TextInput
-                    accessibilityLabel="Education"
-                    style={styles.input}
-                    value={education}
-                    onChangeText={setEducation}
-                    placeholder="e.g. University of California"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    maxLength={100}
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>PHONE</Text>
-                  <TextInput
-                    accessibilityLabel="Phone"
-                    style={styles.input}
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="Phone number"
-                    placeholderTextColor={EMBER.textPlaceholder}
-                    keyboardType="phone-pad"
-                    maxLength={20}
-                  />
-                </View>
-              </>
-            )}
-          </View>
-
-          {/* About Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>ABOUT YOU</Text>
-            {isLoading ? (
-              <>
-                <SkeletonLine width={'20%'} style={{ marginBottom: SPACE.sm }} />
-                <SkeletonBlock width={'100%'} height={100} borderRadius={EMBER_RADIUS.lg} />
-              </>
-            ) : (
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>BIO</Text>
-                <TextInput
-                  accessibilityLabel="Bio"
-                  style={[styles.input, styles.bioInput]}
-                  value={bio}
-                  onChangeText={setBio}
-                  placeholder="Tell people about yourself..."
-                  placeholderTextColor={EMBER.textPlaceholder}
-                  multiline
-                  numberOfLines={4}
-                  maxLength={500}
-                />
-                <Text style={styles.characterCount}>{bio.length}/500</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Interests Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>INTERESTS</Text>
-            {isLoading ? (
-              <View style={styles.tagsContainer}>
-                {[...Array(5)].map((_, i) => (
-                  <SkeletonBlock key={`sk-i-${i}`} width={100} height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} />
-                ))}
-              </View>
-            ) : (
-              <InterestPicker selected={interestIds} onChange={setInterestIds} />
-            )}
-          </View>
+          {/* Photos: the card heads itself (its count is the grid's). */}
+          <EditCard>{authUser ? <PhotoManager userId={authUser.id} maxPhotos={6} onDragging={setDragging} /> : null}</EditCard>
 
           {/*
-            You and matching. Its own card and not folded into ABOUT YOU,
-            because these are the only fields on this screen that nobody else
-            ever reads as text -- they feed `rankMatches` and surface as a tag
-            on a card, never as the values behind it.
+            You and matching, between Photos and Basics (R4.1 14.2). Its own card and not folded into ABOUT YOU, because these are
+            the only fields on this screen that nobody else ever reads as text -- they feed `rankMatches` and surface as a tag on a
+            card, never as the values behind it.
           */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>YOU AND MATCHING</Text>
+          <EditCard title="You and matching">
             <MatchingFields
               intents={intents}
               onToggleIntent={onToggleIntent}
               workField={workField}
-              onChangeWorkField={setWorkField}
+              onChangeWorkField={changeWorkField}
+              expertiseOptions={workField ? expertiseByField[workField] : undefined}
+              expertise={expertise}
+              maxExpertise={maxExpertise}
+              onChangeExpertise={setExpertise}
               workFields={workFields}
+              workFieldsFailed={workFieldsFailed}
+              onRetryWorkFields={() => {
+                setWorkFieldsRetrying(true)
+                void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
+              }}
+              workFieldsRetrying={workFieldsRetrying}
               gender={gender}
               onChangeGender={setGender}
               orientations={orientations}
@@ -707,278 +545,229 @@ export default function EditProfile() {
               offerDating={mayDate(liveAge)}
             />
             {/*
-              Languages, home state, sign and this-or-that: display only, saved
-              on their own screen so this form's save stays what it was.
+              Languages, home state, sign and this-or-that: display only, saved on their own screen so this form's save stays what
+              it was.
             */}
-            <TouchableOpacity
-              style={styles.linkRow}
+            <SettingsRow
+              icon="sparkles"
+              title="Languages, home & more"
+              label="Languages, home state, sign and this or that. Shown on cards when you share one with someone. Never used to rank."
+              trail="chevron"
               onPress={() => router.push('/edit-about-you')}
-              accessibilityRole="button"
-              accessibilityLabel="Languages, home state, sign and this or that"
-              accessibilityHint="Shown on cards when you share one with someone. Never used to rank."
-            >
-              <Text style={styles.linkText}>Languages, home, sign &amp; this-or-that</Text>
-              <Ionicons name="chevron-forward" size={ICON.sm} color={EMBER.textSecondary} />
-            </TouchableOpacity>
-          </View>
+            />
+          </EditCard>
 
-          {/* Goals Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>GOALS</Text>
+          <EditCard title="Basic information" onLayout={(y) => (basicInfoY.current = y)}>
             {isLoading ? (
-              <View style={styles.tagsContainer}>
-                {[...Array(3)].map((_, i) => (
-                  <SkeletonBlock key={`sk-g-${i}`} width={100} height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} />
-                ))}
-              </View>
+              <FieldsSkeleton fields={BASIC_FIELDS} />
             ) : (
-              renderTags(goals, (goal) => setGoals(prev => prev.filter(g => g !== goal)), () => openTagInput('goal'), 'Add Goal')
+              <View style={styles.fields}>
+                <TextField
+                  label="Name"
+                  inputRef={nameInputRef}
+                  value={name}
+                  onChangeText={(value) => {
+                    setName(value)
+                    if (nameError && value.trim()) setNameError(null)
+                  }}
+                  onBlur={() => setNameError(profileFormErrors({ name, age, storedAge: profile?.age ?? null }).name)}
+                  error={overCap.name ?? nameError ?? undefined}
+                  limit={counterLimit(name, PROFILE_LIMITS.name)}
+                  measure={serverLength}
+                  placeholder="Enter your name"
+                  autoComplete="name"
+                  textContentType="name"
+                  testID="edit-profile-name"
+                />
+                <TextField
+                  label="Age"
+                  inputRef={ageInputRef}
+                  value={age}
+                  onChangeText={(value) => {
+                    const sanitized = value.replace(/[^0-9]/g, '').slice(0, AGE_DIGITS)
+                    setAge(sanitized)
+                    if (ageError && sanitized) setAgeError(null)
+                  }}
+                  onBlur={() => setAgeError(profileFormErrors({ name, age, storedAge: profile?.age ?? null }).age)}
+                  error={ageError ?? undefined}
+                  placeholder="Enter your age"
+                  keyboardType="numeric"
+                  testID="edit-profile-age"
+                />
+                <TextField
+                  label="Location"
+                  value={location}
+                  onChangeText={setLocation}
+                  error={overCap.location}
+                  limit={counterLimit(location, PROFILE_LIMITS.location)}
+                  measure={serverLength}
+                  placeholder="Area, city"
+                  testID="edit-profile-location"
+                />
+                {/* D20: "What do you do?" above is the matching chip, seen before a reveal; this is the free title, seen after one. */}
+                <TextField
+                  label={JOB_TITLE_LABEL}
+                  value={occupation}
+                  onChangeText={setOccupation}
+                  error={overCap.occupation}
+                  limit={counterLimit(occupation, PROFILE_LIMITS.occupation)}
+                  measure={serverLength}
+                  placeholder="e.g. Software Engineer"
+                  testID="edit-profile-occupation"
+                />
+                <TextField
+                  label="Education"
+                  value={education}
+                  onChangeText={setEducation}
+                  error={overCap.education}
+                  limit={counterLimit(education, PROFILE_LIMITS.education)}
+                  measure={serverLength}
+                  placeholder="e.g. Christ University"
+                  testID="edit-profile-education"
+                />
+                <TextField
+                  label="Phone"
+                  value={phone}
+                  onChangeText={setPhone}
+                  error={overCap.phone}
+                  limit={counterLimit(phone, PROFILE_LIMITS.phone)}
+                  measure={serverLength}
+                  placeholder="Phone number"
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
+                  textContentType="telephoneNumber"
+                  testID="edit-profile-phone"
+                />
+              </View>
             )}
-          </View>
+          </EditCard>
 
-          {/* Looking For Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>LOOKING FOR</Text>
+          <EditCard title="About you">
             {isLoading ? (
-              <View style={styles.tagsContainer}>
-                {[...Array(3)].map((_, i) => (
-                  <SkeletonBlock key={`sk-l-${i}`} width={100} height={CONTROL.md} borderRadius={EMBER_RADIUS.pill} />
-                ))}
-              </View>
+              <SkeletonBlock width="100%" height={ABOUT_SKELETON} borderRadius={RADIUS.mediaInCard} />
             ) : (
-              renderTags(lookingFor, (pref) => setLookingFor(prev => prev.filter(p => p !== pref)), () => openTagInput('lookingFor'), 'Add Preference')
-            )}
-          </View>
-
-          <View style={styles.bottomPadding} />
-        </ScrollView>
-
-        <Modal
-          visible={tagModalVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={closeTagModal}
-        >
-          <Pressable style={styles.modalBackdrop} onPress={closeTagModal}>
-            <Pressable style={styles.modalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>{TAG_INPUT[tagInputMode].title}</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={tagInputValue}
-                onChangeText={setTagInputValue}
-                placeholder={TAG_INPUT[tagInputMode].placeholder}
-                placeholderTextColor={EMBER.textPlaceholder}
-                autoFocus
-                maxLength={60}
-                returnKeyType="done"
-                onSubmitEditing={submitTagInput}
+              <TextArea
+                label="Bio"
+                value={bio}
+                onChangeText={setBio}
+                limit={PROFILE_LIMITS.bio}
+                measure={serverLength}
+                error={overCap.bio}
+                placeholder="Tell people about yourself…"
+                testID="edit-profile-bio"
               />
-              <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.modalCancelButton} onPress={closeTagModal}>
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalSubmitButton, !tagInputValue.trim() && styles.modalSubmitButtonDisabled]}
-                  onPress={submitTagInput}
-                  disabled={!tagInputValue.trim()}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add item"
-                >
-                  <Text style={styles.modalSubmitText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </Pressable>
-          </Pressable>
-        </Modal>
-      </KeyboardAvoidingView>
+            )}
+          </EditCard>
 
-      <ActionTray
-        visible={discardOpen}
-        title="Discard changes?"
-        message="You have edits that aren't saved. Leave now and they're gone."
-        onClose={() => setDiscardOpen(false)}
-        buttons={[
-          { label: 'Keep editing', onPress: () => setDiscardOpen(false) },
-          { label: 'Discard', variant: 'destructive', onPress: discardChanges },
-        ]}
-      />
-    </SafeAreaView>
+          <EditCard title="Interests" sub={isLoading ? undefined : `${interestIds.length} of ${MAX_INTERESTS}`}>
+            {isLoading ? (
+              <View style={styles.chipsSkeleton}>
+                {[...Array(5)].map((_, i) => (
+                  <SkeletonBlock key={`sk-i-${i}`} width={CHIP_SKELETON} height={SIZE.tag} borderRadius={RADIUS.capsule} />
+                ))}
+              </View>
+            ) : (
+              <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
+            )}
+          </EditCard>
+
+          {/* Goals and Looking for are not drawn by Flow 6 `edit`; they stay (an owner question), restyled on the DS (audit §3 item 4). */}
+          <EditCard title="Goals">
+            {isLoading ? (
+              <View style={styles.chipsSkeleton}>
+                {[...Array(3)].map((_, i) => (
+                  <SkeletonBlock key={`sk-g-${i}`} width={CHIP_SKELETON} height={SIZE.tag} borderRadius={RADIUS.capsule} />
+                ))}
+              </View>
+            ) : (
+              <TagsField items={goals} onChange={setGoals} addLabel="Add goal" sheetTitle="Add goal" placeholder="What are you looking for?" testID="edit-profile-goals" />
+            )}
+          </EditCard>
+
+          <EditCard title="Looking for">
+            {isLoading ? (
+              <View style={styles.chipsSkeleton}>
+                {[...Array(3)].map((_, i) => (
+                  <SkeletonBlock key={`sk-l-${i}`} width={CHIP_SKELETON} height={SIZE.tag} borderRadius={RADIUS.capsule} />
+                ))}
+              </View>
+            ) : (
+              <TagsField
+                items={lookingFor}
+                onChange={setLookingFor}
+                addLabel="Add preference"
+                sheetTitle="Add preference"
+                placeholder="What type of person are you looking for?"
+                testID="edit-profile-looking-for"
+              />
+            )}
+          </EditCard>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   )
 }
 
+/** The Basic information card while the profile loads: its six fields at the final geometry (Flow 6 edit 11). */
+const BASIC_FIELDS = 6
+const ABOUT_SKELETON = 160
+const CHIP_SKELETON = 96
+
+function FieldsSkeleton({ fields }: { fields: number }) {
+  return (
+    <View testID="fields-skeleton" accessibilityLabel="Loading your details" accessibilityState={{ busy: true }} style={styles.fields}>
+      {Array.from({ length: fields }, (_, i) => (
+        <View key={i} style={styles.skeletonField}>
+          <SkeletonLine width="25%" />
+          <SkeletonBlock width="100%" height={SIZE.input} borderRadius={RADIUS.capsule} />
+        </View>
+      ))}
+    </View>
+  )
+}
+
+/** A card of the form (Flow 6 `edit`): `surface` at radius 32, 20 pt in, a mono label and its note above what it holds. */
+function EditCard({ title, sub, children, onLayout }: { title?: string; sub?: string; children: ReactNode; onLayout?: (y: number) => void }) {
+  const bold = useBoldText()
+  return (
+    <View style={styles.card} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
+      {title ? (
+        <View style={styles.cardHeader}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} accessibilityRole="header" style={[font('label', bold), styles.cardTitle]}>
+            {title}
+          </Text>
+          {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.cardSub]}>{sub}</Text> : null}
+        </View>
+      ) : null}
+      {children}
+    </View>
+  )
+}
+
+// design-exception: the frame's card pads 20 and gaps 14, between the 16 and 24 steps
+const CARD_PAD = 20
+const CARD_GAP = 14
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: GUTTER,
-  },
-
-  // Card sections
-  card: {
-    backgroundColor: EMBER.surfaceSunken,
-    borderRadius: EMBER_RADIUS.card,
-    padding: SPACE.xl,
-    marginTop: SPACE.xl,
-  },
-  cardTitle: {
-    ...TYPE.label,
-    color: EMBER.textPrimary,
-    marginBottom: SPACE.lg,
-  },
-
-  // Form inputs
-  inputGroup: {
-    marginBottom: SPACE.lg,
-  },
-  label: {
-    ...TYPE.label,
-    marginBottom: SPACE.sm,
-  },
-  /* Size and family only: a lineHeight on a single-line TextInput misplaces the text on iOS. */
-  input: {
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    // Pill, like the sign-in and onboarding inputs. The multiline bio overrides it.
-    borderRadius: EMBER_RADIUS.pill,
-    minHeight: CONTROL.lg,
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    fontFamily: TYPE.body.fontFamily,
-    fontSize: TYPE.body.fontSize,
-    backgroundColor: EMBER.surfaceMedia,
-    color: EMBER.textPrimary,
-  },
-  inputError: {
-    borderColor: EMBER.destructive,
-  },
-  errorText: {
-    ...TYPE.meta,
-    marginTop: SPACE.xs,
-    color: EMBER.destructive,
-  },
-  // A box, not a control: a pill radius on a 100pt multiline field is a stadium.
-  bioInput: {
-    height: 100,
-    borderRadius: EMBER_RADIUS.lg,
-    textAlignVertical: 'top',
-  },
-  characterCount: {
-    ...TYPE.caption,
-    textAlign: 'right',
-    marginTop: SPACE.xs,
-  },
-
-  // Tags: the same chip as MatchingFields, one height and one fill.
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACE.md,
-  },
-  tag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: EMBER.surface,
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    paddingHorizontal: SPACE.lg,
-    minHeight: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    gap: SPACE.xs,
-  },
-  tagText: {
-    ...TYPE.bodyStrong,
-  },
-  addTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: EMBER.surface,
-    borderColor: EMBER.textTertiary,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderRadius: EMBER_RADIUS.pill,
-    paddingHorizontal: SPACE.lg,
-    minHeight: CONTROL.md,
-    gap: SPACE.xs,
-  },
-  addTagText: {
-    ...TYPE.bodyStrong,
-  },
-
-  bottomPadding: {
-    height: SPACE.xxl,
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: CONTROL.md,
-    marginTop: SPACE.lg,
-  },
-  linkText: {
-    ...TYPE.bodyStrong,
-  },
-
-  // Modal
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: EMBER.backdrop,
-    justifyContent: 'center',
-    paddingHorizontal: GUTTER,
-  },
-  modalCard: {
-    borderRadius: EMBER_RADIUS.lg,
-    padding: SPACE.xl,
-    backgroundColor: EMBER.surfaceSunken,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: EMBER.separator,
-  },
-  modalTitle: {
-    ...TYPE.title,
-    marginBottom: SPACE.lg,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: EMBER.separator,
-    borderRadius: EMBER_RADIUS.pill,
-    minHeight: CONTROL.lg,
-    paddingHorizontal: SPACE.lg,
-    paddingVertical: SPACE.md,
-    fontFamily: TYPE.body.fontFamily,
-    fontSize: TYPE.body.fontSize,
-    color: EMBER.textPrimary,
-    backgroundColor: EMBER.surfaceMedia,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: SPACE.md,
-    marginTop: SPACE.lg,
-  },
-  modalCancelButton: {
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.xl,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-  },
-  modalCancelText: {
-    ...TYPE.button,
-  },
-  modalSubmitButton: {
-    minHeight: CONTROL.md,
-    justifyContent: 'center',
-    paddingHorizontal: SPACE.xl,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-  },
-  modalSubmitButtonDisabled: {
-    opacity: OPACITY.disabled,
-  },
-  modalSubmitText: {
-    ...TYPE.button,
-    color: EMBER.onGradient,
-  },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  content: { flex: 1 },
+  column: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SPACE.lg },
+  card: { backgroundColor: COLOR.surface, borderRadius: RADIUS.card, padding: CARD_PAD, gap: CARD_GAP },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  // FieldLabel's inset, so the card's label and the set labels inside it start on one edge (r7 L8).
+  cardTitle: { color: COLOR.textSecondary, paddingLeft: SPACE.xs },
+  cardSub: { color: COLOR.textTertiary },
+  // Form fields: the design system's TextField / TextArea, one gap between them.
+  fields: { gap: SPACE.lg },
+  skeletonField: { gap: SPACE.sm },
+  chipsSkeleton: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
 })
+
+/** Violet world: one hue on this screen (`HueProvider`). */
+export default function EditProfile() {
+  return (
+    <HueProvider value="violet">
+      <EditProfileContent />
+    </HueProvider>
+  )
+}

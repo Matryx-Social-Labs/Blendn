@@ -31,7 +31,7 @@ import ArrowUp from 'lucide-react-native/icons/arrow-up'
 import ArrowUpRight from 'lucide-react-native/icons/arrow-up-right'
 import BadgeCheck from 'lucide-react-native/icons/badge-check'
 import Ban from 'lucide-react-native/icons/ban'
-import Beer from 'lucide-react-native/icons/beer'
+import Beer, { __iconData as beerData } from 'lucide-react-native/icons/beer'
 import Bell from 'lucide-react-native/icons/bell'
 import BellOff from 'lucide-react-native/icons/bell-off'
 import Bookmark from 'lucide-react-native/icons/bookmark'
@@ -45,21 +45,22 @@ import CameraOff from 'lucide-react-native/icons/camera-off'
 import Car from 'lucide-react-native/icons/car'
 import Cat from 'lucide-react-native/icons/cat'
 import ChartColumn from 'lucide-react-native/icons/chart-column'
-import Check from 'lucide-react-native/icons/check'
+import Check, { __iconData as checkData } from 'lucide-react-native/icons/check'
 import CheckCheck from 'lucide-react-native/icons/check-check'
 import ChevronDown from 'lucide-react-native/icons/chevron-down'
 import ChevronLeft from 'lucide-react-native/icons/chevron-left'
 import ChevronRight from 'lucide-react-native/icons/chevron-right'
+import ChevronUp from 'lucide-react-native/icons/chevron-up'
 import Cigarette from 'lucide-react-native/icons/cigarette'
 import CircleAlert from 'lucide-react-native/icons/circle-alert'
-import CircleCheck from 'lucide-react-native/icons/circle-check'
+import CircleCheck, { __iconData as circleCheckData } from 'lucide-react-native/icons/circle-check'
 import CirclePause from 'lucide-react-native/icons/circle-pause'
 import CircleQuestionMark from 'lucide-react-native/icons/circle-question-mark'
 import CircleSlash from 'lucide-react-native/icons/circle-slash'
 import CircleUserRound from 'lucide-react-native/icons/circle-user-round'
 import Clock from 'lucide-react-native/icons/clock'
 import CloudOff from 'lucide-react-native/icons/cloud-off'
-import Coffee from 'lucide-react-native/icons/coffee'
+import Coffee, { __iconData as coffeeData } from 'lucide-react-native/icons/coffee'
 import Copy from 'lucide-react-native/icons/copy'
 import CreditCard from 'lucide-react-native/icons/credit-card'
 import Disc3 from 'lucide-react-native/icons/disc-3'
@@ -77,12 +78,15 @@ import FingerprintPattern from 'lucide-react-native/icons/fingerprint-pattern'
 import Flag from 'lucide-react-native/icons/flag'
 import Ghost from 'lucide-react-native/icons/ghost'
 import Gift from 'lucide-react-native/icons/gift'
+import GraduationCap from 'lucide-react-native/icons/graduation-cap'
 import Hand from 'lucide-react-native/icons/hand'
+import HandHeart from 'lucide-react-native/icons/hand-heart'
 import Heart from 'lucide-react-native/icons/heart'
 import HeartOff from 'lucide-react-native/icons/heart-off'
 import Hourglass from 'lucide-react-native/icons/hourglass'
 import IdCard from 'lucide-react-native/icons/id-card'
 import Image from 'lucide-react-native/icons/image'
+import Images from 'lucide-react-native/icons/images'
 import Info from 'lucide-react-native/icons/info'
 import KeyRound from 'lucide-react-native/icons/key-round'
 import Link from 'lucide-react-native/icons/link'
@@ -104,8 +108,10 @@ import MicOff from 'lucide-react-native/icons/mic-off'
 import Minus from 'lucide-react-native/icons/minus'
 import Moon from 'lucide-react-native/icons/moon'
 import Music from 'lucide-react-native/icons/music'
-import Music2 from 'lucide-react-native/icons/music-2'
+import Music2, { __iconData as music2Data } from 'lucide-react-native/icons/music-2'
 import Navigation from 'lucide-react-native/icons/navigation'
+import Pause from 'lucide-react-native/icons/pause'
+import PenLine from 'lucide-react-native/icons/pen-line'
 import Pencil from 'lucide-react-native/icons/pencil'
 import Play from 'lucide-react-native/icons/play'
 import Plus from 'lucide-react-native/icons/plus'
@@ -114,11 +120,14 @@ import Radio from 'lucide-react-native/icons/radio'
 import Rainbow from 'lucide-react-native/icons/rainbow'
 import RefreshCw from 'lucide-react-native/icons/refresh-cw'
 import Reply from 'lucide-react-native/icons/reply'
+import Rocket from 'lucide-react-native/icons/rocket'
 import RotateCcw from 'lucide-react-native/icons/rotate-ccw'
+import RotateCcwClock from 'lucide-react-native/icons/rotate-ccw-clock'
 import Scale from 'lucide-react-native/icons/scale'
 import ScanFace from 'lucide-react-native/icons/scan-face'
 import Search from 'lucide-react-native/icons/search'
 import Send from 'lucide-react-native/icons/send'
+import Settings from 'lucide-react-native/icons/settings'
 import Settings2 from 'lucide-react-native/icons/settings-2'
 import Share from 'lucide-react-native/icons/share'
 import Shield from 'lucide-react-native/icons/shield'
@@ -156,6 +165,17 @@ import Wine from 'lucide-react-native/icons/wine'
 import Wrench from 'lucide-react-native/icons/wrench'
 import X from 'lucide-react-native/icons/x'
 import Zap from 'lucide-react-native/icons/zap'
+// Foundations (category glyphs, `lib/categoryGlyph.ts`): kept in one block, apart from the alphabetical map above and below.
+import Cpu from 'lucide-react-native/icons/cpu'
+import Handshake, { __iconData as handshakeData } from 'lucide-react-native/icons/handshake'
+import MicVocal from 'lucide-react-native/icons/mic-vocal'
+import Mountain, { __iconData as mountainData } from 'lucide-react-native/icons/mountain'
+import Palette from 'lucide-react-native/icons/palette'
+import Trophy from 'lucide-react-native/icons/trophy'
+// Flow 7 / 15 (account row, the Android OS line, a rating that is not open) and Flow 9 (the "you're in" and rate badges): the design's own glyphs.
+import AtSign from 'lucide-react-native/icons/at-sign'
+import Star from 'lucide-react-native/icons/star'
+import StarOff from 'lucide-react-native/icons/star-off'
 import { COLOR, ICON } from '../../lib/design/tokens'
 
 const ICONS = {
@@ -189,6 +209,7 @@ const ICONS = {
   'chevron-down': ChevronDown,
   'chevron-left': ChevronLeft,
   'chevron-right': ChevronRight,
+  'chevron-up': ChevronUp,
   cigarette: Cigarette,
   'circle-alert': CircleAlert,
   'circle-check': CircleCheck,
@@ -216,12 +237,16 @@ const ICONS = {
   flag: Flag,
   ghost: Ghost,
   gift: Gift,
+  'graduation-cap': GraduationCap,
   hand: Hand,
+  'hand-heart': HandHeart,
   heart: Heart,
   'heart-off': HeartOff,
+  history: RotateCcwClock,
   hourglass: Hourglass,
   'id-card': IdCard,
   image: Image,
+  images: Images,
   info: Info,
   'key-round': KeyRound,
   link: Link,
@@ -245,6 +270,8 @@ const ICONS = {
   music: Music,
   'music-2': Music2,
   navigation: Navigation,
+  pause: Pause,
+  'pen-line': PenLine,
   pencil: Pencil,
   play: Play,
   plus: Plus,
@@ -253,11 +280,13 @@ const ICONS = {
   rainbow: Rainbow,
   'refresh-cw': RefreshCw,
   reply: Reply,
+  rocket: Rocket,
   'rotate-ccw': RotateCcw,
   scale: Scale,
   'scan-face': ScanFace,
   search: Search,
   send: Send,
+  settings: Settings,
   'settings-2': Settings2,
   share: Share,
   shield: Shield,
@@ -295,6 +324,16 @@ const ICONS = {
   wrench: Wrench,
   x: X,
   zap: Zap,
+  // Foundations: the category glyphs.
+  cpu: Cpu,
+  handshake: Handshake,
+  'mic-vocal': MicVocal,
+  mountain: Mountain,
+  palette: Palette,
+  trophy: Trophy,
+  'at-sign': AtSign,
+  star: Star,
+  'star-off': StarOff,
 } as const satisfies Record<string, LucideIcon>
 
 export type IconName = keyof typeof ICONS
@@ -320,3 +359,17 @@ export function Icon({
   const Glyph = ICONS[name]
   return <Glyph size={size} color={color} strokeWidth={active ? ICON.strokeActive : ICON.stroke} />
 }
+
+/**
+ * The geometry of the glyphs that draw themselves (`Glyph.tsx`, the `draw` verb): read here, beside the map, because
+ * `lucide-react-native` belongs to this file alone.
+ */
+export const DRAW_NODES = {
+  beer: beerData.node,
+  check: checkData.node,
+  'circle-check': circleCheckData.node,
+  coffee: coffeeData.node,
+  'music-2': music2Data.node,
+  handshake: handshakeData.node,
+  mountain: mountainData.node,
+} as const

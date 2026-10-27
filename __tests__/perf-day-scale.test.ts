@@ -33,7 +33,6 @@ describe("the Pulse handlers keep their identity", () => {
   it("reads the volatile maps through refs inside handlers", () => {
     for (const ref of [
       "latestCheckinStatusesRef",
-      "latestProximityDataRef",
       "latestInterestStatusesRef",
       "latestInterestCountsRef",
     ]) {
@@ -54,7 +53,7 @@ describe("the Pulse handlers keep their identity", () => {
       "interestCounts",
     ]
     /*
-     * Handlers only. `renderEventItem` is the deliberate exception below: there
+     * Handlers only. `renderRow` is the deliberate exception below: there
      * the maps ARE the render input, and stabilising it too would fix the
      * re-render count by never re-rendering.
      */
@@ -62,7 +61,7 @@ describe("the Pulse handlers keep their identity", () => {
       "handleEventPress",
       "handleCheckOut",
       "toggleInterest",
-      "handleEventPreview",
+      "onPeekAction",
     ]
     const depArrays = HANDLERS.map((name) => {
       const start = src.indexOf(`const ${name} = useCallback(`)
@@ -81,14 +80,14 @@ describe("the Pulse handlers keep their identity", () => {
     }
   })
 
-  it("still lets renderEventItem see them, because there they are render inputs", () => {
+  it("still lets renderRow see them, because there they are render inputs", () => {
     /*
-     * The maps must stay in `renderEventItem`'s deps. That is what makes a card
+     * The maps must stay in `renderRow`'s deps. That is what makes a card
      * actually update when somebody checks in — stabilising it too would fix
      * the re-render count by never re-rendering.
      */
     expect(src).toMatch(
-      /\}, \[checkinStatuses, proximityData, interestStatuses,/
+      /\}, \[isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses,/
     )
   })
 })

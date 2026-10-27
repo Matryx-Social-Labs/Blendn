@@ -54,6 +54,7 @@ export function useCrewInbox(onError: (text: string) => void) {
     (invite: CrewInvite) =>
       showSheet({
         kind: 'actions',
+        hue: 'rose',
         title: `Decline ${invite.name}?`,
         message: `${invite.invitedBy} isn’t told. They can’t ask you into this crew again for 30 days.`,
         actions: [

@@ -57,6 +57,20 @@ export const CREATURE_GLYPHS = {
 export type CreatureGlyph = keyof typeof CREATURE_GLYPHS
 
 /**
+ * How far right each glyph is drawn so its ink, not its box, sits on the disc's centre (r7 M1; the monogram's
+ * MONOGRAM_MASS_X, for the creatures). In the glyph's 24 units: the lion's mane is a left-only arc, and a dot written
+ * `a r r 0 1 0 0 .01` is a circle whose centre sits r left of the point it starts from (the panda's ears and eyes).
+ * Measured from the paths by `__tests__/creatureOptical.test.ts`, which fails when a glyph or its shift drifts.
+ */
+export const CREATURE_MASS_DX: Readonly<Record<CreatureGlyph, number>> = {
+  fox: 0, wolf: 0, coyote: 0, panda: 1.07, bear: 1.05, koala: 1.35, owl: 0.7, tiger: 0.53,
+  lion: 2.81, panther: 0, lynx: 0, cheetah: 0.57, dolphin: 0, whale: 0, pufferfish: 0, octopus: 0,
+  penguin: 0, flamingo: -0.3, swan: -1.22, parrot: -0.26, toucan: -0.36, eagle: 0, dove: 2.14, bird: 0,
+  stag: 0, gazelle: 0, snake: 0, otter: 0.76, badger: 0.13, bison: 0, gecko: 0.14, lemur: 1.17,
+  horse: 0, unicorn: 0, hedgehog: 0.09, butterfly: 0, bee: 0, turtle: -0.06,
+}
+
+/**
  * Server noun → glyph: `NOUN_CHARACTERS` in lib/pseudonymAvatar.ts with each
  * emoji swapped for its drawn creature, then the nouns of the design's old
  * Lucide map (no server noun among them; the design keeps them for its
@@ -149,13 +163,13 @@ export const Creature = memo(function Creature({
   const [a, b] = CREATURE_PALETTES[paletteIndex(palette)]
   return (
     <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {/* A 48 box, so the glyph's 24 at its centre is half the disc and its stroke scales with it. */}
+      {/* A 48 box, so the glyph's 24 at its centre is half the disc and its stroke scales with it; shifted by its ink. */}
       <Svg width={size} height={size} viewBox="0 0 48 48">
         <Circle cx={24} cy={24} r={24} fill={a} />
         <Path d={SECOND_HALF} fill={b} transform="rotate(-45 24 24)" />
         <Path
           d={CREATURE_GLYPHS[glyph]}
-          transform="translate(12 12)"
+          transform={`translate(${12 + CREATURE_MASS_DX[glyph]} 12)`}
           fill="none"
           stroke={PALETTE_GLYPH.creature}
           strokeWidth={ICON.stroke}

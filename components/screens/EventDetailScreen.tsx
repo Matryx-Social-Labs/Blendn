@@ -1,87 +1,114 @@
-import { LinearGradient } from 'expo-linear-gradient'
-import ScalePress from '../motion/ScalePress'
+import { barTop } from '../../lib/barGeometry'
 import FadeInUp from '../motion/FadeInUp'
+import { bannerFadeIn } from '../motion/presence'
+import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { H } from '../../lib/haptics'
-import { MOTION_DURATION, MOTION_STAGGER } from '../../lib/motion'
-import { HeartIcon } from '../motion/HeartIcon'
-import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  InteractionManager,
-  Linking,
-  Modal,
-  Share,
-  StyleSheet,
-  Text,
-  TextInput,
-  View
-} from 'react-native';
-import Animated, {
-  FadeIn,
-  LayoutAnimationConfig,
-  ReduceMotion,
-  useAnimatedScrollHandler,
-  useSharedValue,
-} from 'react-native-reanimated';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import ActionTray, { type ActionTrayButton } from '../ActionTray';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { InteractionManager, Linking, Platform, StyleSheet, View } from 'react-native'
+import Animated, { FadeIn, LayoutAnimationConfig, LinearTransition, ReduceMotion, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { OverflowMenu } from '../crews/OverflowMenu'
+import { AmenityGrid, type AmenityTileProps } from '../ds/AmenityTile'
+import { Banner } from '../ds/Banner'
+import { Button } from '../ds/Button'
+import { Dock } from '../ds/Dock'
+import { IconButton } from '../ds/IconButton'
+import { SectionHeader } from '../ds/SectionHeader'
+import { StateScreen } from '../ds/StateScreen'
+import { RefusalCard } from '../system/RefusalCard'
+import { linkRefusalCard } from '../../lib/linkRefusalCard'
+import { eventLoadFailure, type EventLoadFailure } from '../../lib/eventLinkRefusal'
+import type { MenuItem } from '../ds/ContextMenu'
+import { OfflineBanner } from '../OfflineBanner'
+import { SceneBar } from '../scene/SceneBar'
+import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
+import { changeLines, parseEventChange, type EventChange } from '../../lib/eventChange'
+import { betweenDaysLine, dayOfWords, parseEventDays, runRange, sessionIsToday, type EventDays } from '../../lib/eventDays'
 import { showSheet } from '../../lib/sheet'
-import { useSingleFlight } from '../../lib/useSingleFlight'
-import { SkeletonBlock } from '../Skeleton';
+import { SkeletonBlock } from '../Skeleton'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
-import { featuredDateLabel, timeLabel as pulseTimeLabel } from '../../lib/pulse'
+import { cardTime, peopleLabel } from '../../lib/pulse'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
+import { askPushInContext } from '../../lib/pushAsk'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { openBlendn, openPass } from '../../lib/blendnOverlay'
 import { useToast } from '../Toast'
+import { useToastDock } from '../toastDock'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
-import { apiClient, type RsvpStatus } from '../../lib/apiClient';
-import { Logger } from '../../lib/logger';
+import { takeSceneSeed } from '../../lib/sceneSeed'
+import { eventTarget, shareText } from '../../lib/shareEvent'
+import { openShare } from '../../lib/shareTray'
+import { openWhatsApp } from '../../lib/shareWhatsApp'
+import { BringSomeoneRow } from '../share/BringSomeoneRow'
+import { apiClient, type RsvpStatus } from '../../lib/apiClient'
+import { Logger } from '../../lib/logger'
 import {
   subscribeToEventCheckIn,
   subscribeToEventInterest,
   EventCheckInCallback,
   EventInterestCallback
-} from '../../lib/socketClient';
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE, TYPE } from '../../lib/theme';
-import { PulseTopBar } from '../pulse/PulseTopBar';
-import { SceneHero, sceneHeroHeight } from '../scene/SceneHero';
-import { SceneLightbox } from '../scene/SceneLightbox';
-import { BoardEntry } from '../board/BoardSections';
-import { BOARD_ENABLED, boardClosed } from '../../lib/board';
+} from '../../lib/socketClient'
+import { COLOR, DURATION, RADIUS, SPACE, SPRING, STAGGER, VENUE_PLATES } from '../../lib/design/tokens'
+import { PAGE_WASH, PageWash } from '../ui/GradientFill'
+import { Icon, type IconName } from '../ui/Icon'
+import { SceneHero, sceneHeroHeight, type ScenePill } from '../scene/SceneHero'
+import { SceneLightbox } from '../scene/SceneLightbox'
+import ScalePress from '../motion/ScalePress'
+import { BoardEntry } from '../board/BoardSections'
+import { BOARD_ENABLED, boardClosed } from '../../lib/board'
 import {
-  SCENE_CTA_HEIGHT,
   SCENE_CTA_ICON,
-  SCENE_CTA_INSET,
   SCENE_PADDING_HORIZONTAL,
   SCENE_SECTION_GAP,
-  AMENITY_TINTS,
-  SceneAmenity,
   SceneAttendees,
   SceneBody,
   SceneBodyAccent,
   SceneByline,
   SceneCTA,
   SceneGallery,
-  SceneHeading,
   SceneLocationCard,
   SceneMap,
   SceneDetails,
   rsvpCtaState,
   type SceneCTAState,
-} from '../scene/SceneSections';
-import { clipFirst, feedPlaylist } from '../../lib/feedMedia';
-import { highlightEntities } from '../../lib/entityHighlight';
-import { heroPillLabel } from '../../lib/scarcity';
-import { useAuth } from '../../lib/useAuth';
-import { getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache';
-import { claimUrlFrom } from '../../lib/claimLink';
+} from '../scene/SceneSections'
+import { clipFirst, feedPlaylist } from '../../lib/feedMedia'
+import { highlightEntities } from '../../lib/entityHighlight'
+import { doorWords, heroPillLabel, pillWords } from '../../lib/scarcity'
+import { calendarDate, eventClock } from '../../lib/time'
+import { eventRoomDoor } from '../../lib/eventRoomDoor'
+import { roomOpensAt } from '../../lib/preEventRoom'
+import { usePreEventRoom } from '../../lib/usePreEventRoom'
+import { useAuth } from '../../lib/useAuth'
+import { printable } from '../../lib/pulseSections'
+import { useNow } from '../../lib/useNow'
+import { forgetEventDetailCache, getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache'
+import { claimUrlFrom } from '../../lib/claimLink'
+import * as Location from 'expo-location'
+import { formatDistance, getDistanceKm } from '../../lib/geo'
+import { ROUGH_FIX_MAX_AGE_MS } from '../../lib/locationFix'
+import { useReducedMotion } from '../../lib/motion'
+
+/*
+ * What the Scene says in the app's one Sheet (lib/sheet.ts, drawn by SheetHost on the DS Sheet), in the frame's words.
+ * A destructive confirm's own press plays `H.destructive` (the Button), so a handler never plays it again.
+ */
+const notice = (title: string, message: string) =>
+  showSheet({ kind: 'actions', title, message, actions: [{ label: 'Done', variant: 'secondary', then: () => {} }] })
+const signInSheet = (title: string, message: string) =>
+  showSheet({
+    kind: 'actions',
+    title,
+    message,
+    actions: [
+      { label: 'Sign in', variant: 'primary', then: () => router.replace('/' as never) },
+      { label: 'Not now', cancel: true },
+    ],
+  })
 
 const NO_CLOCK_SUBSCRIPTION = () => () => {}
 
@@ -97,6 +124,28 @@ function useClockPassed(ms: number | null, inclusive = false): boolean {
   return useSyncExternalStore(NO_CLOCK_SUBSCRIPTION, () =>
     ms === null ? false : inclusive ? ms <= Date.now() : ms < Date.now()
   )
+}
+
+/**
+ * How far the event is from the phone's last fix ("2.4km away"), when one is recent and location is already allowed. It
+ * never asks: a Scene is read in bed as often as on the street, and no fix is simply no WHERE tile.
+ */
+function useDistanceAway(latitude?: number, longitude?: number): string | null {
+  const [km, setKm] = useState<number | null>(null)
+  useEffect(() => {
+    // 0,0 is an unset coordinate in this schema, not the Gulf of Guinea.
+    if (!latitude || !longitude) return
+    let live = true
+    Location.getLastKnownPositionAsync({ maxAge: ROUGH_FIX_MAX_AGE_MS })
+      .then((fix) => {
+        if (live && fix) setKm(getDistanceKm(fix.coords.latitude, fix.coords.longitude, latitude, longitude))
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [latitude, longitude])
+  return formatDistance(km)
 }
 
 interface EventDetailData {
@@ -115,8 +164,14 @@ interface EventDetailData {
   end_time: string
   /** The day LIVE and check-in are judged by — `lib/eventSession.ts`. */
   session?: EventSession | null
+  /** What moved under the people who had heard of it (`lib/eventChange.ts`); null for an event that has not changed or an older server. */
+  change?: EventChange | null
+  /** The days of a run of more than one (`lib/eventDays.ts`); null for a one-day event or an older server. */
+  days?: EventDays | null
   timezone?: string
   category: string
+  /** The first category's slug ("music"), for the hero's plate when there is no picture (TG-06). */
+  category_slug?: string
   max_capacity: number
   current_capacity: number
   cover_image_url: string
@@ -136,6 +191,13 @@ interface EventDetailData {
   media?: { id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }[]
   /** The public claim page, for a curated event nobody has claimed. See `claimUrlFrom`. */
   claim_url?: string | null
+  /** `cancelled` draws the banner, the struck date and the quiet "Cancelled" button. */
+  status?: string
+  /** `public`, `unlisted` or `private`: whether, and how much of it, may be put in a link (`lib/shareLinks.ts`). */
+  visibility?: string
+  /** The organiser's age floor and door: the Door tile and the age pill. */
+  min_age?: number | null
+  door_policy?: string | null
 }
 
 type EventAmenity = ServerAmenity
@@ -165,20 +227,13 @@ interface CheckInStatus {
   code?: string
 }
 
-type EventDetailTrayState = {
-  visible: boolean
-  title: string
-  message?: string
-  buttons: ActionTrayButton[]
-}
-
 /*
- * The Scene's entrance. The hero crossfades over the skeleton (a fade is the
- * reduced form, so it stays under Reduce Motion); the sections below fade up
- * a stagger apart, capped at the fourth — by then they are below the fold.
+ * The Scene's entrance (DS #16). The hero crossfades over the skeleton (a fade is the reduced form, so it stays under
+ * Reduce Motion); the sections below rise `RISE.list` a stagger apart, capped at the fourth: by then they are below
+ * the fold.
  */
-const HERO_FADE_IN = FadeIn.duration(MOTION_DURATION.normal).reduceMotion(ReduceMotion.Never)
-const SECTION_DELAY = [0, 1, 2, 3].map((i) => i * MOTION_STAGGER.normal)
+const HERO_FADE_IN = FadeIn.duration(DURATION.base).reduceMotion(ReduceMotion.Never)
+const SECTION_DELAY = [0, 1, 2, 3].map((i) => Math.min(i * STAGGER.loose, STAGGER.windowMax))
 
 /*
  * The Scene — frame `1141:4853`, 390 wide. See `docs/SCENE.md`.
@@ -192,8 +247,13 @@ const SECTION_DELAY = [0, 1, 2, 3].map((i) => i * MOTION_STAGGER.normal)
  */
 
 export default function EventDetail() {
-  const { id, title, cover, venue, city, start, end, category, description: descriptionParam, interestCount: interestCountParam } = useLocalSearchParams()
+  // The route gives the id and a one-time seed token, nothing else: every other param is ignored (see `lib/sceneSeed.ts`).
+  const { id, seed: seedToken } = useLocalSearchParams<{ id?: string; seed?: string }>()
+  const [seed] = useState(() => takeSceneSeed(seedToken, id))
   const insets = useSafeAreaInsets()
+  // The Android snackbar stands above the CTA dock.
+  const [ctaDockHeight, setCtaDockHeight] = useState(0)
+  useToastDock(ctaDockHeight)
   /*
    * The scroll position, for the hero's parallax and pull-down stretch.
    *
@@ -208,25 +268,27 @@ export default function EventDetail() {
   })
   const { user } = useAuth()
   const { showToast } = useToast()
+  // The badge's clock moves a minute at a time: a render never reads it itself.
+  const now = useNow(60_000)
   /** Out to the browser; the dashboard's claim page needs no account. */
   const openClaimPage = (url: string) => {
-    Linking.openURL(url).catch(() => showToast("That page didn't open. Try again.", 'error'))
+    Linking.openURL(url).catch(() => showToast("That page didn’t open. Try again.", 'error'))
   }
 
-  // Initialize event from params if available for instant display
-  const hasParams = !!(title || cover || venue)
+  // Draw at once from the card that opened this screen, if the app did.
+  const hasParams = !!(seed && (seed.title || seed.cover || seed.venue))
   const [event, setEvent] = useState<EventDetailData | null>(() => {
-    if (hasParams) {
+    if (seed && hasParams) {
       return {
         id: String(id || ''),
-        title: String(title || ''),
-        venue_name: String(venue || ''),
-        cover_image_url: String(cover || ''),
-        city: String(city || ''),
-        start_time: String(start || new Date().toISOString()),
-        end_time: String(end || new Date().toISOString()),
-        category: String(category || ''),
-        description: String(descriptionParam || ''),
+        title: seed.title,
+        venue_name: seed.venue,
+        cover_image_url: seed.cover,
+        city: seed.city,
+        start_time: seed.start || new Date().toISOString(),
+        end_time: seed.end || new Date().toISOString(),
+        category: seed.category,
+        description: seed.description,
         short_description: '',
         address: '',
         max_capacity: 0,
@@ -245,7 +307,7 @@ export default function EventDetail() {
    * event are different sentences: "Event not found" for a dropped connection
    * tells somebody the night was cancelled.
    */
-  const [loadFailure, setLoadFailure] = useState<'network' | 'notFound' | null>(null)
+  const [loadFailure, setLoadFailure] = useState<EventLoadFailure | null>(null)
   /** The room's own "here now", while the event is running. */
   const [hereNow, setHereNow] = useState<number | null>(null)
   /** The detail's `stats.hereCount` (inside now), null from an older server: then no here-now line. */
@@ -255,13 +317,7 @@ export default function EventDetail() {
   // Initialize from params for instant display
   const [checkInCount, setCheckInCount] = useState(0)
   const [goingCount, setGoingCount] = useState(0)
-  const [interestCount, setInterestCount] = useState<number>(() => {
-    if (interestCountParam && typeof interestCountParam === 'string') {
-      const parsed = parseInt(interestCountParam, 10)
-      return Number.isNaN(parsed) ? 0 : parsed
-    }
-    return 0
-  })
+  const [interestCount, setInterestCount] = useState<number>(() => seed?.interestCount ?? 0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
   /*
    * `waitlisted` is included because the server can return it.
@@ -273,37 +329,12 @@ export default function EventDetail() {
    * event they had no seat at.
    */
   const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null)
-  const [showMapImage, setShowMapImage] = useState(false)
-  const [trayState, setTrayState] = useState<EventDetailTrayState>({
-    visible: false,
-    title: '',
-    message: '',
-    buttons: [],
-  })
   const lastFetchRef = React.useRef<number>(0)
-  const [isOrganizer, setIsOrganizer] = useState(false)
-  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  /** The map mounts once the push has settled, so it does not cost the transition a frame. */
+  const [showMap, setShowMap] = useState(false)
   /** Which gallery item the lightbox is on, or null when it is closed. */
   const [lightbox, setLightbox] = useState<number | null>(null)
-  const [announcementText, setAnnouncementText] = useState('')
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editTitle, setEditTitle] = useState('')
-  const [editDescription, setEditDescription] = useState('')
-  const [editShortDescription, setEditShortDescription] = useState('')
-  const [savingEdit, setSavingEdit] = useState(false)
-  const closeTray = useCallback(() => {
-    setTrayState((prev) => ({ ...prev, visible: false }))
-  }, [])
-
-  const showTray = useCallback((titleText: string, messageText: string, buttons?: ActionTrayButton[]) => {
-    setTrayState({
-      visible: true,
-      title: titleText,
-      message: messageText,
-      buttons: buttons && buttons.length > 0 ? buttons : [{ label: 'Done', variant: 'primary', onPress: closeTray }],
-    })
-  }, [closeTray])
-
   /*
    * The detail payload (camelCase, or snake_case from an older cache entry)
    * into the screen's state. One mapper for the fetch and the cache: a field
@@ -322,8 +353,11 @@ export default function EventDetail() {
       start_time: d.startTime || d.start_time || '',
       end_time: d.endTime || d.end_time || '',
       session: sessionFromApi(d.session),
+      change: parseEventChange(d),
+      days: parseEventDays(d),
       timezone: d.timezone,
       category: d.categories?.[0]?.name || '',
+      category_slug: d.categories?.[0]?.slug || undefined,
       max_capacity: d.maxCapacity || d.max_capacity || 0,
       current_capacity: d.currentCapacity || d.current_capacity || 0,
       cover_image_url: d.coverImageUrl || d.cover_image_url || '',
@@ -335,6 +369,10 @@ export default function EventDetail() {
       amenities: Array.isArray(d.amenities) ? (d.amenities as EventAmenity[]) : [],
       details: (d.details ?? undefined) as ServerEventDetails | undefined,
       claim_url: claimUrlFrom(d.claim),
+      status: d.status,
+      visibility: d.visibility,
+      min_age: d.minAge ?? null,
+      door_policy: d.doorPolicy ?? null,
     })
     // Interest, check-in and RSVP from userStatus - no separate API call needed
     if (d.userStatus) {
@@ -355,18 +393,22 @@ export default function EventDetail() {
       setDetailHere(typeof d.stats.hereCount === 'number' ? d.stats.hereCount : null)
       setGoingCount(d.stats.rsvpCount || 0)
     }
-    // Determine if current user is the organizer
-    if (user && d.organizer?.id) {
-      setIsOrganizer(d.organizer.id === user.id)
-    }
   }
 
   const applyEventDetails = (result: Awaited<ReturnType<typeof apiClient.getEvent>>) => {
     if (!result.success || !result.data) {
       Logger.error('events', 'detail:fetch:error', { error: result.error })
-      const notFound = result.errorCode === 'NOT_FOUND' || /not found/i.test(result.error ?? '')
-      setLoadFailure(notFound ? 'notFound' : 'network')
-      return notFound ? 'notFound' : 'network'
+      const failure = eventLoadFailure(result)
+      setLoadFailure(failure)
+      /*
+       * The server says it is gone (the organiser was suspended, or it was taken down): the card or the cached copy this page
+       * opened on is not true any more, so the page is the "No longer available" card (Flow 15 #10), not a stale event.
+       */
+      if (failure === 'notFound') {
+        forgetEventDetailCache(String(id))
+        setEvent(null)
+      }
+      return failure
     } else {
       setLoadFailure(null)
       // Map API response (camelCase) to EventDetailData interface (snake_case)
@@ -386,10 +428,7 @@ export default function EventDetail() {
   const fetchEventDetails = () => {
     Logger.journey('events', 'detail:fetch:start', { eventId: String(id) })
     return apiClient
-      .getEvent(String(id), {
-        include: 'interestedUsers',
-        interestedLimit: 6,
-      })
+      .getEvent(String(id), { ...EVENT_DETAIL_QUERY })
       .then((result) => {
         /*
          * With nothing on screen the page itself says so (below). With the
@@ -398,10 +437,16 @@ export default function EventDetail() {
          * nothing.
          */
         if (applyEventDetails(result) === 'network' && event && lastFetchRef.current === 0) {
-          showTray("Couldn't load everything", 'Some details are missing. Check your connection and try again.', [
-            { label: 'Not now', onPress: closeTray },
-            { label: 'Try again', variant: 'primary', onPress: () => { closeTray(); void fetchEventDetails() } },
-          ])
+          showSheet({
+            kind: 'actions',
+            icon: 'cloud-off',
+            title: 'Couldn’t load everything',
+            message: 'Some details are missing. Check your connection and try again.',
+            actions: [
+              { label: 'Try again', variant: 'primary', then: () => void fetchEventDetails() },
+              { label: 'Not now', cancel: true },
+            ],
+          })
         }
       })
       .catch((error) => {
@@ -422,7 +467,6 @@ export default function EventDetail() {
   const [renderedId, setRenderedId] = useState<typeof id | null>(null)
   if (renderedId !== id) {
     setRenderedId(id)
-    setShowMapImage(false)
     if (id && String(id).trim()) {
       // Params are already handled in initial state - just check cache for more complete data
       const cached = getEventDetailCache<any>(String(id))
@@ -450,16 +494,9 @@ export default function EventDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  // Deferred loading for smoother navigation - reduced delays for faster perceived loading
   useEffect(() => {
-    // Hidden again on an id change during render, above.
-    // Show map immediately after navigation completes
-    const task = InteractionManager.runAfterInteractions(() => {
-      setShowMapImage(true)
-    })
-    return () => {
-      task?.cancel?.()
-    }
+    const task = InteractionManager.runAfterInteractions(() => setShowMap(true))
+    return () => task?.cancel?.()
   }, [id])
 
   // Real-time event updates via Socket.io
@@ -514,10 +551,7 @@ export default function EventDetail() {
     try {
       if (!id) return
       if (!user) {
-        showTray('Sign in to save events', 'Saved events come with you to every device.', [
-          { label: 'Not now', onPress: closeTray },
-          { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
-        ])
+        signInSheet('Sign in to save events', 'Saved events come with you to every device.')
         return
       }
       interestInFlight.current = true
@@ -530,20 +564,19 @@ export default function EventDetail() {
         setUserInterested(prevInterested)
         setInterestCount((prev) => Math.max(0, prev + (prevInterested ? 1 : -1)))
         H.error()
-        showTray("Couldn't save the event", 'Try again.')
+        notice('Couldn’t save the event', 'Try again.')
         return
       }
       setUserInterested(result.data.interested)
       setInterestCount(result.data.interestCount || 0)
-      // Outcome after truth: a save the server kept. Taking one back is silent.
-      if (result.data.interested) H.success()
+      // Saving is silent everywhere (the heart's fill is the cue); only a refusal buzzes (above).
     } catch {
       H.error()
-      showTray("Couldn't save the event", 'Try again.')
+      notice('Couldn’t save the event', 'Try again.')
     } finally {
       interestInFlight.current = false
     }
-  }, [id, user, userInterested, showTray, closeTray])
+  }, [id, user, userInterested])
 
   /*
    * Taking it back. Split out of the toggle because it now sits behind a
@@ -565,14 +598,13 @@ export default function EventDetail() {
     rsvpInFlight.current = true
     try {
       if (!id) return
-      // Its confirm's destructive button was just pressed (§10.2).
-      H.destructive()
+      // Its confirm's destructive button just played `H.destructive` (the Button, §10.2).
       setRsvpStatus(null)
       const result = await apiClient.cancelRsvp(String(id))
       if (!result.success) {
         setRsvpStatus(prevStatus)
         H.error()
-        showTray("Couldn't cancel your RSVP", 'Try again.')
+        notice('Couldn’t cancel your RSVP', 'Try again.')
       } else if (typeof result.data?.rsvpCount === 'number') {
         // The server's count after the change, as on the RSVP below.
         setGoingCount(result.data.rsvpCount)
@@ -580,32 +612,26 @@ export default function EventDetail() {
     } catch {
       setRsvpStatus(prevStatus)
       H.error()
-      showTray("Couldn't update your RSVP", 'Try again.')
+      notice('Couldn’t update your RSVP', 'Try again.')
     } finally {
       rsvpInFlight.current = false
     }
-  }, [id, rsvpStatus, showTray])
+  }, [id, rsvpStatus])
 
   const confirmWithdrawRsvp = useCallback(() => {
     const waitlisted = rsvpStatus === 'waitlisted'
-    showTray(
-      waitlisted ? 'Leave the waitlist?' : 'Cancel your RSVP?',
-      waitlisted
-        ? "You'll lose your place in line. If you join again later, you go to the back."
-        : "You'll come off the list of people going. If it fills up, your place goes to someone else.",
-      [
-        { label: waitlisted ? 'Stay on it' : 'Keep it', onPress: closeTray },
-        {
-          label: waitlisted ? 'Leave waitlist' : 'Cancel RSVP',
-          variant: 'destructive',
-          onPress: () => {
-            closeTray()
-            void withdrawRsvp()
-          },
-        },
-      ]
-    )
-  }, [rsvpStatus, showTray, closeTray, withdrawRsvp])
+    showSheet({
+      kind: 'actions',
+      title: waitlisted ? 'Leave the waitlist?' : 'Cancel your RSVP?',
+      message: waitlisted
+        ? "You’ll lose your place in line. If you join again later, you go to the back."
+        : "You’ll come off the list of people going. If it fills up, your place goes to someone else.",
+      actions: [
+        { label: waitlisted ? 'Stay on it' : 'Keep it', variant: 'secondary', then: () => {} },
+        { label: waitlisted ? 'Leave waitlist' : 'Cancel RSVP', variant: 'destructive', then: () => void withdrawRsvp() },
+      ],
+    })
+  }, [rsvpStatus, withdrawRsvp])
 
   const handleToggleRsvp = useCallback(async () => {
     const prevStatus = rsvpStatus
@@ -614,10 +640,7 @@ export default function EventDetail() {
     try {
       if (!id) return
       if (!user) {
-        showTray('Sign in to RSVP', 'Your RSVP is kept on your account.', [
-          { label: 'Not now', onPress: closeTray },
-          { label: 'Sign in', variant: 'primary', onPress: () => { closeTray(); router.replace('/' as any) } },
-        ])
+        signInSheet('Sign in to RSVP', 'Your RSVP is kept on your account.')
         return
       }
       // Waitlisted counts as "already committed": tapping should offer to take
@@ -639,7 +662,7 @@ export default function EventDetail() {
       if (!result.success || !result.data) {
         setRsvpStatus(prevStatus)
         H.error()
-        showTray("Couldn't RSVP", 'Try again.')
+        notice('Couldn’t RSVP', 'Try again.')
       } else {
         H.success()
         setRsvpStatus(result.data.rsvpStatus)
@@ -649,10 +672,13 @@ export default function EventDetail() {
         if (result.data.rsvpStatus === 'waitlisted') {
           // Say it plainly. An amber icon alone would let someone believe
           // they have a place and turn up to an event that is full.
-          showTray(
-            "You're on the waitlist",
-            "This event is full. We'll let you know if a place frees up — you'll be first in line in the order you joined."
-          )
+          showSheet({
+            kind: 'actions',
+            icon: 'clock',
+            title: 'You’re on the waitlist',
+            message: 'This event is full. We’ll let you know if a place frees up. You’ll be first in line in the order you joined.',
+            actions: [{ label: 'Got it', variant: 'secondary', then: () => {} }],
+          })
         } else if (event) {
           /*
            * The calendar, offered in the moment and not in the way: a toast
@@ -661,15 +687,17 @@ export default function EventDetail() {
            * place is not a plan yet.
            */
           const planned = event
-          showToast("You're going.", 'success', {
+          showToast("You’re going.", 'success', {
             action: { label: 'Add to calendar', onPress: () => addToCalendar(planned) },
           })
+          // The first time only, and only to a phone that can still be asked (Flow 9 · 9.7).
+          void askPushInContext('rsvp')
         }
       }
     } catch {
       setRsvpStatus(prevStatus)
       H.error()
-      showTray("Couldn't update your RSVP", 'Try again.')
+      notice('Couldn’t update your RSVP', 'Try again.')
     } finally {
       // Only this handler's own request: the confirm-tray path never sent one.
       if (sent) {
@@ -677,7 +705,7 @@ export default function EventDetail() {
         setRsvpPending(false)
       }
     }
-  }, [id, user, event, rsvpStatus, showTray, closeTray, confirmWithdrawRsvp, showToast])
+  }, [id, user, event, rsvpStatus, confirmWithdrawRsvp, showToast])
 
   /*
    * Checked in or out anywhere — this screen's CTA, the Pulse's tray, the
@@ -710,138 +738,34 @@ export default function EventDetail() {
     }, [id, loading])
   )
 
-  // === ORGANIZER ACTIONS ===
-
-  /*
-   * One composer, both platforms.
-   *
-   * iOS used `Alert.prompt` and Android this modal, for one action — and the
-   * iOS half was the worse of the two in three ways that all point the same
-   * direction: no character limit against the server's 1,000, no pending
-   * state, and **no disable while sending**, so a second tap sent a second
-   * announcement to every attendee in the room. A system dialog also cannot
-   * carry the app's design, which is the whole reason the modal was written.
-   *
-   * `Alert.prompt` is iOS-only, so the modal was already the general answer;
-   * it was simply never used where the shortcut existed.
-   */
-  const openAnnouncementComposer = () => {
-    setAnnouncementText('')
-    setShowAnnouncementModal(true)
-  }
-
-  // One broadcast per tap, however fast the taps come (`useSingleFlight`).
-  const { run: sendAnnouncement, pending: sendingAnnouncement } = useSingleFlight(async () => {
-    if (!announcementText.trim()) return
-    try {
-      const result = await apiClient.sendAnnouncement(String(id), announcementText.trim())
-      if (result.success) {
-        H.success()
-        setShowAnnouncementModal(false)
-        setAnnouncementText('')
-        showTray('Announcement sent', 'Your announcement has been broadcast to the event chat.')
-      } else {
-        H.error()
-        showTray("Couldn't send the announcement", 'Try again.')
-        setShowAnnouncementModal(false)
-      }
-    } catch {
-      H.error()
-      showTray("Couldn't send the announcement", 'Try again.')
-      setShowAnnouncementModal(false)
-    }
-  })
-
-  const openEditComposer = () => {
-    if (!event) return
-    setEditTitle(event.title)
-    setEditDescription(event.description)
-    setEditShortDescription(event.short_description)
-    setShowEditModal(true)
-  }
-
-  const saveEventEdit = async () => {
-    if (!editTitle.trim()) return
-    setSavingEdit(true)
-    try {
-      const result = await apiClient.updateEvent(String(id), {
-        title: editTitle.trim(),
-        description: editDescription.trim(),
-        shortDescription: editShortDescription.trim(),
-      })
-      if (result.success) {
-        H.success()
-        setShowEditModal(false)
-        setEvent((prev) =>
-          prev
-            ? {
-                ...prev,
-                title: editTitle.trim(),
-                description: editDescription.trim(),
-                short_description: editShortDescription.trim(),
-              }
-            : prev
-        )
-        showTray('Event updated', 'Your changes have been saved.')
-      } else {
-        H.error()
-        showTray("Couldn't save your changes", 'Try again.')
-        setShowEditModal(false)
-      }
-    } catch {
-      H.error()
-      showTray("Couldn't save your changes", 'Try again.')
-      setShowEditModal(false)
-    } finally {
-      setSavingEdit(false)
-    }
-  }
-
-  // The app's one sheet, like every other "are you sure" (lib/sheet.ts): a
-  // failed delete stays on the sheet with "Try again" rather than a second popup.
-  const handleDeleteEvent = () => {
-    showSheet({
-      kind: 'actions',
-      title: 'Delete this event?',
-      message: "Everyone going loses it, and it can't be undone.",
-      actions: [
-        {
-          label: 'Delete event',
-          variant: 'destructive',
-          run: async () => {
-            try {
-              const result = await apiClient.deleteEvent(String(id))
-              if (!result.success) {
-                H.error()
-                return { ok: false, error: "Couldn't delete the event. Try again." }
-              }
-            } catch {
-              H.error()
-              return { ok: false, error: "Couldn't delete the event. Try again." }
-            }
-            H.success()
-            router.back()
-            return { ok: true, toast: 'Event deleted' }
-          },
-        },
-        { label: 'Cancel', cancel: true },
-      ],
-    })
-  }
-
   const openInMaps = () => {
     if (event) void openPlaceInMaps(event)
   }
 
-  const handleShare = async () => {
-    try {
-      if (!event) return
-      await Share.share({
+  /*
+   * What this event may say in a link: null for a private one or a draft, and then there is no share control at all
+   * (hidden, never disabled). An unlisted one shares its area only (`lib/shareEvent.ts`).
+   */
+  const shareTarget = event
+    ? eventTarget({
+        id: event.id,
         title: event.title,
-        message: `${event.title}\n${event.venue_name}\n${event.address}`
+        startTime: event.start_time,
+        venueName: event.venue_name,
+        city: event.city,
+        coverImageUrl: event.cover_image_url,
+        status: event.status,
+        visibility: event.visibility,
+        timezone: event.timezone,
       })
-    } catch {}
-  }
+    : null
+  const handleShare = shareTarget ? () => void openShare(shareTarget) : undefined
+  /** "Bring someone?": WhatsApp with the message already written; no WhatsApp, the tray. */
+  const bringViaWhatsApp = shareTarget
+    ? async () => {
+        if (!(await openWhatsApp(shareText(shareTarget)))) void openShare(shareTarget)
+      }
+    : undefined
 
   const isCheckedIn = checkInStatus?.checked_in || false
   /*
@@ -861,7 +785,16 @@ export default function EventDetail() {
   const isEnded = useClockPassed(liveEnd !== null && Number.isFinite(liveEnd) ? liveEnd : null)
   // Explained with the CTA below; read here, above the early return, because it is a hook.
   const hasStarted = useClockPassed(live ? new Date(live.start_time).getTime() : null, true)
+  /*
+   * The pre-event room's countdown is the Scene's (R6-5): the room opens a day before the run's first doors (the server's
+   * `chatOpensAt`, start − 24 h), and somebody going or saved is told when, then that it is open, with the way in.
+   * "Opens in" ticks once a minute and is null once the room is open; the line is drawn below.
+   */
+  const roomOpensIn = usePreEventRoom(event?.start_time)
+  const [roomOpening, setRoomOpening] = useState(false)
   const isLive = hasStarted && !isEnded
+  /** WHERE says how far, never the venue again (the hero and the Location card do): dropped when no fix is known (D16). */
+  const away = useDistanceAway(event?.latitude, event?.longitude)
 
   /*
    * "N here now", from the room itself while the event runs. Re-read when the
@@ -956,41 +889,42 @@ export default function EventDetail() {
   }
 
 
+  const reduceMotion = useReducedMotion()
+  // Layout glides as a banner arrives or leaves (DS #44); Reduce Motion cuts.
+  const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
+  const goBack = () => router.back()
+
   if (!loading && !event) {
-    const offline = loadFailure === 'network'
+    const network = loadFailure === 'network'
     return (
-      <SafeAreaView style={styles.errorContainer} edges={['top', 'bottom']}>
+      <View style={styles.container} testID="scene-failed">
+        <View style={[styles.stateBar, { top: barTop(insets.top) }]}>
+          <IconButton icon={Platform.OS === 'android' ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={goBack} testID="scene-back" />
+        </View>
         {/* Arrives like any other content, rather than cutting in after the skeleton. */}
-        <FadeInUp style={styles.errorBody}>
-          {offline ? (
-            <>
-              <Text style={styles.errorText}>Couldn&apos;t load this event</Text>
-              <Text style={styles.errorHint}>Check your connection and try again.</Text>
-              <ScalePress
-                style={styles.retryButton}
-                onPress={() => {
-                  setLoadFailure(null)
-                  setLoading(true)
-                  void fetchEventDetails()
-                }}
-                accessibilityRole="button"
-              >
-                <Text style={styles.retryButtonText}>Try again</Text>
-              </ScalePress>
-              <ScalePress haptic={false} style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
-                <Text style={styles.backButtonText}>Go back</Text>
-              </ScalePress>
-            </>
+        <FadeInUp style={styles.stateBody}>
+          {network ? (
+            <StateScreen
+              icon="cloud-off"
+              title="Couldn’t load this event"
+              body="Check your connection and try again."
+              actions={[
+                {
+                  label: 'Try again',
+                  onPress: () => {
+                    setLoadFailure(null)
+                    setLoading(true)
+                    void fetchEventDetails()
+                  },
+                },
+                { label: 'Go back', kind: 'secondary', onPress: goBack },
+              ]}
+            />
           ) : (
-            <>
-              <Text style={styles.errorText}>Event not found</Text>
-              <ScalePress style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
-                <Text style={styles.backButtonText}>Go back</Text>
-              </ScalePress>
-            </>
+            <RefusalCard {...linkRefusalCard(loadFailure, { toPulse: () => router.replace('/(tabs)/events'), toProfile: () => router.push('/edit-profile' as never) })} />
           )}
         </FadeInUp>
-      </SafeAreaView>
+      </View>
     )
   }
 
@@ -1043,105 +977,144 @@ export default function EventDetail() {
   const detailBlocks = eventDetailBlocks(event?.details)
   /** The public claim page, when the server offers one (curated, unclaimed). */
   const claimUrl = event?.claim_url ?? null
-
-  const attendeeBlock = hasStarted
-    ? { label: 'Attendees', count: checkInCount }
-    : { label: goingCount > 0 ? 'Going' : 'Interested', count: goingCount || interestCount }
-
-  const ctaState: SceneCTAState = isEnded
-    ? (attended ? 'rate' : 'ended')
-    : isCheckedIn
-      ? 'going'
-      : !hasStarted
-        ? rsvpCtaState(rsvpStatus)
-        : 'join'
-
-
-  // "I'm going" carries no glyph; "You're going" carries the check (A78).
-  const ctaIcon =
-    ctaState === 'ended'
-      ? 'arrow-forward'
-      : ctaState === 'rsvpd' ? 'checkmark' : ctaState === 'waitlisted' ? 'time-outline' : ctaState === 'rsvp' ? null : 'radio-outline'
+  const cancelled = event?.status === 'cancelled'
+  const waitlisted = rsvpStatus === 'waitlisted'
 
   /*
-   * The Pulse's words for a date — "Today", "Tomorrow", "Oct 24" — so a card
-   * and the page it opens never disagree. Read off the live window, not the
-   * run: on day 2 of a festival the hero says today's doors, not day 1's.
-   * Phone-local, like every date on the Pulse (the helpers take no zone).
+   * Who is there, one word per state, the same in the tile and the section (D17, TG-05): "Going" before the doors (saves,
+   * "Interested", when nobody has RSVP'd), "Here now" while it runs, "Went" after. A cancelled night has nobody to count:
+   * neither is drawn, never "GOING 29" under "Your RSVP is released".
+   */
+  const crowdWord = isEnded ? 'Went' : isLive ? 'Here now' : goingCount > 0 ? 'Going' : 'Interested'
+  const crowdCount = isEnded ? checkInCount : isLive ? (hereNow ?? detailHere ?? checkInCount) : goingCount || interestCount
+  const attendeeBlock = cancelled ? { label: crowdWord, count: 0 } : { label: crowdWord, count: crowdCount }
+
+  const ctaState: SceneCTAState = cancelled
+    ? 'cancelled'
+    : isEnded
+      ? (attended ? 'rate' : 'ended')
+      : isCheckedIn
+        ? 'going'
+        : !hasStarted
+          ? rsvpCtaState(rsvpStatus)
+          : 'join'
+
+  // "I'm going" carries no glyph; "You're going" carries the check (A78). Rating a past night is a star, never the live glyph.
+  const ctaIcon: IconName | null =
+    ctaState === 'ended'
+      ? 'arrow-up-right'
+      : ctaState === 'rate'
+        ? 'star'
+      : ctaState === 'rsvpd'
+        ? 'check'
+        : ctaState === 'waitlisted'
+          ? 'clock'
+          : ctaState === 'rsvp' || ctaState === 'cancelled'
+            ? null
+            : 'radio'
+
+  /*
+   * The hero's words. The badge is the Pulse's date grammar (`cardTime`), so a card and the page it opens never
+   * disagree; read off the live window, not the run: on day 2 of a festival the hero says today's doors.
    */
   const heroStart = live?.start_time ?? null
-  const dateLabel = heroStart ? featuredDateLabel(heroStart) : ''
-  const heroTimeLabel = heroStart ? pulseTimeLabel(heroStart) : ''
+  // A run of days says its own dates ("Sat 27 – Mon 29 Sep", Flow 3 · 3.2), not just the next doors; "Live" and "Ended" stay as they were.
+  const when = isEnded ? 'Ended' : isLive ? 'Live' : event?.days ? runRange(event.days, event, event.timezone) : event ? cardTime(event, now) : ''
+  const place = event?.venue_name ? `at ${[event.venue_name, event.city].filter(Boolean).join(', ')}` : ''
+  const scarcity = heroPillLabel({
+    doorPolicy: event?.door_policy as never,
+    maxCapacity: event?.max_capacity,
+    currentCapacity: event?.current_capacity,
+    goingCount,
+  })
+  const minAge = event?.min_age ?? null
+  const people = isEnded || cancelled ? null : peopleLabel({ here_count: hereNow ?? detailHere, going_count: goingCount }, isLive)
+  const pills: ScenePill[] = [
+    ...(cancelled ? [{ key: 'cancelled', text: 'Cancelled', white: true }] : scarcity ? [{ key: 'scarcity', text: pillWords(scarcity) }] : []),
+    ...(minAge && minAge > MIN_AGE ? [{ key: 'age', text: `${minAge}+` }] : []),
+    ...(people ? [{ key: 'people', text: people }] : []),
+  ]
 
+  /*
+   * The 2 x 2 facts, then the organiser's curated ones (`AmenityGrid`: two up, "+n more" past seven). Doors and
+   * Where are always known; the crowd tile waits for a real number; Door says the age floor and the organiser's door.
+   */
+  const door = [`${minAge ?? MIN_AGE}+`, doorWords(event?.door_policy)].filter(Boolean).join(' · ')
+  /*
+   * A run of days says where today is in it where the doors' time was (Flow 3 · 3.2), but only when the day the session is on is
+   * today in the event's own zone. Between days it is the NEXT day's doors, and the tile keeps its clock time and says so; a
+   * one-day event keeps its doors as always.
+   */
+  const sessionToday = event?.days ? sessionIsToday(event.days, event.timezone, now) : false
+  const dayWords = event?.days && sessionToday ? dayOfWords(event.days) : null
+  const doorsLabel = event?.days && event.days.dayNumber && !sessionToday ? 'NEXT DOORS' : 'DOORS'
+  // Between days, to somebody who is going: the next door, said where "You're going" was (frame 06). Nothing else changes.
+  const betweenLine =
+    event?.days && ctaState === 'rsvpd' && !sessionToday && heroStart && Date.parse(event.start_time) <= now
+      ? betweenDaysLine(event.days, heroStart, event.timezone)
+      : null
+  /*
+   * Said to the people who had heard of the night (going, maybe, waitlisted, saved): what moved, and what it was. A cancel is
+   * the banner's, so it is no line here.
+   */
+  const heardOfIt = (rsvpStatus !== null && rsvpStatus !== 'not_going') || userInterested
+  // Before the doors, to somebody going or saved: "Room opens Sat 24 Oct 9 PM", then "The room is open" and Open the room.
+  const roomOpens = roomOpensAt(event?.start_time)
+  const roomLine =
+    event && !cancelled && !hasStarted && roomOpens !== null && (rsvpStatus === 'going' || userInterested)
+      ? roomOpensIn
+        ? { open: false as const, when: `${calendarDate(roomOpens, { weekday: true, timeZone: event.timezone, now })} ${eventClock(roomOpens, event.timezone)}` }
+        : { open: true as const }
+      : null
+  const openRoom = async () => {
+    if (!event || roomOpening) return
+    setRoomOpening(true)
+    try {
+      const door = await eventRoomDoor(String(id), event.title)
+      if (door.kind === 'say') showToast(door.line)
+      else router.push({ pathname: '/chat/[id]', params: door.params } as never)
+    } finally {
+      setRoomOpening(false)
+    }
+  }
+  const changeRows = event?.change && heardOfIt ? changeLines(event.change, event, now) : []
+  const tiles: AmenityTileProps[] = [
+    ...(dayWords
+      // TODAY, not DOORS: "DOORS: Day 2 of 2" read as a time for the doors (RC drive 2 D-9).
+      ? [{ label: 'TODAY', value: dayWords, mono: true, testID: 'scene-tile-doors' }]
+      : heroStart
+        ? [{ label: doorsLabel, value: eventClock(new Date(heroStart).getTime(), event?.timezone), mono: true, testID: 'scene-tile-doors' }]
+        : []),
+    ...(away ? [{ label: 'WHERE', value: away, onPress: openInMaps, testID: 'scene-tile-where' }] : []),
+    ...(!cancelled && printable(crowdCount) !== null ? [{ label: crowdWord.toUpperCase(), value: String(crowdCount), mono: true, testID: 'scene-tile-crowd' }] : []),
+    { label: 'ENTRY', value: door, testID: 'scene-tile-door' },
+    ...amenities.map((a) => ({ label: a.title.toUpperCase(), value: a.subtitle || 'Included', testID: `scene-tile-${a.id}` })),
+  ]
+
+  // The ⋯: report, for anyone. An organiser edits, announces and deletes on the dashboard (Flow 15 #2, owner ruling D3): the Scene is the
+  // attendee's one surface, and shows no staff control to anybody.
+  const menu: MenuItem[] = [{ icon: 'flag', label: 'Report this event', onPress: () => showEventReportOptions(event?.title || 'this event', String(id)) }]
+
+  const onFirstLoad = loading && !event
   return (
     <View style={styles.container}>
-      {/*
-        The Pulse's bar, not a second one that looks like it.
-
-        The Scene's header (`1141:4930`) and the Pulse's (`1141:4819`) are the
-        same component in the design -- same 64pt height, same flat page-colour
-        band, same wordmark. A lookalike here would be two things to keep in
-        sync, and they would drift the first time one of them was touched.
-      */}
-      <PulseTopBar
-        leading={<SceneBarButton icon="chevron-back" label="Back" onPress={() => router.back()} />}
-        /*
-          Back, heart, share -- exactly the harness, and nothing else.
-
-          An overflow "..." was added here for RSVP and was wrong twice over:
-          it is not in frame `1141:4853`, and it put a control the design never
-          asked for in the most prominent slot on the screen. The two undesigned
-          actions live together below the CTA instead, which is where secondary
-          things belong and where the frame leaves room.
-        */
-        actions={
-          <>
-            <SceneBarButton
-              icon={userInterested ? 'heart' : 'heart-outline'}
-              glyph={
-                <HeartIcon on={userInterested} size={ICON.md} onColor={EMBER.textPrimary} offColor={EMBER.textPrimary} />
-              }
-              label={userInterested ? 'Saved' : 'Save'}
-              active={userInterested}
-              onPress={handleToggleInterest}
-            />
-            <SceneBarButton icon="share-outline" label="Share" onPress={handleShare} />
-            {/*
-              The third reportable subject, and the one that had no path.
-              `event_reports` sat with zero writers and zero readers, so
-              somebody looking at an unsafe venue or a listing that reads as a
-              lure could report a *person* or a *message* — but not the thing
-              they were being asked to physically turn up to.
-
-              No check-in gate, matching the server: two of the three reasons
-              are visible from the listing, and the value is catching them
-              before somebody travels to a venue.
-            */}
-            <SceneBarButton
-              icon="flag-outline"
-              label="Report this event"
-              onPress={() => showEventReportOptions(event?.title || 'this event', String(id))}
-            />
-          </>
-        }
+      {/* First in the tree: Back is the first thing a screen reader reaches. */}
+      <SceneBar
+        title={event?.title || ''}
+        saved={userInterested}
+        onBack={goBack}
+        onSave={handleToggleInterest}
+        onShare={handleShare}
+        onMore={() => setMenuOpen(true)}
+        scrollY={scrollY}
       />
 
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
         scrollEventThrottle={16}
-        /*
-          Room for the floating CTA, and no more.
-
-          `TAB_BAR_CLEARANCE` was in here and does not belong: `/event/[id]` is
-          a root stack route, not a child of `(tabs)`, so there is no tab bar
-          beneath it. Counting it anyway padded the scroll by 88pt and lifted
-          the dock into the middle of the content -- the harness carries a note
-          about the same double-count from the other direction.
-        */
-        contentContainerStyle={{
-          paddingBottom: insets.bottom + SCENE_CTA_HEIGHT + SPACE.md + SPACE.lg + SPACE.xl,
-        }}
+        // Room for the dock, and no more: `/event/[id]` is a root stack route, there is no tab bar beneath it.
+        contentContainerStyle={{ paddingBottom: ctaDockHeight + SPACE.xl }}
       >
         {/*
           The hero fades in over the skeleton's slot instead of cutting in.
@@ -1149,227 +1122,186 @@ export default function EventDetail() {
           doesn't fade — only the skeleton-to-hero swap does.
         */}
         <LayoutAnimationConfig skipEntering>
-        {loading && !event ? (
-          <SkeletonBlock width="100%" height={sceneHeroHeight()} borderRadius={0} />
-        ) : (
-          <Animated.View entering={HERO_FADE_IN}>
-          <SceneHero
-            playlist={playlist}
-            /*
-              Undefined, not the app icon.
-
-              `placeholderImg` is `assets/images/icon.png` -- a square app icon,
-              and `SceneHero` draws its source with `contentFit: 'cover'` into a
-              440x647 box. A coverless event therefore rendered the icon blown
-              up to fill two thirds of the screen, which is the "half the image
-              is behind the header" this looked like. `expo-image` draws nothing
-              for an undefined source, leaving the hero's own dark panel with
-              the title and gradient on it -- which is what a coverless event
-              should look like.
-            */
-            source={event?.cover_image_url ? { uri: event.cover_image_url } : undefined}
-            title={event?.title || ''}
-            dateLabel={dateLabel}
-            timeLabel={heroTimeLabel}
-            scarcity={heroPillLabel({
-              maxCapacity: event?.max_capacity,
-              currentCapacity: event?.current_capacity,
-              goingCount,
-            })}
-            onPressMedia={(i) => setLightbox(i)}
-            scrollY={scrollY}
-          />
-          </Animated.View>
-        )}
+          {onFirstLoad ? (
+            <SkeletonBlock width="100%" height={sceneHeroHeight()} borderRadius={0} />
+          ) : (
+            <Animated.View entering={HERO_FADE_IN}>
+              <SceneHero
+                playlist={playlist}
+                source={event?.cover_image_url ? { uri: event.cover_image_url } : undefined}
+                title={event?.title || ''}
+                when={when}
+                whenSpoken={when.replace(' – ', ' to ')}
+                struck={cancelled}
+                pills={pills}
+                place={place}
+                category={event?.category_slug}
+                onPressMedia={(i) => setLightbox(i)}
+                scrollY={scrollY}
+              />
+            </Animated.View>
+          )}
         </LayoutAnimationConfig>
 
-        <View style={styles.content}>
-          {/*
-            Each section fades up once, as it first mounts, a beat after the one
-            above — they mount with the event, so a socket update or a refetch
-            re-renders them in place and never replays this. Anything past the
-            first screenful shares the last delay; nobody sees it arrive.
-          */}
-          {event?.organizer || isLive ? (
-            <FadeInUp delay={SECTION_DELAY[0]}>
-              <SceneByline host={event?.organizer} hereNow={isLive ? hereNow ?? detailHere : null} />
-            </FadeInUp>
-          ) : null}
-          {event?.description ? (
-            <FadeInUp delay={SECTION_DELAY[0]} style={styles.section}>
-              <SceneHeading>The Experience</SceneHeading>
-              <SceneBody>
-                {highlightEntities(event.description, entities).map((seg, i) =>
-                  seg.entity ? <SceneBodyAccent key={i}>{seg.text}</SceneBodyAccent> : seg.text
-                )}
-              </SceneBody>
-            </FadeInUp>
-          ) : null}
+        {/* The warm wash under the hero: the page is the hero's, not a black sheet laid under it. */}
+        <PageWash color={VENUE_PLATES.brewery[1]} pointerEvents="none" style={styles.wash} />
 
-          {/*
-            The facilities row. Frame `1141:4853` draws it two-up under the
-            description.
-
-            `SceneAmenity` was built to that frame and rendered nowhere, under a
-            docstring saying the screen "should not draw it until there is
-            something true to put in it" — the vocabulary now exists and is on
-            this payload, so it does.
-
-            Tints alternate rather than being mapped per amenity: the vocabulary
-            is curated and open-ended, and a per-slug colour would leave every
-            amenity added later without one.
-          */}
-          {amenities.length > 0 ? (
-            <FadeInUp delay={SECTION_DELAY[1]} style={styles.amenityRow}>
-              {amenities.map((a, i) => (
-                <SceneAmenity
-                  key={a.id}
-                  icon={a.icon}
-                  title={a.title}
-                  subtitle={a.subtitle}
-                  color={AMENITY_TINTS[i % AMENITY_TINTS.length]}
-                  style={styles.amenityTile}
-                />
-              ))}
-            </FadeInUp>
-          ) : null}
-
-          {/*
-            What the organiser actually wrote. Six fields have been collected by
-            the dashboard, stored and served since they existed, and drawn by
-            nothing — including accessibility, which is the one somebody needs
-            *before* deciding whether they can come.
-
-            Below the facilities row because the tiles answer the same questions
-            in one glance where they can; this is where the answer needs a
-            sentence. `eventDetailBlocks` has already dropped anything malformed,
-            so an empty list means the organiser wrote nothing.
-          */}
-          {/* Wrapped only when it draws something: an empty wrapper still takes a gap. */}
-          {detailBlocks.length > 0 ? (
-            <FadeInUp delay={SECTION_DELAY[2]}>
-              <SceneDetails blocks={detailBlocks} />
-            </FadeInUp>
-          ) : null}
-
-          {/* Only when there is more than the cover -- a "gallery" of one is a
-              heading over the picture already at the top of the screen. */}
-          {playlist.length > 1 ? (
-            <FadeInUp delay={SECTION_DELAY[3]}>
-              <SceneGallery items={playlist} onOpen={(i) => setLightbox(i)} />
-            </FadeInUp>
-          ) : null}
-
-          {attendeeBlock.count > 0 ? (
-            <FadeInUp delay={SECTION_DELAY[3]}>
-              <SceneAttendees
-                count={attendeeBlock.count}
-                label={attendeeBlock.label}
-                seed={event?.id || 'scene'}
+        <Animated.View layout={glide} style={styles.content}>
+          <OfflineBanner text="Offline. Showing what you had." testID="scene-offline" />
+          {cancelled ? <Banner kind="offline" text="Cancelled. The organizer called this one off. Your RSVP is released." testID="scene-cancelled" /> : null}
+          {waitlisted && !cancelled ? <Banner kind="paused" text="On the waitlist. You’ll be first in line in the order you joined." testID="scene-waitlisted" /> : null}
+          {/* Keyed by state, so the tick-over is a new banner: announced (iOS) and read (Android's live region) as news. */}
+          {roomLine ? (
+            roomLine.open ? (
+              <Banner
+                key="room-open"
+                kind="info"
+                icon="door-open"
+                text="The room is open"
+                action={{ label: 'Open the room', onPress: () => void openRoom() }}
+                busy={roomOpening}
+                testID="scene-room-open"
               />
-            </FadeInUp>
+            ) : (
+              <Banner key="room-opens" kind="info" icon="clock" text="Room opens" mono={roomLine.when} testID="scene-room-opens" />
+            )
           ) : null}
 
-          {/*
-            The board: going alone, and looking for somebody to go with. Before
-            doors only — after them the room is the place, and the board is
-            closed (client plan Part 3b). Reading needs an RSVP or a save; the
-            board itself says so if neither.
+          {onFirstLoad ? (
+            <View testID="scene-skeleton" accessibilityLabel="Loading the event" accessibilityState={{ busy: true }} style={styles.skeleton}>
+              <SkeletonBlock width="60%" height={30} borderRadius={RADIUS.thumb} />
+              <View style={styles.skeletonTiles}>
+                {[0, 1, 2, 3].map((i) => (
+                  <SkeletonBlock key={i} width="47%" height={76} borderRadius={RADIUS.rowInCard} />
+                ))}
+              </View>
+            </View>
+          ) : (
+            <>
+              {changeRows.length > 0 ? (
+                <FadeInUp delay={SECTION_DELAY[0]}>
+                  <SceneChangedLines lines={changeRows} changedAt={event?.change?.changedAt} testID="scene-changed" />
+                </FadeInUp>
+              ) : null}
 
-            The run's start, not today's session: the server closes the board
-            at the first doors, so on day 2 of a festival the day's window
-            would offer a board that opens onto "closed". Behind BOARD_ENABLED
-            until the board's safety half ships (lib/board.ts).
-          */}
-          {event && BOARD_ENABLED && !boardClosed(event.start_time) ? (
-            <FadeInUp delay={SECTION_DELAY[3]}>
-              <BoardEntry
-                onPress={() =>
-                  router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)
-                }
-              />
-            </FadeInUp>
-          ) : null}
+              <FadeInUp delay={SECTION_DELAY[0]}>
+                <AmenityGrid tiles={tiles} testID="scene-tiles" />
+              </FadeInUp>
 
-          {event?.venue_name ? (
-            <FadeInUp delay={SECTION_DELAY[3]}>
-            {/* No haptic: it leaves the app, and the Maps hand-off is the feedback. */}
-            <ScalePress
-              pressedScale={0.98}
-              haptic={false}
-              onPress={openInMaps}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${event.venue_name} in Maps`}
-            >
-            <SceneLocationCard
-              venue={event.venue_name}
-              area={event.address || event.city || ''}
-              map={
-                showMapImage && event.latitude && event.longitude ? (
-                  <SceneMap latitude={event.latitude} longitude={event.longitude} />
-                ) : null
-              }
-            />
-            </ScalePress>
-            </FadeInUp>
-          ) : null}
+              {event?.days ? (
+                <FadeInUp delay={SECTION_DELAY[0]}>
+                  <SceneDayStrip days={event.days} today={sessionToday} testID="scene-days" />
+                </FadeInUp>
+              ) : null}
 
-          {/*
-            DESIGN IS A PLACEHOLDER — LOGIC IS NOT (docs/PLACEHOLDER_SCREENS.md,
-            "Claim it"). Only on a curated event nobody has claimed, which the
-            server decides. It leaves the app for the public claim page on the
-            dashboard host: the app refuses host accounts by design, and that
-            page needs no account. Filing there grants nothing until a person
-            reviews it.
-          */}
-          {claimUrl ? (
-            <FadeInUp delay={SECTION_DELAY[3]}>
-              <Pressable
-                testID="claim-event-link"
-                onPress={() => openClaimPage(claimUrl)}
-                accessibilityRole="link"
-                accessibilityLabel="Running this event? Claim it"
-                accessibilityHint="Opens the Blend'n dashboard in your browser"
-                style={styles.claimRow}
-              >
-                <Text style={styles.claimText}>
-                  Running this event? <Text style={styles.claimAction}>Claim it</Text>
-                </Text>
-                <Ionicons name="open-outline" size={ICON.sm} color={EMBER.textSecondary} />
-              </Pressable>
-            </FadeInUp>
-          ) : null}
-        </View>
+              {event?.organizer || isLive ? (
+                <FadeInUp delay={SECTION_DELAY[0]}>
+                  <SceneByline host={event?.organizer} hereNow={isLive ? hereNow ?? detailHere : null} />
+                </FadeInUp>
+              ) : null}
+
+              {event?.description ? (
+                <FadeInUp delay={SECTION_DELAY[1]} style={styles.section}>
+                  <SectionHeader title="The experience" />
+                  <SceneBody>
+                    {highlightEntities(event.description, entities).map((seg, i) =>
+                      seg.entity ? <SceneBodyAccent key={i}>{seg.text}</SceneBodyAccent> : seg.text
+                    )}
+                  </SceneBody>
+                </FadeInUp>
+              ) : null}
+
+              {/*
+                What the organiser actually wrote: house rules, FAQ, accessibility, and the rest. Accessibility is
+                the one somebody needs *before* deciding whether they can come. `eventDetailBlocks` has already
+                dropped anything malformed, so an empty list means the organiser wrote nothing; wrapped only when
+                it draws something, since an empty wrapper still takes a gap.
+              */}
+              {detailBlocks.length > 0 ? (
+                <FadeInUp delay={SECTION_DELAY[2]}>
+                  <SceneDetails blocks={detailBlocks} />
+                </FadeInUp>
+              ) : null}
+
+              {/* Only when there is more than the cover: a "gallery" of one is a heading over the picture already at the top. */}
+              {playlist.length > 1 ? (
+                <FadeInUp delay={SECTION_DELAY[3]}>
+                  <SceneGallery items={playlist} onOpen={(i) => setLightbox(i)} />
+                </FadeInUp>
+              ) : null}
+
+              {attendeeBlock.count > 0 ? (
+                <FadeInUp delay={SECTION_DELAY[3]}>
+                  <SceneAttendees count={attendeeBlock.count} label={attendeeBlock.label} seed={event?.id || 'scene'} />
+                </FadeInUp>
+              ) : null}
+
+              {/*
+                The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
+                the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
+                neither. The run's start, not today's session: the server closes the board at the first doors.
+                Behind BOARD_ENABLED until the board's safety half ships (lib/board.ts).
+              */}
+              {event && BOARD_ENABLED && !boardClosed(event.start_time) ? (
+                <FadeInUp delay={SECTION_DELAY[3]}>
+                  <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
+                </FadeInUp>
+              ) : null}
+
+              {event?.venue_name ? (
+                <FadeInUp delay={SECTION_DELAY[3]}>
+                  {/* No haptic: it leaves the app, and the Maps hand-off is the feedback. */}
+                  <ScalePress pressedScale={0.98} haptic={false} onPress={openInMaps} accessibilityRole="button" accessibilityLabel={`Open ${event.venue_name} in Maps`}>
+                    <SceneLocationCard
+                      venue={event.venue_name}
+                      area={event.address || event.city || ''}
+                      map={showMap && event.latitude && event.longitude ? <SceneMap latitude={event.latitude} longitude={event.longitude} /> : null}
+                    />
+                  </ScalePress>
+                </FadeInUp>
+              ) : null}
+
+              {/*
+                Only on a curated event nobody has claimed, which the server decides. It leaves the app for the public
+                claim page on the dashboard host: the app refuses host accounts by design, and that page needs no
+                account. Filing there grants nothing until a person reviews it.
+              */}
+              {claimUrl ? (
+                <FadeInUp delay={SECTION_DELAY[3]} style={styles.claim}>
+                  <Button
+                    kind="tertiary"
+                    size="md"
+                    icon="external-link"
+                    label="Running this event? Claim it"
+                    accessibilityHint="Opens the Blend’n dashboard in your browser"
+                    onPress={() => openClaimPage(claimUrl)}
+                    testID="claim-event-link"
+                  />
+                </FadeInUp>
+              ) : null}
+            </>
+          )}
+        </Animated.View>
       </Animated.ScrollView>
 
-      {/*
-        Outside the ScrollView, as frame `1227:2903` has it -- a sibling of
-        `Main`, not a child. `box-none` so the gap either side still scrolls the
-        page underneath; only the pill takes touches.
-      */}
-      <View style={styles.ctaDock} pointerEvents="box-none">
-        {/*
-          The page fading out under the pill, instead of a glow around it: the
-          pill no longer carries a blur or a shadow, so this is what keeps a
-          photo or the map scrolling underneath from running into it.
-        */}
-        <LinearGradient
-          pointerEvents="none"
-          colors={[EMBER.bgClear, EMBER.bg]}
-          locations={[0, 0.55]}
-          style={StyleSheet.absoluteFill}
+      {/* The dock: a glass bar outside the scroll, so the one action stays where the thumb is. */}
+      <Dock floating onHeight={setCtaDockHeight} testID="scene-dock">
+        {/* Going, not yet there, and shareable: the moment somebody most wants to send the night on. Never after check-in. */}
+        {ctaState === 'rsvpd' && event && shareTarget && handleShare && bringViaWhatsApp ? (
+          <Animated.View entering={bannerFadeIn}>
+            <BringSomeoneRow eventTitle={event.title} onWhatsApp={() => void bringViaWhatsApp()} onShare={handleShare} testID="scene-bring" />
+          </Animated.View>
+        ) : null}
+        <SceneCTA
+          state={ctaState}
+          pending={rsvpPending}
+          alone={checkInCount <= 1}
+          note={betweenLine ?? undefined}
+          onPress={cancelled ? undefined : primaryActionPress}
+          iconKey={ctaIcon ?? undefined}
+          icon={ctaIcon ? (color) => <Icon name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}
         />
-        <View style={styles.ctaDockInner} pointerEvents="box-none">
-          <SceneCTA
-            state={ctaState}
-            pending={rsvpPending}
-            alone={checkInCount <= 1}
-            onPress={primaryActionPress}
-            iconKey={ctaIcon ?? undefined}
-            icon={ctaIcon ? (color) => <Ionicons name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}
-          />
-        </View>
-      </View>
+      </Dock>
 
       <SceneLightbox
         items={playlist}
@@ -1378,350 +1310,24 @@ export default function EventDetail() {
         onClose={() => setLightbox(null)}
       />
 
-      {/*
-        The organiser's own controls, kept exactly as they were.
-        Not in any frame -- `1141:4853` is the attendee's Scene -- so they stay
-        a tray rather than being invented into the new layout.
-      */}
-      {isOrganizer ? (
-        <View style={styles.organiserBar} pointerEvents="box-none">
-          <ScalePress haptic={false} pressedScale={0.9}
-            onPress={openEditComposer}
-            style={styles.organiserButton}
-            accessibilityRole="button"
-            accessibilityLabel="Edit event"
-          >
-            <Ionicons name="create-outline" size={ICON.md} color={EMBER.textPrimary} />
-          </ScalePress>
-          <ScalePress haptic={false} pressedScale={0.9}
-            onPress={openAnnouncementComposer}
-            style={styles.organiserButton}
-            accessibilityRole="button"
-            accessibilityLabel="Send an announcement"
-          >
-            <Ionicons name="megaphone-outline" size={ICON.md} color={EMBER.textPrimary} />
-          </ScalePress>
-          <ScalePress haptic={false} pressedScale={0.9}
-            onPress={handleDeleteEvent}
-            style={styles.organiserButton}
-            accessibilityRole="button"
-            accessibilityLabel="Delete this event"
-          >
-            <Ionicons name="trash-outline" size={ICON.md} color={EMBER.textPrimary} />
-          </ScalePress>
-        </View>
-      ) : null}
-
-      {/*
-        The announcement composer, on both platforms.
-
-        It used to be Android's only: iOS took `Alert.prompt`, which has no
-        character counter, no pending state and no way to disable itself while
-        a send is in flight. Same action, two experiences, and the system one
-        could not carry the app's design. Not in any frame.
-      */}
-      <Modal
-        visible={showAnnouncementModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAnnouncementModal(false)}
-      >
-        <View style={styles.announcementOverlay}>
-          <View style={styles.announcementModal}>
-            <Text style={styles.announcementTitle}>Send announcement</Text>
-            <Text style={styles.announcementSubtitle}>
-              This message is broadcast to everyone in the event chat.
-            </Text>
-            <TextInput
-              style={styles.announcementInput}
-              placeholder="Enter your announcement…"
-              placeholderTextColor={EMBER.textPlaceholder}
-              value={announcementText}
-              onChangeText={setAnnouncementText}
-              multiline
-              maxLength={1000}
-              autoFocus
-            />
-            <View style={styles.announcementButtons}>
-              <Pressable
-                style={styles.announcementCancel}
-                onPress={() => {
-                  setShowAnnouncementModal(false)
-                  setAnnouncementText('')
-                }}
-                accessibilityRole="button"
-              >
-                <Text style={styles.announcementCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.announcementSend,
-                  !announcementText.trim() && styles.announcementSendOff,
-                ]}
-                onPress={sendAnnouncement}
-                disabled={!announcementText.trim() || sendingAnnouncement}
-                accessibilityRole="button"
-              >
-                {sendingAnnouncement ? (
-                  <ActivityIndicator size="small" color={EMBER.onGradient} />
-                ) : (
-                  <Text style={styles.announcementSendText}>Send</Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showEditModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowEditModal(false)}
-      >
-        <View style={styles.announcementOverlay}>
-          <View style={styles.announcementModal}>
-            <Text style={styles.announcementTitle}>Edit event</Text>
-            <Text style={styles.announcementSubtitle}>
-              Changes are visible to everyone viewing this event.
-            </Text>
-            <TextInput
-              style={styles.editFieldInput}
-              placeholder="Title"
-              placeholderTextColor={EMBER.textPlaceholder}
-              value={editTitle}
-              onChangeText={setEditTitle}
-              maxLength={120}
-            />
-            <TextInput
-              style={styles.editFieldInput}
-              placeholder="Short description"
-              placeholderTextColor={EMBER.textPlaceholder}
-              value={editShortDescription}
-              onChangeText={setEditShortDescription}
-              maxLength={200}
-            />
-            <TextInput
-              style={styles.announcementInput}
-              placeholder="Description"
-              placeholderTextColor={EMBER.textPlaceholder}
-              value={editDescription}
-              onChangeText={setEditDescription}
-              multiline
-              maxLength={2000}
-            />
-            <View style={styles.announcementButtons}>
-              <Pressable
-                style={styles.announcementCancel}
-                onPress={() => setShowEditModal(false)}
-                accessibilityRole="button"
-              >
-                <Text style={styles.announcementCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.announcementSend,
-                  !editTitle.trim() && styles.announcementSendOff,
-                ]}
-                onPress={saveEventEdit}
-                disabled={!editTitle.trim() || savingEdit}
-                accessibilityRole="button"
-              >
-                {savingEdit ? (
-                  <ActivityIndicator size="small" color={EMBER.onGradient} />
-                ) : (
-                  <Text style={styles.announcementSendText}>Save</Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-
-      <ActionTray
-        visible={trayState.visible}
-        title={trayState.title}
-        message={trayState.message}
-        buttons={trayState.buttons}
-        onClose={closeTray}
-      />
+      {/* The ⋯: Report. */}
+      <OverflowMenu visible={menuOpen} items={menu} onClose={() => setMenuOpen(false)} testID="scene-menu" />
     </View>
   )
 }
 
-/**
- * A top-bar button — a `CONTROL.sm` disc on `EMBER.surface`.
- *
- * The bar is the opaque page colour (`PulseTopBar`), so the disc is a control
- * on a page, not a pill on a photo: `surface`, not `scrim`. Without it a bare
- * glyph has no apparent hit target. The glyph is always `textPrimary`; the
- * saved heart says "on" by filling, not by turning orange.
- */
-/*
- * Shrinks to 0.9 on press-in: at 32pt, the 0.97 a full-width button uses is
- * below what an eye notices. No haptic of its own — the heart's handler fires
- * one, and Back and Share are navigation, which does not buzz.
- */
-function SceneBarButton({
-  icon,
-  glyph,
-  label,
-  active,
-  onPress,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name']
-  /** Replaces the plain icon, for a glyph that animates itself (the heart). */
-  glyph?: React.ReactNode
-  label: string
-  active?: boolean
-  onPress?: () => void
-}) {
-  return (
-    <ScalePress
-      onPress={onPress}
-      haptic={false}
-      pressedScale={0.9}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={active === undefined ? undefined : { selected: active }}
-      style={styles.barButton}
-    >
-      {glyph ?? <Ionicons name={icon} size={ICON.md} color={EMBER.textPrimary} />}
-    </ScalePress>
-  )
-}
+/** Strictly 18+: an age pill appears only above the floor. */
+const MIN_AGE = 18
 
 const styles = StyleSheet.create({
-  // Frame `1141:4918`: two-up, 16pt gap. `flexWrap` so a vocabulary longer
-  // than two runs on rather than squeezing every tile narrower.
-  amenityRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.lg },
-  amenityTile: { flexGrow: 1, flexBasis: '45%' },
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  barButton: {
-    width: CONTROL.sm,
-    height: CONTROL.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.surface,
-  },
-  content: {
-    paddingHorizontal: SCENE_PADDING_HORIZONTAL,
-    // 48 under the hero, as the harness has it -- more than the 32 that
-    // separates sections further down.
-    paddingTop: SPACE.xxxl,
-    gap: SCENE_SECTION_GAP,
-  },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  // The warm wash under the hero's foot (PageWash's own 300).
+  wash: { position: 'absolute', left: 0, right: 0, top: sceneHeroHeight() - 1, height: PAGE_WASH.height },
+  content: { paddingHorizontal: SCENE_PADDING_HORIZONTAL, paddingTop: SPACE.xl, gap: SCENE_SECTION_GAP },
   section: { gap: SPACE.lg },
-  // The whole row is the target, taller than the 44pt minimum (Apple HIG).
-  claimRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, alignSelf: 'flex-start', minHeight: CONTROL.md },
-  claimText: { ...TYPE.meta },
-  claimAction: { color: EMBER.textPrimary, textDecorationLine: 'underline' },
-  ctaDock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  ctaDockInner: {
-    paddingHorizontal: SCENE_CTA_INSET,
-    // See SCENE_CTA_HEIGHT for the chrome arithmetic.
-    paddingTop: SPACE.md,
-    paddingBottom: SPACE.lg,
-    // The pill is full width (Flow 3's dock, A78): it stretches to the inset.
-    justifyContent: 'center',
-  },
-  organiserBar: {
-    position: 'absolute',
-    right: GUTTER,
-    bottom: SCENE_CTA_HEIGHT + SPACE.lg + SPACE.md + SPACE.xl,
-    gap: SPACE.md,
-  },
-  organiserButton: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.surfaceSunken,
-  },
-  errorContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.bg,
-  },
-  errorBody: { alignItems: 'center', gap: SPACE.lg },
-  errorText: { ...TYPE.title },
-  errorHint: { ...TYPE.meta, color: EMBER.textSecondary, textAlign: 'center', paddingHorizontal: GUTTER },
-  retryButton: {
-    minHeight: CONTROL.md,
-    paddingHorizontal: SPACE.xl,
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-  },
-  retryButtonText: { ...TYPE.button, color: EMBER.onGradient },
-  backButton: {
-    minHeight: CONTROL.md,
-    paddingHorizontal: SPACE.xl,
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-  },
-  backButtonText: { ...TYPE.button },
-
-  announcementOverlay: {
-    flex: 1,
-    backgroundColor: EMBER.backdrop,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: GUTTER,
-  },
-  announcementModal: {
-    width: '100%',
-    borderRadius: EMBER_RADIUS.card,
-    backgroundColor: EMBER.bg,
-    padding: SPACE.xl,
-    gap: SPACE.md,
-  },
-  announcementTitle: { ...TYPE.title },
-  announcementSubtitle: { ...TYPE.meta },
-  announcementInput: {
-    ...TYPE.body,
-    minHeight: CONTROL.lg * 2,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
-    padding: SPACE.lg,
-    textAlignVertical: 'top',
-  },
-  editFieldInput: {
-    ...TYPE.body,
-    height: CONTROL.lg,
-    borderRadius: EMBER_RADIUS.md,
-    backgroundColor: EMBER.surfaceSunken,
-    paddingHorizontal: SPACE.lg,
-  },
-  announcementButtons: { flexDirection: 'row', gap: SPACE.md, marginTop: SPACE.xs },
-  announcementCancel: {
-    flex: 1,
-    minHeight: CONTROL.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.surface,
-  },
-  announcementCancelText: { ...TYPE.button },
-  announcementSend: {
-    flex: 1,
-    minHeight: CONTROL.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.accent,
-  },
-  announcementSendOff: { opacity: OPACITY.disabled },
-  announcementSendText: { ...TYPE.button, color: EMBER.onGradient },
+  claim: { alignSelf: 'flex-start' },
+  skeleton: { gap: SPACE.lg },
+  skeletonTiles: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
+  stateBar: { position: 'absolute', left: SPACE.lg, zIndex: 2 },
+  stateBody: { flex: 1, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl * 4 },
 })

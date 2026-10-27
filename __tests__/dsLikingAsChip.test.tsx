@@ -52,3 +52,10 @@ describe('<LikingAsChip>', () => {
     expect(flat('c-contrast')).toMatchObject({ borderColor: MATERIAL.hairlineIncreaseContrast })
   })
 })
+
+it('a long name gives ground inside the row: the chip may shrink to its row and the name truncates, never the chevron (audit D4)', async () => {
+  await render(<LikingAsChip crew={{ ...NEBULA, name: 'Midnight Vinyl Collective Bengaluru' }} pseudonym="Cosmic Panda" onPress={jest.fn()} testID="l" />)
+  expect(StyleSheet.flatten(screen.getByText('Midnight Vinyl Collective Bengaluru').props.style).flexShrink).toBe(1)
+  expect(screen.getByText('Midnight Vinyl Collective Bengaluru').props.numberOfLines).toBe(1)
+  expect(StyleSheet.flatten(screen.getByTestId('l').props.style)).toMatchObject({ minWidth: 0, maxWidth: '100%' })
+})

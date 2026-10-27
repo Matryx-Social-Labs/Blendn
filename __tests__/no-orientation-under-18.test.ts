@@ -27,7 +27,7 @@ describe('the preferences step', () => {
   const src = readFileSync(join(__dirname, '..', 'app', 'onboarding', 'preferences.tsx'), 'utf8')
   it('neither renders the Orientation section nor writes the fields under 18', () => {
     expect(src).toContain('const under18 = loaded && isUnder18(draft.dateOfBirth)')
-    expect(src).toMatch(/\{under18 \? null : \(\s*<EmberSection\s*title="Orientation"/)
+    expect(src).toMatch(/\{under18 \? null : \(\s*<View style=\{styles\.section\}>\s*<SectionHeader\s*title="Orientation"/)
     expect(src).toMatch(/\.\.\.\(under18\s*\? \{\}\s*: \{\s*orientations,/)
   })
 })

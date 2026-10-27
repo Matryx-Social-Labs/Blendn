@@ -6,14 +6,14 @@ import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
-  useReducedMotion,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { EMBER } from '../../lib/theme'
+import { COLOR } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 
 /** Past this, a slow drag dismisses. */
 const DISMISS_DISTANCE = 120
@@ -133,7 +133,8 @@ export function SwipeToDismiss({
     <GestureHandlerRootView style={styles.fill}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]} pointerEvents="none" />
       <GestureDetector gesture={pan}>
-        <Animated.View style={[styles.fill, contentStyle]}>
+        {/* VoiceOver's two-finger Z dismisses it as the swipe does (audit L5); it is the whole screen, so modal to a reader. */}
+        <Animated.View testID="swipe-to-dismiss" accessibilityViewIsModal onAccessibilityEscape={onDismiss} style={[styles.fill, contentStyle]}>
           {/* A separate view: an entering animation and the drag's transform would fight over one. */}
           <Animated.View style={styles.fill} entering={reduceMotion ? fadeOpenIn : openIn}>
             {children}
@@ -147,5 +148,5 @@ export function SwipeToDismiss({
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   // The page colour, opaque: a lightbox is a full-screen dark room, not a dimmed sheet.
-  backdrop: { backgroundColor: EMBER.bg },
+  backdrop: { backgroundColor: COLOR.ink },
 })

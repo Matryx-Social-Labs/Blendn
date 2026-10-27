@@ -129,7 +129,7 @@ Only three `ScalePress` uses in scope keep the default haptic: "Write a starter"
 | Auto-mute expiry (1h) | next send succeeds → clear | any successful send lifts the lock. But with the field read-only, the **only** send left is tapping a failed bubble to retry it. No countdown, no "muted until" | `app/chat/[id].tsx:646-652` |
 | `chat:memberMuted` socket | disable input live | **not wired**: no listener in `lib/socketClient.ts` (only `messageDeleted` and `memberBanned`, lines 137-138, 678-686) | — |
 | Already muted when the room opens | (Option B: check upfront) | the Banter row knows (`membership.status === 'muted'` → "Muted — you can read, not post"), but **the room screen does not pre-lock the composer**. You find out by sending | `app/(tabs)/chat.tsx:341`, `lib/roomState.ts:12-21` |
-| `USER_BANNED` | full-screen overlay, hide input | no lock case, so it falls to "unlocked". You get a failed bubble and a toast. The `chat:memberBanned` socket opens an `ActionTray` "Removed — You have been removed from this chat by the organiser." with OK → `router.back()`. Reopening it depends on the server's code: `FORBIDDEN` → `RoomLeftState` "You're not in this room" with a Rejoin the server then refuses; any other code (e.g. `USER_BANNED`) → "Couldn't load this chat" + a Try again that can never succeed | `app/chat/[id].tsx:542-549,620-623,371-373` |
+| `USER_BANNED` | full-screen overlay, hide input | no lock case, so it falls to "unlocked". You get a failed bubble and a toast. The `chat:memberBanned` socket opens an `ActionTray` "Removed — You have been removed from this chat by the organizer." with OK → `router.back()`. Reopening it depends on the server's code: `FORBIDDEN` → `RoomLeftState` "You're not in this room" with a Rejoin the server then refuses; any other code (e.g. `USER_BANNED`) → "Couldn't load this chat" + a Try again that can never succeed | `app/chat/[id].tsx:542-549,620-623,371-373` |
 | `CHAT_LOCKED` | banner, input disabled | lock `locked`: "You can read this room, but not post in it." | `app/chat/[id].tsx:610-611` |
 | `CHAT_CLOSED` (not in guide) | — | lock `closed`: "This room is closed." | `app/chat/[id].tsx:612-613` |
 | `NOT_CHECKED_IN` | "Check in to send messages" | no lock; failed bubble plus the server's sentence as a toast | `app/chat/[id].tsx:620-623` |
@@ -150,7 +150,7 @@ Only three `ScalePress` uses in scope keep the default haptic: "Write a starter"
 - failed (on the bubble)
 - muted
 - auto-muted with an expiry
-- locked by the organiser
+- locked by the organizer
 - room closed
 - rate-limited (timed)
 - not checked in
@@ -167,7 +167,7 @@ The plumbing gaps (no `memberMuted` listener, no pre-lock on open, banned not a 
 3. **Never blur client-side.** The blurred hero is the server's 40px derivative, and there is no real URL on the device (`lib/pseudonymAvatar.ts:1-21`, `lib/conversationReveal.ts:139-153`, `app/user/[id].tsx:45-51`).
 4. **Reactions show a count, never who** (`docs/CHAT.md:178-179`, `ChatBubble.tsx:69-78,301-308`). Only the six server emoji (`lib/apiClient.ts:473`: 👍 ❤️ 😂 😮 😢 🔥).
 5. **No read receipts in rooms.** DMs only, own messages only (`docs/CHAT.md:235-240`, `ChatBubble.tsx:87-94`).
-6. **Attendees post no media.** No `+`/attach and no emoji button in the composer (`docs/CHAT.md:130-148`). Sponsored broadcasts may carry media. **Sponsored is always labelled and must never borrow the organiser's or room's voice** (`BroadcastNotice.tsx:24-30`).
+6. **Attendees post no media.** No `+`/attach and no emoji button in the composer (`docs/CHAT.md:130-148`). Sponsored broadcasts may carry media. **Sponsored is always labelled and must never borrow the organizer's or room's voice** (`BroadcastNotice.tsx:24-30`).
 7. **A failed send stays in the thread** as "Not sent · Tap to retry" and is never silently dropped (`docs/CHAT.md:83-86`). A history load failure is never shown as the "start the conversation" empty state (`docs/CHAT.md:88-90`).
 8. **Typing lives at the end of the feed**, not pinned over the composer (`docs/CHAT.md:183-191`).
 9. **The quote sits inside the bubble.** "edited" is on the bubble, not by the timestamp (`docs/CHAT.md:173-177`).
@@ -230,7 +230,7 @@ The plumbing gaps (no `memberMuted` listener, no pre-lock on open, banned not a 
   - Failed: `LoadError` "Couldn't load your chats" + Try again (1102-1104).
   - Partial failure: the `meta` line above.
   - Offline / socket: `RealtimeStatusBanner`.
-  - Moderated: a row's preview becomes the room-state line "Muted — you can read, not post" or "Locked by the organiser — read only" (`lib/roomState.ts:18-21`).
+  - Moderated: a row's preview becomes the room-state line "Muted — you can read, not post" or "Locked by the organizer — read only" (`lib/roomState.ts:18-21`).
   - Muted notifications: a bell-slash after the title, title shrinks (`BanterSections.tsx:330-332,443`).
   - Unrevealed match: generated disc.
   - Reveal asked: preview "Asked to reveal names" in `textPrimary`.
@@ -248,7 +248,7 @@ The plumbing gaps (no `memberMuted` listener, no pre-lock on open, banned not a 
   - Checked-in rooms are lifted out and never repeated (283-298).
   - Never-used conversations sort to the bottom (300-307).
   - Unread is three changes: preview `bodyStrong` `textPrimary`, time `textPrimary`, a 10pt dot. The dot's slot is reserved (`BanterSections.tsx:226-234,449-460`).
-  - Muted is a glyph, not the word, because "Muted" in this list already means the organiser stopped you posting (`BanterSections.tsx:325-329`).
+  - Muted is a glyph, not the word, because "Muted" in this list already means the organizer stopped you posting (`BanterSections.tsx:325-329`).
   - A placeholder name is "Someone", never "Unknown" (526-533).
   - Decline comes first and Accept last (`BanterSections.tsx:595-598`).
   - Faces are fine in the inbox: they are people you already have a thread with (`BanterSections.tsx:23-29`).
@@ -272,7 +272,7 @@ The plumbing gaps (no `memberMuted` listener, no pre-lock on open, banned not a 
   - `components/chat/`: `ChatBubble`, `ChatComposer`, `BroadcastNotice`, `SystemNotice`, `TypingIndicator` (+ `typingLabel`), `ReactionPicker`, `ReplyBar`, `SwipeToReply`, `RoomGuidelinesBanner`, `RoomLeftState`, `ChatLoadFailed`
   - Shared: `components/motion/ScalePress`, `components/motion/presence` (`popIn`/`popOut`), `components/ActionTray`, the app sheet, `RealtimeStatusBanner`, `OptimizedImage`
   - Helpers: `lib/roomMembership`, `lib/reactions`, `lib/sendOutcome`, `lib/useFollowEnd`, `lib/mergeNewestPage`
-- **Job:** the temporary, anonymous room for an event you're checked into: read the room, talk to it, react, reply, and see broadcasts from the organiser or sponsors. **Entry/exit:**
+- **Job:** the temporary, anonymous room for an event you're checked into: read the room, talk to it, react, reply, and see broadcasts from the organizer or sponsors. **Entry/exit:**
   - Entry by push from: a Banter row or Live now; the Room's "Join Chat" toggle / chat dock (`components/blendn/ChatDock.tsx`); check-in's "Go to Chat"; a push notification.
   - Exits: back (swipe or chevron); ⋮ → push `/chat-info/[id]`; a socket ban → tray → back.
   - Header-less stack screen with custom header (`Stack.Screen headerShown:false`, 964).
@@ -390,7 +390,7 @@ The plumbing gaps (no `memberMuted` listener, no pre-lock on open, banned not a 
   - Lock states are a single `meta` line above the pill. That is too quiet for "you can't post". Design a proper restricted composer (icon + reason + what to do + expiry), per §0.7.
   - `ReplyBar` is a full-bleed sunken strip glued above a gutter-inset pill. The two don't share a shape. Attach the reply preview to the composer's glass.
   - Reactions: no quick path (only long-press → sheet), no haptic on pick, no count animation, and the pills are tiny (`SPACE.sm`/`xxs` padding). The picker sits inside a generic action sheet; a contextual reaction bar anchored to the bubble is the expected pattern (six emoji only).
-  - **Broadcasts were "derived, not designed"** (`docs/CHAT.md:209-210`). The announcement rail is a white hairline, sponsored is grey, there is no organiser identity, no media, no CTA, and no arrival motion. This is the one commercial surface in the room and it needs a real design (CHAT.md open ask 4).
+  - **Broadcasts were "derived, not designed"** (`docs/CHAT.md:209-210`). The announcement rail is a white hairline, sponsored is grey, there is no organizer identity, no media, no CTA, and no arrival motion. This is the one commercial surface in the room and it needs a real design (CHAT.md open ask 4).
   - Day pills don't stick while scrolling. Older history is a tap button, not infinite scroll.
   - The scroll-to-newest disc uses a magic `bottom: 80` that won't track a growing composer, has no unread count, and uses `TouchableOpacity activeOpacity 0.8` (off-token).
   - The guidelines banner is a generic info card pushing the feed down. With glass chrome it could be a dismissible glass notice under the header.
@@ -418,7 +418,7 @@ The plumbing gaps (no `memberMuted` listener, no pre-lock on open, banned not a 
   5. Member rows:
      - A 40pt flat mark disc (the same seed as the bubble) with an emoji.
      - Name `bodyStrong` ("You" for you; "Attendee" fallback).
-     - Role `meta` ("Organiser" for admin, "Moderator").
+     - Role `meta` ("Organizer" for admin, "Moderator").
      - Chevron (not on you).
   6. Footer "SHOW MORE" / "LOADING…" (pages of 100).
 - **Interactive elements:**
@@ -441,7 +441,7 @@ The plumbing gaps (no `memberMuted` listener, no pre-lock on open, banned not a 
   - `GET /chat/groups` → event id, title, cover, `mute`.
   - Mute, unmute, leave, report endpoints.
 - **Rules to keep:**
-  - The mute is only your pushes, and nobody is told (`docs/CHAT.md:41-46`). It is **not** the organiser's mute.
+  - The mute is only your pushes, and nobody is told (`docs/CHAT.md:41-46`). It is **not** the organizer's mute.
   - Leave is the one removal you can undo, and the confirmation says so.
   - Report this room is for what no single message shows. Report-the-event lives on the event page (`docs/CHAT.md:48-51`).
   - Members are drawn exactly as the bubbles draw them (the same seed). A member tap passes the pseudonym and `roomSeed` so the profile matches (`docs/PROFILE.md:198-211`).
@@ -1001,14 +1001,14 @@ Format: **path** · role · used by · variants/states · interactions · motion
     - No character counter at the 1000 limit.
     - Needs states for banned, not-checked-in, auto-mute with expiry, left, and ended (§0.7).
     - No `+` and no emoji button, by decision.
-- **`components/chat/BroadcastNotice.tsx`** · organiser announcement or sponsored message in the room feed.
+- **`components/chat/BroadcastNotice.tsx`** · organizer announcement or sponsored message in the room feed.
   - Used by: room.
   - Variants: `announcement` (white rail, label "ANNOUNCEMENT · ORG"), `sponsored` (grey rail, "SPONSORED", dimmer label).
   - Interactions: none. Motion/haptics: none.
   - **Layer: solid content**, full width (maybe a distinct material from bubbles; never the room's brand voice for sponsored).
   - Notes:
     - Strips the server's emoji label prefix.
-    - No media, no CTA, no organiser avatar.
+    - No media, no CTA, no organizer avatar.
     - "Derived, not designed" (`docs/CHAT.md:209-210`).
 - **`components/chat/SystemNotice.tsx`** · centred pill for day separators, system messages, and the DM unread divider.
   - Used by: room, DM.
@@ -1290,7 +1290,7 @@ Format: **path** · role · used by · variants/states · interactions · motion
 4. **Pseudonym palette** vs brand violet (§0.2).
 5. **Bubble grouping and timestamps**: adopt grouping (a component prop change) and pick one time format (locale vs fixed).
 6. **Composer state system**: design all states in §0.7 and file the plumbing gaps (no `memberMuted` listener, no pre-lock, banned isn't a lock, the ended DM keeps the composer).
-7. **Broadcasts**: real design, including sponsored media (allowed) and organiser identity.
+7. **Broadcasts**: real design, including sponsored media (allowed) and organizer identity.
 8. **DM media**: the API supports image/video and the client ignores it. Build or remove.
 9. **The reveal moment** in DMs, including an "Asked" state.
 10. **Where total chat unread lives** (not the bell; the bell counts notifications).

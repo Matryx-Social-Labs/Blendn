@@ -2,8 +2,10 @@ import { memo, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, withDelay, withSpring, withTiming } from 'react-native-reanimated'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
+import { overlapOf } from '../../lib/overlapLine'
+import { printable } from '../../lib/pulseSections'
 import { hereNowStack, reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
 import type { RoomPerson } from '../../lib/useRoom'
 import { Avatar } from '../ds/Avatar'
@@ -81,14 +83,14 @@ export const RoomHero = memo(function RoomHero({
       <View style={styles.heroText}>
         <View style={styles.liveRow}>
           <PresenceDot kind="live" />
-          <Text style={[font('caption', bold), styles.secondary]}>Live</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.secondary]}>Live</Text>
         </View>
         <Text accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={1.3} style={[font('heading', bold), styles.ink]}>
           {title}
         </Text>
         <View style={styles.countRow} accessible accessibilityLabel={`${hereCount} ${hereCount === 1 ? 'person' : 'people'} here now`}>
           <RollingNumber value={hereCount} testID="room-count" />
-          <Text style={[font('meta', bold), styles.secondary]}>{hereCount === 1 ? 'here now · just you' : 'here now'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{hereCount === 1 ? 'here now · just you' : 'here now'}</Text>
         </View>
         {stack.length ? (
           <View style={styles.stack}>
@@ -160,7 +162,7 @@ export const MeetNextRow = memo(function MeetNextRow({
         right={
           <View style={styles.timer} accessible accessibilityLabel={`Shuffles in ${left}`}>
             <Icon name="shuffle" size={ICON.inline} color={COLOR.textSecondary} />
-            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink, styles.tabular]}>{left}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink, styles.tabular]}>{left}</Text>
           </View>
         }
       />
@@ -175,6 +177,7 @@ export const MeetNextRow = memo(function MeetNextRow({
               face={faceOf(p)}
               name={p.name}
               reason={p.matched ? 'Matched' : reasonLine(p)}
+              overlap={p.matched ? null : overlapOf(p).line}
               width={width}
               liked={p.liked}
               onPress={() => onOpen(p)}
@@ -211,6 +214,7 @@ export const RoomGridFace = memo(function RoomGridFace({
       face={faceOf(person)}
       name={person.name}
       reason={person.matched ? 'Matched' : reasonLine(person)}
+      overlap={person.matched ? null : overlapOf(person).line}
       width={width}
       here={person.insideNow}
       liked={person.liked}
@@ -224,11 +228,11 @@ export const RoomGridFace = memo(function RoomGridFace({
   )
 })
 
-/** "Everyone here · 14" (or "Everyone who came"), and the empty room's state under it. */
+/** "Everyone here · 14" (or "Everyone who came"), and the empty room's state under it. Five and up, as every people count (the owner's floor). */
 export function EveryoneHead({ title, count }: { title: string; count: number }) {
   return (
     <View style={[styles.section, styles.gridHead]}>
-      <SectionHeader title={title} count={count > 0 ? count : undefined} testID="everyone-head" />
+      <SectionHeader title={title} count={printable(count) ?? undefined} testID="everyone-head" />
     </View>
   )
 }
@@ -245,7 +249,7 @@ export function ShowMore({ count, loading, onMore }: { count: number | null; loa
       testID="room-show-more"
       style={[styles.more, { minHeight: minTarget() }]}
     >
-      <Text style={[font('button', bold), loading ? styles.secondary : styles.ink]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('button', bold), loading ? styles.secondary : styles.ink]}>
         {loading ? 'Loading…' : count ? `Show ${count} more` : 'Show more'}
       </Text>
     </Pressable>

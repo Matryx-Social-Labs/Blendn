@@ -97,9 +97,9 @@ describe('<Composer>', () => {
   })
 
   it.each([
-    ['muted', 'Muted. The organiser has muted you in this room.'],
+    ['muted', 'Muted. The organizer has muted you in this room.'],
     ['automuted', 'Muted. You are muted in this room. Your messages have been flagged for policy violations.'],
-    ['locked', 'Read only. The organiser locked posting in this room.'],
+    ['locked', 'Read only. The organizer locked posting in this room.'],
     ['closed', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
     ['ratelimited', 'Slow down a moment. Too many messages.'],
     // R2-D2: the two CHAT_CLOSED reasons the server words apart.
@@ -126,7 +126,7 @@ describe('<Composer>', () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     await render(composer())
     await screen.rerender(composer({ state: 'muted' }))
-    expect(announce).toHaveBeenCalledWith('Muted. The organiser has muted you in this room.')
+    expect(announce).toHaveBeenCalledWith('Muted. The organizer has muted you in this room.')
   })
 
   it('a mute carries no countdown; a rate limit carries the server’s, as the hint', async () => {
@@ -168,5 +168,39 @@ describe('<Composer>', () => {
     await render(composer())
     await act(async () => {})
     expect(StyleSheet.flatten(screen.getByTestId('glass').props.style).borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('<Composer> contact-details warning (5.10)', () => {
+  it('shows the advice above the field and keeps Send enabled: a row, not a lock', async () => {
+    const onSend = jest.fn()
+    await render(composer({ value: 'call 9876543210', onSend, warning: 'This looks like a phone number. This room is anonymous.' }))
+    expect(screen.getByTestId('c-warning')).toBeTruthy()
+    expect(screen.getByText(/This looks like a phone number/)).toBeTruthy()
+    expect(send().props.accessibilityState).toMatchObject({ disabled: false })
+    await fireEvent.press(send())
+    expect(onSend).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows nothing without a warning, and never over a locked composer', async () => {
+    const { rerender } = await render(composer({ value: 'hello' }))
+    expect(screen.queryByTestId('c-warning')).toBeNull()
+    await rerender(composer({ value: 'x', state: 'muted', warning: 'This looks like a phone number.' }))
+    expect(screen.queryByTestId('c-warning')).toBeNull()
+  })
+})
+
+describe('<Composer> announces the warning as it appears (M5)', () => {
+  it('once on iOS as it goes from nothing to a sentence, not on every change of its text, and again after it goes', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    const { rerender } = await render(composer({ value: 'a' }))
+    await rerender(composer({ value: 'call 9876543210', warning: 'This looks like a phone number.' }))
+    expect(announce).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('This looks like a phone number.')
+    await rerender(composer({ value: 'call 98765432101', warning: 'This looks like a phone number. More.' }))
+    expect(announce).toHaveBeenCalledTimes(1)
+    await rerender(composer({ value: 'hi', warning: null }))
+    await rerender(composer({ value: 'call 9876543210', warning: 'This looks like a phone number.' }))
+    expect(announce).toHaveBeenCalledTimes(2)
   })
 })

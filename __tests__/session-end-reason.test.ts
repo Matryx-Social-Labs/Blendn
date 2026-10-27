@@ -39,6 +39,7 @@ jest.mock('../lib/logger', () => ({
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
+  consumeSessionEnd,
   consumeSessionEndedNotice,
   markSessionExpired,
   markSessionStarted,
@@ -50,7 +51,7 @@ process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { apiClient, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 
-const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that's a mistake."
+const SUSPENDED = "This account has been suspended. Contact support@blendn.app if you think that’s a mistake."
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -78,7 +79,7 @@ beforeEach(async () => {
 })
 
 describe('a suspended phone is told why, through the sign-out that follows', () => {
-  it("keeps the refresh's sentence when the push-token DELETE 401s after the tokens are gone", async () => {
+  it("keeps the refresh’s sentence when the push-token DELETE 401s after the tokens are gone", async () => {
     await TokenStorage.setTokens('access-1', 'refresh-1')
     const seen = suspendedServer()
 
@@ -154,7 +155,7 @@ describe('the notice belongs to one session end', () => {
     expect(await consumeSessionEndedNotice()).toBe(false)
   })
 
-  it("lets the server's sentence replace a generic marker for the same end", async () => {
+  it("lets the server’s sentence replace a generic marker for the same end", async () => {
     markSessionStarted()
     markSessionExpired()
     markSessionExpired(SUSPENDED)
@@ -170,5 +171,220 @@ describe('the notice belongs to one session end', () => {
     markSessionExpired()
     unsubscribe()
     expect(heard).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('the reason is typed (Flow 15 15.1 to 15.4)', () => {
+  const STAFF = 'This app is for attendees. Organizers, venue owners and sponsors sign in at the dashboard.'
+
+  it('a suspension through the real refresh path is read once as suspended, with the sentence', async () => {
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    suspendedServer()
+    await apiClient.getSession()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'suspended', sentence: SUSPENDED })
+    expect(await consumeSessionEnd()).toBeNull()
+  })
+
+  it('a staff account is told apart from a suspended one by its sentence', async () => {
+    markSessionStarted()
+    markSessionExpired(STAFF, 'FORBIDDEN')
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'staff', sentence: STAFF })
+  })
+
+  it('a code the server names wins over the sentence, and a code alone carries no sentence', async () => {
+    markSessionStarted()
+    markSessionExpired(undefined, 'SESSION_REVOKED_ELSEWHERE')
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'elsewhere', sentence: undefined })
+    markSessionStarted()
+    markSessionExpired(undefined, 'PASSWORD_RESET')
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'reset', sentence: undefined })
+  })
+
+  it('the generic end is expired, and a specific one replaces it but never the reverse', async () => {
+    markSessionStarted()
+    markSessionExpired()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'expired', sentence: undefined })
+
+    markSessionStarted()
+    markSessionExpired()
+    markSessionExpired(undefined, 'PASSWORD_RESET')
+    markSessionExpired()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'reset', sentence: undefined })
+  })
+
+  it('a 401 from the refresh keeps only a named reason, never its own sentence', async () => {
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/mobile/auth/refresh')
+        ? json(401, { success: false, error: 'Invalid or expired refresh token', errorCode: 'SESSION_REVOKED_ELSEWHERE' })
+        : json(401, { success: false, error: 'Unauthorized' })
+    ) as typeof fetch
+    await apiClient.getSession()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'elsewhere', sentence: undefined })
+
+    await TokenStorage.setTokens('access-2', 'refresh-2')
+    markSessionStarted()
+    global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/mobile/auth/refresh')
+        ? json(401, { success: false, error: 'Invalid or expired refresh token', errorCode: 'UNAUTHORIZED' })
+        : json(401, { success: false, error: 'Unauthorized' })
+    ) as typeof fetch
+    await apiClient.getSession()
+    await settle()
+    expect(await consumeSessionEnd()).toEqual({ reason: 'expired', sentence: undefined })
+  })
+
+  it('an end recorded before the reason was kept is classified from its sentence', async () => {
+    await AsyncStorage.setItem('blendn.session.endedByServer', STAFF)
+    expect(await consumeSessionEnd()).toEqual({ reason: 'staff', sentence: STAFF })
+  })
+})
+
+describe('every request names the build (Flow 15 15.14), and a refusal to serve it marks the app', () => {
+  it('sends X-App-Version, and 426 or UPDATE_REQUIRED marks update required', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const gate = require('../lib/updateRequired') as typeof import('../lib/updateRequired')
+    gate.resetUpdateRequired()
+    let sent: Record<string, string> = {}
+    global.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      sent = init?.headers as Record<string, string>
+      return json(426, { success: false, error: 'Update Blend’n', errorCode: 'UPDATE_REQUIRED' })
+    }) as typeof fetch
+    await apiClient.getSession()
+    expect(sent['X-App-Version']).toBeDefined()
+    expect(sent['X-App-Version']).not.toBe('')
+    expect(gate.isUpdateRequired()).toBe(true)
+    expect(gate.isUpdateRefusal(426, undefined)).toBe(true)
+    expect(gate.isUpdateRefusal(400, 'UPDATE_REQUIRED')).toBe(true)
+    expect(gate.isUpdateRefusal(403, 'FORBIDDEN')).toBe(false)
+  })
+
+  it('a refusal that names UPDATE_REQUIRED in reasonCode marks the app too; an old server (errorCode only) still does', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const gate = require('../lib/updateRequired') as typeof import('../lib/updateRequired')
+    gate.resetUpdateRequired()
+    global.fetch = jest.fn(async () => json(400, { success: false, error: 'Update', errorCode: 'BAD_REQUEST', reasonCode: 'UPDATE_REQUIRED' })) as typeof fetch
+    await apiClient.getSession()
+    expect(gate.isUpdateRequired()).toBe(true)
+    gate.resetUpdateRequired()
+    global.fetch = jest.fn(async () => json(400, { success: false, error: 'Update', errorCode: 'UPDATE_REQUIRED' })) as typeof fetch
+    await apiClient.getSession()
+    expect(gate.isUpdateRequired()).toBe(true)
+    gate.resetUpdateRequired()
+    global.fetch = jest.fn(async () => json(400, { success: false, error: 'Nope', errorCode: 'BAD_REQUEST', reasonCode: 'PROFILE_INCOMPLETE' })) as typeof fetch
+    await apiClient.getSession()
+    expect(gate.isUpdateRequired()).toBe(false)
+  })
+
+  it('does not send it from the web build, which has no native build number to judge', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Platform } = require('react-native') as { Platform: { OS: string } }
+    const was = Platform.OS
+    Platform.OS = 'web'
+    try {
+      let sent: Record<string, string> = {}
+      global.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        sent = init?.headers as Record<string, string>
+        return json(200, { success: true, data: {} })
+      }) as typeof fetch
+      await apiClient.getSession()
+      expect(Object.keys(sent)).not.toContain('X-App-Version')
+    } finally {
+      Platform.OS = was
+    }
+  })
+})
+
+describe('every request declares its channel set (SCRUM-739)', () => {
+  // Without X-Channel-Set: 2 the server serves an event_changed bell row as event_update (blendn-admin #716 openapi, mobile-misc.ts).
+  it.each(['ios', 'android', 'web'])('%s: a GET, a POST, a request with its own headers, and the token refresh all carry it, from the push token\'s constant', async (os) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Platform } = require('react-native') as { Platform: { OS: string } }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PUSH_CHANNEL_SET, CHANNEL_SET_HEADER } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+    const was = Platform.OS
+    Platform.OS = os
+    try {
+      const sent: Array<[string, Record<string, string>]> = []
+      global.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        sent.push([String(url), init?.headers as Record<string, string>])
+        return String(url).endsWith('/auth/refresh') ? json(200, { success: true, data: { accessToken: 'a2', refreshToken: 'r2' } }) : json(200, { success: true, data: {} })
+      }) as typeof fetch
+      await apiClient.getSession()
+      await apiClient.getNotifications({ limit: 1 })
+      await apiClient.markNotificationsRead()
+      await apiClient.registerPushToken('tok', 'android')
+      expect(sent.length).toBeGreaterThanOrEqual(4)
+      for (const [url, headers] of sent) expect([url, headers['X-Channel-Set']]).toEqual([url, String(PUSH_CHANNEL_SET)])
+      expect(CHANNEL_SET_HEADER).toEqual({ 'X-Channel-Set': '2' })
+    } finally {
+      Platform.OS = was
+    }
+  })
+
+  it('the token refresh declares it too', async () => {
+    const sent: Array<[string, Record<string, string>]> = []
+    let n = 0
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    global.fetch = jest.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      sent.push([String(url), init?.headers as Record<string, string>])
+      if (String(url).endsWith('/auth/refresh')) return json(200, { success: true, data: { accessToken: 'a2', refreshToken: 'r2' } })
+      return n++ === 0 ? json(401, { success: false, errorCode: 'UNAUTHORIZED' }) : json(200, { success: true, data: {} })
+    }) as typeof fetch
+    await apiClient.getSession()
+    const refresh = sent.find(([u]) => u.endsWith('/auth/refresh'))
+    expect(refresh).toBeDefined()
+    expect(refresh![1]['X-Channel-Set']).toBe('2')
+  })
+})
+
+describe('the refresh names the reason in reasonCode, beside an errorCode that keeps its old value', () => {
+  const refreshAnswers = (status: number, body: Record<string, unknown>) => {
+    global.fetch = jest.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/mobile/auth/refresh') ? json(status, { success: false, ...body }) : json(401, { success: false, error: 'Unauthorized' }),
+    ) as typeof fetch
+  }
+  const endedBy = async (status: number, body: Record<string, unknown>) => {
+    markSessionStarted()
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    refreshAnswers(status, body)
+    await apiClient.getSession()
+    await settle()
+    return (await consumeSessionEnd())?.reason
+  }
+
+  it('a 403 FORBIDDEN with ACCOUNT_STAFF is a staff account, even in a sentence the client does not know', async () => {
+    expect(await endedBy(403, { error: 'Staff, reworded.', errorCode: 'FORBIDDEN', reasonCode: 'ACCOUNT_STAFF' })).toBe('staff')
+  })
+
+  it('a 401 PASSWORD_RESET (both fields) is a reset; SESSION_REVOKED_ELSEWHERE is elsewhere', async () => {
+    const body = { error: 'Invalid or expired refresh token' }
+    expect(await endedBy(401, { ...body, errorCode: 'PASSWORD_RESET', reasonCode: 'PASSWORD_RESET' })).toBe('reset')
+    expect(await endedBy(401, { ...body, errorCode: 'SESSION_REVOKED_ELSEWHERE', reasonCode: 'SESSION_REVOKED_ELSEWHERE' })).toBe('elsewhere')
+  })
+
+  it('an old server (errorCode only) is read the same', async () => {
+    expect(await endedBy(403, { error: SUSPENDED, errorCode: 'FORBIDDEN' })).toBe('suspended')
+    expect(await endedBy(401, { error: 'Invalid or expired refresh token', errorCode: 'PASSWORD_RESET' })).toBe('reset')
+  })
+
+  it('a bare 401 learns no reason', async () => {
+    expect(await endedBy(401, { error: 'Invalid or expired refresh token', errorCode: 'UNAUTHORIZED' })).toBe('expired')
+  })
+
+  it('ApiResponse carries reasonCode through, beside the errorCode', async () => {
+    await TokenStorage.setTokens('access-1', 'refresh-1')
+    global.fetch = jest.fn(async () => json(403, { success: false, error: 'Finish up first', errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE' })) as typeof fetch
+    const res = await apiClient.getSession()
+    expect(res).toMatchObject({ success: false, errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE' })
+    global.fetch = jest.fn(async () => json(403, { success: false, error: 'Nope', errorCode: 'FORBIDDEN' })) as typeof fetch
+    expect(await apiClient.getSession()).not.toHaveProperty('reasonCode')
   })
 })

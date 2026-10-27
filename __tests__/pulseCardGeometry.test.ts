@@ -32,25 +32,32 @@ import { join } from 'path'
  */
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 const SCREEN = () => read('app', '(tabs)', 'events.tsx')
+const SECTIONS = () => read('components', 'pulse', 'PulseSections.tsx')
 
 describe('the screen wires the Featured row in', () => {
   it('lets a lone card fill the width', () => {
-    expect(SCREEN()).toContain('featuredItems.length === 1')
+    // The stack asks for the layout with `solo`, and a solo card is the page's width, margin to margin.
+    expect(SECTIONS()).toContain('featuredLayout(section.events.length === 1)')
+    expect(SECTIONS()).toContain('soloBleed')
   })
 
-  it('cancels the page margin so the row runs edge to edge', () => {
-    expect(SCREEN()).toContain('marginHorizontal: -MAIN_PADDING_HORIZONTAL')
+  it('puts no margin on the list, so the row runs edge to edge without cancelling one', () => {
+    expect(SCREEN()).not.toContain('marginHorizontal: -')
+    expect(SCREEN()).toContain('listContainer: {}')
   })
 
   it('counts the banners above the header, which the chrome constant cannot know', () => {
     // "You're in San Francisco — nothing here yet" pushed the card's date and
     // venue under the bar: the fit assumed nothing sat above the header.
-    expect(SCREEN()).toContain('onLayout={onBannersLayout}')
-    expect(SCREEN().match(/bannersHeight\s*\)/g)?.length).toBeGreaterThanOrEqual(2)
+    expect(SCREEN()).toContain('onLayout={setBannersHeight}')
+    expect(SCREEN().match(/bannersHeight\s*\)/g)?.length).toBeGreaterThanOrEqual(1)
   })
 
   it('snaps by the width it actually drew, not the unclamped one', () => {
-    expect(SCREEN()).toContain('snapToInterval={featured.width + FEATURED_CARD_GAP}')
+    // The Featured rail snaps by the drawn width plus its gap (`Rail`: interval = itemWidth + gap).
+    expect(SECTIONS()).toContain('itemWidth={layout.width}')
+    expect(SECTIONS()).toContain('gap={FEATURED_CARD_GAP}')
+    expect(read('components', 'pulse', 'Rail.tsx')).toContain('snapToInterval={interval}')
   })
 
   it('the page still scrolls under the bar rather than stopping at it', () => {
@@ -74,14 +81,14 @@ describe('each section is drawn once', () => {
   const codeOnly = (s: string) =>
     s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-  it('calls the Featured row from exactly one place', () => {
-    const calls = codeOnly(SRC()).split('renderFeaturedRow()').length - 1
+  it('draws the sections from exactly one place', () => {
+    const calls = codeOnly(SRC()).split('<SectionStack').length - 1
     expect(calls).toBe(1)
   })
 
-  it('calls the Upcoming stack from exactly one place', () => {
-    const calls = codeOnly(SRC()).split('renderUpcomingStack()').length - 1
-    expect(calls).toBe(1)
+  it('no per-section render function is left to be called twice', () => {
+    expect(codeOnly(SRC())).not.toContain('renderFeaturedRow')
+    expect(codeOnly(SRC())).not.toContain('renderUpcomingStack')
   })
 
   it('has no wrapper bundling the two together', () => {

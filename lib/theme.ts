@@ -264,10 +264,11 @@ export const TYPE = {
     letterSpacing: 1.2,
     color: EMBER.textSecondary,
   },
+  // 12 / 16: the design system's floor (`font('caption')`), no legacy 11 pt text left (U-M11).
   caption: {
     fontFamily: EMBER_FONTS.bodySemiBold,
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 16,
     color: EMBER.textSecondary,
   },
 } as const

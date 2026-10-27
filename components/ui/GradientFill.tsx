@@ -34,8 +34,9 @@ export const PHOTO_SCRIM = { foot: 0.88, contrast: 0.2 } as const
  * colour, never under anything but text on a photo (DESIGN-BRIEF §4.5: white
  * text over at least 60%). The caller places it (its height is the page's).
  */
-export function PhotoScrim({ contrast = false, ...rest }: ViewProps & { contrast?: boolean }) {
-  const foot = Math.min(1, PHOTO_SCRIM.foot + (contrast ? PHOTO_SCRIM.contrast : 0))
+export function PhotoScrim({ contrast = false, foot: ends, ...rest }: ViewProps & { contrast?: boolean; foot?: number }) {
+  // `foot` where the scrim must meet solid ink with no seam (a hero over the page, a dock over its fade): 1, not the photo's 0.88.
+  const foot = ends ?? Math.min(1, PHOTO_SCRIM.foot + (contrast ? PHOTO_SCRIM.contrast : 0))
   return <LinearGradient {...rest} colors={[tint(COLOR.ink, 0), tint(COLOR.ink, foot)]} />
 }
 
@@ -43,4 +44,30 @@ export function PhotoScrim({ contrast = false, ...rest }: ViewProps & { contrast
 export const STATUS_SCRIM = 0.45
 export function StatusScrim(props: ViewProps) {
   return <LinearGradient {...props} colors={[tint(COLOR.ink, STATUS_SCRIM), tint(COLOR.ink, 0)]} />
+}
+
+/** The page's wash under the hero (fullpages.js: 300 tall, the hero's warm 50% fading to the page ink). */
+/** `leadIn`: the share of the wash over which it rises from the hero's ink foot to its 50%. */
+export const PAGE_WASH = { height: 300, alpha: 0.5, leadIn: 0.2 } as const
+export function PageWash({ color, ...rest }: ViewProps & { color: string }) {
+  // It rises out of the ink the hero's foot scrim ends on, rather than starting at full strength on that edge: the venue's
+  // body stepped from 19 to 36 luminance on one hard line under the hero (r7 L2).
+  return <LinearGradient {...rest} colors={[COLOR.ink, tint(color, PAGE_WASH.alpha), COLOR.ink]} locations={[0, PAGE_WASH.leadIn, 1]} />
+}
+
+/** A sideways fade's ends, from clear to the colour at the named edge. */
+const SIDEWAYS = {
+  right: { start: { x: 0, y: 0.5 }, end: { x: 1, y: 0.5 } },
+  left: { start: { x: 1, y: 0.5 }, end: { x: 0, y: 0.5 } },
+} as const
+
+/**
+ * The fade above an opaque bar (r7 L7): the page's content dissolves into the bar's own colour over `height` instead of
+ * meeting it on a hard edge. Only where the bar is solid; glass shows what is under it and needs none.
+ *
+ * `toward="right"` / `"left"`: the same fade sideways, at a horizontal rail's edge (the onboarding prompts rail), so a
+ * chip cut by the edge dissolves into the page instead.
+ */
+export function SolidBarFade({ color, toward = 'bottom', ...rest }: ViewProps & { color: string; toward?: 'bottom' | keyof typeof SIDEWAYS }) {
+  return <LinearGradient {...rest} colors={[tint(color, 0), color]} {...(toward === 'bottom' ? null : SIDEWAYS[toward])} />
 }

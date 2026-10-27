@@ -109,13 +109,13 @@ account-existence oracle.
 
 ### A staff account
 
-The app is for attendees. Organisers, venue owners, sponsors and admins sign in
+The app is for attendees. Organizers, venue owners, sponsors and admins sign in
 at the dashboard; an operator app is planned for after the launch. `signin`,
 `google`, `apple`, `refresh` and `session` return **403** for any account whose role is
 not `attendee`, checked after the password so the route is not an oracle:
 
 ```json
-{ "success": false, "error": "This app is for attendees. Organisers, venue owners and sponsors sign in at the dashboard." }
+{ "success": false, "error": "This app is for attendees. Organizers, venue owners and sponsors sign in at the dashboard." }
 ```
 
 A staff session that existed before this rule ends at its next refresh — at
@@ -432,7 +432,7 @@ rule that erodes when someone wants a "verified" badge.
 
 ### Connections — did anyone meet anyone
 
-The organiser's event page (`/dashboard/events/:id`) carries a `connections` block. Attendance
+The organizer's event page (`/dashboard/events/:id`) carries a `connections` block. Attendance
 says people came and ratings say how it felt; neither says whether the thing the
 product exists for happened.
 
@@ -598,9 +598,9 @@ and a person reviews every claim. Computed by `offersClaim` in `lib/curation.ts`
 **`venue` on each card of `GET /events` is the place to name** — `{ id, name }`
 of the venue the event is at, by the takeover's own test: a `confirmed` link,
 or the event's own area at the venue (`atTheVenue`). `null` for a disputed
-link, an auto-link whose area is elsewhere (any organiser can link any venue,
+link, an auto-link whose area is elsewhere (any organizer can link any venue,
 and a card must not lend them a famous bar's name), an archived or deleted
-venue, or none; then say the organiser's free-text `venueName`. Only those two fields: never the venue's area
+venue, or none; then say the organizer's free-text `venueName`. Only those two fields: never the venue's area
 or owner. While the event has the venue (an hour before it starts until it
 ends) `GET /venues` leaves the venue out, so this card is where the app says
 "at The Humming Tree". Computed by `eventVenue` in `lib/venue-visibility.ts`.
@@ -940,7 +940,7 @@ because a friend invited them and they said yes — and a member who leaves or i
 removed is out of the room at once, their row kept `left` for the history.
 
 ### GET /chat/groups
-Lists every **event** room the caller is still a member of: `active` and **`muted`** memberships (a mute silences, it does not banish — the room stays readable and a post is refused with the reason), in `active` and **`locked`** rooms (read-only until the organiser reopens it). Each row carries `membership.status` and the room's `status` so the client can label _Muted_ / _Locked_. Banned and left memberships, and archived rooms, are not listed.
+Lists every **event** room the caller is still a member of: `active` and **`muted`** memberships (a mute silences, it does not banish — the room stays readable and a post is refused with the reason), in `active` and **`locked`** rooms (read-only until the organizer reopens it). Each row carries `membership.status` and the room's `status` so the client can label _Muted_ / _Locked_. Banned and left memberships, and archived rooms, are not listed.
 
 **`rooms`: crews' and Blends' rooms (step 9).** Beside the paged `groups`, the
 response carries `rooms` — the caller's crews' chats and their Blends' rooms,
@@ -1070,7 +1070,7 @@ turned up, or who left an hour ago, has a room whose event is mid-flight.
 
 **The shape is the stored row, snake_case** — `created_at`, `is_edited`, `edited_at`, `parent_id`, `client_id`, `deleted_at`, `deleted_by`, `moderation_status`, plus `moderation_hidden`, `user`, `reactions` (tallies), `parent_message` (`{ id, type, metadata, content, user: { id, name } }` or null) and `_count.replies`. It is not the camelCase message of `GET /events/:eventId/chat`; `pagination` is `{ hasMore, nextCursor }`.
 
-**Who may read (SCRUM-205):** an `active`, `muted` or `left` member. A `banned` member gets `403 USER_BANNED` — "The organiser has removed you from this room." when a person pressed Ban. A ban nobody pressed is the one a suspension leaves behind, and only a restored account can reach this point, so it reads "Your account was restored, but you are not back in this room yet. Check in at the event to rejoin it." Checking in lifts that ban (SCRUM-291). A draft or deleted event's room answers `404`. The same rule (`roomReadDenial`, `lib/chat-window.ts`) governs `GET …/participants`, `GET /events/:eventId/chat` and the socket's `join:chat`; before it, the three GETs served the room to anybody with a membership row, banned included.
+**Who may read (SCRUM-205):** an `active`, `muted` or `left` member. A `banned` member gets `403 USER_BANNED` — "The organizer has removed you from this room." when a person pressed Ban. A ban nobody pressed is the one a suspension leaves behind, and only a restored account can reach this point, so it reads "Your account was restored, but you are not back in this room yet. Check in at the event to rejoin it." Checking in lifts that ban (SCRUM-291). A draft or deleted event's room answers `404`. The same rule (`roomReadDenial`, `lib/chat-window.ts`) governs `GET …/participants`, `GET /events/:eventId/chat` and the socket's `join:chat`; before it, the three GETs served the room to anybody with a membership row, banned included.
 
 ### POST /chat/groups/:chatGroupId/messages
 ```json
@@ -1121,12 +1121,12 @@ Opening the room never rejoins you — the Room tab loads it for the event you
 are checked in to, so it would undo the leave the moment the tab was shown.
 **Two ways back:** checking in to the event again (the check-in clears
 `left_at`), or `DELETE …/leave` while the room is open. A person muted by the
-organiser when they left comes back muted. The sweeper's `left` (archived room)
+organizer when they left comes back muted. The sweeper's `left` (archived room)
 and account deletion's keep their old behaviour; only `left_at` marks a choice.
 
 **Muting** is yours and silent: it stops the room's pushes to you — a reply to
-you, an organiser's announcement and its bell row — and nothing else. Not the
-organiser's mute (`member_status = muted`), which stops a person posting.
+you, an organizer's announcement and its bell row — and nothing else. Not the
+organizer's mute (`member_status = muted`), which stops a person posting.
 Stored in `chat_group_members.notification_preferences` as
 `{ muted, muted_until }`; a lapsed `until` reads as not muted. `until` must be
 in the future and at most a year away. The state is returned as `mute` by
@@ -1975,12 +1975,12 @@ it** (R37). Every announcement is signed with the organising org's name, so one
 from the venue would speak for somebody else. The dashboard composer and
 `/api/events/:id/announcements` always required `canEdit`; this table said
 `canOperate` until SCRUM-335, which let a venue owner post polls through
-`createPoll`. A venue owner who hosts their own event is its organiser and
+`createPoll`. A venue owner who hosts their own event is its organizer and
 announces as one.
 
 **Why `sponsored` needs its own flag.** It is a claim that somebody *paid*. If
 everyone who can announce can also mark a message sponsored, the label stops
-meaning anything and becomes a styling choice — an organiser could dress an
+meaning anything and becomes a styling choice — an organizer could dress an
 advertisement as an announcement or the reverse, and a reader has no way to tell
 which they are looking at. `organisations.may_sponsor` is off for every row and
 granted by an admin, because the word is only worth having if it is scarce.
@@ -1989,7 +1989,7 @@ It is an **organisation** flag rather than a role: the permission belongs to the
 company with the commercial agreement, not to whichever of its staff is logged
 in.
 
-**Why `system` is admin-only.** It renders as Blend'n. An organiser who could
+**Why `system` is admin-only.** It renders as Blend'n. An organizer who could
 send one could issue a safety notice, or a "verified by Blend'n" claim, in the
 platform's voice.
 
@@ -2002,12 +2002,12 @@ exception.
 
 **One refusal message for all three.** "Your organisation is not approved for
 sponsored messages" tells an attacker probing the API which flag to go after, and
-tells an organiser about a capability they cannot self-serve anyway.
+tells an organizer about a capability they cannot self-serve anyway.
 
 **The role is read from the database, not the token.** The mobile JWT carries
 `{ userId, email }` and no role, which is the right call: with a 30-day refresh
 cycle a role baked into a token outlives the decision that changed it, so an
-organiser demoted this morning would keep broadcasting until it expired.
+organizer demoted this morning would keep broadcasting until it expired.
 
 ### Polls in an event room
 
@@ -2286,12 +2286,12 @@ It returns with the invite that makes it true (SCRUM-147).
 **Retired 2026-09-18 (SCRUM-166):** `GET /events/:id/analytics`,
 `GET /events/:id/checkins/export`, `POST /events/:id/clone` — no client
 called them; the dashboard owns each job. `PATCH`/`DELETE /events/:id` and
-`POST /events/:id/announce` stay: the app's organiser tray calls them, and
+`POST /events/:id/announce` stay: the app's organizer tray calls them, and
 `mobile-organiser-routes.itest.ts` holds their organisation-shaped rules.
 
-Set by the organiser in the dashboard event form, bounded 13–25.
+Set by the organizer in the dashboard event form, bounded 13–25.
 
-**A suspended organiser's events are drafts** (SCRUM-8). Suspending an
+**A suspended organizer's events are drafts** (SCRUM-8). Suspending an
 organisation flips its published events to `draft` and reinstating flips them
 back, so everything above applies: absent from `GET /events` and
 `/events/search`, 404 on `GET /events/:id` and every participation write, the
@@ -2366,7 +2366,7 @@ be seen.
 ```json
 { "filename": "photo.jpg", "contentType": "image/jpeg", "folder": "profile|chat|events" }
 ```
-Note: `events` folder requires organiser/admin role.
+Note: `events` folder requires organizer/admin role.
 
 PUT the file to `uploadUrl` with **exactly** the `Content-Type` you asked for.
 The type is signed into the URL, so any other type, or none, is refused by
@@ -2389,7 +2389,7 @@ creatives stay public.
 ## Content Moderation (Admin API)
 
 Base URL: `/api/events/:eventId/chat/moderation`
-Requires admin session (NextAuth). Uses `canModerateChat()` RBAC (app_admin or event organiser).
+Requires admin session (NextAuth). Uses `canModerateChat()` RBAC (app_admin or event organizer).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -2716,7 +2716,7 @@ while the post beside it said when the chat had closed (SCRUM-154).
 All three return `201 { reported: true }` and are rate limited per user.
 
 **The event route takes no check-in.** Two of the three things worth reporting
-about an event — a misleading listing and a dangerous-looking organiser — are
+about an event — a misleading listing and a dangerous-looking organizer — are
 visible from the listing itself, and the point is catching them *before*
 somebody travels to a venue. Requiring attendance would restrict reporting to
 people who had already taken the risk.
@@ -2761,11 +2761,11 @@ not exist yet; see `docs/MODERATION_RESPONSE.md`.
 ### Amenities
 
 `GET /amenities` returns the seeded vocabulary; `GET /events/:id` returns what
-the organiser ticked for that event. **The list endpoint does not carry them** —
+the organizer ticked for that event. **The list endpoint does not carry them** —
 the cards draw none, and `/events` is the hottest endpoint in the product.
 
 **A vocabulary, not free text.** `events.house_rules` already exists and is a
-different thing: "open bar (from 9)" typed by one organiser and "Free drinks!!"
+different thing: "open bar (from 9)" typed by one organizer and "Free drinks!!"
 by another are two facts nothing can group, give an icon, or translate.
 
 **Retired, never deleted.** The foreign key from `event_amenities` is
@@ -2776,7 +2776,7 @@ it from every picker and leaves history intact.
 **Ordering is `sort_order`, not alphabetical**, or "Accessible Entrance" leads
 every picker and every event card in the app.
 
-**The organiser asserts; nothing is inherited.** The event stores its own rows
+**The organizer asserts; nothing is inherited.** The event stores its own rows
 and never reads through to the venue, so a venue editing its list next month
 cannot change what last month's event claimed. The venue layer that would
 *pre-tick* these is deliberately not built — see `docs/AMENITIES.md`: an unowned
@@ -2821,7 +2821,7 @@ them any more. Rows written before that are hidden, and retention removes them.
 | A reply to your room message | Its author, if still in the room and not in a block with the sender; at most once per room every 3 minutes. `data: { type: "group_message", chatGroupId, senderId, kind }` — `kind` is the room's: `event` (a venue day's room too), `crew` (with `crewId`), `blend` (with `blendId`) or `board_post`; open the tap as that room | `room:{chatGroupId}`, replaced in place |
 | A check-in | **Nobody** — the live roster carries arrivals | — |
 | An event you RSVP'd to or saved changes time or place, is cancelled, or starts in an hour | Going, maybe, waitlisted and saved | `event:{eventId}`, replaced in place: only the latest state is true |
-| An organiser announcement | Everyone in the room | Stacked with its event, never replaced |
+| An organizer announcement | Everyone in the room | Stacked with its event, never replaced |
 | Friend request / accepted, match, reveal, board, message request | The person it is about, immediately | One each |
 | A crew invite | The friend invited (`crew_invite`, `crewId`), naming nobody | One each |
 | "We're here" | Every other crew member who has not muted the crew chat or blocked the tapper (`crew_here`, `crewId`, `chatGroupId`), once per person per night; no name, no place | One each |
@@ -2876,7 +2876,7 @@ organisation's records and stay. A public URL can keep serving from Tigris'
 cache until its `max-age` runs out.
 
 Kept: the four settings booleans (how a dead account would behave, not who the
-person was), and `event_check_ins` — attendance is the organiser's history too,
+person was), and `event_check_ins` — attendance is the organizer's history too,
 and it is the co-presence that keeps a conversation open for someone who
 actually met them. What they were *open to* is only theirs, and goes.
 

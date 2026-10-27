@@ -22,3 +22,8 @@ export function noteServerDate(dateHeader: string | null | undefined, receivedAt
 export function serverNow(): number {
   return Date.now() + offsetMs
 }
+
+/** How far the server's clock is ahead of this phone's, in ms (negative: behind). */
+export function serverOffset(): number {
+  return offsetMs
+}

@@ -14,9 +14,11 @@ describe('crew and Blend rooms in the chat screen', () => {
     // A Blend answers 403 to somebody it took out; read as FORBIDDEN first (the
     // room refusals, `roomRefusalState`), that drew "You're not in this room —
     // Rejoin", a door that refuses for ever.
-    const closed = chat.indexOf('roomClosedLine(roomKind, result.errorCode)')
+    // On load the kind may be the one the refusal itself names (a bare link to a closed room, rc8 #6): `kind`.
+    const closed = chat.indexOf('roomClosedLine(kind, result.errorCode)')
+    expect(chat).toContain('const kind = roomKind ?? toldKind')
     // …and not for somebody who left on their own: they can rejoin a Blend.
-    expect(chat).toContain('roomKind && !left ? roomClosedLine(roomKind, result.errorCode)')
+    expect(chat).toContain('kind && !left ? roomClosedLine(kind, result.errorCode)')
     const forbidden = chat.indexOf('roomRefusalState(result.errorCode)')
     expect(closed).toBeGreaterThan(-1)
     expect(forbidden).toBeGreaterThan(-1)
@@ -24,8 +26,8 @@ describe('crew and Blend rooms in the chat screen', () => {
   })
 
   it('a send refused because the room closed closes the room on screen', () => {
-    // On load, on a send, and on a refused rejoin (H2).
-    expect(chat.match(/roomClosedLine\(roomKind, result\.errorCode\)/g)).toHaveLength(3)
+    // On load, on a send, on a refused rejoin (H2), and on a send refused as a removal: a crew's room has no organiser (10-8).
+    expect(chat.match(/roomClosedLine\((roomKind|kind), result\.errorCode\)/g)).toHaveLength(4)
     // Served: the closed line clears (M10).
     expect(chat).toContain('setClosedLine(null)')
     // Opened without a kind (an older push, a deep link): found in `rooms` (H2).

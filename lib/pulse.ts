@@ -6,7 +6,10 @@
  * disagree with, and a rule inside a `<Text>` is a rule nobody can test.
  */
 
-import { MONTHS, WEEKDAYS } from './time'
+import { liveWindow, type SessionSource } from './eventSession'
+import { isLiveNow, printable } from './pulseSections'
+import { distanceText } from './placesPane'
+import { calendarDate, calendarDaysBetween, dayKeyIn, eventClock, hourIn, weekdayIn, WEEKDAYS, WEEKDAYS_LONG } from './time'
 
 /**
  * The heading over one day of the Upcoming list: "Today" / "Thursday".
@@ -15,78 +18,80 @@ import { MONTHS, WEEKDAYS } from './time'
  * time — the date is said once, above the group, instead of down every card.
  * `title` is what somebody scans for; `weekday` is the quieter line beside it.
  * "Today" and "Tomorrow" take the place of a date for the same reason
- * `featuredDateLabel` uses them: "Oct 24" makes the reader do the arithmetic.
+ * `featuredDateLabel` uses them: "24 Oct" makes the reader do the arithmetic.
  *
  * The year appears only when it is not this one.
  */
 export function dayGroupLabel(
   startTime: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  timeZone?: string
 ): { title: string; weekday: string } | null {
   const d = new Date(startTime)
   if (Number.isNaN(d.getTime())) return null
 
-  const weekday = longWeekday(d)
-  const days = calendarDaysBetween(now, d)
+  const weekday = WEEKDAYS_LONG[weekdayIn(d, timeZone)]
+  const days = calendarDaysBetween(now, d, timeZone)
   if (days === 0) return { title: 'Today', weekday }
   if (days === 1) return { title: 'Tomorrow', weekday }
-  if (d.getFullYear() !== now.getFullYear()) {
-    return { title: `${shortMonth(d)} ${d.getDate()}, ${d.getFullYear()}`, weekday }
-  }
-  return { title: `${shortMonth(d)} ${d.getDate()}`, weekday }
+  return { title: calendarDate(d, { now, timeZone }), weekday }
 }
 
 /**
- * Events split into runs of the same local calendar day, in the order given.
+ * Events grouped by their local calendar day, each in its own zone, the days in calendar order.
  *
- * The caller's order is kept (the list is already sorted by start time), so
- * this only draws the lines between days — it never reorders. An event whose
- * start time cannot be read is left out rather than filed under a made-up day.
+ * The caller's order is kept within a day (every caller's list is sorted by start time, soonest first). By key, not
+ * by adjacency: in a list of mixed zones a start-time order can put Fri 24 (London) between two Sat 25s (IST), and
+ * adjacency drew "Sat 25" twice (review). An event whose start time cannot be read is left out rather than filed
+ * under a made-up day.
  */
-export function groupByDay<T extends { start_time: string }>(
+export function groupByDay<T extends { start_time: string; timezone?: string | null }>(
   items: T[],
   now: Date = new Date()
 ): { key: string; title: string; weekday: string; items: T[] }[] {
   const groups: { key: string; title: string; weekday: string; items: T[] }[] = []
+  const byKey = new Map<string, { key: string; title: string; weekday: string; items: T[] }>()
   for (const item of items) {
     const d = new Date(item.start_time)
-    const label = dayGroupLabel(item.start_time, now)
+    // Each event's day is its own zone's (RC drive 5 D-4).
+    const zone = item.timezone ?? undefined
+    const label = dayGroupLabel(item.start_time, now, zone)
     if (!label) continue
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-    const last = groups[groups.length - 1]
-    if (last && last.key === key) last.items.push(item)
-    else groups.push({ key, ...label, items: [item] })
+    const key = dayKeyIn(d, zone)
+    const group = byKey.get(key)
+    if (group) group.items.push(item)
+    else {
+      const next = { key, ...label, items: [item] }
+      byKey.set(key, next)
+      groups.push(next)
+    }
   }
-  return groups
+  // Days in calendar order (a stable sort: one zone's list is already in it).
+  const dayOf = (key: string) => {
+    const [y, m, day] = key.split('-').map(Number)
+    return Date.UTC(y, m, day)
+  }
+  return groups.sort((a, b) => dayOf(a.key) - dayOf(b.key))
 }
 
 /**
- * The time on an upcoming card: "7:00 PM", in the phone's own format.
+ * The time on an upcoming card: "7 PM", "7:30 PM" — the app's one clock (`clockTime`, r7 M7), never the phone's locale.
  *
- * Local time, like the day headings — the question is when to leave the house.
+ * In the event's own zone when it is given, as the Scene's day line says it: a Berlin phone read an IST hackathon's 9 AM
+ * doors as 4:30 AM (RC drive 5 D-4). The phone's zone only for a time with no event zone.
  */
-export function timeLabel(startTime: string): string {
-  const d = new Date(startTime)
-  if (Number.isNaN(d.getTime())) return ''
-  try {
-    return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-  } catch {
-    // No ICU (see `shortMonth`).
-    const h = d.getHours() % 12 || 12
-    return `${h}:${String(d.getMinutes()).padStart(2, '0')} ${d.getHours() < 12 ? 'AM' : 'PM'}`
-  }
-}
+export const timeLabel = (startTime: string, timeZone?: string | null): string => eventClock(startTime, timeZone)
 
 /**
  * The date on a featured card.
  *
  * "Today" and "Tomorrow" rather than a date, because a featured card is a thing
- * you might act on now and "Oct 24" makes the reader do the arithmetic. Beyond
+ * you might act on now and "24 Oct" makes the reader do the arithmetic. Beyond
  * that it is the plain short date — "in 3 days" stops being useful somewhere
  * around two and starts being vague.
  */
-export function featuredDateLabel(startTime: string, now: Date = new Date()): string {
-  return dayGroupLabel(startTime, now)?.title ?? ''
+export function featuredDateLabel(startTime: string, now: Date = new Date(), timeZone?: string | null): string {
+  return dayGroupLabel(startTime, now, timeZone ?? undefined)?.title ?? ''
 }
 
 /** What `nextUpLabel` says while the event is on — the Going hero draws a live dot beside it. */
@@ -98,7 +103,7 @@ export const HAPPENING_NOW = 'Happening now'
  * - "Happening now" — started and not yet over.
  * - "Tonight · 6:30 PM" — later today, from 5pm.
  * - "Today · 10:00 AM" / "Tomorrow · 6:30 PM".
- * - "Sat, Oct 4 · 6:30 PM" beyond that, with the year only when it is not this
+ * - "Sat 4 Oct · 6:30 PM" beyond that, with the year only when it is not this
  *   one.
  *
  * "Tonight" is a separate word from "Today" because it is the one people plan
@@ -108,8 +113,10 @@ export const HAPPENING_NOW = 'Happening now'
 export function nextUpLabel(
   startTime: string,
   endTime: string | null | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  timeZone?: string | null
 ): string {
+  const zone = timeZone ?? undefined
   const start = new Date(startTime)
   if (Number.isNaN(start.getTime())) return ''
   const end = endTime ? new Date(endTime).getTime() : NaN
@@ -117,13 +124,12 @@ export function nextUpLabel(
     return HAPPENING_NOW
   }
 
-  const time = timeLabel(startTime)
-  const days = calendarDaysBetween(now, start)
-  if (days === 0) return `${start.getHours() >= 17 ? 'Tonight' : 'Today'} · ${time}`
+  const time = timeLabel(startTime, zone)
+  const days = calendarDaysBetween(now, start, zone)
+  if (days === 0) return `${hourIn(start, zone) >= 17 ? 'Tonight' : 'Today'} · ${time}`
   if (days === 1) return `Tomorrow · ${time}`
 
-  const year = start.getFullYear() !== now.getFullYear() ? `, ${start.getFullYear()}` : ''
-  return `${shortWeekday(start)}, ${shortMonth(start)} ${start.getDate()}${year} · ${time}`
+  return `${calendarDate(start, { weekday: true, now, timeZone: zone })} · ${time}`
 }
 
 /**
@@ -152,7 +158,28 @@ export function placeLabel(event: {
   return city || null
 }
 
-const count = (n: number | null | undefined) => (typeof n === 'number' && Number.isFinite(n) && n >= 1 ? Math.floor(n) : null)
+/**
+ * The time on a home card, in the one date grammar: "Live", "9 PM" (later
+ * today), "Sat · 10:30 PM" (this week), "Sat 24 Oct · 9 PM" (further out).
+ * Local time: the question is when to leave the house.
+ */
+export function cardTime(event: SessionSource & { timezone?: string | null }, now: number): string {
+  if (isLiveNow(event, now)) return 'Live'
+  const start = new Date(liveWindow(event).start_time)
+  if (Number.isNaN(start.getTime())) return ''
+  // The event's own zone (RC drive 5 D-4).
+  const zone = event.timezone ?? undefined
+  // Named when the event's zone is not the phone's: "9 AM IST" (review LOW).
+  const clock = eventClock(start.getTime(), zone)
+  const days = calendarDaysBetween(new Date(now), start, zone)
+  if (days <= 0) return clock
+  if (days < 7) return `${WEEKDAYS[weekdayIn(start, zone)]} · ${clock}`
+  // No year, even across New Year: a card's time is one line in a fixed slot, and the weekday already says which (review L6).
+  return `${calendarDate(start, { weekday: true, year: false, timeZone: zone })} · ${clock}`
+}
+
+/** A count a card may print: five and up (`printable`); a small number of people is not said. */
+const count = printable
 
 /**
  * The card's people line (the design's EventCard pill): "{n} here now" while
@@ -161,9 +188,10 @@ const count = (n: number | null | undefined) => (typeof n === 'number' && Number
  * count (`current_capacity`, everybody who came): it read "1 joined" on an
  * event 19 were going to, and "14 here now" with 12 inside.
  *
- * Zero is `null` on purpose. "0 going" reads as a verdict on the event, and
- * every event is 0 for a while. No line reads as "this has not started filling
- * up", which is the true statement.
+ * Under five is `null` on purpose (`LIVE_FLOOR`). "0 going" reads as a verdict
+ * on the event, "3 going" names whoever they are, and every event is small for a
+ * while. No line reads as "this has not started filling up", which is the true
+ * statement.
  */
 export function peopleLabel(
   event: { here_count?: number | null; going_count?: number | null },
@@ -177,44 +205,32 @@ export function peopleLabel(
 
 /* -------------------------------------------------------------------------- */
 
-function shortMonth(d: Date): string {
-  try {
-    return d.toLocaleString(undefined, { month: 'short' })
-  } catch {
-    // `toLocaleString` with options throws on a JS engine built without ICU,
-    // which is a real configuration on older Android RN builds rather than a
-    // hypothetical. A three-letter month is recoverable without it.
-    return MONTHS[d.getMonth()]
-  }
-}
 
-function shortWeekday(d: Date): string {
-  try {
-    return d.toLocaleString(undefined, { weekday: 'short' })
-  } catch {
-    return WEEKDAYS[d.getDay()]
+/** What a compact home card draws from one event (the venue, the pills, the cover): pure, so each rule is tested. */
+export function homeCardProps(
+  event: {
+    title: string
+    venue?: { name: string } | null
+    venue_name?: string | null
+    city?: string | null
+    distance?: number | null
+    here_count?: number | null
+    going_count?: number | null
+    cover_image_url?: string | null
+  } & SessionSource,
+  now: number,
+  withDistance: boolean
+) {
+  const live = isLiveNow(event, now)
+  const here = live ? printable(event.here_count) : null
+  const going = live ? null : printable(event.going_count)
+  return {
+    title: event.title,
+    time: cardTime(event, now),
+    venue: event.venue?.name?.trim() || event.venue_name?.trim() || event.city?.trim() || '',
+    distance: withDistance ? (distanceText(event.distance) ?? undefined) : undefined,
+    here: here ?? undefined,
+    going: going ?? undefined,
+    cover: event.cover_image_url ?? null,
   }
-}
-
-function longWeekday(d: Date): string {
-  try {
-    return d.toLocaleString(undefined, { weekday: 'long' })
-  } catch {
-    return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][
-      d.getDay()
-    ]
-  }
-}
-
-/**
- * Whole calendar days from `a` to `b`, ignoring the clock.
- *
- * Not `(b - a) / 86400000`. An event at 9am tomorrow is 15 hours away at 6pm
- * today, which that arithmetic calls 0 and therefore "Today" — on a screen
- * telling somebody where to be tonight.
- */
-function calendarDaysBetween(a: Date, b: Date): number {
-  const start = new Date(a.getFullYear(), a.getMonth(), a.getDate())
-  const end = new Date(b.getFullYear(), b.getMonth(), b.getDate())
-  return Math.round((end.getTime() - start.getTime()) / 86_400_000)
 }

@@ -44,6 +44,8 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 )
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 jest.mock('../lib/paywall', () => ({ notePathname: jest.fn() }))
+// The router test harness stubs Reanimated, which has no Reduce Motion hook; the root layout reads it for its transitions.
+jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => false }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => {}),
   removePushTokenFromProfile: jest.fn(async () => {}),
@@ -61,7 +63,6 @@ jest.mock('../lib/sentry', () => ({
 jest.mock('../lib/onboardingStorage', () => ({ readOnboarding: jest.fn(async () => null) }))
 jest.mock('../lib/pushDecline', () => ({ hasDeclinedPush: jest.fn(async () => false) }))
 jest.mock('../lib/onboardingAssets', () => ({ ONBOARDING_IMAGES: [], prefetchOnboardingImages: jest.fn() }))
-jest.mock('../components/IntroAnimation', () => ({ IntroAnimation: () => null }))
 jest.mock('../components/PresenceMonitor', () => ({ PresenceMonitor: () => null }))
 jest.mock('../components/LiveAtVenue', () => ({ LiveAtVenue: () => null }))
 jest.mock('../components/SheetHost', () => ({ SheetHost: () => null }))
@@ -150,7 +151,7 @@ describe('signed out with the app still open (SCRUM-616)', () => {
   })
 
   it.each([
-    ["an event's public link", EVENT_LINK],
+    ["an event’s public link", EVENT_LINK],
     ['a friend invite', INVITE_LINK],
   ])('%s opened next goes to the entry screen and is held for after sign-in', async (_, link) => {
     const r = await renderSignedInOnSettings()
@@ -192,5 +193,51 @@ describe('signed out with the app still open (SCRUM-616)', () => {
     await setAuth(SIGNED_IN)
 
     expect(r.pathname()).toBe(EVENT_LINK)
+  })
+})
+
+describe('the socket follows who is signed in, not which object they are', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const socket = require('../lib/socketClient') as {
+    initSocketWithAppState: jest.Mock
+    cleanup: jest.Mock
+    disconnect: jest.Mock
+  }
+
+  beforeEach(() => {
+    resetPendingRoute()
+    jest.spyOn(console, 'warn').mockImplementation(() => {})
+    socket.initSocketWithAppState.mockClear()
+    socket.cleanup.mockClear()
+    socket.disconnect.mockClear()
+  })
+  afterEach(async () => {
+    await cleanup()
+    jest.useRealTimers()
+  })
+
+  it('a refreshed profile (a new user object, same id) does not tear the connection down', async () => {
+    // refreshAuthUser() after a photo or profile edit hands over a new object.
+    // Keyed on the object, that reconnected and dropped every subscription
+    // (the bell's among them) over an edit that changed nothing about who is here.
+    await renderSignedInOnSettings()
+    expect(socket.initSocketWithAppState).toHaveBeenCalledTimes(1)
+
+    await setAuth({ ...SIGNED_IN, user: { ...SIGNED_IN.user, profile: { onboarded: true, photo: 'new.jpg' } } })
+
+    expect(socket.cleanup).not.toHaveBeenCalled()
+    expect(socket.initSocketWithAppState).toHaveBeenCalledTimes(1)
+  })
+
+  it('signing out disconnects, and a different account reconnects', async () => {
+    await renderSignedInOnSettings()
+
+    await setAuth(SIGNED_OUT)
+    expect(socket.disconnect).toHaveBeenCalled()
+    expect(socket.cleanup).toHaveBeenCalledTimes(1)
+
+    socket.initSocketWithAppState.mockClear()
+    await setAuth({ ...SIGNED_IN, user: { ...SIGNED_IN.user, id: 'u2' } })
+    expect(socket.initSocketWithAppState).toHaveBeenCalledTimes(1)
   })
 })

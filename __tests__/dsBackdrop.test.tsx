@@ -91,6 +91,28 @@ describe('<Orbs>', () => {
     expect(alpha('orbs-1')).toBe(COLOR.orbVioletAlpha)
   })
 
+  // TG-14 (B-R8): Tonight and the Room are rose, and the brand set put an ember and violet glow under rose controls.
+  // Negative control: without `tint` the stops carry orange and violet and this fails.
+  it('`tint` draws every orb in the one colour, at the set\u2019s places and alphas', async () => {
+    // react-native-svg packs each stop's colour into the gradient array; one colour for both orbs is one array.
+    const gradients = () => JSON.stringify(screen.toJSON()).match(/"gradient":\[[^\]]+\]/g) ?? []
+    await render(<Orbs set="brand" time="night" testID="orbs" />)
+    await lay('orbs', 804, 874)
+    expect(new Set(gradients()).size).toBe(2)
+    await render(<Orbs set="brand" time="night" tint={COLOR.brandRose} testID="orbs" />)
+    await lay('orbs', 804, 874)
+    expect(gradients()).toHaveLength(2)
+    expect(new Set(gradients()).size).toBe(1)
+    await render(<Orbs set="moment" tint={COLOR.brandRose} testID="orbs" />)
+    await lay('orbs', 804, 874)
+    const rose = gradients()[0]
+    await render(<Orbs set="brand" time="night" tint={COLOR.brandRose} testID="orbs" />)
+    await lay('orbs', 804, 874)
+    expect(gradients()[0]).toBe(rose)
+    expect(alpha('orbs-0')).toBe(COLOR.orbOrangeAlpha)
+    expect(flat('orbs-0')).toMatchObject({ left: (70 - 180) * 2, width: 720 })
+  })
+
   it('Increase Contrast halves the orb alpha', async () => {
     jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
     await render(<Orbs set="brand" time="night" testID="orbs" />)
@@ -98,7 +120,11 @@ describe('<Orbs>', () => {
     expect(alpha('orbs-0')).toBe(COLOR.orbOrangeAlpha / 2)
   })
 
-  it('drifts on iOS: two incommensurate periods, 28 s and 36 s, back and forth for ever', async () => {
+  it.each([
+    ['iOS', () => {}],
+    ['Android (owner, 2026-10-21)', () => on('android')],
+  ])('drifts on %s: two incommensurate periods, 9 s and 11.6 s, ±40 pt, back and forth for ever', async (_, arrange) => {
+    arrange()
     await render(<Orbs set="feed" time="night" testID="orbs" />)
     await lay()
     expect(withRepeat).toHaveBeenCalledTimes(2)
@@ -106,12 +132,11 @@ describe('<Orbs>', () => {
       [-1, true],
       [-1, true],
     ])
-    expect(DURATION.ambientA).toBe(28000)
-    expect(ORBS.drift).toBe(24)
+    expect([DURATION.ambientA, DURATION.ambientB]).toEqual([9000, 11600])
+    expect(ORBS.drift).toBe(40)
   })
 
   it.each([
-    ['Android', () => on('android'), {}],
     ['Reduce Motion', () => reduceMotion.mockReturnValue(true), {}],
     ['paused (keyboard, scroll, chat, unfocused)', () => {}, { paused: true }],
   ])('is still on %s', async (_, arrange, props) => {

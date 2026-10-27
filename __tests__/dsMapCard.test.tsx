@@ -50,6 +50,26 @@ describe('<MapCard>', () => {
       color: COLOR.textPrimary,
     })
     expect(query('m-you')).toBeTruthy()
+    // One line with an ellipsis, never two lines clipped mid-word (r7 L4).
+    expect(screen.getByText('12th Main, Indiranagar', { includeHiddenElements: true }).props.numberOfLines).toBe(1)
+  })
+
+  it('the pill and the address share one bottom row, the address taking what is left: no overlap at 1.3× / 360 (rc7 D5)', async () => {
+    await render(<MapCard venue="Toit" address="8, Allied Grande Plaza, Koramangala" testID="m" />)
+    expect(StyleSheet.flatten(screen.getByTestId('m-foot', { includeHiddenElements: true }).props.style)).toMatchObject({ position: 'absolute', flexDirection: 'row' })
+    const address = StyleSheet.flatten(screen.getByText('8, Allied Grande Plaza, Koramangala', { includeHiddenElements: true }).props.style)
+    expect(address.position).toBeUndefined()
+  })
+
+  // rc8 10a: right-aligned and ellipsized, Android drew the line at its full width, so "8," lost its "8" at 1.3× / 360.
+  // The address hugs its text and shrinks into what the pill leaves, pushed right by its margin.
+  // Negative control: the rc7 style (`flex: 1, textAlign: 'right'`) fails it.
+  it('the address is pushed right by its margin, never right-aligned text, so Android never clips its first character (rc8 10a)', async () => {
+    await render(<MapCard venue="Toit" address="8, Allied Grande Plaza, Koramangala" testID="m" />)
+    const address = StyleSheet.flatten(screen.getByText('8, Allied Grande Plaza, Koramangala', { includeHiddenElements: true }).props.style)
+    expect(address).toMatchObject({ flexShrink: 1, marginLeft: 'auto' })
+    expect(address.textAlign).not.toBe('right')
+    expect(address.flex).toBeUndefined()
   })
 
   it('focused rings it; Increase Contrast adds the 50% hairline', async () => {

@@ -40,7 +40,7 @@ const room = (patch: Partial<LiveRoster> = {}): LiveRoster => ({
 })
 
 describe('nextHereCount', () => {
-  it("takes the server's number whenever it sends one", () => {
+  it("takes the server’s number whenever it sends one", () => {
     expect(nextHereCount(5, 12, 1)).toBe(12)
     expect(nextHereCount(5, 0, -1)).toBe(0)
   })
@@ -77,7 +77,7 @@ describe('applyArrival', () => {
     expect(next.hereCount).toBe(4)
   })
 
-  it("prefers the server's count to +1", () => {
+  it("prefers the server’s count to +1", () => {
     expect(applyArrival(room(), arrival('c', { hereCount: 40 }), ME).hereCount).toBe(40)
   })
 
@@ -126,7 +126,7 @@ describe('applyCheckout', () => {
     expect(next.hereCount).toBe(3)
   })
 
-  it("prefers the server's count", () => {
+  it("prefers the server’s count", () => {
     expect(applyCheckout(room(), { userId: 'a', hereCount: 20 }, ME).hereCount).toBe(20)
   })
 

@@ -10,6 +10,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
+import { HueProvider } from '../components/ds/shared'
 import { ProgressBar } from '../components/ds/ProgressBar'
 import { Stepper } from '../components/ds/Stepper'
 import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPRING } from '../lib/design/tokens'
@@ -49,7 +50,7 @@ describe('<Stepper>', () => {
     await draw()
     expect(flat('s-minus')).toMatchObject({ width: SIZE.control, height: SIZE.control, backgroundColor: COLOR.surfaceSunken })
     const n = StyleSheet.flatten(screen.getByText('2', { includeHiddenElements: true }).props.style)
-    expect(n).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontVariant: ['tabular-nums'] })
+    expect(n).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontVariant: ['tabular-nums'], fontSize: 20 })
   })
 
   it('on a glass sheet the discs are 8% white', async () => {
@@ -77,6 +78,53 @@ describe('<Stepper>', () => {
     expect(StyleSheet.flatten(screen.getByText('1', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textPrimary)
     await draw({ value: 20, onChange })
     expect(flat('s-plus').opacity).toBe(OPACITY.disabled)
+  })
+
+  describe('motion #40: the nudge at a bound and the digit roll', () => {
+    const spring = Reanimated.withSpring as jest.Mock
+    const nudges = () => spring.mock.calls.filter(([to]) => to === 4 || to === -4)
+
+    it('a press at the ceiling nudges the number 4 pt toward plus on M.press and lets it back, with no haptic and no change', async () => {
+      const onChange = jest.fn()
+      await draw({ value: 20, onChange })
+      spring.mockClear()
+      await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
+      expect(spring).toHaveBeenCalledWith(4, expect.objectContaining({ stiffness: SPRING.press.stiffness }))
+      expect(spring).toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.press.stiffness }))
+      expect(onChange).not.toHaveBeenCalled()
+      expect(select).not.toHaveBeenCalled()
+    })
+
+    it('a press at the floor nudges toward minus', async () => {
+      await draw({ value: 1 })
+      spring.mockClear()
+      await fireEvent.press(screen.getByTestId('s-minus', HIDDEN))
+      expect(spring).toHaveBeenCalledWith(-4, expect.anything())
+    })
+
+    it('Reduce Motion: no nudge', async () => {
+      reduceMotion.mockReturnValue(true)
+      await draw({ value: 20 })
+      spring.mockClear()
+      await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
+      expect(nudges()).toHaveLength(0)
+    })
+
+    it('a step inside the range does not nudge; a disabled stepper does not either', async () => {
+      await draw({ value: 5 })
+      spring.mockClear()
+      await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
+      expect(nudges()).toHaveLength(0)
+      await draw({ value: 20, disabled: true })
+      await fireEvent.press(screen.getByTestId('s-plus', HIDDEN))
+      expect(nudges()).toHaveLength(0)
+    })
+
+    it('the number is a rolling number: the digit that changes rolls out and in', async () => {
+      const view = await draw({ value: 2 })
+      await view.rerender(<Stepper label="Spaces" value={3} onChange={jest.fn()} testID="s" />)
+      expect(screen.getByTestId('s-number-0-out', HIDDEN)).toBeTruthy()
+    })
   })
 
   it('the discs are not separate elements on Android either', async () => {
@@ -119,10 +167,10 @@ describe('<Stepper>', () => {
 })
 
 describe('<ProgressBar>', () => {
-  it('a 4 pt surfaceSunken track with a white fill, hidden from screen readers', async () => {
+  it('a 4 pt surfaceSunken track with a fill in the hue, hidden from screen readers', async () => {
     await render(<ProgressBar progress={0.25} testID="p" />)
     expect(flat('p')).toMatchObject({ height: 4, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surfaceSunken })
-    expect(flat('p-fill').backgroundColor).toBe(COLOR.textPrimary)
+    expect(flat('p-fill').backgroundColor).toBe(COLOR.brandOrange)
     expect(screen.getByTestId('p', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
     expect(Reanimated.getAnimatedStyle(screen.getByTestId('p-fill', { includeHiddenElements: true })).width).toBe('25%')
   })
@@ -174,5 +222,19 @@ describe('Increase Contrast', () => {
     expect(flat('s-minus').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
     await render(<ProgressBar progress={0.5} testID="p" />)
     expect(flat('p').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+describe('<ProgressBar> in a hue', () => {
+  it.each([
+    ['rose', COLOR.brandRose],
+    ['violet', COLOR.brandViolet],
+  ] as const)('the fill is %s’s edge colour', async (hue, color) => {
+    await render(
+      <HueProvider value={hue}>
+        <ProgressBar progress={0.5} testID="p" />
+      </HueProvider>
+    )
+    expect(flat('p-fill').backgroundColor).toBe(color)
   })
 })

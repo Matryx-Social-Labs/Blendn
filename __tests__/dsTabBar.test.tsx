@@ -6,12 +6,18 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
-import { TabBar } from '../components/ds/TabBar'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import * as Reanimated from 'react-native-reanimated'
+
+import { pillX, TabBar, tabBarGeometry } from '../components/ds/TabBar'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
+jest.mock('react-native-reanimated', () => {
+  const actual = jest.requireActual('react-native-reanimated')
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withSpring: jest.fn(actual.withSpring) }
+})
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
@@ -36,9 +42,13 @@ const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { va
 
 const IDLE = { state: 'idle', eventId: null, badge: 0 } as const
 
+const withSpring = Reanimated.withSpring as jest.Mock
+const reduceMotion = Reanimated.useReducedMotion as jest.Mock
 let haptics: jest.SpyInstance[]
 beforeEach(() => {
   on('ios')
+  reduceMotion.mockReturnValue(false)
+  withSpring.mockClear()
   haptics = (['select', 'primary', 'disc'] as const).map((k) => jest.spyOn(H, k).mockImplementation(() => {}))
 })
 
@@ -69,7 +79,7 @@ describe('<TabBar>', () => {
 
   it('iOS: the selected tab is a 22% white pill and a 700 label; the rest 500 in textSecondary', async () => {
     await draw()
-    expect(flat('tabs-pulse-pill').backgroundColor).toBe(COLOR.tabCapsule)
+    expect(flat('tabs-pill').backgroundColor).toBe(COLOR.tabCapsule)
     expect(label('Pulse')).toMatchObject({ fontFamily: FONT_FAMILY.brand[700], color: COLOR.textPrimary })
     expect(label('Going')).toMatchObject({ fontFamily: FONT_FAMILY.brand[500], color: COLOR.textSecondary })
   })
@@ -77,7 +87,7 @@ describe('<TabBar>', () => {
   it('Android: a 56 × 32 indicator behind the glyph, and the label is not bold (§13)', async () => {
     on('android')
     await draw()
-    expect(flat('tabs-pulse-pill')).toMatchObject({ width: 56, height: 32 })
+    expect(flat('tabs-pill')).toMatchObject({ width: 56, height: 32 })
     expect(label('Pulse').fontFamily).toBe(FONT_FAMILY.brand[500])
   })
 
@@ -142,5 +152,62 @@ describe('geometry: five equal slots, the disc in the middle one (owner override
     const width = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style).width
     const slots = ['pulse', 'going', 'banter', 'me'].map((k) => width(`tabs-${k}-cell`)).concat(width('tabs-disc-slot'))
     expect(new Set(slots).size).toBe(1)
+  })
+})
+
+
+describe('the selection pill slides (DS #2: the capsule moves on M.snap)', () => {
+  const WIDTH = 402 // the jest window
+  const { cell } = tabBarGeometry(Dimensions.get('window').width)
+  const translateX = () => (Reanimated.getAnimatedStyle(screen.getByTestId('tabs-pill', { includeHiddenElements: true })) as { transform: { translateX: number }[] }).transform[0].translateX
+
+  it('is one pill, not one per tab', async () => {
+    await draw({ selected: 'going' })
+    expect(screen.getAllByTestId(/-pill$/, { includeHiddenElements: true })).toHaveLength(1)
+    expect(screen.queryByTestId('tabs-going-pill')).toBeNull()
+  })
+
+  it('rests under the selected tab’s slot: its centre, the disc’s slot skipped', async () => {
+    await draw({ selected: 'banter' })
+    // Slot 3 (the disc owns 2), centred, after the row’s 4 pt of padding.
+    expect(translateX()).toBe(SPACE.xs + cell * 3.5 - SIZE.primary / 2)
+    expect(pillX('pulse', cell, SIZE.primary)).toBe(SPACE.xs + cell * 0.5 - SIZE.primary / 2)
+    expect(pillX('me', cell, SIZE.primary)).toBe(SPACE.xs + cell * 4.5 - SIZE.primary / 2)
+    void WIDTH
+  })
+
+  it('a new selection springs to the new slot on M.snap, from where it is', async () => {
+    const view = await draw({ selected: 'pulse' })
+    expect(withSpring).not.toHaveBeenCalled()
+    await view.rerender(<TabBar selected="me" onSelect={jest.fn()} disc={{ target: IDLE, onPress: jest.fn() }} testID="tabs" />)
+    expect(withSpring).toHaveBeenCalledWith(pillX('me', cell, SIZE.primary), expect.objectContaining({ stiffness: SPRING.snap.stiffness, damping: SPRING.snap.damping }))
+  })
+
+  it('a second switch mid-flight retargets: each selection springs to its own slot', async () => {
+    const view = await draw({ selected: 'pulse' })
+    for (const to of ['going', 'me'] as const) await view.rerender(<TabBar selected={to} onSelect={jest.fn()} disc={{ target: IDLE, onPress: jest.fn() }} testID="tabs" />)
+    expect(withSpring.mock.calls.map(([x]) => x)).toEqual([pillX('going', cell, SIZE.primary), pillX('me', cell, SIZE.primary)])
+  })
+
+  it('Reduce Motion: it jumps, with no spring', async () => {
+    reduceMotion.mockReturnValue(true)
+    const view = await draw({ selected: 'pulse' })
+    await view.rerender(<TabBar selected="me" onSelect={jest.fn()} disc={{ target: IDLE, onPress: jest.fn() }} testID="tabs" />)
+    expect(withSpring).not.toHaveBeenCalled()
+  })
+
+  it('Android: the 56 × 32 indicator slides the same way', async () => {
+    on('android')
+    const view = await draw({ selected: 'pulse' })
+    await view.rerender(<TabBar selected="going" onSelect={jest.fn()} disc={{ target: IDLE, onPress: jest.fn() }} testID="tabs" />)
+    expect(withSpring).toHaveBeenCalledWith(pillX('going', cell, SIZE.primary), expect.any(Object))
+    expect(flat('tabs-pill')).toMatchObject({ width: 56, height: 32 })
+  })
+
+  it('the tabs’ content crossfades, never slides (source check on the layout)', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../app/(tabs)/_layout.tsx'), 'utf8')
+    expect(src).toMatch(/animation: 'fade'/)
+    expect(src).toMatch(/transitionSpec: \{ animation: 'timing'/)
+    expect(src).not.toMatch(/animation: 'shift'/)
   })
 })

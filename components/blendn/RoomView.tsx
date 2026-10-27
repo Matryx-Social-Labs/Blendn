@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
+import Animated, { Easing, LinearTransition, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { DURATION, EASING, RISE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import type { CrewCard } from '../../lib/crews'
@@ -17,6 +17,7 @@ import { SOCKET_GRACE_MS } from '../RealtimeStatusBanner'
 import { ChatDock, type DockLine } from './ChatDock'
 import { EveryoneHead, GRID_GAP, MeetNextRow, RoomGridFace, RoomHero, ShowMore, useGridCell } from './RoomSections'
 import { useStageScroll } from './RoomStage'
+import { useReducedMotion } from '../../lib/motion'
 
 /*
  * Motion #9, after the pour: the Room's hero rises 12 on M.travel and its
@@ -24,6 +25,8 @@ import { useStageScroll } from './RoomStage'
  */
 const HERO_RISE = SPACE.md
 const SECTIONS_AT = 60
+/** The content under a section that appears or goes (Friends here) moves on `M.settle`, never jumps. */
+const SETTLE = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 
 /**
  * #9's entrance on shared values, not layout animations: the Room can be
@@ -95,6 +98,10 @@ export type RoomViewProps = {
   onView: (view: 'people' | 'crews') => void
   /** Your crews here, in the People view (CrewStrip). */
   crewStrip?: ReactNode
+  /** Friends here (the friends at this event who let friends see them): after the crew strip, above Meet next. Null draws nothing, no gap. */
+  friendsHere?: ReactNode
+  /** The section has someone in it: the empty state then says nobody *new* (a friend is here, so the room is not empty). */
+  friendsPresent?: boolean
   /** The Crews view: its head, its cards, its foot. */
   crewsHead?: ReactNode
   crewCards: CrewCard[]
@@ -143,6 +150,7 @@ export function RoomView(props: RoomViewProps) {
   const cell = useGridCell()
   const { view, people, enter, hidden = false } = props
   const entrance = useEntrance(enter, hidden)
+  const reduceMotion = useReducedMotion()
   const crewsView = view === 'crews'
   const empty = people.length === 0
 
@@ -177,11 +185,13 @@ export function RoomView(props: RoomViewProps) {
       {crewsView ? (
         props.crewsHead
       ) : (
-        <Animated.View style={[styles.sections, entrance.sections[2]]}>
+        <Animated.View style={[styles.sections, entrance.sections[2]]} layout={reduceMotion ? undefined : SETTLE}>
           {props.crewStrip}
+          {/* A friend is not a stranger card: they are here (plans/friends-in-room.md), even when nobody else is. */}
+          {props.friendsHere}
           {empty ? (
             <View style={styles.empty}>
-              <StateScreen icon="users" title="Nobody else is here yet" body="People show up as they check in." testID="room-empty" />
+              <StateScreen icon="users" title={props.friendsPresent ? 'No one new here yet' : 'Nobody else is here yet'} body="People show up as they check in." testID="room-empty" />
             </View>
           ) : (
             <>
@@ -208,6 +218,8 @@ export function RoomView(props: RoomViewProps) {
           scrollEventThrottle={scrollEventThrottle}
           bounces={false}
           showsVerticalScrollIndicator={false}
+          // A scrolled list keeps its place when a section above it arrives or goes: nothing jumps under a thumb.
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           columnWrapperStyle={crewsView ? undefined : styles.gridRow}
           contentContainerStyle={{ paddingTop: props.topInset, paddingBottom: props.bottomInset + SPACE.xxxl * 2 }}
           ListHeaderComponent={header}

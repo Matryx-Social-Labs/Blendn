@@ -8,7 +8,21 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, Text, TextInput } from 'react-native'
 
 import { Material, materialTier } from '../components/ui/Material'
-import { MATERIAL } from '../lib/design/tokens'
+import { COLOR, MATERIAL } from '../lib/design/tokens'
+import { tint } from '../lib/theme'
+
+const channel = (c: number) => {
+  const x = c / 255
+  return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4
+}
+const luminance = (hex: string) => {
+  const n = parseInt(hex.slice(1, 7), 16)
+  return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255)
+}
+const contrast = (a: string, b: string) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
 
 jest.mock('expo-glass-effect', () => {
   const { View } = jest.requireActual('react-native')
@@ -71,6 +85,26 @@ describe('<Material>', () => {
     expect(screen.getByTestId('glass').props.glassEffectStyle).toBe('clear')
   })
 
+  it('media glass has an ink floor, so a white glyph on it reads at 3:1 even over a white photo (B-S9)', async () => {
+    on('ios', { glass: true })
+    await draw('media')
+    const floor = StyleSheet.flatten(screen.getByTestId('material-media-floor', { includeHiddenElements: true }).props.style)
+    expect(floor.backgroundColor).toBe(tint(COLOR.ink, MATERIAL.glassDimMedia))
+    // The floor alone, composited over pure white (the clear glass's own 25% tint only darkens it further).
+    const over = (alpha: number, ink: string, ground: number) => Math.round(alpha * parseInt(ink.slice(1, 3), 16) + (1 - alpha) * ground)
+    const v = over(MATERIAL.glassDimMedia, COLOR.ink, 255).toString(16).padStart(2, '0')
+    expect(contrast(COLOR.textPrimary, `#${v}${v}${v}`)).toBeGreaterThanOrEqual(3)
+  })
+
+  it('no other role, and no other tier, draws the floor', async () => {
+    on('ios', { glass: true })
+    await draw('bar')
+    expect(screen.queryByTestId('material-media-floor', { includeHiddenElements: true })).toBeNull()
+    on('android')
+    await draw('media')
+    expect(screen.queryByTestId('material-media-floor', { includeHiddenElements: true })).toBeNull()
+  })
+
   it('is a blur tinted harder on older iOS, at the full system material', async () => {
     on('ios')
     await draw('sheet')
@@ -129,16 +163,47 @@ describe('<Material>', () => {
 
   it('is Tier B solid on Android: near-opaque, a top hairline and the inner highlight', async () => {
     on('android')
-    await draw('control')
-    expect(flat('material')).toMatchObject({ backgroundColor: MATERIAL.solidControl, borderTopColor: MATERIAL.solidTopHairline })
+    await draw('sheet')
+    expect(flat('material')).toMatchObject({ backgroundColor: MATERIAL.solidSheet, borderTopColor: MATERIAL.solidTopHairline })
     expect(screen.getByTestId('highlight').props.colors).toEqual(MATERIAL.solidInnerHighlight.colors)
     expect(screen.queryByTestId('glass')).toBeNull()
     expect(screen.queryByTestId('blur')).toBeNull()
+  })
+
+  it.each(['control', 'media'] as const)('a solid %s circle is rimmed all round, not a top arc that reads as a half-moon (r7 L14, L13)', async (role) => {
+    on('android')
+    await draw(role)
+    expect(flat('material')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.solidTopHairline })
+  })
+
+  it('a solid bar keeps its top hairline only', async () => {
+    on('android')
+    await draw('bar')
+    expect(flat('material').borderWidth).toBeUndefined()
+    expect(flat('material').borderTopWidth).toBe(1)
   })
 
   it.each(['ios', 'android'] as const)('never sets an opacity of its own (%s)', async (os) => {
     on(os)
     await draw('toast')
     expect(flat('material').opacity).toBeUndefined()
+  })
+})
+
+describe('the solid tier is opaque (visual QA r5: white text ghosted through the Android tab bar, the Scene dock and the Plus dock)', () => {
+  const alpha = (css: string) => {
+    if (/^#[0-9a-f]{6}$/i.test(css)) return 1
+    const m = css.match(/^rgba\([^)]*,\s*([\d.]+)\)$/)
+    return m ? Number(m[1]) : 1
+  }
+
+  it('every solid role is fully opaque: "solid" is the tier’s whole contract', async () => {
+    const { SOLID } = jest.requireActual('../components/ui/Material') as typeof import('../components/ui/Material')
+    for (const [role, css] of Object.entries(SOLID)) expect([role, alpha(css)]).toEqual([role, 1])
+  })
+
+  it('the token itself, in the design source and in the generated file, is #1A1818', () => {
+    expect(MATERIAL.solidBar).toBe('#1A1818')
+    expect(require('fs').readFileSync(require('path').join(__dirname, '..', 'design', 'tokens.json'), 'utf8')).toContain('"solid-bar": "#1A1818"')
   })
 })

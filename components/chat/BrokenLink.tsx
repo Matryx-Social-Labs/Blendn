@@ -9,7 +9,7 @@ export function BrokenLink() {
   const back = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))
   return (
     <View style={styles.screen}>
-      <StateScreen variant="screen" icon="link-2-off" title="This link doesn’t work" body="It doesn’t lead to a chat." actions={[{ label: 'Back', onPress: back }]} testID="chat-broken-link" />
+      <StateScreen variant="screen" icon="link-2-off" title="This link doesn’t work" body="It doesn’t lead to a chat." actions={[{ label: 'Back', kind: 'secondary', onPress: back }]} testID="chat-broken-link" />
     </View>
   )
 }

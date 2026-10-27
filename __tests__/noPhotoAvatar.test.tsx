@@ -23,14 +23,15 @@ import { OptimizedImage } from '../components/OptimizedImage'
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 
 describe('OptimizedImage with nothing to load', () => {
-  it.each([['empty string', ''], ['empty uri', { uri: '' }]])('does not spin for an %s', async (_label, source) => {
+  // The placeholder is a still shape hidden from screen readers (DS #17), so it is found by testID, not a label.
+  it.each([['empty string', ''], ['empty uri', { uri: '' }]])('draws no placeholder for an %s', async (_label, source) => {
     await render(<OptimizedImage source={source as never} width={48} height={48} />)
-    expect(screen.queryByLabelText('Loading image')).toBeNull()
+    expect(screen.queryByTestId('image-placeholder', { includeHiddenElements: true })).toBeNull()
   })
 
-  it('still spins while a real image loads', async () => {
+  it('draws the placeholder while a real image loads', async () => {
     await render(<OptimizedImage source="https://example.com/a.jpg" width={48} height={48} />)
-    expect(screen.getByLabelText('Loading image')).toBeTruthy()
+    expect(screen.getByTestId('image-placeholder', { includeHiddenElements: true })).toBeTruthy()
   })
 })
 

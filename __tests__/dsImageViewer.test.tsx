@@ -15,6 +15,7 @@ import * as Reanimated from 'react-native-reanimated'
 import { clampPan, fittedSize, ImageViewer } from '../components/ds/ImageViewer'
 import { SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { dismissModals } from '../lib/pendingRoute'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -152,4 +153,11 @@ describe('<ImageViewer>', () => {
     await render(viewer())
     expect(withSpring).not.toHaveBeenCalled()
   })
+})
+
+it('a link closes it through its own close (RC drive 6)', async () => {
+  const onClose = jest.fn()
+  await render(viewer({ onClose }))
+  await act(async () => dismissModals())
+  expect(onClose).toHaveBeenCalledTimes(1)
 })

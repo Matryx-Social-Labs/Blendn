@@ -18,6 +18,8 @@ import { MomentReady } from '../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap'
 import { COLOR, DURATION, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { markOffline, markOnline } from '../lib/networkStatus'
+import { dismissModals } from '../lib/pendingRoute'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -138,6 +140,7 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     await advance(1)
     expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
     screenReader.mockResolvedValue(true)
+    await screen.unmount() // one Modal on screen at a time (lib/modalTurn): the first goes before the next
     await render(match().el)
     await act(async () => {})
     expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
@@ -511,6 +514,30 @@ describe('<MomentRecap> · That’s a wrap (#43)', () => {
     expect(screen.getByRole('button', { name: 'Back to tonight' })).toBeTruthy()
   })
 
+  it('R3: People from tonight sits between Rate and Back, and is absent without a deck', async () => {
+    await render(recap().el)
+    expect(screen.queryByRole('button', { name: 'People from tonight' })).toBeNull()
+    const onPeople = jest.fn()
+    await render(recap({ onPeople }).el)
+    await fireEvent.press(screen.getByRole('button', { name: 'People from tonight' }))
+    expect(onPeople).toHaveBeenCalledTimes(1)
+    const order = screen.getAllByRole('button').map((b) => b.props.accessibilityLabel)
+    expect(order.indexOf('People from tonight')).toBeGreaterThan(order.indexOf('Rate who you met'))
+    expect(order.indexOf('People from tonight')).toBeLessThan(order.indexOf('Back to tonight'))
+  })
+
+  it('R6: offline, the page keeps what it had and says so; online, no banner', async () => {
+    await render(recap().el)
+    expect(screen.queryByTestId('w-offline', HIDDEN)).toBeNull()
+    await act(async () => markOffline())
+    expect(screen.getByText('Offline. Showing what loaded last.')).toBeTruthy()
+    // Reads stay: the night and both actions are still there.
+    expect(screen.getByText('That’s a wrap')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Back to tonight' })).toBeTruthy()
+    await act(async () => markOnline())
+    expect(screen.queryByText('Offline. Showing what loaded last.')).toBeNull()
+  })
+
   it('no photo: the creature; no check-in time: no time tile', async () => {
     await render(recap({ face: { kind: 'creature', pseudonym: 'Cosmic Panda' }, minutes: null }).el)
     expect(screen.queryByTestId('w-face-body', HIDDEN)).toBeNull()
@@ -549,5 +576,25 @@ describe('/preview/ds-p5', () => {
     expect(screen.getByTestId('ds-recap-rated', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('ds-orbs-feed-late', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('ds-emblem-orbit-field', HIDDEN)).toBeTruthy()
+  })
+})
+
+describe('a link and a moment (RC drive 6)', () => {
+  it('closes the match by its own close, once: it is not shown again or asked again', async () => {
+    const { p, el } = match()
+    const view = await render(el)
+    await act(async () => dismissModals())
+    expect(p.onClose).toHaveBeenCalledTimes(1)
+    expect(p.onSayHi).not.toHaveBeenCalled()
+    await view.unmount()
+    await act(async () => dismissModals())
+    expect(p.onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("leaves onboarding's Ready alone: its only way out (skip) navigates, so a link does not take it", async () => {
+    const onDone = jest.fn()
+    await render(<MomentReady name="Sam" onDone={onDone} testID="ready" />)
+    await act(async () => dismissModals())
+    expect(onDone).not.toHaveBeenCalled()
   })
 })

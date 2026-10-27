@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { IconButton } from './IconButton'
 import { BUBBLE, plural, timeFont } from './chatShared'
-import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
 /** The page's media corner (12) and the announcement's mark (a 28 pt white square, 8 pt corners). */
 const MEDIA_RADIUS = 12
@@ -82,13 +82,13 @@ export function BroadcastNotice({ kind, from, text, time, media, testID }: Broad
           ) : (
             <Icon name="megaphone" size={ICON.inline} color={COLOR.textTertiary} />
           )}
-          <Text style={[font('label', bold), { color: announcement || contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{label}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: announcement || contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{label}</Text>
         </View>
-        <Text style={[font('body', bold), { color: announcement ? COLOR.textPrimary : COLOR.textSecondary }]}>{text}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: announcement ? COLOR.textPrimary : COLOR.textSecondary }]}>{text}</Text>
       </View>
       {media ? <Media media={media} testID={testID && `${testID}-media`} /> : null}
       {/* Read with the words above; the media's own controls come between. */}
-      <Text accessibilityElementsHidden importantForAccessibility="no" style={timeFont(bold)}>
+      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} accessibilityElementsHidden importantForAccessibility="no" style={timeFont(bold)}>
         {time}
       </Text>
     </View>
@@ -150,7 +150,7 @@ function Video({ media, testID }: { media: Extract<BroadcastMedia, { kind: 'vide
       {state === 'failed' ? (
         <View style={styles.center} accessibilityLiveRegion="polite">
           <Icon name="cloud-off" color={COLOR.textSecondary} />
-          <Text style={[font('meta', bold), styles.secondary]}>Couldn’t load this</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Couldn’t load this</Text>
           <Pressable
             ref={retry}
             accessibilityRole="button"
@@ -160,7 +160,7 @@ function Video({ media, testID }: { media: Extract<BroadcastMedia, { kind: 'vide
               setState('playing')
             }}
           >
-            <Text style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.white]}>Try again</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.white]}>Try again</Text>
           </Pressable>
         </View>
       ) : null}

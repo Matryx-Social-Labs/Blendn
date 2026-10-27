@@ -92,12 +92,15 @@ export async function canBuyAs(userId: string | null | undefined): Promise<boole
   }
 }
 
+/** The Night Pass's package id in the offering: a one-off, granted by product id (the `plus` entitlement is the subscriptions'). */
+export const NIGHT_PASS_ID = 'night_pass'
+
 /** The packages the paywall sells, in this order. Anything else in the offering is not shown. */
 export const PLUS_PACKAGES = [
-  { id: '$rc_monthly', title: 'Blendn+ · Monthly', length: '1 month, renews monthly' },
-  { id: '$rc_three_month', title: 'Blendn+ · 3 months', length: '3 months, renews every 3 months' },
-  { id: '$rc_annual', title: 'Blendn+ · Yearly', length: '1 year, renews yearly' },
-  { id: 'night_pass', title: 'Night Pass · 24 hours', length: '24 hours, does not renew' },
+  { id: '$rc_monthly', title: 'Blend’n+ · Monthly', length: '1 month, renews monthly' },
+  { id: '$rc_three_month', title: 'Blend’n+ · 3 months', length: '3 months, renews every 3 months' },
+  { id: '$rc_annual', title: 'Blend’n+ · Yearly', length: '1 year, renews yearly' },
+  { id: NIGHT_PASS_ID, title: 'Night Pass · 24 hours', length: '24 hours, does not renew' },
 ] as const
 
 export type PlusOffer = { pkg: PurchasesPackage; title: string; length: string; price: string }
@@ -136,7 +139,7 @@ export type PurchaseOutcome =
   | { kind: 'cancelled' }
   | { kind: 'failed'; message: string; manage?: boolean }
 
-const NOT_SIGNED_IN = "We couldn't connect your account to the store. Close this and try again."
+const NOT_SIGNED_IN = "We couldn’t connect your account to the store. Close this and try again."
 
 /** What the store said, in words a person can act on. `manage`: point them at Manage subscription. */
 export function purchaseFailure(code: string | undefined): { message: string; manage?: boolean } {
@@ -144,13 +147,13 @@ export function purchaseFailure(code: string | undefined): { message: string; ma
     case PURCHASES_ERROR_CODE.PRODUCT_ALREADY_PURCHASED_ERROR:
       return { message: 'You already have this. See it under Manage subscription.', manage: true }
     case PURCHASES_ERROR_CODE.RECEIPT_ALREADY_IN_USE_ERROR:
-      return { message: "This store account's purchase belongs to another Blendn account. Sign in to that one to use it." }
+      return { message: "This store account’s purchase belongs to another Blendn account. Sign in to that one to use it." }
     case PURCHASES_ERROR_CODE.PURCHASE_NOT_ALLOWED_ERROR:
-      return { message: "Purchases aren't allowed on this device. Check Screen Time or your store's settings." }
+      return { message: "Purchases aren’t allowed on this device. Check Screen Time or your store’s settings." }
     case PURCHASES_ERROR_CODE.NETWORK_ERROR:
       return { message: "No connection to the store. Check your connection and try again." }
     default:
-      return { message: "The purchase didn't go through. Try again." }
+      return { message: "The purchase didn’t go through. Try again." }
   }
 }
 
@@ -175,8 +178,37 @@ export type RestoreOutcome = { kind: 'restored' } | { kind: 'nothing' } | { kind
  * anything decides only what is said; what unlocks is the server's, once the
  * store tells RevenueCat and RevenueCat tells the server.
  */
-export async function restore(userId: string | null | undefined): Promise<RestoreOutcome> {
-  if (!configured) return { kind: 'failed', message: "Purchases aren't available yet." }
+export async function restore(
+  userId: string | null | undefined,
+  /** The store's answer when it lands after the 20 s "didn't answer": it replaces that message, it is never dropped. */
+  onLate?: (outcome: RestoreOutcome) => void
+): Promise<RestoreOutcome> {
+  if (!configured) return { kind: 'failed', message: "Purchases aren’t available yet." }
+  // A store that never answers (a sign-in sheet nobody sees, a stalled sandbox) ends in words, not a spinner.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let timedOut = false
+  const silent = new Promise<RestoreOutcome>((resolve) => {
+    timer = setTimeout(() => {
+      timedOut = true
+      resolve({ kind: 'failed', message: RESTORE_SILENT })
+    }, RESTORE_TIMEOUT_MS)
+  })
+  const answer = restoreFor(userId).then((outcome) => {
+    if (timedOut) onLate?.(outcome)
+    return outcome
+  })
+  try {
+    return await Promise.race([answer, silent])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** How long Restore waits for the store before it says so. */
+export const RESTORE_TIMEOUT_MS = 20_000
+export const RESTORE_SILENT = "The store didn’t answer. Try again."
+
+async function restoreFor(userId: string | null | undefined): Promise<RestoreOutcome> {
   if (!(await canBuyAs(userId))) return { kind: 'failed', message: NOT_SIGNED_IN }
   try {
     const info = await Purchases.restorePurchases()
@@ -184,12 +216,12 @@ export async function restore(userId: string | null | undefined): Promise<Restor
   } catch (error) {
     const code = (error as { code?: string })?.code
     Logger.warn('plus', 'Restore failed', { code })
-    return { kind: 'failed', message: code === PURCHASES_ERROR_CODE.NETWORK_ERROR ? purchaseFailure(code).message : "Couldn't reach the store. Try again." }
+    return { kind: 'failed', message: code === PURCHASES_ERROR_CODE.NETWORK_ERROR ? purchaseFailure(code).message : "Couldn’t reach the store. Try again." }
   }
 }
 
 function hasSomethingActive(info: CustomerInfo): boolean {
-  return Object.keys(info.entitlements.active).length > 0 || info.activeSubscriptions.length > 0
+  return Object.keys(info?.entitlements?.active ?? {}).length > 0 || (info?.activeSubscriptions?.length ?? 0) > 0
 }
 
 const STORE_SUBSCRIPTIONS = {

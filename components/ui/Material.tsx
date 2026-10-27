@@ -4,7 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useState } from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, View, type ViewProps } from 'react-native'
 
-import { MATERIAL } from '../../lib/design/tokens'
+import { COLOR, MATERIAL } from '../../lib/design/tokens'
+import { tint } from '../../lib/theme'
 
 /**
  * What a surface is for (DESIGN-BRIEF §5.4): `bar` (tab bar, top bar, docks,
@@ -27,6 +28,13 @@ export const GLASS: Record<MaterialRole, string> = {
   media: MATERIAL.glassTintMedia,
   toast: MATERIAL.glassTintToast,
 }
+
+/**
+ * Clear glass over one hero photo has no floor of its own: over a bright photo the circle vanished and its white glyph
+ * with it (B-S9). The media role lays the token's dim (`glassDimMedia`, 45% ink) under its content, which alone holds a
+ * white glyph at 3:1 over pure white; the glass's own 25% tint only darkens it further.
+ */
+const MEDIA_FLOOR = tint(COLOR.ink, MATERIAL.glassDimMedia)
 
 /** The blur tier cannot saturate the backdrop, so it tints harder (§5.3). */
 export const BLUR: Record<MaterialRole, { material: BlurTint; tint: string }> = {
@@ -123,9 +131,14 @@ const BLUR_INTENSITY = Math.min(EXPO_BLUR_MAX, MATERIAL.blurRadius / EXPO_BLUR_P
  * ponytail: no Increase Contrast hairline and no Tier B noise tile yet; they
  * come with the first screen that adopts this.
  */
-export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'role'> & { role: MaterialRole }) {
+/** The tier this phone draws now: what `<Material>` will be, for a neighbour that has to match it (a dock's fade). */
+export function useMaterialTier(): MaterialTier {
   const reduceTransparency = useReduceTransparency()
-  const tier = materialTier({ os: Platform.OS, liquidGlass: liquidGlassAvailable(), reduceTransparency })
+  return materialTier({ os: Platform.OS, liquidGlass: liquidGlassAvailable(), reduceTransparency })
+}
+
+export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'role'> & { role: MaterialRole }) {
+  const tier = useMaterialTier()
 
   if (tier === 'glass') {
     return (
@@ -136,6 +149,7 @@ export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'ro
         colorScheme="dark"
         style={[styles.clip, style]}
       >
+        {role === 'media' ? <View testID="material-media-floor" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: MEDIA_FLOOR }]} /> : null}
         {children}
       </GlassView>
     )
@@ -156,7 +170,10 @@ export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'ro
     ) : (
       <LinearGradient colors={MATERIAL.solidInnerHighlight.colors} style={styles.highlight} />
     )
-  const surface = tier === 'blur' ? styles.edge : [styles.solid, { backgroundColor: SOLID[role] }]
+  // A bar or sheet keeps a top hairline; a circle (control, media) takes it all round, or on a ground of its own tone it
+  // reads as a half-moon (r7 L14: Home's filter circle) or not at all (L13: the profile's circles on the creature hero).
+  const round = role === 'control' || role === 'media'
+  const surface = tier === 'blur' ? styles.edge : [round ? styles.solidRim : styles.solid, { backgroundColor: SOLID[role] }]
 
   return (
     <View {...rest} style={[styles.clip, surface, style]}>
@@ -171,6 +188,7 @@ const styles = StyleSheet.create({
   edge: { borderWidth: MATERIAL.glassEdge.width, borderColor: MATERIAL.glassEdge.color },
   /** Tier B (§13): a 1pt top hairline and a 0 → 6% white highlight over the top 12pt. */
   solid: { borderTopWidth: 1, borderTopColor: MATERIAL.solidTopHairline },
+  solidRim: { borderWidth: 1, borderColor: MATERIAL.solidTopHairline },
   highlight: {
     position: 'absolute',
     top: 0,

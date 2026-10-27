@@ -37,6 +37,10 @@ export interface ProfileIdentity {
   revealed: boolean
   /** The hero's title: "Julian, 24" once visible; the room's pseudonym until then. */
   title: string
+  /** The name alone ("Julian"; the pseudonym until then), for a hero that sets the age beside it in its own face. */
+  name: string
+  /** Their age, when the server sent one: it is outside the identity gate, so a pseudonym carries it too. */
+  age: number | null
   /** What the generated mark is seeded on (`markSeed`) — never a user id. */
   seed: string
 }
@@ -54,12 +58,15 @@ export function profileIdentity(
   const revealed = profile?.identityVisible === true
   const pseudonym = from.pseudonym?.trim() || null
   const fallbackSeed = from.roomSeed || 'someone'
+  const age = typeof profile?.age === 'number' && profile.age > 0 ? profile.age : null
   if (revealed) {
     return {
       revealed,
       title: [profile?.name, profile?.age].filter(Boolean).join(', ') || 'Someone',
+      name: profile?.name || 'Someone',
+      age,
       seed: markSeed(pseudonym ?? profile?.name, fallbackSeed),
     }
   }
-  return { revealed, title: pseudonym ?? 'Someone', seed: markSeed(pseudonym, fallbackSeed) }
+  return { revealed, title: pseudonym ?? 'Someone', name: pseudonym ?? 'Someone', age, seed: markSeed(pseudonym, fallbackSeed) }
 }

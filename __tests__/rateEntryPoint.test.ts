@@ -50,7 +50,8 @@ describe("the entry point to peer rating", () => {
      * `PLACEHOLDER_SCREENS.md`: "Only after the event ends — during the night a
      * rating is leverage; afterwards it is reflection."
      */
-    expect(CTA_STATE).toMatch(/^const ctaState: SceneCTAState = isEnded/)
+    // A cancelled event has nothing to rate; otherwise the first question is whether it has ended.
+    expect(CTA_STATE).toMatch(/^const ctaState: SceneCTAState = cancelled\s*\? 'cancelled'\s*: isEnded/)
   })
 
   it("only appears to somebody who was actually there", () => {
@@ -96,10 +97,10 @@ describe("the entry point to peer rating", () => {
     // Nothing after the end is disabled: `rate` rates, `ended` offers tonight.
     expect(CTA).toMatch(/const disabled = !onPress/)
     // The CTA is never disabled now: a check-in is the pass's, so there is no busy state here (Flow 4).
-    expect(DETAIL).toMatch(/onPress=\{primaryActionPress\}/)
+    expect(DETAIL).toMatch(/onPress=\{cancelled \? undefined : primaryActionPress\}/)
   })
 
-  it("sends somebody who wasn't there to tonight, not to a dead pill", () => {
+  it("sends somebody who wasn’t there to tonight, not to a dead pill", () => {
     const press = DETAIL.slice(DETAIL.indexOf("const primaryActionPress"))
     const rate = press.indexOf("'/rate/[eventId]'")
     const tonight = press.indexOf("toTheOverlay(openBlendn)")
@@ -109,7 +110,7 @@ describe("the entry point to peer rating", () => {
   })
 })
 
-describe("the Going tab's way in to peer rating", () => {
+describe("the Going tab’s way in to peer rating", () => {
   /*
    * The second entry point: every Past row on Going carries the action, so
    * rating does not depend on reopening an old event. Past is only events you
@@ -120,5 +121,12 @@ describe("the Going tab's way in to peer rating", () => {
     expect(past).toMatch(/label="Rate who you met"/)
     expect(past).toMatch(/pathname: '\/rate\/\[eventId\]', params: \{ eventId: row\.id \}/)
     expect(past).toMatch(/accessibilityLabel=\{`Rate who you met at \$\{row\.title\}`\}/)
+  })
+
+  it('puts it on its own line under the row, not beside the title it squeezed (rc7 D14)', () => {
+    const past = GOING.slice(GOING.indexOf("item.kind === 'past'"), GOING.indexOf('// Saved.'))
+    expect(past.indexOf('below={')).toBeGreaterThan(-1)
+    expect(past.indexOf('below={')).toBeLessThan(past.indexOf('label="Rate who you met"'))
+    expect(past).not.toMatch(/trailing=\{[^}]*Rate who you met/)
   })
 })

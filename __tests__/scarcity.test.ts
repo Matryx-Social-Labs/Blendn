@@ -65,7 +65,7 @@ describe('scarcityLabel', () => {
 })
 
 describe('heroPillLabel', () => {
-  it('prefers the organiser door policy over the spot count', () => {
+  it('prefers the organizer door policy over the spot count', () => {
     // "3 left" beside a guest-list door sends someone hurrying towards a night
     // they cannot get into.
     expect(

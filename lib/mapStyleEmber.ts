@@ -181,7 +181,8 @@ export const MAP_CREDITS = {
   openMapTiles: { text: '© OpenMapTiles', href: 'https://www.openmaptiles.org/' },
   overture: { text: 'Overture Maps Foundation', href: 'https://docs.overturemaps.org/attribution/' },
   googleOpenBuildings: { text: 'Google Open Buildings', href: 'https://sites.research.google/gr/open-buildings/', licence: 'CC BY 4.0' },
-  microsoft: { text: 'Microsoft', href: 'https://github.com/microsoft/GlobalMLBuildingFootprints' },
+  // Global ML Building Footprints are published under the ODbL (the repository's licence): named, as the others are.
+  microsoft: { text: 'Microsoft', href: 'https://github.com/microsoft/GlobalMLBuildingFootprints', licence: 'ODbL' },
 } as const
 
 export type MapCredit = (typeof MAP_CREDITS)[keyof typeof MAP_CREDITS]

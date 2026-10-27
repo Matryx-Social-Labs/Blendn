@@ -1,16 +1,19 @@
 /*
  * <GoLiveSheet> (guidelines/components/GoLiveSheet.html, Flow 11 · 11.2,
- * Delta R2-D7): dial, then hold. 20 / 45 min / 1 hour / Stay while I'm here;
+ * Delta R2-D7): dial, then hold. 20 / 45 min / 1 hour / Stay while I’m here;
  * Stay locked behind Blend'n+ shows the server's sentence and the Plus mark
  * and opens the Tonight sheet; the one hold (900 ms); the five refusals are
  * the server's sentence in the sheet, with no haptic.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
 
 import { GoLiveSheet } from '../components/ds/GoLiveSheet'
+import { HueProvider } from '../components/ds/shared'
+import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { AX_XXXL, uncapped } from './helpers/ax'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -40,13 +43,13 @@ describe('<GoLiveSheet>', () => {
   it('names the room and what others see; four choices as radios', async () => {
     await render(sheet())
     expect(screen.getByRole('header', { name: 'Go live at Toit' })).toBeTruthy()
-    expect(screen.getByText('People in Toit’s room tonight see you by your nickname for today. Outside the room, Toit only shows how busy it is — never who.')).toBeTruthy()
+    expect(screen.getByText('People in the room here tonight see you by your nickname for today. Outside the room, this place only shows how busy it is — never who.')).toBeTruthy()
     const radios = screen.getAllByRole('radio')
     expect(radios.map((r) => r.props.accessibilityLabel)).toEqual([
       '20 min',
       '45 min',
       '1 hour',
-      'Stay while I’m here, Keeps you live as long as you’re at Toit, up to 4 hours, free today',
+      'Stay while I’m here, Keeps you live while you’re here, up to 4 hours, free today',
     ])
     expect(radios[1].props.accessibilityState).toMatchObject({ checked: true })
     expect(screen.getByText('You can end it anytime.')).toBeTruthy()
@@ -66,6 +69,7 @@ describe('<GoLiveSheet>', () => {
     await render(sheet())
     expect(screen.getByLabelText('Hold to go live')).toBeTruthy()
     ;(AccessibilityInfo.isScreenReaderEnabled as jest.Mock).mockResolvedValue(true)
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
     await render(sheet())
     await act(async () => {})
     expect(screen.getByRole('button', { name: 'Go live at Toit for 45 minutes as Night Cat' })).toBeTruthy()
@@ -98,7 +102,7 @@ describe('<GoLiveSheet>', () => {
     const onChoice = jest.fn()
     await render(sheet({ stay: 'locked', onStayLocked, onChoice }))
     const stay = screen.getAllByRole('radio')[3]
-    expect(stay.props.accessibilityLabel).toBe('Stay while I’m here, Staying live is part of Blendn+., Blend’n+')
+    expect(stay.props.accessibilityLabel).toBe('Stay while I’m here, Staying live is part of Blend’n+., Blend’n+')
     expect(stay.props.accessibilityHint).toBe('Opens Blend’n+')
     await fireEvent.press(stay)
     expect(onStayLocked).toHaveBeenCalledTimes(1)
@@ -109,9 +113,9 @@ describe('<GoLiveSheet>', () => {
   it.each([
     ['notHere', 'Not here yet', /You’re not at Toit yet\. Go live once you’re inside\./, 'Open Maps'],
     ['eventOn', 'Vinyl Night is on here', /An event is on here\./, 'Check in to Vinyl Night'],
-    ['noArea', 'Not yet', /You can’t go live here yet\./, 'OK'],
+    ['noArea', 'Not yet', /You can’t go live here yet\./, 'Close'],
     ['age', 'Not yet', /18 and over/, 'Finish setting up'],
-    ['closed', 'Toit is closed right now', /Tonight’s hours: 12 PM – 1 AM\./, 'OK'],
+    ['closed', 'Toit is closed right now', /Tonight’s hours: 12 PM – 1 AM\./, 'Close'],
   ] as const)('refusal %s: the server’s sentence in the sheet, no haptic', async (refusal, title, body, action) => {
     const onRefusalAction = jest.fn()
     const onClose = jest.fn()
@@ -120,8 +124,96 @@ describe('<GoLiveSheet>', () => {
     expect(screen.getByText(body)).toBeTruthy()
     expect(screen.queryByRole('radio')).toBeNull()
     await fireEvent.press(screen.getByRole('button', { name: action }))
-    // OK has nothing to do but close; the others take you somewhere.
-    expect(action === 'OK' ? onClose : onRefusalAction).toHaveBeenCalledTimes(1)
+    // Close has nothing to do but close; the others take you somewhere (A50: a verb, never OK).
+    expect(screen.queryByRole('button', { name: 'OK' })).toBeNull()
+    expect(action === 'Close' ? onClose : onRefusalAction).toHaveBeenCalledTimes(1)
     for (const k of ['error', 'success', 'primary', 'select']) if (refusal !== 'eventOn' || k !== 'primary') expect(spies[k]).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['gps', 'GPS signal too weak', 'GPS signal is too weak (accuracy: 400m).', 'Try again'],
+    ['timeout', 'Couldn’t go live', 'Check your connection and try again.', 'Try again'],
+    ['rate', 'Too many tries', 'Try again in 2 minutes.', 'Close'],
+    ['notFound', 'This place isn’t available', 'Venue not found', 'Go back'],
+    ['notHere', 'Not here yet', 'You’re not at Toit yet.', 'Open Maps'],
+  ] as const)('R4 11-1 refusal %s: the server’s sentence verbatim, a verb for the way on, no haptic', async (refusal, title, message, action) => {
+    const onRefusalAction = jest.fn()
+    const onClose = jest.fn()
+    await render(sheet({ refusal, refusalMessage: message, onRefusalAction, onClose }))
+    expect(screen.getByRole('header', { name: title })).toBeTruthy()
+    expect(screen.getByText(new RegExp(message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: action }))
+    expect(action === 'Close' ? onClose : onRefusalAction).toHaveBeenCalledTimes(1)
+    for (const k of Object.keys(spies)) expect(spies[k]).not.toHaveBeenCalled()
+  })
+
+  it('"Staying live is part of Blend’n+": Pick a time is the strong way back, See Blend’n+ the second', async () => {
+    const onRefusalAction = jest.fn()
+    const onRefusalAlt = jest.fn()
+    await render(sheet({ refusal: 'stay', onRefusalAction, onRefusalAlt }))
+    expect(screen.getByRole('header', { name: 'Staying live is part of Blend’n+' })).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Pick a time' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'See Blend’n+' }))
+    expect(onRefusalAction).toHaveBeenCalledTimes(1)
+    expect(onRefusalAlt).toHaveBeenCalledTimes(1)
+  })
+
+  it('a refusal with no sheet of its own takes the server’s title and words; an event with no known title is still named', async () => {
+    await render(sheet({ refusal: 'other', refusalTitle: 'Finish your profile first', refusalMessage: 'Finish onboarding.' }))
+    expect(screen.getByRole('header', { name: 'Finish your profile first' })).toBeTruthy()
+    expect(screen.getByText('Finish onboarding.')).toBeTruthy()
+    await screen.unmount() // one sheet on screen at a time (lib/modalTurn): the first goes before the next
+    await render(sheet({ refusal: 'eventOn' }))
+    expect(screen.getByRole('header', { name: 'An event is on here' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check in to the event' })).toBeTruthy()
+  })
+})
+
+describe('DS-13 (B-T1, B-T2, B-T3): the venue named once, the lit pick, the lit hold, the brand spelled', () => {
+  const hidden = { includeHiddenElements: true }
+  const allText = () =>
+    screen
+      .getAllByText(/./, hidden)
+      .map((t) => t.props.children)
+      .flat()
+      .filter((c: unknown) => typeof c === 'string')
+      .join(' ')
+
+  it('names the venue once, in the title; the rest says "this place" and "here"', async () => {
+    await render(sheet({ venue: 'The Big Pitcher' }))
+    expect(allText().split('The Big Pitcher').length - 1).toBe(1)
+  })
+
+  it('the picked duration is lit, as a picked RadioCard is: the hue’s fill behind the row and its ring in the hue’s edge, never a bare ring', async () => {
+    await render(
+      <HueProvider value="rose">
+        {sheet()}
+      </HueProvider>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('g-45').props.style).backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(StyleSheet.flatten(screen.getByTestId('g-20').props.style).backgroundColor).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByTestId('g-45-ring', hidden).props.style).borderColor).toBe(COLOR.brandRose)
+  })
+
+  it('the hold is the lit kind: the hue’s fill and rim on the track, the hue’s flare as it fills, no gradient', async () => {
+    await render(sheet())
+    expect(StyleSheet.flatten(screen.getByTestId('g-hold').props.style).backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(StyleSheet.flatten(screen.getByTestId('g-hold-rim', hidden).props.style).borderColor).toBe(COLOR.brandOrange)
+    expect(StyleSheet.flatten(screen.getByTestId('g-hold-fill-ground', hidden).props.style).backgroundColor).toBe(COLOR.selectionEmberFlare)
+  })
+
+  it('no “Blendn+” anywhere on the sheet, locked or not', async () => {
+    await render(sheet({ stay: 'locked' }))
+    expect(allText()).not.toMatch(/Blendn\+/)
+  })
+
+  it('at AX XXXL every line on the sheet is capped', async () => {
+    const window = Dimensions.get('window')
+    try {
+      await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
+      await render(sheet({ stay: 'locked' }))
+      expect(uncapped(screen.toJSON())).toEqual([])
+    } finally {
+      Dimensions.set({ window, screen: window })
+    }
   })
 })

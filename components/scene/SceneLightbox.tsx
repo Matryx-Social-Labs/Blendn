@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons'
+import { barTop } from '../../lib/barGeometry'
 import { Image } from 'expo-image'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -6,7 +6,6 @@ import {
   Dimensions,
   FlatList,
   Modal,
-  Pressable,
   StyleSheet,
   Text,
   View,
@@ -15,7 +14,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, SPACE, TYPE } from '../../lib/theme'
+import { MODAL_FADE_MS, useQueuedModal } from '../../lib/modalTurn'
+import { IconButton } from '../ds/IconButton'
+import { ScrimPill, monoCaption } from '../ds/MonoFamily'
+import { useBoldText } from '../ds/shared'
+import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { SwipeToDismiss } from '../motion/SwipeToDismiss'
 import { ZoomableImage } from '../motion/ZoomableImage'
 
@@ -29,9 +32,9 @@ const VIEWABILITY_CONFIG = { viewAreaCoveragePercentThreshold: 50 }
  * Full-screen viewer for an event's media — the place a photograph is actually
  * looked at.
  *
- * ## Why this exists beside `PhotoLightbox`
+ * ## Why this exists beside `PhotoViewer`
  *
- * `PhotoLightbox` takes `string[]` and renders images. Handing it a clip's URL
+ * `PhotoViewer` takes `string[]` and renders images. Handing it a clip's URL
  * would draw a still frame at best and a broken image at worst, and widening
  * it would change a component three other screens depend on. This takes the
  * same `FeedMediaItem[]` the hero and the feed already use, so a clip that
@@ -72,10 +75,13 @@ export function SceneLightbox({
   // its own controls. See `ZoomableImage`.
   const [zoomed, setZoomed] = useState(false)
   // The close button and the counter share one top edge: under the status bar,
-  // a step below it. Both are CONTROL.sm tall, so their centres line up too.
-  const top = useSafeAreaInsets().top + SPACE.sm
+  // a step below it, the close at the left as the DS viewer draws it.
+  const top = barTop(useSafeAreaInsets().top)
+  const bold = useBoldText()
   const listRef = useRef<FlatList<FeedMediaItem>>(null)
 
+  // One Modal on screen at a time on iOS (lib/modalTurn).
+  const turn = useQueuedModal(visible, { animationMs: MODAL_FADE_MS, closeForLink: onClose })
   const onShow = useCallback(() => {
     setIndex(initialIndex)
     setZoomed(false)
@@ -114,10 +120,14 @@ export function SceneLightbox({
 
   return (
     <Modal
-      visible={visible}
+      visible={turn.visible}
       transparent
       animationType="fade"
-      onShow={onShow}
+      onShow={() => {
+        turn.onShow()
+        onShow()
+      }}
+      onDismiss={turn.onDismiss}
       onRequestClose={onClose}
       statusBarTranslucent
     >
@@ -139,17 +149,17 @@ export function SceneLightbox({
 
         {items.length > 1 ? (
           <View style={[styles.counter, { top }]} pointerEvents="none">
-            <Text style={styles.counterText}>
-              {index + 1} / {items.length}
-            </Text>
+            <ScrimPill>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.ink]}>
+                {index + 1} / {items.length}
+              </Text>
+            </ScrimPill>
           </View>
         ) : null}
 
-        <Pressable style={[styles.close, { top }]} onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
-          <View style={styles.closeInner}>
-            <Ionicons name="close" size={ICON.md} color={EMBER.textPrimary} />
-          </View>
-        </Pressable>
+        <View style={[styles.close, { top }]}>
+          <IconButton icon="x" tier="media" accessibilityLabel="Close" onPress={onClose} testID="lightbox-close" />
+        </View>
       </SwipeToDismiss>
     </Modal>
   )
@@ -236,23 +246,7 @@ const styles = StyleSheet.create({
   page: { width: SCREEN_W, height: SCREEN_H, alignItems: 'center', justifyContent: 'center' },
   media: { width: SCREEN_W, height: SCREEN_H },
   // `top` is applied inline from the safe-area inset.
-  close: { position: 'absolute', right: GUTTER, zIndex: 10 },
-  closeInner: {
-    width: CONTROL.sm,
-    height: CONTROL.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.scrim,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  counter: {
-    position: 'absolute',
-    alignSelf: 'center',
-    minHeight: CONTROL.sm,
-    justifyContent: 'center',
-    backgroundColor: EMBER.scrim,
-    paddingHorizontal: SPACE.md,
-    borderRadius: EMBER_RADIUS.pill,
-  },
-  counterText: { ...TYPE.caption, color: EMBER.textPrimary },
+  close: { position: 'absolute', left: SPACE.lg, zIndex: 10 },
+  counter: { position: 'absolute', alignSelf: 'center', height: SPACE.xxxl, justifyContent: 'center' },
+  ink: { color: COLOR.textPrimary },
 })

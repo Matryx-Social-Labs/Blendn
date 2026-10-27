@@ -10,7 +10,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated'
 
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { avatarOf, BUBBLE, plural, type ChatPerson } from './chatShared'
@@ -61,11 +61,13 @@ export function TypingIndicator({
   const reduceMotion = useReducedMotion()
   const clock = useSharedValue(0)
 
+  // DS #14: the loop runs only while somebody is typing. The component can stay mounted with nobody (it renders nothing then).
+  const typing = people.length > 0
   useEffect(() => {
-    if (reduceMotion) return
+    if (reduceMotion || !typing) return
     clock.set(withRepeat(withTiming(1, { duration: CYCLE_MS, easing: Easing.linear }), -1))
     return () => cancelAnimation(clock)
-  }, [reduceMotion, clock])
+  }, [reduceMotion, typing, clock])
 
   if (!people.length) return null
   const one = people.length === 1
@@ -85,7 +87,7 @@ export function TypingIndicator({
           <Dot key={i} clock={clock} index={i} still={reduceMotion} testID={testID && `${testID}-dot-${i}`} />
         ))}
       </View>
-      {one ? null : <Text style={[font('meta', bold), styles.count]}>{label}</Text>}
+      {one ? null : <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.count]}>{label}</Text>}
     </View>
   )
 }

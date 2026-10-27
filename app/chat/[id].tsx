@@ -1,12 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, FlatList, Platform, StyleSheet, useWindowDimensions, View, type ViewToken } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { ChatHeader, chatFeedFrame, chatHeaderBottom, SubtitleText } from '../../components/chat/ChatHeader'
+import { useBlendRoom } from '../../components/crews/BlendRoom'
+import { ChatHeader, chatFeedFrame, chatHeaderBottom, OpensLine, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
-import { CountLine, FeedSkeleton, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
+import { CountLine, FeedSkeleton, HEADER_FACE, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
+import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { RoomMessageRow, RoomOutside, senderOf, type Outside, type RowHandlers } from '../../components/chat/RoomFeed'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
@@ -15,23 +17,28 @@ import type { Rect } from '../../components/ds/chatShared'
 import { Composer } from '../../components/ds/Composer'
 import { LongPressMenu, placeLongPress, type MenuItem } from '../../components/ds/ContextMenu'
 import { Grain } from '../../components/ds/Grain'
-import { Orbs } from '../../components/ds/Orbs'
+import { HueProvider } from '../../components/ds/shared'
 import { REACTION_CELL, reactionBarWidth } from '../../components/ds/ReactionBar'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TypingIndicator } from '../../components/ds/TypingIndicator'
 import { DayPill } from '../../components/ds/UnreadDivider'
 import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
+import { useToastInset } from '../../components/toastDock'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
 import { LINKS_LINE, refusalPlace, runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
-import { draftOf, failedOf, keepFailed, roomThread, setDraft } from '../../lib/chatOutbox'
+import { failedOf, keepFailed, roomThread, useThreadDraft } from '../../lib/chatOutbox'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
+import { contactWarning } from '../../lib/contactWarning'
 import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
+import { notOpenYetAt, opensInSpoken } from '../../lib/preEventRoom'
+import { useOpensAt, usePreEventRoom } from '../../lib/usePreEventRoom'
 import { newClientId } from '../../lib/clientId'
-import { defaultRoomName, roomClosedLine, roomKindParam } from '../../lib/crews'
+import { BLEND_CLOSED_LINE, defaultRoomName, roomClosedLine, roomKindParam, UNKNOWN_ROOM_NAME } from '../../lib/crews'
+import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
@@ -42,20 +49,21 @@ import { messageMenu, type MessageMenu } from '../../lib/messageMenu'
 import { useActiveThread } from '../../lib/notifications'
 import { ScreenProfiler } from '../../lib/perf'
 import { roomRefusalState } from '../../lib/placeRoom'
+import { printable } from '../../lib/pulseSections'
 import { queryCache } from '../../lib/queryCache'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
-import { useRoomRow, type RoomRow } from '../../lib/roomRow'
+import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
+import { roomLockedIn } from '../../lib/roomState'
 import { blockStep, messageReportStep } from '../../lib/safetyUtils'
-import { sendOutcome } from '../../lib/sendOutcome'
+import { REMOVED_AFTER_DELIVERY, sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
 import {
   rejoinChatSocket,
   startTyping,
   stopTyping,
   subscribeToChatMemberBanned,
-  subscribeToChatMemberLeft,
   subscribeToChatMemberMuted,
   subscribeToChatMessage,
   subscribeToChatMessageDeleted,
@@ -63,12 +71,14 @@ import {
   subscribeToChatTyping,
   subscribeToLiveEnded,
 } from '../../lib/socketClient'
-import { chatClock } from '../../lib/time'
+import { clockTime } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
-import { lockFor, useComposerLock } from '../../lib/useComposerLock'
+import { isReadOnlyLock, lockFor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
+import { useOnBlock } from '../../lib/useOnBlock'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { isOffline, useWaitingSends } from '../../lib/useWaitingSends'
 import { userMessage } from '../../lib/userMessage'
@@ -82,6 +92,8 @@ const AT_END = 80
 /** iOS dismisses the keyboard interactively with the drag; Android on the drag (R3-D5 5.3). */
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 const REACTION_INDEX = Object.fromEntries(CHAT_REACTIONS.map((e, i) => [e, i])) as Record<string, number>
+/** A row counts as seen once a fifth of it is on screen. */
+const VIEWABLE = { itemVisiblePercentThreshold: 20 } as const
 const stamp = (m: { created_at: string }) => Date.parse(m.created_at) || 0
 
 /**
@@ -96,6 +108,34 @@ const stamp = (m: { created_at: string }) => Date.parse(m.created_at) || 0
  * or name opens their card. The composer says why it can't post, in the
  * server's words. Crew chats and Blend rooms are this screen too (`kind`).
  */
+/** A route's `opensAt` if it is an instant still to come; a countdown is never drawn from anything else. */
+const futureInstant = (value: unknown): string | null => {
+  const at = typeof value === 'string' ? Date.parse(value) : NaN
+  return Number.isFinite(at) && at > Date.now() ? new Date(at).toISOString() : null
+}
+
+/**
+ * A crew chat's header face: the crew's own emblem, as the Banter row and the Blend draw it (TG-17, RC audit C23), read
+ * from the crew (`GET /crews/:id`); the room's square until it answers, or when it does not.
+ */
+function CrewRoomFace({ crewId }: { crewId: string | null }) {
+  const [seed, setSeed] = useState<{ crewId: string; seed: string } | null>(null)
+  useEffect(() => {
+    if (!crewId) return
+    let live = true
+    void crewsApi.crew(crewId).then((r) => {
+      if (live && r.success && r.data?.emblemSeed) setSeed({ crewId, seed: r.data.emblemSeed })
+    })
+    return () => {
+      live = false
+    }
+  }, [crewId])
+  return seed && seed.crewId === crewId ? <CrewEmblem seed={seed.seed} size={HEADER_FACE} testID="room-crew-emblem" /> : <RoomCover />
+}
+
+/** A send only this phone holds: refused ("Not sent") or waiting for a connection. */
+const isPendingSend = (m: Message) => !!(m.failed || m.waiting)
+
 function GroupChatInner() {
   const params = useLocalSearchParams()
   const chatRoomId = params.id
@@ -112,7 +152,9 @@ function GroupChatInner() {
    * never supplies an image — `blendn://chat/x?eventImage=…` is anybody's link,
    * and drawing it fetched a host the server never named (Flow 5 security review).
    */
-  const roomName = roomInfo.title || nameParam(params.roomName)
+  /* A closed room as its history's refusal names it (rc8 #6): neither the opener nor the Banter's list has one. */
+  const [told, setTold] = useState<{ kind: string | null; name: string | null } | null>(null)
+  const roomName = roomInfo.title || nameParam(params.roomName) || told?.name
   const eventTitle = roomInfo.title || nameParam(params.eventTitle)
   const eventImage = roomInfo.image
   const { user: authUser, loading: authLoading } = useAuth()
@@ -121,7 +163,7 @@ function GroupChatInner() {
   const [messages, setMessages] = useState<Message[]>(() => failedOf<Message>(thread))
   // Read by a refresh to decide whether the older-page cursor moves (lib/mergeNewestPage).
   const messagesRef = useLatest(messages)
-  const [newMessage, setNewMessage] = useState(() => draftOf(thread))
+  const [newMessage, setNewMessage] = useThreadDraft(thread)
   const [loading, setLoading] = useState(true)
   /* The in-flight guard against a double tap landing before `setNewMessage('')` flushes. */
   const sendInFlightRef = useRef(false)
@@ -143,9 +185,19 @@ function GroupChatInner() {
    * Banter agree; `outOfRoom` is history refused as a non-member.
    */
   const [outOfRoom, setOutOfRoom] = useState(false)
+  /*
+   * An event's room before it opens, to someone entitled (RSVP'd or saved): the server's `opensAt` on its NOT_OPEN_YET
+   * refusal (D-7). The opener may hand it over (the Room's chat button) so the countdown is there from the first frame;
+   * the server's answer below is what holds it. Never an error, and never shown to someone the server only refused.
+   */
+  // Only beside the event it is for: the door is asked about that event, and its answer is what holds the countdown.
+  const [notOpen, setNotOpen] = useState<string | null>(() => (idParam(params.eventId) ? futureInstant(params.opensAt) : null))
+  const [opening, setOpening] = useState(false)
   /* A place's room after your Go Live there ended (`NOT_LIVE`): going live again is the way back. */
   const [notLive, setNotLive] = useState(false)
   const notLiveRef = useLatest(notLive)
+  /** Why it ended, when the socket said (`live:ended`): the room's calm state is its own for each (11.5). */
+  const [endedReason, setEndedReason] = useState<string | null>(null)
   /** Removed by the organiser (`USER_BANNED`), in the server's sentence (R2-D2 room states #01). */
   const [removedLine, setRemovedLine] = useState<string | null | undefined>(undefined)
   /** An event room that is not there any more (404, R2-D2 room states #02). */
@@ -156,8 +208,14 @@ function GroupChatInner() {
   const openedFromPlace = idParam(params.venueId)
   const venueId = openedFromPlace ?? roomInfo.venueId ?? null
   /* A crew's or a Blend's room (step 9), told by the opener; null for an event's. */
-  const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? null
+  const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? roomKindParam(told?.kind) ?? null
   const eventRoom = roomKind === null
+  /*
+   * Known to be an event's room: its row names the event, or an event opener said so. A bare link or a push carries no
+   * kind, and a closed crew's or Blend's room answers it with the same 404 an event's does: that one is not told it was
+   * an event (RC drive 4 D-5).
+   */
+  const eventKnown = eventRoom && (!!roomInfo.eventId || !!nameParam(params.eventTitle) || told?.kind === 'event')
   /* Back, or — opened from a push with nothing underneath — the Banter. */
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))
   const crewIdParam = idParam(params.crewId) ?? roomInfo.crewId
@@ -165,25 +223,75 @@ function GroupChatInner() {
   const [closedLine, setClosedLine] = useState<string | null>(null)
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(roomId)
+  const top = chatHeaderBottom(insets.top, window.fontScale)
+  /* A Blend's sides sit above the feed in this same room, not on a page of their own (Flow 10 · 10.9). */
+  const blendRoom = useBlendRoom(roomKind === 'blend' ? (blendIdParam ?? null) : null, top)
+  // A Blend not listed to you any more after being listed is closed for you: its clock, or a block across its sides refused your door.
   const outside: Outside | null =
     closedLine !== null
       ? { kind: 'closed', line: closedLine }
-      : removedLine !== undefined
+      : blendRoom.gone
+        ? { kind: 'closed', line: BLEND_CLOSED_LINE }
+        : removedLine !== undefined
         ? { kind: 'removed', line: removedLine }
         : gone
-          ? { kind: 'gone' }
+          ? { kind: 'gone', event: eventKnown }
           : notLive
-            ? { kind: 'not_live' }
-            : left
+            ? { kind: 'not_live', reason: endedReason, venueName: roomInfo.title ?? null, dayEndsAt: roomInfo.dayEndsAt ?? null }
+            : notOpen
+              ? { kind: 'notopen', opensAt: notOpen }
+              : left
               ? { kind: 'left' }
               : outOfRoom
                 ? { kind: 'out' }
                 : null
+  const outsideRef = useLatest(outside)
+  /*
+   * Read-only for good: a lock no retry gets past, or a room that closed, went or removed you. Nothing is queued or kept
+   * as "Not sent · Tap to retry" under it, and what was pending goes (state adjusted in render), here and in the
+   * Banter's "Not sent" (RC drive 4 D-6). The last of it is not lost: it is kept as the thread's draft, unless one was
+   * being written (review LOW-3), so it is there to copy if the room ever opens again.
+   */
+  const readOnly = isReadOnlyLock(composer.lock) || outside?.kind === 'closed' || outside?.kind === 'gone' || outside?.kind === 'removed'
+  if (readOnly && messages.some(isPendingSend)) {
+    const lastUnsent = [...messages].reverse().find(isPendingSend)
+    if (lastUnsent && !newMessage.trim()) setNewMessage(lastUnsent.message_text)
+    setMessages((prev) => prev.filter((m) => !isPendingSend(m)))
+  }
   const muted = isMuted(useRoomMute(chatRoomId ? roomId : null))
-  /** From the room list (`memberCount`), less anyone who leaves while you watch (`chat:memberLeft`). */
-  const [leftSince, setLeftSince] = useState(0)
-  const memberCount = roomInfo.memberCount ? Math.max(0, roomInfo.memberCount - leftSince) : null
+  /** In the room now: the Room's number, live (`useHereCount`); a chat leave is not leaving the room. */
+  const hereCount = useHereCount(roomInfo)
+  /* A day before doors the room is served but not open: its header counts down, its composer says so (Flow 15 #8). */
+  const opensIn = usePreEventRoom(eventRoom ? roomInfo.startTime : null)
+  /* The server's own opening, when it refused the room as not open yet: the same countdown (D-7). */
+  const notOpenIn = useOpensAt(notOpen)
+  const countingDown = opensIn ?? notOpenIn
+  /* The room opening is said aloud, once, as the countdown ends (iOS: nothing else announces it). */
+  const wasClosed = useRef(false)
+  useEffect(() => {
+    if (wasClosed.current && !countingDown && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('The room is open')
+    wasClosed.current = !!countingDown
+  }, [countingDown])
+  /*
+   * A room the organiser locked opens read-only (TG-02): its row in the Banter's list says so (`status`, the same cached
+   * read as `useRoomRow`). Before, the lock was learnt only from a send it refused, so it opened with a live composer.
+   */
+  const applyLock = composer.apply
+  useEffect(() => {
+    if (!chatRoomId) return
+    let live = true
+    void apiClient.getChatGroups().then((result) => {
+      if (live && result.success && roomLockedIn(result.data, roomId)) applyLock('CHAT_LOCKED')
+    })
+    return () => {
+      live = false
+    }
+  }, [chatRoomId, roomId, applyLock])
+  /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
+  const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
   const { showToast } = useToast()
+  // Android: the snackbar over the composer covers the newest row (the withheld placeholder it explains); the feed makes room (rc8 #5).
+  const toastInset = useToastInset()
 
   /* The long-press, a sender's card, your reaction's flight (#36, 5.1, #37). */
   const [menu, setMenu] = useState<{ message: Message; anchor: Rect } | null>(null)
@@ -196,7 +304,21 @@ function GroupChatInner() {
   const [dockHeight, setDockHeight] = useState<number>(SIZE.input)
 
   const flatListRef = useRef<FlatList<ChatListItem>>(null)
+  /* Polls whose row has been on screen: a poll is read from the server only once it is seen (a room of thousands). */
+  const [viewablePolls, setViewablePolls] = useState<ReadonlySet<string>>(() => new Set())
+  // One function for the screen's life: FlatList refuses a changing `onViewableItemsChanged`.
+  const [onViewable] = useState(() => ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const seen = viewableItems.flatMap((v) => (v.item?.kind === 'message' && v.item.message_type === 'poll' ? [v.item.message_id as string] : []))
+    if (!seen.length) return
+    setViewablePolls((prev) => (seen.every((id) => prev.has(id)) ? prev : new Set([...prev, ...seen])))
+  })
   const isAtBottomRef = useRef(true)
+  /* Messages that rise as they mount: a live arrival while you were at the bottom. Cleared after a second. */
+  const arrivingRef = useRef(new Set<string>())
+  const markArriving = (id: string) => {
+    arrivingRef.current.add(id)
+    setTimeout(() => arrivingRef.current.delete(id), 1000)
+  }
   /*
    * Every message id this screen has held. The chip counts a socket message
    * only the first time its id is seen: a redelivery, or one history already
@@ -234,8 +356,12 @@ function GroupChatInner() {
         }
 
         const result = await apiClient.getChatMessages(roomId, { limit: 50 })
+        // A closed room the link did not name: the server's refusal says what it was, to somebody who was in it (rc8 #6).
+        const toldKind = result.success ? null : roomKindParam(result.roomKind)
+        if (!result.success && (result.roomKind || result.roomName)) setTold({ kind: result.roomKind ?? null, name: nameParam(result.roomName) ?? null })
+        const kind = roomKind ?? toldKind
         // Not while this phone knows you left: a Blend answers a leaver's read with the 403 it gives somebody it took out.
-        const closed = !result.success && roomKind && !left ? roomClosedLine(roomKind, result.errorCode) : null
+        const closed = !result.success && kind && !left ? roomClosedLine(kind, result.errorCode) : null
         if (closed) return setClosedLine(closed)
         if (!result.success && result.errorCode === 'USER_BANNED') return setRemovedLine(result.error || null)
         if (!result.success && result.errorCode === 'NOT_FOUND' && eventRoom) return setGone(true)
@@ -254,9 +380,11 @@ function GroupChatInner() {
         setOutOfRoom(false)
         setRemovedLine(undefined)
         setGone(false)
+        setNotOpen(null)
         // Live again at the place: the socket was taken out of the room at the end (M3).
         if (notLiveRef.current) rejoinChatSocket(roomId)
         setNotLive(false)
+        setEndedReason(null)
         markRoomJoined(roomId)
 
         const raw = Array.isArray(result.data) ? result.data : (result.data as any)?.messages || (result.data as any)?.data || []
@@ -312,9 +440,6 @@ function GroupChatInner() {
     }
   }, [messages, messagesCacheKey, thread])
 
-  // The composer's text stays with the thread when you leave it (the Banter's "Draft ·", R3-D5 5.8).
-  const draftRef = useLatest(newMessage)
-  useEffect(() => () => setDraft(thread, draftRef.current), [thread, draftRef])
 
   // Follows the signed-in user once the room can load (adjusted in render).
   if (chatRoomId && authUser && !authLoading && currentUser !== authUser) setCurrentUser(authUser)
@@ -331,6 +456,8 @@ function GroupChatInner() {
       subscribeToChatMessage(roomId, (data) => {
         const incoming = roomMessageFromSocket(data.message, currentUser?.id)
         const fresh = !seenIds.current.has(incoming.message_id)
+        // At the bottom, somebody else's message rises as it arrives (#13); read back, the list never moves (the chip counts it).
+        if (fresh && isAtBottomRef.current && data.message.userId !== currentUser?.id) markArriving(incoming.message_id)
         seenIds.current.add(incoming.message_id)
         setMessages((prev) =>
           prev.some((m) => m.message_id === incoming.message_id)
@@ -371,7 +498,10 @@ function GroupChatInner() {
       }),
       /* The server sends the whole tally, so this replaces rather than merges: counts, never who. */
       subscribeToChatReaction(roomId, (data) => setMessage(data.messageId, (m) => ({ ...m, reactions: withMine(data.tally, m.reactions) }))),
-      /* A moderation removal of your own message becomes the placeholder; everyone else's copy simply goes. */
+      /*
+       * A moderation removal of your own message becomes the placeholder, and the toast (a live region) tells a screen
+       * reader the bubble changed; everyone else's copy simply goes.
+       */
       subscribeToChatMessageDeleted(roomId, (data) => {
         const ownRemoval = data.moderation && data.userId && data.userId === currentUser?.id
         setMessages((prev) =>
@@ -379,13 +509,16 @@ function GroupChatInner() {
             ? prev.map((m) => (m.message_id === data.messageId ? { ...m, removed: true, message_text: '' } : m))
             : prev.filter((m) => m.message_id !== data.messageId)
         )
+        if (ownRemoval) showToast(REMOVED_AFTER_DELIVERY, 'info')
       }),
       // Removed while reading: the room becomes the removed state (R2-D2 #01), never a modal.
       subscribeToChatMemberBanned(roomId, (data) => {
-        if (data.userId === currentUser?.id && data.banned) setRemovedLine('The organiser has removed you from this room.')
+        if (data.userId !== currentUser?.id || !data.banned) return
+        // No organiser in a crew's room: its own sentence, the one a later read gives (10-9 · 23).
+        const crewLine = roomKind ? roomClosedLine(roomKind, 'USER_BANNED') : null
+        if (crewLine) setClosedLine(crewLine)
+        else setRemovedLine('The organizer has removed you from this room.')
       }),
-      // Somebody left: one fewer in the header's count.
-      subscribeToChatMemberLeft(roomId, () => setLeftSince((n) => n + 1)),
       // A mute arriving live flips the composer in place, with a "Just now" line (R2-D2 #06).
       subscribeToChatMemberMuted(roomId, (data) => {
         if (data.userId !== currentUser?.id) return
@@ -416,7 +549,11 @@ function GroupChatInner() {
   const deliver = async (optimistic: Message) => {
     try {
       const result = await apiClient.sendChatMessage(roomId, optimistic.message_text, 'text', undefined, optimistic.reply_to_message_id ?? undefined, optimistic.client_id)
-      if (!result.success && result.errorCode === 'USER_BANNED') return setRemovedLine(result.error || null)
+      if (!result.success && result.errorCode === 'USER_BANNED') {
+        // A crew's or a Blend's room has no organiser: it says the crew's own line (10-8, 10-9).
+        const crewLine = roomKind ? roomClosedLine(roomKind, result.errorCode) : null
+        return crewLine ? setClosedLine(crewLine) : setRemovedLine(result.error || null)
+      }
       // Every answer re-decides the lock: a refusal sets it, a send that got through lifts it.
       const place = result.success ? null : refusalPlace(result.errorCode, result.error)
       if (place !== 'links') composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error)
@@ -452,9 +589,8 @@ function GroupChatInner() {
       markDomainsDirty(['chat'])
     } catch (error) {
       Logger.warn('chat', 'send failed', { error })
-      H.error()
       setMessage(optimistic.message_id, (m) => ({ ...m, failed: true, waiting: false }))
-      showToast("Couldn't send. Try again.", 'error')
+      showToast("Couldn’t send. Try again.", 'error', { haptic: 'error' })
     }
   }
 
@@ -469,7 +605,7 @@ function GroupChatInner() {
   })
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !currentUser || sendInFlightRef.current) return
+    if (readOnly || !newMessage.trim() || !currentUser || sendInFlightRef.current) return
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
     stopTyping(roomId)
     sendInFlightRef.current = true
@@ -503,6 +639,7 @@ function GroupChatInner() {
   }
 
   const retrySend = (message: Message) => {
+    if (readOnly) return
     setMessage(message.message_id, (m) => ({ ...m, failed: false, failedLine: undefined }))
     void deliver({ ...message, failed: false, failedLine: undefined })
   }
@@ -521,7 +658,7 @@ function GroupChatInner() {
     if (reactRefused === 'left') markRoomLeft(roomId)
     else if (reactRefused === 'not_live') setNotLive(true)
     else if (lockFor(result.errorCode)) composer.apply(result.errorCode, undefined, result.error)
-    showToast(userMessage(result, "Couldn't add your reaction. Try again."), 'error')
+    showToast(userMessage(result, "Couldn’t add your reaction. Try again."), 'error', { haptic: 'error' })
   }
 
   /* Back in, or the server's refusal in its own words; a room you were never in is its 404 (check in). */
@@ -533,7 +670,7 @@ function GroupChatInner() {
     if (!result.success) {
       const closed = roomKind ? roomClosedLine(roomKind, result.errorCode) : null
       if (closed) return setClosedLine(closed)
-      showToast(result.errorCode === 'NOT_FOUND' ? 'Check in at the event to join its room.' : userMessage(result, "Couldn't rejoin this room. Try again."), 'error')
+      showToast(result.errorCode === 'NOT_FOUND' ? 'Check in at the event to join its room.' : userMessage(result, "Couldn’t rejoin this room. Try again."), 'error', { haptic: 'error' })
       return
     }
     markRoomJoined(roomId)
@@ -541,7 +678,7 @@ function GroupChatInner() {
     rejoinChatSocket(roomId)
     setOutOfRoom(false)
     setLoading(true)
-    showToast("You're back in the room", 'success')
+    showToast("You’re back in the room", 'success')
     void loadMessages(true)
   }
 
@@ -555,8 +692,7 @@ function GroupChatInner() {
     const result = await apiClient.rsvpToEvent(eventId, 'going')
     setRsvping(false)
     if (!result.success) {
-      H.error()
-      return showToast(userMessage(result, "Couldn't save your RSVP. Try again."), 'error')
+      return showToast(userMessage(result, "Couldn’t save your RSVP. Try again."), 'error', { haptic: 'error' })
     }
     H.success()
     composer.setLock(null)
@@ -564,12 +700,84 @@ function GroupChatInner() {
 
   /* A Go Live ended: only this room's re-reads, and answers NOT_LIVE (L2). */
   const loadMessagesRef = useLatest(loadMessages)
+  /**
+   * Refused as not in the room: an event's room asks its own door once, which joins someone entitled inside the window,
+   * says when it opens before it (NOT_OPEN_YET), or refuses as before (an older server's bare 403 included).
+   */
+  const askedDoor = useRef(false)
+  const askEventDoor = async (): Promise<'joined' | 'notopen' | 'out'> => {
+    if (!roomEventId) {
+      setNotOpen(null)
+      return 'out'
+    }
+    // A door that cannot be read is "not in this room", as before.
+    const door = await Promise.resolve()
+      .then(() => apiClient.getEventChat(roomEventId))
+      .catch(() => null)
+    const at = notOpenYetAt(door)
+    if (at) {
+      setNotOpen(at)
+      return 'notopen'
+    }
+    if (door?.success) {
+      setNotOpen(null)
+      markRoomJoined(roomId)
+      rejoinChatSocket(roomId)
+      return 'joined'
+    }
+    // Not entitled (or an older server): no countdown, whatever a link's `opensAt` said (review LOW).
+    setNotOpen(null)
+    return 'out'
+  }
+  // Once per open, as soon as the event is known (the row may land after the refusal): a door that joins you is read
+  // again; one that says "not yet" is the countdown; anything else leaves "You're not in this room" as it was.
+  useEffect(() => {
+    if (!outOfRoom || !roomEventId || askedDoor.current) return
+    askedDoor.current = true
+    void askEventDoor().then((answer) => {
+      if (answer === 'out') return
+      setOutOfRoom(false)
+      if (answer === 'joined') void loadMessagesRef.current(true)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outOfRoom, roomEventId])
+  /* "Open the room", once the countdown has ended: the door again, then the room. */
+  const openRoom = async () => {
+    if (opening) return
+    setOpening(true)
+    const answer = await askEventDoor()
+    setOpening(false)
+    if (answer === 'joined') {
+      setOutOfRoom(false)
+      setLoading(true)
+      void loadMessages(true)
+    } else if (answer === 'out') {
+      setNotOpen(null)
+      setOutOfRoom(true)
+    }
+  }
+  /*
+   * A block made anywhere (Room info's card, a profile) takes that person out of what this feed already holds: the
+   * loaded pages are dropped (only what this phone has not sent yet stays) and the newest page is read again, which
+   * the server now filters. Their cursor starts over with it.
+   */
+  useOnBlock(() => {
+    if (!chatRoomId || outsideRef.current) return
+    messagesRef.current = messagesRef.current.filter(isTemp)
+    setMessages(messagesRef.current)
+    setHasMore(false)
+    setOldestCursor(null)
+    if (messagesCacheKey) queryCache.invalidate(messagesCacheKey)
+    void loadMessagesRef.current(true)
+  })
   const roomEventIdRef = useLatest(roomInfo.eventId ?? null)
   useEffect(
     () =>
       subscribeToLiveEnded((data) => {
         const mine = roomEventIdRef.current
-        if (!mine || mine === data.eventId) void loadMessagesRef.current(true)
+        if (mine && mine !== data.eventId) return
+        setEndedReason(data.reason)
+        void loadMessagesRef.current(true)
       }),
     [loadMessagesRef, roomEventIdRef]
   )
@@ -598,7 +806,7 @@ function GroupChatInner() {
 
   const myId = currentUser?.id
   /* Muted, locked, closed: the server refuses reactions too, so the bar does not offer them. */
-  const refusesWrites = !!composer.lock && composer.lock.state !== 'ratelimited'
+  const refusesWrites = (!!composer.lock && composer.lock.state !== 'ratelimited') || !!opensIn
   /** What a long-press offers for this message (lib/messageMenu.ts, R3-D5 5.2). */
   const planFor = (message: Message): MessageMenu =>
     messageMenu({
@@ -668,7 +876,13 @@ function GroupChatInner() {
   }
 
   /* Stable for the rows' memo: each reads the screen as it is when it fires. */
-  const handlersRef = useLatest({ openMenu, retrySend, react })
+  /* A vote the room itself refused drives the room's state, as any other refusal of it does. */
+  const pollRefusal = (reason: PollRefusal) => {
+    if (reason === 'NOT_LIVE') setNotLive(true)
+    else if (reason === 'NOT_IN_ROOM') setOutOfRoom(true)
+    else composer.setLock({ state: 'closed' })
+  }
+  const handlersRef = useLatest({ openMenu, retrySend, react, pollRefusal })
   const handlers = useMemo<RowHandlers>(
     () => ({
       menu: (m, a) => handlersRef.current.openMenu(m, a),
@@ -677,6 +891,7 @@ function GroupChatInner() {
       reply: (m) => setReplyingTo(m),
       sender: (m) => setCardFor({ id: m.sender_id, name: m.sender_name }),
       link: (url) => showSheet(linkSheet(url, 'room')),
+      pollRefusal: (reason) => handlersRef.current.pollRefusal(reason),
     }),
     [handlersRef]
   )
@@ -692,7 +907,10 @@ function GroupChatInner() {
         first={place.first}
         last={place.last}
         landed={landed?.id === item.message_id ? landed.emoji : undefined}
+        arriving={arrivingRef.current.has(item.message_id)}
         senderTappable={eventRoom}
+        eventId={eventRoom ? roomInfo.eventId : null}
+        pollViewable={viewablePolls.has(item.message_id)}
         handlers={handlers}
       />
     )
@@ -714,22 +932,44 @@ function GroupChatInner() {
     }, 2000)
   }
 
-  const name = roomName || defaultRoomName(roomKind)
+  /*
+   * Unnamed, the kind's own word, once something has said what the room is; a bare link or a push says nothing, and is
+   * not called an event's room until it is known to be one (rc8 #6).
+   */
+  const name = roomName || (roomKind !== null || eventKnown ? defaultRoomName(roomKind) : UNKNOWN_ROOM_NAME)
   // Most rooms are named for their event: then the line is the live count (dot, Geist Mono), else the event's title.
-  const line = roomSubtitle(name, eventTitle || undefined, memberCount)
-  const subtitle = !line ? null : line === eventTitle ? <SubtitleText>{line}</SubtitleText> : <CountLine count={memberCount ?? 0} />
-  const top = chatHeaderBottom(insets.top)
+  // Five and up, as every people count says it (the owner's floor): under that the line is the event's title, or nothing.
+  const line = roomSubtitle(name, eventTitle || undefined, printable(hereCount))
+  const subtitle = opensIn ? (
+    <OpensLine label={opensIn} spoken={opensInSpoken(opensIn)} count={printable(hereCount)} />
+  ) : !line ? null : line === eventTitle ? (
+    <SubtitleText>{line}</SubtitleText>
+  ) : (
+    <CountLine count={printable(hereCount) ?? 0} />
+  )
+  // Advice before sending, never a gate (5.10): the server decides. A crew's room says its own sentence; the rest are anonymous.
+  const warning = useMemo(() => contactWarning(newMessage, roomKind === 'crew' ? 'crew' : 'anonymous'), [newMessage, roomKind])
   const dockBottom = keyboardUp ? SPACE.sm : Math.max(insets.bottom, SPACE.lg)
-  const lock = composer.lock
+  /* Before the room opens the composer says so without a send being refused first; a refusal's own lock wins. */
+  const lock: ComposerLock | null = composer.lock ?? (opensIn ? { state: 'notopen' } : null)
   const menuPlan = menu ? planFor(menu.message) : null
 
   return (
     <View style={styles.screen}>
-      <Orbs set="brand" paused={keyboardUp} />
       <Grain />
       <KeyboardFrame>
         {outside ? (
-          <RoomOutside outside={outside} rejoining={rejoining} onRejoin={() => void rejoin()} onGoLive={goLiveAgain} onBack={goBack} />
+          <RoomOutside
+            outside={outside}
+            roomKind={roomKind}
+            rejoining={rejoining}
+            onRejoin={() => void rejoin()}
+            onGoLive={goLiveAgain}
+            onBack={goBack}
+            opensIn={notOpenIn}
+            opening={opening}
+            onOpenRoom={() => void openRoom()}
+          />
         ) : (
           <>
             <FlatList
@@ -738,8 +978,8 @@ function GroupChatInner() {
               data={loading && !messages.length ? [] : chatItems}
               renderItem={renderChatItem}
               keyExtractor={(item) => (item.kind === 'separator' ? item.id : item.message_id)}
-              style={[styles.fill, chatFeedFrame(insets.top).style]}
-              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md }]}
+              style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace, window.fontScale).style]}
+              contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md + toastInset }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
@@ -796,12 +1036,14 @@ function GroupChatInner() {
                       title="Start the room conversation"
                       body="Be the first to post so everyone can join."
                       // Fills the composer for you to send or change: the tap sends nothing.
-                      actions={[{ label: 'Write a starter', kind: 'secondary', onPress: () => setNewMessage('Hey everyone 👋') }]}
+                      actions={[{ label: 'Write a starter', kind: 'lit', onPress: () => setNewMessage('Hey everyone 👋') }]}
                       testID="room-empty"
                     />
                   </View>
                 )
               }
+              onViewableItemsChanged={onViewable}
+              viewabilityConfig={VIEWABLE}
               onContentSizeChange={follow.onContentSizeChange}
               onScrollBeginDrag={follow.onScrollBeginDrag}
               onScroll={(e) => {
@@ -836,6 +1078,7 @@ function GroupChatInner() {
                 state={lock?.state ?? 'normal'}
                 reason={lock?.reason}
                 countdown={composer.countdown}
+                warning={warning}
                 action={lock?.state === 'notcheckedin' && roomInfo.eventId ? { label: 'I’m going', onPress: () => void imGoing(), loading: rsvping } : undefined}
                 reply={replyingTo ? { name: replyingTo.sender_name, text: replyingTo.message_text } : null}
                 onCancelReply={() => setReplyingTo(null)}
@@ -849,15 +1092,15 @@ function GroupChatInner() {
 
       <ChatHeader
         testID="room-header"
-        title={name}
+        title={blendRoom.title ?? name}
         muted={muted}
-        leading={<RoomCover uri={eventImage} />}
-        subtitle={outside ? null : subtitle}
+        leading={blendRoom.leading ?? (roomKind === 'crew' ? <CrewRoomFace crewId={crewIdParam ?? null} /> : <RoomCover uri={eventImage} />)}
+        subtitle={outside?.kind === 'notopen' ? (notOpenIn ? <OpensLine label={notOpenIn} spoken={opensInSpoken(notOpenIn)} count={null} /> : null) : outside ? null : (blendRoom.subtitle ?? subtitle)}
         onBack={goBack}
-        moreLabel="Room info"
+        moreLabel={blendRoom.blend ? 'More' : 'Room info'}
         onMore={() =>
-          blendIdParam
-            ? router.push({ pathname: '/blend/[blendId]', params: { blendId: blendIdParam, fromChat: '1' } })
+          blendRoom.blend
+            ? blendRoom.openMenu()
             : crewIdParam
               ? router.push({ pathname: '/crews/[crewId]', params: { crewId: crewIdParam, fromChat: '1' } })
               : router.push({
@@ -866,7 +1109,9 @@ function GroupChatInner() {
                 } as never)
         }
       />
-      {outside ? null : <RealtimeStatusBanner status={socketStatus} style={{ ...styles.banner, top }} />}
+      {outside ? null : blendRoom.bar}
+      {outside ? null : blendRoom.overlays}
+      {outside ? null : <RealtimeStatusBanner status={socketStatus} style={{ ...styles.banner, top: top + blendRoom.barSpace }} />}
 
       <LongPressMenu
         testID="room-menu"
@@ -894,7 +1139,7 @@ function GroupChatInner() {
             sender={senderOf(menu.message, roomId)}
             text={menu.message.message_text}
             replyTo={menu.message.replyTo ? { name: menu.message.replyTo.sender_name, text: menu.message.replyTo.message_text } : undefined}
-            time={chatClock(menu.message.created_at)}
+            time={clockTime(menu.message.created_at)}
           />
         ) : null}
       </LongPressMenu>
@@ -928,10 +1173,15 @@ const styles = StyleSheet.create({
  * `ScreenProfiler` is the children untouched in production — see its header.
  */
 export default function GroupChat() {
-  if (!idParam(useLocalSearchParams().id)) return <BrokenLink />
+  const id = idParam(useLocalSearchParams().id)
+  if (!id) return <BrokenLink />
+  // Rose world: a room is people together, as Banter and its DMs are; its sheets inherit it.
   return (
-    <ScreenProfiler id="event-chat">
-      <GroupChatInner />
-    </ScreenProfiler>
+    <HueProvider value="rose">
+      <ScreenProfiler id="event-chat">
+        {/* Keyed by the room (RC drive 2 D-E): a link from one open room to another never carries this one's draft or state. */}
+        <GroupChatInner key={id} />
+      </ScreenProfiler>
+    </HueProvider>
   )
 }

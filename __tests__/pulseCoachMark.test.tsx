@@ -14,7 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 
 let mockUser: { id: string } | null = null
 let mockFocused = true
@@ -43,9 +43,20 @@ jest.mock('expo-location', () => ({
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 // The shell reports what the drawer is doing; the test decides it.
+// The city lives in the shell's title tabs now: its chip calls what the screen reported as `openCityPicker`.
+let mockBrowse: { openCityPicker: () => void } | null = null
 jest.mock('../components/home/HomeShell', () => ({
-  HomeShell: ({ renderEvents }: { renderEvents: (b: () => void, visible: boolean, full: boolean) => React.ReactNode }) =>
-    renderEvents(() => {}, mockVisible, mockFull),
+  HomeShell: ({ renderEvents }: { renderEvents: (b: (browse: { openCityPicker: () => void }) => void, visible: boolean, full: boolean) => React.ReactNode }) => {
+    const { Pressable } = require('react-native')
+    return (
+      <>
+        {renderEvents((browse) => {
+          mockBrowse = browse
+        }, mockVisible, mockFull)}
+        <Pressable testID="open-city" onPress={() => mockBrowse?.openCityPicker()} />
+      </>
+    )
+  },
 }))
 jest.mock('../app/(tabs)/_layout', () => ({ TAB_BAR_CLEARANCE: 92, tabBarTop: () => 800 }))
 jest.mock('../components/pulse/FeaturedCard', () => {
@@ -53,33 +64,30 @@ jest.mock('../components/pulse/FeaturedCard', () => {
   return {
     FEATURED_CARD_GAP: 16,
     featuredCardLayout: () => ({ width: 300, photoHeight: 200, height: 300, inset: 24 }),
-    FeaturedCard: (p: { id: string; title: string; onPress: () => void; onLongPress: () => void }) => (
-      <Pressable testID={`card-${p.id}`} onPress={p.onPress} onLongPress={p.onLongPress}>
+    FeaturedCard: (p: { id: string; title: string; onPress: () => void; onLongPress: (frame: object) => void }) => (
+      <Pressable testID={`card-${p.id}`} onPress={p.onPress} onLongPress={() => p.onLongPress({ x: 0, y: 0, width: 300, height: 300 })}>
         <Text>{p.title}</Text>
       </Pressable>
     ),
   }
 })
-jest.mock('../components/pulse/UpcomingCard', () => {
+jest.mock('../components/ds/EventCard', () => {
   const { Pressable, Text } = require('react-native')
   return {
-    UPCOMING_THUMB: 72,
-    UpcomingCard: (p: { title: string; onPress: () => void; onPressIn?: () => void; onLongPress: () => void; onToggleFavorite: () => void }) => (
-      <Pressable testID={`row-${p.title}`} onPress={p.onPress} onPressIn={p.onPressIn} onLongPress={p.onLongPress}>
+    EventCard: (p: { title: string; onPress: () => void; onPressIn?: () => void; onLongPress?: (frame: object) => void }) => (
+      <Pressable testID={`row-${p.title}`} onPress={p.onPress} onPressIn={p.onPressIn} onLongPress={() => p.onLongPress?.({ x: 0, y: 0, width: 300, height: 64 })}>
         <Text>{p.title}</Text>
-        <Pressable testID={`heart-${p.title}`} onPress={p.onToggleFavorite} />
       </Pressable>
     ),
   }
 })
-// The two sheets the header opens, each with a way to close it.
+// The two sheets the header opens, each with a way to close it (the city's is opened from the shell, above).
 jest.mock('../components/pulse/PulseHeader', () => {
   const { Pressable, View } = require('react-native')
   return {
-    PULSE_HEADER_HEIGHT: 104,
-    PulseHeader: (p: { onPressCity: () => void; onPressFilter: () => void }) => (
+    PULSE_HEADER_HEIGHT: 48,
+    PulseSearch: (p: { onPressFilter: () => void }) => (
       <View>
-        <Pressable testID="open-city" onPress={p.onPressCity} />
         <Pressable testID="open-filters" onPress={p.onPressFilter} />
       </View>
     ),
@@ -92,29 +100,25 @@ jest.mock('../components/pulse/FilterControl', () => {
       p.visible ? <Pressable testID="close-sheet" onPress={p.onClose} /> : null,
   }
 })
-jest.mock('../components/pulse/SectionHeader', () => ({ SectionHeader: () => null }))
-jest.mock('../components/ui/DayHeading', () => ({ DayHeading: () => null }))
+jest.mock('../components/ds/DayHeading', () => ({ DayHeading: () => null }))
 jest.mock('../components/cityArt/CityArtCard', () => ({ CityArtBanner: () => null, CityArtCard: () => null }))
 jest.mock('../components/cityArt/drawable', () => ({ drawableCityArt: () => null }))
-jest.mock('../components/NearbyEventCard', () => () => null)
 jest.mock('../components/OptimizedImage', () => ({ preloadImages: jest.fn(async () => {}) }))
 jest.mock('../components/RealtimeStatusBanner', () => () => null)
-jest.mock('../components/Skeleton', () => ({ SkeletonBlock: () => null, SkeletonLine: () => null }))
+jest.mock('../components/Skeleton', () => ({ Skeleton: () => null, SkeletonBlock: () => null, SkeletonLine: () => null }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+jest.mock('../components/pulse/PulseBanners', () => ({ PulseBanners: () => null }))
 jest.mock('../components/motion/FadeInUp', () => ({ children }: { children: React.ReactNode }) => children)
-jest.mock('../components/motion/RisingSheet', () => {
+// The city picker's sheet, with a way to close it (the Sheet needs a modal host).
+jest.mock('../components/pulse/CityPicker', () => {
   const { Pressable } = require('react-native')
-  return {
-    RisingSheet: () => null,
-    SheetFlatList: () => null,
-    SheetModal: (p: { visible: boolean; onRequestClose: () => void }) =>
-      p.visible ? <Pressable testID="close-sheet" onPress={p.onRequestClose} /> : null,
-  }
+  return { CityPicker: (p: { visible: boolean; onClose: () => void }) => (p.visible ? <Pressable testID="close-sheet" onPress={p.onClose} /> : null) }
 })
-jest.mock('../components/ui/Grabber', () => ({ Grabber: () => null }))
-jest.mock('../components/ActionTray', () => ({
-  __esModule: true,
-  default: (p: { visible: boolean; onClose: () => void }) => {
-    mockTray.push(p)
+// The peek the long-press opens: what it was told, and a way to close it.
+jest.mock('../components/pulse/PulsePeek', () => ({
+  PulsePeek: (p: { peek: unknown; onClose: () => void }) => {
+    mockTray.push({ visible: !!p.peek, onClose: p.onClose })
     return null
   },
 }))
@@ -147,7 +151,7 @@ jest.mock('../lib/useAuth', () => ({
 }))
 
 /* eslint-disable import/first */
-import Events from '../app/(tabs)/events'
+import Events, { coachClearsNextHeader } from '../app/(tabs)/events'
 import { CoachMarkHost, spotlightMeasure } from '../components/ds/CoachMarkHost'
 import { getEvents } from '../lib/api'
 /* eslint-enable import/first */
@@ -164,7 +168,9 @@ const event = (id: string, cover: string | null) => ({
   latitude: null,
   longitude: null,
 })
-const FEATURED = [event('e1', 'https://img/1.jpg'), event('e2', 'https://img/2.jpg')]
+// Featured is only what is featured; the server's rank (BUILD-SPEC C1) puts e1 first, so the test does not depend on the day's rotation.
+const featured = (id: string, rank: number) => ({ ...event(id, `https://img/${rank}.jpg`), is_featured: true, featured: { kind: 'editorial' as const, rank } })
+const FEATURED = [featured('e1', 1), featured('e2', 2)]
 
 let accounts = 0
 function signIn() {
@@ -199,6 +205,12 @@ async function shell(view: Awaited<ReturnType<typeof render>>, next: { full?: bo
   await settle()
 }
 const mark = () => screen.queryByText(TEXT)
+/** The page's own request gets the list; the weekend and interest requests the screen also makes get none, so one fixture is one section. */
+const serve = (list: unknown[]) =>
+  (getEvents as jest.Mock).mockImplementation(async (params: { startDate?: string; categorySlug?: string }) => ({
+    data: params?.startDate || params?.categorySlug ? [] : list,
+    error: null,
+  }))
 
 beforeEach(async () => {
   measuredNode = null
@@ -210,7 +222,7 @@ beforeEach(async () => {
   mockVisible = true
   mockFull = false
   mockTray.length = 0
-  ;(getEvents as jest.Mock).mockResolvedValue({ data: FEATURED, error: null })
+  ;serve(FEATURED)
   await AsyncStorage.clear()
 })
 
@@ -232,11 +244,14 @@ describe('the Pulse’s coach mark', () => {
     await mount()
     expect(within(screen.getByTestId('coach-mark-host')).getByTestId('pulse-coach-mark')).toBeTruthy()
     expect(measuredNode?.props.children.props.title).toBe('Event e1')
-    // Caret up, at the card above it; the tip starts under the hole (200 + 300 + the 8 pad + the 8 gap).
+    // Caret up, at the card above it; the tip starts under the hole (200 + 300 + the 8 pad + the 8 gap), and under the next
+    // section's heading, so it never hides that heading and leaves its "See all" floating (rc7 D15).
     expect(StyleSheet.flatten(screen.getByTestId('pulse-coach-mark-caret').props.style)).toMatchObject({ top: -6 })
     let tip = screen.getByTestId('pulse-coach-mark').parent
     while (tip && StyleSheet.flatten(tip.props.style)?.position !== 'absolute') tip = tip.parent
-    expect(StyleSheet.flatten(tip!.props.style)).toMatchObject({ top: 516 })
+    const clears = coachClearsNextHeader(Dimensions.get('window').fontScale)
+    expect(clears).toBeGreaterThan(0)
+    expect(StyleSheet.flatten(tip!.props.style)).toMatchObject({ top: 516 + clears })
     // Four dim rects, none over the card.
     expect(screen.getAllByTestId(/^coach-mark-dim-/, { includeHiddenElements: true })).toHaveLength(4)
   })
@@ -254,7 +269,7 @@ describe('the Pulse’s coach mark', () => {
     expect(mark()).toBeNull()
   })
 
-  it('a long-press on a card: gone, the tray opens, and not back on a remount', async () => {
+  it('a long-press on a card: gone, the peek opens, and not back on a remount', async () => {
     signIn()
     mockFull = true
     const view = await mount()
@@ -262,7 +277,7 @@ describe('the Pulse’s coach mark', () => {
     await act(async () => fireEvent(screen.getByTestId('card-e2'), 'longPress'))
     expect(mark()).toBeNull()
     expect(mockTray.at(-1)?.visible).toBe(true)
-    // Used, not just covered: the tray closing does not bring it back.
+    // Used, not just covered: the peek closing does not bring it back.
     await act(async () => mockTray.at(-1)!.onClose())
     expect(mark()).toBeNull()
     await view.unmount()
@@ -314,7 +329,7 @@ describe('the Pulse’s coach mark', () => {
 
   it('with nothing featured, it is over the first Upcoming card', async () => {
     signIn()
-    ;(getEvents as jest.Mock).mockResolvedValue({ data: [event('u1', null), event('u2', null)], error: null })
+    ;serve([event('u1', null), event('u2', null)])
     mockFull = true
     await mount()
     expect(mark()).toBeTruthy()
@@ -322,9 +337,9 @@ describe('the Pulse’s coach mark', () => {
     expect(measuredNode?.props.children.props.title).toBe('Event u1')
   })
 
-  it('a sheet or tray over it hides it; closed, it is back (still the one showing)', async () => {
+  it('a sheet over it hides it; closed, it is back (still the one showing)', async () => {
     signIn()
-    ;(getEvents as jest.Mock).mockResolvedValue({ data: [event('u1', null), event('u2', null)], error: null })
+    ;serve([event('u1', null), event('u2', null)])
     mockFull = true
     await mount()
     expect(mark()).toBeTruthy()
@@ -335,14 +350,6 @@ describe('the Pulse’s coach mark', () => {
       await act(async () => fireEvent.press(screen.getByTestId('close-sheet')))
       expect(mark()).toBeTruthy()
     }
-
-    // A failed save answers with a tray.
-    await act(async () => fireEvent.press(screen.getByTestId('heart-Event u2')))
-    await settle()
-    expect(mockTray.at(-1)?.visible).toBe(true)
-    expect(mark()).toBeNull()
-    await act(async () => mockTray.at(-1)!.onClose())
-    expect(mark()).toBeTruthy()
   })
 
   it('signed out, nothing', async () => {
@@ -356,12 +363,36 @@ describe('the Pulse’s coach mark', () => {
 describe('the event page, warm before the tap', () => {
   it('the first featured card once the Pulse settles, and a card the finger is on', async () => {
     signIn()
-    ;(getEvents as jest.Mock).mockResolvedValue({ data: [event('e1', 'https://img/1.jpg'), event('u1', null)], error: null })
+    ;serve([featured('e1', 1), event('u1', null)])
     const { apiClient } = jest.requireMock('../lib/apiClient') as { apiClient: { getEvent: jest.Mock } }
     apiClient.getEvent.mockClear()
     await mount()
     expect(apiClient.getEvent.mock.calls.map((c) => c[0])).toEqual(['e1'])
     await act(async () => fireEvent(screen.getByTestId('row-Event u1'), 'pressIn'))
     expect(apiClient.getEvent).toHaveBeenLastCalledWith('u1', expect.objectContaining({ include: 'interestedUsers' }))
+  })
+})
+
+describe('the save heart beside each Everything-else row (kept)', () => {
+  it('is a named toggle; a refused save puts it back and says so in a toast with the error haptic', async () => {
+    signIn()
+    ;serve([event('u1', null), event('u2', null)])
+    mockShowToast.mockClear()
+    await mount()
+    const heart = screen.getByRole('button', { name: 'Save Event u2' })
+    expect(heart.props.accessibilityState).toMatchObject({ selected: false })
+    await act(async () => fireEvent.press(heart))
+    await settle()
+    expect(mockShowToast).toHaveBeenCalledWith("Couldn’t save this event. Try again.", 'error', { haptic: 'error' })
+    // Rolled back: still offering Save, not "Saved".
+    expect(screen.getByRole('button', { name: 'Save Event u2' })).toBeTruthy()
+  })
+})
+
+describe('the tip clears the next section’s heading (rc7 D15)', () => {
+  it('is the section margin plus the heading line, growing with the text to the heading’s cap', () => {
+    const { SPACE, TYPE } = jest.requireActual('../lib/design/tokens')
+    expect(coachClearsNextHeader(1)).toBe(SPACE.xxl + TYPE.heading.lineHeight)
+    expect(coachClearsNextHeader(5)).toBe(SPACE.xxl + TYPE.heading.lineHeight * 2)
   })
 })

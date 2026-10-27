@@ -11,9 +11,10 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 
 import { PersonCard, PersonCardContent, type PersonCardPerson } from '../components/ds/PersonCard'
+import { HueProvider } from '../components/ds/shared'
 import * as Reanimated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, MATERIAL, SPRING, TYPE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPRING, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -89,6 +90,19 @@ describe('a · here now', () => {
     expect(text('Techno')).toBeTruthy()
   })
 
+  it('the reason under the name is not said again as the panel’s first row (B-R13)', async () => {
+    await draw()
+    expect(screen.getAllByText('Both open to dating', { includeHiddenElements: true })).toHaveLength(1)
+    expect(text('Both at 3 nights before')).toBeTruthy()
+  })
+
+  it('a panel whose only reason is the one under the name is not drawn; a different first reason stays', async () => {
+    await draw({ person: { ...PRIYA, reasons: ['Both open to dating'] } })
+    expect(query('p-reasons')).toBeNull()
+    await draw({ person: { ...PRIYA, reasons: ['Both at 3 nights before', 'Both open to dating'] } })
+    expect(screen.getAllByText('Both open to dating', { includeHiddenElements: true })).toHaveLength(2)
+  })
+
   it('Like (the gradient primary) · Wave · Message · ⋯, the consequence, View profile', async () => {
     await draw()
     const like = screen.getByRole('button', { name: 'Like' })
@@ -119,12 +133,13 @@ describe('a · here now', () => {
 })
 
 describe('the states', () => {
-  it('liked: a white “Liked”, selected, still: no second H.like', async () => {
+  it('liked: a lit “Liked” (direction C: no white selection), selected, still: no second H.like', async () => {
     const onLike = jest.fn()
     await draw({ state: 'liked', onLike })
     const liked = screen.getByRole('button', { name: 'Liked' })
     expect(liked.props.accessibilityState).toMatchObject({ selected: true })
-    expect(flat('p-liked').backgroundColor).toBe(COLOR.textPrimary)
+    expect(flat('p-liked')).toMatchObject({ backgroundColor: COLOR.selectionEmberFill, borderWidth: 1, borderColor: COLOR.brandOrange, height: SIZE.control })
+    expect(StyleSheet.flatten(text('Liked')!.props.style).color).toBe(COLOR.textPrimary)
     await fireEvent.press(liked)
     expect(onLike).not.toHaveBeenCalled()
     silent()
@@ -159,11 +174,12 @@ describe('the states', () => {
     expect(onWave).not.toHaveBeenCalled()
   })
 
-  it('waved: the label settles to a still white “Waved” with a check (R3-D4 12, 15), not a dimmed button', async () => {
+  it('waved: the label settles to a still lit “Waved” with a check (R3-D4 12, 15), selected, not a dimmed button', async () => {
     await draw({ state: 'waved' })
     expect(screen.queryByRole('button', { name: /Wave/ })).toBeNull()
-    expect(StyleSheet.flatten(text('Waved')!.props.style).color).toBe(COLOR.ink)
-    expect(flat('p-waved')).toMatchObject({ backgroundColor: COLOR.textPrimary })
+    expect(StyleSheet.flatten(text('Waved')!.props.style).color).toBe(COLOR.textPrimary)
+    expect(flat('p-waved')).toMatchObject({ backgroundColor: COLOR.selectionEmberFill, borderWidth: 1, borderColor: COLOR.brandOrange })
+    expect(screen.getByLabelText('Waved').props.accessibilityState).toMatchObject({ selected: true })
     expect(text('Waved. Message sends a request and reveals you to Priya.')).toBeTruthy()
   })
 
@@ -367,5 +383,75 @@ describe('Flow 4: the room’s card (R2-D1, R3-D4, #51)', () => {
     await draw({ liked: true, crewLike: { name: 'Nebula', emblemSeed: 'nebula', onPress: jest.fn() }, testID: 'c' })
     expect(screen.queryByRole('button', { name: 'Like for Nebula' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Like as yourself' })).toBeNull()
+  })
+})
+
+describe('the action row is one height (M4)', () => {
+  it('Like, Message, the pills and the circles are all 48', async () => {
+    await draw({ onLike: jest.fn(), onWave: jest.fn(), onMore: jest.fn() })
+    for (const id of ['p-like', 'p-message', 'p-hand', 'p-ellipsis']) expect(flat(id).height).toBe(SIZE.control)
+  })
+
+  it('under rose, Liked lights in rose', async () => {
+    await render(
+      <HueProvider value="rose">
+        <PersonCardContent person={PRIYA} variant="here" state="liked" testID="p" />
+      </HueProvider>
+    )
+    expect(flat('p-liked').backgroundColor).toBe(COLOR.selectionRoseFill)
+  })
+})
+
+describe('Matching v2 overlap (Flow 14 · 14.1, R7)', () => {
+  const LABELS = [
+    { text: 'Friendship', shared: true },
+    { text: 'CSK', shared: true },
+    { text: 'Filter coffee', shared: true },
+    { text: 'Leo', shared: false },
+  ]
+  const overlap = { line: 'Both CSK, in RCB country', labels: LABELS }
+
+  it('draws the server’s line and two labels before a reveal; the plain chips give way', async () => {
+    await draw({ person: { ...PRIYA, overlap } })
+    expect(text('Both CSK, in RCB country')).toBeTruthy()
+    expect(text('Friendship')).toBeTruthy()
+    expect(text('CSK')).toBeTruthy()
+    expect(text('Filter coffee')).toBeNull()
+    expect(text('Vinyl')).toBeNull()
+  })
+
+  it('four labels after a reveal (matched)', async () => {
+    await draw({ person: { ...PRIYA, overlap }, variant: 'matched' })
+    expect(text('Leo')).toBeTruthy()
+  })
+
+  it('no line: nothing new, and the plain chips stay', async () => {
+    await draw({ person: { ...PRIYA, overlap: { line: null, labels: [] } } })
+    expect(query('p-overlap')).toBeNull()
+    expect(text('Vinyl')).toBeTruthy()
+  })
+
+  it('the thin card never says what you share', async () => {
+    await draw({ person: { ...PRIYA, overlap }, variant: 'thin' })
+    expect(query('p-overlap')).toBeNull()
+  })
+})
+
+describe('badges on the card (Flow 14 · 14.5, the server’s own budget)', () => {
+  // `badges` as a room card's person carries them: `{ kind, label }[]`, none in a small room.
+  it('draws what they earned as read-only DS pills after the chips', async () => {
+    await draw({ person: { ...PRIYA, badges: ['shows_up', 'nights_out'] } })
+    expect(query('p-badges')).toBeTruthy()
+    expect(screen.getByLabelText('Badge: Shows up')).toBeTruthy()
+    expect(screen.getByLabelText('Badge: 5+ nights this month')).toBeTruthy()
+    // Read, not pressed: a pill with no handler is not a button.
+    expect(screen.getByLabelText('Badge: Shows up').props.accessibilityRole).toBeUndefined()
+  })
+
+  it('draws no row for none, and none on the thin card', async () => {
+    await draw({ person: { ...PRIYA, badges: [] } })
+    expect(query('p-badges')).toBeNull()
+    await draw({ person: { ...PRIYA, badges: ['shows_up'] }, variant: 'thin' })
+    expect(query('p-badges')).toBeNull()
   })
 })

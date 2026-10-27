@@ -1,5 +1,5 @@
-import { Easing, FadeIn, FadeOut, ReduceMotion, withTiming } from 'react-native-reanimated'
-import { DURATION, EASING } from '../../lib/design/tokens'
+import { Easing, FadeIn, FadeOut, ReduceMotion, withDelay, withTiming } from 'react-native-reanimated'
+import { DURATION, EASING, REDUCE_MOTION, RISE } from '../../lib/design/tokens'
 
 /*
  * Entering/exiting presets for small things that appear and disappear —
@@ -49,6 +49,23 @@ export const popOut = () => {
 }
 
 /*
+ * A badge arriving and leaving (DS #28, `Badge`'s own): it arrives from 0.8 and settles while it fades in over `quick`, and
+ * leaves as a fade over `quick`. Reduce Motion: the fade alone, over the Reduce Motion `quick`.
+ */
+const GENTLE = Easing.bezier(...EASING.gentle)
+const BADGE_FROM = 0.8
+export const badgeIn = () => {
+  'worklet'
+  const t = { duration: DURATION.quick, easing: GENTLE, reduceMotion: ReduceMotion.Never }
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: BADGE_FROM }] },
+    animations: { opacity: withTiming(1, t), transform: [{ scale: withTiming(1, t) }] },
+  }
+}
+export const badgeFadeIn = FadeIn.duration(REDUCE_MOTION.duration.quick).easing(GENTLE).reduceMotion(ReduceMotion.Never)
+export const badgeOut = FadeOut.duration(DURATION.quick).easing(GENTLE).reduceMotion(ReduceMotion.Never)
+
+/*
  * A glass pill arriving (ROUND4 B8, approved with Prompt 10): the pill rises
  * 16 pt on `base` with its glass opaque the whole way — a blur faded by
  * opacity reads as a grey smear — and only its contents fade in. Put
@@ -67,3 +84,44 @@ export const glassRiseIn = () => {
   }
 }
 export const glassContentsIn = FadeIn.duration(PILL_IN).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
+
+/*
+ * A system banner arriving or leaving (DS #44): it slides 16 pt and fades over `base` on the entrance curve, and
+ * leaves in a quick fade; the content below shifts on `M.settle` (the parent's layout transition). Reduce Motion: the
+ * fade alone, and the content shifts at once.
+ */
+const BANNER_RISE = 16
+export const bannerIn = () => {
+  'worklet'
+  const t = { duration: DURATION.base, easing: ENTRANCE, reduceMotion: ReduceMotion.System }
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: -BANNER_RISE }] },
+    animations: { opacity: withTiming(1, t), transform: [{ translateY: withTiming(0, t) }] },
+  }
+}
+export const bannerFadeIn = FadeIn.duration(DURATION.base).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
+export const bannerOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)
+
+/*
+ * A whole state arriving (Flow 15: "replaces the landing or the current screen · base 220 ms crossfade · no haptic"): the
+ * screen fades in over `base` on the gentle curve; no rise, so there is nothing for Reduce Motion to remove.
+ */
+export const stateScreenIn = FadeIn.duration(DURATION.base).easing(GENTLE).reduceMotion(ReduceMotion.Never)
+
+/*
+ * A list re-sorted by a filter (#38, `lib/resort.ts`): a row arrives with a fade and a rise of `RISE.list` over `base`, starting
+ * `delay` ms in (the 18 ms stagger); a row that leaves fades over `quick`. Reduce Motion: both are the quick crossfade.
+ */
+export const resortIn = (delay: number) => () => {
+  'worklet'
+  const t = { duration: DURATION.base, easing: ENTRANCE, reduceMotion: ReduceMotion.Never }
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: RISE.list }] },
+    animations: {
+      opacity: withDelay(delay, withTiming(1, t)),
+      transform: [{ translateY: withDelay(delay, withTiming(0, t)) }],
+    },
+  }
+}
+export const resortFadeIn = FadeIn.duration(REDUCE_MOTION.duration.quick).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
+export const resortOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)

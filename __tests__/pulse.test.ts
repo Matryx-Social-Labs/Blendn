@@ -33,11 +33,11 @@ describe('dayGroupLabel', () => {
   })
 
   it('names any later day by its date', () => {
-    expect(dayGroupLabel(at(2026, 10, 2), NOW)).toEqual({ title: 'Nov 2', weekday: 'Monday' })
+    expect(dayGroupLabel(at(2026, 10, 2), NOW)).toEqual({ title: '2 Nov', weekday: 'Monday' })
   })
 
   it('adds the year only when it is not this one', () => {
-    expect(dayGroupLabel(at(2027, 0, 3), NOW)?.title).toBe('Jan 3, 2027')
+    expect(dayGroupLabel(at(2027, 0, 3), NOW)?.title).toBe('3 Jan 2027')
   })
 
   it('returns null for a date it cannot read rather than "Invalid Date"', () => {
@@ -62,7 +62,7 @@ describe('groupByDay', () => {
     expect(groups.map((g) => [g.title, g.items.map((i) => i.id)])).toEqual([
       ['Today', ['a', 'b']],
       ['Tomorrow', ['c']],
-      ['Nov 2', ['d']],
+      ['2 Nov', ['d']],
     ])
   })
 
@@ -76,9 +76,9 @@ describe('groupByDay', () => {
 })
 
 describe('timeLabel', () => {
-  it('shows the local start time with minutes', () => {
-    expect(timeLabel(new Date(2026, 9, 24, 19, 0).toISOString())).toMatch(/7:00/)
-    expect(timeLabel(new Date(2026, 9, 24, 9, 30).toISOString())).toMatch(/9:30/)
+  it('shows the local start time in the app’s one clock, never the phone’s locale (r7 M7)', () => {
+    expect(timeLabel(new Date(2026, 9, 24, 19, 0).toISOString())).toBe('7 PM')
+    expect(timeLabel(new Date(2026, 9, 24, 9, 30).toISOString())).toBe('9:30 AM')
   })
 
   it('returns empty for a date it cannot read', () => {
@@ -107,12 +107,12 @@ describe('featuredDateLabel', () => {
 
   it('falls back to a short date past tomorrow', () => {
     // "In 3 days" stops being useful around two and starts being vague.
-    expect(featuredDateLabel(at(2026, 9, 27), NOW)).toBe('Oct 27')
-    expect(featuredDateLabel(at(2026, 10, 2), NOW)).toBe('Nov 2')
+    expect(featuredDateLabel(at(2026, 9, 27), NOW)).toBe('27 Oct')
+    expect(featuredDateLabel(at(2026, 10, 2), NOW)).toBe('2 Nov')
   })
 
   it('carries the year across a new year', () => {
-    expect(featuredDateLabel(at(2027, 0, 1), NOW)).toBe('Jan 1, 2027')
+    expect(featuredDateLabel(at(2027, 0, 1), NOW)).toBe('1 Jan 2027')
   })
 
   it('is empty for an unreadable date', () => {
@@ -151,6 +151,15 @@ describe('peopleLabel', () => {
     expect(peopleLabel({ here_count: 0, going_count: 39 }, true)).toBe('39 going')
   })
 
+  it('the floor is five: "3 going" and "4 here now" say nothing, five and up do (BUILD-SPEC §0)', () => {
+    expect(peopleLabel({ going_count: 4 }, false)).toBeNull()
+    expect(peopleLabel({ going_count: 5 }, false)).toBe('5 going')
+    expect(peopleLabel({ here_count: 4, going_count: 4 }, true)).toBeNull()
+    // Four inside is not said, so the line falls to the going count, which clears its own floor.
+    expect(peopleLabel({ here_count: 4, going_count: 30 }, true)).toBe('30 going')
+    expect(peopleLabel({ here_count: 5, going_count: 3 }, true)).toBe('5 here now')
+  })
+
   it('reads hereCount, never checkInCount: 12 inside of 14 who came is "12 here now" (final drive)', () => {
     const card = eventFromApi({ id: 'e1', title: 'Evening Ragas', startTime: '2026-10-16T13:00:00.000Z', hereCount: 12, checkInCount: 14, currentCapacity: 14, goingCount: 30 } as never)
     expect(peopleLabel(card, true)).toBe('12 here now')
@@ -165,7 +174,7 @@ describe('peopleLabel', () => {
 
   it('zero, or a count the server did not send, is nothing to say', () => {
     expect(peopleLabel({ here_count: 0, going_count: 0 }, false)).toBeNull()
-    expect(peopleLabel({ here_count: 3, going_count: null }, false)).toBeNull()
+    expect(peopleLabel({ here_count: 30, going_count: null }, false)).toBeNull()
     expect(peopleLabel({ going_count: -3 }, false)).toBeNull()
     expect(peopleLabel({ going_count: Number.NaN }, false)).toBeNull()
     expect(peopleLabel({}, true)).toBeNull()
@@ -206,9 +215,9 @@ describe('nextUpLabel', () => {
 
   it('names a later day by weekday and date, with the year only when it differs', () => {
     const t = at(2026, 10, 7, 19)
-    expect(nextUpLabel(t, end(2026, 10, 7, 23), NOW)).toBe(`Sat, Nov 7 · ${timeLabel(t)}`)
+    expect(nextUpLabel(t, end(2026, 10, 7, 23), NOW)).toBe(`Sat 7 Nov · ${timeLabel(t)}`)
     const next = at(2027, 0, 2, 19)
-    expect(nextUpLabel(next, end(2027, 0, 2, 23), NOW)).toBe(`Sat, Jan 2, 2027 · ${timeLabel(next)}`)
+    expect(nextUpLabel(next, end(2027, 0, 2, 23), NOW)).toBe(`Sat 2 Jan 2027 · ${timeLabel(next)}`)
   })
 
   it('is empty for a start it cannot read', () => {

@@ -59,7 +59,7 @@ tags:
       TOKEN: ${MAESTRO_THEIR_TOKEN}
       EVENT_ID: ${EVENT_ID}
       LIKE_CREW: ${MY_CREW}
-- tapOn: "Close Blend'n"
+- tapOn: "Close Blend’n"
 - tapOn: "Banter"
 # Live now lists the Blend from GET /chat/groups rooms: "Blend · <both crews>".
 - extendedWaitUntil:

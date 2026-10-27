@@ -8,8 +8,19 @@ import { fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { StyleSheet } from 'react-native'
 
+import * as Reanimated from 'react-native-reanimated'
+
 import { OfferCard } from '../components/ds/OfferCard'
+import { DURATION } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+
+jest.mock('react-native-reanimated', () => {
+  const actual = jest.requireActual('react-native-reanimated')
+  return { ...actual, __esModule: true, withTiming: jest.fn(actual.withTiming), useReducedMotion: jest.fn(() => false) }
+})
+jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: jest.fn(() => false) }))
+// eslint-disable-next-line import/first
+import { useReducedMotion } from '../lib/motion'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const TOIT = { name: 'Toit', type: 'brewery', typeLabel: 'Brewery', area: 'Indiranagar' }
@@ -65,5 +76,44 @@ describe('<OfferCard>', () => {
     expect(flat('o').opacity).toBe(0.72)
     expect(screen.getByText(stateLabel)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Use at the door' })).toBeNull()
+  })
+})
+
+describe('"Why you got this" opens over base', () => {
+  beforeEach(() => {
+    ;(useReducedMotion as jest.Mock).mockReturnValue(false)
+    jest.mocked(Reanimated.withTiming).mockClear()
+  })
+  const why = () => screen.getByRole('button', { name: 'Why you got this' })
+
+  it('the card moves with its content (a layout transition), so the floor sentence glides down', async () => {
+    await render(card())
+    expect(screen.getByTestId('o').props.layout).toBeDefined()
+  })
+
+  it('the text fades in on entering and has an exit, and the chevron turns a quarter', async () => {
+    await render(card())
+    await fireEvent.press(why())
+    const text = screen.getByTestId('o-why')
+    expect(text.props.entering).toBeDefined()
+    expect(text.props.exiting).toBeDefined()
+    expect(Reanimated.withTiming).toHaveBeenCalledWith(90, expect.objectContaining({ duration: DURATION.base }))
+  })
+
+  it('closing turns the chevron back and takes the text away', async () => {
+    await render(card())
+    await fireEvent.press(why())
+    jest.mocked(Reanimated.withTiming).mockClear()
+    await fireEvent.press(why())
+    expect(Reanimated.withTiming).toHaveBeenCalledWith(0, expect.objectContaining({ duration: DURATION.base }))
+  })
+
+  it('under Reduce Motion: no layout glide, the chevron jumps, the text still fades (200 ms)', async () => {
+    ;(useReducedMotion as jest.Mock).mockReturnValue(true)
+    await render(card())
+    expect(screen.getByTestId('o').props.layout).toBeUndefined()
+    await fireEvent.press(why())
+    expect(Reanimated.withTiming).not.toHaveBeenCalledWith(90, expect.anything())
+    expect(screen.getByTestId('o-why').props.entering).toBeDefined()
   })
 })

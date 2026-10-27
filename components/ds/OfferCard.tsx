@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { FadeIn } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { Button } from './Button'
 import { monoCaption } from './MonoFamily'
@@ -29,6 +29,13 @@ export type OfferVenue = {
   typeLabel: string
   area: string
 }
+
+const STANDARD = Easing.bezier(...EASING.standard)
+const GENTLE = Easing.bezier(...EASING.gentle)
+/** The chevron turns a quarter: pointing right closed, down open. */
+const CHEVRON_OPEN_DEG = 90
+/** Under Reduce Motion the text still fades in: the change is explained, not moved. */
+const REDUCED_FADE_MS = 200
 
 /** G3: offers go to regulars only, so "why" is one sentence, the rule and who picked. */
 function why(venue: string) {
@@ -82,18 +89,30 @@ export function OfferCard({
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
   const [open, setOpen] = useState(defaultWhyOpen)
+  // The chevron is one glyph that turns, not two that swap.
+  const turn = useSharedValue(defaultWhyOpen ? CHEVRON_OPEN_DEG : 0)
+  useEffect(() => {
+    const to = open ? CHEVRON_OPEN_DEG : 0
+    turn.set(reduceMotion ? to : withTiming(to, { duration: DURATION.base, easing: STANDARD, reduceMotion: ReduceMotion.Never }))
+  }, [open, reduceMotion, turn])
+  const chevron = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get()}deg` }] }))
   const live = state === 'live'
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const quiet = live ? COLOR.textPrimary : COLOR.textSecondary
   const text = why(venue.name)
 
   return (
-    <View testID={testID} style={[styles.card, !live && { opacity: SPENT_OPACITY }, contrast && IC_HAIRLINE]}>
+    // `layout`: opening "Why" grows the card and moves the floor sentence together, over base (a plain jump under Reduce Motion).
+    <Animated.View
+      testID={testID}
+      layout={reduceMotion ? undefined : LinearTransition.duration(DURATION.base).easing(STANDARD)}
+      style={[styles.card, !live && { opacity: SPENT_OPACITY }, contrast && IC_HAIRLINE]}
+    >
       <View style={styles.top}>
         <VenuePlate type={venue.type} size={PLATE} radius={RADIUS.thumb} />
         <View style={styles.fill}>
-          <Text style={[font('bodyStrong', bold), styles.ink]}>{venue.name}</Text>
-          <Text style={[font('meta', bold), { color: detail }]}>{`${venue.typeLabel} · ${venue.area}`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{venue.name}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>{`${venue.typeLabel} · ${venue.area}`}</Text>
         </View>
         {state === 'used' ? (
           <View style={[styles.pill, styles.used]}>
@@ -109,7 +128,7 @@ export function OfferCard({
             </Text>
           </View>
         ) : (
-          <Text style={[font('label', bold), { color: COLOR.textTertiary }]}>OFFER</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: COLOR.textTertiary }]}>OFFER</Text>
         )}
         <Pressable
           onPress={onMore}
@@ -124,8 +143,8 @@ export function OfferCard({
       </View>
 
       <View accessible accessibilityLabel={`${venue.name}: ${offer}. ${window}, valid until ${validUntil}`} style={styles.body}>
-        <Text style={[font('heading', bold), { color: quiet }]}>{offer}</Text>
-        <Text style={[font('meta', bold), { color: detail }]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), { color: quiet }]}>{offer}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
           {`${window} `}
           <Text style={{ color: COLOR.textTertiary }}>·</Text>
           {' Valid '}
@@ -133,7 +152,7 @@ export function OfferCard({
         </Text>
       </View>
 
-      {live && onUse ? <Button kind="strong" size="md" icon="ticket" label="Use at the door" pressHaptic={H.primary} onPress={onUse} /> : null}
+      {live && onUse ? <Button kind="lit" size="md" icon="ticket" label="Use at the door" pressHaptic={H.primary} onPress={onUse} /> : null}
 
       <Pressable
         onPress={() => setOpen((o) => !o)}
@@ -143,12 +162,18 @@ export function OfferCard({
         hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
         style={styles.why}
       >
-        <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: quiet }]}>Why you got this</Text>
-        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={ICON.inline} color={COLOR.textSecondary} />
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: quiet }]}>Why you got this</Text>
+        <Animated.View testID={testID && `${testID}-chevron`} style={chevron}>
+          <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
+        </Animated.View>
       </Pressable>
       {open ? (
-        <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(motionTokens(reduceMotion).duration.base)}>
-          <Text style={[font('meta', bold), styles.ink]}>
+        <Animated.View
+          testID={testID && `${testID}-why`}
+          entering={reduceMotion ? FadeIn.duration(REDUCED_FADE_MS) : FadeIn.duration(DURATION.base).easing(GENTLE)}
+          exiting={FadeOut.duration(DURATION.quick)}
+        >
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
             {text.rule}
             <Text style={font('meta', bold, FONT_FAMILY.brand[500])}>{text.picked}</Text>
           </Text>
@@ -156,11 +181,11 @@ export function OfferCard({
       ) : null}
 
       <View style={styles.foot}>
-        <Text style={[font('caption', bold, FONT_FAMILY.brand[400]), { color: contrast ? COLOR.textSecondary : COLOR.textTertiary }]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[400]), { color: contrast ? COLOR.textSecondary : COLOR.textTertiary }]}>
           Offers only go to groups of 5 or more, so no one can be singled out.
         </Text>
       </View>
-    </View>
+    </Animated.View>
   )
 }
 

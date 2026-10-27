@@ -1,7 +1,7 @@
 # The API contract
 
 Mirrored from **Blendn-Admin**, which holds the REST API, the Socket.io server
-and the organiser dashboard. They are copies so you can read the contract
+and the organizer dashboard. They are copies so you can read the contract
 without a second checkout — **the sources are there, and edits belong there.**
 
 Refresh, and see what changed on the server side since last time:

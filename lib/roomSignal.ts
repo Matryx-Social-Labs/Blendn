@@ -1,4 +1,4 @@
-import { pickInsideEvent, pickTodayEvents, type RoomButtonEvent } from './roomButton'
+import { pickInsideEvent, pickTodayEvents, type PreciseFix, type RoomButtonEvent } from './roomButton'
 
 /**
  * What the centre button knows, published by whoever already knows it.
@@ -34,12 +34,17 @@ const _listeners = new Set<() => void>()
  * that refetches on city change, on foreground and on pull-to-refresh, and
  * re-rendering the tab bar each time for an unchanged answer is work nobody
  * asked for.
+ *
+ * `at` is the phone's precise fix. The server's `distance` was measured from a position rounded to ~110 m, which is
+ * too coarse for a 100 m fence (SCRUM-744), so "inside" is judged from `at` and the event's own coordinates; a list
+ * with no fix to hand falls back to the server's number.
  */
 export function publishRoomSignal(
   events: readonly RoomButtonEvent[],
-  now: number = Date.now()
+  now: number = Date.now(),
+  at?: PreciseFix | null
 ): void {
-  const insideEventId = pickInsideEvent(events, now)
+  const insideEventId = pickInsideEvent(events, now, at)
   const next: RoomSignal = {
     insideEventId,
     insideVenue: events.find((e) => e.id === insideEventId)?.venue_name ?? null,

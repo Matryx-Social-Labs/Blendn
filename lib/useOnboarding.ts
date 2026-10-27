@@ -39,11 +39,19 @@ export async function syncInterests(userId: string, wanted: string[]): Promise<b
   const add = [...wantedIds].filter((id) => !heldIds.has(id))
   const remove = [...heldIds].filter((id) => !wantedIds.has(id))
 
+  /*
+   * Remove first. The server holds at most ten (`MAX_INTERESTS`) and checks the add against what is held, so swapping one at
+   * the cap, with the remove still to come, was refused the first time and worked on the second. Both are still attempted if
+   * the first is refused; the answer is whether both held.
+   */
   let ok = true
-  if (add.length) ok = (await apiClient.addProfileInterests(userId, add)).success && ok
   if (remove.length) ok = (await apiClient.removeProfileInterests(userId, remove)).success && ok
+  if (add.length) ok = (await apiClient.addProfileInterests(userId, add)).success && ok
   return ok
 }
+
+/** The save that never reached the server (Flow 2 `SAVE_FAIL`): the step stays, and Continue is the retry. */
+const SAVE_FAILED_OFFLINE = 'Couldn’t save that. Check your connection and tap Continue to try again.'
 
 const FINISH_FAILED =
   'We could not finish setting up your profile. Check your connection and try again — nothing you entered has been lost.'
@@ -261,7 +269,7 @@ export function useOnboarding(step: OnboardingStep) {
           const synced = await syncInterests(userId, merged.interestIds)
           if (!synced) {
             Logger.warn('auth', 'Onboarding could not save the interest graph', { step })
-            failure = "Couldn't save your interests. Check your connection and try again."
+            failure = "Couldn’t save your interests. Check your connection and try again."
           }
         }
 
@@ -277,14 +285,14 @@ export function useOnboarding(step: OnboardingStep) {
             })
             // The server's sentence when it gave one: a refused field says
             // which, and that is what somebody needs to fix it.
-            failure = result.error || "Couldn't save that. Try again."
+            failure = result.error || "Couldn’t save that. Try again."
           } else if (body.photos) {
             saved = withStoredPhotos(merged, result.data)
           }
         }
       } catch (error) {
         Logger.warn('auth', 'Onboarding step threw while saving', { step, error })
-        failure = "Couldn't save that. Check your connection and try again."
+        failure = SAVE_FAILED_OFFLINE
       } finally {
         // In `finally` rather than after the call: a throw here used to leave
         // this stuck true, which is what made the button spin forever.
@@ -294,7 +302,7 @@ export function useOnboarding(step: OnboardingStep) {
       }
 
       if (failure) {
-        showToast(failure, 'error')
+        showToast(failure, 'error', { haptic: 'error' })
         return false
       }
 
@@ -378,7 +386,7 @@ export function useOnboarding(step: OnboardingStep) {
         Logger.warn('auth', 'Could not complete onboarding', { error: result.error })
         // A toast, as every other step reports a failed save: the ready
         // screen's own sentence sat below the fold (SCRUM-492).
-        showToast(result.error || FINISH_FAILED, 'error')
+        showToast(result.error || FINISH_FAILED, 'error', { haptic: 'error' })
         return false
       }
 
@@ -393,7 +401,7 @@ export function useOnboarding(step: OnboardingStep) {
     } catch (error) {
       // A throw here used to leave `saving` true and the button spinning.
       Logger.warn('auth', 'Finishing onboarding threw', { error })
-      showToast(FINISH_FAILED, 'error')
+      showToast(FINISH_FAILED, 'error', { haptic: 'error' })
       return false
     } finally {
       inFlight.current = false

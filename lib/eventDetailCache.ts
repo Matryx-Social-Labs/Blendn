@@ -20,6 +20,11 @@ export function setEventDetailCache<T>(eventId: string, data: T): void {
   cache.set(eventId, { data, expiresAt: Date.now() + CACHE_TTL_MS })
 }
 
+/** Sign-out: every entry carries the last account's `userStatus` (going, checked in), which the next account must not see. */
+export function forgetEventDetails(): void {
+  cache.clear()
+}
+
 /** After a check-in or check-out: the cached `userStatus` is no longer true. */
 export function forgetEventDetailCache(eventId: string): void {
   cache.delete(eventId)

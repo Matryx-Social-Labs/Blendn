@@ -1,28 +1,27 @@
-import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { LoadError, LoadState } from '../../components/LoadError'
-import PhotoLightbox from '../../components/PhotoLightbox'
-import { EmberButton } from '../../components/onboarding/EmberControls'
-import {
-  ProfileBio,
-  ProfileDetail,
-  ProfileGallery,
-  ProfileHeading,
-  ProfileHero,
-  ProfileInterests,
-} from '../../components/profile/ProfileSections'
+import { Button } from '../../components/ds/Button'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { StateScreen } from '../../components/ds/StateScreen'
+import { PhotoViewer } from '../../components/profile/PhotoViewer'
+import { ProfileBar } from '../../components/profile/ProfileBar'
+import { dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
+import { heroHeightFor, ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
+import { ProfileBody, SECTION_GAP } from '../../components/profile/ProfileSections'
+import type { Rect } from '../../components/ds/chatShared'
+import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
-import { Text } from '../../components/ui/Text'
 import { apiClient } from '../../lib/apiClient'
-import { friendsSinceLabel, type FriendProfile } from '../../lib/friends'
+import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { friendsSinceParts, type FriendProfile } from '../../lib/friends'
+import { noteFriendGone } from '../../lib/friendsGone'
 import { isGone } from '../../lib/loadFailure'
-import { showUserSafetyActions } from '../../lib/safetyUtils'
-import { showSheet } from '../../lib/sheet'
-import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../../lib/theme'
+import { blockStep, userReportStep } from '../../lib/safetyUtils'
+import { showSheet, type Sheet } from '../../lib/sheet'
 
 /**
  * A friend's profile — opened from the friends list, never from a room.
@@ -33,10 +32,10 @@ import { CONTROL, EMBER, EMBER_RADIUS, GUTTER, ICON, OPACITY, SPACE } from '../.
  * turned on "Friends can see who I am in rooms".
  *
  * Message opens (or finds) a DM that needs no shared event. Unfriend is quiet:
- * nobody is told, and the DM stays. Report or block is in the corner, as on
- * every profile.
+ * nobody is told, and the DM stays. Remove friend, Block and Report are in the
+ * corner's menu. The body is `/user/[id]`'s (`ProfileBody`), plus Friends since.
  */
-export default function FriendProfileScreen() {
+function FriendProfileScreenContent() {
   const { userId } = useLocalSearchParams<{ userId: string }>()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
@@ -46,7 +45,14 @@ export default function FriendProfileScreen() {
   const [failed, setFailed] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [opening, setOpening] = useState(false)
-  const [lightbox, setLightbox] = useState<number | null>(null)
+  const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
+  const bold = useBoldText()
+  const [dockHeight, setDockHeight] = useState(0)
+  // The page's scroll offset, written on the UI thread: the bar and the hero's stretch read it, React never renders for it.
+  const scrollY = useSharedValue(0)
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.set(e.contentOffset.y)
+  })
 
   /*
    * 404 means not (or no longer) friends — the same answer whoever asks.
@@ -59,11 +65,12 @@ export default function FriendProfileScreen() {
       setFriend(result.data)
       setFailed(false)
     } else if (isGone(result)) {
+      noteFriendGone(String(userId))
       setGone(true)
     } else {
       setFailed(true)
     }
-  }, [])
+  }, [userId])
 
   // State is set only once the request has settled, and not after leaving.
   useEffect(() => {
@@ -88,7 +95,7 @@ export default function FriendProfileScreen() {
     const conversationId = friend.conversationId ?? (await apiClient.openFriendConversation(friend.userId)).data?.conversationId
     setOpening(false)
     if (!conversationId) {
-      showToast("The conversation didn't open. Try again.", 'error')
+      showToast("The conversation didn’t open. Try again.", 'error', { haptic: 'error' })
       return
     }
     router.push({
@@ -106,187 +113,176 @@ export default function FriendProfileScreen() {
    * every other "are you sure" on a person lives (block, report, leave). A
    * refusal stays in the sheet and turns the button into Try again.
    */
-  const confirmUnfriend = () => {
+  const unfriendStep = (who: FriendProfile): Sheet => ({
+    kind: 'actions',
+    hue: 'rose',
+    title: `Remove ${who.name}?`,
+    message: "They won’t be told. Your messages stay, and you can add each other again later.",
+    actions: [
+      {
+        label: 'Remove friend',
+        variant: 'destructive',
+        run: async () => {
+          const result = await apiClient.removeFriend(who.userId)
+          if (!result.success) return { ok: false, error: "That didn’t go through. Try again." }
+          noteFriendGone(who.userId)
+          router.back()
+          return { ok: true, toast: `${who.name} is no longer a friend` }
+        },
+      },
+      { label: 'Cancel', cancel: true },
+    ],
+  })
+
+  /*
+   * The corner's one menu (D26): Remove friend (destructive, confirmed) with Block and Report, the same steps every profile's
+   * sheet takes. Remove friend used to float under the sections, where at AX it peeked under the Message dock (D-L31).
+   */
+  const openMore = () => {
     if (!friend) return
     showSheet({
       kind: 'actions',
-      title: `Remove ${friend.name}?`,
-      message: "They won't be told. Your messages stay, and you can add each other again later.",
+      hue: 'rose',
+      title: friend.name,
       actions: [
-        {
-          label: 'Remove friend',
-          variant: 'destructive',
-          run: async () => {
-            const result = await apiClient.removeFriend(friend.userId)
-            if (!result.success) return { ok: false, error: "That didn't go through. Try again." }
-            router.back()
-            return { ok: true, toast: `${friend.name} is no longer a friend` }
-          },
-        },
+        { label: 'Remove friend', variant: 'destructive', next: () => unfriendStep(friend) },
+        { label: 'Block', variant: 'destructive', next: () => blockStep(friend.name, friend.userId, back) },
+        { label: 'Report', next: () => userReportStep(friend.name, friend.userId) },
         { label: 'Cancel', cancel: true },
       ],
     })
   }
 
+  const back = () => router.back()
+
   if (gone) {
     return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
-        <LoadState
-          icon="person-outline"
-          title="You're not friends with this person any more."
-          action={{ label: 'Go back', onPress: () => router.back() }}
-        />
+      <View style={styles.container}>
+        <ProfileBar testID="friend-bar" scrollY={scrollY} onBack={back} />
+        <View style={[styles.center, { paddingTop: insets.top }]}>
+          <StateScreen
+            icon="user"
+            title="You’re not friends with this person any more."
+            actions={[{ label: 'Go back', onPress: back, kind: 'secondary' }]}
+            testID="friend-gone"
+          />
+        </View>
       </View>
     )
   }
 
   if (!friend) {
     return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
+      <View style={styles.container}>
+        <ProfileBar testID="friend-bar" scrollY={scrollY} onBack={back} overPhoto={!failed} />
         {failed ? (
-          <LoadError title="This profile didn't load" onRetry={() => void retry()} retrying={retrying} />
+          <View style={[styles.center, { paddingTop: insets.top }]}>
+            <StateScreen
+              icon="user"
+              title="This profile didn’t load"
+              body="Check your connection and try again."
+              actions={[{ label: 'Try again', onPress: () => void retry(), loading: retrying }]}
+              testID="friend-failed"
+            />
+          </View>
         ) : (
-          <ActivityIndicator color={EMBER.textSecondary} />
+          // The hero's own shape, so the page does not jump when it lands (Flow 6 `friend` 05).
+          <View testID="friend-skeleton" accessibilityLabel="Loading profile" accessibilityState={{ busy: true }}>
+            <SkeletonBlock width={width} height={heroHeightFor(width)} borderRadius={0} />
+          </View>
         )}
-        <View style={[styles.topBar, { paddingTop: insets.top + SPACE.md }]} pointerEvents="box-none">
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            hitSlop={SPACE.md}
-            style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
-          >
-            <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-          </Pressable>
-        </View>
       </View>
     )
   }
 
-  const title = friend.age ? `${friend.name}, ${friend.age}` : friend.name
   const subtitle = [friend.occupation, friend.location].filter(Boolean).join(' · ') || null
+  const columnWidth = Math.floor((width - SPACE.gutter * 2 - SPACE.sm) / 2)
+  // Flow 6 `friend`: the date alone in Geist Mono, the words in the page's face.
+  const since = friendsSinceParts(friend.friendsSince)
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + SPACE.xxxl }} showsVerticalScrollIndicator={false}>
-        <ProfileHero width={width} photos={friend.photos} title={title} subtitle={subtitle} pseudonym={friend.name} />
+      {/* First in the tree for the focus order; it draws over the scroll by zIndex. */}
+      <ProfileBar
+        testID="friend-bar"
+        scrollY={scrollY}
+        title={friend.name}
+        overPhoto
+        onBack={back}
+        actions={[{ icon: 'ellipsis', label: 'More', onPress: openMore }]}
+      />
+      <Animated.ScrollView
+        testID="friend-scroll"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingBottom: (dockHeight || dockClearance(insets.bottom)) + SPACE.xl }}
+        showsVerticalScrollIndicator={false}
+      >
+        <ProfileHeroStage
+          testID="friend-hero"
+          width={width}
+          scrollY={scrollY}
+          photos={friend.photos}
+          name={friend.name}
+          age={friend.age}
+          subtitle={subtitle}
+          seed={friend.name}
+          onPressPhoto={(i, from) => setViewer({ index: i, from })}
+        />
 
         <View style={styles.canvas}>
-          <View style={styles.section}>
-            <Text variant="meta">{friendsSinceLabel(friend.friendsSince)}</Text>
-            <EmberButton label="Message" onPress={() => void message()} busy={opening} />
-          </View>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.since]}>
+            {since.words}
+            {since.date ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.sinceDate]}>{since.date}</Text> : null}
+          </Text>
 
-          {friend.bio ? (
-            <View style={styles.section}>
-              <ProfileHeading title="Bio" />
-              <ProfileBio text={friend.bio} />
-            </View>
-          ) : null}
-
-          {friend.interests.length > 0 ? (
-            <View style={styles.section}>
-              <ProfileHeading title="Interests" />
-              <ProfileInterests interests={friend.interests.map((i) => i.name)} />
-            </View>
-          ) : null}
-
-          {friend.occupation || friend.education ? (
-            <View style={styles.details}>
-              {friend.occupation ? <ProfileDetail label="OCCUPATION" value={friend.occupation} /> : null}
-              {friend.education ? <ProfileDetail label="EDUCATION" value={friend.education} variant="ruled" /> : null}
-            </View>
-          ) : null}
-
-          {friend.photos.length > 1 ? (
-            <View style={styles.section}>
-              <ProfileHeading title="Gallery" trailing={`${friend.photos.length} photos`} />
-              {/*
-                The photos beyond the hero's: the hero already cycles the first,
-                so it is not repeated here. `+ 1` keeps the lightbox on the
-                photo that was tapped.
-              */}
-              <ProfileGallery
-                photos={friend.photos.slice(1)}
-                columnWidth={(width - GUTTER * 2 - SPACE.lg) / 2}
-                onPressPhoto={(i) => setLightbox(i + 1)}
-              />
-            </View>
-          ) : null}
-
-          <Pressable
-            onPress={confirmUnfriend}
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${friend.name} from friends`}
-            style={({ pressed }) => [styles.quiet, pressed && styles.pressed]}
-          >
-            <Text variant="bodyStrong" color={EMBER.textSecondary}>Remove friend</Text>
-          </Pressable>
+          {/* The same body `/user/[id]` draws for this person (D26): one person, one page. */}
+          <ProfileBody
+            facts={{
+              bio: friend.bio,
+              interests: friend.interests.map((i) => i.name),
+              occupation: friend.occupation,
+              education: friend.education,
+              photos: friend.photos,
+            }}
+            columnWidth={columnWidth}
+            onPressPhoto={(i, from) => setViewer({ index: i, from })}
+          />
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
-      <PhotoLightbox
+      {/* Message, where the thumb is: a positive action inside the rose world is lit (D1, PLAN-buttons), as on `/user/[id]`. */}
+      <ProfileDock testID="friend-dock" onHeight={setDockHeight}>
+        <Button kind="lit" size="md" icon="message-circle" label="Message" loading={opening} onPress={() => void message()} style={styles.flex} testID="friend-message" />
+      </ProfileDock>
+
+      <PhotoViewer
         photos={friend.photos}
-        initialIndex={lightbox ?? 0}
-        visible={lightbox !== null}
-        onClose={() => setLightbox(null)}
+        initialIndex={viewer?.index ?? 0}
+        from={viewer?.from}
+        visible={viewer !== null}
+        onClose={() => setViewer(null)}
+        testID="friend-viewer"
       />
-
-      <View style={[styles.topBar, { paddingTop: insets.top + SPACE.md }]} pointerEvents="box-none">
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={SPACE.md}
-          style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
-        >
-          <Ionicons name="chevron-back" size={ICON.lg} color={EMBER.textPrimary} />
-        </Pressable>
-        <Pressable
-          onPress={() => showUserSafetyActions(friend.name, friend.userId, () => router.back())}
-          accessibilityRole="button"
-          accessibilityLabel="Report or block"
-          hitSlop={SPACE.md}
-          style={({ pressed }) => [styles.barButton, pressed && styles.pressed]}
-        >
-          <Ionicons name="ellipsis-horizontal" size={ICON.lg} color={EMBER.textPrimary} />
-        </Pressable>
-      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACE.lg,
-    paddingHorizontal: GUTTER,
-    backgroundColor: EMBER.bg,
-  },
-  canvas: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxl, gap: SPACE.xxl },
-  section: { gap: SPACE.lg },
-  details: { gap: SPACE.xl },
-  quiet: { alignSelf: 'center', paddingVertical: SPACE.sm },
-  topBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    paddingHorizontal: GUTTER,
-    paddingBottom: SPACE.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  barButton: {
-    width: CONTROL.md,
-    height: CONTROL.md,
-    borderRadius: EMBER_RADIUS.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: EMBER.scrim,
-  },
-  pressed: { opacity: OPACITY.pressed },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  center: { flex: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
+  // The frame's column starts 8 under the hero and keeps 28 between sections.
+  canvas: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SECTION_GAP },
+  since: { color: COLOR.textSecondary },
+  sinceDate: { color: COLOR.textPrimary },
+  flex: { flex: 1 },
 })
+
+/** Rose world: one hue on this screen (`HueProvider`). */
+export default function FriendProfileScreen() {
+  return (
+    <HueProvider value="rose">
+      <FriendProfileScreenContent />
+    </HueProvider>
+  )
+}

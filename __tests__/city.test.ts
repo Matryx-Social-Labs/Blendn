@@ -80,7 +80,7 @@ describe('resolveBrowseCity', () => {
     ).toEqual(inferred('Bengaluru'))
   })
 
-  it("returns the server's spelling, not the geocoder's", () => {
+  it("returns the server’s spelling, not the geocoder’s", () => {
     // The value goes straight back as a filter, so it has to be one the server
     // will match rather than whatever the device's geocoder produced.
     expect(
@@ -267,7 +267,9 @@ describe('cityCountLabel', () => {
   it('names the events when a city has them, and its places when it has none', () => {
     expect(cityCountLabel({ eventCount: 12, placeCount: 1505 })).toBe('12 events')
     expect(cityCountLabel({ eventCount: 1, placeCount: 0 })).toBe('1 event')
-    expect(cityCountLabel({ eventCount: 0, placeCount: 1206 })).toBe('1206 places')
+    // Grouped, as the Places header groups them (GO-10, A6): "1,362 places", not "1362".
+    expect(cityCountLabel({ eventCount: 0, placeCount: 1362 })).toBe('1,362 places')
+    expect(cityCountLabel({ eventCount: 1053, placeCount: 0 })).toBe('1,053 events')
     expect(cityCountLabel({ eventCount: 0, placeCount: 1 })).toBe('1 place')
   })
 

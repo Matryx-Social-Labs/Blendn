@@ -159,3 +159,45 @@ export function aboutLine(p: { languages?: string[] | null; homeState?: string |
   ].filter((x): x is string => !!x)
   return parts.length ? parts.join(' · ') : null
 }
+
+/** The profile fields the server rate-limits together: three changes a day (blendn-admin `lib/tier-b.ts`). */
+const TIER_B_KEYS = ['languages', 'home_state', 'sun_sign', 'sign_system'] as const
+
+/**
+ * A profile body in two: the Tier B facts, and the rest (the badge switches).
+ * They go in separate PUTs because the server refuses a whole request when its
+ * Tier B part is over the day's limit, and writes nothing else in it — so a
+ * badge switch sent beside a refused language change was lost with it.
+ */
+export function splitTierB(body: Record<string, unknown>): { tierB: Record<string, unknown>; other: Record<string, unknown> } {
+  const tierB: Record<string, unknown> = {}
+  const other: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(body)) (TIER_B_KEYS as readonly string[]).includes(key) ? (tierB[key] = value) : (other[key] = value)
+  return { tierB, other }
+}
+
+export type TierBField = 'languages' | 'homeState' | 'sign'
+
+/** The sentence under a field the server refused: the limit is three changes a day, so "tomorrow" is the honest retry. */
+export const TIER_B_LIMIT_LINE = 'Not saved: you’ve changed this three times today. Try again tomorrow.'
+export const TIER_B_RETRY_LINE = 'Not saved. Try again.'
+
+/** Which fields a refused Tier B body carried, each with its own sentence (`RATE_LIMITED` is the limit; anything else, a retry). */
+export function tierBRefusals(body: Record<string, unknown>, errorCode?: string): Partial<Record<TierBField, string>> {
+  const line = errorCode === 'RATE_LIMITED' ? TIER_B_LIMIT_LINE : TIER_B_RETRY_LINE
+  const out: Partial<Record<TierBField, string>> = {}
+  if ('languages' in body) out.languages = line
+  if ('home_state' in body) out.homeState = line
+  if ('sun_sign' in body || 'sign_system' in body) out.sign = line
+  return out
+}
+
+/** "languages, home state and sign": which of the person's Tier B edits a body carries, in their words. */
+export function tierBNames(body: Record<string, unknown>): string {
+  const names = [
+    'languages' in body ? 'languages' : null,
+    'home_state' in body ? 'home state' : null,
+    'sun_sign' in body || 'sign_system' in body ? 'sign' : null,
+  ].filter((n): n is string => n !== null)
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '')
+}

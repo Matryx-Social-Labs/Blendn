@@ -10,6 +10,7 @@ import { warmAvatars } from './warmAvatars'
 import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
 import { likeRefusal, type LikeRefusal } from './likeRefusal'
+import { requestTextRefusal } from './requestRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
 import { Logger } from './logger'
 import { reasonLine } from './roomMoments'
@@ -35,6 +36,7 @@ import {
 import { useAuth } from './useAuth'
 import { useLatest } from './useLatest'
 import { useLiveSync } from './useLiveSync'
+import { askPushInContext } from './pushAsk'
 
 /**
  * The Room's data: who is here, who just walked in, and what you can do about
@@ -152,7 +154,8 @@ export interface RoomActions {
   like(id: string): Promise<RoomAnswer<'liked' | 'matched' | 'already'>>
   /** Wave at somebody. "Too soon" is the server's once-per-ten-minutes rule: said as "Waved", never as an error. */
   sendWave(id: string): Promise<RoomAnswer<'sent' | 'too-soon'>>
-  connect(id: string, note?: string): Promise<boolean>
+  /** `stands`: a request now exists between you. `refusal`: the server's sentence when it refused the note's text (lib/requestRefusal.ts); absent for a failure it cannot name. */
+  connect(id: string, note?: string): Promise<{ stands: boolean; refusal?: string }>
   /** After a block or report: gone from every list for the rest of the session. */
   remove(id: string): void
   clearMatch(): void
@@ -184,6 +187,32 @@ async function countCandidates(eventId: string, force: boolean): Promise<unknown
   }
 }
 
+/**
+ * eventId -> the room's chat group id, for the session.
+ *
+ * Opening a room asked for the group (`getEventChat`) and only then for its
+ * last messages (`getChatMessages`): two round trips in series, ~200-250 ms each
+ * from Canada. On a re-open the id is already known, so the messages start with
+ * the lookup; the lookup stays the authority (a different id, a left room, or a
+ * failure throws the early read away and asks again).
+ */
+const chatGroupIdByEvent = new Map<string, string>()
+
+type ChatLookup = {
+  result: ReturnType<typeof apiClient.getEventChat>
+  history: { groupId: string; messages: Promise<Awaited<ReturnType<typeof apiClient.getChatMessages>> | null> } | null
+}
+
+function startChatLookup(eventId: string): ChatLookup {
+  const groupId = chatGroupIdByEvent.get(eventId)
+  return {
+    result: apiClient.getEventChat(eventId),
+    history: groupId
+      ? { groupId, messages: apiClient.getChatMessages(groupId, { limit: DOCK_HISTORY }).catch(() => null) }
+      : null,
+  }
+}
+
 export function useRoom(): RoomState & RoomActions {
   const { user: authUser, initialized: authInitialized } = useAuth()
   const userId = authUser?.id ?? null
@@ -205,7 +234,7 @@ export function useRoom(): RoomState & RoomActions {
   const [chatHistory, setChatHistory] = useState<ChatHistory | null>(null)
   const [avatarsFor, setAvatarsFor] = useState<string | null>(null)
   /** The chat lookup started with the check-ins read, before the roster: the chat effect takes it over. */
-  const chatEarly = useRef<{ eventId: string; result: ReturnType<typeof apiClient.getEventChat> } | null>(null)
+  const chatEarly = useRef<{ eventId: string; lookup: ChatLookup } | null>(null)
 
   /*
    * Session knowledge about people in this room. All of it belongs to an
@@ -307,7 +336,7 @@ export function useRoom(): RoomState & RoomActions {
          */
         const earlyCount = firstId ? countCandidates(firstId, force) : undefined
         if (firstId && chatResolvedForRef.current !== firstId && chatEarly.current?.eventId !== firstId) {
-          chatEarly.current = { eventId: firstId, result: apiClient.getEventChat(firstId) }
+          chatEarly.current = { eventId: firstId, lookup: startChatLookup(firstId) }
         }
         const remembered = recallRoster(firstId)
         if (remembered && firstId && liveRef.current.attendees.length === 0) {
@@ -327,7 +356,7 @@ export function useRoom(): RoomState & RoomActions {
 
         if (!active.success || !active.data?.checkIns) {
           Logger.error('match', 'Error fetching active check-ins', { error: active.error })
-          if (!eventRef.current) setLoadError(active.error || "Couldn't reach the server.")
+          if (!eventRef.current) setLoadError(active.error || "Couldn’t reach the server.")
           return
         }
 
@@ -341,25 +370,29 @@ export function useRoom(): RoomState & RoomActions {
          * `removed`, which is keyed on the room's own ids.
          */
         let blocked = new Set<string>()
-        try {
-          blocked = new Set((await getBlockedUsers()).map((b) => b.blocked_id))
-        } catch (blockErr) {
-          // Not fatal: the room without the block filter is worse than late,
-          // but far better than nothing.
-          Logger.warn('match', 'Failed to load blocked users', { error: blockErr })
-        }
-        if (superseded()) return
-        blockedRef.current = blocked
+        // In parallel with the roster, not before it: a serial round trip on every 30 s sync for a filter that bites nobody now.
+        const blockedLoad = getBlockedUsers()
+          .then((list) => {
+            blocked = new Set(list.map((b) => b.blocked_id))
+          })
+          .catch((blockErr) => {
+            // Not fatal: the room without the block filter is worse than late,
+            // but far better than nothing.
+            Logger.warn('match', 'Failed to load blocked users', { error: blockErr })
+          })
 
         const outcome = await pickActiveRoom(
           checkins,
           async (eventId) => {
-            const r = await apiClient.getEventMatches(eventId, { force, limit: PAGE })
+            // The set is read once a roster has come back, so it waits for the same set it always had.
+            const [r] = await Promise.all([apiClient.getEventMatches(eventId, { force, limit: PAGE }), blockedLoad])
             return { success: r.success, error: r.error, matches: r.data?.matches }
           },
           { excludeUserId: selfId, isBlocked: (id) => blocked.has(id) }
         )
+        await blockedLoad
         if (superseded()) return
+        blockedRef.current = blocked
 
         if (leaveTimerRef.current) {
           clearTimeout(leaveTimerRef.current)
@@ -432,7 +465,7 @@ export function useRoom(): RoomState & RoomActions {
         Logger.error('match', 'Failed to load the room', { error: e })
         if (superseded()) return
         if (!eventRef.current) {
-          setLoadError(e instanceof Error ? e.message : "Couldn't load the room.")
+          setLoadError(e instanceof Error ? e.message : "Couldn’t load the room.")
         }
       }
     },
@@ -561,19 +594,24 @@ export function useRoom(): RoomState & RoomActions {
     if (!eventId || chatResolvedForRef.current === eventId) return
     chatResolvedForRef.current = eventId
     let cancelled = false
-    const early = chatEarly.current?.eventId === eventId ? chatEarly.current.result : null
+    const lookup = chatEarly.current?.eventId === eventId ? chatEarly.current.lookup : startChatLookup(eventId)
     chatEarly.current = null
-    ;(early ?? apiClient.getEventChat(eventId))
+    lookup.result
       .then(async (result) => {
         if (cancelled || eventRef.current?.id !== eventId) return
         const id = result.data?.chatGroupId ?? result.data?.id
         if (result.success && id) {
           setChatGroupId(String(id))
+          chatGroupIdByEvent.set(eventId, String(id))
           // Served as a member: back in, and the room's mute as the server has it.
           markRoomJoined(String(id))
           rememberRoomMute(String(id), result.data?.mute)
           // The dock's last line, with the room: it never opens on "Nobody has said anything yet" and then changes.
-          const history = await apiClient.getChatMessages(String(id), { limit: DOCK_HISTORY }).catch(() => null)
+          const early = lookup.history?.groupId === String(id) ? await lookup.history.messages : null
+          // An early read can beat the lookup's rejoin and be refused: ask again, now that the lookup has answered.
+          const history = early?.success
+            ? early
+            : await apiClient.getChatMessages(String(id), { limit: DOCK_HISTORY }).catch(() => null)
           if (cancelled) return
           setChatHistory({ groupId: String(id), data: history?.success ? history.data : null, failed: !history?.success })
         } else if (result.errorCode === 'LEFT_ROOM' && result.chatGroupId) {
@@ -709,6 +747,7 @@ export function useRoom(): RoomState & RoomActions {
         }
 
         const conversationId = result.data?.mutual ? result.data.conversationId : undefined
+        if (!conversationId) void askPushInContext('like')
         if (conversationId) {
           setConversations((prev) => ({ ...prev, [id]: conversationId }))
           celebrate({
@@ -758,10 +797,10 @@ export function useRoom(): RoomState & RoomActions {
    * Marked requested only when the ask stands: a new request, or a `CONFLICT`
    * saying one already exists between you (`@@unique` above — re-offering it
    * invites a send that can never succeed). Anything else — offline, refused,
-   * a 500 — leaves the button offered, and `false` lets the caller say so;
+   * a 500 — leaves the button offered, and `stands: false` lets the caller say so;
    * it used to mark every failure "Request sent". The haptic is success-only.
    */
-  const connect = useCallback(async (id: string, note?: string): Promise<boolean> => {
+  const connect = useCallback(async (id: string, note?: string): Promise<{ stands: boolean; refusal?: string }> => {
     try {
       const result = await apiClient.createMessageRequest(id, note)
       if (result.success) {
@@ -771,10 +810,10 @@ export function useRoom(): RoomState & RoomActions {
       }
       const stands = !!result.success || result.errorCode === 'CONFLICT'
       if (stands) setRequested((prev) => ({ ...prev, [id]: true }))
-      return stands
+      return { stands, refusal: requestTextRefusal(result) }
     } catch (e) {
       Logger.error('match', 'connect request error', { error: e })
-      return false
+      return { stands: false }
     }
   }, [])
 

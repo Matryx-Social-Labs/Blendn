@@ -42,7 +42,7 @@ export function UnreadDivider({
       style={styles.row}
     >
       <View testID={testID && `${testID}-line`} style={line} />
-      <Text style={[font('label', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
         {(count ? `${count} ${word}` : word).toUpperCase()}
       </Text>
       <View style={line} />

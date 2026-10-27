@@ -9,19 +9,27 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, processColor, StyleSheet } from 'react-native'
 import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 
-import { ChatBubble, type ChatBubbleProps } from '../components/ds/ChatBubble'
-import { avatarOf, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
-import { COLOR, MATERIAL } from '../lib/design/tokens'
+import * as Reanimated from 'react-native-reanimated'
+
+import { ChatBubble, PRESS_DELAY_MS, type ChatBubbleProps } from '../components/ds/ChatBubble'
+import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, replyOffset } from '../components/ds/chatShared'
+import { COLOR, FONT_FAMILY, MATERIAL } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { CONTROL_FONT_CAP, minTarget } from '../components/ds/shared'
+import { AX_XXXL, uncapped } from './helpers/ax'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
-  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false) }
+  return { ...actual, __esModule: true, useReducedMotion: jest.fn(() => false), withDelay: jest.fn(actual.withDelay) }
 })
+
+// A test renderer lays nothing out: the screen reader's menu is measured from here.
+const FRAME = { x: 16, y: 300, width: 240, height: 44 }
+jest.mock('../components/ds/anchor', () => ({ measureAnchor: (_node: unknown, then: (r: typeof FRAME) => void) => then(FRAME) }))
 
 const PANDA = { name: 'Cosmic Panda' }
 const bubble = (props: Partial<ChatBubbleProps> = {}) => (
@@ -163,6 +171,20 @@ describe('<ChatBubble>', () => {
     expect(flat('b-bubble').borderBottomLeftRadius).toBe(6)
   })
 
+  // rc9 #5 (revised): the face stays hidden from screen readers (the bubble's "View profile" action covers it, and a
+  // second stop per message would double a busy room); touch gets the platform minimum. Negative control: making the
+  // face a labelled button fails the first expectation.
+  it('inbound, the last: the face is a touch target the platform’s minimum wide, hidden from screen readers', async () => {
+    const onSenderPress = jest.fn()
+    await render(bubble({ first: false, last: true, onSenderPress }))
+    expect(screen.queryByRole('button', { name: /View profile/ })).toBeNull()
+    const face = screen.getByTestId('b-avatar', { includeHiddenElements: true })
+    expect(face.props.importantForAccessibility).toBe('no-hide-descendants')
+    expect(BUBBLE.avatar + 2 * face.props.hitSlop).toBe(minTarget())
+    await fireEvent.press(face)
+    expect(onSenderPress).toHaveBeenCalledTimes(1)
+  })
+
   it('yours: surfaceRaised, the tail on the right, no name or creature', async () => {
     await render(bubble({ mine: true }))
     expect(flat('b-bubble')).toMatchObject({ backgroundColor: COLOR.surfaceRaised, borderBottomRightRadius: 6 })
@@ -193,13 +215,38 @@ describe('<ChatBubble>', () => {
     expect(onReactionPress).toHaveBeenCalledWith('🔥')
   })
 
-  it('removed: keeps its place, dashed and italic; no hold, no swipe', async () => {
+  it('removed: keeps its place in the DS dashed frame, in the DS face and never italic; no hold, no swipe', async () => {
     const onLongPress = jest.fn()
     await render(bubble({ removed: true, onLongPress, onReply: jest.fn() }))
-    expect(flat('b-bubble')).toMatchObject({ borderStyle: 'dashed', backgroundColor: 'transparent' })
-    expect(screen.getByText('This message was removed by moderation.', { includeHiddenElements: true })).toBeTruthy()
+    expect(flat('b-bubble')).toMatchObject({ backgroundColor: 'transparent' })
+    // No border dash (per platform, and solid on Android with any per-side width): the SVG frame's 6 4 at 1.5 in inputBorder.
+    expect(flat('b-bubble').borderStyle).toBeUndefined()
+    await fireEvent(screen.getByTestId('b-dashed', { includeHiddenElements: true }), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 240, height: 44 } } })
+    type Node = { props?: Record<string, unknown>; children?: (Node | string)[] | null }
+    const find = (n: Node | string | null | undefined): Node | undefined =>
+      !n || typeof n === 'string' ? undefined : n.props?.strokeDasharray !== undefined ? n : (n.children ?? []).map(find).find(Boolean)
+    const rect = find(screen.toJSON() as Node)?.props ?? {}
+    // As the SVG host receives them: the dash split, the colour processed.
+    expect(rect).toMatchObject({ strokeDasharray: ['6', '4'], strokeWidth: 1.5, stroke: { payload: processColor(COLOR.inputBorder) }, fill: null, width: 238.5, height: 42.5 })
+    expect(Number(rect.rx)).toBeCloseTo(BUBBLE.radius - 0.75)
+    const words = screen.getByText('This message was removed by moderation.', { includeHiddenElements: true })
+    expect(words).toBeTruthy()
+    // rc9 #1: Satoshi has no italic face, so Android synthesised Roboto italic. Negative control: `fontStyle: 'italic'` on removedText fails this.
+    expect(StyleSheet.flatten(words.props.style)).toMatchObject({ fontFamily: expect.stringContaining('Satoshi') })
+    expect(StyleSheet.flatten(words.props.style).fontStyle).toBeUndefined()
+    // L9: read without the full stop before the time.
+    expect(message().props.accessibilityLabel).toBe('Cosmic Panda, This message was removed by moderation, 9:38 PM')
     await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }, { state: State.ACTIVE }, { state: State.END }]))
     expect(onLongPress).not.toHaveBeenCalled()
+  })
+
+  it('a removed photo, the sender’s view (round 4 #37): 220×160 in the dashed frame, a shield, “Removed by moderation”', async () => {
+    await render(bubble({ mine: true, text: undefined, removed: 'photo', surface: 'dm' }))
+    expect(flat('b-bubble')).toMatchObject({ width: 220, height: 160, backgroundColor: 'transparent' })
+    expect(screen.getByTestId('b-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('Removed by moderation', { includeHiddenElements: true })).toBeTruthy()
+    expect(message().props.accessibilityLabel).toBe('You, Photo removed by moderation, 9:38 PM')
+    expect(message().props.accessibilityActions).toEqual([])
   })
 
   it('not sent: the line under it; a tap retries with H.send; the server’s reason when it gave one', async () => {
@@ -302,6 +349,25 @@ describe('<ChatBubble>', () => {
     expect(report).toHaveBeenCalledTimes(1)
   })
 
+  it('H1: a screen reader opens the same menu the hold does (More options), at the bubble’s frame, and the card (View profile)', async () => {
+    const onLongPress = jest.fn()
+    const onSenderPress = jest.fn()
+    await render(bubble({ onLongPress, onSenderPress, onReply: jest.fn() }))
+    expect(message().props.accessibilityActions.map((a: { name: string }) => a.name).slice(0, 3)).toEqual(['Reply', 'More options', 'View profile'])
+    await fireEvent(message(), 'accessibilityAction', { nativeEvent: { actionName: 'More options' } })
+    expect(onLongPress).toHaveBeenCalledWith(FRAME)
+    expect(haptic.longPress).toHaveBeenCalledTimes(1)
+    await fireEvent(message(), 'accessibilityAction', { nativeEvent: { actionName: 'View profile' } })
+    expect(onSenderPress).toHaveBeenCalledTimes(1)
+  })
+
+  it('H1: no menu handler, no More options; a removed message offers neither', async () => {
+    await render(bubble({ onSenderPress: jest.fn() }))
+    expect(message().props.accessibilityActions.map((a: { name: string }) => a.name)).toEqual(['View profile'])
+    await screen.rerender(bubble({ removed: true, onLongPress: jest.fn(), onSenderPress: jest.fn() }))
+    expect(message().props.accessibilityActions).toEqual([])
+  })
+
   it('a screen reader reacts from the bubble: the six as actions, landing with H.reaction', async () => {
     const land = jest.spyOn(H, 'reaction').mockImplementation(() => {})
     const onReactionPress = jest.fn()
@@ -359,5 +425,48 @@ describe('<ChatBubble>', () => {
     await render(bubble())
     await act(async () => {})
     expect(flat('b-bubble').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+  })
+})
+
+
+describe('the press squash waits for a touch that stays (audit L2: bubbles flickered under a scrolling thumb)', () => {
+  const withDelay = Reanimated.withDelay as jest.Mock
+
+  it('squashes after a 120 ms hold, not on touch-down', async () => {
+    expect(PRESS_DELAY_MS).toBe(120)
+    await render(bubble({ onLongPress: jest.fn() }))
+    withDelay.mockClear()
+    await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }]))
+    expect(withDelay).toHaveBeenCalledWith(120, expect.anything())
+  })
+
+  it('a touch that ends first springs straight back: nothing was ever squashed', async () => {
+    await render(bubble({ onLongPress: jest.fn() }))
+    withDelay.mockClear()
+    await act(async () => fireGestureHandler(getByGestureTestId('b-hold'), [{ state: State.BEGAN }, { state: State.FAILED }]))
+    // The release is a plain spring to 1 (it replaces the pending delayed squash), never delayed itself.
+    const delays = withDelay.mock.calls.map(([ms]) => ms)
+    expect(delays).toEqual([120])
+  })
+})
+
+describe('the bubble’s time (DS-09 C16, DS-18 C31)', () => {
+  it('sets "1:12 PM" with its space in the brand face', async () => {
+    await render(bubble({ time: '1:12 PM' }))
+    const time = screen.getByText('1:12 PM', { includeHiddenElements: true })
+    const space = time.children.find((c) => typeof c !== 'string' && c.props.children === ' ') as unknown as { props: { style: { fontFamily?: string } } }
+    expect(StyleSheet.flatten(space.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
+  })
+
+  it('stops at the control cap, a tag as Banter’s time is; at AX XXXL nothing on a bubble is uncapped (C31)', async () => {
+    const window = Dimensions.get('window')
+    try {
+      await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
+      await render(bubble({ time: '1:12 PM' }))
+      expect(screen.getByText('1:12 PM', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+      expect(uncapped(screen.toJSON())).toEqual([])
+    } finally {
+      Dimensions.set({ window, screen: window })
+    }
   })
 })

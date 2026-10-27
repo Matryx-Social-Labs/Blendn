@@ -11,6 +11,8 @@
  * rejects a raw hex in `components/`, and none of these belong in `EMBER`.
  */
 
+import { hourIn } from './time'
+
 export type CityArtKey = 'blr' | 'bom' | 'del'
 export type TimeOfDay = 'day' | 'dusk' | 'night'
 
@@ -65,15 +67,8 @@ export function cityArtFor(city: string | null | undefined): CityArtInfo | null 
  * at this size.
  */
 export function timeOfDay(now: Date, timeZone: string): TimeOfDay {
-  let hour: number
-  try {
-    hour = Number(
-      new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone }).format(now),
-    )
-  } catch {
-    hour = now.getHours()
-  }
-  if (!Number.isFinite(hour)) hour = now.getHours()
+  // The city's hour; the phone's when this engine does not know the zone.
+  const hour = hourIn(now, timeZone)
   if (hour >= 6 && hour < 17) return 'day'
   if (hour >= 17 && hour < 19) return 'dusk'
   return 'night'

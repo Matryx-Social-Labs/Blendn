@@ -8,7 +8,7 @@ import React from 'react'
 import { StyleSheet } from 'react-native'
 
 import { CrewCard, CrewRow } from '../components/ds/CrewCard'
-import { COLOR, RADIUS } from '../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('expo-linear-gradient', () => {
@@ -101,5 +101,21 @@ describe('<CrewRow>', () => {
     await render(<CrewRow name="The Usual Suspects" emblemSeed="usual" size={6} onPress={onPress} testID="r" />)
     await fireEvent.press(screen.getByRole('button', { name: 'The Usual Suspects, Crew of 6' }))
     expect(onPress).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('long crew names (You hand-off 2)', () => {
+  const NAME = 'The Midnight Vinyl Collective'
+
+  it('a CrewRow’s name takes two lines at its role’s cap; the line under it stops at meta’s', async () => {
+    await render(<CrewRow name={NAME} emblemSeed="nebula" size={4} onPress={jest.fn()} />)
+    expect(screen.getByText(NAME).props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: MAX_FONT_SCALE.bodyStrong })
+    expect(screen.getByText('Crew of 4').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+  })
+
+  it('a CrewCard’s name wraps at its role’s cap', async () => {
+    await render(<CrewCard crew={{ id: 'c', name: NAME, emblemSeed: 'n', size: 4, tags: [], bio: null } as never} />)
+    expect(screen.getByText(NAME).props.numberOfLines).toBeUndefined()
+    expect(screen.getByText(NAME).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.title)
   })
 })

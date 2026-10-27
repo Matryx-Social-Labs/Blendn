@@ -219,8 +219,8 @@ describe('<Disc>', () => {
     ['dn', 'Open the room. 3 unread messages'],
   ] as const)('(%s) is a button that says “%s”', async (look, label) => {
     await draw(look)
-    // The export's typographic apostrophes; the app's labels use straight ones.
-    expect(screen.getByRole('button').props.accessibilityLabel).toBe(label.replace(/’/g, "'"))
+    // The export's typographic apostrophes, and the app's (r7 L16).
+    expect(screen.getByRole('button').props.accessibilityLabel).toBe(label)
   })
 
   it('(c) wears “Check in · {venue}” above the disc; no other state does', async () => {
@@ -240,7 +240,7 @@ describe('<Disc>', () => {
   it('(c) without a venue still says what the tap does', async () => {
     await draw('c', { venue: undefined })
     expect(screen.getByText('Check in', HIDDEN)).toBeTruthy()
-    expect(screen.getByRole('button').props.accessibilityLabel).toBe("You're at an event. Check in to see who else is here")
+    expect(screen.getByRole('button').props.accessibilityLabel).toBe("You’re at an event. Check in to see who else is here")
   })
 
   it('(dn) shows the count; past nine, “9+”', async () => {
@@ -309,7 +309,7 @@ describe('<Disc>', () => {
     await act(async () => screen.rerender(<Disc target={TARGETS.a} onPress={() => {}} venue="Toit" />))
     await act(async () => screen.rerender(<Disc target={TARGETS.c} onPress={() => {}} venue="Toit" />))
     expect(announce).toHaveBeenCalledTimes(1)
-    expect(announce).toHaveBeenCalledWith("You're at Toit. Check in from the Blend'n button.", { queue: true })
+    expect(announce).toHaveBeenCalledWith("You’re at Toit. Check in from the Blend’n button.", { queue: true })
   })
 
   describe('back from the background in (c)', () => {

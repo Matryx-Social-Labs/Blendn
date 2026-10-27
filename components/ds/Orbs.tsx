@@ -14,6 +14,7 @@ import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg'
 
 import { COLOR, DURATION } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { hourIn } from '../../lib/time'
 import { useIncreaseContrast } from './shared'
 
 /** `brand`: landing, onboarding, the Blend'n overlay, Recap. `feed`: about half strength, top only, behind a header. `moment`: the L4 moments. */
@@ -59,7 +60,7 @@ const LATE_UNTIL = 6
 
 /** Which time-of-night set the clock asks for. */
 export function orbTime(date: Date): OrbTime {
-  const h = date.getHours()
+  const h = hourIn(date)
   if (h >= NIGHT_FROM || h < LATE_FROM) return 'night'
   return h < LATE_UNTIL ? 'late' : 'early'
 }
@@ -129,6 +130,11 @@ export type OrbsProps = {
   time?: OrbTime
   /** Hold the drift: the keyboard is up, the list is scrolling under glass, a chat is open, the screen is not focused. */
   paused?: boolean
+  /**
+   * Draw every orb in this one colour, keeping the set's places and alphas: a world screen's glow in its own hue (TG-14,
+   * one hue per screen), where the set's ember and violet would put a second and third under the screen's controls.
+   */
+  tint?: string
   testID?: string
 }
 
@@ -138,10 +144,12 @@ export type OrbsProps = {
  * Every frame must also work without them. Fills its parent; put `<Grain>`
  * over it.
  *
- * Motion #22: the slow ambient drift, one of the three loops the app allows —
- * transform only, ±24 pt and 0.96–1.04, periods 28 s and 36 s (incommensurate,
- * so the pattern never visibly repeats). Still on Android, under Reduce Motion,
- * in the background and while `paused`. Increase Contrast halves the alpha.
+ * Motion #22: the ambient drift, one of the three loops the app allows —
+ * transform only, ±40 pt and 0.96–1.04, periods 9 s and 11.6 s (incommensurate,
+ * so the pattern never visibly repeats). The owner asked for it livelier and on
+ * Android too (2026-10-21; the spec had ±24 pt, 28 s / 36 s, static on Android).
+ * Still under Reduce Motion, in the background and while `paused`. Increase
+ * Contrast halves the alpha.
  * Motion #53: the time-of-night set swaps at launch or on a foreground that
  * crosses 21:00 or 01:00, crossfading over `long` on iOS (instant on Android
  * and under Reduce Motion); never while the app is in front.
@@ -151,7 +159,7 @@ export type OrbsProps = {
  * ponytail: Low Power Mode is not read (no installed module reports it); the
  * screen can pass `paused` once one is.
  */
-export function Orbs({ set, time: pinned, paused = false, testID }: OrbsProps) {
+export function Orbs({ set, time: pinned, paused = false, tint, testID }: OrbsProps) {
   const android = Platform.OS === 'android'
   const reduceMotion = useReducedMotion()
   const contrast = useIncreaseContrast()
@@ -161,7 +169,7 @@ export function Orbs({ set, time: pinned, paused = false, testID }: OrbsProps) {
 
   const a = useSharedValue(HALF)
   const b = useSharedValue(HALF)
-  const still = android || reduceMotion || paused || !active
+  const still = reduceMotion || paused || !active
   useEffect(() => {
     if (still) return
     drift(a, DURATION.ambientA / 2)
@@ -184,7 +192,7 @@ export function Orbs({ set, time: pinned, paused = false, testID }: OrbsProps) {
         style={[StyleSheet.absoluteFill, current ? shown.nowStyle : shown.beforeStyle]}
       >
         {ORB_SETS[set][time].map((o, i) => (
-          <OrbView key={i} orb={o} box={box} alpha={o.alpha * (contrast ? CONTRAST_SCALE : 1)} style={i ? styleB : styleA} testID={current && testID ? `${testID}-${i}` : undefined} />
+          <OrbView key={i} orb={tint ? { ...o, color: tint } : o} box={box} alpha={o.alpha * (contrast ? CONTRAST_SCALE : 1)} style={i ? styleB : styleA} testID={current && testID ? `${testID}-${i}` : undefined} />
         ))}
       </Animated.View>
     ) : null

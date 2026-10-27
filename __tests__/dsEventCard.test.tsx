@@ -11,11 +11,18 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 
 import { EventCard } from '../components/ds/EventCard'
 import { PHOTO_SCRIM } from '../components/ui/GradientFill'
-import { PRESSED_WASH } from '../components/ds/shared'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, TYPE } from '../lib/design/tokens'
+import { HueProvider, PRESSED_WASH } from '../components/ds/shared'
+import { COLOR, FONT_FAMILY, MATERIAL, PALETTE_GLYPH, RADIUS, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
 
+jest.mock('../components/ds/anchor', () => ({
+  measureAnchor: (_node: unknown, then: (r: { x: number; y: number; width: number; height: number }) => void) => then({ x: 24, y: 300, width: 240, height: 170 }),
+}))
+jest.mock('../components/ui/Icon', () => {
+  const { View } = jest.requireActual('react-native')
+  return { Icon: ({ name, size, color }: { name: string; size: number; color: string }) => <View testID={`icon-${name}`} size={size} color={color} /> }
+})
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} testID="scrim" /> }
@@ -53,6 +60,16 @@ describe('hero and compact', () => {
     expect(screen.getByText('42 going', { includeHiddenElements: true })).toBeTruthy()
   })
 
+  it('says no count under five, from any caller: not "4 going", not "3 here now" (rc7 D2)', async () => {
+    await render(<EventCard kind="hero" {...VINYL} going={4} />)
+    expect(screen.queryByText('4 going', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('button').props.accessibilityLabel).toBe('Vinyl Night, 9 PM, at Toit, 1.2 km')
+    await render(<EventCard kind="hero" {...VINYL} here={3} going={4} testID="e" />)
+    expect(screen.queryByTestId('e-here', { includeHiddenElements: true })).toBeNull()
+    await render(<EventCard kind="hero" {...VINYL} going={5} />)
+    expect(screen.getByText('5 going', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('saved: the white ribbon, “You’re going · 9 PM”, the time in Geist Mono, read first', async () => {
     await render(<EventCard kind="compact" {...VINYL} saved="9 PM" testID="e" />)
     expect(flat('e-saved')).toMatchObject({ backgroundColor: COLOR.textPrimary, borderRadius: RADIUS.capsule })
@@ -86,22 +103,90 @@ it('the words on the photo stop at 1.5×, so the foot never runs up under the pi
   expect(screen.getByText('at Toit · 1.2 km', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
 })
 
+describe('the peek (onLongPress)', () => {
+  it('a hold plays H.longPress once and hands the screen the card\'s frame; a tap plays none', async () => {
+    const longPress = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+    const onLongPress = jest.fn()
+    const onPress = jest.fn()
+    await render(<EventCard kind="compact" {...VINYL} onPress={onPress} onLongPress={onLongPress} testID="e" />)
+    await fireEvent.press(screen.getByTestId('e'))
+    expect(longPress).not.toHaveBeenCalled()
+    await fireEvent(screen.getByTestId('e'), 'longPress')
+    expect(longPress).toHaveBeenCalledTimes(1)
+    expect(onLongPress).toHaveBeenCalledWith({ x: 24, y: 300, width: 240, height: 170 })
+  })
+
+  it('a screen reader reaches it as "Quick actions", with the same frame and no hold haptic', async () => {
+    const longPress = jest.spyOn(H, 'longPress').mockImplementation(() => {})
+    const onLongPress = jest.fn()
+    await render(<EventCard kind="row" {...VINYL} onLongPress={onLongPress} testID="e" />)
+    await fireEvent(screen.getByTestId('e'), 'accessibilityAction', { nativeEvent: { actionName: 'quickActions' } })
+    expect(onLongPress).toHaveBeenCalledWith({ x: 24, y: 300, width: 240, height: 170 })
+    expect(longPress).not.toHaveBeenCalled()
+  })
+
+  it('a card with no peek has no Quick actions and no hold', async () => {
+    await render(<EventCard kind="row" {...VINYL} testID="e" />)
+    expect(screen.getByTestId('e').props.accessibilityActions).toBeUndefined()
+  })
+})
+
+describe('row · lead="distance"', () => {
+  it('moves the distance into a Geist Mono 700 column ahead of the thumb, and out of the meta line', async () => {
+    await render(<EventCard kind="row" lead="distance" {...VINYL} testID="e" />)
+    expect(style('1.2 km')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], minWidth: 64 })
+    expect(screen.queryByText(/Toit · 1\.2 km/, { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('button').props.accessibilityLabel).toContain('1.2 km')
+  })
+
+  it('the column is at least 64 and sizes to its words up to 96, never a fixed width that clips them (drive 4 D-4)', async () => {
+    await render(<EventCard kind="row" lead="distance" {...VINYL} distance="16 km" testID="e" />)
+    const lead = style('16 km')
+    expect(lead.width).toBeUndefined()
+    expect(lead).toMatchObject({ minWidth: 64, maxWidth: 96, flexShrink: 0 })
+  })
+
+  it('beside the column the venue has its own line, so the time never squeezes it to "…" (R6-6, 360 dp at 1.3)', async () => {
+    await render(<EventCard kind="row" lead="distance" {...VINYL} venue="Toit Brewpub, Indiranagar" testID="e" />)
+    const venue = screen.getByTestId('e-venue', { includeHiddenElements: true })
+    expect(venue.props).toMatchObject({ numberOfLines: 1, children: 'Toit Brewpub, Indiranagar' })
+    expect(StyleSheet.flatten(venue.props.style).flexShrink ?? 0).toBe(0)
+    // The time line is the time alone: no venue run, no dot to share it with.
+    expect(screen.queryByText('·', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('9 PM', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('Vinyl Night', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
+  })
+
+  it('draws no column when the row has no distance, and leaves the default row alone', async () => {
+    await render(<EventCard kind="row" lead="distance" {...VINYL} distance={undefined} testID="e" />)
+    expect(screen.queryByTestId('e-lead')).toBeNull()
+    await render(<EventCard kind="row" {...VINYL} testID="e" />)
+    expect(screen.queryByTestId('e-lead')).toBeNull()
+    expect(screen.getByText(/Toit · 1\.2 km/, { includeHiddenElements: true })).toBeTruthy()
+  })
+})
+
 describe('row', () => {
   it('a long venue gives way; the time is never the part cut off', async () => {
     await render(<EventCard kind="row" {...VINYL} venue="Toit Brewpub, 100 Feet Road, Indiranagar" />)
-    const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar · 1.2 km ·', { includeHiddenElements: true })
+    const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar · 1.2 km', { includeHiddenElements: true })
     expect(venue.props.numberOfLines).toBe(1)
     expect(StyleSheet.flatten(venue.props.style).flexShrink).toBe(1)
+    // The separator before the time is its own run, so truncating the venue never takes it (r7 L12).
+    const dot = screen.getByText('·', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(dot.props.style).flexShrink ?? 0).toBe(0)
     const time = screen.getByText('9 PM', { includeHiddenElements: true })
     expect(StyleSheet.flatten(time.props.style).flexShrink ?? 0).toBe(0)
   })
 
-  it('a 64 pt row: the 56 pt thumb at radius 8, the title on one line, venue · distance · the time in Geist Mono', async () => {
+  it('a row of 64 pt at least: the 56 pt thumb at radius 8, the title on two lines, venue · distance · the time in Geist Mono', async () => {
     await render(<EventCard kind="row" {...VINYL} testID="e" />)
-    expect(flat('e').height).toBe(64)
+    // A two-line title grows the row: its height is a minimum, never a box (shared.ts).
+    expect(flat('e')).toMatchObject({ minHeight: 64 })
+    expect(flat('e').height).toBeUndefined()
     expect(flat('e-thumb')).toMatchObject({ width: 56, height: 56, borderRadius: RADIUS.thumb })
     const title = screen.getByText('Vinyl Night', { includeHiddenElements: true })
-    expect(title.props).toMatchObject({ numberOfLines: 1, maxFontSizeMultiplier: 1.3 })
+    expect(title.props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.3 })
     expect(style('9 PM')).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], fontVariant: ['tabular-nums'] })
     expect(screen.getByRole('button', { name: 'Vinyl Night, 9 PM, at Toit, 1.2 km, 42 going' })).toBeTruthy()
   })
@@ -113,4 +198,65 @@ it('Increase Contrast: the 50% hairline on the card and the scrim 20% deeper', a
   await act(async () => {})
   expect(flat('e-contrast')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
   expect(screen.getByTestId('scrim', { includeHiddenElements: true }).props.colors[1]).toBe(tint(COLOR.ink, 1))
+})
+
+describe('inert: a card with nowhere to go', () => {
+  it('is read and not pressed: text role, disabled, and a press does nothing (row and card)', async () => {
+    const onPress = jest.fn()
+    for (const kind of ['row', 'compact'] as const) {
+      const { unmount } = await render(<EventCard kind={kind} title="Toit" time="28 Sep" venue="Live here" inert onPress={onPress} testID={`inert-${kind}`} />)
+      const card = screen.getByTestId(`inert-${kind}`)
+      expect(card.props.accessibilityRole).toBe('text')
+      await fireEvent.press(card)
+      expect(onPress).not.toHaveBeenCalled()
+      await unmount()
+    }
+  })
+})
+
+describe('the event plate (D8, rc7 ruling 5: one no-cover look, the venue plate’s, at every size)', () => {
+  const hidden = { includeHiddenElements: true }
+  const NO_COVER = { ...VINYL, cover: null }
+  const half = (id: string) => StyleSheet.flatten((screen.getByTestId(id, hidden).children[0] as unknown as { props: { style: object } }).props.style) as { backgroundColor?: string }
+
+  it('a row with no cover draws its category glyph at 70% white on the world’s duotone (fill split with flare)', async () => {
+    await render(<EventCard kind="row" {...NO_COVER} category="music" testID="e" />)
+    expect(flat('e-plate')).toMatchObject({ backgroundColor: COLOR.selectionEmberFill })
+    expect(half('e-plate').backgroundColor).toBe(COLOR.selectionEmberFlare)
+    expect(screen.getByTestId('icon-music-2', hidden).props.color).toBe(PALETTE_GLYPH.plate)
+    expect(screen.getByTestId('e-plate', hidden).props.accessibilityElementsHidden).toBe(true)
+  })
+
+  it('in the screen’s hue: rose together', async () => {
+    await render(
+      <HueProvider value="rose">
+        <EventCard kind="row" {...NO_COVER} category="music" testID="e" />
+      </HueProvider>
+    )
+    expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(half('e-plate').backgroundColor).toBe(COLOR.selectionRoseFlare)
+  })
+
+  it('a category with no glyph, or none at all, still draws a glyph: a calendar, never a blank plate', async () => {
+    await render(<EventCard kind="row" {...NO_COVER} category="something-new" testID="e" />)
+    expect(screen.getByTestId('icon-calendar', hidden)).toBeTruthy()
+    await render(<EventCard kind="hero" {...NO_COVER} testID="e" />)
+    expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionEmberFill)
+    expect(screen.getByTestId('icon-calendar', hidden)).toBeTruthy()
+  })
+
+  it('a cover always wins; a venue plate wins over a category', async () => {
+    await render(<EventCard kind="row" {...VINYL} category="music" testID="e" />)
+    expect(screen.queryByTestId('e-plate', hidden)).toBeNull()
+    await render(<EventCard kind="row" {...NO_COVER} plate="cafe" category="music" testID="e" />)
+    expect(screen.queryByTestId('e-plate', hidden)).toBeNull()
+  })
+
+  it('hero and compact with no cover draw it under the scrim', async () => {
+    for (const kind of ['hero', 'compact'] as const) {
+      await render(<EventCard kind={kind} {...NO_COVER} category="nightlife" testID="e" />)
+      expect(flat('e-plate').backgroundColor).toBe(COLOR.selectionEmberFill)
+      expect(screen.getByTestId('icon-moon', hidden)).toBeTruthy()
+    }
+  })
 })

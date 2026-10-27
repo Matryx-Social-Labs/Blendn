@@ -25,7 +25,7 @@ describe('there is one profile editor', () => {
   it('edits the matching fields inside edit-profile', () => {
     const src = codeOnly(read('app/edit-profile.tsx'))
     expect(src).toContain('<MatchingFields')
-    expect(src).toContain('YOU AND MATCHING')
+    expect(src).toContain('title="You and matching"')
   })
 
   it('shows what you already chose', () => {
@@ -68,7 +68,10 @@ describe('there is one profile editor', () => {
 
   it('leaves no second door in Settings', () => {
     const src = codeOnly(read('app/settings.tsx'))
-    expect(src).not.toContain('about-you')
+    // The one door the design draws (R4.1 7.1, Flow 14 · 14.4): "How you match", to the about-you fields' own screen.
+    // The old `/about-you` route, a second profile editor, stays gone.
+    expect(src.replace("'/edit-about-you'", '')).not.toContain('about-you')
+    expect(src).toContain("pathname: '/edit-about-you'")
     expect(src).not.toContain('/edit-profile')
     // And no profile card above the list, whose outer press went to the Me tab.
     expect(src).not.toContain('profileCard')
@@ -85,9 +88,9 @@ describe('every Settings heading describes what is under it', () => {
      * to a web page.
      */
     const src = SETTINGS()
-    const safetyAt = src.indexOf("header: 'Safety'")
-    const blockedAt = src.indexOf('Blocked users')
-    const aboutAt = src.indexOf("header: 'About'")
+    const safetyAt = src.indexOf('title="Safety"')
+    const blockedAt = src.indexOf('title="Blocked users"')
+    const aboutAt = src.indexOf('title="About"')
     expect(safetyAt).toBeGreaterThan(-1)
     expect(blockedAt).toBeGreaterThan(safetyAt)
     expect(blockedAt).toBeLessThan(aboutAt)
@@ -95,7 +98,7 @@ describe('every Settings heading describes what is under it', () => {
 
   it('has no section called Discovery', () => {
     // It mixed a navigation row with three toggles, and the row has moved.
-    expect(SETTINGS()).not.toContain("header: 'Discovery'")
+    expect(SETTINGS()).not.toContain('title="Discovery"')
   })
 })
 
@@ -119,28 +122,31 @@ describe('a failed toggle rolls back only itself', () => {
 describe('the irreversible row is hard to hit by accident', () => {
   const SETTINGS = () => codeOnly(read('app/settings.tsx'))
 
-  it('puts Delete account last, under its own spaced header', () => {
+  it('puts Delete account last, in its own group', () => {
     /*
      * It used to sit one row under Sign out, both red, both in the first
      * section, at the top of the screen where the thumb lands. One is routine
      * and reversible; the other destroys the account.
      */
     const src = SETTINGS()
-    expect(src).toContain("header: 'Danger zone', spaced: true")
-    expect(src.indexOf('Delete account')).toBeGreaterThan(src.indexOf("header: 'Account'"))
+    expect(src).toContain('<SettingsGroup title="Danger zone" danger>')
+    // The row's title is `Deleting account…` while it runs, so it is found by its test id.
+    expect(src.indexOf('testID="settings-delete"')).toBeGreaterThan(src.indexOf('<SettingsGroup title="Account">'))
+    // Nothing follows it but the end of the list.
+    expect(src.slice(src.indexOf('testID="settings-delete"'))).not.toContain('<SettingsGroup')
   })
 
   it('reserves the danger colour for it alone', () => {
     // Sign out is no longer red. One red row is what makes red mean something.
     const src = SETTINGS()
-    expect(src.match(/danger: true/g)).toHaveLength(1)
+    expect(src.match(/<SettingsRow[^>]*\bdestructive\b/g)).toHaveLength(1)
   })
 
-  it('actually spaces the header it marks', () => {
-    // A `spaced` flag the renderer ignores is worse than no flag.
+  it('separates every group from the next by a gap, not one card', () => {
+    // Six groups in one bordered card read as one block; each is its own SettingsGroup in a gapped column.
     const src = SETTINGS()
-    expect(src).toContain('item.spaced && styles.sectionHeaderSpaced')
-    expect(src).toContain('sectionHeaderSpaced: { marginTop: SPACE.xxxl }')
+    expect(src.match(/<SettingsGroup title=/g)?.length).toBeGreaterThanOrEqual(7)
+    expect(src).toMatch(/content: \{[^}]*gap: DS_SPACE\.xl/)
   })
 })
 
@@ -164,9 +170,8 @@ describe('the editor is on the app’s palette', () => {
      * `rgba(255,255,255,0.16)` -- a 10% lightness step.
      */
     const src = codeOnly(read('components/profile/MatchingFields.tsx'))
-    // The design system's selected chip: `textPrimary` fill, `bg` text.
-    expect(src).toContain('chipOn: { backgroundColor: EMBER.textPrimary')
-    expect(src).toContain('chipTextOn: { color: EMBER.bg }')
-    expect(src).not.toMatch(/EMBER\.(accent|onGradientChip)/)
+    // The design system's chip (white fill, ink type) through ChipSet: the editor draws none of its own.
+    expect(src).toContain('<ChipSet')
+    expect(src).not.toMatch(/chipOn|EMBER\./)
   })
 })

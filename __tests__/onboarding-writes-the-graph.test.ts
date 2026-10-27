@@ -69,7 +69,7 @@ describe('the details step carries category ids, not only names', () => {
     const src = read('app/onboarding/details.tsx')
 
     // The picker has had `item.id` all along; the screen used only `item.name`.
-    expect(src).toMatch(/onPress=\{\(\) => toggle\(item\.id, item\.name\)\}/)
+    expect(src).toMatch(/toggle\(item\.id, item\.name\)/)
     expect(src).toMatch(/setInterestIds\(/)
     // And both are committed, because both are still read.
     expect(src).toMatch(/commit\(\{ interests, interestIds, bio: bio\.trim\(\) \}\)/)
@@ -148,6 +148,16 @@ describe('syncInterests makes the server match the picker', () => {
     await expect(syncInterests('u1', ['b', 'c'])).resolves.toBe(true)
     expect(mockApi.addProfileInterests).toHaveBeenCalledWith('u1', ['c'])
     expect(mockApi.removeProfileInterests).toHaveBeenCalledWith('u1', ['a'])
+  })
+
+  it('removes before it adds, so swapping one at the ten-interest cap is accepted the first time', async () => {
+    const order: string[] = []
+    const ten = Array.from({ length: 10 }, (_, i) => `i${i}`)
+    mockApi.getProfileInterests.mockResolvedValue(held(ten))
+    mockApi.removeProfileInterests.mockImplementation(async () => (order.push('remove'), { success: true }))
+    mockApi.addProfileInterests.mockImplementation(async () => (order.push('add'), { success: true, data: {} }))
+    await expect(syncInterests('u1', [...ten.slice(1), 'new'])).resolves.toBe(true)
+    expect(order).toEqual(['remove', 'add'])
   })
 
   it('sends nothing when the server already matches', async () => {

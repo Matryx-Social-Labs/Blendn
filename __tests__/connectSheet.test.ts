@@ -37,7 +37,7 @@ describe('the disclosure names people the way the server does', () => {
      * person, after the fact.
      */
     const copy = connectDisclosure('Cosmic Panda', false)
-    expect(copy).toContain("You'll still see them as Cosmic Panda")
+    expect(copy).toContain("You’ll still see them as Cosmic Panda")
   })
 
   it('drops the second sentence once they are already revealed', () => {
@@ -76,7 +76,7 @@ describe('the cost is stated before the effort', () => {
      * where it can still change the answer.
      */
     const src = SHEET()
-    expect(src.indexOf('connectDisclosure(')).toBeLessThan(src.indexOf('<TextInput'))
+    expect(src.indexOf('connectDisclosure(')).toBeLessThan(src.indexOf('<TextArea'))
   })
 
   it('says the request is one-shot', () => {
@@ -110,7 +110,7 @@ describe('the card keeps the two actions apart', () => {
     /*
      * The safe, symmetric, reversible action is the easy one. Making the button
      * with a cost the more attractive one is how people reveal themselves by
-     * reflex. Like is the gradient primary; Message a secondary after it.
+     * reflex. Like is the gradient primary; Message a lit action after it, a size smaller.
      */
     const src = CARD()
     const actions = src.slice(src.indexOf("testID={id('actions')}"))
@@ -118,9 +118,10 @@ describe('the card keeps the two actions apart', () => {
     const message = actions.indexOf('label="Message"')
     expect(like).toBeGreaterThan(-1)
     expect(like).toBeLessThan(message)
-    // The Button's default kind is primary (the gradient); Message says secondary.
+    // The Button's default kind is primary (the gradient, at 56); Message is lit, at 48.
     expect(actions.slice(like, actions.indexOf('/>', like))).not.toContain('kind=')
-    expect(actions.slice(message, actions.indexOf('/>', message))).toContain('kind="secondary"')
+    expect(actions.slice(message, actions.indexOf('/>', message))).toContain('kind="lit"')
+    expect(actions.slice(message, actions.indexOf('/>', message))).toContain('size="md"')
   })
 
   it('tells a screen reader what each one costs', () => {

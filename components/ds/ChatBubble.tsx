@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { memo, useCallback, useState, type ComponentProps } from 'react'
+import { memo, useCallback, useRef, useState, type ComponentProps } from 'react'
 import { Pressable, StyleSheet, Text, View, type AccessibilityActionEvent, type GestureResponderEvent } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Circle } from 'react-native-svg'
@@ -10,26 +10,32 @@ import Animated, {
   ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withSpring,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, EASING, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { COLOR, EASING, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { MonoRun } from './MonoFamily'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
+import { measureAnchor } from './anchor'
+import { DashedFrame } from './DashedFrame'
 import { Avatar } from './Avatar'
 import { CHAT_REACTIONS } from '../../lib/chatReactions'
 import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, reactionName, REPLY_SWIPE, replyOffset, timeFont, type ChatPerson, type Rect, type TextPart } from './chatShared'
 import { ReactionPill } from './ReactionBar'
 import { RECEIPT_WORD, ReceiptMark, type Receipt } from './ReceiptMark'
 import { ReplyPreview } from './ReplyPreview'
-import { focusRing, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
 
 /** #36: the hold that opens the menu. */
 const HOLD_MS = 400
 const PRESS_SPRING = { ...SPRING.press, reduceMotion: ReduceMotion.Never }
+/** The bubble squashes only for a touch that stays: a scroll's first touch-down ends sooner than this. */
+export const PRESS_DELAY_MS = 120
 /** The page's not-sent bubble at 70%. */
 const FAILED_OPACITY = 0.7
 /** R3-D5 5.11: one to three emoji alone at 32 pt, no bubble. */
@@ -37,6 +43,8 @@ const FAILED_OPACITY = 0.7
 const EMOJI_ONLY_TYPE = { fontSize: 32, lineHeight: 40 }
 /** The page's photo in a bubble. */
 const PHOTO = { width: 220, height: 160 }
+/** The removed message's words, said and shown (Flow 5 #11; round 4 #37 for a photo). */
+const REMOVED_WORDS = { text: 'This message was removed by moderation', photo: 'Photo removed by moderation', photoShown: 'Removed by moderation' }
 /** R3-D5 5.9: a 44 pt ring with a 3 pt stroke; the veil is the photo dimmed to 65%. */
 const RING = { size: SIZE.circleButton, stroke: 3 }
 const VEIL_ALPHA = 0.35
@@ -69,8 +77,11 @@ export type ChatBubbleProps = {
   receipt?: Receipt
   /** Offline: "Waiting for connection" with a clock, never a spinner (R3-D5 5.8). */
   waiting?: boolean
-  /** Removed by moderation: keeps its place, dashed; no menu, no swipe. */
-  removed?: boolean
+  /**
+   * Removed by moderation: keeps its place in the DS dashed frame; no menu, no swipe. `'photo'`: a photo's, the
+   * sender's view (round 4 #37): the photo-sized frame with a shield and "Removed by moderation".
+   */
+  removed?: boolean | 'photo'
   /** Not sent: `true` for "Not sent · Tap to retry", or the line the server's reason gives. */
   failed?: boolean | string
   onRetry?: () => void
@@ -82,7 +93,7 @@ export type ChatBubbleProps = {
   onSenderPress?: () => void
   /** A link: the screen's domain sheet, never a preview. */
   onLinkPress?: (url: string) => void
-  /** The menu's items, for a screen reader (Copy, Report…): the hold is a shortcut. */
+  /** Extra screen-reader actions. The menu itself is "More options" (whenever `onLongPress` is set), so its items need not be repeated here. */
   actions?: { label: string; onPress: () => void }[]
   /** Only for a message that has just landed in front of you, never history. */
   animateIn?: 'send' | 'arrive'
@@ -123,8 +134,10 @@ function entering(kind: 'send' | 'arrive', reduceMotion: boolean) {
  * haptic on arrival. Android: no ripple on a bubble.
  *
  * Read as one element per message, "{name}, {text}, {time}", the reply as its
- * hint; Reply, the menu's items and each link are its accessibility actions,
- * so neither gesture is the only way. The name is a button to their card.
+ * hint; Reply, "More options" (the same menu the hold opens, at the bubble's
+ * frame), "View profile" (the creature's card), the reactions and each link
+ * are its accessibility actions, so no gesture is the only way. The name is a
+ * button to their card.
  * Text scales freely; the width holds. Increase Contrast: the 50% hairline.
  */
 /**
@@ -150,7 +163,8 @@ function useBubbleGestures({ onLongPress, onReply, removed, failed, testID }: Pi
   const hold = Gesture.LongPress()
     .enabled(!!onLongPress && !removed)
     .minDuration(HOLD_MS)
-    .onBegin(() => press.set(withSpring(PRESS.scale, PRESS_SPRING)))
+    // A hold shows in time; a flick's touch-down is gone (onFinalize) before it, so a scrolling thumb never squashes a bubble.
+    .onBegin(() => press.set(withDelay(PRESS_DELAY_MS, withSpring(PRESS.scale, PRESS_SPRING))))
     .onStart((e) => {
       const { width, height } = size.get()
       scheduleOnRN(openMenu, { x: e.absoluteX - e.x, y: e.absoluteY - e.y, width, height })
@@ -185,7 +199,7 @@ function useBubbleGestures({ onLongPress, onReply, removed, failed, testID }: Pi
     opacity: interpolate(dx.get(), [0, REPLY_SWIPE.trigger / 2], [0, 1], 'clamp'),
     transform: [{ scale: interpolate(dx.get(), [0, REPLY_SWIPE.trigger], [0.6, 1], 'clamp') }],
   }))
-  return { hold, swipe, size, pressStyle, swipeStyle, glyphStyle }
+  return { hold, swipe, size, pressStyle, swipeStyle, glyphStyle, openMenu }
 }
 
 function ChatBubbleBase(props: ChatBubbleProps) {
@@ -195,7 +209,10 @@ function ChatBubbleBase(props: ChatBubbleProps) {
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
   const [focused, setFocused] = useState(false)
-  const { hold, swipe, size, pressStyle, swipeStyle, glyphStyle } = useBubbleGestures(props)
+  const { hold, swipe, size, pressStyle, swipeStyle, glyphStyle, openMenu } = useBubbleGestures(props)
+  const holdArea = useRef<View>(null)
+  // A screen reader's "More options": the hold's own path, measured from the bubble rather than from a finger.
+  const onMore = props.onLongPress && !removed ? () => measureAnchor(holdArea.current, openMenu) : undefined
 
   const room = surface === 'room' && !mine
   const emoji = !removed && !photo && !replyTo && emojiOnly(text)
@@ -204,6 +221,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
   const bubble = (
     <Message
       {...props}
+      onMore={onMore}
       emoji={emoji}
       size={() => size.get()}
       onFocus={() => setFocused(true)}
@@ -212,7 +230,8 @@ function ChatBubbleBase(props: ChatBubbleProps) {
         styles.bubble,
         emoji && styles.bare,
         photo && styles.photoBubble,
-        removed && styles.removed,
+        // The dash is DashedFrame's (SVG): a border dash differs per platform, and draws solid on Android with any per-side width.
+        removed === 'photo' && styles.removedPhoto,
         { backgroundColor: removed || emoji ? 'transparent' : mine ? COLOR.surfaceRaised : COLOR.surfaceSunken },
         mine ? { borderBottomRightRadius: tail } : { borderBottomLeftRadius: tail },
         failed && styles.failedBubble,
@@ -238,7 +257,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
               hitSlop={{ top: (minTarget() - TYPE.meta.lineHeight) / 2, bottom: (minTarget() - TYPE.meta.lineHeight) / 2 }}
               style={indent}
             >
-              <Text numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
+              <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
                 {sender.name}
               </Text>
             </Pressable>
@@ -250,6 +269,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
             {room ? <SenderAvatar sender={sender} last={last} onPress={onSenderPress} testID={testID && `${testID}-avatar`} /> : null}
             <GestureDetector gesture={hold}>
               <Animated.View
+                ref={holdArea}
                 testID={testID && `${testID}-hold-area`}
                 onLayout={(e) => size.set({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
                 style={[styles.shrink, previewState === 'pressed' ? styles.pressed : pressStyle]}
@@ -275,7 +295,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
  */
 export const ChatBubble = memo(ChatBubbleBase)
 
-/** The 32 pt creature beside an inbound room group, on its last bubble; a button to their card (a screen reader uses the name). */
+/** The 32 pt creature beside an inbound room group, on its last bubble: a touch target to their card (48 dp); screen readers use the bubble's "View profile" action. */
 function SenderAvatar({ sender, last, onPress, testID }: { sender: ChatPerson; last: boolean; onPress?: () => void; testID?: string }) {
   if (!last) return <View style={styles.avatarSpace} />
   return (
@@ -284,6 +304,8 @@ function SenderAvatar({ sender, last, onPress, testID }: { sender: ChatPerson; l
       onPress={onPress}
       disabled={!onPress}
       hitSlop={(minTarget() - BUBBLE.avatar) / 2}
+      // Hidden from screen readers: the bubble already offers "View profile" as an action, and a second stop on
+      // every message would double each one in a busy room. Touch gets the 48 dp target.
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
@@ -310,6 +332,8 @@ function Message({
   reactions = [],
   onReactionPress,
   actions = [],
+  onMore,
+  onSenderPress,
   testID,
   emoji,
   size,
@@ -317,6 +341,8 @@ function Message({
   onBlur,
   style,
 }: ChatBubbleProps & {
+  /** "More options": the hold's menu, for a screen reader. */
+  onMore?: () => void
   emoji: boolean
   size: () => { width: number; height: number }
   onFocus: () => void
@@ -325,23 +351,28 @@ function Message({
 }) {
   const bold = useBoldText()
   const parts = removed || photo ? [] : linkParts(text)
+  const removedPhoto = removed === 'photo'
   const links = onLinkPress ? parts.filter((p): p is TextPart & { url: string } => !!p.url) : []
 
-  // The room frame's words (Flow 5 #11): it was moderation, and it says so.
-  const content = removed ? 'This message was removed by moderation.' : photo ? 'Photo' : text
+  // The room frame's words (Flow 5 #11): it was moderation, and it says so. Said without the full stop, which a
+  // screen reader read as ".," before the time.
+  const content = removed ? REMOVED_WORDS[removedPhoto ? 'photo' : 'text'] : photo ? 'Photo' : text
   const label = `${failed ? 'Not sent' : mine ? 'You' : sender.name}${failed ? ':' : ','} ${content}, ${time}${
     receipt ? `, ${RECEIPT_WORD[receipt]}` : ''
   }${waiting ? ', waiting for connection' : ''}`
   /*
-   * Everything the gestures and the menu offer, as actions: Reply, the six
-   * reactions (the bar is behind a hold), the menu's items, each link. A
-   * removed message offers nothing; one not sent offers no Reply.
+   * Everything the gestures offer, as actions: Reply, the hold's menu (Report,
+   * Block, Copy, their card: a safety path, so never gesture-only), the
+   * creature's card, the six reactions (the bar is behind a hold), each link.
+   * A removed message offers nothing; one not sent offers no Reply.
    */
   const yours = new Set(reactions.filter((r) => r.mine).map((r) => r.emoji))
   const named: [string, () => void][] = removed
     ? []
     : [
         ...(onReply && !failed ? [['Reply', onReply] as [string, () => void]] : []),
+        ...(onMore ? [['More options', onMore] as [string, () => void]] : []),
+        ...(onSenderPress ? [['View profile', onSenderPress] as [string, () => void]] : []),
         ...(onReactionPress && !failed
           ? CHAT_REACTIONS.map((e): [string, () => void] => [
               `${yours.has(e) ? 'Take back' : 'React,'} ${reactionName(e)}`,
@@ -378,19 +409,31 @@ function Message({
       onBlur={onBlur}
       style={style}
     >
+      {removed ? <DashedFrame radius={BUBBLE.radius} testID={testID && `${testID}-dashed`} /> : null}
       {replyTo && !removed ? <ReplyPreview name={replyTo.name} text={replyTo.text} onPress={replyTo.onPress} /> : null}
-      {photo && !removed ? (
+      {removedPhoto ? (
+        <>
+          <Icon name="shield" size={ICON.control} color={COLOR.textSecondary} />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centred]}>
+            {REMOVED_WORDS.photoShown}
+          </Text>
+        </>
+      ) : photo && !removed ? (
         <View>
           <Image source={{ uri: photo.uri }} style={styles.photo} contentFit="cover" accessible={false} />
           {photo.progress !== undefined ? <UploadRing progress={photo.progress} /> : null}
         </View>
       ) : (
-        <Text style={[emoji ? EMOJI_ONLY_TYPE : font('body', bold), removed ? styles.removedText : styles.primary]}>
+        <Text
+          // Reading text grows to body's cap; a 32 pt emoji-only message is already large, so it stops at display's.
+          maxFontSizeMultiplier={emoji ? MAX_FONT_SCALE.display : MAX_FONT_SCALE.body}
+          style={[emoji ? EMOJI_ONLY_TYPE : font('body', bold), removed ? styles.removedText : styles.primary]}
+        >
           {removed
-            ? content
+            ? `${content}.`
             : parts.map(({ text: words, url }, i) =>
                 url ? (
-                  <Text key={i} onPress={() => onLinkPress?.(url)} style={styles.link}>
+                  <Text key={i} onPress={() => onLinkPress?.(url)} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.link}>
                     {words}
                   </Text>
                 ) : (
@@ -403,8 +446,11 @@ function Message({
   )
 }
 
-/** The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. */
-function UploadRing({ progress }: { progress: number }) {
+/**
+ * The upload's determinate ring over a 35% veil (R3-D5 5.9 #33): a fraction, read as a percentage. A photo message's, and the
+ * onboarding photo tile's (`label`: what a screen reader says it is doing).
+ */
+export function UploadRing({ progress, label = 'Sending photo' }: { progress: number; label?: string }) {
   const r = (RING.size - RING.stroke) / 2
   const around = 2 * Math.PI * r
   const done = Math.max(0, Math.min(1, progress))
@@ -412,7 +458,7 @@ function UploadRing({ progress }: { progress: number }) {
     <View
       accessible
       accessibilityRole="progressbar"
-      accessibilityLabel="Sending photo"
+      accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: 100, now: Math.round(done * 100) }}
       style={[StyleSheet.absoluteFill, styles.veil]}
     >
@@ -479,7 +525,7 @@ function Under({
           style={[styles.meta, indent]}
         >
           <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-          <Text style={[font('caption', bold), styles.destructive]}>{typeof failed === 'string' ? failed : 'Not sent · Tap to retry'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.destructive]}>{typeof failed === 'string' ? failed : 'Not sent · Tap to retry'}</Text>
         </Pressable>
       ) : null}
       {last && !failed ? (
@@ -488,11 +534,16 @@ function Under({
           {waiting ? (
             <>
               <Icon name="clock" size={ICON.inline} color={COLOR.textTertiary} />
-              <Text style={[font('caption', bold), styles.tertiary]}>Waiting for connection</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>
+                Waiting for connection
+              </Text>
             </>
           ) : (
             <>
-              <Text style={timeFont(bold)}>{time}</Text>
+              {/* A tag, as Banter's time: it stops where a control does (C31). */}
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={timeFont(bold)}>
+                <MonoRun text={time} />
+              </Text>
               {mine && surface === 'dm' && receipt ? <ReceiptMark state={receipt} /> : null}
             </>
           )}
@@ -515,7 +566,14 @@ const styles = StyleSheet.create({
   bubble: { borderRadius: BUBBLE.radius, paddingVertical: SPACE.sm, paddingHorizontal: SPACE.md },
   bare: { paddingVertical: 0, paddingHorizontal: 0 },
   photoBubble: { padding: SPACE.xs },
-  removed: { borderWidth: 1, borderStyle: 'dashed', borderColor: COLOR.textTertiary },
+  removedPhoto: {
+    width: PHOTO.width,
+    height: PHOTO.height,
+    padding: SPACE.md,
+    gap: SPACE.xs + SPACE.xxs,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   failedBubble: { opacity: FAILED_OPACITY },
   photo: { width: PHOTO.width, height: PHOTO.height, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface },
   veil: { borderRadius: RADIUS.rowInCard, backgroundColor: tint(COLOR.ink, VEIL_ALPHA), alignItems: 'center', justifyContent: 'center' },
@@ -526,5 +584,7 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   tertiary: { color: COLOR.textTertiary },
   destructive: { color: COLOR.destructive },
-  removedText: { color: COLOR.textSecondary, fontStyle: 'italic' },
+  // No fontStyle: Satoshi ships no italic face, so Android synthesises one from the system face (Roboto). The dashed frame and the secondary colour say "removed".
+  removedText: { color: COLOR.textSecondary },
+  centred: { textAlign: 'center' },
 })

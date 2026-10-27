@@ -9,6 +9,7 @@ import React from 'react'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 
 import { CrewStrip, type StripCrew } from '../components/ds/CrewStrip'
+import { FONT_FAMILY } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('expo-linear-gradient', () => {
@@ -51,9 +52,13 @@ describe('<CrewStrip>', () => {
     expect(screen.getByText('You’re the first from Nebula. Your crew shows up here once two of you are in.')).toBeTruthy()
   })
 
-  it('everyone in', async () => {
+  it('everyone in, in the body face: mono is for the figures ("3 of 4"), not a word (rc7 D12)', async () => {
     await render(<CrewStrip crews={[nebula({ here: 4 })]} onTell={jest.fn()} />)
-    expect(screen.getByText('everyone')).toBeTruthy()
+    const title = screen.getByText(/everyone in$/)
+    expect(StyleSheet.flatten(title.props.style).fontFamily).not.toBe(FONT_FAMILY.mono[500])
+    expect(screen.queryByText('everyone')).toBeNull()
+    await render(<CrewStrip crews={[nebula({ here: 3 })]} onTell={jest.fn()} />)
+    expect(StyleSheet.flatten(screen.getByText('3 of 4').props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
   })
 
   it('the action is the raised 44 Button (A31): 44 pt on iOS, slop to 48 dp on Android', async () => {

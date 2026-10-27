@@ -229,7 +229,7 @@ Audit: [`audit/audit-discovery.md`](./audit/audit-discovery.md), `docs/PULSE.md`
   - Upcoming is grouped by day, and each card shows only its time.
   - Show counts, not faces, before check-in ("blind regulars").
   - The hero card is sized for the drawer's header (since #363) and the tab bar's measured top.
-  - Event cards say "at ‹Venue›" when the server names a linked venue, else the organiser's text.
+  - Event cards say "at ‹Venue›" when the server names a linked venue, else the organizer's text.
 - **Fix while redesigning:**
   - The door-policy pill can never show.
   - "N joined" may always be 0 before doors.
@@ -585,9 +585,9 @@ Audit: [`audit/audit-social.md` §1 (Banter, room chat, room info, DM)](./audit/
   - failed send
   - removed-by-moderation (own)
   - withheld at send (inline placeholder + toast, not a modal)
-  - broadcasts: **announcement** (organiser identity) and **sponsored** (labelled, quieter, optional media)
+  - broadcasts: **announcement** (organizer identity) and **sponsored** (labelled, quieter, optional media)
   - scroll-to-newest with an unread count
-  - **every composer state** in audit §0.7: normal, failed (shown on the bubble), muted, auto-muted with an expiry, locked by the organiser, room closed, rate-limited (timed), not checked in, banned/removed, left the room (Rejoin). There is deliberately **no "sending" state**: a sent message appears at once
+  - **every composer state** in audit §0.7: normal, failed (shown on the bubble), muted, auto-muted with an expiry, locked by the organizer, room closed, rate-limited (timed), not checked in, banned/removed, left the room (Rejoin). There is deliberately **no "sending" state**: a sent message appears at once
   - the message action sheet and the report-reasons step
   - realtime paused
 - **Direction:**
@@ -595,7 +595,7 @@ Audit: [`audit/audit-social.md` §1 (Banter, room chat, room info, DM)](./audit/
   - **A truly floating glass composer.** The feed scrolls under it, with the reply preview attached to the composer's glass.
   - A restricted composer is a designed state: icon + reason + what to do + expiry. Not a grey line.
   - **Reactions:** a contextual reaction bar anchored to the long-pressed bubble (six emoji) instead of a generic sheet. Counts roll.
-  - Broadcasts are full width, with no tail and no avatar. Announcements carry the organiser's mark. Sponsored is labelled and quieter, and may carry an image.
+  - Broadcasts are full width, with no tail and no avatar. Announcements carry the organizer's mark. Sponsored is labelled and quieter, and may carry an image.
 - **Motion:**
   - **Send:** the text lifts out of the composer and becomes the bubble (DESIGN-BRIEF §9.3 #12). Only *your* sends animate in; history never does.
   - Typing dots share the bubble shape.
@@ -610,7 +610,7 @@ Audit: [`audit/audit-social.md` §1 (Banter, room chat, room info, DM)](./audit/
 ### `/chat-info/[id]` · Room info
 - **Direction:**
   - The cover as a scrimmed hero with the title.
-  - **Members as a "crowd" grid of creature marks** with role badges (Organiser, Moderator), not a settings list.
+  - **Members as a "crowd" grid of creature marks** with role badges (Organizer, Moderator), not a settings list.
   - Mute shows as a still bell-slash chip near the title.
   - Leave room sits apart in a danger zone.
 - **Haptics:** `H.select` on a mute option, `H.destructive` on Leave room.

@@ -125,3 +125,22 @@ export function isTimeoutError(error: unknown): boolean {
     (error as { name?: unknown }).name === 'AbortError'
   )
 }
+
+/**
+ * `work`, or `fallback` once `ms` has passed: a promise a caller may hold a spinner on. A rejection still rejects.
+ *
+ * `fetchWithTimeout` bounds the fetch, and only the fetch. What a call does before it reaches one is not
+ * bounded: a slot in `apiClient`'s queue, the keychain read of the token, a shared token refresh. A screen
+ * that awaits the call to end its busy state (a request answered in place) needs the whole of it to settle.
+ */
+export async function settleWithin<T>(work: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms)
+  })
+  try {
+    return await Promise.race([work, late])
+  } finally {
+    clearTimeout(timer)
+  }
+}

@@ -156,6 +156,18 @@ describe('a check-in', () => {
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
   })
 
+  it('a question closed for a link (abandoned) does not go on to the room: they went elsewhere (review MED-2)', async () => {
+    const { done } = await checkIn(fresh({ askIntent: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    await advance(DURATION.base)
+    expect(router.push).toHaveBeenCalledWith(askIntentRoute('e1'))
+
+    await act(async () => intentAnswered('abandoned'))
+
+    expect(await done).toBe('checkedIn')
+    expect(props.onEnterRoom).not.toHaveBeenCalled()
+  })
+
   it('offers the reveal after the pour has cleared, then the intent, then the room', async () => {
     offer.mockResolvedValue({ title: 'Show who you are?', message: 'm', confirm: 'Show me', cancel: 'Not now' })
     const { done } = await checkIn(fresh({ revealSuggestion: true, askIntent: true }))
@@ -214,11 +226,11 @@ describe('the sheets it asks for (Flow 4 Tonight #15–#22)', () => {
     ({ kind: 'refused', refusal: { ...checkInRefusal(errorCode, 'The server’s sentence.'), title, offerDirections }, errorCode, alreadyCheckedIn: false }) as CheckInOutcome
   const buttons = () => (props.showTray.mock.calls[0][2] as { label: string; kind?: string }[]).map((b) => [b.label, b.kind])
 
-  it('Not quite there yet: the server’s sentence, map-pin, Open Maps (strong) and Close, one H.error', async () => {
+  it('Not quite there yet: the server’s sentence, map-pin, Open Maps (lit) and Close, one H.error', async () => {
     const { done } = await checkIn(refused('OUT_OF_RANGE', 'Not quite there yet', true))
     expect(await done).toBe('refused')
     expect(props.showTray).toHaveBeenCalledWith('Not quite there yet', 'The server’s sentence.', expect.any(Array), { icon: 'map-pin' })
-    expect(buttons()).toEqual([['Close', 'tertiary'], ['Open Maps', 'strong']])
+    expect(buttons()).toEqual([['Close', 'tertiary'], ['Open Maps', 'lit']])
     expect(error).toHaveBeenCalledTimes(1)
     expect(success).not.toHaveBeenCalled()
   })
@@ -231,6 +243,41 @@ describe('the sheets it asks for (Flow 4 Tonight #15–#22)', () => {
     await checkIn(refused(code, title))
     expect(props.showTray).toHaveBeenCalledWith(title, 'The server’s sentence.', expect.any(Array), { icon })
     expect(buttons()).toEqual([['Close', 'secondary']])
+  })
+
+  describe('the refusals with a fix (Flow 15 15.22)', () => {
+    const outcome = (errorCode: string, message: string): CheckInOutcome =>
+      ({ kind: 'refused', refusal: checkInRefusal(errorCode, message), errorCode, alreadyCheckedIn: false }) as CheckInOutcome
+
+    it.each([
+      ['FORBIDDEN', 'Finish setting up your profile first. Blend\'n is for people 18 and over.', 'Finish your profile first', 'Finish profile', 'user-round-pen'],
+      ['PROFILE_INCOMPLETE', 'whatever the server says', 'Finish your profile first', 'Finish profile', 'user-round-pen'],
+      ['AGE_RESTRICTED', 'This event is 18+. Add your age to your profile to check in.', 'Add your age to check in', 'Add your age', 'calendar'],
+      ['AGE_UNKNOWN', 'whatever the server says', 'Add your age to check in', 'Add your age', 'calendar'],
+    ])('%s: the frame’s sheet with the fix as the primary and Not now beside it, and no haptic of its own', async (code, message, title, fix, icon) => {
+      const { done } = await checkIn(outcome(code, message))
+      expect(await done).toBe('refused')
+      expect(props.showTray).toHaveBeenCalledWith(title, expect.any(String), expect.any(Array), { icon })
+      expect(buttons()).toEqual([['Not now', 'tertiary'], [fix, 'primary']])
+      // "A refusal never carries a haptic; the fix does": no H.error as the sheet opens.
+      expect(error).not.toHaveBeenCalled()
+    })
+
+    it('the fix closes the sheet and opens Edit profile; Not now only closes', async () => {
+      await checkIn(outcome('AGE_UNKNOWN', 'x'))
+      const [notNow, fix] = props.showTray.mock.calls[0][2] as { onPress: () => void }[]
+      notNow.onPress()
+      expect(router.push).not.toHaveBeenCalledWith('/edit-profile')
+      fix.onPress()
+      expect(props.closeTray).toHaveBeenCalled()
+      expect(router.push).toHaveBeenCalledWith('/edit-profile')
+    })
+
+    it('an age the server knows is under the event’s gets no fix: a plain "Not open to you"', async () => {
+      await checkIn(outcome('AGE_RESTRICTED', 'This event is 21+.'))
+      expect(props.showTray).toHaveBeenCalledWith('Not open to you', 'This event is 21+.', expect.any(Array), { icon: 'circle-slash' })
+      expect(buttons()).toEqual([['Close', 'secondary']])
+    })
   })
 
   it('a failure on our side offers Try again, which runs the check-in again', async () => {
@@ -334,6 +381,7 @@ describe('every door is this flow', () => {
     // A check-in always goes through the hold (docs/redesign/SCREENS.md, Pulse).
     const src = read('app/(tabs)/events.tsx')
     expect(src).not.toContain('submitCheckIn(')
-    expect(src).toMatch(/label: 'Blend in',[\s\S]{0,200}closeTray\(\)\s*openBlendn\(\)/)
+    // The peek's Check in item (the frame's label) is the pass's hold: it only ever opens the overlay.
+    expect(src).toMatch(/action === 'checkIn'\) return openBlendn\(\)/)
   })
 })

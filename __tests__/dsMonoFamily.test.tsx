@@ -6,18 +6,57 @@
  */
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, StyleSheet, Text } from 'react-native'
 
-import { Badge, LivePill, PresenceDot, Price, TimeBadge } from '../components/ds/MonoFamily'
-import { COLOR, FONT_FAMILY, MATERIAL, TYPE } from '../lib/design/tokens'
+import { badgeFadeIn, badgeIn } from '../components/motion/presence'
+import { Badge, LivePill, MonoRun, PresenceDot, Price, TimeBadge } from '../components/ds/MonoFamily'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, TYPE } from '../lib/design/tokens'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const text = (t: string) => screen.getByText(t, { includeHiddenElements: true })
 
+describe('<Badge> motion (DS #28, #26)', () => {
+  it('a count is a RollingNumber in the badge role: Geist Mono 700 at 12/16, ink', async () => {
+    await render(<Badge text={14} testID="b" />)
+    expect(screen.getByTestId('b-count', { includeHiddenElements: true })).toBeTruthy()
+    const digit = StyleSheet.flatten(screen.getByTestId('b-count-0-in', { includeHiddenElements: true }).props.style)
+    expect(digit).toMatchObject({ color: COLOR.ink, fontFamily: FONT_FAMILY.mono[700], fontSize: TYPE.caption.fontSize, lineHeight: TYPE.caption.lineHeight })
+  })
+
+  it('“9+”, “99+” and “3 new” never roll: they are plain text', async () => {
+    for (const label of ['9+', '99+', '3 new']) {
+      await render(<Badge text={label} testID="w" />)
+      expect(screen.queryByTestId('w-count', { includeHiddenElements: true })).toBeNull()
+      expect(text(label)).toBeTruthy()
+    }
+  })
+
+  /** The badge's own root layer, as it reaches the host. */
+  const root = () => (screen.toJSON() as { props: { entering?: unknown; exiting?: unknown } }).props
+
+  it('a badge in a row has no entering or exiting animation: scrolling and first paint never pop', async () => {
+    await render(<Badge text={3} testID="b" />)
+    expect(root().entering).toBeUndefined()
+    expect(root().exiting).toBeUndefined()
+  })
+
+  it('with `arrive` (the bell, a filter count, a dock’s “n new”) it arrives and leaves', async () => {
+    await render(<Badge text={3} arrive testID="b" />)
+    expect(root().entering).toBe(badgeIn)
+    expect(root().exiting).toBeDefined()
+  })
+
+  it('it arrives from 0.8 and fades in over quick; Reduce Motion is the fade alone', () => {
+    const entering = badgeIn()
+    expect(entering.initialValues).toEqual({ opacity: 0, transform: [{ scale: 0.8 }] })
+    expect(badgeFadeIn).toBeDefined()
+  })
+})
+
 describe('<Badge>', () => {
   it('is an 18 pt white pill with ink digits in Geist Mono 700, capped at 1.3×', async () => {
     await render(<Badge text={3} testID="b" />)
-    expect(flat('b')).toMatchObject({ height: 18, minWidth: 18, backgroundColor: COLOR.textPrimary })
+    expect(flat('b')).toMatchObject({ minHeight: 18, minWidth: 18, backgroundColor: COLOR.textPrimary })
     const digits = text('3')
     expect(StyleSheet.flatten(digits.props.style)).toMatchObject({ color: COLOR.ink, fontFamily: FONT_FAMILY.mono[700] })
     expect(digits.props.maxFontSizeMultiplier).toBe(1.3)
@@ -25,7 +64,7 @@ describe('<Badge>', () => {
 
   it('is a 22 pt pill as a label (“3 new”)', async () => {
     await render(<Badge text="3 new" size={22} testID="b" />)
-    expect(flat('b')).toMatchObject({ height: 22, minWidth: 22 })
+    expect(flat('b')).toMatchObject({ minHeight: 22, minWidth: 22 })
   })
 
   it('cuts out of what it sits on with a 2 pt ring in the ground colour', async () => {
@@ -46,6 +85,13 @@ describe('<PresenceDot>', () => {
     await render(<PresenceDot kind="live" testID="d" />)
     expect(flat('d')).toMatchObject({ width: 8, height: 8, backgroundColor: COLOR.live })
     expect(screen.getByTestId('d', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
+  })
+
+  it('takes a colour for the unread dot (a world’s light glyph tone), and the live dot ignores it', async () => {
+    await render(<PresenceDot color={COLOR.selectionRoseGlyph} size={8} testID="d" />)
+    expect(flat('d')).toMatchObject({ width: 8, backgroundColor: COLOR.selectionRoseGlyph })
+    await render(<PresenceDot kind="live" color={COLOR.selectionRoseGlyph} testID="d" />)
+    expect(flat('d').backgroundColor).toBe(COLOR.live)
   })
 
   it('takes a size and a ring on a face', async () => {
@@ -102,8 +148,57 @@ describe('<Price>', () => {
     expect(screen.getByLabelText('Free')).toBeTruthy()
   })
 
-  it('scales freely: no cap', async () => {
+  // DS-22: every text has a cap. A price grows (no fixed box) up to its role's: `lg` is display (1.5), its unit body.
+  it('grows to its role’s cap, never past it', async () => {
     await render(<Price amount="₹49" per="tonight" size="lg" />)
-    expect(text('₹49').props.maxFontSizeMultiplier).toBeUndefined()
+    expect(text('₹49').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.display)
+    expect(text('tonight').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
+  })
+})
+
+describe('a mono run divided by middots', () => {
+  it('sets the middot and its spaces in the brand face, the day and the clock in mono', async () => {
+    await render(
+      <Text testID="run" style={{ fontFamily: FONT_FAMILY.mono[500] }}>
+        <MonoRun text="Sun · 3:30 PM" />
+      </Text>,
+    )
+    const run = screen.getByTestId('run')
+    const divider = run.children.find((c) => typeof c !== 'string' && c.props.children === ' · ') as unknown as { props: { style: { fontFamily: string } } }
+    expect(StyleSheet.flatten(divider.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
+    expect(screen.getByText('Sun · 3:30 PM')).toBeTruthy()
+    await render(<TimeBadge when="Live" testID="tb" />)
+    expect(screen.getByText('Live')).toBeTruthy()
+  })
+
+  it('sets every plain space in the brand face too, so "1:12 PM" and "Oct 2026" do not read double-spaced (C16, C17, D-L1)', async () => {
+    const spacesIn = (text: string) =>
+      screen
+        .getByText(text)
+        .children.filter((c) => typeof c !== 'string' && c.props.children === ' ')
+        .map((c) => (StyleSheet.flatten((c as unknown as { props: { style: object } }).props.style) as { fontFamily?: string }).fontFamily)
+    await render(
+      <Text style={{ fontFamily: FONT_FAMILY.mono[500] }}>
+        <MonoRun text="1:12 PM" />
+      </Text>,
+    )
+    expect(spacesIn('1:12 PM')).toEqual([FONT_FAMILY.brand[500]])
+    await render(
+      <Text style={{ fontFamily: FONT_FAMILY.mono[500] }}>
+        <MonoRun text="Sat 24 Oct · 9 PM" />
+      </Text>,
+    )
+    expect(spacesIn('Sat 24 Oct · 9 PM')).toEqual([FONT_FAMILY.brand[500], FONT_FAMILY.brand[500], FONT_FAMILY.brand[500]])
+    // The digits and words stay in the mono run: only separators are pulled out.
+    expect(screen.getByText('Sat 24 Oct · 9 PM').children.filter((c) => typeof c === 'string')).toEqual(['Sat', '24', 'Oct', '9', 'PM'])
+  })
+  it('a struck badge (a cancelled night) strikes the time, not the middot between (B-S16: "Sun - 2:30 PM")', async () => {
+    await render(<TimeBadge when="Sun · 2:30 PM" struck testID="tb" />)
+    const hidden = { includeHiddenElements: true }
+    const divider = screen.getByText(' · ', hidden)
+    expect(StyleSheet.flatten(divider.props.style).textDecorationLine).toBeUndefined()
+    for (const part of [/^Sun$/, /^2:30 PM$/]) expect(StyleSheet.flatten(screen.getByText(part, hidden).props.style).textDecorationLine).toBe('line-through')
+    // The badge's own line is not struck, so the strike never runs through the divider by inheritance.
+    expect(StyleSheet.flatten(screen.getByText('Sun · 2:30 PM', hidden).props.style).textDecorationLine).toBeUndefined()
   })
 })

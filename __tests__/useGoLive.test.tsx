@@ -15,7 +15,7 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 import { router } from 'expo-router'
 import { apiClient } from '../lib/apiClient'
 import { checkInChanged } from '../lib/checkIn'
-import { readLiveSession } from '../lib/goLive'
+import { ownGoLiveWithin, readLiveSession } from '../lib/goLive'
 import { getCurrentLocation } from '../lib/locationFix'
 import { openInMaps } from '../lib/openInMaps'
 import { useGoLive } from '../lib/useGoLive'
@@ -52,6 +52,20 @@ describe('useGoLive', () => {
     })
   })
 
+  it('a Go Live that lands is noted as our own, a refusal is not (a "stay" that ends right after is not Blendn+ lapsing)', async () => {
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: 'x' })
+    jest.useFakeTimers({ now: Date.now() + 3_600_000 })
+    try {
+      await run({ minutes: 20 })
+      expect(ownGoLiveWithin(15_000)).toBe(false)
+      ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: live })
+      await run({ minutes: 20 })
+      expect(ownGoLiveWithin(15_000)).toBe(true)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('on success remembers the session (venue + window), tells the tab bar, and calls onLive', async () => {
     ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: live })
     const { ok, onLive } = await run({ minutes: 20 })
@@ -62,7 +76,7 @@ describe('useGoLive', () => {
   })
 
   it('OUT_OF_RANGE offers Open Maps at the place; AGE_RESTRICTED offers adding your age (L3)', async () => {
-    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: "You're not at The Humming Tree yet." })
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'OUT_OF_RANGE', error: "You’re not at The Humming Tree yet." })
     const far = await run()
     const buttons = far.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]
     expect(buttons.map((b) => b.label)).toEqual(['Done', 'Open Maps'])
@@ -150,9 +164,9 @@ describe('"stay" refused as Blendn+\'s (PLUS_REQUIRED) — the paywall, through 
   })
 
   it('on iOS, pushes the paywall only once the tray has finished leaving (review MEDIUM)', async () => {
-    const tray = require('../components/ActionTray')
+    const tray = require('../lib/sheetDismissed')
     let left: () => void = () => {}
-    const waited = jest.spyOn(tray, 'afterTrayDismissed').mockReturnValue(new Promise<void>((r) => { left = r }))
+    const waited = jest.spyOn(tray, 'afterSheetDismissed').mockReturnValue(new Promise<void>((r) => { left = r }))
     try {
       const { result } = await renderHook(() => useGoLive({ place, showTray: jest.fn(), closeTray: jest.fn() }))
       let pending!: Promise<boolean>
@@ -178,9 +192,45 @@ describe('"stay" refused as Blendn+\'s (PLUS_REQUIRED) — the paywall, through 
     const again = await run({ stay: true })
     expect(router.push).not.toHaveBeenCalled()
     const [title, , buttons] = again.showTray.mock.calls[0]
-    expect(title).toBe('Staying live is part of Blendn+')
-    const see = (buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blendn+')
+    expect(title).toBe('Staying live is part of Blend’n+')
+    const see = (buttons as { label: string; onPress: () => void }[]).find((b) => b.label === 'See Blend’n+')
     await act(async () => { see?.onPress(); await Promise.resolve() })
     expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'go_live_expiry' } })
+  })
+})
+
+describe('"stay" refused as Blendn+\'s with the Tonight sheet drawn — it opens, with the place and both ways on', () => {
+  const { registerTonightHost, resetPaywallSession, notePathname } = require('../lib/paywall')
+  let host: jest.Mock
+  let off: () => void
+  beforeEach(() => {
+    resetPaywallSession()
+    notePathname('/venue/v1')
+    host = jest.fn()
+    off = registerTonightHost(host)
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: false, errorCode: 'PLUS_REQUIRED', error: 'Staying live is part of Blendn+.' })
+  })
+  afterEach(() => off())
+
+  it('the Stay tap: the free hour goes live for an hour, a bought Stay goes live with Stay', async () => {
+    await run({ stay: true })
+    expect(router.push).not.toHaveBeenCalled()
+    expect(host).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay', venue: 'The Humming Tree' }))
+    ;(apiClient.goLive as jest.Mock).mockClear().mockResolvedValue({ success: true, data: live })
+    const { onFree, onUnlocked } = host.mock.calls[0][0]
+    await act(async () => { onFree(); await new Promise((r) => setTimeout(r, 0)) })
+    expect(apiClient.goLive).toHaveBeenLastCalledWith('v1', expect.objectContaining({ minutes: 60 }))
+    await act(async () => { onUnlocked(); await new Promise((r) => setTimeout(r, 0)) })
+    expect(apiClient.goLive).toHaveBeenLastCalledWith('v1', expect.objectContaining({ stay: true }))
+  })
+
+  it('"See Blendn+" on the second refusal opens the same sheet on a tap, whatever the session has shown', async () => {
+    await run({ stay: true })
+    host.mockClear()
+    const again = await run({ stay: true })
+    expect(host).not.toHaveBeenCalled()
+    const buttons = again.showTray.mock.calls[0][2] as { label: string; onPress: () => void }[]
+    await act(async () => { buttons.find((b) => b.label === 'See Blend’n+')?.onPress(); await Promise.resolve() })
+    expect(host).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'stay' }))
   })
 })

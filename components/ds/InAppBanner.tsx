@@ -9,6 +9,7 @@ import ScalePress from '../motion/ScalePress'
 import { Material } from '../ui/Material'
 import { COLOR, EASING, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { registerBannerShowing } from '../../lib/inAppBanners'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { NotificationVisual, type NotificationVisualSpec } from './NotificationRow'
@@ -121,6 +122,9 @@ export function InAppBanner({ kind = 'default', visual, title, context, onPress,
   const { leave, swipe, motion, height, gone } = useBannerMotion(kind === 'wave', onDismiss)
   const [held, setHeld] = useState(false)
   if (testID) swipe.withTestId(`${testID}-swipe`)
+
+  // The toast's lane steps down while a banner is up (`lib/inAppBanners`).
+  useEffect(() => registerBannerShowing(), [])
 
   useEffect(() => {
     if (kind === 'wave') H.arrive()

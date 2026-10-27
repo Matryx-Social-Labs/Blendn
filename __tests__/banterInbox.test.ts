@@ -17,6 +17,8 @@ const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
  */
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
+/** The request card moved to one row both the strip and the See all screen draw. */
+const REQUEST_ROW = () => stripComments(read('components/banter/RequestRow.tsx'))
 const SCREEN = () => stripComments(read('app/(tabs)/chat.tsx'))
 const PARTS = () => stripComments(read('components/banter/BanterParts.tsx'))
 const INBOX = () => stripComments(read('lib/useBanterInbox.ts'))
@@ -35,6 +37,17 @@ describe('one inbox, not two tabs', () => {
     expect(body).toContain('Promise.all')
     expect(body).toContain('loadGroupChats')
     expect(body).toContain('loadPersonalChats')
+  })
+
+  it('starts the message requests with the lists, not after them', () => {
+    // Three round trips in series (~200-250 ms each from Canada) became two in parallel.
+    const src = INBOX()
+    const load = src.slice(src.indexOf('const loadChats'))
+    const started = load.indexOf('const requestsLoad = shouldFetchRequests ? loadMessageRequests(')
+    expect(started).toBeGreaterThan(-1)
+    expect(started).toBeLessThan(load.indexOf('if (shouldFetchList)'))
+    expect(load).not.toMatch(/await loadMessageRequests\(/)
+    expect(load).toMatch(/if \(requestsLoad\) \{\s*await requestsLoad/)
   })
 
   it('sorts by last message with never-used conversations last', () => {
@@ -60,9 +73,9 @@ describe('one inbox, not two tabs', () => {
 
   it('groups into Crews, People and Past rooms under one heading system', () => {
     const src = SCREEN()
-    expect(src).toContain("['Crews', match(crewRows), false]")
-    expect(src).toContain("['People', match(peopleRows), true]")
-    expect(src).toContain("['Past rooms', match(pastRows), false]")
+    expect(src).toContain("['Crews', match(crewRows)]")
+    expect(src).toContain("['People', match(peopleRows)]")
+    expect(src).toContain("['Past rooms', match(pastRows)]")
     expect(src).toContain('<SectionHeader')
   })
 })
@@ -70,13 +83,14 @@ describe('one inbox, not two tabs', () => {
 describe('message requests', () => {
   it('still load, and are still answerable', () => {
     expect(INBOX()).toContain('loadMessageRequests')
-    expect(SCREEN()).toContain("inbox.respondToRequest(r, 'accept')")
-    expect(SCREEN()).toContain("inbox.respondToRequest(r, 'decline')")
+    expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'accept')")
+    expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'decline')")
+    expect(SCREEN()).toContain('<RequestRow')
   })
 
-  it('show the note verbatim, in two lines (ROUND3 C11)', () => {
-    expect(SCREEN()).toContain('note={r.initial_message?.trim() ||')
-    expect(PARTS()).toMatch(/numberOfLines=\{2\}[^>]*>\s*\{note\}/)
+  it('show the note verbatim, in two lines (four at the accessibility sizes: RC drive 5) (ROUND3 C11)', () => {
+    expect(REQUEST_ROW()).toContain('note={r.initial_message?.trim() ||')
+    expect(PARTS()).toMatch(/numberOfLines=\{largeText \? 4 : 2\}[^>]*>\s*\{note\}/)
   })
 
   it('put Decline before Accept, at 48, and hold both while one is in flight', () => {
@@ -99,10 +113,10 @@ describe('message requests', () => {
     expect(src).toContain('layout={reduceMotion ? undefined : REQUEST_REFLOW}')
   })
 
-  it('show crew invites as requests, with Join opening the consent screen (R2-D2 #02)', () => {
+  it('show crew invites as requests, with Join opening the invite, which holds the consent (R2-D2 #02)', () => {
     const src = SCREEN()
     expect(src).toContain('accept="Join"')
-    expect(src).toContain("router.push('/crews')")
+    expect(src).toContain("pathname: '/crews/invite/[crewId]'")
     expect(src).toContain('crews.decline(invite)')
   })
 })
@@ -141,30 +155,33 @@ describe('the room you are standing in', () => {
     expect(src).toContain('.filter((c) => !c.is_checked_in)')
   })
 
-  it('shows the room count from `memberCount`, rolling', () => {
-    expect(INBOX()).toContain('participant_count: roomMemberCount(room) ?? 0')
-    expect(SCREEN()).toContain('count={c.participant_count}')
+  it('shows the room count from `hereCount` (in the room now), rolling', () => {
+    expect(INBOX()).toContain('participant_count: roomHereCount(room) ?? 0')
+    // Five and up, as every people count says it (the owner's floor).
+    expect(SCREEN()).toContain('count={printable(c.participant_count) ?? 0}')
     expect(PARTS()).toContain('<RollingNumber value={count}')
   })
 
   it('says a locked room as a status, not as speech (Flow 5 #08)', () => {
-    expect(SCREEN()).toContain("'Locked by the organiser · read only'")
+    expect(SCREEN()).toContain("'Locked by the organizer · read only'")
     expect(SCREEN()).toContain("const stateLine = roomStateLine(c.room_state)")
     expect(SCREEN()).toContain("{ kind: 'chip', icon: c.room_state === 'locked' ? 'lock' : 'mic-off', text: stateLine, warn: c.room_state === 'locked' }")
   })
 })
 
 describe('a row is one height, read or unread', () => {
-  it("reserves the unread dot's slot on every row", () => {
+  it("reserves the unread dot’s slot on every row", () => {
     const parts = PARTS()
     expect(parts).toContain('<View style={styles.dotSlot}>')
-    expect(parts).toContain('<PresenceDot kind="unread" />')
+    // In the world's rose (D28, TG-12): white is for counts.
+    expect(parts).toContain('<PresenceDot kind="unread" color={sel.glyph}')
   })
 
   it('marks unread in three changes: the line white and medium, the time white, the dot', () => {
     const parts = PARTS()
     expect(parts).toContain('unread ? FONT_FAMILY.brand[500] : undefined), unread ? styles.ink : styles.secondary')
-    expect(parts).toContain('unread ? styles.ink : styles.tertiary')
+    expect(parts).toContain('<TimeTag time={time} ink={unread} />')
+    expect(parts).toContain('ink ? styles.ink : styles.tertiary')
   })
 })
 
@@ -200,7 +217,7 @@ describe('what the API already sends is read', () => {
   })
 
   it('knows when the last DM was yours', () => {
-    expect(INBOX()).toContain('conv.lastMessage.senderId === user?.id')
+    expect(INBOX()).toContain('conv.lastMessage.senderId === userId')
     expect(SCREEN()).toContain('previewWithSender(c.last_message, { fromMe: c.last_message_from_me })')
   })
 
@@ -213,7 +230,8 @@ describe('what the API already sends is read', () => {
   it('offers Mark all read for DMs only — no endpoint marks a room read', () => {
     const src = SCREEN()
     expect(src).toContain('const hasUnread = personalChats.some((c) => c.unread_count > 0)')
-    expect(src).toContain("action={item.markAll && hasUnread ? { label: 'Mark all read'")
+    // The header's control only (D29, TG-12): the People heading's link said it twice.
+    expect(src).not.toContain("label: 'Mark all read'")
     expect(src).toContain('canMarkAll={hasUnread}')
   })
 
@@ -260,8 +278,8 @@ describe('inbox helpers', () => {
     expect(inboxTimeLabel(at(2026, 8, 30, 23), now)).toBe('Yesterday')
     expect(inboxTimeLabel(at(2026, 8, 29), now)).toBe('Tue')
     expect(inboxTimeLabel(at(2026, 8, 25), now)).toBe('Fri')
-    expect(inboxTimeLabel(at(2026, 8, 24), now)).toBe('Sep 24')
-    expect(inboxTimeLabel(at(2025, 9, 4), now)).toBe('Oct 4, 2025')
+    expect(inboxTimeLabel(at(2026, 8, 24), now)).toBe('24 Sep')
+    expect(inboxTimeLabel(at(2025, 9, 4), now)).toBe('4 Oct 2025')
     expect(inboxTimeLabel(undefined, now)).toBe('')
     expect(inboxTimeLabel('not a date', now)).toBe('')
   })

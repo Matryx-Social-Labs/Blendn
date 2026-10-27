@@ -17,6 +17,8 @@
  * and picking "Any distance" removes it rather than setting it large.
  */
 
+import { dateIn, instantIn, startOfDayIn, weekdayIn } from './time'
+
 export const WHEN_OPTIONS = ['any', 'today', 'weekend', 'week'] as const
 export type When = (typeof WHEN_OPTIONS)[number]
 
@@ -61,17 +63,20 @@ export function hasActiveFilters(f: EventFilters): boolean {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
-const endOfDay = (d: Date) =>
-  new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+const startOfDay = (d: Date) => new Date(startOfDayIn(d))
+/** The last millisecond of `d`'s day on the phone: the next day's midnight, less one. */
+const endOfDay = (d: Date) => {
+  const [y, m, day] = dateIn(d)
+  return new Date(instantIn(y, m, day + 1) - 1)
+}
 
 /**
  * "This weekend" and friends, as an actual pair of instants.
  *
  * ## Local days, not UTC ones
  *
- * Built from `getFullYear`/`getMonth`/`getDate`, so a day boundary is the one
- * the person is standing in. Using UTC would put "Today" in Bengaluru at
+ * Built from the phone's own date (`dateIn`, the zone the OS says, not the engine's
+ * cached one), so a day boundary is the one the person is standing in. Using UTC would put "Today" in Bengaluru at
  * 05:30 local, and every late-night event — which is most of them here — would
  * land in the wrong bucket. Nightlife is exactly the category where this is
  * least forgivable.
@@ -104,7 +109,7 @@ export function whenToRange(
   }
 
   // Weekend. 0 = Sunday, 6 = Saturday.
-  const day = now.getDay()
+  const day = weekdayIn(now)
   if (day === 0) {
     return { startDate: now.toISOString(), endDate: endOfDay(now).toISOString() }
   }
@@ -142,4 +147,24 @@ export function filtersToQuery(
   if (typeof f.radiusKm === 'number') q.radius = f.radiusKm
 
   return q
+}
+
+export type AppliedFilter = { field: keyof EventFilters; label: string }
+
+/**
+ * Each choice the person has made, as the removable chip under the search ("Live music", "This weekend", "Within 5 km"):
+ * not just a count (Flow 3 `home` · filters applied). A category the list no longer knows is named by its slug rather
+ * than hidden, so a filter that is on is always visible.
+ */
+export function appliedFilters(f: EventFilters, categories: readonly { slug: string; name: string }[]): AppliedFilter[] {
+  const out: AppliedFilter[] = []
+  if (f.categorySlug) out.push({ field: 'categorySlug', label: categories.find((c) => c.slug === f.categorySlug)?.name ?? f.categorySlug })
+  if (f.when !== 'any') out.push({ field: 'when', label: WHEN_LABELS[f.when] })
+  if (typeof f.radiusKm === 'number') out.push({ field: 'radiusKm', label: `Within ${f.radiusKm} km` })
+  return out
+}
+
+/** The filters with one choice taken back (a chip's ×): the others stay. */
+export function withoutFilter(f: EventFilters, field: keyof EventFilters): EventFilters {
+  return field === 'when' ? { ...f, when: 'any' } : { ...f, [field]: undefined }
 }

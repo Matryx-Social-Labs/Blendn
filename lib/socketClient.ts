@@ -8,7 +8,9 @@ import { AppState, AppStateStatus } from "react-native"
 import { apiClient, TokenStorage } from "./apiClient"
 import { markDomainsDirty } from "./liveSyncState"
 import { Logger } from "./logger"
+import { hostOf } from "./urlHost"
 import { Sentry } from "./sentry"
+import { endedByOf, type SessionEndReason } from "./sessionEnd"
 import { buildAuthPayload } from "./socketAuth"
 
 // Socket server URL
@@ -132,6 +134,11 @@ export interface ServerToClientEvents {
   }) => void
   /** These messages reached the other person's app: ✓✓ delivered (SCRUM-408). */
   "private:delivered": (data: { conversationId: string; messageIds: string[] }) => void
+  /**
+   * The other person revealed in this conversation (blendn-admin `feat/reveal-socket`, RC drive D3). Names nothing: the DM
+   * re-reads the conversation, which is what says who can see whom.
+   */
+  "private:revealed": (data: { conversationId: string }) => void
   // Moderation events
   /** `moderation` + `userId` arrive on a moderation hide, so the sender can keep a placeholder. */
   "chat:messageDeleted": (data: { chatGroupId: string; messageId: string; moderation?: boolean; userId?: string }) => void
@@ -156,6 +163,10 @@ export interface ServerToClientEvents {
   }) => void
   /** Somebody in the room waved at you. `fromName` is how they appear to you. */
   "room:wave": (data: { eventId: string; fromUserId: string; fromName: string }) => void
+  /** The event was cancelled: everyone checked in has been checked out (blendn-admin `emitEventCancelled`, to `event:{id}` and `event:room:{id}`). */
+  "event:cancelled": (data: { eventId: string }) => void
+  /** Who is here among your friends changed (blendn-admin `notifyFriendsHere`): content-free, so the phone re-reads Friends here. */
+  "room:friends": (data: { eventId: string }) => void
   /** A row landed in your notifications bell (blendn-admin `announceToBell`). The kind only. */
   "notification:new": (data: { kind: string }) => void
   /**
@@ -165,6 +176,8 @@ export interface ServerToClientEvents {
    * `left_area`.
    */
   "live:ended": (data: { eventId: string; reason: string }) => void
+  /** Your board post was taken down (blendn-admin lib/board-takedown.ts): to the author alone, never the post's words. */
+  "board:postRemoved": (data: { eventId: string; postId: string }) => void
   error: (data: { message: string; code?: string }) => void
   connected: (data: { userId: string }) => void
 }
@@ -197,6 +210,12 @@ interface SocketConnectionStatus {
   reconnectAttempts: number
   lastConnectedAt: number | null
   lastError: string | null
+  /**
+   * The handshake was refused because the account is no longer one (Flow 15 #21): `deleted` says so on the banner,
+   * `suspended` and `staff` are the session's to end (the landing's screens). From the server's `error.data.code`
+   * (`ACCOUNT_DELETED`, `ACCOUNT_SUSPENDED`, `ACCOUNT_STAFF`); null while the server sends none, which is today.
+   */
+  endedBy: SessionEndReason | null
 }
 
 // Subscription callback types
@@ -214,8 +233,11 @@ type ChatMemberMutedCallback = (data: ServerToClientEvents["chat:memberMuted"] e
 type PrivateMessageCallback = (data: ServerToClientEvents["private:message"] extends (data: infer D) => void ? D : never) => void
 type PrivateTypingCallback = (data: ServerToClientEvents["private:typing"] extends (data: infer D) => void ? D : never) => void
 type PrivateReadCallback = (data: ServerToClientEvents["private:read"] extends (data: infer D) => void ? D : never) => void
+type PrivateRevealedCallback = (data: ServerToClientEvents["private:revealed"] extends (data: infer D) => void ? D : never) => void
 type RoomMatchCallback = (data: ServerToClientEvents["room:match"] extends (data: infer D) => void ? D : never) => void
 type RoomWaveCallback = (data: ServerToClientEvents["room:wave"] extends (data: infer D) => void ? D : never) => void
+type EventCancelledCallback = (data: ServerToClientEvents["event:cancelled"] extends (data: infer D) => void ? D : never) => void
+type RoomFriendsCallback = (data: ServerToClientEvents["room:friends"] extends (data: infer D) => void ? D : never) => void
 type BellCallback = (data: ServerToClientEvents["notification:new"] extends (data: infer D) => void ? D : never) => void
 type LiveEndedCallback = (data: ServerToClientEvents["live:ended"] extends (data: infer D) => void ? D : never) => void
 
@@ -246,6 +268,7 @@ let connectionStatus: SocketConnectionStatus = {
   reconnectAttempts: 0,
   lastConnectedAt: null,
   lastError: null,
+  endedBy: null,
 }
 const connectionStatusSubscribers = new Set<(status: SocketConnectionStatus) => void>()
 
@@ -278,6 +301,7 @@ export function subscribeConnectionStatus(
 const eventCheckInSubscriptions = new Map<string, Set<EventCheckInCallback>>()
 const eventRoomCheckInSubscriptions = new Map<string, Set<EventRoomCheckInCallback>>()
 const eventCheckOutSubscriptions = new Map<string, Set<EventCheckOutCallback>>()
+const eventCancelledSubscriptions = new Map<string, Set<EventCancelledCallback>>()
 const eventInterestSubscriptions = new Map<string, Set<EventInterestCallback>>()
 const chatMessageSubscriptions = new Map<string, Set<ChatMessageCallback>>()
 const chatTypingSubscriptions = new Map<string, Set<ChatTypingCallback>>()
@@ -306,6 +330,7 @@ export interface ConversationHandlers {
   onMessage?: PrivateMessageCallback
   onTyping?: PrivateTypingCallback
   onRead?: PrivateReadCallback
+  onRevealed?: PrivateRevealedCallback
 }
 const conversationSubscriptions = new Map<string, Set<ConversationHandlers>>()
 const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
@@ -315,8 +340,10 @@ const userSubscriptions = new Map<string, Set<PrivateMessageCallback>>()
  */
 const roomMatchSubscriptions = new Set<RoomMatchCallback>()
 const roomWaveSubscriptions = new Set<RoomWaveCallback>()
+const roomFriendsSubscriptions = new Set<RoomFriendsCallback>()
 const bellSubscriptions = new Set<BellCallback>()
 const liveEndedSubscriptions = new Set<LiveEndedCallback>()
+const boardPostRemovedSubscriptions = new Set<(data: { eventId: string; postId: string }) => void>()
 type DeliveredCallback = (data: { conversationId: string; messageIds: string[] }) => void
 const deliveredSubscriptions = new Set<DeliveredCallback>()
 /** Who this socket signed in as (from `connected`), so an ack is never for your own message. */
@@ -404,7 +431,7 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
        * storage.
        *
        * Note that a callback alone would not have fixed it:
-       * `TokenStorage.getAccessToken()` is a bare SecureStore read with no
+       * `TokenStorage.getAccessToken()` is a bare storage read with no
        * expiry awareness, so re-reading serves the same expired token.
        * `buildAuthPayload` refreshes first. See lib/socketAuth.ts.
        */
@@ -469,6 +496,7 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
           reconnectAttempts: 0,
           lastConnectedAt: Date.now(),
           lastError: null,
+          endedBy: null,
         })
         resolve(true)
       })
@@ -491,13 +519,14 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
               ? detail.description.message
               : detail.description,
           transport: socket?.io?.engine?.transport?.name,
-          url: SOCKET_URL,
+          host: hostOf(SOCKET_URL),
         })
         isConnecting = false
         emitConnectionStatus({
           state: "disconnected",
           connected: false,
           lastError: error.message || "Connection error",
+          endedBy: endedByOf(error),
         })
         resolve(false)
       })
@@ -533,6 +562,7 @@ export function disconnect(): void {
   eventCheckInSubscriptions.clear()
   eventRoomCheckInSubscriptions.clear()
   eventCheckOutSubscriptions.clear()
+  eventCancelledSubscriptions.clear()
   eventInterestSubscriptions.clear()
   chatMessageSubscriptions.clear()
   chatTypingSubscriptions.clear()
@@ -545,6 +575,7 @@ export function disconnect(): void {
   userSubscriptions.clear()
   roomMatchSubscriptions.clear()
   roomWaveSubscriptions.clear()
+  roomFriendsSubscriptions.clear()
 }
 
 /**
@@ -557,6 +588,7 @@ function rejoinAllRooms(): void {
   const eventIds = new Set<string>([
     ...eventCheckInSubscriptions.keys(),
     ...eventCheckOutSubscriptions.keys(),
+    ...eventCancelledSubscriptions.keys(),
     ...eventInterestSubscriptions.keys(),
   ])
   eventIds.forEach((id) => socket?.emit("join:event", id))
@@ -663,6 +695,14 @@ function setupSocketHandlers(sock: TypedSocket): void {
     void ifItWasMe(data)
   })
 
+  sock.on("event:cancelled", (data) => {
+    // Everyone inside was checked out: what the app knows of the room and of "am I in" is stale.
+    apiClient.forgetEventMatches(data.eventId)
+    apiClient.forgetActiveCheckins()
+    markDomainsDirty(["events", "match", "chat"])
+    eventCancelledSubscriptions.get(data.eventId)?.forEach((cb) => cb(data))
+  })
+
   sock.on("event:interestUpdate", (data) => {
     markDomainsDirty(["events", "match"])
     const callbacks = eventInterestSubscriptions.get(data.eventId)
@@ -731,6 +771,10 @@ function setupSocketHandlers(sock: TypedSocket): void {
     roomWaveSubscriptions.forEach((cb) => cb(data))
   })
 
+  sock.on("room:friends", (data) => {
+    roomFriendsSubscriptions.forEach((cb) => cb(data))
+  })
+
   sock.on("notification:new", (data) => {
     bellSubscriptions.forEach((cb) => cb(data))
   })
@@ -748,6 +792,11 @@ function setupSocketHandlers(sock: TypedSocket): void {
     liveEndedSubscriptions.forEach((cb) => cb(data))
   })
 
+  /* Your own board post was taken down: the Board re-reads and says so. Nothing else about it is sent. */
+  sock.on("board:postRemoved", (data) => {
+    boardPostRemovedSubscriptions.forEach((cb) => cb(data))
+  })
+
   sock.on("private:typing", (data) => {
     const callbacks = conversationSubscriptions.get(data.conversationId)
     callbacks?.forEach((h) => h.onTyping?.(data))
@@ -760,6 +809,12 @@ function setupSocketHandlers(sock: TypedSocket): void {
 
   sock.on("private:delivered", (data) => {
     deliveredSubscriptions.forEach((cb) => cb(data))
+  })
+
+  /* Keyed by the payload, so it reaches the open DM whichever room the server sends it to (the conversation's, or yours). */
+  sock.on("private:revealed", (data) => {
+    if (typeof data?.conversationId !== "string") return
+    conversationSubscriptions.get(data.conversationId)?.forEach((h) => h.onRevealed?.(data))
   })
 }
 
@@ -815,6 +870,7 @@ function subscribeToEventMap<TCallback>(
         targetMap.delete(eventId)
         const hasAnyEventSubs = eventCheckInSubscriptions.has(eventId)
           || eventCheckOutSubscriptions.has(eventId)
+          || eventCancelledSubscriptions.has(eventId)
           || eventInterestSubscriptions.has(eventId)
         if (!hasAnyEventSubs) {
           socket?.emit("leave:event", eventId)
@@ -871,6 +927,11 @@ export function subscribeToEventRoomCheckIn(
       socket?.emit("leave:event:room", eventId)
     }
   }
+}
+
+/** The event was cancelled while you are in its room. One emit to the room, never one per person. */
+export function subscribeToEventCancelled(eventId: string, callback: EventCancelledCallback): () => void {
+  return subscribeToEventMap(eventId, callback, eventCancelledSubscriptions)
 }
 
 /**
@@ -1154,6 +1215,15 @@ export function subscribeToRoomWave(callback: RoomWaveCallback): () => void {
   }
 }
 
+/** Friends here changed in a room you are in. Same delivery as `subscribeToRoomMatch`; the payload names no one. */
+export function subscribeToRoomFriends(callback: RoomFriendsCallback): () => void {
+  if (!socket?.connected) connect()
+  roomFriendsSubscriptions.add(callback)
+  return () => {
+    roomFriendsSubscriptions.delete(callback)
+  }
+}
+
 /** Your messages reached their app: ✓✓ delivered (SCRUM-408). */
 export function subscribeToDelivered(callback: DeliveredCallback): () => void {
   deliveredSubscriptions.add(callback)
@@ -1168,6 +1238,15 @@ export function subscribeToLiveEnded(callback: LiveEndedCallback): () => void {
   liveEndedSubscriptions.add(callback)
   return () => {
     liveEndedSubscriptions.delete(callback)
+  }
+}
+
+/** Your board post was taken down. Same delivery as `subscribeToLiveEnded`: your `user:{id}` room. */
+export function subscribeToBoardPostRemoved(callback: (data: { eventId: string; postId: string }) => void): () => void {
+  if (!socket?.connected) connect()
+  boardPostRemovedSubscriptions.add(callback)
+  return () => {
+    boardPostRemovedSubscriptions.delete(callback)
   }
 }
 
