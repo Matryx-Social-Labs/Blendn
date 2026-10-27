@@ -61,6 +61,18 @@ describe('the Pulse filter sheet', () => {
     expect(screen.getByTestId('pulse-filter-when-weekend')).toBeTruthy()
   })
 
+  it('uses the frame’s words: How far · Any distance · Under N km, and Tonight (BAR-13)', async () => {
+    await draw()
+    expect(screen.getByText('How far')).toBeTruthy()
+    expect(screen.getByText('Any distance')).toBeTruthy()
+    for (const km of [2, 5, 10]) expect(screen.getByText(`Under ${km} km`)).toBeTruthy()
+    expect(screen.queryByText('25 km')).toBeNull()
+    expect(screen.queryByText('Within')).toBeNull()
+    expect(screen.getByText('Tonight')).toBeTruthy()
+    expect(screen.queryByText('Today')).toBeNull()
+    expect(screen.getByText('This week')).toBeTruthy()
+  })
+
   it('a choice changes the draft only; the chosen category, tapped again, clears it', async () => {
     const { onChange, onApply } = await draw({ draft: { when: 'any', categorySlug: 'music' } })
     await act(async () => fireEvent.press(screen.getByTestId('pulse-filter-what-music')))
