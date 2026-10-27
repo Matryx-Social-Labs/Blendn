@@ -261,6 +261,21 @@ describe('inviting', () => {
     expect(mockToast).toHaveBeenCalledWith('Asked 2 friends', 'success')
   })
 
+  it('an invite that fills the crew takes Invite friends away at once (seatsLeft goes down by the number asked)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10, seatsLeft: 2 }) })
+    api.getFriends.mockResolvedValue(friends('Kavya', 'Meera'))
+    crews.invite.mockResolvedValue({ success: true, data: { invited: 2 } })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Invite friends'))
+    await fireEvent.press(screen.getByLabelText('Invite friends'))
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Kavya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Kavya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Meera' }))
+    await fireEvent.press(screen.getByLabelText('Ask 2'))
+    await waitFor(() => expect(crews.invite).toHaveBeenCalledWith('c2', ['u-Kavya', 'u-Meera']))
+    await waitFor(() => expect(screen.queryByLabelText('Invite friends')).toBeNull())
+  })
+
   it('when every friend is in already, says so', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
     api.getFriends.mockResolvedValue(friends('Rohan'))

@@ -169,6 +169,8 @@ function CrewScreenContent() {
     setBusy(null)
     if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t send the invites. Try again.'), 'error', { haptic: 'error' })
     setInviting(false)
+    // The open invites now count against the 12: take them off the seats at once, so a full crew stops offering Invite without a re-read.
+    patchCrew((c) => ({ ...c, seatsLeft: Math.max(0, crewSeatsLeft(c) - (result.data?.invited ?? 0)) }))
     // `invited` is how many you asked for, never who got one.
     showToast(result.data.invited === 1 ? 'Asked 1 friend' : `Asked ${result.data.invited} friends`, 'success')
   }

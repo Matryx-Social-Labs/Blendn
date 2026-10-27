@@ -23,7 +23,8 @@ export function BadgeRow({ badges, onPress, testID }: { badges: readonly Badge[]
 /**
  * Your badges on Me (Flow 14 · 14.5): the earned ones as pills, one line on where they come from, and a tap on one says what it
  * means, in one line, with no haptic. Nothing earned yet is a sentence and no locked grid: badges simply appear. Not drawn at all
- * when the server sent none (the person turned them off, or an older server): `badges` is `null` then, and the card is absent.
+ * only when nothing says anything about badges (`badges` is `null`: an older server with badges on and none sent). Turned off, the card stays
+ * with its "Show my badges" switch, so there is always a way back from Me.
  * Composed from the DS heading, `AchievementBadge` and the surface card; "Show 'Shows up'" stays in About you.
  */
 export function MeBadges({

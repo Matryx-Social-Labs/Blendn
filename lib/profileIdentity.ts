@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react'
+
+import { apiClient } from './apiClient'
 import { markSeed } from './pseudonymAvatar'
 
 /**
@@ -72,4 +75,28 @@ export function profileIdentity(
     }
   }
   return { revealed, title: pseudonym ?? 'Someone', name: pseudonym ?? 'Someone', age, seed: markSeed(pseudonym, fallbackSeed) }
+}
+
+type WorkFieldList = { slug: string; label: string }[]
+
+/** A stored `work_field` code ("data_ai") as its label ("Data & AI"). A code the list does not know is left out, never shown raw. */
+export const workFieldLabel = (slug: string | null | undefined, fields: WorkFieldList): string | undefined =>
+  slug ? fields.find((f) => f.slug === slug)?.label : undefined
+
+/** The fields of work for mapping a code to its label: `getWorkFields()` is cached by the client, so this is one cheap read per screen. */
+export function useWorkFields(): WorkFieldList {
+  const [fields, setFields] = useState<WorkFieldList>([])
+  useEffect(() => {
+    let live = true
+    Promise.resolve()
+      .then(() => apiClient.getWorkFields())
+      .then((r) => {
+        if (live && r?.success && r.data?.workFields) setFields(r.data.workFields)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+  return fields
 }

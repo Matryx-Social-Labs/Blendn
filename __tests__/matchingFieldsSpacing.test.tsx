@@ -79,4 +79,34 @@ describe('who sees each field (YOU-07, 14.0)', () => {
       Dimensions.set({ window, screen: window })
     }
   })
+
+  const dating = (showOrientation?: boolean) => (
+    <MatchingFields
+      intents={['dating']}
+      onToggleIntent={noop}
+      workField={null}
+      onChangeWorkField={noop}
+      workFields={[{ slug: 'design', label: 'Design' }]}
+      gender={null}
+      onChangeGender={noop}
+      orientations={[]}
+      onChangeOrientations={noop}
+      interestedIn={[]}
+      onChangeInterestedIn={noop}
+      offerDating
+      showOrientation={showOrientation}
+    />
+  )
+
+  it('orientation says nobody but you while show_orientation is off (the default)', async () => {
+    await render(dating())
+    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Nobody but you sees this.')
+  })
+
+  it('orientation is Tier C once show_orientation is on: shown to whoever may see who you are, never "nobody"', async () => {
+    await render(dating(true))
+    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+    // Gender stays owner-only either way.
+    expect(screen.getByTestId('who-sees-gender').props.accessibilityLabel).toBe('Nobody but you sees this.')
+  })
 })

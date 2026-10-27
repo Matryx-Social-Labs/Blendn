@@ -322,6 +322,12 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     })
   })
 
+  it('an older server with badges off sends neither badges nor earned_badges: the card and its switch still stand', async () => {
+    await mount({ success: true, data: { profile: { show_badges: false } } })
+    expect(await screen.findByTestId('me-show-badges')).toBeTruthy()
+    expect(screen.getByText('Off · hidden on every card')).toBeTruthy()
+  })
+
   it('draws no Badges card when the server sent none (badges off, or an older server)', async () => {
     await mount({ success: true, data: { profile: { name: 'Sam' } } })
     await waitFor(() => expect(api.getProfile).toHaveBeenCalled())

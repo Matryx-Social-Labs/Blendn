@@ -283,7 +283,8 @@ function ProfileInner() {
       const own = result.success ? result.data?.profile : undefined
       // `badges` is absent when they are off; SV-8's `earned_badges` is what you hold either way, so Me keeps the card and its switch.
       const ownRecord = own as Record<string, unknown> | undefined
-      setBadges(parseBadges(own?.badges) ?? parseBadges(ownRecord?.earned_badges))
+      // An older server with badges off sends neither key: `show_badges: false` alone keeps the card (an empty list) and its switch.
+      setBadges(parseBadges(own?.badges) ?? parseBadges(ownRecord?.earned_badges) ?? (ownRecord?.show_badges === false ? [] : null))
       setShowBadges(typeof ownRecord?.show_badges === 'boolean' ? ownRecord.show_badges : null)
       // Only a server that sends the field has the switch to show: an older one sends none, and the row is not drawn.
       const sent = (own as Record<string, unknown> | undefined)?.shows_up_badge
@@ -294,7 +295,7 @@ function ProfileInner() {
     }
   }, [user])
 
-  /** The "Show my badges" switch on the badges card: written at once; true when the server kept it. A turn-on reads the shown badges again. */
+  /** The "Show my badges" switch on the badges card: written at once; true when the server kept it. The card already holds what you earned (`earned_badges`), so no re-read is needed. */
   const saveShowBadges = useCallback(
     async (next: boolean) => {
       if (!user) return false

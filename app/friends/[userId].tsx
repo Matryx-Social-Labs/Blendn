@@ -19,6 +19,7 @@ import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { aboutLine } from '../../lib/aboutYou'
+import { useWorkFields, workFieldLabel } from '../../lib/profileIdentity'
 import { friendsSinceParts, type FriendProfile } from '../../lib/friends'
 import { noteFriendGone } from '../../lib/friendsGone'
 import { isGone } from '../../lib/loadFailure'
@@ -51,6 +52,7 @@ function FriendProfileScreenContent() {
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
   const bold = useBoldText()
   const [dockHeight, setDockHeight] = useState(0)
+  const workFields = useWorkFields()
   // The page's scroll offset, written on the UI thread: the bar and the hero's stretch read it, React never renders for it.
   const scrollY = useSharedValue(0)
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -199,7 +201,7 @@ function FriendProfileScreenContent() {
   }
 
   // The field of work, as `/user/[id]` says it (the occupation is its own line below); an older server sends none, so the occupation stands in.
-  const subtitle = [friend.work_field || friend.occupation, friend.location].filter(Boolean).join(' · ') || null
+  const subtitle = [workFieldLabel(friend.work_field, workFields) ?? friend.occupation, friend.location].filter(Boolean).join(' · ') || null
   const badges = parseBadges(friend.badges) ?? []
   const columnWidth = Math.floor((width - SPACE.gutter * 2 - SPACE.sm) / 2)
   // Flow 6 `friend`: the date alone in Geist Mono, the words in the page's face.

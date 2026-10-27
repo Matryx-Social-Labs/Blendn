@@ -16,7 +16,7 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getFriend: jest.fn(), openFriendConversation: jest.fn(), removeFriend: jest.fn() },
+  apiClient: { getFriend: jest.fn(), openFriendConversation: jest.fn(), removeFriend: jest.fn(), getWorkFields: jest.fn() },
 }))
 jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
@@ -28,7 +28,8 @@ jest.mock('../components/profile/ProfileHeroStage', () => {
   const { Text } = require('react-native')
   return {
     heroHeightFor: (w: number) => Math.round(w * 1.3),
-    ProfileHeroStage: (p: { name: string; age?: number | null }) => React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name),
+    ProfileHeroStage: (p: { name: string; age?: number | null; subtitle?: string | null }) =>
+      React.createElement(React.Fragment, null, React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name), p.subtitle ? React.createElement(Text, { testID: 'hero-subtitle' }, p.subtitle) : null),
   }
 })
 jest.mock('../components/profile/ProfileSections', () => {
@@ -197,5 +198,23 @@ describe('the about line and the badges (YOU-04): what GET /friends/:id sends, a
     await render(<FriendProfileScreen />)
     await screen.findByText('Message')
     expect(screen.queryByText('Badges')).toBeNull()
+  })
+})
+
+describe('the work field is a label, never the stored code (MED-1)', () => {
+  beforeEach(() => api.getWorkFields.mockResolvedValue({ success: true, data: { workFields: [{ slug: 'data_ai', label: 'Data & AI' }] } } as never))
+
+  it('maps data_ai to “Data & AI” in the hero line', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, work_field: 'data_ai' } })
+    await render(<FriendProfileScreen />)
+    expect(await screen.findByText('Data & AI · Bengaluru')).toBeTruthy()
+    expect(screen.queryByText(/data_ai/)).toBeNull()
+  })
+
+  it('a code it cannot map is left out, never shown raw', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, work_field: 'mystery_code' } })
+    await render(<FriendProfileScreen />)
+    await screen.findByText('Message')
+    expect(screen.queryByText(/mystery_code/)).toBeNull()
   })
 })

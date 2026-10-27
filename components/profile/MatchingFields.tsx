@@ -15,7 +15,7 @@ import {
 import { ChipSet } from '../ds/ChipSet'
 import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { FieldLabel } from '../ds/TextField'
-import { TIER_SEES } from '../../lib/matchingTiers'
+import { orientationTier, TIER_SEES } from '../../lib/matchingTiers'
 import { WhoSees } from './WhoSees'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
@@ -102,6 +102,8 @@ export interface MatchingFieldsProps {
    * orientation questions it opens are shown (SCRUM-294).
    */
   offerDating: boolean
+  /** `show_orientation` as the profile has it: on, orientation is shown to whoever may see who you are (Tier C), not owner-only. */
+  showOrientation?: boolean
   /**
    * The list of fields of work could not be read (6-3, Edit profile · 04): the heading stands with the failure line under it, and
    * the line is the retry. A heading alone says nothing. Only a host that can retry passes both; onboarding is unchanged.
@@ -154,6 +156,7 @@ export function MatchingFields({
   onChangeInterestedIn,
   afterIntents,
   offerDating,
+  showOrientation = false,
   expertiseOptions,
   expertise = [],
   maxExpertise = DEFAULT_MAX_EXPERTISE,
@@ -213,7 +216,7 @@ export function MatchingFields({
               onToggle={(value) => onChangeOrientations(toggleOrientation(orientations, value as Orientation))}
               testID="matching-orientations"
             />
-            <WhoSees field="orientation" />
+            <WhoSees field="orientation" tier={orientationTier(showOrientation)} />
           </View>
 
           {askInterestedIn ? (

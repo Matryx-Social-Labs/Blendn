@@ -27,7 +27,7 @@ import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tok
 import { likeRefusal } from '../../lib/likeRefusal'
 import { heroFoldHeight } from '../../lib/profileFold'
 import { interestNames } from '../../lib/meProfile'
-import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
+import { profileIdentity, useWorkFields, withheldUnlessVisible, workFieldLabel } from '../../lib/profileIdentity'
 import { aboutLine, type Badge } from '../../lib/aboutYou'
 import { FRIEND_COPY, friendAction, isHandle, parseFriendOffer, type FriendOffer } from '../../lib/friendOffer'
 import { parseBadges } from '../../lib/profileBadges'
@@ -136,6 +136,8 @@ function UserProfileInner() {
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   // Their badges, from `GET /users/:id` (the server gives them to whoever may see who they are); none until it answers.
   const [badgesOf, setBadgesOf] = useState<{ for: string; list: Badge[] } | null>(null)
+  // `work_field` arrives as a stored code ("data_ai"); the hero line says its label.
+  const workFields = useWorkFields()
   const badges = badgesOf?.for === id ? badgesOf.list : []
   const [loading, setLoading] = useState(true)
   /*
@@ -611,7 +613,7 @@ function UserProfileInner() {
    * real and, in an unrevealed profile, is the whole point of `work_field`
    * living outside the identity gate: an attribute rather than an address.
    */
-  const heroSubtitle = [profile?.workField, profile?.location].filter(Boolean).join(' · ') || null
+  const heroSubtitle = [workFieldLabel(profile?.workField, workFields), profile?.location].filter(Boolean).join(' · ') || null
 
   const columnWidth = Math.floor((windowWidth - SPACE.gutter * 2 - SPACE.sm) / 2)
   const showDock = !loading && !!profile && ctaMode !== 'self'

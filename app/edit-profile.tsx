@@ -146,6 +146,8 @@ function EditProfileContent() {
   const [gender, setGender] = useState<Gender | null>(null)
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [interestedIn, setInterestedIn] = useState<Gender[]>([])
+  // `show_orientation` as the server has it (read-only here): on, orientation reaches everyone who may see who you are, and the line says so.
+  const [showOrientation, setShowOrientation] = useState(false)
   /* What the server had, so the save can send only what actually moved. */
   const [matchingAtLoad, setMatchingAtLoad] = useState<{
     intents: Intent[]
@@ -314,6 +316,7 @@ function EditProfileContent() {
         const loadedOrientations = (p2?.orientations || []) as Orientation[]
         const loadedInterestedIn = (p2?.interested_in || []) as Gender[]
         setIntents(loadedIntents)
+        setShowOrientation((p2 as { show_orientation?: boolean } | undefined)?.show_orientation === true)
         setWorkField(loadedWorkField)
         setExpertise(loadedExpertise)
         setGender(loadedGender)
@@ -561,6 +564,7 @@ function EditProfileContent() {
               interestedIn={interestedIn}
               onChangeInterestedIn={setInterestedIn}
               offerDating={mayDate(liveAge)}
+              showOrientation={showOrientation}
             />
             {/*
               Languages, home state, sign and this-or-that: display only, saved on their own screen so this form's save stays what

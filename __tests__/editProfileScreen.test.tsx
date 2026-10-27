@@ -340,3 +340,30 @@ describe('a profile that fails to load (YOU-05, Edit profile 6-1)', () => {
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t load your profile.', 'error', expect.anything()))
   })
 })
+
+describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
+  const dating = (profile: Record<string, unknown>) =>
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Sam', interests: [], profile: { age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [], intent_default: ['dating'], ...profile } } } as never)
+
+  it('names the tier under intent, interests and the college', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.getByTestId('who-sees-intent')).toBeTruthy()
+    expect(screen.getByTestId('who-sees-interests')).toBeTruthy()
+    expect(screen.getByTestId('who-sees-college').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+  })
+
+  it('orientation reads Nobody but you while show_orientation is off', async () => {
+    dating({ show_orientation: false })
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Nobody but you sees this.')
+  })
+
+  it('orientation reads the reveal tier when the profile says show_orientation is on', async () => {
+    dating({ show_orientation: true })
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+  })
+})
