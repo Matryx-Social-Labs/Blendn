@@ -24,6 +24,7 @@ import {
   defaultPick,
   dockMode,
   isNightPass,
+  knownPlus,
   planRowFor,
   planSubline,
   PLUS_FEATURES,
@@ -150,12 +151,15 @@ function PlusScreenContent() {
     retryOffers()
   }
 
-  const confirm = async () => {
+  /** `purchase`: wait for the buy to land on top of what the account held. A restore has nothing new to wait for. */
+  const confirm = async (purchase = false) => {
     setPhase('confirming')
     say('Confirming with the store')
     let granted: PlusStatus | null = null
+    // An active account (a grant, a Night Pass) waits for the purchase to land, not for "active" (SYS-03).
+    const before = purchase ? (status ?? knownPlus()) : null
     try {
-      granted = await waitForPlus(() => !mounted.current)
+      granted = await waitForPlus(() => !mounted.current, Date.now, before)
     } catch {
       granted = null
     } finally {
@@ -198,7 +202,7 @@ function PlusScreenContent() {
         return
       }
       notePaywallEvent('purchased', trigger)
-      await confirm()
+      await confirm(true)
     } finally {
       working.current = false
       if (mounted.current) setBusy(null)

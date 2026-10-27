@@ -20,6 +20,7 @@ import {
   PLUS_FEATURES,
   PLUS_POLL_EVERY_MS,
   plusStatusLine,
+  plusChangedSince,
   waitForPlus,
 } from '../lib/plus'
 import { lockedNightsLabel, withLockedNights, type GoingItem } from '../lib/savedEvents'
@@ -207,3 +208,27 @@ describe('Going re-reads when the app comes back (review MEDIUM: a pending payme
   })
 })
 
+
+describe('an already active account waits for the purchase to land (SYS-03)', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+  const held = { success: true, data: { active: true, gated: false, product: 'night_pass', source: 'apple', expiresAt: '2026-10-28T04:00:00.000Z' } } as never
+  const stacked = { success: true, data: { active: true, gated: false, product: 'night_pass', source: 'apple', expiresAt: '2026-10-29T04:00:00.000Z' } } as never
+
+  it('does not say "in" on the account it already had, only on the stacked expiry', async () => {
+    getMyPlus.mockResolvedValueOnce(held).mockResolvedValueOnce(held).mockResolvedValue(stacked)
+    const done = waitForPlus(() => false, Date.now, (held as { data: never }).data)
+    await jest.advanceTimersByTimeAsync(3000)
+    await jest.advanceTimersByTimeAsync(3000)
+    await expect(done).resolves.toMatchObject({ expiresAt: '2026-10-29T04:00:00.000Z' })
+    expect(getMyPlus).toHaveBeenCalledTimes(3)
+  })
+
+  it('a different product or source counts as the change', () => {
+    const before = (held as { data: never }).data
+    expect(plusChangedSince(before, { ...(before as object), product: 'plus' } as never)).toBe(true)
+    expect(plusChangedSince(before, { ...(before as object), source: 'google' } as never)).toBe(true)
+    expect(plusChangedSince(before, before)).toBe(false)
+    expect(plusChangedSince(null, before)).toBe(true)
+  })
+})

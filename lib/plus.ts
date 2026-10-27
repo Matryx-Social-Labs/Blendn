@@ -115,16 +115,32 @@ export const PLUS_POLL_EVERY_MS = 3_000
 export const PLUS_POLL_FOR_MS = 60_000
 
 /**
- * The store's webhook grants Blendn+, not the app: ask the server until it
- * says active, or give up after a minute (null). `stopped` ends it early — the
- * screen closed.
+ * Whether the server's answer is a purchase landing on top of `before` (SYS-03): a different product or source, or a
+ * later expiry (a Night Pass stacks). An account that was not active needs no change, only to be active.
  */
-export async function waitForPlus(stopped: () => boolean = () => false, now: () => number = Date.now): Promise<PlusStatus | null> {
+export function plusChangedSince(before: PlusStatus | null | undefined, status: PlusStatus): boolean {
+  if (!status.active) return false
+  if (!before?.active) return true
+  if (status.product !== before.product || status.source !== before.source) return true
+  return Date.parse(status.expiresAt ?? '') > Date.parse(before.expiresAt ?? '')
+}
+
+/**
+ * The store's webhook grants Blendn+, not the app: ask the server until it says so, or give up after a minute (null).
+ * `stopped` ends it early (the screen closed). `before` is what the account held when the purchase started: with it,
+ * an already active account (a grant, a Night Pass) waits for the purchase to land rather than for "active", which it
+ * already was. Without it, the first "active" ends the wait (a restore).
+ */
+export async function waitForPlus(
+  stopped: () => boolean = () => false,
+  now: () => number = Date.now,
+  before?: PlusStatus | null
+): Promise<PlusStatus | null> {
   const until = now() + PLUS_POLL_FOR_MS
   while (!stopped()) {
     // A failed ask (offline, a cleared queue) is "not yet", never the end of the wait.
     const res = await apiClient.getMyPlus().catch(() => null)
-    if (res?.success && res.data?.active) {
+    if (res?.success && res.data && plusChangedSince(before, res.data)) {
       lastKnown = res.data
       notifyPlusChanged()
       return res.data
