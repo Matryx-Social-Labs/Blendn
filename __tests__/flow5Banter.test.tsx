@@ -19,6 +19,7 @@ jest.mock('expo-router', () => {
   return {
     router: { push: jest.fn(), back: jest.fn(), replace: jest.fn() },
     useScrollToTop: () => {},
+    useIsFocused: () => true,
     // The screen is focused once, on mount.
     useFocusEffect: (effect: () => void | (() => void)) => {
       mockRefocus = effect
@@ -81,6 +82,13 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn(
 const mockRefreshBadge = jest.fn()
 jest.mock('../lib/appBadge', () => ({ refreshAppIconBadge: () => mockRefreshBadge(), scheduleIconBadgeRefresh: jest.fn() }))
 
+const mockSpots: { active: boolean; text?: string }[] = []
+jest.mock('../components/ds/CoachMarkHost', () => ({
+  useCoachMarkSpot: (active: boolean, spot: { text: string }) => {
+    mockSpots.push({ active, text: spot.text })
+  },
+}))
+
 /* eslint-disable import/first */
 import { router } from 'expo-router'
 import Banter from '../app/(tabs)/chat'
@@ -124,6 +132,22 @@ beforeEach(() => {
   mockAuth.user = { id: 'u-a' }
   mockRM = false
   serve()
+})
+
+// First in the file on purpose: a coach mark is once per account per launch (module state), so a later render would find it spent.
+describe('the fourth tip: "Swipe a chat left to mute it." (ROOM-18)', () => {
+  it('is placed on the Banter once a chat can be muted, and not before the list has loaded', async () => {
+    mockSpots.length = 0
+    serve()
+    await open()
+    await flush() // the stored "seen" flag is read asynchronously
+    expect(mockSpots.some((s) => s.active && s.text === 'Swipe a chat left to mute it.')).toBe(true)
+  })
+
+  it('a swipe-open counts as use, so it never shows to somebody who already knows', async () => {
+    const { COACH_TIPS } = jest.requireActual('../lib/coachMarks') as typeof import('../lib/coachMarks')
+    expect(COACH_TIPS.find((t) => t.id === 'banter_swipe_mute')?.text).toBe('Swipe a chat left to mute it.')
+  })
 })
 
 it('draws Live now, Requests, People and Past rooms, with a request’s note verbatim', async () => {

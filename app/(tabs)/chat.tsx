@@ -26,6 +26,8 @@ import { holdController } from '../../components/banter/hold'
 import { BanterPressGuard, type PressGuard } from '../../components/banter/pressGuard'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
 import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
+import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
+import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Button } from '../../components/ds/Button'
@@ -42,7 +44,7 @@ import { refreshAppIconBadge } from '../../lib/appBadge'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { blendWith, crewRoomTitle, systemPreview, type CrewRoomRow } from '../../lib/crews'
-import { COLOR, DURATION, EASING, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, RADIUS, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
 import { printable } from '../../lib/pulseSections'
@@ -332,6 +334,23 @@ function ChatInner() {
   }
   const { shown, moved: newAbove } = heldList(items, heldOrder)
 
+  /*
+   * The fourth tip (round4/r4.js TIPS[3]): the first chat that can be muted is the hole, "Swipe a chat left to mute it."
+   * Once ever; a swipe or the Mute sheet counts as use (`markCoachUsed`).
+   */
+  const firstMutable = items.find((i): i is Extract<Item, { type: 'row' }> => i.type === 'row' && i.row.swipe.some((a) => a.label === 'Mute'))?.key ?? null
+  const swipeCoach = useCoachMark('banter_swipe_mute', { ready: !inbox.loading && !searching && !trimmed && !muteFor && openSwipe === null && firstMutable !== null })
+  const swipeCoachTarget = useRef<View>(null)
+  useCoachMarkSpot(swipeCoach.visible, {
+    target: swipeCoachTarget,
+    text: 'Swipe a chat left to mute it.',
+    place: 'below',
+    radius: RADIUS.rowInCard,
+    onDismiss: swipeCoach.dismiss,
+    onLost: swipeCoach.lose,
+    testID: 'banter-swipe-coach',
+  })
+
   /* Rows enter once, 18 ms apart, as the list first lands (Flow 5 Banter annotation). */
   const entered = useRef(false)
   useEffect(() => {
@@ -379,13 +398,16 @@ function ChatInner() {
       />
     )
     return (
-      <Reanimated.View entering={entering(item.index)}>
+      <Reanimated.View entering={entering(item.index)} ref={row.key === firstMutable ? swipeCoachTarget : undefined}>
         {row.swipe.length ? (
           <SwipeRow
             actions={row.swipe}
             onPress={pressGuard(row.open)}
             open={openSwipe === row.key}
-            onOpenChange={(open) => setOpenSwipe(open ? row.key : null)}
+            onOpenChange={(open) => {
+              if (open) markCoachUsed('banter_swipe_mute')
+              setOpenSwipe(open ? row.key : null)
+            }}
             accessibilityLabel={label}
             testID={`banter-swipe-${row.key}`}
           >
