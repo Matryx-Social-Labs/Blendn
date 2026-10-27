@@ -294,7 +294,12 @@ let sessionEpoch = 0
  * A session begins, or the last one ends. Exported for the launch's signed-out marker (`useAuth.initializeAuth`), which
  * clears the keychain outside this module (re-review L2).
  */
-export const nextSession = (): number => ++sessionEpoch
+export const nextSession = (): number => {
+  // The last session's refresh guards are not this one's: a new sign-in is never told 'failed' for the old one's silence.
+  lastProactiveRefreshAt = 0
+  lastRefreshFailedAt = 0
+  return ++sessionEpoch
+}
 
 /*
  * Why the reads stay on SecureStore's async API (RC drive D1). expo-secure-store's async functions have no `.runOnQueue`, so
@@ -1653,6 +1658,8 @@ class ApiClientClass {
       const accessToken = await this.freshAccessToken()
       // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
       if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
+      // The session ended while the refresh was out (a sign-out, another sign-in): never sent with the next one's token (H1).
+      if (epoch !== sessionEpoch) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`
         sentToken = true

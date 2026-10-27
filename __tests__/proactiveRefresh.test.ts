@@ -45,7 +45,7 @@ import { join } from 'path'
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { apiClient, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+const { apiClient, nextSession, TokenStorage } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 
 const jwt = (expiresInSeconds: number) => {
   const payload = Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + expiresInSeconds })).toString('base64url')
@@ -163,6 +163,46 @@ describe('around the refresh', () => {
     expect(seen.filter((u) => u === '/api/mobile/auth/refresh')).toHaveLength(1)
   })
 
+  /*
+   * The bug this guarded: signOut read R1, then request()'s proactive refresh rotated to R2 before the POST, so the server
+   * was handed the dead R1 and R2 stayed live for 30 days. Since the redesign signOut reads both tokens and POSTs them itself
+   * (`postSignOut`, never `request()`), so nothing rotates between the read and the POST: the token presented is the live one.
+   */
+  it('signing out never rotates before the POST, so the refresh token it presents is the live one', async () => {
+    await TokenStorage.setTokens(jwt(10), 'refresh-1')
+    const seen: string[] = []
+    let signoutBody: { refreshToken?: string } = {}
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input).replace(/^https?:\/\/[^/]+/, '')
+      seen.push(url)
+      if (url === '/api/mobile/auth/refresh') return json(200, { success: true, data: { accessToken: jwt(900), refreshToken: 'refresh-2' } })
+      if (url === '/api/mobile/auth/signout') signoutBody = JSON.parse(String(init?.body))
+      return json(200, { success: true })
+    }) as typeof fetch
+
+    await apiClient.signOut()
+
+    expect(seen).toEqual(['/api/mobile/auth/signout'])
+    expect(signoutBody.refreshToken).toBe('refresh-1')
+  })
+
+  it('an access token the server refuses at sign-out is refreshed once, and the rotated refresh token is the one ended', async () => {
+    await TokenStorage.setTokens(jwt(10), 'refresh-1')
+    const bodies: { refreshToken?: string }[] = []
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input).replace(/^https?:\/\/[^/]+/, '')
+      if (url === '/api/mobile/auth/refresh') return json(200, { success: true, data: { accessToken: 'fresh', refreshToken: 'refresh-2' } })
+      const auth = (init?.headers as Record<string, string> | undefined)?.Authorization
+      bodies.push(JSON.parse(String(init?.body)))
+      return auth === 'Bearer fresh' ? json(200, { success: true }) : json(401, { success: false })
+    }) as typeof fetch
+
+    const result = await apiClient.signOut()
+
+    expect(result.success).toBe(true)
+    expect(bodies.map((b) => b.refreshToken)).toEqual(['refresh-1', 'refresh-2'])
+  })
+
   it('a refresh that already failed is not asked again by the launch path', async () => {
     await TokenStorage.setTokens(jwt(10), 'refresh-1')
     const seen: string[] = []
@@ -171,6 +211,9 @@ describe('around the refresh', () => {
       seen.push(url)
       return json(503, { success: false })
     }) as typeof fetch
+
+    // The GET's 5xx retries back off with jitter; at its floor they finish before the 2 s background retry of the refresh.
+    jest.spyOn(Math, 'random').mockReturnValue(0)
 
     await apiClient.getSession()
     const outcome = await apiClient.refreshSessionOutcome()
@@ -195,6 +238,41 @@ describe('around the refresh', () => {
 
     expect(seen.filter((s) => s.includes(stale))).toHaveLength(0)
     refreshDelayMs = 5
+  })
+})
+
+describe('the proactive refresh and the session it began in (sessionEpoch)', () => {
+  it('a request whose session ends while its refresh is out is never sent with the next session\'s token', async () => {
+    await TokenStorage.setTokens(jwt(10), 'refresh-1')
+    const next = jwt(900)
+    refreshDelayMs = 30
+    const seen = server(next, jwt(900))
+
+    const pending = apiClient.getSession()
+    // A sign-out and another sign-in land while the refresh is on the wire.
+    await new Promise((r) => setTimeout(r, 5))
+    nextSession()
+    await TokenStorage.setTokens(next, 'refresh-b')
+    const result = await pending
+
+    expect(result.success).toBe(false)
+    expect(seen.filter((s) => s.includes(next))).toHaveLength(0)
+    refreshDelayMs = 5
+  })
+
+  it('a new session is not refused a refresh for the last one\'s silence', async () => {
+    await TokenStorage.setTokens(jwt(900), 'refresh-1')
+    const seen: string[] = []
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      seen.push(String(input).replace(/^https?:\/\/[^/]+/, ''))
+      return json(503, { success: false })
+    }) as typeof fetch
+
+    expect(await apiClient.refreshSessionOutcome()).toBe('failed')
+    nextSession()
+    await apiClient.refreshSessionOutcome()
+
+    expect(seen.filter((u) => u === '/api/mobile/auth/refresh')).toHaveLength(2)
   })
 })
 
