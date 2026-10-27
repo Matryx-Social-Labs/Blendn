@@ -1359,7 +1359,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
   // The loaded page, read by the section requests without re-asking when it changes.
   const eventsRef = useRef(events)
-  eventsRef.current = events
+  useEffect(() => {
+    eventsRef.current = events
+  }, [events])
   const [nearbyState, setNearbyState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const sectionRequestsOn = !!user && !authLoading && feedCityReady && !isNarrowed
   useEffect(() => {

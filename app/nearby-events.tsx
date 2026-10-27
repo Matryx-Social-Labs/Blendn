@@ -81,7 +81,9 @@ export default function NearbyEventsScreen() {
   const [sort, setSort] = useState<NearbySort>('nearest')
   // The sort the screen is on now: an answer to another sort that lands late is dropped.
   const sortRef = useRef(sort)
-  sortRef.current = sort
+  useEffect(() => {
+    sortRef.current = sort
+  }, [sort])
   /** The last page held (0-based, `fetchEventsApi`'s own), whether the server may have more, and what the next read is doing. */
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
