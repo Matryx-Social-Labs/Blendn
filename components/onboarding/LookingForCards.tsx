@@ -24,6 +24,11 @@ export const LOOKING_FOR_OPTIONS: readonly { value: Intent; label: string; art: 
   { value: 'just_here', label: 'Just here for the event', art: require('../../assets/onboarding/looking-open.jpg') },
 ]
 
+/** Each intent's tile word, for the places that say it back (the review step). */
+export const INTENT_LABELS: Readonly<Record<Intent, string>> = Object.fromEntries(
+  LOOKING_FOR_OPTIONS.map((option) => [option.value, option.label])
+) as Record<Intent, string>
+
 /** Two to a row. */
 const PER_ROW = 2
 

@@ -171,6 +171,8 @@ function IndexInner() {
           return
         }
 
+        // The server's yes, once (readme #97); a refusal above played its H.error.
+        H.success()
         Logger.info('auth', 'Google Sign In successful', { isNewUser: result.isNewUser })
 
         // Where a new account goes is decided in `app/_layout.tsx`, which
@@ -238,6 +240,7 @@ function IndexInner() {
         return
       }
 
+      H.success()
       Logger.info('auth', 'Apple Sign In successful', { isNewUser: result.isNewUser })
 
       // Same as Google above: the layout effect routes new accounts.

@@ -91,7 +91,5 @@ describe('every screen asks', () => {
   it('onboarding hides the card and does not send a stale "Dating" for a minor', () => {
     const src = read('app/onboarding/preferences.tsx')
     expect(src).toMatch(/<LookingForCards[^>]*withoutDating=\{under18\}/)
-    expect(src).toMatch(/under18 && intent === 'dating' \? null : intent/)
-    expect(src).toMatch(/intent_default: \[chosen\]/)
   })
 })

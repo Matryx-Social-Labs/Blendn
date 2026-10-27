@@ -324,9 +324,8 @@ describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
   ]
   type Node = { type: string; props: Record<string, unknown>; children: (Node | string)[] | null }
   const uncapped = (n: Node, found: string[] = []): string[] => {
-    // An icon font's glyph is a private-use character in a Text; it does not scale with the type size, so it needs no cap.
-    const glyph = n.children?.length === 1 && typeof n.children[0] === 'string' && /^[\uE000-\uF8FF]$/u.test(n.children[0])
-    if (n.type === 'Text') return n.props.maxFontSizeMultiplier || glyph ? found : [...found, JSON.stringify(n.children)]
+    // An icon glyph opts out of font scaling altogether (allowFontScaling={false}), so it needs no cap.
+    if (n.type === 'Text') return n.props.maxFontSizeMultiplier || n.props.allowFontScaling === false ? found : [...found, JSON.stringify(n.children)]
     return (n.children ?? []).reduce<string[]>((acc, c) => (typeof c === 'object' ? uncapped(c, acc) : acc), found)
   }
 

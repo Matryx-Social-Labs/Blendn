@@ -198,7 +198,8 @@ export default function PreferencesScreen() {
                 // `orientationConsent` for why that is not just tidiness.
                 show_orientation: orientationConsent(orientations, showOrientation),
               }),
-          ...(chosen ? { intent_default: [chosen] } : {}),
+          // Always present, so a stale draft value (a minor's old 'dating') is overwritten rather than carried: stepPayload drops undefined.
+          intent_default: chosen ? [chosen] : undefined,
           reveal_by_default: !anonymous,
         })
       }

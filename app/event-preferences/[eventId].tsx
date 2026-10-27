@@ -85,9 +85,10 @@ function EventPreferencesContent() {
   /*
    * "Why do you go out?" — asked at the door of the first room.
    *
-   * Onboarding never wrote `intent_default`, so every account that came
-   * through it was refused the board ("add … why you go out") for a field the
-   * flow never asked for. Check-in says `intentNeeded` while there is no
+   * Onboarding now asks it ("Why you go out", OUT-01), but older accounts and
+   * anyone who skipped that step have no `intent_default`, and the board refuses
+   * them ("add … why you go out") for it. No backfill (E14): this is their ask.
+   * Check-in says `intentNeeded` while there is no
    * default; the events tab sends people here with this flag, the intent
    * leads, and the answer is saved as the default in the same write.
    */
