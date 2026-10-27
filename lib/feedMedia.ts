@@ -31,6 +31,8 @@ export interface EventMediaItem {
   id?: string
   url?: string | null
   thumbnail_url?: string | null
+  /** The detail route's spelling (`events/[eventId]/route.ts`); the list sends `thumbnail_url` (ROOM-12). */
+  thumbnailUrl?: string | null
   type?: string | null
   order?: number | null
 }
@@ -73,8 +75,8 @@ export function feedPoster(
   const image = sorted.find((m) => m.type === 'image')
   if (image?.url) return image.url
 
-  const withThumb = sorted.find((m) => m.thumbnail_url)
-  return withThumb?.thumbnail_url ?? null
+  const withThumb = sorted.find((m) => m.thumbnail_url || m.thumbnailUrl)
+  return withThumb?.thumbnail_url || withThumb?.thumbnailUrl || null
 }
 
 
@@ -122,7 +124,7 @@ export function feedPlaylist(
     }
 
     if (m.type === 'video') {
-      const posterUrl = m.thumbnail_url || coverImageUrl
+      const posterUrl = m.thumbnail_url || m.thumbnailUrl || coverImageUrl
       if (!posterUrl) continue
       out.push({ kind: 'video', url: m.url as string, posterUrl })
     }

@@ -188,7 +188,7 @@ interface EventDetailData {
    * one cover image while the event had a gallery and, since #244, video. The
    * hero and the gallery are the two things the frame is mostly made of.
    */
-  media?: { id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }[]
+  media?: { id: string; url: string; type: string; thumbnail_url?: string | null; thumbnailUrl?: string | null; order?: number | null }[]
   /** The public claim page, for a curated event nobody has claimed. See `claimUrlFrom`. */
   claim_url?: string | null
   /** `cancelled` draws the banner, the struck date and the quiet "Cancelled" button. */

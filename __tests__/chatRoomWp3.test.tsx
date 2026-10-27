@@ -310,7 +310,7 @@ describe('every live:ended reason has its own calm state (C6, 11.5)', () => {
 
   it('switching to another place goes back, with no way to "go live again" here', async () => {
     await ended('switched_event')
-    expect(screen.getByText('You went live somewhere else')).toBeTruthy()
+    expect(screen.getByText('You checked in somewhere else')).toBeTruthy()
     expect(screen.queryByLabelText('Go live again')).toBeNull()
     await act(async () => fireEvent.press(screen.getByLabelText('Back to Banter')))
     expect(router.back).toHaveBeenCalled()

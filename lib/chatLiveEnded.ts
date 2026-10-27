@@ -54,8 +54,9 @@ export function liveEndedState(reason: string | null | undefined, facts: LiveEnd
     case 'switched_event':
       return {
         icon: 'shuffle',
-        title: 'You went live somewhere else',
-        body: `Going live somewhere else ended your time at ${at}. One place at a time.`,
+        // E8: `switched_event` is sent for a Go Live elsewhere and for an event check-in alike, so the words are true of both.
+        title: 'You checked in somewhere else',
+        body: `That ended your time at ${at}. One place at a time.`,
         action: { label: 'Back to Banter', kind: 'back' },
       }
     case 'left_area':
