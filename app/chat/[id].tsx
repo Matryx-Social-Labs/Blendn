@@ -284,9 +284,16 @@ function GroupChatInner() {
    * Banter's row (page 1 of a cached list) said it first. Any other room's lock is on its row in that list.
    */
   const setComposerLock = composer.setLock
+  // After the history has been read, and not for somebody out of the room: that door is `askEventDoor`'s, asked once.
+  const lockReadable = !loading && !outOfRoom
   useEffect(() => {
-    if (!chatRoomId) return
+    if (!chatRoomId || !lockReadable) return
     let live = true
+    // The Banter's row of this room (cached): a lock the list already knows. Kept for every room (TG-02) ...
+    void apiClient.getChatGroups().then((result) => {
+      if (live && result.success && roomLockedIn(result.data, roomId)) setComposerLock({ state: 'locked' })
+    })
+    // ... and an event's room asks its own door, which is complete where the list's first page is not (ROOM-05).
     if (roomEventId) {
       void Promise.resolve()
         .then(() => apiClient.getEventChat(roomEventId))
@@ -295,15 +302,11 @@ function GroupChatInner() {
           if (next) setComposerLock(next)
         })
         .catch(() => {})
-    } else {
-      void apiClient.getChatGroups().then((result) => {
-        if (live && result.success && roomLockedIn(result.data, roomId)) setComposerLock({ state: 'locked' })
-      })
     }
     return () => {
       live = false
     }
-  }, [chatRoomId, roomId, roomEventId, setComposerLock])
+  }, [chatRoomId, roomId, roomEventId, setComposerLock, lockReadable])
   const { showToast } = useToast()
   // Android: the snackbar over the composer covers the newest row (the withheld placeholder it explains); the feed makes room (rc8 #5).
   const toastInset = useToastInset()
