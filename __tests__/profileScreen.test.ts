@@ -33,6 +33,11 @@ describe('the screen never re-decides the identity gate', () => {
     expect(src).not.toContain('theyRevealed')
   })
 
+  it('reads the fallback’s photos from the nested profile, which is where /profiles/:id puts them (YOU-13)', () => {
+    const src = SCREEN()
+    expect(src).toContain('data.profile?.photos ?? []')
+  })
+
   it('draws a missing field as absent, never as an error', () => {
     /*
      * "No bio" and "not allowed to see the bio" are identical in the payload by

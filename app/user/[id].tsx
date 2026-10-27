@@ -334,7 +334,8 @@ function UserProfileInner() {
           gone = gone && isGone(fallbackResult)
           if (fallbackResult.success && fallbackResult.data) {
             const data = fallbackResult.data
-            const photos = data.photos || data.profile_photos || []
+            // `/profiles/:id` nests the profile: the photos are `profile.photos`, not top-level (YOU-13).
+            const photos = data.profile?.photos ?? []
             const interests = interestNames(data.interests)
             nextProfile = {
               user_id: id,
