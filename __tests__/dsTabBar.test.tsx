@@ -106,6 +106,16 @@ describe('<TabBar>', () => {
     expect(flat('tabs-me-avatar-ring').backgroundColor).toBe(COLOR.textPrimary)
   })
 
+  it('Banter carries a dot and says how many are new; with none it has neither (BAR-02)', async () => {
+    await draw({ banterUnread: 3 })
+    expect(screen.getByTestId('tabs-banter-dot', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Banter, 3 new' })).toBeTruthy()
+    await screen.unmount()
+    await draw({ banterUnread: 0 })
+    expect(screen.queryByTestId('tabs-banter-dot', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Banter' })).toBeTruthy()
+  })
+
   it('labels cap at 1.3× in the fixed bar', async () => {
     await draw()
     expect(screen.getByText('Pulse').props.maxFontSizeMultiplier).toBe(1.3)

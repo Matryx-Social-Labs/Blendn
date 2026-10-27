@@ -11,6 +11,7 @@ import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { ForegroundBanners } from '../../components/notifications/ForegroundBanners'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
+import { banterUnread, useInboxBadge, useInboxBadgeSync } from '../../lib/inboxBadge'
 import { blendnClosed, openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
 import { onClosingForLink } from '../../lib/linkClosers'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
@@ -62,6 +63,9 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const [venue, setVenue] = useState<string | null>(null)
   // Your face on Me: the session's `profile.photos`, re-read after every photo save and on foreground (`refreshAuthUser`).
   const mePhoto = myMainPhoto(useAuth().user)
+  // The Banter dot: the same counts as the Pulse's bell, one read for both (`lib/inboxBadge`).
+  useInboxBadgeSync()
+  const banter = banterUnread(useInboxBadge())
 
   /*
    * The centre button's coach mark (round4/r4.js): the first time it says you
@@ -223,6 +227,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         onSelect={select}
         disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined }}
         mePhoto={mePhoto ?? undefined}
+        banterUnread={banter}
         discRef={discRef}
       />
   )
