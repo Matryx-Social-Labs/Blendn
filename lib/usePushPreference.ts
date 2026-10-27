@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { Linking } from 'react-native'
 
 import { useToast } from '../components/Toast'
@@ -10,6 +10,33 @@ import { useOsPush } from './pushStatus'
 import { PUSH_BLOCKED_SHEET } from './settingsSheets'
 import { showSheet } from './sheet'
 import { useAuth } from './useAuth'
+
+/** The account's `push_enabled` is read again on mount when what a screen holds is older than this. */
+const PUSH_PREF_FRESH_MS = 30_000
+
+type PushPref = { userId: string | null; enabled: boolean | null; at: number }
+
+/**
+ * One copy for every screen: Settings, Notification settings and Notifications each call the hook, and a write
+ * on one must show on the others when they come back (they stay mounted in the stack), so the value lives here.
+ */
+let pref: PushPref = { userId: null, enabled: null, at: 0 }
+const listeners = new Set<() => void>()
+const putPref = (next: Partial<PushPref>) => {
+  pref = { ...pref, ...next }
+  listeners.forEach((l) => l())
+}
+const subscribePref = (l: () => void) => {
+  listeners.add(l)
+  return () => {
+    listeners.delete(l)
+  }
+}
+
+/** Test hook: forget what a previous account (or test) left. */
+export function resetPushPreferenceStore() {
+  pref = { userId: null, enabled: null, at: 0 }
+}
 
 /**
  * Whether this person gets pushes: what the account says (`profiles.push_enabled`) and what the phone says
@@ -24,10 +51,12 @@ export function usePushPreference() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const { os, known, refresh: refreshOs } = useOsPush()
-  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const stored = useSyncExternalStore(subscribePref, () => pref, () => pref)
   const [saving, setSaving] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const userId = user?.id
+  // Another account's answer is not this one's.
+  const enabled = stored.userId === (userId ?? null) ? stored.enabled : null
 
   const load = useCallback(async () => {
     if (!userId) return
@@ -36,7 +65,7 @@ export function usePushPreference() {
       if (!result.success || !result.data) throw new Error(result.error ?? 'The profile did not load')
       const data = result.data as { profile?: { push_enabled?: unknown }; push_enabled?: unknown }
       const value = (data.profile ?? data).push_enabled
-      setEnabled(typeof value === 'boolean' ? value : true)
+      putPref({ userId, enabled: typeof value === 'boolean' ? value : true, at: Date.now() })
       setLoadFailed(false)
     } catch (error) {
       Logger.warn('notifications', 'push preference did not load', { error: error as never })
@@ -45,17 +74,18 @@ export function usePushPreference() {
   }, [userId])
 
   useEffect(() => {
+    const fresh = pref.userId === (userId ?? null) && pref.at > 0 && Date.now() - pref.at < PUSH_PREF_FRESH_MS
     // Every setState in `load` comes after its first await; the rule cannot see through the async function.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load()
-  }, [load])
+    if (!fresh) void load()
+  }, [load, userId])
 
   /** Saves `next`; the account's choice, then the phone's side of it (register to turn on, drop the token to turn off). */
   const save = useCallback(
     async (next: boolean) => {
       if (!userId) return
       const previous = enabled
-      setEnabled(next)
+      putPref({ userId, enabled: next, at: Date.now() })
       setSaving(true)
       try {
         const result = await apiClient.updateProfile(userId, { push_enabled: next })
@@ -70,7 +100,7 @@ export function usePushPreference() {
           removePushTokenFromProfile().catch(() => {})
         }
       } catch {
-        setEnabled(previous)
+        putPref({ userId, enabled: previous })
         showToast('Couldn’t save “Push notifications”. Try again.', 'error', { haptic: 'error' })
       } finally {
         setSaving(false)

@@ -34,6 +34,7 @@ import { parsePrefs } from '../lib/notificationPrefs'
 import { closeSheet } from '../lib/sheet'
 import { View } from 'react-native'
 import { forgetPushPermission } from '../lib/pushStatus'
+import { resetPushPreferenceStore } from '../lib/usePushPreference'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const permissions = Notifications.getPermissionsAsync as jest.Mock
@@ -52,6 +53,7 @@ beforeEach(() => {
   offers = { success: true, data: { enabled: true, regulars: { active: true } } }
   // The permission is read once a session (RC drive D1): each test is a new one.
   forgetPushPermission()
+  resetPushPreferenceStore()
   jest.clearAllMocks()
   kinds = { success: false, errorCode: 'NOT_FOUND' }
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
