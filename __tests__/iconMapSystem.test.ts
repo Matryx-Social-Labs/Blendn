@@ -5,7 +5,7 @@ import { join } from 'path'
 const src = readFileSync(join(__dirname, '..', 'components/ui/Icon.tsx'), 'utf8')
 
 it.each([
-  ["'trash-2'", 'Trash'],
+  ["'trash-2'", 'Trash2'],
   ['locate', 'Locate'],
   ["'image-off'", 'ImageOff'],
   ['store', 'Store'],

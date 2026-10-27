@@ -63,9 +63,14 @@ describe('MN-CU01: the paywall is not reachable from onboarding, a check-in, a c
 describe('MN-G03: Blendn+ is never sold outside the stores', () => {
   const SOURCES = [...walk('app'), ...walk('components'), ...walk('lib')]
 
-  it('no Razorpay anywhere in the app source', () => {
-    const hits = SOURCES.filter((f) => /razorpay/i.test(read(f)))
+  // Reading what the server says about an entitlement bought outside the app is not selling it (SYS-17, OD-5): the source
+  // name `'razorpay'` and the words about it, in the three files that draw Manage. Never a link, a checkout or an SDK.
+  const SOURCE_NAME_READERS = ['app/plus-manage.tsx', 'lib/plus.ts', 'lib/plusManage.ts']
+
+  it('no Razorpay anywhere in the app source, bar the entitlement source name where Manage reads it', () => {
+    const hits = SOURCES.filter((f) => !SOURCE_NAME_READERS.includes(f) && /razorpay/i.test(read(f)))
     expect(hits).toEqual([])
+    for (const f of SOURCE_NAME_READERS) expect(read(f)).not.toMatch(/razorpay\.com|from ['"][^'"]*razorpay|checkout|https?:/i)
   })
 
   it('no Razorpay or web-billing SDK among the dependencies', () => {
