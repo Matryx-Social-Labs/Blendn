@@ -3,7 +3,7 @@
  * for what may be linked at all.
  */
 import { redirectSystemPath } from '../app/+native-intent'
-import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, SHARE_ORIGIN, shareability, venueLink, WEB_PAGES_LIVE } from '../lib/shareLinks'
+import { eventLink, inviteLink, nativeIntentPath, parseLink, routeFor, SHARE_ORIGIN, shareability, venueLink, venueTextOnly, WEB_PAGES_LIVE } from '../lib/shareLinks'
 
 const ID = '7f3a2c4e-91d0-4b8a-a1c2-0d5e6f7a8b9c'
 const TOKEN = 'abcdefghijklmnopqrstuv'
@@ -201,5 +201,13 @@ describe('a room link keeps its countdown (R6-5)', () => {
     expect(nativeIntentPath(`blendn://chat/abc/more?eventId=${ID}`)).toBe('/chat/abc/more')
     expect(nativeIntentPath(`blendn://private-chat/abc?eventId=${ID}&opensAt=${OPENS}`)).toBe('/private-chat/abc')
     expect(nativeIntentPath(`https://evil.example/chat/abc?eventId=${ID}`)).toBe('/')
+  })
+})
+
+describe('a venue shared before its page exists (SYS-04)', () => {
+  it('is words only: no link that opens the homepage', () => {
+    expect(WEB_PAGES_LIVE).toBe(false)
+    expect(venueTextOnly('The Daily Grind')).toBe('The Daily Grind on Blend’n')
+    expect(venueTextOnly('The Daily Grind')).not.toContain('http')
   })
 })
