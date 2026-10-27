@@ -4,11 +4,11 @@ import type { IconName } from '../components/ui/Icon'
 /**
  * What a person can switch off, by kind (Flow 9 · 9.6): the same words here and in the phone's settings.
  *
- * The server has no per-kind preferences yet, so this is the client's side of a contract it has not
- * signed: `GET /api/mobile/me/notification-preferences` answers `{ matches, crew, night }`, three
- * booleans, and `PUT` takes any of them and answers all three. Until a GET answers in exactly that
- * shape, `parsePrefs` is null and the screen shows no per-kind row at all (a switch that cannot be saved
- * would be a lie). Offers are already the server's (`/me/offers`) and always shown.
+ * The server keeps them: `GET /api/mobile/me/notification-preferences` answers `{ matches, crew, night }`, three
+ * booleans (plus `mutedRooms`), and `PUT` takes any of them and answers all three. A build whose GET does not answer
+ * in exactly that shape gets `parsePrefs` null, and the screen shows no per-kind row (a switch that cannot be saved
+ * would be a lie). Offers are the server's too (`/me/offers`) and always shown. A DM, a room reply, an event's change
+ * and a report's outcome have no switch here by design (the server has three kinds).
  *
  * A switch stops the push only: the bell still fills (the row is written regardless).
  */
