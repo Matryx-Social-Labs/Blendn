@@ -96,6 +96,15 @@ describe('Crews', () => {
     expect(router.push).toHaveBeenCalledWith('/crews/new')
   })
 
+  it('a crew past the nights threshold shows “Out together often” on its row; the others show none (YOU-06)', async () => {
+    api.myCrews.mockResolvedValue(
+      list([crew({ badges: [{ kind: 'nights_together', label: 'Out together often' }] } as never), crew({ crewId: 'c2', name: 'Orbit', size: 6 })], [])
+    )
+    await render(<CrewsScreen />)
+    await waitFor(() => screen.getByLabelText('Nebula, Crew of 4, Badge: Out together often'))
+    expect(screen.getByLabelText('Orbit, Crew of 6')).toBeTruthy()
+  })
+
   it('your crews are rows with the name and Crew of N, no presence, and the dock', async () => {
     api.myCrews.mockResolvedValue(list([crew(), crew({ crewId: 'c2', name: 'Orbit', size: 6 })], []))
     await render(<CrewsScreen />)

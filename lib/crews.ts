@@ -18,6 +18,7 @@
  */
 
 /** The server's `CREW` constants (blendn-admin lib/constants.ts). */
+import { parseBadges } from './profileBadges'
 import { toggleLanguage, type Badge, type Overlap } from './aboutYou'
 
 export const CREW_MAX_MEMBERS = 12
@@ -120,7 +121,13 @@ export interface Crew {
    * server sends none, and `crewSeatsLeft` falls back to `size`.
    */
   seatsLeft?: number
+  /** SV-11: `crewView`'s badges (`{ kind, label }[]`, read through `parseBadges`). Absent from an older server: no pill. */
+  badges?: unknown
 }
+
+/** The crew's one tier badge for a row or a card, or none (YOU-06). Only "Out together often" exists for a crew, and never with a count. */
+export const crewBadge = (badges: unknown): 'nights_together' | undefined =>
+  parseBadges(badges)?.some((b) => b.kind === 'nights_together') ? 'nights_together' : undefined
 
 /** Seats an invite can still take (YOU-12): the server's own count, else the members alone (the older server's best guess). */
 export const crewSeatsLeft = (crew: { size: number; seatsLeft?: number }): number =>

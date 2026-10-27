@@ -16,7 +16,7 @@ import { emptyOut, fadeIn, riseIn } from '../../components/board/boardMotion'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToastDock } from '../../components/toastDock'
-import { type Crew, type CrewInvite } from '../../lib/crews'
+import { crewBadge, type Crew, type CrewInvite } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { crewRowSub, inviteRows } from '../../lib/crewsScreens'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -197,6 +197,7 @@ function CrewsScreenContent() {
                   emblemSeed={crew.emblemSeed}
                   size={crew.size}
                   sub={crewRowSub(crew.size)}
+                  badge={crewBadge(crew.badges)}
                   onPress={() => router.push({ pathname: '/crews/[crewId]', params: { crewId: crew.crewId } })}
                 />
               ))}
