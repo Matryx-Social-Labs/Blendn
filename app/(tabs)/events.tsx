@@ -73,7 +73,6 @@ import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { FIX_MAX_AGE_MS, fixOf, type PreciseFix } from '../../lib/roomButton'
-import { publishRoomSignal } from '../../lib/roomSignal'
 import { homeCardProps, groupByDay } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import {
@@ -491,10 +490,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
   const locationRequestInFlight = useRef(false)
-  /** iOS's reduced-accuracy grant: its fixes are good to kilometres, so the centre button never judges a fence by one. */
-  const approximateRef = useRef(false)
-  /** The newest fix the phone gave, with its accuracy and time: the state keeps its identity for a nearby one, this does not. */
-  const latestFixRef = useRef<PreciseFix | null>(null)
   const interestInFlightRef = useRef<Set<string>>(new Set())
   const checkOutInFlightRef = useRef<Set<string>>(new Set())
   const lastFetchLocationRef = useRef<string>('none')
@@ -715,8 +710,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
       // Best-effort permission request with quick timeout; fallback if denied/unavailable
-      const { status, ios } = await Location.requestForegroundPermissionsAsync()
-      approximateRef.current = ios?.accuracy === 'reduced'
+      const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
         setUserLocation(null)
         setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
@@ -736,7 +730,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       setLocationStatus('granted')
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       const coords = fixOf(position)
-      latestFixRef.current = coords
       setUserLocation(coords)
       Logger.journey('proximity', 'quietLocation:resolved', coords)
     } catch (error) {
@@ -760,15 +753,13 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   useEffect(() => {
     const checkLocationPermission = async () => {
       try {
-        const { status, ios } = await Location.getForegroundPermissionsAsync()
-        approximateRef.current = ios?.accuracy === 'reduced'
+        const { status } = await Location.getForegroundPermissionsAsync()
         if (status === 'granted') {
           // Permission already granted - mark as granted immediately (before fetching coords)
           setLocationStatus('granted')
           try {
             const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS })
             if (lastKnown?.coords) {
-              latestFixRef.current = fixOf(lastKnown)
               setUserLocation(fixOf(lastKnown))
             }
           } catch {}
@@ -776,7 +767,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           setTimeout(async () => {
             try {
               const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-              latestFixRef.current = fixOf(position)
               setUserLocation(fixOf(position))
             } catch {
               // Position fetch failed but permission is still granted - don't show prompt
@@ -897,16 +887,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
       const normalized = (eventsData || []).map(normalizeEvent)
       setEvents(normalized)
-      /*
-       * Hand the centre button what this fetch already knows.
-       *
-       * This screen asks for events with a location and gets `distance` back on
-       * every one. The tab bar needs two facts derived from exactly that —
-       * whether you are standing inside a fence, and what you said you were
-       * going to tonight — and re-deriving them there would mean a second
-       * location permission dance and a second copy of this list on a timer.
-       */
-      publishRoomSignal(normalized, Date.now(), latestFixRef.current && { ...latestFixRef.current, approximate: approximateRef.current })
       setPage(0)
       setHasMore(pageHasMore(normalized.length, PAGE_SIZE))
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
@@ -1177,16 +1157,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
        * status on every foreground so a grant elsewhere clears it.
        */
       Location.getForegroundPermissionsAsync()
-        .then(({ status, ios }) => {
-          approximateRef.current = ios?.accuracy === 'reduced'
+        .then(({ status }) => {
           setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
         })
         .catch(() => {})
       Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS })
         .then((position) => {
           if (!position) return
-          // The state keeps its identity for a nearby fix (a new one would refetch the feed), but the fix's age moves on.
-          latestFixRef.current = fixOf(position)
+          // The state keeps its identity for a nearby fix (a new one would refetch the feed).
           setUserLocation((current) =>
             current &&
             Math.abs(current.latitude - position.coords.latitude) < 0.01 &&
@@ -1335,11 +1313,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       const received = data ?? []
       setHasMore(pageHasMore(received.length, PAGE_SIZE))
       if (received.length === 0) return
-      setEvents(prev => {
-        const merged = mergeEventPage(prev, received.map(normalizeEvent))
-        publishRoomSignal(merged, Date.now(), latestFixRef.current && { ...latestFixRef.current, approximate: approximateRef.current })
-        return merged
-      })
+      setEvents(prev => mergeEventPage(prev, received.map(normalizeEvent)))
       setPage(prev => prev + 1)
       const maps = feedMaps(received)
       setInterestStatuses((prev) => ({ ...prev, ...maps.interests }))

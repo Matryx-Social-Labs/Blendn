@@ -390,11 +390,11 @@ describe('pickTodayEvents', () => {
 describe('the callers hand the centre button the precise fix (SCRUM-744)', () => {
   const read = (file: string) => readFileSync(join(__dirname, '..', file), 'utf8')
 
-  it('the Pulse (both pages) and Tonight publish with the phone’s own position', () => {
-    const pulse = read('app/(tabs)/events.tsx')
-    expect(pulse).toMatch(/publishRoomSignal\(normalized, Date\.now\(\), latestFixRef\.current && \{ \.\.\.latestFixRef\.current, approximate: approximateRef\.current \}\)/)
-    expect(pulse).toMatch(/publishRoomSignal\(merged, Date\.now\(\), latestFixRef\.current && \{ \.\.\.latestFixRef\.current, approximate: approximateRef\.current \}\)/)
-    expect(read('lib/useTonight.ts')).toMatch(/publishRoomSignal\(result\.data, Date\.now\(\), coords\)/)
+  it('only the one source publishes, with the phone’s own position; the Pulse and Tonight do not (BAR-04)', () => {
+    expect(read('app/(tabs)/events.tsx')).not.toMatch(/publishRoomSignal/)
+    expect(read('lib/useTonight.ts')).not.toMatch(/publishRoomSignal/)
+    expect(read('lib/useRoomSignalSource.ts')).toMatch(/publish: publishRoomSignal/)
+    expect(read('lib/useRoomSignalSource.ts')).toMatch(/deps\.publish\(events, deps\.now\(\), fix\)/)
   })
 
   it('the Tonight read asks for a fresh, accurate last-known fix and keeps its accuracy and time', () => {
@@ -404,14 +404,12 @@ describe('the callers hand the centre button the precise fix (SCRUM-744)', () =>
     expect(read('lib/roomButton.ts')).toMatch(/FIX_MAX_AGE_MS = 120_000/)
   })
 
-  it('the Pulse sets every position through fixOf (accuracy and time), asks for fresh last-known fixes, and says when the grant is approximate', () => {
+  it('the Pulse sets every position through fixOf (accuracy and time) and asks for fresh last-known fixes', () => {
     const pulse = read('app/(tabs)/events.tsx')
     expect(pulse).not.toMatch(/setUserLocation\(\{/)
     expect(pulse.match(/setUserLocation\(/g)?.length).toBeGreaterThan(2)
     expect(pulse).not.toMatch(/getLastKnownPositionAsync\(\)/)
     expect(pulse.match(/getLastKnownPositionAsync\(\{ maxAge: FIX_MAX_AGE_MS \}\)/g)).toHaveLength(2)
-    expect(pulse).toMatch(/approximate: approximateRef\.current/)
-    expect(pulse).toMatch(/ios\?\.accuracy === 'reduced'/)
   })
 
   it('publishRoomSignal judges inside from the fix it is given', () => {

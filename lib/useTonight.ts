@@ -11,7 +11,7 @@ import { Logger } from './logger'
 import { printable } from './pulseSections'
 import { pickTonight } from './roomMoments'
 import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
-import { getRoomSignal, publishRoomSignal, subscribeRoomSignal } from './roomSignal'
+import { getRoomSignal, subscribeRoomSignal } from './roomSignal'
 import { useLiveSync } from './useLiveSync'
 
 /**
@@ -74,12 +74,12 @@ export interface TonightState {
 const PREVIEW_TOP = 3
 
 /** The Pulse's page size, so the query — and so the cache entry — is the same. */
-const PULSE_PAGE = 20
+export const PULSE_PAGE = 20
 
-type QuietCoords = PreciseFix & { approximate: boolean }
+export type QuietCoords = PreciseFix & { approximate: boolean }
 
 /** A fix only if the person already said yes. Never prompts. */
-async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
+export async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
   try {
     const permission = await Location.getForegroundPermissionsAsync()
     if (permission.status !== 'granted') return { coords: null, location: 'off' }
@@ -173,13 +173,6 @@ export function useTonight(): TonightState {
       return
     }
     setOffline(false)
-
-    /*
-     * Hand the centre button what this fetch knows — but only with a fix. A
-     * city feed has no distances, and publishing from it would clear an
-     * "inside" the Pulse had correctly worked out.
-     */
-    if (coords) publishRoomSignal(result.data, Date.now(), coords)
 
     const goingIds = new Set<string>(
       (rsvps?.data?.events ?? []).filter((e) => e.rsvpStatus === 'going').map((e) => e.id)

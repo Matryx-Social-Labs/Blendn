@@ -21,6 +21,7 @@ import { Logger } from '../../lib/logger'
 import { myMainPhoto } from '../../lib/myPhoto'
 import { roomButtonTarget, type RoomButtonTarget } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
+import { useRoomSignalSource } from '../../lib/useRoomSignalSource'
 import { watchRoomUnread } from '../../lib/roomUnread'
 import { listenForWaves, useRoomWaves, waveShown } from '../../lib/roomWaves'
 
@@ -65,6 +66,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const mePhoto = myMainPhoto(useAuth().user)
   // The Banter dot: the same counts as the Pulse's bell, one read for both (`lib/inboxBadge`).
   useInboxBadgeSync()
+  useRoomSignalSource()
   const banter = banterUnread(useInboxBadge())
 
   /*
