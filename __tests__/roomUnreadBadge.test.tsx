@@ -39,6 +39,7 @@ jest.mock("../lib/socketClient", () => ({
   subscribeToChatMessage: (...a: unknown[]) =>
     mockSubscribeMessage(...(a as [])),
   subscribeToRoomWave: () => () => {},
+  subscribeToBell: () => () => {},
 }));
 
 {

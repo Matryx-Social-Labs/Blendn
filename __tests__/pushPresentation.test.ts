@@ -180,9 +180,12 @@ describe('the bell, while the app is open', () => {
     const socket = read('lib', 'socketClient.ts')
     expect(socket).toMatch(/sock\.on\("notification:new"/)
     expect(socket).toMatch(/export function subscribeToBell\(/)
+    // The bell and the tab bar share one read (`lib/inboxBadge`), which listens.
     const bell = read('components', 'pulse', 'NotificationBell.tsx')
-    expect(bell).toMatch(/subscribeToBell\(/)
+    expect(bell).toMatch(/useInboxBadgeSync\(\)/)
+    const shared = read('lib', 'inboxBadge.ts')
+    expect(shared).toMatch(/subscribeToBell\(/)
     // The server's count, not a local +1 that duplicates would inflate.
-    expect(bell).toMatch(/subscribeToBell\(\(\) => void load\(\)\)/)
+    expect(shared).toMatch(/subscribeToBell\(\(\) => void refreshInboxBadge\(\)\)/)
   })
 })
