@@ -7,6 +7,7 @@ import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TextArea, TextField } from '../components/ds/TextField'
 import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
+import { WhoSees } from '../components/profile/WhoSees'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
 import { RepositionHost } from '../components/profile/Reposition'
 import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
@@ -642,6 +643,7 @@ function EditProfileContent() {
                   placeholder="e.g. Christ University"
                   testID="edit-profile-education"
                 />
+                <WhoSees field="college" />
                 <TextField
                   label="Phone"
                   value={phone}
@@ -684,7 +686,10 @@ function EditProfileContent() {
                 ))}
               </View>
             ) : (
-              <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
+              <>
+                <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
+                <WhoSees field="interests" />
+              </>
             )}
           </EditCard>
 

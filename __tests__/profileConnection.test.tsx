@@ -525,7 +525,7 @@ describe('one profile body', () => {
     api.getPublicProfile.mockResolvedValue({
       success: true,
       data: { id: 'rh_ben', identityVisible: false, interests: [{ name: 'Vinyl' }, { name: 'Chess' }], sharedInterests: ['Vinyl'], work_field: 'Design' },
-    })
+    } as never)
     await render(<UserProfile />)
     expect(await screen.findByText(/hasn’t revealed who they are yet/)).toBeTruthy()
     expect(screen.queryByText('interests')).toBeNull()
