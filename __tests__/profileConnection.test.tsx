@@ -521,6 +521,16 @@ describe('one profile body', () => {
     expect(screen.queryByText(PROFILE_EMPTY)).toBeNull()
   })
 
+  it('an unrevealed profile opened by id draws no interest chips, whatever the payload carries (YOU-03)', async () => {
+    api.getPublicProfile.mockResolvedValue({
+      success: true,
+      data: { id: 'rh_ben', identityVisible: false, interests: [{ name: 'Vinyl' }, { name: 'Chess' }], sharedInterests: ['Vinyl'], work_field: 'Design' },
+    })
+    await render(<UserProfile />)
+    expect(await screen.findByText(/hasn’t revealed who they are yet/)).toBeTruthy()
+    expect(screen.queryByText('interests')).toBeNull()
+  })
+
   it('your own profile says it is how others see you, with Edit', async () => {
     mockParams = { id: 'u_me' }
     api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_me', isOwnProfile: true } })

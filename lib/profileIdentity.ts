@@ -11,8 +11,8 @@ import { markSeed } from './pseudonymAvatar'
  * field that turns up by mistake — an older route, a fallback endpoint, a
  * server bug — became a reveal nobody agreed to, with the real name as the
  * title. Now only `identityVisible === true` (or your own profile) shows
- * identity, and when it is anything else the photos, bio, occupation and
- * education are dropped here, at the boundary, even if the payload had them.
+ * identity, and when it is anything else the photos, bio, occupation,
+ * education and interests are dropped here, at the boundary, even if the payload had them.
  */
 
 export interface ProfileFields {
@@ -22,6 +22,9 @@ export interface ProfileFields {
   occupation?: string
   education?: string
   photos?: string[]
+  /** Interest chips, and the ones you share: identity-gated like the bio (YOU-03; the server sends `[]` too, SV-10). */
+  interests?: string[]
+  sharedInterests?: string[]
   /** Languages, home state, sign — sent only when identified; withheld here too. */
   about?: string | null
   identityVisible: boolean
@@ -30,7 +33,7 @@ export interface ProfileFields {
 /** The payload with every identity field removed unless the server said you may see it. */
 export function withheldUnlessVisible<T extends ProfileFields>(profile: T): T {
   if (profile.identityVisible === true) return profile
-  return { ...profile, photos: [], bio: undefined, occupation: undefined, education: undefined, about: undefined }
+  return { ...profile, photos: [], bio: undefined, occupation: undefined, education: undefined, about: undefined, interests: [], sharedInterests: [] }
 }
 
 export interface ProfileIdentity {
