@@ -597,3 +597,29 @@ export function likeAs(myCrews: CrewsAtEvent['myCrews']): { as: 'me' } | { as: '
   if (myCrews.length === 1) return { as: 'crew', crewId: myCrews[0].crewId }
   return { as: 'choose' }
 }
+
+/** The most pages of invites one lookup reads: 4 × 50 = the server's newest 200 (YOU-11). */
+export const INVITE_LOOKUP_PAGES = 4
+
+type InvitesPage = { success: boolean; data?: { invites: CrewInvite[]; invitesPagination?: { hasMore: boolean; nextCursor: string | null } } }
+
+/**
+ * The invite to `crewId` among yours, however far down: pages `myCrews` by `invitesPagination.nextCursor` until it is found or there
+ * are no more (at most `INVITE_LOOKUP_PAGES`). `failed` is a page that did not load; `null` is "not open any more" (really).
+ */
+export async function findInvite(
+  loadPage: (cursor?: string | null) => Promise<InvitesPage>,
+  crewId: string
+): Promise<{ kind: 'found'; invite: CrewInvite } | { kind: 'notOpen' } | { kind: 'failed' }> {
+  let cursor: string | null = null
+  for (let page = 0; page < INVITE_LOOKUP_PAGES; page++) {
+    const result = await loadPage(cursor)
+    if (!result.success || !result.data) return { kind: 'failed' }
+    const invite = result.data.invites.find((i) => i.crewId === crewId)
+    if (invite) return { kind: 'found', invite }
+    const next = result.data.invitesPagination
+    if (!next?.hasMore || !next.nextCursor) break
+    cursor = next.nextCursor
+  }
+  return { kind: 'notOpen' }
+}

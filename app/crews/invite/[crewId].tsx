@@ -17,7 +17,7 @@ import { Icon } from '../../../components/ui/Icon'
 import { useToast } from '../../../components/Toast'
 import { useToastDock } from '../../../components/toastDock'
 import { askCrewPush } from '../../../lib/crewPushAsk'
-import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, type CrewInvite } from '../../../lib/crews'
+import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, findInvite, type CrewInvite } from '../../../lib/crews'
 import { crewsApi } from '../../../lib/crewsApi'
 import { inviteWho } from '../../../lib/crewsScreens'
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../../lib/design/tokens'
@@ -65,10 +65,9 @@ function CrewInviteScreenContent() {
   const inFlight = useRef(false)
 
   const read = useCallback(async () => {
-    const result = await crewsApi.myCrews()
-    if (!result.success || !result.data) return setLoad({ kind: 'failed' })
-    const invite = result.data.invites.find((i) => i.crewId === crewId)
-    setLoad(invite ? { kind: 'ready', invite } : { kind: 'notOpen' })
+    // Past the first 50 invites too (YOU-11): the push for invite #51 must still open it.
+    const found = await findInvite((cursor) => crewsApi.myCrews(cursor), crewId)
+    setLoad(found.kind === 'found' ? { kind: 'ready', invite: found.invite } : { kind: found.kind })
   }, [crewId])
 
   useFocusEffect(
