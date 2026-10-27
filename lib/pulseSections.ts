@@ -318,3 +318,16 @@ export function resultsCount(loaded: number, totalCount: number | null | undefin
 
 /** A section header's count as words: "50+" when the count is a floor (BAR-10), else the number. */
 export const sectionCountLabel = (s: Pick<PulseSection, 'count' | 'more'>): string => `${s.count}${s.more ? '+' : ''}`
+
+/**
+ * Which interest "Because you like …" names: the one with the most events in the loaded page, the first on a tie (and the
+ * first of all with an empty page). The server now lists interests oldest first (SV-4), so a tie is always the same answer (BAR-12).
+ */
+export function pickInterest<I extends { slug: string }>(interests: readonly I[], page: readonly { category_group?: string | null }[]): I | undefined {
+  let best: { interest: I; n: number } | undefined
+  for (const interest of interests) {
+    const n = page.filter((e) => e.category_group === interest.slug).length
+    if (!best || n > best.n) best = { interest, n }
+  }
+  return best?.interest
+}

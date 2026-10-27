@@ -13,6 +13,7 @@ import {
   LIVE_FLOOR,
   nextDayReset,
   printable,
+  pickInterest,
   pulseSections,
   sectionCountLabel,
   seedDateOf,
@@ -352,5 +353,20 @@ describe('what the Everything-else chips and the peek line read', () => {
     expect(pulsePeekLine([sec('tonight', 6)])).toBe('6 on tonight')
     expect(pulsePeekLine([sec('now', 2)])).toBe('2 live now')
     expect(pulsePeekLine([])).toBeNull()
+  })
+})
+
+describe('pickInterest (BAR-12)', () => {
+  const mine = [{ slug: 'music' }, { slug: 'art' }, { slug: 'food' }]
+  const page = (...groups: string[]) => groups.map((category_group) => ({ category_group }))
+
+  it('is the interest with the most events in the loaded page', () => {
+    expect(pickInterest(mine, page('art', 'art', 'music', 'food'))?.slug).toBe('art')
+  })
+
+  it('a tie, or an empty page, is the first (the server’s stable order)', () => {
+    expect(pickInterest(mine, page('food', 'art'))?.slug).toBe('art')
+    expect(pickInterest(mine, [])?.slug).toBe('music')
+    expect(pickInterest([], page('art'))).toBeUndefined()
   })
 })

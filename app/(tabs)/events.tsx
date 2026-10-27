@@ -80,6 +80,7 @@ import {
   everythingElse,
   NEARBY_DAYS,
   pulsePeekLine,
+  pickInterest,
   pulseSections,
   seedDateOf,
   weekendWindow,
@@ -1356,6 +1357,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
+  // The loaded page, read by the section requests without re-asking when it changes.
+  const eventsRef = useRef(events)
+  eventsRef.current = events
   const [nearbyState, setNearbyState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const sectionRequestsOn = !!user && !authLoading && feedCityReady && !isNarrowed
   useEffect(() => {
@@ -1393,7 +1397,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     void (async () => {
       try {
         const interests = await apiClient.getProfileInterests(user.id)
-        const first = interests.success ? interests.data?.interests?.[0] : undefined
+        const first = interests.success ? pickInterest(interests.data?.interests ?? [], eventsRef.current) : undefined
         if (cancelled) return
         if (!first) return setForYouState({ key: sectionsKey, value: null })
         const { data, error } = await fetchEventsApi({ page: 0, limit: 12, ...where, include: 'checkins', categorySlug: first.slug })
