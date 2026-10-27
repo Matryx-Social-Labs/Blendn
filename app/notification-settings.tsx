@@ -1,5 +1,5 @@
 import { router } from 'expo-router'
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Banner } from '../components/ds/Banner'
@@ -85,9 +85,8 @@ function NotificationSettingsContent() {
         <View style={masterOff ? styles.dim : null} pointerEvents={masterOff ? 'none' : 'auto'} testID="notification-settings-kinds">
           <SettingsGroup title="Tell me about">
             {PREF_ROWS.map((row) =>
-              ANDROID ? (
-                <SettingsRow key={row.key} icon={row.icon} title={row.title} trail="external" opens="opens your phone’s settings" onPress={() => void openChannelSettings(row.channel)} testID={`pref-${row.key}`} />
-              ) : kinds.prefs ? (
+              // Android's rows open the phone's channel page, except one the account turned off elsewhere (iOS): the phone's channel is still on, so only a switch can turn it back on (SYS-08).
+              kinds.prefs && (!ANDROID || !kinds.prefs[row.key]) ? (
                 <SettingsRow
                   key={row.key}
                   icon={row.icon}
@@ -98,6 +97,8 @@ function NotificationSettingsContent() {
                   busy={kinds.saving.has(row.key)}
                   testID={`pref-${row.key}`}
                 />
+              ) : ANDROID ? (
+                <SettingsRow key={row.key} icon={row.icon} title={row.title} trail="external" opens="opens your phone’s settings" onPress={() => void openChannelSettings(row.channel)} testID={`pref-${row.key}`} />
               ) : null
             )}
             {/* One offers row on both platforms, once a place has regulars on (D21): the account's switch, held while push can't arrive. */}
@@ -130,6 +131,17 @@ function NotificationSettingsContent() {
             ) : null}
           </SettingsGroup>
         ) : null}
+        {/* The phone owns sounds, pop-ups and the lock screen (E9, SYS-07): the app's page in its settings. */}
+        <SettingsGroup testID="notification-settings-system">
+          <SettingsRow
+            icon="smartphone"
+            title="Sounds, pop-ups and lock screen"
+            trail="external"
+            opens="opens your phone’s settings"
+            onPress={() => void Linking.openSettings().catch(() => {})}
+            testID="notification-settings-sounds"
+          />
+        </SettingsGroup>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{(ANDROID ? ANDROID_FOOT : '') + PREFS_FOOT}</Text>
       </ScrollView>
       <View style={bar.barPin} pointerEvents="box-none">
