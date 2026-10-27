@@ -110,6 +110,8 @@ function ManageContent() {
   const start = () => router.push({ pathname: '/plus', params: { trigger: 'profile' } } as never)
   // A gift of ours (D4): no store holds it, so no store row and no word about cancelling in one.
   const granted = status?.source === 'grant'
+  // Bought outside the app: the status line says so; there is no store to open (OD-5).
+  const outside = status?.source === 'razorpay'
   const storeName = card?.store === 'android' ? 'Google Play' : card?.store === 'ios' ? 'the App Store' : 'the store'
 
   return (
@@ -141,7 +143,7 @@ function ManageContent() {
               </Text>
             ) : null}
             <SettingsGroup>
-              {granted ? null : (
+              {granted || outside ? null : (
                 <SettingsRow
                   icon="credit-card"
                   title={`Manage in ${storeName}`}
@@ -166,7 +168,7 @@ function ManageContent() {
                 testID="plus-manage-start"
               />
             ) : null}
-            {granted ? null : <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{FOOT}</Text>}
+            {granted || outside ? null : <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{FOOT}</Text>}
           </>
         ) : null}
       </ScrollView>

@@ -124,3 +124,12 @@ describe('a Night Pass names the day, as the frame does', () => {
     expect(pass('2026-10-25T21:42:00')).toMatch(/^Until .*25.*, 9:42 PM\./)
   })
 })
+
+describe('Blend’n+ bought outside the app (Razorpay; OD-5, SYS-17)', () => {
+  it('names no store, says it is managed outside the app, and carries no link', () => {
+    const c = card({ source: 'razorpay', state: 'cancelled' }, 'ios')
+    expect(c).toEqual({ status: 'active', sentence: expect.stringMatching(/^Blend’n\+ until .*Nov.* · Managed outside the app$/), store: 'ios' })
+    expect(c?.sentence).not.toMatch(/App Store|Google Play|store/i)
+    expect(card({ source: 'razorpay', expiresAt: null })?.sentence).toBe('Blend’n+ is on · Managed outside the app')
+  })
+})

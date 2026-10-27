@@ -20,7 +20,7 @@ export type PlusStatus = {
    */
   gated: boolean
   product: 'plus' | 'night_pass' | null
-  source: 'apple' | 'google' | 'grant' | null
+  source: 'apple' | 'google' | 'grant' | 'razorpay' | null
   expiresAt: string | null
   /**
    * How a subscription stands, and which gift a grant is: not sent yet (`lib/plusManage.ts` reads them when they are,
