@@ -39,9 +39,11 @@ export type RowHandlers = {
  * on it — the one seed rule every surface shares (`markSeed`): the Grid, Room
  * info and the profile agree, and two unresolved people never share one.
  */
-export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id'>, roomId: string) => ({
+export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id' | 'sender_image'>, roomId: string) => ({
   name: m.sender_name,
   pseudonym: markSeed(m.sender_name, `${roomId}:${m.sender_id}`),
+  // A crew's members are named and photographed (SV-6); an event's room never sends one, so it stays a creature.
+  ...(m.sender_image ? { photoUri: m.sender_image } : {}),
 })
 
 /** The six the server accepts, as the bubble draws them: counts, never who. */

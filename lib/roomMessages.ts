@@ -8,6 +8,8 @@ export interface RoomMessage {
   message_id: string
   sender_id: string
   sender_name: string
+  /** The sender's photo, which the server sends for a crew's room only (SV-6); an event's room is creatures. */
+  sender_image?: string | null
   message_text: string
   message_type: string
   reply_to_message_id: string | null
@@ -73,6 +75,7 @@ export function roomMessagesFrom(raw: any[], userId?: string): RoomMessage[] {
       message_id: msg.id || msg.message_id,
       sender_id: senderId,
       sender_name: senderId === 'system' ? 'System' : senderId === userId ? 'You' : serverName,
+      ...(typeof msg.user?.image === 'string' && msg.user.image ? { sender_image: msg.user.image } : {}),
       message_text: msg.message_text || msg.content || msg.text || '',
       // The server nulls the text and says why; an empty bubble said nothing.
       removed: Boolean(msg.moderation_hidden),

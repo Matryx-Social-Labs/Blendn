@@ -36,7 +36,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useOnBlock } from '../../lib/useOnBlock'
 import { OPACITY } from '../../lib/theme'
 
-type Member = { userId: string; name: string | null; role: string }
+type Member = { userId: string; name: string | null; role: string; avatar?: string | null }
 
 const PAGE = 100
 /** The hero: the cover, 300 tall (Room info frame). */
@@ -134,7 +134,7 @@ function ChatInfoInner() {
             else setMoreFailed(true)
             return
           }
-          const page = result.data.participants.map((p) => ({ userId: p.userId, name: p.name, role: p.role }))
+          const page = result.data.participants.map((p) => ({ userId: p.userId, name: p.name, role: p.role, avatar: p.avatar }))
           setFailed(false)
           setMoreFailed(false)
           setTotal(result.data.totalCount)
@@ -437,7 +437,11 @@ const MemberCell = memo(function MemberCell({
       style={[styles.member, { width: cell, height }]}
     >
       <View>
-        <Avatar size={face} kind="creature" pseudonym={markSeed(member.name, `${chatGroupId}:${member.userId}`)} />
+        {member.avatar ? (
+          <Avatar size={face} kind="photo" uri={member.avatar} />
+        ) : (
+          <Avatar size={face} kind="creature" pseudonym={markSeed(member.name, `${chatGroupId}:${member.userId}`)} />
+        )}
         {role ? (
           <View style={styles.roleBadgePlace} pointerEvents="none">
             <View style={styles.roleBadge}>

@@ -9,6 +9,10 @@ import { RoomMessageRow, type RowHandlers } from '../components/chat/RoomFeed'
 import { crewLikeLine } from '../lib/crews'
 import type { RoomMessage } from '../lib/roomMessages'
 
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual('react-native')
+  return { Image: ({ source }: { source: { uri: string } }) => <View testID={`img-${source.uri}`} /> }
+})
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 jest.mock('expo-video', () => ({ useVideoPlayer: () => ({ addListener: () => ({ remove: () => {} }), play: () => {} }), VideoView: () => null }))
@@ -51,4 +55,33 @@ it('the Banter preview words: who, then the predicate, with no "You:"', () => {
   expect(crewLikeLine('liked Crew Nebula for the crew', 'You')).toBe('You liked Crew Nebula for the crew')
   expect(crewLikeLine('  liked Two for the crew ', 'Rohan')).toBe('Rohan liked Two for the crew')
   expect(crewLikeLine('see you at 9', 'Rohan')).toBeNull()
+})
+
+describe('a crew’s members are photographed, an event’s room is creatures (ROOM-07, SV-6)', () => {
+  const PHOTO = 'https://cdn.example/rohan.jpg'
+  const { roomMessagesFrom } = require('../lib/roomMessages')
+  const { senderOf } = require('../components/chat/RoomFeed')
+  const raw = (user: Record<string, unknown>) => [{ id: 'm1', type: 'text', content: 'hi', createdAt: '2026-10-24T19:00:00.000Z', user: { id: 'u1', name: 'Rohan', ...user } }]
+
+  it('reads the server’s user.image onto the message, and senderOf hands it to the bubble', () => {
+    const [m] = roomMessagesFrom(raw({ image: PHOTO }), 'me')
+    expect(m.sender_image).toBe(PHOTO)
+    expect(senderOf(m, 'g1')).toMatchObject({ name: 'Rohan', photoUri: PHOTO })
+  })
+
+  it('an event’s room sends image: null, so the sender stays a creature', () => {
+    const [m] = roomMessagesFrom(raw({ image: null }), 'me')
+    expect(m.sender_image).toBeUndefined()
+    expect(senderOf(m, 'g1').photoUri).toBeUndefined()
+  })
+
+  it('the bubble draws the photo for a crew member, and a creature (no image) for anyone else', async () => {
+    await row(like({ message_type: 'text', sender_image: PHOTO }), false)
+    expect(screen.getByTestId(`img-${PHOTO}`, { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('no photo for a sender without one', async () => {
+    await row(like({ message_type: 'text' }), false)
+    expect(screen.queryByTestId(`img-${PHOTO}`, { includeHiddenElements: true })).toBeNull()
+  })
 })
