@@ -3,8 +3,11 @@ import { useSyncExternalStore } from 'react'
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { Banner } from '../ds/Banner'
 
-/** The approved offline banner's words (Flow 15 #16, DS #44). */
-export const OFFLINE_LINE = 'You’re offline. Some actions won’t work until you’re back.'
+/**
+ * The offline banner's words for a surface that acts (Flow 15 #16, DS #44; E6): one sentence per meaning. A cached view says
+ * "Offline. Showing what you had." instead; a chat's banner (`RealtimeStatusBanner` `OFFLINE`) says this one too.
+ */
+export const OFFLINE_LINE = 'Offline. Some actions won’t work until you’re back.'
 
 /** Whether the phone knows it has no connection: what an action here would fail on. */
 export function useOffline() {
