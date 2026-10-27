@@ -23,6 +23,11 @@ export type PlusStatus = {
   source: 'apple' | 'google' | 'grant' | 'razorpay' | null
   expiresAt: string | null
   /**
+   * When the account's entitlement rows last changed (the server's `changedAt`). `GET /me/plus` reports only the longest live
+   * row, so a Night Pass stacked on a grant or a subscription never moves the answer; this does. Absent from an older server.
+   */
+  changedAt?: string | null
+  /**
    * How a subscription stands, and which gift a grant is: not sent yet (`lib/plusManage.ts` reads them when they are,
    * and never guesses). Absent, a subscription is "active" and a grant is "nothing renews".
    */
@@ -113,6 +118,11 @@ export function usePlusStatus(): { status: PlusStatus | null; refresh: () => voi
 export const PLUS_POLL_EVERY_MS = 3_000
 /** … for this long, before saying it is taking longer than usual. */
 export const PLUS_POLL_FOR_MS = 60_000
+/**
+ * An already active account on a server that sends no `changedAt` cannot be told apart from itself once the purchase lands
+ * (the answer is the longest live row), so it waits this long and then takes the active answer it has.
+ */
+export const PLUS_POLL_ACTIVE_NO_CHANGEDAT_MS = 10_000
 
 /**
  * Whether the server's answer is a purchase landing on top of `before` (SYS-03): a different product or source, or a
@@ -121,6 +131,7 @@ export const PLUS_POLL_FOR_MS = 60_000
 export function plusChangedSince(before: PlusStatus | null | undefined, status: PlusStatus): boolean {
   if (!status.active) return false
   if (!before?.active) return true
+  if (status.changedAt && before.changedAt && status.changedAt !== before.changedAt) return true
   if (status.product !== before.product || status.source !== before.source) return true
   return Date.parse(status.expiresAt ?? '') > Date.parse(before.expiresAt ?? '')
 }
@@ -136,16 +147,20 @@ export async function waitForPlus(
   now: () => number = Date.now,
   before?: PlusStatus | null
 ): Promise<PlusStatus | null> {
-  const until = now() + PLUS_POLL_FOR_MS
+  const until = now() + (before?.active && !before.changedAt ? PLUS_POLL_ACTIVE_NO_CHANGEDAT_MS : PLUS_POLL_FOR_MS)
+  let lastActive: PlusStatus | null = null
+  const settle = (status: PlusStatus) => {
+    lastKnown = status
+    notifyPlusChanged()
+    return status
+  }
   while (!stopped()) {
     // A failed ask (offline, a cleared queue) is "not yet", never the end of the wait.
     const res = await apiClient.getMyPlus().catch(() => null)
-    if (res?.success && res.data && plusChangedSince(before, res.data)) {
-      lastKnown = res.data
-      notifyPlusChanged()
-      return res.data
-    }
-    if (now() + PLUS_POLL_EVERY_MS > until) return null
+    if (res?.success && res.data && plusChangedSince(before, res.data)) return settle(res.data)
+    if (res?.success && res.data?.active) lastActive = res.data
+    // The account was already active and still is: the purchase may have stacked under the answer. Say it is on.
+    if (now() + PLUS_POLL_EVERY_MS > until) return before?.active && lastActive ? settle(lastActive) : null
     await new Promise((resolve) => setTimeout(resolve, PLUS_POLL_EVERY_MS))
   }
   return null
