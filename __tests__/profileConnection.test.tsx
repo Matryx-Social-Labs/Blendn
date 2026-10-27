@@ -39,11 +39,16 @@ jest.mock('../components/profile/PhotoViewer', () => ({ PhotoViewer: () => null 
 jest.mock('../components/Skeleton', () => ({ SkeletonBlock: () => null, SkeletonLine: () => null }))
 // Open, it is one button that sends "hi" — enough to drive what the screen does with the answer.
 jest.mock('../components/grid/ConnectSheet', () => ({
-  ConnectSheet: (p: { visible: boolean; onSend: (m: string) => void }) => {
+  ConnectSheet: (p: { visible: boolean; error?: string; onSend: (m: string) => void }) => {
     const React = require('react')
-    const { Pressable, Text } = require('react-native')
+    const { Pressable, Text, View } = require('react-native')
     return p.visible
-      ? React.createElement(Pressable, { onPress: () => p.onSend('hi') }, React.createElement(Text, null, 'Send request'))
+      ? React.createElement(
+          View,
+          null,
+          React.createElement(Pressable, { onPress: () => p.onSend('hi') }, React.createElement(Text, null, 'Send request')),
+          p.error ? React.createElement(Text, null, p.error) : null
+        )
       : null
   },
 }))
@@ -213,7 +218,9 @@ describe('Connect', () => {
     fireEvent.press(await screen.findByText('Connect'))
     fireEvent.press(await screen.findByText('Send request'))
 
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("Your request didn’t send. Try again.", 'error', { haptic: 'error' }))
+    // In the sheet, under the note — a toast sat dimmed behind the sheet's scrim (drive 2026-10-27).
+    expect(await screen.findByText("Your request didn’t send. Try again.")).toBeTruthy()
+    expect(mockShowToast).not.toHaveBeenCalled()
     expect(screen.getByText('Connect')).toBeTruthy()
     expect(screen.queryByText('Requested')).toBeNull()
     // The sheet stays open, with the message in it.

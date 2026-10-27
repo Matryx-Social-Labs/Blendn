@@ -55,6 +55,7 @@ export function ConnectSheet({
   displayName,
   theyAreRevealed = false,
   sending,
+  error,
   onSend,
   onDismiss,
 }: {
@@ -63,10 +64,18 @@ export function ConnectSheet({
   displayName: string
   theyAreRevealed?: boolean
   sending?: boolean
+  /**
+   * Why the last send did not go, said under the field it is about (a refusal of
+   * the text names what to change). A toast sat behind the sheet's scrim, dimmed
+   * and gone in seconds (drive 2026-10-27). Shown until the text is edited.
+   */
+  error?: string
   onSend: (message: string) => void
   onDismiss: () => void
 }) {
   const [message, setMessage] = useState('')
+  // The text the shown error is about: editing it clears the error (DS: in error until the value changes).
+  const [sentAs, setSentAs] = useState<string | null>(null)
 
   const trimmed = message.trim()
   /* Required, not optional — the server refuses an empty one either way. */
@@ -85,7 +94,10 @@ export function ConnectSheet({
        */
       body={connectDisclosure(displayName, theyAreRevealed)}
       actions={[
-        { label: 'Send request', kind: 'primary', onPress: () => onSend(message), loading: sending, disabled: !canSend },
+        { label: 'Send request', kind: 'primary', onPress: () => {
+            setSentAs(message)
+            onSend(message)
+          }, loading: sending, disabled: !canSend },
         { label: 'Cancel', kind: 'tertiary', onPress: onDismiss },
       ]}
     >
@@ -99,6 +111,7 @@ export function ConnectSheet({
         placeholder="Why do you want to talk?"
         limit={CONNECT_MESSAGE_MAX}
         hint="They see this before deciding. You can only send one request to someone."
+        error={error && message === sentAs ? error : undefined}
         minHeight={SHEET_FIELD_MIN}
         testID="connect-message"
       />

@@ -35,6 +35,7 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   AppState: { addEventListener: () => ({ remove: () => {} }) },
 }))
+jest.mock('../lib/appVersion', () => ({ appVersionNumber: () => '1.0.0' }))
 jest.mock('../lib/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
@@ -146,6 +147,22 @@ describe('proactive refresh', () => {
 })
 
 describe('around the refresh', () => {
+  it('a refused refresh token is not sent a second time (drive 2026-10-27: two 401s per launch)', async () => {
+    await TokenStorage.setTokens(jwt(-5), 'refresh-dead')
+    const seen: string[] = []
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input).replace(/^https?:\/\/[^/]+/, '')
+      seen.push(url)
+      return json(401, { success: false, error: 'Invalid or expired refresh token' })
+    }) as typeof fetch
+
+    const result = await apiClient.getSession()
+
+    expect(result.success).toBe(false)
+    // The proactive refresh is refused; the session read's 401 does not ask again with the same token.
+    expect(seen.filter((u) => u === '/api/mobile/auth/refresh')).toHaveLength(1)
+  })
+
   /*
    * The bug this guarded: signOut read R1, then request()'s proactive refresh rotated to R2 before the POST, so the server
    * was handed the dead R1 and R2 stayed live for 30 days. Since the redesign signOut reads both tokens and POSTs them itself

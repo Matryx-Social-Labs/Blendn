@@ -14,7 +14,6 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: async (k: string) => { mockSecure.delete(k) },
 }))
 jest.mock('expo-application', () => ({ nativeApplicationVersion: '1.0.1', nativeBuildVersion: '130' }))
-// `lib/appVersion` reads expo-constants beside it (its fallback); unmocked, the require throws and the build reads 'unknown'.
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { version: '1.0.1' } } }))
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },

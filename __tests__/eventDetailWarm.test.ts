@@ -24,6 +24,7 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
   AppState: { addEventListener: () => ({ remove: () => {} }) },
 }))
+jest.mock('../lib/appVersion', () => ({ appVersionNumber: () => '1.0.0' }))
 jest.mock('../lib/logger', () => ({
   Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))

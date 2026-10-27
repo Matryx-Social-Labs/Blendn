@@ -10,6 +10,7 @@ import { warmAvatars } from './warmAvatars'
 import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
 import { likeRefusal, type LikeRefusal } from './likeRefusal'
+import { requestTextRefusal } from './requestRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
 import { Logger } from './logger'
 import { reasonLine } from './roomMoments'
@@ -153,7 +154,8 @@ export interface RoomActions {
   like(id: string): Promise<RoomAnswer<'liked' | 'matched' | 'already'>>
   /** Wave at somebody. "Too soon" is the server's once-per-ten-minutes rule: said as "Waved", never as an error. */
   sendWave(id: string): Promise<RoomAnswer<'sent' | 'too-soon'>>
-  connect(id: string, note?: string): Promise<boolean>
+  /** `stands`: a request now exists between you. `refusal`: the server's sentence when it refused the note's text (lib/requestRefusal.ts); absent for a failure it cannot name. */
+  connect(id: string, note?: string): Promise<{ stands: boolean; refusal?: string }>
   /** After a block or report: gone from every list for the rest of the session. */
   remove(id: string): void
   clearMatch(): void
@@ -795,10 +797,10 @@ export function useRoom(): RoomState & RoomActions {
    * Marked requested only when the ask stands: a new request, or a `CONFLICT`
    * saying one already exists between you (`@@unique` above — re-offering it
    * invites a send that can never succeed). Anything else — offline, refused,
-   * a 500 — leaves the button offered, and `false` lets the caller say so;
+   * a 500 — leaves the button offered, and `stands: false` lets the caller say so;
    * it used to mark every failure "Request sent". The haptic is success-only.
    */
-  const connect = useCallback(async (id: string, note?: string): Promise<boolean> => {
+  const connect = useCallback(async (id: string, note?: string): Promise<{ stands: boolean; refusal?: string }> => {
     try {
       const result = await apiClient.createMessageRequest(id, note)
       if (result.success) {
@@ -808,10 +810,10 @@ export function useRoom(): RoomState & RoomActions {
       }
       const stands = !!result.success || result.errorCode === 'CONFLICT'
       if (stands) setRequested((prev) => ({ ...prev, [id]: true }))
-      return stands
+      return { stands, refusal: requestTextRefusal(result) }
     } catch (e) {
       Logger.error('match', 'connect request error', { error: e })
-      return false
+      return { stands: false }
     }
   }, [])
 

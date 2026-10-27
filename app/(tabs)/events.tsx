@@ -1070,10 +1070,12 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         setSelection((current) => current ?? stored)
         setFeedCityReady(true)
       }
-      const response = await apiClient.getEventCities()
+      // A rejection (a permission prompt makes the app 'inactive', which clears the queue) is
+      // a failed list, not a stop: the feed must still start (`feedCityReady` below).
+      const response = await apiClient.getEventCities().catch(() => ({ success: false as const }))
       if (cancelled) return
 
-      const available = response.success && response.data ? response.data.cities : []
+      const available = response.success && 'data' in response && response.data ? response.data.cities : []
       setCityOptions(available)
       setSelection((current) =>
         // Never overwrite a choice the user made while this was in flight.
@@ -1375,11 +1377,10 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
-  const sectionRequestsOn = !!user && !authLoading && cityResolved && !isNarrowed
+  const sectionRequestsOn = !!user && !authLoading && feedCityReady && !isNarrowed
   useEffect(() => {
     if (!sectionRequestsOn) return
     let cancelled = false
-    // Rounded as the feed's are (and as `sectionsKey` already is): a GPS jitter is not a new request.
     const where = { city: selectedCity ?? undefined, lat: roundCoord(userLocation?.latitude), lon: roundCoord(userLocation?.longitude) }
     const window = weekendWindow(Date.now())
     if (!window.skip) {

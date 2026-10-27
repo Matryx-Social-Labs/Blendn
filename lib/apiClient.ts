@@ -414,6 +414,8 @@ class TokenStorage {
   }
 
   static async setRefreshToken(token: string): Promise<void> {
+    // A token stored is a token not yet refused (`refusedRefreshToken`).
+    refusedRefreshToken = null
     return this.secureSet(REFRESH_TOKEN_KEY, token)
   }
 
@@ -1310,6 +1312,12 @@ let lastProactiveRefreshAt = 0
  */
 const FAILED_REFRESH_COOLDOWN_MS = 10_000
 let lastRefreshFailedAt = 0
+/**
+ * The refresh token the server last refused (401/403). It is dead: a launch that
+ * refreshed it ahead of `/auth/session` asked again from that request's 401 and
+ * sent it twice (drive 2026-10-27). Asked about it again, the answer is the same.
+ */
+let refusedRefreshToken: string | null = null
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
@@ -1606,7 +1614,6 @@ class ApiClientClass {
    */
   private async freshAccessToken(): Promise<string | null | typeof TIMED_OUT> {
     if (refreshPromise) await refreshPromise
-    // Each read on the fetch's deadline, as every token read here is (SCRUM-754): timed out is never "no token".
     const token = await withinDeadline(TokenStorage.getAccessToken())
     if (token === TIMED_OUT) return token
     const remaining = msUntilExpiry(token, serverNow())
@@ -1618,8 +1625,7 @@ class ApiClientClass {
       if (now - lastProactiveRefreshAt < PROACTIVE_REFRESH_MIN_GAP_MS) return withinDeadline(TokenStorage.getAccessToken())
       lastProactiveRefreshAt = now
     }
-    // 'failed' / 'rejected': send what we have; the 401 path decides what that means. The refresh itself stores nothing
-    // once the session it began in has ended (`sessionEpoch`, H1).
+    // 'failed' / 'rejected': send what we have; the 401 path decides what that means.
     await this.refreshTokens()
     return withinDeadline(TokenStorage.getAccessToken())
   }
@@ -1649,7 +1655,6 @@ class ApiClientClass {
     const epoch = sessionEpoch
     let sentToken = false
     if (requireAuth) {
-      // Refreshed first when it is about to die (`freshAccessToken`): a stale token cost a 401 and a second round trip.
       const accessToken = await this.freshAccessToken()
       // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
       if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
@@ -1779,7 +1784,7 @@ class ApiClientClass {
         const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
         // A keychain that did not answer is not a missing token: 'failed', tried again, never the sign-out a 'rejected' is.
         if (refreshToken === TIMED_OUT) return 'failed'
-        if (!refreshToken) {
+        if (!refreshToken || refreshToken === refusedRefreshToken) {
           return 'rejected'
         }
 
@@ -1819,6 +1824,7 @@ class ApiClientClass {
               if (code && code in SESSION_END_CODES) rejectedCode = code
             } catch {}
           }
+          refusedRefreshToken = refreshToken
           return 'rejected'
         }
 
