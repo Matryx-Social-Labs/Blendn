@@ -86,6 +86,12 @@ function EditProfileContent() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  /*
+   * The profile could not be read (5xx, 401, no signal). The form stays blank, and Save stays off until a retry reads it: a blank
+   * form saved is a blanked profile (YOU-05). `loadAttempt` is what Try again bumps to run the load effect once more.
+   */
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   // Form state
   const [name, setName] = useState('')
@@ -240,9 +246,16 @@ function EditProfileContent() {
 
         if (!result.success || !result.data) {
           Logger.error('profile', 'EditProfile: Profile load error', { error: result.error })
+          setLoadFailed(true)
+          showToast('Couldn’t load your profile.', 'error', {
+            haptic: 'error',
+            action: { label: 'Try again', onPress: () => { setLoading(true); setLoadAttempt((n) => n + 1) } },
+          })
+          return
         }
+        setLoadFailed(false)
 
-        const profileData = result.data || {}
+        const profileData = result.data
         const p = profileData.profile || {}
 
         // Combine with auth user data
@@ -337,7 +350,11 @@ function EditProfileContent() {
 
       } catch (error) {
         Logger.error('profile', 'EditProfile: Load profile error', { error })
-        showToast("Couldn’t load your profile. Try again.", 'error')
+        setLoadFailed(true)
+        showToast('Couldn’t load your profile.', 'error', {
+          haptic: 'error',
+          action: { label: 'Try again', onPress: () => { setLoading(true); setLoadAttempt((n) => n + 1) } },
+        })
       } finally {
         setLoading(false)
       }
@@ -346,7 +363,7 @@ function EditProfileContent() {
     if (authUser) {
       loadProfile()
     }
-  }, [authUser, showToast, loadWorkFields])
+  }, [authUser, showToast, loadWorkFields, loadAttempt])
 
   /** A new field clears what they do within the old one, silently: the server prunes the same way, so a stale chip never saves. */
   const changeWorkField = (slug: string | null) => {
@@ -360,7 +377,7 @@ function EditProfileContent() {
   const overCapped = Object.keys(overCap).length > 0
 
   const handleSave = async () => {
-    if (!authUser || overCapped) return
+    if (!authUser || overCapped || loadFailed) return
 
     const trimmedName = name.trim()
     const errors = profileFormErrors({ name, age, storedAge: profile?.age ?? null })
@@ -494,7 +511,7 @@ function EditProfileContent() {
           title="Edit profile"
           state={bar.state}
           onBack={() => router.back()}
-          save={{ onPress: handleSave, saving, disabled: saving || offline || overCapped }}
+          save={{ onPress: handleSave, saving, disabled: saving || offline || overCapped || loadFailed }}
           testID="edit-profile-top"
         />
 
