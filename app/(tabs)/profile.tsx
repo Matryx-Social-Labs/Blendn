@@ -84,6 +84,8 @@ interface UserProfileViewModel {
   stats?: {
     eventsAttended: number
     eventsFavorited: number
+    /** SV-7: the Saved list's own count (upcoming, not deleted); absent from an older server, which only sends the lifetime `eventsFavorited`. */
+    savedCount?: number
     eventsOrganized: number
   }
   memberSince?: string
@@ -117,6 +119,8 @@ function ProfileInner() {
   const [pulled, setPulled] = useState<PulledPhoto[]>([])
   // The "Shows up" opt-in on the badges card; null until the profile says (then the card draws no switch).
   const [showsUp, setShowsUp] = useState<boolean | null>(null)
+  // "Show my badges": null until the profile says (then the card draws no master switch).
+  const [showBadges, setShowBadges] = useState<boolean | null>(null)
   const lastBackgroundRefreshRef = React.useRef(0)
   // Tapping Me while already on it goes back to the top (the bar emits `tabPress`).
   const scrollRef = React.useRef<Animated.ScrollView>(null)
@@ -277,7 +281,10 @@ function ProfileInner() {
     try {
       const result = await apiClient.getProfile(user.id)
       const own = result.success ? result.data?.profile : undefined
-      setBadges(parseBadges(own?.badges))
+      // `badges` is absent when they are off; SV-8's `earned_badges` is what you hold either way, so Me keeps the card and its switch.
+      const ownRecord = own as Record<string, unknown> | undefined
+      setBadges(parseBadges(own?.badges) ?? parseBadges(ownRecord?.earned_badges))
+      setShowBadges(typeof ownRecord?.show_badges === 'boolean' ? ownRecord.show_badges : null)
       // Only a server that sends the field has the switch to show: an older one sends none, and the row is not drawn.
       const sent = (own as Record<string, unknown> | undefined)?.shows_up_badge
       setShowsUp(typeof sent === 'boolean' ? aboutYouFrom(own as Record<string, unknown>).showsUpBadge : null)
@@ -286,6 +293,19 @@ function ProfileInner() {
       Logger.debug('profile', 'Failed to load badges and photo states', { error })
     }
   }, [user])
+
+  /** The "Show my badges" switch on the badges card: written at once; true when the server kept it. A turn-on reads the shown badges again. */
+  const saveShowBadges = useCallback(
+    async (next: boolean) => {
+      if (!user) return false
+      const result = await apiClient.updateProfile(user.id, { show_badges: next })
+      if (!result.success) return false
+      setShowBadges(next)
+      queryCache.invalidate(`profile_${user.id}`)
+      return true
+    },
+    [user]
+  )
 
   /** The "Shows up" switch on the badges card: written at once; true when the server kept it. */
   const saveShowsUp = useCallback(
@@ -486,7 +506,7 @@ function ProfileInner() {
           <FadeInUp {...next()}>
             <StatsCard
               attended={nightCounts.total ?? stats.eventsAttended}
-              saved={stats.eventsFavorited}
+              saved={stats.savedCount ?? stats.eventsFavorited}
               friends={friendsCount}
               hosted={stats.eventsOrganized}
               onGoing={openGoing}
@@ -518,7 +538,7 @@ function ProfileInner() {
 
         {badges !== null ? (
           <FadeInUp {...next()}>
-            <MeBadges badges={badges} showsUp={showsUp === null ? undefined : { value: showsUp, onChange: saveShowsUp }} />
+            <MeBadges badges={badges} showBadges={showBadges === null ? undefined : { value: showBadges, onChange: saveShowBadges }} showsUp={showsUp === null ? undefined : { value: showsUp, onChange: saveShowsUp }} />
           </FadeInUp>
         ) : null}
 

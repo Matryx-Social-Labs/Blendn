@@ -94,6 +94,21 @@ it('draws the frame: name, circles, requests, crews with its count and dot, stat
   expect(screen.queryByLabelText(/Hosted/)).toBeNull()
 })
 
+it('SAVED is the Saved list: the server savedCount (upcoming, not deleted), not the lifetime favourites', async () => {
+  api.getPublicProfile.mockResolvedValue({ ...PROFILE, data: { ...PROFILE.data, stats: { eventsAttended: 14, eventsFavorited: 6, savedCount: 2, eventsOrganized: 0 } } } as never)
+  api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
+  await render(<Profile />)
+  expect(await screen.findByLabelText('2 Saved')).toBeTruthy()
+  expect(screen.queryByLabelText('6 Saved')).toBeNull()
+})
+
+it('SAVED falls back to eventsFavorited from a server that sends no savedCount', async () => {
+  api.getPublicProfile.mockResolvedValue(PROFILE as never)
+  api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
+  await render(<Profile />)
+  expect(await screen.findByLabelText('6 Saved')).toBeTruthy()
+})
+
 it('says the first night is not written yet when there is none, never an empty grid', async () => {
   api.getPublicProfile.mockResolvedValue(PROFILE as never)
   api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
@@ -266,6 +281,45 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     await mount({ success: true, data: { profile: { badges: [] } } })
     expect(await screen.findByText(/Badges come from your check-ins/)).toBeTruthy()
     expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+  })
+
+  describe('Show my badges off (SV-8 earned_badges): the card stays, says earned and shown to nobody, and carries the switch', () => {
+    const off = { show_badges: false, earned_badges: badges }
+
+    it('draws the earned badges and says they are shown to nobody', async () => {
+      await mount({ success: true, data: { profile: off } })
+      expect(await screen.findByTestId('me-badges')).toBeTruthy()
+      expect(screen.getByLabelText('Badge: Shows up')).toBeTruthy()
+      expect(screen.getByText('Earned, shown to nobody')).toBeTruthy()
+      expect(screen.queryByTestId('me-shows-up')).toBeNull()
+    })
+
+    it('the switch turns them back on from Me: PUT show_badges, and the line goes back to the meaning', async () => {
+      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: true })
+      await mount({ success: true, data: { profile: off } })
+      await fireEvent.press(await screen.findByTestId('me-show-badges'))
+      await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('me', { show_badges: true }))
+      expect(await screen.findByText('From your check-ins. They can’t be bought, and they come and go on their own.')).toBeTruthy()
+    })
+
+    it('a refused write puts the switch back', async () => {
+      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: false, error: 'no' })
+      await mount({ success: true, data: { profile: off } })
+      await fireEvent.press(await screen.findByTestId('me-show-badges'))
+      expect(await screen.findByText('Couldn’t save that. Try again.')).toBeTruthy()
+      expect(screen.getByText('Earned, shown to nobody')).toBeTruthy()
+    })
+
+    it('nothing earned and badges off still draws the card, so the way back exists', async () => {
+      await mount({ success: true, data: { profile: { show_badges: false, earned_badges: [] } } })
+      expect(await screen.findByTestId('me-show-badges')).toBeTruthy()
+    })
+
+    it('with badges on, the switch is there too and says what it does', async () => {
+      await mount({ success: true, data: { profile: { badges, show_badges: true, earned_badges: badges } } })
+      expect(await screen.findByTestId('me-show-badges')).toBeTruthy()
+      expect(screen.getByText('Never shown in rooms under 8')).toBeTruthy()
+    })
   })
 
   it('draws no Badges card when the server sent none (badges off, or an older server)', async () => {

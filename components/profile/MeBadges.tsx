@@ -28,15 +28,19 @@ export function BadgeRow({ badges, onPress, testID }: { badges: readonly Badge[]
  */
 export function MeBadges({
   badges,
+  showBadges,
   showsUp,
 }: {
   badges: readonly Badge[] | null
+  /** "Show my badges" (14.5 #04/#05): the master switch, kept on Me so turning badges off is never a dead end. Omitted from a server that sends no `show_badges`. */
+  showBadges?: { value: boolean; onChange: (next: boolean) => Promise<boolean> }
   /** The "Shows up" opt-in on the card (14.5): its value and the write; `onChange` says whether the server kept it. Omitted: the row is not drawn. */
   showsUp?: { value: boolean; onChange: (next: boolean) => Promise<boolean> }
 }) {
   const bold = useBoldText()
   const [meaning, setMeaning] = useState<string | null>(null)
   if (badges === null) return null
+  const hidden = showBadges?.value === false
   return (
     <ProfileSection title="Badges" testID="me-badges">
       <View style={styles.card}>
@@ -52,7 +56,7 @@ export function MeBadges({
               }}
             />
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.muted]}>
-              {meaning ?? 'From your check-ins. They can’t be bought, and they come and go on their own.'}
+              {hidden ? SHOWN_TO_NOBODY : (meaning ?? 'From your check-ins. They can’t be bought, and they come and go on their own.')}
             </Text>
           </>
         ) : (
@@ -61,7 +65,25 @@ export function MeBadges({
             Nothing to unlock.
           </Text>
         )}
-        {showsUp ? <ShowsUpRow value={showsUp.value} onChange={showsUp.onChange} /> : null}
+        {showBadges || (showsUp && !hidden) ? (
+          <View style={styles.rule}>
+            {showBadges ? (
+              <SwitchRow
+                testID="me-show-badges"
+                icon="badge-check"
+                title={SHOW_BADGES_TITLE}
+                hintOn={SHOW_BADGES_ON}
+                hintOff={SHOW_BADGES_OFF}
+                value={showBadges.value}
+                onChange={showBadges.onChange}
+              />
+            ) : null}
+            {/* With every badge hidden the "Shows up" opt-in has nothing to opt into. */}
+            {showsUp && !hidden ? (
+              <SwitchRow testID="me-shows-up" icon="calendar-check" title={SHOWS_UP_TITLE} hintOn={SHOWS_UP_ON} hintOff={SHOWS_UP_OFF} value={showsUp.value} onChange={showsUp.onChange} />
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </ProfileSection>
   )
@@ -71,12 +93,32 @@ const SHOWS_UP_ON = 'When 80%+ of your RSVPs turn into nights, 3 or more'
 const SHOWS_UP_OFF = 'Off · earned, not shown'
 
 export const SHOWS_UP_TITLE = 'Show badge: Shows up'
+const SHOW_BADGES_TITLE = 'Show my badges'
+const SHOW_BADGES_ON = 'Never shown in rooms under 8'
+const SHOW_BADGES_OFF = 'Off · hidden on every card'
+const SHOWN_TO_NOBODY = 'Earned, shown to nobody'
 
 /**
- * Show "Shows up" (Flow 14 · 14.5 #01 to #03): the one opt-in on the card, a switch under a hairline. It changes at once and
- * is written at once; a write the server refuses puts it back and says so under the row (`error`, which plays `H.error`).
+ * A switch on the card (Flow 14 · 14.5 #01 to #05), under a hairline: "Show my badges" and "Show “Shows up”". It changes at once
+ * and is written at once; a write the server refuses puts it back and says so under the row (`error`, which plays `H.error`).
  */
-function ShowsUpRow({ value, onChange }: { value: boolean; onChange: (next: boolean) => Promise<boolean> }) {
+function SwitchRow({
+  testID,
+  icon,
+  title,
+  hintOn,
+  hintOff,
+  value,
+  onChange,
+}: {
+  testID: string
+  icon: 'badge-check' | 'calendar-check'
+  title: string
+  hintOn: string
+  hintOff: string
+  value: boolean
+  onChange: (next: boolean) => Promise<boolean>
+}) {
   const [on, setOn] = useState(value)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -99,20 +141,18 @@ function ShowsUpRow({ value, onChange }: { value: boolean; onChange: (next: bool
     }
   }
   return (
-    <View style={styles.rule}>
-      <SettingsRow
-        testID="me-shows-up"
-        icon="calendar-check"
-        // D-L31: what the switch shows, said plainly; "Show “Shows up”" read as a stutter.
-        title={SHOWS_UP_TITLE}
-        hint={failed ? 'Couldn’t save that. Try again.' : on ? SHOWS_UP_ON : SHOWS_UP_OFF}
-        trail="switch"
-        value={on}
-        busy={busy}
-        error={failed}
-        onValueChange={(next) => void change(next)}
-      />
-    </View>
+    <SettingsRow
+      testID={testID}
+      icon={icon}
+      // D-L31: what the switch shows, said plainly; "Show “Shows up”" read as a stutter.
+      title={title}
+      hint={failed ? 'Couldn’t save that. Try again.' : on ? hintOn : hintOff}
+      trail="switch"
+      value={on}
+      busy={busy}
+      error={failed}
+      onValueChange={(next) => void change(next)}
+    />
   )
 }
 
