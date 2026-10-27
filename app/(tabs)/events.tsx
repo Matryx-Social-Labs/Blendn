@@ -82,6 +82,7 @@ import {
   pulseSections,
   seedDateOf,
   weekendWindow,
+  resultsCount,
   type PulseSectionKey,
 } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
@@ -829,6 +830,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * (`pageHasMore`), so the end of a twelve-event city stops asking.
    */
   const [hasMore, setHasMore] = useState(true)
+  /** The server's count for the current query (page one's `pagination.totalCount`): what the results overline prints. */
+  const [totalCount, setTotalCount] = useState<number | null>(null)
   const fetchMoreInFlightRef = useRef(false)
   /*
    * Bumped by every page-one load. A page two that was in flight when the
@@ -859,7 +862,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       // Rounded, so the last-known fix and the live one are one cache key (and one request).
       const lat = roundCoord(userLocation?.latitude)
       const lon = roundCoord(userLocation?.longitude)
-      const { data: eventsData, error } = await fetchEventsApi({
+      const { data: eventsData, meta: eventsMeta, error } = await fetchEventsApi({
         page: 0,
         limit: PAGE_SIZE,
         city: selectedCity ?? undefined,
@@ -887,6 +890,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
       const normalized = (eventsData || []).map(normalizeEvent)
       setEvents(normalized)
+      setTotalCount(eventsMeta?.totalCount ?? null)
       setPage(0)
       setHasMore(pageHasMore(normalized.length, PAGE_SIZE))
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
@@ -1698,8 +1702,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       {isNarrowed && events.length > 0 ? (
         <View style={styles.resultsLabel}>
           <Text style={styles.resultsLabelText} accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-            <Text style={styles.resultsCount}>{events.length}</Text>
-            {` ${events.length === 1 ? 'event' : 'events'}${selectedCity ? ` · ${selectedCity}` : ''}`}
+            <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).count}</Text>
+            {` ${resultsCount(events.length, totalCount).noun}${selectedCity ? ` · ${selectedCity}` : ''}`}
           </Text>
         </View>
       ) : null}

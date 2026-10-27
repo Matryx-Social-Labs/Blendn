@@ -299,3 +299,12 @@ export function pulsePeekLine(sections: readonly PulseSection[]): string | null 
   const parts = [live > 0 ? `${live} live now` : null, tonight > 0 ? `${tonight} on tonight` : null].filter(Boolean)
   return parts.length ? parts.join(' · ') : null
 }
+
+/**
+ * The search results overline's count and noun: the server's total for the query, not the rows loaded so far (a page is 50 and
+ * grows as you scroll). Never fewer than what is on screen, and the loaded count while the total is not known (BAR-07).
+ */
+export function resultsCount(loaded: number, totalCount: number | null | undefined): { count: number; noun: string } {
+  const count = typeof totalCount === 'number' && Number.isFinite(totalCount) ? Math.max(totalCount, loaded) : loaded
+  return { count, noun: count === 1 ? 'event' : 'events' }
+}
