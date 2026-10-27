@@ -84,6 +84,8 @@ export type PulseSection<E extends SectionEvent = SectionEvent> = {
   events: E[]
   /** Every event the section claims, for its header; `events` is the capped list. */
   count: number
+  /** The count is a floor, not a total: the page it was counted from was full, so there may be more (BAR-10). */
+  more?: boolean
   /** The interest "Because you like …" is about. */
   interest?: { name: string; slug: string }
 }
@@ -95,6 +97,10 @@ export type PulseSectionsInput<E extends SectionEvent> = {
   weekend: readonly E[] | null
   /** Request D: `featured=true&limit=5`, so a featured event outside the first page still shows; or null (not loaded, failed). */
   featured?: readonly E[] | null
+  /** The page came back full (`hasMore`): "Happening now" and "Tonight" counts are then "N+", never an exact-looking number (BAR-10). */
+  pageFull?: boolean
+  /** Request E: the nearest events in the next 7 days (`sortBy=distance`), so a closer event on page 2 still ranks; or null (not loaded). */
+  nearby?: readonly E[] | null
   /** Request C: the first interest's events, or null. */
   forYou: { interest: { name: string; slug: string }; events: readonly E[] } | null
   now: number
@@ -217,7 +223,8 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
   const claimed = new Set<string>()
   const built: Partial<Record<PulseSectionKey, PulseSection<E>>> = {}
   const take = (key: PulseSectionKey, all: E[], limit: number, interest?: PulseSection['interest']) => {
-    built[key] = { key, events: all.slice(0, limit), count: all.length, ...(interest ? { interest } : {}) }
+    const floor = input.pageFull === true && (key === 'now' || key === 'tonight')
+    built[key] = { key, events: all.slice(0, limit), count: all.length, ...(floor ? { more: true } : {}), ...(interest ? { interest } : {}) }
     // Only the drawn ones are claimed: an event past a section's cap is still an event nobody has shown.
     for (const e of built[key]!.events) claimed.add(e.id)
   }
@@ -245,7 +252,7 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
       // Not deduped, not claimed: a place near you is a different question from what is on.
       if (!hasFix) continue
       const horizon = now + NEARBY_DAYS * DAY
-      const near = page
+      const near = unique(input.nearby ?? page)
         .filter((e) => e.distance != null && Number.isFinite(e.distance) && endOf(e) > now && startOf(e) < horizon)
         .sort((a, b) => (a.distance as number) - (b.distance as number))
       if (near.length) built.nearby = { key: 'nearby', events: near.slice(0, NEARBY_LIMIT), count: near.length }
@@ -308,3 +315,6 @@ export function resultsCount(loaded: number, totalCount: number | null | undefin
   const count = typeof totalCount === 'number' && Number.isFinite(totalCount) ? Math.max(totalCount, loaded) : loaded
   return { count, noun: count === 1 ? 'event' : 'events' }
 }
+
+/** A section header's count as words: "50+" when the count is a floor (BAR-10), else the number. */
+export const sectionCountLabel = (s: Pick<PulseSection, 'count' | 'more'>): string => `${s.count}${s.more ? '+' : ''}`

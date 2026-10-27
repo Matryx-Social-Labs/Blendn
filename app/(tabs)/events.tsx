@@ -78,6 +78,7 @@ import { liveWindow, sessionOver } from '../../lib/eventSession'
 import {
   categoryChips,
   everythingElse,
+  NEARBY_DAYS,
   pulsePeekLine,
   pulseSections,
   seedDateOf,
@@ -1355,6 +1356,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
+  const [nearbyState, setNearbyState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const sectionRequestsOn = !!user && !authLoading && feedCityReady && !isNarrowed
   useEffect(() => {
     if (!sectionRequestsOn) return
@@ -1369,6 +1371,16 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           setWeekendState({ key: sectionsKey, events: error || !data ? null : data.map(normalizeEvent) })
         })
         .catch((error) => Logger.warn('events', 'This weekend threw', { error: String(error) }))
+    }
+    // Request E: the nearest in the next week, by distance (a closer event past the first page of 50 still ranks).
+    if (userLocation) {
+      fetchEventsApi({ page: 0, limit: 12, ...where, include: 'checkins', sortBy: 'distance', sortOrder: 'asc', endDate: new Date(Date.now() + NEARBY_DAYS * 86_400_000).toISOString() })
+        .then(({ data, error }) => {
+          if (cancelled) return
+          if (error || !data) Logger.warn('events', 'Nearby did not load', { error: error?.message })
+          setNearbyState({ key: sectionsKey, events: error || !data ? null : data.map(normalizeEvent) })
+        })
+        .catch((error) => Logger.warn('events', 'Nearby threw', { error: String(error) }))
     }
     // Request D: the city's featured events, in the server's rank order, whatever page they would be on.
     fetchEventsApi({ page: 0, limit: 5, ...where, include: 'checkins', featured: true })
@@ -1399,13 +1411,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sectionRequestsOn, sectionsKey, user?.id])
   const weekend = weekendState?.key === sectionsKey ? weekendState.events : null
+  const nearby = nearbyState?.key === sectionsKey ? nearbyState.events : null
   const featuredRequested = featuredState?.key === sectionsKey ? featuredState.events : null
   const forYou = forYouState?.key === sectionsKey ? forYouState.value : null
 
   /** The sections, in order, each claiming its events once (`lib/pulseSections.ts`). Search and filters make the pane a flat list. */
   const sections = useMemo(
-    () => (isNarrowed ? [] : pulseSections<Event>({ page: events, weekend, featured: featuredRequested, forYou, now, hasFix, seedDate })),
-    [isNarrowed, events, weekend, featuredRequested, forYou, now, hasFix, seedDate]
+    () => (isNarrowed ? [] : pulseSections<Event>({ page: events, pageFull: hasMore, nearby, weekend, featured: featuredRequested, forYou, now, hasFix, seedDate })),
+    [isNarrowed, events, hasMore, nearby, weekend, featuredRequested, forYou, now, hasFix, seedDate]
   )
   const sectionOf = (key: PulseSectionKey) => sections.find((x) => x.key === key)
 

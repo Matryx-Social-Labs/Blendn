@@ -14,6 +14,7 @@ import {
   nextDayReset,
   printable,
   pulseSections,
+  sectionCountLabel,
   seedDateOf,
   WEEKEND_MIN,
   weekendLabel,
@@ -178,6 +179,37 @@ describe('Tonight', () => {
       const page = [{ ...istEvent('no-zone', '2026-10-24T13:00:00.000Z'), timezone: null }]
       expect(run(page)).toBeUndefined()
     })
+  })
+})
+
+describe('counts are floors when the page is full (BAR-10)', () => {
+  const page = Array.from({ length: 50 }, (_, i) => ev(`t${i}`, 20))
+
+  it('a full page says Tonight · 50+', () => {
+    const tonight = pulseSections<E>({ page, pageFull: true, ...empty }).find((s) => s.key === 'tonight')!
+    expect(tonight.count).toBe(50)
+    expect(sectionCountLabel(tonight)).toBe('50+')
+  })
+
+  it('a last page says the exact number', () => {
+    const tonight = pulseSections<E>({ page, pageFull: false, ...empty }).find((s) => s.key === 'tonight')!
+    expect(sectionCountLabel(tonight)).toBe('50')
+  })
+})
+
+describe('Nearby, from the distance query (BAR-11)', () => {
+  const near = (id: string, km: number) => ev(id, 21, { distance: km })
+
+  it('ranks the distance query’s rows, not the first page by start time', () => {
+    const page = [near('page1', 5)]
+    const nearby = [near('closer', 0.2), near('page1', 5)]
+    const s = pulseSections<E>({ page, nearby, ...empty }).find((x) => x.key === 'nearby')!
+    expect(s.events.map((e) => e.id)).toEqual(['closer', 'page1'])
+  })
+
+  it('falls back to the page while the query has not answered', () => {
+    const s = pulseSections<E>({ page: [near('a', 1)], nearby: null, ...empty }).find((x) => x.key === 'nearby')!
+    expect(s.events.map((e) => e.id)).toEqual(['a'])
   })
 })
 
