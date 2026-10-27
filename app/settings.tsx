@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Banner } from '../components/ds/Banner'
@@ -24,6 +24,7 @@ import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
 import { passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { useLatest } from '../lib/useLatest'
+import { usePullToRefresh } from '../lib/usePullToRefresh'
 import { usePushPreference } from '../lib/usePushPreference'
 import { Logger } from '../lib/logger'
 import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
@@ -212,6 +213,8 @@ function SettingsScreenContent() {
     await loadPreferences()
     setRefreshing(false)
   }, [loadPreferences])
+  // The app's one pull to refresh, with its haptic when it arms (SYS-12).
+  const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), onScroll: bar.scrollProps.onScroll, indicatorTop: bar.indicatorTop })
 
   const persistPreference = useCallback(async (next: PreferencesState, previous: PreferencesState, key: PreferenceKey) => {
     if (!user) return
@@ -456,10 +459,7 @@ function SettingsScreenContent() {
         contentContainerStyle={[styles.content, { paddingTop: bar.contentTop, paddingBottom: insets.bottom + DS_SPACE.xl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />
-        }
-        {...bar.scrollProps}
+        {...pull.listProps}
       >
         {/*
           There was a profile card here, and it was the third door to editing.
@@ -517,7 +517,7 @@ function SettingsScreenContent() {
             onPress={() => router.push('/notification-settings')}
             testID="settings-notifications"
           />
-          <SettingsRow icon="sparkles" title="How you match" hint="What matching reads" trail="chevron" onPress={() => router.push({ pathname: '/edit-about-you', params: { from: 'settings' } })} testID="settings-how-you-match" />
+          <SettingsRow icon="sparkles" title="About you" hint="What matching reads" trail="chevron" onPress={() => router.push({ pathname: '/edit-about-you', params: { from: 'settings' } })} testID="settings-how-you-match" />
         </SettingsGroup>
 
         {/* Blocked users leads Safety: blocking is the most consequential safety action in the product. */}
@@ -577,6 +577,7 @@ function SettingsScreenContent() {
           />
         </SettingsGroup>
       </ScrollView>
+      {pull.indicator}
       <View style={bar.barPin} pointerEvents="box-none">
         <TopBar title="Settings" state={bar.state} onBack={() => router.back()} testID="settings-top" />
       </View>

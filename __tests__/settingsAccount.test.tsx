@@ -188,10 +188,10 @@ describe('the muted count is the truth, or says it is not all of it', () => {
   })
 })
 
-describe('How you match row (Flow 14 · 14.4)', () => {
+describe('About you row (E7: titled for the screen it opens until 14.4 "How you match" is built)', () => {
   it('sits beside Notifications and opens the about-you fields', async () => {
     await render(<Screen />)
-    fireEvent.press(await screen.findByRole('button', { name: 'How you match, What matching reads' }))
+    fireEvent.press(await screen.findByRole('button', { name: 'About you, What matching reads' }))
     expect(router.push).toHaveBeenCalledWith({ pathname: '/edit-about-you', params: { from: 'settings' } })
     expect(screen.getByText('Notifications & matching')).toBeTruthy()
   })
