@@ -15,7 +15,7 @@ jest.mock('../lib/purchases', () => ({ syncPurchasesUser: jest.fn(async () => {}
 
 /* eslint-disable import/first */
 import { apiClient, TokenStorage } from '../lib/apiClient'
-import { refreshAuthUser, sameUser, signInWithEmail } from '../lib/useAuth'
+import { FOREGROUND_REFRESH_MS, refreshAuthUser, refreshAuthUserOnForeground, sameUser, signInWithEmail } from '../lib/useAuth'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -49,4 +49,16 @@ it('a changed signInMethod counts as a change', async () => {
 it('sameUser needs a user to compare with', () => {
   expect(sameUser(null, user as never)).toBe(false)
   expect(sameUser(user as never, { ...user } as never)).toBe(true)
+})
+
+describe('refreshAuthUserOnForeground', () => {
+  it('re-reads the session when the app comes back, at most once a minute', async () => {
+    api.getSession.mockResolvedValue({ success: true, data: { ...user } } as never)
+    const t0 = 10_000_000
+    await refreshAuthUserOnForeground(t0)
+    await refreshAuthUserOnForeground(t0 + FOREGROUND_REFRESH_MS - 1)
+    expect(api.getSession).toHaveBeenCalledTimes(1)
+    await refreshAuthUserOnForeground(t0 + FOREGROUND_REFRESH_MS)
+    expect(api.getSession).toHaveBeenCalledTimes(2)
+  })
 })

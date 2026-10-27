@@ -14,8 +14,10 @@ import { apiClient } from '../../lib/apiClient'
 import { blendnClosed, openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
 import { onClosingForLink } from '../../lib/linkClosers'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
+import { refreshAuthUserOnForeground, useAuth } from '../../lib/useAuth'
 import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
+import { myMainPhoto } from '../../lib/myPhoto'
 import { roomButtonTarget, type RoomButtonTarget } from '../../lib/roomButton'
 import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
 import { watchRoomUnread } from '../../lib/roomUnread'
@@ -58,7 +60,8 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     badge: 0,
   })
   const [venue, setVenue] = useState<string | null>(null)
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  // Your face on Me: the session's `profile.photos`, re-read after every photo save and on foreground (`refreshAuthUser`).
+  const mePhoto = myMainPhoto(useAuth().user)
 
   /*
    * The centre button's coach mark (round4/r4.js): the first time it says you
@@ -99,41 +102,6 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     onLost: centreCoach.lose,
     testID: 'centre-coach-mark',
   })
-
-  /*
-   * Your photo for the Me tab.
-   *
-   * Read once through `getProfile`, which is cache-first — every screen that
-   * shows your profile has already warmed it, so on the common path this costs
-   * nothing and the bar draws with a face on first paint.
-   *
-   * `photos[0]`, not `user.image`: the OAuth avatar is deliberately not used
-   * anywhere in this app because it often 404s.
-   */
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        const me = await apiClient.getCurrentUser()
-        if (cancelled || !me?.id) return
-        const r = await apiClient.getProfile(me.id)
-        if (cancelled || !r.success) return
-        const data = r.data as { profile_photos?: string[]; photos?: string[] } | undefined
-        // Same precedence the rest of the app uses.
-        const primary =
-          (Array.isArray(data?.profile_photos) && data.profile_photos[0]) ||
-          (Array.isArray(data?.photos) && data.photos[0]) ||
-          null
-        if (primary) setAvatarUrl(primary)
-      } catch (e) {
-        Logger.debug('navigation', 'avatar lookup failed', { error: e })
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   /*
    * Two sources, combined here.
@@ -216,6 +184,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     const unsubscribeCheckIn = subscribeCheckInChanged(() => void read())
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
+        void refreshAuthUserOnForeground()
         void read()
         rereadUnread.current(true)
       }
@@ -253,7 +222,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         selected={TAB_OF[state.routes[state.index]?.name] ?? 'pulse'}
         onSelect={select}
         disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined }}
-        mePhoto={avatarUrl ?? undefined}
+        mePhoto={mePhoto ?? undefined}
         discRef={discRef}
       />
   )

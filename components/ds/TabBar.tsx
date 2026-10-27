@@ -1,4 +1,4 @@
-import { useEffect, type Ref } from 'react'
+import { useEffect, useState, type Ref } from 'react'
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -95,6 +95,8 @@ export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 't
   const contrast = useIncreaseContrast()
   const { cell } = tabBarGeometry(useWindowDimensions().width)
   const reduceMotion = useReducedMotion()
+  // A photo URL that failed to load: Me shows the glyph for that URL (E1), and a new URL gets its try.
+  const [deadPhoto, setDeadPhoto] = useState<string | null>(null)
 
   /*
    * One pill, not one per tab (DS #2): it slides to the new tab on M.snap, and a second tap mid-flight retargets it from
@@ -131,8 +133,15 @@ export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 't
           accessibilityLargeContentTitle={label}
           style={styles.tab}
         >
-          {key === 'me' && mePhoto ? (
-            <Avatar kind="photo" uri={mePhoto} size={ICON.nav} ring={on ? COLOR.textPrimary : undefined} testID={`${testID}-me-avatar`} />
+          {key === 'me' && mePhoto && mePhoto !== deadPhoto ? (
+            <Avatar
+              kind="photo"
+              uri={mePhoto}
+              size={ICON.nav}
+              ring={on ? COLOR.textPrimary : undefined}
+              onError={() => setDeadPhoto(mePhoto)}
+              testID={`${testID}-me-avatar`}
+            />
           ) : (
             <Icon name={icon} size={ICON.nav} color={ink} active={on} />
           )}

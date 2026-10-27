@@ -647,6 +647,17 @@ export const refreshAuthUser = async (): Promise<void> => {
   }
 }
 
+/** How often coming back to the app may re-read the session (moderation pulls and other devices change `profile.photos`). */
+export const FOREGROUND_REFRESH_MS = 60_000
+let lastForegroundRefresh = 0
+
+/** `refreshAuthUser()` when the app comes to the foreground, at most once a minute, and only while signed in. */
+export const refreshAuthUserOnForeground = async (now: number = Date.now()): Promise<void> => {
+  if (!globalAuthState.user || now - lastForegroundRefresh < FOREGROUND_REFRESH_MS) return
+  lastForegroundRefresh = now
+  await refreshAuthUser()
+}
+
 export const deleteAccount = async (appleAuthorizationCode?: string): Promise<{ success: boolean; error?: string }> => {
   try {
     Logger.info('auth', 'Deleting account...')
