@@ -14,7 +14,7 @@ Design tokens are in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md).
 | 1 | `/onboarding/basics` | `1141:3928` | first name, gender, **date of birth** | **no** |
 | 2 | `/onboarding/notifications` | `1141:4064` | push permission → `push_enabled` | yes |
 | 3 | `/onboarding/location` | `1141:4119` | location permission → `share_location` | yes |
-| 4 | `/onboarding/preferences` | `1141:4192` | orientations (up to 3), looking-for | yes |
+| 4 | `/onboarding/preferences` | `1141:4192` | orientations (up to 3), intent (why you go out) | yes |
 | 5 | `/onboarding/journey` | `1141:4290` | city, occupation, field of work, education | yes |
 | 6 | `/onboarding/details` | `1141:4408` | interests, bio | yes |
 | 7 | `/onboarding/media` | `1141:4502` | up to six photos | yes |
@@ -186,18 +186,18 @@ any.
 **"Demisexual" is still not offered.** It is in the frame and not in the
 server's list, and a chip that 400s on save is worse than an absent one.
 
-### 3. "Looking for" does not reach matching
+### 3. "Looking for" is the intent (fix round 2026-10-27, OUT-01)
 
-The frame offers **Dating, Friendship, Networking, Travel, Open**. The intent
-enum the matcher reads is `dating | networking | friendship | just_here` —
-Travel and Open are not in it and would be rejected by the API.
+The step is now "Why you go out": four single-choice tiles, **Dating, Friendship,
+Networking, Just here for the event**, written as `intent_default: [choice]`
+(`dating | friendship | networking | just_here`, the enum matching reads). It no
+longer writes `looking_for`; older profiles keep what they hold and it is
+read-only. A minor is not offered Dating.
 
-These are stored in `looking_for`, which is free text and accepts all five, so
-nothing is lost from the profile. What is lost is that these answers do not
-influence who anyone is matched with.
-
-**Decision needed:** either add Travel and Open to `connection_intent`, or
-accept that this screen is profile decoration and collect intent elsewhere.
+Before this, onboarding wrote only `looking_for`, so a new account had an empty
+`intent_default`: matching could not use the answer, `profileIsComplete` refused
+its first Board post, and the first check-in asked again. No backfill: the
+first-door ask covers older accounts.
 
 ### 3. The fourth gender chip says what it stores
 

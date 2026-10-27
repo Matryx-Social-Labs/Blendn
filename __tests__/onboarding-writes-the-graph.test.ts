@@ -22,6 +22,7 @@ jest.mock('../lib/onboardingStorage', () => ({}))
 // The photos step's blur (SCRUM-478) is photoUtils' concern; it pulls native modules this suite has none of.
 jest.mock('../lib/photoUtils', () => ({ withBlurForPrimary: jest.fn(async (body: unknown) => body) }))
 
+import { stepPayload } from '../lib/onboarding'
 import { syncInterests } from '../lib/useOnboarding'
 
 const mockApi = jest.requireMock('../lib/apiClient').apiClient as Record<
@@ -240,5 +241,21 @@ describe('the first screen does not ask again for something already given', () =
     expect(read('app/onboarding/basics.tsx')).toMatch(
       /setName\(draft\.name \?\? user\?\.name \?\? ''\)/
     )
+  })
+})
+
+describe('the preferences step writes the intent, not free text (OUT-01)', () => {
+  /*
+   * `lib/board.ts` `profileIsComplete` needs `intent_default.length >= 1` and matching reads it. The step used to send
+   * `looking_for`, so a new account was refused its first Board post and asked "Why do you go out?" again at check-in.
+   */
+  it('sends intent_default: [choice] and no looking_for', () => {
+    const body = stepPayload('preferences', { intent_default: ['friendship'], looking_for: ['Friendship'] })
+    expect(body).toEqual({ intent_default: ['friendship'] })
+    expect('looking_for' in body).toBe(false)
+  })
+
+  it('sends nothing for the intent when none was chosen', () => {
+    expect('intent_default' in stepPayload('preferences', { reveal_by_default: false })).toBe(false)
   })
 })

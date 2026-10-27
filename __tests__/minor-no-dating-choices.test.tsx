@@ -47,14 +47,14 @@ describe('mayDate: the client twin of the server rule', () => {
 
 describe('Looking for', () => {
   it('offers Dating to an adult', async () => {
-    await render(<LookingForCards selected={[]} onToggle={noop} />)
+    await render(<LookingForCards selected={null} onSelect={noop} />)
     expect(screen.getByLabelText('Dating')).toBeTruthy()
   })
 
   it('does not offer Dating to a minor, and keeps the other four', async () => {
-    await render(<LookingForCards selected={[]} onToggle={noop} withoutDating />)
+    await render(<LookingForCards selected={null} onSelect={noop} withoutDating />)
     expect(screen.queryByLabelText('Dating')).toBeNull()
-    for (const option of ['Friendship', 'Networking', 'Travel', 'Open']) {
+    for (const option of ['Friendship', 'Networking', 'Just here for the event']) {
       expect(screen.getByLabelText(option)).toBeTruthy()
     }
   })
@@ -91,6 +91,7 @@ describe('every screen asks', () => {
   it('onboarding hides the card and does not send a stale "Dating" for a minor', () => {
     const src = read('app/onboarding/preferences.tsx')
     expect(src).toMatch(/<LookingForCards[^>]*withoutDating=\{under18\}/)
-    expect(src).toMatch(/looking_for: under18 \? withoutDatingChoice\(lookingFor\) : lookingFor/)
+    expect(src).toMatch(/under18 && intent === 'dating' \? null : intent/)
+    expect(src).toMatch(/intent_default: \[chosen\]/)
   })
 })
