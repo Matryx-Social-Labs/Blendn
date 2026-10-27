@@ -35,7 +35,8 @@ describe('the screen never re-decides the identity gate', () => {
 
   it('reads the fallback’s photos from the nested profile, which is where /profiles/:id puts them (YOU-13)', () => {
     const src = SCREEN()
-    expect(src).toContain('data.profile?.photos ?? []')
+    expect(src).toContain('photos: p.photos ?? []')
+    expect(src).toContain('age: p.age')
   })
 
   it('draws a missing field as absent, never as an error', () => {

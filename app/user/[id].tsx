@@ -22,7 +22,7 @@ import { BadgeRow } from '../../components/profile/MeBadges'
 import { FoldBlock, PROFILE_EMPTY, ProfileBody, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { Glyph } from '../../components/ui/Glyph'
 import { Icon } from '../../components/ui/Icon'
-import { apiClient, type UserProfileData } from '../../lib/apiClient'
+import { apiClient, type PublicProfile } from '../../lib/apiClient'
 import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { likeRefusal } from '../../lib/likeRefusal'
 import { heroFoldHeight } from '../../lib/profileFold'
@@ -101,7 +101,7 @@ const CTA_HINT = {
   message: 'You can message each other.',
   declined: 'You declined this request.',
 } as const
-type ProfileConnection = NonNullable<UserProfileData['connection']>
+type ProfileConnection = NonNullable<PublicProfile['connection']>
 
 function UserProfileInner() {
   const sel = useSelection()
@@ -337,19 +337,18 @@ function UserProfileInner() {
           gone = gone && isGone(fallbackResult)
           if (fallbackResult.success && fallbackResult.data) {
             const data = fallbackResult.data
-            // `/profiles/:id` nests the profile: the photos are `profile.photos`, not top-level (YOU-13).
-            const photos = data.profile?.photos ?? []
-            const interests = interestNames(data.interests)
+            // `/profiles/:id` nests the profile (age, location, bio, photos ... are under `profile`); only `name` and `interests` are top-level (YOU-13).
+            const p = data.profile ?? {}
             nextProfile = {
               user_id: id,
               name: data.name,
-              age: data.age,
-              bio: data.bio,
-              location: data.location,
-              occupation: data.occupation,
-              education: data.education,
-              interests,
-              photos,
+              age: p.age,
+              bio: p.bio,
+              location: p.location,
+              occupation: p.occupation,
+              education: p.education,
+              interests: interestNames(data.interests),
+              photos: p.photos ?? [],
               // An older route with no `identityVisible`: fail closed.
               identityVisible: false,
             }

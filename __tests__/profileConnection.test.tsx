@@ -531,6 +531,14 @@ describe('one profile body', () => {
     expect(screen.queryByText(/data_ai/)).toBeNull()
   })
 
+  it('when GET /users/:id fails the /profiles/:id fallback still shows age and location, which it nests under profile (YOU-13)', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: false, error: 'boom' } as never)
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Ben', interests: [], profile: { age: 29, location: 'Bengaluru', photos: ['https://cdn/ben.jpg'] } } } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText(/, 29$/)).toBeTruthy()
+    expect(screen.getByTestId('hero-subtitle').props.children).toBe('Bengaluru')
+  })
+
   it('an unrevealed profile opened by id draws no interest chips, whatever the payload carries (YOU-03)', async () => {
     api.getPublicProfile.mockResolvedValue({
       success: true,

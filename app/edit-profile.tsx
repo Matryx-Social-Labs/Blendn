@@ -296,7 +296,7 @@ function EditProfileContent() {
          * screen came to write the wrong one.
          */
         const structured = Array.isArray(profileData.interests)
-          ? (profileData.interests as { id: string }[]).map((i) => String(i.id))
+          ? profileData.interests.map((i) => String(i.id))
           : []
         setInterestIds(structured)
         setInterestsAtLoad(structured)
