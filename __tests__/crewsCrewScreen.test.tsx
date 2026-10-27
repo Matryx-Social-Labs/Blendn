@@ -136,6 +136,19 @@ describe('the page', () => {
     expect(screen.queryByLabelText('Invite friends')).toBeNull()
   })
 
+  it('open invites count against the seats: 10 members + 2 invites (seatsLeft 0) offers no Invite (YOU-12)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10, seatsLeft: 0 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.queryByLabelText('Invite friends')).toBeNull()
+  })
+
+  it('an older server with no seatsLeft still reads the members alone', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Invite friends'))
+  })
+
   it('has no Open crew chat: the room is reached from the Banter and the chat’s own header', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('member') })
     await render(<CrewScreen />)

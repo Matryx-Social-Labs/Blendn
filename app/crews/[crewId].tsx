@@ -21,7 +21,7 @@ import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import {
-  CREW_MAX_MEMBERS,
+  crewSeatsLeft,
   CREW_REPORT_REASONS,
   KEEP_ANONYMOUS_LABEL,
   crewMessage,
@@ -302,7 +302,7 @@ function CrewScreenContent() {
             members={crew.members}
             myId={myId}
             isOwner={owner}
-            canInvite={crew.size < CREW_MAX_MEMBERS}
+            canInvite={crewSeatsLeft(crew) > 0}
             apart={crew.apart === true}
             onInvite={() => void startInvite()}
             onMore={confirmRemove}
@@ -386,7 +386,7 @@ function CrewScreenContent() {
             friends={invitable}
             search={{ query: friendList.query, onChange: friendList.search, searching: friendList.searching, active: friendList.searched !== null, offered: friendList.allTotal > FRIEND_SEARCH_OFFER }}
             paging={{ hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() }}
-            room={CREW_MAX_MEMBERS - crew.size}
+            room={crewSeatsLeft(crew)}
             asking={busy === 'invite'}
             onRetry={startInvite}
             onAsk={(ids) => void sendInvites(ids)}

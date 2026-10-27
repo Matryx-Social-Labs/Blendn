@@ -115,7 +115,16 @@ export interface Crew {
    * off `members`. Optional for the same reason; absent says nothing.
    */
   apart?: boolean
+  /**
+   * SV-13: seats the server will still fill — it counts the open invites against the 12, which `size` does not. Optional: an older
+   * server sends none, and `crewSeatsLeft` falls back to `size`.
+   */
+  seatsLeft?: number
 }
+
+/** Seats an invite can still take (YOU-12): the server's own count, else the members alone (the older server's best guess). */
+export const crewSeatsLeft = (crew: { size: number; seatsLeft?: number }): number =>
+  Math.max(0, typeof crew.seatsLeft === 'number' ? crew.seatsLeft : CREW_MAX_MEMBERS - crew.size)
 
 export interface CrewInvite {
   crewId: string
