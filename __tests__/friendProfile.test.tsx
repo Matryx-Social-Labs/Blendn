@@ -166,3 +166,36 @@ it('Message is lit, Remove friend is in the corner menu, and an empty profile sa
   fireEvent.press(screen.getByLabelText('More'))
   expect(menu().actions.map((a: { label: string }) => a.label)).toEqual(['Remove friend', 'Block', 'Report', 'Cancel'])
 })
+
+describe('the about line and the badges (YOU-04): what GET /friends/:id sends, as /user/[id] draws it', () => {
+  const FRIEND = {
+    ...BEN,
+    work_field: 'Design',
+    languages: ['Tamil', 'English'],
+    homeState: 'Tamil Nadu',
+    sign: 'Leo ♌',
+    badges: [{ kind: 'shows_up', label: 'Shows up' }],
+  }
+
+  it('draws the about line and the badges', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: FRIEND })
+    await render(<FriendProfileScreen />)
+    expect(await screen.findByLabelText('Badge: Shows up')).toBeTruthy()
+    expect(screen.getByLabelText(/Speaks Tamil, English · From Tamil Nadu · Leo/)).toBeTruthy()
+  })
+
+  it('an older server that sends none draws neither, and the page stands', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: BEN })
+    await render(<FriendProfileScreen />)
+    await screen.findByText('Message')
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
+    expect(screen.queryByLabelText(/Speaks/)).toBeNull()
+  })
+
+  it('badges turned off (key absent) draw no Badges section', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...FRIEND, badges: undefined } })
+    await render(<FriendProfileScreen />)
+    await screen.findByText('Message')
+    expect(screen.queryByText('Badges')).toBeNull()
+  })
+})
