@@ -369,7 +369,7 @@ describe('the event page, warm before the tap', () => {
     await mount()
     expect(apiClient.getEvent.mock.calls.map((c) => c[0])).toEqual(['e1'])
     await act(async () => fireEvent(screen.getByTestId('row-Event u1'), 'pressIn'))
-    expect(apiClient.getEvent).toHaveBeenLastCalledWith('u1', expect.objectContaining({ include: 'interestedUsers' }))
+    expect(apiClient.getEvent).toHaveBeenLastCalledWith('u1', expect.not.objectContaining({ include: expect.anything() }))
   })
 })
 
