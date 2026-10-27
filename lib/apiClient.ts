@@ -939,7 +939,7 @@ export interface EventApiItem {
     averageRating?: number | null
   }
   /** The list's own RSVP read (`GET /events`): your status on this event, null when none. Absent from an older server; the detail route's is `userStatus.rsvpStatus`. */
-  rsvpStatus?: 'going' | 'maybe' | 'not_going' | null
+  rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
   userStatus?: {
     isFavorited?: boolean
     isCheckedIn?: boolean
@@ -947,7 +947,7 @@ export interface EventApiItem {
     checkInId?: string
     userRating?: number | null
     userReview?: string | null
-    rsvpStatus?: 'going' | 'maybe' | 'not_going' | null
+    rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
   }
 }
 
@@ -1155,14 +1155,16 @@ export interface ProfileFields {
  * against the wrong one (SYS-19, O1).
  */
 export interface OwnProfileEnvelope {
-  profile?: ProfileFields
-  /** Their badges, top-level beside `profile`; read through `parseBadges`. */
-  badges?: unknown
+  id?: string
+  email?: string
+  name?: string
+  image?: string | null
+  createdAt?: string
   /** Whether to offer "Add friend" (`parseFriendOffer`). */
   friend?: unknown
-  isOwnProfile?: boolean
-  memberSince?: string
-  stats?: { eventsAttended: number; eventsFavorited: number; eventsOrganized: number }
+  profile?: ProfileFields | null
+  /** The interests as structured rows (the editor's chips); `profile.interests` is the labels. */
+  interests?: { id: string; name: string; slug: string; icon: string | null }[]
 }
 
 /**
