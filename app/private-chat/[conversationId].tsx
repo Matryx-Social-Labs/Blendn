@@ -59,7 +59,7 @@ import { useActiveThread } from '../../lib/notifications'
 import { ScreenProfiler } from '../../lib/perf'
 import { pickImage, uploadChatPhoto } from '../../lib/photoUtils'
 import { queryCache } from '../../lib/queryCache'
-import { RECEIPT_POLL_MS, receiptFor } from '../../lib/receipts'
+import { RECEIPT_POLL_MS, receiptFor, receiptPollLimit } from '../../lib/receipts'
 import { messageReportStep, showConversationOptions } from '../../lib/safetyUtils'
 import { sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
@@ -101,6 +101,11 @@ const revealOut = FadeOut.duration(DURATION.base)
  * permanent header; receipts under your last bubble; the composer says
  * "Message {name}", and once you can both see each other it takes a photo.
  */
+/** One page of a thread, and the width of a full read. */
+const DM_PAGE = 50
+/** Kept warm so a re-open paints the thread at once; the network read that follows replaces it. */
+const MESSAGES_CACHE_TTL = 5 * 60 * 1000
+
 function PrivateChatInner() {
   const { conversationId, otherUserName, otherUserId, draft } = useLocalSearchParams()
   const conversation = String(conversationId)
@@ -112,7 +117,14 @@ function PrivateChatInner() {
   const myId = authUser?.id
   const thread = dmThread(conversation, myId)
   // A failed send survives leaving the thread (SCRUM-633).
-  const [messages, setMessages] = useState<PrivateMessage[]>(() => failedOf<PrivateMessage>(thread))
+  // The first page as it was last seen (this phone's, per account): a re-open is not blank while the read is in flight.
+  const messagesCacheKey = myId ? `private_messages_${myId}_${conversation}` : null
+  const [cachedFirstPage] = useState(() => (messagesCacheKey ? queryCache.get<PrivateMessage[]>(messagesCacheKey) : undefined))
+  const [messages, setMessages] = useState<PrivateMessage[]>(() =>
+    cachedFirstPage
+      ? mergeNewestPage(failedOf<PrivateMessage>(thread), cachedFirstPage, (m) => m.id, isLocalMessage).items
+      : failedOf<PrivateMessage>(thread)
+  )
   // Read by a refresh to decide whether the older-page cursor moves (lib/mergeNewestPage).
   const messagesRef = useLatest(messages)
   /*
@@ -125,7 +137,7 @@ function PrivateChatInner() {
    * wins over it (Opus review M4): it is stored as you type, so a remount (a text-size change) shows your edits.
    */
   const [newMessage, setNewMessage] = useThreadDraft(thread, draftParam(draft))
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!cachedFirstPage)
   const [sending, setSending] = useState(false)
   // The message the next send replies to (SCRUM-409).
   const [replyingTo, setReplyingTo] = useState<PrivateMessage | null>(null)
@@ -287,16 +299,30 @@ function PrivateChatInner() {
   const scrollToBottom = (animated = true) => scrollListToEnd(flatListRef.current, animated)
   const follow = useFollowEnd(() => scrollToBottom(false))
 
-  const loadMessages = (cursor?: string) =>
+  const loadMessages = (cursor?: string, limit = DM_PAGE) =>
     apiClient
-      .getConversationMessages(conversation, { limit: 50, before: cursor })
+      .getConversationMessages(conversation, { limit, before: cursor })
       .then((result) => {
-        if (!result.success && result.errorCode === 'NOT_FOUND') return setEnded(true)
+        if (!result.success && result.errorCode === 'NOT_FOUND') {
+          // Gone for both people: the next open must not paint it from here.
+          if (messagesCacheKey) queryCache.invalidate(messagesCacheKey)
+          return setEnded(true)
+        }
         if (!result.success && !cursor) return setLoadError(true)
         if (!result.success || !result.data) return
         if (!cursor) setLoadError(false)
         const msgs = result.data.messages.map(directMessageFrom).reverse()
         let keptOlder = false
+        // Before the branch below marks it done: the first read of a visit sets the cursors even over a cache-seeded list.
+        const firstRead = !initialLoadDoneRef.current
+        /*
+         * A receipt poll is a few rows. When they do not reach what is held (more
+         * arrived than the poll asked for, and the socket missed it), merging would
+         * replace the thread with the poll: read a full page instead.
+         */
+        if (!cursor && limit < DM_PAGE && msgs.length > 0 && messagesRef.current.length > 0 && !messagesRef.current.some((m) => m.id === msgs[0].id)) {
+          return void loadMessages()
+        }
         if (cursor) {
           setMessages((prev) => {
             const existingIds = new Set(prev.map((m) => m.id))
@@ -317,7 +343,8 @@ function PrivateChatInner() {
           }
           initialLoadDoneRef.current = true
         }
-        if (!keptOlder) {
+        // A short receipt poll is not a page: its cursor says nothing about the thread's start.
+        if ((!keptOlder || firstRead) && limit === DM_PAGE) {
           setHasMore(result.data.hasMore)
           setOldestCursor(result.data.nextCursor)
         }
@@ -375,6 +402,13 @@ function PrivateChatInner() {
 
   // This phone's unsent messages stay where the thread (and the Banter) can find them; the draft is kept as it is typed.
   useEffect(() => keepFailed(thread, messages.filter((m) => m.failed || m.waiting)), [messages, thread])
+  // The cache follows the thread (sends and arrivals too), without what only this phone holds. Not before the first read has answered: that would cache an empty or failed-only list.
+  useEffect(() => {
+    if (!messagesCacheKey || (loading && !cachedFirstPage)) return
+    // One page, as the comment says: the newest.
+    const confirmed = messages.filter((m) => !isLocalMessage(m)).slice(-DM_PAGE)
+    if (confirmed.length > 0) queryCache.set(messagesCacheKey, confirmed, MESSAGES_CACHE_TTL)
+  }, [messages, messagesCacheKey, loading, cachedFirstPage])
 
   const subscribeToMessages = useCallback(() => {
     if (!conversationId) return () => {}
@@ -558,7 +592,9 @@ function PrivateChatInner() {
    */
   const lastMine = messages.find((m) => m.id === lastMineId)
   const awaitingReceipt = !ended && !!lastMine && receiptFor(lastMine, myId) !== 'read'
-  const reloadRef = useLatest(() => void loadMessages())
+  // Just far enough back to reach your last message: usually one row, not fifty.
+  const receiptLimit = receiptPollLimit(messages.map((m) => m.id), lastMineId, DM_PAGE)
+  const reloadRef = useLatest(() => void loadMessages(undefined, receiptLimit))
   useFocusEffect(
     useCallback(() => {
       if (!awaitingReceipt) return

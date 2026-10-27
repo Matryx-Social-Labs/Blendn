@@ -1,6 +1,7 @@
 import { barTop } from '../../lib/barGeometry'
 import FadeInUp from '../motion/FadeInUp'
 import { bannerFadeIn } from '../motion/presence'
+import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { H } from '../../lib/haptics'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
@@ -427,10 +428,7 @@ export default function EventDetail() {
   const fetchEventDetails = () => {
     Logger.journey('events', 'detail:fetch:start', { eventId: String(id) })
     return apiClient
-      .getEvent(String(id), {
-        include: 'interestedUsers',
-        interestedLimit: 6,
-      })
+      .getEvent(String(id), { ...EVENT_DETAIL_QUERY })
       .then((result) => {
         /*
          * With nothing on screen the page itself says so (below). With the

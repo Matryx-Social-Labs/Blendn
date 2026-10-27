@@ -41,8 +41,10 @@ describe('Connect in the room', () => {
 
   it('checks the answer, says so on failure, and always stops the spinner', () => {
     const onSend = SCREEN.slice(SCREEN.indexOf('onSend={async'), SCREEN.indexOf('<MomentMatch'))
-    expect(onSend).toMatch(/if \(await room\.connect\(connectTo\.id, message\)\) setConnectTo\(null\)/)
-    expect(onSend).toContain("say('Couldn’t send the request. Try again.', 'error')")
+    expect(onSend).toMatch(/const sent = await room\.connect\(connectTo\.id, message\)\s*if \(sent\.stands\) setConnectTo\(null\)/)
+    // The server's sentence when it named one (TEXT_NOT_ALLOWED), else the generic line: in the sheet, under the note.
+    expect(onSend).toContain("setConnectError(sent.refusal ?? 'Couldn’t send the request. Try again.')")
+    expect(SCREEN).toMatch(/<ConnectSheet[\s\S]{0,400}error=\{connectError\}/)
     expect(onSend).toMatch(/finally \{\s*setConnecting\(false\)/)
   })
 

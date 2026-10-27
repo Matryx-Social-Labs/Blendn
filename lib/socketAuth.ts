@@ -41,7 +41,7 @@
  * token. Sixty seconds of slack means we never hand over a credential that
  * dies mid-connection.
  */
-const REFRESH_SKEW_MS = 60_000
+export const REFRESH_SKEW_MS = 60_000
 
 /**
  * Milliseconds until this JWT expires, or `null` if that cannot be determined.
@@ -51,7 +51,7 @@ const REFRESH_SKEW_MS = 60_000
  * vouch for, and an unnecessary refresh is cheap where a failed handshake costs
  * the user their realtime connection.
  */
-function msUntilExpiry(token: string | null | undefined, now: number): number | null {
+export function msUntilExpiry(token: string | null | undefined, now: number): number | null {
   if (typeof token !== 'string') return null
 
   const segments = token.split('.')

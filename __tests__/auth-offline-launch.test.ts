@@ -35,6 +35,7 @@ jest.mock('../lib/roomSignal', () => ({ clearRoomSignal: jest.fn() }))
 jest.mock('../lib/sentry', () => ({ Sentry: { setUser: jest.fn() } }))
 
 import { apiClient, TokenStorage } from '../lib/apiClient'
+import { queryCache } from '../lib/queryCache'
 import { markSessionExpired } from '../lib/sessionEvents'
 import { cleanupAuth, reinitializeAuth, retryAuth } from '../lib/useAuth'
 
@@ -114,6 +115,17 @@ describe('a session the server refused', () => {
     expect(state.unreachable).toBe(false)
     expect(store.clearAll).toHaveBeenCalled()
     expect(markSessionExpired).toHaveBeenCalled()
+  })
+
+  it('takes the cached DM threads with it', async () => {
+    queryCache.set('private_messages_u1_c1', [{ id: 'm1' }], 60_000)
+    api.getSession.mockResolvedValue({ success: false, error: 'Unauthorized' } as never)
+    api.refreshSessionOutcome.mockResolvedValue('rejected')
+    store.getUser.mockResolvedValue(STORED)
+
+    await reinitializeAuth()
+
+    expect(queryCache.get('private_messages_u1_c1')).toBeNull()
   })
 
   it('is cleared without another refresh when the 401 path already dropped the tokens', async () => {

@@ -29,7 +29,8 @@ import { appVersionNumber } from './appVersion'
 import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { onCriticalPath } from './criticalPath'
-import { noteServerDate } from './serverClock'
+import { noteServerDate, serverNow } from './serverClock'
+import { msUntilExpiry, REFRESH_SKEW_MS } from './socketAuth'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
 import { SEARCH_TOO_SHORT, searchTermOf } from './searchTerm'
@@ -89,7 +90,16 @@ const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
 /** A page by the cursor the page before it handed over (keyset), or by number while the server has none. */
 const pageQuery = (page: number, cursor?: string | null): string => (cursor ? `cursor=${encodeURIComponent(cursor)}` : `page=${page}`)
 
-class RequestQueue {
+/**
+ * How many requests are on the wire at once.
+ *
+ * Six was tuned for HTTP/1.1. Over HTTP/2 (Railway's edge) the requests share
+ * one connection, and a launch burst of 10-12 reads with six slots queued the
+ * second half behind the first: one extra ~200-250 ms round trip from Canada.
+ */
+export const MAX_CONCURRENT_REQUESTS = 10
+
+export class RequestQueue {
   private queue: Array<{
     request: () => Promise<unknown>
     resolve: (value: unknown) => void
@@ -99,7 +109,7 @@ class RequestQueue {
     type: 'query' | 'mutation' | 'auth'
   }> = []
   private processing = false
-  private maxConcurrent = 6
+  private maxConcurrent = MAX_CONCURRENT_REQUESTS
   private currentRequests = 0
   private lastProcessTime = 0
   private debounceMs = 10
@@ -197,7 +207,8 @@ class RequestQueue {
 
       item.reject(error)
     } finally {
-      this.currentRequests--
+      // Never below zero: a request that outlived clear() still ends here.
+      this.currentRequests = Math.max(0, this.currentRequests - 1)
       setTimeout(() => this.processQueue(), 10)
     }
   }
@@ -218,7 +229,10 @@ class RequestQueue {
       item.reject(new Error('Request queue cleared'))
     })
     this.queue = []
-    this.currentRequests = 0
+    // currentRequests is deliberately NOT reset: what is on the wire stays on the
+    // wire and still holds its slot until it settles. Zeroing it here (on every
+    // background) let the count go negative as those requests finished, and so
+    // admitted more than the ceiling afterwards.
     this.processing = false
   }
 }
@@ -395,6 +409,8 @@ class TokenStorage {
   }
 
   static async setRefreshToken(token: string): Promise<void> {
+    // A token stored is a token not yet refused (`refusedRefreshToken`).
+    refusedRefreshToken = null
     return this.secureSet(REFRESH_TOKEN_KEY, token)
   }
 
@@ -1270,6 +1286,33 @@ const NOT_SIGNED_IN_MESSAGE = 'You’re not signed in.'
 export const REFRESH_RETRY_DELAYS_MS = [2000, 5000, 10000] as const
 /** The whole refresh: the keychain read and the fetch, each on the fetch deadline. */
 export const REFRESH_DEADLINE_MS = 2 * REQUEST_TIMEOUT_MS
+/**
+ * At most one *proactive* refresh per this window.
+ *
+ * A phone whose clock is wrong reads every token as dead. `serverNow()` corrects
+ * for that once any response has carried a `Date` header, but the very first
+ * request has none, and a token that is genuinely short-lived would otherwise
+ * refresh on every call. The 401 path is not rate-limited by this: it only
+ * governs refreshing *before* we know the token is bad.
+ */
+const PROACTIVE_REFRESH_MIN_GAP_MS = 30_000
+let lastProactiveRefreshAt = 0
+/**
+ * When a refresh last came back 'failed' (the server never answered), or 0.
+ *
+ * On a cold start against a hung server the proactive refresh times out, then the
+ * session read, then the launch path asked for a refresh again: a third deadline
+ * for the same silence. `refreshSessionOutcome` reads this and does not ask again
+ * inside the window; the background retries and the 401 path still do.
+ */
+const FAILED_REFRESH_COOLDOWN_MS = 10_000
+let lastRefreshFailedAt = 0
+/**
+ * The refresh token the server last refused (401/403). It is dead: a launch that
+ * refreshed it ahead of `/auth/session` asked again from that request's 401 and
+ * sent it twice (drive 2026-10-27). Asked about it again, the answer is the same.
+ */
+let refusedRefreshToken: string | null = null
 let refreshRetryAttempt = 0
 let refreshRetryTimer: ReturnType<typeof setTimeout> | null = null
 /** The server's sentence from the last rejected refresh, if it gave one. */
@@ -1552,6 +1595,36 @@ class ApiClientClass {
     return { success: true, data: parsed as T }
   }
 
+  /**
+   * The access token to send, refreshed first if it is about to die.
+   *
+   * Tokens live 15 minutes, so a cold start or a resume after that sent the
+   * stale one, took a 401 (a full round trip, ~200-250 ms from Canada), then
+   * refreshed and retried; on foreground four or five requests each burned
+   * their own. Reading the expiry costs nothing. A token whose expiry cannot be
+   * read is sent as is: the server decides, and the 401 path below still
+   * recovers it. Awaiting an in-flight refresh also stops a request that read
+   * the old token just before it rotated from 401ing after the refresh settles
+   * and starting a second rotation.
+   */
+  private async freshAccessToken(): Promise<string | null | typeof TIMED_OUT> {
+    if (refreshPromise) await refreshPromise
+    const token = await withinDeadline(TokenStorage.getAccessToken())
+    if (token === TIMED_OUT) return token
+    const remaining = msUntilExpiry(token, serverNow())
+    if (remaining === null || remaining > REFRESH_SKEW_MS) return token
+    // A refresh begun since we read the token is joined, whatever the guard says.
+    const now = Date.now()
+    if (!refreshPromise) {
+      // Read again: the refresh that set the guard may have landed since `token` was read.
+      if (now - lastProactiveRefreshAt < PROACTIVE_REFRESH_MIN_GAP_MS) return withinDeadline(TokenStorage.getAccessToken())
+      lastProactiveRefreshAt = now
+    }
+    // 'failed' / 'rejected': send what we have; the 401 path decides what that means.
+    await this.refreshTokens()
+    return withinDeadline(TokenStorage.getAccessToken())
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
@@ -1577,7 +1650,7 @@ class ApiClientClass {
     const epoch = sessionEpoch
     let sentToken = false
     if (requireAuth) {
-      const accessToken = await withinDeadline(TokenStorage.getAccessToken())
+      const accessToken = await this.freshAccessToken()
       // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
       if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
       if (accessToken) {
@@ -1704,7 +1777,7 @@ class ApiClientClass {
         const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
         // A keychain that did not answer is not a missing token: 'failed', tried again, never the sign-out a 'rejected' is.
         if (refreshToken === TIMED_OUT) return 'failed'
-        if (!refreshToken) {
+        if (!refreshToken || refreshToken === refusedRefreshToken) {
           return 'rejected'
         }
 
@@ -1744,6 +1817,7 @@ class ApiClientClass {
               if (code && code in SESSION_END_CODES) rejectedCode = code
             } catch {}
           }
+          refusedRefreshToken = refreshToken
           return 'rejected'
         }
 
@@ -1790,6 +1864,7 @@ class ApiClientClass {
     })
 
     p.then((outcome) => {
+      lastRefreshFailedAt = outcome === 'failed' ? Date.now() : 0
       if (outcome !== 'failed') {
         refreshRetryAttempt = 0
         return
@@ -2148,6 +2223,7 @@ class ApiClientClass {
    * "no answer" as "refused" and cleared a perfectly good session.
    */
   async refreshSessionOutcome(): Promise<RefreshOutcome> {
+    if (!refreshPromise && Date.now() - lastRefreshFailedAt < FAILED_REFRESH_COOLDOWN_MS) return 'failed'
     return this.refreshTokens()
   }
 
@@ -2734,13 +2810,15 @@ class ApiClientClass {
   async getPresignedUploadUrl(
     filename: string,
     contentType: string,
-    folder: 'profile' | 'chat' | 'events' = 'profile'
+    folder: 'profile' | 'chat' | 'events' = 'profile',
+    /** Bytes the PUT will carry: signed into the URL, so the upload cannot be larger. */
+    size?: number
   ): Promise<ApiResponse<{ uploadUrl: string; publicUrl: string; key?: string }>> {
     return this.queuedRequest<{ uploadUrl: string; publicUrl: string; key?: string }>(
       '/api/mobile/uploads/presigned-url',
       {
         method: 'POST',
-        body: JSON.stringify({ filename, contentType, folder }),
+        body: JSON.stringify({ filename, contentType, folder, size }),
       },
       true,
       3

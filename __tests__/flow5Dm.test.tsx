@@ -63,6 +63,7 @@ jest.mock('../lib/logger', () => ({
 import PrivateChat from '../app/private-chat/[conversationId]'
 import { apiClient } from '../lib/apiClient'
 import { clearOutbox, dmThread, keepFailed } from '../lib/chatOutbox'
+import { queryCache } from '../lib/queryCache'
 import { RECEIPT_POLL_MS } from '../lib/receipts'
 /* eslint-enable import/first */
 
@@ -108,6 +109,8 @@ beforeEach(() => {
   jest.clearAllMocks()
   clearOutbox()
   mockLive.length = 0
+  // The thread's first page is cached for a re-open; each test starts from a first open.
+  queryCache.invalidate('private_messages_')
   mockParams = { conversationId: 'c1' }
   mockToastInset = 0
   mockAuth.user = { id: 'u-a' }
@@ -531,4 +534,119 @@ it('the feed makes room under the newest row for the Android snackbar over the c
   mockToastInset = 70
   await open()
   expect(bottom()).toBe(without + 70)
+})
+
+describe('opening a thread you have seen before', () => {
+  it('paints the last page at once, before the read answers, and replaces it with the server\'s', async () => {
+    // Arrange: a first open, which caches the page.
+    await open()
+    expect(screen.getByText('See you at the bar?')).toBeTruthy()
+    await screen.unmount()
+    // Act: the same thread again, the read still in flight.
+    api.getConversationMessages.mockReturnValue(new Promise(() => {}) as never)
+    await open()
+    // Assert: not blank.
+    expect(screen.getByText('See you at the bar?')).toBeTruthy()
+  })
+
+  it('never paints one account\'s thread for the next', async () => {
+    await open()
+    await screen.unmount()
+    mockAuth.user = { id: 'u-b' }
+    api.getConversationMessages.mockReturnValue(new Promise(() => {}) as never)
+    await open()
+    expect(screen.queryByText('See you at the bar?')).toBeNull()
+  })
+
+  it('a thread that has ended is not painted from the cache next time', async () => {
+    await open()
+    await screen.unmount()
+    api.getConversationMessages.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'Conversation not found' } as never)
+    await open()
+    await screen.unmount()
+    api.getConversationMessages.mockReturnValue(new Promise(() => {}) as never)
+    await open()
+    expect(screen.queryByText('See you at the bar?')).toBeNull()
+  })
+})
+
+describe('the receipt poll reads as little as it can', () => {
+  const pollAfterOpening = async (messages: unknown[]) => {
+    const polls: Array<() => void> = []
+    const realSetInterval = global.setInterval
+    const spy = jest.spyOn(global, 'setInterval').mockImplementation(((fn: () => void, ms?: number) => {
+      if (ms === RECEIPT_POLL_MS) polls.push(fn)
+      return realSetInterval(() => {}, 1e9)
+    }) as typeof setInterval)
+    api.getConversationMessages.mockResolvedValue(page(messages) as never)
+    await open()
+    api.getConversationMessages.mockClear()
+    await act(async () => polls[polls.length - 1]())
+    await flush()
+    spy.mockRestore()
+  }
+  const mine = { id: 'm9', conversationId: 'c1', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: 'On my way', isRead: false, createdAt: '2026-10-15T19:05:00.000Z' }
+
+  it('asks for one message when yours is the newest', async () => {
+    await pollAfterOpening([theirs, mine].reverse())
+    expect(api.getConversationMessages).toHaveBeenCalledWith('c1', expect.objectContaining({ limit: 1 }))
+  })
+
+  it('asks for yours and what came after it when they have replied since', async () => {
+    const reply = { ...theirs, id: 'm10', createdAt: '2026-10-15T19:06:00.000Z' }
+    await pollAfterOpening([reply, mine, theirs])
+    expect(api.getConversationMessages).toHaveBeenCalledWith('c1', expect.objectContaining({ limit: 2 }))
+  })
+})
+
+describe('a short receipt poll never costs the thread its history', () => {
+  const mineNewest = { id: 'm9', conversationId: 'c1', senderId: 'u-a', sender: { id: 'u-a', name: null, image: null }, text: 'On my way', isRead: false, createdAt: '2026-10-15T19:05:00.000Z' }
+  const reply = { ...theirs, id: 'm10', text: 'Okay, see you', createdAt: '2026-10-15T19:06:00.000Z' }
+
+  it('when they replied and the socket missed it, the page without yours triggers a full read instead of replacing the list', async () => {
+    const polls: Array<() => void> = []
+    const realSetInterval = global.setInterval
+    const spy = jest.spyOn(global, 'setInterval').mockImplementation(((fn: () => void, ms?: number) => {
+      if (ms === RECEIPT_POLL_MS) polls.push(fn)
+      return realSetInterval(() => {}, 1e9)
+    }) as typeof setInterval)
+    api.getConversationMessages.mockResolvedValue(page([mineNewest, theirs]) as never)
+    await open()
+    // Their reply (and one more) landed unseen: the one-row page holds neither of ours.
+    const reply2 = { ...reply, id: 'm11', text: 'Bring a jacket' }
+    api.getConversationMessages.mockImplementation((async (_id: string, o: { limit?: number }) =>
+      o.limit === 1 ? page([reply2]) : page([reply2, reply, mineNewest, theirs])) as never)
+
+    await act(async () => polls[polls.length - 1]())
+    await flush()
+
+    expect(screen.getByText('See you at the bar?')).toBeTruthy()
+    expect(screen.getByText('On my way')).toBeTruthy()
+    expect(screen.getByText('Bring a jacket')).toBeTruthy()
+    spy.mockRestore()
+  })
+})
+
+describe('re-opening from the cache keeps older history reachable', () => {
+  it('sets the older-page cursor from the first read even when something new arrived since', async () => {
+    const at = (n: number) => new Date(Date.UTC(2026, 9, 15, 10, n)).toISOString()
+    const m = (id: string, n: number) => ({ ...theirs, id, text: `message ${id}`, createdAt: at(n) })
+    // Cached: a, b, c. Then d arrives and the page (newest first) no longer reaches a.
+    api.getConversationMessages.mockResolvedValue(page([m('c', 3), m('b', 2), m('a', 1)]) as never)
+    await open()
+    await screen.unmount()
+    api.getConversationMessages.mockResolvedValue({ success: true, data: { messages: [m('d', 4), m('c', 3), m('b', 2)], hasMore: true, nextCursor: at(2) } } as never)
+
+    await open()
+
+    expect(screen.getByLabelText('Load older messages', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('caches one page at most, as many rows as a read returns', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({ ...theirs, id: `bulk-${i}`, createdAt: new Date(Date.UTC(2026, 9, 15, 10, 60 - i)).toISOString() }))
+    api.getConversationMessages.mockResolvedValue(page(many) as never)
+    await open()
+    const cached = queryCache.get<unknown[]>('private_messages_u-a_c1')
+    expect(cached).toHaveLength(50)
+  })
 })
