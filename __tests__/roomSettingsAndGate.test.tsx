@@ -55,3 +55,18 @@ describe("the way into the room’s settings", () => {
     expect(banner).not.toContain("event-preferences")
   })
 })
+
+describe("your photo in the room is myMainPhoto, never User.image (ROOM-01)", () => {
+  const controls = readFileSync(join(__dirname, "..", "lib", "useRoomControls.ts"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
+
+  it("the screen and the readiness read the main photo, not the OAuth avatar", () => {
+    expect(code).toContain("myMainPhoto(user)")
+    expect(code).not.toMatch(/user\??\.image/)
+    expect(controls).toContain("myMainPhoto(user)")
+    expect(controls).not.toMatch(/user\??\.image/)
+  })
+
+  it("the face is decided by myRoomFace: anonymous is the creature", () => {
+    expect(code).toContain("myRoomFace({ revealed: controls.revealed")
+  })
+})

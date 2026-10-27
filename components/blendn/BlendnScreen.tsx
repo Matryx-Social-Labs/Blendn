@@ -39,6 +39,9 @@ import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useLatest } from '../../lib/useLatest'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
+import { myMainPhoto } from '../../lib/myPhoto'
+import { markSeed } from '../../lib/pseudonymAvatar'
+import { myRoomFace } from '../../lib/roomState'
 import { useTonight, type TonightEvent } from '../../lib/useTonight'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
@@ -469,10 +472,12 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
   const [myPseudonym, setMyPseudonym] = useState<string | null>(null)
   if (room.match?.you && room.match.you !== myPseudonym) setMyPseudonym(room.match.you)
-  const myPhoto = user?.image ?? user?.profile?.photos?.[0] ?? null
+  const myPhoto = myMainPhoto(user)
   const myName = user?.name?.trim() || 'You'
+  /** The creature's seed while anonymous: never your real name. */
+  const myMarkSeed = myPseudonym ?? markSeed('You', eventId ?? 'room')
   /** Your face as this room knows it: your photo when you are named, else your creature (once its pseudonym is known). */
-  const myFace: Face = controls.revealed && myPhoto ? { kind: 'photo', uri: myPhoto } : myPseudonym ? { kind: 'creature', pseudonym: myPseudonym } : myPhoto ? { kind: 'photo', uri: myPhoto } : { kind: 'creature', pseudonym: myName }
+  const myFace: Face = myRoomFace({ revealed: controls.revealed, photo: myPhoto, pseudonym: myPseudonym, eventId })
 
   // --- crews (R2-D1: People | Crews, the strip, crew cards, Liking as) ---------
   const [gridView, setGridView] = useState<'people' | 'crews'>('people')
@@ -515,7 +520,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         title: `Blend with ${card.name}`,
         sides: ours
           ? { ours: { kind: 'crew', name: ours.name, emblemSeed: emblemOf(ours.crewId), count: ours.presentCount }, theirs }
-          : { ours: { kind: 'person', pseudonym: myPseudonym ?? myName }, theirs },
+          : { ours: { kind: 'person', pseudonym: myMarkSeed }, theirs },
       })
     },
   })
@@ -902,7 +907,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                   checkInKey={room.checkedInAt ?? ''}
                   crews={crews}
                   likingAs={chipAs === undefined ? undefined : chipAs ? { name: chipAs.name, emblemSeed: emblemOf(chipAs.crewId) } : null}
-                  pseudonym={myPseudonym ?? myName}
+                  pseudonym={myMarkSeed}
                   onLikingAs={() => void chooseLikingAs()}
                 />
               ) : null
@@ -1090,7 +1095,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       */}
       {room.match ? (
         <MomentMatch
-          you={controls.revealed && myPhoto ? { kind: 'photo', uri: myPhoto } : { kind: 'creature', pseudonym: room.match.you ?? myPseudonym ?? myName }}
+          you={myRoomFace({ revealed: controls.revealed, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}
           them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}
           name={room.match.name}
           reason={matchPerson ? reasonLine(matchPerson) : null}

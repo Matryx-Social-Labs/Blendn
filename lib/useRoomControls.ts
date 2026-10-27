@@ -4,6 +4,7 @@ import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
 import { checkOutOf } from './checkIn'
 import { Logger } from './logger'
+import { myMainPhoto } from './myPhoto'
 import { revealReadiness } from './reveal'
 import { useAuth } from './useAuth'
 
@@ -19,14 +20,14 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
   /*
    * Is there anything to reveal?
    *
-   * `User.image` mirrors `photos[0]` and is written only by the profile PUT, so
-   * it is the same photo a reveal would show. Without this the banner offered a
-   * switch that changed nothing anybody could see.
+   * The first of `profile.photos`, the photo a reveal shows (`myMainPhoto`): never
+   * `User.image`, the OAuth avatar, which a reveal does not show. Without this the
+   * banner offered a switch that changed nothing anybody could see.
    */
   const { user } = useAuth()
   const readiness = revealReadiness({
     name: user?.name,
-    photos: user?.image ? [user.image] : user?.profile?.photos ?? [],
+    photos: [myMainPhoto(user) ?? ''].filter(Boolean),
   })
   const { showToast } = useToast()
 
