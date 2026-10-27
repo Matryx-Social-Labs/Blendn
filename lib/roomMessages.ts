@@ -64,8 +64,16 @@ const pollField = (msg: any): { poll_id?: string } => {
   return id && (msg.message_type || msg.type) === 'poll' ? { poll_id: id } : {}
 }
 
+/**
+ * Whether a room may show its members' photos: a crew's only (names are first names there, `round4/r41-groups.js`).
+ * Event, board-post and Blend rooms are pseudonymous, and an unknown kind is treated as one.
+ */
+export const roomPhotosAllowed = (roomKind: string | null | undefined): boolean => roomKind === 'crew'
+
 /** A history page, as the room holds it: your own is "You", a quote resolved where its parent is loaded. */
-export function roomMessagesFrom(raw: any[], userId?: string): RoomMessage[] {
+export function roomMessagesFrom(raw: any[], userId?: string, roomKind?: string | null): RoomMessage[] {
+  // Photos are a crew's room only; every other kind is creatures whatever the server sends (anonymity, defence in depth).
+  const photos = roomPhotosAllowed(roomKind)
   const list: RoomMessage[] = raw.map((msg: any) => {
     const senderId = msg.sender_id || msg.senderId || msg.user_id || msg.userId
     const serverName = msg.user?.name || msg.sender_name || msg.senderName || 'Attendee'
@@ -75,7 +83,7 @@ export function roomMessagesFrom(raw: any[], userId?: string): RoomMessage[] {
       message_id: msg.id || msg.message_id,
       sender_id: senderId,
       sender_name: senderId === 'system' ? 'System' : senderId === userId ? 'You' : serverName,
-      ...(typeof msg.user?.image === 'string' && msg.user.image ? { sender_image: msg.user.image } : {}),
+      ...(photos && typeof msg.user?.image === 'string' && msg.user.image ? { sender_image: msg.user.image } : {}),
       message_text: msg.message_text || msg.content || msg.text || '',
       // The server nulls the text and says why; an empty bubble said nothing.
       removed: Boolean(msg.moderation_hidden),

@@ -63,16 +63,25 @@ describe('a crew’s members are photographed, an event’s room is creatures (R
   const { senderOf } = require('../components/chat/RoomFeed')
   const raw = (user: Record<string, unknown>) => [{ id: 'm1', type: 'text', content: 'hi', createdAt: '2026-10-24T19:00:00.000Z', user: { id: 'u1', name: 'Rohan', ...user } }]
 
-  it('reads the server’s user.image onto the message, and senderOf hands it to the bubble', () => {
-    const [m] = roomMessagesFrom(raw({ image: PHOTO }), 'me')
+  it('a crew room keeps the server’s user.image, and senderOf hands it to the bubble', () => {
+    const [m] = roomMessagesFrom(raw({ image: PHOTO }), 'me', 'crew')
     expect(m.sender_image).toBe(PHOTO)
     expect(senderOf(m, 'g1')).toMatchObject({ name: 'Rohan', photoUri: PHOTO })
   })
 
-  it('an event’s room sends image: null, so the sender stays a creature', () => {
-    const [m] = roomMessagesFrom(raw({ image: null }), 'me')
+  // Defence in depth for anonymity: whatever the server sends, only a crew's room is photographed.
+  it.each([['event', 'event'], ['board_post', 'board_post'], ['blend', 'blend'], ['no kind (an event’s room)', undefined]])(
+    'a %s room drops user.image even when the server sends one',
+    (_label, kind) => {
+      const [m] = roomMessagesFrom(raw({ image: PHOTO }), 'me', kind as never)
+      expect(m.sender_image).toBeUndefined()
+      expect(senderOf(m, 'g1').photoUri).toBeUndefined()
+    }
+  )
+
+  it('a crew room with no image stays a creature', () => {
+    const [m] = roomMessagesFrom(raw({ image: null }), 'me', 'crew')
     expect(m.sender_image).toBeUndefined()
-    expect(senderOf(m, 'g1').photoUri).toBeUndefined()
   })
 
   it('the bubble draws the photo for a crew member, and a creature (no image) for anyone else', async () => {

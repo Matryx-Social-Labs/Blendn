@@ -28,6 +28,7 @@ import { printable } from '../../lib/pulseSections'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
+import { roomPhotosAllowed } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow } from '../../lib/roomRow'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { showRoomReportOptions } from '../../lib/safetyUtils'
@@ -224,7 +225,7 @@ function ChatInfoInner() {
   const getItemLayout = headerHeight > 0 ? (_: unknown, index: number) => ({ length: rowStride, offset: headerHeight + index * rowStride, index }) : undefined
 
   const renderMember = ({ item: m }: { item: Member }) => (
-    <MemberCell member={m} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={setCardFor} />
+    <MemberCell member={m} photos={roomPhotosAllowed(row?.kind)} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={setCardFor} />
   )
 
   const header = (
@@ -408,6 +409,7 @@ function ChatInfoInner() {
  */
 const MemberCell = memo(function MemberCell({
   member,
+  photos,
   you,
   chatGroupId,
   cell,
@@ -416,6 +418,8 @@ const MemberCell = memo(function MemberCell({
   onOpen,
 }: {
   member: Member
+  /** A crew's room only; everywhere else a creature, whatever the server sent. */
+  photos: boolean
   you: boolean
   chatGroupId: string
   cell: number
@@ -437,7 +441,7 @@ const MemberCell = memo(function MemberCell({
       style={[styles.member, { width: cell, height }]}
     >
       <View>
-        {member.avatar ? (
+        {photos && member.avatar ? (
           <Avatar size={face} kind="photo" uri={member.avatar} />
         ) : (
           <Avatar size={face} kind="creature" pseudonym={markSeed(member.name, `${chatGroupId}:${member.userId}`)} />

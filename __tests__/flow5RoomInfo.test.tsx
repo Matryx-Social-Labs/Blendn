@@ -346,3 +346,21 @@ describe('at AX XXXL (TG-03)', () => {
     expect(uncapped(subtree(screen.toJSON() as never, 'info-leave'))).toEqual([])
   })
 })
+
+describe('member photos are a crew room’s only (ROOM-07, anonymity)', () => {
+  const AVATAR = 'https://cdn.blendn.app/u/amber.jpg'
+  const withAvatar = { success: true, data: { participants: [{ userId: 'u-o', name: 'Amber Fox', role: 'member', avatar: AVATAR }], totalCount: 1 } }
+
+  it('an event room whose server sends an avatar still draws the creature', async () => {
+    api.getChatParticipants.mockResolvedValue(withAvatar as never)
+    await open()
+    expect(imageUris()).not.toContain(AVATAR)
+  })
+
+  it('a crew room draws the member’s photo', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [{ id: 'g1', name: 'Nebula', kind: 'crew', crewId: 'c1' }] } } as never)
+    api.getChatParticipants.mockResolvedValue(withAvatar as never)
+    await open()
+    expect(imageUris()).toContain(AVATAR)
+  })
+})

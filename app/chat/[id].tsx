@@ -404,7 +404,7 @@ function GroupChatInner() {
 
         const raw = Array.isArray(result.data) ? result.data : (result.data as any)?.messages || (result.data as any)?.data || []
         const pagination = (result.data as any)?.pagination
-        const msgs = roomMessagesFrom(Array.isArray(raw) ? raw : [], user.id)
+        const msgs = roomMessagesFrom(Array.isArray(raw) ? raw : [], user.id, kind)
         /* A refresh keeps the older pages already loaded, and what only this phone holds (lib/mergeNewestPage). */
         const { keptOlder } = mergeNewestPage(messagesRef.current, msgs, (m) => m.message_id, isTemp)
         setMessages((prev) => mergeNewestPage(prev, msgs, (m) => m.message_id, isTemp).items)
@@ -430,7 +430,7 @@ function GroupChatInner() {
       const pagination = (result.data as any)?.pagination
       setHasMore(pagination?.hasMore || false)
       setOldestCursor(pagination?.nextCursor || null)
-      const older = roomMessagesFrom(Array.isArray(raw) ? raw : [], authUser.id)
+      const older = roomMessagesFrom(Array.isArray(raw) ? raw : [], authUser.id, roomKind)
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.message_id))
         return [...older.filter((m) => !ids.has(m.message_id)), ...prev]
