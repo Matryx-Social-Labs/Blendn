@@ -158,6 +158,8 @@ interface EventDetailData {
   description: string
   short_description: string
   city: string
+  /** The venue's neighbourhood, else the city: what an unlisted event is shared as (ROOM-17). */
+  area?: string
   venue_name: string
   address: string
   start_time: string
@@ -347,6 +349,7 @@ export default function EventDetail() {
       description: d.description || '',
       short_description: d.shortDescription || d.short_description || '',
       city: d.city || '',
+      area: (d as { area?: string | null }).area ?? undefined,
       venue_name: d.venueName || d.venue_name || '',
       address: d.address || '',
       start_time: d.startTime || d.start_time || '',
@@ -751,6 +754,7 @@ export default function EventDetail() {
         startTime: event.start_time,
         venueName: event.venue_name,
         city: event.city,
+        area: event.area,
         coverImageUrl: event.cover_image_url,
         status: event.status,
         visibility: event.visibility,

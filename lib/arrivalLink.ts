@@ -53,7 +53,9 @@ export async function lookUpArrival(target: LinkTarget): Promise<ArrivalLookup> 
       if (!result.success || !result.data) return { status: 'retry' }
       const e = result.data
       if (e.status === 'draft' || e.visibility === 'private') return { status: 'gone' }
-      const place = e.visibility === 'unlisted' ? e.city : [e.venueName, e.city].filter(Boolean).join(', ')
+      // `area` is on the detail route (SYS-19 declares it on the type); an unlisted event names it, never the venue.
+      const area = (e as { area?: string | null }).area || e.city
+      const place = e.visibility === 'unlisted' ? area : [e.venueName, area].filter(Boolean).join(', ')
       const when = dateParts(e.startTime, e.timezone).dateText
       return {
         status: 'ready',
