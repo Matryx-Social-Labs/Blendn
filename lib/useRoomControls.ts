@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
+import { useCallback, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
@@ -47,19 +48,23 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
    * wonder why nobody likes them.
    */
   const [listed, setListed] = useState(true)
-  useEffect(() => {
-    if (!user?.id) return
-    let cancelled = false
-    apiClient
-      .getProfile(user.id)
-      .then((r) => {
-        if (!cancelled && r.success) setListed(r.data?.profile?.show_online !== false)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [user?.id])
+  const userId = user?.id ?? null
+  // On every focus, uncached: Settings is a screen above the Room, and "Turn it on" there must clear the banner on return (ROOM-04).
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return
+      let cancelled = false
+      apiClient
+        .getProfile(userId, { cache: false })
+        .then((r) => {
+          if (!cancelled && r.success) setListed(r.data?.profile?.show_online !== false)
+        })
+        .catch(() => {})
+      return () => {
+        cancelled = true
+      }
+    }, [userId])
+  )
 
   /*
    * Flipping your visibility, from inside the room it applies to.
