@@ -9,7 +9,7 @@ import { goneKindFor } from '../../lib/chatGone'
 import { liveEndedState, type LiveEndedAction } from '../../lib/chatLiveEnded'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { DURATION, SPACE } from '../../lib/design/tokens'
-import { isTemp, type RoomMessage } from '../../lib/roomMessages'
+import { isTemp, QUOTE_UNAVAILABLE, type RoomMessage } from '../../lib/roomMessages'
 import { clockTime } from '../../lib/time'
 import { BroadcastNotice } from '../ds/BroadcastNotice'
 import { ChatBubble, type BubbleReaction } from '../ds/ChatBubble'
@@ -136,7 +136,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
         last={last}
         text={item.removed ? '' : item.message_text}
         removed={item.removed}
-        replyTo={item.replyTo ? { name: item.replyTo.sender_name, text: item.replyTo.message_text } : undefined}
+        replyTo={item.replyTo ? { name: item.replyTo.sender_name, text: item.replyTo.removed ? QUOTE_UNAVAILABLE : item.replyTo.message_text } : undefined}
         reactions={bubbleReactions(item.reactions)}
         onReactionPress={item.removed || sending ? undefined : (emoji) => handlers.react(item, emoji)}
         landed={landed}

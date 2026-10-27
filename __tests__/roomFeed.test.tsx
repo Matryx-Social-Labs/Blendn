@@ -94,3 +94,24 @@ describe('a crew’s members are photographed, an event’s room is creatures (R
     expect(screen.queryByTestId(`img-${PHOTO}`, { includeHiddenElements: true })).toBeNull()
   })
 })
+
+describe('a reply to a message that was taken down (ROOM-15)', () => {
+  const { roomMessagesFrom } = require('../lib/roomMessages')
+  const raw = (parent: Record<string, unknown>) => [
+    { id: 'm2', type: 'text', content: 'agreed', parent_id: 'm1', createdAt: '2026-10-24T19:00:00.000Z', user: { id: 'u2', name: 'Priya' }, parent_message: { id: 'm1', created_at: 't', user: { id: 'u1', name: 'Rohan' }, ...parent } },
+  ]
+  it('reads the server’s moderation_hidden onto the quote', () => {
+    expect(roomMessagesFrom(raw({ content: null, moderation_hidden: true }), 'me')[0].replyTo.removed).toBe(true)
+    expect(roomMessagesFrom(raw({ content: 'hi', moderation_hidden: false }), 'me')[0].replyTo.removed).toBe(false)
+  })
+  it('the bubble says "Message unavailable", not a name over a blank', async () => {
+    const [m] = roomMessagesFrom(raw({ content: null, moderation_hidden: true }), 'me')
+    await row(m, false)
+    expect(screen.getByText('Message unavailable')).toBeTruthy()
+  })
+  it('a live quote keeps its words', async () => {
+    const [m] = roomMessagesFrom(raw({ content: 'see you there', moderation_hidden: false }), 'me')
+    await row(m, false)
+    expect(screen.getByText('see you there')).toBeTruthy()
+  })
+})

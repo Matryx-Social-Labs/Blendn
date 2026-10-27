@@ -70,6 +70,9 @@ const pollField = (msg: any): { poll_id?: string } => {
  */
 export const roomPhotosAllowed = (roomKind: string | null | undefined): boolean => roomKind === 'crew'
 
+/** What a quote of a message that was taken down reads, as the DM's does (`quoteText`). */
+export const QUOTE_UNAVAILABLE = 'Message unavailable'
+
 /** A history page, as the room holds it: your own is "You", a quote resolved where its parent is loaded. */
 export function roomMessagesFrom(raw: any[], userId?: string, roomKind?: string | null): RoomMessage[] {
   // Photos are a crew's room only; every other kind is creatures whatever the server sends (anonymity, defence in depth).
@@ -100,6 +103,8 @@ export function roomMessagesFrom(raw: any[], userId?: string, roomKind?: string 
             sender_id: msg.parent_message.user?.id ?? '',
             sender_name: msg.parent_message.user?.id === userId ? 'You' : msg.parent_message.user?.name || 'Attendee',
             message_text: msg.parent_message.content ?? '',
+            // Taken down since (moderation or delete): the quote says so, not a name over nothing (ROOM-15).
+            removed: Boolean(msg.parent_message.moderation_hidden),
             message_type: 'text',
             reply_to_message_id: null,
             created_at: msg.parent_message.created_at ?? '',
