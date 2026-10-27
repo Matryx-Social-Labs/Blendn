@@ -362,6 +362,17 @@ describe('what is already active', () => {
     expect(buyPackage).not.toHaveBeenCalled()
   })
 
+  // OD-5 default (M5): Plus bought outside the app is not bought again here (a double charge). Negative control: dropping `outside` from `locked` or the dock action fails both.
+  it('a Razorpay-sourced Plus gets no buy dock and no pickable plan', async () => {
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: true, gated: true, product: 'plus', source: 'razorpay', expiresAt: '2027-10-23T12:00:00.000Z' } })
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly, nightPass])
+    await mount()
+    expect(screen.queryByRole('button', { name: MONTHLY_CTA })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Manage Blend’n\+/ })).toBeNull()
+    for (const id of ['$rc_monthly', '$rc_annual', 'night_pass']) expect(plan(id).props.accessibilityState.disabled).toBe(true)
+    expect(screen.getByText(/Managed outside the app/)).toBeTruthy()
+  })
+
   it('a store subscription is managed in the store: the dock reads Manage, and opens the store', async () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(subscribed)
     const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
