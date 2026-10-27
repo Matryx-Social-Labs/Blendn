@@ -199,7 +199,7 @@ describe('what the frame draws and the product cannot back', () => {
     const src = SCREEN()
     expect(src).not.toContain('PRO MEMBER')
     expect(src).not.toContain('@blendn')
-    expect(src).toContain("[profile?.workField, profile?.location].filter(Boolean).join(' · ')")
+    expect(src).toContain("[workFieldLabel(profile?.workField, workFields), profile?.location].filter(Boolean).join(' · ')")
   })
 
   it('ships no Appreciate button', () => {
