@@ -470,8 +470,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const eventTitle = room.event?.title ?? ''
   const chatGroupId = room.chatGroupId
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
-  const [myPseudonym, setMyPseudonym] = useState<string | null>(null)
-  if (room.match?.you && room.match.you !== myPseudonym) setMyPseudonym(room.match.you)
+  const myPseudonym = room.match?.you ?? room.pseudonym ?? null
   const myPhoto = myMainPhoto(user)
   const myName = user?.name?.trim() || 'You'
   /** The creature's seed while anonymous: never your real name. */

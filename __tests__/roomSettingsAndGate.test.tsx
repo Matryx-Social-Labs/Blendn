@@ -1,5 +1,6 @@
 import { readFileSync } from "fs"
 import { join } from "path"
+import { pseudonymFromDoor } from "../lib/roomState"
 
 /**
  * The room's reveal switch, and the way into the room's settings.
@@ -68,5 +69,18 @@ describe("your photo in the room is myMainPhoto, never User.image (ROOM-01)", ()
 
   it("the face is decided by myRoomFace: anonymous is the creature", () => {
     expect(code).toContain("myRoomFace({ revealed: controls.revealed")
+  })
+})
+
+describe("the banner names your pseudonym (ROOM-02, SV-3)", () => {
+  it("reads you.pseudonym from the door; absent or blank is null", () => {
+    expect(pseudonymFromDoor({ you: { pseudonym: " Night Cat " } })).toBe("Night Cat")
+    expect(pseudonymFromDoor({ you: {} })).toBeNull()
+    expect(pseudonymFromDoor({ you: { pseudonym: "  " } })).toBeNull()
+    expect(pseudonymFromDoor({})).toBeNull()
+    expect(pseudonymFromDoor(null)).toBeNull()
+  })
+  it("the screen takes it from the room, ahead of a match's", () => {
+    expect(code).toContain("room.match?.you ?? room.pseudonym")
   })
 })

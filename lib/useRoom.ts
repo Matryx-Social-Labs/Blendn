@@ -14,6 +14,7 @@ import { requestTextRefusal } from './requestRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
 import { Logger } from './logger'
 import { reasonLine } from './roomMoments'
+import { pseudonymFromDoor } from './roomState'
 import {
   applyArrival,
   applyCheckout,
@@ -128,6 +129,8 @@ export interface RoomState {
   refreshing: boolean
   /** The room's group chat, resolved once per room; null if it isn't open. */
   chatGroupId: string | null
+  /** Your pseudonym in this room, as the server holds it (`GET /events/:id/chat` `you`, SV-3); null until it says. */
+  pseudonym?: string | null
   /** The mutual just made — from your like, or from theirs over the socket. */
   /**
    * The mutual just made — from your like, or from theirs over the socket.
@@ -198,6 +201,7 @@ async function countCandidates(eventId: string, force: boolean): Promise<unknown
  */
 const chatGroupIdByEvent = new Map<string, string>()
 
+
 type ChatLookup = {
   result: ReturnType<typeof apiClient.getEventChat>
   history: { groupId: string; messages: Promise<Awaited<ReturnType<typeof apiClient.getChatMessages>> | null> } | null
@@ -228,6 +232,7 @@ export function useRoom(): RoomState & RoomActions {
   const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [chatGroupId, setChatGroupId] = useState<string | null>(null)
+  const [pseudonym, setPseudonym] = useState<string | null>(null)
   /** The room whose first count, and whose chat lookup, have answered. */
   const [seededFor, setSeededFor] = useState<string | null>(null)
   const [chatFor, setChatFor] = useState<string | null>(null)
@@ -602,6 +607,7 @@ export function useRoom(): RoomState & RoomActions {
         const id = result.data?.chatGroupId ?? result.data?.id
         if (result.success && id) {
           setChatGroupId(String(id))
+          setPseudonym(pseudonymFromDoor(result.data))
           chatGroupIdByEvent.set(eventId, String(id))
           // Served as a member: back in, and the room's mute as the server has it.
           markRoomJoined(String(id))
@@ -877,6 +883,7 @@ export function useRoom(): RoomState & RoomActions {
     loadingMore,
     refreshing,
     chatGroupId,
+    pseudonym,
     match,
     error: loadError,
     connection,

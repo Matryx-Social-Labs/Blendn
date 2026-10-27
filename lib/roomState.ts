@@ -48,3 +48,9 @@ export function myRoomFace(input: { revealed: boolean; photo: string | null; pse
   if (input.revealed && input.photo) return { kind: 'photo', uri: input.photo }
   return { kind: 'creature', pseudonym: input.pseudonym ?? markSeed('You', input.eventId ?? 'room') }
 }
+
+/** `you.pseudonym` from `GET /events/:id/chat` (SV-3). Narrow cast: `EventChatData` is `apiClient.ts`'s (SYS-19 declares it). Absent on an older server. */
+export function pseudonymFromDoor(data: unknown): string | null {
+  const name = (data as { you?: { pseudonym?: unknown } } | null | undefined)?.you?.pseudonym
+  return typeof name === 'string' && name.trim() ? name.trim() : null
+}
