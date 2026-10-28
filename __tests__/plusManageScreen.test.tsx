@@ -106,6 +106,7 @@ describe('a Blend’n+ bought outside the app', () => {
     expect(screen.queryByTestId('plus-manage-store')).toBeNull()
     expect(screen.queryByRole('link')).toBeNull()
     expect(screen.getByText(/Managed outside the app/)).toBeTruthy()
+    expect(screen.queryByText(/Cancelling is one tap/)).toBeNull()
   })
 })
 

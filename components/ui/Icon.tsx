@@ -145,11 +145,7 @@ import Sparkles from 'lucide-react-native/icons/sparkles'
 import Ticket from 'lucide-react-native/icons/ticket'
 import Timer from 'lucide-react-native/icons/timer'
 import Toilet from 'lucide-react-native/icons/toilet'
-// Two names, one glyph (the frames say `trash-2`; Lucide 1.x calls it `trash`): one import per map key, as the inventory test counts.
-// eslint-disable-next-line import/no-duplicates
 import Trash from 'lucide-react-native/icons/trash'
-// eslint-disable-next-line import/no-duplicates
-import Trash2 from 'lucide-react-native/icons/trash'
 import Trees from 'lucide-react-native/icons/trees'
 import TreePalm from 'lucide-react-native/icons/tree-palm'
 import TriangleAlert from 'lucide-react-native/icons/triangle-alert'
@@ -313,7 +309,7 @@ const ICONS = {
   toilet: Toilet,
   trash: Trash,
   // The frames' name for it: Lucide 1.x calls `trash-2` `trash`, so both names draw the one glyph (SYS-13).
-  'trash-2': Trash2,
+  'trash-2': Trash,
   trees: Trees,
   'tree-palm': TreePalm,
   'triangle-alert': TriangleAlert,

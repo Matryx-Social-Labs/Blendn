@@ -5,7 +5,7 @@ import { Platform } from 'react-native'
  * "Update Blend'n to keep going" (Flow 15 15.14).
  *
  * The server says it by refusing a build it no longer serves: `426` with `errorCode: 'UPDATE_REQUIRED'` on any request,
- * decided in `middleware.ts` (`lib/mobile-gate.ts`) from the `X-App-Version` header every request carries and the
+ * decided in `middleware.ts` (`lib/mobile-gate.ts`, SV-14) from the `X-App-Version` header every request carries and the
  * `X-App-Build` number (`MOBILE_MIN_APP_VERSION` / `MOBILE_MIN_APP_BUILD_{IOS,ANDROID}`; unset means no gate). Nothing
  * here guesses: without the server's refusal this never shows. The first refusal marks it for the rest of the run,
  * because a build the server will not talk to will not recover without the store.
