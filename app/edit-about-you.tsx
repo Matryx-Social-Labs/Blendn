@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router'
+import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
@@ -76,9 +76,6 @@ export const LANGUAGES_SHOWN = HOME_STATES_SHOWN
  * basics step's and Edit profile's, not this screen's.
  */
 function EditAboutYouScreenContent() {
-  // Opened from Settings' "How you match" row it says so in its bar; from Edit profile it is "About you". A flag, not a
-  // title: a route param is whatever a link says, and a bar must not be made to print it.
-  const { from } = useLocalSearchParams<{ from?: string }>()
   const { user: authUser } = useAuth()
   const { showToast } = useToast()
   const insets = useSafeAreaInsets()
@@ -260,7 +257,7 @@ function EditAboutYouScreenContent() {
   return (
     <View style={styles.screen}>
       <TopBar
-        title={from === 'settings' ? 'How you match' : 'About you'}
+        title="About you"
         state={scrolled ? 'scrolled' : 'rest'}
         onBack={() => router.back()}
         save={{

@@ -100,20 +100,13 @@ const save = async () => {
   })
 }
 
-describe('the bar says where you came from (Settings › How you match)', () => {
-  it('is "About you" from Edit profile', async () => {
+describe('the bar is "About you", whichever screen opened it (SYS-18: Settings\' row is titled the same)', () => {
+  it.each([{}, { from: 'settings' }])('reads "About you" for %j, and prints nothing a link says', async (params) => {
+    mockParams = { ...params, title: 'Free money' }
     await open()
     expect(screen.getByText('About you')).toBeTruthy()
-  })
-  it('is "How you match" when Settings opened it', async () => {
-    mockParams = { from: 'settings' }
-    await open()
-    expect(screen.getByText('How you match')).toBeTruthy()
-  })
-  it('prints nothing a link says: only the flag picks between the two bars', async () => {
-    mockParams = { from: 'settings', title: 'Free money' }
-    await open()
     expect(screen.queryByText('Free money')).toBeNull()
+    expect(screen.queryByText('How you match')).toBeNull()
   })
 })
 

@@ -192,7 +192,7 @@ describe('About you row (E7: titled for the screen it opens until 14.4 "How you 
   it('sits beside Notifications and opens the about-you fields', async () => {
     await render(<Screen />)
     fireEvent.press(await screen.findByRole('button', { name: 'About you, What matching reads' }))
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/edit-about-you', params: { from: 'settings' } })
+    expect(router.push).toHaveBeenCalledWith('/edit-about-you')
     expect(screen.getByText('Notifications & matching')).toBeTruthy()
   })
 })
