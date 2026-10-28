@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
-import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { blendnClosed, isLiveHint, openPass, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -167,7 +167,15 @@ export function BlendnScreen() {
   // The Room is people: the rose world, one hue for the whole screen (People | Crews, the chips, the sheets).
   return (
     <HueProvider value="rose">
-      <RoomStage ref={stage} onClosed={blendnClosed}>
+      <RoomStage
+        ref={stage}
+        onClosed={() => {
+          const back = takeReturnTo()
+          blendnClosed()
+          // Opened from an event page ("Blend in"): back to it, not to the Pulse it stepped through (ROOM-13).
+          if (back) router.push({ pathname: '/event/[id]', params: { id: back } as never })
+        }}
+      >
         <BlendnContent onClose={close} backGuard={backGuard} />
       </RoomStage>
     </HueProvider>

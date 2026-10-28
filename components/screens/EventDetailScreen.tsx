@@ -846,7 +846,8 @@ export default function EventDetail() {
         going: rsvpStatus === 'going',
         tasteMatchCount: null,
         goingCount: null,
-      })
+      // Closing the Room comes back to this page (ROOM-13): it is dismissed to show the overlay, and re-opened after.
+      }, { returnToEvent: true })
     )
 
   /*
