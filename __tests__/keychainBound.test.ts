@@ -33,7 +33,7 @@ jest.mock('../lib/fetchTimeout', () => ({ ...jest.requireActual('../lib/fetchTim
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { apiClient, TokenStorage, REFRESH_DEADLINE_MS } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+const { apiClient, TokenStorage, REFRESH_DEADLINE_MS, SIGN_OUT_READ_MS } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 const { TIMEOUT_MESSAGE } = require('../lib/fetchTimeout') as typeof import('../lib/fetchTimeout')
 const { Logger } = require('../lib/logger') as typeof import('../lib/logger')
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -161,7 +161,8 @@ describe('sign-out always finishes (SCRUM-733)', () => {
     global.fetch = jest.fn() as typeof fetch
     mockStalledReads.add(REFRESH)
     const pending = apiClient.signOut()
-    await jest.advanceTimersByTimeAsync(100)
+    // Sign-out waits SIGN_OUT_READ_MS for the keychain, not the (here shortened) request deadline.
+    await jest.advanceTimersByTimeAsync(SIGN_OUT_READ_MS + 100)
     await expect(pending).resolves.toEqual({ success: false, error: TIMEOUT_MESSAGE })
     expect(global.fetch).not.toHaveBeenCalled()
     expect(mockSecure.has(ACCESS)).toBe(false)

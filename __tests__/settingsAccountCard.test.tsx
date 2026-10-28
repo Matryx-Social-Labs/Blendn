@@ -36,6 +36,17 @@ jest.mock('../lib/notifications', () => ({
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted', canAskAgain: true }) }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+const mockCaps: number[] = []
+jest.mock('../lib/fetchTimeout', () => {
+  const actual = jest.requireActual('../lib/fetchTimeout')
+  return {
+    ...actual,
+    settleWithin: (work: Promise<unknown>, ms: number, fallback: unknown) => {
+      mockCaps.push(ms)
+      return actual.settleWithin(work, 30, fallback)
+    },
+  }
+})
 jest.mock('../lib/haptics', () => ({ H: { destructive: jest.fn(), toggle: jest.fn(), error: jest.fn(), primary: jest.fn(), success: jest.fn() } }))
 const mockOffline = jest.fn()
 jest.mock('../lib/networkStatus', () => ({
@@ -176,6 +187,21 @@ describe('Sign out of every device', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
     expect(screen.getByText('Sign out everywhere?')).toBeTruthy()
     expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
+  // SCRUM-733: the spinner (and the sheet's disabled Cancel) lasted as long as a restored session's keychain took.
+  it('gives up waiting after the cap: nothing was signed out, Try again is offered, and Cancel works', async () => {
+    ;(signOutEverywhere as jest.Mock).mockReturnValue(new Promise(() => {}))
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('button', { name: 'Sign out of every device' }))
+    await screen.findByText('Sign out everywhere?')
+    fireEvent.press(screen.getByRole('button', { name: 'Sign out everywhere' }))
+    // The cap is 20 s (past one request deadline); the test shortens the wait, not the number it asks for.
+    expect(mockCaps).toContain(20_000)
+    expect(await screen.findByText('Couldn’t reach Blend’n, so nothing was signed out. Try again.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByText('Sign out everywhere?')).toBeNull())
   })
 })
 
