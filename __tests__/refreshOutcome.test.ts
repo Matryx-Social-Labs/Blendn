@@ -77,7 +77,8 @@ describe('the reason travels with the sign-out (SCRUM-93)', () => {
     // told only "You were signed out" — the server had said why at refresh.
     const refresh = src.slice(src.indexOf('private async refreshTokens'))
     expect(refresh).toMatch(/if \(response\.status === 403\) \{[\s\S]*rejectedReason = body\.error/)
-    expect(src).toContain('markSessionExpired(rejectedReason, rejectedCode)')
+    expect(src).toContain('markSessionExpired(reason, code)')
+    expect(src).toContain('const reason = rejectedReason')
     expect(events).toMatch(/return stored === '1' \? true : stored/)
     expect(entry).toContain("setNotice(reason === 'expired' && sentence ? sentence : SESSION_END_NOTICE[reason])")
   })

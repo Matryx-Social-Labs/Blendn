@@ -360,8 +360,10 @@ describe('authed requests read the session from memory (RC drive 2 D-A)', () => 
     expect(mockLog.slice(from)).toContain(`delete ${ACCESS}`)
     // And memory is empty at once: the next authed request carries no token, though the keychain still holds one.
     expect(mockSecure.has(ACCESS)).toBe(true)
+    // The next authed request is answered here, not sent without a token (SCRUM-879).
+    const sentBefore = sessionBearers.length
     await expect(apiClient.getSession()).resolves.toMatchObject({ success: false })
-    expect(sessionBearers.at(-1)).toBeNull()
+    expect(sessionBearers.length).toBe(sentBefore)
 
     // The relaunch: the marker means the keychain's leftovers are cleared, not restored.
     relaunch()
