@@ -108,7 +108,7 @@ it('an RSVP or a save (the status writers announce it) reads again, forced; afte
   await flush()
   expect(events).toHaveBeenCalledTimes(2)
   expect(events.mock.calls[1][1]).toEqual({ force: true })
-  view.unmount()
+  await view.unmount()
   await act(async () => emitEventStatusChanged())
   await flush()
   expect(events).toHaveBeenCalledTimes(2)
