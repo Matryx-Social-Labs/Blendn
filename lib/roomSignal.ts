@@ -83,6 +83,23 @@ export function clearRoomSignal(): void {
   for (const fn of _listeners) fn()
 }
 
+let _stopSource: (() => void) | null = null
+
+/**
+ * The mounted source says how to stop it, so sign-out can (`useAuth` imports this leaf, not the source: the source reaches
+ * location and the API client). Cleared by the source itself on unmount.
+ */
+export function setRoomSignalSourceStop(stop: (() => void) | null): void {
+  _stopSource = stop
+}
+
+/** Sign-out: nothing more is published for this account, whatever read is still out. Before `clearRoomSignal`. */
+export function stopRoomSignalSource(): void {
+  const stop = _stopSource
+  _stopSource = null
+  stop?.()
+}
+
 export function subscribeRoomSignal(fn: () => void): () => void {
   _listeners.add(fn)
   return () => _listeners.delete(fn)

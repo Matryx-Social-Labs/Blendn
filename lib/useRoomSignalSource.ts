@@ -8,7 +8,7 @@ import { getDistanceKm, roundCoord } from './geo'
 import { Logger } from './logger'
 import { type PreciseFix, type RoomButtonEvent } from './roomButton'
 import { subscribeEventStatusChanged } from './eventStatusSignal'
-import { publishRoomSignal } from './roomSignal'
+import { publishRoomSignal, setRoomSignalSourceStop, stopRoomSignalSource } from './roomSignal'
 import { rsvpEventRows, savedEventRows, type SavedEventRow } from './savedEvents'
 import { quietLocation, type QuietCoords } from './useTonight'
 
@@ -170,20 +170,15 @@ function liveDepsFor(userId: string): SourceDeps {
   }
 }
 
-let active: ReturnType<typeof createRoomSignalSource> | null = null
-
-/** Sign-out: nothing more is published for this account, whatever read is still out. */
-export function stopRoomSignalSource(): void {
-  active?.dispose()
-  active = null
-}
+export { stopRoomSignalSource }
 
 /** Mount once, in the tab layout. */
 export function useRoomSignalSource(userId: string | null | undefined): void {
   useEffect(() => {
     if (!userId) return
     const source = createRoomSignalSource(liveDepsFor(userId))
-    active = source
+    const stop = () => source.dispose()
+    setRoomSignalSourceStop(stop)
     void source.run()
     // A phone in a pocket does not need its fence judged every minute: the foreground does it when it comes back.
     const id = setInterval(() => AppState.currentState === 'active' && void source.run(), SOURCE_TICK_MS)
@@ -193,7 +188,7 @@ export function useRoomSignalSource(userId: string | null | undefined): void {
     const unStatus = subscribeEventStatusChanged(() => void source.run('mine'))
     return () => {
       source.dispose()
-      if (active === source) active = null
+      setRoomSignalSourceStop(null)
       clearInterval(id)
       app.remove()
       unCheckIn()
