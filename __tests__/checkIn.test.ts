@@ -17,7 +17,7 @@ jest.mock('../lib/roomVisibilityStorage', () => ({
 /* eslint-disable import/first */
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { askIntentRoute, checkOutOf, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
+import { askIntentRoute, checkOutOf, revealOffer, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
 /* eslint-enable import/first */
 
 const mockApi = jest.requireMock('../lib/apiClient').apiClient as Record<
@@ -226,5 +226,22 @@ describe('every check-out goes through checkOutOf', () => {
   it('and the tab bar listens', () => {
     const src = readFileSync(join(__dirname, '..', 'app', '(tabs)', '_layout.tsx'), 'utf8')
     expect(src).toContain('subscribeCheckInChanged(')
+  })
+})
+
+describe('revealOffer reads the main photo (L4)', () => {
+  const seen = jest.requireMock('../lib/roomVisibilityStorage').hasSeenPublicCheckInWarning as jest.Mock
+  it('a first-time warning only when there is a photo to reveal; none without one', async () => {
+    seen.mockResolvedValue(false)
+    const withPhoto = await revealOffer({ id: 'u1', firstName: 'Sneha', photo: 'https://cdn/p.jpg' })
+    const without = await revealOffer({ id: 'u1', firstName: 'Sneha', photo: null })
+    expect(withPhoto.title).not.toBe(without.title)
+    expect(without.title).toBe('Show your name here?')
+    seen.mockResolvedValue(true)
+  })
+  it('the check-in flow hands it myMainPhoto, never User.image', () => {
+    const src = readFileSync(join(__dirname, '..', 'lib', 'useCheckInFlow.ts'), 'utf8')
+    expect(src).toContain('photo: myMainPhoto(user)')
+    expect(src).not.toMatch(/image: user\.image/)
   })
 })

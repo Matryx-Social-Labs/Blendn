@@ -144,6 +144,13 @@ describe('the fourth tip: "Swipe a chat left to mute it." (ROOM-18)', () => {
     expect(mockSpots.some((s) => s.active && s.text === 'Swipe a chat left to mute it.')).toBe(true)
   })
 
+  it('finds its row by a flag on the row, not by matching the tray’s label', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'chat.tsx'), 'utf8')
+    expect(src).toContain('i.row.canMute === true')
+    expect(src).not.toMatch(/label === 'Mute'/)
+    expect(src.match(/canMute: true/g)).toHaveLength(2)
+  })
+
   it('a swipe-open counts as use, so it never shows to somebody who already knows', async () => {
     const { COACH_TIPS } = jest.requireActual('../lib/coachMarks') as typeof import('../lib/coachMarks')
     expect(COACH_TIPS.find((t) => t.id === 'banter_swipe_mute')?.text).toBe('Swipe a chat left to mute it.')

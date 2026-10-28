@@ -21,9 +21,8 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
   /*
    * Is there anything to reveal?
    *
-   * The first of `profile.photos`, the photo a reveal shows (`myMainPhoto`): never
-   * `User.image`, the OAuth avatar, which a reveal does not show. Without this the
-   * banner offered a switch that changed nothing anybody could see.
+   * The first of `profile.photos`, the photo a reveal shows (`myMainPhoto`). Without
+   * this the banner offered a switch that changed nothing anybody could see.
    */
   const { user } = useAuth()
   const readiness = revealReadiness({

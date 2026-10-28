@@ -68,6 +68,8 @@ type Row = {
   searchText: string
   open: () => void
   swipe: SwipeAction[]
+  /** Its swipe tray has Mute: the first such row is where the Banter's swipe tip points (a flag, not a label to match). */
+  canMute?: true
 }
 
 type Item =
@@ -228,6 +230,7 @@ function ChatInner() {
           searchText: `${r.name} ${text}`.toLowerCase(),
           open: () => openCrewRoom(r),
           swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(r.id) }],
+          canMute: true,
         }
       })
       .sort(byRecent)
@@ -279,6 +282,7 @@ function ChatInner() {
             { icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(c.chat_room_id) },
             { icon: 'log-out', label: 'Leave', destructive: true, onPress: () => setLeaveFor(c.chat_room_id) },
           ],
+          canMute: true,
         }
       })
       .sort(byRecent)
@@ -338,7 +342,7 @@ function ChatInner() {
    * The fourth tip (round4/r4.js TIPS[3]): the first chat that can be muted is the hole, "Swipe a chat left to mute it."
    * Once ever; a swipe or the Mute sheet counts as use (`markCoachUsed`).
    */
-  const firstMutable = items.find((i): i is Extract<Item, { type: 'row' }> => i.type === 'row' && i.row.swipe.some((a) => a.label === 'Mute'))?.key ?? null
+  const firstMutable = items.find((i): i is Extract<Item, { type: 'row' }> => i.type === 'row' && i.row.canMute === true)?.key ?? null
   const swipeCoach = useCoachMark('banter_swipe_mute', { ready: !inbox.loading && !searching && !trimmed && !muteFor && openSwipe === null && firstMutable !== null })
   const swipeCoachTarget = useRef<View>(null)
   useCoachMarkSpot(swipeCoach.visible, {

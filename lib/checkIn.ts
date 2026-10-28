@@ -196,14 +196,14 @@ export function askIntentRoute(eventId: string): Href {
 export async function revealOffer(user: {
   id: string
   firstName: string | null
-  image?: string | null
+  /** The main photo a reveal would show (`myMainPhoto`). */
+  photo?: string | null
 }): Promise<{ title: string; message: string; confirm: string; cancel: string }> {
   const firstTime = shouldWarnBeforePublicCheckIn({
     revealByDefault: true,
     hasSeenWarning: await hasSeenPublicCheckInWarning(user.id),
-    // Nothing to reveal means nothing to warn about. `User.image` mirrors
-    // `photos[0]`, so it is the same photo a reveal would show.
-    canReveal: revealReadiness({ name: user.firstName, photos: user.image ? [user.image] : [] }).ok,
+    // Nothing to reveal means nothing to warn about: the main photo is the one a reveal would show.
+    canReveal: revealReadiness({ name: user.firstName, photos: user.photo ? [user.photo] : [] }).ok,
   })
   if (firstTime) await markPublicCheckInWarningSeen(user.id)
   return firstTime
