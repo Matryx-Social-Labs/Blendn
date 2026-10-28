@@ -55,6 +55,7 @@ export function ShareSheet({
   onCopy,
   onMore,
   onDismissed,
+  linkless = false,
   testID,
 }: {
   visible: boolean
@@ -69,6 +70,8 @@ export function ShareSheet({
   onMore: () => void
   /** Once the tray has left the screen: a sheet that follows it (the Story options) waits for this. */
   onDismissed?: () => void
+  /** There is no link to send (a venue whose page is not live yet): no card, no "This is what they'll see", and Copy copies words. */
+  linkless?: boolean
   testID?: string
 }) {
   const bold = useBoldText()
@@ -98,7 +101,7 @@ export function ShareSheet({
     { id: 'story', label: 'Instagram Story', icon: 'camera', onPress: onStory, haptic: H.primary },
     {
       id: 'copy',
-      label: copied ? 'Copied' : 'Copy link',
+      label: copied ? 'Copied' : linkless ? 'Copy' : 'Copy link',
       icon: copied ? 'check' : 'link',
       strong: !!copied,
       live: true,
@@ -114,12 +117,14 @@ export function ShareSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} title="Share" testID={testID}>
-      <View accessible accessibilityLabel={`This is what they’ll see: ${spoken}`} style={styles.preview}>
-        <View style={[styles.cardEdge, contrast && IC_HAIRLINE]}>
-          <LinkPreviewCard preview={previewOf(share)} width={width - 2 * SPACE.gutter} radius={RADIUS.rowInCard} />
+      {linkless ? null : (
+        <View accessible accessibilityLabel={`This is what they’ll see: ${spoken}`} style={styles.preview}>
+          <View style={[styles.cardEdge, contrast && IC_HAIRLINE]}>
+            <LinkPreviewCard preview={previewOf(share)} width={width - 2 * SPACE.gutter} radius={RADIUS.rowInCard} />
+          </View>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[400]), styles.centre, { color: COLOR.textTertiary }]}>This is what they’ll see</Text>
         </View>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.brand[400]), styles.centre, { color: COLOR.textTertiary }]}>This is what they’ll see</Text>
-      </View>
+      )}
       <View style={styles.titleBlock}>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>{title}</Text>
         {share.kind === 'event' ? (

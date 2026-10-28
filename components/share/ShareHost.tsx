@@ -141,6 +141,7 @@ function ShareFlow({ target, shown }: { target: ShareTarget; shown: boolean }) {
         visible={shown && stage === 'tray' && whatsApp !== null}
         onClose={finish}
         onDismissed={openStory}
+        linkless={!!textOnly}
         share={target}
         whatsApp={whatsApp ?? true}
         onWhatsApp={() => void whatsAppSend()}
