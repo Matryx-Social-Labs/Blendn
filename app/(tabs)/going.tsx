@@ -21,7 +21,8 @@ import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../..
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
 import { apiClient } from '../../lib/apiClient'
-import { openBlendn } from '../../lib/blendnOverlay'
+import { openPass, useLiveEventId } from '../../lib/blendnOverlay'
+import { attendancePhase, doorOf, goingCardAction } from '../../lib/attendanceState'
 import { Logger } from '../../lib/logger'
 import { failedSections, goingSections, newFailure, type GoingPaging, type GoingSection } from '../../lib/goingSections'
 import {
@@ -437,6 +438,9 @@ function GoingScreenInner() {
     [shareRow, openBoard]
   )
 
+  // The event you are checked into (the disc's poll): its Next up card says "You’re in" (SCRUM-882).
+  const liveEventId = useLiveEventId()
+
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })
   }, [])
@@ -457,8 +461,17 @@ function GoingScreenInner() {
      * listed until the run's end, and says so rather than naming a start.
      */
     const today = liveWindow(row)
-    const when = sessionOver(row) ? 'Ended' : nextUpLabel(today.start_time, today.end_time, new Date(), row.timezone)
-    const live = when === HAPPENING_NOW
+    // The attendance flow's one phase (`lib/attendanceState.ts`): a cancelled night is never "Happening now" (SCRUM-882).
+    const phase = attendancePhase(row)
+    const live = phase === 'live'
+    const clock = nextUpLabel(today.start_time, today.end_time, new Date(), row.timezone)
+    // Not live but inside its hours (called off): its date and time, never "Happening now".
+    const when = sessionOver(row)
+      ? 'Ended'
+      : live || clock !== HAPPENING_NOW
+        ? clock
+        : `${featuredDateLabel(today.start_time, new Date(), row.timezone)} · ${timeLabel(today.start_time, row.timezone)}`
+    const action = goingCardAction(phase, liveEventId === row.id)
     const place = placeLabel(row)
     const cancelled = row.status === 'cancelled'
     const waitlisted = !cancelled && row.rsvpStatus === 'waitlisted'
@@ -517,20 +530,30 @@ function GoingScreenInner() {
            * (Direction C, audit C14: nothing on the tab was lit); Calendar and Share are icons.
            */}
           <View style={styles.heroActions}>
-            {live ? (
-              <Button kind="lit" size="md" icon="radio" label="Open Blend’n" onPress={() => openBlendn()} style={styles.heroLit} testID="going-open-blendn" />
-            ) : (
+            {action.kind === 'pass' ? (
+              // Owner ruling 2026-10-28: the check-in page for THIS event (its pass and hold), never the overlay with no event.
+              <Button
+                kind="lit"
+                size="md"
+                icon="radio"
+                label={action.label}
+                accessibilityHint={liveEventId === row.id ? 'Opens the room' : 'Opens Blend’n to check in'}
+                onPress={() => openPass(doorOf(row, { going: row.rsvpStatus === 'going' }))}
+                style={styles.heroLit}
+                testID="going-blend-in"
+              />
+            ) : action.kind === 'directions' ? (
               <Button
                 kind="lit"
                 size="md"
                 icon="navigation"
-                label="Directions"
+                label={action.label}
                 accessibilityLabel={`Directions to ${row.venue_name || row.title}`}
                 onPress={() => void openInMaps(row)}
                 style={styles.heroLit}
                 testID="going-directions"
               />
-            )}
+            ) : null}
             {live ? (
               <HeroAction icon="navigation" accessibilityLabel={`Directions to ${row.venue_name || row.title}`} onPress={() => void openInMaps(row)} />
             ) : (
@@ -547,7 +570,7 @@ function GoingScreenInner() {
         </View>
       </View>
     )
-  }, [bold, openBoard, openEvent, refreshCount, shareRow])
+  }, [bold, openBoard, openEvent, refreshCount, shareRow, liveEventId])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:

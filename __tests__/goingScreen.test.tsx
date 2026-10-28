@@ -32,7 +32,8 @@ jest.mock('../lib/apiClient', () => ({
 }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/shareRow', () => ({ shareEvent: jest.fn() }))
-jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
+let mockLiveEventId: string | null = null
+jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn(), useLiveEventId: () => mockLiveEventId }))
 jest.mock('../lib/paywall', () => ({ openTonight: jest.fn() }))
 
 /* eslint-disable import/first */
@@ -426,5 +427,47 @@ describe('the Board from Going (OUT-02, decision E2)', () => {
     await screen.findByTestId('going-next')
     expect(screen.queryByLabelText(/^The Board\./)).toBeNull()
     expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Board')
+  })
+})
+
+describe('Next up while it is on: the label follows the state, and the tap docks THIS event’s pass (SCRUM-882)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const overlay = require('../lib/blendnOverlay') as { openPass: jest.Mock; openBlendn: jest.Mock }
+  const liveNow = (over: object = {}) => ({
+    ...upcoming('live', { startTime: new Date(Date.now() - 1_800_000).toISOString(), endTime: new Date(Date.now() + 7_200_000).toISOString(), latitude: 12.97, longitude: 77.64 }),
+    rsvpStatus: 'going',
+    ...over,
+  })
+  afterEach(() => {
+    mockLiveEventId = null
+  })
+
+  it('not checked in: "Blend in" opens Blend’n at this event’s pass, not the overlay with no event', async () => {
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: [liveNow()], pagination: page(1, 1, false) } } as never)
+    await open()
+    const button = await screen.findByTestId('going-blend-in')
+    expect(screen.getAllByText('Blend in').length).toBeGreaterThan(0)
+    await fireEvent.press(button)
+    expect(overlay.openPass).toHaveBeenCalledWith(expect.objectContaining({ id: 'live', latitude: 12.97, longitude: 77.64 }))
+    expect(overlay.openBlendn).not.toHaveBeenCalled()
+  })
+
+  it('checked in here: "You’re in", still this event (the overlay shows its room)', async () => {
+    mockLiveEventId = 'live'
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: [liveNow()], pagination: page(1, 1, false) } } as never)
+    await open()
+    await fireEvent.press(await screen.findByTestId('going-blend-in'))
+    expect(screen.getAllByText('You’re in').length).toBeGreaterThan(0)
+    expect(overlay.openPass).toHaveBeenCalledWith(expect.objectContaining({ id: 'live' }))
+  })
+
+  it('a cancelled night happening now offers neither Blend in nor Directions', async () => {
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: [liveNow({ status: 'cancelled' })], pagination: page(1, 1, false) } } as never)
+    await open()
+    await screen.findByText('Cancelled')
+    expect(screen.queryByTestId('going-blend-in')).toBeNull()
+    expect(screen.queryByText('Open Blend’n')).toBeNull()
+    expect(screen.queryByTestId('going-directions')).toBeNull()
+    expect(screen.queryByText('Happening now')).toBeNull()
   })
 })

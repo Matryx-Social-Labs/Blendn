@@ -1,5 +1,6 @@
 import type { SceneCTAState } from '../components/scene/SceneSections'
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
+import type { TonightEvent } from './useTonight'
 
 /**
  * The attendance flow's one state model (SCRUM-882; spec: blendn-design-export/plans/ATTENDANCE-FLOW-2026-10-28.md).
@@ -74,4 +75,42 @@ export function passReach(s: { inside: boolean; location: 'on' | 'off' | 'approx
 /** The one short line under a disabled hold; no venue, no distance (owner ruling 2026-10-28). */
 export function passReachLine(reach: PassReach): string | null {
   return reach === 'far' ? 'You’re too far away' : reach === 'locationOff' ? 'Location is off' : null
+}
+
+/**
+ * The pass to dock for one event (`openPass`): the Going card's "Blend in" and the event page's both open the check-in for
+ * THIS event (owner ruling 2026-10-28), with today's window and its coordinates, so the pass can tell "too far" itself.
+ */
+export function doorOf(
+  e: PhaseSource & {
+    id: string
+    title: string
+    venue_name?: string | null
+    cover_image_url?: string | null
+    timezone?: string | null
+    latitude?: number | null
+    longitude?: number | null
+    category?: string
+  },
+  extra: { going: boolean; hereCount?: number }
+): TonightEvent {
+  const w = liveWindow(e)
+  return {
+    id: e.id,
+    title: e.title,
+    venue: e.venue_name ?? '',
+    photo: e.cover_image_url ?? null,
+    startsAt: w.start_time,
+    endsAt: w.end_time ?? e.end_time ?? w.start_time,
+    timeZone: e.timezone ?? null,
+    distanceKm: null,
+    hereCount: extra.hereCount ?? 0,
+    capacity: null,
+    going: extra.going,
+    tasteMatchCount: null,
+    goingCount: null,
+    category: e.category,
+    latitude: e.latitude ?? null,
+    longitude: e.longitude ?? null,
+  }
 }

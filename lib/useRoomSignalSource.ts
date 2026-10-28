@@ -56,7 +56,7 @@ export function mergeSignalEvents(near: readonly RoomButtonEvent[], mine: readon
   if (mine === null) return [...near]
   const yours = new Map(mine.map((m) => [m.id, m]))
   const seen = new Set<string>()
-  const merged = near.map((e) => {
+  const merged = near.map((e): RoomButtonEvent => {
     seen.add(e.id)
     const m = yours.get(e.id)
     return { ...e, is_favorited: m?.is_favorited === true, rsvp_status: m?.rsvp_status ?? null }
