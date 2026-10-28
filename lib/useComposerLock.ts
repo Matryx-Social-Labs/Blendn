@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { ComposerState } from '../components/ds/Composer'
 import { waitLabel } from './chatFeed'
+import type { ChatHistoryData, RoomWriteRead } from './apiClient'
 
 export type ComposerLock = { state: ComposerState; reason?: string }
 
@@ -66,19 +67,21 @@ export function lockForReason(reason: string | null | undefined, serverText?: st
   }
 }
 
-/**
- * What `GET /events/:id/chat` says about whether you may write, as the composer's lock on open (ROOM-05): the room's
- * own `status: 'locked'`, else your `write.reason`. A room that has not opened yet is the countdown's, not a lock here.
- * Narrow cast: `EventChatData` is `apiClient.ts`'s (SYS-19 declares these fields).
- */
+/** The `write` / `status` a read carried: a bare array (an older server's history) carries none. */
+const writeReadOf = (data: RoomWriteRead | ChatHistoryData | null | undefined): RoomWriteRead => (!data || Array.isArray(data) ? {} : data)
+
 /** Whether a read said anything about writing (`write`): a server older than SV-5 does not, and the caller asks the door instead. */
-export function saidWrite(data: unknown): boolean {
-  const write = (data as { write?: unknown } | null | undefined)?.write
+export function saidWrite(data: RoomWriteRead | ChatHistoryData | null | undefined): boolean {
+  const write = writeReadOf(data).write
   return !!write && typeof write === 'object'
 }
 
-export function lockFromDoor(data: unknown): ComposerLock | null {
-  const d = (data ?? {}) as { status?: unknown; write?: { allowed?: unknown; reason?: unknown; message?: unknown } | null }
+/**
+ * What `GET /events/:id/chat` says about whether you may write, as the composer's lock on open (ROOM-05): the room's
+ * own `status: 'locked'`, else your `write.reason`. A room that has not opened yet is the countdown's, not a lock here.
+ */
+export function lockFromDoor(data: RoomWriteRead | ChatHistoryData | null | undefined): ComposerLock | null {
+  const d = writeReadOf(data)
   const message = typeof d.write?.message === 'string' ? d.write.message : undefined
   if (d.status === 'locked') return lockForReason('locked', message)
   if (!d.write || d.write.allowed !== false || typeof d.write.reason !== 'string' || d.write.reason === 'not_open_yet') return null

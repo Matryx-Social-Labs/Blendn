@@ -12,6 +12,6 @@ describe('left (ROOM-10)', () => {
     expect(youLeftLine({ left: [] })).toBeNull()
     expect(youLeftLine({})).toBeNull()
     expect(youLeftLine(null)).toBeNull()
-    expect(leftNames({ left: [null, { name: '  ' }, { name: 5 }] })).toEqual([])
+    expect(leftNames({ left: [null, { name: '  ' }, { name: 5 }] } as never)).toEqual([])
   })
 })

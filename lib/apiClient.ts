@@ -763,6 +763,8 @@ export interface PaginationMeta {
 /** Represents one event item as returned by the mobile API (camelCase). */
 export interface EventApiItem {
   id: string
+  /** The neighbourhood, from the detail route (an unlisted event names it, never the venue). Absent from a server that does not send it. */
+  area?: string | null
   slug: string
   title: string
   description: string | null
@@ -1084,6 +1086,13 @@ export interface VenueDetail {
   tonight: { id: string; title: string; startTime: string; endTime: string; coverImageUrl?: string | null; timezone?: string | null } | null
 }
 
+/** A room a check-in or Go Live took you out of (blendn-admin `LeftRoom`). Absent from an older server: none. */
+export interface LeftRoom {
+  eventId: string
+  kind: string
+  name: string
+}
+
 /** `POST /api/mobile/venues/:venueId/live` — your window at a place. */
 export interface GoLiveResult {
   venueDayId: string
@@ -1092,6 +1101,7 @@ export interface GoLiveResult {
   stay: boolean
   stayUntil: string | null
   checkIn: { id: string; status: string; checkInTime: string }
+  left?: LeftRoom[]
   revealSuggestion: boolean
   intentNeeded: boolean
 }
@@ -1235,6 +1245,9 @@ export interface ChatMessageData {
 }
 
 export interface CheckInResult {
+  /** The route's shape: the check-in row. `checkInId` below was never on it (ROOM-11). */
+  checkIn?: { id?: string }
+  left?: LeftRoom[]
   checkInId?: string
   check_in_id?: string
   status?: string
@@ -1277,11 +1290,22 @@ export interface EventChatData {
   status?: string
   memberCount?: number
   /** You as this room names you (yours only). */
-  you?: { pseudonym: string | null }
+  you?: { pseudonym?: string | null }
   /** This caller's answer to "may I write here": `reason` names their mute, ban or the room's state; `message` is the closed sentence. */
-  write?: { allowed: boolean; reason: string | null; message: string | null; closesAt?: string | null; eventEndedAt?: string | null }
+  write?: { allowed: boolean; reason?: string | null; message?: string | null; closesAt?: string | null; eventEndedAt?: string | null }
   [key: string]: unknown
 }
+
+/** What a room's `write` / `status` come in: the event door (`EventChatData`) and the history read both carry them. */
+export type RoomWriteRead = Pick<EventChatData, 'status' | 'write'>
+
+/**
+ * `GET /chat/groups/:id/messages`: an object `{ status, write, messages, pagination }` on a current server (SV-5), a bare
+ * array on an older one. `write` / `status` are for any room kind, so the composer's lock reads them here.
+ */
+export type ChatHistoryData =
+  | Array<Record<string, unknown>>
+  | (RoomWriteRead & { messages?: Array<Record<string, unknown>>; pagination?: { hasMore?: boolean; nextCursor?: string | null } })
 
 export interface AuthTokens {
   accessToken: string
@@ -2866,12 +2890,12 @@ class ApiClientClass {
   async getChatMessages(
     chatGroupId: string,
     params?: { limit?: number; before?: string }
-  ): Promise<ApiResponse<Array<Record<string, unknown>>>> {
+  ): Promise<ApiResponse<ChatHistoryData>> {
     const searchParams = new URLSearchParams()
     if (params?.limit) searchParams.append('limit', String(params.limit))
     if (params?.before) searchParams.append('before', params.before)
     const query = searchParams.toString()
-    return this.queuedRequest<Array<Record<string, unknown>>>(
+    return this.queuedRequest<ChatHistoryData>(
       `/api/mobile/chat/groups/${chatGroupId}/messages${query ? `?${query}` : ''}`
     )
   }

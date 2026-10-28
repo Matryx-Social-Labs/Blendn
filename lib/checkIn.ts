@@ -130,7 +130,7 @@ export async function submitCheckIn(
   return {
     kind: 'checkedIn',
     // The route's shape is `checkIn: { id }`; `checkInId` was never on it (ROOM-11).
-    checkInId: (result.data as { checkIn?: { id?: string } } | undefined)?.checkIn?.id,
+    checkInId: result.data?.checkIn?.id,
     left: leftNames(result.data),
     askIntent: result.data?.intentNeeded === true,
     revealSuggestion: result.data?.revealSuggestion === true,
