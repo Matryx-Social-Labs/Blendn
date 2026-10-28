@@ -1,4 +1,5 @@
 import { router, useFocusEffect } from 'expo-router'
+import { useState } from 'react'
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -38,6 +39,10 @@ function NotificationSettingsContent() {
   const push = usePushPreference()
   useFocusEffect(push.reloadIfStale)
   const kinds = useNotificationPrefs()
+  // The kinds that were off when the server first answered (Android): they stay switches, so turning one on does not swap the
+  // row for a channel link under the finger (M6). Taken once, in state: a ref cannot be read while rendering.
+  const [offAtLoad, setOffAtLoad] = useState<ReadonlySet<string> | null>(null)
+  if (kinds.prefs && offAtLoad === null) setOffAtLoad(new Set(PREF_ROWS.filter((r) => !kinds.prefs![r.key]).map((r) => r.key)))
   const masterOff = push.enabled === false
   const phoneBlocks = push.off && push.enabled !== false
   const muted = useMutedRooms()
@@ -87,7 +92,7 @@ function NotificationSettingsContent() {
           <SettingsGroup title="Tell me about">
             {PREF_ROWS.map((row) =>
               // Android's rows open the phone's channel page, except one the account turned off elsewhere (iOS): the phone's channel is still on, so only a switch can turn it back on (SYS-08).
-              kinds.prefs && (!ANDROID || !kinds.prefs[row.key]) ? (
+              kinds.prefs && (!ANDROID || offAtLoad?.has(row.key)) ? (
                 <SettingsRow
                   key={row.key}
                   icon={row.icon}
