@@ -115,3 +115,35 @@ describe('a reply to a message that was taken down (ROOM-15)', () => {
     expect(screen.getByText('see you there')).toBeTruthy()
   })
 })
+
+describe('a live message photographs a crew member, nobody else (M3)', () => {
+  const { roomMessageFromSocket } = require('../lib/roomMessages')
+  const live = { id: 'm9', userId: 'u1', userName: 'Rohan', userImage: 'https://cdn.example/rohan.jpg', content: 'hi', createdAt: '2026-10-24T19:00:00.000Z' }
+  it('crew: the socket payload’s userImage becomes the sender’s photo', () => {
+    expect(roomMessageFromSocket(live, 'me', 'crew').sender_image).toBe('https://cdn.example/rohan.jpg')
+  })
+  it.each([['event'], ['board_post'], ['blend'], [undefined], [null]])('%s: dropped whatever the server sends', (kind) => {
+    expect(roomMessageFromSocket(live, 'me', kind as never).sender_image).toBeUndefined()
+  })
+  it('a crew message with no image stays a creature, and your own is never photographed', () => {
+    expect(roomMessageFromSocket({ ...live, userImage: undefined }, 'me', 'crew').sender_image).toBeUndefined()
+    expect(roomMessageFromSocket({ ...live, userId: 'me' }, 'me', 'crew').sender_image).toBeUndefined()
+  })
+})
+
+describe('sender_image has one writer (L3)', () => {
+  it('is set only in lib/roomMessages.ts, and only behind the room-kind gate', () => {
+    const { execSync } = require('child_process')
+    const files = execSync("grep -rln 'sender_image' app components lib || true", { cwd: require('path').join(__dirname, '..') }).toString().trim().split('\n').sort()
+    // Writers: roomMessages.ts alone. Readers: the feed row (RoomFeed) draws it; the type lives in roomMessages.
+    expect(files).toEqual(['components/chat/RoomFeed.tsx', 'lib/roomMessages.ts'])
+    const src: string = require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'roomMessages.ts'), 'utf8')
+    // Exactly two assignments (history, socket); each is on a line behind a room-kind gate.
+    const assigned = src.match(/[^\n]*\{ sender_image: [^\n]*/g) ?? []
+    expect(assigned).toHaveLength(2)
+    for (const line of assigned) expect(line).toMatch(/photos &&|roomPhotosAllowed\(roomKind\) &&/)
+    // Both writers sit behind the gate: history (`photos &&`, from roomPhotosAllowed) and the socket (roomPhotosAllowed inline).
+    expect(src.match(/photos && [^\n]*sender_image/g)).toHaveLength(1)
+    expect(src.match(/roomPhotosAllowed\(roomKind\) && [^\n]*sender_image/g)).toHaveLength(1)
+  })
+})

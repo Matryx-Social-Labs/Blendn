@@ -485,7 +485,7 @@ function GroupChatInner() {
     if (!chatRoomId) return () => {}
     const unsubscribe = [
       subscribeToChatMessage(roomId, (data) => {
-        const incoming = roomMessageFromSocket(data.message, currentUser?.id)
+        const incoming = roomMessageFromSocket(data.message, currentUser?.id, photoKind)
         const fresh = !seenIds.current.has(incoming.message_id)
         // At the bottom, somebody else's message rises as it arrives (#13); read back, the list never moves (the chip counts it).
         if (fresh && isAtBottomRef.current && data.message.userId !== currentUser?.id) markArriving(incoming.message_id)
@@ -570,7 +570,7 @@ function GroupChatInner() {
     return subscribeToMessages()
     // subscribeToMessages is redefined every render; only the listed values should re-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatRoomId, currentUser, outside === null])
+  }, [chatRoomId, currentUser, outside === null, photoKind])
 
   /*
    * One send of one message, first time or retry. The bubble is already on

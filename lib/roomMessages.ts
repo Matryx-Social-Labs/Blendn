@@ -122,13 +122,16 @@ export function roomMessagesFrom(raw: any[], userId?: string, roomKind?: string 
 
 /** A `chat:message` from the socket, as the room holds it. */
 export function roomMessageFromSocket(
-  message: { id: string; userId: string; userName?: string; content: string; kind?: string; type?: string; parentId?: string | null; createdAt: string; pollId?: string },
-  userId: string | undefined
+  message: { id: string; userId: string; userName?: string; userImage?: string | null; content: string; kind?: string; type?: string; parentId?: string | null; createdAt: string; pollId?: string },
+  userId: string | undefined,
+  roomKind?: string | null
 ): RoomMessage {
   return {
     message_id: message.id,
     sender_id: message.userId,
     sender_name: message.userId === userId ? 'You' : message.userName || 'Attendee',
+    // A crew's room only, and never your own bubble (SV-6 sends it for crew rooms; the gate is defence in depth).
+    ...(roomPhotosAllowed(roomKind) && message.userId !== userId && message.userImage ? { sender_image: message.userImage } : {}),
     message_text: message.content,
     message_type: message.kind === 'sponsored' ? 'sponsored' : message.type || 'text',
     reply_to_message_id: message.parentId || null,
