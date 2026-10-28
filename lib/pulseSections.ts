@@ -220,10 +220,20 @@ const byStart = (a: SessionSource, b: SessionSource) => startOf(a) - startOf(b)
 export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<E>): PulseSection<E>[] {
   const { now, hasFix, seedDate } = input
   const page = unique(input.page)
+  /*
+   * Whether the page being full says there may be more of this section (BAR-10, M7). The page is in start order: "Happening
+   * now" cannot grow if its last row starts after now, and "Tonight" cannot if its last row starts after the city's 06:00.
+   */
+  const lastRow = page.reduce<E | null>((last, e) => (last === null || startOf(e) > startOf(last) ? e : last), null)
+  const pageMayHideMore = (key: PulseSectionKey): boolean => {
+    if (input.pageFull !== true || lastRow === null) return false
+    const horizon = key === 'now' ? now : key === 'tonight' ? nextDayReset(now, DAY_RESET_HOUR, lastRow.timezone ?? undefined) : -Infinity
+    return startOf(lastRow) < horizon
+  }
   const claimed = new Set<string>()
   const built: Partial<Record<PulseSectionKey, PulseSection<E>>> = {}
   const take = (key: PulseSectionKey, all: E[], limit: number, interest?: PulseSection['interest']) => {
-    const floor = input.pageFull === true && (key === 'now' || key === 'tonight')
+    const floor = pageMayHideMore(key)
     built[key] = { key, events: all.slice(0, limit), count: all.length, ...(floor ? { more: true } : {}), ...(interest ? { interest } : {}) }
     // Only the drawn ones are claimed: an event past a section's cap is still an event nobody has shown.
     for (const e of built[key]!.events) claimed.add(e.id)
@@ -301,9 +311,9 @@ export function categoryChips(
 
 /** The drawer's peek line for the Pulse: "● 3 live now · 14 on tonight"; a part that is 0 is dropped, both 0 is none. */
 export function pulsePeekLine(sections: readonly PulseSection[]): string | null {
-  const live = sections.find((s) => s.key === 'now')?.count ?? 0
-  const tonight = sections.find((s) => s.key === 'tonight')?.count ?? 0
-  const parts = [live > 0 ? `${live} live now` : null, tonight > 0 ? `${tonight} on tonight` : null].filter(Boolean)
+  const now = sections.find((s) => s.key === 'now')
+  const tonight = sections.find((s) => s.key === 'tonight')
+  const parts = [now && now.count > 0 ? `${sectionCountLabel(now)} live now` : null, tonight && tonight.count > 0 ? `${sectionCountLabel(tonight)} on tonight` : null].filter(Boolean)
   return parts.length ? parts.join(' · ') : null
 }
 
@@ -311,13 +321,20 @@ export function pulsePeekLine(sections: readonly PulseSection[]): string | null 
  * The search results overline's count and noun: the server's total for the query, not the rows loaded so far (a page is 50 and
  * grows as you scroll). Never fewer than what is on screen, and the loaded count while the total is not known (BAR-07).
  */
-export function resultsCount(loaded: number, totalCount: number | null | undefined): { count: number; noun: string } {
+export function resultsCount(loaded: number, totalCount: number | null | undefined): { count: number; text: string; noun: string } {
   const count = typeof totalCount === 'number' && Number.isFinite(totalCount) ? Math.max(totalCount, loaded) : loaded
-  return { count, noun: count === 1 ? 'event' : 'events' }
+  return { count, text: count.toLocaleString('en-US'), noun: count === 1 ? 'event' : 'events' }
 }
 
 /** A section header's count as words: "50+" when the count is a floor (BAR-10), else the number. */
 export const sectionCountLabel = (s: Pick<PulseSection, 'count' | 'more'>): string => `${s.count}${s.more ? '+' : ''}`
+
+/** The Nearby request's and See all's upper bound: a week from now, rounded up to the hour so the pages of one list share a cache key (BAR-11). */
+export const nearbyEndDate = (now: number): string => new Date(Math.ceil((now + NEARBY_DAYS * DAY) / HOUR) * HOUR).toISOString()
+
+/** The place a loaded page was read for: another city or a ~100 m move is another page (the sections' requests wait for it). */
+export const feedKey = (city: string | null | undefined, at: { latitude: number; longitude: number } | null | undefined): string =>
+  `${city ?? '-'}|${at ? at.latitude.toFixed(3) : '-'},${at ? at.longitude.toFixed(3) : '-'}`
 
 /**
  * Which interest "Because you like …" names: the one with the most events in the loaded page, the first on a tie (and the

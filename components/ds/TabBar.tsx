@@ -1,5 +1,5 @@
 import { useEffect, useState, type Ref } from 'react'
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { AppState, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -100,6 +100,11 @@ export function TabBar({ selected, onSelect, disc, mePhoto, banterUnread = 0, di
   const reduceMotion = useReducedMotion()
   // A photo URL that failed to load: Me shows the glyph for that URL (E1), and a new URL gets its try.
   const [deadPhoto, setDeadPhoto] = useState<string | null>(null)
+  // A URL that failed (offline, a blip) gets another try when the app comes back to the front.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && setDeadPhoto(null))
+    return () => sub.remove()
+  }, [])
 
   /*
    * One pill, not one per tab (DS #2): it slides to the new tab on M.snap, and a second tap mid-flight retargets it from

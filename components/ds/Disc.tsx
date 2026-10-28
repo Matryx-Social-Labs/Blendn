@@ -184,7 +184,7 @@ export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProp
         pressedScale={PRESS.scaleDisc}
         haptic={H.disc}
         accessibilityRole="button"
-        accessibilityLabel={look === 'c' && venue ? checkInLabel(venue, here) : roomButtonAccessibilityLabel(target)}
+        accessibilityLabel={look === 'c' && (venue || (here ?? 0) > 1) ? checkInLabel(venue ?? '', here) : roomButtonAccessibilityLabel(target)}
         style={styles.slot}
         testID={testID}
       >

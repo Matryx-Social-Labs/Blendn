@@ -78,7 +78,8 @@ import { liveWindow, sessionOver } from '../../lib/eventSession'
 import {
   categoryChips,
   everythingElse,
-  NEARBY_DAYS,
+  nearbyEndDate,
+  feedKey,
   pulsePeekLine,
   pickInterest,
   pulseSections,
@@ -834,6 +835,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [hasMore, setHasMore] = useState(true)
   /** The server's count for the current query (page one's `pagination.totalCount`): what the results overline prints. */
   const [totalCount, setTotalCount] = useState<number | null>(null)
+  /** The place page one was last read for (`feedKey`): the "Because you like" request waits for it, so it names an interest from this page (M10). */
+  const [pageFor, setPageFor] = useState<string | null>(null)
   const fetchMoreInFlightRef = useRef(false)
   /*
    * Bumped by every page-one load. A page two that was in flight when the
@@ -893,6 +896,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       const normalized = (eventsData || []).map(normalizeEvent)
       setEvents(normalized)
       setTotalCount(eventsMeta?.totalCount ?? null)
+      setPageFor(feedKey(selectedCity, userLocation))
       setPage(0)
       setHasMore(pageHasMore(normalized.length, PAGE_SIZE))
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
@@ -1351,9 +1355,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * key they were asked for, so another city's answer is never drawn under this
    * one's header.
    */
-  const lat3 = userLocation ? userLocation.latitude.toFixed(3) : '-'
-  const lon3 = userLocation ? userLocation.longitude.toFixed(3) : '-'
-  const sectionsKey = `${selectedCity ?? '-'}|${lat3},${lon3}|${seedDate}|${pulls}`
+  const placeKey = feedKey(selectedCity, userLocation)
+  const sectionsKey = `${placeKey}|${seedDate}|${pulls}`
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
@@ -1379,8 +1382,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         .catch((error) => Logger.warn('events', 'This weekend threw', { error: String(error) }))
     }
     // Request E: the nearest in the next week, by distance (a closer event past the first page of 50 still ranks).
-    if (userLocation) {
-      fetchEventsApi({ page: 0, limit: 12, ...where, include: 'checkins', sortBy: 'distance', sortOrder: 'asc', endDate: new Date(Date.now() + NEARBY_DAYS * 86_400_000).toISOString() })
+    if (hasFix) {
+      fetchEventsApi({ page: 0, limit: 12, ...where, include: 'checkins', sortBy: 'distance', sortOrder: 'asc', endDate: nearbyEndDate(Date.now()) })
         .then(({ data, error }) => {
           if (cancelled) return
           if (error || !data) Logger.warn('events', 'Nearby did not load', { error: error?.message })
@@ -1396,6 +1399,21 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         setFeaturedState({ key: sectionsKey, events: error || !data ? null : data.map(normalizeEvent) })
       })
       .catch((error) => Logger.warn('events', 'Featured threw', { error: String(error) }))
+    return () => {
+      cancelled = true
+    }
+    // The location only moves the key (to ~100 m); the request reads the live fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionRequestsOn, sectionsKey, user?.id])
+
+  /*
+   * Request C, "Because you like": after page one has loaded for this place, because the interest it names is the one with the
+   * most events on that page (`pickInterest`), and a pick made before the page lands is a pick from nothing (M10).
+   */
+  useEffect(() => {
+    if (!sectionRequestsOn || !user || pageFor !== placeKey) return
+    let cancelled = false
+    const where = { city: selectedCity ?? undefined, lat: roundCoord(userLocation?.latitude), lon: roundCoord(userLocation?.longitude) }
     void (async () => {
       try {
         const interests = await apiClient.getProfileInterests(user.id)
@@ -1415,7 +1433,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     }
     // The location only moves the key (to ~100 m); the request reads the live fix.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionRequestsOn, sectionsKey, user?.id])
+  }, [sectionRequestsOn, sectionsKey, pageFor, user?.id])
   const weekend = weekendState?.key === sectionsKey ? weekendState.events : null
   const nearby = nearbyState?.key === sectionsKey ? nearbyState.events : null
   const featuredRequested = featuredState?.key === sectionsKey ? featuredState.events : null
@@ -1721,7 +1739,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       {isNarrowed && events.length > 0 ? (
         <View style={styles.resultsLabel}>
           <Text style={styles.resultsLabelText} accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-            <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).count}</Text>
+            <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).text}</Text>
             {` ${resultsCount(events.length, totalCount).noun}${selectedCity ? ` · ${selectedCity}` : ''}`}
           </Text>
         </View>

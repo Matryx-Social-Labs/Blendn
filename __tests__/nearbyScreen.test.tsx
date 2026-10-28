@@ -304,3 +304,30 @@ describe('Nearby sort and bound (BAR-11, BAR-14)', () => {
     expect(events.mock.calls[0][0].endDate).toBeUndefined()
   })
 })
+
+describe('a late answer for the other sort (M9, L7)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void
+    const promise = new Promise((r) => (resolve = r))
+    return { promise, resolve }
+  }
+
+  it('Nearest answering after the chip moved to Soonest paints nothing and does not clear the spinner', async () => {
+    const slow = deferred()
+    events.mockReturnValueOnce(slow.promise)
+    await render(<NearbyEventsScreen />)
+    await act(async () => {})
+    const soonest = deferred()
+    events.mockReturnValueOnce(soonest.promise)
+    await fireEvent.press(screen.getByRole('tab', { name: 'Soonest' }))
+    await act(async () => {
+      slow.resolve({ data: [ev('stale', 'Stale Night', 12.98)], error: null })
+    })
+    expect(screen.queryByText(/Stale Night/)).toBeNull()
+    expect(screen.getByTestId('nearby-skeleton')).toBeTruthy()
+    await act(async () => {
+      soonest.resolve({ data: [ev('fresh', 'Fresh Night', 12.98)], error: null })
+    })
+    expect(await screen.findByText(/Fresh Night/)).toBeTruthy()
+  })
+})

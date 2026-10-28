@@ -228,6 +228,9 @@ describe('<Disc>', () => {
     expect(screen.getByText('Check in · 2 here', HIDDEN)).toBeTruthy()
     expect(screen.queryByText('Check in · Toit', HIDDEN)).toBeNull()
     expect(screen.getByRole('button').props.accessibilityLabel).toBe('You’re at 2 events. Check in to see who else is here')
+    // Two events and no venue name: still the count, in the label a screen reader reads.
+    await draw('c', { here: 2, venue: undefined })
+    expect(screen.getByRole('button').props.accessibilityLabel).toBe('You’re at 2 events. Check in to see who else is here')
     await draw('c', { here: 1 })
     expect(screen.getByText('Check in · Toit', HIDDEN)).toBeTruthy()
   })

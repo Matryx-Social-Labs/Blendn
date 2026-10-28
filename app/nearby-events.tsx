@@ -22,7 +22,7 @@ import { EVENT_DETAIL_QUERY } from '../lib/eventDetailQuery'
 import { getDistanceKm } from '../lib/geo'
 import { isAbortedFix, roughFix, type FixAsk } from '../lib/locationFix'
 import { mergeEventPage, pageHasMore } from '../lib/pulseFeed'
-import { NEARBY_DAYS } from '../lib/pulseSections'
+import { nearbyEndDate } from '../lib/pulseSections'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { homeCardProps } from '../lib/pulse'
 import { useMinimumVisible } from '../lib/useMinimumVisible'
@@ -152,6 +152,8 @@ export default function NearbyEventsScreen() {
   const loadEvents = useCallback(
     (force = false) => {
       let superseded = false
+      // Asked for one sort and answered after the chip moved to the other: its rows and its spinner are not the screen's now.
+      let otherSort = false
       return Promise.resolve(locationRef.current || getLocation())
         .then(async (coords) => {
           if (coords === SUPERSEDED) {
@@ -179,7 +181,11 @@ export default function NearbyEventsScreen() {
           cityRef.current = (await readStoredCity())?.city
           const result = await fetchEventsApi(nearbyQuery(cityRef.current, coords, 0, sort), { force })
 
-          if (!mountedRef.current || sortRef.current !== sort) return
+          if (!mountedRef.current) return
+          if (sortRef.current !== sort) {
+            otherSort = true
+            return
+          }
 
           if (result.data) {
             // Filter to events that have coordinates, then sort by distance
@@ -194,10 +200,10 @@ export default function NearbyEventsScreen() {
         })
         .catch(() => {
           // Keep what is on screen: a network error is not "no events near you".
-          if (mountedRef.current) setLoadFailed(true)
+          if (mountedRef.current && sortRef.current === sort) setLoadFailed(true)
         })
         .finally(() => {
-          if (mountedRef.current && !superseded) setLoading(false)
+          if (mountedRef.current && !superseded && !otherSort) setLoading(false)
         })
     },
     [getLocation, sort]
@@ -243,7 +249,8 @@ export default function NearbyEventsScreen() {
     setMore('busy')
     try {
       const result = await fetchEventsApi(nearbyQuery(cityRef.current, userLocation, asked, sort))
-      if (!mountedRef.current) return
+      // The chip moved while this page was out: it belongs to the other sort's list.
+      if (!mountedRef.current || sortRef.current !== sort) return
       if (!result.data) return setMore('failed')
       const rows = nearbyRows(result.data, userLocation, sort)
       setEvents((prev) => mergeEventPage(prev, rows))
@@ -252,7 +259,7 @@ export default function NearbyEventsScreen() {
       setHasMore(pageHasMore(result.data.length, PAGE_SIZE))
       setMore('idle')
     } catch {
-      if (mountedRef.current) setMore('failed')
+      if (mountedRef.current && sortRef.current === sort) setMore('failed')
     } finally {
       moreInFlight.current = false
     }
@@ -434,7 +441,6 @@ export default function NearbyEventsScreen() {
 
 type NearbySort = 'nearest' | 'soonest'
 const SORTS: readonly NearbySort[] = ['nearest', 'soonest']
-const HOUR_MS = 3_600_000
 
 /**
  * The query for one page of Nearby: the city's events from this fix. Nearest is the Pulse's Nearby section expanded, so it has
@@ -447,7 +453,7 @@ const nearbyQuery = (city: string | undefined, coords: { latitude: number; longi
   lon: coords.longitude,
   limit: PAGE_SIZE,
   ...(sort === 'nearest'
-    ? { sortBy: 'distance' as const, endDate: new Date(Math.ceil((Date.now() + NEARBY_DAYS * 24 * HOUR_MS) / HOUR_MS) * HOUR_MS).toISOString() }
+    ? { sortBy: 'distance' as const, endDate: nearbyEndDate(Date.now()) }
     : { sortBy: 'start_time' as const }),
   sortOrder: 'asc' as const,
   status: 'published' as const,
