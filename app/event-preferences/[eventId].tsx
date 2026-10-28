@@ -16,7 +16,7 @@ import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../componen
 import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
-import { intentAnswered } from '../../lib/checkIn'
+import { checkInChanged, intentAnswered } from '../../lib/checkIn'
 import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
@@ -190,6 +190,8 @@ function EventPreferencesContent() {
         showToast(res.error || 'Could not save. Try again.', 'error', { haptic: 'error' })
         return
       }
+      // The Room and the tab bar read the reveal from caches this just made stale: say so, don't wait on a poll (ROOM-03).
+      checkInChanged(String(eventId))
       leave()
     } catch (e) {
       Logger.error('match', 'Failed to save match preferences', { error: e })

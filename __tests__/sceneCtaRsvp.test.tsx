@@ -54,3 +54,19 @@ describe('the RSVP slot', () => {
     expect(src).toContain('pending={rsvpPending}')
   })
 })
+
+describe('closing the Room returns to the event it was opened from (ROOM-13)', () => {
+  const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
+  it('"Blend in" asks the overlay to come back to this event; the other doors do not', () => {
+    const src = read('components', 'screens', 'EventDetailScreen.tsx')
+    const pass = src.slice(src.indexOf('const openThisPass'), src.indexOf('Nothing after the end is disabled'))
+    expect(pass).toContain('{ returnToEvent: true }')
+    // The overlay lives under the root stack: the page still steps back to the tabs first, or the Room opens unseen.
+    expect(src).toMatch(/router\.dismissTo\('\/\(tabs\)\/events'\)/)
+    expect(src.match(/returnToEvent/g)).toHaveLength(1)
+  })
+  it('the overlay re-opens the event once it has closed, and only when one was stored', () => {
+    const src = read('components', 'blendn', 'BlendnScreen.tsx')
+    expect(src).toMatch(/const back = takeReturnTo\(\)\s*blendnClosed\(\)[^\n]*\n[^\n]*\n?\s*if \(back\) router\.push\(\{ pathname: '\/event\/\[id\]', params: \{ id: back \} as never \}\)/)
+  })
+})

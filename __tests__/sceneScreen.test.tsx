@@ -35,7 +35,10 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../components/scene/SceneHeroMedia', () => ({ SceneHeroMedia: () => null, HERO_CAPTION_FOOT: 40 }))
 jest.mock('../components/scene/SceneLightbox', () => ({ SceneLightbox: () => null }))
-jest.mock('../components/board/BoardSections', () => ({ BoardEntry: () => null }))
+jest.mock('../components/board/BoardSections', () => {
+  const { View } = jest.requireActual('react-native')
+  return { BoardEntry: () => <View testID="board-entry" /> }
+})
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn() }))
 jest.mock('../lib/calendar', () => ({ addToCalendar: jest.fn() }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn() }))
@@ -658,3 +661,31 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
 function textOf(node: { children: (string | { children: unknown[] })[] }): string {
   return node.children.map((c) => (typeof c === 'string' ? c : textOf(c as never))).join('')
 }
+
+describe('the Board row (ROOM-08, flow3.js:68)', () => {
+  const at = (id: string) => JSON.stringify(screen.toJSON()).indexOf(`"${id}"`)
+
+  it('follows The experience directly, above the details, the gallery and the attendees', async () => {
+    api.getEvent.mockResolvedValue(detail() as never)
+    await open()
+    expect(await screen.findByTestId('board-entry')).toBeTruthy()
+    const experience = JSON.stringify(screen.toJSON()).indexOf('The experience')
+    expect(experience).toBeGreaterThan(-1)
+    expect(at('board-entry')).toBeGreaterThan(experience)
+    expect(at('board-entry')).toBeLessThan(at('scene-attendees'))
+  })
+
+  it('is absent on a cancelled night', async () => {
+    api.getEvent.mockResolvedValue(detail({ status: 'cancelled' }) as never)
+    await open()
+    await screen.findByTestId('scene-cancelled')
+    expect(screen.queryByTestId('board-entry')).toBeNull()
+  })
+
+  it('is absent after the doors (the server closes the board at the first doors)', async () => {
+    api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2) }) as never)
+    await open()
+    await screen.findByTestId('scene-tiles')
+    expect(screen.queryByTestId('board-entry')).toBeNull()
+  })
+})

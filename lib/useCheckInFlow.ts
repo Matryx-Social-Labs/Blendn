@@ -2,6 +2,7 @@ import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { apiClient } from './apiClient'
 import { afterSheetDismissed } from './sheetDismissed'
+import { myMainPhoto } from './myPhoto'
 import { askIntentRoute, revealOffer, submitCheckIn, untilIntentAnswered, type CheckInOutcome } from './checkIn'
 import { isExpectedRefusal, type CheckInRefusal } from './checkInRefusal'
 import { markCheckIn } from './checkInTiming'
@@ -270,7 +271,7 @@ export function useCheckInFlow({
           const offer = await revealOffer({
             id: user.id,
             firstName: user.name?.trim().split(/\s+/)[0] ?? null,
-            image: user.image,
+            photo: myMainPhoto(user),
           })
           trayShown = true
           const yes = await new Promise<boolean>((answer) => {

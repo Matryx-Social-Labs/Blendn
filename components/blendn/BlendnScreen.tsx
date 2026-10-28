@@ -1,6 +1,7 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { MutableRefObject } from 'react'
 import { BackHandler, Platform, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   Easing,
@@ -17,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
-import { blendnClosed, isLiveHint, openPass, takePendingPerson, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { blendnClosed, isLiveHint, openPass, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -29,7 +30,7 @@ import { useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
 import { useOffline } from '../OfflineBanner'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
-import { roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
+import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
 import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
@@ -39,6 +40,9 @@ import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useLatest } from '../../lib/useLatest'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
+import { myMainPhoto } from '../../lib/myPhoto'
+import { markSeed } from '../../lib/pseudonymAvatar'
+import { myRoomFace } from '../../lib/roomState'
 import { useTonight, type TonightEvent } from '../../lib/useTonight'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
@@ -49,6 +53,7 @@ import { MomentBlend, type BlendCrew, type BlendPerson } from '../ds/MomentBlend
 import { MomentMatch } from '../ds/MomentMatch'
 import { MomentPour, ORBS_LIFT_MS, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
+import { PeopleFromTonight } from './PeopleFromTonight'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
 import { Sheet } from '../ds/Sheet'
 import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
@@ -146,10 +151,13 @@ type OpenCard = { id: string; name: string }
 export function BlendnScreen() {
   const stage = useRef<{ close(): void }>(null)
   const close = useCallback(() => stage.current?.close(), [])
+  /** The content's own layer that back should close first (People from tonight over the Recap), or false. */
+  const backGuardRef = useRef<(() => boolean) | null>(null)
 
   // Android back closes the overlay rather than leaving the tabs underneath.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (backGuardRef.current?.()) return true
       close()
       return true
     })
@@ -159,8 +167,16 @@ export function BlendnScreen() {
   // The Room is people: the rose world, one hue for the whole screen (People | Crews, the chips, the sheets).
   return (
     <HueProvider value="rose">
-      <RoomStage ref={stage} onClosed={blendnClosed}>
-        <BlendnContent onClose={close} />
+      <RoomStage
+        ref={stage}
+        onClosed={() => {
+          const back = takeReturnTo()
+          blendnClosed()
+          // Opened from an event page ("Blend in"): back to it, not to the Pulse it stepped through (ROOM-13).
+          if (back) router.push({ pathname: '/event/[id]', params: { id: back } as never })
+        }}
+      >
+        <BlendnContent onClose={close} backGuardRef={backGuardRef} />
       </RoomStage>
     </HueProvider>
   )
@@ -182,7 +198,7 @@ function useScrolledPast(): boolean {
   return scrolled
 }
 
-function BlendnContent({ onClose }: { onClose: () => void }) {
+function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGuardRef: MutableRefObject<(() => boolean) | null> }) {
   const insets = useSafeAreaInsets()
   const scrolled = useScrolledPast()
   const contrast = useIncreaseContrast()
@@ -223,6 +239,20 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
    */
   const [recap, setRecap] = useState<Recap | null>(null)
   const [dismissedRecap, setDismissedRecap] = useState<string | null>(null)
+  const [peopleOpen, setPeopleOpen] = useState(false)
+  // Android back closes People from tonight before it closes the overlay (M5).
+  useEffect(() => {
+    backGuardRef.current = () => {
+      if (peopleOpen) {
+        setPeopleOpen(false)
+        return true
+      }
+      return false
+    }
+    return () => {
+      backGuardRef.current = null
+    }
+  }, [backGuardRef, peopleOpen])
   const endedRecap =
     room.status === 'ready' && room.event ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now) : null
   if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) setRecap(endedRecap)
@@ -351,7 +381,9 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
     onCheckedIn: (outcome) => {
       if (outcome.kind !== 'checkedIn') return
       const from = switchFromNow.current
-      leftRoom.current = from && insideEventNow.current ? { title: from.title, toId: insideEventNow.current.id } : null
+      // The server names the room it took you out of (`left`); the screen's own switch is the fallback for an older one.
+      const leftTitle = outcome.left[0] ?? from?.title
+      leftRoom.current = leftTitle && insideEventNow.current ? { title: leftTitle, toId: insideEventNow.current.id } : null
       setPourEntrance(true)
       setPourPlaying(true)
       setPourStill(false)
@@ -467,12 +499,13 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const eventTitle = room.event?.title ?? ''
   const chatGroupId = room.chatGroupId
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
-  const [myPseudonym, setMyPseudonym] = useState<string | null>(null)
-  if (room.match?.you && room.match.you !== myPseudonym) setMyPseudonym(room.match.you)
-  const myPhoto = user?.image ?? user?.profile?.photos?.[0] ?? null
+  const myPseudonym = room.match?.you ?? room.pseudonym ?? null
+  const myPhoto = myMainPhoto(user)
   const myName = user?.name?.trim() || 'You'
+  /** The creature's seed while anonymous: never your real name. */
+  const myMarkSeed = myPseudonym ?? markSeed('You', eventId ?? 'room')
   /** Your face as this room knows it: your photo when you are named, else your creature (once its pseudonym is known). */
-  const myFace: Face = controls.revealed && myPhoto ? { kind: 'photo', uri: myPhoto } : myPseudonym ? { kind: 'creature', pseudonym: myPseudonym } : myPhoto ? { kind: 'photo', uri: myPhoto } : { kind: 'creature', pseudonym: myName }
+  const myFace: Face = myRoomFace({ revealed: controls.revealed, photo: myPhoto, pseudonym: myPseudonym, eventId })
 
   // --- crews (R2-D1: People | Crews, the strip, crew cards, Liking as) ---------
   const [gridView, setGridView] = useState<'people' | 'crews'>('people')
@@ -515,7 +548,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
         title: `Blend with ${card.name}`,
         sides: ours
           ? { ours: { kind: 'crew', name: ours.name, emblemSeed: emblemOf(ours.crewId), count: ours.presentCount }, theirs }
-          : { ours: { kind: 'person', pseudonym: myPseudonym ?? myName }, theirs },
+          : { ours: { kind: 'person', pseudonym: myMarkSeed }, theirs },
       })
     },
   })
@@ -776,20 +809,30 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       {/* Below the Room: Tonight (or the Recap, or the skeleton), held under a hand-off until its crossfade is done. */}
       {!tonightUp ? null : mode === 'ended' && recap ? (
         <Animated.View key="ended" style={styles.layer} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
-          <MomentRecap
-            face={myFace}
-            title={recap.title}
-            minutes={recap.minutes}
-            matches={recap.matched}
-            rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
-            onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
-            onBack={() => {
-              setDismissedRecap(recap.eventId)
-              setRecap(null)
-            }}
-            onClose={onClose}
-            testID="room-recap"
-          />
+          {/* Under People from tonight the Recap is not there for a screen reader: a swipe never walks past the deck. */}
+          <View style={styles.layer} accessibilityElementsHidden={peopleOpen} importantForAccessibility={peopleOpen ? 'no-hide-descendants' : 'auto'}>
+            <MomentRecap
+              face={myFace}
+              title={recap.title}
+              venue={room.event?.venueName}
+              onPeople={room.event && room.people.length > 0 && recapPeopleOpen(room.event.endsAt, now, room.chatClosesAt) ? () => setPeopleOpen(true) : undefined}
+              minutes={recap.minutes}
+              matches={recap.matched}
+              rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
+              onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
+              onBack={() => {
+                setDismissedRecap(recap.eventId)
+                setRecap(null)
+              }}
+              onClose={onClose}
+              testID="room-recap"
+            />
+          </View>
+          {peopleOpen ? (
+            <Animated.View style={styles.layer} accessibilityViewIsModal entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
+              <PeopleFromTonight people={room.people} hasMore={room.hasMore} loadingMore={room.loadingMore} onMore={() => void room.loadMore()} onBack={() => setPeopleOpen(false)} />
+            </Animated.View>
+          ) : null}
         </Animated.View>
       ) : mode === 'loading' ? (
         <RoomSkeleton topInset={topInset} />
@@ -902,7 +945,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
                   checkInKey={room.checkedInAt ?? ''}
                   crews={crews}
                   likingAs={chipAs === undefined ? undefined : chipAs ? { name: chipAs.name, emblemSeed: emblemOf(chipAs.crewId) } : null}
-                  pseudonym={myPseudonym ?? myName}
+                  pseudonym={myMarkSeed}
                   onLikingAs={() => void chooseLikingAs()}
                 />
               ) : null
@@ -1090,7 +1133,7 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       */}
       {room.match ? (
         <MomentMatch
-          you={controls.revealed && myPhoto ? { kind: 'photo', uri: myPhoto } : { kind: 'creature', pseudonym: room.match.you ?? myPseudonym ?? myName }}
+          you={myRoomFace({ revealed: controls.revealed, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}
           them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}
           name={room.match.name}
           reason={matchPerson ? reasonLine(matchPerson) : null}

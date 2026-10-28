@@ -28,6 +28,7 @@ import { printable } from '../../lib/pulseSections'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
+import { roomPhotosAllowed } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow } from '../../lib/roomRow'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { showRoomReportOptions } from '../../lib/safetyUtils'
@@ -36,7 +37,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useOnBlock } from '../../lib/useOnBlock'
 import { OPACITY } from '../../lib/theme'
 
-type Member = { userId: string; name: string | null; role: string }
+type Member = { userId: string; name: string | null; role: string; avatar?: string | null }
 
 const PAGE = 100
 /** The hero: the cover, 300 tall (Room info frame). */
@@ -134,7 +135,7 @@ function ChatInfoInner() {
             else setMoreFailed(true)
             return
           }
-          const page = result.data.participants.map((p) => ({ userId: p.userId, name: p.name, role: p.role }))
+          const page = result.data.participants.map((p) => ({ userId: p.userId, name: p.name, role: p.role, avatar: p.avatar }))
           setFailed(false)
           setMoreFailed(false)
           setTotal(result.data.totalCount)
@@ -224,7 +225,7 @@ function ChatInfoInner() {
   const getItemLayout = headerHeight > 0 ? (_: unknown, index: number) => ({ length: rowStride, offset: headerHeight + index * rowStride, index }) : undefined
 
   const renderMember = ({ item: m }: { item: Member }) => (
-    <MemberCell member={m} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={setCardFor} />
+    <MemberCell member={m} photos={roomPhotosAllowed(row?.kind)} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={setCardFor} />
   )
 
   const header = (
@@ -408,6 +409,7 @@ function ChatInfoInner() {
  */
 const MemberCell = memo(function MemberCell({
   member,
+  photos,
   you,
   chatGroupId,
   cell,
@@ -416,6 +418,8 @@ const MemberCell = memo(function MemberCell({
   onOpen,
 }: {
   member: Member
+  /** A crew's room only; everywhere else a creature, whatever the server sent. */
+  photos: boolean
   you: boolean
   chatGroupId: string
   cell: number
@@ -437,7 +441,11 @@ const MemberCell = memo(function MemberCell({
       style={[styles.member, { width: cell, height }]}
     >
       <View>
-        <Avatar size={face} kind="creature" pseudonym={markSeed(member.name, `${chatGroupId}:${member.userId}`)} />
+        {photos && member.avatar ? (
+          <Avatar size={face} kind="photo" uri={member.avatar} />
+        ) : (
+          <Avatar size={face} kind="creature" pseudonym={markSeed(member.name, `${chatGroupId}:${member.userId}`)} />
+        )}
         {role ? (
           <View style={styles.roleBadgePlace} pointerEvents="none">
             <View style={styles.roleBadge}>

@@ -37,6 +37,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getChatMessages: jest.fn(),
     getChatGroups: jest.fn(),
+    getEventChat: jest.fn(),
     sendChatMessage: jest.fn(),
     reactToChatMessage: jest.fn(),
     rejoinChatGroup: jest.fn(),
@@ -309,7 +310,7 @@ describe('every live:ended reason has its own calm state (C6, 11.5)', () => {
 
   it('switching to another place goes back, with no way to "go live again" here', async () => {
     await ended('switched_event')
-    expect(screen.getByText('You went live somewhere else')).toBeTruthy()
+    expect(screen.getByText('You checked in somewhere else')).toBeTruthy()
     expect(screen.queryByLabelText('Go live again')).toBeNull()
     await act(async () => fireEvent.press(screen.getByLabelText('Back to Banter')))
     expect(router.back).toHaveBeenCalled()
@@ -369,5 +370,108 @@ describe('polls in the feed are read only once seen (M6)', () => {
     await flush()
     expect(queued).toHaveBeenCalledWith('/api/mobile/events/e1/polls/p1')
     jest.restoreAllMocks()
+  })
+})
+
+describe('a room opens already muted, locked or closed (ROOM-05)', () => {
+  const open = { startTime: new Date(Date.now() - HOUR).toISOString() }
+  const door = (data: Record<string, unknown>) => ({ success: true, data: { chatGroupId: 'g1', status: 'active', ...data } })
+  beforeEach(() => {
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [eventRow({}, open)] } })
+  })
+
+  it('muted: read-only before anybody types, with the server\'s sentence', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue(door({ write: { allowed: false, reason: 'muted', message: null } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Muted')).toBeTruthy()
+    expect(screen.queryByLabelText('Message')).toBeNull()
+  })
+
+  it('locked by the organiser (the room\'s status, which a mute would hide in write.reason)', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue(door({ status: 'locked', write: { allowed: false, reason: 'muted', message: null } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Read only')).toBeTruthy()
+  })
+
+  it('window closed: the closed state in the server\'s words', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue(door({ write: { allowed: false, reason: 'window_closed', message: 'This chat has closed. Event chats stay open for 24 hours after the event ends.' } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('This chat has closed')).toBeTruthy()
+  })
+
+  it('allowed: a live composer', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue(door({ write: { allowed: true, reason: null, message: null } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+  })
+
+  it('a door that cannot be read leaves the composer as it was', async () => {
+    ;(apiClient.getEventChat as jest.Mock).mockRejectedValue(new Error('offline'))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+  })
+})
+
+describe('a room that is not on the Banter’s first page opens read-only too (ROOM-05, H1)', () => {
+  const MUTED = { allowed: false, reason: 'muted', message: null }
+  const served = (extra: Record<string, unknown>) => ({ success: true, data: { messages: [], pagination: { hasMore: false, nextCursor: null }, ...extra } })
+  beforeEach(() => {
+    // Opened from a push or a link: the Banter's list does not hold it.
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [] } })
+    ;(apiClient.getEventChat as jest.Mock).mockReset()
+  })
+
+  it('new server: the messages read carries write + status, so Muted shows before typing and no second read is made', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served({ status: 'active', write: MUTED }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Muted')).toBeTruthy()
+    expect(screen.queryByLabelText('Message')).toBeNull()
+    expect(apiClient.getEventChat).not.toHaveBeenCalled()
+  })
+
+  it('new server: the room’s own status locks it, whatever the viewer’s reason', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served({ status: 'locked', write: { allowed: false, reason: 'muted', message: null } }))
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Read only')).toBeTruthy()
+  })
+
+  it('old server (no write in the messages): falls back to the event’s door, asked with limit 1 from the opener’s event id', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served({}))
+    ;(apiClient.getEventChat as jest.Mock).mockResolvedValue({ success: true, data: { chatGroupId: 'g1', status: 'active', write: MUTED } })
+    await render(<GroupChat />)
+    await flush()
+    expect(apiClient.getEventChat).toHaveBeenCalledWith('e1', { limit: 1 })
+    expect(screen.getByText('Muted')).toBeTruthy()
+    expect(screen.queryByLabelText('Message')).toBeNull()
+  })
+
+  it('old server, the door read fails: the room stays as it was, and the failure is logged', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(served({}))
+    ;(apiClient.getEventChat as jest.Mock).mockRejectedValue(new Error('offline'))
+    const { Logger } = require('../lib/logger') as { Logger: { warn: jest.Mock } }
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+    expect(Logger.warn).toHaveBeenCalledWith('chat', expect.stringContaining('lock'), expect.anything())
+  })
+
+  it('the cached Banter-row lock does not wait for the history read', async () => {
+    mockParams = { id: 'g1', eventId: 'e1' }
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [{ id: 'g1', status: 'locked' }] } })
+    ;(apiClient.getChatMessages as jest.Mock).mockReturnValue(new Promise(() => {})) // never answers
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Read only')).toBeTruthy()
   })
 })

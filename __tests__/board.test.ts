@@ -295,7 +295,7 @@ describe('the board is on, now its safety half has shipped', () => {
   it('reads one constant at every way in', () => {
     const src = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
     expect(src('components/screens/EventDetailScreen.tsx')).toContain(
-      'event && BOARD_ENABLED && !boardClosed(event.start_time) ?'
+      'event && BOARD_ENABLED && !cancelled && !boardClosed(event.start_time) ?'
     )
     expect(src('app/(tabs)/chat.tsx')).toMatch(/\{BOARD_ENABLED && !trimmed \? <BoardRequestsSection/)
     expect(src('app/board/[eventId].tsx')).toContain('if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />')

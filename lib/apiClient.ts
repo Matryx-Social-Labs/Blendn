@@ -4,6 +4,7 @@
  */
 
 import { roundCoordinate } from './coordinates'
+import { patchEventDetailStatus } from './eventDetailCache'
 import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
@@ -1475,9 +1476,20 @@ class ApiClientClass {
    */
   forgetEvent(eventId: string): void {
     const detail = `:/api/mobile/events/${eventId}`
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(`${detail}:`) || key.includes(`${detail}?`)) this.responseCache.delete(key)
-    }
+    // forgetMatching also bumps the epoch and drops reads on the wire: a getEvent sent before this write (the page just
+    // opened, "I'm going" tapped at once) must neither be joined by the next read nor refill the entry with the old status.
+    this.forgetMatching((key) => key.includes(`${detail}:`) || key.includes(`${detail}?`))
+  }
+
+  /**
+   * Your RSVP or Save on an event changed (SCRUM-876): the event page reads two caches that still say the old thing, so
+   * both are corrected here, once, for every caller (the page, the room's "I'm going", the Going tray). This one's 30 s
+   * entry is forgotten, as check-in does; the page's own 2-minute copy is patched with the new status so a reopen is right
+   * before the network answers.
+   */
+  private eventStatusChanged(eventId: string, status: { rsvpStatus?: string | null; isFavorited?: boolean }): void {
+    this.forgetEvent(eventId)
+    patchEventDetailStatus(eventId, status)
   }
 
   /**
@@ -2479,7 +2491,7 @@ class ApiClientClass {
   async toggleInterest(
     eventId: string
   ): Promise<ApiResponse<{ interested: boolean; interestCount: number }>> {
-    return this.queuedRequest<{ interested: boolean; interestCount: number }>(
+    const result = await this.queuedRequest<{ interested: boolean; interestCount: number }>(
       `/api/mobile/events/${eventId}/interest`,
       {
         method: 'POST',
@@ -2487,6 +2499,9 @@ class ApiClientClass {
       true,
       3
     )
+    // The detail both caches hold says the old thing now (SCRUM-876).
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.interested })
+    return result
   }
 
   /**
@@ -2504,7 +2519,7 @@ class ApiClientClass {
     eventId: string,
     status: 'going' | 'maybe' | 'not_going'
   ): Promise<ApiResponse<{ rsvpStatus: RsvpStatus; rsvpCount: number }>> {
-    return this.queuedRequest<{ rsvpStatus: RsvpStatus; rsvpCount: number }>(
+    const result = await this.queuedRequest<{ rsvpStatus: RsvpStatus; rsvpCount: number }>(
       `/api/mobile/events/${eventId}/rsvp`,
       {
         method: 'POST',
@@ -2513,12 +2528,15 @@ class ApiClientClass {
       true,
       2
     )
+    // What the server answered, which may be `waitlisted`, not what was asked.
+    if (result.success && result.data) this.eventStatusChanged(eventId, { rsvpStatus: result.data.rsvpStatus })
+    return result
   }
 
   async cancelRsvp(
     eventId: string
   ): Promise<ApiResponse<{ rsvpStatus: null; rsvpCount: number }>> {
-    return this.queuedRequest<{ rsvpStatus: null; rsvpCount: number }>(
+    const result = await this.queuedRequest<{ rsvpStatus: null; rsvpCount: number }>(
       `/api/mobile/events/${eventId}/rsvp`,
       {
         method: 'DELETE',
@@ -2526,6 +2544,8 @@ class ApiClientClass {
       true,
       2
     )
+    if (result.success) this.eventStatusChanged(eventId, { rsvpStatus: null })
+    return result
   }
 
   async rateEvent(
@@ -2812,8 +2832,10 @@ class ApiClientClass {
     return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, CHAT_LIST_SWR_TTL)
   }
 
-  async getEventChat(eventId: string): Promise<ApiResponse<EventChatData>> {
-    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat`)
+  /** `limit: 1` when only `write` / `status` is wanted (the composer's lock): the room's history is not. */
+  async getEventChat(eventId: string, options?: { limit?: number }): Promise<ApiResponse<EventChatData>> {
+    const query = options?.limit ? `?limit=${options.limit}` : ''
+    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat${query}`)
   }
 
   async sendChatMessage(

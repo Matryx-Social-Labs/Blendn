@@ -32,6 +32,11 @@ let pendingPerson: string | null = null
  * yet". Kept while the overlay is open.
  */
 let door: TonightEvent | null = null
+/**
+ * The event page the overlay was opened from ("Blend in"), to come back to when it closes (ROOM-13). The page steps back to
+ * the tabs to show the overlay (it is hosted there, under the root stack), so closing would otherwise land on the Pulse.
+ */
+let returnTo: string | null = null
 const listeners = new Set<() => void>()
 
 function notify() {
@@ -58,10 +63,18 @@ export function openBlendn(personId?: string): void {
  * in. From a pushed screen, get back to the tabs first (the overlay is under
  * the root stack).
  */
-export function openPass(event: TonightEvent): void {
+export function openPass(event: TonightEvent, options?: { returnToEvent?: boolean }): void {
   door = event
+  returnTo = options?.returnToEvent ? event.id : null
   if (open) notify()
   set(true)
+}
+
+/** The event to return to once, as the overlay closes: reading it clears it. */
+export function takeReturnTo(): string | null {
+  const id = returnTo
+  returnTo = null
+  return id
 }
 
 export function getDoor(): TonightEvent | null {
@@ -100,6 +113,7 @@ export function isLiveHint(): boolean {
 export function blendnClosed(): void {
   pendingPerson = null
   door = null
+  returnTo = null
   set(false)
 }
 

@@ -47,6 +47,7 @@ describe('the list and the marks say the same words', () => {
     events_preview_hint: 'app/(tabs)/events.tsx',
     room_reveal: 'components/blendn/BlendnScreen.tsx',
     door_pass: 'app/offer/[id].tsx',
+    banter_swipe_mute: 'app/(tabs)/chat.tsx',
   }
   for (const [id, file] of Object.entries(where)) {
     it(`${id}: the sentence is the one in ${file}`, () => {

@@ -14,6 +14,7 @@ import { requestTextRefusal } from './requestRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
 import { Logger } from './logger'
 import { reasonLine } from './roomMoments'
+import { closesAtFromDoor, pseudonymFromDoor } from './roomState'
 import {
   applyArrival,
   applyCheckout,
@@ -111,7 +112,7 @@ export interface RoomState {
   settled: boolean
   /** The dock's first read of the room chat, fetched with the room so the dock opens on its real last line. */
   chatHistory: ChatHistory | null
-  event: { id: string; title: string; startsAt?: string; endsAt?: string } | null
+  event: { id: string; title: string; startsAt?: string; endsAt?: string; venueName?: string | null } | null
   checkedInAt: string | null
   /**
    * Whether *you* are named in this room — never anyone else's state. From
@@ -128,6 +129,10 @@ export interface RoomState {
   refreshing: boolean
   /** The room's group chat, resolved once per room; null if it isn't open. */
   chatGroupId: string | null
+  /** Your pseudonym in this room, as the server holds it (`GET /events/:id/chat` `you`, SV-3); null until it says. */
+  pseudonym?: string | null
+  /** When the room's chat closes, as the door says (`write.closesAt`); null until it does. */
+  chatClosesAt?: string | null
   /** The mutual just made — from your like, or from theirs over the socket. */
   /**
    * The mutual just made — from your like, or from theirs over the socket.
@@ -198,6 +203,7 @@ async function countCandidates(eventId: string, force: boolean): Promise<unknown
  */
 const chatGroupIdByEvent = new Map<string, string>()
 
+
 type ChatLookup = {
   result: ReturnType<typeof apiClient.getEventChat>
   history: { groupId: string; messages: Promise<Awaited<ReturnType<typeof apiClient.getChatMessages>> | null> } | null
@@ -228,6 +234,8 @@ export function useRoom(): RoomState & RoomActions {
   const [loadingMore, setLoadingMore] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [chatGroupId, setChatGroupId] = useState<string | null>(null)
+  const [pseudonym, setPseudonym] = useState<string | null>(null)
+  const [chatClosesAt, setChatClosesAt] = useState<string | null>(null)
   /** The room whose first count, and whose chat lookup, have answered. */
   const [seededFor, setSeededFor] = useState<string | null>(null)
   const [chatFor, setChatFor] = useState<string | null>(null)
@@ -287,6 +295,9 @@ export function useRoom(): RoomState & RoomActions {
     setConversations({})
     setRequested({})
     setChatGroupId(null)
+    // Your pseudonym is this room's: another room's must not stay on screen (M1).
+    setPseudonym(null)
+    setChatClosesAt(null)
     chatResolvedForRef.current = null
   }, [])
 
@@ -348,6 +359,7 @@ export function useRoom(): RoomState & RoomActions {
               title: remembered.eventTitle ?? first?.event?.title ?? '',
               startsAt: first?.event?.startTime,
               endsAt: first?.event?.endTime,
+              venueName: first?.event?.venueName,
             }
             eventRef.current = seeded
             setEvent(seeded)
@@ -434,6 +446,7 @@ export function useRoom(): RoomState & RoomActions {
           title: outcome.eventTitle ?? checkin?.event?.title ?? '',
           startsAt: checkin?.event?.startTime,
           endsAt: checkin?.event?.endTime,
+          venueName: checkin?.event?.venueName,
         }
 
         const changedRoom = eventRef.current?.id !== outcome.eventId
@@ -444,7 +457,8 @@ export function useRoom(): RoomState & RoomActions {
           prev.id === next.id &&
           prev.title === next.title &&
           prev.startsAt === next.startsAt &&
-          prev.endsAt === next.endsAt
+          prev.endsAt === next.endsAt &&
+          prev.venueName === next.venueName
             ? prev
             : next
         )
@@ -602,6 +616,8 @@ export function useRoom(): RoomState & RoomActions {
         const id = result.data?.chatGroupId ?? result.data?.id
         if (result.success && id) {
           setChatGroupId(String(id))
+          setPseudonym(pseudonymFromDoor(result.data))
+          setChatClosesAt(closesAtFromDoor(result.data))
           chatGroupIdByEvent.set(eventId, String(id))
           // Served as a member: back in, and the room's mute as the server has it.
           markRoomJoined(String(id))
@@ -622,14 +638,22 @@ export function useRoom(): RoomState & RoomActions {
            */
           markRoomLeft(result.chatGroupId)
           setChatGroupId(result.chatGroupId)
+          setPseudonym(null)
+          setChatClosesAt(null)
         } else {
           chatResolvedForRef.current = null
           setChatGroupId(null)
+          setPseudonym(null)
+          setChatClosesAt(null)
         }
       })
       .catch((e) => {
         Logger.warn('match', 'Chat group lookup failed', { error: e })
-        if (!cancelled) chatResolvedForRef.current = null
+        if (!cancelled) {
+          chatResolvedForRef.current = null
+          setPseudonym(null)
+          setChatClosesAt(null)
+        }
       })
       // Answered either way: the Room may reveal (a failed lookup is the dock's "not open", not a wait).
       .finally(() => {
@@ -877,6 +901,8 @@ export function useRoom(): RoomState & RoomActions {
     loadingMore,
     refreshing,
     chatGroupId,
+    pseudonym,
+    chatClosesAt,
     match,
     error: loadError,
     connection,

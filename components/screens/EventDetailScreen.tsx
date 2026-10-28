@@ -158,6 +158,8 @@ interface EventDetailData {
   description: string
   short_description: string
   city: string
+  /** The venue's neighbourhood, else the city: what an unlisted event is shared as (ROOM-17). */
+  area?: string
   venue_name: string
   address: string
   start_time: string
@@ -188,7 +190,7 @@ interface EventDetailData {
    * one cover image while the event had a gallery and, since #244, video. The
    * hero and the gallery are the two things the frame is mostly made of.
    */
-  media?: { id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }[]
+  media?: { id: string; url: string; type: string; thumbnail_url?: string | null; thumbnailUrl?: string | null; order?: number | null }[]
   /** The public claim page, for a curated event nobody has claimed. See `claimUrlFrom`. */
   claim_url?: string | null
   /** `cancelled` draws the banner, the struck date and the quiet "Cancelled" button. */
@@ -215,7 +217,6 @@ interface CheckInStatus {
    * attended from somebody who merely opened the page.
    */
   status?: string | null
-  check_in_id?: string
   checked_in_at?: string
   distance_meters?: number
   event_title?: string
@@ -348,6 +349,7 @@ export default function EventDetail() {
       description: d.description || '',
       short_description: d.shortDescription || d.short_description || '',
       city: d.city || '',
+      area: (d as { area?: string | null }).area ?? undefined,
       venue_name: d.venueName || d.venue_name || '',
       address: d.address || '',
       start_time: d.startTime || d.start_time || '',
@@ -381,7 +383,6 @@ export default function EventDetail() {
         success: true,
         checked_in: d.userStatus.isCheckedIn || false,
         status: d.userStatus.checkInStatus ?? null,
-        check_in_id: d.userStatus.checkInId,
       })
       setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
     }
@@ -753,6 +754,7 @@ export default function EventDetail() {
         startTime: event.start_time,
         venueName: event.venue_name,
         city: event.city,
+        area: event.area,
         coverImageUrl: event.cover_image_url,
         status: event.status,
         visibility: event.visibility,
@@ -844,7 +846,8 @@ export default function EventDetail() {
         going: rsvpStatus === 'going',
         tasteMatchCount: null,
         goingCount: null,
-      })
+      // Closing the Room comes back to this page (ROOM-13): it is dismissed to show the overlay, and re-opened after.
+      }, { returnToEvent: true })
     )
 
   /*
@@ -1212,6 +1215,18 @@ export default function EventDetail() {
               ) : null}
 
               {/*
+                The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
+                the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
+                neither. Not on a cancelled night. The run's start, not today's session: the server closes the board at the first doors.
+                Behind BOARD_ENABLED until the board's safety half ships (lib/board.ts).
+              */}
+              {event && BOARD_ENABLED && !cancelled && !boardClosed(event.start_time) ? (
+                <FadeInUp delay={SECTION_DELAY[1]}>
+                  <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
+                </FadeInUp>
+              ) : null}
+
+              {/*
                 What the organiser actually wrote: house rules, FAQ, accessibility, and the rest. Accessibility is
                 the one somebody needs *before* deciding whether they can come. `eventDetailBlocks` has already
                 dropped anything malformed, so an empty list means the organiser wrote nothing; wrapped only when
@@ -1233,18 +1248,6 @@ export default function EventDetail() {
               {attendeeBlock.count > 0 ? (
                 <FadeInUp delay={SECTION_DELAY[3]}>
                   <SceneAttendees count={attendeeBlock.count} label={attendeeBlock.label} seed={event?.id || 'scene'} />
-                </FadeInUp>
-              ) : null}
-
-              {/*
-                The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
-                the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
-                neither. The run's start, not today's session: the server closes the board at the first doors.
-                Behind BOARD_ENABLED until the board's safety half ships (lib/board.ts).
-              */}
-              {event && BOARD_ENABLED && !boardClosed(event.start_time) ? (
-                <FadeInUp delay={SECTION_DELAY[3]}>
-                  <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
                 </FadeInUp>
               ) : null}
 

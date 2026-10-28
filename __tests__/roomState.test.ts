@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { roomLockedIn, roomStateFrom, roomStateLine } from '../lib/roomState'
+import { myRoomFace, roomLockedIn, roomStateFrom, roomStateLine } from '../lib/roomState'
 
 /*
  * A muted member's room stays in the list, with a reason (SCRUM-178).
@@ -51,5 +51,22 @@ describe('roomLockedIn (TG-02: a locked room opens read-only)', () => {
     expect(roomLockedIn(payload, 'nope')).toBe(false)
     expect(roomLockedIn([{ chat_room_id: 'g3', status: 'locked' }], 'g3')).toBe(true)
     expect(roomLockedIn(null, 'g1')).toBe(false)
+  })
+})
+
+describe('myRoomFace (ROOM-01): anonymous is never your photo', () => {
+  const photo = 'https://cdn/me.jpg'
+  it('anonymous + a photo + no pseudonym yet: the creature, seeded per room', () => {
+    const face = myRoomFace({ revealed: false, photo, pseudonym: null, eventId: 'e1' })
+    expect(face).toEqual({ kind: 'creature', pseudonym: 'e1' })
+  })
+  it('anonymous + a pseudonym: that creature', () => {
+    expect(myRoomFace({ revealed: false, photo, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'creature', pseudonym: 'Night Cat' })
+  })
+  it('named + a photo: the photo', () => {
+    expect(myRoomFace({ revealed: true, photo, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'photo', uri: photo })
+  })
+  it('named with no photo: the creature, not a blank', () => {
+    expect(myRoomFace({ revealed: true, photo: null, pseudonym: null, eventId: null })).toEqual({ kind: 'creature', pseudonym: 'room' })
   })
 })

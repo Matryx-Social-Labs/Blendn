@@ -37,6 +37,8 @@ import { subscribeCheckInChanged } from './checkIn'
 
 export interface GroupChat {
   chat_room_id: string
+  /** The event this room is, when it is an event's (the opener hands it to the room, which asks that door). */
+  event_id?: string
   event_title: string
   /** `hereCount`: in the room now (`roomHereCount`). 0 when the server did not say. */
   participant_count: number
@@ -137,6 +139,7 @@ export const groupChatFrom = (room: any, userId: string | undefined): GroupChat 
   const preview = previewFromConversation(room)
   return {
     chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
+    ...(room.event?.id ? { event_id: String(room.event.id) } : {}),
     // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
     event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
     // In the room now, the Room's number; never for a place's room (H5, D-19).

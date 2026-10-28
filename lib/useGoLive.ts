@@ -3,7 +3,9 @@ import { useSyncExternalStore } from 'react'
 import { Platform } from 'react-native'
 
 import { apiClient, type GoLiveResult } from './apiClient'
+import { useToast } from '../components/Toast'
 import { checkInChanged } from './checkIn'
+import { youLeftLine } from './leftRooms'
 import { reasonOf } from './sessionEnd'
 import { goLiveRefusal, noteOwnGoLive, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
 import { H } from './haptics'
@@ -166,6 +168,7 @@ export function useGoLive({
   onRefusal?: (refusal: GoLiveRefusal) => void
 }) {
   const { user } = useAuth()
+  const { showToast } = useToast()
   const userId = user?.id ?? null
   const busy = useGoLiveBusy()
 
@@ -192,6 +195,9 @@ export function useGoLive({
           await rememberLiveSession({ userId, venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
         }
         checkInChanged(result.data.venueDayId)
+        // Never a silent switch: the room this took you out of, named by the server (ROOM-10). Queued ahead of the caller's own toast.
+        const left = youLeftLine(result.data)
+        if (left) showToast(left, 'info')
         onLive?.(result.data)
         return true
       }

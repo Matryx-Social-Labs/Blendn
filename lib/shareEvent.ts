@@ -21,6 +21,8 @@ export type ShareSource = {
   venueName?: string | null
   venue_name?: string | null
   city?: string | null
+  /** The detail route's `area`: the venue's neighbourhood, else the city. An unlisted event says this and nothing finer (ROOM-17). */
+  area?: string | null
   coverImageUrl?: string | null
   cover_image_url?: string | null
   status?: string | null
@@ -66,7 +68,7 @@ export function shareEventOf(source: ShareSource): ShareEvent | null {
     ...dateParts(source.startTime ?? source.start_time, source.timezone),
     // An unlisted event never carries its venue: nothing downstream can print what it was never given.
     venue: kind === 'unlisted' ? '' : (source.venueName ?? source.venue_name ?? ''),
-    area: source.city ?? '',
+    area: source.area || source.city || '',
     cover: source.coverImageUrl || source.cover_image_url || null,
     url: eventLink(source.id),
     cancelled: source.status === 'cancelled',

@@ -69,3 +69,17 @@ describe('every caller that warms the page, and the page, use the same query', (
     expect(call).not.toMatch(/\blat\b|\blon\b/)
   })
 })
+
+it('the event page asks for no dead include: one cache entry per event (ROOM-14)', async () => {
+  expect(EVENT_DETAIL_QUERY).toEqual({})
+  const urls: string[] = []
+  global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+    urls.push(String(input))
+    return new Response(JSON.stringify({ success: true, data: { id: 'e2' } }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  await apiClient.getEvent('e2')
+  await apiClient.getEvent('e2', { ...EVENT_DETAIL_QUERY })
+  expect(urls).toHaveLength(1)
+  expect(urls[0]).not.toContain('interestedUsers')
+  expect(read('lib/eventDetailQuery.ts')).not.toMatch(/include:/)
+})
