@@ -7,6 +7,7 @@ import { subscribeCheckInChanged } from './checkIn'
 import { getDistanceKm, roundCoord } from './geo'
 import { Logger } from './logger'
 import { type PreciseFix, type RoomButtonEvent } from './roomButton'
+import { subscribeEventStatusChanged } from './eventStatusSignal'
 import { publishRoomSignal } from './roomSignal'
 import { rsvpEventRows, savedEventRows, type SavedEventRow } from './savedEvents'
 import { quietLocation, type QuietCoords } from './useTonight'
@@ -165,7 +166,7 @@ function liveDepsFor(userId: string): SourceDeps {
 
 let active: ReturnType<typeof createRoomSignalSource> | null = null
 
-/** Something changed under the signal (a save, an RSVP, a check-in): judge again now, from a fresh read. */
+/** Something changed under the signal: judge again now, from a fresh read. (Saves, RSVPs and check-ins call it themselves.) */
 export function rejudgeRoomSignal(): void {
   void active?.run(true)
 }
@@ -181,12 +182,15 @@ export function useRoomSignalSource(userId: string | null | undefined): void {
     const id = setInterval(() => AppState.currentState === 'active' && void source.run(), SOURCE_TICK_MS)
     const app = AppState.addEventListener('change', (s) => s === 'active' && void source.run())
     const unCheckIn = subscribeCheckInChanged(() => void source.run(true))
+    // An RSVP or a save (every writer goes through `apiClient`'s `eventStatusChanged`).
+    const unStatus = subscribeEventStatusChanged(() => void source.run(true))
     return () => {
       source.dispose()
       if (active === source) active = null
       clearInterval(id)
       app.remove()
       unCheckIn()
+      unStatus()
     }
   }, [userId])
 }

@@ -5,6 +5,7 @@
 
 import { roundCoordinate } from './coordinates'
 import { patchEventDetailStatus } from './eventDetailCache'
+import { emitEventStatusChanged } from './eventStatusSignal'
 import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
@@ -1514,6 +1515,8 @@ class ApiClientClass {
   private eventStatusChanged(eventId: string, status: { rsvpStatus?: string | null; isFavorited?: boolean }): void {
     this.forgetEvent(eventId)
     patchEventDetailStatus(eventId, status)
+    // The centre button's plan and fence are judged from your saves and RSVPs: judge again now, not at the next tick.
+    emitEventStatusChanged()
   }
 
   /**

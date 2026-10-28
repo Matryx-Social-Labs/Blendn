@@ -100,6 +100,20 @@ it('rejudgeRoomSignal reads again, forced', async () => {
   expect(events.mock.calls[1][1]).toEqual({ force: true })
 })
 
+it('an RSVP or a save (the status writers announce it) reads again, forced; after unmount it does not', async () => {
+  const { emitEventStatusChanged } = require('../lib/eventStatusSignal') as typeof import('../lib/eventStatusSignal')
+  const view = await renderHook(() => useRoomSignalSource('u1'))
+  await flush()
+  await act(async () => emitEventStatusChanged())
+  await flush()
+  expect(events).toHaveBeenCalledTimes(2)
+  expect(events.mock.calls[1][1]).toEqual({ force: true })
+  view.unmount()
+  await act(async () => emitEventStatusChanged())
+  await flush()
+  expect(events).toHaveBeenCalledTimes(2)
+})
+
 it('unmounting stops the timer and the listener, and nothing is published after', async () => {
   const view = await renderHook(() => useRoomSignalSource('u1'))
   await flush()

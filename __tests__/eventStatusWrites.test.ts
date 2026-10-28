@@ -9,7 +9,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }))
 jest.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }))
 jest.mock('react-native', () => ({ Platform: { OS: 'ios' }, AppState: { addEventListener: () => ({ remove: () => {} }) } }))
-jest.mock('../lib/appVersion', () => ({ appVersionNumber: () => '1.0.0' }))
+jest.mock('../lib/appVersion', () => ({ appVersionNumber: () => '1.0.0', appBuildNumber: () => null }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
@@ -87,6 +87,20 @@ describe('an RSVP or Save write keeps the event page true on reopen', () => {
     expect(((await apiClient.getEvent(ID)).data as unknown as Detail).userStatus.isFavorited).toBe(true)
     await apiClient.toggleInterest(ID)
     expect(cached()?.userStatus.isFavorited).toBe(false)
+  })
+
+  it('every writer tells the centre button to judge again; a refused one does not', async () => {
+    const { subscribeEventStatusChanged } = require('../lib/eventStatusSignal') as typeof import('../lib/eventStatusSignal')
+    const heard = jest.fn()
+    const off = subscribeEventStatusChanged(heard)
+    await apiClient.rsvpToEvent(ID, 'going')
+    await apiClient.cancelRsvp(ID)
+    await apiClient.toggleInterest(ID)
+    expect(heard).toHaveBeenCalledTimes(3)
+    ;(global.fetch as jest.Mock).mockImplementationOnce(async () => new Response(JSON.stringify({ success: false, error: 'No', errorCode: 'FORBIDDEN' }), { status: 403, headers: { 'content-type': 'application/json' } }))
+    await apiClient.rsvpToEvent(ID, 'going')
+    expect(heard).toHaveBeenCalledTimes(3)
+    off()
   })
 
   it('a write the server refused changes nothing', async () => {
