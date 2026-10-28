@@ -4,6 +4,7 @@ import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import { onCriticalPath } from './criticalPath'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
+import { resetInboxBadge } from './inboxBadge'
 import { Logger } from './logger'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
@@ -271,6 +272,7 @@ let lastForegroundRefresh = 0
 const resetLocalSession = () => {
   // The next account's first foreground read is not held back by the last one's throttle.
   lastForegroundRefresh = 0
+  resetInboxBadge()
   void forgetAuthMethod()
   // The icon's number was the last account's: the next person to open the app on this phone does not inherit it.
   void setAppIconBadge(0)

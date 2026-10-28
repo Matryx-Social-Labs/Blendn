@@ -2,7 +2,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { useCallback } from 'react'
 import { Platform, StyleSheet, View } from 'react-native'
 
-import { markBellRead, useInboxBadge, useInboxBadgeSync, useRefreshInboxBadge } from '../../lib/inboxBadge'
+import { markBellRead, useInboxBadge, useRefreshInboxBadge } from '../../lib/inboxBadge'
 import { badgeLabel } from '../../lib/notificationFormat'
 import { Badge } from '../ds/MonoFamily'
 import { Icon } from '../ui/Icon'
@@ -43,12 +43,9 @@ export function NotificationBell() {
   useFocusEffect(load)
 
   /*
-   * And the moment a row lands while the app is open, and when the app comes back to the front: the server says so
-   * on your own socket room and the count is re-read rather than added to (it read 3 for one row on the owner's
-   * iPhone when the app held three sockets). The icon's number is the one thing that shows from outside, so it is
-   * re-read the moment the app is looked at. The tab bar's Banter dot reads the same counts (`lib/inboxBadge`).
+   * A row landing, a DM, and the app coming back to the front re-read the count too: one set of triggers for every reader,
+   * mounted once in the tab layout (`useInboxBadgeSync`), because this bell is mounted on three screens.
    */
-  useInboxBadgeSync()
 
   // Optimistic: the badge clears on tap rather than after a round trip, because opening it is what "seen" means.
   const open = useCallback(() => {

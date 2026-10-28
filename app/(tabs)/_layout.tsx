@@ -64,9 +64,10 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const [venue, setVenue] = useState<string | null>(null)
   const [insideCount, setInsideCount] = useState(0)
   // Your face on Me: the session's `profile.photos`, re-read after every photo save and on foreground (`refreshAuthUser`).
-  const mePhoto = myMainPhoto(useAuth().user)
+  const authUser = useAuth().user
+  const mePhoto = myMainPhoto(authUser)
   // The Banter dot: the same counts as the Pulse's bell, one read for both (`lib/inboxBadge`).
-  useInboxBadgeSync()
+  useInboxBadgeSync(authUser?.id)
   useRoomSignalSource()
   const banter = banterUnread(useInboxBadge())
 

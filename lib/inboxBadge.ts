@@ -4,7 +4,7 @@ import { AppState } from 'react-native'
 import { apiClient } from './apiClient'
 import { iconBadgeFor, setAppIconBadge } from './appBadge'
 import { Logger } from './logger'
-import { subscribeToBell } from './socketClient'
+import { subscribeToBell, subscribeToUserNotifications } from './socketClient'
 
 /**
  * What the feed says is waiting, read once and shared (BAR-02): the bell's badge is `unreadCount` (its own rows), the app icon
@@ -17,6 +17,10 @@ export type InboxBadge = { unreadCount: number; badgeCount: number | null }
 const EMPTY: InboxBadge = { unreadCount: 0, badgeCount: null }
 let current = EMPTY
 let inflight: Promise<void> | null = null
+/** A trigger landed while a read was out: that read may predate it, so one more follows. */
+let again = false
+/** Bumped on sign-out: a read begun for the last account paints nothing. */
+let generation = 0
 const listeners = new Set<() => void>()
 
 const set = (next: InboxBadge) => {
@@ -28,24 +32,49 @@ const set = (next: InboxBadge) => {
 /** Conversations with something unread, from the other side: what the Banter tab's dot says. An older server sends no `badgeCount`: none. */
 export const banterUnread = (b: InboxBadge): number => (b.badgeCount === null ? 0 : Math.max(0, b.badgeCount - b.unreadCount))
 
-/** Read the counts; calls while a read is out share it. A failed read keeps the last answer. */
+const readOnce = async (mine: number) => {
+  try {
+    const result = await apiClient.getNotifications({ limit: 1 })
+    if (mine !== generation) return
+    if (result.success && result.data) {
+      const badgeCount = iconBadgeFor(result.data)
+      set({ unreadCount: result.data.unreadCount, badgeCount })
+      void setAppIconBadge(badgeCount)
+    }
+  } catch (error) {
+    Logger.warn('notifications', 'count:failed', { error: error as never })
+  }
+}
+
+/** Read the counts; a trigger while a read is out shares it and earns exactly one follow-up. A failed read keeps the last answer. */
 export function refreshInboxBadge(): Promise<void> {
-  if (inflight) return inflight
+  if (inflight) {
+    again = true
+    return inflight
+  }
+  const mine = generation
   inflight = (async () => {
     try {
-      const result = await apiClient.getNotifications({ limit: 1 })
-      if (result.success && result.data) {
-        const badgeCount = iconBadgeFor(result.data)
-        set({ unreadCount: result.data.unreadCount, badgeCount })
-        void setAppIconBadge(badgeCount)
+      await readOnce(mine)
+      while (again && mine === generation) {
+        again = false
+        await readOnce(mine)
       }
-    } catch (error) {
-      Logger.warn('notifications', 'count:failed', { error: error as never })
     } finally {
-      inflight = null
+      if (mine === generation) inflight = null
     }
   })()
   return inflight
+}
+
+/** Sign-out: the next account starts from nothing, and a read still out for this one is dropped. */
+export function resetInboxBadge(): void {
+  generation += 1
+  inflight = null
+  again = false
+  clearTimeout(dmTimer ?? undefined)
+  dmTimer = null
+  set(EMPTY)
 }
 
 /** Opening the bell marks its rows seen: they leave both counts, the conversations stay. */
@@ -62,12 +91,25 @@ const subscribe = (l: () => void) => {
 
 export const useInboxBadge = (): InboxBadge => useSyncExternalStore(subscribe, () => current)
 
+let dmTimer: ReturnType<typeof setTimeout> | null = null
+const DM_READ_DELAY_MS = 2000
+/** A burst of messages is one read, a moment after the first: the count is the server's, and it needs the message stored. */
+function scheduleDmRead(): void {
+  if (dmTimer) return
+  dmTimer = setTimeout(() => {
+    dmTimer = null
+    void refreshInboxBadge()
+  }, DM_READ_DELAY_MS)
+}
+
 /**
  * The triggers, one set for every subscriber (calls share a read): on mount, the moment a row lands on your own socket room
  * (the server's count, never a local +1), and when the app comes back to the front.
  */
-export function useInboxBadgeSync(): void {
+export function useInboxBadgeSync(userId?: string | null): void {
   useEffect(() => subscribeToBell(() => void refreshInboxBadge()), [])
+  // A DM never rings the bell (the server keeps `private_message` out of it); it arrives on your own room as `private:message`.
+  useEffect(() => (userId ? subscribeToUserNotifications(userId, scheduleDmRead) : undefined), [userId])
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active') void refreshInboxBadge()
