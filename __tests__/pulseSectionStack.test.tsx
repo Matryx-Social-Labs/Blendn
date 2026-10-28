@@ -43,3 +43,9 @@ it('with nothing loaded it is not drawn: location is not the way back from offli
   await render(stack([]))
   expect(screen.queryByTestId('pulse-nearby-ask')).toBeNull()
 })
+
+it('a section counted from a full page prints its count as a floor (BAR-10)', async () => {
+  await render(stack([{ key: 'tonight', events: [event], count: 50, more: true }]))
+  expect(screen.getByTestId('pulse-tonight-header')).toBeTruthy()
+  expect(screen.getByText('50+')).toBeTruthy()
+})
