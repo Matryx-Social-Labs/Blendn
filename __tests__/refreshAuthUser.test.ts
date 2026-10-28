@@ -3,7 +3,7 @@
  * must not notify every `useAuth` subscriber or rewrite secure storage; a changed one must do both (L3).
  */
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { signInWithEmail: jest.fn(), getSession: jest.fn() },
+  apiClient: { signInWithEmail: jest.fn(), signInWithGoogle: jest.fn(), signInWithApple: jest.fn(), signOut: jest.fn(), getSession: jest.fn() },
   TokenStorage: { clearAll: jest.fn(), setUser: jest.fn(), getUser: jest.fn(), getAccessToken: jest.fn() },
 }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
@@ -15,7 +15,8 @@ jest.mock('../lib/purchases', () => ({ syncPurchasesUser: jest.fn(async () => {}
 
 /* eslint-disable import/first */
 import { apiClient, TokenStorage } from '../lib/apiClient'
-import { FOREGROUND_REFRESH_MS, refreshAuthUser, refreshAuthUserOnForeground, sameUser, signInWithEmail } from '../lib/useAuth'
+import { myMainPhoto } from '../lib/myPhoto'
+import { FOREGROUND_REFRESH_MS, getCurrentUser, refreshAuthUser, refreshAuthUserOnForeground, sameUser, signInWithApple, signInWithEmail, signInWithGoogle, signOut } from '../lib/useAuth'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -61,4 +62,46 @@ describe('refreshAuthUserOnForeground', () => {
     await refreshAuthUserOnForeground(t0 + FOREGROUND_REFRESH_MS)
     expect(api.getSession).toHaveBeenCalledTimes(2)
   })
+})
+
+/*
+ * H1: the Google and Apple routes answer with the profile WITHOUT `photos` (blendn-admin auth/google/route.ts: the user is built
+ * from `profileForSelfResponse(user.profile)`, which selects none), so the Me tab had no face after either sign-in until a relaunch.
+ * The fixture is that response.
+ */
+describe('Google and Apple sign-in fetch the session photo (H1)', () => {
+  const googleUser = { id: 'g1', email: 'g@b.c', name: 'Gita', image: 'https://oauth.example/a.jpg', emailVerified: null, createdAt: '2026-01-01', profile: { phone: null, name: 'Gita', age: 30, location: 'Bengaluru', interests: [], onboarded: true } }
+  const sessionUser = { ...googleUser, profile: { ...googleUser.profile, photos: ['https://x/main.jpg'] } }
+
+  it.each([
+    ['Google', () => signInWithGoogle('idtoken'), 'signInWithGoogle'],
+    ['Apple', () => signInWithApple('idtoken'), 'signInWithApple'],
+  ] as const)('%s: getSession is called and the photo becomes the Me tab’s', async (_n, run, method) => {
+    ;(api as unknown as Record<string, jest.Mock>)[method].mockResolvedValue({ success: true, data: { user: googleUser, isNewUser: false } })
+    api.getSession.mockClear()
+    api.getSession.mockResolvedValue({ success: true, data: sessionUser } as never)
+    await run()
+    await new Promise((r) => setImmediate(r))
+    expect(api.getSession).toHaveBeenCalledTimes(1)
+    expect(myMainPhoto(await getCurrentUser())).toBe('https://x/main.jpg')
+  })
+
+  it('signing out lets the next account’s first foreground read through the throttle', async () => {
+    api.getSession.mockResolvedValue({ success: true, data: { ...user } } as never)
+    api.signOut.mockResolvedValue({ success: true } as never)
+    const t0 = 20_000_000
+    await signInWithEmail('a@b.c', 'pw')
+    await refreshAuthUserOnForeground(t0)
+    api.getSession.mockClear()
+    await signOut()
+    await signInWithEmail('a@b.c', 'pw')
+    await refreshAuthUserOnForeground(t0 + 1)
+    expect(api.getSession).toHaveBeenCalledTimes(1)
+  })
+})
+
+it('drops a session read that belongs to another account (L1)', async () => {
+  api.getSession.mockResolvedValue({ success: true, data: { ...user, id: 'someone-else', name: 'Other' } } as never)
+  await refreshAuthUser()
+  expect(TokenStorage.setUser).not.toHaveBeenCalled()
 })
