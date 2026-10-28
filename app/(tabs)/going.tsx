@@ -41,7 +41,6 @@ import {
   lockedNightsLabel,
   ratingsToRead,
   stayLabel,
-  boardOpenFor,
   rsvpEventRows,
   savedEventRows,
   withLockedNights,
@@ -52,6 +51,7 @@ import {
   type RsvpEventRow,
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
+import { boardOpen } from '../../lib/board'
 import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -430,7 +430,7 @@ function GoingScreenInner() {
                 { label: 'Add to calendar', variant: 'secondary' as const, then: () => addToCalendar(row) },
               ]),
           // The Board serves committed people, and this is their list: the Scene's gate, before doors and not called off.
-          ...(boardOpenFor(row) ? [{ label: 'The Board', variant: 'secondary' as const, then: () => openBoard(row.id) }] : []),
+          ...(boardOpen(row) ? [{ label: 'The Board', variant: 'secondary' as const, then: () => openBoard(row.id) }] : []),
           { label: 'Cancel', cancel: true },
         ],
       }),
@@ -539,7 +539,7 @@ function GoingScreenInner() {
             <HeroAction icon="share" accessibilityLabel={`Share ${row.title}`} onPress={() => shareRow(row)} />
           </View>
           {/* The Scene's own row, under the buttons: before doors, not called off (E2). */}
-          {boardOpenFor(row) ? (
+          {boardOpen(row) ? (
             <View style={styles.heroBoard}>
               <BoardEntry onPress={() => openBoard(row.id)} />
             </View>

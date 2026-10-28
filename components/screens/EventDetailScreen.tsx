@@ -59,7 +59,7 @@ import { SceneHero, sceneHeroHeight, type ScenePill } from '../scene/SceneHero'
 import { SceneLightbox } from '../scene/SceneLightbox'
 import ScalePress from '../motion/ScalePress'
 import { BoardEntry } from '../board/BoardSections'
-import { BOARD_ENABLED, boardClosed } from '../../lib/board'
+import { boardOpen } from '../../lib/board'
 import {
   SCENE_CTA_ICON,
   SCENE_PADDING_HORIZONTAL,
@@ -1218,9 +1218,9 @@ export default function EventDetail() {
                 The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
                 the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
                 neither. Not on a cancelled night. The run's start, not today's session: the server closes the board at the first doors.
-                Behind BOARD_ENABLED until the board's safety half ships (lib/board.ts).
+                The one gate is `boardOpen` (lib/board.ts), which the Going tab asks too.
               */}
-              {event && BOARD_ENABLED && !cancelled && !boardClosed(event.start_time) ? (
+              {event && boardOpen(event) ? (
                 <FadeInUp delay={SECTION_DELAY[1]}>
                   <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
                 </FadeInUp>

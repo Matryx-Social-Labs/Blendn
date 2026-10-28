@@ -13,6 +13,7 @@ import {
   BOARD_ENABLED,
   BOARD_MAX_POST_LENGTH,
   boardClosed,
+  boardOpen,
   boardMarkSeed,
   boardMessage,
   inboxRequests,
@@ -96,6 +97,29 @@ describe('the board closes at doors', () => {
   it('leaves an unknown start to the server', () => {
     expect(boardClosed(undefined, now)).toBe(false)
     expect(boardClosed('not a date', now)).toBe(false)
+  })
+})
+
+describe('boardOpen: the one gate the Scene and the Going tab share', () => {
+  const now = Date.parse('2026-10-01T20:00:00Z')
+  const before = '2026-10-01T20:30:00Z'
+  it('is open before the doors on a night that is on', () => {
+    expect(boardOpen({ start_time: before, status: 'published' }, now)).toBe(true)
+    expect(boardOpen({ start_time: before }, now)).toBe(true)
+  })
+  it('is closed from the doors, and on a night called off', () => {
+    expect(boardOpen({ start_time: '2026-10-01T20:00:00Z', status: 'published' }, now)).toBe(false)
+    expect(boardOpen({ start_time: before, status: 'cancelled' }, now)).toBe(false)
+  })
+  it('leaves an unknown start to the server', () => {
+    expect(boardOpen({ start_time: undefined, status: 'published' }, now)).toBe(true)
+  })
+  it('the Scene and the Going tab call it, and nothing else judges the board', () => {
+    const read = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
+    expect(read('components/screens/EventDetailScreen.tsx')).toContain('boardOpen(event)')
+    expect(read('app/(tabs)/going.tsx')).toContain('boardOpen(row)')
+    expect(read('lib/savedEvents.ts')).not.toContain('boardClosed')
+    expect(read('components/screens/EventDetailScreen.tsx')).not.toContain('boardClosed')
   })
 })
 
@@ -294,9 +318,8 @@ describe('the board is on, now its safety half has shipped', () => {
 
   it('reads one constant at every way in', () => {
     const src = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
-    expect(src('components/screens/EventDetailScreen.tsx')).toContain(
-      'event && BOARD_ENABLED && !cancelled && !boardClosed(event.start_time) ?'
-    )
+    expect(src('components/screens/EventDetailScreen.tsx')).toContain('event && boardOpen(event) ?')
+    expect(src('lib/board.ts')).toContain('BOARD_ENABLED && event.status !== ')
     expect(src('app/(tabs)/chat.tsx')).toMatch(/\{BOARD_ENABLED && !trimmed \? <BoardRequestsSection/)
     expect(src('app/board/[eventId].tsx')).toContain('if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />')
   })

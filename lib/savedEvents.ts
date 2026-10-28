@@ -11,7 +11,6 @@
 import { sessionFromApi, type EventSession } from './eventSession'
 import type { ChangedField } from './eventChange'
 import { feedPoster, type EventMediaItem } from './feedMedia'
-import { BOARD_ENABLED, boardClosed } from './board'
 import { groupByDay } from './pulse'
 
 export interface SavedEventRow {
@@ -111,15 +110,6 @@ export function changedTag(row: Pick<SavedEventRow, 'changed' | 'status'>): 'New
   if (row.status === 'cancelled') return null
   if (row.changed?.includes('time')) return 'New time'
   return row.changed?.includes('venue') ? 'New venue' : null
-}
-
-/**
- * Does a night you are going to (or saved) offer the Board? The Scene's own gate (`EventDetailScreen`): before the run's
- * first doors, and not called off. The run's start, not today's session: the server closes the board at the first doors.
- */
-// Keep in step with the Scene's gate in components/screens/EventDetailScreen.tsx (BOARD_ENABLED && !boardClosed && not cancelled).
-export function boardOpenFor(row: Pick<SavedEventRow, 'start_time' | 'status'>, now: number = Date.now()): boolean {
-  return BOARD_ENABLED && !boardClosed(row.start_time, now) && row.status !== 'cancelled'
 }
 
 // ---------------------------------------------------------------------------
