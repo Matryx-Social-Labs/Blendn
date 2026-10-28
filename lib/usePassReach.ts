@@ -24,8 +24,10 @@ export function usePassReach(door: TonightEvent | null, insideEventId: string | 
   useEffect(() => {
     if (id === null || inside) return
     let live = true
+    // Through a promise, so a read that throws is an unknown distance (the hold stays open), never a crash.
     const read = () =>
-      quietLocation()
+      Promise.resolve()
+        .then(quietLocation)
         .then(({ coords }) => {
           if (!live) return
           // 0,0 is an unset coordinate in this schema.

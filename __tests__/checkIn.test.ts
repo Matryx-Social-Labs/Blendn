@@ -173,9 +173,9 @@ describe('the event screen hears check-in changes', () => {
   it('checks in only through the pass: "Blend in" opens this event’s VenuePass (Flow 3 #04–#06, Flow 4)', () => {
     expect(screen).not.toContain('useCheckInFlow(')
     expect(screen).not.toContain('<MomentPour')
-    expect(screen).toMatch(/if \(!isCheckedIn\) \{\s*openThisPass\(\)/)
-    // Checked in, "You're in" leads to the Room.
-    expect(screen).toMatch(/openThisPass\(\)\s*return\s*\}\s*toTheOverlay\(openBlendn\)/)
+    // "Blend in" (join) docks the pass; checked in, "You're in" (going) leads to the Room. One switch on the CTA's own state.
+    expect(screen).toMatch(/case 'join':\s*openThisPass\(\)/)
+    expect(screen).toMatch(/case 'going':\s*toTheOverlay\(openBlendn\)/)
   })
 
   it('apiClient drops only the detail, not the attendee list', () => {
