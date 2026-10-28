@@ -40,7 +40,7 @@ jest.mock('../lib/notifications', () => ({
   removePushTokenFromProfile: jest.fn(async () => {}),
   setupNotificationResponseListener: () => ({ remove: () => {} }),
 }))
-jest.mock('../lib/socketClient', () => ({ initSocketWithAppState: jest.fn(), cleanup: jest.fn(), disconnect: jest.fn(), subscribeToBell: () => () => {} }))
+jest.mock('../lib/socketClient', () => ({ initSocketWithAppState: jest.fn(), cleanup: jest.fn(), disconnect: jest.fn(), subscribeToBell: () => () => {}, subscribeToUserNotifications: () => () => {} }))
 jest.mock('../lib/sentry', () => ({
   ...jest.requireActual('../lib/sentry'),
   initSentry: jest.fn(),
