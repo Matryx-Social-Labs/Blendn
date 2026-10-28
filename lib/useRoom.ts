@@ -292,6 +292,8 @@ export function useRoom(): RoomState & RoomActions {
     setConversations({})
     setRequested({})
     setChatGroupId(null)
+    // Your pseudonym is this room's: another room's must not stay on screen (M1).
+    setPseudonym(null)
     chatResolvedForRef.current = null
   }, [])
 
@@ -631,14 +633,19 @@ export function useRoom(): RoomState & RoomActions {
            */
           markRoomLeft(result.chatGroupId)
           setChatGroupId(result.chatGroupId)
+          setPseudonym(null)
         } else {
           chatResolvedForRef.current = null
           setChatGroupId(null)
+          setPseudonym(null)
         }
       })
       .catch((e) => {
         Logger.warn('match', 'Chat group lookup failed', { error: e })
-        if (!cancelled) chatResolvedForRef.current = null
+        if (!cancelled) {
+          chatResolvedForRef.current = null
+          setPseudonym(null)
+        }
       })
       // Answered either way: the Room may reveal (a failed lookup is the dock's "not open", not a wait).
       .finally(() => {
