@@ -71,6 +71,12 @@ export function lockForReason(reason: string | null | undefined, serverText?: st
  * own `status: 'locked'`, else your `write.reason`. A room that has not opened yet is the countdown's, not a lock here.
  * Narrow cast: `EventChatData` is `apiClient.ts`'s (SYS-19 declares these fields).
  */
+/** Whether a read said anything about writing (`write`): a server older than SV-5 does not, and the caller asks the door instead. */
+export function saidWrite(data: unknown): boolean {
+  const write = (data as { write?: unknown } | null | undefined)?.write
+  return !!write && typeof write === 'object'
+}
+
 export function lockFromDoor(data: unknown): ComposerLock | null {
   const d = (data ?? {}) as { status?: unknown; write?: { allowed?: unknown; reason?: unknown; message?: unknown } | null }
   const message = typeof d.write?.message === 'string' ? d.write.message : undefined

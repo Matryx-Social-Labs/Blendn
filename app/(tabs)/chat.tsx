@@ -147,7 +147,7 @@ function ChatInner() {
       noteOpened(chat.chat_room_id)
       router.push({
         pathname: '/chat/[id]',
-        params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title } as never,
+        params: { id: chat.chat_room_id, roomName: chat.event_title, eventTitle: chat.event_title, ...(chat.event_id ? { eventId: chat.event_id } : {}) } as never,
       })
     },
     [inbox, noteOpened]

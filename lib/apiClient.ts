@@ -2790,8 +2790,10 @@ class ApiClientClass {
     return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, CHAT_LIST_SWR_TTL)
   }
 
-  async getEventChat(eventId: string): Promise<ApiResponse<EventChatData>> {
-    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat`)
+  /** `limit: 1` when only `write` / `status` is wanted (the composer's lock): the room's history is not. */
+  async getEventChat(eventId: string, options?: { limit?: number }): Promise<ApiResponse<EventChatData>> {
+    const query = options?.limit ? `?limit=${options.limit}` : ''
+    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat${query}`)
   }
 
   async sendChatMessage(

@@ -74,7 +74,7 @@ import {
 import { clockTime } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
-import { isReadOnlyLock, lockFor, lockFromDoor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
+import { isReadOnlyLock, lockFor, lockFromDoor, saidWrite, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
@@ -210,6 +210,8 @@ function GroupChatInner() {
   /* A crew's or a Blend's room (step 9), told by the opener; null for an event's. */
   const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? roomKindParam(told?.kind) ?? null
   const eventRoom = roomKind === null
+  /** Photos follow the room's kind as the server's own row or refusal told it, never a link's param (anonymity, L2). */
+  const photoKind = roomInfo.kind ?? roomKindParam(told?.kind) ?? null
   /*
    * Known to be an event's room: its row names the event, or an event opener said so. A bare link or a push carries no
    * kind, and a closed crew's or Blend's room answers it with the same 404 an event's does: that one is not told it was
@@ -284,29 +286,36 @@ function GroupChatInner() {
    * Banter's row (page 1 of a cached list) said it first. Any other room's lock is on its row in that list.
    */
   const setComposerLock = composer.setLock
-  // After the history has been read, and not for somebody out of the room: that door is `askEventDoor`'s, asked once.
-  const lockReadable = !loading && !outOfRoom
+  /** Whether the history read said anything about writing: a server older than SV-5 does not, and the door is asked instead. */
+  const historySaidWrite = useRef(false)
+  // The Banter's row of this room (cached): a lock the list already knows (TG-02). Waits for nothing.
   useEffect(() => {
-    if (!chatRoomId || !lockReadable) return
+    if (!chatRoomId) return
     let live = true
-    // The Banter's row of this room (cached): a lock the list already knows. Kept for every room (TG-02) ...
     void apiClient.getChatGroups().then((result) => {
       if (live && result.success && roomLockedIn(result.data, roomId)) setComposerLock({ state: 'locked' })
     })
-    // ... and an event's room asks its own door, which is complete where the list's first page is not (ROOM-05).
-    if (roomEventId) {
-      void Promise.resolve()
-        .then(() => apiClient.getEventChat(roomEventId))
-        .then((door) => {
-          const next = live && door?.success ? lockFromDoor(door.data) : null
-          if (next) setComposerLock(next)
-        })
-        .catch(() => {})
-    }
     return () => {
       live = false
     }
-  }, [chatRoomId, roomId, roomEventId, setComposerLock, lockReadable])
+  }, [chatRoomId, roomId, setComposerLock])
+  // Older server only: an event's room asks its own door for `write` / `status`, once the history has been read and not
+  // for somebody out of the room (that door is `askEventDoor`'s). `limit: 1`: the lock is wanted, not the history.
+  const lockReadable = !loading && !outOfRoom
+  useEffect(() => {
+    if (!chatRoomId || !lockReadable || !roomEventId || historySaidWrite.current) return
+    let live = true
+    void Promise.resolve()
+      .then(() => apiClient.getEventChat(roomEventId, { limit: 1 }))
+      .then((door) => {
+        const next = live && door?.success ? lockFromDoor(door.data) : null
+        if (next) setComposerLock(next)
+      })
+      .catch((error) => Logger.warn('chat', 'Could not read the room’s lock from its event', { error }))
+    return () => {
+      live = false
+    }
+  }, [chatRoomId, roomEventId, setComposerLock, lockReadable])
   const { showToast } = useToast()
   // Android: the snackbar over the composer covers the newest row (the withheld placeholder it explains); the feed makes room (rc8 #5).
   const toastInset = useToastInset()
@@ -404,10 +413,14 @@ function GroupChatInner() {
         setNotLive(false)
         setEndedReason(null)
         markRoomJoined(roomId)
+        // The history read says whether you may write (SV-5), for any room, the Banter's first page or not (ROOM-05).
+        historySaidWrite.current = saidWrite(result.data)
+        const lockedBy = lockFromDoor(result.data)
+        if (lockedBy) composer.setLock(lockedBy)
 
         const raw = Array.isArray(result.data) ? result.data : (result.data as any)?.messages || (result.data as any)?.data || []
         const pagination = (result.data as any)?.pagination
-        const msgs = roomMessagesFrom(Array.isArray(raw) ? raw : [], user.id, kind)
+        const msgs = roomMessagesFrom(Array.isArray(raw) ? raw : [], user.id, photoKind)
         /* A refresh keeps the older pages already loaded, and what only this phone holds (lib/mergeNewestPage). */
         const { keptOlder } = mergeNewestPage(messagesRef.current, msgs, (m) => m.message_id, isTemp)
         setMessages((prev) => mergeNewestPage(prev, msgs, (m) => m.message_id, isTemp).items)
@@ -433,7 +446,7 @@ function GroupChatInner() {
       const pagination = (result.data as any)?.pagination
       setHasMore(pagination?.hasMore || false)
       setOldestCursor(pagination?.nextCursor || null)
-      const older = roomMessagesFrom(Array.isArray(raw) ? raw : [], authUser.id, roomKind)
+      const older = roomMessagesFrom(Array.isArray(raw) ? raw : [], authUser.id, photoKind)
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.message_id))
         return [...older.filter((m) => !ids.has(m.message_id)), ...prev]

@@ -364,6 +364,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
             ...(kind ? { kind } : {}),
             ...(kind === 'crew' && data.crewId ? { crewId: String(data.crewId) } : {}),
             ...(kind === 'blend' && data.blendId ? { blendId: String(data.blendId) } : {}),
+            // An event's room: the room asks that door for its lock when the server's history says nothing (ROOM-05).
+            ...(!kind && data.eventId ? { eventId: String(data.eventId) } : {}),
           } as any,
         }
       } else {
@@ -373,7 +375,7 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
     }
     case 'announcement': {
       if (data.chatGroupId) {
-        target = { pathname: '/chat/[id]', params: { id: String(data.chatGroupId) } as any }
+        target = { pathname: '/chat/[id]', params: { id: String(data.chatGroupId), ...(data.eventId ? { eventId: String(data.eventId) } : {}) } as any }
       } else if (data.eventId) {
         target = { pathname: '/event/[id]', params: { id: String(data.eventId) } as any }
       } else {
