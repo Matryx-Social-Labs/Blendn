@@ -68,13 +68,22 @@ describe('there is one profile editor', () => {
 
   it('leaves no second door in Settings', () => {
     const src = codeOnly(read('app/settings.tsx'))
-    // The one door the design draws (R4.1 7.1, Flow 14 · 14.4): "How you match", to the about-you fields' own screen.
+    // The one door: "About you" (E7; the row is not "How you match" until Flow 14 · 14.4 is built), to the about-you fields' own screen.
     // The old `/about-you` route, a second profile editor, stays gone.
     expect(src.replace("'/edit-about-you'", '')).not.toContain('about-you')
     expect(src).toContain("pathname: '/edit-about-you'")
     expect(src).not.toContain('/edit-profile')
     // And no profile card above the list, whose outer press went to the Me tab.
     expect(src).not.toContain('profileCard')
+    expect(src).toContain('title="About you"')
+    expect(src).not.toContain('title="How you match"')
+  })
+
+  it('pulls to refresh with the shared hook, which plays H.threshold (SYS-12)', () => {
+    const src = codeOnly(read('app/settings.tsx'))
+    expect(src).toContain('usePullToRefresh(')
+    expect(src).toContain('{...pull.listProps}')
+    expect(src).not.toContain('<RefreshControl')
   })
 })
 

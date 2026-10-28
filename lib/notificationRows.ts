@@ -74,6 +74,8 @@ export const GLYPH: Record<string, IconName> = {
   group_message: 'message-circle',
   // A post of yours a moderator or the automatic check took down (C34): the moderation shield, never the generic bell.
   board_post_removed: 'shield',
+  // The outcome of a report you made (SYS-06): the same shield, not the generic bell.
+  report_actioned: 'shield',
 }
 
 const EVENT_BADGES = ['clock', 'map-pin', 'megaphone', 'star'] as const

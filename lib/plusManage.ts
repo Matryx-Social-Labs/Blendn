@@ -21,6 +21,9 @@ export type PlusState = 'active' | 'cancelled' | 'grace' | 'hold' | 'paused' | '
 /** Which of our own gifts a `grant` is. */
 export type PlusGrant = 'trial' | 'referral'
 
+/** What a Razorpay-sourced Blend'n+ says in place of a store row (OD-5): no link, no button. */
+export const MANAGED_OUTSIDE = 'Managed outside the app'
+
 export type PlusStore = 'ios' | 'android'
 const STORE_NAME: Record<PlusStore, string> = { ios: 'the App Store', android: 'Google Play' }
 
@@ -81,6 +84,9 @@ export function manageCard(status: PlusStatus | null | undefined, device: PlusSt
     // A trial or a gift we cannot tell apart: both end on their date and renew nothing.
     return card(status.grant === 'trial' ? 'trial' : 'active', `Blend’n+ ${through(date, 'for now')} · nothing renews`)
   }
+
+  // Bought outside the app (Razorpay): no store holds it, so no store is named and nothing points anywhere (OD-5, App Store 3.1.1).
+  if (status.source === 'razorpay') return card('active', `Blend’n+ ${through(date, 'is on')} · ${MANAGED_OUTSIDE}`)
 
   switch (status.state) {
     case 'cancelled':

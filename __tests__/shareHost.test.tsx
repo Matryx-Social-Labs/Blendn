@@ -142,12 +142,12 @@ describe('the tray', () => {
     await expect(went).resolves.toBe(false)
   })
 
-  it('a venue shares its name and its link; an invite shares the short ask and no name', async () => {
+  it('a venue shares its name alone while its page is not live (SYS-04); an invite shares the short ask and no name', async () => {
     await render(<ShareHost />)
     await open(VENUE)
     expect(screen.getByText('Brewery · Indiranagar')).toBeTruthy()
     await press('WhatsApp')
-    expect(mockOpenWhatsApp).toHaveBeenLastCalledWith(`Toit on Blend’n\n${VENUE.url}`)
+    expect(mockOpenWhatsApp).toHaveBeenLastCalledWith('Toit on Blend’n')
     await open(INVITE)
     expect(screen.getByText('A link only you can send · no name on the card')).toBeTruthy()
     await press('WhatsApp')
@@ -189,17 +189,17 @@ describe('Instagram Story', () => {
     await expect(went).resolves.toBe(false)
   })
 
-  it('a venue has no card to draw: it copies the link and opens Instagram’s Story camera for the Link sticker', async () => {
+  it('a venue has no card to draw: it copies the words (no page to link yet) and opens Instagram’s Story camera for the Link sticker', async () => {
     await render(<ShareHost />)
     const { went } = await open(VENUE)
     await press('Instagram Story')
-    expect(mockSetString).toHaveBeenCalledWith(VENUE.url)
+    expect(mockSetString).toHaveBeenCalledWith('Toit on Blend’n')
     expect(mockOpenCamera).toHaveBeenCalled()
-    expect(mockToast).toHaveBeenCalledWith('Link copied — add it with the Link sticker', 'success')
+    expect(mockToast).toHaveBeenCalledWith('Copied — paste it into your Story', 'success')
     await expect(went).resolves.toBe(true)
   })
 
-  it('a venue’s “Link copied” toast waits for the tray to leave', async () => {
+  it('a venue’s “Copied” toast waits for the tray to leave', async () => {
     let leave!: () => void
     mockLeft = new Promise<void>((resolve) => { leave = resolve })
     await render(<ShareHost />)
@@ -208,7 +208,7 @@ describe('Instagram Story', () => {
     expect(mockOpenCamera).toHaveBeenCalled()
     expect(mockToast).not.toHaveBeenCalled()
     await act(async () => leave())
-    expect(mockToast).toHaveBeenCalledWith('Link copied — add it with the Link sticker', 'success')
+    expect(mockToast).toHaveBeenCalledWith('Copied — paste it into your Story', 'success')
   })
 
   it('says so when Instagram will not open', async () => {

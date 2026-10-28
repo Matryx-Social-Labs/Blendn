@@ -143,14 +143,14 @@ describe('<InAppBanner>', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
 
-  it('with a screen reader: Dismiss, and it never leaves on its own', async () => {
+  it('with a screen reader: a × labelled Close (not a Dismiss pill), and it never leaves on its own', async () => {
     ;(AccessibilityInfo.isScreenReaderEnabled as jest.Mock).mockResolvedValue(true)
     const onDismiss = jest.fn()
     await render(wave({ onDismiss }))
     await act(async () => {})
     await advance(60000)
     expect(onDismiss).not.toHaveBeenCalled()
-    await fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Close' }))
     await advance(500)
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })

@@ -44,6 +44,10 @@ export type NotificationKind =
   | 'blend'
   /** A place sent its regulars an offer. Carries `offerId`. */
   | 'venue_offer'
+  /** A moderator or the automatic check took down your Board post. Carries `eventId` and `postId`. */
+  | 'board_post_removed'
+  /** The outcome of a report you made. Carries nothing to open. */
+  | 'report_actioned'
 
 /**
  * What the server adds to a row once it resolves the people and the event for the

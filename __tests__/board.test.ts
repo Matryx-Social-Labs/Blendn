@@ -276,6 +276,11 @@ describe('board pushes carry no text, and open where the thing lives', () => {
     })
     expect(notificationTarget({ type: 'board_request_accepted' })).toBe('/(tabs)/chat')
   })
+
+  it('sends a post taken down to the Board it was on (SYS-06)', () => {
+    expect(notificationTarget({ type: 'board_post_removed', eventId: 'e1', postId: 'p1' })).toEqual({ pathname: '/board/[eventId]', params: { eventId: 'e1' } })
+    expect(notificationTarget({ type: 'board_post_removed' })).toBe('/(tabs)/chat')
+  })
 })
 
 describe('the board is on, now its safety half has shipped', () => {

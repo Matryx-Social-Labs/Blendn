@@ -25,7 +25,7 @@ import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, 
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { reasonOf, SESSION_END_CODES } from './sessionEnd'
-import { appVersionNumber } from './appVersion'
+import { appBuildNumber, appVersionNumber } from './appVersion'
 import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { onCriticalPath } from './criticalPath'
@@ -471,14 +471,14 @@ class TokenStorage {
 // Profile Cache - shared across components to avoid duplicate fetches
 const PROFILE_CACHE_TTL = 60 * 1000 // 60 seconds
 interface ProfileCacheEntry {
-  data: UserProfileData
+  data: OwnProfileEnvelope
   timestamp: number
   userId: string
 }
 let profileCache: ProfileCacheEntry | null = null
 
 export const ProfileCache = {
-  get(userId: string): UserProfileData | null {
+  get(userId: string): OwnProfileEnvelope | null {
     if (!profileCache) return null
     if (profileCache.userId !== userId) return null
     if (Date.now() - profileCache.timestamp > PROFILE_CACHE_TTL) {
@@ -487,7 +487,7 @@ export const ProfileCache = {
     }
     return profileCache.data
   },
-  set(userId: string, data: UserProfileData): void {
+  set(userId: string, data: OwnProfileEnvelope): void {
     profileCache = { data, timestamp: Date.now(), userId }
   },
   clear(): void {
@@ -938,6 +938,8 @@ export interface EventApiItem {
     ratingCount?: number
     averageRating?: number | null
   }
+  /** The list's own RSVP read (`GET /events`): your status on this event, null when none. Absent from an older server; the detail route's is `userStatus.rsvpStatus`. */
+  rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
   userStatus?: {
     isFavorited?: boolean
     isCheckedIn?: boolean
@@ -945,7 +947,7 @@ export interface EventApiItem {
     checkInId?: string
     userRating?: number | null
     userReview?: string | null
-    rsvpStatus?: 'going' | 'maybe' | 'not_going' | null
+    rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
   }
 }
 
@@ -953,7 +955,7 @@ export interface EventsListResponse {
   events: EventApiItem[]
   pagination: PaginationMeta
   activeCheckins?: Array<{ id: string; eventId: string; status: string; [key: string]: unknown }>
-  profile?: UserProfileData
+  profile?: OwnProfileEnvelope
 }
 
 /** One place in the Places list — `GET /api/mobile/venues`. */
@@ -1027,6 +1029,8 @@ export interface VenueDetail {
     /** The venue_type key ("pub_bar"): which plate the page draws when tonight has no cover. */
     venueType?: string | null
     venueTypeLabel: string
+    /** The venue's IANA zone (`venues.timezone`): its hours and its day are read in it, never the phone's. Absent from an older server. */
+    timezone?: string | null
     /** False: "Own this place? Claim it" applies. */
     claimed: boolean
     /*
@@ -1091,54 +1095,8 @@ export interface GoLiveResult {
   intentNeeded: boolean
 }
 
-export interface UserProfileData {
-  id?: string
-  user_id?: string
-  email?: string
-  name?: string
-  display_name?: string
-  image?: string
-  age?: number
-  bio?: string
-  location?: string
-  occupation?: string
-  education?: string
-  interests?: Array<string | { id?: string; name?: string; slug?: string; icon?: string }>
-  photos?: string[]
-  profile_photos?: string[]
-  goals?: string[]
-  looking_for?: string[]
-  memberSince?: string
-  stats?: {
-    eventsAttended: number
-    eventsFavorited: number
-    eventsOrganized: number
-  }
-  isOwnProfile?: boolean
-  /**
-   * `GET /users/:id` only: whether you may see who this is (`maySeeIdentity`).
-   * The server's one answer to "revealed?"; photos, bio and occupation are
-   * sent only when it is true. Absent from an older server — read as false.
-   */
-  identityVisible?: boolean
-  onboarded?: boolean
-  /**
-   * `GET /users/:id` only: where you stand with them, decided by the server
-   * (SCRUM-371). A profile opened from a room is keyed on an `rh_` handle,
-   * which no conversation or request list carries, so the client cannot work
-   * this out itself. Sent only when you may see who they are; absent
-   * otherwise, and from an older server.
-   */
-  connection?: { conversationId: string | null; request: 'sent' | 'received' | null }
-  /**
-   * Whether to offer "Add friend" (SCRUM-750): `{ state, canAdd }`, read through `parseFriendOffer`. Top-level beside the
-   * profile, as `badges` is: the profile page reads both from this one request.
-   */
-  friend?: unknown
-  /** Their badges (`{ kind, label }[]`), top-level beside `friend` for whoever may see who they are; read through `parseBadges`. */
-  badges?: unknown
-  /** Nested profile object from /api/mobile/profiles/[userId] */
-  profile?: {
+/** The fields of the nested `profile` object (`GET /profiles/:id`). */
+export interface ProfileFields {
     /*
      * The five matching fields, declared because the editor needs to *show*
      * them, not just write them.
@@ -1190,7 +1148,79 @@ export interface UserProfileData {
     created_at?: string
     updated_at?: string
   }
+
+/**
+ * `GET /profiles/:id`: the NESTED shape. The profile is `data.profile`; a top-level `photos` or `name` is not here (that is
+ * `GET /users/:id`, `PublicProfile`). Two endpoints used to share one type, which is how a top-level `photos` read compiled
+ * against the wrong one (SYS-19, O1).
+ */
+export interface OwnProfileEnvelope {
+  id?: string
+  email?: string
+  name?: string
+  image?: string | null
+  createdAt?: string
+  /** Whether to offer "Add friend" (`parseFriendOffer`). */
+  friend?: unknown
+  profile?: ProfileFields | null
+  /** The interests as structured rows (the editor's chips); `profile.interests` is the labels. */
+  interests?: { id: string; name: string; slug: string; icon: string | null }[]
 }
+
+/**
+ * `GET /users/:id`: the FLAT shape, what a profile page draws for anyone. Photos, bio and occupation are sent only when
+ * `identityVisible` (the server's one answer to "revealed?").
+ */
+export interface PublicProfile {
+  id?: string
+  user_id?: string
+  email?: string
+  name?: string
+  display_name?: string
+  image?: string
+  age?: number
+  bio?: string
+  location?: string
+  occupation?: string
+  education?: string
+  interests?: Array<string | { id?: string; name?: string; slug?: string; icon?: string }>
+  photos?: string[]
+  profile_photos?: string[]
+  goals?: string[]
+  looking_for?: string[]
+  memberSince?: string
+  stats?: {
+    eventsAttended: number
+    eventsFavorited: number
+    eventsOrganized: number
+  }
+  isOwnProfile?: boolean
+  /**
+   * `GET /users/:id` only: whether you may see who this is (`maySeeIdentity`).
+   * The server's one answer to "revealed?"; photos, bio and occupation are
+   * sent only when it is true. Absent from an older server — read as false.
+   */
+  identityVisible?: boolean
+  onboarded?: boolean
+  /**
+   * `GET /users/:id` only: where you stand with them, decided by the server
+   * (SCRUM-371). A profile opened from a room is keyed on an `rh_` handle,
+   * which no conversation or request list carries, so the client cannot work
+   * this out itself. Sent only when you may see who they are; absent
+   * otherwise, and from an older server.
+   */
+  connection?: { conversationId: string | null; request: 'sent' | 'received' | null }
+  /**
+   * Whether to offer "Add friend" (SCRUM-750): `{ state, canAdd }`, read through `parseFriendOffer`. Top-level beside the
+   * profile, as `badges` is: the profile page reads both from this one request.
+   */
+  friend?: unknown
+  /** Their badges (`{ kind, label }[]`), top-level beside `friend` for whoever may see who they are; read through `parseBadges`. */
+  badges?: unknown
+}
+
+/** @deprecated the flat `GET /users/:id` shape; name `PublicProfile`. Delete once `app/user/[id].tsx` imports the new name (SYS-19). */
+export type UserProfileData = PublicProfile
 
 export interface ChatMessageData {
   id: string
@@ -1241,8 +1271,13 @@ export interface EventChatData {
   chatGroupName?: string
   id?: string
   name?: string
+  /** The room's own state, `active` or `locked` (the organiser's lock), for everyone in it. */
   status?: string
   memberCount?: number
+  /** You as this room names you (yours only). */
+  you?: { pseudonym: string | null }
+  /** This caller's answer to "may I write here": `reason` names their mute, ban or the room's state; `message` is the closed sentence. */
+  write?: { allowed: boolean; reason: string | null; message: string | null; closesAt?: string | null; eventEndedAt?: string | null }
   [key: string]: unknown
 }
 
@@ -1342,6 +1377,12 @@ export const LIST_PAGE = { conversations: CONVERSATIONS_PAGE, friends: FRIENDS_P
  * SCRUM-739). Web sends it too: the server's CORS allow-list names `X-Channel-Set`.
  */
 export const CHANNEL_SET_HEADER = { 'X-Channel-Set': String(PUSH_CHANNEL_SET) } as const
+
+/** `X-App-Build` and `X-App-Platform`: the build number the server's per-build minimum judges (SYS-14). Nothing when the build has no plain number. */
+function buildHeaders(): Record<string, string> {
+  const build = appBuildNumber()
+  return build ? { 'X-App-Build': build, 'X-App-Platform': Platform.OS } : {}
+}
 
 class ApiClientClass {
   private baseUrl: string
@@ -1646,7 +1687,7 @@ class ApiClientClass {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build, which has no native build number to judge (the server's CORS allow-list names this header and `X-Channel-Set`, so a preflight is no reason).
-      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber(), ...buildHeaders() } : {}),
       ...CHANNEL_SET_HEADER,
       ...(options.headers as Record<string, string>),
     }
@@ -2178,7 +2219,7 @@ class ApiClientClass {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber(), ...buildHeaders() } : {}),
           ...CHANNEL_SET_HEADER,
           Authorization: `Bearer ${access}`,
         },
@@ -2517,7 +2558,7 @@ class ApiClientClass {
    * `cache: false` reads fresh and leaves the cache alone: the cache holds one profile, and reading somebody else's must not
    * replace your own.
    */
-  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<UserProfileData>> {
+  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<OwnProfileEnvelope>> {
     const useCache = options.cache !== false
     // Check cache first for instant response
     const cached = useCache ? ProfileCache.get(userId) : null
@@ -2525,7 +2566,7 @@ class ApiClientClass {
       return { success: true, data: cached }
     }
 
-    const result = await this.queuedRequest<UserProfileData>(`/api/mobile/profiles/${userId}`)
+    const result = await this.queuedRequest<OwnProfileEnvelope>(`/api/mobile/profiles/${userId}`)
 
     // Cache successful responses
     if (useCache && result.success && result.data) {
@@ -2717,8 +2758,8 @@ class ApiClientClass {
 
   // === USER ENDPOINTS ===
 
-  async getPublicProfile(userId: string): Promise<ApiResponse<UserProfileData>> {
-    return this.queuedRequest<UserProfileData>(`/api/mobile/users/${userId}`)
+  async getPublicProfile(userId: string): Promise<ApiResponse<PublicProfile>> {
+    return this.queuedRequest<PublicProfile>(`/api/mobile/users/${userId}`)
   }
 
   /**

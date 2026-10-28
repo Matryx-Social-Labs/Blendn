@@ -464,6 +464,14 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
         : '/(tabs)/events'
       break
     }
+    /*
+     * A post of yours taken down (SYS-06): the Board it was on. The push carries `eventId` and `postId`; without an
+     * event there is nowhere to go, and the Banter tab is where the app opens for a kind that has no place of its own.
+     */
+    case 'board_post_removed': {
+      target = data.eventId ? { pathname: '/board/[eventId]', params: { eventId: String(data.eventId) } as any } : '/(tabs)/chat'
+      break
+    }
     case 'friend_request': {
       /*
        * Where requests are answered. Not the asker's profile: a friend's

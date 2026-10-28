@@ -102,6 +102,8 @@ function NotificationsScreenContent() {
   useEffect(() => {
     settle.current = feed.settle
   })
+  const reloadPushIfStale = push.reloadIfStale
+  useFocusEffect(reloadPushIfStale)
   useFocusEffect(
     useCallback(() => {
       const release = claimBannerHost('notifications')
@@ -166,7 +168,7 @@ function NotificationsScreenContent() {
     showSheet({
       kind: 'actions',
       hue: 'rose',
-      icon: 'trash',
+      icon: 'trash-2',
       title: 'Clear all notifications?',
       message: feed.clearKeepsRequests
         ? 'Requests waiting on you stay. Everything else leaves this list; nothing is sent to anyone.'
@@ -174,7 +176,7 @@ function NotificationsScreenContent() {
           ? CLEAR_OVER_REQUESTS
           : 'This clears the list. Nothing is sent to anyone.',
       actions: [
-        { label: 'Clear all', variant: 'destructive', then: () => void feed.clear() },
+        { label: 'Clear all', variant: 'primary', then: () => void feed.clear() },
         { label: 'Cancel', cancel: true },
       ],
     })
@@ -182,7 +184,7 @@ function NotificationsScreenContent() {
 
   const menuItems = [
     { icon: 'settings' as const, label: 'Notification settings', onPress: () => router.push('/notification-settings') },
-    ...(feed.items.length ? [{ icon: 'trash' as const, label: 'Clear all', onPress: confirmClear }] : []),
+    ...(feed.items.length ? [{ icon: 'trash-2' as const, label: 'Clear all', onPress: confirmClear }] : []),
   ]
 
   const visualOf = (row: FeedRow, requestState: string | undefined) => {

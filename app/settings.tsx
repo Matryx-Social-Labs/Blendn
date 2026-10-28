@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Banner } from '../components/ds/Banner'
@@ -24,6 +24,7 @@ import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
 import { passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { useLatest } from '../lib/useLatest'
+import { usePullToRefresh } from '../lib/usePullToRefresh'
 import { usePushPreference } from '../lib/usePushPreference'
 import { Logger } from '../lib/logger'
 import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
@@ -207,11 +208,16 @@ function SettingsScreenContent() {
     void loadPreferences()
   }, [loadPreferences])
 
+  const { load: reloadPush, reloadIfStale: reloadPushIfStale } = push
+  // The Notifications row's hint says what the account says: read again when this screen comes back (30 s), and on a pull.
+  useFocusEffect(reloadPushIfStale)
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await loadPreferences()
+    await Promise.all([loadPreferences(), reloadPush()])
     setRefreshing(false)
-  }, [loadPreferences])
+  }, [loadPreferences, reloadPush])
+  // The app's one pull to refresh, with its haptic when it arms (SYS-12).
+  const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), onScroll: bar.scrollProps.onScroll, indicatorTop: bar.indicatorTop })
 
   const persistPreference = useCallback(async (next: PreferencesState, previous: PreferencesState, key: PreferenceKey) => {
     if (!user) return
@@ -281,7 +287,7 @@ function SettingsScreenContent() {
   const confirmDeleteSheet = useCallback((): Sheet => ({
     kind: 'actions',
     hue: 'violet',
-    icon: 'trash',
+    icon: 'trash-2',
     title: 'Delete your account for good?',
     message: 'This can’t be undone. You’d need a new account to use Blend’n again.',
     actions: [
@@ -323,7 +329,7 @@ function SettingsScreenContent() {
       return {
         kind: 'actions',
         hue: 'violet',
-        icon: 'trash',
+        icon: 'trash-2',
         title: 'Delete your account?',
         message:
           'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires.',
@@ -456,10 +462,7 @@ function SettingsScreenContent() {
         contentContainerStyle={[styles.content, { paddingTop: bar.contentTop, paddingBottom: insets.bottom + DS_SPACE.xl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />
-        }
-        {...bar.scrollProps}
+        {...pull.listProps}
       >
         {/*
           There was a profile card here, and it was the third door to editing.
@@ -517,7 +520,7 @@ function SettingsScreenContent() {
             onPress={() => router.push('/notification-settings')}
             testID="settings-notifications"
           />
-          <SettingsRow icon="sparkles" title="How you match" hint="What matching reads" trail="chevron" onPress={() => router.push({ pathname: '/edit-about-you', params: { from: 'settings' } })} testID="settings-how-you-match" />
+          <SettingsRow icon="sparkles" title="About you" hint="What matching reads" trail="chevron" onPress={() => router.push({ pathname: '/edit-about-you', params: { from: 'settings' } })} testID="settings-how-you-match" />
         </SettingsGroup>
 
         {/* Blocked users leads Safety: blocking is the most consequential safety action in the product. */}
@@ -567,7 +570,7 @@ function SettingsScreenContent() {
         */}
         <SettingsGroup title="Danger zone" danger>
           <SettingsRow
-            icon="trash"
+            icon="trash-2"
             title={deleting ? 'Deleting account…' : 'Delete account'}
             trail={deleting ? 'none' : 'chevron'}
             busy={deleting}
@@ -577,6 +580,7 @@ function SettingsScreenContent() {
           />
         </SettingsGroup>
       </ScrollView>
+      {pull.indicator}
       <View style={bar.barPin} pointerEvents="box-none">
         <TopBar title="Settings" state={bar.state} onBack={() => router.back()} testID="settings-top" />
       </View>
