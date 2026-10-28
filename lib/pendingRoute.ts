@@ -83,8 +83,18 @@ export function pendingEventLink(): boolean {
 
 /** The id of the event whose link is waiting for sign-in, or null (a link is held as its path: `/event/<id>`). */
 export function pendingEventId(): string | null {
+  const target = pending as unknown
+  if (target && typeof target === 'object') {
+    const t = target as { pathname?: unknown; params?: { id?: unknown } }
+    if (t.pathname === '/event/[id]' && typeof t.params?.id === 'string') return t.params.id || null
+  }
   const m = pendingPath()?.match(/^\/event\/([^/?#]+)/)
-  return m ? decodeURIComponent(m[1]) : null
+  if (!m) return null
+  try {
+    return decodeURIComponent(m[1])
+  } catch {
+    return null
+  }
 }
 
 /** Tests only. */

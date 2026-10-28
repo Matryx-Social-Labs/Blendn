@@ -3,6 +3,8 @@
  * itself, and nothing at all after unmount or without a user. The pure source is in roomSignalSource.test.ts.
  */
 import { act, renderHook } from '@testing-library/react-native'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { AppState } from 'react-native'
 
 jest.mock('../lib/api', () => ({ getEvents: jest.fn() }))
@@ -15,7 +17,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(),
 import { getEvents } from '../lib/api'
 import { apiClient } from '../lib/apiClient'
 import { clearRoomSignal, getRoomSignal } from '../lib/roomSignal'
-import { SOURCE_TICK_MS, rejudgeRoomSignal, useRoomSignalSource } from '../lib/useRoomSignalSource'
+import { SOURCE_TICK_MS, stopRoomSignalSource, useRoomSignalSource } from '../lib/useRoomSignalSource'
 import { quietLocation } from '../lib/useTonight'
 /* eslint-enable import/first */
 
@@ -91,27 +93,41 @@ it('a tick in the background judges nothing', async () => {
   expect(quietLocation).not.toHaveBeenCalled()
 })
 
-it('rejudgeRoomSignal reads again, forced', async () => {
+it('sign-out stops the source: a read in flight publishes nothing (L2)', async () => {
+  let land!: (v: unknown) => void
+  events.mockImplementationOnce(() => new Promise((resolve) => (land = resolve)))
   await renderHook(() => useRoomSignalSource('u1'))
   await flush()
-  await act(async () => rejudgeRoomSignal())
+  stopRoomSignalSource()
+  clearRoomSignal()
+  land({ data: [{ id: 'e1', start_time: new Date(Date.now() - 60_000).toISOString(), end_time: new Date(Date.now() + 3600_000).toISOString(), ...VENUE, check_in_radius: 260, distance: 0.1, venue_name: 'Toit' }], error: null })
   await flush()
-  expect(events).toHaveBeenCalledTimes(2)
-  expect(events.mock.calls[1][1]).toEqual({ force: true })
+  expect(getRoomSignal().insideEventId).toBeNull()
 })
 
-it('an RSVP or a save (the status writers announce it) reads again, forced; after unmount it does not', async () => {
+it('useAuth stops the source before it clears the signal (L2)', () => {
+  const src = readFileSync(join(__dirname, '..', 'lib/useAuth.ts'), 'utf8')
+  expect(src.indexOf('stopRoomSignalSource()')).toBeGreaterThan(-1)
+  expect(src.indexOf('stopRoomSignalSource()')).toBeLessThan(src.indexOf('clearRoomSignal()'))
+})
+
+it('rejudgeRoomSignal is gone: every writer announces through eventStatusChanged (L4)', () => {
+  expect(readFileSync(join(__dirname, '..', 'lib/useRoomSignalSource.ts'), 'utf8')).not.toContain('rejudgeRoomSignal')
+})
+
+it('an RSVP or a save (the status writers announce it) reads what is yours again, not the nearest page; after unmount it does not', async () => {
   const { emitEventStatusChanged } = require('../lib/eventStatusSignal') as typeof import('../lib/eventStatusSignal')
   const view = await renderHook(() => useRoomSignalSource('u1'))
   await flush()
+  const mineReads = (apiClient.getUserFavorites as jest.Mock).mock.calls.length
   await act(async () => emitEventStatusChanged())
   await flush()
-  expect(events).toHaveBeenCalledTimes(2)
-  expect(events.mock.calls[1][1]).toEqual({ force: true })
+  expect((apiClient.getUserFavorites as jest.Mock).mock.calls.length).toBe(mineReads + 1)
+  expect(events).toHaveBeenCalledTimes(1)
   await view.unmount()
   await act(async () => emitEventStatusChanged())
   await flush()
-  expect(events).toHaveBeenCalledTimes(2)
+  expect((apiClient.getUserFavorites as jest.Mock).mock.calls.length).toBe(mineReads + 1)
 })
 
 it('unmounting stops the timer and the listener, and nothing is published after', async () => {

@@ -23,7 +23,7 @@ import { quietLocation, type QuietCoords } from './useTonight'
  *   happened to return.
  *
  * Never asks for location (`quietLocation`). The feed is read again only when the fix has moved 1 km, the read is 5 minutes old,
- * or something changed under it (`rejudgeRoomSignal`).
+ * or a check-in forces it (a save or an RSVP reads only what is yours).
  */
 export const SOURCE_TICK_MS = 60_000
 /** The feed is read again only when the fix has moved this far, or the read is this old. */
@@ -66,15 +66,20 @@ export function createRoomSignalSource(deps: SourceDeps) {
   /** Where the nearest page was read from: only ever a real fix, so a lost fix reads from the last place you were. */
   let readFrom: PreciseFix | null = null
   let inflight: Promise<void> | null = null
-  let pendingForce = false
+  let pendingForce: boolean | 'mine' = false
   let disposed = false
 
-  const step = async (force: boolean) => {
+  const step = async (force: boolean | 'mine') => {
     const fix = await deps.readFix()
     const where: PreciseFix | null = fix ?? readFrom
     const moved = fix !== null && (readFrom === null || getDistanceKm(readFrom.latitude, readFrom.longitude, fix.latitude, fix.longitude) > REFETCH_KM)
-    if (force || near === null || mine === null || deps.now() - readAt >= REFETCH_AGE_MS || moved) {
-      const [nextNear, nextMine] = await Promise.all([where ? deps.fetchNearest(where, force) : Promise.resolve([]), deps.fetchMine()])
+    // `'mine'`: a save or an RSVP changed what is yours, not where the fence is, so only your own list is read again.
+    const mineOnly = force === 'mine' && near !== null && mine !== null && !moved && deps.now() - readAt < REFETCH_AGE_MS
+    if (mineOnly) {
+      const nextMine = await deps.fetchMine()
+      if (nextMine) mine = nextMine
+    } else if (force || near === null || mine === null || deps.now() - readAt >= REFETCH_AGE_MS || moved) {
+      const [nextNear, nextMine] = await Promise.all([where ? deps.fetchNearest(where, force === true) : Promise.resolve([]), deps.fetchMine()])
       // A failed read keeps the last page: "could not look" is not "nothing on".
       if (nextNear) {
         near = nextNear
@@ -87,10 +92,10 @@ export function createRoomSignalSource(deps: SourceDeps) {
     deps.publish(mergeSignalEvents(near ?? [], mine ?? []), deps.now(), fix)
   }
 
-  const run = (force = false): Promise<void> => {
+  const run = (force: boolean | 'mine' = false): Promise<void> => {
     if (inflight) {
-      // Something changed while a read was out: that read may predate it, so one more follows, forced.
-      if (force) pendingForce = true
+      // Something changed while a read was out: that read may predate it, so one more follows, forced (a full one beats a mine-only one).
+      if (force) pendingForce = pendingForce === true || force === true ? true : 'mine'
       return inflight
     }
     const running = step(force)
@@ -98,8 +103,9 @@ export function createRoomSignalSource(deps: SourceDeps) {
       .then(() => {
         inflight = null
         if (pendingForce && !disposed) {
+          const again = pendingForce
           pendingForce = false
-          return run(true)
+          return run(again)
         }
         pendingForce = false
       })
@@ -166,9 +172,10 @@ function liveDepsFor(userId: string): SourceDeps {
 
 let active: ReturnType<typeof createRoomSignalSource> | null = null
 
-/** Something changed under the signal: judge again now, from a fresh read. (Saves, RSVPs and check-ins call it themselves.) */
-export function rejudgeRoomSignal(): void {
-  void active?.run(true)
+/** Sign-out: nothing more is published for this account, whatever read is still out. */
+export function stopRoomSignalSource(): void {
+  active?.dispose()
+  active = null
 }
 
 /** Mount once, in the tab layout. */
@@ -183,7 +190,7 @@ export function useRoomSignalSource(userId: string | null | undefined): void {
     const app = AppState.addEventListener('change', (s) => s === 'active' && void source.run())
     const unCheckIn = subscribeCheckInChanged(() => void source.run(true))
     // An RSVP or a save (every writer goes through `apiClient`'s `eventStatusChanged`).
-    const unStatus = subscribeEventStatusChanged(() => void source.run(true))
+    const unStatus = subscribeEventStatusChanged(() => void source.run('mine'))
     return () => {
       source.dispose()
       if (active === source) active = null

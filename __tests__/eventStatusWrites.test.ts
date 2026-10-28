@@ -41,6 +41,10 @@ beforeEach(async () => {
       server.rsvp = null
       return json({ rsvpStatus: null, rsvpCount: 0 })
     }
+    if (url.endsWith('/favorite')) {
+      server.fav = method === 'POST'
+      return json({ isFavorited: server.fav, favoriteCount: 1 })
+    }
     if (url.endsWith('/interest')) {
       server.fav = !server.fav
       return json({ interested: server.fav, interestCount: 1 })
@@ -87,6 +91,20 @@ describe('an RSVP or Save write keeps the event page true on reopen', () => {
     expect(((await apiClient.getEvent(ID)).data as unknown as Detail).userStatus.isFavorited).toBe(true)
     await apiClient.toggleInterest(ID)
     expect(cached()?.userStatus.isFavorited).toBe(false)
+  })
+
+  it('the Going tab\'s Save and Unsave (addFavorite, removeFavorite) keep the page true too', async () => {
+    const { subscribeEventStatusChanged } = require('../lib/eventStatusSignal') as typeof import('../lib/eventStatusSignal')
+    const heard = jest.fn()
+    const off = subscribeEventStatusChanged(heard)
+    await apiClient.getEvent(ID)
+    await apiClient.addFavorite(ID)
+    expect(cached()?.userStatus.isFavorited).toBe(true)
+    expect(((await apiClient.getEvent(ID)).data as unknown as Detail).userStatus.isFavorited).toBe(true)
+    await apiClient.removeFavorite(ID)
+    expect(cached()?.userStatus.isFavorited).toBe(false)
+    expect(heard).toHaveBeenCalledTimes(2)
+    off()
   })
 
   it('every writer tells the centre button to judge again; a refused one does not', async () => {

@@ -105,3 +105,23 @@ it('drops a session read that belongs to another account (L1)', async () => {
   await refreshAuthUser()
   expect(TokenStorage.setUser).not.toHaveBeenCalled()
 })
+
+it('a read in flight when the person signs out does not put them back (H1)', async () => {
+  let land!: (r: unknown) => void
+  api.getSession.mockImplementation(() => new Promise((resolve) => (land = resolve)) as never)
+  api.signOut.mockResolvedValue({ success: true } as never)
+  const reading = refreshAuthUser()
+  await signOut()
+  land({ success: true, data: { ...user, name: 'Back again' } })
+  await reading
+  expect(await getCurrentUser()).toBeNull()
+  expect(TokenStorage.setUser).not.toHaveBeenCalled()
+})
+
+it('without a signed-in user there is nothing to refresh and nothing is read (H1)', async () => {
+  api.signOut.mockResolvedValue({ success: true } as never)
+  await signOut()
+  api.getSession.mockClear()
+  await refreshAuthUser()
+  expect(api.getSession).not.toHaveBeenCalled()
+})

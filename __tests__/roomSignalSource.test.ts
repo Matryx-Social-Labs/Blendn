@@ -209,3 +209,39 @@ it('only the source publishes the signal, and nothing re-judges on a socket herd
   const src = fs.readFileSync(path.join(__dirname, '../lib/useRoomSignalSource.ts'), 'utf8')
   expect(src).not.toMatch(/subscribeDirtyDomains/)
 })
+
+describe('a status change reads what is yours again, not the nearest page (L3)', () => {
+  it('run("mine") asks fetchMine and not fetchNearest, and publishes', async () => {
+    const h = harness([event()], [])
+    await h.source.run()
+    h.fetchNearest.mockClear()
+    h.fetchMine.mockClear()
+    h.publish.mockClear()
+    await h.source.run('mine')
+    expect(h.fetchMine).toHaveBeenCalledTimes(1)
+    expect(h.fetchNearest).not.toHaveBeenCalled()
+    expect(h.publish).toHaveBeenCalledTimes(1)
+  })
+
+  it('before anything has been read it reads both, as a first run does', async () => {
+    const h = harness([event()], [])
+    await h.source.run('mine')
+    expect(h.fetchNearest).toHaveBeenCalledTimes(1)
+    expect(h.fetchMine).toHaveBeenCalledTimes(1)
+  })
+
+  it('one that lands while a read is out follows it, and a full force beats a mine-only one', async () => {
+    const h = harness([event()], [])
+    let release!: () => void
+    h.fetchMine.mockImplementationOnce(() => new Promise((r) => (release = () => r([]))))
+    const first = h.source.run()
+    await Promise.resolve()
+    void h.source.run('mine')
+    void h.source.run(true)
+    await Promise.resolve()
+    release()
+    await first
+    // The follow-up was the full one: nearest was read again, forced.
+    expect(h.fetchNearest).toHaveBeenLastCalledWith(expect.anything(), true)
+  })
+})

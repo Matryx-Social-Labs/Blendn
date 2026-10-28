@@ -75,6 +75,13 @@ describe('pendingEventId', () => {
     expect(pendingEventId()).toBeNull()
   })
 
+  it('reads the object form too, and a malformed escape is no id (L1)', () => {
+    openWhenReady({ pathname: '/event/[id]', params: { id: 'e9' } } as never)
+    expect(pendingEventId()).toBe('e9')
+    openWhenReady('/event/%E0%A4%A' as never)
+    expect(pendingEventId()).toBeNull()
+  })
+
   it('is null for anything that is not an event link', () => {
     expect(pendingEventId()).toBeNull()
     openWhenReady('/f/abc123' as never)

@@ -2505,7 +2505,7 @@ class ApiClientClass {
    * remove, or `toggleInterest` to flip.
    */
   async addFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
-    return this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
+    const result = await this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
       `/api/mobile/events/${eventId}/favorite`,
       {
         method: 'POST',
@@ -2513,11 +2513,13 @@ class ApiClientClass {
       true,
       3
     )
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.isFavorited })
+    return result
   }
 
   /** Never refused — not on age, not on status (API: SCRUM-176). */
   async removeFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
-    return this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
+    const result = await this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
       `/api/mobile/events/${eventId}/favorite`,
       {
         method: 'DELETE',
@@ -2525,6 +2527,8 @@ class ApiClientClass {
       true,
       3
     )
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.isFavorited })
+    return result
   }
 
   async toggleInterest(

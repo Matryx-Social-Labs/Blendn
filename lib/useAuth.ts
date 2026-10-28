@@ -11,6 +11,7 @@ import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
 import { queryCache } from './queryCache'
 import { clearRoomSignal } from './roomSignal'
+import { stopRoomSignalSource } from './useRoomSignalSource'
 import { resetRoomMembership } from './roomMembership'
 import { forgetRosters } from './rosterMemory'
 import { forgetHeldForm } from './heldSignInForm'
@@ -284,6 +285,7 @@ const resetLocalSession = () => {
    * plans for tonight. Cleared here rather than in `signOut` because a failed
    * background refresh reaches this path without going through it.
    */
+  stopRoomSignalSource()
   clearRoomSignal()
   /*
    * So are a thread's draft and unsent messages, and the rooms you left or
@@ -642,13 +644,16 @@ export const sameUser = (a: AuthUser | null | undefined, b: AuthUser): boolean =
  */
 export const refreshAuthUser = async (): Promise<void> => {
   try {
+    // Nobody signed in has nothing to refresh; and the read is for whoever started it.
+    const startedFor = globalAuthState.user?.id
+    if (!startedFor) return
     const result = await apiClient.getSession()
     if (!result.success || !result.data) {
       Logger.warn('auth', 'Session refresh did not return a user', { error: result.error })
       return
     }
-    // A read that began for one account can land after another signed in: it is not theirs.
-    if (globalAuthState.user && result.data.id !== globalAuthState.user.id) return
+    // A read in flight when they signed out, or when another account signed in, lands on nobody: it is not theirs.
+    if (globalAuthState.user?.id !== startedFor || result.data.id !== startedFor) return
     // Settings reads the session every time it opens: an unchanged user must not notify every `useAuth` subscriber.
     if (sameUser(globalAuthState.user, result.data)) return
     updateAuthState({ session: { user: result.data }, user: result.data })
