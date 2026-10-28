@@ -162,9 +162,24 @@ export interface RoomButtonEvent {
   longitude?: number | null
   check_in_radius?: number | null
   is_favorited?: boolean
-  /** The venue, for the disc's (c) label "Check in · {venue}" and its coach mark. */
+  /** "going" / "maybe" / …: the RSVP, from a server that sends `rsvpStatus` (SV-2); absent from an older one. Going counts as yours (BAR-05). */
+  rsvp_status?: string | null
+  /** The event's own zone (IANA): its "tonight" is said there, not in the phone's (BAR-09). */
+  timezone?: string | null
+  /** The linked venue's name, else the free-text one: the disc's (c) label "Check in · {venue}" and its coach mark (BAR-08). */
+  venue?: { name?: string | null } | null
   venue_name?: string | null
 }
+
+/** The place the card names: the linked venue, else the free-text one, else nothing. A blank is not a name (`lib/pulse.ts`' rule). */
+export const venueNameOf = (e: Pick<RoomButtonEvent, 'venue' | 'venue_name'>): string | null =>
+  e.venue?.name?.trim() || e.venue_name?.trim() || null
+
+/** Yours: saved, or said "I'm going". Maybe is not (OD-6 is about the Board, not the disc). */
+const isCommitted = (e: Pick<RoomButtonEvent, 'is_favorited' | 'rsvp_status'>): boolean => e.is_favorited === true || e.rsvp_status === 'going'
+
+/** R15's order among the fences you are inside: said "going" first, then saved, then the rest. */
+const commitment = (e: Pick<RoomButtonEvent, 'is_favorited' | 'rsvp_status'>): number => (e.rsvp_status === 'going' ? 2 : e.is_favorited === true ? 1 : 0)
 
 /**
  * The phone's own fix, never rounded: it stays on the phone. `accuracy` is the radius in metres the OS gives it, and
@@ -230,12 +245,12 @@ function distanceMetresTo(e: RoomButtonEvent, at: PreciseFix | null | undefined,
  * is not — the server re-validates the GPS on the actual check-in and refuses
  * it. So this asks the plain question and lets the real gate be the gate.
  */
-export function pickInsideEvent(
+export function pickInsideEvents(
   events: readonly RoomButtonEvent[],
   now: number = Date.now(),
   at?: PreciseFix | null
-): string | null {
-  let best: { id: string; distanceM: number } | null = null
+): string[] {
+  const inside: { id: string; distanceM: number; rank: number }[] = []
 
   for (const e of events) {
     const distanceM = distanceMetresTo(e, at, now)
@@ -249,18 +264,21 @@ export function pickInsideEvent(
     const end = live.end_time ? new Date(live.end_time).getTime() : NaN
     if (Number.isFinite(end) && end < now) continue
 
-    // Two fences can overlap on one street. The nearer centre is the better
-    // guess at which building somebody is actually in.
-    if (!best || distanceM < best.distanceM) best = { id: e.id, distanceM }
+    inside.push({ id: e.id, distanceM, rank: commitment(e) })
   }
 
-  return best?.id ?? null
+  // R15: the event you said you are going to, then a saved one; then the nearer centre, the better guess at which building you are in.
+  return inside.sort((a, b) => b.rank - a.rank || a.distanceM - b.distanceM).map((m) => m.id)
 }
+
+/** The first of `pickInsideEvents`: the one a tap opens. */
+export const pickInsideEvent = (events: readonly RoomButtonEvent[], now: number = Date.now(), at?: PreciseFix | null): string | null =>
+  pickInsideEvents(events, now, at)[0] ?? null
 
 /**
  * Events today you said you were going to, soonest first.
  *
- * **Saved only.** Every event in the city is not "yours", and a button that
+ * **Yours only** (saved, or "I'm going"). Every event in the city is not "yours", and a button that
  * pointed at whatever happens to be on tonight would be a recommendation
  * wearing the clothes of a reminder.
  *
@@ -274,13 +292,14 @@ export function pickTodayEvents(
   const today = new Date(now)
   return events
     .filter((e) => {
-      if (!e.is_favorited) return false
+      if (!isCommitted(e)) return false
       // Today's day of a multi-day run, so a run that is between days or whose
       // day is cancelled is not "tonight".
       const live = liveWindow(e)
       const start = new Date(live.start_time)
       if (Number.isNaN(start.getTime())) return false
-      if (dayKeyIn(start) !== dayKeyIn(today)) return false
+      // The event's own day, as Tonight says it (BAR-09), not the phone's.
+      if (dayKeyIn(start, e.timezone ?? undefined) !== dayKeyIn(today, e.timezone ?? undefined)) return false
       const end = live.end_time ? new Date(live.end_time).getTime() : NaN
       return Number.isFinite(end) ? end >= now : true
     })

@@ -109,3 +109,15 @@ describe('eventFromApi', () => {
     expect(eventFromApi(serverEvent({ city: 'Saarbrücken' })).city).toBe('Saarbrücken')
   })
 })
+
+describe('eventFromApi, the centre button’s fields (BAR-03, BAR-05)', () => {
+  it('keeps the fence the list now sends, and defaults to 100 m for an older server', () => {
+    expect(eventFromApi(serverEvent({ checkInRadius: 260 })).check_in_radius).toBe(260)
+    expect(eventFromApi(serverEvent()).check_in_radius).toBe(100)
+  })
+
+  it('reads rsvpStatus when sent, null when not', () => {
+    expect(eventFromApi(serverEvent({ rsvpStatus: 'going' })).rsvp_status).toBe('going')
+    expect(eventFromApi(serverEvent()).rsvp_status).toBeNull()
+  })
+})

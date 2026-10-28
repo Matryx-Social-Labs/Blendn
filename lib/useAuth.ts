@@ -4,6 +4,7 @@ import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import { onCriticalPath } from './criticalPath'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
+import { resetInboxBadge } from './inboxBadge'
 import { Logger } from './logger'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
@@ -260,12 +261,18 @@ const keepStoredSession = async () => {
   })
 }
 
+/** When coming to the foreground last re-read the session (`refreshAuthUserOnForeground`). */
+let lastForegroundRefresh = 0
+
 /**
  * Everything this phone holds for the session in memory, cleared at once: signed out, and the root layout routes to the
  * entry screen. Never waits on a native call (SCRUM-733, RC drive D1): the keychain shares one native queue with every Expo
  * module, and a call stuck there would keep somebody in a session they asked to leave. The keychain is the caller's.
  */
 const resetLocalSession = () => {
+  // The next account's first foreground read is not held back by the last one's throttle.
+  lastForegroundRefresh = 0
+  resetInboxBadge()
   void forgetAuthMethod()
   // The icon's number was the last account's: the next person to open the app on this phone does not inherit it.
   void setAppIconBadge(0)
@@ -410,6 +417,8 @@ export const signInWithGoogle = async (
         // there anything to ask about.
         isNewAccount: isNewUser === true,
       })
+      // This route's profile carries no `photos` (the Me tab's face): the session read has them.
+      void refreshAuthUser()
 
       return { success: true, isNewUser }
     } else {
@@ -450,6 +459,8 @@ export const signInWithApple = async (
         // there anything to ask about.
         isNewAccount: isNewUser === true,
       })
+      // This route's profile carries no `photos` (the Me tab's face): the session read has them.
+      void refreshAuthUser()
 
       return { success: true, isNewUser }
     } else {
@@ -636,6 +647,8 @@ export const refreshAuthUser = async (): Promise<void> => {
       Logger.warn('auth', 'Session refresh did not return a user', { error: result.error })
       return
     }
+    // A read that began for one account can land after another signed in: it is not theirs.
+    if (globalAuthState.user && result.data.id !== globalAuthState.user.id) return
     // Settings reads the session every time it opens: an unchanged user must not notify every `useAuth` subscriber.
     if (sameUser(globalAuthState.user, result.data)) return
     updateAuthState({ session: { user: result.data }, user: result.data })
@@ -645,6 +658,15 @@ export const refreshAuthUser = async (): Promise<void> => {
     // would be an unhandled rejection with the photo already saved.
     Logger.warn('auth', 'Session refresh failed', { error })
   }
+}
+
+/** How often coming back to the app may re-read the session (moderation pulls and other devices change `profile.photos`). */
+export const FOREGROUND_REFRESH_MS = 60_000
+/** `refreshAuthUser()` when the app comes to the foreground, at most once a minute, and only while signed in. */
+export const refreshAuthUserOnForeground = async (now: number = Date.now()): Promise<void> => {
+  if (!globalAuthState.user || now - lastForegroundRefresh < FOREGROUND_REFRESH_MS) return
+  lastForegroundRefresh = now
+  await refreshAuthUser()
 }
 
 export const deleteAccount = async (appleAuthorizationCode?: string): Promise<{ success: boolean; error?: string }> => {

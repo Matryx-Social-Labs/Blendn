@@ -12,7 +12,7 @@ jest.mock('expo-router', () => ({
   useFocusEffect: (fn: () => void) => require('react').useEffect(() => fn(), [fn]),
 }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getNotifications: jest.fn() } }))
-jest.mock('../lib/socketClient', () => ({ subscribeToBell: () => () => {} }))
+jest.mock('../lib/socketClient', () => ({ subscribeToBell: () => () => {}, subscribeToUserNotifications: () => () => {} }))
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(), setBadgeCountAsync: jest.fn() }))
 jest.mock('../components/ui/Material', () => ({ Material: () => null }))
 
@@ -20,6 +20,7 @@ jest.mock('../components/ui/Material', () => ({ Material: () => null }))
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
 import { NotificationBell } from '../components/pulse/NotificationBell'
+import { useInboxBadgeSync } from '../lib/inboxBadge'
 import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
 
@@ -63,6 +64,12 @@ it('an older server sends no badgeCount: the bell works and the icon is left alo
   expect(setBadge).not.toHaveBeenCalled()
 })
 
+// The sync is mounted once, in the tab layout; the bell only looks when its tab is looked at.
+const WithSync = () => {
+  useInboxBadgeSync('u1')
+  return <NotificationBell />
+}
+
 it('when the app comes back to the front it reads the counts again, so the icon is right the moment it is looked at', async () => {
   let listener: (state: string) => void = () => {}
   const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: (s: string) => void) => {
@@ -70,7 +77,7 @@ it('when the app comes back to the front it reads the counts again, so the icon 
     return { remove: jest.fn() }
   }) as never)
   api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 1 }))
-  await render(<NotificationBell />)
+  await render(<WithSync />)
   await waitFor(() => expect(setBadge).toHaveBeenCalledWith(1))
   api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 4 }))
   await act(async () => listener('background'))

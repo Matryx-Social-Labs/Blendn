@@ -1,5 +1,5 @@
-import { useEffect, type Ref } from 'react'
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { useEffect, useState, type Ref } from 'react'
+import { AppState, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -10,6 +10,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { Avatar } from './Avatar'
 import { Disc, type DiscProps } from './Disc'
+import { PresenceDot } from './MonoFamily'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 export type Tab = 'pulse' | 'going' | 'banter' | 'me'
@@ -69,6 +70,8 @@ export type TabBarProps = {
   disc: DiscProps
   /** Your own face on Me; the outlined person until there is one. */
   mePhoto?: string
+  /** Conversations with something unread from the other side: a dot on Banter's glyph, the count only in its spoken label ("Banter, 3 new"). */
+  banterUnread?: number
   /** The disc's slot, for whoever points at it (the centre button's coach mark). */
   discRef?: Ref<View>
   testID?: string
@@ -88,13 +91,20 @@ export type TabBarProps = {
  * Increase Contrast: the 50% outline on the capsule. Bold Text: every label
  * 700, so the pill alone tells selected from not.
  */
-export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 'tabs' }: TabBarProps) {
+export function TabBar({ selected, onSelect, disc, mePhoto, banterUnread = 0, discRef, testID = 'tabs' }: TabBarProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { cell } = tabBarGeometry(useWindowDimensions().width)
   const reduceMotion = useReducedMotion()
+  // A photo URL that failed to load: Me shows the glyph for that URL (E1), and a new URL gets its try.
+  const [deadPhoto, setDeadPhoto] = useState<string | null>(null)
+  // A URL that failed (offline, a blip) gets another try when the app comes back to the front.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && setDeadPhoto(null))
+    return () => sub.remove()
+  }, [])
 
   /*
    * One pill, not one per tab (DS #2): it slides to the new tab on M.snap, and a second tap mid-flight retargets it from
@@ -110,8 +120,10 @@ export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 't
   }, [target, reduceMotion, x])
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }))
 
-  const tab = ({ key, label, icon }: (typeof TABS)[number]) => {
+  const tab = ({ key, label: name, icon }: (typeof TABS)[number]) => {
     const on = key === selected
+    const fresh = key === 'banter' && banterUnread > 0
+    const label = fresh ? `${name}, ${banterUnread} new` : name
     const ink = on ? COLOR.textPrimary : COLOR.textSecondary
     const family = bold || (on && !android) ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]
     return (
@@ -131,13 +143,27 @@ export function TabBar({ selected, onSelect, disc, mePhoto, discRef, testID = 't
           accessibilityLargeContentTitle={label}
           style={styles.tab}
         >
-          {key === 'me' && mePhoto ? (
-            <Avatar kind="photo" uri={mePhoto} size={ICON.nav} ring={on ? COLOR.textPrimary : undefined} testID={`${testID}-me-avatar`} />
+          {key === 'me' && mePhoto && mePhoto !== deadPhoto ? (
+            <Avatar
+              kind="photo"
+              uri={mePhoto}
+              size={ICON.nav}
+              ring={on ? COLOR.textPrimary : undefined}
+              onError={() => setDeadPhoto(mePhoto)}
+              testID={`${testID}-me-avatar`}
+            />
           ) : (
-            <Icon name={icon} size={ICON.nav} color={ink} active={on} />
+            <View>
+              <Icon name={icon} size={ICON.nav} color={ink} active={on} />
+              {fresh ? (
+                <View style={styles.dot} pointerEvents="none">
+                  <PresenceDot testID={`${testID}-banter-dot`} />
+                </View>
+              ) : null}
+            </View>
           )}
           <Text style={[font('caption', false, family), { color: ink }]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
-            {label}
+            {name}
           </Text>
         </Pressable>
       </View>
@@ -178,6 +204,8 @@ const styles = StyleSheet.create({
   round: { borderRadius: RADIUS.tabBar },
   row: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.xs },
   cell: { alignItems: 'center' },
+  // On the glyph's top-right corner.
+  dot: { position: 'absolute', top: -SPACE.xxs, right: -SPACE.xxs },
   // The middle slot is a tab slot's width; the disc keeps its 56 pt, centred in it.
   slot: { height: SIZE.disc, alignItems: 'center', justifyContent: 'center' },
   tab: { width: SIZE.primary, maxWidth: '100%', height: SIZE.primary, alignItems: 'center', justifyContent: 'center', gap: SPACE.xxs },
