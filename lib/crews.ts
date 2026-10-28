@@ -18,6 +18,7 @@
  */
 
 /** The server's `CREW` constants (blendn-admin lib/constants.ts). */
+import { parseBadges } from './profileBadges'
 import { toggleLanguage, type Badge, type Overlap } from './aboutYou'
 
 export const CREW_MAX_MEMBERS = 12
@@ -115,7 +116,22 @@ export interface Crew {
    * off `members`. Optional for the same reason; absent says nothing.
    */
   apart?: boolean
+  /**
+   * SV-13: seats the server will still fill — it counts the open invites against the 12, which `size` does not. Optional: an older
+   * server sends none, and `crewSeatsLeft` falls back to `size`.
+   */
+  seatsLeft?: number
+  /** SV-11: `crewView`'s badges (`{ kind, label }[]`, read through `parseBadges`). Absent from an older server: no pill. */
+  badges?: unknown
 }
+
+/** The crew's one tier badge for a row or a card, or none (YOU-06). Only "Out together often" exists for a crew, and never with a count. */
+export const crewBadge = (badges: unknown): 'nights_together' | undefined =>
+  parseBadges(badges)?.some((b) => b.kind === 'nights_together') ? 'nights_together' : undefined
+
+/** Seats an invite can still take (YOU-12): the server's own count, else the members alone (the older server's best guess). */
+export const crewSeatsLeft = (crew: { size: number; seatsLeft?: number }): number =>
+  Math.max(0, typeof crew.seatsLeft === 'number' ? crew.seatsLeft : CREW_MAX_MEMBERS - crew.size)
 
 export interface CrewInvite {
   crewId: string
@@ -596,4 +612,30 @@ export function likeAs(myCrews: CrewsAtEvent['myCrews']): { as: 'me' } | { as: '
   if (myCrews.length === 0) return { as: 'me' }
   if (myCrews.length === 1) return { as: 'crew', crewId: myCrews[0].crewId }
   return { as: 'choose' }
+}
+
+/** The most pages of invites one lookup reads: 4 × 50 = the server's newest 200 (YOU-11). */
+export const INVITE_LOOKUP_PAGES = 4
+
+type InvitesPage = { success: boolean; data?: { invites: CrewInvite[]; invitesPagination?: { hasMore: boolean; nextCursor: string | null } } }
+
+/**
+ * The invite to `crewId` among yours, however far down: pages `myCrews` by `invitesPagination.nextCursor` until it is found or there
+ * are no more (at most `INVITE_LOOKUP_PAGES`). `failed` is a page that did not load; `null` is "not open any more" (really).
+ */
+export async function findInvite(
+  loadPage: (cursor?: string | null) => Promise<InvitesPage>,
+  crewId: string
+): Promise<{ kind: 'found'; invite: CrewInvite } | { kind: 'notOpen' } | { kind: 'failed' }> {
+  let cursor: string | null = null
+  for (let page = 0; page < INVITE_LOOKUP_PAGES; page++) {
+    const result = await loadPage(cursor)
+    if (!result.success || !result.data) return { kind: 'failed' }
+    const invite = result.data.invites.find((i) => i.crewId === crewId)
+    if (invite) return { kind: 'found', invite }
+    const next = result.data.invitesPagination
+    if (!next?.hasMore || !next.nextCursor) break
+    cursor = next.nextCursor
+  }
+  return { kind: 'notOpen' }
 }

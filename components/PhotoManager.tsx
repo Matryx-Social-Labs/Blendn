@@ -460,6 +460,8 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
                 uri={uri}
                 label={`Photo ${index + 1} of ${n}${item.isPrimary ? ', main photo' : ''}`}
                 main={index === 0}
+                // The first photo is the one others see before you reveal, blurred (Flow 6 edit 06).
+                blurred={index === 0}
                 onRemove={() => handleRemovePhoto(index)}
                 removeLabel={`Remove photo ${index + 1}`}
                 removeDisabled={busy}

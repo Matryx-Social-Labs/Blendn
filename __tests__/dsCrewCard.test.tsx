@@ -88,6 +88,24 @@ describe('<CrewCard>', () => {
   })
 })
 
+describe('<CrewCard> with its badge (YOU-06, E15)', () => {
+  it('draws one pill, “Out together often”, and no digits in it', async () => {
+    await render(<CrewCard crew={{ ...NEBULA, badge: 'nights_together' }} />)
+    expect(screen.getAllByLabelText('Badge: Out together often')).toHaveLength(1)
+    expect(screen.getByLabelText(/Nebula, crew of 4.*Badge: Out together often/)).toBeTruthy()
+    expect(screen.getByText('Out together often').props.children).not.toMatch(/\d/)
+  })
+
+  it('crewBadge reads the server’s badges: the tier or nothing, however many nights', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { crewBadge } = require('../lib/crews')
+    expect(crewBadge([{ kind: 'nights_together', label: 'Out together often' }])).toBe('nights_together')
+    expect(crewBadge([])).toBeUndefined()
+    expect(crewBadge(undefined)).toBeUndefined()
+    expect(crewBadge([{ kind: 'shows_up', label: 'x' }])).toBeUndefined()
+  })
+})
+
 describe('<CrewRow> with its badge', () => {
   it('reads the badge with the row, in the chevron’s place', async () => {
     await render(<CrewRow name="Nebula" emblemSeed="nebula" size={4} sub="4 people · Techno heads" badge="nights_together" onPress={jest.fn()} />)

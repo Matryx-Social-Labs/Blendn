@@ -117,6 +117,19 @@ describe('the bar says where you came from (Settings › How you match)', () => 
   })
 })
 
+describe('who sees each field (YOU-07, 14.0)', () => {
+  it('names the tier under languages, home state and this-or-that, and under the sign once it is on', async () => {
+    await open()
+    expect(screen.getByTestId('who-sees-languages')).toBeTruthy()
+    expect(screen.getByTestId('who-sees-homeState')).toBeTruthy()
+    expect(screen.getAllByLabelText('Shown to people you match with, in rooms of 8 or more.').length).toBe(2)
+    await act(async () => {
+      fireEvent.press(screen.getByText('Show my sign'))
+    })
+    expect(screen.getByTestId('who-sees-sign')).toBeTruthy()
+  })
+})
+
 describe('the sign is never preselected (M4)', () => {
   it('says it shows next to the age, offers the birthday sign as a hint, and saves none until picked', async () => {
     await open()

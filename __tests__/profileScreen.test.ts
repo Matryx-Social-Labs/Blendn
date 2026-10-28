@@ -33,6 +33,12 @@ describe('the screen never re-decides the identity gate', () => {
     expect(src).not.toContain('theyRevealed')
   })
 
+  it('reads the fallback’s photos from the nested profile, which is where /profiles/:id puts them (YOU-13)', () => {
+    const src = SCREEN()
+    expect(src).toContain('photos: p.photos ?? []')
+    expect(src).toContain('age: p.age')
+  })
+
   it('draws a missing field as absent, never as an error', () => {
     /*
      * "No bio" and "not allowed to see the bio" are identical in the payload by
@@ -194,7 +200,7 @@ describe('what the frame draws and the product cannot back', () => {
     const src = SCREEN()
     expect(src).not.toContain('PRO MEMBER')
     expect(src).not.toContain('@blendn')
-    expect(src).toContain("[profile?.workField, profile?.location].filter(Boolean).join(' · ')")
+    expect(src).toContain("[workFieldLabel(profile?.workField, workFields), profile?.location].filter(Boolean).join(' · ')")
   })
 
   it('ships no Appreciate button', () => {

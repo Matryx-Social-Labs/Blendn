@@ -5,6 +5,7 @@ import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ChipSet } from '../components/ds/ChipSet'
+import { WhoSees } from '../components/profile/WhoSees'
 import { FieldLabel, FieldNotes } from '../components/ds/TextField'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { font, GroundProvider, HueProvider, useBoldText } from '../components/ds/shared'
@@ -324,6 +325,7 @@ function EditAboutYouScreenContent() {
                       error={tierBError.languages}
                       testID="about-you-languages"
                     />
+                    <WhoSees field="languages" />
                   </View>
                   <View onLayout={(e) => (ys.current.homeState = e.nativeEvent.layout.y)}>
                     <ChipSet
@@ -347,6 +349,7 @@ function EditAboutYouScreenContent() {
                       error={tierBError.homeState}
                       testID="about-you-home-state"
                     />
+                    <WhoSees field="homeState" />
                   </View>
                   {options.thisOrThat.length ? (
                     <View style={styles.field}>
@@ -362,6 +365,7 @@ function EditAboutYouScreenContent() {
                         />
                       ))}
                       <FieldNotes hint="Pick one, or leave it. Tap again to take it back." bold={bold} />
+                      <WhoSees field="thisOrThat" />
                     </View>
                   ) : null}
                 </View>
@@ -418,6 +422,7 @@ function EditAboutYouScreenContent() {
                       error={tierBError.sign}
                       testID="about-you-signs"
                     />
+                    <WhoSees field="sign" />
                   </Animated.View>
                 </GroundProvider>
               ) : null}

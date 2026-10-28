@@ -37,6 +37,13 @@ it('a failed read says it did not load, never "no blocked users"', async () => {
   expect(screen.queryByText('No blocked users')).toBeNull()
 })
 
+it('draws a creature, never a face, even if a photo slips through (YOU-10, E10)', async () => {
+  mockFetch.mockResolvedValue(ok([{ ...user(1), blocked_user_photo: 'https://cdn/face.jpg' }]))
+  await render(<BlockedUsers />)
+  await screen.findByText('Person 1')
+  expect(screen.getByTestId('person-creature', { includeHiddenElements: true })).toBeTruthy()
+})
+
 it('one person is one row with Unblock', async () => {
   mockFetch.mockResolvedValue(ok([user(1)]))
   await render(<BlockedUsers />)

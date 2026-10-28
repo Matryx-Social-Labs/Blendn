@@ -309,3 +309,61 @@ it('names the job title and who sees it, with placeholders that fit here', async
   expect(screen.getByPlaceholderText('e.g. Christ University')).toBeTruthy()
   expect(screen.getByPlaceholderText('Tell people about yourself…')).toBeTruthy()
 })
+
+describe('a profile that fails to load (YOU-05, Edit profile 6-1)', () => {
+  const retry = () => mockShowToast.mock.calls.at(-1)?.[2]?.action
+
+  it('toasts with Try again, keeps Save off, and never writes a blank profile', async () => {
+    api.getProfile.mockResolvedValue({ success: false, error: 'boom' } as never)
+    await render(<EditProfile />)
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t load your profile.', 'error', expect.objectContaining({ action: expect.objectContaining({ label: 'Try again' }) })))
+    const save = await screen.findByRole('button', { name: /^Save/ })
+    expect(save.props.accessibilityState?.disabled).toBe(true)
+    await fireEvent.press(save)
+    expect(api.updateProfile).not.toHaveBeenCalled()
+  })
+
+  it('Try again reads it again and, once it loads, the form is filled and Save is on', async () => {
+    api.getProfile.mockResolvedValueOnce({ success: false, error: 'boom' } as never)
+    await render(<EditProfile />)
+    await waitFor(() => expect(retry()).toBeTruthy())
+    await act(async () => retry().onPress())
+    expect(await screen.findByDisplayValue('Sam')).toBeTruthy()
+    expect(api.getProfile).toHaveBeenCalledTimes(2)
+    const save = await screen.findByRole('button', { name: /^Save/ })
+    expect(save.props.accessibilityState?.disabled).not.toBe(true)
+  })
+
+  it('a thrown read says the same', async () => {
+    api.getProfile.mockRejectedValue(new Error('net') as never)
+    await render(<EditProfile />)
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t load your profile.', 'error', expect.anything()))
+  })
+})
+
+describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
+  const dating = (profile: Record<string, unknown>) =>
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Sam', interests: [], profile: { age: 28, location: 'Bengaluru', bio: 'Records.', goals: [], looking_for: [], intent_default: ['dating'], ...profile } } } as never)
+
+  it('names the tier under intent, interests and the college', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.getByTestId('who-sees-intent')).toBeTruthy()
+    expect(screen.getByTestId('who-sees-interests')).toBeTruthy()
+    expect(screen.getByTestId('who-sees-college').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+  })
+
+  it('orientation reads Nobody but you while show_orientation is off', async () => {
+    dating({ show_orientation: false })
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Nobody but you sees this.')
+  })
+
+  it('orientation reads the reveal tier when the profile says show_orientation is on', async () => {
+    dating({ show_orientation: true })
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+  })
+})

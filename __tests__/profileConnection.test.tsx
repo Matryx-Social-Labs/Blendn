@@ -25,6 +25,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getPublicProfile: jest.fn(),
     getProfile: jest.fn(),
+    getWorkFields: jest.fn(),
     getConversations: jest.fn(),
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
@@ -64,7 +65,8 @@ jest.mock('../components/profile/ProfileHeroStage', () => {
   const { Text } = require('react-native')
   return {
     heroHeightFor: (w: number) => Math.round(w * 1.3),
-    ProfileHeroStage: (p: { name: string; age?: number | null }) => React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name),
+    ProfileHeroStage: (p: { name: string; age?: number | null; subtitle?: string | null }) =>
+      React.createElement(React.Fragment, null, React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name), p.subtitle ? React.createElement(Text, { testID: 'hero-subtitle' }, p.subtitle) : null),
   }
 })
 jest.mock('../components/profile/ProfileSections', () => {
@@ -519,6 +521,32 @@ describe('one profile body', () => {
     await render(<UserProfile />)
     expect(await screen.findByText(/hasn’t revealed who they are yet/)).toBeTruthy()
     expect(screen.queryByText(PROFILE_EMPTY)).toBeNull()
+  })
+
+  it('the work field is a label, never the stored code (MED-1, OD-3 keeps it on an unrevealed profile)', async () => {
+    api.getWorkFields.mockResolvedValue({ success: true, data: { workFields: [{ slug: 'data_ai', label: 'Data & AI' }] } } as never)
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', identityVisible: false, work_field: 'data_ai', location: 'Bengaluru' } } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText('Data & AI · Bengaluru')).toBeTruthy()
+    expect(screen.queryByText(/data_ai/)).toBeNull()
+  })
+
+  it('when GET /users/:id fails the /profiles/:id fallback still shows age and location, which it nests under profile (YOU-13)', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: false, error: 'boom' } as never)
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Ben', interests: [], profile: { age: 29, location: 'Bengaluru', photos: ['https://cdn/ben.jpg'] } } } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText(/, 29$/)).toBeTruthy()
+    expect(screen.getByTestId('hero-subtitle').props.children).toBe('Bengaluru')
+  })
+
+  it('an unrevealed profile opened by id draws no interest chips, whatever the payload carries (YOU-03)', async () => {
+    api.getPublicProfile.mockResolvedValue({
+      success: true,
+      data: { id: 'rh_ben', identityVisible: false, interests: [{ name: 'Vinyl' }, { name: 'Chess' }], sharedInterests: ['Vinyl'], work_field: 'Design' },
+    } as never)
+    await render(<UserProfile />)
+    expect(await screen.findByText(/hasn’t revealed who they are yet/)).toBeTruthy()
+    for (const chip of ['Vinyl', 'Chess', 'Interests']) expect(screen.queryByText(chip)).toBeNull()
   })
 
   it('your own profile says it is how others see you, with Edit', async () => {

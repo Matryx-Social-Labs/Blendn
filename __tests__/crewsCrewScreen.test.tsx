@@ -136,6 +136,19 @@ describe('the page', () => {
     expect(screen.queryByLabelText('Invite friends')).toBeNull()
   })
 
+  it('open invites count against the seats: 10 members + 2 invites (seatsLeft 0) offers no Invite (YOU-12)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10, seatsLeft: 0 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.queryByLabelText('Invite friends')).toBeNull()
+  })
+
+  it('an older server with no seatsLeft still reads the members alone', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Invite friends'))
+  })
+
   it('has no Open crew chat: the room is reached from the Banter and the chat’s own header', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('member') })
     await render(<CrewScreen />)
@@ -246,6 +259,21 @@ describe('inviting', () => {
     await fireEvent.press(screen.getByLabelText('Ask 2'))
     await waitFor(() => expect(crews.invite).toHaveBeenCalledWith('c2', ['u-Kavya', 'u-Meera']))
     expect(mockToast).toHaveBeenCalledWith('Asked 2 friends', 'success')
+  })
+
+  it('an invite that fills the crew takes Invite friends away at once (seatsLeft goes down by the number asked)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 10, seatsLeft: 2 }) })
+    api.getFriends.mockResolvedValue(friends('Kavya', 'Meera'))
+    crews.invite.mockResolvedValue({ success: true, data: { invited: 2 } })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Invite friends'))
+    await fireEvent.press(screen.getByLabelText('Invite friends'))
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Kavya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Kavya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Meera' }))
+    await fireEvent.press(screen.getByLabelText('Ask 2'))
+    await waitFor(() => expect(crews.invite).toHaveBeenCalledWith('c2', ['u-Kavya', 'u-Meera']))
+    await waitFor(() => expect(screen.queryByLabelText('Invite friends')).toBeNull())
   })
 
   it('when every friend is in already, says so', async () => {

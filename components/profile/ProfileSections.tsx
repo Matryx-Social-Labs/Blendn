@@ -18,8 +18,8 @@ import { OptimizedImage } from '../OptimizedImage'
  * `app/api/mobile/profiles/[userId]` gates on `maySeeIdentity`, and the split it makes is not "show less", it is a different
  * set of facts:
  *
- *   unrevealed   age, interests, location, work_field
- *   revealed     ...and name, photo, bio, occupation, education, gallery
+ *   unrevealed   age, location, work_field (OD-3). Interests are withheld until the reveal (SV-10; `withheldUnlessVisible`)
+ *   revealed     ...and name, interests, photo, bio, occupation, education, gallery
  *   self         ...and email, and the dating fields
  *
  * Nothing here re-derives any of that. A missing field is simply not drawn, and never drawn as a fault: "no bio" and "not allowed
