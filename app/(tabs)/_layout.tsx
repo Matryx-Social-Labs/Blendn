@@ -138,7 +138,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
       setInsideCount(signal.insideCount)
       // SCRUM-630: waves are heard while you are checked in, overlay open or not.
       listenForWaves(activeEventId)
-      setLiveHint(activeEventId !== null)
+      setLiveHint(activeEventId)
       setTarget(
         roomButtonTarget({
           activeEventId,

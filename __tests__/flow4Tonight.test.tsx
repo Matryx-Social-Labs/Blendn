@@ -186,6 +186,23 @@ describe('the pass (#06, #07)', () => {
     expect(screen.getByLabelText('Turn on Precise Location', HIDDEN)).toBeTruthy()
   })
 
+  it('away from the door: the same pass, the hold disabled, one short line, no venue or distance (owner ruling 2026-10-28)', async () => {
+    await draw({ insideEvent: event('door', { title: 'Vinyl Night' }), reach: 'far' })
+    const hold = screen.getByRole('button', { name: 'Hold to blend in' })
+    expect(hold.props.accessibilityState).toMatchObject({ disabled: true })
+    // The reason is the hold's hint: "Hold to blend in, dimmed, button. You’re too far away."
+    expect(hold.props.accessibilityHint).toBe('You’re too far away')
+    expect(screen.getByText('You’re too far away', HIDDEN)).toBeTruthy()
+    expect(screen.queryByText('YOU’RE HERE', HIDDEN)).toBeNull()
+    expect(screen.queryByText('You’re at an event. Hold the pass below to check in.')).toBeNull()
+  })
+
+  it('location off with a door docked: disabled, "Location is off"', async () => {
+    await draw({ insideEvent: event('door'), reach: 'locationOff' })
+    expect(screen.getByRole('button', { name: 'Hold to blend in' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByText('Location is off', HIDDEN)).toBeTruthy()
+  })
+
   it('in another room already: the hold is a switch out of it (ROUND4 8.3 #06)', async () => {
     await draw({ insideEvent: event('door'), switchFrom: 'Vinyl Night' })
     expect(screen.getAllByText('Hold to switch', HIDDEN).length).toBeGreaterThan(0)

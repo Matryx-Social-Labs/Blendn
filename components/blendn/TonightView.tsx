@@ -3,6 +3,7 @@ import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
+import { passReachLine, type PassReach } from '../../lib/attendanceState'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
@@ -89,6 +90,11 @@ export type TonightViewProps = {
   location?: TonightLocation
   onRetry: () => void
   insideEvent: TonightEvent | null
+  /**
+   * Whether the docked pass's hold is offered (`lib/attendanceState.ts` `passReach`): away from the door or with location off
+   * the same pass shows, its hold disabled, with one short line (owner ruling 2026-10-28).
+   */
+  reach?: PassReach
   /** In another event's room already: the pass's hold is a switch out of it (ROUND4 8.3 #06). */
   switchFrom?: string
   checkingIn: boolean
@@ -127,6 +133,7 @@ export function TonightView({
   location = 'on',
   onRetry,
   insideEvent,
+  reach = 'open',
   switchFrom,
   checkingIn,
   youreIn = false,
@@ -160,7 +167,7 @@ export function TonightView({
   const sub =
     location === 'approximate'
       ? 'Approximate location. Check-in needs your exact spot: turn on Precise Location for Blend’n.'
-      : door
+      : door && reach === 'open'
         ? 'You’re at an event. Hold the pass below to check in.'
         : 'Check in at an event to open its room.'
 
@@ -256,7 +263,8 @@ export function TonightView({
               tasteCount={door.tasteMatchCount}
               onConfirm={onCheckIn}
               holdLabel={switchFrom ? 'Hold to switch' : undefined}
-              note={switchFrom ? `You’ll leave ${switchFrom}` : undefined}
+              note={passReachLine(reach) ?? (switchFrom ? `You’ll leave ${switchFrom}` : undefined)}
+              disabled={reach !== 'open'}
               busy={checkingIn && !youreIn}
               confirmed={youreIn}
               testID="tonight-pass"

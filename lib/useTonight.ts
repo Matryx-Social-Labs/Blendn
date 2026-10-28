@@ -49,6 +49,9 @@ export interface TonightEvent {
   goingCount: number | null
   /** The event's category slug, for its plate when it has no cover (rc7 ruling 5); absent from an older server. */
   category?: string
+  /** Where it is, when the opener knows (a door from the Going card or the event page): the pass judges "too far" from it. */
+  latitude?: number | null
+  longitude?: number | null
 }
 
 /** What Tonight can say about your location (Flow 4 Tonight #10, R3-D4 4.7). */
@@ -119,6 +122,8 @@ function toTonight(
     endsAt: live.end_time ?? e.end_time,
     timeZone: e.timezone,
     distanceKm,
+    latitude: e.latitude ?? null,
+    longitude: e.longitude ?? null,
     // Inside now (the Room's rule), never everybody who came; 0 from an older server.
     hereCount: e.here_count ?? 0,
     // `eventFromApi` writes 0 for "no cap"; 0 is not a capacity anyone set.

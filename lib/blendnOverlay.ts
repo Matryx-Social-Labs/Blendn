@@ -101,12 +101,21 @@ export function peekPendingPerson(): string | null {
  * loaded yet, the overlay draws the Room's skeleton (Flow 4 Room #01) rather
  * than Tonight's. A hint only; the Room's own load decides.
  */
-let liveHint = false
-export function setLiveHint(live: boolean): void {
-  liveHint = live
+let liveEventId: string | null = null
+/** The event you are checked into (the disc's poll), or null. The Going card says "You’re in" for it (SCRUM-882). */
+export function setLiveHint(eventId: string | null): void {
+  if (liveEventId === eventId) return
+  liveEventId = eventId
+  notify()
 }
 export function isLiveHint(): boolean {
-  return liveHint
+  return liveEventId !== null
+}
+export function getLiveEventId(): string | null {
+  return liveEventId
+}
+export function useLiveEventId(): string | null {
+  return useSyncExternalStore(subscribe, getLiveEventId, getLiveEventId)
 }
 
 /** Called by the overlay once its closing transition has finished. */

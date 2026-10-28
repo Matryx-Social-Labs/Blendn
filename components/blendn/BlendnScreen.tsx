@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
+import { usePassReach } from '../../lib/usePassReach'
 import { blendnClosed, isLiveHint, openPass, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
@@ -313,6 +314,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const [held, setHeld] = useState<{ events: TonightEvent[]; insideEvent: TonightEvent | null } | null>(null)
   const tonightEvents = held ? held.events : tonight.events
   const insideEvent = held ? held.insideEvent : liveInside
+  // Away from the door, or location off: the pass docks with its hold disabled (owner ruling 2026-10-28).
+  const passReachNow = usePassReach(liveInside, tonight.insideEventId, tonight.location)
   /*
    * The Room is there to hand off to: loaded, or waited for long enough.
    * ponytail: a fixed ceiling, so a room that doesn't load straight after the
@@ -856,6 +859,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             location={tonight.location}
             onRetry={() => void tonight.refresh()}
             insideEvent={insideEvent}
+            // Judged before the hold, never during it: a check-in in flight is the server's to answer.
+            reach={held || checkIn.checkingIn ? 'open' : passReachNow}
             switchFrom={switchFrom?.title}
             // Under the hand-off the check-in is over, but the pass fading out still reads "You're in", never a re-armed hold.
             checkingIn={checkIn.checkingIn || mode === 'room'}
