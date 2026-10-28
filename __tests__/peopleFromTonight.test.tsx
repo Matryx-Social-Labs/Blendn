@@ -54,7 +54,7 @@ describe('the People layer is a modal over the Recap, and Android back closes it
   it('marks itself modal, hides the Recap from a screen reader while open, and back closes it before the overlay', () => {
     expect(code).toContain('accessibilityViewIsModal')
     expect(code).toMatch(/importantForAccessibility=\{peopleOpen \? 'no-hide-descendants' : 'auto'\}/)
-    expect(code).toMatch(/backGuard\.current\?\.\(\)/)
+    expect(code).toMatch(/backGuardRef\.current\?\.\(\)/)
     expect(code).toMatch(/if \(peopleOpen\) \{\s*setPeopleOpen\(false\)\s*return true\s*\}/)
   })
 })

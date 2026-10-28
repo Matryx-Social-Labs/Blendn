@@ -152,12 +152,12 @@ export function BlendnScreen() {
   const stage = useRef<{ close(): void }>(null)
   const close = useCallback(() => stage.current?.close(), [])
   /** The content's own layer that back should close first (People from tonight over the Recap), or false. */
-  const backGuard = useRef<(() => boolean) | null>(null)
+  const backGuardRef = useRef<(() => boolean) | null>(null)
 
   // Android back closes the overlay rather than leaving the tabs underneath.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (backGuard.current?.()) return true
+      if (backGuardRef.current?.()) return true
       close()
       return true
     })
@@ -176,7 +176,7 @@ export function BlendnScreen() {
           if (back) router.push({ pathname: '/event/[id]', params: { id: back } as never })
         }}
       >
-        <BlendnContent onClose={close} backGuard={backGuard} />
+        <BlendnContent onClose={close} backGuardRef={backGuardRef} />
       </RoomStage>
     </HueProvider>
   )
@@ -198,7 +198,7 @@ function useScrolledPast(): boolean {
   return scrolled
 }
 
-function BlendnContent({ onClose, backGuard }: { onClose: () => void; backGuard: MutableRefObject<(() => boolean) | null> }) {
+function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGuardRef: MutableRefObject<(() => boolean) | null> }) {
   const insets = useSafeAreaInsets()
   const scrolled = useScrolledPast()
   const contrast = useIncreaseContrast()
@@ -242,7 +242,7 @@ function BlendnContent({ onClose, backGuard }: { onClose: () => void; backGuard:
   const [peopleOpen, setPeopleOpen] = useState(false)
   // Android back closes People from tonight before it closes the overlay (M5).
   useEffect(() => {
-    backGuard.current = () => {
+    backGuardRef.current = () => {
       if (peopleOpen) {
         setPeopleOpen(false)
         return true
@@ -250,9 +250,9 @@ function BlendnContent({ onClose, backGuard }: { onClose: () => void; backGuard:
       return false
     }
     return () => {
-      backGuard.current = null
+      backGuardRef.current = null
     }
-  }, [backGuard, peopleOpen])
+  }, [backGuardRef, peopleOpen])
   const endedRecap =
     room.status === 'ready' && room.event ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now) : null
   if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) setRecap(endedRecap)
