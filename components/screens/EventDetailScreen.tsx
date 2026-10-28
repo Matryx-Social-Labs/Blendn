@@ -33,6 +33,7 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { askPushInContext } from '../../lib/pushAsk'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
+import { attendancePhase, doorOf, sceneCtaState } from '../../lib/attendanceState'
 import { openBlendn, openPass } from '../../lib/blendnOverlay'
 import { useToast } from '../Toast'
 import { useToastDock } from '../toastDock'
@@ -73,7 +74,6 @@ import {
   SceneLocationCard,
   SceneMap,
   SceneDetails,
-  rsvpCtaState,
   type SceneCTAState,
 } from '../scene/SceneSections'
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia'
@@ -606,9 +606,14 @@ export default function EventDetail() {
         setRsvpStatus(prevStatus)
         H.error()
         notice('Couldn’t cancel your RSVP', 'Try again.')
-      } else if (typeof result.data?.rsvpCount === 'number') {
+      } else {
         // The server's count after the change, as on the RSVP below.
-        setGoingCount(result.data.rsvpCount)
+        if (typeof result.data?.rsvpCount === 'number') setGoingCount(result.data.rsvpCount)
+        /*
+         * Said, as "You’re going." is: the CTA now reads "I’m going", the invitation, which looked like the status just
+         * removed ("it still shows I’m going", SCRUM-881).
+         */
+        showToast(prevStatus === 'waitlisted' ? 'You’ve left the waitlist.' : 'RSVP cancelled.', 'success')
       }
     } catch {
       setRsvpStatus(prevStatus)
@@ -617,7 +622,7 @@ export default function EventDetail() {
     } finally {
       rsvpInFlight.current = false
     }
-  }, [id, rsvpStatus])
+  }, [id, rsvpStatus, showToast])
 
   const confirmWithdrawRsvp = useCallback(() => {
     const waitlisted = rsvpStatus === 'waitlisted'
@@ -833,62 +838,40 @@ export default function EventDetail() {
   const openThisPass = () =>
     event &&
     toTheOverlay(() =>
-      openPass({
-        id: String(id),
-        title: event.title,
-        venue: event.venue_name,
-        photo: event.cover_image_url ?? null,
-        startsAt: event.start_time,
-        endsAt: event.end_time,
-        distanceKm: null,
-        hereCount: hereNow ?? detailHere ?? 0,
-        capacity: null,
-        going: rsvpStatus === 'going',
-        tasteMatchCount: null,
-        goingCount: null,
+      // Today's window and the coordinates, so the pass can say "too far" itself (`lib/attendanceState.ts`, SCRUM-882).
       // Closing the Room comes back to this page (ROOM-13): it is dismissed to show the overlay, and re-opened after.
-      }, { returnToEvent: true })
+      openPass(doorOf({ ...event, id: String(id) }, { going: rsvpStatus === 'going', hereCount: hereNow ?? detailHere ?? 0 }), { returnToEvent: true })
     )
 
+  // The attendance flow's one state (`lib/attendanceState.ts`): the Going card, the disc and this CTA cannot disagree.
+  const ctaNow = (): SceneCTAState => sceneCtaState({ phase: event ? attendancePhase(event) : 'upcoming', rsvpStatus, checkedIn: isCheckedIn, attended })
+
   /*
-   * Nothing after the end is disabled. Every other post-doors state routes
-   * through `actionStage`, which is about checking in and is meaningless once
-   * the event is over — leaving it in charge here would disable the button for
-   * anyone who had checked in, which is precisely everyone `rate` exists for.
+   * The press does what the label says, read from the same state, so the two cannot drift. Nothing after the end is
+   * disabled: rate the people you met (the entry point `PLACEHOLDER_SCREENS.md` asks for), or, if you weren't here,
+   * what's on tonight instead of a dead pill. The overlays are hosted by the tabs, under the root stack: back to them first.
    */
   const primaryActionPress = () => {
-    /*
-     * The night is over and you were here. `PLACEHOLDER_SCREENS.md` asks for
-     * "an entry point after an event ends"; the screen it opens has been built,
-     * tested and reachable from nowhere since it was written.
-     *
-     * First branch on purpose — every check below asks a question about
-     * checking in, which cannot happen any more.
-     */
-    if (isEnded && attended) {
-      router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any })
-      return
+    switch (ctaNow()) {
+      case 'rate':
+        router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any })
+        return
+      case 'ended':
+      case 'going':
+        toTheOverlay(openBlendn)
+        return
+      // Before the doors, the button is the RSVP and its own off-switch.
+      case 'rsvp':
+      case 'rsvpd':
+      case 'waitlisted':
+        void handleToggleRsvp()
+        return
+      case 'join':
+        openThisPass()
+        return
+      case 'cancelled':
+        return
     }
-    /*
-     * Over, and you weren't here: what's on tonight instead of a dead pill.
-     * Back to the tabs first — the Blend'n screen is an overlay hosted there,
-     * under the root stack, so opening it from here would open it beneath
-     * this page.
-     */
-    if (isEnded) {
-      toTheOverlay(openBlendn)
-      return
-    }
-    // Before the doors, the button is the RSVP and its own off-switch.
-    if (!isCheckedIn && !hasStarted) {
-      void handleToggleRsvp()
-      return
-    }
-    if (!isCheckedIn) {
-      openThisPass()
-      return
-    }
-    toTheOverlay(openBlendn)
   }
 
 
@@ -992,15 +975,7 @@ export default function EventDetail() {
   const crowdCount = isEnded ? checkInCount : isLive ? (hereNow ?? detailHere ?? checkInCount) : goingCount || interestCount
   const attendeeBlock = cancelled ? { label: crowdWord, count: 0 } : { label: crowdWord, count: crowdCount }
 
-  const ctaState: SceneCTAState = cancelled
-    ? 'cancelled'
-    : isEnded
-      ? (attended ? 'rate' : 'ended')
-      : isCheckedIn
-        ? 'going'
-        : !hasStarted
-          ? rsvpCtaState(rsvpStatus)
-          : 'join'
+  const ctaState = ctaNow()
 
   // "I'm going" carries no glyph; "You're going" carries the check (A78). Rating a past night is a star, never the live glyph.
   const ctaIcon: IconName | null =

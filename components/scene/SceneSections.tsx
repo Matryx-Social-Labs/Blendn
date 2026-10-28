@@ -323,10 +323,8 @@ export function sceneCtaLabel(state: SceneCTAState, alone = false): string {
  */
 const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'waitlisted', 'going', 'ended', 'cancelled']
 
-/** Before the doors: the RSVP slot's state from the server's answer. */
-export function rsvpCtaState(status: string | null | undefined): 'rsvp' | 'rsvpd' | 'waitlisted' {
-  return status === 'going' ? 'rsvpd' : status === 'waitlisted' ? 'waitlisted' : 'rsvp'
-}
+/** Before the doors: the RSVP slot's state from the server's answer. One copy, with the rest of the attendance state. */
+export { rsvpCtaState } from '../../lib/attendanceState'
 
 /*
  * The CTA's motion (#45 as A78 settled it): a press scale; on a change the old

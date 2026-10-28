@@ -36,9 +36,11 @@ const GOING = read("app", "(tabs)", "going.tsx")
  * producer, not a string that happens to be nearby.
  */
 const CTA_STATE = (() => {
-  const at = DETAIL.indexOf("const ctaState: SceneCTAState")
-  return at === -1 ? "" : DETAIL.slice(at, DETAIL.indexOf("\n\n", at))
+  const at = DETAIL.indexOf("const ctaNow = ")
+  return at === -1 ? "" : DETAIL.slice(at, DETAIL.indexOf("\n", at))
 })()
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { sceneCtaState } = require("../lib/attendanceState") as typeof import("../lib/attendanceState")
 
 describe("the entry point to peer rating", () => {
   it("exists at all", () => {
@@ -48,10 +50,16 @@ describe("the entry point to peer rating", () => {
   it("only appears after the event has ended", () => {
     /*
      * `PLACEHOLDER_SCREENS.md`: "Only after the event ends — during the night a
-     * rating is leverage; afterwards it is reflection."
+     * rating is leverage; afterwards it is reflection." The page's CTA is the
+     * shared `sceneCtaState` (SCRUM-882), fed the attended flag.
      */
-    // A cancelled event has nothing to rate; otherwise the first question is whether it has ended.
-    expect(CTA_STATE).toMatch(/^const ctaState: SceneCTAState = cancelled\s*\? 'cancelled'\s*: isEnded/)
+    expect(CTA_STATE).toMatch(/sceneCtaState\(\{ phase: event \? attendancePhase\(event\) : 'upcoming', rsvpStatus, checkedIn: isCheckedIn, attended \}\)/)
+    const base = { rsvpStatus: null, checkedIn: true, attended: true }
+    expect(sceneCtaState({ ...base, phase: "live" })).not.toBe("rate")
+    expect(sceneCtaState({ ...base, phase: "upcoming" })).not.toBe("rate")
+    // A cancelled event has nothing to rate.
+    expect(sceneCtaState({ ...base, phase: "cancelled" })).toBe("cancelled")
+    expect(sceneCtaState({ ...base, phase: "ended" })).toBe("rate")
   })
 
   it("only appears to somebody who was actually there", () => {
@@ -62,14 +70,8 @@ describe("the entry point to peer rating", () => {
      * from its entire audience.
      */
     expect(DETAIL).toMatch(/const attended = !!checkInStatus\?\.status/)
-    /*
-     * The *ended* branch specifically. `isCheckedIn` appears legitimately
-     * further down the same expression — it is what selects "You're in" — so
-     * asserting it was absent from the whole thing was simply wrong, and the
-     * first version of this test failed for that reason rather than finding
-     * anything.
-     */
-    expect(CTA_STATE).toMatch(/isEnded\s*\n?\s*\?\s*\(attended \? 'rate' : 'ended'\)/)
+    expect(sceneCtaState({ phase: "ended", rsvpStatus: "going", checkedIn: false, attended: true })).toBe("rate")
+    expect(sceneCtaState({ phase: "ended", rsvpStatus: "going", checkedIn: false, attended: false })).toBe("ended")
   })
 
   it("reads the status the server was already sending, on every path that fills it", () => {

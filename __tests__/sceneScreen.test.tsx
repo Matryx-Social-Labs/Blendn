@@ -32,7 +32,8 @@ jest.mock('../lib/socketClient', () => ({
   subscribeToEventInterest: () => () => {},
 }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
-jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../components/scene/SceneHeroMedia', () => ({ SceneHeroMedia: () => null, HERO_CAPTION_FOOT: 40 }))
 jest.mock('../components/scene/SceneLightbox', () => ({ SceneLightbox: () => null }))
 jest.mock('../components/board/BoardSections', () => {
@@ -517,6 +518,39 @@ describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
     expect(api.cancelRsvp).toHaveBeenCalledWith('e1')
   })
 
+  it('a cancel says it worked: the CTA is the RSVP again and a toast confirms it (SCRUM-881)', async () => {
+    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'You’re going' }))
+    const sheet = (showSheet as jest.Mock).mock.calls[0][0]
+    api.cancelRsvp.mockResolvedValue({ success: true, data: { rsvpStatus: null, rsvpCount: 41 } } as never)
+    await act(async () => sheet.actions[1].then())
+    expect(mockShowToast).toHaveBeenCalledWith('RSVP cancelled.', 'success')
+    expect(await screen.findByRole('button', { name: 'I’m going' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'You’re going' })).toBeNull()
+  })
+
+  it('leaving the waitlist says so', async () => {
+    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'waitlisted' }) as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'On the waitlist' }))
+    const sheet = (showSheet as jest.Mock).mock.calls[0][0]
+    api.cancelRsvp.mockResolvedValue({ success: true, data: { rsvpStatus: null, rsvpCount: 42 } } as never)
+    await act(async () => sheet.actions[1].then())
+    expect(mockShowToast).toHaveBeenCalledWith('You’ve left the waitlist.', 'success')
+  })
+
+  it('a refused cancel keeps "You’re going" and says nothing worked', async () => {
+    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'You’re going' }))
+    const sheet = (showSheet as jest.Mock).mock.calls[0][0]
+    api.cancelRsvp.mockResolvedValue({ success: false, error: 'boom' } as never)
+    await act(async () => sheet.actions[1].then())
+    expect(mockShowToast).not.toHaveBeenCalledWith('RSVP cancelled.', 'success')
+    expect(await screen.findByRole('button', { name: 'You’re going' })).toBeTruthy()
+  })
+
   it('a failed RSVP says so in a sheet and plays the error haptic once', async () => {
     api.getEvent.mockResolvedValue(detail() as never)
     api.rsvpToEvent.mockResolvedValue({ success: false } as never)
@@ -687,5 +721,25 @@ describe('the Board row (ROOM-08, flow3.js:68)', () => {
     await open()
     await screen.findByTestId('scene-tiles')
     expect(screen.queryByTestId('board-entry')).toBeNull()
+  })
+})
+
+describe('Blend in docks THIS event’s pass (owner ruling 2026-10-28, SCRUM-882)', () => {
+  it('live and not checked in: Blend in opens the pass with today’s window and the event’s coordinates', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { openPass } = require('../lib/blendnOverlay') as { openPass: jest.Mock }
+    api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2) }) as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'Blend in' }))
+    expect(openPass).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1', latitude: 12.9, longitude: 77.6 }), { returnToEvent: true })
+  })
+
+  it('a cancelled night happening now is "Cancelled", never Blend in', async () => {
+    api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2), status: 'cancelled' }) as never)
+    await open()
+    expect(await screen.findByTestId('scene-cancelled')).toBeTruthy()
+    expect(screen.getAllByText('Cancelled').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Blend in' })).toBeNull()
+    expect(screen.queryByText('Blend in')).toBeNull()
   })
 })

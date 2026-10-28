@@ -1,5 +1,7 @@
+import { isLiveNow } from '../lib/goingSections'
 import {
   attendancePhase,
+  doorOf,
   goingCardAction,
   passReach,
   passReachLine,
@@ -107,8 +109,6 @@ describe('passReach: the docked pass is disabled only on evidence (owner ruling 
 
 describe('the Going tab and the Pulse read the same phase', () => {
   it('a cancelled night happening now is not under "Happening now" (isLiveNow)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { isLiveNow } = require('../lib/goingSections') as typeof import('../lib/goingSections')
     expect(isLiveNow(tonight, NOW)).toBe(true)
     expect(isLiveNow({ ...tonight, status: 'cancelled' }, NOW)).toBe(false)
   })
@@ -116,8 +116,6 @@ describe('the Going tab and the Pulse read the same phase', () => {
 
 describe('doorOf: the pass a Going card or an event page docks is THIS event (owner ruling 2026-10-28)', () => {
   it('carries the event’s id, today’s window and its coordinates for the reach', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { doorOf } = require('../lib/attendanceState') as typeof import('../lib/attendanceState')
     const run = { start_time: iso(-3000), end_time: iso(3000), session: tonight }
     const door = doorOf({ id: 'e1', title: 'Toit', venue_name: 'Toit', cover_image_url: null, timezone: 'Asia/Kolkata', latitude: 12.97, longitude: 77.64, ...run }, { going: true })
     expect(door).toMatchObject({ id: 'e1', title: 'Toit', startsAt: tonight.start_time, endsAt: tonight.end_time, latitude: 12.97, longitude: 77.64, going: true, distanceKm: null })

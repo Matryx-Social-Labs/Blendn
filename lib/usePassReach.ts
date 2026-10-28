@@ -13,7 +13,8 @@ const REREAD_MS = 30_000
  * Measured from the phone's own fix when there is one and the event's coordinates, else the server's distance. Never prompts.
  */
 export function usePassReach(door: TonightEvent | null, insideEventId: string | null, location: TonightLocation): PassReach {
-  const [distanceM, setDistanceM] = useState<number | null>(null)
+  // Keyed by the door it was measured for: another door starts unknown, without a reset in the effect.
+  const [measured, setMeasured] = useState<{ id: string; m: number | null } | null>(null)
   const id = door?.id ?? null
   const lat = door?.latitude ?? null
   const lon = door?.longitude ?? null
@@ -21,7 +22,6 @@ export function usePassReach(door: TonightEvent | null, insideEventId: string | 
   const inside = id !== null && id === insideEventId
 
   useEffect(() => {
-    setDistanceM(null)
     if (id === null || inside) return
     let live = true
     const read = () =>
@@ -30,8 +30,10 @@ export function usePassReach(door: TonightEvent | null, insideEventId: string | 
           if (!live) return
           // 0,0 is an unset coordinate in this schema.
           const placed = typeof lat === 'number' && typeof lon === 'number' && !(lat === 0 && lon === 0)
-          if (coords && !coords.approximate && placed) setDistanceM(getDistanceMetres(coords.latitude, coords.longitude, lat, lon))
-          else setDistanceM(typeof km === 'number' && Number.isFinite(km) ? km * 1000 : null)
+          setMeasured({
+            id,
+            m: coords && !coords.approximate && placed ? getDistanceMetres(coords.latitude, coords.longitude, lat, lon) : typeof km === 'number' && Number.isFinite(km) ? km * 1000 : null,
+          })
         })
         .catch(() => {})
     void read()
@@ -42,5 +44,6 @@ export function usePassReach(door: TonightEvent | null, insideEventId: string | 
     }
   }, [id, inside, lat, lon, km])
 
+  const distanceM = measured && measured.id === id ? measured.m : null
   return id === null ? 'open' : passReach({ inside, location, distanceM })
 }

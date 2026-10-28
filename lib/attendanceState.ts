@@ -52,8 +52,13 @@ export function sceneCtaState(s: {
   if (s.phase === 'cancelled') return 'cancelled'
   if (s.phase === 'ended') return s.attended ? 'rate' : 'ended'
   if (s.checkedIn) return 'going'
-  if (s.phase === 'upcoming') return s.rsvpStatus === 'going' ? 'rsvpd' : s.rsvpStatus === 'waitlisted' ? 'waitlisted' : 'rsvp'
+  if (s.phase === 'upcoming') return rsvpCtaState(s.rsvpStatus)
   return 'join'
+}
+
+/** Before the doors: the RSVP slot's state from the server's answer. After a cancel (null) it is the RSVP again. */
+export function rsvpCtaState(status: string | null | undefined): 'rsvp' | 'rsvpd' | 'waitlisted' {
+  return status === 'going' ? 'rsvpd' : status === 'waitlisted' ? 'waitlisted' : 'rsvp'
 }
 
 /**
