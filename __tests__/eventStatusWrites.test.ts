@@ -104,4 +104,32 @@ describe('an RSVP or Save write keeps the event page true on reopen', () => {
     await expect(apiClient.rsvpToEvent(ID, 'going')).resolves.toMatchObject({ success: true })
     expect(cached()).toBeNull()
   })
+
+  it('a getEvent already in flight when the write lands does not refill the cache with the old status', async () => {
+    // The page opened (its read is on the wire, answered from BEFORE the write) and "I'm going" was tapped at once.
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    const real = global.fetch as jest.Mock
+    const impl = real.getMockImplementation()!
+    let heldOnce = false
+    real.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      // Only the page's GET is held, and it answers from before the write.
+      if (!heldOnce && (init?.method ?? 'GET') === 'GET') {
+        heldOnce = true
+        const stale = json(detail(null))
+        await held
+        return stale
+      }
+      return impl(input, init)
+    })
+    const inFlight = apiClient.getEvent(ID)
+    await apiClient.rsvpToEvent(ID, 'going')
+    release()
+    await inFlight
+    // The next reopen must ask the server, not be served the stale answer that landed after the write.
+    reads = 0
+    const reopened = await apiClient.getEvent(ID)
+    expect((reopened.data as unknown as Detail).userStatus.rsvpStatus).toBe('going')
+    expect(reads).toBe(1)
+  })
 })

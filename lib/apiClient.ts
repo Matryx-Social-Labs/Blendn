@@ -1434,9 +1434,9 @@ class ApiClientClass {
    */
   forgetEvent(eventId: string): void {
     const detail = `:/api/mobile/events/${eventId}`
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(`${detail}:`) || key.includes(`${detail}?`)) this.responseCache.delete(key)
-    }
+    // forgetMatching also bumps the epoch and drops reads on the wire: a getEvent sent before this write (the page just
+    // opened, "I'm going" tapped at once) must neither be joined by the next read nor refill the entry with the old status.
+    this.forgetMatching((key) => key.includes(`${detail}:`) || key.includes(`${detail}?`))
   }
 
   /**
