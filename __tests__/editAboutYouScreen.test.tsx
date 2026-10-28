@@ -101,7 +101,7 @@ const save = async () => {
 }
 
 describe('the bar is "About you", whichever screen opened it (SYS-18: Settings\' row is titled the same)', () => {
-  it.each([{}, { from: 'settings' }])('reads "About you" for %j, and prints nothing a link says', async (params) => {
+  it.each<Record<string, string>>([{}, { from: 'settings' }])('reads "About you" for %j, and prints nothing a link says', async (params) => {
     mockParams = { ...params, title: 'Free money' }
     await open()
     expect(screen.getByText('About you')).toBeTruthy()
