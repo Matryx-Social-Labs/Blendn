@@ -1735,19 +1735,21 @@ class ApiClientClass {
       ...(options.headers as Record<string, string>),
     }
 
-    // The session this request was made in, and whether it carried a token at all (M1): see the 401 below.
+    // The session this request was made in: see the 401 below.
     const epoch = sessionEpoch
-    let sentToken = false
     if (requireAuth) {
       const accessToken = await this.freshAccessToken()
       // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
       if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
       // The session ended while the refresh was out (a sign-out, another sign-in): never sent with the next one's token (H1).
       if (epoch !== sessionEpoch) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`
-        sentToken = true
-      }
+      /*
+       * Nobody is signed in (a session the server revoked has just been ended here, or none was ever started): a request that
+       * needs one is answered here, not sent to be refused. Sent, every screen still mounted over the entry screen's
+       * redirect asked again and drew a 401 each time, about 29 a minute until a relaunch (SCRUM-879).
+       */
+      if (!accessToken) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
+      headers['Authorization'] = `Bearer ${accessToken}`
     }
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1776,10 +1778,10 @@ class ApiClientClass {
         if (response.status === 401 && requireAuth) {
           /*
            * Not this request's session to refresh or to end (Opus review M1): it ended while the request was out (a sign-out
-           * the person chose, another sign-in), or the request carried no token because nobody is signed in. Either way a
-           * refusal here is not a session the server ended, and must never write "You were signed out".
+           * the person chose, another sign-in). A refusal here is not a session the server ended, and must never write
+           * "You were signed out". (A request with no token at all is never sent: see above.)
            */
-          if (epoch !== sessionEpoch || !sentToken) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
+          if (epoch !== sessionEpoch) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
           const refreshed = await this.refreshTokens()
           if (refreshed === 'ok') {
             const newAccessToken = await withinDeadline(TokenStorage.getAccessToken())
@@ -1795,10 +1797,7 @@ class ApiClientClass {
             // transport problem it is, and tried again on the next call.
             return { success: false, error: TIMEOUT_MESSAGE }
           }
-          await TokenStorage.clearAll()
-          markSessionExpired(rejectedReason, rejectedCode)
-          rejectedReason = undefined
-          rejectedCode = undefined
+          await this.endRejectedSession()
           return { success: false, error: 'Session expired. Please sign in again.' }
         }
 
@@ -1850,6 +1849,21 @@ class ApiClientClass {
 
     Logger.error('api', 'Request failed after retries', { endpoint })
     return { success: false, error: GENERIC_FAILURE_MESSAGE }
+  }
+
+  /**
+   * The server refused the refresh token: the session is over. The tokens go, the server's reason is stored for the entry
+   * screen, and `useAuth` resets the local session and routes there (`subscribeSessionExpired`). Run by the request whose 401
+   * found out, and by a refresh no request was waiting on when the server named the reason (SCRUM-879); the second to arrive
+   * finds the tokens gone and the reason already recorded.
+   */
+  private async endRejectedSession(): Promise<void> {
+    const reason = rejectedReason
+    const code = rejectedCode
+    rejectedReason = undefined
+    rejectedCode = undefined
+    await TokenStorage.clearAll()
+    markSessionExpired(reason, code)
   }
 
   private async refreshTokens(): Promise<RefreshOutcome> {
@@ -1954,6 +1968,12 @@ class ApiClientClass {
       if (ms > REFRESH_SLOW_MS) Logger.warn('api', 'refresh:slow', { ms, outcome })
     })
 
+    // A named reason (a password reset, a sign-out elsewhere, an account state) is the session's end whoever asked: the app
+    // open on a quiet screen must not wait for its next request to find out. Registered first, so it reads the reason
+    // before the request that joined this refresh does.
+    p.then((outcome) => {
+      if (outcome === 'rejected' && rejectedCode && epoch === sessionEpoch) void this.endRejectedSession()
+    })
     p.then((outcome) => {
       lastRefreshFailedAt = outcome === 'failed' ? Date.now() : 0
       if (outcome !== 'failed') {
