@@ -213,6 +213,9 @@ export interface OnboardingDraft {
    * a tap in the room. What this changes is whether that tap is offered.
    */
   reveal_by_default?: boolean
+  /** Why you go out: one of the server's intents. What matching and the Board's posting gate read. */
+  intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
+  /** Read-only: older drafts and profiles hold it; onboarding no longer writes it. */
   looking_for?: string[]
   location?: string
   occupation?: string
@@ -256,7 +259,7 @@ const STEP_FIELDS: Record<OnboardingStep, readonly (keyof OnboardingDraft)[]> = 
   basics: ['name', 'gender', 'dateOfBirth'],
   notifications: ['push_enabled'],
   location: ['share_location'],
-  preferences: ['orientations', 'show_orientation', 'looking_for', 'reveal_by_default'],
+  preferences: ['orientations', 'show_orientation', 'intent_default', 'reveal_by_default'],
   journey: ['location', 'occupation', 'education', 'work_field', 'expertise'],
   details: ['interests', 'bio'],
   media: ['photos'],

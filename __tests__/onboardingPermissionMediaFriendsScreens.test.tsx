@@ -45,6 +45,7 @@ import LocationScreen from '../app/onboarding/location'
 import MediaScreen from '../app/onboarding/media'
 import { PhotoTile } from '../components/onboarding/PhotoTile'
 import PreferencesScreen from '../app/onboarding/preferences'
+import { stepPayload } from '../lib/onboarding'
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -328,6 +329,30 @@ describe('preferences', () => {
     await fireEvent.press(screen.getByLabelText(/^Bisexual/))
     expect(screen.getByTestId('onboarding-show-orientation')).toBeTruthy()
     expect(screen.getByText('Only people you match or talk with will see it. Never a room.')).toBeTruthy()
+  })
+
+  // What the hook sends: its merge of the draft and the patch, through the step's own fields.
+  const sentOnContinue = (draft: Record<string, unknown>) =>
+    stepPayload('preferences', { ...draft, ...(mockCommit.mock.calls.at(-1)?.[0] as object) })
+
+  it('OUT-01: one tile, Continue: commit carries intent_default and no looking_for', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(screen.getByTestId('looking-for-friendship'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    const patch = mockCommit.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(patch.intent_default).toEqual(['friendship'])
+    expect('looking_for' in patch).toBe(false)
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship'])
+  })
+
+  it('OUT-01: a minor whose draft holds a stale dating intent sends no intent at all', async () => {
+    mockDraft = { dateOfBirth: `${new Date().getFullYear() - 17}-01-01`, intent_default: ['dating'] }
+    await render(<PreferencesScreen />)
+    expect(screen.queryByTestId('looking-for-dating')).toBeNull()
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    // The hook spreads the patch over the draft, so the patch must overwrite the stale value, not omit it.
+    expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
   })
 
   it('draws the looking-for tiles as the design system’s, and a minor never sees Dating', async () => {

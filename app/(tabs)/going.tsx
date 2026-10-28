@@ -41,6 +41,7 @@ import {
   lockedNightsLabel,
   ratingsToRead,
   stayLabel,
+  boardOpenFor,
   rsvpEventRows,
   savedEventRows,
   withLockedNights,
@@ -58,6 +59,7 @@ import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { DURATION, EASING, SPRING, useReducedMotion } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
+import { BoardEntry } from '../../components/board/BoardSections'
 import { addToCalendar } from '../../lib/calendar'
 import { openTonight } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
@@ -403,6 +405,10 @@ function GoingScreenInner() {
   }, [events, restoreRow, say, markSave, settleSave])
 
   // The tray (Flow 16 · 16.1). The rows do not say whether an event may be shared, so the tray asks the event itself.
+  const openBoard = useCallback((id: string) => {
+    router.push({ pathname: '/board/[eventId]', params: { eventId: id } } as never)
+  }, [])
+
   const shareRow = useCallback((event: EventRow) => void shareEvent(event), [])
   /*
    * A row's ⋯ (Flow 4 · Going · share from a row, frame 02): the app's one Sheet with what a night you are going to or saved
@@ -423,10 +429,12 @@ function GoingScreenInner() {
                 { label: 'Directions', variant: 'secondary' as const, then: () => void openInMaps(row) },
                 { label: 'Add to calendar', variant: 'secondary' as const, then: () => addToCalendar(row) },
               ]),
+          // The Board serves committed people, and this is their list: the Scene's gate, before doors and not called off.
+          ...(boardOpenFor(row) ? [{ label: 'The Board', variant: 'secondary' as const, then: () => openBoard(row.id) }] : []),
           { label: 'Cancel', cancel: true },
         ],
       }),
-    [shareRow]
+    [shareRow, openBoard]
   )
 
   const openEvent = useCallback((id: string) => {
@@ -530,10 +538,16 @@ function GoingScreenInner() {
             )}
             <HeroAction icon="share" accessibilityLabel={`Share ${row.title}`} onPress={() => shareRow(row)} />
           </View>
+          {/* The Scene's own row, under the buttons: before doors, not called off (E2). */}
+          {boardOpenFor(row) ? (
+            <View style={styles.heroBoard}>
+              <BoardEntry onPress={() => openBoard(row.id)} />
+            </View>
+          ) : null}
         </View>
       </View>
     )
-  }, [bold, openEvent, refreshCount, shareRow])
+  }, [bold, openBoard, openEvent, refreshCount, shareRow])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:
@@ -1133,6 +1147,7 @@ const styles = StyleSheet.create({
   },
   // The details' 6 gap plus the group's 4 above it; the details' 8 below.
   heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
+  heroBoard: { paddingHorizontal: SPACE.xs },
   heroAction: {
     height: SIZE.control,
     flexDirection: 'row',

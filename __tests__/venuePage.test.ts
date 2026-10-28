@@ -1,4 +1,5 @@
 import type { VenueDetail } from '../lib/apiClient'
+import { refreshPhoneZone } from '../lib/time'
 import {
   againLabel,
   apiChoice,
@@ -94,6 +95,34 @@ describe('the tiles', () => {
     expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 6).value).toBe('Till 2 AM')
     // With a midnight reset it is already Sunday, which has no row.
     expect(at([{ day: SAT, open: '18:00', close: '02:00' }], 0).value).toBe('Closed')
+  })
+
+  describe('Open is judged on the venue\'s clock, not the phone\'s (OUT-03)', () => {
+    const phone = process.env.TZ
+    // A Toronto phone looking at a Bengaluru venue (Asia/Kolkata, Saturday 18:00 to 04:00, day resets at 06:00).
+    beforeAll(() => {
+      process.env.TZ = 'America/Toronto'
+      refreshPhoneZone()
+    })
+    afterAll(() => {
+      if (phone === undefined) delete process.env.TZ
+      else process.env.TZ = phone
+      refreshPhoneZone()
+    })
+    const hours = [{ day: SAT, open: '18:00', close: '04:00' }]
+    const tile = (now: number, timezone?: string | null) =>
+      venueTiles(detail({ venue: { hours, dayResetHour: 6, ...(timezone ? { timezone } : {}) } as never, live: { liveNow: null } }), now)[0].value
+
+    it('23:00 IST Saturday is "Till 4 AM", though it is 13:30 on the Toronto phone', () => {
+      const at2300Ist = Date.UTC(2026, 9, 17, 17, 30)
+      expect(tile(at2300Ist, 'Asia/Kolkata')).toBe('Till 4 AM')
+      // Without the zone it falls back to the phone, which reads a different day and clock: the bug.
+      expect(tile(at2300Ist)).toBe('Opens 6 PM')
+    })
+
+    it('the weekday is the venue\'s: 01:00 IST Sunday is still Saturday\'s night', () => {
+      expect(tile(Date.UTC(2026, 9, 17, 19, 30), 'Asia/Kolkata')).toBe('Till 4 AM')
+    })
   })
 
   it('Open: between the close and the reset hour it is Closed, not Opens (SCRUM-743 review M1)', () => {

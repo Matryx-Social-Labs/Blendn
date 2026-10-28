@@ -7,6 +7,7 @@ import { InterestChip } from '../../components/ds/Chip'
 import { MomentReady } from '../../components/ds/MomentReady'
 import { font, useBoldText, useSelection } from '../../components/ds/shared'
 import { OptimizedImage } from '../../components/OptimizedImage'
+import { INTENT_LABELS } from '../../components/onboarding/LookingForCards'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -126,7 +127,7 @@ export default function ReadyScreen() {
           </View>
         ) : null}
         {draft.location ? <Summary icon="map-pin" label="Where you live" value={draft.location} /> : null}
-        {draft.looking_for?.length ? <Summary icon="users" label="Looking for" value={draft.looking_for.join(' · ')} /> : null}
+        {draft.intent_default?.[0] ? <Summary icon="users" label="Why you go out" value={INTENT_LABELS[draft.intent_default[0]] ?? ''} /> : null}
       </OnboardingScreen>
       {celebrating ? (
         <MomentReady testID="ready-moment" name={name} onDone={() => router.replace('/onboarding/friends')} />

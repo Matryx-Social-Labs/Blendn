@@ -18,6 +18,7 @@ import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { setAccountState } from '../lib/accountState'
 import { accountRefusalOf } from '../lib/sessionEnd'
 import { signInWithEmail, signUp } from '../lib/useAuth'
+import { H } from '../lib/haptics'
 import { useKeyboardShown } from '../lib/keyboard'
 import { accountAgeError, NAME_LENGTH_SENTENCE, nameTooShort } from '../lib/onboarding'
 import { PendingInvite } from '../components/friends/PendingInvite'
@@ -212,6 +213,8 @@ export default function SignIn() {
       // The button stays busy until this screen is replaced: freeing it here left an idle form for the frames the next screen
       // takes to draw (a blank frame on Android).
       stayBusy = true
+      // The server's yes, once (readme #97); a refusal above played its H.error.
+      H.success()
       // In: nothing of this form is kept for the next one (M4; `useAuth` drops it on every sign-in too).
       forgetHeldForm()
     } catch (e) {

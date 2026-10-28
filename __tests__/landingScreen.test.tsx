@@ -15,6 +15,7 @@ const mockAuth = jest.fn()
 const mockRetry = jest.fn()
 const mockGoogle = jest.fn()
 const mockSignInWithGoogle = jest.fn()
+const mockSignInWithApple = jest.fn()
 const mockNotice = jest.fn()
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -24,7 +25,7 @@ jest.mock('../lib/useAuth', () => ({
   useAuth: () => mockAuth(),
   retryAuth: () => mockRetry(),
   signInWithGoogle: (...args: unknown[]) => mockSignInWithGoogle(...args),
-  signInWithApple: jest.fn(),
+  signInWithApple: (...args: unknown[]) => mockSignInWithApple(...args),
 }))
 // What the last session's end was: null, or `{ reason, sentence? }` (Flow 15 #1 to #4).
 jest.mock('../lib/sessionEvents', () => ({ consumeSessionEnd: () => mockNotice() }))
@@ -56,6 +57,7 @@ import { openWhenReady, resetPendingRoute } from '../lib/pendingRoute'
 const signedOut = { user: null, loading: false, unreachable: false }
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
 let error: jest.SpyInstance
+let success: jest.SpyInstance
 beforeEach(() => {
   jest.clearAllMocks()
   jest.useFakeTimers()
@@ -63,6 +65,7 @@ beforeEach(() => {
   mockAuth.mockReturnValue(signedOut)
   mockNotice.mockResolvedValue(null)
   error = jest.spyOn(H, 'error').mockImplementation(() => {})
+  success = jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(H, 'primary').mockImplementation(() => {})
 })
 afterEach(() => jest.useRealTimers())
@@ -155,6 +158,37 @@ describe('the ways in', () => {
     await draw()
     await fireEvent.press(screen.getByLabelText('Continue with email'))
     expect(router.push).toHaveBeenCalledWith('/sign-in')
+  })
+})
+
+describe('the success haptic on the server\'s yes (OUT-04)', () => {
+  const appleButton = () => screen.getByTestId('apple-button')
+  const AppleAuth = () => jest.requireMock('expo-apple-authentication') as { signInAsync: jest.Mock }
+
+  it('Google: once on success, none on a refusal', async () => {
+    mockGoogle.mockResolvedValue({ data: { idToken: 't' } })
+    mockSignInWithGoogle.mockResolvedValue({ success: true, isNewUser: false })
+    await draw()
+    await fireEvent.press(google())
+    expect(success).toHaveBeenCalledTimes(1)
+
+    jest.clearAllMocks()
+    mockSignInWithGoogle.mockResolvedValue({ success: false, error: 'no', errorCode: 'FORBIDDEN' })
+    await fireEvent.press(google())
+    expect(success).not.toHaveBeenCalled()
+  })
+
+  it('Apple: once on success, none on a refusal', async () => {
+    AppleAuth().signInAsync.mockResolvedValue({ identityToken: 'i', fullName: null })
+    mockSignInWithApple.mockResolvedValue({ success: true, isNewUser: false })
+    await draw()
+    await fireEvent(appleButton(), 'press')
+    expect(success).toHaveBeenCalledTimes(1)
+
+    jest.clearAllMocks()
+    mockSignInWithApple.mockResolvedValue({ success: false, error: 'no', errorCode: 'FORBIDDEN' })
+    await fireEvent(appleButton(), 'press')
+    expect(success).not.toHaveBeenCalled()
   })
 })
 

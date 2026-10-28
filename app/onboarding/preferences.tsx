@@ -8,14 +8,13 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Toggle } from '../../components/ds/Toggle'
 import { font, minTarget, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import ScalePress from '../../components/motion/ScalePress'
-import { LookingForCards } from '../../components/onboarding/LookingForCards'
+import { LookingForCards, type Intent } from '../../components/onboarding/LookingForCards'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import {
   ORIENTATIONS as ORIENTATION_VALUES,
   ORIENTATION_LABELS,
   orientationDisabled,
   toggleOrientation,
-  withoutDatingChoice,
   type Orientation,
 } from '../../lib/dating'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MAX_FONT_SCALE, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -71,14 +70,11 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * the named option safe to offer at all — a warning the first time, and a
  * banner for as long as you are inside — live in `lib/roomVisibility.ts`.
  *
- * ## One deliberate departure from the frames
+ * ## "Why you go out" is the intent, not free text
  *
- * **"Looking for" writes `looking_for`, not `intent_default`.** The frame's
- * cards are Dating, Friendship, Networking, Travel and Open. The intent enum
- * the matcher reads is `dating | networking | friendship | just_here` — Travel
- * and Open are not in it and would be rejected. `looking_for` is free text and
- * takes all five, so nothing is lost from the profile; what is lost is that
- * these answers do not reach matching. Also in `docs/ONBOARDING.md`.
+ * The four tiles are the server's `intent_default` enum (`dating | friendship | networking | just_here`), one choice. It is
+ * what matching ranks on and what the Board's profile gate needs: an account that never wrote it could not post, and was
+ * asked again at its first check-in. `looking_for` (free text) is no longer written; old profiles keep what they have.
  */
 
 /*
@@ -92,7 +88,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  *
  * "Demisexual" is in the frame and not in the server's list, so it is not
  * offered — a chip that 400s on save is worse than an absent one.
- * The five looking-for options live in `LookingForCards`, beside their artwork.
+ * The four intent tiles live in `LookingForCards`, beside their artwork.
  */
 const ORIENTATIONS = ORIENTATION_VALUES.map((value) => ({
   value,
@@ -150,7 +146,7 @@ export default function PreferencesScreen() {
 
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [showOrientation, setShowOrientation] = useState(false)
-  const [lookingFor, setLookingFor] = useState<string[]>([])
+  const [intent, setIntent] = useState<Intent | null>(null)
   /*
    * Holds *anonymity*, not its opposite.
    *
@@ -177,14 +173,12 @@ export default function PreferencesScreen() {
     setPrefilled(true)
     setOrientations((draft.orientations ?? []) as Orientation[])
     setShowOrientation(draft.show_orientation ?? false)
-    setLookingFor(draft.looking_for ?? [])
+    setIntent(draft.intent_default?.[0] ?? null)
     setAnonymous(anonymousByDefault(draft))
   }
 
-  const toggle = (value: string) =>
-    setLookingFor((current) =>
-      current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
-    )
+  // A draft written before the birth date said otherwise can hold a stale 'dating'.
+  const chosen: Intent | null = under18 && intent === 'dating' ? null : intent
 
   return (
     <OnboardingScreen
@@ -204,8 +198,8 @@ export default function PreferencesScreen() {
                 // `orientationConsent` for why that is not just tidiness.
                 show_orientation: orientationConsent(orientations, showOrientation),
               }),
-          // A draft written before the birth date said otherwise can hold it.
-          looking_for: under18 ? withoutDatingChoice(lookingFor) : lookingFor,
+          // Always present, so a stale draft value (a minor's old 'dating') is overwritten rather than carried: stepPayload drops undefined.
+          intent_default: chosen ? [chosen] : undefined,
           reveal_by_default: !anonymous,
         })
       }
@@ -300,8 +294,8 @@ export default function PreferencesScreen() {
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title="Looking for" caption="What brings you to Blend’n today?" />
-        <LookingForCards selected={lookingFor} onToggle={toggle} withoutDating={under18} />
+        <SectionHeader title="Why you go out" caption="What brings you to Blend’n today?" />
+        <LookingForCards selected={chosen} onSelect={setIntent} withoutDating={under18} />
       </View>
     </OnboardingScreen>
   )

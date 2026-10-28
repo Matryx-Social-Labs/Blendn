@@ -58,12 +58,17 @@ const validReset = (hour: number | null | undefined): number | null => (typeof h
  * reset hour, not at midnight: at 01:00 on Saturday a venue that resets at 06:00 is still in Friday's, and Friday's row
  * answers (`lib/venue-tonight.ts` on the server). Null when no hours are given or none for that weekday. A split day
  * answers with its latest opening, as the server's card does. Rows that are not the server's shape are dropped.
- * ponytail: "now" is the phone's clock, the venue's whenever the person is in the venue's city; the server does not send
- * the venue's timezone. Add it to `GET /venues/:id` to make this exact anywhere.
+ * `timeZone` is the venue's IANA zone (`GET /venues/:id` sends it): the weekday and the clock are read there, so a
+ * Toronto phone looking at a Bengaluru venue reads Bengaluru's night. Absent (an older server), it is the phone's.
  */
-export function tonightOpening(hours: VenueDetail['venue']['hours'], dayResetHour: number | null | undefined, now: number): { opensAt: string; closesAt: string } | null {
+export function tonightOpening(
+  hours: VenueDetail['venue']['hours'],
+  dayResetHour: number | null | undefined,
+  now: number,
+  timeZone?: string | null
+): { opensAt: string; closesAt: string } | null {
   if (!Array.isArray(hours)) return null
-  const weekday = weekdayIn(new Date(now - (validReset(dayResetHour) ?? 0) * HOUR_MS))
+  const weekday = weekdayIn(new Date(now - (validReset(dayResetHour) ?? 0) * HOUR_MS), timeZone ?? undefined)
   const rows = hours.filter((h) => h && h.day === weekday && typeof h.open === 'string' && typeof h.close === 'string')
   if (rows.length === 0) return null
   const latest = rows.reduce((a, b) => (b.open > a.open ? b : a))
@@ -81,7 +86,9 @@ export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: num
   const hours = detail.venue.hours
   if (Array.isArray(hours) && hours.length > 0) {
     // Hours are given: a weekday with no row, or a night that is over (up to the reset hour), is Closed.
-    const day = venueDayState(tonightOpening(hours, detail.venue.dayResetHour, now), now, validReset(detail.venue.dayResetHour))
+    // `timezone` is not on `VenueDetail` until SYS-19 declares it: read it through a narrow cast.
+    const timeZone = (detail.venue as { timezone?: string | null }).timezone
+    const day = venueDayState(tonightOpening(hours, detail.venue.dayResetHour, now, timeZone), now, validReset(detail.venue.dayResetHour), timeZone)
     tiles.push({ label: 'OPEN', value: day?.state === 'opens' ? `Opens ${day.time}` : day?.state === 'open' ? `Till ${day.time}` : 'Closed', mono: true })
   }
   const liveWord = liveNowWord(detail.live.liveNow)
