@@ -315,8 +315,12 @@ describe('pickInsideEvent', () => {
     expect(pickInsideEvent([running({ end_time: iso(now - 1) })], now)).toBeNull()
   })
 
-  it('treats a missing end time as still running', () => {
-    expect(pickInsideEvent([running({ end_time: null })], now)).toBe('e')
+  it('does not guess a row with no end time is running (events.end_time is NOT NULL; one shared phase, SCRUM-882)', () => {
+    expect(pickInsideEvent([running({ end_time: null })], now)).toBeNull()
+  })
+
+  it('never offers a check-in at a cancelled night, inside its fence or not (SCRUM-882)', () => {
+    expect(pickInsideEvent([running({ status: 'cancelled' })], now)).toBeNull()
   })
 
   it('picks the nearer centre when two fences overlap', () => {

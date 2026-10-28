@@ -1,3 +1,4 @@
+import { attendancePhase } from './attendanceState'
 import { liveWindow, type EventSession } from './eventSession'
 import { getDistanceMetres } from './geo'
 import { dayKeyIn } from './time'
@@ -152,6 +153,8 @@ export interface RoomButtonEvent {
   end_time?: string | null
   /** The day "running" means on a multi-day event — `lib/eventSession.ts`. */
   session?: EventSession | null
+  /** "cancelled" for a night called off: never a fence to check in at. */
+  status?: string | null
   /**
    * Kilometres, from the server, present only when a fix was sent. Measured from the position the phone put in the
    * URL, which it rounds to ~110 m (`lib/coordinates.ts`): good for a label, not for a 100 m fence. `pickInsideEvent`
@@ -258,11 +261,8 @@ export function pickInsideEvents(
     const radiusM = typeof e.check_in_radius === 'number' ? e.check_in_radius : DEFAULT_RADIUS_M
     if (distanceM > radiusM) continue
 
-    const live = liveWindow(e)
-    const start = new Date(live.start_time).getTime()
-    if (!Number.isFinite(start) || start > now) continue
-    const end = live.end_time ? new Date(live.end_time).getTime() : NaN
-    if (Number.isFinite(end) && end < now) continue
+    // Running now, by the attendance flow's one answer: today's session, and never a cancelled night.
+    if (attendancePhase(e, now) !== 'live') continue
 
     inside.push({ id: e.id, distanceM, rank: commitment(e) })
   }

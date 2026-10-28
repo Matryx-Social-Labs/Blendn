@@ -104,3 +104,12 @@ describe('passReach: the docked pass is disabled only on evidence (owner ruling 
     expect(passReachLine('open')).toBeNull()
   })
 })
+
+describe('the Going tab and the Pulse read the same phase', () => {
+  it('a cancelled night happening now is not under "Happening now" (isLiveNow)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { isLiveNow } = require('../lib/goingSections') as typeof import('../lib/goingSections')
+    expect(isLiveNow(tonight, NOW)).toBe(true)
+    expect(isLiveNow({ ...tonight, status: 'cancelled' }, NOW)).toBe(false)
+  })
+})

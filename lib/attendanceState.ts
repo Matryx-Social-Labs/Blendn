@@ -16,7 +16,8 @@ export type PhaseSource = SessionSource & { status?: string | null }
 
 /**
  * Where the event is, by today's session (`liveWindow`: a multi-day run goes by the day the server's door goes by).
- * Cancelled wins over the clock. Live needs a real start and end: the window the door is open in.
+ * Cancelled wins over the clock. Live needs a real start and end: `events.end_time` is NOT NULL on the server, so a row
+ * without one is a payload that dropped it, and the app does not guess it is on (the disc used to; the Going tab did not).
  */
 export function attendancePhase(e: PhaseSource, now: number = Date.now()): AttendancePhase {
   if (e.status === 'cancelled') return 'cancelled'
