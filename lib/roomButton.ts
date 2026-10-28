@@ -178,6 +178,9 @@ export const venueNameOf = (e: Pick<RoomButtonEvent, 'venue' | 'venue_name'>): s
 /** Yours: saved, or said "I'm going". Maybe is not (OD-6 is about the Board, not the disc). */
 const isCommitted = (e: Pick<RoomButtonEvent, 'is_favorited' | 'rsvp_status'>): boolean => e.is_favorited === true || e.rsvp_status === 'going'
 
+/** R15's order among the fences you are inside: said "going" first, then saved, then the rest. */
+const commitment = (e: Pick<RoomButtonEvent, 'is_favorited' | 'rsvp_status'>): number => (e.rsvp_status === 'going' ? 2 : e.is_favorited === true ? 1 : 0)
+
 /**
  * The phone's own fix, never rounded: it stays on the phone. `accuracy` is the radius in metres the OS gives it, and
  * `approximate` is iOS's reduced-accuracy grant (a fix good to kilometres): either makes it useless against a fence.
@@ -247,7 +250,7 @@ export function pickInsideEvents(
   now: number = Date.now(),
   at?: PreciseFix | null
 ): string[] {
-  const inside: { id: string; distanceM: number; yours: boolean }[] = []
+  const inside: { id: string; distanceM: number; rank: number }[] = []
 
   for (const e of events) {
     const distanceM = distanceMetresTo(e, at, now)
@@ -261,11 +264,11 @@ export function pickInsideEvents(
     const end = live.end_time ? new Date(live.end_time).getTime() : NaN
     if (Number.isFinite(end) && end < now) continue
 
-    inside.push({ id: e.id, distanceM, yours: isCommitted(e) })
+    inside.push({ id: e.id, distanceM, rank: commitment(e) })
   }
 
-  // R15: the event you said you are going to first; then the nearer centre, the better guess at which building you are in.
-  return inside.sort((a, b) => Number(b.yours) - Number(a.yours) || a.distanceM - b.distanceM).map((m) => m.id)
+  // R15: the event you said you are going to, then a saved one; then the nearer centre, the better guess at which building you are in.
+  return inside.sort((a, b) => b.rank - a.rank || a.distanceM - b.distanceM).map((m) => m.id)
 }
 
 /** The first of `pickInsideEvents`: the one a tap opens. */

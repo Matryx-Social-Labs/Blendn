@@ -68,7 +68,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const mePhoto = myMainPhoto(authUser)
   // The Banter dot: the same counts as the Pulse's bell, one read for both (`lib/inboxBadge`).
   useInboxBadgeSync(authUser?.id)
-  useRoomSignalSource()
+  useRoomSignalSource(authUser?.id)
   const banter = banterUnread(useInboxBadge())
 
   /*

@@ -396,7 +396,7 @@ describe('the callers hand the centre button the precise fix (SCRUM-744)', () =>
     expect(read('app/(tabs)/events.tsx')).not.toMatch(/publishRoomSignal/)
     expect(read('lib/useTonight.ts')).not.toMatch(/publishRoomSignal/)
     expect(read('lib/useRoomSignalSource.ts')).toMatch(/publish: publishRoomSignal/)
-    expect(read('lib/useRoomSignalSource.ts')).toMatch(/deps\.publish\(events, deps\.now\(\), fix\)/)
+    expect(read('lib/useRoomSignalSource.ts')).toMatch(/deps\.publish\(mergeSignalEvents\(near \?\? \[\], mine \?\? \[\]\), deps\.now\(\), fix\)/)
   })
 
   it('the Tonight read asks for a fresh, accurate last-known fix and keeps its accuracy and time', () => {
@@ -460,6 +460,14 @@ describe('the centre button’s data wiring (BAR-03, 05, 06, 08, 09)', () => {
     expect(pickInsideEvent([near, mine], now, fix())).toBe('mine')
     // Neither yours: the nearer centre first.
     expect(pickInsideEvents([{ ...mine, rsvp_status: null }, near], now, fix())).toEqual(['mine', 'near'])
+  })
+
+  it('L3: going outranks saved outranks the rest, then the nearer centre', () => {
+    const at = { ...base, check_in_radius: 300 }
+    const plain = { id: 'plain', ...at }
+    const saved = { id: 'saved', ...at, latitude: 12.9702, is_favorited: true }
+    const going = { id: 'going', ...at, latitude: 12.9704, rsvp_status: 'going' }
+    expect(pickInsideEvents([plain, saved, going], now, fix())).toEqual(['going', 'saved', 'plain'])
   })
 
   it('BAR-08: the linked venue’s name, else the free-text one, and a blank is not a name', () => {
