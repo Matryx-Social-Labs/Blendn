@@ -27,7 +27,7 @@ import { COLOR, DURATION, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, RISE
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 import { setAccountState, useAccountState } from '../lib/accountState'
-import { pendingEventLink } from '../lib/pendingRoute'
+import { pendingEventId, pendingEventLink } from '../lib/pendingRoute'
 import { accountRefusalOf, SESSION_END_NOTICE } from '../lib/sessionEnd'
 import { consumeSessionEnd } from '../lib/sessionEvents'
 import { socialSignInMessage } from '../lib/signInRefusal'
@@ -327,7 +327,7 @@ function IndexInner() {
       {/* A link tapped while signed out is held through sign-in; say so (Flow 15 15.12 02). */}
       {pendingEventLink() ? (
         <View style={[styles.held, { top: insets.top + SPACE.md }]}>
-          <HeldLink />
+          <HeldLink eventId={pendingEventId()} />
         </View>
       ) : null}
 

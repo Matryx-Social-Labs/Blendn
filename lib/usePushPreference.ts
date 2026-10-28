@@ -71,8 +71,7 @@ export function usePushPreference() {
     try {
       const result = await apiClient.getProfile(userId)
       if (!result.success || !result.data) throw new Error(result.error ?? 'The profile did not load')
-      const data = result.data as { profile?: { push_enabled?: unknown }; push_enabled?: unknown }
-      const value = (data.profile ?? data).push_enabled
+      const value = result.data.profile?.push_enabled
       // A save began while this read was out: the read is older than the person's word.
       if (writes === seen) putPref({ userId, enabled: typeof value === 'boolean' ? value : true, at: Date.now() })
       setLoadFailed(false)

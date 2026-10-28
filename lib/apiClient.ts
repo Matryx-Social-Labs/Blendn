@@ -1110,6 +1110,10 @@ export interface ProfileFields {
      */
     intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
     work_field?: string | null
+    /** The account's push switch (`profiles.push_enabled`); on unless somebody turned it off. */
+    push_enabled?: boolean
+    /** Off by default: friends see a pseudonym in rooms unless this is on. */
+    friends_see_me_in_rooms?: boolean
     /** Your own profile only: the slugs you picked within the field (the route sends labels to everyone else). */
     expertise?: string[]
     gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
@@ -1218,9 +1222,6 @@ export interface PublicProfile {
   /** Their badges (`{ kind, label }[]`), top-level beside `friend` for whoever may see who they are; read through `parseBadges`. */
   badges?: unknown
 }
-
-/** @deprecated the flat `GET /users/:id` shape; name `PublicProfile`. Delete once `app/user/[id].tsx` imports the new name (SYS-19). */
-export type UserProfileData = PublicProfile
 
 export interface ChatMessageData {
   id: string

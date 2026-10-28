@@ -74,11 +74,17 @@ function pendingPath(): string | null {
 
 /**
  * Whether an event's link is waiting for sign-in (Flow 15 15.12 "Sign in to open this"): the landing says a link is held,
- * so the sign-in does not look like it dropped it. The event's name is not asked for: the public link says nothing to
- * someone who has not signed in.
+ * so the sign-in does not look like it dropped it. `pendingEventId` names which event, and `HeldLink` reads its name
+ * and day from the public share read (SYS-15): the link says nothing more to someone who has not signed in.
  */
 export function pendingEventLink(): boolean {
   return /^\/event\//.test(pendingPath() ?? '')
+}
+
+/** The id of the event whose link is waiting for sign-in, or null (a link is held as its path: `/event/<id>`). */
+export function pendingEventId(): string | null {
+  const m = pendingPath()?.match(/^\/event\/([^/?#]+)/)
+  return m ? decodeURIComponent(m[1]) : null
 }
 
 /** Tests only. */

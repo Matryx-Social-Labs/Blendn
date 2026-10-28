@@ -86,8 +86,7 @@ export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: num
   const hours = detail.venue.hours
   if (Array.isArray(hours) && hours.length > 0) {
     // Hours are given: a weekday with no row, or a night that is over (up to the reset hour), is Closed.
-    // `timezone` is not on `VenueDetail` until SYS-19 declares it: read it through a narrow cast.
-    const timeZone = (detail.venue as { timezone?: string | null }).timezone
+    const timeZone = detail.venue.timezone
     const day = venueDayState(tonightOpening(hours, detail.venue.dayResetHour, now, timeZone), now, validReset(detail.venue.dayResetHour), timeZone)
     tiles.push({ label: 'OPEN', value: day?.state === 'opens' ? `Opens ${day.time}` : day?.state === 'open' ? `Till ${day.time}` : 'Closed', mono: true })
   }
