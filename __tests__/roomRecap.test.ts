@@ -68,3 +68,14 @@ describe('recapPeopleOpen (ROOM-06): People from tonight until the chat closes',
     expect(recapPeopleOpen('nope', endMs)).toBe(false)
   })
 })
+
+describe('recapPeopleOpen follows the door’s own closing time (L1)', () => {
+  it('uses write.closesAt when the server sent it, in place of end + 24 h', () => {
+    const closes = new Date(endMs + 3 * 60 * 60_000).toISOString()
+    expect(recapPeopleOpen(END, endMs + 3 * 60 * 60_000 - 1, closes)).toBe(true)
+    expect(recapPeopleOpen(END, endMs + 3 * 60 * 60_000, closes)).toBe(false)
+  })
+  it('an unreadable closesAt falls back to 24 h', () => {
+    expect(recapPeopleOpen(END, endMs + 60_000, 'nope')).toBe(true)
+  })
+})

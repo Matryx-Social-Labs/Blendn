@@ -14,7 +14,7 @@ import { requestTextRefusal } from './requestRefusal'
 import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
 import { Logger } from './logger'
 import { reasonLine } from './roomMoments'
-import { pseudonymFromDoor } from './roomState'
+import { closesAtFromDoor, pseudonymFromDoor } from './roomState'
 import {
   applyArrival,
   applyCheckout,
@@ -131,6 +131,8 @@ export interface RoomState {
   chatGroupId: string | null
   /** Your pseudonym in this room, as the server holds it (`GET /events/:id/chat` `you`, SV-3); null until it says. */
   pseudonym?: string | null
+  /** When the room's chat closes, as the door says (`write.closesAt`); null until it does. */
+  chatClosesAt?: string | null
   /** The mutual just made — from your like, or from theirs over the socket. */
   /**
    * The mutual just made — from your like, or from theirs over the socket.
@@ -233,6 +235,7 @@ export function useRoom(): RoomState & RoomActions {
   const [refreshing, setRefreshing] = useState(false)
   const [chatGroupId, setChatGroupId] = useState<string | null>(null)
   const [pseudonym, setPseudonym] = useState<string | null>(null)
+  const [chatClosesAt, setChatClosesAt] = useState<string | null>(null)
   /** The room whose first count, and whose chat lookup, have answered. */
   const [seededFor, setSeededFor] = useState<string | null>(null)
   const [chatFor, setChatFor] = useState<string | null>(null)
@@ -294,6 +297,7 @@ export function useRoom(): RoomState & RoomActions {
     setChatGroupId(null)
     // Your pseudonym is this room's: another room's must not stay on screen (M1).
     setPseudonym(null)
+    setChatClosesAt(null)
     chatResolvedForRef.current = null
   }, [])
 
@@ -613,6 +617,7 @@ export function useRoom(): RoomState & RoomActions {
         if (result.success && id) {
           setChatGroupId(String(id))
           setPseudonym(pseudonymFromDoor(result.data))
+          setChatClosesAt(closesAtFromDoor(result.data))
           chatGroupIdByEvent.set(eventId, String(id))
           // Served as a member: back in, and the room's mute as the server has it.
           markRoomJoined(String(id))
@@ -634,10 +639,12 @@ export function useRoom(): RoomState & RoomActions {
           markRoomLeft(result.chatGroupId)
           setChatGroupId(result.chatGroupId)
           setPseudonym(null)
+          setChatClosesAt(null)
         } else {
           chatResolvedForRef.current = null
           setChatGroupId(null)
           setPseudonym(null)
+          setChatClosesAt(null)
         }
       })
       .catch((e) => {
@@ -645,6 +652,7 @@ export function useRoom(): RoomState & RoomActions {
         if (!cancelled) {
           chatResolvedForRef.current = null
           setPseudonym(null)
+          setChatClosesAt(null)
         }
       })
       // Answered either way: the Room may reveal (a failed lookup is the dock's "not open", not a wait).
@@ -894,6 +902,7 @@ export function useRoom(): RoomState & RoomActions {
     refreshing,
     chatGroupId,
     pseudonym,
+    chatClosesAt,
     match,
     error: loadError,
     connection,

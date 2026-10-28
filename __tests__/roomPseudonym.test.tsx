@@ -103,7 +103,7 @@ function answer(path: string): unknown {
   }
   if (path.startsWith(`/api/mobile/events/${EVENT}/room-preview`)) return { hereCount: 1, tasteMatchCount: null }
   if (path.startsWith(`/api/mobile/events/${EVENT}/matches`)) return { matches: [] }
-  if (path.startsWith(`/api/mobile/events/${EVENT}/chat`)) return { chatGroupId: `g-${EVENT}`, you: { pseudonym: 'Night Cat' } }
+  if (path.startsWith(`/api/mobile/events/${EVENT}/chat`)) return { chatGroupId: `g-${EVENT}`, you: { pseudonym: 'Night Cat' }, write: { allowed: true, closesAt: '2026-10-13T20:00:00.000Z' } }
   return []
 }
 
@@ -147,10 +147,12 @@ describe('your pseudonym is the current room’s (M1)', () => {
     await connected()
     const hook = await renderHook(() => useRoom())
     await waitFor(() => expect(hook.result.current.pseudonym).toBe('Night Cat'))
+    expect(hook.result.current.chatClosesAt).toBe('2026-10-13T20:00:00.000Z')
 
     await moveTo(`e-b-${how}`, how)
     await waitFor(() => expect(hook.result.current.event?.id).toBe(`e-b-${how}`))
     await waitFor(() => expect(hook.result.current.pseudonym).toBeNull())
+    expect(hook.result.current.chatClosesAt).toBeNull()
     hook.unmount()
   })
 })

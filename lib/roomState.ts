@@ -54,3 +54,9 @@ export function pseudonymFromDoor(data: unknown): string | null {
   const name = (data as { you?: { pseudonym?: unknown } } | null | undefined)?.you?.pseudonym
   return typeof name === 'string' && name.trim() ? name.trim() : null
 }
+
+/** `write.closesAt` from `GET /events/:id/chat`: when the room's chat closes. Narrow cast, as `pseudonymFromDoor`. */
+export function closesAtFromDoor(data: unknown): string | null {
+  const at = (data as { write?: { closesAt?: unknown } } | null | undefined)?.write?.closesAt
+  return typeof at === 'string' && at ? at : null
+}

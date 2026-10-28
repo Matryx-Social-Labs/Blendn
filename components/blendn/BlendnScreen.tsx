@@ -1,6 +1,7 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { MutableRefObject } from 'react'
 import { BackHandler, Platform, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   Easing,
@@ -150,10 +151,13 @@ type OpenCard = { id: string; name: string }
 export function BlendnScreen() {
   const stage = useRef<{ close(): void }>(null)
   const close = useCallback(() => stage.current?.close(), [])
+  /** The content's own layer that back should close first (People from tonight over the Recap), or false. */
+  const backGuard = useRef<(() => boolean) | null>(null)
 
   // Android back closes the overlay rather than leaving the tabs underneath.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (backGuard.current?.()) return true
       close()
       return true
     })
@@ -164,7 +168,7 @@ export function BlendnScreen() {
   return (
     <HueProvider value="rose">
       <RoomStage ref={stage} onClosed={blendnClosed}>
-        <BlendnContent onClose={close} />
+        <BlendnContent onClose={close} backGuard={backGuard} />
       </RoomStage>
     </HueProvider>
   )
@@ -186,7 +190,7 @@ function useScrolledPast(): boolean {
   return scrolled
 }
 
-function BlendnContent({ onClose }: { onClose: () => void }) {
+function BlendnContent({ onClose, backGuard }: { onClose: () => void; backGuard: MutableRefObject<(() => boolean) | null> }) {
   const insets = useSafeAreaInsets()
   const scrolled = useScrolledPast()
   const contrast = useIncreaseContrast()
@@ -228,6 +232,19 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
   const [recap, setRecap] = useState<Recap | null>(null)
   const [dismissedRecap, setDismissedRecap] = useState<string | null>(null)
   const [peopleOpen, setPeopleOpen] = useState(false)
+  // Android back closes People from tonight before it closes the overlay (M5).
+  useEffect(() => {
+    backGuard.current = () => {
+      if (peopleOpen) {
+        setPeopleOpen(false)
+        return true
+      }
+      return false
+    }
+    return () => {
+      backGuard.current = null
+    }
+  }, [backGuard, peopleOpen])
   const endedRecap =
     room.status === 'ready' && room.event ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now) : null
   if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) setRecap(endedRecap)
@@ -784,25 +801,28 @@ function BlendnContent({ onClose }: { onClose: () => void }) {
       {/* Below the Room: Tonight (or the Recap, or the skeleton), held under a hand-off until its crossfade is done. */}
       {!tonightUp ? null : mode === 'ended' && recap ? (
         <Animated.View key="ended" style={styles.layer} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
-          <MomentRecap
-            face={myFace}
-            title={recap.title}
-            venue={room.event?.venueName}
-            onPeople={room.event && room.people.length > 0 && recapPeopleOpen(room.event.endsAt, now) ? () => setPeopleOpen(true) : undefined}
-            minutes={recap.minutes}
-            matches={recap.matched}
-            rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
-            onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
-            onBack={() => {
-              setDismissedRecap(recap.eventId)
-              setRecap(null)
-            }}
-            onClose={onClose}
-            testID="room-recap"
-          />
+          {/* Under People from tonight the Recap is not there for a screen reader: a swipe never walks past the deck. */}
+          <View style={styles.layer} accessibilityElementsHidden={peopleOpen} importantForAccessibility={peopleOpen ? 'no-hide-descendants' : 'auto'}>
+            <MomentRecap
+              face={myFace}
+              title={recap.title}
+              venue={room.event?.venueName}
+              onPeople={room.event && room.people.length > 0 && recapPeopleOpen(room.event.endsAt, now, room.chatClosesAt) ? () => setPeopleOpen(true) : undefined}
+              minutes={recap.minutes}
+              matches={recap.matched}
+              rated={ratedEvent === recap.eventId || isNightRated(recap.eventId)}
+              onRate={() => router.push({ pathname: '/rate/[eventId]', params: { eventId: recap.eventId } as never })}
+              onBack={() => {
+                setDismissedRecap(recap.eventId)
+                setRecap(null)
+              }}
+              onClose={onClose}
+              testID="room-recap"
+            />
+          </View>
           {peopleOpen ? (
-            <Animated.View style={styles.layer} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
-              <PeopleFromTonight people={room.people} onBack={() => setPeopleOpen(false)} />
+            <Animated.View style={styles.layer} accessibilityViewIsModal entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
+              <PeopleFromTonight people={room.people} hasMore={room.hasMore} loadingMore={room.loadingMore} onMore={() => void room.loadMore()} onBack={() => setPeopleOpen(false)} />
             </Animated.View>
           ) : null}
         </Animated.View>

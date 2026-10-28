@@ -75,10 +75,13 @@ export function roomRecap(source: RecapSource, now: number): RoomRecap | null {
 const CHAT_WINDOW_MS = 24 * 60 * 60 * 1000
 
 /**
- * Whether "People from tonight" is on offer (Flow 4 R4.1 4.5): from the end until the room's chat closes, when the
- * roster stops being readable. Unknown end is not offered, as `roomRecap` treats it.
+ * Whether "People from tonight" is on offer (Flow 4 R4.1 4.5): from the end until the room's chat closes (`closesAt`, else
+ * end + 24 h), when the roster stops being readable. Unknown end is not offered, as `roomRecap` treats it.
  */
-export function recapPeopleOpen(endsAt: string | null | undefined, now: number): boolean {
+export function recapPeopleOpen(endsAt: string | null | undefined, now: number, closesAt?: string | null): boolean {
   const end = endsAtMs(endsAt)
-  return end !== null && end <= now && now < end + CHAT_WINDOW_MS
+  if (end === null || end > now) return false
+  // The door's own `write.closesAt` when it sent one (it is the server's rule); else the window this client knows.
+  const told = endsAtMs(closesAt)
+  return now < (told ?? end + CHAT_WINDOW_MS)
 }
