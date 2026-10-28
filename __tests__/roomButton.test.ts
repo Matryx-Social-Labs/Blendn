@@ -396,7 +396,7 @@ describe('the callers hand the centre button the precise fix (SCRUM-744)', () =>
     expect(read('app/(tabs)/events.tsx')).not.toMatch(/publishRoomSignal/)
     expect(read('lib/useTonight.ts')).not.toMatch(/publishRoomSignal/)
     expect(read('lib/useRoomSignalSource.ts')).toMatch(/publish: publishRoomSignal/)
-    expect(read('lib/useRoomSignalSource.ts')).toMatch(/deps\.publish\(mergeSignalEvents\(near \?\? \[\], mine \?\? \[\]\), deps\.now\(\), fix\)/)
+    expect(read('lib/useRoomSignalSource.ts')).toMatch(/deps\.publish\(mergeSignalEvents\(near \?\? \[\], mine\), deps\.now\(\), fix\)/)
   })
 
   it('the Tonight read asks for a fresh, accurate last-known fix and keeps its accuracy and time', () => {

@@ -187,6 +187,17 @@ describe('what is yours does not depend on the nearest page (M4)', () => {
     expect(merged[0]).toMatchObject({ id: 'far', latitude: null, longitude: null })
   })
 
+  it('a cancelled RSVP is no longer yours, though the nearest page still says going (SCRUM-881)', () => {
+    // The nearest page was read before the cancel; a 'mine' re-read does not re-read it.
+    const merged = mergeSignalEvents([event({ id: 'a', rsvp_status: 'going', is_favorited: true })], [])
+    expect(merged[0]).toMatchObject({ id: 'a', rsvp_status: null, is_favorited: false })
+  })
+
+  it('when your own lists failed to load, the nearest page’s flags are what there is', () => {
+    const merged = mergeSignalEvents([event({ id: 'a', rsvp_status: 'going' })], null)
+    expect(merged[0]).toMatchObject({ id: 'a', rsvp_status: 'going' })
+  })
+
   it('an event on both sides keeps its fence and gains your flags', () => {
     const merged = mergeSignalEvents([event({ id: 'a' })], [{ id: 'a', start_time: 'x', rsvp_status: 'going', is_favorited: true }])
     expect(merged).toHaveLength(1)

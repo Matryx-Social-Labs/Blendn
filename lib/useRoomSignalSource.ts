@@ -46,14 +46,20 @@ export type SourceDeps = {
  * The nearest page with your own events folded in. An event in both carries both halves (its fence and your flags). One that is
  * only yours has no coordinates here: it was not among the nearest, so it cannot be the fence you are standing in, and a list
  * row's missing radius must not be judged as the 100 m default.
+ *
+ * What is yours comes from your own lists alone. The nearest page's flags are a copy from when it was read, and a status change
+ * re-reads only your lists ('mine'): after a cancelled RSVP the page still said "going", and the disc kept offering the night
+ * (SCRUM-881). Only when your lists never loaded (`null`) are the page's flags what there is.
+ * ponytail: your lists are their first page (50 saves, 50 RSVPs); a nearby save beyond it reads as not yours. Page them if that bites.
  */
-export function mergeSignalEvents(near: readonly RoomButtonEvent[], mine: readonly RoomButtonEvent[]): RoomButtonEvent[] {
+export function mergeSignalEvents(near: readonly RoomButtonEvent[], mine: readonly RoomButtonEvent[] | null): RoomButtonEvent[] {
+  if (mine === null) return [...near]
   const yours = new Map(mine.map((m) => [m.id, m]))
   const seen = new Set<string>()
   const merged = near.map((e) => {
     seen.add(e.id)
     const m = yours.get(e.id)
-    return m ? { ...e, is_favorited: e.is_favorited || m.is_favorited, rsvp_status: m.rsvp_status ?? e.rsvp_status } : e
+    return { ...e, is_favorited: m?.is_favorited === true, rsvp_status: m?.rsvp_status ?? null }
   })
   for (const m of mine) if (!seen.has(m.id)) merged.push({ ...m, latitude: null, longitude: null, distance: null })
   return merged
@@ -89,7 +95,7 @@ export function createRoomSignalSource(deps: SourceDeps) {
       if (nextNear && nextMine) readAt = deps.now()
     }
     if (disposed || (near === null && mine === null)) return
-    deps.publish(mergeSignalEvents(near ?? [], mine ?? []), deps.now(), fix)
+    deps.publish(mergeSignalEvents(near ?? [], mine), deps.now(), fix)
   }
 
   const run = (force: boolean | 'mine' = false): Promise<void> => {
