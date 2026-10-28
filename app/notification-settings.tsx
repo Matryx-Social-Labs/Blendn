@@ -1,4 +1,4 @@
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -36,6 +36,7 @@ function NotificationSettingsContent() {
   const insets = useSafeAreaInsets()
   const bar = useTopBarOverlay()
   const push = usePushPreference()
+  useFocusEffect(push.reloadIfStale)
   const kinds = useNotificationPrefs()
   const masterOff = push.enabled === false
   const phoneBlocks = push.off && push.enabled !== false

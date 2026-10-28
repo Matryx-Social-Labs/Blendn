@@ -14,7 +14,7 @@ jest.mock('../lib/notifications', () => ({
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
-    getProfile: jest.fn(async () => ({ success: true, data: { push_enabled: true } })),
+    getProfile: jest.fn(async () => ({ success: true, data: { profile: { push_enabled: true } } })),
     updateProfile: jest.fn(async () => ({ success: true })),
   },
 }))
@@ -53,6 +53,27 @@ it('a store older than 30 s is read again on mount', async () => {
     await renderHook(() => usePushPreference())
     await act(async () => {})
     expect(apiClient.getProfile).toHaveBeenCalledTimes(2)
+  } finally {
+    jest.useRealTimers()
+  }
+})
+
+it('a slow read that lands after a save does not undo it (M1)', async () => {
+  jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] })
+  try {
+    const saver = await renderHook(() => usePushPreference())
+    await act(async () => {})
+    expect(saver.result.current.enabled).toBe(true)
+    // The value is stale, so a second screen reads again; that read is slow.
+    jest.setSystemTime(Date.now() + 31_000)
+    let land: (v: unknown) => void = () => {}
+    ;(apiClient.getProfile as jest.Mock).mockReturnValueOnce(new Promise((r) => (land = r)))
+    const reader = await renderHook(() => usePushPreference())
+    // While it is out, the person turns push off on the first screen.
+    await act(async () => saver.result.current.toggle())
+    await act(async () => land({ success: true, data: { profile: { push_enabled: true } } }))
+    expect(saver.result.current.enabled).toBe(false)
+    expect(reader.result.current.enabled).toBe(false)
   } finally {
     jest.useRealTimers()
   }

@@ -208,11 +208,14 @@ function SettingsScreenContent() {
     void loadPreferences()
   }, [loadPreferences])
 
+  const { load: reloadPush, reloadIfStale: reloadPushIfStale } = push
+  // The Notifications row's hint says what the account says: read again when this screen comes back (30 s), and on a pull.
+  useFocusEffect(reloadPushIfStale)
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await loadPreferences()
+    await Promise.all([loadPreferences(), reloadPush()])
     setRefreshing(false)
-  }, [loadPreferences])
+  }, [loadPreferences, reloadPush])
   // The app's one pull to refresh, with its haptic when it arms (SYS-12).
   const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), onScroll: bar.scrollProps.onScroll, indicatorTop: bar.indicatorTop })
 

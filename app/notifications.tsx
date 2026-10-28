@@ -102,6 +102,8 @@ function NotificationsScreenContent() {
   useEffect(() => {
     settle.current = feed.settle
   })
+  const reloadPushIfStale = push.reloadIfStale
+  useFocusEffect(reloadPushIfStale)
   useFocusEffect(
     useCallback(() => {
       const release = claimBannerHost('notifications')

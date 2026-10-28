@@ -21,6 +21,10 @@ type PushPref = { userId: string | null; enabled: boolean | null; at: number }
  * on one must show on the others when they come back (they stay mounted in the stack), so the value lives here.
  */
 let pref: PushPref = { userId: null, enabled: null, at: 0 }
+/** Saves begun, ever: a read that began before one must not land over it (M1). */
+let writes = 0
+/** The account a read is out for: a screen mounting and gaining focus at once asks once. */
+let reading: string | null = null
 const listeners = new Set<() => void>()
 const putPref = (next: Partial<PushPref>) => {
   pref = { ...pref, ...next }
@@ -36,6 +40,8 @@ const subscribePref = (l: () => void) => {
 /** Test hook: forget what a previous account (or test) left. */
 export function resetPushPreferenceStore() {
   pref = { userId: null, enabled: null, at: 0 }
+  writes = 0
+  reading = null
 }
 
 /**
@@ -60,31 +66,42 @@ export function usePushPreference() {
 
   const load = useCallback(async () => {
     if (!userId) return
+    const seen = writes
+    reading = userId
     try {
       const result = await apiClient.getProfile(userId)
       if (!result.success || !result.data) throw new Error(result.error ?? 'The profile did not load')
       const data = result.data as { profile?: { push_enabled?: unknown }; push_enabled?: unknown }
       const value = (data.profile ?? data).push_enabled
-      putPref({ userId, enabled: typeof value === 'boolean' ? value : true, at: Date.now() })
+      // A save began while this read was out: the read is older than the person's word.
+      if (writes === seen) putPref({ userId, enabled: typeof value === 'boolean' ? value : true, at: Date.now() })
       setLoadFailed(false)
     } catch (error) {
       Logger.warn('notifications', 'push preference did not load', { error: error as never })
       setLoadFailed(true)
+    } finally {
+      if (reading === userId) reading = null
     }
   }, [userId])
 
-  useEffect(() => {
+  /** Reads again unless this screen's account has a value younger than 30 s: on mount, and when a screen comes back into focus. */
+  const reloadIfStale = useCallback(() => {
     const fresh = pref.userId === (userId ?? null) && pref.at > 0 && Date.now() - pref.at < PUSH_PREF_FRESH_MS
+    if (!fresh && reading !== (userId ?? null)) void load()
+  }, [load, userId])
+
+  useEffect(() => {
     // Every setState in `load` comes after its first await; the rule cannot see through the async function.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!fresh) void load()
-  }, [load, userId])
+    reloadIfStale()
+  }, [reloadIfStale])
 
   /** Saves `next`; the account's choice, then the phone's side of it (register to turn on, drop the token to turn off). */
   const save = useCallback(
     async (next: boolean) => {
       if (!userId) return
       const previous = enabled
+      writes++
       putPref({ userId, enabled: next, at: Date.now() })
       setSaving(true)
       try {
@@ -134,6 +151,7 @@ export function usePushPreference() {
     saving,
     loadFailed,
     load,
+    reloadIfStale,
     toggle,
     turnOn,
     /** The phone refuses, or the account switched it off. Unknown (still loading) is not off. */

@@ -7,7 +7,7 @@ import { Linking, Platform } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }))
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() }, useFocusEffect: (effect: () => void) => require('react').useEffect(effect, [effect]) }))
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u_me' } }) }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), queuedRequest: jest.fn() } }))
