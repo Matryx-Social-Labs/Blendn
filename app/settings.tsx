@@ -22,7 +22,8 @@ import { useAuthMethod } from '../lib/authMethod'
 import { APPLE_UNLINK_HINT, appleCodeForDeletion } from '../lib/appleRevocation'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
-import { passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
+import { settleWithin } from '../lib/fetchTimeout'
+import { NOT_SIGNED_OUT_EVERYWHERE, passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { useLatest } from '../lib/useLatest'
 import { usePullToRefresh } from '../lib/usePullToRefresh'
 import { usePushPreference } from '../lib/usePushPreference'
@@ -37,6 +38,9 @@ import { manageSubscriptionUrl } from '../lib/purchases'
 import { useReducedMotion } from '../lib/motion'
 
 /** The banner's sentence when the profile could not be read (Flow 7 frame 06). */
+/** How long "Sign out of every device" keeps its spinner: past one request deadline (15 s), so a slow answer still lands. */
+const SIGN_OUT_EVERYWHERE_CAP_MS = 20_000
+
 const SETTINGS_NOT_LOADED = 'Your settings didn’t load. Pull down or try again.'
 
 type PreferenceKey = 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
@@ -397,7 +401,18 @@ function SettingsScreenContent() {
 
   /** Sign out asks first (one stray tap used to end the session on the spot); so does signing out of every device. */
   const askSignOut = useCallback(() => showSheet(signOutSheet({ signOut, showToast })), [showToast])
-  const askSignOutEverywhere = useCallback(() => showSheet(signOutEverywhereSheet({ signOutEverywhere })), [])
+  // The spinner is capped (SCRUM-733): a restored session's keychain can hold the request for a long time, and the sheet's Cancel is
+  // disabled while it spins. On the cap it says nothing was signed out, which is what the person can rely on; a late success
+  // simply ends their sessions anyway.
+  const askSignOutEverywhere = useCallback(
+    () =>
+      showSheet(
+        signOutEverywhereSheet({
+          signOutEverywhere: () => settleWithin(signOutEverywhere(), SIGN_OUT_EVERYWHERE_CAP_MS, { success: false, error: NOT_SIGNED_OUT_EVERYWHERE }),
+        })
+      ),
+    []
+  )
   const openDataCopyMail = useCallback(
     () => void Linking.openURL(dataCopyMailto(user?.id)).catch(() => showToast(`No email app opened. Write to ${SUPPORT_EMAIL}.`, 'info')),
     [showToast, user?.id]

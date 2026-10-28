@@ -285,6 +285,9 @@ export const TIMED_OUT = Symbol('timed out')
  */
 const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => settleWithin<T | typeof TIMED_OUT>(work, REQUEST_TIMEOUT_MS, TIMED_OUT)
 
+/** Sign-out waits this long for the keychain, not the request deadline: the person asked to leave, and a restored session's read can hang (SCRUM-733). */
+export const SIGN_OUT_READ_MS = 3_000
+
 /**
  * Which session the keychain holds: bumped by a stored sign-in (`keepSession`) and by every way out (`signOut`,
  * `signOutEverywhere`, `deleteAccount`). Work that started in one session never writes into the next (Opus review H1): a
@@ -2229,13 +2232,22 @@ class ApiClientClass {
      */
     requestQueue.clear()
     this.clearResponseCache()
-    const accessRead = withinDeadline(TokenStorage.getAccessToken())
-    const refreshRead = withinDeadline(TokenStorage.getRefreshToken())
-    const cleared = withinDeadline(TokenStorage.clearAll())
+    const rawAccess = TokenStorage.getAccessToken()
+    const rawRefresh = TokenStorage.getRefreshToken()
+    const accessRead = settleWithin<string | null | typeof TIMED_OUT>(rawAccess, SIGN_OUT_READ_MS, TIMED_OUT)
+    const refreshRead = settleWithin<string | null | typeof TIMED_OUT>(rawRefresh, SIGN_OUT_READ_MS, TIMED_OUT)
+    const cleared = settleWithin<unknown>(TokenStorage.clearAll(), SIGN_OUT_READ_MS, TIMED_OUT)
     const [accessToken, refreshToken] = await Promise.all([accessRead, refreshRead])
     let result: ApiResponse<void>
     if ((refreshToken === TIMED_OUT && !revokeAll) || accessToken === TIMED_OUT) {
       result = { success: false, error: TIMEOUT_MESSAGE }
+      /*
+       * The keychain is slow, not empty: this phone is signed out now, and the server is told (best effort) when the tokens
+       * arrive. The reads were queued ahead of the deletes, so they still return the session that is being left.
+       */
+      void Promise.all([rawAccess, rawRefresh])
+        .then(([access, refresh]) => (access ? this.postSignOut(access, refresh, !revokeAll, pushToken) : undefined))
+        .catch(() => {})
     } else if (!accessToken) {
       // Nothing stored: there is no session here for the server to end.
       result = { success: true }
