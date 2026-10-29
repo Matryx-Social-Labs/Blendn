@@ -28,7 +28,7 @@ import { printable } from '../../lib/pulseSections'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
-import { roomCardRoute } from '../../lib/roomCard'
+import { opensRoomCard, roomCardRoute } from '../../lib/roomCard'
 import { roomPhotosAllowed } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow } from '../../lib/roomRow'
 import { idParam, nameParam } from '../../lib/routeParams'
@@ -226,7 +226,7 @@ function ChatInfoInner() {
   const getItemLayout = headerHeight > 0 ? (_: unknown, index: number) => ({ length: rowStride, offset: headerHeight + index * rowStride, index }) : undefined
 
   /* A crew's member opens the room card (first name only); an event's opens the sender card over this page. */
-  const openMember = (member: Sender) => (row?.kind === 'crew' ? router.push(roomCardRoute(member, chatGroupId) as never) : setCardFor(member))
+  const openMember = (member: Sender) => (opensRoomCard(row?.kind) ? router.push(roomCardRoute(member, chatGroupId) as never) : setCardFor(member))
   const renderMember = ({ item: m }: { item: Member }) => (
     <MemberCell member={m} photos={roomPhotosAllowed(row?.kind)} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={openMember} />
   )

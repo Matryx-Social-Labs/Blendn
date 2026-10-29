@@ -53,7 +53,7 @@ import { printable } from '../../lib/pulseSections'
 import { queryCache } from '../../lib/queryCache'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
-import { roomCardRoute } from '../../lib/roomCard'
+import { opensRoomCard, roomCardRoute } from '../../lib/roomCard'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
 import { roomLockedIn } from '../../lib/roomState'
@@ -864,8 +864,8 @@ function GroupChatInner() {
       refusesWrites,
     })
 
-  /** An event's sender opens the card over the feed; a crew's member opens the room card (first name only, SRV-07). */
-  const openSender = (sender: Sender) => (roomKind === 'crew' ? router.push(roomCardRoute(sender, roomId) as never) : setCardFor(sender))
+  /** An event's sender opens the card over the feed; a crew's or a Blend's member opens the room card (a name only, SRV-07, SV-20). */
+  const openSender = (sender: Sender) => (opensRoomCard(roomKind) ? router.push(roomCardRoute(sender, roomId) as never) : setCardFor(sender))
   /** After a block, their messages fade out of the feed (R3-D5 5.7). */
   const blockFromFeed = (senderId: string) => setBlocked((prev) => new Set(prev).add(senderId))
 
@@ -957,7 +957,7 @@ function GroupChatInner() {
         last={place.last}
         landed={landed?.id === item.message_id ? landed.emoji : undefined}
         arriving={arrivingRef.current.has(item.message_id)}
-        senderTappable={eventRoom || roomKind === 'crew'}
+        senderTappable={eventRoom || opensRoomCard(roomKind)}
         eventId={eventRoom ? roomInfo.eventId : null}
         pollViewable={viewablePolls.has(item.message_id)}
         handlers={handlers}
