@@ -94,7 +94,7 @@ import { router } from 'expo-router'
 import Banter from '../app/(tabs)/chat'
 import { apiClient } from '../lib/apiClient'
 import { clearOutbox, dmThread, keepFailed, roomThread, setDraft } from '../lib/chatOutbox'
-import { markDomainsDirty } from '../lib/liveSyncState'
+import { clearDirtyDomains, markDomainsDirty } from '../lib/liveSyncState'
 import { queryCache } from '../lib/queryCache'
 import { resetRoomMembership } from '../lib/roomMembership'
 import { noteBlocked } from '../lib/blockEpoch'
@@ -670,4 +670,53 @@ it('reads the room’s own line from lastMessage.type: system has no "You:", a p
   expect(await screen.findByText('You liked Crew Nebula for the crew')).toBeTruthy()
   expect(screen.getByText('Crew Two is on the board')).toBeTruthy()
   expect(screen.getByText('You: liked Lot S9 for the crew')).toBeTruthy()
+})
+
+describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
+  // The dirty set is module state: an earlier test's mark would hide whether this one's own change was the cue.
+  beforeEach(() => clearDirtyDomains(['chat']))
+
+  it('a request that arrived while the tab was away shows at once when a known change marks the chat dirty', async () => {
+    // Arrange: the Banter loaded with no requests (and cached that); then someone sends one.
+    serve({ requests: [] })
+    await open()
+    expect(screen.queryByText('Loved your take on the set — coffee next week?')).toBeNull()
+    // The SWR copy is still the empty list; only a forced fetch has the new one.
+    api.getMessageRequests.mockImplementation((async (_p?: unknown, o?: { force?: boolean }) => ({
+      success: true,
+      data: { requests: o?.force ? [request] : [] },
+    })) as never)
+    // Act: the bell's row for it lands (the chat domain is marked) and the Banter syncs.
+    markDomainsDirty(['chat'])
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    // Assert
+    expect(screen.getByText('Loved your take on the set — coffee next week?')).toBeTruthy()
+  })
+
+  it('a quiet sync inside the throttle still reads requests past a stale cache once a request is known', async () => {
+    serve({ requests: [] })
+    await open()
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [request] } } as never)
+    markDomainsDirty(['chat'])
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending' }, { force: true })
+  })
+
+  it('a room you opened stays read when a background sync repaints from the cache behind you', async () => {
+    // Arrange: an unread room; the server marks it read the moment it opens.
+    const unreadRoom = { ...pastRoom, status: 'open', unreadCount: 2 }
+    const label = /Jazz Brunch, .*unread/
+    serve({ rooms: [unreadRoom], dms: [], requests: [] })
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText(label)))
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...unreadRoom, unreadCount: 0 }] } } as never)
+    // Act: back on the Banter, then the next background sync (the 8 s tick while the socket is down).
+    await act(async () => void mockRefocus?.())
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    // Assert
+    expect(screen.queryByLabelText(label)).toBeNull()
+  })
 })

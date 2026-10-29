@@ -12,6 +12,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { navigateFromNotificationData, notificationTarget } from '../lib/notifications'
+import { clearDirtyDomains, hasDirtyDomain } from '../lib/liveSyncState'
 import { openWhenReady, pendingEventId, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
 
 beforeEach(() => {
@@ -138,5 +139,20 @@ describe('the root guard', () => {
     const src = layout()
     const afterRead = src.slice(src.indexOf('await readOnboarding(user.id)'))
     expect(afterRead.slice(0, 120)).toContain('if (superseded) return;')
+  })
+})
+
+describe('View on a request notification (SCRUM-907)', () => {
+  beforeEach(() => clearDirtyDomains(['chat']))
+
+  it('lands on the Banter and marks it stale, so the request is on the list when it arrives', () => {
+    navigateFromNotificationData({ type: 'message_request', requestId: 'r1' })
+    expect(takePendingRoute()).toBe('/(tabs)/chat')
+    expect(hasDirtyDomain(['chat'])).toBe(true)
+  })
+
+  it('a notification that goes elsewhere leaves the Banter alone', () => {
+    navigateFromNotificationData({ type: 'rating_request', eventId: 'e1' })
+    expect(hasDirtyDomain(['chat'])).toBe(false)
   })
 })

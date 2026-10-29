@@ -314,8 +314,8 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
 
   // The loaders sit above every callback and effect that calls them: React
   // Compiler rejects a closure that reads a binding before its declaration.
-  const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false) => {
-    if (cacheKey && !force) {
+  const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false, fresh = force) => {
+    if (cacheKey && !fresh) {
       const cached = queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(cacheKey)
       if (cached) {
         if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
@@ -324,7 +324,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       }
     }
     try {
-      const result = await apiClient.getMessageRequests({ status: 'pending' }, { force })
+      const result = await apiClient.getMessageRequests({ status: 'pending' }, { force: fresh })
       if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
 
       if (result.success && result.data?.requests) {
@@ -501,8 +501,10 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       || !hasCachedList
       || chatDirty
       || (refreshEvenIfCached && now - lastFetchRef.current.list > CHAT_BACKGROUND_REFRESH_THROTTLE_MS))
+    // A request arrives with no socket event of its own: the bell's row marks the chat dirty (lib/inboxBadge), and that is the cue.
     const shouldFetchRequests = force
       || !hasCachedRequests
+      || chatDirty
       || (refreshEvenIfCached && now - lastFetchRef.current.requests > CHAT_BACKGROUND_REFRESH_THROTTLE_MS)
 
     if (!shouldFetchList && !shouldFetchRequests) return
@@ -516,7 +518,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       }
 
       // Started with the lists, not after them: it never rejects, and waiting cost the inbox a third round trip in series.
-      const requestsLoad = shouldFetchRequests ? loadMessageRequests(loadId, requestsCacheKey, force) : null
+      const requestsLoad = shouldFetchRequests ? loadMessageRequests(loadId, requestsCacheKey, force, force || hasCachedRequests) : null
 
       if (shouldFetchList) {
         // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's

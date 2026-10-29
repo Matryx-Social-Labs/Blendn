@@ -185,6 +185,6 @@ describe('the bell, while the app is open', () => {
     const shared = read('lib', 'inboxBadge.ts')
     expect(shared).toMatch(/subscribeToBell\(/)
     // The server's count, not a local +1 that duplicates would inflate.
-    expect(shared).toMatch(/subscribeToBell\(\(\) => void refreshInboxBadge\(\)\)/)
+    expect(shared).toMatch(/subscribeToBell\(\(row\) => \{[^}]*\}[^}]*void refreshInboxBadge\(\)/)
   })
 })
