@@ -136,14 +136,15 @@ function ChatInner() {
    * room opened, they left behind the screen that covered them. The room is read the moment it opens (the server
    * marks it so, and no message in it counts here); only the list's drawing of that waits for the return.
    */
+  const userId = user?.id
   const clearRead = useCallback(
     (opened: ReadonlySet<string>) => {
       setGroupChats((prev) => prev.map((c) => (opened.has(c.chat_room_id) ? { ...c, unread_count: 0 } : c)))
       setCrewRooms((prev) => prev.map((r) => (opened.has(r.id) ? { ...r, unreadCount: 0 } : r)))
       // The server read it as it opened, and the cached list still holds the count: the next quiet sync would paint it back.
-      if (user?.id) queryCache.invalidate(`group_chats_${user.id}`)
+      if (userId) queryCache.invalidate(`group_chats_${userId}`)
     },
-    [setGroupChats, setCrewRooms, user?.id]
+    [setGroupChats, setCrewRooms, userId]
   )
   const noteOpened = useReadOnReturn(clearRead)
   const openRoom = useCallback(
