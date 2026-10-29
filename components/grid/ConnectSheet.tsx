@@ -77,6 +77,20 @@ export function ConnectSheet({
   // The text the shown error is about: editing it clears the error (DS: in error until the value changes).
   const [sentAs, setSentAs] = useState<string | null>(null)
 
+  /*
+   * The note is written to ONE person. Every opening starts empty, whoever the caller says it is for: `SenderCard` mounts a
+   * single sheet for every sender in a chat, so state that outlived the opening was sent to the next person (SCRUM-912).
+   * A refused send keeps the sheet open, so the note stays; adjusted in render, on the same change, so no frame shows the old one.
+   */
+  const [wasVisible, setWasVisible] = useState(visible)
+  if (visible !== wasVisible) {
+    setWasVisible(visible)
+    if (visible) {
+      setMessage('')
+      setSentAs(null)
+    }
+  }
+
   const trimmed = message.trim()
   /* Required, not optional — the server refuses an empty one either way. */
   const canSend = trimmed.length > 0 && message.length <= CONNECT_MESSAGE_MAX && !sending
