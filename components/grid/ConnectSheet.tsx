@@ -78,14 +78,16 @@ export function ConnectSheet({
   const [sentAs, setSentAs] = useState<string | null>(null)
 
   /*
-   * The note is written to ONE person. Every opening starts empty, whoever the caller says it is for: `SenderCard` mounts a
+   * The note is written to ONE person. Every opening, and every change of person while open, starts empty: `SenderCard` mounts a
    * single sheet for every sender in a chat, so state that outlived the opening was sent to the next person (SCRUM-912).
-   * A refused send keeps the sheet open, so the note stays; adjusted in render, on the same change, so no frame shows the old one.
+   * Where the caller keeps the sheet open after a refused send the note stays (same person, same opening). Adjusted in render,
+   * on the same change, so no frame shows the old note.
    */
-  const [wasVisible, setWasVisible] = useState(visible)
-  if (visible !== wasVisible) {
-    setWasVisible(visible)
-    if (visible) {
+  const openFor = visible ? displayName : null
+  const [shownFor, setShownFor] = useState<string | null>(openFor)
+  if (openFor !== shownFor) {
+    setShownFor(openFor)
+    if (openFor !== null) {
       setMessage('')
       setSentAs(null)
     }

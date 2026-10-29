@@ -8,10 +8,18 @@
 import { fireEvent, render, screen } from '@testing-library/react-native'
 
 jest.mock('../components/ds/Sheet', () => ({
-  Sheet: (p: { visible: boolean; title: string; children: unknown }) => {
+  Sheet: (p: { visible: boolean; title: string; children: unknown; actions: { label: string; onPress: () => void }[] }) => {
     const React = require('react')
-    const { Text, View } = require('react-native')
-    return p.visible ? React.createElement(View, null, React.createElement(Text, null, p.title), p.children) : null
+    const { Pressable, Text, View } = require('react-native')
+    return p.visible
+      ? React.createElement(
+          View,
+          null,
+          React.createElement(Text, null, p.title),
+          p.children,
+          p.actions.map((a) => React.createElement(Pressable, { key: a.label, onPress: a.onPress, testID: `action-${a.label}` }, React.createElement(Text, null, a.label)))
+        )
+      : null
   },
 }))
 jest.mock('../components/ds/TextField', () => ({
@@ -25,8 +33,8 @@ jest.mock('../components/ds/TextField', () => ({
 import { ConnectSheet } from '../components/grid/ConnectSheet'
 
 const noop = () => undefined
-const sheet = (visible: boolean, displayName: string) => (
-  <ConnectSheet visible={visible} displayName={displayName} onSend={noop} onDismiss={noop} />
+const sheet = (visible: boolean, displayName: string, onSend: (m: string) => void = noop) => (
+  <ConnectSheet visible={visible} displayName={displayName} onSend={onSend} onDismiss={noop} />
 )
 const note = () => screen.getByTestId('connect-message').props.value
 
@@ -55,5 +63,12 @@ describe('the Connect note starts empty for every opening', () => {
     await fireEvent.changeText(screen.getByTestId('connect-message'), 'still here')
     await view.rerender(sheet(true, 'Rushing Tiger'))
     expect(note()).toBe('still here')
+  })
+
+  it('is empty when the person changes while the sheet stays open', async () => {
+    const view = await render(sheet(true, 'Rushing Tiger'))
+    await fireEvent.changeText(screen.getByTestId('connect-message'), 'for the tiger')
+    await view.rerender(sheet(true, 'Quiet Birch'))
+    expect(note()).toBe('')
   })
 })
