@@ -6,6 +6,7 @@ import { apiClient, type RoomPreview } from './apiClient'
 import { subscribeCheckInChanged } from './checkIn'
 import { readStoredCity } from './cityStorage'
 import { liveWindow } from './eventSession'
+import { settleWithin } from './fetchTimeout'
 import { getDistanceKm, roundCoord } from './geo'
 import { Logger } from './logger'
 import { printable } from './pulseSections'
@@ -81,8 +82,19 @@ export const PULSE_PAGE = 20
 
 export type QuietCoords = PreciseFix & { approximate: boolean }
 
-/** A fix only if the person already said yes. Never prompts. */
+/**
+ * How long the Pulse's first load waits on the phone for a fix it only wants as a sort. The reads share Expo's one native queue, a
+ * blocked one never answers, and the events request waits behind them (SCRUM-903): no fix is better than no Pulse.
+ */
+export const QUIET_LOCATION_MS = 3_000
+
+/** A fix only if the person already said yes. Never prompts. Bounded: past `QUIET_LOCATION_MS` it is no fix. */
 export async function quietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
+  const noFix = { coords: null, location: 'on' as TonightLocation }
+  return settleWithin(readQuietLocation(), QUIET_LOCATION_MS, noFix)
+}
+
+async function readQuietLocation(): Promise<{ coords: QuietCoords | null; location: TonightLocation }> {
   try {
     const permission = await Location.getForegroundPermissionsAsync()
     if (permission.status !== 'granted') return { coords: null, location: 'off' }

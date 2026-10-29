@@ -289,6 +289,14 @@ const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => 
 export const SIGN_OUT_READ_MS = 3_000
 
 /**
+ * A sign-in waits this long for the keychain writes, then goes on with the session it holds in memory (SCRUM-903). The server had
+ * signed the person in; three keychain writes behind a blocked native queue (one notification-permission read wedged on an iOS 27
+ * sim) kept the spinner up for good. The writes stay queued and land when the queue frees; if they never do, the next launch asks
+ * for a sign-in, which is the lesser loss.
+ */
+export const SIGN_IN_PERSIST_MS = 3_000
+
+/**
  * Which session the keychain holds: bumped by a stored sign-in (`keepSession`) and by every way out (`signOut`,
  * `signOutEverywhere`, `deleteAccount`). Work that started in one session never writes into the next (Opus review H1): a
  * refresh in flight across a sign-out does not store the rotated tokens (which would sign the old account back in on the
@@ -2061,10 +2069,31 @@ class ApiClientClass {
       nextSession()
       // Nothing cached, or still in flight, from before this sign-in is served to it.
       this.clearResponseCache()
-      await TokenStorage.setTokens(result.data.accessToken, result.data.refreshToken)
-      await TokenStorage.setUser(result.data.user)
-      // Only once this session is in the keychain: dropped earlier, a kill before the writes land restored the last one (M2).
-      await TokenStorage.forgetSignedOut()
+      const epoch = sessionEpoch
+      const { accessToken, refreshToken, user } = result.data
+      // Memory is set before the keychain is asked (`secureSet`), so the session is live from here whatever the writes do.
+      const persisting = (async () => {
+        await TokenStorage.setTokens(accessToken, refreshToken)
+        // A sign-out (or another sign-in) while the queue was blocked: its session is not put back.
+        if (epoch !== sessionEpoch) return
+        await TokenStorage.setUser(user)
+        if (epoch !== sessionEpoch) return
+        // Only once this session is in the keychain: dropped earlier, a kill before the writes land restored the last one (M2).
+        await TokenStorage.forgetSignedOut()
+      })()
+      // The writes go on in the background past the wait; a failure there is a warning, never a lost sign-in.
+      const persisted = persisting.then(
+        () => true,
+        (error) => {
+          Logger.warn('auth', 'signIn:persistFailed', { error })
+          return true
+        }
+      )
+      if (!(await settleWithin(persisted, SIGN_IN_PERSIST_MS, false))) {
+        Logger.warn('auth', 'signIn:persistSlow', { ms: SIGN_IN_PERSIST_MS })
+        // `setTokens` marks the session started after its writes; the session is started now.
+        markSessionStarted()
+      }
     }
     return result
   }

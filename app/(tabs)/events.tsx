@@ -40,6 +40,7 @@ import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
 import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
 import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
+import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useReducedMotion } from '../../lib/motion'
 import { searchTermOf } from '../../lib/searchTerm'
 import { showSheet } from '../../lib/sheet'
@@ -732,7 +733,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         return
       }
       setLocationStatus('granted')
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      // Bounded: `getCurrentPositionAsync` has no deadline, and this ask's caller shows "waiting" until it settles (SCRUM-906).
+      const position = await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_FIX_TIMEOUT_MS)
       const coords = fixOf(position)
       setUserLocation(coords)
       Logger.journey('proximity', 'quietLocation:resolved', coords)

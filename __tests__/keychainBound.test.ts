@@ -11,6 +11,8 @@ const mockSecure = new Map<string, string>()
 /** Keys whose read (or write) never answers: a SecureStore queue blocked by another module's call. */
 const mockStalledReads = new Set<string>()
 const mockStalledWrites = new Set<string>()
+/** Writes held in the blocked queue: each lands (in order) when the test unblocks it. */
+const mockHeldWrites: (() => void)[] = []
 /** A read held until the test answers it. */
 let mockHeld: ((value: string) => void) | null = null
 let mockHold = false
@@ -21,7 +23,10 @@ jest.mock('expo-secure-store', () => ({
       : mockStalledReads.has(k)
         ? new Promise(() => {})
         : Promise.resolve(mockSecure.get(k) ?? null),
-  setItemAsync: (k: string, v: string) => (mockStalledWrites.has(k) ? new Promise(() => {}) : Promise.resolve(void mockSecure.set(k, v))),
+  setItemAsync: (k: string, v: string) =>
+    mockStalledWrites.has(k)
+      ? new Promise<void>((resolve) => mockHeldWrites.push(() => resolve(void mockSecure.set(k, v))))
+      : Promise.resolve(void mockSecure.set(k, v)),
   deleteItemAsync: async (k: string) => void mockSecure.delete(k),
 }))
 jest.mock('react-native', () => ({ Platform: { OS: 'ios' }, AppState: { addEventListener: () => ({ remove: () => {} }), currentState: 'active' } }))
@@ -33,7 +38,7 @@ jest.mock('../lib/fetchTimeout', () => ({ ...jest.requireActual('../lib/fetchTim
 
 process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.test'
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { apiClient, TokenStorage, REFRESH_DEADLINE_MS, SIGN_OUT_READ_MS } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+const { apiClient, TokenStorage, REFRESH_DEADLINE_MS, SIGN_OUT_READ_MS, SIGN_IN_PERSIST_MS } = require('../lib/apiClient') as typeof import('../lib/apiClient')
 const { TIMEOUT_MESSAGE } = require('../lib/fetchTimeout') as typeof import('../lib/fetchTimeout')
 const { Logger } = require('../lib/logger') as typeof import('../lib/logger')
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -47,6 +52,7 @@ beforeEach(async () => {
   mockSecure.clear()
   mockStalledReads.clear()
   mockStalledWrites.clear()
+  mockHeldWrites.length = 0
   mockExpired.mockClear()
   await TokenStorage.setTokens('access-1', 'refresh-1')
   // The keychain as a launch finds it: nothing read into memory yet (RC drive 2 D-A), so every read here asks the keychain.
@@ -177,5 +183,71 @@ describe('sign-out always finishes (SCRUM-733)', () => {
     await expect(apiClient.signOut()).resolves.toMatchObject({ success: true })
     expect(body.refreshToken).toBe('refresh-1')
     expect(mockSecure.has(REFRESH)).toBe(false)
+  })
+})
+
+describe('sign-in lands on the Pulse even when the keychain is blocked (SCRUM-903)', () => {
+  const USER = 'blendn_user'
+  const signedIn = { success: true, data: { accessToken: 'access-2', refreshToken: 'refresh-2', user: { id: 'u2', email: 'b@test' } } }
+  /** The keychain's queue is blocked: every write waits, as behind a wedged permission read. */
+  const blockWrites = () => [ACCESS, REFRESH, USER].forEach((k) => mockStalledWrites.add(k))
+  const unblockWrites = async () => {
+    mockStalledWrites.clear()
+    mockHeldWrites.splice(0).forEach((land) => land())
+    await jest.advanceTimersByTimeAsync(0)
+  }
+
+  it('answers the sign-in at SIGN_IN_PERSIST_MS, with the session in memory and a warning', async () => {
+    global.fetch = jest.fn(async () => json(200, signedIn)) as typeof fetch
+    blockWrites()
+    const warn = Logger.warn as jest.Mock
+    warn.mockClear()
+    const pending = apiClient.signInWithEmail('b@test', 'pw')
+    let settled = false
+    void pending.then(() => (settled = true))
+    await jest.advanceTimersByTimeAsync(SIGN_IN_PERSIST_MS - 1)
+    expect(settled).toBe(false)
+    await jest.advanceTimersByTimeAsync(1)
+    await expect(pending).resolves.toMatchObject({ success: true })
+    // The new session answers from memory, so the Pulse's first request carries it.
+    await expect(TokenStorage.getAccessToken()).resolves.toBe('access-2')
+    expect(warn).toHaveBeenCalledWith('auth', 'signIn:persistSlow', expect.objectContaining({ ms: SIGN_IN_PERSIST_MS }))
+  })
+
+  it('keeps persisting in the background: when the queue frees, the keychain holds the session', async () => {
+    global.fetch = jest.fn(async () => json(200, signedIn)) as typeof fetch
+    blockWrites()
+    const pending = apiClient.signInWithEmail('b@test', 'pw')
+    await jest.advanceTimersByTimeAsync(SIGN_IN_PERSIST_MS)
+    await pending
+    expect(mockSecure.get(ACCESS)).toBe('access-1')
+    // Tokens land, then the user is written (it is issued after them), then the signed-out marker is forgotten.
+    await unblockWrites()
+    await unblockWrites()
+    expect(mockSecure.get(ACCESS)).toBe('access-2')
+    expect(mockSecure.get(REFRESH)).toBe('refresh-2')
+    expect(JSON.parse(mockSecure.get(USER) ?? '{}')).toMatchObject({ id: 'u2' })
+  })
+
+  it('a sign-out while the persist is pending: the old sign-in does not write its user back', async () => {
+    global.fetch = jest.fn(async () => json(200, signedIn)) as typeof fetch
+    blockWrites()
+    const pending = apiClient.signInWithEmail('b@test', 'pw')
+    await jest.advanceTimersByTimeAsync(SIGN_IN_PERSIST_MS)
+    await pending
+    global.fetch = jest.fn(async () => json(200, { success: true })) as typeof fetch
+    await apiClient.signOut()
+    await unblockWrites()
+    await unblockWrites()
+    expect(mockSecure.has(USER)).toBe(false)
+  })
+
+  it('a keychain that answers costs no wait and no warning', async () => {
+    global.fetch = jest.fn(async () => json(200, signedIn)) as typeof fetch
+    const warn = Logger.warn as jest.Mock
+    warn.mockClear()
+    await expect(apiClient.signInWithEmail('b@test', 'pw')).resolves.toMatchObject({ success: true })
+    expect(mockSecure.get(ACCESS)).toBe('access-2')
+    expect(warn).not.toHaveBeenCalledWith('auth', 'signIn:persistSlow', expect.anything())
   })
 })
