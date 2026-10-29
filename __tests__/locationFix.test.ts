@@ -79,6 +79,36 @@ describe('getCurrentLocation', () => {
     expect(t.showTray).toHaveBeenCalledWith('Location timed out', 'We couldn’t get a fix in 15 seconds.', expect.any(Array), { icon: 'hourglass' })
   })
 
+  // SCRUM-906: the deadline starts before the first native read, so a blocked native queue cannot spin Go Live for ever.
+  it.each([
+    ['the Location Services read', () => loc.hasServicesEnabledAsync.mockReturnValue(new Promise(() => {}))],
+    ['the permission read', () => loc.requestForegroundPermissionsAsync.mockReturnValue(new Promise(() => {}))],
+  ])('answers "Couldn’t get your location" within the deadline when %s never answers (SCRUM-906)', async (_name, stall) => {
+    jest.useFakeTimers()
+    stall()
+    const t = trays()
+    const pending = getCurrentLocation({ ...t, purpose: 'goLive' })
+    await jest.advanceTimersByTimeAsync(LOCATION_FIX_TIMEOUT_MS - 1)
+    expect(t.showTray).not.toHaveBeenCalled()
+    await jest.advanceTimersByTimeAsync(1)
+    expect(await pending).toBeNull()
+    expect(t.showTray).toHaveBeenCalledTimes(1)
+    expect(t.showTray).toHaveBeenCalledWith('Couldn’t get your location', expect.any(String), expect.any(Array), { icon: 'map-pin-off' })
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
+  })
+
+  it('bounds the whole ask, reads and fix together, at one deadline (SCRUM-906)', async () => {
+    jest.useFakeTimers()
+    loc.requestForegroundPermissionsAsync.mockImplementation(() => new Promise((r) => setTimeout(() => r({ status: 'granted' } as any), 10_000)))
+    loc.getCurrentPositionAsync.mockReturnValue(new Promise(() => {}))
+    const t = trays()
+    const pending = getCurrentLocation(t)
+    await jest.advanceTimersByTimeAsync(LOCATION_FIX_TIMEOUT_MS)
+    expect(await pending).toBeNull()
+    // The reads answered, so it is the fix that ran out of time.
+    expect(t.showTray).toHaveBeenCalledWith('Location timed out', expect.any(String), expect.any(Array), { icon: 'hourglass' })
+  })
+
   it('asks for permission rather than reading a position without it', async () => {
     loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' } as any)
     const t = trays()

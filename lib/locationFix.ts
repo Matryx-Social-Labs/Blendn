@@ -94,7 +94,7 @@ const ROUGH_FIX_RETRY_MS = 1_000
 const timedOutError = () => Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })
 
 /** `work`, or a timeout at `ms`: `getCurrentPositionAsync` has no deadline of its own. */
-function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+export function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(timedOutError()), ms)
@@ -117,15 +117,18 @@ export const isAbortedFix = (error: unknown) => (error as { code?: string } | nu
 const abortedError = () => Object.assign(new Error('Location ask abandoned'), { code: 'E_LOCATION_ABORTED' })
 
 export async function roughFix(deadlineMs: number = LOCATION_FIX_TIMEOUT_MS, ask: FixAsk = { aborted: false }): Promise<Location.LocationObject> {
-  const last = await Promise.resolve()
-    .then(() => Location.getLastKnownPositionAsync({ maxAge: ROUGH_FIX_MAX_AGE_MS }))
-    .catch(() => null)
-  if (last) return last
-  const services = await Promise.resolve()
-    .then(() => Location.hasServicesEnabledAsync())
-    .catch(() => true)
-  if (!services) throw Object.assign(new Error('Location services are off'), { code: 'E_LOCATION_SERVICES_DISABLED' })
+  // The deadline starts before the first native read: they share Expo's one native queue, and a blocked one never answers (SCRUM-906).
   const deadline = Date.now() + deadlineMs
+  const last = await withDeadline(
+    Promise.resolve().then(() => Location.getLastKnownPositionAsync({ maxAge: ROUGH_FIX_MAX_AGE_MS })).catch(() => null),
+    deadlineMs
+  )
+  if (last) return last
+  const services = await withDeadline(
+    Promise.resolve().then(() => Location.hasServicesEnabledAsync()).catch(() => true),
+    Math.max(0, deadline - Date.now())
+  )
+  if (!services) throw Object.assign(new Error('Location services are off'), { code: 'E_LOCATION_SERVICES_DISABLED' })
   for (;;) {
     if (ask.aborted) throw abortedError()
     try {
@@ -274,12 +277,33 @@ export async function getCurrentLocation({
       },
     },
   ]
+  /*
+   * One deadline for the whole ask, started before the first native read (SCRUM-906). The reads shared Expo's single
+   * native queue with every other module, and a blocked queue (a notification-permission read wedged on an iOS 27 sim)
+   * left them, and so Go Live's button, spinning for ever: the 15 s used to start only after both had answered. Reads
+   * that never answered say "Couldn’t get your location" (no code: the generic tray); once they have, it is the fix
+   * that ran out of time.
+   */
+  let permitted = false
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_, reject) => {
+    deadlineTimer = setTimeout(
+      () =>
+        reject(
+          permitted
+            ? Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })
+            : new Error('Location services and permission did not answer')
+        ),
+      LOCATION_FIX_TIMEOUT_MS
+    )
+  })
   try {
     // Services and permission are asked together: neither waits on the other.
-    const [serviceEnabled, permission] = await Promise.all([
-      Location.hasServicesEnabledAsync(),
-      Location.requestForegroundPermissionsAsync(),
+    const [serviceEnabled, permission] = await Promise.race([
+      Promise.all([Location.hasServicesEnabledAsync(), Location.requestForegroundPermissionsAsync()]),
+      deadline,
     ])
+    permitted = true
     if (!serviceEnabled) {
       Logger.warn('events', 'location:servicesDisabled')
       showTray('Location Services are off', `Turn on Location Services ${VERB[purpose]}.`, settingsButtons, { icon: 'map-pin-off' })
@@ -315,19 +339,8 @@ export async function getCurrentLocation({
      * one as good as the door asks, is used; High, not BestForNavigation,
      * when a new one is needed — the door asks 50 m, not lane-level.
      */
-    const location = await new Promise<Location.LocationObject>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(Object.assign(new Error('Location timed out'), { code: 'E_LOCATION_TIMEOUT' })),
-        LOCATION_FIX_TIMEOUT_MS
-      )
-      freshFix(maxAccuracyM)
-        .then(({ fix, source }) => {
-          clearTimeout(timer)
-          markCheckIn('location', { source, ageMs: Date.now() - fix.timestamp, accuracyM: fix.coords.accuracy ?? undefined })
-          resolve(fix)
-        })
-        .catch((err) => { clearTimeout(timer); reject(err) })
-    })
+    const { fix: location, source } = await Promise.race([freshFix(maxAccuracyM), deadline])
+    markCheckIn('location', { source, ageMs: Date.now() - location.timestamp, accuracyM: location.coords.accuracy ?? undefined })
 
     // Validate GPS accuracy for production
     const accuracy = location.coords.accuracy || 999
@@ -376,5 +389,7 @@ export async function getCurrentLocation({
       showTray('Couldn’t get your location', 'Check your location settings and try again.', retryButtons, { icon: 'map-pin-off' })
     }
     return null
+  } finally {
+    clearTimeout(deadlineTimer)
   }
 }
