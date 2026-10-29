@@ -16,7 +16,7 @@ import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
-import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError, settleWithin } from './fetchTimeout'
+import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isNetworkFailure, isTimeoutError, settleWithin } from './fetchTimeout'
 import type { CityOption } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline } from './networkStatus'
@@ -1811,7 +1811,8 @@ class ApiClientClass {
         if (result.success) markOnline()
         return result
       } catch (error) {
-        const isNetworkError = error instanceof TypeError
+        // Not `instanceof TypeError`: expo/fetch rejects with a FetchError (SCRUM-898, lib/fetchTimeout.ts).
+        const isNetworkError = isNetworkFailure(error)
         if (isNetworkError && attempt < MAX_RETRIES) {
           Logger.warn('api', `Network error, retry ${attempt + 1}/${MAX_RETRIES}`, { endpoint })
           continue
@@ -1946,6 +1947,8 @@ class ApiClientClass {
         return 'rejected'
       } catch (error) {
         Logger.error('api', 'Token refresh failed', { error })
+        // The refresh is a request too: a network that would not carry it is offline, whatever was being refreshed for.
+        if (isNetworkFailure(error)) markOffline()
         return 'failed'
       }
     })()

@@ -54,7 +54,8 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
 
 describe('a refresh distinguishes rejected from failed', () => {
   it('reports a timeout or dropped connection as failed, not rejected', () => {
-    expect(src).toMatch(/catch \(error\) \{\s*Logger\.error\('api', 'Token refresh failed'[^}]*\}\)\s*return 'failed'/)
+    // A refresh that the network would not carry is still 'failed' (never 'rejected'); it may also mark the network offline (SCRUM-898).
+    expect(src).toMatch(/catch \(error\) \{\s*Logger\.error\('api', 'Token refresh failed'[^}]*\}\)\s*(?:if \(isNetworkFailure\(error\)\) markOffline\(\)\s*)?return 'failed'/)
     expect(src).toContain("if (response.status >= 500) return 'failed'")
     expect(src).toMatch(/if \(response\.status === 403\) \{[\s\S]*?\}\s*return 'rejected'/)
   })
