@@ -122,4 +122,49 @@ describe('a transport failure is offline, whichever shape it takes', () => {
     expect(await calm(() => Object.assign(new Error('Request timed out'), { name: 'AbortError' }))).toBe('online')
     expect(await calm(() => new Error('fetch failed: The operation was aborted.'))).toBe('online')
   })
+
+  // Timeouts in a row are offline, one is not (SCRUM-898 follow-up).
+  const timeout = () => {
+    global.fetch = jest.fn(async () => {
+      throw Object.assign(new Error('Request timed out'), { name: 'AbortError' })
+    }) as typeof fetch
+  }
+  const ask = async (id: string) => {
+    const pending = apiClient.getEventChat(id)
+    await jest.advanceTimersByTimeAsync(10_000)
+    return pending
+  }
+
+  it('one timeout leaves the app online, with the "taking too long" sentence', async () => {
+    timeout()
+    expect((await ask('t1')).error).toMatch(/taking too long/)
+    expect(getNetworkState()).toBe('online')
+  })
+
+  it('two in a row mark it offline', async () => {
+    timeout()
+    await ask('t2')
+    await ask('t3')
+    expect(getNetworkState()).toBe('offline')
+  })
+
+  it('an answer between them starts the count again', async () => {
+    timeout()
+    await ask('t4')
+    global.fetch = jest.fn(async () => json(200, { success: true, data: {} })) as typeof fetch
+    await ask('t5')
+    timeout()
+    await ask('t6')
+    expect(getNetworkState()).toBe('online')
+  })
+
+  it('the next success clears it', async () => {
+    timeout()
+    await ask('t7')
+    await ask('t8')
+    expect(getNetworkState()).toBe('offline')
+    global.fetch = jest.fn(async () => json(200, { success: true, data: {} })) as typeof fetch
+    await ask('t9')
+    expect(getNetworkState()).toBe('online')
+  })
 })

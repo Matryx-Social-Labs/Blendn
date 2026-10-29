@@ -19,7 +19,7 @@ import { AppState, Platform } from 'react-native'
 import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isNetworkFailure, isTimeoutError, settleWithin } from './fetchTimeout'
 import type { CityOption } from './city'
 import { Logger } from './logger'
-import { markOffline, markOnline } from './networkStatus'
+import { markOffline, markOnline, markTimeout } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import { noteFriendGone } from './friendsGone'
 import { FRIENDS_PAGE } from './friendsPaging'
@@ -1833,9 +1833,10 @@ class ApiClientClass {
          * went quiet. Telling someone to check their wifi when their wifi is
          * fine sends them to fix the wrong thing, and `markOffline()` would put
          * the whole app into an offline state on the strength of one slow
-         * endpoint.
+         * endpoint (so one timeout only counts: `markTimeout`).
          */
         if (isTimeoutError(error)) {
+          markTimeout() // one is a slow endpoint; two in a row with no answer is no network (lib/networkStatus.ts)
           return { success: false, error: TIMEOUT_MESSAGE }
         }
         /*
