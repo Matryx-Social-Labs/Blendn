@@ -552,3 +552,62 @@ describe('rc8 #6: a room opened by a bare link', () => {
     expect(screen.queryByText('Event chat')).toBeNull()
   })
 })
+
+describe('a crew’s room draws its members’ photos and opens their room card (SCRUM-895, ROOM-07, SRV-07)', () => {
+  const PHOTO = 'https://cdn.blendn.app/profile/rohan.jpg'
+  const crewRow = { id: 'g1', kind: 'crew', name: 'Sim Lot 16', crewId: 'c1', memberCount: 2 }
+  const rohan = { id: 'm1', user_id: 'rh_rohan', user: { id: 'rh_rohan', name: 'Rohan', image: PHOTO }, content: 'on my way', type: 'text', created_at: '2026-10-15T19:00:00.000Z' }
+  const { router } = require('expo-router')
+  const { queryCache } = require('../lib/queryCache')
+
+  beforeEach(() => {
+    queryCache.invalidate('chat_messages')
+    jest.spyOn(require('../lib/crewsApi').crewsApi, 'crew').mockResolvedValue({ success: false } as never)
+    api.getChatMessages.mockResolvedValue(page([rohan]) as never)
+  })
+
+  it.each([['no kind param', { id: 'g1' }], ['the opener’s kind=crew', { id: 'g1', kind: 'crew' }]])(
+    'photos show with %s even when the history answers before the room list does',
+    async (_label, params) => {
+      // Arrange: the list is slow; the history lands first, so it is mapped before anything has said the room is a crew's.
+      mockParams = params
+      let answerList: (v: unknown) => void = () => {}
+      api.getChatGroups.mockReturnValue(new Promise((res) => (answerList = res)) as never)
+      await open()
+      expect(imageUris()).not.toContain(PHOTO)
+
+      // Act
+      await act(async () => answerList({ success: true, data: { groups: [], rooms: [crewRow] } }))
+      await flush()
+
+      // Assert
+      expect(imageUris()).toContain(PHOTO)
+    }
+  )
+
+  it('an event’s room never shows a photo, whatever the server sent', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [eventRow] } } as never)
+    await open()
+    expect(screen.getByText('on my way')).toBeTruthy()
+    expect(imageUris()).not.toContain(PHOTO)
+  })
+
+  it('tapping a member’s name opens the room card: their handle, first name only', async () => {
+    mockParams = { id: 'g1', kind: 'crew' }
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [crewRow] } } as never)
+    await open()
+
+    await act(async () => fireEvent.press(screen.getByText('Rohan')))
+
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/user/[id]', params: { id: 'rh_rohan', pseudonym: 'Rohan', roomSeed: 'g1:rh_rohan' } })
+  })
+
+  it('an event room’s sender still opens the in-room card, not the page', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [eventRow] } } as never)
+    ;(api as unknown as Record<string, jest.Mock>).getEventMatches = jest.fn().mockResolvedValue({ success: true, data: { matches: [] } })
+    await open()
+    await act(async () => fireEvent.press(screen.getByText('Rohan')))
+    expect(router.push).not.toHaveBeenCalled()
+    expect(screen.getByTestId('sender-card')).toBeTruthy()
+  })
+})

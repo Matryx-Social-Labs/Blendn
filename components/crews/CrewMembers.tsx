@@ -23,6 +23,7 @@ export function CrewMembers({
   canInvite,
   apart,
   onInvite,
+  onOpen,
   onMore,
 }: {
   members: readonly CrewMember[]
@@ -31,6 +32,8 @@ export function CrewMembers({
   canInvite: boolean
   apart: boolean
   onInvite: () => void
+  /** Somebody else's row opens their room card (first name only). */
+  onOpen: (member: CrewMember) => void
   onMore: (member: CrewMember) => void
 }) {
   const bold = useBoldText()
@@ -44,7 +47,14 @@ export function CrewMembers({
           const who = me ? 'You' : m.name
           return (
             <View key={m.userId} style={styles.row}>
-              <View accessible accessibilityLabel={m.role === 'owner' ? `${who}, owner` : who} style={styles.who}>
+              <Pressable
+                accessible
+                accessibilityRole={me ? undefined : 'button'}
+                accessibilityLabel={m.role === 'owner' ? `${who}, owner` : who}
+                disabled={me}
+                onPress={() => onOpen(m)}
+                style={({ pressed }) => [styles.who, pressed && { backgroundColor: PRESSED_WASH.ios }]}
+              >
                 {m.photo ? <Avatar kind="photo" uri={m.photo} size={FACE} /> : <Avatar kind="creature" pseudonym={m.name} size={FACE} />}
                 <View style={styles.text}>
                   <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
@@ -52,7 +62,7 @@ export function CrewMembers({
                   </Text>
                   {m.role === 'owner' ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Owner</Text> : null}
                 </View>
-              </View>
+              </Pressable>
               {isOwner && !me ? (
                 <Pressable
                   onPress={() => onMore(m)}

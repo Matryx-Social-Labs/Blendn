@@ -363,4 +363,12 @@ describe('member photos are a crew room’s only (ROOM-07, anonymity)', () => {
     await open()
     expect(imageUris()).toContain(AVATAR)
   })
+
+  it('a crew room’s member opens the room card (their handle, first name), not the sender card', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [{ id: 'g1', name: 'Nebula', kind: 'crew', crewId: 'c1' }] } } as never)
+    api.getChatParticipants.mockResolvedValue(withAvatar as never)
+    await open()
+    await act(async () => fireEvent.press(screen.getByTestId('info-member-u-o')))
+    expect(require('expo-router').router.push).toHaveBeenCalledWith({ pathname: '/user/[id]', params: { id: 'u-o', pseudonym: 'Amber Fox', roomSeed: 'g1:u-o' } })
+  })
 })

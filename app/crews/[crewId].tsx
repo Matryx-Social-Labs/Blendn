@@ -35,6 +35,7 @@ import { crewBarState, leaveSheet, removeSheet, textFieldOf } from '../../lib/cr
 import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
+import { roomCardRoute } from '../../lib/roomCard'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
 import { showSheet } from '../../lib/sheet'
@@ -307,6 +308,7 @@ function CrewScreenContent() {
             canInvite={crewSeatsLeft(crew) > 0}
             apart={crew.apart === true}
             onInvite={() => void startInvite()}
+            onOpen={(member) => router.push(roomCardRoute({ id: member.userId, name: member.name }, crewId) as never)}
             onMore={confirmRemove}
           />
         </View>

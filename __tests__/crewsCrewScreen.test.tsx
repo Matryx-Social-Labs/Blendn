@@ -90,6 +90,19 @@ describe('the page', () => {
     expect(screen.getByLabelText('Leave crew')).toBeTruthy()
   })
 
+  it('a member row opens their room card (handle, first name); your own row does nothing', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+
+    await act(async () => fireEvent.press(screen.getByLabelText('Priya, owner')))
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/user/[id]', params: { id: 'rh_priya', pseudonym: 'Priya', roomSeed: 'c2:rh_priya' } })
+
+    ;(router.push as jest.Mock).mockClear()
+    await act(async () => fireEvent.press(screen.getByLabelText('You')))
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
   // D-L14: the owner's Edit crew lists the fields it edits, not a setting. Negative control: the old hint fails it.
   it('the owner’s Edit crew says what it edits: name, bio, vibe', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
