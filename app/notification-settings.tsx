@@ -1,5 +1,6 @@
-import { router } from 'expo-router'
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { router, useFocusEffect } from 'expo-router'
+import { useState } from 'react'
+import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Banner } from '../components/ds/Banner'
@@ -36,7 +37,12 @@ function NotificationSettingsContent() {
   const insets = useSafeAreaInsets()
   const bar = useTopBarOverlay()
   const push = usePushPreference()
+  useFocusEffect(push.reloadIfStale)
   const kinds = useNotificationPrefs()
+  // The kinds that were off when the server first answered (Android): they stay switches, so turning one on does not swap the
+  // row for a channel link under the finger (M6). Taken once, in state: a ref cannot be read while rendering.
+  const [offAtLoad, setOffAtLoad] = useState<ReadonlySet<string> | null>(null)
+  if (kinds.prefs && offAtLoad === null) setOffAtLoad(new Set(PREF_ROWS.filter((r) => !kinds.prefs![r.key]).map((r) => r.key)))
   const masterOff = push.enabled === false
   const phoneBlocks = push.off && push.enabled !== false
   const muted = useMutedRooms()
@@ -85,9 +91,8 @@ function NotificationSettingsContent() {
         <View style={masterOff ? styles.dim : null} pointerEvents={masterOff ? 'none' : 'auto'} testID="notification-settings-kinds">
           <SettingsGroup title="Tell me about">
             {PREF_ROWS.map((row) =>
-              ANDROID ? (
-                <SettingsRow key={row.key} icon={row.icon} title={row.title} trail="external" opens="opens your phone’s settings" onPress={() => void openChannelSettings(row.channel)} testID={`pref-${row.key}`} />
-              ) : kinds.prefs ? (
+              // Android's rows open the phone's channel page, except one the account turned off elsewhere (iOS): the phone's channel is still on, so only a switch can turn it back on (SYS-08).
+              kinds.prefs && (!ANDROID || offAtLoad?.has(row.key)) ? (
                 <SettingsRow
                   key={row.key}
                   icon={row.icon}
@@ -98,6 +103,8 @@ function NotificationSettingsContent() {
                   busy={kinds.saving.has(row.key)}
                   testID={`pref-${row.key}`}
                 />
+              ) : ANDROID ? (
+                <SettingsRow key={row.key} icon={row.icon} title={row.title} trail="external" opens="opens your phone’s settings" onPress={() => void openChannelSettings(row.channel)} testID={`pref-${row.key}`} />
               ) : null
             )}
             {/* One offers row on both platforms, once a place has regulars on (D21): the account's switch, held while push can't arrive. */}
@@ -130,6 +137,17 @@ function NotificationSettingsContent() {
             ) : null}
           </SettingsGroup>
         ) : null}
+        {/* The phone owns sounds, pop-ups and the lock screen (E9, SYS-07): the app's page in its settings. */}
+        <SettingsGroup testID="notification-settings-system">
+          <SettingsRow
+            icon="smartphone"
+            title="Sounds, pop-ups and lock screen"
+            trail="external"
+            opens="opens your phone’s settings"
+            onPress={() => void Linking.openSettings().catch(() => {})}
+            testID="notification-settings-sounds"
+          />
+        </SettingsGroup>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{(ANDROID ? ANDROID_FOOT : '') + PREFS_FOOT}</Text>
       </ScrollView>
       <View style={bar.barPin} pointerEvents="box-none">

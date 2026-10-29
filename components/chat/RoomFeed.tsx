@@ -9,7 +9,7 @@ import { goneKindFor } from '../../lib/chatGone'
 import { liveEndedState, type LiveEndedAction } from '../../lib/chatLiveEnded'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { DURATION, SPACE } from '../../lib/design/tokens'
-import { isTemp, type RoomMessage } from '../../lib/roomMessages'
+import { isTemp, QUOTE_UNAVAILABLE, type RoomMessage } from '../../lib/roomMessages'
 import { clockTime } from '../../lib/time'
 import { BroadcastNotice } from '../ds/BroadcastNotice'
 import { ChatBubble, type BubbleReaction } from '../ds/ChatBubble'
@@ -39,9 +39,11 @@ export type RowHandlers = {
  * on it — the one seed rule every surface shares (`markSeed`): the Grid, Room
  * info and the profile agree, and two unresolved people never share one.
  */
-export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id'>, roomId: string) => ({
+export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id' | 'sender_image'>, roomId: string) => ({
   name: m.sender_name,
   pseudonym: markSeed(m.sender_name, `${roomId}:${m.sender_id}`),
+  // A crew's members are named and photographed (SV-6); an event's room never sends one, so it stays a creature.
+  ...(m.sender_image ? { photoUri: m.sender_image } : {}),
 })
 
 /** The six the server accepts, as the bubble draws them: counts, never who. */
@@ -134,7 +136,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
         last={last}
         text={item.removed ? '' : item.message_text}
         removed={item.removed}
-        replyTo={item.replyTo ? { name: item.replyTo.sender_name, text: item.replyTo.message_text } : undefined}
+        replyTo={item.replyTo ? { name: item.replyTo.sender_name, text: item.replyTo.removed ? QUOTE_UNAVAILABLE : item.replyTo.message_text } : undefined}
         reactions={bubbleReactions(item.reactions)}
         onReactionPress={item.removed || sending ? undefined : (emoji) => handlers.react(item, emoji)}
         landed={landed}

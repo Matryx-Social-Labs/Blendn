@@ -125,3 +125,13 @@ describe('the card (GO-02, audit A3)', () => {
     expect(screen.getByTestId('ready-avatar', { includeHiddenElements: true })).toBeTruthy()
   })
 })
+
+it('says the chosen intent with the tile\'s own words under "Why you go out", and nothing when there is none', async () => {
+  mockDraft = { name: 'Sam', photos: [], interests: [], intent_default: ['just_here'] }
+  await render(<ReadyScreen />)
+  expect(screen.getByLabelText('Why you go out, Just here for the event')).toBeTruthy()
+  await screen.unmount()
+  mockDraft = { name: 'Sam', photos: [], interests: [] }
+  await render(<ReadyScreen />)
+  expect(screen.queryByText('Why you go out')).toBeNull()
+})

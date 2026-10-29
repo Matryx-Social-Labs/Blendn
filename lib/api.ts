@@ -75,6 +75,8 @@ export function eventFromApi(e: EventPayload) {
       /** The server's placement, once it sends one (C1): `kind` decides "Promoted". */
       featured: e.featured ?? null,
       is_favorited: e.isFavorited === true,
+      /** "going" / "maybe" / …, from a server that sends it (SV-2); null from an older one. Read through a cast until the payload type declares it. */
+      rsvp_status: e.rsvpStatus ?? null,
       favorite_count: typeof e.favoriteCount === 'number' ? e.favoriteCount : 0,
       user_checkin: e.userCheckin || null,
     }
@@ -93,6 +95,8 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
     return {
       data: events,
       meta: {
+        /** The server's count for these params, whatever the page (BAR-07); null from a reply without pagination. */
+        totalCount: typeof result.data.pagination?.totalCount === 'number' ? result.data.pagination.totalCount : null,
         activeCheckins: result.data.activeCheckins,
         profile: result.data.profile,
       },
@@ -101,7 +105,7 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
   }
   Logger.warn('api', 'getEvents failed', { error: result.error })
   // The code and the wait ride along: a refusal for asking too fast is not "check your connection" (Flow 15 #15, `lib/rateLimited.ts`).
-  return { data: null, error: { message: result.error || 'Failed to fetch events', errorCode: result.errorCode, retryAfter: result.retryAfter } }
+  return { data: null, meta: null, error: { message: result.error || 'Failed to fetch events', errorCode: result.errorCode, retryAfter: result.retryAfter } }
 }
 
 /**

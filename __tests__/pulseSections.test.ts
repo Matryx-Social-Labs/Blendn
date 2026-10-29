@@ -13,7 +13,11 @@ import {
   LIVE_FLOOR,
   nextDayReset,
   printable,
+  feedKey,
+  nearbyEndDate,
+  pickInterest,
   pulseSections,
+  sectionCountLabel,
   seedDateOf,
   WEEKEND_MIN,
   weekendLabel,
@@ -181,6 +185,81 @@ describe('Tonight', () => {
   })
 })
 
+describe('counts are floors when the page is full (BAR-10)', () => {
+  const page = Array.from({ length: 50 }, (_, i) => ev(`t${i}`, 20))
+
+  it('a full page says Tonight · 50+', () => {
+    const tonight = pulseSections<E>({ page, pageFull: true, ...empty }).find((s) => s.key === 'tonight')!
+    expect(tonight.count).toBe(50)
+    expect(sectionCountLabel(tonight)).toBe('50+')
+  })
+
+  it('a last page says the exact number', () => {
+    const tonight = pulseSections<E>({ page, pageFull: false, ...empty }).find((s) => s.key === 'tonight')!
+    expect(sectionCountLabel(tonight)).toBe('50')
+  })
+})
+
+describe('the floor is only claimed when the page can hide more (M7)', () => {
+  // NOW is 19:00; the page is in start order. 50 rows, the last of them at `lastH`.
+  const pageEndingAt = (lastH: number, day = 0) => [...Array.from({ length: 49 }, (_, i) => ev(`p${i}`, 20)), ev('last', lastH, {}, day)]
+
+  it('Tonight is exact when the last row of a full page already starts after the 06:00 reset', () => {
+    const page = pageEndingAt(12, 1) // tomorrow noon
+    const tonight = pulseSections<E>({ page, pageFull: true, ...empty }).find((s) => s.key === 'tonight')!
+    expect(tonight.more).toBeUndefined()
+    expect(sectionCountLabel(tonight)).toBe('49')
+  })
+
+  it('Tonight is a floor when the full page ends tonight', () => {
+    const tonight = pulseSections<E>({ page: pageEndingAt(23), pageFull: true, ...empty }).find((s) => s.key === 'tonight')!
+    expect(tonight.more).toBe(true)
+  })
+
+  it('Happening now is exact when the page already reaches events that have not started', () => {
+    const page = [...Array.from({ length: 49 }, (_, i) => ev(`l${i}`, 17)), ev('later', 22)]
+    const live = pulseSections<E>({ page, pageFull: true, ...empty }).find((s) => s.key === 'now')!
+    expect(live.more).toBeUndefined()
+  })
+
+  it('the peek line carries the plus', () => {
+    const sections = pulseSections<E>({ page: pageEndingAt(23), pageFull: true, ...empty })
+    expect(pulsePeekLine(sections)).toBe('50+ on tonight')
+  })
+})
+
+describe('shared Nearby bound and feed key (M8, M10)', () => {
+  it('nearbyEndDate is a week out, rounded up to the hour, the same for two calls in one hour', () => {
+    const a = Date.parse('2026-10-27T18:10:00Z')
+    expect(nearbyEndDate(a)).toBe('2026-11-03T19:00:00.000Z')
+    expect(nearbyEndDate(a + 40 * 60_000)).toBe(nearbyEndDate(a))
+  })
+
+  it('feedKey changes with the city and with a move of ~100 m, not a few metres', () => {
+    const at = { latitude: 12.97101, longitude: 77.59101 }
+    expect(feedKey('Bengaluru', at)).toBe(feedKey('Bengaluru', { latitude: 12.97104, longitude: 77.59104 }))
+    expect(feedKey('Bengaluru', at)).not.toBe(feedKey('Mumbai', at))
+    expect(feedKey('Bengaluru', at)).not.toBe(feedKey('Bengaluru', { latitude: 12.9725, longitude: 77.59101 }))
+    expect(feedKey(null, null)).toBe('-|-,-')
+  })
+})
+
+describe('Nearby, from the distance query (BAR-11)', () => {
+  const near = (id: string, km: number) => ev(id, 21, { distance: km })
+
+  it('ranks the distance query’s rows, not the first page by start time', () => {
+    const page = [near('page1', 5)]
+    const nearby = [near('closer', 0.2), near('page1', 5)]
+    const s = pulseSections<E>({ page, nearby, ...empty }).find((x) => x.key === 'nearby')!
+    expect(s.events.map((e) => e.id)).toEqual(['closer', 'page1'])
+  })
+
+  it('falls back to the page while the query has not answered', () => {
+    const s = pulseSections<E>({ page: [near('a', 1)], nearby: null, ...empty }).find((x) => x.key === 'nearby')!
+    expect(s.events.map((e) => e.id)).toEqual(['a'])
+  })
+})
+
 describe('Nearby', () => {
   const near = (id: string, km: number | null, startH = 21, day = 0) => ev(id, startH, { distance: km }, day)
 
@@ -320,5 +399,20 @@ describe('what the Everything-else chips and the peek line read', () => {
     expect(pulsePeekLine([sec('tonight', 6)])).toBe('6 on tonight')
     expect(pulsePeekLine([sec('now', 2)])).toBe('2 live now')
     expect(pulsePeekLine([])).toBeNull()
+  })
+})
+
+describe('pickInterest (BAR-12)', () => {
+  const mine = [{ slug: 'music' }, { slug: 'art' }, { slug: 'food' }]
+  const page = (...groups: string[]) => groups.map((category_group) => ({ category_group }))
+
+  it('is the interest with the most events in the loaded page', () => {
+    expect(pickInterest(mine, page('art', 'art', 'music', 'food'))?.slug).toBe('art')
+  })
+
+  it('a tie, or an empty page, is the first (the server’s stable order)', () => {
+    expect(pickInterest(mine, page('food', 'art'))?.slug).toBe('art')
+    expect(pickInterest(mine, [])?.slug).toBe('music')
+    expect(pickInterest([], page('art'))).toBeUndefined()
   })
 })

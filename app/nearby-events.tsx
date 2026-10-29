@@ -6,6 +6,7 @@ import { AppState, FlatList, Linking, Platform, RefreshControl, StyleSheet, View
 import { Button } from '../components/ds/Button'
 import { EventCard } from '../components/ds/EventCard'
 import { Spinner } from '../components/ds/Loader'
+import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { Orbs } from '../components/ds/Orbs'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
@@ -21,6 +22,7 @@ import { EVENT_DETAIL_QUERY } from '../lib/eventDetailQuery'
 import { getDistanceKm } from '../lib/geo'
 import { isAbortedFix, roughFix, type FixAsk } from '../lib/locationFix'
 import { mergeEventPage, pageHasMore } from '../lib/pulseFeed'
+import { nearbyEndDate } from '../lib/pulseSections'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
 import { homeCardProps } from '../lib/pulse'
 import { useMinimumVisible } from '../lib/useMinimumVisible'
@@ -63,8 +65,7 @@ function RevealRow({ animate, delay, children }: { animate: boolean; delay: numb
 
 /**
  * Nearby (the "See all" behind the Pulse's Nearby section; Flow 3 `nearby`): nearest first, the distance in a Geist
- * Mono column and then the design system's `EventCard` row. One sort, so there is no sort control: a pill that
- * could only say "Nearest" would be a dead control.
+ * Mono column and then the design system's `EventCard` row. A Nearest / Soonest chip sits under the bar (BAR-14).
  */
 export default function NearbyEventsScreen() {
   const bar = useTopBarState()
@@ -77,6 +78,12 @@ export default function NearbyEventsScreen() {
   // Permission granted, but no fix: GPS off, indoors, timed out. Not "no events".
   const [locationFailed, setLocationFailed] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [sort, setSort] = useState<NearbySort>('nearest')
+  // The sort the screen is on now: an answer to another sort that lands late is dropped.
+  const sortRef = useRef(sort)
+  useEffect(() => {
+    sortRef.current = sort
+  }, [sort])
   /** The last page held (0-based, `fetchEventsApi`'s own), whether the server may have more, and what the next read is doing. */
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
@@ -145,6 +152,8 @@ export default function NearbyEventsScreen() {
   const loadEvents = useCallback(
     (force = false) => {
       let superseded = false
+      // Asked for one sort and answered after the chip moved to the other: its rows and its spinner are not the screen's now.
+      let otherSort = false
       return Promise.resolve(locationRef.current || getLocation())
         .then(async (coords) => {
           if (coords === SUPERSEDED) {
@@ -170,13 +179,17 @@ export default function NearbyEventsScreen() {
            * just looking at.
            */
           cityRef.current = (await readStoredCity())?.city
-          const result = await fetchEventsApi(nearbyQuery(cityRef.current, coords, 0), { force })
+          const result = await fetchEventsApi(nearbyQuery(cityRef.current, coords, 0, sort), { force })
 
           if (!mountedRef.current) return
+          if (sortRef.current !== sort) {
+            otherSort = true
+            return
+          }
 
           if (result.data) {
             // Filter to events that have coordinates, then sort by distance
-            setEvents(nearbyRows(result.data, coords))
+            setEvents(nearbyRows(result.data, coords, sort))
             setPage(0)
             setHasMore(pageHasMore(result.data.length, PAGE_SIZE))
             setMore('idle')
@@ -187,13 +200,13 @@ export default function NearbyEventsScreen() {
         })
         .catch(() => {
           // Keep what is on screen: a network error is not "no events near you".
-          if (mountedRef.current) setLoadFailed(true)
+          if (mountedRef.current && sortRef.current === sort) setLoadFailed(true)
         })
         .finally(() => {
-          if (mountedRef.current && !superseded) setLoading(false)
+          if (mountedRef.current && !superseded && !otherSort) setLoading(false)
         })
     },
-    [getLocation]
+    [getLocation, sort]
   )
 
   useEffect(() => {
@@ -235,21 +248,22 @@ export default function NearbyEventsScreen() {
     const asked = page + 1
     setMore('busy')
     try {
-      const result = await fetchEventsApi(nearbyQuery(cityRef.current, userLocation, asked))
-      if (!mountedRef.current) return
+      const result = await fetchEventsApi(nearbyQuery(cityRef.current, userLocation, asked, sort))
+      // The chip moved while this page was out: it belongs to the other sort's list.
+      if (!mountedRef.current || sortRef.current !== sort) return
       if (!result.data) return setMore('failed')
-      const rows = nearbyRows(result.data, userLocation)
+      const rows = nearbyRows(result.data, userLocation, sort)
       setEvents((prev) => mergeEventPage(prev, rows))
       // The page actually asked for, never one more than whatever is held when the answer lands.
       setPage((p) => Math.max(p, asked))
       setHasMore(pageHasMore(result.data.length, PAGE_SIZE))
       setMore('idle')
     } catch {
-      if (mountedRef.current) setMore('failed')
+      if (mountedRef.current && sortRef.current === sort) setMore('failed')
     } finally {
       moreInFlight.current = false
     }
-  }, [hasMore, more, page, userLocation])
+  }, [hasMore, more, page, userLocation, sort])
 
   const retryLocation = useCallback(() => {
     setLoading(true)
@@ -369,6 +383,19 @@ export default function NearbyEventsScreen() {
     <View style={styles.screen}>
       <Orbs set="feed" />
       <TopBar title="Nearby" state={Platform.OS === 'ios' ? 'condensed' : bar.state} onBack={() => router.back()} testID="nearby-top" />
+      <View style={styles.sort}>
+        <SegmentedControl
+          items={['Nearest', 'Soonest']}
+          selected={SORTS.indexOf(sort)}
+          onChange={(i) => {
+            if (SORTS[i] === sort) return
+            // The list is another question now: the rows it was are not this order.
+            setLoading(true)
+            setSort(SORTS[i])
+          }}
+          testID="nearby-sort"
+        />
+      </View>
       <View style={styles.banner}>
         <OfflineBanner text="Offline. Showing what you had." testID="nearby-offline" />
       </View>
@@ -412,29 +439,40 @@ export default function NearbyEventsScreen() {
   )
 }
 
-/** The query for one page of Nearby: the city's events, nearest first, from this fix. */
-const nearbyQuery = (city: string | undefined, coords: { latitude: number; longitude: number }, page: number) => ({
+type NearbySort = 'nearest' | 'soonest'
+const SORTS: readonly NearbySort[] = ['nearest', 'soonest']
+
+/**
+ * The query for one page of Nearby: the city's events from this fix. Nearest is the Pulse's Nearby section expanded, so it has
+ * the section's week (`NEARBY_DAYS`, rounded to the hour so the pages share one key); Soonest is the city by start time (BAR-11, BAR-14).
+ */
+const nearbyQuery = (city: string | undefined, coords: { latitude: number; longitude: number }, page: number, sort: NearbySort = 'nearest') => ({
   page,
   city,
   lat: coords.latitude,
   lon: coords.longitude,
   limit: PAGE_SIZE,
-  sortBy: 'distance' as const,
+  ...(sort === 'nearest'
+    ? { sortBy: 'distance' as const, endDate: nearbyEndDate(Date.now()) }
+    : { sortBy: 'start_time' as const }),
   sortOrder: 'asc' as const,
   status: 'published' as const,
 })
 
 /** A page's events that have a place, each with its distance from the fix, nearest first within the page. */
-const nearbyRows = (events: BlendnEvent[], coords: { latitude: number; longitude: number }): Row[] =>
-  events
+const nearbyRows = (events: BlendnEvent[], coords: { latitude: number; longitude: number }, sort: NearbySort = 'nearest'): Row[] => {
+  const rows = events
     .filter((e): e is BlendnEvent & { latitude: number; longitude: number } => Number.isFinite(e.latitude) && Number.isFinite(e.longitude))
     .map((e) => ({ ...e, _distance: getDistanceKm(coords.latitude, coords.longitude, e.latitude, e.longitude) }))
-    .sort((a, b) => a._distance - b._distance)
+  // Soonest keeps the server's order (start time).
+  return sort === 'nearest' ? rows.sort((a, b) => a._distance - b._distance) : rows
+}
 
 const styles = StyleSheet.create({
   foot: { alignItems: 'center', paddingVertical: SPACE.lg },
   screen: { flex: 1, backgroundColor: COLOR.ink },
   banner: { paddingHorizontal: SPACE.gutter },
+  sort: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl * 2 },
   // The first row stands clear of the bar's hairline (r7 L12: it sat 8 pt under it).
   list: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md, paddingBottom: SPACE.xxl },

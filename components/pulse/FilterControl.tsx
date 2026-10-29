@@ -5,7 +5,9 @@ import { Sheet } from '../ds/Sheet'
 import { font, useBoldText } from '../ds/shared'
 import {
   activeFilterCount,
+  DISTANCE_ANY_LABEL,
   DISTANCE_OPTIONS,
+  distanceLabel,
   NO_FILTERS,
   WHEN_LABELS,
   WHEN_OPTIONS,
@@ -111,9 +113,9 @@ export function FilterSheet({
         />
         {hasLocation ? (
           <ChipSet
-            label="Within"
+            label="How far"
             selection="single"
-            items={[{ key: 'any', label: 'Any' }, ...DISTANCE_OPTIONS.map((km) => ({ key: String(km), label: `${km} km` }))]}
+            items={[{ key: 'any', label: DISTANCE_ANY_LABEL }, ...DISTANCE_OPTIONS.map((km) => ({ key: String(km), label: distanceLabel(km) }))]}
             selected={[String(draft.radiusKm ?? 'any')]}
             onToggle={(key) => onChange({ ...draft, radiusKm: key === 'any' || String(draft.radiusKm) === key ? undefined : Number(key) })}
             testID="pulse-filter-within"

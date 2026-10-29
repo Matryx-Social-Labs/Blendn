@@ -156,3 +156,13 @@ it('the action is a control: it stops at the control cap, so "Nights out" and "S
   await render(<SectionHeader title="Nights out" action={{ label: 'See all', onPress: jest.fn() }} />)
   expect(screen.getByText('See all').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
 })
+
+it('a count that is a floor prints "N+" and is heard the same (BAR-10), plain or lit', async () => {
+  await render(<SectionHeader title="Tonight" count={50} more testID="h" />)
+  expect(screen.getByText('50+')).toBeTruthy()
+  expect(screen.getByRole('header').props.accessibilityLabel).toBe('Tonight, 50+')
+  await render(<SectionHeader title="Waiting" count={1204} more countStyle="lit" testID="l" />)
+  expect(screen.getByText('1,204+')).toBeTruthy()
+  await render(<SectionHeader title="Exact" count={7} testID="e" />)
+  expect(screen.getByText('7')).toBeTruthy()
+})

@@ -4,12 +4,13 @@ import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import { onCriticalPath } from './criticalPath'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
+import { resetInboxBadge } from './inboxBadge'
 import { Logger } from './logger'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
 import { queryCache } from './queryCache'
-import { clearRoomSignal } from './roomSignal'
+import { clearRoomSignal, stopRoomSignalSource } from './roomSignal'
 import { resetRoomMembership } from './roomMembership'
 import { forgetRosters } from './rosterMemory'
 import { forgetHeldForm } from './heldSignInForm'
@@ -260,12 +261,18 @@ const keepStoredSession = async () => {
   })
 }
 
+/** When coming to the foreground last re-read the session (`refreshAuthUserOnForeground`). */
+let lastForegroundRefresh = 0
+
 /**
  * Everything this phone holds for the session in memory, cleared at once: signed out, and the root layout routes to the
  * entry screen. Never waits on a native call (SCRUM-733, RC drive D1): the keychain shares one native queue with every Expo
  * module, and a call stuck there would keep somebody in a session they asked to leave. The keychain is the caller's.
  */
 const resetLocalSession = () => {
+  // The next account's first foreground read is not held back by the last one's throttle.
+  lastForegroundRefresh = 0
+  resetInboxBadge()
   void forgetAuthMethod()
   // The icon's number was the last account's: the next person to open the app on this phone does not inherit it.
   void setAppIconBadge(0)
@@ -277,6 +284,7 @@ const resetLocalSession = () => {
    * plans for tonight. Cleared here rather than in `signOut` because a failed
    * background refresh reaches this path without going through it.
    */
+  stopRoomSignalSource()
   clearRoomSignal()
   /*
    * So are a thread's draft and unsent messages, and the rooms you left or
@@ -410,6 +418,8 @@ export const signInWithGoogle = async (
         // there anything to ask about.
         isNewAccount: isNewUser === true,
       })
+      // This route's profile carries no `photos` (the Me tab's face): the session read has them.
+      void refreshAuthUser()
 
       return { success: true, isNewUser }
     } else {
@@ -450,6 +460,8 @@ export const signInWithApple = async (
         // there anything to ask about.
         isNewAccount: isNewUser === true,
       })
+      // This route's profile carries no `photos` (the Me tab's face): the session read has them.
+      void refreshAuthUser()
 
       return { success: true, isNewUser }
     } else {
@@ -631,11 +643,16 @@ export const sameUser = (a: AuthUser | null | undefined, b: AuthUser): boolean =
  */
 export const refreshAuthUser = async (): Promise<void> => {
   try {
+    // Nobody signed in has nothing to refresh; and the read is for whoever started it.
+    const startedFor = globalAuthState.user?.id
+    if (!startedFor) return
     const result = await apiClient.getSession()
     if (!result.success || !result.data) {
       Logger.warn('auth', 'Session refresh did not return a user', { error: result.error })
       return
     }
+    // A read in flight when they signed out, or when another account signed in, lands on nobody: it is not theirs.
+    if (globalAuthState.user?.id !== startedFor || result.data.id !== startedFor) return
     // Settings reads the session every time it opens: an unchanged user must not notify every `useAuth` subscriber.
     if (sameUser(globalAuthState.user, result.data)) return
     updateAuthState({ session: { user: result.data }, user: result.data })
@@ -645,6 +662,15 @@ export const refreshAuthUser = async (): Promise<void> => {
     // would be an unhandled rejection with the photo already saved.
     Logger.warn('auth', 'Session refresh failed', { error })
   }
+}
+
+/** How often coming back to the app may re-read the session (moderation pulls and other devices change `profile.photos`). */
+export const FOREGROUND_REFRESH_MS = 60_000
+/** `refreshAuthUser()` when the app comes to the foreground, at most once a minute, and only while signed in. */
+export const refreshAuthUserOnForeground = async (now: number = Date.now()): Promise<void> => {
+  if (!globalAuthState.user || now - lastForegroundRefresh < FOREGROUND_REFRESH_MS) return
+  lastForegroundRefresh = now
+  await refreshAuthUser()
 }
 
 export const deleteAccount = async (appleAuthorizationCode?: string): Promise<{ success: boolean; error?: string }> => {

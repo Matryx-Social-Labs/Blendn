@@ -4,6 +4,8 @@
  */
 
 import { roundCoordinate } from './coordinates'
+import { patchEventDetailStatus } from './eventDetailCache'
+import { emitEventStatusChanged } from './eventStatusSignal'
 import { markCheckIn } from './checkInTiming'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from './savedEvents'
@@ -14,10 +16,10 @@ import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
-import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isTimeoutError, settleWithin } from './fetchTimeout'
+import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isNetworkFailure, isTimeoutError, settleWithin } from './fetchTimeout'
 import type { CityOption } from './city'
 import { Logger } from './logger'
-import { markOffline, markOnline } from './networkStatus'
+import { markOffline, markOnline, markTimeout } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
 import { noteFriendGone } from './friendsGone'
 import { FRIENDS_PAGE } from './friendsPaging'
@@ -25,7 +27,7 @@ import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, 
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { reasonOf, SESSION_END_CODES } from './sessionEnd'
-import { appVersionNumber } from './appVersion'
+import { appBuildNumber, appVersionNumber } from './appVersion'
 import { isUpdateRefusal, markUpdateRequired } from './updateRequired'
 import { markSessionExpired, markSessionStarted } from './sessionEvents'
 import { onCriticalPath } from './criticalPath'
@@ -283,6 +285,9 @@ export const TIMED_OUT = Symbol('timed out')
  */
 const withinDeadline = <T,>(work: Promise<T>): Promise<T | typeof TIMED_OUT> => settleWithin<T | typeof TIMED_OUT>(work, REQUEST_TIMEOUT_MS, TIMED_OUT)
 
+/** Sign-out waits this long for the keychain, not the request deadline: the person asked to leave, and a restored session's read can hang (SCRUM-733). */
+export const SIGN_OUT_READ_MS = 3_000
+
 /**
  * Which session the keychain holds: bumped by a stored sign-in (`keepSession`) and by every way out (`signOut`,
  * `signOutEverywhere`, `deleteAccount`). Work that started in one session never writes into the next (Opus review H1): a
@@ -471,14 +476,14 @@ class TokenStorage {
 // Profile Cache - shared across components to avoid duplicate fetches
 const PROFILE_CACHE_TTL = 60 * 1000 // 60 seconds
 interface ProfileCacheEntry {
-  data: UserProfileData
+  data: OwnProfileEnvelope
   timestamp: number
   userId: string
 }
 let profileCache: ProfileCacheEntry | null = null
 
 export const ProfileCache = {
-  get(userId: string): UserProfileData | null {
+  get(userId: string): OwnProfileEnvelope | null {
     if (!profileCache) return null
     if (profileCache.userId !== userId) return null
     if (Date.now() - profileCache.timestamp > PROFILE_CACHE_TTL) {
@@ -487,7 +492,7 @@ export const ProfileCache = {
     }
     return profileCache.data
   },
-  set(userId: string, data: UserProfileData): void {
+  set(userId: string, data: OwnProfileEnvelope): void {
     profileCache = { data, timestamp: Date.now(), userId }
   },
   clear(): void {
@@ -762,6 +767,8 @@ export interface PaginationMeta {
 /** Represents one event item as returned by the mobile API (camelCase). */
 export interface EventApiItem {
   id: string
+  /** The neighbourhood, from the detail route (an unlisted event names it, never the venue). Absent from a server that does not send it. */
+  area?: string | null
   slug: string
   title: string
   description: string | null
@@ -938,6 +945,8 @@ export interface EventApiItem {
     ratingCount?: number
     averageRating?: number | null
   }
+  /** The list's own RSVP read (`GET /events`): your status on this event, null when none. Absent from an older server; the detail route's is `userStatus.rsvpStatus`. */
+  rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
   userStatus?: {
     isFavorited?: boolean
     isCheckedIn?: boolean
@@ -945,7 +954,7 @@ export interface EventApiItem {
     checkInId?: string
     userRating?: number | null
     userReview?: string | null
-    rsvpStatus?: 'going' | 'maybe' | 'not_going' | null
+    rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
   }
 }
 
@@ -953,7 +962,7 @@ export interface EventsListResponse {
   events: EventApiItem[]
   pagination: PaginationMeta
   activeCheckins?: Array<{ id: string; eventId: string; status: string; [key: string]: unknown }>
-  profile?: UserProfileData
+  profile?: OwnProfileEnvelope
 }
 
 /** One place in the Places list — `GET /api/mobile/venues`. */
@@ -1027,6 +1036,8 @@ export interface VenueDetail {
     /** The venue_type key ("pub_bar"): which plate the page draws when tonight has no cover. */
     venueType?: string | null
     venueTypeLabel: string
+    /** The venue's IANA zone (`venues.timezone`): its hours and its day are read in it, never the phone's. Absent from an older server. */
+    timezone?: string | null
     /** False: "Own this place? Claim it" applies. */
     claimed: boolean
     /*
@@ -1079,6 +1090,13 @@ export interface VenueDetail {
   tonight: { id: string; title: string; startTime: string; endTime: string; coverImageUrl?: string | null; timezone?: string | null } | null
 }
 
+/** A room a check-in or Go Live took you out of (blendn-admin `LeftRoom`). Absent from an older server: none. */
+export interface LeftRoom {
+  eventId: string
+  kind: string
+  name: string
+}
+
 /** `POST /api/mobile/venues/:venueId/live` — your window at a place. */
 export interface GoLiveResult {
   venueDayId: string
@@ -1087,11 +1105,92 @@ export interface GoLiveResult {
   stay: boolean
   stayUntil: string | null
   checkIn: { id: string; status: string; checkInTime: string }
+  left?: LeftRoom[]
   revealSuggestion: boolean
   intentNeeded: boolean
 }
 
-export interface UserProfileData {
+/** The fields of the nested `profile` object (`GET /profiles/:id`). */
+export interface ProfileFields {
+    /*
+     * The five matching fields, declared because the editor needs to *show*
+     * them, not just write them.
+     *
+     * They were always in the payload for your own profile -- the route spreads
+     * `selfProfileFields`, the whole row minus `date_of_birth` -- and were
+     * simply never typed or read, so `about-you` opened with every chip blank
+     * whatever you had already chosen. The route's "withheld from everyone"
+     * rule governs the *public* branch; self is the exception it is written
+     * against.
+     */
+    intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
+    work_field?: string | null
+    /** The account's push switch (`profiles.push_enabled`); on unless somebody turned it off. */
+    push_enabled?: boolean
+    /** Off by default: friends see a pseudonym in rooms unless this is on. */
+    friends_see_me_in_rooms?: boolean
+    /** Your own profile only: the slugs you picked within the field (the route sends labels to everyone else). */
+    expertise?: string[]
+    gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
+    orientations?: string[]
+    interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
+    id?: string
+    phone?: string
+    name?: string
+    age?: number
+    location?: string
+    bio?: string
+    occupation?: string
+    education?: string
+    interests?: string[]
+    photos?: string[]
+    profile_photos?: string[]
+    onboarded?: boolean
+    goals?: string[]
+    looking_for?: string[]
+    /**
+     * Returned to the owner only. Off means counted and not listed in any
+     * room — the roster and the grid leave you out — and the room banner
+     * says so (SCRUM-141).
+     */
+    show_online?: boolean
+    /**
+     * `GET /profiles/:id` (blendn-admin #716): what check-ins earned, for you and for anyone who may see who you are. Absent when
+     * the person turned badges off, for a viewer the profile is anonymous to, and from an older server (`parseBadges`).
+     */
+    badges?: Badge[]
+    /**
+     * Your own profile only: `photos` in order, each `pulled: false`, then the photos moderation took down in the last 7 days,
+     * `pulled: true` with `url: null` (the object is withdrawn) and `was_main`. Absent from an older server (`pulledPhotos`).
+     */
+    photo_states?: Array<{ url: string | null; pulled: boolean; pulled_at: string | null; was_main: boolean }>
+    created_at?: string
+    updated_at?: string
+  }
+
+/**
+ * `GET /profiles/:id`: the NESTED shape. The profile is `data.profile`; a top-level `photos` or `name` is not here (that is
+ * `GET /users/:id`, `PublicProfile`). Two endpoints used to share one type, which is how a top-level `photos` read compiled
+ * against the wrong one (SYS-19, O1).
+ */
+export interface OwnProfileEnvelope {
+  id?: string
+  email?: string
+  name?: string
+  image?: string | null
+  createdAt?: string
+  /** Whether to offer "Add friend" (`parseFriendOffer`). */
+  friend?: unknown
+  profile?: ProfileFields | null
+  /** The interests as structured rows (the editor's chips); `profile.interests` is the labels. */
+  interests?: { id: string; name: string; slug: string; icon: string | null }[]
+}
+
+/**
+ * `GET /users/:id`: the FLAT shape, what a profile page draws for anyone. Photos, bio and occupation are sent only when
+ * `identityVisible` (the server's one answer to "revealed?").
+ */
+export interface PublicProfile {
   id?: string
   user_id?: string
   email?: string
@@ -1137,59 +1236,6 @@ export interface UserProfileData {
   friend?: unknown
   /** Their badges (`{ kind, label }[]`), top-level beside `friend` for whoever may see who they are; read through `parseBadges`. */
   badges?: unknown
-  /** Nested profile object from /api/mobile/profiles/[userId] */
-  profile?: {
-    /*
-     * The five matching fields, declared because the editor needs to *show*
-     * them, not just write them.
-     *
-     * They were always in the payload for your own profile -- the route spreads
-     * `selfProfileFields`, the whole row minus `date_of_birth` -- and were
-     * simply never typed or read, so `about-you` opened with every chip blank
-     * whatever you had already chosen. The route's "withheld from everyone"
-     * rule governs the *public* branch; self is the exception it is written
-     * against.
-     */
-    intent_default?: ('dating' | 'networking' | 'friendship' | 'just_here')[]
-    work_field?: string | null
-    /** Your own profile only: the slugs you picked within the field (the route sends labels to everyone else). */
-    expertise?: string[]
-    gender?: 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say' | null
-    orientations?: string[]
-    interested_in?: ('woman' | 'man' | 'non_binary' | 'prefer_not_to_say')[]
-    id?: string
-    phone?: string
-    name?: string
-    age?: number
-    location?: string
-    bio?: string
-    occupation?: string
-    education?: string
-    interests?: string[]
-    photos?: string[]
-    profile_photos?: string[]
-    onboarded?: boolean
-    goals?: string[]
-    looking_for?: string[]
-    /**
-     * Returned to the owner only. Off means counted and not listed in any
-     * room — the roster and the grid leave you out — and the room banner
-     * says so (SCRUM-141).
-     */
-    show_online?: boolean
-    /**
-     * `GET /profiles/:id` (blendn-admin #716): what check-ins earned, for you and for anyone who may see who you are. Absent when
-     * the person turned badges off, for a viewer the profile is anonymous to, and from an older server (`parseBadges`).
-     */
-    badges?: Badge[]
-    /**
-     * Your own profile only: `photos` in order, each `pulled: false`, then the photos moderation took down in the last 7 days,
-     * `pulled: true` with `url: null` (the object is withdrawn) and `was_main`. Absent from an older server (`pulledPhotos`).
-     */
-    photo_states?: Array<{ url: string | null; pulled: boolean; pulled_at: string | null; was_main: boolean }>
-    created_at?: string
-    updated_at?: string
-  }
 }
 
 export interface ChatMessageData {
@@ -1203,6 +1249,9 @@ export interface ChatMessageData {
 }
 
 export interface CheckInResult {
+  /** The route's shape: the check-in row. `checkInId` below was never on it (ROOM-11). */
+  checkIn?: { id?: string }
+  left?: LeftRoom[]
   checkInId?: string
   check_in_id?: string
   status?: string
@@ -1241,10 +1290,26 @@ export interface EventChatData {
   chatGroupName?: string
   id?: string
   name?: string
+  /** The room's own state, `active` or `locked` (the organiser's lock), for everyone in it. */
   status?: string
   memberCount?: number
+  /** You as this room names you (yours only). */
+  you?: { pseudonym?: string | null }
+  /** This caller's answer to "may I write here": `reason` names their mute, ban or the room's state; `message` is the closed sentence. */
+  write?: { allowed: boolean; reason?: string | null; message?: string | null; closesAt?: string | null; eventEndedAt?: string | null }
   [key: string]: unknown
 }
+
+/** What a room's `write` / `status` come in: the event door (`EventChatData`) and the history read both carry them. */
+export type RoomWriteRead = Pick<EventChatData, 'status' | 'write'>
+
+/**
+ * `GET /chat/groups/:id/messages`: an object `{ status, write, messages, pagination }` on a current server (SV-5), a bare
+ * array on an older one. `write` / `status` are for any room kind, so the composer's lock reads them here.
+ */
+export type ChatHistoryData =
+  | Array<Record<string, unknown>>
+  | (RoomWriteRead & { messages?: Array<Record<string, unknown>>; pagination?: { hasMore?: boolean; nextCursor?: string | null } })
 
 export interface AuthTokens {
   accessToken: string
@@ -1343,6 +1408,12 @@ export const LIST_PAGE = { conversations: CONVERSATIONS_PAGE, friends: FRIENDS_P
  */
 export const CHANNEL_SET_HEADER = { 'X-Channel-Set': String(PUSH_CHANNEL_SET) } as const
 
+/** `X-App-Build` and `X-App-Platform`: the build number the server's per-build minimum judges (SYS-14). Nothing when the build has no plain number. */
+function buildHeaders(): Record<string, string> {
+  const build = appBuildNumber()
+  return build ? { 'X-App-Build': build, 'X-App-Platform': Platform.OS } : {}
+}
+
 class ApiClientClass {
   private baseUrl: string
   private inFlight = new Map<string, Promise<ApiResponse<unknown>>>()
@@ -1433,9 +1504,22 @@ class ApiClientClass {
    */
   forgetEvent(eventId: string): void {
     const detail = `:/api/mobile/events/${eventId}`
-    for (const key of this.responseCache.keys()) {
-      if (key.includes(`${detail}:`) || key.includes(`${detail}?`)) this.responseCache.delete(key)
-    }
+    // forgetMatching also bumps the epoch and drops reads on the wire: a getEvent sent before this write (the page just
+    // opened, "I'm going" tapped at once) must neither be joined by the next read nor refill the entry with the old status.
+    this.forgetMatching((key) => key.includes(`${detail}:`) || key.includes(`${detail}?`))
+  }
+
+  /**
+   * Your RSVP or Save on an event changed (SCRUM-876): the event page reads two caches that still say the old thing, so
+   * both are corrected here, once, for every caller (the page, the room's "I'm going", the Going tray). This one's 30 s
+   * entry is forgotten, as check-in does; the page's own 2-minute copy is patched with the new status so a reopen is right
+   * before the network answers.
+   */
+  private eventStatusChanged(eventId: string, status: { rsvpStatus?: string | null; isFavorited?: boolean }): void {
+    this.forgetEvent(eventId)
+    patchEventDetailStatus(eventId, status)
+    // The centre button's plan and fence are judged from your saves and RSVPs: judge again now, not at the next tick.
+    emitEventStatusChanged()
   }
 
   /**
@@ -1646,24 +1730,26 @@ class ApiClientClass {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       // Which build is asking, so the server can refuse one it no longer serves (Flow 15 15.14). Not from the web build, which has no native build number to judge (the server's CORS allow-list names this header and `X-Channel-Set`, so a preflight is no reason).
-      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+      ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber(), ...buildHeaders() } : {}),
       ...CHANNEL_SET_HEADER,
       ...(options.headers as Record<string, string>),
     }
 
-    // The session this request was made in, and whether it carried a token at all (M1): see the 401 below.
+    // The session this request was made in: see the 401 below.
     const epoch = sessionEpoch
-    let sentToken = false
     if (requireAuth) {
       const accessToken = await this.freshAccessToken()
       // The keychain did not answer: a transport-shaped failure, tried again on the next call. Never sent unauthenticated.
       if (accessToken === TIMED_OUT) return { success: false, error: TIMEOUT_MESSAGE }
       // The session ended while the refresh was out (a sign-out, another sign-in): never sent with the next one's token (H1).
       if (epoch !== sessionEpoch) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`
-        sentToken = true
-      }
+      /*
+       * Nobody is signed in (a session the server revoked has just been ended here, or none was ever started): a request that
+       * needs one is answered here, not sent to be refused. Sent, every screen still mounted over the entry screen's
+       * redirect asked again and drew a 401 each time, about 29 a minute until a relaunch (SCRUM-879).
+       */
+      if (!accessToken) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
+      headers['Authorization'] = `Bearer ${accessToken}`
     }
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -1692,10 +1778,10 @@ class ApiClientClass {
         if (response.status === 401 && requireAuth) {
           /*
            * Not this request's session to refresh or to end (Opus review M1): it ended while the request was out (a sign-out
-           * the person chose, another sign-in), or the request carried no token because nobody is signed in. Either way a
-           * refusal here is not a session the server ended, and must never write "You were signed out".
+           * the person chose, another sign-in). A refusal here is not a session the server ended, and must never write
+           * "You were signed out". (A request with no token at all is never sent: see above.)
            */
-          if (epoch !== sessionEpoch || !sentToken) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
+          if (epoch !== sessionEpoch) return { success: false, error: NOT_SIGNED_IN_MESSAGE }
           const refreshed = await this.refreshTokens()
           if (refreshed === 'ok') {
             const newAccessToken = await withinDeadline(TokenStorage.getAccessToken())
@@ -1711,10 +1797,7 @@ class ApiClientClass {
             // transport problem it is, and tried again on the next call.
             return { success: false, error: TIMEOUT_MESSAGE }
           }
-          await TokenStorage.clearAll()
-          markSessionExpired(rejectedReason, rejectedCode)
-          rejectedReason = undefined
-          rejectedCode = undefined
+          await this.endRejectedSession()
           return { success: false, error: 'Session expired. Please sign in again.' }
         }
 
@@ -1728,7 +1811,8 @@ class ApiClientClass {
         if (result.success) markOnline()
         return result
       } catch (error) {
-        const isNetworkError = error instanceof TypeError
+        // Not `instanceof TypeError`: expo/fetch rejects with a FetchError (SCRUM-898, lib/fetchTimeout.ts).
+        const isNetworkError = isNetworkFailure(error)
         if (isNetworkError && attempt < MAX_RETRIES) {
           Logger.warn('api', `Network error, retry ${attempt + 1}/${MAX_RETRIES}`, { endpoint })
           continue
@@ -1749,9 +1833,10 @@ class ApiClientClass {
          * went quiet. Telling someone to check their wifi when their wifi is
          * fine sends them to fix the wrong thing, and `markOffline()` would put
          * the whole app into an offline state on the strength of one slow
-         * endpoint.
+         * endpoint (so one timeout only counts: `markTimeout`).
          */
         if (isTimeoutError(error)) {
+          markTimeout() // one is a slow endpoint; two in a row with no answer is no network (lib/networkStatus.ts)
           return { success: false, error: TIMEOUT_MESSAGE }
         }
         /*
@@ -1766,6 +1851,21 @@ class ApiClientClass {
 
     Logger.error('api', 'Request failed after retries', { endpoint })
     return { success: false, error: GENERIC_FAILURE_MESSAGE }
+  }
+
+  /**
+   * The server refused the refresh token: the session is over. The tokens go, the server's reason is stored for the entry
+   * screen, and `useAuth` resets the local session and routes there (`subscribeSessionExpired`). Run by the request whose 401
+   * found out, and by a refresh no request was waiting on when the server named the reason (SCRUM-879); the second to arrive
+   * finds the tokens gone and the reason already recorded.
+   */
+  private async endRejectedSession(): Promise<void> {
+    const reason = rejectedReason
+    const code = rejectedCode
+    rejectedReason = undefined
+    rejectedCode = undefined
+    await TokenStorage.clearAll()
+    markSessionExpired(reason, code)
   }
 
   private async refreshTokens(): Promise<RefreshOutcome> {
@@ -1848,6 +1948,8 @@ class ApiClientClass {
         return 'rejected'
       } catch (error) {
         Logger.error('api', 'Token refresh failed', { error })
+        // The refresh is a request too: a network that would not carry it is offline, whatever was being refreshed for.
+        if (isNetworkFailure(error)) markOffline()
         return 'failed'
       }
     })()
@@ -1870,6 +1972,12 @@ class ApiClientClass {
       if (ms > REFRESH_SLOW_MS) Logger.warn('api', 'refresh:slow', { ms, outcome })
     })
 
+    // A named reason (a password reset, a sign-out elsewhere, an account state) is the session's end whoever asked: the app
+    // open on a quiet screen must not wait for its next request to find out. Registered first, so it reads the reason
+    // before the request that joined this refresh does.
+    p.then((outcome) => {
+      if (outcome === 'rejected' && rejectedCode && epoch === sessionEpoch) void this.endRejectedSession()
+    })
     p.then((outcome) => {
       lastRefreshFailedAt = outcome === 'failed' ? Date.now() : 0
       if (outcome !== 'failed') {
@@ -2148,13 +2256,22 @@ class ApiClientClass {
      */
     requestQueue.clear()
     this.clearResponseCache()
-    const accessRead = withinDeadline(TokenStorage.getAccessToken())
-    const refreshRead = withinDeadline(TokenStorage.getRefreshToken())
-    const cleared = withinDeadline(TokenStorage.clearAll())
+    const rawAccess = TokenStorage.getAccessToken()
+    const rawRefresh = TokenStorage.getRefreshToken()
+    const accessRead = settleWithin<string | null | typeof TIMED_OUT>(rawAccess, SIGN_OUT_READ_MS, TIMED_OUT)
+    const refreshRead = settleWithin<string | null | typeof TIMED_OUT>(rawRefresh, SIGN_OUT_READ_MS, TIMED_OUT)
+    const cleared = settleWithin<unknown>(TokenStorage.clearAll(), SIGN_OUT_READ_MS, TIMED_OUT)
     const [accessToken, refreshToken] = await Promise.all([accessRead, refreshRead])
     let result: ApiResponse<void>
     if ((refreshToken === TIMED_OUT && !revokeAll) || accessToken === TIMED_OUT) {
       result = { success: false, error: TIMEOUT_MESSAGE }
+      /*
+       * The keychain is slow, not empty: this phone is signed out now, and the server is told (best effort) when the tokens
+       * arrive. The reads were queued ahead of the deletes, so they still return the session that is being left.
+       */
+      void Promise.all([rawAccess, rawRefresh])
+        .then(([access, refresh]) => (access ? this.postSignOut(access, refresh, !revokeAll, pushToken) : undefined))
+        .catch(() => {})
     } else if (!accessToken) {
       // Nothing stored: there is no session here for the server to end.
       result = { success: true }
@@ -2178,7 +2295,7 @@ class ApiClientClass {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber() } : {}),
+          ...(Platform.OS !== 'web' ? { 'X-App-Version': appVersionNumber(), ...buildHeaders() } : {}),
           ...CHANNEL_SET_HEADER,
           Authorization: `Bearer ${access}`,
         },
@@ -2412,7 +2529,7 @@ class ApiClientClass {
    * remove, or `toggleInterest` to flip.
    */
   async addFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
-    return this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
+    const result = await this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
       `/api/mobile/events/${eventId}/favorite`,
       {
         method: 'POST',
@@ -2420,11 +2537,13 @@ class ApiClientClass {
       true,
       3
     )
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.isFavorited })
+    return result
   }
 
   /** Never refused — not on age, not on status (API: SCRUM-176). */
   async removeFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
-    return this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
+    const result = await this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
       `/api/mobile/events/${eventId}/favorite`,
       {
         method: 'DELETE',
@@ -2432,12 +2551,14 @@ class ApiClientClass {
       true,
       3
     )
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.isFavorited })
+    return result
   }
 
   async toggleInterest(
     eventId: string
   ): Promise<ApiResponse<{ interested: boolean; interestCount: number }>> {
-    return this.queuedRequest<{ interested: boolean; interestCount: number }>(
+    const result = await this.queuedRequest<{ interested: boolean; interestCount: number }>(
       `/api/mobile/events/${eventId}/interest`,
       {
         method: 'POST',
@@ -2445,6 +2566,9 @@ class ApiClientClass {
       true,
       3
     )
+    // The detail both caches hold says the old thing now (SCRUM-876).
+    if (result.success && result.data) this.eventStatusChanged(eventId, { isFavorited: result.data.interested })
+    return result
   }
 
   /**
@@ -2462,7 +2586,7 @@ class ApiClientClass {
     eventId: string,
     status: 'going' | 'maybe' | 'not_going'
   ): Promise<ApiResponse<{ rsvpStatus: RsvpStatus; rsvpCount: number }>> {
-    return this.queuedRequest<{ rsvpStatus: RsvpStatus; rsvpCount: number }>(
+    const result = await this.queuedRequest<{ rsvpStatus: RsvpStatus; rsvpCount: number }>(
       `/api/mobile/events/${eventId}/rsvp`,
       {
         method: 'POST',
@@ -2471,12 +2595,15 @@ class ApiClientClass {
       true,
       2
     )
+    // What the server answered, which may be `waitlisted`, not what was asked.
+    if (result.success && result.data) this.eventStatusChanged(eventId, { rsvpStatus: result.data.rsvpStatus })
+    return result
   }
 
   async cancelRsvp(
     eventId: string
   ): Promise<ApiResponse<{ rsvpStatus: null; rsvpCount: number }>> {
-    return this.queuedRequest<{ rsvpStatus: null; rsvpCount: number }>(
+    const result = await this.queuedRequest<{ rsvpStatus: null; rsvpCount: number }>(
       `/api/mobile/events/${eventId}/rsvp`,
       {
         method: 'DELETE',
@@ -2484,6 +2611,8 @@ class ApiClientClass {
       true,
       2
     )
+    if (result.success) this.eventStatusChanged(eventId, { rsvpStatus: null })
+    return result
   }
 
   async rateEvent(
@@ -2517,7 +2646,7 @@ class ApiClientClass {
    * `cache: false` reads fresh and leaves the cache alone: the cache holds one profile, and reading somebody else's must not
    * replace your own.
    */
-  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<UserProfileData>> {
+  async getProfile(userId: string, options: { cache?: boolean } = {}): Promise<ApiResponse<OwnProfileEnvelope>> {
     const useCache = options.cache !== false
     // Check cache first for instant response
     const cached = useCache ? ProfileCache.get(userId) : null
@@ -2525,7 +2654,7 @@ class ApiClientClass {
       return { success: true, data: cached }
     }
 
-    const result = await this.queuedRequest<UserProfileData>(`/api/mobile/profiles/${userId}`)
+    const result = await this.queuedRequest<OwnProfileEnvelope>(`/api/mobile/profiles/${userId}`)
 
     // Cache successful responses
     if (useCache && result.success && result.data) {
@@ -2717,8 +2846,8 @@ class ApiClientClass {
 
   // === USER ENDPOINTS ===
 
-  async getPublicProfile(userId: string): Promise<ApiResponse<UserProfileData>> {
-    return this.queuedRequest<UserProfileData>(`/api/mobile/users/${userId}`)
+  async getPublicProfile(userId: string): Promise<ApiResponse<PublicProfile>> {
+    return this.queuedRequest<PublicProfile>(`/api/mobile/users/${userId}`)
   }
 
   /**
@@ -2770,8 +2899,10 @@ class ApiClientClass {
     return this.cachedRequest<Array<Record<string, unknown>>>(endpoint, CHAT_LIST_SWR_TTL)
   }
 
-  async getEventChat(eventId: string): Promise<ApiResponse<EventChatData>> {
-    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat`)
+  /** `limit: 1` when only `write` / `status` is wanted (the composer's lock): the room's history is not. */
+  async getEventChat(eventId: string, options?: { limit?: number }): Promise<ApiResponse<EventChatData>> {
+    const query = options?.limit ? `?limit=${options.limit}` : ''
+    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat${query}`)
   }
 
   async sendChatMessage(
@@ -2802,12 +2933,12 @@ class ApiClientClass {
   async getChatMessages(
     chatGroupId: string,
     params?: { limit?: number; before?: string }
-  ): Promise<ApiResponse<Array<Record<string, unknown>>>> {
+  ): Promise<ApiResponse<ChatHistoryData>> {
     const searchParams = new URLSearchParams()
     if (params?.limit) searchParams.append('limit', String(params.limit))
     if (params?.before) searchParams.append('before', params.before)
     const query = searchParams.toString()
-    return this.queuedRequest<Array<Record<string, unknown>>>(
+    return this.queuedRequest<ChatHistoryData>(
       `/api/mobile/chat/groups/${chatGroupId}/messages${query ? `?${query}` : ''}`
     )
   }

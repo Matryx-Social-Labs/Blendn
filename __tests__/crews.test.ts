@@ -402,6 +402,12 @@ describe('crew pushes land where they mean something, and name nobody', () => {
     })
   })
 
+  it('ROOM-05: an event room’s push carries the event id, so the room can ask that door for its lock; a crew’s never does', () => {
+    expect(notificationTarget({ type: 'group_message', chatGroupId: 'g3', eventId: 'e9' })).toEqual({ pathname: '/chat/[id]', params: { id: 'g3', eventId: 'e9' } })
+    expect(notificationTarget({ type: 'announcement', chatGroupId: 'g3', eventId: 'e9' })).toEqual({ pathname: '/chat/[id]', params: { id: 'g3', eventId: 'e9' } })
+    expect(notificationTarget({ type: 'group_message', chatGroupId: 'g2', kind: 'crew', crewId: 'c1', eventId: 'e9' })).toEqual({ pathname: '/chat/[id]', params: { id: 'g2', kind: 'crew', crewId: 'c1' } })
+  })
+
   it('an invite opens the crews screen', () => {
     expect(notificationTarget({ type: 'crew_invite', crewId: 'c1' })).toEqual({
       pathname: '/crews/invite/[crewId]',
@@ -443,5 +449,35 @@ describe('systemPreview (TG-10, S-7)', () => {
     const rows = crewRoomsFrom({ rooms: [{ id: 'r', kind: 'crew', lastMessage: { content: 'x', type: 'system', user: { id: 'u' } } }] })
     expect(rows[0].lastMessage?.type).toBe('system')
     expect(crewRoomsFrom({ rooms: [{ id: 'r', kind: 'crew', lastMessage: { content: 'x', user: { id: 'u' } } }] })[0].lastMessage).not.toHaveProperty('type')
+  })
+})
+
+describe('finding an invite past the first page (YOU-11)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { findInvite, INVITE_LOOKUP_PAGES } = require('../lib/crews')
+  const inv = (crewId: string) => ({ crewId })
+  const page = (ids: string[], next: string | null) => ({ success: true, data: { invites: ids.map(inv), invitesPagination: { hasMore: !!next, nextCursor: next } } })
+
+  it('finds invite #51 on page two', async () => {
+    const load = jest.fn(async (cursor?: string | null) => (cursor ? page(['c51'], null) : page(['c1', 'c2'], 'p2')))
+    expect(await findInvite(load, 'c51')).toMatchObject({ kind: 'found', invite: { crewId: 'c51' } })
+    expect(load).toHaveBeenNthCalledWith(2, 'p2')
+  })
+
+  it('stops when there are no more pages: really not open', async () => {
+    const load = jest.fn(async () => page(['c1'], null))
+    expect(await findInvite(load, 'zzz')).toEqual({ kind: 'notOpen' })
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('never reads past the cap (200 invites)', async () => {
+    const load = jest.fn(async () => page(['c1'], 'more'))
+    expect(await findInvite(load, 'zzz')).toEqual({ kind: 'notOpen' })
+    expect(load).toHaveBeenCalledTimes(INVITE_LOOKUP_PAGES)
+  })
+
+  it('a page that fails is a failure, not "not open"', async () => {
+    const load = jest.fn(async (cursor?: string | null) => (cursor ? { success: false } : page(['c1'], 'p2')))
+    expect(await findInvite(load, 'c9')).toEqual({ kind: 'failed' })
   })
 })

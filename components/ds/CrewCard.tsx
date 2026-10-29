@@ -28,6 +28,8 @@ export type CrewCardCrew = {
   bio?: string | null
   tags: string[]
   intent?: string
+  /** The crew's tier badge ("Out together often"): one pill, never a count (14.5, E15). */
+  badge?: AchievementKind
 }
 
 export type CrewLike = {
@@ -78,7 +80,7 @@ export function CrewCard({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const here = Math.max(0, Math.min(crew.here, crew.size))
-  const label = [crew.name, `crew of ${crew.size}`, here ? `${here} here` : null, crew.bio, ...crew.tags, crew.intent].filter(Boolean).join(', ')
+  const label = [crew.name, `crew of ${crew.size}`, here ? `${here} here` : null, crew.bio, ...crew.tags, crew.intent, crew.badge ? `Badge: ${ACHIEVEMENT[crew.badge].label}` : null].filter(Boolean).join(', ')
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const slop = (minTarget() - MORE) / 2
 
@@ -115,6 +117,11 @@ export function CrewCard({
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
               {here ? `Crew of ${crew.size} · ${here} here now` : `Crew of ${crew.size}`}
             </Text>
+            {crew.badge ? (
+              <View style={styles.badge}>
+                <AchievementBadge kind={crew.badge} />
+              </View>
+            ) : null}
             {crew.bio ? (
               <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={2} style={[font(compact ? 'meta' : 'body', bold), styles.ink]}>
                 {crew.bio}
@@ -254,6 +261,7 @@ export function CrewRow({
 }
 
 const styles = StyleSheet.create({
+  badge: { alignSelf: 'flex-start', paddingVertical: SPACE.xs },
   card: { backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   info: { gap: SPACE.md },
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.lg },

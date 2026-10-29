@@ -53,6 +53,7 @@ import { printable } from '../../lib/pulseSections'
 import { queryCache } from '../../lib/queryCache'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
+import { opensRoomCard, roomCardRoute } from '../../lib/roomCard'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
 import { roomLockedIn } from '../../lib/roomState'
@@ -74,7 +75,7 @@ import {
 import { clockTime } from '../../lib/time'
 import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
-import { isReadOnlyLock, lockFor, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
+import { isReadOnlyLock, lockFor, lockFromDoor, saidWrite, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
 import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
@@ -210,6 +211,14 @@ function GroupChatInner() {
   /* A crew's or a Blend's room (step 9), told by the opener; null for an event's. */
   const roomKind = roomKindParam(params.kind) ?? roomInfo.kind ?? roomKindParam(told?.kind) ?? null
   const eventRoom = roomKind === null
+  /** Photos follow the room's kind as the server's own row or refusal told it, never a link's param (anonymity, L2). */
+  const photoKind = roomInfo.kind ?? roomKindParam(told?.kind) ?? null
+  /*
+   * A load that lands after the room's row does is mapped with the kind as of then, not as of the render that started it
+   * (SCRUM-895: the history raced the list and stripped a crew's photos). One that landed before is mapped again below.
+   */
+  const photoKindRef = useLatest(photoKind)
+  const mappedPhotoKind = useRef<string | null | undefined>(undefined)
   /*
    * Known to be an event's room: its row names the event, or an event opener said so. A bare link or a push carries no
    * kind, and a closed crew's or Blend's room answers it with the same 404 an event's does: that one is not told it was
@@ -276,19 +285,44 @@ function GroupChatInner() {
    * A room the organiser locked opens read-only (TG-02): its row in the Banter's list says so (`status`, the same cached
    * read as `useRoomRow`). Before, the lock was learnt only from a send it refused, so it opened with a live composer.
    */
-  const applyLock = composer.apply
+  /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
+  const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
+  /*
+   * A room muted for you, locked by the organiser or closed opens read-only (TG-02, ROOM-05): an event's room asks its
+   * own door, which says so by `status` and `write.reason`; before, the lock was learnt from a send it refused, and the
+   * Banter's row (page 1 of a cached list) said it first. Any other room's lock is on its row in that list.
+   */
+  const setComposerLock = composer.setLock
+  /** Whether the history read said anything about writing: a server older than SV-5 does not, and the door is asked instead. */
+  const historySaidWrite = useRef(false)
+  // The Banter's row of this room (cached): a lock the list already knows (TG-02). Waits for nothing.
   useEffect(() => {
     if (!chatRoomId) return
     let live = true
     void apiClient.getChatGroups().then((result) => {
-      if (live && result.success && roomLockedIn(result.data, roomId)) applyLock('CHAT_LOCKED')
+      if (live && result.success && roomLockedIn(result.data, roomId)) setComposerLock({ state: 'locked' })
     })
     return () => {
       live = false
     }
-  }, [chatRoomId, roomId, applyLock])
-  /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
-  const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
+  }, [chatRoomId, roomId, setComposerLock])
+  // Older server only: an event's room asks its own door for `write` / `status`, once the history has been read and not
+  // for somebody out of the room (that door is `askEventDoor`'s). `limit: 1`: the lock is wanted, not the history.
+  const lockReadable = !loading && !outOfRoom
+  useEffect(() => {
+    if (!chatRoomId || !lockReadable || !roomEventId || historySaidWrite.current) return
+    let live = true
+    void Promise.resolve()
+      .then(() => apiClient.getEventChat(roomEventId, { limit: 1 }))
+      .then((door) => {
+        const next = live && door?.success ? lockFromDoor(door.data) : null
+        if (next) setComposerLock(next)
+      })
+      .catch((error) => Logger.warn('chat', 'Could not read the room’s lock from its event', { error }))
+    return () => {
+      live = false
+    }
+  }, [chatRoomId, roomEventId, setComposerLock, lockReadable])
   const { showToast } = useToast()
   // Android: the snackbar over the composer covers the newest row (the withheld placeholder it explains); the feed makes room (rc8 #5).
   const toastInset = useToastInset()
@@ -386,10 +420,15 @@ function GroupChatInner() {
         setNotLive(false)
         setEndedReason(null)
         markRoomJoined(roomId)
+        // The history read says whether you may write (SV-5), for any room, the Banter's first page or not (ROOM-05).
+        historySaidWrite.current = saidWrite(result.data)
+        const lockedBy = lockFromDoor(result.data)
+        if (lockedBy) composer.setLock(lockedBy)
 
         const raw = Array.isArray(result.data) ? result.data : (result.data as any)?.messages || (result.data as any)?.data || []
         const pagination = (result.data as any)?.pagination
-        const msgs = roomMessagesFrom(Array.isArray(raw) ? raw : [], user.id)
+        mappedPhotoKind.current = photoKindRef.current
+        const msgs = roomMessagesFrom(Array.isArray(raw) ? raw : [], user.id, photoKindRef.current)
         /* A refresh keeps the older pages already loaded, and what only this phone holds (lib/mergeNewestPage). */
         const { keptOlder } = mergeNewestPage(messagesRef.current, msgs, (m) => m.message_id, isTemp)
         setMessages((prev) => mergeNewestPage(prev, msgs, (m) => m.message_id, isTemp).items)
@@ -415,7 +454,7 @@ function GroupChatInner() {
       const pagination = (result.data as any)?.pagination
       setHasMore(pagination?.hasMore || false)
       setOldestCursor(pagination?.nextCursor || null)
-      const older = roomMessagesFrom(Array.isArray(raw) ? raw : [], authUser.id)
+      const older = roomMessagesFrom(Array.isArray(raw) ? raw : [], authUser.id, photoKindRef.current)
       setMessages((prev) => {
         const ids = new Set(prev.map((m) => m.message_id))
         return [...older.filter((m) => !ids.has(m.message_id)), ...prev]
@@ -450,11 +489,19 @@ function GroupChatInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatRoomId, authUser, authLoading])
 
+  /* The row said it is a crew's after the history was mapped without photos: read it again, now that it may show them. */
+  useEffect(() => {
+    if (photoKind !== 'crew' || mappedPhotoKind.current === undefined || mappedPhotoKind.current === 'crew') return
+    if (chatRoomId && authUser && !authLoading) void loadMessages(true)
+    // loadMessages is redefined every render; only the kind should trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoKind])
+
   const subscribeToMessages = () => {
     if (!chatRoomId) return () => {}
     const unsubscribe = [
       subscribeToChatMessage(roomId, (data) => {
-        const incoming = roomMessageFromSocket(data.message, currentUser?.id)
+        const incoming = roomMessageFromSocket(data.message, currentUser?.id, photoKind)
         const fresh = !seenIds.current.has(incoming.message_id)
         // At the bottom, somebody else's message rises as it arrives (#13); read back, the list never moves (the chip counts it).
         if (fresh && isAtBottomRef.current && data.message.userId !== currentUser?.id) markArriving(incoming.message_id)
@@ -539,7 +586,7 @@ function GroupChatInner() {
     return subscribeToMessages()
     // subscribeToMessages is redefined every render; only the listed values should re-subscribe.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatRoomId, currentUser, outside === null])
+  }, [chatRoomId, currentUser, outside === null, photoKind])
 
   /*
    * One send of one message, first time or retry. The bubble is already on
@@ -556,7 +603,7 @@ function GroupChatInner() {
       }
       // Every answer re-decides the lock: a refusal sets it, a send that got through lifts it.
       const place = result.success ? null : refusalPlace(result.errorCode, result.error)
-      if (place !== 'links') composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error)
+      if (place !== 'links') composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error, result.success ? null : result.reasonCode)
       if (result.success) setJustMuted(false)
       const closed = !result.success && roomKind ? roomClosedLine(roomKind, result.errorCode) : null
       if (closed) setClosedLine(closed)
@@ -657,7 +704,7 @@ function GroupChatInner() {
     const reactRefused = roomRefusalState(result.errorCode)
     if (reactRefused === 'left') markRoomLeft(roomId)
     else if (reactRefused === 'not_live') setNotLive(true)
-    else if (lockFor(result.errorCode)) composer.apply(result.errorCode, undefined, result.error)
+    else if (lockFor(result.errorCode, undefined, result.reasonCode)) composer.apply(result.errorCode, undefined, result.error, result.reasonCode)
     showToast(userMessage(result, "Couldn’t add your reaction. Try again."), 'error', { haptic: 'error' })
   }
 
@@ -817,6 +864,8 @@ function GroupChatInner() {
       refusesWrites,
     })
 
+  /** An event's sender opens the card over the feed; a crew's or a Blend's member opens the room card (a name only, SRV-07, SV-20). */
+  const openSender = (sender: Sender) => (opensRoomCard(roomKind) ? router.push(roomCardRoute(sender, roomId) as never) : setCardFor(sender))
   /** After a block, their messages fade out of the feed (R3-D5 5.7). */
   const blockFromFeed = (senderId: string) => setBlocked((prev) => new Set(prev).add(senderId))
 
@@ -824,7 +873,7 @@ function GroupChatInner() {
     const plan = planFor(message)
     if (plan.kind !== 'menu') return []
     const items: Record<string, MenuItem> = {
-      person: { icon: 'user', label: message.sender_name, chevron: true, onPress: () => setCardFor({ id: message.sender_id, name: message.sender_name }) },
+      person: { icon: 'user', label: message.sender_name, chevron: true, onPress: () => openSender({ id: message.sender_id, name: message.sender_name }) },
       reply: { icon: 'reply', label: 'Reply', onPress: () => setReplyingTo(message) },
       // No haptic and no toast: copying is silent (C20).
       copy: { icon: 'copy', label: 'Copy', onPress: () => copyText(message.message_text) },
@@ -882,14 +931,14 @@ function GroupChatInner() {
     else if (reason === 'NOT_IN_ROOM') setOutOfRoom(true)
     else composer.setLock({ state: 'closed' })
   }
-  const handlersRef = useLatest({ openMenu, retrySend, react, pollRefusal })
+  const handlersRef = useLatest({ openMenu, retrySend, react, pollRefusal, openSender })
   const handlers = useMemo<RowHandlers>(
     () => ({
       menu: (m, a) => handlersRef.current.openMenu(m, a),
       retry: (m) => handlersRef.current.retrySend(m),
       react: (m, e) => void handlersRef.current.react(m, e as ChatReaction),
       reply: (m) => setReplyingTo(m),
-      sender: (m) => setCardFor({ id: m.sender_id, name: m.sender_name }),
+      sender: (m) => handlersRef.current.openSender({ id: m.sender_id, name: m.sender_name }),
       link: (url) => showSheet(linkSheet(url, 'room')),
       pollRefusal: (reason) => handlersRef.current.pollRefusal(reason),
     }),
@@ -908,7 +957,7 @@ function GroupChatInner() {
         last={place.last}
         landed={landed?.id === item.message_id ? landed.emoji : undefined}
         arriving={arrivingRef.current.has(item.message_id)}
-        senderTappable={eventRoom}
+        senderTappable={eventRoom || opensRoomCard(roomKind)}
         eventId={eventRoom ? roomInfo.eventId : null}
         pollViewable={viewablePolls.has(item.message_id)}
         handlers={handlers}

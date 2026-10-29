@@ -63,6 +63,12 @@ describe('PhotoManager', () => {
     await waitFor(() => expect(photoUtils.selectAndUploadPhoto).toHaveBeenCalledWith('u1', expect.objectContaining({ main: false })))
   })
 
+  it('marks only the first tile "Blurred for others" (YOU-09, Flow 6 edit 06)', async () => {
+    await mount(3)
+    expect(screen.getAllByTestId('tile-blur-note')).toHaveLength(1)
+    expect(screen.getByText('Blurred for others')).toBeTruthy()
+  })
+
   it('stays quiet when the picker is cancelled', async () => {
     photoUtils.selectAndUploadPhoto.mockResolvedValue({ success: false, cancelled: true, error: 'cancelled' })
     await mount(1)

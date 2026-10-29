@@ -280,3 +280,54 @@ describe('two triggers in one frame (Nearby)', () => {
     expect(events.mock.calls[2][0]).toMatchObject({ page: 2 })
   })
 })
+
+describe('Nearby sort and bound (BAR-11, BAR-14)', () => {
+  it('Nearest asks for the week the Pulse section covers', async () => {
+    events.mockResolvedValue({ data: [ev('a', 'A Night', 12.98)], error: null })
+    await open()
+    await screen.findByTestId('nearby-list')
+    const q = events.mock.calls[0][0]
+    expect(q).toMatchObject({ sortBy: 'distance' })
+    const days = (Date.parse(q.endDate) - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(6.9)
+    expect(days).toBeLessThanOrEqual(7.05)
+  })
+
+  it('Soonest switches the query to start time, keeps the fix, and drops the date bound', async () => {
+    events.mockResolvedValue({ data: [ev('a', 'A Night', 12.98)], error: null })
+    await open()
+    await screen.findByTestId('nearby-list')
+    events.mockClear()
+    await fireEvent.press(screen.getByRole('tab', { name: 'Soonest' }))
+    await waitFor(() => expect(events).toHaveBeenCalled())
+    expect(events.mock.calls[0][0]).toMatchObject({ page: 0, sortBy: 'start_time', lat: 12.97, lon: 77.6, city: 'Bengaluru' })
+    expect(events.mock.calls[0][0].endDate).toBeUndefined()
+  })
+})
+
+describe('a late answer for the other sort (M9, L7)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void
+    const promise = new Promise((r) => (resolve = r))
+    return { promise, resolve }
+  }
+
+  it('Nearest answering after the chip moved to Soonest paints nothing and does not clear the spinner', async () => {
+    const slow = deferred()
+    events.mockReturnValueOnce(slow.promise)
+    await render(<NearbyEventsScreen />)
+    await act(async () => {})
+    const soonest = deferred()
+    events.mockReturnValueOnce(soonest.promise)
+    await fireEvent.press(screen.getByRole('tab', { name: 'Soonest' }))
+    await act(async () => {
+      slow.resolve({ data: [ev('stale', 'Stale Night', 12.98)], error: null })
+    })
+    expect(screen.queryByText(/Stale Night/)).toBeNull()
+    expect(screen.getByTestId('nearby-skeleton')).toBeTruthy()
+    await act(async () => {
+      soonest.resolve({ data: [ev('fresh', 'Fresh Night', 12.98)], error: null })
+    })
+    expect(await screen.findByText(/Fresh Night/)).toBeTruthy()
+  })
+})

@@ -84,7 +84,7 @@ export const NowSection = memo(function NowSection({ section, onSeeAll, ...rest 
   return (
     <View style={styles.section}>
       <View style={styles.gutter}>
-        <SectionHeader live title="Happening now" count={section.count} action={{ label: 'See all', onPress: onSeeAll }} testID="pulse-now-header" />
+        <SectionHeader live title="Happening now" count={section.count} more={section.more} action={{ label: 'See all', onPress: onSeeAll }} testID="pulse-now-header" />
       </View>
       <CompactRail {...rest} events={section.events} testID="pulse-now" />
     </View>
@@ -171,6 +171,7 @@ export const FeaturedSection = memo(function FeaturedSection({
         <SectionHeader
           title="Featured"
           count={section.count}
+          more={section.more}
           right={
             <Button kind="tertiary" size="sm" label="Why these?" icon="info" onPress={() => setWhy(true)} accessibilityLabel="Why these?" accessibilityHint="Explains how Featured events are chosen" testID="why-these-open" />
           }
@@ -220,7 +221,7 @@ export const TonightSection = memo(function TonightSection({
   return (
     <View style={styles.section}>
       <View style={styles.gutter}>
-        <SectionHeader title="Tonight" count={section.count} action={{ label: 'See all', onPress: onSeeAll }} testID="pulse-tonight-header" />
+        <SectionHeader title="Tonight" count={section.count} more={section.more} action={{ label: 'See all', onPress: onSeeAll }} testID="pulse-tonight-header" />
       </View>
       <SetList events={section.events} now={now} withDistance={withDistance} coachRef={coachRef} onPress={onPress} onPressIn={onPressIn} onLongPress={(event, anchor) => onLongPress(event, anchor, 'row')} />
     </View>

@@ -127,6 +127,15 @@ export function boardClosed(startTime: string | null | undefined, now: number = 
   return Number.isFinite(t) && t <= now
 }
 
+/**
+ * Does a night offer the Board? The one gate: the Scene's row, the Going tab's row and its tray action all ask it. The board is
+ * switched on (`BOARD_ENABLED`), the night is not called off, and the doors of its first run have not opened (`boardClosed`:
+ * the run's start, not today's session; the server closes the board at the first doors).
+ */
+export function boardOpen(event: { start_time: string | null | undefined; status?: string | null }, now: number = Date.now()): boolean {
+  return BOARD_ENABLED && event.status !== 'cancelled' && !boardClosed(event.start_time, now)
+}
+
 type Refusal = { error?: string | null; errorCode?: string | null } | null | undefined
 
 /**

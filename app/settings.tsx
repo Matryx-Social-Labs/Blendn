@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Banner } from '../components/ds/Banner'
@@ -22,8 +22,10 @@ import { useAuthMethod } from '../lib/authMethod'
 import { APPLE_UNLINK_HINT, appleCodeForDeletion } from '../lib/appleRevocation'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
-import { passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
+import { settleWithin } from '../lib/fetchTimeout'
+import { NOT_SIGNED_OUT_EVERYWHERE, passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { useLatest } from '../lib/useLatest'
+import { usePullToRefresh } from '../lib/usePullToRefresh'
 import { usePushPreference } from '../lib/usePushPreference'
 import { Logger } from '../lib/logger'
 import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } from '../lib/useAuth'
@@ -36,6 +38,9 @@ import { manageSubscriptionUrl } from '../lib/purchases'
 import { useReducedMotion } from '../lib/motion'
 
 /** The banner's sentence when the profile could not be read (Flow 7 frame 06). */
+/** How long "Sign out of every device" keeps its spinner: past one request deadline (15 s), so a slow answer still lands. */
+const SIGN_OUT_EVERYWHERE_CAP_MS = 20_000
+
 const SETTINGS_NOT_LOADED = 'Your settings didn’t load. Pull down or try again.'
 
 type PreferenceKey = 'showOnlineStatus' | 'shareReadReceipts' | 'locationSharing' | 'friendsSeeMe'
@@ -207,11 +212,16 @@ function SettingsScreenContent() {
     void loadPreferences()
   }, [loadPreferences])
 
+  const { load: reloadPush, reloadIfStale: reloadPushIfStale } = push
+  // The Notifications row's hint says what the account says: read again when this screen comes back (30 s), and on a pull.
+  useFocusEffect(reloadPushIfStale)
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
-    await loadPreferences()
+    await Promise.all([loadPreferences(), reloadPush()])
     setRefreshing(false)
-  }, [loadPreferences])
+  }, [loadPreferences, reloadPush])
+  // The app's one pull to refresh, with its haptic when it arms (SYS-12).
+  const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), onScroll: bar.scrollProps.onScroll, indicatorTop: bar.indicatorTop })
 
   const persistPreference = useCallback(async (next: PreferencesState, previous: PreferencesState, key: PreferenceKey) => {
     if (!user) return
@@ -281,7 +291,7 @@ function SettingsScreenContent() {
   const confirmDeleteSheet = useCallback((): Sheet => ({
     kind: 'actions',
     hue: 'violet',
-    icon: 'trash',
+    icon: 'trash-2',
     title: 'Delete your account for good?',
     message: 'This can’t be undone. You’d need a new account to use Blend’n again.',
     actions: [
@@ -323,7 +333,7 @@ function SettingsScreenContent() {
       return {
         kind: 'actions',
         hue: 'violet',
-        icon: 'trash',
+        icon: 'trash-2',
         title: 'Delete your account?',
         message:
           'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires.',
@@ -391,7 +401,18 @@ function SettingsScreenContent() {
 
   /** Sign out asks first (one stray tap used to end the session on the spot); so does signing out of every device. */
   const askSignOut = useCallback(() => showSheet(signOutSheet({ signOut, showToast })), [showToast])
-  const askSignOutEverywhere = useCallback(() => showSheet(signOutEverywhereSheet({ signOutEverywhere })), [])
+  // The spinner is capped (SCRUM-733): a restored session's keychain can hold the request for a long time, and the sheet's Cancel is
+  // disabled while it spins. On the cap it says nothing was signed out, which is what the person can rely on; a late success
+  // simply ends their sessions anyway.
+  const askSignOutEverywhere = useCallback(
+    () =>
+      showSheet(
+        signOutEverywhereSheet({
+          signOutEverywhere: () => settleWithin(signOutEverywhere(), SIGN_OUT_EVERYWHERE_CAP_MS, { success: false, error: NOT_SIGNED_OUT_EVERYWHERE }),
+        })
+      ),
+    []
+  )
   const openDataCopyMail = useCallback(
     () => void Linking.openURL(dataCopyMailto(user?.id)).catch(() => showToast(`No email app opened. Write to ${SUPPORT_EMAIL}.`, 'info')),
     [showToast, user?.id]
@@ -456,10 +477,7 @@ function SettingsScreenContent() {
         contentContainerStyle={[styles.content, { paddingTop: bar.contentTop, paddingBottom: insets.bottom + DS_SPACE.xl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />
-        }
-        {...bar.scrollProps}
+        {...pull.listProps}
       >
         {/*
           There was a profile card here, and it was the third door to editing.
@@ -517,7 +535,7 @@ function SettingsScreenContent() {
             onPress={() => router.push('/notification-settings')}
             testID="settings-notifications"
           />
-          <SettingsRow icon="sparkles" title="How you match" hint="What matching reads" trail="chevron" onPress={() => router.push({ pathname: '/edit-about-you', params: { from: 'settings' } })} testID="settings-how-you-match" />
+          <SettingsRow icon="sparkles" title="About you" hint="What matching reads" trail="chevron" onPress={() => router.push('/edit-about-you')} testID="settings-how-you-match" />
         </SettingsGroup>
 
         {/* Blocked users leads Safety: blocking is the most consequential safety action in the product. */}
@@ -567,7 +585,7 @@ function SettingsScreenContent() {
         */}
         <SettingsGroup title="Danger zone" danger>
           <SettingsRow
-            icon="trash"
+            icon="trash-2"
             title={deleting ? 'Deleting account…' : 'Delete account'}
             trail={deleting ? 'none' : 'chevron'}
             busy={deleting}
@@ -577,6 +595,7 @@ function SettingsScreenContent() {
           />
         </SettingsGroup>
       </ScrollView>
+      {pull.indicator}
       <View style={bar.barPin} pointerEvents="box-none">
         <TopBar title="Settings" state={bar.state} onBack={() => router.back()} testID="settings-top" />
       </View>

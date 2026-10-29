@@ -13,6 +13,7 @@ import {
   maybeLaterKey,
   nextRefreshMs,
   OFFER_REPORT_REASONS,
+  REGULAR_COPY,
   offersApi,
   offerStateLine,
   passView,
@@ -66,9 +67,14 @@ describe('an offer from a place', () => {
 
   it('says which organisation would see a yes (M2)', () => {
     expect(knownLine({ ownerName: 'Indiranagar Hospitality' }, 'Toit')).toBe(
-      "Indiranagar Hospitality, who runs Toit on Blendn, will see your first name and how many nights you’ve come in the last 30 — nothing else."
+      'Indiranagar Hospitality, who runs Toit on Blendn, will see that a regular was here, and how many nights in the last 30 days.'
     )
-    expect(knownLine({ ownerName: null }, 'Toit')).toMatch(/^Toit will see your first name/)
+    expect(knownLine({ ownerName: null }, 'Toit')).toMatch(/^Toit will see that a regular was here/)
+  })
+
+  it('never promises the venue a name (SCRUM-888): hosts see "A regular · N nights" only (SCRUM-887)', () => {
+    for (const text of [knownLine({ ownerName: null }, 'Toit'), REGULAR_COPY.sees, REGULAR_COPY.why]) expect(text).not.toMatch(/name/i)
+    expect(REGULAR_COPY.wontSee).toMatch(/^who you are,/)
   })
 
   it('shows a code only until two seconds past its turn (L2)', () => {

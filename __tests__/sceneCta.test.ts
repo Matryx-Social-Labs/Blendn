@@ -170,8 +170,12 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
 
     // The CTA is time-aware. "Blend in" before the event cannot succeed --
     // check-in requires the event to be running -- so it must not be offered.
-    expect(detail).toContain('hasStarted')
-    expect(detail).toContain('? rsvpCtaState(rsvpStatus)')
+    // One state for every surface (`lib/attendanceState.ts`, SCRUM-882): upcoming → the RSVP slot, live → Blend in.
+    expect(detail).toContain('sceneCtaState({ phase: event ? attendancePhase(event)')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { sceneCtaState } = require('../lib/attendanceState') as typeof import('../lib/attendanceState')
+    expect(sceneCtaState({ phase: 'upcoming', rsvpStatus: null, checkedIn: false, attended: false })).toBe('rsvp')
+    expect(sceneCtaState({ phase: 'live', rsvpStatus: null, checkedIn: false, attended: false })).toBe('join')
     expect(detail).toContain('handleToggleRsvp')
 
     // A thrown RSVP request puts the old status back. The optimistic
@@ -187,7 +191,7 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
 
     // Nothing spins here now: the check-in is the pass's, in the Blend'n overlay (Flow 3 #04–#06, Flow 4).
     expect(detail).not.toContain('checkingIn')
-    expect(detail).toContain('openPass({')
+    expect(detail).toContain('openPass(doorOf(')
   })
 
   it('check out really is where this screen says it moved to', () => {

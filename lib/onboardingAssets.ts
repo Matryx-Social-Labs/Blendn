@@ -50,7 +50,6 @@ export const ONBOARDING_IMAGES = [
   require('../assets/onboarding/looking-dating.jpg'),
   require('../assets/onboarding/looking-friendship.jpg'),
   require('../assets/onboarding/looking-networking.jpg'),
-  require('../assets/onboarding/looking-travel.jpg'),
   require('../assets/onboarding/looking-open.jpg'),
 ]
 

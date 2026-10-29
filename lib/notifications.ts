@@ -364,6 +364,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
             ...(kind ? { kind } : {}),
             ...(kind === 'crew' && data.crewId ? { crewId: String(data.crewId) } : {}),
             ...(kind === 'blend' && data.blendId ? { blendId: String(data.blendId) } : {}),
+            // An event's room: the room asks that door for its lock when the server's history says nothing (ROOM-05).
+            ...(!kind && data.eventId ? { eventId: String(data.eventId) } : {}),
           } as any,
         }
       } else {
@@ -373,7 +375,7 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
     }
     case 'announcement': {
       if (data.chatGroupId) {
-        target = { pathname: '/chat/[id]', params: { id: String(data.chatGroupId) } as any }
+        target = { pathname: '/chat/[id]', params: { id: String(data.chatGroupId), ...(data.eventId ? { eventId: String(data.eventId) } : {}) } as any }
       } else if (data.eventId) {
         target = { pathname: '/event/[id]', params: { id: String(data.eventId) } as any }
       } else {
@@ -462,6 +464,14 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
       target = data.offerId
         ? { pathname: '/offer/[id]', params: { id: String(data.offerId) } as any }
         : '/(tabs)/events'
+      break
+    }
+    /*
+     * A post of yours taken down (SYS-06): the Board it was on. The push carries `eventId` and `postId`; without an
+     * event there is nowhere to go, and the Banter tab is where the app opens for a kind that has no place of its own.
+     */
+    case 'board_post_removed': {
+      target = data.eventId ? { pathname: '/board/[eventId]', params: { eventId: String(data.eventId) } as any } : '/(tabs)/chat'
       break
     }
     case 'friend_request': {

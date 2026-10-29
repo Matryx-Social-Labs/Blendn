@@ -17,7 +17,7 @@ jest.mock('../lib/roomVisibilityStorage', () => ({
 /* eslint-disable import/first */
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { askIntentRoute, checkOutOf, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
+import { askIntentRoute, checkOutOf, revealOffer, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
 /* eslint-enable import/first */
 
 const mockApi = jest.requireMock('../lib/apiClient').apiClient as Record<
@@ -55,11 +55,13 @@ describe('submitCheckIn', () => {
   it('reads intentNeeded and revealSuggestion off a success', async () => {
     mockApi.checkIn.mockResolvedValue({
       success: true,
-      data: { checkInId: 'c1', intentNeeded: true, revealSuggestion: true },
+      // The route's real shape (events/[eventId]/checkin/route.ts): `checkIn.id`, and `left` named for "You left {A}."
+      data: { checkIn: { id: 'c1', status: 'checked_in' }, intentNeeded: true, revealSuggestion: true, left: [{ eventId: 'e0', kind: 'event', name: 'Vinyl Night' }] },
     })
     expect(await submitCheckIn('e1', at)).toEqual({
       kind: 'checkedIn',
       checkInId: 'c1',
+      left: ['Vinyl Night'],
       askIntent: true,
       revealSuggestion: true,
     })
@@ -171,9 +173,9 @@ describe('the event screen hears check-in changes', () => {
   it('checks in only through the pass: "Blend in" opens this event’s VenuePass (Flow 3 #04–#06, Flow 4)', () => {
     expect(screen).not.toContain('useCheckInFlow(')
     expect(screen).not.toContain('<MomentPour')
-    expect(screen).toMatch(/if \(!isCheckedIn\) \{\s*openThisPass\(\)/)
-    // Checked in, "You're in" leads to the Room.
-    expect(screen).toMatch(/openThisPass\(\)\s*return\s*\}\s*toTheOverlay\(openBlendn\)/)
+    // "Blend in" (join) docks the pass; checked in, "You're in" (going) leads to the Room. One switch on the CTA's own state.
+    expect(screen).toMatch(/case 'join':\s*openThisPass\(\)/)
+    expect(screen).toMatch(/case 'going':\s*toTheOverlay\(openBlendn\)/)
   })
 
   it('apiClient drops only the detail, not the attendee list', () => {
@@ -224,5 +226,22 @@ describe('every check-out goes through checkOutOf', () => {
   it('and the tab bar listens', () => {
     const src = readFileSync(join(__dirname, '..', 'app', '(tabs)', '_layout.tsx'), 'utf8')
     expect(src).toContain('subscribeCheckInChanged(')
+  })
+})
+
+describe('revealOffer reads the main photo (L4)', () => {
+  const seen = jest.requireMock('../lib/roomVisibilityStorage').hasSeenPublicCheckInWarning as jest.Mock
+  it('a first-time warning only when there is a photo to reveal; none without one', async () => {
+    seen.mockResolvedValue(false)
+    const withPhoto = await revealOffer({ id: 'u1', firstName: 'Sneha', photo: 'https://cdn/p.jpg' })
+    const without = await revealOffer({ id: 'u1', firstName: 'Sneha', photo: null })
+    expect(withPhoto.title).not.toBe(without.title)
+    expect(without.title).toBe('Show your name here?')
+    seen.mockResolvedValue(true)
+  })
+  it('the check-in flow hands it myMainPhoto, never User.image', () => {
+    const src = readFileSync(join(__dirname, '..', 'lib', 'useCheckInFlow.ts'), 'utf8')
+    expect(src).toContain('photo: myMainPhoto(user)')
+    expect(src).not.toMatch(/image: user\.image/)
   })
 })

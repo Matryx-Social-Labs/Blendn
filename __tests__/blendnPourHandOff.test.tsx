@@ -166,7 +166,7 @@ const { mockRoomLoads, mockRoomReset, mockRoomReadyUnsettled } = jest.requireMoc
 const submit = submitCheckIn as jest.Mock
 const HIDDEN = { includeHiddenElements: true }
 const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
-const fresh = (askIntent: boolean): CheckInOutcome => ({ kind: 'checkedIn', checkInId: 'c1', askIntent, revealSuggestion: false })
+const fresh = (askIntent: boolean): CheckInOutcome => ({ kind: 'checkedIn', checkInId: 'c1', askIntent, revealSuggestion: false, left: [] })
 const roomShowing = () => screen.queryByTestId('room', HIDDEN) !== null
 const tonightShowing = () => screen.queryByTestId('tonight', HIDDEN) !== null
 /** The pre-mounted Room laid out on the native side: the hand-off waits for this, as on a device. */

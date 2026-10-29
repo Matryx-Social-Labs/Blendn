@@ -70,6 +70,18 @@ export interface FriendProfile {
   age: number | null
   location: string | null
   interests: { id: string; name: string; slug: string; icon: string | null }[]
+  /** The names of `interests` you hold too (SCRUM-896), as `GET /users/:id` sends them. Absent from an older server: nothing is outlined. */
+  sharedInterests?: string[]
+  /**
+   * What `GET /friends/:id` sends for the about line and the badges, as `GET /users/:id` does for somebody you may see (a friend
+   * always may). Absent from an older server: the page then simply draws less (YOU-04).
+   */
+  work_field?: string | null
+  languages?: string[]
+  homeState?: string | null
+  sign?: string | null
+  /** `{ kind, label }[]`, read through `parseBadges`; the key is absent when they turned badges off. */
+  badges?: unknown
   friendsSince: string
   /** An open DM, if there is one. */
   conversationId: string | null

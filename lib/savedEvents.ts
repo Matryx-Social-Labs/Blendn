@@ -75,7 +75,7 @@ export interface SavedEventsPayload {
     changedFields?: ChangedField[] | null
     /** Both list routes send it (`/me/rsvps`, `/users/:id/favorites`). */
     timezone?: string | null
-    /** The favourites route sends it; `/me/rsvps` not yet (server need). */
+    /** Both list routes send it. */
     categories?: ListCategories
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
@@ -146,19 +146,19 @@ export interface AttendancePayload {
     attendedAt: string
     /** The event's IANA zone (admin #749): its day is said in it. Absent from an older server: the phone's. */
     timezone?: string | null
-    /** Read under the list routes' name when the attendance route sends it (not yet: server need). */
+    /** The attendance route sends it under the list routes' name. */
     categories?: ListCategories
     /** `venue_day` is a visit to a place you went live at; its `title` is bookkeeping, its `venue_name` the place (blendn-admin D-6). */
     kind?: 'event' | 'venue_day'
     /**
-     * How long you were there, in minutes, and the place's own id (for its page): neither is on the route yet, so a visit says
-     * its date alone and opens nothing until they are. Read from these names when the server sends them.
+     * How long you were there, in minutes, and the place's own id (for its page): the route sends both for a visit (a venue
+     * day) and null for an event. An older server omits them, and a visit then says its date alone and opens nothing.
      */
     stay_minutes?: number | null
     venue_id?: string | null
     /** `venue_type` (a plate's type, when the server says what kind of place it was). */
     venue_type?: string | null
-    /** When you rated the night, or null: sent by the list once the server has it (absent today, and then each row is asked). */
+    /** When you rated the night, or null: the route sends it. An older server omits it, and then each row is asked. */
     ratedAt?: string | null
   }[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }

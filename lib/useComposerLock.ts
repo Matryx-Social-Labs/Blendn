@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { ComposerState } from '../components/ds/Composer'
 import { waitLabel } from './chatFeed'
+import type { ChatHistoryData, RoomWriteRead } from './apiClient'
 
 export type ComposerLock = { state: ComposerState; reason?: string }
 
@@ -18,7 +19,10 @@ const MAX_WAIT_S = 120
  * no `retryAfter` (SPAM_BLOCKED has none yet, SCRUM-624) it shows no clock.
  * A mute never has one (R11).
  */
-export function lockFor(errorCode: string | null | undefined, serverText?: string): ComposerLock | null {
+export function lockFor(errorCode: string | null | undefined, serverText?: string, reasonCode?: string | null): ComposerLock | null {
+  // The server's own word for why (`write.reason`, SV-5) beats parsing its sentence.
+  const byReason = lockForReason(reasonCode, serverText)
+  if (byReason) return byReason
   switch (errorCode) {
     case 'USER_MUTED':
       return { state: 'muted', reason: serverText }
@@ -38,6 +42,50 @@ export function lockFor(errorCode: string | null | undefined, serverText?: strin
     default:
       return null
   }
+}
+
+/**
+ * `write.reason` / `reasonCode` (blendn-admin `lib/chat-window.ts` WriteDenial) as the composer's state. `banned`,
+ * `left` and `not_live` are not locks: the room has its own states for them. Unknown → null, so the caller falls back.
+ */
+export function lockForReason(reason: string | null | undefined, serverText?: string | null): ComposerLock | null {
+  const text = serverText ?? undefined
+  switch (reason) {
+    case 'muted':
+      return { state: 'muted', reason: text }
+    case 'locked':
+      return { state: 'locked', reason: text }
+    case 'window_closed':
+    case 'archived':
+      return { state: 'closed', reason: text }
+    case 'not_open_yet':
+      return { state: 'notopen', reason: text }
+    case 'hidden':
+      return { state: 'hidden', reason: text }
+    default:
+      return null
+  }
+}
+
+/** The `write` / `status` a read carried: a bare array (an older server's history) carries none. */
+const writeReadOf = (data: RoomWriteRead | ChatHistoryData | null | undefined): RoomWriteRead => (!data || Array.isArray(data) ? {} : data)
+
+/** Whether a read said anything about writing (`write`): a server older than SV-5 does not, and the caller asks the door instead. */
+export function saidWrite(data: RoomWriteRead | ChatHistoryData | null | undefined): boolean {
+  const write = writeReadOf(data).write
+  return !!write && typeof write === 'object'
+}
+
+/**
+ * What `GET /events/:id/chat` says about whether you may write, as the composer's lock on open (ROOM-05): the room's
+ * own `status: 'locked'`, else your `write.reason`. A room that has not opened yet is the countdown's, not a lock here.
+ */
+export function lockFromDoor(data: RoomWriteRead | ChatHistoryData | null | undefined): ComposerLock | null {
+  const d = writeReadOf(data)
+  const message = typeof d.write?.message === 'string' ? d.write.message : undefined
+  if (d.status === 'locked') return lockForReason('locked', message)
+  if (!d.write || d.write.allowed !== false || typeof d.write.reason !== 'string' || d.write.reason === 'not_open_yet') return null
+  return lockForReason(d.write.reason, message)
 }
 
 /**
@@ -63,9 +111,9 @@ export function useComposerLock() {
 
   /** Every send's answer re-decides the lock: a refusal sets it, a send that got through lifts it. */
   const apply = useCallback(
-    (errorCode?: string | null, retryAfter?: number, serverText?: string) => {
+    (errorCode?: string | null, retryAfter?: number, serverText?: string, reasonCode?: string | null) => {
       stop()
-      const next = lockFor(errorCode, serverText)
+      const next = lockFor(errorCode, serverText, reasonCode)
       setLock(next)
       if (next?.state !== 'ratelimited') return
       let left = Math.min(Math.max(retryAfter ?? DEFAULT_WAIT_S, 1), MAX_WAIT_S)

@@ -143,8 +143,12 @@ describe('a row from the stored push, which names nobody', () => {
 
 // C34: a takedown of your post is told with the moderation shield, not the generic bell. Negative control: no GLYPH entry fails it.
 describe('a post of yours taken down', () => {
+  it('a report’s outcome draws the shield too, not the bell (SYS-06)', () => {
+    expect(rowFor(item({ id: 'r', kind: 'report_actioned', title: 'We reviewed your report' }), NOW).visual).toEqual({ type: 'glyph', icon: 'shield' })
+  })
+
   it('draws the shield glyph', () => {
-    const row = rowFor(item({ id: 'm', kind: 'board_post_removed' as NotificationItem['kind'], title: 'Your post was taken down' }), NOW)
+    const row = rowFor(item({ id: 'm', kind: 'board_post_removed', title: 'Your post was taken down' }), NOW)
     expect(row.visual).toEqual({ type: 'glyph', icon: 'shield' })
   })
 })

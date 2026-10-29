@@ -65,13 +65,13 @@ export function BoardEntry({ onPress }: { onPress: () => void }) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel="The Board. Going alone? See who is looking for company, or offer a space."
+      accessibilityLabel="The Board. Going alone? See who’s looking for company, or offer a space."
       style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
     >
       <Ionicons name="people-outline" size={ICON.lg} color={COLOR.textPrimary} />
       <View style={styles.entryText}>
         <Text variant="bodyStrong">The Board</Text>
-        <Text variant="meta">Going alone? See who’s looking for company — or offer a space.</Text>
+        <Text variant="meta">Going alone? See who’s looking for company, or offer a space.</Text>
       </View>
       <Ionicons name="chevron-forward" size={ICON.md} color={COLOR.textSecondary} />
     </Pressable>

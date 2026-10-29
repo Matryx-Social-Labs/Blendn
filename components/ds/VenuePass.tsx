@@ -82,17 +82,19 @@ export function VenuePass({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const inside = hereCount > 0 ? `${hereCount} inside now` : 'Be the first one in'
+  // Disabled is away from the door (SCRUM-882): the pass says the night is on, never that you are there.
+  const where = disabled ? 'Live now' : 'You’re here'
   const tease = tasteCount && tasteCount > 0 ? `${tasteCount} ${tasteCount === 1 ? 'person' : 'people'} here share your taste` : null
 
   return (
     <View testID={testID} style={styles.pass}>
       <Material role="sheet" style={[StyleSheet.absoluteFill, styles.radius]} />
-      <View accessible accessibilityLabel={`You’re here. ${title}. ${inside}.`} style={styles.head}>
+      <View accessible accessibilityLabel={`${where}. ${title}. ${inside}.`} style={styles.head}>
         <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
           {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
         </View>
         <View style={styles.headText}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>YOU’RE HERE</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{where.toUpperCase()}</Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={1} style={[font('title', bold), styles.primary]}>
             {title}
           </Text>

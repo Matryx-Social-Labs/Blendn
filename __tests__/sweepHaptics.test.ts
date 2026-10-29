@@ -27,8 +27,8 @@ describe('what a save, a refresh and a failure play', () => {
   it('Clear all on the Notifications screen ticks H.destructive on the confirm, and a failure restores the rows and answers from its toast', () => {
     const screen = code('app/notifications.tsx')
     const feed = code('lib/useNotificationFeed.ts')
-    // The confirm is the DS Sheet's destructive button, which plays the tick on press-in itself: a second call here would play it twice.
-    expect(screen).toMatch(/label: 'Clear all', variant: 'destructive'/)
+    // The confirm is the DS Sheet's primary button (strong, not red: nothing is destroyed; E13), which plays its own tap: a call here would play it twice.
+    expect(screen).toMatch(/label: 'Clear all', variant: 'primary'/)
     expect(screen).not.toMatch(/H\.destructive/)
     expect(feed).toMatch(/showToast\('Couldn’t clear\. Try again\.', 'error', \{ haptic: 'error' \}\)/)
     expect(feed).toMatch(/setItems\(before\)/)

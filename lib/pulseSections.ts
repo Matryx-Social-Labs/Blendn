@@ -84,6 +84,8 @@ export type PulseSection<E extends SectionEvent = SectionEvent> = {
   events: E[]
   /** Every event the section claims, for its header; `events` is the capped list. */
   count: number
+  /** The count is a floor, not a total: the page it was counted from was full, so there may be more (BAR-10). */
+  more?: boolean
   /** The interest "Because you like …" is about. */
   interest?: { name: string; slug: string }
 }
@@ -95,6 +97,10 @@ export type PulseSectionsInput<E extends SectionEvent> = {
   weekend: readonly E[] | null
   /** Request D: `featured=true&limit=5`, so a featured event outside the first page still shows; or null (not loaded, failed). */
   featured?: readonly E[] | null
+  /** The page came back full (`hasMore`): "Happening now" and "Tonight" counts are then "N+", never an exact-looking number (BAR-10). */
+  pageFull?: boolean
+  /** Request E: the nearest events in the next 7 days (`sortBy=distance`), so a closer event on page 2 still ranks; or null (not loaded). */
+  nearby?: readonly E[] | null
   /** Request C: the first interest's events, or null. */
   forYou: { interest: { name: string; slug: string }; events: readonly E[] } | null
   now: number
@@ -214,10 +220,21 @@ const byStart = (a: SessionSource, b: SessionSource) => startOf(a) - startOf(b)
 export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<E>): PulseSection<E>[] {
   const { now, hasFix, seedDate } = input
   const page = unique(input.page)
+  /*
+   * Whether the page being full says there may be more of this section (BAR-10, M7). The page is in start order: "Happening
+   * now" cannot grow if its last row starts after now, and "Tonight" cannot if its last row starts after the city's 06:00.
+   */
+  const lastRow = page.reduce<E | null>((last, e) => (last === null || startOf(e) > startOf(last) ? e : last), null)
+  const pageMayHideMore = (key: PulseSectionKey): boolean => {
+    if (input.pageFull !== true || lastRow === null) return false
+    const horizon = key === 'now' ? now : key === 'tonight' ? nextDayReset(now, DAY_RESET_HOUR, lastRow.timezone ?? undefined) : -Infinity
+    return startOf(lastRow) < horizon
+  }
   const claimed = new Set<string>()
   const built: Partial<Record<PulseSectionKey, PulseSection<E>>> = {}
   const take = (key: PulseSectionKey, all: E[], limit: number, interest?: PulseSection['interest']) => {
-    built[key] = { key, events: all.slice(0, limit), count: all.length, ...(interest ? { interest } : {}) }
+    const floor = pageMayHideMore(key)
+    built[key] = { key, events: all.slice(0, limit), count: all.length, ...(floor ? { more: true } : {}), ...(interest ? { interest } : {}) }
     // Only the drawn ones are claimed: an event past a section's cap is still an event nobody has shown.
     for (const e of built[key]!.events) claimed.add(e.id)
   }
@@ -245,7 +262,7 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
       // Not deduped, not claimed: a place near you is a different question from what is on.
       if (!hasFix) continue
       const horizon = now + NEARBY_DAYS * DAY
-      const near = page
+      const near = unique(input.nearby ?? page)
         .filter((e) => e.distance != null && Number.isFinite(e.distance) && endOf(e) > now && startOf(e) < horizon)
         .sort((a, b) => (a.distance as number) - (b.distance as number))
       if (near.length) built.nearby = { key: 'nearby', events: near.slice(0, NEARBY_LIMIT), count: near.length }
@@ -294,8 +311,40 @@ export function categoryChips(
 
 /** The drawer's peek line for the Pulse: "● 3 live now · 14 on tonight"; a part that is 0 is dropped, both 0 is none. */
 export function pulsePeekLine(sections: readonly PulseSection[]): string | null {
-  const live = sections.find((s) => s.key === 'now')?.count ?? 0
-  const tonight = sections.find((s) => s.key === 'tonight')?.count ?? 0
-  const parts = [live > 0 ? `${live} live now` : null, tonight > 0 ? `${tonight} on tonight` : null].filter(Boolean)
+  const now = sections.find((s) => s.key === 'now')
+  const tonight = sections.find((s) => s.key === 'tonight')
+  const parts = [now && now.count > 0 ? `${sectionCountLabel(now)} live now` : null, tonight && tonight.count > 0 ? `${sectionCountLabel(tonight)} on tonight` : null].filter(Boolean)
   return parts.length ? parts.join(' · ') : null
+}
+
+/**
+ * The search results overline's count and noun: the server's total for the query, not the rows loaded so far (a page is 50 and
+ * grows as you scroll). Never fewer than what is on screen, and the loaded count while the total is not known (BAR-07).
+ */
+export function resultsCount(loaded: number, totalCount: number | null | undefined): { count: number; text: string; noun: string } {
+  const count = typeof totalCount === 'number' && Number.isFinite(totalCount) ? Math.max(totalCount, loaded) : loaded
+  return { count, text: count.toLocaleString('en-US'), noun: count === 1 ? 'event' : 'events' }
+}
+
+/** A section header's count as words: "50+" when the count is a floor (BAR-10), else the number. */
+export const sectionCountLabel = (s: Pick<PulseSection, 'count' | 'more'>): string => `${s.count}${s.more ? '+' : ''}`
+
+/** The Nearby request's and See all's upper bound: a week from now, rounded up to the hour so the pages of one list share a cache key (BAR-11). */
+export const nearbyEndDate = (now: number): string => new Date(Math.ceil((now + NEARBY_DAYS * DAY) / HOUR) * HOUR).toISOString()
+
+/** The place a loaded page was read for: another city or a ~100 m move is another page (the sections' requests wait for it). */
+export const feedKey = (city: string | null | undefined, at: { latitude: number; longitude: number } | null | undefined): string =>
+  `${city ?? '-'}|${at ? at.latitude.toFixed(3) : '-'},${at ? at.longitude.toFixed(3) : '-'}`
+
+/**
+ * Which interest "Because you like …" names: the one with the most events in the loaded page, the first on a tie (and the
+ * first of all with an empty page). The server now lists interests oldest first (SV-4), so a tie is always the same answer (BAR-12).
+ */
+export function pickInterest<I extends { slug: string }>(interests: readonly I[], page: readonly { category_group?: string | null }[]): I | undefined {
+  let best: { interest: I; n: number } | undefined
+  for (const interest of interests) {
+    const n = page.filter((e) => e.category_group === interest.slug).length
+    if (!best || n > best.n) best = { interest, n }
+  }
+  return best?.interest
 }

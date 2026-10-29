@@ -86,6 +86,13 @@ describe('<VenuePass>', () => {
     expect(screen.getByRole('button').props.accessibilityState).toMatchObject({ disabled: true })
   })
 
+  it('disabled (away from the door): it never claims you are here (SCRUM-882)', async () => {
+    await pass({ disabled: true, note: 'You’re too far away' })
+    expect(screen.getByLabelText('Live now. Vinyl Night. 14 inside now.')).toBeTruthy()
+    expect(screen.queryByText('YOU’RE HERE', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('LIVE NOW', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('on the server’s yes (#9, the Flow 4 prototype): the hold reads “You’re in”, and the pour floods up inside the panel', async () => {
     await pass({ confirmed: true, pour: <View testID="the-pour" /> })
     expect(screen.getAllByText('You’re in', { includeHiddenElements: true })).toHaveLength(2)

@@ -131,12 +131,14 @@ describe('Check your inbox', () => {
     expect(screen.queryByTestId('forgot-ring', { includeHiddenElements: true })).toBeNull()
   })
 
-  it('Resend, once it can, says so in a success toast that plays the outcome haptic', async () => {
+  it('Resend, once it can, says so in a success toast with no haptic of its own: the first send had its H.success', async () => {
     await sent()
     await wait(30)
     await fireEvent.press(screen.getByTestId('forgot-resend'))
     expect(mockForgot).toHaveBeenCalledTimes(2)
-    expect(mockToast).toHaveBeenCalledWith('Sent again. Give it a minute to arrive.', 'success', { haptic: 'success' })
+    expect(mockToast).toHaveBeenCalledWith('Sent again. Give it a minute to arrive.', 'success')
+    // The press played H.success once for the first send, and the resend adds none.
+    expect(success).toHaveBeenCalledTimes(1)
   })
 
   it('a refused Resend is the card and one H.error on Resend, with the page kept', async () => {

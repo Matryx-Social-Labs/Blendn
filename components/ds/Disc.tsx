@@ -32,6 +32,8 @@ export type DiscProps = {
   onPress: () => void
   /** The venue (c)'s label names: "Check in · {venue}". */
   venue?: string
+  /** How many events' fences you are inside; over one, (c) says "Check in · 2 here" and a tap opens the first (BAR-06). */
+  here?: number
   testID?: string
 }
 
@@ -66,7 +68,11 @@ const MARKER_X = R + R * Math.sin(MARKER_ANGLE)
 const MARKER_Y = R - R * Math.cos(MARKER_ANGLE)
 
 /** (c)'s label, with the venue its pill shows, so the name a screen reader or Voice Control has matches the words on screen. */
-const checkInLabel = (venue: string) => `You’re at ${venue}. Check in to see who else is here`
+const checkInLabel = (venue: string, here = 1) =>
+  here > 1 ? `You’re at ${here} events. Check in to see who else is here` : `You’re at ${venue}. Check in to see who else is here`
+
+/** The pill's words: the place, or how many events share the spot. */
+const checkInText = (venue: string | undefined, here = 1) => (here > 1 ? `Check in · ${here} here` : venue ? `Check in · ${venue}` : 'Check in')
 
 /** (c)'s label sits this far either side of the disc at most; a long venue is truncated. */
 const LABEL_REACH = SPACE.xxxl * 2
@@ -113,7 +119,7 @@ const AnimatedPath = Animated.createAnimatedComponent(Path)
  * haptic the disc makes; (c → d)'s `H.success` belongs to the check-in's
  * server answer, not here.
  */
-export function Disc({ target, onPress, venue, testID = 'disc' }: DiscProps) {
+export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProps) {
   const reduceMotion = useReducedMotion()
   const look = discLook(target)
   // One shared value per channel, made once: eleven `useSharedValue`s by another name.
@@ -132,9 +138,9 @@ export function Disc({ target, onPress, venue, testID = 'disc' }: DiscProps) {
     play(v, discTransition(from, look, reduceMotion))
     // Politely: queued behind whatever is being read, not over it.
     if (look === 'c') {
-      AccessibilityInfo.announceForAccessibilityWithOptions(`You’re at ${venue ?? 'an event'}. Check in from the Blend’n button.`, { queue: true })
+      AccessibilityInfo.announceForAccessibilityWithOptions(`${here && here > 1 ? `You’re at ${here} events` : `You’re at ${venue ?? 'an event'}`}. Check in from the Blend’n button.`, { queue: true })
     }
-  }, [look, reduceMotion, v, venue])
+  }, [look, reduceMotion, v, venue, here])
 
   // Back in (c) after a while away: the pulse again, at most once per foreground.
   useEffect(() => {
@@ -172,13 +178,13 @@ export function Disc({ target, onPress, venue, testID = 'disc' }: DiscProps) {
 
   return (
     <View style={styles.slot}>
-      {look === 'c' ? <CheckInLabel venue={venue} onPress={onPress} testID={`${testID}-label`} /> : null}
+      {look === 'c' ? <CheckInLabel venue={venue} here={here} onPress={onPress} testID={`${testID}-label`} /> : null}
       <ScalePress
         onPress={onPress}
         pressedScale={PRESS.scaleDisc}
         haptic={H.disc}
         accessibilityRole="button"
-        accessibilityLabel={look === 'c' && venue ? checkInLabel(venue) : roomButtonAccessibilityLabel(target)}
+        accessibilityLabel={look === 'c' && (venue || (here ?? 0) > 1) ? checkInLabel(venue ?? '', here) : roomButtonAccessibilityLabel(target)}
         style={styles.slot}
         testID={testID}
       >
@@ -236,13 +242,13 @@ export function Disc({ target, onPress, venue, testID = 'disc' }: DiscProps) {
  * so it is mounted rather than faded (glass never fades, §5.2). Hidden from
  * screen readers: the disc says the same, with the consequence.
  */
-function CheckInLabel({ venue, onPress, testID }: { venue?: string; onPress: () => void; testID: string }) {
+function CheckInLabel({ venue, here, onPress, testID }: { venue?: string; here?: number; onPress: () => void; testID: string }) {
   return (
     <View style={styles.labelSlot} pointerEvents="box-none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <ScalePress onPress={onPress} haptic={H.disc} hitSlop={LABEL_SLOP} testID={testID}>
         <Material role="toast" style={styles.label}>
           <Text style={styles.labelText} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.caption}>
-            {venue ? `Check in · ${venue}` : 'Check in'}
+            {checkInText(venue, here)}
           </Text>
         </Material>
       </ScalePress>

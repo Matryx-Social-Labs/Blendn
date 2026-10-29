@@ -16,7 +16,7 @@ import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../componen
 import { fadeInFast } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
-import { intentAnswered } from '../../lib/checkIn'
+import { checkInChanged, intentAnswered } from '../../lib/checkIn'
 import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
@@ -85,9 +85,10 @@ function EventPreferencesContent() {
   /*
    * "Why do you go out?" — asked at the door of the first room.
    *
-   * Onboarding never wrote `intent_default`, so every account that came
-   * through it was refused the board ("add … why you go out") for a field the
-   * flow never asked for. Check-in says `intentNeeded` while there is no
+   * Onboarding now asks it ("Why you go out", OUT-01), but older accounts and
+   * anyone who skipped that step have no `intent_default`, and the board refuses
+   * them ("add … why you go out") for it. No backfill (E14): this is their ask.
+   * Check-in says `intentNeeded` while there is no
    * default; the events tab sends people here with this flag, the intent
    * leads, and the answer is saved as the default in the same write.
    */
@@ -189,6 +190,8 @@ function EventPreferencesContent() {
         showToast(res.error || 'Could not save. Try again.', 'error', { haptic: 'error' })
         return
       }
+      // The Room and the tab bar read the reveal from caches this just made stale: say so, don't wait on a poll (ROOM-03).
+      checkInChanged(String(eventId))
       leave()
     } catch (e) {
       Logger.error('match', 'Failed to save match preferences', { error: e })

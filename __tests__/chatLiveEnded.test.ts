@@ -11,6 +11,13 @@ describe('each live:ended reason has its own calm state', () => {
     expect(liveEndedState('manual', venue).body).toBe('You left Toit’s room. Go live again any time you’re here.')
   })
 
+  it('switched_event is true for a Go Live elsewhere AND an event check-in (E8): it says "checked in", not "went live"', () => {
+    const s = liveEndedState('switched_event', venue)
+    expect(s.title).toBe('You checked in somewhere else')
+    expect(s.body).toContain('One place at a time.')
+    expect(`${s.title} ${s.body}`).not.toMatch(/went live/i)
+  })
+
   it('an event starting hands off to the place, not to going live again', () => {
     expect(liveEndedState('event_started', venue).action.kind).toBe('seeWhatsOn')
   })

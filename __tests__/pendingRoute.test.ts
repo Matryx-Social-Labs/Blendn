@@ -12,7 +12,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { navigateFromNotificationData, notificationTarget } from '../lib/notifications'
-import { openWhenReady, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
+import { openWhenReady, pendingEventId, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
 
 beforeEach(() => {
   resetPendingRoute()
@@ -64,6 +64,28 @@ describe('pendingInviteToken', () => {
     expect(pendingInviteToken()).toBeNull()
     openWhenReady('/friends/add' as never)
     expect(pendingInviteToken()).toBeNull()
+  })
+})
+
+describe('pendingEventId', () => {
+  it('reads the id of an event link waiting for sign-in, without taking it', () => {
+    openWhenReady('/event/e%2D1?ref=x' as never)
+    expect(pendingEventId()).toBe('e-1')
+    expect(takePendingRoute()).toBe('/event/e%2D1?ref=x')
+    expect(pendingEventId()).toBeNull()
+  })
+
+  it('reads the object form too, and a malformed escape is no id (L1)', () => {
+    openWhenReady({ pathname: '/event/[id]', params: { id: 'e9' } } as never)
+    expect(pendingEventId()).toBe('e9')
+    openWhenReady('/event/%E0%A4%A' as never)
+    expect(pendingEventId()).toBeNull()
+  })
+
+  it('is null for anything that is not an event link', () => {
+    expect(pendingEventId()).toBeNull()
+    openWhenReady('/f/abc123' as never)
+    expect(pendingEventId()).toBeNull()
   })
 })
 

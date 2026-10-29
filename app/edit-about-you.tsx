@@ -1,10 +1,11 @@
-import { router, useLocalSearchParams } from 'expo-router'
+import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ChipSet } from '../components/ds/ChipSet'
+import { WhoSees } from '../components/profile/WhoSees'
 import { FieldLabel, FieldNotes } from '../components/ds/TextField'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { font, GroundProvider, HueProvider, useBoldText } from '../components/ds/shared'
@@ -75,9 +76,6 @@ export const LANGUAGES_SHOWN = HOME_STATES_SHOWN
  * basics step's and Edit profile's, not this screen's.
  */
 function EditAboutYouScreenContent() {
-  // Opened from Settings' "How you match" row it says so in its bar; from Edit profile it is "About you". A flag, not a
-  // title: a route param is whatever a link says, and a bar must not be made to print it.
-  const { from } = useLocalSearchParams<{ from?: string }>()
   const { user: authUser } = useAuth()
   const { showToast } = useToast()
   const insets = useSafeAreaInsets()
@@ -259,7 +257,7 @@ function EditAboutYouScreenContent() {
   return (
     <View style={styles.screen}>
       <TopBar
-        title={from === 'settings' ? 'How you match' : 'About you'}
+        title="About you"
         state={scrolled ? 'scrolled' : 'rest'}
         onBack={() => router.back()}
         save={{
@@ -324,6 +322,7 @@ function EditAboutYouScreenContent() {
                       error={tierBError.languages}
                       testID="about-you-languages"
                     />
+                    <WhoSees field="languages" />
                   </View>
                   <View onLayout={(e) => (ys.current.homeState = e.nativeEvent.layout.y)}>
                     <ChipSet
@@ -347,6 +346,7 @@ function EditAboutYouScreenContent() {
                       error={tierBError.homeState}
                       testID="about-you-home-state"
                     />
+                    <WhoSees field="homeState" />
                   </View>
                   {options.thisOrThat.length ? (
                     <View style={styles.field}>
@@ -362,6 +362,7 @@ function EditAboutYouScreenContent() {
                         />
                       ))}
                       <FieldNotes hint="Pick one, or leave it. Tap again to take it back." bold={bold} />
+                      <WhoSees field="thisOrThat" />
                     </View>
                   ) : null}
                 </View>
@@ -418,6 +419,7 @@ function EditAboutYouScreenContent() {
                       error={tierBError.sign}
                       testID="about-you-signs"
                     />
+                    <WhoSees field="sign" />
                   </Animated.View>
                 </GroundProvider>
               ) : null}

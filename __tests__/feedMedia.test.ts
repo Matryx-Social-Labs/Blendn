@@ -196,3 +196,15 @@ describe('a hero clip restarts when the carousel comes back to it', () => {
     expect(feed).toContain('single-active-player policy')
   })
 })
+
+describe('the detail route spells the poster thumbnailUrl (ROOM-12)', () => {
+  // events/[eventId]/route.ts media[]; the list route says thumbnail_url.
+  const clip: EventMediaItem = { id: 'v', url: 'https://cdn.example/clip.mp4', type: 'video', thumbnailUrl: 'https://cdn.example/poster.jpg' }
+  it('a video-only event keeps its clip, posterised by its own thumbnail', () => {
+    expect(feedPlaylist([clip], null)).toEqual([{ kind: 'video', url: 'https://cdn.example/clip.mp4', posterUrl: 'https://cdn.example/poster.jpg' }])
+    expect(feedPoster([clip], null)).toBe('https://cdn.example/poster.jpg')
+  })
+  it('snake_case still wins when both are present', () => {
+    expect(feedPoster([{ ...clip, thumbnail_url: 'https://cdn.example/snake.jpg' }], null)).toBe('https://cdn.example/snake.jpg')
+  })
+})

@@ -22,12 +22,13 @@ import { BadgeRow } from '../../components/profile/MeBadges'
 import { FoldBlock, PROFILE_EMPTY, ProfileBody, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { Glyph } from '../../components/ui/Glyph'
 import { Icon } from '../../components/ui/Icon'
-import { apiClient, type UserProfileData } from '../../lib/apiClient'
+import { apiClient, type PublicProfile } from '../../lib/apiClient'
 import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { likeRefusal } from '../../lib/likeRefusal'
 import { heroFoldHeight } from '../../lib/profileFold'
 import { interestNames } from '../../lib/meProfile'
-import { profileIdentity, withheldUnlessVisible } from '../../lib/profileIdentity'
+import { useWorkFields } from '../../components/profile/useWorkFields'
+import { profileIdentity, withheldUnlessVisible, workFieldLabel } from '../../lib/profileIdentity'
 import { aboutLine, type Badge } from '../../lib/aboutYou'
 import { FRIEND_COPY, friendAction, isHandle, parseFriendOffer, type FriendOffer } from '../../lib/friendOffer'
 import { parseBadges } from '../../lib/profileBadges'
@@ -100,7 +101,7 @@ const CTA_HINT = {
   message: 'You can message each other.',
   declined: 'You declined this request.',
 } as const
-type ProfileConnection = NonNullable<UserProfileData['connection']>
+type ProfileConnection = NonNullable<PublicProfile['connection']>
 
 function UserProfileInner() {
   const sel = useSelection()
@@ -136,6 +137,8 @@ function UserProfileInner() {
   const [profile, setProfile] = useState<UserProfileView | null>(null)
   // Their badges, from `GET /users/:id` (the server gives them to whoever may see who they are); none until it answers.
   const [badgesOf, setBadgesOf] = useState<{ for: string; list: Badge[] } | null>(null)
+  // `work_field` arrives as a stored code ("data_ai"); the hero line says its label.
+  const workFields = useWorkFields()
   const badges = badgesOf?.for === id ? badgesOf.list : []
   const [loading, setLoading] = useState(true)
   /*
@@ -334,18 +337,18 @@ function UserProfileInner() {
           gone = gone && isGone(fallbackResult)
           if (fallbackResult.success && fallbackResult.data) {
             const data = fallbackResult.data
-            const photos = data.photos || data.profile_photos || []
-            const interests = interestNames(data.interests)
+            // `/profiles/:id` nests the profile (age, location, bio, photos ... are under `profile`); only `name` and `interests` are top-level (YOU-13).
+            const p = data.profile ?? {}
             nextProfile = {
               user_id: id,
               name: data.name,
-              age: data.age,
-              bio: data.bio,
-              location: data.location,
-              occupation: data.occupation,
-              education: data.education,
-              interests,
-              photos,
+              age: p.age,
+              bio: p.bio,
+              location: p.location,
+              occupation: p.occupation,
+              education: p.education,
+              interests: interestNames(data.interests),
+              photos: p.photos ?? [],
               // An older route with no `identityVisible`: fail closed.
               identityVisible: false,
             }
@@ -610,7 +613,7 @@ function UserProfileInner() {
    * real and, in an unrevealed profile, is the whole point of `work_field`
    * living outside the identity gate: an attribute rather than an address.
    */
-  const heroSubtitle = [profile?.workField, profile?.location].filter(Boolean).join(' · ') || null
+  const heroSubtitle = [workFieldLabel(profile?.workField, workFields), profile?.location].filter(Boolean).join(' · ') || null
 
   const columnWidth = Math.floor((windowWidth - SPACE.gutter * 2 - SPACE.sm) / 2)
   const showDock = !loading && !!profile && ctaMode !== 'self'

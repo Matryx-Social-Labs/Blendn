@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../../components/ds/Button'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
+import { BadgeRow } from '../../components/profile/MeBadges'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
 import { dockClearance, ProfileDock } from '../../components/profile/ProfileDock'
@@ -17,9 +18,13 @@ import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { aboutLine } from '../../lib/aboutYou'
+import { useWorkFields } from '../../components/profile/useWorkFields'
+import { workFieldLabel } from '../../lib/profileIdentity'
 import { friendsSinceParts, type FriendProfile } from '../../lib/friends'
 import { noteFriendGone } from '../../lib/friendsGone'
 import { isGone } from '../../lib/loadFailure'
+import { parseBadges } from '../../lib/profileBadges'
 import { blockStep, userReportStep } from '../../lib/safetyUtils'
 import { showSheet, type Sheet } from '../../lib/sheet'
 
@@ -48,6 +53,7 @@ function FriendProfileScreenContent() {
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
   const bold = useBoldText()
   const [dockHeight, setDockHeight] = useState(0)
+  const workFields = useWorkFields()
   // The page's scroll offset, written on the UI thread: the bar and the hero's stretch read it, React never renders for it.
   const scrollY = useSharedValue(0)
   const onScroll = useAnimatedScrollHandler((e) => {
@@ -195,7 +201,9 @@ function FriendProfileScreenContent() {
     )
   }
 
-  const subtitle = [friend.occupation, friend.location].filter(Boolean).join(' · ') || null
+  // The field of work, as `/user/[id]` says it (the occupation is its own line below); an older server sends none, so the occupation stands in.
+  const subtitle = [workFieldLabel(friend.work_field, workFields) ?? friend.occupation, friend.location].filter(Boolean).join(' · ') || null
+  const badges = parseBadges(friend.badges) ?? []
   const columnWidth = Math.floor((width - SPACE.gutter * 2 - SPACE.sm) / 2)
   // Flow 6 `friend`: the date alone in Geist Mono, the words in the page's face.
   const since = friendsSinceParts(friend.friendsSince)
@@ -241,10 +249,13 @@ function FriendProfileScreenContent() {
             facts={{
               bio: friend.bio,
               interests: friend.interests.map((i) => i.name),
+              sharedInterests: friend.sharedInterests,
+              about: aboutLine(friend),
               occupation: friend.occupation,
               education: friend.education,
               photos: friend.photos,
             }}
+            badges={badges.length > 0 ? <BadgeRow badges={badges} /> : null}
             columnWidth={columnWidth}
             onPressPhoto={(i, from) => setViewer({ index: i, from })}
           />

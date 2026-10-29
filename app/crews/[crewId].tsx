@@ -21,7 +21,7 @@ import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import {
-  CREW_MAX_MEMBERS,
+  crewSeatsLeft,
   CREW_REPORT_REASONS,
   KEEP_ANONYMOUS_LABEL,
   crewMessage,
@@ -35,6 +35,7 @@ import { crewBarState, leaveSheet, removeSheet, textFieldOf } from '../../lib/cr
 import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
+import { roomCardRoute } from '../../lib/roomCard'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
 import { showSheet } from '../../lib/sheet'
@@ -169,6 +170,8 @@ function CrewScreenContent() {
     setBusy(null)
     if (!result.success || !result.data) return showToast(crewMessage(result, 'crew', 'Couldn’t send the invites. Try again.'), 'error', { haptic: 'error' })
     setInviting(false)
+    // The open invites now count against the 12: take them off the seats at once, so a full crew stops offering Invite without a re-read.
+    patchCrew((c) => ({ ...c, seatsLeft: Math.max(0, crewSeatsLeft(c) - (result.data?.invited ?? 0)) }))
     // `invited` is how many you asked for, never who got one.
     showToast(result.data.invited === 1 ? 'Asked 1 friend' : `Asked ${result.data.invited} friends`, 'success')
   }
@@ -302,9 +305,10 @@ function CrewScreenContent() {
             members={crew.members}
             myId={myId}
             isOwner={owner}
-            canInvite={crew.size < CREW_MAX_MEMBERS}
+            canInvite={crewSeatsLeft(crew) > 0}
             apart={crew.apart === true}
             onInvite={() => void startInvite()}
+            onOpen={(member) => router.push(roomCardRoute({ id: member.userId, name: member.name }, crewId) as never)}
             onMore={confirmRemove}
           />
         </View>
@@ -386,7 +390,7 @@ function CrewScreenContent() {
             friends={invitable}
             search={{ query: friendList.query, onChange: friendList.search, searching: friendList.searching, active: friendList.searched !== null, offered: friendList.allTotal > FRIEND_SEARCH_OFFER }}
             paging={{ hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() }}
-            room={CREW_MAX_MEMBERS - crew.size}
+            room={crewSeatsLeft(crew)}
             asking={busy === 'invite'}
             onRetry={startInvite}
             onAsk={(ids) => void sendInvites(ids)}

@@ -169,7 +169,7 @@ describe('the Notifications screen reuses the push switch rather than copying it
 
   it('clears the badge on the tap, before the screen has asked the server anything', () => {
     // Optimistic: opening is what "seen" means, and the round trip is the slowest part of it.
-    expect(BELL()).toMatch(/setUnread\(0\)\s*\n\s*router\.push\('\/notifications'\)/)
+    expect(BELL()).toMatch(/markBellRead\(\)\s*\n\s*router\.push\('\/notifications'\)/)
   })
 
   it('does not poll, but does look when you look', () => {

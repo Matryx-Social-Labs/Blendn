@@ -13,7 +13,7 @@ const CAPSULE = 22
 export type SectionAction = { label: string; onPress: () => void; busy?: boolean; accessibilityLabel?: string }
 
 /** A count in thousands is grouped ("1,204"): it reads at a glance and never wraps the header. */
-const grouped = (n: number) => n.toLocaleString('en-US')
+const grouped = (n: number, floor = false) => `${n.toLocaleString('en-US')}${floor ? '+' : ''}`
 
 /**
  * How every section inside a screen starts (guidelines/components/SectionHeader.html):
@@ -35,6 +35,7 @@ const grouped = (n: number) => n.toLocaleString('en-US')
 export function SectionHeader({
   title,
   count,
+  more = false,
   countStyle = 'plain',
   action,
   live = false,
@@ -44,6 +45,8 @@ export function SectionHeader({
 }: {
   title: string
   count?: number
+  /** The count is a floor (a full page was counted): it prints "N+" and is spoken the same (BAR-10). */
+  more?: boolean
   /** `plain`: "· N" in textSecondary. `lit`: a capsule in the screen's hue (`HueProvider`). */
   countStyle?: 'plain' | 'lit'
   action?: SectionAction
@@ -58,7 +61,7 @@ export function SectionHeader({
   const sel = useSelection()
   const [focused, setFocused] = useState(false)
   const slop = (minTarget() - TYPE.meta.lineHeight) / 2
-  const heading = count == null ? title : `${title}, ${grouped(count)}`
+  const heading = count == null ? title : `${title}, ${grouped(count, more)}`
 
   return (
     <View style={styles.block}>
@@ -76,13 +79,13 @@ export function SectionHeader({
           {count != null && countStyle === 'lit' ? (
             <View testID={testID && `${testID}-count`} style={[styles.capsule, { backgroundColor: sel.fill, borderColor: sel.edge }]}>
               <Text style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.capsuleText, styles.tabular]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                {grouped(count)}
+                {grouped(count, more)}
               </Text>
             </View>
           ) : count != null ? (
             <>
               <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.muted]}>·</Text>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{grouped(count)}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{grouped(count, more)}</Text>
             </>
           ) : null}
         </View>

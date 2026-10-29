@@ -72,6 +72,7 @@ import { crewsApi } from '../lib/crewsApi'
 import type { NotificationItem } from '../lib/notificationFormat'
 import { navigateFromNotificationData } from '../lib/notifications'
 import { H } from '../lib/haptics'
+import * as sheetModule from '../lib/sheet'
 import { closeSheet } from '../lib/sheet'
 import { ANSWER_DEADLINE_MS, DONE_DWELL_MS } from '../lib/useNotificationFeed'
 import { forgetPushPermission } from '../lib/pushStatus'
@@ -503,6 +504,17 @@ describe('the ⋯ menu and Clear all', () => {
     expect(screen.getByRole('button', { name: 'Clear all' })).toBeTruthy()
     fireEvent.press(screen.getByRole('button', { name: 'Notification settings' }))
     expect(router.push).toHaveBeenCalledWith('/notification-settings')
+  })
+
+  it('draws the Clear all confirm strong (white), not red: nothing is destroyed (SYS-05, E13)', async () => {
+    const show = jest.spyOn(sheetModule, 'showSheet')
+    await render(<Screen />)
+    await screen.findByText('You have a new match')
+    await openMenu()
+    fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
+    const sheet = show.mock.calls[0][0] as { actions: { label: string; variant?: string }[] }
+    expect(sheet.actions.find((a) => a.label === 'Clear all')?.variant).toBe('primary')
+    show.mockRestore()
   })
 
   it('has nothing to clear when there is nothing', async () => {

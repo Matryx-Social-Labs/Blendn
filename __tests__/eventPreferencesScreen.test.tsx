@@ -48,7 +48,7 @@ jest.mock('../lib/linkClosers', () => ({
   },
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), setMatchPreferences: jest.fn() },
+  apiClient: { getProfile: jest.fn(), setMatchPreferences: jest.fn(), forgetActiveCheckins: jest.fn(), forgetVenues: jest.fn(), forgetEvent: jest.fn() },
 }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
@@ -310,5 +310,25 @@ describe('at AX XXXL (TG-03)', () => {
     for (const h of owned) expect(h.props.maxFontSizeMultiplier).toBeLessThanOrEqual(MAX_FONT_SCALE.title)
     const src = readFileSync(join(__dirname, '..', 'app', 'event-preferences', '[eventId].tsx'), 'utf8')
     expect(src.match(/<Text(?![^>]*maxFontSizeMultiplier)[^>]*>/g) ?? []).toEqual([])
+  })
+})
+
+describe('saving tells the Room (ROOM-03)', () => {
+  const save = async () => {
+    await render(<EventPreferences />)
+    await fireEvent.press(await screen.findByRole('checkbox', { name: /^Making friends/ }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+  }
+  it('a saved choice drops the active check-ins and the event, so the Room re-reads at once', async () => {
+    ;(apiClient.setMatchPreferences as jest.Mock).mockResolvedValue({ success: true })
+    await save()
+    await waitFor(() => expect(apiClient.forgetActiveCheckins).toHaveBeenCalled())
+    expect(apiClient.forgetEvent).toHaveBeenCalledWith('e1')
+  })
+  it('a refused save changes nothing', async () => {
+    ;(apiClient.setMatchPreferences as jest.Mock).mockResolvedValue({ success: false, error: 'No' })
+    await save()
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalled())
+    expect(apiClient.forgetActiveCheckins).not.toHaveBeenCalled()
   })
 })

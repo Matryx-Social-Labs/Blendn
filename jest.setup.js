@@ -1,4 +1,7 @@
 /* global jest */
+// `lib/apiClient.ts` throws at import without a base URL, so a suite that reaches it (the landing screen) died on a
+// machine with no shell variable. A test that wants its own sets it before the import.
+process.env.EXPO_PUBLIC_API_BASE_URL ??= 'https://staging-api.blendn.app'
 // Reanimated 4 runs its animations on react-native-worklets, whose JS entry
 // calls into a native module at import time. Jest has no native side, so any
 // test that imports a module importing Reanimated dies before its first line

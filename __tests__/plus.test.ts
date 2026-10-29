@@ -20,6 +20,7 @@ import {
   PLUS_FEATURES,
   PLUS_POLL_EVERY_MS,
   plusStatusLine,
+  plusChangedSince,
   waitForPlus,
 } from '../lib/plus'
 import { lockedNightsLabel, withLockedNights, type GoingItem } from '../lib/savedEvents'
@@ -207,3 +208,57 @@ describe('Going re-reads when the app comes back (review MEDIUM: a pending payme
   })
 })
 
+
+describe('an already active account waits for the purchase to land (SYS-03)', () => {
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+  const grant = { active: true, gated: false, product: 'plus', source: 'grant', expiresAt: '2027-10-28T04:00:00.000Z' }
+  const ok = (data: object) => ({ success: true, data }) as never
+
+  // GET /me/plus reports the longest live row, so a Night Pass stacked on a grant never changes the answer.
+  it('the same answer on every poll resolves active within 10 s, not "taking longer than usual" after 60', async () => {
+    getMyPlus.mockResolvedValue(ok(grant))
+    let settled: unknown = 'pending'
+    void waitForPlus(() => false, Date.now, grant as never).then((r) => { settled = r })
+    await jest.advanceTimersByTimeAsync(6_000)
+    expect(settled).toBe('pending')
+    await jest.advanceTimersByTimeAsync(4_000)
+    expect(settled).toMatchObject({ active: true, source: 'grant' })
+  })
+
+  it('resolves to the new status as soon as changedAt moves', async () => {
+    const before = { ...grant, changedAt: '2026-10-27T10:00:00.000Z' }
+    const after = { ...grant, changedAt: '2026-10-27T10:00:07.000Z' }
+    getMyPlus.mockResolvedValueOnce(ok(before)).mockResolvedValue(ok(after))
+    const done = waitForPlus(() => false, Date.now, before as never)
+    await jest.advanceTimersByTimeAsync(3_000)
+    await expect(done).resolves.toMatchObject({ changedAt: '2026-10-27T10:00:07.000Z' })
+    expect(getMyPlus).toHaveBeenCalledTimes(2)
+  })
+
+  it('with changedAt on both and no change, it waits the full minute and then still answers active', async () => {
+    const held = { ...grant, changedAt: '2026-10-27T10:00:00.000Z' }
+    getMyPlus.mockResolvedValue(ok(held))
+    let settled: unknown = 'pending'
+    void waitForPlus(() => false, Date.now, held as never).then((r) => { settled = r })
+    await jest.advanceTimersByTimeAsync(30_000)
+    expect(settled).toBe('pending')
+    await jest.advanceTimersByTimeAsync(31_000)
+    expect(settled).toMatchObject({ active: true })
+  })
+
+  it('an account that was not active still gets null on timeout', async () => {
+    getMyPlus.mockResolvedValue({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } } as never)
+    let settled: unknown = 'pending'
+    void waitForPlus(() => false, Date.now, null).then((r) => { settled = r })
+    await jest.advanceTimersByTimeAsync(61_000)
+    expect(settled).toBeNull()
+  })
+
+  it('a different product or source counts as the change', () => {
+    expect(plusChangedSince(grant as never, { ...grant, product: 'night_pass' } as never)).toBe(true)
+    expect(plusChangedSince(grant as never, { ...grant, source: 'google' } as never)).toBe(true)
+    expect(plusChangedSince(grant as never, grant as never)).toBe(false)
+    expect(plusChangedSince(null, grant as never)).toBe(true)
+  })
+})

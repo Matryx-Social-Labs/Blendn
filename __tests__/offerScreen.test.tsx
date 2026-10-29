@@ -327,7 +327,9 @@ describe('"Let them know I’m a regular"', () => {
 
   it('names who would see a yes (M2), and what they would not', async () => {
     await mount()
-    expect(screen.getByText(/Indiranagar Hospitality, who runs The Humming Tree on Blendn, will see your first name/)).toBeTruthy()
+    expect(screen.getByText(/Indiranagar Hospitality, who runs The Humming Tree on Blendn, will see that a regular was here/)).toBeTruthy()
+    expect(screen.queryByText(/first name/i)).toBeNull()
+    expect(screen.getByText('who you are, your chats, who you met, or anywhere else you go')).toBeTruthy()
     expect(screen.getByText('The Humming Tree will see')).toBeTruthy()
     expect(screen.getByText('The Humming Tree won’t see')).toBeTruthy()
     expect(screen.queryByText(/photo/i)).toBeNull()

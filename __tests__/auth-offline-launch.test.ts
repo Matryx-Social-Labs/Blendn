@@ -31,7 +31,7 @@ jest.mock('../lib/sessionEvents', () => ({
   markSessionExpired: jest.fn(),
   subscribeSessionExpired: jest.fn(() => () => {}),
 }))
-jest.mock('../lib/roomSignal', () => ({ clearRoomSignal: jest.fn() }))
+jest.mock('../lib/roomSignal', () => ({ clearRoomSignal: jest.fn(), stopRoomSignalSource: jest.fn() }))
 jest.mock('../lib/sentry', () => ({ Sentry: { setUser: jest.fn() } }))
 
 import { apiClient, TokenStorage } from '../lib/apiClient'

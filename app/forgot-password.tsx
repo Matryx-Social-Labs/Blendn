@@ -147,9 +147,9 @@ export default function ForgotPassword() {
     }
   }
 
-  // The outcome plays its success haptic with its toast, as it appears.
+  // Silent: the first send had its H.success (Flow 1, forgot 09), and a resend is the same news again.
   const resend = async () => {
-    if (await send('resend')) showToast('Sent again. Give it a minute to arrive.', 'success', { haptic: 'success' })
+    if (await send('resend')) showToast('Sent again. Give it a minute to arrive.', 'success')
   }
 
   /*

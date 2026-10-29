@@ -73,16 +73,19 @@ import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { FIX_MAX_AGE_MS, fixOf, type PreciseFix } from '../../lib/roomButton'
-import { publishRoomSignal } from '../../lib/roomSignal'
 import { homeCardProps, groupByDay } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import {
   categoryChips,
   everythingElse,
+  nearbyEndDate,
+  feedKey,
   pulsePeekLine,
+  pickInterest,
   pulseSections,
   seedDateOf,
   weekendWindow,
+  resultsCount,
   type PulseSectionKey,
 } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
@@ -491,10 +494,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
   const locationRequestInFlight = useRef(false)
-  /** iOS's reduced-accuracy grant: its fixes are good to kilometres, so the centre button never judges a fence by one. */
-  const approximateRef = useRef(false)
-  /** The newest fix the phone gave, with its accuracy and time: the state keeps its identity for a nearby one, this does not. */
-  const latestFixRef = useRef<PreciseFix | null>(null)
   const interestInFlightRef = useRef<Set<string>>(new Set())
   const checkOutInFlightRef = useRef<Set<string>>(new Set())
   const lastFetchLocationRef = useRef<string>('none')
@@ -715,8 +714,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const getCurrentLocationQuietly = useCallback(async () => {
     try {
       // Best-effort permission request with quick timeout; fallback if denied/unavailable
-      const { status, ios } = await Location.requestForegroundPermissionsAsync()
-      approximateRef.current = ios?.accuracy === 'reduced'
+      const { status } = await Location.requestForegroundPermissionsAsync()
       if (status !== 'granted') {
         setUserLocation(null)
         setLocationStatus(status === 'denied' ? 'denied' : 'undetermined')
@@ -736,7 +734,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       setLocationStatus('granted')
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
       const coords = fixOf(position)
-      latestFixRef.current = coords
       setUserLocation(coords)
       Logger.journey('proximity', 'quietLocation:resolved', coords)
     } catch (error) {
@@ -760,15 +757,13 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   useEffect(() => {
     const checkLocationPermission = async () => {
       try {
-        const { status, ios } = await Location.getForegroundPermissionsAsync()
-        approximateRef.current = ios?.accuracy === 'reduced'
+        const { status } = await Location.getForegroundPermissionsAsync()
         if (status === 'granted') {
           // Permission already granted - mark as granted immediately (before fetching coords)
           setLocationStatus('granted')
           try {
             const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS })
             if (lastKnown?.coords) {
-              latestFixRef.current = fixOf(lastKnown)
               setUserLocation(fixOf(lastKnown))
             }
           } catch {}
@@ -776,7 +771,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           setTimeout(async () => {
             try {
               const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-              latestFixRef.current = fixOf(position)
               setUserLocation(fixOf(position))
             } catch {
               // Position fetch failed but permission is still granted - don't show prompt
@@ -839,6 +833,10 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * (`pageHasMore`), so the end of a twelve-event city stops asking.
    */
   const [hasMore, setHasMore] = useState(true)
+  /** The server's count for the current query (page one's `pagination.totalCount`): what the results overline prints. */
+  const [totalCount, setTotalCount] = useState<number | null>(null)
+  /** The place page one was last read for (`feedKey`): the "Because you like" request waits for it, so it names an interest from this page (M10). */
+  const [pageFor, setPageFor] = useState<string | null>(null)
   const fetchMoreInFlightRef = useRef(false)
   /*
    * Bumped by every page-one load. A page two that was in flight when the
@@ -869,7 +867,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       // Rounded, so the last-known fix and the live one are one cache key (and one request).
       const lat = roundCoord(userLocation?.latitude)
       const lon = roundCoord(userLocation?.longitude)
-      const { data: eventsData, error } = await fetchEventsApi({
+      const { data: eventsData, meta: eventsMeta, error } = await fetchEventsApi({
         page: 0,
         limit: PAGE_SIZE,
         city: selectedCity ?? undefined,
@@ -897,16 +895,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
       const normalized = (eventsData || []).map(normalizeEvent)
       setEvents(normalized)
-      /*
-       * Hand the centre button what this fetch already knows.
-       *
-       * This screen asks for events with a location and gets `distance` back on
-       * every one. The tab bar needs two facts derived from exactly that —
-       * whether you are standing inside a fence, and what you said you were
-       * going to tonight — and re-deriving them there would mean a second
-       * location permission dance and a second copy of this list on a timer.
-       */
-      publishRoomSignal(normalized, Date.now(), latestFixRef.current && { ...latestFixRef.current, approximate: approximateRef.current })
+      setTotalCount(eventsMeta?.totalCount ?? null)
+      setPageFor(feedKey(selectedCity, userLocation))
       setPage(0)
       setHasMore(pageHasMore(normalized.length, PAGE_SIZE))
       lastFetchLocationRef.current = lat && lon ? `${lat},${lon}` : 'none'
@@ -1177,16 +1167,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
        * status on every foreground so a grant elsewhere clears it.
        */
       Location.getForegroundPermissionsAsync()
-        .then(({ status, ios }) => {
-          approximateRef.current = ios?.accuracy === 'reduced'
+        .then(({ status }) => {
           setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
         })
         .catch(() => {})
       Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS })
         .then((position) => {
           if (!position) return
-          // The state keeps its identity for a nearby fix (a new one would refetch the feed), but the fix's age moves on.
-          latestFixRef.current = fixOf(position)
+          // The state keeps its identity for a nearby fix (a new one would refetch the feed).
           setUserLocation((current) =>
             current &&
             Math.abs(current.latitude - position.coords.latitude) < 0.01 &&
@@ -1335,11 +1323,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       const received = data ?? []
       setHasMore(pageHasMore(received.length, PAGE_SIZE))
       if (received.length === 0) return
-      setEvents(prev => {
-        const merged = mergeEventPage(prev, received.map(normalizeEvent))
-        publishRoomSignal(merged, Date.now(), latestFixRef.current && { ...latestFixRef.current, approximate: approximateRef.current })
-        return merged
-      })
+      setEvents(prev => mergeEventPage(prev, received.map(normalizeEvent)))
       setPage(prev => prev + 1)
       const maps = feedMaps(received)
       setInterestStatuses((prev) => ({ ...prev, ...maps.interests }))
@@ -1371,12 +1355,17 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * key they were asked for, so another city's answer is never drawn under this
    * one's header.
    */
-  const lat3 = userLocation ? userLocation.latitude.toFixed(3) : '-'
-  const lon3 = userLocation ? userLocation.longitude.toFixed(3) : '-'
-  const sectionsKey = `${selectedCity ?? '-'}|${lat3},${lon3}|${seedDate}|${pulls}`
+  const placeKey = feedKey(selectedCity, userLocation)
+  const sectionsKey = `${placeKey}|${seedDate}|${pulls}`
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
+  // The loaded page, read by the section requests without re-asking when it changes.
+  const eventsRef = useRef(events)
+  useEffect(() => {
+    eventsRef.current = events
+  }, [events])
+  const [nearbyState, setNearbyState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const sectionRequestsOn = !!user && !authLoading && feedCityReady && !isNarrowed
   useEffect(() => {
     if (!sectionRequestsOn) return
@@ -1392,6 +1381,16 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         })
         .catch((error) => Logger.warn('events', 'This weekend threw', { error: String(error) }))
     }
+    // Request E: the nearest in the next week, by distance (a closer event past the first page of 50 still ranks).
+    if (hasFix) {
+      fetchEventsApi({ page: 0, limit: 12, ...where, include: 'checkins', sortBy: 'distance', sortOrder: 'asc', endDate: nearbyEndDate(Date.now()) })
+        .then(({ data, error }) => {
+          if (cancelled) return
+          if (error || !data) Logger.warn('events', 'Nearby did not load', { error: error?.message })
+          setNearbyState({ key: sectionsKey, events: error || !data ? null : data.map(normalizeEvent) })
+        })
+        .catch((error) => Logger.warn('events', 'Nearby threw', { error: String(error) }))
+    }
     // Request D: the city's featured events, in the server's rank order, whatever page they would be on.
     fetchEventsApi({ page: 0, limit: 5, ...where, include: 'checkins', featured: true })
       .then(({ data, error }) => {
@@ -1400,10 +1399,25 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         setFeaturedState({ key: sectionsKey, events: error || !data ? null : data.map(normalizeEvent) })
       })
       .catch((error) => Logger.warn('events', 'Featured threw', { error: String(error) }))
+    return () => {
+      cancelled = true
+    }
+    // The location only moves the key (to ~100 m); the request reads the live fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionRequestsOn, sectionsKey, user?.id])
+
+  /*
+   * Request C, "Because you like": after page one has loaded for this place, because the interest it names is the one with the
+   * most events on that page (`pickInterest`), and a pick made before the page lands is a pick from nothing (M10).
+   */
+  useEffect(() => {
+    if (!sectionRequestsOn || !user || pageFor !== placeKey) return
+    let cancelled = false
+    const where = { city: selectedCity ?? undefined, lat: roundCoord(userLocation?.latitude), lon: roundCoord(userLocation?.longitude) }
     void (async () => {
       try {
         const interests = await apiClient.getProfileInterests(user.id)
-        const first = interests.success ? interests.data?.interests?.[0] : undefined
+        const first = interests.success ? pickInterest(interests.data?.interests ?? [], eventsRef.current) : undefined
         if (cancelled) return
         if (!first) return setForYouState({ key: sectionsKey, value: null })
         const { data, error } = await fetchEventsApi({ page: 0, limit: 12, ...where, include: 'checkins', categorySlug: first.slug })
@@ -1419,15 +1433,16 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     }
     // The location only moves the key (to ~100 m); the request reads the live fix.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionRequestsOn, sectionsKey, user?.id])
+  }, [sectionRequestsOn, sectionsKey, pageFor, user?.id])
   const weekend = weekendState?.key === sectionsKey ? weekendState.events : null
+  const nearby = nearbyState?.key === sectionsKey ? nearbyState.events : null
   const featuredRequested = featuredState?.key === sectionsKey ? featuredState.events : null
   const forYou = forYouState?.key === sectionsKey ? forYouState.value : null
 
   /** The sections, in order, each claiming its events once (`lib/pulseSections.ts`). Search and filters make the pane a flat list. */
   const sections = useMemo(
-    () => (isNarrowed ? [] : pulseSections<Event>({ page: events, weekend, featured: featuredRequested, forYou, now, hasFix, seedDate })),
-    [isNarrowed, events, weekend, featuredRequested, forYou, now, hasFix, seedDate]
+    () => (isNarrowed ? [] : pulseSections<Event>({ page: events, pageFull: hasMore, nearby, weekend, featured: featuredRequested, forYou, now, hasFix, seedDate })),
+    [isNarrowed, events, hasMore, nearby, weekend, featuredRequested, forYou, now, hasFix, seedDate]
   )
   const sectionOf = (key: PulseSectionKey) => sections.find((x) => x.key === key)
 
@@ -1724,8 +1739,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       {isNarrowed && events.length > 0 ? (
         <View style={styles.resultsLabel}>
           <Text style={styles.resultsLabelText} accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-            <Text style={styles.resultsCount}>{events.length}</Text>
-            {` ${events.length === 1 ? 'event' : 'events'}${selectedCity ? ` · ${selectedCity}` : ''}`}
+            <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).text}</Text>
+            {` ${resultsCount(events.length, totalCount).noun}${selectedCity ? ` · ${selectedCity}` : ''}`}
           </Text>
         </View>
       ) : null}

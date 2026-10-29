@@ -41,8 +41,16 @@ describe('the bubble points at its sender', () => {
     expect(src).not.toMatch(/pseudonym: m\.sender_id/)
   })
 
-  it('never hands the room bubble a photo', () => {
-    expect(ROW()).not.toMatch(/photoUri|profile_photos|photo=\{/)
+  /*
+   * ROOM-07 (SV-6): the rule is "a photo only where the room names them". An event's room sends `image: null`, so it stays
+   * a creature; a crew's room names its members and sends the photo. The row has ONE photo source, the message's
+   * `sender_image` (what the server sent), and never reaches for a profile.
+   */
+  it('hands the room bubble only the photo the server sent for that message', () => {
+    const src = ROW()
+    expect(src).not.toMatch(/profile_photos|photo=\{/)
+    expect(src).toContain('photoUri: m.sender_image')
+    expect(src.match(/photoUri/g)).toHaveLength(1)
   })
 
   it('counts reactions without naming who left them', () => {
@@ -335,7 +343,7 @@ describe('the send button does not pretend the message is still in flight', () =
     // A rate limit lifts on its own; the server says when, and the clock counts it down.
     expect(lock).toContain('retryAfter ?? DEFAULT_WAIT_S')
     // Every answer re-decides it: a send that got through lifts it.
-    expect(ROOM()).toContain('composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error)')
+    expect(ROOM()).toContain('composer.apply(result.success ? null : result.errorCode, result.retryAfter, result.error, result.success ? null : result.reasonCode)')
     expect(ROOM()).toContain('countdown={composer.countdown}')
   })
 

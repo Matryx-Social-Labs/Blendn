@@ -4,6 +4,7 @@ import { apiClient } from './apiClient'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
 import { forgetEventDetailCache } from './eventDetailCache'
 import { reasonOf } from './sessionEnd'
+import { leftNames } from './leftRooms'
 import { revealPromptText, revealReadiness } from './reveal'
 import { forgetRoster } from './rosterMemory'
 import { PUBLIC_CHECKIN_WARNING, shouldWarnBeforePublicCheckIn } from './roomVisibility'
@@ -74,6 +75,8 @@ export type CheckInOutcome =
   | {
       kind: 'checkedIn'
       checkInId?: string
+      /** The rooms this took you out of, by name, for "You left {A}." (SCRUM-635). Empty when you were in none. */
+      left: string[]
       /** No `intent_default` yet: ask "Why do you go out?" after the tray. */
       askIntent: boolean
       /** `reveal_by_default` is set: offer to show their name, never apply it. */
@@ -126,7 +129,9 @@ export async function submitCheckIn(
   checkInChanged(eventId)
   return {
     kind: 'checkedIn',
-    checkInId: result.data?.checkInId,
+    // The route's shape is `checkIn: { id }`; `checkInId` was never on it (ROOM-11).
+    checkInId: result.data?.checkIn?.id,
+    left: leftNames(result.data),
     askIntent: result.data?.intentNeeded === true,
     revealSuggestion: result.data?.revealSuggestion === true,
   }
@@ -191,14 +196,14 @@ export function askIntentRoute(eventId: string): Href {
 export async function revealOffer(user: {
   id: string
   firstName: string | null
-  image?: string | null
+  /** The main photo a reveal would show (`myMainPhoto`). */
+  photo?: string | null
 }): Promise<{ title: string; message: string; confirm: string; cancel: string }> {
   const firstTime = shouldWarnBeforePublicCheckIn({
     revealByDefault: true,
     hasSeenWarning: await hasSeenPublicCheckInWarning(user.id),
-    // Nothing to reveal means nothing to warn about. `User.image` mirrors
-    // `photos[0]`, so it is the same photo a reveal would show.
-    canReveal: revealReadiness({ name: user.firstName, photos: user.image ? [user.image] : [] }).ok,
+    // Nothing to reveal means nothing to warn about: the main photo is the one a reveal would show.
+    canReveal: revealReadiness({ name: user.firstName, photos: user.photo ? [user.photo] : [] }).ok,
   })
   if (firstTime) await markPublicCheckInWarningSeen(user.id)
   return firstTime

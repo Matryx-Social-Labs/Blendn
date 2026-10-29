@@ -9,6 +9,8 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { goLive: jest.fn() } }))
 jest.mock('../lib/checkIn', () => ({ checkInChanged: jest.fn() }))
 jest.mock('../lib/locationFix', () => ({ getCurrentLocation: jest.fn() }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn(() => Promise.resolve()) }))
+const mockToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }))
 
 /* eslint-disable import/first */
@@ -41,6 +43,18 @@ beforeEach(async () => {
 })
 
 describe('useGoLive', () => {
+  beforeEach(() => mockToast.mockClear())
+
+  it('says which room it took you out of, from the server\'s left list (ROOM-10), and nothing when it took you out of none', async () => {
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: { ...live, left: [{ eventId: 'e0', kind: 'event', name: 'Vinyl Night' }] } })
+    await run({ minutes: 20 })
+    expect(mockToast).toHaveBeenCalledWith('You left Vinyl Night.', 'info')
+    mockToast.mockClear()
+    ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: { ...live, left: [] } })
+    await run({ minutes: 20 })
+    expect(mockToast).not.toHaveBeenCalled()
+  })
+
   it('sends the fix with its accuracy under deviceInfo.gpsAccuracy — the key the server reads (vagueFixRefusal)', async () => {
     ;(apiClient.goLive as jest.Mock).mockResolvedValue({ success: true, data: live })
     await run({ minutes: 45 })

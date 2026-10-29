@@ -99,6 +99,17 @@ describe('an active subscription', () => {
   })
 })
 
+// OD-5 (SYS-17): a Razorpay-sourced Plus has no store row and points nowhere.
+describe('a Blend’n+ bought outside the app', () => {
+  it('has no store row, no cancelling footer, and says it is managed outside the app', async () => {
+    await mount(status({ source: 'razorpay', expiresAt: '2027-10-23T12:00:00' }))
+    expect(screen.queryByTestId('plus-manage-store')).toBeNull()
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByText(/Managed outside the app/)).toBeTruthy()
+    expect(screen.queryByText(/Cancelling is one tap/)).toBeNull()
+  })
+})
+
 // D4: a gift of ours is in no store. Negative control: drawing the store row for every card fails this.
 describe('a granted Blend’n+', () => {
   it('has no store row and no word about cancelling: "Free until {date} · nothing to manage", and Restore stays', async () => {

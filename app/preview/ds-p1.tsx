@@ -359,8 +359,7 @@ const LOOKING = [
   ['Dating', require('../../assets/onboarding/looking-dating.jpg')],
   ['Friendship', require('../../assets/onboarding/looking-friendship.jpg')],
   ['Networking', require('../../assets/onboarding/looking-networking.jpg')],
-  ['Travel', require('../../assets/onboarding/looking-travel.jpg')],
-  ['Open', require('../../assets/onboarding/looking-open.jpg')],
+  ['Just here', require('../../assets/onboarding/looking-open.jpg')],
 ] as const
 
 function LookingFor() {

@@ -24,13 +24,17 @@ export type When = (typeof WHEN_OPTIONS)[number]
 
 export const WHEN_LABELS: Record<When, string> = {
   any: 'Any time',
-  today: 'Today',
+  today: 'Tonight',
   weekend: 'This weekend',
   week: 'This week',
 }
 
 /** Kilometres. `undefined` means the caller did not ask for a bound. */
-export const DISTANCE_OPTIONS = [2, 5, 10, 25] as const
+export const DISTANCE_OPTIONS = [2, 5, 10] as const
+
+/** The distance chips' words (the frame's "How far": Any distance · Under 2 km …). */
+export const DISTANCE_ANY_LABEL = 'Any distance'
+export const distanceLabel = (km: number): string => `Under ${km} km`
 
 export interface EventFilters {
   /** A slug from the server's taxonomy — a parent sweeps its children. */
@@ -152,7 +156,7 @@ export function filtersToQuery(
 export type AppliedFilter = { field: keyof EventFilters; label: string }
 
 /**
- * Each choice the person has made, as the removable chip under the search ("Live music", "This weekend", "Within 5 km"):
+ * Each choice the person has made, as the removable chip under the search ("Live music", "This weekend", "Under 5 km"):
  * not just a count (Flow 3 `home` · filters applied). A category the list no longer knows is named by its slug rather
  * than hidden, so a filter that is on is always visible.
  */
@@ -160,7 +164,7 @@ export function appliedFilters(f: EventFilters, categories: readonly { slug: str
   const out: AppliedFilter[] = []
   if (f.categorySlug) out.push({ field: 'categorySlug', label: categories.find((c) => c.slug === f.categorySlug)?.name ?? f.categorySlug })
   if (f.when !== 'any') out.push({ field: 'when', label: WHEN_LABELS[f.when] })
-  if (typeof f.radiusKm === 'number') out.push({ field: 'radiusKm', label: `Within ${f.radiusKm} km` })
+  if (typeof f.radiusKm === 'number') out.push({ field: 'radiusKm', label: distanceLabel(f.radiusKm) })
   return out
 }
 

@@ -34,6 +34,13 @@ export type LinkTarget = { kind: LinkKind; id: string }
  */
 export const WEB_PAGES_LIVE = false
 
+/**
+ * What a venue's tray sends while the pages are off (E12, SYS-04): the words alone. `venueLink` is the site's front
+ * page then, and a card that names a place above a link that opens the homepage promises what the link cannot honour.
+ * Null once the pages are live: the link goes with the words (`shareText`).
+ */
+export const venueTextOnly = (name: string): string | null => (WEB_PAGES_LIVE ? null : `${name} on Blend’n`)
+
 export const eventLink = (id: string): string => `${SHARE_ORIGIN}/${WEB_PAGES_LIVE ? 'e' : 'event'}/${id}`
 export const venueLink = (id: string): string => (WEB_PAGES_LIVE ? `${SHARE_ORIGIN}/v/${id}` : SHARE_ORIGIN)
 export const inviteLink = (token: string): string => `${SHARE_ORIGIN}/f/${token}`

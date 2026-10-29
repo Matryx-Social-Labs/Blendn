@@ -131,6 +131,14 @@ describe('the attendee profile fails closed', () => {
     expect(withheldUnlessVisible({ ...leaked, identityVisible: true })).toMatchObject(leaked)
   })
 
+  it('drops interests and shared interests too (YOU-03): work field stays, by ruling OD-3', () => {
+    const withChips = { ...leaked, interests: ['Vinyl'], sharedInterests: ['Vinyl'] }
+    const shown = withheldUnlessVisible({ ...withChips, identityVisible: false })
+    expect(shown.interests).toEqual([])
+    expect(shown.sharedInterests).toEqual([])
+    expect(withheldUnlessVisible({ ...withChips, identityVisible: true }).interests).toEqual(['Vinyl'])
+  })
+
   it('titles them by the room’s pseudonym, never the leaked name or "Attendee"', () => {
     const who = profileIdentity({ ...leaked, identityVisible: false }, { pseudonym: 'Cosmic Panda', roomSeed: 'g1:rh_b' })
     expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })

@@ -24,6 +24,7 @@ import {
   defaultPick,
   dockMode,
   isNightPass,
+  knownPlus,
   planRowFor,
   planSubline,
   PLUS_FEATURES,
@@ -150,12 +151,15 @@ function PlusScreenContent() {
     retryOffers()
   }
 
-  const confirm = async () => {
+  /** `purchase`: wait for the buy to land on top of what the account held. A restore has nothing new to wait for. */
+  const confirm = async (purchase = false) => {
     setPhase('confirming')
     say('Confirming with the store')
     let granted: PlusStatus | null = null
+    // An active account (a grant, a Night Pass) waits for the purchase to land, not for "active" (SYS-03).
+    const before = purchase ? (status ?? knownPlus()) : null
     try {
-      granted = await waitForPlus(() => !mounted.current)
+      granted = await waitForPlus(() => !mounted.current, Date.now, before)
     } catch {
       granted = null
     } finally {
@@ -198,7 +202,7 @@ function PlusScreenContent() {
         return
       }
       notePaywallEvent('purchased', trigger)
-      await confirm()
+      await confirm(true)
     } finally {
       working.current = false
       if (mounted.current) setBusy(null)
@@ -254,9 +258,11 @@ function PlusScreenContent() {
   const pick = offers?.find((o) => o.pkg.identifier === picked) ?? offers?.find((o) => o.pkg.identifier === defaultPick(offers ?? []))
   // A subscriber manages in the store (12.2 #06): the plans stay drawn, but nothing is pickable and no pick plays a haptic.
   const managing = dockMode(status) === 'manage'
+  // Plus bought outside the app (Razorpay) is not sold again in it: a second charge. No buy, and nothing to open either (OD-5).
+  const outside = status?.active === true && status.source === 'razorpay' && status.product === 'plus'
   // No buy dock when the page failed, nor when the store could not be reached for prices: it would offer a button with nothing behind it.
   const dockShown = !failed && !(forSale && offers === null)
-  const locked = !sellable || busy !== null || finished || managing
+  const locked = !sellable || busy !== null || finished || managing || outside
 
   const plans = (list: PlusOffer[]) => {
     const subs = list.filter((o) => !isNightPass(o))
@@ -367,7 +373,7 @@ function PlusScreenContent() {
           phase={phase}
           restoring={busy === 'restore'}
           notice={notice}
-          action={launch ? 'launch' : managing ? 'manage' : forSale ? 'buy' : 'none'}
+          action={launch ? 'launch' : managing ? 'manage' : outside ? 'none' : forSale ? 'buy' : 'none'}
           cta={ctaParts(pick)}
           disabled={locked || !pick}
           // While the store prices load the button holds with a spinner (after the grace), never a bare dead button.

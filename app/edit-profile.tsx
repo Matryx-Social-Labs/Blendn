@@ -7,6 +7,7 @@ import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TextArea, TextField } from '../components/ds/TextField'
 import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
+import { WhoSees } from '../components/profile/WhoSees'
 import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
 import { RepositionHost } from '../components/profile/Reposition'
 import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
@@ -86,6 +87,12 @@ function EditProfileContent() {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  /*
+   * The profile could not be read (5xx, 401, no signal). The form stays blank, and Save stays off until a retry reads it: a blank
+   * form saved is a blanked profile (YOU-05). `loadAttempt` is what Try again bumps to run the load effect once more.
+   */
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   // Form state
   const [name, setName] = useState('')
@@ -139,6 +146,8 @@ function EditProfileContent() {
   const [gender, setGender] = useState<Gender | null>(null)
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [interestedIn, setInterestedIn] = useState<Gender[]>([])
+  // `show_orientation` as the server has it (read-only here): on, orientation reaches everyone who may see who you are, and the line says so.
+  const [showOrientation, setShowOrientation] = useState(false)
   /* What the server had, so the save can send only what actually moved. */
   const [matchingAtLoad, setMatchingAtLoad] = useState<{
     intents: Intent[]
@@ -240,9 +249,16 @@ function EditProfileContent() {
 
         if (!result.success || !result.data) {
           Logger.error('profile', 'EditProfile: Profile load error', { error: result.error })
+          setLoadFailed(true)
+          showToast('Couldn’t load your profile.', 'error', {
+            haptic: 'error',
+            action: { label: 'Try again', onPress: () => { setLoading(true); setLoadAttempt((n) => n + 1) } },
+          })
+          return
         }
+        setLoadFailed(false)
 
-        const profileData = result.data || {}
+        const profileData = result.data
         const p = profileData.profile || {}
 
         // Combine with auth user data
@@ -280,7 +296,7 @@ function EditProfileContent() {
          * screen came to write the wrong one.
          */
         const structured = Array.isArray(profileData.interests)
-          ? (profileData.interests as { id: string }[]).map((i) => String(i.id))
+          ? profileData.interests.map((i) => String(i.id))
           : []
         setInterestIds(structured)
         setInterestsAtLoad(structured)
@@ -300,6 +316,7 @@ function EditProfileContent() {
         const loadedOrientations = (p2?.orientations || []) as Orientation[]
         const loadedInterestedIn = (p2?.interested_in || []) as Gender[]
         setIntents(loadedIntents)
+        setShowOrientation((p2 as { show_orientation?: boolean } | undefined)?.show_orientation === true)
         setWorkField(loadedWorkField)
         setExpertise(loadedExpertise)
         setGender(loadedGender)
@@ -337,7 +354,11 @@ function EditProfileContent() {
 
       } catch (error) {
         Logger.error('profile', 'EditProfile: Load profile error', { error })
-        showToast("Couldn’t load your profile. Try again.", 'error')
+        setLoadFailed(true)
+        showToast('Couldn’t load your profile.', 'error', {
+          haptic: 'error',
+          action: { label: 'Try again', onPress: () => { setLoading(true); setLoadAttempt((n) => n + 1) } },
+        })
       } finally {
         setLoading(false)
       }
@@ -346,7 +367,7 @@ function EditProfileContent() {
     if (authUser) {
       loadProfile()
     }
-  }, [authUser, showToast, loadWorkFields])
+  }, [authUser, showToast, loadWorkFields, loadAttempt])
 
   /** A new field clears what they do within the old one, silently: the server prunes the same way, so a stale chip never saves. */
   const changeWorkField = (slug: string | null) => {
@@ -360,7 +381,7 @@ function EditProfileContent() {
   const overCapped = Object.keys(overCap).length > 0
 
   const handleSave = async () => {
-    if (!authUser || overCapped) return
+    if (!authUser || overCapped || loadFailed) return
 
     const trimmedName = name.trim()
     const errors = profileFormErrors({ name, age, storedAge: profile?.age ?? null })
@@ -494,7 +515,7 @@ function EditProfileContent() {
           title="Edit profile"
           state={bar.state}
           onBack={() => router.back()}
-          save={{ onPress: handleSave, saving, disabled: saving || offline || overCapped }}
+          save={{ onPress: handleSave, saving, disabled: saving || offline || overCapped || loadFailed }}
           testID="edit-profile-top"
         />
 
@@ -543,6 +564,7 @@ function EditProfileContent() {
               interestedIn={interestedIn}
               onChangeInterestedIn={setInterestedIn}
               offerDating={mayDate(liveAge)}
+              showOrientation={showOrientation}
             />
             {/*
               Languages, home state, sign and this-or-that: display only, saved on their own screen so this form's save stays what
@@ -625,6 +647,7 @@ function EditProfileContent() {
                   placeholder="e.g. Christ University"
                   testID="edit-profile-education"
                 />
+                <WhoSees field="college" />
                 <TextField
                   label="Phone"
                   value={phone}
@@ -667,7 +690,10 @@ function EditProfileContent() {
                 ))}
               </View>
             ) : (
-              <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
+              <>
+                <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
+                <WhoSees field="interests" />
+              </>
             )}
           </EditCard>
 

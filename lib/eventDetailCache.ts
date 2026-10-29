@@ -29,3 +29,15 @@ export function forgetEventDetails(): void {
 export function forgetEventDetailCache(eventId: string): void {
   cache.delete(eventId)
 }
+
+/**
+ * An RSVP or a Save went through: write what the server now says into the cached detail, so a reopen inside the TTL paints
+ * the truth before the network answers (SCRUM-876). A copy, never a mutation. Nothing cached: nothing to patch (the next
+ * open fetches, and the API client's own entry was forgotten with the write). The expiry is left as it was.
+ */
+export function patchEventDetailStatus(eventId: string, patch: { rsvpStatus?: string | null; isFavorited?: boolean }): void {
+  const entry = cache.get(eventId)
+  if (!entry) return
+  const data = entry.data as { userStatus?: Record<string, unknown> | null }
+  cache.set(eventId, { ...entry, data: { ...data, userStatus: { ...(data.userStatus ?? {}), ...patch } } })
+}

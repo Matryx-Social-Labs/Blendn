@@ -27,7 +27,7 @@ export type AvatarProps = {
   label?: string
   testID?: string
 } & (
-  | { kind: 'photo'; uri: string }
+  | { kind: 'photo'; uri: string; /** The picture failed to load (a dead URL): the caller draws its own fallback. */ onError?: () => void }
   /** The pseudonym (the `markSeed`, never a user id): it picks the creature and its palette (`creatureFor`). */
   | { kind: 'creature'; pseudonym: string }
   /** A crew's emblem plate: two colours. */
@@ -102,7 +102,7 @@ export function Avatar(props: AvatarProps) {
       ) : null}
       <View testID={testID && `${testID}-body`} style={[styles.body, { width: size, height: size, borderRadius: radius }]}>
         {props.kind === 'photo' ? (
-          <Image source={{ uri: props.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+          <Image source={{ uri: props.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} onError={props.onError} />
         ) : (
           <>
             <Plate testID={testID && `${testID}-plate`} colors={props.plate} />

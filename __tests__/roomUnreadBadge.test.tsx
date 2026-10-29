@@ -13,6 +13,13 @@ import {
 } from "expo-router/testing-library";
 
 const mockGroups = jest.fn();
+const mockFeed = jest.fn();
+let mockAuthUser: { id: string; profile: { photos: string[] } } | null = null;
+jest.mock("../lib/useAuth", () => ({
+  ...jest.requireActual("../lib/useAuth"),
+  useAuth: () => ({ user: mockAuthUser }),
+}));
+jest.mock("../lib/useRoomSignalSource", () => ({ useRoomSignalSource: () => {} }));
 jest.mock("../lib/apiClient", () => ({
   apiClient: {
     getCurrentUser: jest.fn(async () => null),
@@ -22,6 +29,7 @@ jest.mock("../lib/apiClient", () => ({
       data: { checkIns: [{ eventId: "e1", event: { title: "Vinyl Night" } }] },
     })),
     getChatGroups: (...a: unknown[]) => mockGroups(...a),
+    getNotifications: (...a: unknown[]) => mockFeed(...a),
   },
 }));
 jest.mock("../lib/checkIn", () => ({
@@ -39,6 +47,8 @@ jest.mock("../lib/socketClient", () => ({
   subscribeToChatMessage: (...a: unknown[]) =>
     mockSubscribeMessage(...(a as [])),
   subscribeToRoomWave: () => () => {},
+  subscribeToBell: () => () => {},
+  subscribeToUserNotifications: () => () => {},
 }));
 
 {
@@ -77,7 +87,14 @@ async function renderBar() {
   }
 }
 
+beforeEach(() => {
+  mockAuthUser = null;
+  mockFeed.mockResolvedValue({ success: true, data: { unreadCount: 0, badgeCount: 0 } });
+});
+
 afterEach(async () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("../lib/inboxBadge").resetInboxBadge();
   await cleanup();
   jest.useRealTimers();
 });
@@ -110,5 +127,39 @@ describe("the disc’s unread badge", () => {
     });
     await renderBar();
     expect(mockSubscribeMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("the tab bar’s own faces, through the real layout (M11)", () => {
+  const room = () =>
+    mockGroups.mockResolvedValue({ success: true, data: [{ id: "g1", unreadCount: 0, event: { id: "e1" } }] });
+  const has = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true });
+
+  it("Me wears the signed-in user’s session photo", async () => {
+    room();
+    mockAuthUser = { id: "u1", profile: { photos: ["https://x/me.jpg"] } };
+    await renderBar();
+    expect(has("tabs-me-avatar")).toBeTruthy();
+  });
+
+  it("Me is the glyph for a user with no photo", async () => {
+    room();
+    mockAuthUser = { id: "u1", profile: { photos: [] } };
+    await renderBar();
+    expect(has("tabs-me-avatar")).toBeNull();
+  });
+
+  it("Banter shows the dot and says how many from the feed’s counts (badgeCount − unreadCount)", async () => {
+    room();
+    mockFeed.mockResolvedValue({ success: true, data: { unreadCount: 1, badgeCount: 4 } });
+    await renderBar();
+    expect(has("tabs-banter-dot")).toBeTruthy();
+    expect(screen.getByLabelText("Banter, 3 new")).toBeTruthy();
+  });
+
+  it("Banter has no dot when nothing is unread", async () => {
+    room();
+    await renderBar();
+    expect(has("tabs-banter-dot")).toBeNull();
   });
 });

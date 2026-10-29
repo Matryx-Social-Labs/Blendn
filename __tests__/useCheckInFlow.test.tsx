@@ -49,6 +49,7 @@ const fresh = (o: Partial<Extract<CheckInOutcome, { kind: 'checkedIn' }>> = {}):
   checkInId: 'c1',
   askIntent: false,
   revealSuggestion: false,
+  left: [],
   ...o,
 })
 
@@ -372,7 +373,7 @@ describe('every door is this flow', () => {
     const src = read('components/screens/EventDetailScreen.tsx')
     expect(src).not.toContain('useCheckInFlow(')
     expect(src).not.toContain('submitCheckIn(')
-    expect(src).toMatch(/openThisPass = \(\) =>[\s\S]{0,120}openPass\(\{/)
+    expect(src).toMatch(/openThisPass = \(\) =>[\s\S]{0,300}openPass\(doorOf\(/)
     // To the tabs first: the overlay is under the root stack.
     expect(src).toContain("router.dismissTo('/(tabs)/events')")
   })

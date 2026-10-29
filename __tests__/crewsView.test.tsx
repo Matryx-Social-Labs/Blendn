@@ -30,7 +30,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn(
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
 import { router } from 'expo-router'
-import { CrewsFoot, CrewsHead } from '../components/blendn/RoomCrews'
+import { CrewsFoot, CrewsHead, RoomCrewCard } from '../components/blendn/RoomCrews'
 import { useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
 import { OPEN_TO_CREWS_LABEL, type CrewCard, type CrewsAtEvent } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
@@ -201,5 +201,17 @@ describe('the crews here, a page at a time (M9)', () => {
     })
     const s = result.current.state
     expect(s.status === 'ready' ? s.data.crews.map((c) => c.crewId) : []).toEqual(['fresh'])
+  })
+})
+
+describe('the Room crew card’s badge (YOU-06)', () => {
+  const actions = { like: jest.fn(), report: jest.fn() } as never
+  it('draws “Out together often” once when the server sends the tier, and nothing when it does not', async () => {
+    await render(<RoomCrewCard card={{ ...card('nebula'), badges: [{ kind: 'nights_together', label: 'Out together often' }] }} actions={actions} as={null} index={0} />)
+    expect(screen.getAllByLabelText('Badge: Out together often')).toHaveLength(1)
+  })
+  it('no badge key, no pill', async () => {
+    await render(<RoomCrewCard card={card('orbit')} actions={actions} as={null} index={0} />)
+    expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
   })
 })

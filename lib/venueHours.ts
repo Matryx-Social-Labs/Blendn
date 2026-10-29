@@ -12,8 +12,8 @@ import { clockIn, instantIn } from './time'
  * `resetHour` null is a list row, which does not carry the reset: the small hours are then taken to belong to the night
  * before while that night's close has not passed, which is what a reset at the close hour says.
  *
- * ponytail: "now" is the phone's clock, the venue's whenever the person is in the venue's city; the server sends no
- * timezone. Add one to make this exact anywhere.
+ * `timeZone` is the venue's IANA zone: the clock is read there, not on the phone. A list row carries none and passes none
+ * (the phone's, which is the venue's whenever the person is in the venue's city).
  */
 export type VenueDayState = { state: 'opens' | 'open'; time: string } | { state: 'closed' }
 
@@ -30,7 +30,8 @@ function wallClock(hhmm: string): { minutes: number; text: string } | null {
 export function venueDayState(
   opening: { opensAt: string; closesAt: string } | null | undefined,
   now: number,
-  resetHour: number | null
+  resetHour: number | null,
+  timeZone?: string | null
 ): VenueDayState | null {
   if (!opening) return null
   const open = wallClock(opening.opensAt)
@@ -39,7 +40,7 @@ export function venueDayState(
   const pastMidnight = close.minutes <= open.minutes
   const resetMinutes = resetHour === null ? (pastMidnight ? close.minutes : 0) : resetHour * 60
   const rel = (m: number) => (m - resetMinutes + DAY_MIN) % DAY_MIN
-  const [h, min] = clockIn(new Date(now))
+  const [h, min] = clockIn(new Date(now), timeZone ?? undefined)
   const at = rel(h * 60 + min)
   const opens = rel(open.minutes)
   const closes = rel(close.minutes) <= opens ? rel(close.minutes) + DAY_MIN : rel(close.minutes)

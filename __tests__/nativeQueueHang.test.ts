@@ -198,6 +198,32 @@ describe('sign-out clears the keychain before it tells the server (security revi
     await auth.signOut()
   })
 
+  // SCRUM-733: a keychain-restored session's token read hung for the whole request deadline (and the sheet with it).
+  it('a token read that hangs still signs out within ~3 s, and the revoke is sent when the tokens arrive (SCRUM-733)', async () => {
+    await auth.signInWithEmail('a@b.c', 'pw')
+    const stored = mockSecure.get(REFRESH)
+    // A session restored from the keychain: nothing of it in memory, so every read goes to the native queue.
+    TokenStorage.forgetMemory()
+    let free = () => {}
+    void mockQueue('stuck', () => new Promise<void>((resolve) => (free = resolve)))
+    const leaving = auth.signOut()
+    let settled = false
+    void leaving.then(() => (settled = true))
+    await jest.advanceTimersByTimeAsync(3_100)
+    expect(settled).toBe(true)
+    await expect(leaving).resolves.toMatchObject({ success: false })
+    // The server has not been told yet: the tokens are still behind the stuck call.
+    expect(signOutPosts).toHaveLength(0)
+    // The keychain frees: the late read hands over the tokens and the revoke goes out, best effort, in the background.
+    free()
+    await jest.advanceTimersByTimeAsync(0)
+    await jest.advanceTimersByTimeAsync(0)
+    expect(signOutPosts).toHaveLength(1)
+    expect(signOutPosts[0].body.refreshToken).toBe(stored)
+    expect(mockSecure.has(ACCESS)).toBe(false)
+    expect(mockSecure.has(REFRESH)).toBe(false)
+  })
+
   it('an expired access token is refreshed with the tokens it read, ends the rotated session, and stores nothing', async () => {
     await auth.signInWithEmail('a@b.c', 'pw')
     mockExpiredAccess = mockSecure.get(ACCESS) ?? null
@@ -334,8 +360,10 @@ describe('authed requests read the session from memory (RC drive 2 D-A)', () => 
     expect(mockLog.slice(from)).toContain(`delete ${ACCESS}`)
     // And memory is empty at once: the next authed request carries no token, though the keychain still holds one.
     expect(mockSecure.has(ACCESS)).toBe(true)
+    // The next authed request is answered here, not sent without a token (SCRUM-879).
+    const sentBefore = sessionBearers.length
     await expect(apiClient.getSession()).resolves.toMatchObject({ success: false })
-    expect(sessionBearers.at(-1)).toBeNull()
+    expect(sessionBearers.length).toBe(sentBefore)
 
     // The relaunch: the marker means the keychain's leftovers are cleared, not restored.
     relaunch()

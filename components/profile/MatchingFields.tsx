@@ -15,6 +15,8 @@ import {
 import { ChipSet } from '../ds/ChipSet'
 import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { FieldLabel } from '../ds/TextField'
+import { orientationTier, TIER_SEES } from '../../lib/matchingTiers'
+import { WhoSees } from './WhoSees'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 /**
@@ -100,6 +102,8 @@ export interface MatchingFieldsProps {
    * orientation questions it opens are shown (SCRUM-294).
    */
   offerDating: boolean
+  /** `show_orientation` as the profile has it: on, orientation is shown to whoever may see who you are (Tier C), not owner-only. */
+  showOrientation?: boolean
   /**
    * The list of fields of work could not be read (6-3, Edit profile · 04): the heading stands with the failure line under it, and
    * the line is the retry. A heading alone says nothing. Only a host that can retry passes both; onboarding is unchanged.
@@ -110,8 +114,8 @@ export interface MatchingFieldsProps {
   workFieldsRetrying?: boolean
 }
 
-/** D20 (D-M14): the matching chip is seen before a reveal; the free "Job title" field is seen after one. */
-export const WORK_FIELD_HINT = 'On your card, even before you reveal.'
+/** D20 (D-M14, 14.0): the matching chip is Tier B (people you match with, in rooms of 8 or more); the free "Job title" field is seen after a reveal. */
+export const WORK_FIELD_HINT = TIER_SEES.B
 
 /** Edit profile · 04: the failure line under the heading, in the frame's words. */
 export const WORK_FIELDS_FAILED = 'Couldn’t load fields of work. Try again.'
@@ -152,6 +156,7 @@ export function MatchingFields({
   onChangeInterestedIn,
   afterIntents,
   offerDating,
+  showOrientation = false,
   expertiseOptions,
   expertise = [],
   maxExpertise = DEFAULT_MAX_EXPERTISE,
@@ -176,6 +181,7 @@ export function MatchingFields({
           onToggle={(value) => onToggleIntent(value as Intent)}
           testID="matching-intents"
         />
+        <WhoSees field="intent" />
       </View>
 
       {afterIntents}
@@ -195,6 +201,7 @@ export function MatchingFields({
               onToggle={(value) => onChangeGender(value as Gender)}
               testID="matching-gender"
             />
+            <WhoSees field="gender" />
           </View>
 
           <View style={styles.set}>
@@ -209,6 +216,7 @@ export function MatchingFields({
               onToggle={(value) => onChangeOrientations(toggleOrientation(orientations, value as Orientation))}
               testID="matching-orientations"
             />
+            <WhoSees field="orientation" tier={orientationTier(showOrientation)} />
           </View>
 
           {askInterestedIn ? (
@@ -226,6 +234,7 @@ export function MatchingFields({
                 }}
                 testID="matching-interested-in"
               />
+              <WhoSees field="interestedIn" />
             </View>
           ) : null}
         </>

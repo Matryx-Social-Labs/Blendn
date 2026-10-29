@@ -33,6 +33,7 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { askPushInContext } from '../../lib/pushAsk'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
+import { attendancePhase, doorOf, sceneCtaState } from '../../lib/attendanceState'
 import { openBlendn, openPass } from '../../lib/blendnOverlay'
 import { useToast } from '../Toast'
 import { useToastDock } from '../toastDock'
@@ -59,7 +60,7 @@ import { SceneHero, sceneHeroHeight, type ScenePill } from '../scene/SceneHero'
 import { SceneLightbox } from '../scene/SceneLightbox'
 import ScalePress from '../motion/ScalePress'
 import { BoardEntry } from '../board/BoardSections'
-import { BOARD_ENABLED, boardClosed } from '../../lib/board'
+import { boardOpen } from '../../lib/board'
 import {
   SCENE_CTA_ICON,
   SCENE_PADDING_HORIZONTAL,
@@ -73,7 +74,6 @@ import {
   SceneLocationCard,
   SceneMap,
   SceneDetails,
-  rsvpCtaState,
   type SceneCTAState,
 } from '../scene/SceneSections'
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia'
@@ -158,6 +158,8 @@ interface EventDetailData {
   description: string
   short_description: string
   city: string
+  /** The venue's neighbourhood, else the city: what an unlisted event is shared as (ROOM-17). */
+  area?: string
   venue_name: string
   address: string
   start_time: string
@@ -188,7 +190,7 @@ interface EventDetailData {
    * one cover image while the event had a gallery and, since #244, video. The
    * hero and the gallery are the two things the frame is mostly made of.
    */
-  media?: { id: string; url: string; type: string; thumbnail_url?: string | null; order?: number | null }[]
+  media?: { id: string; url: string; type: string; thumbnail_url?: string | null; thumbnailUrl?: string | null; order?: number | null }[]
   /** The public claim page, for a curated event nobody has claimed. See `claimUrlFrom`. */
   claim_url?: string | null
   /** `cancelled` draws the banner, the struck date and the quiet "Cancelled" button. */
@@ -215,7 +217,6 @@ interface CheckInStatus {
    * attended from somebody who merely opened the page.
    */
   status?: string | null
-  check_in_id?: string
   checked_in_at?: string
   distance_meters?: number
   event_title?: string
@@ -348,6 +349,7 @@ export default function EventDetail() {
       description: d.description || '',
       short_description: d.shortDescription || d.short_description || '',
       city: d.city || '',
+      area: (d as { area?: string | null }).area ?? undefined,
       venue_name: d.venueName || d.venue_name || '',
       address: d.address || '',
       start_time: d.startTime || d.start_time || '',
@@ -381,7 +383,6 @@ export default function EventDetail() {
         success: true,
         checked_in: d.userStatus.isCheckedIn || false,
         status: d.userStatus.checkInStatus ?? null,
-        check_in_id: d.userStatus.checkInId,
       })
       setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
     }
@@ -605,9 +606,14 @@ export default function EventDetail() {
         setRsvpStatus(prevStatus)
         H.error()
         notice('Couldn’t cancel your RSVP', 'Try again.')
-      } else if (typeof result.data?.rsvpCount === 'number') {
+      } else {
         // The server's count after the change, as on the RSVP below.
-        setGoingCount(result.data.rsvpCount)
+        if (typeof result.data?.rsvpCount === 'number') setGoingCount(result.data.rsvpCount)
+        /*
+         * Said, as "You’re going." is: the CTA now reads "I’m going", the invitation, which looked like the status just
+         * removed ("it still shows I’m going", SCRUM-881).
+         */
+        showToast(prevStatus === 'waitlisted' ? 'You’ve left the waitlist.' : 'RSVP cancelled.', 'success')
       }
     } catch {
       setRsvpStatus(prevStatus)
@@ -616,7 +622,7 @@ export default function EventDetail() {
     } finally {
       rsvpInFlight.current = false
     }
-  }, [id, rsvpStatus])
+  }, [id, rsvpStatus, showToast])
 
   const confirmWithdrawRsvp = useCallback(() => {
     const waitlisted = rsvpStatus === 'waitlisted'
@@ -753,6 +759,7 @@ export default function EventDetail() {
         startTime: event.start_time,
         venueName: event.venue_name,
         city: event.city,
+        area: event.area,
         coverImageUrl: event.cover_image_url,
         status: event.status,
         visibility: event.visibility,
@@ -831,61 +838,40 @@ export default function EventDetail() {
   const openThisPass = () =>
     event &&
     toTheOverlay(() =>
-      openPass({
-        id: String(id),
-        title: event.title,
-        venue: event.venue_name,
-        photo: event.cover_image_url ?? null,
-        startsAt: event.start_time,
-        endsAt: event.end_time,
-        distanceKm: null,
-        hereCount: hereNow ?? detailHere ?? 0,
-        capacity: null,
-        going: rsvpStatus === 'going',
-        tasteMatchCount: null,
-        goingCount: null,
-      })
+      // Today's window and the coordinates, so the pass can say "too far" itself (`lib/attendanceState.ts`, SCRUM-882).
+      // Closing the Room comes back to this page (ROOM-13): it is dismissed to show the overlay, and re-opened after.
+      openPass(doorOf({ ...event, id: String(id) }, { going: rsvpStatus === 'going', hereCount: hereNow ?? detailHere ?? 0 }), { returnToEvent: true })
     )
 
+  // The attendance flow's one state (`lib/attendanceState.ts`): the Going card, the disc and this CTA cannot disagree.
+  const ctaNow = (): SceneCTAState => sceneCtaState({ phase: event ? attendancePhase(event) : 'upcoming', rsvpStatus, checkedIn: isCheckedIn, attended })
+
   /*
-   * Nothing after the end is disabled. Every other post-doors state routes
-   * through `actionStage`, which is about checking in and is meaningless once
-   * the event is over — leaving it in charge here would disable the button for
-   * anyone who had checked in, which is precisely everyone `rate` exists for.
+   * The press does what the label says, read from the same state, so the two cannot drift. Nothing after the end is
+   * disabled: rate the people you met (the entry point `PLACEHOLDER_SCREENS.md` asks for), or, if you weren't here,
+   * what's on tonight instead of a dead pill. The overlays are hosted by the tabs, under the root stack: back to them first.
    */
   const primaryActionPress = () => {
-    /*
-     * The night is over and you were here. `PLACEHOLDER_SCREENS.md` asks for
-     * "an entry point after an event ends"; the screen it opens has been built,
-     * tested and reachable from nowhere since it was written.
-     *
-     * First branch on purpose — every check below asks a question about
-     * checking in, which cannot happen any more.
-     */
-    if (isEnded && attended) {
-      router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any })
-      return
+    switch (ctaNow()) {
+      case 'rate':
+        router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any })
+        return
+      case 'ended':
+      case 'going':
+        toTheOverlay(openBlendn)
+        return
+      // Before the doors, the button is the RSVP and its own off-switch.
+      case 'rsvp':
+      case 'rsvpd':
+      case 'waitlisted':
+        void handleToggleRsvp()
+        return
+      case 'join':
+        openThisPass()
+        return
+      case 'cancelled':
+        return
     }
-    /*
-     * Over, and you weren't here: what's on tonight instead of a dead pill.
-     * Back to the tabs first — the Blend'n screen is an overlay hosted there,
-     * under the root stack, so opening it from here would open it beneath
-     * this page.
-     */
-    if (isEnded) {
-      toTheOverlay(openBlendn)
-      return
-    }
-    // Before the doors, the button is the RSVP and its own off-switch.
-    if (!isCheckedIn && !hasStarted) {
-      void handleToggleRsvp()
-      return
-    }
-    if (!isCheckedIn) {
-      openThisPass()
-      return
-    }
-    toTheOverlay(openBlendn)
   }
 
 
@@ -989,15 +975,7 @@ export default function EventDetail() {
   const crowdCount = isEnded ? checkInCount : isLive ? (hereNow ?? detailHere ?? checkInCount) : goingCount || interestCount
   const attendeeBlock = cancelled ? { label: crowdWord, count: 0 } : { label: crowdWord, count: crowdCount }
 
-  const ctaState: SceneCTAState = cancelled
-    ? 'cancelled'
-    : isEnded
-      ? (attended ? 'rate' : 'ended')
-      : isCheckedIn
-        ? 'going'
-        : !hasStarted
-          ? rsvpCtaState(rsvpStatus)
-          : 'join'
+  const ctaState = ctaNow()
 
   // "I'm going" carries no glyph; "You're going" carries the check (A78). Rating a past night is a star, never the live glyph.
   const ctaIcon: IconName | null =
@@ -1212,6 +1190,18 @@ export default function EventDetail() {
               ) : null}
 
               {/*
+                The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
+                the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
+                neither. Not on a cancelled night. The run's start, not today's session: the server closes the board at the first doors.
+                The one gate is `boardOpen` (lib/board.ts), which the Going tab asks too.
+              */}
+              {event && boardOpen(event) ? (
+                <FadeInUp delay={SECTION_DELAY[1]}>
+                  <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
+                </FadeInUp>
+              ) : null}
+
+              {/*
                 What the organiser actually wrote: house rules, FAQ, accessibility, and the rest. Accessibility is
                 the one somebody needs *before* deciding whether they can come. `eventDetailBlocks` has already
                 dropped anything malformed, so an empty list means the organiser wrote nothing; wrapped only when
@@ -1233,18 +1223,6 @@ export default function EventDetail() {
               {attendeeBlock.count > 0 ? (
                 <FadeInUp delay={SECTION_DELAY[3]}>
                   <SceneAttendees count={attendeeBlock.count} label={attendeeBlock.label} seed={event?.id || 'scene'} />
-                </FadeInUp>
-              ) : null}
-
-              {/*
-                The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
-                the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
-                neither. The run's start, not today's session: the server closes the board at the first doors.
-                Behind BOARD_ENABLED until the board's safety half ships (lib/board.ts).
-              */}
-              {event && BOARD_ENABLED && !boardClosed(event.start_time) ? (
-                <FadeInUp delay={SECTION_DELAY[3]}>
-                  <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
                 </FadeInUp>
               ) : null}
 

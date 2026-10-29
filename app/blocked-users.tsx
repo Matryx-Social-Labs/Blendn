@@ -151,7 +151,8 @@ function BlockedUsersContent() {
     const line = blockedLine(item)
     return (
       <PersonRow
-        person={{ userId: item.blocked_id, name, photo: item.blocked_user_photo }}
+        // A blocked person is a creature mark, never their face (E10, flow-6 blocked): the server sends no photo, and none is drawn if one slips through.
+        person={{ userId: item.blocked_id, name, photo: null }}
         detail={line.detail}
         detailMono={line.mono}
         detailTail={line.tail}
