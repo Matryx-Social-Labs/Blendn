@@ -11,7 +11,7 @@ import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } fr
 import { monoCaption } from '../ds/MonoFamily'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
-import { endedLabel, knownLine, type PassView, type RegularPrefs } from '../../lib/offers'
+import { endedLabel, knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
 
 /** The disc at the ticket's middle (Flow 13 pass.js: 200). */
 const DISC = 200
@@ -156,8 +156,8 @@ export function RegularAsk({
     <View testID="regular-ask" style={styles.card}>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>{`Let ${venueName} know you’re a regular`}</Text>
       <FactRow icon="eye" title={`${venueName} will see`} text={knownLine(prefs, venueName)} />
-      <FactRow icon="eye-off" title={`${venueName} won’t see`} text="your chats, who you met, or anywhere else you go" />
-      <FactRow icon="hand-heart" title="Why" text="so the staff can say hi or look after you" />
+      <FactRow icon="eye-off" title={`${venueName} won’t see`} text={REGULAR_COPY.wontSee} />
+      <FactRow icon="hand-heart" title="Why" text={REGULAR_COPY.why} />
       <View style={styles.actions}>
         <View style={styles.fill}>
           <Button kind="lit" size="md" label={`Let ${venueName} know`} loading={saving} onPress={onYes} />

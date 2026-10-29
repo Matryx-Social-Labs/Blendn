@@ -9,7 +9,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { useToast } from '../Toast'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
-import { offersApi, type RegularPrefs } from '../../lib/offers'
+import { offersApi, REGULAR_COPY, type RegularPrefs } from '../../lib/offers'
 
 /** Where the page stands on "regular": offered, on, or just turned off (stays for this visit, then the offer returns). */
 export type RegularState = 'offer' | 'on' | 'off' | 'later'
@@ -34,9 +34,9 @@ export function regularState(current: RegularState | null, known: boolean): Regu
 }
 
 const ROWS = (who: string): { icon: IconName; key: string; value: string }[] => [
-  { icon: 'eye', key: `${who} will see`, value: 'your first name and how many nights you’ve been in the last 30 days' },
-  { icon: 'eye-off', key: `${who} won’t see`, value: 'your chats, who you met, or anywhere else you go' },
-  { icon: 'hand-heart', key: 'Why', value: 'so the staff can say hi or look after you' },
+  { icon: 'eye', key: `${who} will see`, value: REGULAR_COPY.sees },
+  { icon: 'eye-off', key: `${who} won’t see`, value: REGULAR_COPY.wontSee },
+  { icon: 'hand-heart', key: 'Why', value: REGULAR_COPY.why },
 ]
 
 /**

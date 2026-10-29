@@ -811,7 +811,9 @@ describe('regulars (Flow 13 · 13.4)', () => {
     await mount(claimed)
     expect(screen.getByRole('header', { name: 'Let The Humming Tree know you’re a regular' })).toBeTruthy()
     expect(screen.getByText('Indiranagar Hospitality, who runs The Humming Tree on Blendn, will see')).toBeTruthy()
-    expect(screen.getByText('your first name and how many nights you’ve been in the last 30 days')).toBeTruthy()
+    expect(screen.getByText('that a regular was here, and how many nights in the last 30 days')).toBeTruthy()
+    expect(screen.getByText('who you are, your chats, who you met, or anywhere else you go')).toBeTruthy()
+    expect(screen.queryByText(/first name/i)).toBeNull()
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'Let The Humming Tree know I’m a regular' }))
     })

@@ -18,7 +18,7 @@ import { BringSomeoneRow } from '../components/share/BringSomeoneRow'
 import { RequestCard } from '../components/banter/BanterParts'
 import { NAME_LINES_ALONE, PersonRow, PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
 import { InviteRow } from '../components/crews/InviteRow'
-import { RegularOn } from '../components/offer/OfferSections'
+import { RegularAsk, RegularOn } from '../components/offer/OfferSections'
 import { ArrivalBanner } from '../components/share/ArrivalBanner'
 import { CONTROL_FONT_CAP } from '../components/ds/shared'
 import { MAX_FONT_SCALE, SPACE, TYPE } from '../lib/design/tokens'
@@ -158,6 +158,20 @@ describe('the same squeeze, swept: a sentence beside one action keeps its measur
     expect(flat('invite-row-body')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
     expect(flat('invite-row-text')).toMatchObject({ flexGrow: 1, minWidth: measureOf('bodyStrong', AX_XXXL), flexBasis: measureOf('bodyStrong', AX_XXXL) })
     expect(screen.getByText('Aisha invited you to The Usual Suspects', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.bodyStrong)
+  })
+
+  it('the regular ask, at 360 dp and AX XXXL with a long venue and owner: every line wraps whole, capped, none truncated (SCRUM-888)', async () => {
+    await at(360, AX_XXXL)
+    await render(<RegularAsk venueName="The Big Pitcher Brewing Company" prefs={{ ownerName: 'Indiranagar Hospitality Group Private Limited' }} saving={false} onYes={jest.fn()} onLater={jest.fn()} />)
+    for (const text of [
+      screen.getByText(/will see that a regular was here, and how many nights in the last 30 days/, hidden),
+      screen.getByText('who you are, your chats, who you met, or anywhere else you go', hidden),
+      screen.getByText('so the staff know when a regular is in', hidden),
+    ]) {
+      expect(text.props.numberOfLines).toBeUndefined()
+      expect(text.props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+    }
+    expect(screen.queryByText(/first name/i, hidden)).toBeNull()
   })
 
   it('a venue’s "knows you’re a regular", at 360 dp and 1.3 beside Turn off', async () => {

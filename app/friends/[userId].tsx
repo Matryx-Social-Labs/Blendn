@@ -249,6 +249,7 @@ function FriendProfileScreenContent() {
             facts={{
               bio: friend.bio,
               interests: friend.interests.map((i) => i.name),
+              sharedInterests: friend.sharedInterests,
               about: aboutLine(friend),
               occupation: friend.occupation,
               education: friend.education,

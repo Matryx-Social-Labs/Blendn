@@ -90,10 +90,21 @@ export const offersApi = {
   },
 }
 
+/**
+ * What a yes shows the people who run a place, in the app's words -- one source for the venue page and the offer pass.
+ * A host sees "A regular · N nights" and never who (SCRUM-887: hosts meet people by pseudonym only), so no line here
+ * may promise a name.
+ */
+export const REGULAR_COPY = {
+  sees: 'that a regular was here, and how many nights in the last 30 days',
+  wontSee: 'who you are, your chats, who you met, or anywhere else you go',
+  why: 'so the staff know when a regular is in',
+} as const
+
 /** Who sees a yes, in the app's words: the organisation, and the place it runs. */
 export function knownLine(prefs: Pick<RegularPrefs, 'ownerName'>, venueName: string): string {
   const who = prefs.ownerName ? `${prefs.ownerName}, who runs ${venueName} on Blendn,` : venueName
-  return `${who} will see your first name and how many nights you’ve come in the last 30 — nothing else.`
+  return `${who} will see ${REGULAR_COPY.sees}.`
 }
 
 /** The code on the pass is shown only while it is fresh: two seconds past its turn with no new one, it is hidden (L2). */

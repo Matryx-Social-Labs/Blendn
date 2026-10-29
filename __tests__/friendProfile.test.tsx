@@ -32,6 +32,13 @@ jest.mock('../components/profile/ProfileHeroStage', () => {
       React.createElement(React.Fragment, null, React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name), p.subtitle ? React.createElement(Text, { testID: 'hero-subtitle' }, p.subtitle) : null),
   }
 })
+// The page's body is the real `ProfileBody`, so the real `ProfileInterests` runs and draws `InterestChip`s; the chip is
+// read through its `shared` prop (the outline) instead of through pixels.
+jest.mock('../components/ds/Chip', () => {
+  const React = require('react')
+  const { Text } = require('react-native')
+  return { ...jest.requireActual('../components/ds/Chip'), InterestChip: (p: { label: string; shared?: boolean }) => React.createElement(Text, null, p.shared ? `${p.label} (outlined)` : p.label) }
+})
 jest.mock('../components/profile/ProfileSections', () => {
   const React = require('react')
   const { Text, View } = require('react-native')
@@ -41,11 +48,11 @@ jest.mock('../components/profile/ProfileSections', () => {
   return {
     ...jest.requireActual('../components/profile/ProfileSections'),
     SECTION_GAP: 28,
-    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
     ProfileBio: stub('bio'),
     ProfileDetail: stub('detail'),
     ProfileGallery: (p: { photos: string[] }) => React.createElement(Text, null, `gallery: ${p.photos.join(',')}`),
     ProfileInterests: stub('interests'),
+    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
   }
 })
 
@@ -72,6 +79,28 @@ const BEN = {
 }
 
 beforeEach(() => jest.clearAllMocks())
+
+describe('shared interests (SCRUM-896): one person looks the same from both doors, as /user/[id] draws them', () => {
+  const interests = [
+    { id: 'c1', name: 'Exhibitions', slug: 'exhibitions', icon: null },
+    { id: 'c2', name: 'Coffee', slug: 'coffee', icon: null },
+  ]
+
+  it('outlines the ones you share and says how many, from the payload\'s sharedInterests', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, interests, sharedInterests: ['Exhibitions'] } })
+    await render(<FriendProfileScreen />)
+    expect(await screen.findByText('Exhibitions (outlined)')).toBeTruthy()
+    expect(screen.getByText('Coffee')).toBeTruthy()
+    expect(screen.getByText('1 shared')).toBeTruthy()
+  })
+
+  it('draws the plain list, with no count, when the server (or an older one) shares none', async () => {
+    api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, interests } })
+    await render(<FriendProfileScreen />)
+    expect(await screen.findByText('Exhibitions')).toBeTruthy()
+    expect(screen.queryByText(/outlined|shared/)).toBeNull()
+  })
+})
 
 it('goes straight to an open DM without asking for a new one', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: { ...BEN, conversationId: 'conv-1' } })
