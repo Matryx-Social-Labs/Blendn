@@ -3,8 +3,8 @@ import { AppState } from 'react-native'
 
 import { apiClient } from './apiClient'
 import { iconBadgeFor, setAppIconBadge } from './appBadge'
-import { markDomainsDirty } from './liveSyncState'
 import { Logger } from './logger'
+import { forgetMessageRequests } from './queryCache'
 import { subscribeToBell, subscribeToUserNotifications } from './socketClient'
 
 /**
@@ -111,8 +111,8 @@ export function useInboxBadgeSync(userId?: string | null): void {
   useEffect(
     () =>
       subscribeToBell((row) => {
-        // A message request has no socket event of its own, only this row: the Banter's list is stale until it reads again.
-        if (row?.kind === 'message_request') markDomainsDirty(['chat'])
+        // A message request has no socket event of its own, only this row: the Banter's list is stale until it reads again (its next sync then goes to the server).
+        if (row?.kind === 'message_request') forgetMessageRequests()
         void refreshInboxBadge()
       }),
     []

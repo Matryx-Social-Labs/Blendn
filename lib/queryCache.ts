@@ -84,3 +84,9 @@ class QueryCache {
 
 // Global cache instance
 export const queryCache = new QueryCache()
+
+/** `message_requests_<userId>`: the Banter's pending requests. */
+export const MESSAGE_REQUESTS_KEY = 'message_requests_'
+
+/** A request has arrived that no socket event told the Banter about: the next read goes to the server. */
+export const forgetMessageRequests = (): void => queryCache.invalidate(MESSAGE_REQUESTS_KEY)

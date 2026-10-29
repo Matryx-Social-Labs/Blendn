@@ -18,7 +18,7 @@ import {
   type RowFace,
   type RowLine,
 } from '../../components/banter/BanterParts'
-import { markDomainsDirty } from '../../lib/liveSyncState'
+import { queryCache } from '../../lib/queryCache'
 import { useLatest } from '../../lib/useLatest'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { useReadOnReturn } from '../../lib/useReadOnReturn'
@@ -141,9 +141,9 @@ function ChatInner() {
       setGroupChats((prev) => prev.map((c) => (opened.has(c.chat_room_id) ? { ...c, unread_count: 0 } : c)))
       setCrewRooms((prev) => prev.map((r) => (opened.has(r.id) ? { ...r, unreadCount: 0 } : r)))
       // The server read it as it opened, and the cached list still holds the count: the next quiet sync would paint it back.
-      markDomainsDirty(['chat'])
+      if (user?.id) queryCache.invalidate(`group_chats_${user.id}`)
     },
-    [setGroupChats, setCrewRooms]
+    [setGroupChats, setCrewRooms, user?.id]
   )
   const noteOpened = useReadOnReturn(clearRead)
   const openRoom = useCallback(

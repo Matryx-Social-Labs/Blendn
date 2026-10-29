@@ -7,8 +7,8 @@ import { router, useFocusEffect, type Href } from 'expo-router'
 import { openWhenReady } from './pendingRoute'
 import { apiClient, TokenStorage } from './apiClient'
 import { bannerPresentation, isOnNotificationsScreen } from './inAppBanners'
-import { markDomainsDirty } from './liveSyncState'
 import { Logger } from './logger'
+import { forgetMessageRequests } from './queryCache'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
 import { notePushPermission, readPushPermission, whenPermissionReadable } from './pushStatus'
 
@@ -554,8 +554,8 @@ export function landFromNotificationData(data: Record<string, any> | undefined) 
 export function navigateFromNotificationData(data: Record<string, any> | undefined) {
   try {
     const target = notificationTarget(data)
-    // The Banter holds a list that predates the notification being shown: it reads again on arrival.
-    if (target === '/(tabs)/chat') markDomainsDirty(['chat'])
+    // The Banter's requests predate the notification being shown: it reads them again on arrival.
+    if (target === '/(tabs)/chat') forgetMessageRequests()
     if (target) openWhenReady(target)
   } catch (e) {
     Logger.warn('notifications', 'Failed to navigate from notification', { error: e })

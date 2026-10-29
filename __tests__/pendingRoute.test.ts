@@ -12,7 +12,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { navigateFromNotificationData, notificationTarget } from '../lib/notifications'
-import { clearDirtyDomains, hasDirtyDomain } from '../lib/liveSyncState'
+import { queryCache } from '../lib/queryCache'
 import { openWhenReady, pendingEventId, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
 
 beforeEach(() => {
@@ -143,16 +143,17 @@ describe('the root guard', () => {
 })
 
 describe('View on a request notification (SCRUM-907)', () => {
-  beforeEach(() => clearDirtyDomains(['chat']))
+  const KEY = 'message_requests_u1'
+  beforeEach(() => queryCache.set(KEY, { incoming: [], outgoing: [] }, 60_000))
 
-  it('lands on the Banter and marks it stale, so the request is on the list when it arrives', () => {
+  it('lands on the Banter and drops its cached requests, so the request is read when it arrives', () => {
     navigateFromNotificationData({ type: 'message_request', requestId: 'r1' })
     expect(takePendingRoute()).toBe('/(tabs)/chat')
-    expect(hasDirtyDomain(['chat'])).toBe(true)
+    expect(queryCache.get(KEY)).toBeNull()
   })
 
-  it('a notification that goes elsewhere leaves the Banter alone', () => {
+  it('a notification that goes elsewhere leaves them', () => {
     navigateFromNotificationData({ type: 'rating_request', eventId: 'e1' })
-    expect(hasDirtyDomain(['chat'])).toBe(false)
+    expect(queryCache.get(KEY)).not.toBeNull()
   })
 })

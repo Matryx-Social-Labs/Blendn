@@ -13,7 +13,7 @@ jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(async () =
 
 /* eslint-disable import/first */
 import { apiClient } from '../lib/apiClient'
-import { clearDirtyDomains, hasDirtyDomain } from '../lib/liveSyncState'
+import { queryCache } from '../lib/queryCache'
 import { banterUnread, markBellRead, refreshInboxBadge, resetInboxBadge, useInboxBadge, useInboxBadgeSync } from '../lib/inboxBadge'
 import { subscribeToBell, subscribeToUserNotifications } from '../lib/socketClient'
 /* eslint-enable import/first */
@@ -127,23 +127,24 @@ describe('reads that overlap or outlive the account', () => {
   })
 })
 
-describe('a message request marks the Banter stale (SCRUM-907)', () => {
+describe('a message request makes the Banter read its requests again (SCRUM-907)', () => {
   // A request has no socket event of its own, only the bell's row.
+  const KEY = 'message_requests_u1'
   const land = async (kind: string) => {
     api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 1 }))
+    queryCache.set(KEY, { incoming: [], outgoing: [] }, 60_000)
     await render(<Probe />)
     const onRow = (subscribeToBell as jest.Mock).mock.calls.at(-1)[0]
     await act(async () => onRow({ kind }))
   }
-  beforeEach(() => clearDirtyDomains(['chat']))
 
-  it('a message_request row marks the chat domain dirty', async () => {
+  it('a message_request row drops the cached requests', async () => {
     await land('message_request')
-    expect(hasDirtyDomain(['chat'])).toBe(true)
+    expect(queryCache.get(KEY)).toBeNull()
   })
 
-  it('another kind of row does not make the Banter read again', async () => {
+  it('another kind of row leaves them', async () => {
     await land('event_update')
-    expect(hasDirtyDomain(['chat'])).toBe(false)
+    expect(queryCache.get(KEY)).not.toBeNull()
   })
 })
