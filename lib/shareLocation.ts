@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react'
+
 /**
  * "Share location for nearby events" (Settings, onboarding; `profiles.share_location`).
  *
@@ -8,10 +10,24 @@
  * account when a session begins (`useAuth`) and from a saved switch (`apiClient.updateProfile`). Unknown is on, the column's default.
  */
 let sharing = true
+const listeners = new Set<() => void>()
 
 export const locationSharingOn = (): boolean => sharing
 
 /** `undefined` (a profile that does not say) is the default, on. */
 export function setLocationSharing(value: boolean | null | undefined): void {
-  sharing = value !== false
+  const next = value !== false
+  if (next === sharing) return
+  sharing = next
+  listeners.forEach((l) => l())
 }
+
+const subscribe = (l: () => void) => {
+  listeners.add(l)
+  return () => {
+    listeners.delete(l)
+  }
+}
+
+/** The switch as a component reads it: the screen draws again when it changes. */
+export const useLocationSharing = (): boolean => useSyncExternalStore(subscribe, locationSharingOn)
