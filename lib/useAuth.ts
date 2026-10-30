@@ -6,6 +6,7 @@ import { onCriticalPath } from './criticalPath'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { resetInboxBadge } from './inboxBadge'
 import { Logger } from './logger'
+import { setLocationSharing } from './shareLocation'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
@@ -82,6 +83,8 @@ let initializationPromise: Promise<AuthState> | null = null // Promise-based wai
 const updateAuthState = (newState: Partial<AuthState>) => {
   const previousUserId = globalAuthState.user?.id
   globalAuthState = { ...globalAuthState, ...newState }
+  // The account's own switch (and the default once it has gone) is what the distance reads obey.
+  if ('user' in newState) setLocationSharing(globalAuthState.user?.profile?.share_location)
   // Any path that produces a user has reached the server, or has a user to
   // carry on with. Either way the "can't reach" screen no longer applies.
   if (newState.user) globalAuthState.unreachable = false
