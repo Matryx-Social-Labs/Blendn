@@ -39,7 +39,7 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => mockAuth }))
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getChatMessages: jest.fn(),
-    getChatGroups: jest.fn(),
+    getChatGroups: jest.fn(), getRoomPreview: jest.fn(async () => ({ success: false })),
     sendChatMessage: jest.fn(),
     reactToChatMessage: jest.fn(),
     rejoinChatGroup: jest.fn(),

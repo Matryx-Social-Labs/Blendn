@@ -97,24 +97,37 @@ export function useRoomRow(roomId: string | null): RoomRow | null {
 }
 
 /**
- * How many are in an event's room now, kept live: the row's `hereCount`, then
- * the server's recount on each check-in and checkout (`event:checkin`,
- * `event:checkout`), as the Room keeps its own headline. A chat leave is not
- * one: whoever presses Leave is still in the room. Null for a place's room
- * and for a crew's or a Blend's.
+ * How many are in an event's room now, kept live: the room preview (the
+ * server's own "here now", the number the Room seeds from) over the row's
+ * `hereCount`, which is the Banter list's and as old as that list, then the
+ * server's recount on each check-in and checkout (`event:checkin`,
+ * `event:checkout`), as the Room keeps its own headline. An arrival heard
+ * while the preview was out wins over it: the recount is newer. A chat leave
+ * is not one: whoever presses Leave is still in the room. Null for a place's
+ * room and for a crew's or a Blend's.
  */
 export function useHereCount(row: Partial<RoomRow> | null | undefined): number | null {
   const eventId = row && !row.venueId && !row.kind ? row.eventId ?? null : null
   const [live, setLive] = useState<{ eventId: string; count: number } | null>(null)
   useEffect(() => {
     if (!eventId) return
+    let current = true
     const take = (data: { hereCount?: number }) => {
       const n = data.hereCount
       if (typeof n === 'number' && Number.isFinite(n) && n >= 0) setLive({ eventId, count: Math.floor(n) })
     }
+    apiClient
+      .getRoomPreview(eventId, { force: true })
+      .then((preview) => {
+        const n = preview.success ? preview.data?.hereCount : undefined
+        if (!current || typeof n !== 'number' || !Number.isFinite(n) || n < 0) return
+        setLive((prev) => (prev?.eventId === eventId ? prev : { eventId, count: Math.floor(n) }))
+      })
+      .catch(() => {})
     const offIn = subscribeToEventCheckIn(eventId, take)
     const offOut = subscribeToEventCheckOut(eventId, take)
     return () => {
+      current = false
       offIn()
       offOut()
     }
