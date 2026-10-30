@@ -179,10 +179,14 @@ const displayName = (name?: string) => {
 
 type RoomEvent = NonNullable<RoomState['event']>
 
-/** The here count's candidates: the room preview (the server's own "here now"), else the detail's `stats.hereCount` (never who came). */
-async function countCandidates(eventId: string, force: boolean): Promise<unknown[]> {
+/**
+ * The here count's candidates: the room preview (the server's own "here now"), else the detail's `stats.hereCount` (never who came).
+ * Always asked, never the SWR copy: that serves an entry up to five minutes old and refreshes it behind the answer, so a Room
+ * opened after your own check-in (or on each 30 s poll) said the count from before it (SCRUM-936).
+ */
+async function countCandidates(eventId: string): Promise<unknown[]> {
   try {
-    const preview = await apiClient.getRoomPreview(eventId, { force })
+    const preview = await apiClient.getRoomPreview(eventId, { force: true })
     if (preview.success && preview.data) return [preview.data.hereCount]
     const detail = await apiClient.getEvent(eventId)
     return [detail.data?.stats?.hereCount]
@@ -309,8 +313,8 @@ export function useRoom(): RoomState & RoomActions {
    * server's own "here now"; an older server 404s it and the event detail's
    * occupancy stands in.
    */
-  const seedCount = useCallback(async (eventId: string, force: boolean, loadId: number, early?: Promise<unknown[]>) => {
-    const candidates = await (early ?? countCandidates(eventId, force))
+  const seedCount = useCallback(async (eventId: string, loadId: number, early?: Promise<unknown[]>) => {
+    const candidates = await (early ?? countCandidates(eventId))
     if (loadId !== loadIdRef.current || eventRef.current?.id !== eventId) return
     setSeededFor(eventId)
     setLive((prev) => {
@@ -345,7 +349,7 @@ export function useRoom(): RoomState & RoomActions {
          * check-in's Room is mounted under the pour and revealed once these
          * answer too, so they must not add two more round trips after it.
          */
-        const earlyCount = firstId ? countCandidates(firstId, force) : undefined
+        const earlyCount = firstId ? countCandidates(firstId) : undefined
         if (firstId && chatResolvedForRef.current !== firstId && chatEarly.current?.eventId !== firstId) {
           chatEarly.current = { eventId: firstId, lookup: startChatLookup(firstId) }
         }
@@ -469,7 +473,7 @@ export function useRoom(): RoomState & RoomActions {
         // Memory only — `lib/rosterMemory.ts` says why this never reaches disk.
         rememberRoster(outcome.eventId, attendees, outcome.eventTitle)
 
-        void seedCount(outcome.eventId, force, loadId, outcome.eventId === firstId ? earlyCount : undefined)
+        void seedCount(outcome.eventId, loadId, outcome.eventId === firstId ? earlyCount : undefined)
         // The faces the Room opens on, decoded before it is revealed (PR #401 drive 2: blank faces filling in).
         const avatarsOf = outcome.eventId
         void warmAvatars(attendees.map((a) => a.profile_photos?.[0])).then(() => {

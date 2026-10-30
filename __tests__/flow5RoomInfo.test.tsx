@@ -20,7 +20,7 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn(), journey: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-a' } }) }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getChatGroups: jest.fn(), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), getVenue: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn() },
+  apiClient: { getChatGroups: jest.fn(), getRoomPreview: jest.fn(async () => ({ success: false })), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), getVenue: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn() },
 }))
 /** The event's checkout listeners: Room info's count follows the server's recount. */
 const mockCheckOut: ((data: { hereCount?: number }) => void)[] = []
