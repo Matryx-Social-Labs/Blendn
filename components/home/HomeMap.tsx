@@ -618,15 +618,17 @@ export const HomeMap = memo(function HomeMap({
       </Map>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
-      <LocateButton
-        // Nothing to show, or ask for, while the switch is off.
-        visible={locateVisible && sharing}
-        following={hasFix && !moved}
-        pending={asking}
-        drawerTop={drawerTop}
-        drawer={drawer}
-        onPress={locate}
-      />
+      {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}
+      {sharing ? (
+        <LocateButton
+          visible={locateVisible}
+          following={hasFix && !moved}
+          pending={asking}
+          drawerTop={drawerTop}
+          drawer={drawer}
+          onPress={locate}
+        />
+      ) : null}
     </>
   )
 })
