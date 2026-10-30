@@ -173,18 +173,23 @@ function choose<T>(
  * prompt the OS would have shown anyway teaches people to ignore it.
  */
 const offerLibraryInstead = (
-  reason: PermissionOutcome | 'unavailable'
+  reason: PermissionOutcome | 'unavailable' | 'failed'
 ): Promise<'library' | 'settings' | null> =>
   choose<'library' | 'settings'>(
-    reason === 'unavailable' ? 'No camera here' : 'Camera access is off',
+    reason === 'unavailable' ? 'No camera here' : reason === 'failed' ? 'The camera didn’t work' : 'Camera access is off',
     reason === 'unavailable'
       ? 'This device has no camera to use. You can still add a photo from your library.'
-      : 'You can still add a photo from your library — that never needs the camera.',
+      : reason === 'failed'
+        ? 'Something went wrong with the camera. You can still add a photo from your library.'
+        : 'You can still add a photo from your library — that never needs the camera.',
     [
       { label: 'Choose from photos', value: 'library', variant: 'primary' },
       ...(reason === 'blocked' ? [{ label: 'Open Settings', value: 'settings' as const }] : []),
     ]
   )
+
+/** expo-image-picker's own code for "nothing on this device handles the camera intent" (Android). */
+const NO_CAMERA_CODE = 'ERR_MISSING_ACTIVITY_TO_HANDLE_INTENT'
 
 /** Where the photo comes from: the camera or the library. */
 export const showPhotoSourceActionSheet = (): Promise<'camera' | 'library' | null> =>
@@ -229,7 +234,7 @@ export const pickImage = async (
     }
   }
 
-  let fallback: PermissionOutcome | 'unavailable' | null = null
+  let fallback: PermissionOutcome | 'unavailable' | 'failed' | null = null
   try {
     const permission = await ensureCameraPermission()
     if (permission !== 'granted') {
@@ -239,10 +244,11 @@ export const pickImage = async (
       return result.canceled ? null : result
     }
   } catch (error) {
-    // No camera activity (emulators, some tablets), or the module refused
-    // after we were told granted. Either way the gallery still works.
-    Logger.warn('profile', 'Camera unavailable, offering the library', { error })
-    fallback = 'unavailable'
+    // Only a missing camera activity (emulators, some tablets) is "no camera";
+    // any other failure (SCRUM-947 threw after the camera had saved its file)
+    // is the camera not working, and says so. The gallery still works either way.
+    Logger.warn('profile', 'Camera did not open, offering the library', { error })
+    fallback = (error as { code?: string })?.code === NO_CAMERA_CODE ? 'unavailable' : 'failed'
   }
 
   const next = await offerLibraryInstead(fallback)

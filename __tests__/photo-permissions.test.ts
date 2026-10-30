@@ -132,10 +132,23 @@ describe('the camera asks for the camera and nothing else', () => {
 
   it('no camera on the device → the library is offered, not "Failed to pick image"', async () => {
     picker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true, canAskAgain: true } as never)
-    picker.launchCameraAsync.mockRejectedValue(new Error('MissingActivityToHandleIntent'))
+    picker.launchCameraAsync.mockRejectedValue(
+      Object.assign(new Error('Failed to resolve activity'), { code: 'ERR_MISSING_ACTIVITY_TO_HANDLE_INTENT' })
+    )
     const p = pickImage('camera')
     await flush()
     expect(lastSheet().title).toBe('No camera here')
+    press('Choose from photos')
+    await expect(p).resolves.toBe(picked)
+  })
+
+  it('a camera that opened but then failed (SCRUM-947) is never called "no camera"', async () => {
+    picker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true, canAskAgain: true } as never)
+    picker.launchCameraAsync.mockRejectedValue(Object.assign(new Error('unexpected'), { code: 'ERR_UNEXPECTED' }))
+    const p = pickImage('camera')
+    await flush()
+    expect(lastSheet().title).toBe('The camera didn’t work')
+    expect(lastSheet().message).not.toMatch(/no camera/i)
     press('Choose from photos')
     await expect(p).resolves.toBe(picked)
   })
