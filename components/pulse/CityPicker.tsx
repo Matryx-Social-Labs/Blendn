@@ -10,6 +10,7 @@ import { Icon } from '../ui/Icon'
 import { cityCount, cityCountLabel, sameCity, type CityOption } from '../../lib/city'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { useLocationSharing } from '../../lib/shareLocation'
 
 /** The locate row: 52 pt, a dashed 38% hairline at the row radius (Flow 3 `city`). */
 const LOCATE_HEIGHT = 52
@@ -49,6 +50,8 @@ type PickerProps = {
  */
 export function CityPicker({ visible, onClose, cities, selectedCity, deviceCity, onChoose, onLocate }: PickerProps) {
   const bold = useBoldText()
+  // Off: nothing here asks the phone where it is (SCRUM-908).
+  const sharing = useLocationSharing()
   const [query, setQuery] = useState('')
   const shown = useMemo(() => matchingCities(cities, query), [cities, query])
 
@@ -70,24 +73,26 @@ export function CityPicker({ visible, onClose, cities, selectedCity, deviceCity,
     <Sheet visible={visible} onClose={onClose} title="Browse in" detents={['medium', 'tall']} testID="city-picker">
       <SearchField value={query} onChangeText={setQuery} placeholder="Search cities" inSheet testID="city-search" />
 
-      <Pressable
-        testID="city-locate"
-        onPress={locate}
-        accessibilityRole="button"
-        accessibilityLabel={deviceCity ? `Use my current location, ${deviceCity}` : 'Use my current location'}
-        android_ripple={{ color: PRESSED_WASH.android }}
-        style={({ pressed }) => [styles.locate, pressed && Platform.OS === 'ios' && styles.pressed]}
-      >
-        <Icon name="navigation" size={ICON.control} />
-        <View style={styles.fill}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Use my current location</Text>
-          {deviceCity ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{deviceCity}</Text> : null}
-        </View>
-      </Pressable>
+      {sharing ? (
+        <Pressable
+          testID="city-locate"
+          onPress={locate}
+          accessibilityRole="button"
+          accessibilityLabel={deviceCity ? `Use my current location, ${deviceCity}` : 'Use my current location'}
+          android_ripple={{ color: PRESSED_WASH.android }}
+          style={({ pressed }) => [styles.locate, pressed && Platform.OS === 'ios' && styles.pressed]}
+        >
+          <Icon name="navigation" size={ICON.control} />
+          <View style={styles.fill}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Use my current location</Text>
+            {deviceCity ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{deviceCity}</Text> : null}
+          </View>
+        </Pressable>
+      ) : null}
 
       {cities.length === 0 ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]} testID="city-none">
-          {deviceCity ? 'No cities have published events yet.' : 'No cities have published events yet. Turn on location to browse where you are.'}
+          {deviceCity || !sharing ? 'No cities have published events yet.' : 'No cities have published events yet. Turn on location to browse where you are.'}
         </Text>
       ) : shown.length === 0 ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]} testID="city-no-match">
