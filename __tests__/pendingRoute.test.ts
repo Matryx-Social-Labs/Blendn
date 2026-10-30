@@ -12,6 +12,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(),
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { navigateFromNotificationData, notificationTarget } from '../lib/notifications'
+import { queryCache } from '../lib/queryCache'
 import { openWhenReady, pendingEventId, pendingInviteToken, resetPendingRoute, setRouteReady, takePendingRoute } from '../lib/pendingRoute'
 
 beforeEach(() => {
@@ -138,5 +139,21 @@ describe('the root guard', () => {
     const src = layout()
     const afterRead = src.slice(src.indexOf('await readOnboarding(user.id)'))
     expect(afterRead.slice(0, 120)).toContain('if (superseded) return;')
+  })
+})
+
+describe('View on a request notification (SCRUM-907)', () => {
+  const KEY = 'message_requests_u1'
+  beforeEach(() => queryCache.set(KEY, { incoming: [], outgoing: [] }, 60_000))
+
+  it('lands on the Banter and drops its cached requests, so the request is read when it arrives', () => {
+    navigateFromNotificationData({ type: 'message_request', requestId: 'r1' })
+    expect(takePendingRoute()).toBe('/(tabs)/chat')
+    expect(queryCache.get(KEY)).toBeNull()
+  })
+
+  it('a notification that goes elsewhere leaves them', () => {
+    navigateFromNotificationData({ type: 'rating_request', eventId: 'e1' })
+    expect(queryCache.get(KEY)).not.toBeNull()
   })
 })

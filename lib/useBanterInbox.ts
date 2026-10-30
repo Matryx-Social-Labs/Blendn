@@ -15,7 +15,7 @@ import { hasDirtyDomain } from './liveSyncState'
 import { Logger } from './logger'
 import { conversationsCursor, namedList, type NamedList } from './namedList'
 import { isPlaceRoom, roomDisplayTitle, roomHereCount } from './placeRoom'
-import { queryCache } from './queryCache'
+import { MESSAGE_REQUESTS_KEY, queryCache } from './queryCache'
 import { rememberRoomMute } from './roomMembership'
 import { roomStateFrom, type RoomState } from './roomState'
 import { userReportStep } from './safetyUtils'
@@ -314,8 +314,12 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
 
   // The loaders sit above every callback and effect that calls them: React
   // Compiler rejects a closure that reads a binding before its declaration.
-  const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false) => {
-    if (cacheKey && !force) {
+  /*
+   * `fresh`: past the first read, a load that was asked for is a read of the server. The cache was already consulted by
+   * `loadChats` (a request arrives with no socket event, and the 60 s copy, or `apiClient`'s 30 s one, hid it: SCRUM-907).
+   */
+  const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false, fresh = force) => {
+    if (cacheKey && !fresh) {
       const cached = queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(cacheKey)
       if (cached) {
         if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
@@ -324,7 +328,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       }
     }
     try {
-      const result = await apiClient.getMessageRequests({ status: 'pending' }, { force })
+      const result = await apiClient.getMessageRequests({ status: 'pending' }, { force: fresh })
       if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
 
       if (result.success && result.data?.requests) {
@@ -339,17 +343,15 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
         if (cacheKey) {
           queryCache.set(cacheKey, { incoming: requests, outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
         }
-      } else {
+      } else if (result.success) {
         setIncomingRequests([])
         if (cacheKey) {
           queryCache.set(cacheKey, { incoming: [], outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
         }
       }
+      // A refusal or a dropped connection leaves what is drawn (as the list loaders do): it is not "no requests".
     } catch (e) {
       Logger.error('chat', 'loadMessageRequests failed', { error: e })
-      if (loadId === undefined || latestLoadIdRef.current === loadId) {
-        setIncomingRequests([])
-      }
     }
   }
 
@@ -466,7 +468,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
     const userId = user.id
     const groupCacheKey = `group_chats_${userId}`
     const personalCacheKey = `personal_chats_${userId}`
-    const requestsCacheKey = `message_requests_${userId}`
+    const requestsCacheKey = `${MESSAGE_REQUESTS_KEY}${userId}`
 
     /*
      * A known change (a message the socket delivered, a send) makes both caches
@@ -516,7 +518,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       }
 
       // Started with the lists, not after them: it never rejects, and waiting cost the inbox a third round trip in series.
-      const requestsLoad = shouldFetchRequests ? loadMessageRequests(loadId, requestsCacheKey, force) : null
+      const requestsLoad = shouldFetchRequests ? loadMessageRequests(loadId, requestsCacheKey, force, force || lastFetchRef.current.requests > 0) : null
 
       if (shouldFetchList) {
         // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's

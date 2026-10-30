@@ -18,6 +18,7 @@ import {
   type RowFace,
   type RowLine,
 } from '../../components/banter/BanterParts'
+import { queryCache } from '../../lib/queryCache'
 import { useLatest } from '../../lib/useLatest'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { useReadOnReturn } from '../../lib/useReadOnReturn'
@@ -135,12 +136,15 @@ function ChatInner() {
    * room opened, they left behind the screen that covered them. The room is read the moment it opens (the server
    * marks it so, and no message in it counts here); only the list's drawing of that waits for the return.
    */
+  const userId = user?.id
   const clearRead = useCallback(
     (opened: ReadonlySet<string>) => {
       setGroupChats((prev) => prev.map((c) => (opened.has(c.chat_room_id) ? { ...c, unread_count: 0 } : c)))
       setCrewRooms((prev) => prev.map((r) => (opened.has(r.id) ? { ...r, unreadCount: 0 } : r)))
+      // The server read it as it opened, and the cached list still holds the count: the next quiet sync would paint it back.
+      if (userId) queryCache.invalidate(`group_chats_${userId}`)
     },
-    [setGroupChats, setCrewRooms]
+    [setGroupChats, setCrewRooms, userId]
   )
   const noteOpened = useReadOnReturn(clearRead)
   const openRoom = useCallback(

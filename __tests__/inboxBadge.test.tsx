@@ -13,6 +13,7 @@ jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(async () =
 
 /* eslint-disable import/first */
 import { apiClient } from '../lib/apiClient'
+import { queryCache } from '../lib/queryCache'
 import { banterUnread, markBellRead, refreshInboxBadge, resetInboxBadge, useInboxBadge, useInboxBadgeSync } from '../lib/inboxBadge'
 import { subscribeToBell, subscribeToUserNotifications } from '../lib/socketClient'
 /* eslint-enable import/first */
@@ -123,5 +124,27 @@ describe('reads that overlap or outlive the account', () => {
       await read
     })
     expect(view.getByTestId('n').props.children).toBe('0/0')
+  })
+})
+
+describe('a message request makes the Banter read its requests again (SCRUM-907)', () => {
+  // A request has no socket event of its own, only the bell's row.
+  const KEY = 'message_requests_u1'
+  const land = async (kind: string) => {
+    api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 1 }))
+    queryCache.set(KEY, { incoming: [], outgoing: [] }, 60_000)
+    await render(<Probe />)
+    const onRow = (subscribeToBell as jest.Mock).mock.calls.at(-1)[0]
+    await act(async () => onRow({ kind }))
+  }
+
+  it('a message_request row drops the cached requests', async () => {
+    await land('message_request')
+    expect(queryCache.get(KEY)).toBeNull()
+  })
+
+  it('another kind of row leaves them', async () => {
+    await land('event_update')
+    expect(queryCache.get(KEY)).not.toBeNull()
   })
 })

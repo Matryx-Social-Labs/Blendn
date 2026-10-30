@@ -95,7 +95,7 @@ import Banter from '../app/(tabs)/chat'
 import { apiClient } from '../lib/apiClient'
 import { clearOutbox, dmThread, keepFailed, roomThread, setDraft } from '../lib/chatOutbox'
 import { markDomainsDirty } from '../lib/liveSyncState'
-import { queryCache } from '../lib/queryCache'
+import { forgetMessageRequests, queryCache } from '../lib/queryCache'
 import { resetRoomMembership } from '../lib/roomMembership'
 import { noteBlocked } from '../lib/blockEpoch'
 import { H } from '../lib/haptics'
@@ -670,4 +670,67 @@ it('reads the room’s own line from lastMessage.type: system has no "You:", a p
   expect(await screen.findByText('You liked Crew Nebula for the crew')).toBeTruthy()
   expect(screen.getByText('Crew Two is on the board')).toBeTruthy()
   expect(screen.getByText('You: liked Lot S9 for the crew')).toBeTruthy()
+})
+
+describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
+  const requestCard = 'Loved your take on the set — coffee next week?'
+  // The server has the request; the SWR copy is still the empty list, and only a forced read has it.
+  const serveRequestAfterSwr = () =>
+    api.getMessageRequests.mockImplementation((async (_p?: unknown, o?: { force?: boolean }) => ({
+      success: true,
+      data: { requests: o?.force ? [request] : [] },
+    })) as never)
+
+  it('a request that arrived while the tab was away shows on the next sync once the bell has said so', async () => {
+    // Arrange: the Banter loaded with no requests (and cached that); then someone sends one.
+    serve({ requests: [] })
+    await open()
+    expect(screen.queryByText(requestCard)).toBeNull()
+    serveRequestAfterSwr()
+    // Act: the bell's row for it lands (lib/inboxBadge), and the Banter syncs.
+    forgetMessageRequests()
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    // Assert
+    expect(screen.getByText(requestCard)).toBeTruthy()
+  })
+
+  it('a quiet sync with nothing known asks for no requests inside the throttle, and the first read is not forced', async () => {
+    serve({ requests: [] })
+    await open()
+    expect(api.getMessageRequests).toHaveBeenCalledTimes(1)
+    expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending' }, { force: false })
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(api.getMessageRequests).toHaveBeenCalledTimes(1)
+  })
+
+  it('a read that fails leaves the requests on screen: it is not "no requests"', async () => {
+    serve()
+    await open()
+    expect(screen.getByText(requestCard)).toBeTruthy()
+    api.getMessageRequests.mockResolvedValue({ success: false, error: 'offline' } as never)
+    forgetMessageRequests()
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    expect(api.getMessageRequests).toHaveBeenCalledTimes(2)
+    expect(screen.getByText(requestCard)).toBeTruthy()
+  })
+
+  it('a room you opened stays read when a background sync repaints from the cache behind you', async () => {
+    // Arrange: an unread room; the server marks it read the moment it opens.
+    const unreadRoom = { ...pastRoom, status: 'open', unreadCount: 2 }
+    const label = /Jazz Brunch, .*unread/
+    serve({ rooms: [unreadRoom], dms: [], requests: [] })
+    await open()
+    await act(async () => fireEvent.press(screen.getByLabelText(label)))
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...unreadRoom, unreadCount: 0 }] } } as never)
+    // Act: back on the Banter, then the next background sync (the 8 s tick while the socket is down).
+    await act(async () => void mockRefocus?.())
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    // Assert: read from the server, not painted from the 60 s copy that still said 2.
+    expect(screen.queryByLabelText(label)).toBeNull()
+    expect(api.getChatGroups).toHaveBeenCalledTimes(2)
+  })
 })

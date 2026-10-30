@@ -4,6 +4,7 @@ import { AppState } from 'react-native'
 import { apiClient } from './apiClient'
 import { iconBadgeFor, setAppIconBadge } from './appBadge'
 import { Logger } from './logger'
+import { forgetMessageRequests } from './queryCache'
 import { subscribeToBell, subscribeToUserNotifications } from './socketClient'
 
 /**
@@ -107,7 +108,15 @@ function scheduleDmRead(): void {
  * (the server's count, never a local +1), and when the app comes back to the front.
  */
 export function useInboxBadgeSync(userId?: string | null): void {
-  useEffect(() => subscribeToBell(() => void refreshInboxBadge()), [])
+  useEffect(
+    () =>
+      subscribeToBell((row) => {
+        // A message request has no socket event of its own, only this row: the Banter's list is stale until it reads again (its next sync then goes to the server).
+        if (row?.kind === 'message_request') forgetMessageRequests()
+        void refreshInboxBadge()
+      }),
+    []
+  )
   // A DM never rings the bell (the server keeps `private_message` out of it); it arrives on your own room as `private:message`.
   useEffect(() => (userId ? subscribeToUserNotifications(userId, scheduleDmRead) : undefined), [userId])
   useEffect(() => {
