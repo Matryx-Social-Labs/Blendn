@@ -20,6 +20,9 @@ import { rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
 
+/** How long the cold start waits on the keychain for the stored account's location switch. */
+const LOCATION_SWITCH_READ_MS = 1_500
+
 export interface AuthState {
   session: { user: AuthUser } | null // Maintain session shape for compatibility
   user: AuthUser | null
@@ -144,6 +147,8 @@ const initializeAuth = async (): Promise<AuthState> => {
       if (accessToken) {
         // We have a token, verify it's still valid
         Logger.debug('auth', 'Found stored access token, verifying session...')
+        // The switch is known before the session answers: a read on the way up obeys it (`lib/shareLocation`). Bounded: no keychain waits for it.
+        setLocationSharing((await settleWithin(TokenStorage.getUser(), LOCATION_SWITCH_READ_MS, null))?.profile?.share_location)
 
         const result = await apiClient.getSession()
 

@@ -78,9 +78,29 @@ describe('with sharing off', () => {
     expect(urls).toHaveLength(3)
     for (const url of urls) expect(url).not.toMatch(/[?&](lat|lon)=/)
     expect(urls[0]).toContain('city=Bengaluru')
-    expect(urls[0]).toContain('radius=5')
-    expect(urls[1]).toContain('sortBy=distance')
+    expect(urls[1]).toContain('city=Bengaluru')
     expect(urls[2]).toContain('include=checkins')
+  })
+
+  it('a radius or a distance sort that needs the position goes with it, so the server is not asked for what it cannot do', async () => {
+    setLocationSharing(false)
+    const urls = server()
+    await apiClient.getEvents({ page: 1, lat: LAT, lon: LON, radius: 5, sortBy: 'distance' }, { force: true })
+    await apiClient.getEvents({ page: 1, lat: LAT, lon: LON, sortBy: 'start_time' }, { force: true })
+    await apiClient.getVenues({ page: 1, lat: LAT, lon: LON, radius: 2, sortBy: 'name' }, { force: true })
+    expect(urls[0]).not.toMatch(/radius=|sortBy=/)
+    expect(urls[1]).toContain('sortBy=start_time')
+    expect(urls[2]).toContain('sortBy=name')
+    expect(urls[2]).not.toContain('radius=')
+  })
+
+  it('the map’s viewport is where the camera is, not where you are: it still goes', async () => {
+    setLocationSharing(false)
+    const urls = server()
+    await apiClient.getEvents({ lat: LAT, lon: LON, radius: 3 }, { force: true, viewport: true })
+    await apiClient.getVenues({ lat: LAT, lon: LON, radius: 3, sortBy: 'distance' }, { force: true, viewport: true })
+    for (const url of urls) expect(url).toMatch(/lat=12\.972/)
+    expect(urls[0]).toContain('radius=3')
   })
 
   it('saving the switch in Settings is what turns it off and on', async () => {

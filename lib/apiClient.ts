@@ -242,15 +242,21 @@ export class RequestQueue {
 
 const requestQueue = new RequestQueue()
 
-/** `?a=1&b=2` from the fields that are set, or '' when none are. */
-function toQuery(params: object = {}): string {
+/**
+ * `?a=1&b=2` from the fields that are set, or '' when none are.
+ *
+ * "Share location for nearby events" off: the question is asked without the person's position (`lib/shareLocation`), and
+ * without what only that position gives meaning (a `radius`, a sort by distance), so the server answers the city, not a
+ * wrong "nearest". `viewport`: the lat/lon are where a map camera points, not where the person is.
+ */
+function toQuery(params: object = {}, viewport = false): string {
   const searchParams = new URLSearchParams()
+  const withheld = !viewport && !locationSharingOn()
   for (const [key, raw] of Object.entries(params)) {
     // A `search` the server would refuse (under 2 characters, admin #751) is no search: never sent (`searchTermOf`).
     const value = key === 'search' ? searchTermOf(typeof raw === 'string' ? raw : null) : raw
     if (value === undefined || value === null) continue
-    // "Share location for nearby events" off: the question is asked without the position (`lib/shareLocation`).
-    if ((key === 'lat' || key === 'lon') && !locationSharingOn()) continue
+    if (withheld && (key === 'lat' || key === 'lon' || key === 'radius' || (key === 'sortBy' && value === 'distance'))) continue
     // A position never leaves in a URL at more than ~110 m (`lib/coordinates.ts`): the server logs query strings.
     searchParams.append(key, (key === 'lat' || key === 'lon') && typeof value === 'number' ? String(roundCoordinate(value)) : String(value))
   }
@@ -2414,8 +2420,8 @@ class ApiClientClass {
     interestedPreviewLimit?: number
     /** At most five published, public, age-gated, not-ended events, in the server's `featured.rank` order (BUILD-SPEC C1). */
     featured?: boolean
-  }, options?: { force?: boolean }): Promise<ApiResponse<EventsListResponse>> {
-    const endpoint = `/api/mobile/events${toQuery(params)}`
+  }, options?: { force?: boolean; viewport?: boolean }): Promise<ApiResponse<EventsListResponse>> {
+    const endpoint = `/api/mobile/events${toQuery(params, options?.viewport)}`
     const result = options?.force
       ? await this.queuedRequest<EventsListResponse>(endpoint)
       : await this.cachedRequest<EventsListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
@@ -2434,9 +2440,9 @@ class ApiClientClass {
    */
   async getVenues(
     params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live'; search?: string; radius?: number },
-    options?: { force?: boolean }
+    options?: { force?: boolean; viewport?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
-    const endpoint = `/api/mobile/venues${toQuery(params)}`
+    const endpoint = `/api/mobile/venues${toQuery(params, options?.viewport)}`
     if (options?.force) return this.queuedRequest<VenuesListResponse>(endpoint)
     return this.cachedRequest<VenuesListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
   }

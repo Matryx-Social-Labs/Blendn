@@ -90,10 +90,10 @@ const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.
 /** The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger. */
 const pinApi = {
   getEvents: async (q: PinQuery & { limit: number }) => {
-    const res = await apiClient.getEvents(q, { force: true })
+    const res = await apiClient.getEvents(q, { force: true, viewport: true })
     return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi) } : undefined }
   },
-  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true }),
+  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport: true }),
 }
 
 /**
