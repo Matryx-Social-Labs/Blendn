@@ -741,7 +741,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       const position = await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }), LOCATION_FIX_TIMEOUT_MS)
       const coords = fixOf(position)
       setUserLocation(coords)
-      Logger.journey('proximity', 'quietLocation:resolved', coords)
+      Logger.journey('proximity', 'quietLocation:resolved')
     } catch (error) {
       // Keep status as granted if permission was granted but position fetch failed
       Logger.warn('events', 'quietLocation:error', { error: error as any })
@@ -1044,7 +1044,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   // conditions. `proximityData` itself is derived near the top (`proximityFor`).
   useEffect(() => {
     if (!userLocation || !user || events.length === 0) return
-    Logger.journey('proximity', 'checkAll:start', { lat: userLocation.latitude, lon: userLocation.longitude })
+    Logger.journey('proximity', 'checkAll:start')
     Logger.journey('proximity', 'checkAll:success', { eventsEvaluated: events.length, nearbyCount: Object.keys(proximityData).length })
   }, [userLocation, user, events, proximityData])
 
