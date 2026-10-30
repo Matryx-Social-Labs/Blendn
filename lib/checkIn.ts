@@ -1,3 +1,4 @@
+import { validAccuracy } from './geo'
 import type { Href } from 'expo-router'
 import { Platform } from 'react-native'
 import { apiClient } from './apiClient'
@@ -107,7 +108,7 @@ export async function submitCheckIn(
       // `gpsAccuracy` is the key the route reads — `deviceInfo?.gpsAccuracy` —
       // not a top-level field. Unknown is sent as absent, which the server
       // reads as "assume the usual", never as a number we made up.
-      deviceInfo: { platform: Platform.OS, gpsAccuracy: at.accuracy ?? undefined },
+      deviceInfo: { platform: Platform.OS, gpsAccuracy: validAccuracy(at.accuracy) ?? undefined },
     }),
     timeout,
   ]).finally(() => clearTimeout(timer))

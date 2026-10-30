@@ -9,6 +9,7 @@ import { youLeftLine } from './leftRooms'
 import { reasonOf } from './sessionEnd'
 import { goLiveRefusal, noteOwnGoLive, rememberLiveSession, type GoLiveChoice, type GoLiveRefusal } from './goLive'
 import { H } from './haptics'
+import { validAccuracy } from './geo'
 import { getCurrentLocation, type ShowTray } from './locationFix'
 import { Logger } from './logger'
 import { openInMaps } from './openInMaps'
@@ -184,7 +185,7 @@ export function useGoLive({
         latitude: at.latitude,
         longitude: at.longitude,
         // The key the server reads; unknown is absent, never a number we made up.
-        deviceInfo: { platform: Platform.OS, gpsAccuracy: at.accuracy ?? undefined },
+        deviceInfo: { platform: Platform.OS, gpsAccuracy: validAccuracy(at.accuracy) ?? undefined },
         ...choice,
       })
       if (result.success && result.data) {

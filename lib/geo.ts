@@ -37,6 +37,13 @@ export function getDistanceMetres(
   return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+/**
+ * A fix's accuracy in metres, or null when the platform does not know it. iOS says -1 for an invalid one (truthy, so
+ * `|| 999` kept it, and the server refuses a negative: SCRUM-930), and a NaN or Infinity is no more a measure.
+ */
+export const validAccuracy = (raw: number | null | undefined): number | null =>
+  typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : null
+
 /** Kilometres, for display only. Never for a comparison against a radius. */
 export function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   return getDistanceMetres(lat1, lon1, lat2, lon2) / 1000

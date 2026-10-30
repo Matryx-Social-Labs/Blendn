@@ -25,6 +25,7 @@ import * as Location from 'expo-location'
 import { Platform } from 'react-native'
 import { markCheckIn } from '../lib/checkInTiming'
 import { getCurrentLocation, LOCATION_FIX_TIMEOUT_MS } from '../lib/locationFix'
+import { validAccuracy } from '../lib/geo'
 
 /** Which native path runs: iOS watches, Android asks once. */
 const setOS = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { get: () => os, configurable: true })
@@ -164,6 +165,34 @@ describe('getCurrentLocation', () => {
   })
 })
 
+// SCRUM-930: iOS reports -1 for an invalid accuracy. It is truthy, so `|| 999` kept it, and the server refuses a negative.
+describe('an accuracy below zero is no accuracy', () => {
+  it.each([[-1], [-0.5], [NaN], [Infinity], [null], [undefined]])('validAccuracy(%s) is unknown', (raw) => {
+    expect(validAccuracy(raw as number | null | undefined)).toBeNull()
+  })
+
+  it.each([[0], [12.5], [150]])('validAccuracy(%s) is itself', (raw) => {
+    expect(validAccuracy(raw)).toBe(raw)
+  })
+
+  it.each([[-1], [NaN]])('a fix saying %s is a weak signal, never an accuracy sent on', async (raw) => {
+    loc.getCurrentPositionAsync.mockResolvedValue(fixWith(raw))
+    const t = trays()
+    expect(await getCurrentLocation(t)).toBeNull()
+    expect(t.showTray).toHaveBeenCalledWith('GPS signal is weak', 'Accuracy is 999 m. Step away from walls and try again.', expect.any(Array), { icon: 'radar' })
+  })
+
+  it('on iOS a watch fix of -1 is not the best fix, nor good enough', async () => {
+    setOS('ios')
+    loc.watchPositionAsync.mockImplementation(async (_o: any, cb: any) => {
+      cb(fixWith(-1))
+      cb(fixWith(20))
+      return { remove: jest.fn() } as any
+    })
+    expect(await getCurrentLocation(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 20 })
+  })
+})
+
 /*
  * The wait between "Checking you in…" and "You're in" was a cold
  * BestForNavigation fix started only once the hold ended: seconds, up to the
@@ -190,6 +219,14 @@ describe('a fix that is already there', () => {
     await warmLocationFix()
     expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
 
+    expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 9 })
+    expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('a cached fix saying -1 is not reused: a new one is asked for (SCRUM-930)', async () => {
+    const { getCurrentLocation: locate } = fresh()
+    loc.getLastKnownPositionAsync.mockResolvedValue(recentFix(-1, 1000))
+    loc.getCurrentPositionAsync.mockResolvedValue(recentFix(9))
     expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 9 })
     expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
   })

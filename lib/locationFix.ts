@@ -3,6 +3,7 @@ import { Linking, Platform } from 'react-native'
 import type { ButtonKind } from '../components/ds/Button'
 import type { IconName } from '../components/ui/Icon'
 import { markCheckIn, type FixSource } from './checkInTiming'
+import { validAccuracy } from './geo'
 import { H } from './haptics'
 import { Logger } from './logger'
 
@@ -71,7 +72,7 @@ export function firstGoodFix(
       subscription?.remove()
       finish()
     }
-    const accuracyOf = (fix: Location.LocationObject) => fix.coords.accuracy ?? Infinity
+    const accuracyOf = (fix: Location.LocationObject) => validAccuracy(fix.coords.accuracy) ?? Infinity
     const timer = setTimeout(() => settle(() => (best ? resolve(best) : reject(timedOut()))), deadlineMs)
     Location.watchPositionAsync({ accuracy: Location.Accuracy.High, distanceInterval: 0 }, (fix) => {
       if (!best || accuracyOf(fix) < accuracyOf(best)) best = fix
@@ -162,7 +163,7 @@ export async function warmLocationFix(): Promise<void> {
 /** Recent, and as good as the door asks: a fix that can stand in for a new one. */
 function usable(fix: Location.LocationObject | null, maxAccuracyM: number): Location.LocationObject | null {
   if (!fix || Date.now() - fix.timestamp > FRESH_FIX_MAX_AGE_MS) return null
-  return (fix.coords.accuracy ?? Infinity) <= maxAccuracyM ? fix : null
+  return (validAccuracy(fix.coords.accuracy) ?? Infinity) <= maxAccuracyM ? fix : null
 }
 
 /**
@@ -340,10 +341,10 @@ export async function getCurrentLocation({
      * when a new one is needed — the door asks 50 m, not lane-level.
      */
     const { fix: location, source } = await Promise.race([freshFix(maxAccuracyM), deadline])
-    markCheckIn('location', { source, ageMs: Date.now() - location.timestamp, accuracyM: location.coords.accuracy ?? undefined })
+    markCheckIn('location', { source, ageMs: Date.now() - location.timestamp, accuracyM: validAccuracy(location.coords.accuracy) ?? undefined })
 
     // Validate GPS accuracy for production
-    const accuracy = location.coords.accuracy || 999
+    const accuracy = validAccuracy(location.coords.accuracy) ?? 999
     if (accuracy > maxAccuracyM) {
       Logger.warn('events', 'location:lowAccuracy', { accuracy })
       showTray('GPS signal is weak', `Accuracy is ${Math.round(accuracy)} m. Step away from walls and try again.`, retryButtons, { icon: 'radar' })
@@ -374,7 +375,7 @@ export async function getCurrentLocation({
        * through as-is rather than coerced; `accuracyAllowance` already treats
        * null as "no information" and applies the assumed value.
        */
-      accuracy: location.coords.accuracy ?? null,
+      accuracy: validAccuracy(location.coords.accuracy),
     }
   } catch (error) {
     Logger.error('events', 'location:getCurrentLocation:error', { error: error as any })

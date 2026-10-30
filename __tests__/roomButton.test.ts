@@ -287,6 +287,10 @@ describe('pickInsideEvent', () => {
       expect(pickInsideEvent([e], now, { ...inside, timestamp: now - 1_000 })).toBe('e')
     })
 
+    it('fixOf says an invalid accuracy (-1) is unknown, never a number that passes a radius (SCRUM-930)', () => {
+      expect(fixOf({ coords: { latitude: 1, longitude: 2, accuracy: -1 }, timestamp: 99 }).accuracy).toBeNull()
+    })
+
     it('fixOf carries the accuracy and the time of a position', () => {
       expect(fixOf({ coords: { latitude: 1, longitude: 2, accuracy: 7 }, timestamp: 99 })).toEqual({ latitude: 1, longitude: 2, accuracy: 7, timestamp: 99 })
     })
