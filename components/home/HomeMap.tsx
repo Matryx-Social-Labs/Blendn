@@ -403,9 +403,16 @@ export const HomeMap = memo(function HomeMap({
     moveTo({ to: [cityLon, cityLat], easeMs: MAP_THEME.camera.easeMs })
   }, [cityPick.n, cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
 
-  // The switch goes off while the camera is following the fix: it leaves the person for the city.
+  // The switch goes off while the camera is following the fix: what was asked or held around the person is dropped, and the map goes to the city.
   useEffect(() => {
-    if (sharing || touched.current) return
+    if (sharing) return
+    if (touched.current) return
+    // A read pending on a fix-centred view, the circle already answered around it, and the fix followed: none survives the switch.
+    if (debounce.current) clearTimeout(debounce.current)
+    debounce.current = null
+    setQuery(null)
+    lastQuery.current = null
+    followedFix.current = null
     moveTo({ to: cityLat !== undefined && cityLon !== undefined ? [cityLon, cityLat] : DEFAULT_CENTRE, easeMs: MAP_THEME.camera.easeMs })
   }, [sharing]) // eslint-disable-line react-hooks/exhaustive-deps -- only the switch moves the camera here
 

@@ -70,14 +70,19 @@ const FIX = { latitude: 12.9784, longitude: 77.6408 }
 const CITY = { latitude: 12.9763, longitude: 77.5929 }
 const SHEET = { half: 420, full: 120 }
 
+// One identity for every prop that is not the fix: the memo'd map draws again only for what the test changes.
+const CITY_PICK = { n: 0, here: false }
+const NO_PINS: never[] = []
+const ASK = jest.fn()
+const DRAWER_TOP = makeMutable(SHEET.half)
 const map = (center: typeof FIX | null) => (
   <HomeMap
     center={center}
     cityCentre={CITY}
-    cityPick={{ n: 0, here: false }}
-    requestLocation={jest.fn()}
+    cityPick={CITY_PICK}
+    requestLocation={ASK}
     locateVisible
-    drawerTop={makeMutable(SHEET.half)}
+    drawerTop={DRAWER_TOP}
     drawer={SHEET}
     segment="events"
     topChrome={90}
@@ -85,7 +90,7 @@ const map = (center: typeof FIX | null) => (
     drawerSnapTop={SHEET.half}
     focused
     glowVisible={false}
-    nearPins={[]}
+    nearPins={NO_PINS}
     fitNear={0}
   />
 )
@@ -140,11 +145,27 @@ describe('with sharing off and a GPS fix', () => {
     await settle()
     mockStops.length = 0
     mockGetEvents.mockClear()
+    // The switch alone: the props are the same, so only the subscription can draw the map again.
     await act(async () => setLocationSharing(false))
-    await view.rerender(map(FIX))
     await settle()
     expect(mockStops.some((s) => JSON.stringify(s.center) === JSON.stringify([CITY.longitude, CITY.latitude]))).toBe(true)
     expect(mockStops.filter(stopOnFix)).toHaveLength(0)
+  })
+
+  it('a read pending on a view centred on the fix is dropped when the switch goes off', async () => {
+    jest.useFakeTimers()
+    try {
+      // No read has been answered yet, so nothing but the debounce stands between the fix-centred view and the server.
+      await render(map(FIX))
+      // The camera has just settled on the fix: its read is waiting out the debounce.
+      const [lon, lat] = [FIX.longitude, FIX.latitude]
+      await act(async () => mockRegion?.({ nativeEvent: { bounds: [lon - 0.02, lat - 0.04, lon + 0.02, lat + 0.04], center: [lon, lat], zoom: 15, pitch: 45, userInteraction: false } }))
+      await act(async () => setLocationSharing(false))
+      await act(async () => void (await jest.advanceTimersByTimeAsync(5_000)))
+      expect(mockGetEvents.mock.calls.filter(readOnFix)).toHaveLength(0)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('no read carries the fix', async () => {
