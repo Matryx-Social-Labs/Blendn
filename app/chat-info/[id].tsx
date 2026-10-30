@@ -1,7 +1,7 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
 import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
-import React, { memo, useCallback, useEffect, useState } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -113,6 +113,10 @@ function ChatInfoInner() {
   const muted = isMuted(mute)
 
   const [members, setMembers] = useState<Member[]>([])
+  const membersRef = useRef(members)
+  useEffect(() => {
+    membersRef.current = members
+  }, [members])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
@@ -151,7 +155,7 @@ function ChatInfoInner() {
   )
 
   /* The next page as the end comes into view; one at a time, and not while a page is failing (its retry is the way on). */
-  /* Blocking somebody from their card takes them off the list at once; the server's next pages leave them out too. `total` is the list's length, for paging — the count the screen prints is the room's (`people`). */
+  /* Blocking somebody from their card takes them off the list at once; the server's next pages leave them out too. `total` is the list's length: the heading counts it; the hero line above prints the room's (`people`). */
   const removeMember = (userId: string) => {
     setMembers((prev) => prev.filter((m) => m.userId !== userId))
     setTotal((t) => Math.max(0, t - 1))
@@ -177,6 +181,8 @@ function ChatInfoInner() {
   useEffect(
     () =>
       subscribeToChatMemberLeft(chatGroupId, ({ userId }) => {
+        // Only somebody this list holds: the heading counts its cards, and a leaver it never listed is not one.
+        if (!membersRef.current.some((m) => m.userId === userId)) return
         setMembers((prev) => prev.filter((m) => m.userId !== userId))
         setTotal((t) => Math.max(0, t - 1))
       }),
@@ -298,8 +304,8 @@ function ChatInfoInner() {
           </SettingsGroup>
         </View>
 
-        {/* The room's number, as the line above says it (five and up), never the number loaded so far; a place says no count at all. */}
-        <SectionHeader title="In the room" count={loading || failed || place ? undefined : (people ?? undefined)} testID="info-members" />
+        {/* The cards this list holds (the server's total for it, paged), not the room's number in the line above: a hidden friend is counted there, not listed. Five and up; nothing until the row says whether this is a place, and a place says no count at all. */}
+        <SectionHeader title="In the room" count={loading || failed || !row || place ? undefined : (printable(total || null) ?? undefined)} testID="info-members" />
         {loading ? (
           <View style={styles.grid}>
             {Array.from({ length: COLUMNS * 2 }, (_, i) => (

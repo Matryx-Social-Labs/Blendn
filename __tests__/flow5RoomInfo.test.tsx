@@ -24,8 +24,12 @@ jest.mock('../lib/apiClient', () => ({
 }))
 /** The event's checkout listeners: Room info's count follows the server's recount. */
 const mockCheckOut: ((data: { hereCount?: number }) => void)[] = []
+const mockLeft: ((data: { userId: string }) => void)[] = []
 jest.mock('../lib/socketClient', () => ({
-  subscribeToChatMemberLeft: () => () => {},
+  subscribeToChatMemberLeft: (_group: string, cb: (data: { userId: string }) => void) => {
+    mockLeft.push(cb)
+    return () => {}
+  },
   subscribeToEventCheckIn: () => () => {},
   subscribeToEventCheckOut: (_event: string, cb: (data: { hereCount?: number }) => void) => {
     mockCheckOut.push(cb)
@@ -242,14 +246,14 @@ describe('one number for the room (RC drive 3)', () => {
     data: { participants: Array.from({ length: n }, (_, i) => ({ userId: `u-${i}`, name: `Fox ${i}`, role: 'member' })), totalCount },
   })
 
-  it('says the Room’s number on both lines: not the 515 members, not the 450 listed', async () => {
+  it('the hero says the Room’s number, the list heading the cards it lists: not the 515 members', async () => {
     api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, hereCount: 483, memberCount: 515 }] } } as never)
     api.getChatParticipants.mockResolvedValue(page(100, 450) as never)
     await open()
-    expect(screen.getByLabelText('In the room, 483')).toBeTruthy()
-    expect(screen.getAllByText('483').length).toBe(2)
+    expect(screen.getByLabelText('In the room, 450')).toBeTruthy()
+    expect(screen.getAllByText('483').length).toBe(1)
+    expect(screen.getAllByText('450').length).toBe(1)
     expect(screen.queryByText('515')).toBeNull()
-    expect(screen.queryByText('450')).toBeNull()
   })
 
   it('follows the server’s recount as people check out', async () => {
@@ -258,7 +262,7 @@ describe('one number for the room (RC drive 3)', () => {
     api.getChatParticipants.mockResolvedValue(page(100, 450) as never)
     await open()
     await act(async () => mockCheckOut.forEach((cb) => cb({ hereCount: 482 })))
-    expect(screen.getByLabelText('In the room, 482')).toBeTruthy()
+    expect(screen.getByText('482')).toBeTruthy()
   })
 })
 
@@ -290,6 +294,31 @@ describe('a place’s room (C5, 5-2)', () => {
   })
 })
 
+describe('the heading counts the cards it lists (SCRUM-935)', () => {
+  const page = (n: number, totalCount: number) => ({
+    success: true,
+    data: { participants: Array.from({ length: n }, (_, i) => ({ userId: `u-${i}`, name: `Fox ${i}`, role: 'member' })), totalCount },
+  })
+
+  it('says nothing until the row says whether this is a place (a place never prints an exact count)', async () => {
+    api.getChatGroups.mockResolvedValue({ success: false, error: 'offline' } as never)
+    api.getChatParticipants.mockResolvedValue(page(6, 6) as never)
+    await open()
+    expect(screen.queryByLabelText(/^In the room, /)).toBeNull()
+  })
+
+  it('a leaver the list never held (a hidden friend) does not take a card off the count', async () => {
+    mockLeft.length = 0
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, hereCount: 7 }] } } as never)
+    api.getChatParticipants.mockResolvedValue(page(6, 6) as never)
+    await open()
+    await act(async () => mockLeft.forEach((cb) => cb({ userId: 'hidden-friend' })))
+    expect(screen.getByLabelText('In the room, 6')).toBeTruthy()
+    await act(async () => mockLeft.forEach((cb) => cb({ userId: 'u-1' })))
+    expect(screen.getByLabelText('In the room, 5')).toBeTruthy()
+  })
+})
+
 describe('a block takes the person off the list (safety)', () => {
   it('removes them from what is loaded, and the next page asks from where the list now stands', async () => {
     const page = (from: number, n: number, totalCount: number) => ({
@@ -302,8 +331,9 @@ describe('a block takes the person off the list (safety)', () => {
     await act(async () => fireEvent.press(screen.getByTestId('info-member-u-1')))
     await act(async () => mockCard.props!.onBlocked('u-1'))
     expect(screen.queryByTestId('info-member-u-1')).toBeNull()
-    // Off the list, and still in the room: the count is the room's, as the Room and the chat say it (RC drive 3).
-    expect(screen.getByLabelText('In the room, 250')).toBeTruthy()
+    // Off the list: the heading counts the cards, so it drops by one; the hero line stays the room's 250.
+    expect(screen.getByLabelText('In the room, 249')).toBeTruthy()
+    expect(screen.getByText('250')).toBeTruthy()
     await act(async () => fireEvent(screen.getByTestId('info-list'), 'endReached'))
     // 99 held now, and the server's own list no longer has them: the next page starts at 99.
     expect(api.getChatParticipants).toHaveBeenLastCalledWith('g1', { limit: 100, offset: 99 })

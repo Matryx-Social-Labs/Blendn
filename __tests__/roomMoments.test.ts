@@ -194,9 +194,9 @@ describe('who is here now', () => {
 
   it('calls the grid "Everyone here" only while everyone in it is', () => {
     const head = (people: { insideNow?: boolean }[]) => everyoneHead(people, { hasMore: false, hereCount: 9 })
-    // "Everyone here" is the room's number (9), not the faces drawn: friends and "show online" off are counted, not listed.
-    expect(head([here('a'), here('b')])).toEqual({ title: 'Everyone here', count: 9 })
-    expect(head([])).toEqual({ title: 'Everyone here', count: 9 })
+    // The heading counts the cards under it: friends and "show online" off are in the room's 9, not in the grid.
+    expect(head([here('a'), here('b')])).toEqual({ title: 'Everyone here', count: 2 })
+    expect(head([])).toEqual({ title: 'Everyone here', count: 0 })
     expect(head([here('a'), left('b')])).toEqual({ title: 'Everyone who came', count: 2 })
   })
 
@@ -212,10 +212,10 @@ describe('who is here now', () => {
 })
 
 describe('one number for the room (RC drive 3)', () => {
-  it('says the Room’s number, you included: 483, not 482 (minus you) or the 100 faces loaded', () => {
+  it('counts the cards once the grid is whole (a hidden friend is not a card), the Room’s number while pages remain', () => {
     const faces = Array.from({ length: 100 }, (_, i) => ({ id: `p${i}`, insideNow: true }))
     expect(everyoneHead(faces, { hasMore: true, hereCount: 483 })).toEqual({ title: 'Everyone here', count: 483 })
-    expect(everyoneHead(faces, { hasMore: false, hereCount: 483 })).toEqual({ title: 'Everyone here', count: 483 })
+    expect(everyoneHead(faces, { hasMore: false, hereCount: 483 })).toEqual({ title: 'Everyone here', count: 100 })
   })
 })
 
