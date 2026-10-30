@@ -280,6 +280,18 @@ describe('<MomentReady> · the one celebration (Flow 2)', () => {
     expect(haptic.success).toHaveBeenCalledTimes(1)
   })
 
+  it('the stage root is never flattened, before or after done (SCRUM-921: Android crashed with "child already has a parent")', async () => {
+    // `done` flips the root's pointerEvents and accessibility props, which are what make Fabric flatten a View or not. A
+    // root that can be flattened is re-parented under its children on that flip, in the same batch as the Ready screen
+    // being replaced, and Android dies in addViewAt. jest cannot see the native crash; it can pin the one prop that stops it.
+    await render(<MomentReady onDone={jest.fn()} testID="r" />)
+    expect(screen.getByTestId('r', HIDDEN).props.collapsable).toBe(false)
+    expect(screen.getByTestId('r', HIDDEN).props.pointerEvents).toBe('auto')
+    await advance(1300)
+    expect(screen.getByTestId('r', HIDDEN).props.pointerEvents).toBe('none')
+    expect(screen.getByTestId('r', HIDDEN).props.collapsable).toBe(false)
+  })
+
   it('a tap on the mark skips (it is not a hit target)', async () => {
     await render(<MomentReady onDone={jest.fn()} testID="r" />)
     expect(screen.getByTestId('r-centre', HIDDEN).props.pointerEvents).toBe('none')
