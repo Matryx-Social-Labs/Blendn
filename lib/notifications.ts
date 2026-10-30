@@ -8,7 +8,7 @@ import { openWhenReady } from './pendingRoute'
 import { apiClient, TokenStorage } from './apiClient'
 import { bannerPresentation, isOnNotificationsScreen } from './inAppBanners'
 import { Logger } from './logger'
-import { forgetMessageRequests } from './queryCache'
+import { forgetMessageRequests, forgetPersonalChats } from './queryCache'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
 import { notePushPermission, readPushPermission, whenPermissionReadable } from './pushStatus'
 
@@ -554,8 +554,11 @@ export function landFromNotificationData(data: Record<string, any> | undefined) 
 export function navigateFromNotificationData(data: Record<string, any> | undefined) {
   try {
     const target = notificationTarget(data)
-    // The Banter's requests predate the notification being shown: it reads them again on arrival.
-    if (target === '/(tabs)/chat') forgetMessageRequests()
+    // The Banter's requests and people predate the notification being shown: it reads them again on arrival.
+    if (target === '/(tabs)/chat') {
+      forgetMessageRequests()
+      forgetPersonalChats()
+    }
     if (target) openWhenReady(target)
   } catch (e) {
     Logger.warn('notifications', 'Failed to navigate from notification', { error: e })

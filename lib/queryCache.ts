@@ -90,3 +90,9 @@ export const MESSAGE_REQUESTS_KEY = 'message_requests_'
 
 /** A request has arrived that no socket event told the Banter about: the next read goes to the server. */
 export const forgetMessageRequests = (): void => queryCache.invalidate(MESSAGE_REQUESTS_KEY)
+
+/** `personal_chats_<userId>`: the Banter's People. */
+export const PERSONAL_CHATS_KEY = 'personal_chats_'
+
+/** A conversation has begun that no socket event told the Banter about (an accepted request): the next read goes to the server. */
+export const forgetPersonalChats = (): void => queryCache.invalidate(PERSONAL_CHATS_KEY)
