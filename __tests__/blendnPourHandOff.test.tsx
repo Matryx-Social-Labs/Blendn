@@ -31,7 +31,10 @@ jest.mock('react-native-gesture-handler', () => ({
   ...jest.requireActual('react-native-gesture-handler'),
   GestureDetector: ({ children }: { children: React.ReactNode }) => children,
 }))
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), navigate: jest.fn(), back: jest.fn(), replace: jest.fn() } }))
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), navigate: jest.fn(), back: jest.fn(), replace: jest.fn() },
+  useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
+}))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
 }))

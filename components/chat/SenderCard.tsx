@@ -117,7 +117,7 @@ export function SenderCard({
     onClose()
     router.push({
       pathname: '/user/[id]',
-      params: { id: who.id, ...(eventId ? { eventId } : {}), pseudonym: who.name, roomSeed: `${chatGroupId}:${who.id}` },
+      params: { id: who.id, ...(eventId ? { eventId } : {}), ...(state === 'liked' ? { liked: '1' } : {}), pseudonym: who.name, roomSeed: `${chatGroupId}:${who.id}` },
     } as never)
   }
 

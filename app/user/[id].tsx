@@ -125,11 +125,14 @@ function UserProfileInner() {
    * Asked by a real id with no room, the server still says "Attendee", which
    * this page never shows (`lib/profileIdentity.ts`).
    */
-  const { id, eventId, pseudonym, roomSeed } = useLocalSearchParams<{
+  const { id, eventId, pseudonym, roomSeed, liked: likedInRoom, conversationId: roomConversationId } = useLocalSearchParams<{
     id: string
     eventId?: string
     pseudonym?: string
     roomSeed?: string
+    /** What the room already knows of this person (SCRUM-953): `'1'` once you liked them, and the conversation a mutual like opened. */
+    liked?: string
+    conversationId?: string
   }>()
   const insets = useSafeAreaInsets()
   const { user: authUser } = useAuth()
@@ -155,7 +158,7 @@ function UserProfileInner() {
   useEffect(() => markSelf(ctaMode === 'self'), [ctaMode, markSelf])
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [liked, setLiked] = useState(false)
+  const [liked, setLiked] = useState(likedInRoom === '1')
   const [likeBusy, setLikeBusy] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
@@ -238,6 +241,14 @@ function UserProfileInner() {
       return
     }
 
+    // Still anonymous to you, and the room knows the conversation a mutual like opened: the lists could not match a handle.
+    if (roomConversationId) {
+      setConversationId(roomConversationId)
+      setCtaMode('message')
+      setCtaMessage(CTA_HINT.message)
+      return
+    }
+
     // An older server, or a profile still anonymous to you: the lists.
     try {
       // Cached: this runs on mount, and the conversation list changes far more
@@ -279,7 +290,7 @@ function UserProfileInner() {
     } catch {}
     setCtaMode('connect')
     setCtaMessage(CTA_HINT.connect)
-  }, [authUser])
+  }, [authUser, roomConversationId])
 
 
   // State is set only in the callbacks, once the requests have settled; the

@@ -2,7 +2,7 @@ import { barHeight, barTop } from '../../lib/barGeometry'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
-import { BackHandler, Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 import Animated, {
   Easing,
   FadeIn,
@@ -39,6 +39,7 @@ import { showSheet } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useLatest } from '../../lib/useLatest'
+import { useFocusedBackHandler } from '../../lib/useFocusedBackHandler'
 import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
 import { myMainPhoto } from '../../lib/myPhoto'
@@ -155,15 +156,15 @@ export function BlendnScreen() {
   /** The content's own layer that back should close first (People from tonight over the Recap), or false. */
   const backGuardRef = useRef<(() => boolean) | null>(null)
 
-  // Android back closes the overlay rather than leaving the tabs underneath.
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+  // Android back closes the overlay rather than leaving the tabs underneath — while it is the screen in front: a chat or
+  // a DM pushed from the Room goes back to the Room first (SCRUM-952).
+  useFocusedBackHandler(
+    useCallback(() => {
       if (backGuardRef.current?.()) return true
       close()
       return true
-    })
-    return () => sub.remove()
-  }, [close])
+    }, [close])
+  )
 
   // The Room is people: the rose world, one hue for the whole screen (People | Crews, the chips, the sheets).
   return (
@@ -675,12 +676,19 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     [room, sent]
   )
   const openProfile = useCallback(
-    (p: OpenCard) => {
+    (p: OpenCard, seen?: Pick<RoomPerson, 'liked' | 'conversationId'>) => {
       setOpen(null)
       // The event travels with the id (the profile's Like needs the room), and the pseudonym titles it until the server says who they are.
+      // What the room knows of them goes too: the profile cannot ask a handle whether you liked or matched (SCRUM-953).
       router.push({
         pathname: '/user/[id]',
-        params: { id: p.id, ...(eventId ? { eventId, roomSeed: `${eventId}:${p.id}` } : {}), ...(p.name ? { pseudonym: p.name } : {}) } as never,
+        params: {
+          id: p.id,
+          ...(eventId ? { eventId, roomSeed: `${eventId}:${p.id}` } : {}),
+          ...(p.name ? { pseudonym: p.name } : {}),
+          ...(seen?.liked ? { liked: '1' } : {}),
+          ...(seen?.conversationId ? { conversationId: seen.conversationId } : {}),
+        } as never,
       })
     },
     [eventId]
@@ -1083,7 +1091,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         }}
         onSayHi={() => cardPerson?.conversationId && sayHi(cardPerson.conversationId, cardPerson)}
         onMore={() => card && safety(card)}
-        onViewProfile={() => card && openProfile(card)}
+        onViewProfile={() => card && openProfile(card, cardPerson ?? undefined)}
         testID="person-card"
       />
 
