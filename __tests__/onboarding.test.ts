@@ -214,6 +214,8 @@ describe('the birth date', () => {
     expect(isCompleteDateOfBirth('1998-02-30')).toBe(false) // rolls to 2 March
     expect(isCompleteDateOfBirth('3000-01-01')).toBe(false)
     expect(isCompleteDateOfBirth(dobForAge(9))).toBe(false)
+    expect(isCompleteDateOfBirth(dobForAge(114))).toBe(false) // SCRUM-923: 1912 for 1995
+    expect(isCompleteDateOfBirth(dobForAge(100))).toBe(true)
   })
 
   it('pads a single-digit day and month', () => {
