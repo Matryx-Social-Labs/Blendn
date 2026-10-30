@@ -41,6 +41,7 @@ import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterC
 import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
 import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
+import { useLocationSharing } from '../../lib/shareLocation'
 import { useReducedMotion } from '../../lib/motion'
 import { searchTermOf } from '../../lib/searchTerm'
 import { showSheet } from '../../lib/sheet'
@@ -393,7 +394,10 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   // Narrower than `cityResolved`: the feed may fire once the city is *known* (a stored one is, from disk), without waiting for the city list.
   const [feedCityReady, setFeedCityReady] = useState(false)
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
-  const [deviceCity, setDeviceCity] = useState<string | null>(null)
+  // "Share location for nearby events" off: the fix is never turned into a place, so no city is inferred, offered or reported (SCRUM-908).
+  const sharing = useLocationSharing()
+  const [namedCity, setNamedCity] = useState<string | null>(null)
+  const deviceCity = sharing ? namedCity : null
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   // Bumped by every city the person chooses, so the map moves even to the city it already shows; `here` when they chose where they stand.
   const [cityPick, setCityPick] = useState({ n: 0, here: false })
@@ -1097,7 +1101,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * two match, so the value used as a filter is always one the server knows.
    */
   useEffect(() => {
-    if (!userLocation) return
+    if (!userLocation || !sharing) return
     let cancelled = false
     ;(async () => {
       try {
@@ -1106,7 +1110,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           longitude: userLocation.longitude,
         })
         if (cancelled) return
-        setDeviceCity(place?.city || place?.subregion || place?.region || null)
+        setNamedCity(place?.city || place?.subregion || place?.region || null)
       } catch (error) {
         // Not being able to name where you are costs a "switch?" prompt and a
         // distance label. It must not interrupt browsing.
@@ -1116,7 +1120,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     return () => {
       cancelled = true
     }
-  }, [userLocation])
+  }, [userLocation, sharing])
 
   /*
    * Once the device city is known, a **guess** may be improved. A choice is not.
