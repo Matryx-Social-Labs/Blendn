@@ -110,18 +110,19 @@ describe('what is not a block', () => {
 /*
  * A block or a leave closes the conversation on the server. The Banter's People list is a 60 s copy, and a read that
  * races the forced one the block starts can leave it on screen until a pull-to-refresh (SCRUM-919): the copy goes, and
- * the next sync reads the server.
+ * the next read is the server's.
  */
 describe('the conversation a block or a leave closes leaves the cached People (SCRUM-919)', () => {
   it.each([
     ...paths,
     ['leaveConversation (unmatch)', () => apiClient.leaveConversation('c1', { action: 'unmatch' })] as [string, () => Promise<{ success: boolean }>],
-  ])('%s drops it and marks the chat domain dirty when the server says yes', async (_n, run) => {
+  ])('%s drops it when the server says yes', async (_n, run) => {
     server(ok({ blocked: true }))
     cachePeople()
     await run()
     expect(queryCache.get(PEOPLE)).toBeNull()
-    expect(isDomainDirty('chat')).toBe(true)
+    // Not the open conversation's own sync: it has just been closed.
+    expect(isDomainDirty('chat')).toBe(false)
   })
 
   it.each(paths)('%s leaves it when the server refuses', async (_n, run) => {

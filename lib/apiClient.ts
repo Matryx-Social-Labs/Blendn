@@ -13,7 +13,6 @@ import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from '.
 import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
 import type { PlusStatus } from './plus'
 import { noteBlocked } from './blockEpoch'
-import { markDomainsDirty } from './liveSyncState'
 import { forgetPersonalChats } from './queryCache'
 import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { namedList, type NamedList } from './namedList'
@@ -678,12 +677,12 @@ function noteBlockedOn<T extends { success: boolean }>(result: T): T {
 
 /**
  * A conversation was closed on the server (a leave, or a block of somebody you talk to): the Banter's People copy is
- * dropped and the chat domain marked, so its next read is the server's. The forced read a block starts can lose a race
- * with the one the return to the Banter starts, and leave the closed row on screen until a pull-to-refresh (SCRUM-919).
+ * dropped, so its next read is the server's. The forced read a block starts can lose a race with the one the return to
+ * the Banter starts, and leave the closed row on screen until a pull-to-refresh (SCRUM-919). Not marked dirty: that wakes
+ * the sync of the open conversation, which has just been closed.
  */
 function notePeopleClosed(): void {
   forgetPersonalChats()
-  markDomainsDirty(['chat'])
 }
 
 export interface ApiResponse<T = unknown> {
