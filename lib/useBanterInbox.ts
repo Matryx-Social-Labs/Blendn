@@ -315,8 +315,9 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
   // The loaders sit above every callback and effect that calls them: React
   // Compiler rejects a closure that reads a binding before its declaration.
   /*
-   * `fresh`: past the first read, a load that was asked for is a read of the server. The cache was already consulted by
-   * `loadChats` (a request arrives with no socket event, and the 60 s copy, or `apiClient`'s 30 s one, hid it: SCRUM-907).
+   * `fresh`: a load that was asked for is a read of the server, never `apiClient`'s 30 s stale-while-revalidate copy. `loadChats`
+   * has already consulted the 60 s cache, and a request arrives with no socket event: a copy served here hid it, most of all to a
+   * Banter that had only just mounted, as the one View on a notification pushes (SCRUM-907).
    */
   const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false, fresh = force) => {
     if (cacheKey && !fresh) {
@@ -518,7 +519,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       }
 
       // Started with the lists, not after them: it never rejects, and waiting cost the inbox a third round trip in series.
-      const requestsLoad = shouldFetchRequests ? loadMessageRequests(loadId, requestsCacheKey, force, force || lastFetchRef.current.requests > 0) : null
+      const requestsLoad = shouldFetchRequests ? loadMessageRequests(loadId, requestsCacheKey, force, true) : null
 
       if (shouldFetchList) {
         // If queryCache was empty (e.g. invalidated after a send), also bypass apiClient's
