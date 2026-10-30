@@ -12,7 +12,9 @@ import { useRefusedPulse } from '../../components/onboarding/useRefusedPulse'
 import {
   ADULTS_ONLY,
   canContinue,
+  DOB_TOO_OLD,
   isCompleteDateOfBirth,
+  isOverAccountAge,
   isUnderAccountAge,
   joinDateOfBirth,
   NAME_LENGTH_SENTENCE,
@@ -136,8 +138,9 @@ function BasicsScreenInner() {
    * which is never true once the boxes are full, so it never showed.
    */
   const underAge = isUnderAccountAge(dateOfBirth)
-  const notADate = !underAge && !!dateOfBirth && !isCompleteDateOfBirth(dateOfBirth)
-  const dateError = underAge ? ADULTS_ONLY : notADate ? NOT_A_DATE : undefined
+  const tooOld = isOverAccountAge(dateOfBirth)
+  const notADate = !underAge && !tooOld && !!dateOfBirth && !isCompleteDateOfBirth(dateOfBirth)
+  const dateError = underAge ? ADULTS_ONLY : tooOld ? DOB_TOO_OLD : notADate ? NOT_A_DATE : undefined
 
   return (
     <OnboardingScreen

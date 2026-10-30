@@ -66,6 +66,16 @@ it('30 February is “not a date we recognise”, not under 18, with no exit off
   expect(screen.queryByTestId('onboarding-under-age-sign-out')).toBeNull()
 })
 
+it('a date more than 100 years back is told to enter the real one, not that Blend’n is 18+ (SCRUM-923)', async () => {
+  await render(<BasicsScreen />)
+  await dob('15', '06', '1912')
+  expect(screen.getByText('Enter your real date of birth.')).toBeTruthy()
+  expect(screen.queryByText('That is not a date we recognise.')).toBeNull()
+  expect(screen.queryByText('Blend’n is for people 18 and over.')).toBeNull()
+  expect(screen.queryByTestId('onboarding-under-age-sign-out')).toBeNull()
+  expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
+})
+
 it('a one-letter name is told "Use 2 to 100 letters." once the field is left, and Continue waits', async () => {
   mockDraft = { name: '' }
   await render(<BasicsScreen />)
