@@ -49,7 +49,7 @@ afterEach(() => jest.useRealTimers())
 
 describe('<VenuePass>', () => {
   const pass = (props: Partial<React.ComponentProps<typeof VenuePass>> = {}) =>
-    render(<VenuePass title="Vinyl Night" hereCount={14} tasteCount={4} onConfirm={jest.fn()} testID="v" {...props} />)
+    render(<VenuePass title="Vinyl Night" hereCount={14} tasteCount={3} onConfirm={jest.fn()} testID="v" {...props} />)
 
   it('is the sheet tier at radius 24, with the thumb, the label, the title and N inside now', async () => {
     await pass({ cover: 'https://example.com/cover.jpg' })
@@ -64,13 +64,30 @@ describe('<VenuePass>', () => {
   it('reads as one head, then the tease (never who), then the hold with the consequence as its hint', async () => {
     await pass()
     expect(screen.getByLabelText('You’re here. Vinyl Night. 14 inside now.')).toBeTruthy()
-    expect(screen.getByLabelText('4 people here share your taste')).toBeTruthy()
+    expect(screen.getByLabelText('3 or more people here share your taste')).toBeTruthy()
     expect(screen.getAllByText('?', { includeHiddenElements: true })).toHaveLength(3)
     const hold = screen.getByRole('button', { name: 'Hold to blend in' })
     expect(hold.props.accessibilityHint).toBe('Checks you in. Other people at this event will see you.')
   })
 
-  it('no taste matches: no tease; nobody in yet: “Be the first one in”', async () => {
+  it('the count is a floor, so it reads as one: 3+ and 10+, never “3 people” when 7 share', async () => {
+    await pass({ tasteCount: 10 })
+    expect(screen.getByText('10+ here share your taste', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/people here/, { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('under three is never shown, even from a stale payload: no “1+” pointing at one person', async () => {
+    await pass({ tasteCount: 2 })
+    expect(screen.queryByText(/share your taste/, { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('no taste matches (null, or 0): no tease; nobody in yet: “Be the first one in”', async () => {
+    await pass({ tasteCount: null })
+    expect(screen.queryByText('?', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByText(/share your taste/, { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('nobody in yet: no tease, and “Be the first one in”', async () => {
     await pass({ tasteCount: 0, hereCount: 0 })
     expect(screen.queryByText('?', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByLabelText('You’re here. Vinyl Night. Be the first one in.')).toBeTruthy()

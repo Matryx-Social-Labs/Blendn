@@ -166,7 +166,7 @@ describe('the pass (#06, #07)', () => {
     await draw({ insideEvent: event('door', { title: 'Vinyl Night', hereCount: 12, tasteMatchCount: 3 }) })
     expect(screen.getByTestId('tonight-pass', HIDDEN)).toBeTruthy()
     expect(screen.getByText('YOU’RE HERE', HIDDEN)).toBeTruthy()
-    expect(screen.getByText('3 people here share your taste', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('3+ here share your taste', HIDDEN)).toBeTruthy()
     expect(screen.getByText('Checks you in. Other people at this event will see you.', HIDDEN)).toBeTruthy()
     expect(screen.queryByText('Event door', HIDDEN)).toBeNull()
   })
