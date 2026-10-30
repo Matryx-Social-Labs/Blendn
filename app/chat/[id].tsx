@@ -817,6 +817,14 @@ function GroupChatInner() {
     if (messagesCacheKey) queryCache.invalidate(messagesCacheKey)
     void loadMessagesRef.current(true)
   })
+  /* Removed, then restored (SCRUM-949): the subscription above is off while outside, so an unban has its own. */
+  const restoredUserId = currentUser?.id
+  useEffect(() => {
+    if (outside?.kind !== 'removed' || !restoredUserId) return
+    return subscribeToChatMemberBanned(roomId, (data) => {
+      if (data.userId === restoredUserId && !data.banned) void loadMessagesRef.current(true)
+    })
+  }, [outside?.kind, roomId, restoredUserId, loadMessagesRef])
   const roomEventIdRef = useLatest(roomInfo.eventId ?? null)
   useEffect(
     () =>

@@ -263,6 +263,22 @@ describe('closed and removed rooms of a crew or a Blend (C3, C4)', () => {
     expect(screen.getByText('You were removed from this room')).toBeTruthy()
   })
 
+  it('an unban brings the room back without reopening it (SCRUM-949)', async () => {
+    mockParams = { id: 'g1' }
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] } })
+    await render(<GroupChat />)
+    await flush()
+    await act(async () => mockBanned.forEach((f) => f({ userId: 'u1', banned: true })))
+    expect(screen.getByText('You were removed from this room')).toBeTruthy()
+    ;(apiClient.getChatMessages as jest.Mock).mockClear()
+
+    await act(async () => mockBanned.forEach((f) => f({ userId: 'u1', banned: false })))
+    await flush()
+
+    expect(apiClient.getChatMessages).toHaveBeenCalled()
+    expect(screen.queryByText('You were removed from this room')).toBeNull()
+  })
+
   it('a crew room you are not in does not tell you to check in at an event', async () => {
     ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(refuse('FORBIDDEN'))
     await render(<GroupChat />)
