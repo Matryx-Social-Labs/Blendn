@@ -4,7 +4,8 @@ import { AppState } from 'react-native'
 import { apiClient } from './apiClient'
 import { iconBadgeFor, setAppIconBadge } from './appBadge'
 import { Logger } from './logger'
-import { forgetMessageRequests } from './queryCache'
+import { markDomainsDirty } from './liveSyncState'
+import { forgetMessageRequests, forgetPersonalChats } from './queryCache'
 import { subscribeToBell, subscribeToUserNotifications } from './socketClient'
 
 /**
@@ -113,6 +114,11 @@ export function useInboxBadgeSync(userId?: string | null): void {
       subscribeToBell((row) => {
         // A message request has no socket event of its own, only this row: the Banter's list is stale until it reads again (its next sync then goes to the server).
         if (row?.kind === 'message_request') forgetMessageRequests()
+        // Your request was answered: an accept made the conversation on the server, and only this row says so. People reads again, now.
+        if (row?.kind === 'message_request_response') {
+          forgetPersonalChats()
+          markDomainsDirty(['chat'])
+        }
         void refreshInboxBadge()
       }),
     []

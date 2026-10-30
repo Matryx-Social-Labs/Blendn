@@ -15,6 +15,7 @@ jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(async () =
 import { apiClient } from '../lib/apiClient'
 import { queryCache } from '../lib/queryCache'
 import { banterUnread, markBellRead, refreshInboxBadge, resetInboxBadge, useInboxBadge, useInboxBadgeSync } from '../lib/inboxBadge'
+import { clearDirtyDomains, isDomainDirty } from '../lib/liveSyncState'
 import { subscribeToBell, subscribeToUserNotifications } from '../lib/socketClient'
 /* eslint-enable import/first */
 
@@ -146,5 +147,31 @@ describe('a message request makes the Banter read its requests again (SCRUM-907)
   it('another kind of row leaves them', async () => {
     await land('event_update')
     expect(queryCache.get(KEY)).not.toBeNull()
+  })
+})
+
+describe('an accepted message request makes the Banter read its people again (SCRUM-918)', () => {
+  // The accepted request creates the conversation on the server; the sender is told by the bell's row only.
+  const KEY = 'personal_chats_u1'
+  const land = async (kind: string) => {
+    api.getNotifications.mockResolvedValue(feed({ unreadCount: 1, badgeCount: 1 }))
+    queryCache.set(KEY, [], 60_000)
+    await render(<Probe />)
+    const onRow = (subscribeToBell as jest.Mock).mock.calls.at(-1)[0]
+    await act(async () => onRow({ kind }))
+  }
+
+  it('a message_request_response row drops the cached people and marks the chat domain dirty', async () => {
+    clearDirtyDomains(['chat'])
+    await land('message_request_response')
+    expect(queryCache.get(KEY)).toBeNull()
+    expect(isDomainDirty('chat')).toBe(true)
+  })
+
+  it('another kind of row leaves them', async () => {
+    clearDirtyDomains(['chat'])
+    await land('event_update')
+    expect(queryCache.get(KEY)).not.toBeNull()
+    expect(isDomainDirty('chat')).toBe(false)
   })
 })

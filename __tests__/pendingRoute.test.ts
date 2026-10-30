@@ -157,3 +157,19 @@ describe('View on a request notification (SCRUM-907)', () => {
     expect(queryCache.get(KEY)).not.toBeNull()
   })
 })
+
+describe('View on a "request accepted" notification (SCRUM-918)', () => {
+  const KEY = 'personal_chats_u1'
+  beforeEach(() => queryCache.set(KEY, [], 60_000))
+
+  it('lands on the Banter and drops its cached people, so the new conversation is read when it arrives', () => {
+    navigateFromNotificationData({ type: 'message_request_response', requestId: 'r1', conversationId: 'c1' })
+    expect(takePendingRoute()).toBe('/(tabs)/chat')
+    expect(queryCache.get(KEY)).toBeNull()
+  })
+
+  it('a notification that goes elsewhere leaves them', () => {
+    navigateFromNotificationData({ type: 'rating_request', eventId: 'e1' })
+    expect(queryCache.get(KEY)).not.toBeNull()
+  })
+})

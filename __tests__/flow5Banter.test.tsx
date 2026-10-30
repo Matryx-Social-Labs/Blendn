@@ -95,7 +95,7 @@ import Banter from '../app/(tabs)/chat'
 import { apiClient } from '../lib/apiClient'
 import { clearOutbox, dmThread, keepFailed, roomThread, setDraft } from '../lib/chatOutbox'
 import { markDomainsDirty } from '../lib/liveSyncState'
-import { forgetMessageRequests, queryCache } from '../lib/queryCache'
+import { forgetMessageRequests, forgetPersonalChats, queryCache } from '../lib/queryCache'
 import { resetRoomMembership } from '../lib/roomMembership'
 import { noteBlocked } from '../lib/blockEpoch'
 import { H } from '../lib/haptics'
@@ -703,6 +703,21 @@ describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
     await open()
     expect(screen.getByText(requestCard)).toBeTruthy()
     expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending' }, { force: true })
+  })
+
+  it('a conversation made by an accepted request shows on the next sync once the bell has said so (SCRUM-918)', async () => {
+    // Arrange: People loaded empty (and cached); the other person accepts, and the SWR copy still says empty.
+    serve({ dms: [], requests: [] })
+    await open()
+    expect(screen.queryByText(/See you there/)).toBeNull()
+    api.getConversations.mockImplementation((async (o?: { force?: boolean }) => ({ success: true, data: o?.force ? [dm] : [] })) as never)
+    // Act: the bell's row for the response lands (lib/inboxBadge), and the Banter syncs.
+    forgetPersonalChats()
+    await act(async () => void (await mockSync.onSync?.()))
+    await flush()
+    // Assert
+    expect(screen.getByText(/See you there/)).toBeTruthy()
+    expect(api.getConversations).toHaveBeenLastCalledWith({ force: true })
   })
 
   it('a quiet sync with nothing known asks for no requests inside the throttle', async () => {
