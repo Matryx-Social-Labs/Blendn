@@ -142,6 +142,18 @@ describe('the camera asks for the camera and nothing else', () => {
     await expect(p).resolves.toBe(picked)
   })
 
+  it('no camera under R8, where the code is renamed to ERR_UNEXPECTED, is still "No camera here"', async () => {
+    picker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true, canAskAgain: true } as never)
+    picker.launchCameraAsync.mockRejectedValue(
+      Object.assign(new Error("Failed to resolve activity to handle the intent of type 'image/*'"), { code: 'ERR_UNEXPECTED' })
+    )
+    const p = pickImage('camera')
+    await flush()
+    expect(lastSheet().title).toBe('No camera here')
+    press('Choose from photos')
+    await expect(p).resolves.toBe(picked)
+  })
+
   it('a camera that opened but then failed (SCRUM-947) is never called "no camera"', async () => {
     picker.requestCameraPermissionsAsync.mockResolvedValue({ granted: true, canAskAgain: true } as never)
     picker.launchCameraAsync.mockRejectedValue(Object.assign(new Error('unexpected'), { code: 'ERR_UNEXPECTED' }))

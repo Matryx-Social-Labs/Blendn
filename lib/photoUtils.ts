@@ -188,8 +188,15 @@ const offerLibraryInstead = (
     ]
   )
 
-/** expo-image-picker's own code for "nothing on this device handles the camera intent" (Android). */
-const NO_CAMERA_CODE = 'ERR_MISSING_ACTIVITY_TO_HANDLE_INTENT'
+/**
+ * expo-image-picker's "nothing on this device handles the camera intent" (Android). The code is
+ * derived from the Kotlin class name, which R8 renames in a release build (driven: it arrives as
+ * ERR_UNEXPECTED), so the message — a string literal that survives — is read too.
+ */
+const isNoCamera = (error: unknown) => {
+  const { code, message } = (error ?? {}) as { code?: string; message?: string }
+  return code === 'ERR_MISSING_ACTIVITY_TO_HANDLE_INTENT' || /resolve activity to handle/i.test(message ?? '')
+}
 
 /** Where the photo comes from: the camera or the library. */
 export const showPhotoSourceActionSheet = (): Promise<'camera' | 'library' | null> =>
@@ -248,7 +255,7 @@ export const pickImage = async (
     // any other failure (SCRUM-947 threw after the camera had saved its file)
     // is the camera not working, and says so. The gallery still works either way.
     Logger.warn('profile', 'Camera did not open, offering the library', { error })
-    fallback = (error as { code?: string })?.code === NO_CAMERA_CODE ? 'unavailable' : 'failed'
+    fallback = isNoCamera(error) ? 'unavailable' : 'failed'
   }
 
   const next = await offerLibraryInstead(fallback)
