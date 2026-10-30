@@ -12,6 +12,8 @@ const mockFetch = jest.fn()
 jest.mock('../lib/blockedUsersPage', () => ({ fetchBlockedPage: (...a: unknown[]) => mockFetch(...a) }))
 jest.mock('../lib/safetyUtils', () => ({ unblockUser: jest.fn() }))
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
+const mockShowSheet = jest.fn()
+jest.mock('../lib/sheet', () => ({ ...jest.requireActual('../lib/sheet'), showSheet: (...a: unknown[]) => mockShowSheet(...a) }))
 
 import BlockedUsers from '../app/blocked-users'
 
@@ -19,7 +21,10 @@ const user = (i: number) => ({ blocked_id: `u${i}`, blocked_user_name: `Person $
 const users = (from: number, n: number) => Array.from({ length: n }, (_, i) => user(from + i))
 const ok = (list: unknown[], nextCursor: string | null = null) => ({ ok: true, page: { users: list, nextCursor } })
 
-beforeEach(() => mockFetch.mockReset())
+beforeEach(() => {
+  mockFetch.mockReset()
+  mockShowSheet.mockReset()
+})
 
 it('nobody blocked says so, top-aligned as Muted rooms is (D-L11)', async () => {
   mockFetch.mockResolvedValue(ok([]))
@@ -49,6 +54,19 @@ it('one person is one row with Unblock', async () => {
   await render(<BlockedUsers />)
   expect(await screen.findByText('Person 1')).toBeTruthy()
   expect(screen.getByLabelText('Unblock Person 1')).toBeTruthy()
+})
+
+it('the Unblock sheet promises only what unblocking does (SCRUM-909)', async () => {
+  // A block that closed a conversation leaves it closed for good (the server answers a new request with 404),
+  // and the list does not say which blocks did: so the line must be true for both.
+  mockFetch.mockResolvedValue(ok([user(1)]))
+  await render(<BlockedUsers />)
+  await screen.findByText('Person 1')
+  await act(async () => fireEvent.press(screen.getByLabelText('Unblock Person 1')))
+  const sheet = mockShowSheet.mock.calls[0][0]
+  expect(sheet.title).toBe('Unblock Person 1?')
+  expect(sheet.message).toBe('They can see your profile again. A conversation you ended stays closed. They are not told.')
+  expect(sheet.message).not.toMatch(/message you again/)
 })
 
 it('asks for the next page when the end comes into view, once, and adds it without repeats', async () => {

@@ -123,7 +123,7 @@ function BlockedUsersContent() {
       kind: 'actions',
       hue: 'violet',
       title: `Unblock ${name}?`,
-      message: 'They can see your profile and message you again. They are not told.',
+      message: 'They can see your profile again. A conversation you ended stays closed. They are not told.',
       actions: [
         {
           label: 'Unblock',
