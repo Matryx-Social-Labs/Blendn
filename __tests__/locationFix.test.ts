@@ -165,12 +165,6 @@ describe('getCurrentLocation', () => {
   })
 })
 
-/*
- * The wait between "Checking you in…" and "You're in" was a cold
- * BestForNavigation fix started only once the hold ended: seconds, up to the
- * 15 s deadline. A fix is now started when the pass shows, and a recent one
- * good enough for the door is used instead of asking again.
- */
 // SCRUM-930: iOS reports -1 for an invalid accuracy. It is truthy, so `|| 999` kept it, and the server refuses a negative.
 describe('an accuracy below zero is no accuracy', () => {
   it.each([[-1], [-0.5], [NaN], [Infinity], [null], [undefined]])('validAccuracy(%s) is unknown', (raw) => {
@@ -199,6 +193,12 @@ describe('an accuracy below zero is no accuracy', () => {
   })
 })
 
+/*
+ * The wait between "Checking you in…" and "You're in" was a cold
+ * BestForNavigation fix started only once the hold ended: seconds, up to the
+ * 15 s deadline. A fix is now started when the pass shows, and a recent one
+ * good enough for the door is used instead of asking again.
+ */
 describe('a fix that is already there', () => {
   const recentFix = (accuracy: number, ageMs = 0) =>
     ({ coords: { latitude: 12.97, longitude: 77.59, accuracy }, timestamp: Date.now() - ageMs }) as any
@@ -219,6 +219,14 @@ describe('a fix that is already there', () => {
     await warmLocationFix()
     expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
 
+    expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 9 })
+    expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('a cached fix saying -1 is not reused: a new one is asked for (SCRUM-930)', async () => {
+    const { getCurrentLocation: locate } = fresh()
+    loc.getLastKnownPositionAsync.mockResolvedValue(recentFix(-1, 1000))
+    loc.getCurrentPositionAsync.mockResolvedValue(recentFix(9))
     expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 9 })
     expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
   })
