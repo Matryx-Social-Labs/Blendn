@@ -44,7 +44,7 @@ export interface TonightEvent {
   capacity: number | null
   /** Saved or RSVP'd — yours, so it sorts first. */
   going: boolean
-  /** How many here share your taste; null when withheld, unknown, or not fetched. */
+  /** How many here share your taste, as the server's floor (3 or 10, shown "3+"); null when withheld, unknown, or not fetched. */
   tasteMatchCount: number | null
   /** RSVPs, for the card's "N going" pill (Flow 4 Tonight #06); null until the detail answers (the list carries none). */
   goingCount: number | null

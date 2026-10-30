@@ -32,7 +32,7 @@ const EVENTS: TonightEvent[] = [
     hereCount: 23,
     capacity: 80,
     going: true,
-    tasteMatchCount: 4,
+    tasteMatchCount: 3,
     goingCount: 9,
   },
   {
@@ -74,7 +74,7 @@ const EVENTS: TonightEvent[] = [
     hereCount: 41,
     capacity: 60,
     going: false,
-    tasteMatchCount: 7,
+    tasteMatchCount: 10,
     goingCount: 31,
   },
 ]

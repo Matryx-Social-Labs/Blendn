@@ -16,12 +16,14 @@ const THUMB = SIZE.primary
 const TEASE_DISC = SIZE.tag
 const TEASE_SHOWN = 3
 const TEASE_RING = tint(COLOR.ink, 0.8)
+/** The least the server will count (3), so the least the tease will show. */
+const TASTE_FLOOR = 3
 
 export type VenuePassProps = {
   title: string
   cover?: string | null
   hereCount: number
-  /** "N people here share your taste": a count from the server (never under three), never who. */
+  /** "N+ here share your taste": the server's bucket floor (3 or 10, never under three; null when withheld), read as a floor, never who. */
   tasteCount?: number | null
   /** "Hold to switch" when checking in here takes you out of another room (ROUND3 4.8). */
   holdLabel?: string
@@ -49,7 +51,7 @@ export type VenuePassProps = {
  * (guidelines/components/VenuePass.html): a sheet-tier panel (glass on iOS,
  * solid on Android and under Reduce Transparency) pinned above the tab bar.
  * The thumb, the Geist Mono "You're here", the title, how many are inside,
- * three "?" discs with "N people here share your taste" (never who), then the
+ * three "?" discs with "N+ here share your taste" (never who), then the
  * HoldToConfirm and the consequence in one line.
  *
  * Its haptics are the hold's: `H.tick` ×3, `H.commit`, `H.error` on a refusal
@@ -84,7 +86,9 @@ export function VenuePass({
   const inside = hereCount > 0 ? `${hereCount} inside now` : 'Be the first one in'
   // Disabled is away from the door (SCRUM-882): the pass says the night is on, never that you are there.
   const where = disabled ? 'Live now' : 'You’re here'
-  const tease = tasteCount && tasteCount > 0 ? `${tasteCount} ${tasteCount === 1 ? 'person' : 'people'} here share your taste` : null
+  // A floor, not a count (the server buckets it: 3 or 10), so "3+", never "3 people" when seven share.
+  // Never under three (the server's own floor): a stale or older payload cannot show "1+" and point at one person.
+  const tease = tasteCount && tasteCount >= TASTE_FLOOR ? `${tasteCount}+ here share your taste` : null
 
   return (
     <View testID={testID} style={styles.pass}>
@@ -110,7 +114,7 @@ export function VenuePass({
         </View>
       </View>
       {tease ? (
-        <View accessible accessibilityLabel={tease} style={styles.tease}>
+        <View accessible accessibilityLabel={`${tasteCount} or more people here share your taste`} style={styles.tease}>
           <View style={styles.discs}>
             {Array.from({ length: TEASE_SHOWN }, (_, i) => (
               <View key={i} style={[styles.disc, i > 0 && styles.overlap]}>

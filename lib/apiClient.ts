@@ -619,9 +619,10 @@ export interface LikeOutcome {
 /**
  * The room from outside it: a number, and how many of them share your taste.
  *
- * `tasteMatchCount` is null under three people — "1 person here shares your
- * taste" in a room of two is that person — and blocked users are excluded
- * server-side, so neither number can be walked back to anybody.
+ * `tasteMatchCount` is a bucket floor, `null | 3 | 10` (null under three: "1
+ * person here shares your taste" in a room of two is that person), so it is
+ * shown as "3+" / "10+". Blocked users are excluded server-side, so neither
+ * number can be walked back to anybody.
  */
 export interface RoomPreview {
   hereCount: number
