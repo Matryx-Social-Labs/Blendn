@@ -252,8 +252,8 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     api.getEvent.mockResolvedValue(detail(run(true)) as never)
     await open()
     await screen.findByTestId('scene-when')
-    // Three days: the first day's date to the last, the month said once.
-    expect(screen.getByLabelText(/^Vinyl Night\. \w{3} \d+ to \w{3} \d+ \w{3}\./)).toBeTruthy()
+    // Three days: the first day's date to the last, the month said once (twice when the run crosses a month end).
+    expect(screen.getByLabelText(/^Vinyl Night\. \w{3} \d+( \w{3})? to \w{3} \d+ \w{3}\./)).toBeTruthy()
   })
 
   it('between days, to somebody who is going, the pill says when the next day starts and is still the RSVP\'s off-switch (frame 06)', async () => {
