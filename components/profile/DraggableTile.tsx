@@ -78,7 +78,7 @@ export function DraggableTile({
       x.set(reduceMotion ? to.x : withSpring(to.x, SPRING.snap))
       y.set(reduceMotion ? to.y : withSpring(to.y, SPRING.snap))
     },
-    [grid, reduceMotion]
+    [grid, index, reduceMotion]
   )
 
   const liftChanged = onLift ?? noLift
