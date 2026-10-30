@@ -13,7 +13,7 @@ import { AppState, Platform } from 'react-native'
 import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { RouteModal } from '../components/system/RouteModal'
 import { Sheet } from '../components/ds/Sheet'
-import { holdTurnWhile, holdsTurn, requestTurn, resetModalTurns, retryDelay } from '../lib/modalTurn'
+import { HOLD_MAX_MS, holdTurnWhile, holdsTurn, requestTurn, resetModalTurns, retryDelay } from '../lib/modalTurn'
 import { afterSheetDismissed, HANDOFF_MS } from '../lib/sheetDismissed'
 import { dismissModals } from '../lib/pendingRoute'
 
@@ -386,5 +386,27 @@ describe('a link closes a plain Modal through its own close (RC drive 6)', () =>
     await view.rerender(<OverflowMenu visible={false} onClose={onClose} items={[]} testID="menu" />)
     await act(async () => dismissModals())
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a page that never opens does not hold the screen for good (SCRUM-911)', () => {
+  it('the in-app browser that never settles gives the turn up, so the next sheet is not refused for ever', async () => {
+    jest.useFakeTimers()
+    try {
+      // Arrange: "What’s kept" asked for the browser, and it never answered (it was never presented, or never reported).
+      void holdTurnWhile(() => new Promise<never>(() => {}))
+      const next = {}
+      requestTurn(next)
+      expect(holdsTurn(next)).toBe(false)
+      // Act: a person reading the page for a minute still holds the screen...
+      await act(async () => void jest.advanceTimersByTime(60_000))
+      expect(holdsTurn(next)).toBe(false)
+      // ...but not for ever.
+      await act(async () => void jest.advanceTimersByTime(HOLD_MAX_MS))
+      // Assert
+      expect(holdsTurn(next)).toBe(true)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })
