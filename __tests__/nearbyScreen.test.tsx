@@ -29,6 +29,7 @@ import { Linking, Platform } from 'react-native'
 import NearbyEventsScreen from '../app/nearby-events'
 import { getEvents } from '../lib/api'
 import { markOffline, markOnline } from '../lib/networkStatus'
+import { setLocationSharing } from '../lib/shareLocation'
 /* eslint-enable import/first */
 
 const events = getEvents as jest.Mock
@@ -59,6 +60,31 @@ const open = async () => {
   await render(<NearbyEventsScreen />)
   await act(async () => {})
 }
+
+describe('with "Share location for nearby events" off (SCRUM-908)', () => {
+  afterEach(() => setLocationSharing(true))
+
+  it('says so, asks for no permission and no fix, and reads no events', async () => {
+    setLocationSharing(false)
+    await open()
+    expect(await screen.findByText('Location sharing is off')).toBeTruthy()
+    expect(mockLocation.requestForegroundPermissionsAsync).not.toHaveBeenCalled()
+    expect(mockLocation.getCurrentPositionAsync).not.toHaveBeenCalled()
+    expect(events).not.toHaveBeenCalled()
+    expect(screen.queryByText('No nearby events')).toBeNull()
+  })
+
+  it('Open Settings goes to Settings; Try again lists once the switch is on', async () => {
+    setLocationSharing(false)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'Open Settings' }))
+    expect(router.push).toHaveBeenCalledWith('/settings')
+    setLocationSharing(true)
+    events.mockResolvedValue({ data: [ev('a', 'Alpha Night', 12.98)], error: null })
+    await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Alpha Night/ })).toBeTruthy())
+  })
+})
 
 it('lists the nearest first, each row led by its distance, and a tap opens the Scene', async () => {
   events.mockResolvedValue({ data: [ev('far', 'Far Night', 13.2), ev('near', 'Near Night', 12.975)], error: null })

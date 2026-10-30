@@ -243,6 +243,8 @@ function SettingsScreenContent() {
       }
 
       await savePreferencesLocal(next)
+      // The account's cached copy is what a cold start reads the switch from (`lib/shareLocation`): bring it up to date.
+      if (key === 'locationSharing') void refreshAuthUser()
     } catch {
       // Roll back THIS key only, from what is on screen NOW. Restoring the
       // whole snapshot undid a sibling toggle that had already been saved

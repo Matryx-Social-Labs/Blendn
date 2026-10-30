@@ -6,6 +6,7 @@ import { onCriticalPath } from './criticalPath'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { resetInboxBadge } from './inboxBadge'
 import { Logger } from './logger'
+import { setLocationSharing } from './shareLocation'
 import { outageFrom, type Outage } from './outage'
 import { syncPurchasesUser } from './purchases'
 import { clearOutbox } from './chatOutbox'
@@ -18,6 +19,9 @@ import { forgetEventDetails } from './eventDetailCache'
 import { rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
+
+/** How long the cold start waits on the keychain for the stored account's location switch. */
+const LOCATION_SWITCH_READ_MS = 1_500
 
 export interface AuthState {
   session: { user: AuthUser } | null // Maintain session shape for compatibility
@@ -82,6 +86,8 @@ let initializationPromise: Promise<AuthState> | null = null // Promise-based wai
 const updateAuthState = (newState: Partial<AuthState>) => {
   const previousUserId = globalAuthState.user?.id
   globalAuthState = { ...globalAuthState, ...newState }
+  // The account's own switch (and the default once it has gone) is what the distance reads obey.
+  if ('user' in newState) setLocationSharing(globalAuthState.user?.profile?.share_location)
   // Any path that produces a user has reached the server, or has a user to
   // carry on with. Either way the "can't reach" screen no longer applies.
   if (newState.user) globalAuthState.unreachable = false
@@ -141,6 +147,8 @@ const initializeAuth = async (): Promise<AuthState> => {
       if (accessToken) {
         // We have a token, verify it's still valid
         Logger.debug('auth', 'Found stored access token, verifying session...')
+        // The switch is known before the session answers: a read on the way up obeys it (`lib/shareLocation`). Bounded: no keychain waits for it.
+        setLocationSharing((await settleWithin(TokenStorage.getUser(), LOCATION_SWITCH_READ_MS, null))?.profile?.share_location)
 
         const result = await apiClient.getSession()
 

@@ -4,6 +4,7 @@
  */
 
 import { roundCoordinate } from './coordinates'
+import { locationSharingOn, setLocationSharing } from './shareLocation'
 import { patchEventDetailStatus } from './eventDetailCache'
 import { emitEventStatusChanged } from './eventStatusSignal'
 import { markCheckIn } from './checkInTiming'
@@ -241,13 +242,21 @@ export class RequestQueue {
 
 const requestQueue = new RequestQueue()
 
-/** `?a=1&b=2` from the fields that are set, or '' when none are. */
-function toQuery(params: object = {}): string {
+/**
+ * `?a=1&b=2` from the fields that are set, or '' when none are.
+ *
+ * "Share location for nearby events" off: the question is asked without the person's position (`lib/shareLocation`), and
+ * without what only that position gives meaning (a `radius`, a sort by distance), so the server answers the city, not a
+ * wrong "nearest". `viewport`: the lat/lon are where a map camera points, not where the person is.
+ */
+function toQuery(params: object = {}, viewport = false): string {
   const searchParams = new URLSearchParams()
+  const withheld = !viewport && !locationSharingOn()
   for (const [key, raw] of Object.entries(params)) {
     // A `search` the server would refuse (under 2 characters, admin #751) is no search: never sent (`searchTermOf`).
     const value = key === 'search' ? searchTermOf(typeof raw === 'string' ? raw : null) : raw
     if (value === undefined || value === null) continue
+    if (withheld && (key === 'lat' || key === 'lon' || key === 'radius' || (key === 'sortBy' && value === 'distance'))) continue
     // A position never leaves in a URL at more than ~110 m (`lib/coordinates.ts`): the server logs query strings.
     searchParams.append(key, (key === 'lat' || key === 'lon') && typeof value === 'number' ? String(roundCoordinate(value)) : String(value))
   }
@@ -758,6 +767,8 @@ export interface AuthUser {
     location: string | null
     interests: string[]
     onboarded: boolean
+    /** "Share location for nearby events" (`lib/shareLocation`); absent reads as on. */
+    share_location?: boolean
     /** Present on the sign-in and session shapes; `image` mirrors `photos[0]`. */
     photos?: string[]
   } | null
@@ -2409,8 +2420,8 @@ class ApiClientClass {
     interestedPreviewLimit?: number
     /** At most five published, public, age-gated, not-ended events, in the server's `featured.rank` order (BUILD-SPEC C1). */
     featured?: boolean
-  }, options?: { force?: boolean }): Promise<ApiResponse<EventsListResponse>> {
-    const endpoint = `/api/mobile/events${toQuery(params)}`
+  }, options?: { force?: boolean; viewport?: boolean }): Promise<ApiResponse<EventsListResponse>> {
+    const endpoint = `/api/mobile/events${toQuery(params, options?.viewport)}`
     const result = options?.force
       ? await this.queuedRequest<EventsListResponse>(endpoint)
       : await this.cachedRequest<EventsListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
@@ -2429,9 +2440,9 @@ class ApiClientClass {
    */
   async getVenues(
     params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live'; search?: string; radius?: number },
-    options?: { force?: boolean }
+    options?: { force?: boolean; viewport?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
-    const endpoint = `/api/mobile/venues${toQuery(params)}`
+    const endpoint = `/api/mobile/venues${toQuery(params, options?.viewport)}`
     if (options?.force) return this.queuedRequest<VenuesListResponse>(endpoint)
     return this.cachedRequest<VenuesListResponse>(endpoint, EVENTS_LIST_SWR_TTL)
   }
@@ -2510,8 +2521,9 @@ class ApiClientClass {
   ): Promise<ApiResponse<EventApiItem>> {
     const searchParams = new URLSearchParams()
     if (params) {
-      if (params.lat !== undefined) searchParams.append('lat', String(roundCoordinate(params.lat)))
-      if (params.lon !== undefined) searchParams.append('lon', String(roundCoordinate(params.lon)))
+      // Off: no position (`lib/shareLocation`).
+      if (params.lat !== undefined && locationSharingOn()) searchParams.append('lat', String(roundCoordinate(params.lat)))
+      if (params.lon !== undefined && locationSharingOn()) searchParams.append('lon', String(roundCoordinate(params.lon)))
       if (params.include) searchParams.append('include', params.include)
       if (params.interestedLimit !== undefined) {
         searchParams.append('interestedLimit', String(params.interestedLimit))
@@ -2815,7 +2827,11 @@ class ApiClientClass {
      * leaves them showing the old value for up to a minute is the same bug
      * wearing a different screen.
      */
-    if (result.success) ProfileCache.clear()
+    if (result.success) {
+      ProfileCache.clear()
+      // The switch the person just saved is the one the distance reads obey from now on.
+      if (typeof data.share_location === 'boolean') setLocationSharing(data.share_location)
+    }
     return result
   }
 

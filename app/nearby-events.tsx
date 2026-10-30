@@ -21,6 +21,7 @@ import { COLOR, RADIUS, SPACE, STAGGER } from '../lib/design/tokens'
 import { EVENT_DETAIL_QUERY } from '../lib/eventDetailQuery'
 import { getDistanceKm } from '../lib/geo'
 import { isAbortedFix, roughFix, type FixAsk } from '../lib/locationFix'
+import { locationSharingOn } from '../lib/shareLocation'
 import { mergeEventPage, pageHasMore } from '../lib/pulseFeed'
 import { nearbyEndDate } from '../lib/pulseSections'
 import { getOptimizedImageUrl } from '../lib/photoUtils'
@@ -75,6 +76,8 @@ export default function NearbyEventsScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationDenied, setLocationDenied] = useState(false)
+  // "Share location for nearby events" is off in Settings: no fix is asked for, nothing is read (SCRUM-908).
+  const [sharingOff, setSharingOff] = useState(false)
   // Permission granted, but no fix: GPS off, indoors, timed out. Not "no events".
   const [locationFailed, setLocationFailed] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -117,8 +120,15 @@ export default function NearbyEventsScreen() {
   // settled, so the effect below can start them.
   const getLocation = useCallback(
     (): Promise<{ latitude: number; longitude: number } | null | typeof SUPERSEDED> =>
-      Location.requestForegroundPermissionsAsync()
-        .then(async ({ status }) => {
+      Promise.resolve(locationSharingOn())
+        .then((sharing) => {
+          setSharingOff(!sharing)
+          return sharing ? Location.requestForegroundPermissionsAsync() : null
+        })
+        .then(async (asked) => {
+          // The switch is off: not even the permission is asked.
+          if (!asked) return null
+          const { status } = asked
           if (status !== 'granted') {
             setLocationDenied(true)
             return null
@@ -344,7 +354,18 @@ export default function NearbyEventsScreen() {
 
   const keyExtractor = useCallback((item: Row) => item.id, [])
 
-  const state = locationDenied ? (
+  const state = sharingOff ? (
+    <StateScreen
+      icon="map-pin-off"
+      title="Location sharing is off"
+      body="Turn on “Share location for nearby events” in Settings to see events near you."
+      actions={[
+        { label: 'Open Settings', onPress: () => router.push('/settings') },
+        { label: 'Try again', onPress: retryLocation },
+      ]}
+      testID="nearby-sharing-off"
+    />
+  ) : locationDenied ? (
     <StateScreen
       icon="map-pin-off"
       title="Location access needed"

@@ -42,6 +42,7 @@ import {
   compassBelow,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
+import { useLocationSharing } from '../../lib/shareLocation'
 import {
   BUILDING_LAYER_ID,
   drawsOwnBuildings,
@@ -90,10 +91,10 @@ const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.
 /** The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger. */
 const pinApi = {
   getEvents: async (q: PinQuery & { limit: number }) => {
-    const res = await apiClient.getEvents(q, { force: true })
+    const res = await apiClient.getEvents(q, { force: true, viewport: true })
     return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi) } : undefined }
   },
-  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true }),
+  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport: true }),
 }
 
 /**
@@ -135,7 +136,7 @@ const pinApi = {
  *   `lib/mapTheme.ts` alone.
  */
 export const HomeMap = memo(function HomeMap({
-  center,
+  center: fix,
   cityCentre,
   cityPick,
   requestLocation,
@@ -180,6 +181,13 @@ export const HomeMap = memo(function HomeMap({
   fitNear: number
 }) {
   const { width, height } = useWindowDimensions()
+  /*
+   * "Share location for nearby events" off: the map has no fix of its own. It opens on the city and follows only the camera the
+   * person moves, so a viewport query means where they looked, never where they are (SCRUM-908). The same null as before a fix
+   * arrives, so nothing here follows, draws or asks for one.
+   */
+  const sharing = useLocationSharing()
+  const center = sharing ? fix : null
   const map = useRef<MapRef>(null)
   const camera = useRef<CameraRef>(null)
   // The person has moved the map (a pan, or a city picked): a fix no longer takes it over.
@@ -380,7 +388,7 @@ export const HomeMap = memo(function HomeMap({
   const hasFix = center !== null
   useEffect(() => {
     const picked = cityPick.n !== seenPick.current
-    const action = cityPickAction({ picked, here: cityPick.here, hasFix, touched: touched.current })
+    const action = cityPickAction({ picked, here: cityPick.here && sharing, hasFix, touched: touched.current })
     if (action === 'locate') {
       seenPick.current = cityPick.n
       locate()
@@ -394,6 +402,19 @@ export const HomeMap = memo(function HomeMap({
     if (picked) setTouched(true)
     moveTo({ to: [cityLon, cityLat], easeMs: MAP_THEME.camera.easeMs })
   }, [cityPick.n, cityLat, cityLon]) // eslint-disable-line react-hooks/exhaustive-deps -- a fix arriving is not a city change
+
+  // The switch goes off while the camera is following the fix: what was asked or held around the person is dropped, and the map goes to the city.
+  useEffect(() => {
+    if (sharing) return
+    if (touched.current) return
+    // A read pending on a fix-centred view, the circle already answered around it, and the fix followed: none survives the switch.
+    if (debounce.current) clearTimeout(debounce.current)
+    debounce.current = null
+    setQuery(null)
+    lastQuery.current = null
+    followedFix.current = null
+    moveTo({ to: cityLat !== undefined && cityLon !== undefined ? [cityLon, cityLat] : DEFAULT_CENTRE, easeMs: MAP_THEME.camera.easeMs })
+  }, [sharing]) // eslint-disable-line react-hooks/exhaustive-deps -- only the switch moves the camera here
 
   useEffect(
     () => () => {
@@ -598,7 +619,8 @@ export const HomeMap = memo(function HomeMap({
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       <LocateButton
-        visible={locateVisible}
+        // Nothing to show, or ask for, while the switch is off.
+        visible={locateVisible && sharing}
         following={hasFix && !moved}
         pending={asking}
         drawerTop={drawerTop}
