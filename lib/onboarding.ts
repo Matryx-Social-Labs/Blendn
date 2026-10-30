@@ -369,7 +369,7 @@ export function nameTooShort(name: string | undefined): boolean {
 export const NAME_LENGTH_SENTENCE = `Use ${NAME_MIN_LENGTH} to ${PROFILE_LIMITS.name} letters.`
 
 /**
- * The ages the product admits: the API's own rule, `age.min(18).max(120)`.
+ * The ages the product admits: the API's own rule, `age.min(18).max(100)`.
  *
  * Blend'n is 18+ (SCRUM-330, the owner's ruling of 2026-09-27; the store
  * listings already said so). The floor was 13. Every form that takes an age
@@ -379,7 +379,8 @@ export const NAME_LENGTH_SENTENCE = `Use ${NAME_MIN_LENGTH} to ${PROFILE_LIMITS.
  * accounts made before the ruling are left alone.
  */
 export const ACCOUNT_MIN_AGE = 18
-export const ACCOUNT_MAX_AGE = 120
+// Mirrors the server's ACCOUNT_MAX_AGE (lib/age.ts); 120 let 1912 pass as 114 (SCRUM-923).
+export const ACCOUNT_MAX_AGE = 100
 
 /** What someone under `ACCOUNT_MIN_AGE` is told, word for word what the server says. */
 export const ADULTS_ONLY = `Blend’n is for people ${ACCOUNT_MIN_AGE} and over.`
