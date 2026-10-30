@@ -695,11 +695,20 @@ describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
     expect(screen.getByText(requestCard)).toBeTruthy()
   })
 
-  it('a quiet sync with nothing known asks for no requests inside the throttle, and the first read is not forced', async () => {
+  it('a Banter that has only just mounted (what View on a notification pushes) reads the server, not the stale copy', async () => {
+    // Nothing cached in this instance, and `apiClient`'s stale-while-revalidate copy still says there are none.
+    serveRequestAfterSwr()
+    serve({ requests: [] })
+    serveRequestAfterSwr()
+    await open()
+    expect(screen.getByText(requestCard)).toBeTruthy()
+    expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending' }, { force: true })
+  })
+
+  it('a quiet sync with nothing known asks for no requests inside the throttle', async () => {
     serve({ requests: [] })
     await open()
     expect(api.getMessageRequests).toHaveBeenCalledTimes(1)
-    expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending' }, { force: false })
     await act(async () => void (await mockSync.onSync?.()))
     await flush()
     expect(api.getMessageRequests).toHaveBeenCalledTimes(1)
