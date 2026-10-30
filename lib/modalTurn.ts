@@ -269,6 +269,12 @@ export function useQueuedModal(wanted: boolean, options: { animationMs?: number;
 
 /** A native screen's own dismissal (the photo picker sliding down) is given this long before the next Modal asks. */
 export const NATIVE_GONE_MS = 350
+/**
+ * The longest a native page (the in-app browser) may hold the screen. It holds it until its promise settles, and one that never
+ * does (it was not presented, or never reported being closed) took every later sheet with it: "Delete account" went dead after
+ * "What's kept" until a relaunch (SCRUM-911). Past this, whoever is waiting asks again, and iOS refuses a Modal that has to wait.
+ */
+export const HOLD_MAX_MS = 90_000
 
 /**
  * A native screen that is not a Modal (the photo picker, the share sheet, the in-app browser) holds the screen while it
@@ -300,9 +306,11 @@ export async function holdTurnWhile<T>(
       })
     })
   }
+  const cap = setTimeout(() => releaseTurn(turn), HOLD_MAX_MS)
   try {
     return await work()
   } finally {
+    clearTimeout(cap)
     setTimeout(() => releaseTurn(turn), NATIVE_GONE_MS)
   }
 }
