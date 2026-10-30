@@ -1,6 +1,6 @@
 import { attendancePhase } from './attendanceState'
 import { liveWindow, type EventSession } from './eventSession'
-import { getDistanceMetres } from './geo'
+import { getDistanceMetres, validAccuracy } from './geo'
 import { dayKeyIn } from './time'
 
 /**
@@ -198,7 +198,7 @@ export const FIX_REQUIRED_ACCURACY_M = 100
 export const fixOf = (position: { coords: { latitude: number; longitude: number; accuracy: number | null }; timestamp: number }): PreciseFix => ({
   latitude: position.coords.latitude,
   longitude: position.coords.longitude,
-  accuracy: position.coords.accuracy,
+  accuracy: validAccuracy(position.coords.accuracy),
   timestamp: position.timestamp,
 })
 
