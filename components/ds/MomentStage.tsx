@@ -122,6 +122,10 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
   const stage = (
     <View
       testID={testID}
+      // Never flattened (SCRUM-921). `done` flips the three props below, which are what make Fabric flatten a View or not;
+      // on Android a stage that flipped was re-parented in the same batch as Ready's replace and died in addViewAt
+      // ("The specified child already has a parent"), at the end of every new account's onboarding.
+      collapsable={false}
       pointerEvents={done ? 'none' : 'auto'}
       accessibilityElementsHidden={done}
       importantForAccessibility={done ? 'no-hide-descendants' : 'auto'}
