@@ -115,7 +115,8 @@ beforeEach(() => {
 afterEach(() => setLocationSharing(true))
 
 it('with sharing on, the map opens on the fix and the pins are read around it (the control)', async () => {
-  await render(map(FIX))
+  const view = await render(map(FIX))
+  expect(view.getByLabelText('Show my location', { includeHiddenElements: true })).toBeTruthy()
   expect(mockCamera.initial?.center).toEqual([FIX.longitude, FIX.latitude])
   await settle()
   expect(mockGetEvents.mock.calls.some(readOnFix)).toBe(true)
@@ -127,6 +128,12 @@ describe('with sharing off and a GPS fix', () => {
     const view = await render(map(FIX))
     expect(mockCamera.initial?.center).not.toEqual([FIX.longitude, FIX.latitude])
     expect(view.queryByTestId('user-puck')).toBeNull()
+  })
+
+  it('does not draw the "my location" button, not even faded', async () => {
+    setLocationSharing(false)
+    const view = await render(map(FIX))
+    expect(view.queryByLabelText('Show my location', { includeHiddenElements: true })).toBeNull()
   })
 
   it('a fix that arrives later never moves the camera', async () => {
