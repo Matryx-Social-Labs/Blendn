@@ -4,6 +4,8 @@
  * error. Never what somebody wrote, uploaded or was sent: no payload, no body, no URL of a person's photo or a link.
  * The scrubber (lib/sentry `scrubDeep`) is the net under this; this is the rule above it.
  *
+ * A second test covers every other level for a coordinate.
+ *
  * Negative control: putting back `{ data: result.data }` in lib/useBanterInbox.ts (or `body: result.body` in
  * lib/photoUtils.ts) fails it, naming the file and line.
  */
@@ -58,7 +60,8 @@ it('no warning or error logs a payload, a body or a URL', () => {
  * (development builds), but a warn or an error lands in Sentry, and a line that is fine at one level becomes a
  * report when someone raises it. So no call, at any level, carries a fix: say that the pass ran, never where.
  */
-const LOCATION_KEYS = /\b(lat|lon|lng|latitude|longitude|coords?|userLocation)\b/
+// A bare name, or one ending in a camel-cased one (`userLat`, `venueLongitude`). The net, not the rule: a fix under another name passes it.
+const LOCATION_KEYS = /\b(lat|lon|lng|latitude|longitude|coords?|position|fix|userLocation)\b|[a-z](Lat|Lon|Lng|Latitude|Longitude|Coords?)\b/
 
 it('no log call, at any level, carries a coordinate', () => {
   const offenders = ['app', 'components', 'lib'].flatMap(sources).flatMap((file) =>
