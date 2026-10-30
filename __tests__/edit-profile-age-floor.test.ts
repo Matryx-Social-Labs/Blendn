@@ -32,7 +32,8 @@ describe('the account floor is 18', () => {
     expect(accountAgeError('17', { required: true })).toBe(ADULTS_ONLY)
     expect(accountAgeError('13', { required: true })).toBe(ADULTS_ONLY)
     expect(accountAgeError('18', { required: true })).toBeNull()
-    expect(accountAgeError('101', { required: true })).toBe('Enter a valid age between 18 and 100')
+    expect(accountAgeError('101', { required: true })).toBe('Enter your real age.')
+    expect(accountAgeError('abc', { required: true })).toBe('Enter a valid age between 18 and 100')
   })
 
   it('leaves an age that is optional alone when it is blank', () => {
@@ -55,8 +56,9 @@ describe('Edit profile', () => {
     expect(profileFormErrors({ name: 'Asha', age: '17', storedAge: null }).age).toBe(ADULTS_ONLY)
   })
 
-  it('refuses 101 and anything that is not a whole number, naming the real range', () => {
-    for (const age of ['101', 'abc', '17.5']) {
+  it('refuses 101 as not real, and anything that is not a whole number, naming the range', () => {
+    expect(profileFormErrors({ name: 'Asha', age: '101', storedAge: null }).age).toBe('Enter your real age.')
+    for (const age of ['abc', '17.5']) {
       expect(profileFormErrors({ name: 'Asha', age, storedAge: null }).age).toBe('Enter a valid age between 18 and 100')
     }
   })
@@ -123,14 +125,14 @@ describe('one age rule for every form that takes an age', () => {
     expect(src).not.toContain('Used for age-restricted events')
   })
 
-  it('tells "The basics" why Continue is off: under 18, or not a usable date', () => {
+  it('tells "The basics" why Continue is off: under 18, too old, or not a usable date', () => {
     const src = read('app/onboarding/basics.tsx')
     // The date field announces its own sentence as it appears (assertive, with the ring), so the screen only chooses it.
     expect(src).toContain('const underAge = isUnderAccountAge(dateOfBirth)')
-    expect(src).toContain('const dateError = underAge ? ADULTS_ONLY : notADate ? NOT_A_DATE : undefined')
+    expect(src).toContain('const dateError = underAge ? ADULTS_ONLY : tooOld ? DOB_TOO_OLD : notADate ? NOT_A_DATE : undefined')
     expect(src).toContain("const NOT_A_DATE = 'That is not a date we recognise.'")
     // `!dateOfBirth` is never true once the boxes are full, so 30 February showed nothing.
-    expect(src).toMatch(/const notADate = !underAge && !!dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\)/)
+    expect(src).toMatch(/const notADate = !underAge && !tooOld && !!dateOfBirth && !isCompleteDateOfBirth\(dateOfBirth\)/)
     expect(src).not.toMatch(/&& !dateOfBirth \? \(/)
     // The two cases are disjoint: an impossible date is never "under 18".
     expect(isUnderAccountAge('2010-02-30')).toBe(false)

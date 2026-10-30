@@ -385,6 +385,10 @@ export const ACCOUNT_MAX_AGE = 100
 /** What someone under `ACCOUNT_MIN_AGE` is told, word for word what the server says. */
 export const ADULTS_ONLY = `Blend’n is for people ${ACCOUNT_MIN_AGE} and over.`
 
+/** Word for word what the server says to a birth date or an age past `ACCOUNT_MAX_AGE` (SCRUM-923). */
+export const DOB_TOO_OLD = 'Enter your real date of birth.'
+export const AGE_TOO_OLD = 'Enter your real age.'
+
 export function isAccountAge(years: number | null | undefined): boolean {
   return (
     typeof years === 'number' &&
@@ -427,6 +431,7 @@ export function accountAgeError(
   const years = Number(typed)
   if (years === opts.stored) return null
   if (Number.isInteger(years) && years >= 0 && years < ACCOUNT_MIN_AGE) return ADULTS_ONLY
+  if (Number.isInteger(years) && years > ACCOUNT_MAX_AGE) return AGE_TOO_OLD
   return isAccountAge(years) ? null : `Enter a valid age between ${ACCOUNT_MIN_AGE} and ${ACCOUNT_MAX_AGE}`
 }
 
@@ -470,6 +475,12 @@ export function isCompleteDateOfBirth(value: string | undefined): boolean {
 export function isUnderAccountAge(value: string | undefined): boolean {
   const years = wholeYearsSince(value)
   return years !== null && years >= 0 && years < ACCOUNT_MIN_AGE
+}
+
+/** A real birth date that makes this person older than `ACCOUNT_MAX_AGE` today: a mistyped year, not "not a date". */
+export function isOverAccountAge(value: string | undefined): boolean {
+  const years = wholeYearsSince(value)
+  return years !== null && years > ACCOUNT_MAX_AGE
 }
 
 /** Whole years from a `YYYY-MM-DD` to today (UTC), or `null` if it is not a real date. */
