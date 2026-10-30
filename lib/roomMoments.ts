@@ -136,12 +136,13 @@ export function hereNowStack<T extends { id: string; insideNow?: boolean }>(
 /**
  * The face grid's heading and its number.
  *
- * "Everyone here" is the room's number, inside now (`hereCount`, you
- * included): the one the Room's headline, the chat header and Room info all
- * say (RC drive 3 had 482, 515 and 450 for one room of 483). Not the faces
- * loaded, and not the room minus you — the grid leaves out friends (their own
- * section) and "show online" off (counted, not listed), so its length was
- * never the room.
+ * A heading over cards counts the cards (Room count ruling, SCRUM-376): the
+ * grid leaves out friends (their own section) and "show online" off (counted,
+ * not listed), so the room's number over it said five over four faces. While
+ * more pages remain the cards cannot be counted, so "Everyone here" says the
+ * room's number (`hereCount`, you included — the one the headline, the chat
+ * header and Room info's hero say); the headline "N here now" stays that
+ * aggregate.
  *
  * "Everyone here" stops being true once somebody in it has left: then it is
  * "Everyone who came", counted by its faces only when they are all loaded
@@ -153,7 +154,7 @@ export function everyoneHead(
 ): { title: string; count: number } {
   const allHere = people.every((p) => p.insideNow !== false)
   if (!allHere) return { title: 'Everyone who came', count: hasMore ? 0 : people.length }
-  return { title: 'Everyone here', count: hereCount }
+  return { title: 'Everyone here', count: hasMore ? hereCount : people.length }
 }
 
 /* -------------------------------------------------------------------------- */
