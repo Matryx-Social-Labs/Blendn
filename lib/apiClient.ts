@@ -13,6 +13,8 @@ import type { AttendancePayload, RsvpEventsPayload, SavedEventsPayload } from '.
 import type { PaywallEvent, PaywallTrigger } from './paywallPolicy'
 import type { PlusStatus } from './plus'
 import { noteBlocked } from './blockEpoch'
+import { markDomainsDirty } from './liveSyncState'
+import { forgetPersonalChats } from './queryCache'
 import { CONVERSATIONS_PAGE } from './conversationsPage'
 import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
@@ -667,8 +669,21 @@ export interface WorkFieldsResponse {
  * a message request, a conversation) can forget it.
  */
 function noteBlockedOn<T extends { success: boolean }>(result: T): T {
-  if (result.success) noteBlocked()
+  if (result.success) {
+    noteBlocked()
+    notePeopleClosed()
+  }
   return result
+}
+
+/**
+ * A conversation was closed on the server (a leave, or a block of somebody you talk to): the Banter's People copy is
+ * dropped and the chat domain marked, so its next read is the server's. The forced read a block starts can lose a race
+ * with the one the return to the Banter starts, and leave the closed row on screen until a pull-to-refresh (SCRUM-919).
+ */
+function notePeopleClosed(): void {
+  forgetPersonalChats()
+  markDomainsDirty(['chat'])
 }
 
 export interface ApiResponse<T = unknown> {
@@ -3563,6 +3578,7 @@ class ApiClientClass {
       3
     )
     if (options.action === 'block') noteBlockedOn(result)
+    else if (result.success) notePeopleClosed()
     return result
   }
 
