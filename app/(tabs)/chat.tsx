@@ -203,6 +203,15 @@ function ChatInner() {
   const liveRooms = useMemo(() => rooms.filter((c) => c.is_checked_in), [rooms])
   const blendRooms = useMemo(() => crewRooms.filter((r) => r.kind === 'blend' && !membership.left.has(r.id)), [crewRooms, membership.left])
 
+  /** The Live now card's line: the same precedence as a row's (SCRUM-633), as plain text. */
+  const liveLine = (c: (typeof liveRooms)[number]): string | null => {
+    const held = outboxLine(outbox, roomThread(c.chat_room_id, user?.id))
+    if (held) return held.kind === 'failed' ? 'Not sent · Tap to retry' : `Draft · ${held.text}`
+    return c.last_message && c.last_message !== SPONSORED
+      ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name })
+      : null
+  }
+
   /** Line 2, by 5.8's precedence: not sent, then a draft, then the last message. */
   const lineFor = useCallback(
     (thread: Thread, fallback: RowLine): RowLine => {
@@ -456,13 +465,7 @@ function ChatInner() {
               here={c.is_place}
               unread={c.unread_count}
               muted={roomMuted(c.chat_room_id)}
-              line={
-                c.room_state === 'locked'
-                  ? 'Locked by the organizer · read only'
-                  : c.last_message && c.last_message !== SPONSORED
-                    ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name })
-                    : null
-              }
+              line={c.room_state === 'locked' ? 'Locked by the organizer · read only' : liveLine(c)}
               onPress={() => openRoom(c)}
             />
           ))}
