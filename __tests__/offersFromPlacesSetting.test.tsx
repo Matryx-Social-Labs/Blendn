@@ -70,7 +70,7 @@ beforeEach(() => {
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
   ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
     // A place has regulars on for this person: the row is drawn only then (D21, YOU-04).
-    Promise.resolve({ success: true, data: init?.method === 'PUT' ? { enabled: JSON.parse(String(init.body)).enabled } : { enabled: true, regulars: { active: true } } })
+    Promise.resolve({ success: true, data: init?.method === 'PUT' ? JSON.parse(String(init.body)) : { enabled: true, pushes: true, regulars: { active: true } } })
   )
 })
 
@@ -81,8 +81,22 @@ describe('Offers from places (step 12 review M6)', () => {
     await waitFor(() => expect(screen.getByLabelText(/^Offers from places/).props.accessibilityState).toMatchObject({ checked: true }))
     await act(async () => { fireEvent.press(screen.getByLabelText(/^Offers from places/)) })
     void row
-    expect(api.queuedRequest).toHaveBeenLastCalledWith('/api/mobile/me/offers', { method: 'PUT', body: '{"enabled":false}' }, true, 2)
+    expect(api.queuedRequest).toHaveBeenLastCalledWith('/api/mobile/me/offers', { method: 'PUT', body: '{"enabled":false,"pushes":false}' }, true, 2)
     expect(screen.getByLabelText(/^Offers from places/).props.accessibilityState).toMatchObject({ checked: false })
+  })
+
+  it('reads off while the server holds no yes for the push, and turning it on gives both yeses with the consent words beside it (SCRUM-628)', async () => {
+    ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
+      Promise.resolve({ success: true, data: init?.method === 'PUT' ? JSON.parse(String(init.body)) : { enabled: true, pushes: false, regulars: { active: true } } })
+    )
+    await render(<SettingsScreen />)
+    await screen.findByLabelText(/^Offers from places/)
+    await waitFor(() => expect(screen.getByLabelText(/^Offers from places/).props.accessibilityState).toMatchObject({ checked: false }))
+    // The words that ask: a notification, for an offer, from a place.
+    expect(screen.getByLabelText(/^Offers from places/).props.accessibilityLabel).toMatch(/notification/i)
+    await act(async () => { fireEvent.press(screen.getByLabelText(/^Offers from places/)) })
+    expect(api.queuedRequest).toHaveBeenLastCalledWith('/api/mobile/me/offers', { method: 'PUT', body: '{"enabled":true,"pushes":true}' }, true, 2)
+    expect(screen.getByLabelText(/^Offers from places/).props.accessibilityState).toMatchObject({ checked: true })
   })
 })
 
