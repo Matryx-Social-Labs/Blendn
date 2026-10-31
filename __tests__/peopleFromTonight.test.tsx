@@ -55,6 +55,9 @@ describe('the People layer is a modal over the Recap, and Android back closes it
     expect(code).toContain('accessibilityViewIsModal')
     expect(code).toMatch(/importantForAccessibility=\{peopleOpen \? 'no-hide-descendants' : 'auto'\}/)
     expect(code).toMatch(/backGuardRef\.current\?\.\(\)/)
+    // SCRUM-812 drive: the deck has no background of its own, so the Recap showed through it unless it is drawn away.
+    expect(code).toMatch(/style=\{\[styles\.layer, peopleOpen && styles\.underPeople\]\}/)
+    expect(code).toMatch(/underPeople: \{ opacity: 0 \}/)
     expect(code).toMatch(/if \(peopleOpen\) \{\s*setPeopleOpen\(false\)\s*return true\s*\}/)
   })
 })
