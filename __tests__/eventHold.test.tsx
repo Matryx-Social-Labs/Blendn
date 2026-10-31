@@ -14,7 +14,7 @@ import { submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
-import { openRoomOf, setRoomUp } from '../lib/blendnOverlay'
+import { openRoomOf, setLiveHint, setRoomUp } from '../lib/blendnOverlay'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-gesture-handler', () => ({
@@ -61,6 +61,7 @@ beforeEach(() => {
   jest.useFakeTimers()
   jest.clearAllMocks()
   setRoomUp(null)
+  setLiveHint(null)
   mockFix.mockResolvedValue(fix(12.9792, 77.6408))
   jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(H, 'error').mockImplementation(() => {})
@@ -94,6 +95,17 @@ describe('the hold is the button', () => {
     await act(async () => {})
     expect(screen.getByRole('button', { name: 'Hold to blend in' }).props.accessibilityState).toMatchObject({ disabled: true })
     expect(screen.getByText('Location is off', HIDDEN)).toBeTruthy()
+  })
+})
+
+describe('in another room already', () => {
+  it('the hold is a switch out of it', async () => {
+    setLiveHint('other')
+    await render(<Page />)
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: 'Hold to switch' })).toBeTruthy()
+    expect(screen.getByText('You’ll leave your current room', HIDDEN)).toBeTruthy()
+    setLiveHint(null)
   })
 })
 

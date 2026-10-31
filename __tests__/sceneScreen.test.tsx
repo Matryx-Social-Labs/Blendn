@@ -40,7 +40,7 @@ jest.mock('../components/board/BoardSections', () => {
   const { View } = jest.requireActual('react-native')
   return { BoardEntry: () => <View testID="board-entry" /> }
 })
-jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn(), openRoomOf: jest.fn(), useRoomUp: () => false }))
+jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn(), openRoomOf: jest.fn(), useRoomUp: () => false, useLiveEventId: () => null }))
 jest.mock('../lib/calendar', () => ({ addToCalendar: jest.fn() }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn() }))
 jest.mock('../lib/safetyUtils', () => ({ showEventReportOptions: jest.fn() }))
