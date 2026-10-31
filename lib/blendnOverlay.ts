@@ -143,6 +143,18 @@ export function useLiveTitle(): string | null {
 }
 
 /**
+ * The room a check-in took you out of, and the event it landed in: whichever door ran the check-in (Tonight's pass, or an event
+ * page's hold) leaves it here, and the Room says "You left {room}." once that event's room is the one shown (SCRUM-816, 969).
+ */
+let leftNotice: { title: string; toId: string } | null = null
+export function setLeftNotice(notice: { title: string; toId: string } | null): void {
+  leftNotice = notice
+}
+export function getLeftNotice(): { title: string; toId: string } | null {
+  return leftNotice
+}
+
+/**
  * The event whose Room the overlay is showing, whole. An event page that checked someone in keeps its "You're in" pour over
  * itself until this says the Room is behind it, then steps aside onto it (SCRUM-966).
  */

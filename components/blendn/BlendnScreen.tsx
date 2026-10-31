@@ -19,7 +19,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { usePassReach } from '../../lib/usePassReach'
-import { blendnClosed, isLiveHint, openPass, setDoor, setRoomUp, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNotice, setRoomUp, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -364,7 +364,6 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const switchFromNow = useLatest(switchFrom)
   const insideEventNow = useLatest(insideEvent)
   /** The room a switch left, and the event it switched into: the toast is for that landing only. */
-  const leftRoom = useRef<{ title: string; toId: string } | null>(null)
   const roomReady = (room.status === 'ready' && !switchFrom) || roomWaitOver
   const roomReadyNow = useLatest(roomReady)
   const roomShown = useRef<(() => void) | null>(null)
@@ -382,7 +381,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       const from = switchFromNow.current
       // The server names the room it took you out of (`left`); the screen's own switch is the fallback for an older one.
       const leftTitle = outcome.left[0] ?? from?.title
-      leftRoom.current = leftTitle && insideEventNow.current ? { title: leftTitle, toId: insideEventNow.current.id } : null
+      setLeftNotice(leftTitle && insideEventNow.current ? { title: leftTitle, toId: insideEventNow.current.id } : null)
       // The card checked into is the door now: the room it opens is this one, not a switch from the old door's.
       if (insideEventNow.current) setDoor(insideEventNow.current)
       setPourEntrance(true)
@@ -472,15 +471,16 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   // #07: the switch landed: an info toast, no haptic.
   const roomEventId = room.event?.id ?? null
   useEffect(() => {
-    const left = leftRoom.current
+    const left = getLeftNotice()
     if (mode !== 'room' || !left) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the toast for the landing the overlay's store was told of
     if (roomEventId === left.toId) say(`You left ${left.title}.`)
-    leftRoom.current = null
+    setLeftNotice(null)
   }, [mode, roomEventId, say])
-  // The pass moved on (another door, or none): a switch it was carrying is no longer this one.
+  // The pass moved on to another door: a switch it was carrying is no longer this one. (An event page's hold has no door of its own.)
   const doorId = door?.id ?? null
   useEffect(() => {
-    if (leftRoom.current && leftRoom.current.toId !== doorId) leftRoom.current = null
+    if (doorId && getLeftNotice()?.toId !== doorId) setLeftNotice(null)
   }, [doorId])
 
   // --- your controls in the room --------------------------------------------
