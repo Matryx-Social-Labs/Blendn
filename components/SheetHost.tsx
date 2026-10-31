@@ -18,6 +18,7 @@ const NOTE_MAX = 500
 /** lib/sheet's variants as the DS Sheet's kinds: an affirmative in a sheet is lit in the caller's world, never the gradient. */
 const KIND: Record<NonNullable<SheetAction['variant']>, ButtonKind> = {
   primary: 'lit',
+  strong: 'strong',
   secondary: 'secondary',
   tertiary: 'tertiary',
   destructive: 'destructive',
