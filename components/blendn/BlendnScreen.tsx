@@ -821,7 +821,12 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       {!tonightUp ? null : mode === 'ended' && recap ? (
         <Animated.View key="ended" style={styles.layer} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
           {/* Under People from tonight the Recap is not there for a screen reader: a swipe never walks past the deck. */}
-          <View style={styles.layer} accessibilityElementsHidden={peopleOpen} importantForAccessibility={peopleOpen ? 'no-hide-descendants' : 'auto'}>
+          <View
+            style={[styles.layer, peopleOpen && styles.underPeople]}
+            pointerEvents={peopleOpen ? 'none' : 'auto'}
+            accessibilityElementsHidden={peopleOpen}
+            importantForAccessibility={peopleOpen ? 'no-hide-descendants' : 'auto'}
+          >
             <MomentRecap
               face={myFace}
               title={recap.title}
@@ -1213,6 +1218,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   /** Tonight and the Room are one absolute stack: as flex siblings, a Room mounted under the pour halved Tonight's height (drive 3). */
   layer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  /** The Recap kept mounted (its state) under People from tonight, which has no background of its own: drawn away. */
+  underPeople: { opacity: 0 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   topBar: {
