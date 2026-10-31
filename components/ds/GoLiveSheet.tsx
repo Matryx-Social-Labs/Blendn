@@ -134,8 +134,11 @@ export function GoLiveSheet({
   onRefusalAction,
   onRefusalAlt,
   onDismissed,
+  leaving = null,
   testID,
 }: {
+  /** The room you are in somewhere else: going live here leaves it (SCRUM-635), said before the hold. */
+  leaving?: string | null
   visible: boolean
   onClose: () => void
   venue: string
@@ -259,11 +262,12 @@ export function GoLiveSheet({
         icon="radio"
         kind="lit"
         srLabel={`Go live at ${venue} for ${picked.spoken} as ${pseudonym}`}
+        consequence={leaving ? `Leaves ${leaving}.` : undefined}
         onConfirm={onGoLive}
         testID={testID && `${testID}-hold`}
       />
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
-        You can end it anytime.
+        {leaving ? `Leaves ${leaving}. You can end it anytime.` : 'You can end it anytime.'}
       </Text>
     </Sheet>
   )

@@ -13,6 +13,7 @@ import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
 import { banterUnread, useInboxBadge, useInboxBadgeSync } from '../../lib/inboxBadge'
 import { blendnClosed, openBlendn, setLiveHint, useBlendnOpen, useLiveTitle } from '../../lib/blendnOverlay'
+import { activeRoomName } from '../../lib/leftRooms'
 import { onClosingForLink } from '../../lib/linkClosers'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { refreshAuthUserOnForeground, useAuth } from '../../lib/useAuth'
@@ -157,7 +158,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         if (cancelled || !r.success) return
         const active = r.data?.checkIns?.[0] ?? null
         activeEventId = active?.eventId ?? null
-        activeTitle = active?.event?.title ?? null
+        activeTitle = activeRoomName(active)
         if (activeEventId !== watchedEvent) {
           watcher?.stop()
           unread = 0

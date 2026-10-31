@@ -15,3 +15,15 @@ export function youLeftLine(data: Pick<CheckInResult, 'left'> | null | undefined
   const [first] = leftNames(data)
   return first ? `You left ${first}.` : null
 }
+
+/**
+ * The room you are in, by the name a person knows it by: an event by its title, a Go Live by its place (the venue day's own
+ * title, "Venue day · {place} · {date}", is bookkeeping). For "Hold to switch" / "Leaves {A}" (SCRUM-635).
+ */
+export function activeRoomName(
+  active: { kind?: 'event' | 'venue_day'; event?: { title: string; venueName?: string | null } | null } | null | undefined
+): string | null {
+  if (!active?.event) return null
+  const place = active.kind === 'venue_day' ? active.event.venueName?.trim() : null
+  return place || active.event.title
+}
