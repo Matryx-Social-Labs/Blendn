@@ -106,7 +106,12 @@ function DeckCard({
     }
   })
 
-  return <Animated.View style={[styles.card, cardStyle, style]}>{children}</Animated.View>
+  // Rasterised once and moved as a texture on Android: a rounded, clipped, rotating card is otherwise re-drawn through an offscreen layer every frame.
+  return (
+    <Animated.View renderToHardwareTextureAndroid style={[styles.card, cardStyle, style]}>
+      {children}
+    </Animated.View>
+  )
 }
 
 /**
@@ -147,6 +152,7 @@ export function SwipeDeck<T>({
   cardStyle,
   accessibilityLabel,
   accessibilityHint,
+  accessibilityValue,
   nextLabel = 'Next',
 }: {
   items: readonly T[]
@@ -167,6 +173,8 @@ export function SwipeDeck<T>({
   cardStyle?: StyleProp<ViewStyle>
   accessibilityLabel: string
   accessibilityHint?: string
+  /** Where the pile is, spoken after each adjust ("1 of 3"). */
+  accessibilityValue?: { text: string }
   /** The VoiceOver action that does the swap. */
   nextLabel?: string
 }) {
@@ -261,6 +269,7 @@ export function SwipeDeck<T>({
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
+        accessibilityValue={accessibilityValue}
         accessibilityActions={
           count > 1 ? [{ name: 'activate' }, { name: 'increment', label: nextLabel }] : [{ name: 'activate' }]
         }

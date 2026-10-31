@@ -181,9 +181,9 @@ function EventCards() {
 const DECK: DeckEvent[] = [VINYL, OPEN_MIC, QUIZ]
 
 function Tonight() {
-  const [index, setIndex] = useState(0)
+  const [, setIndex] = useState(0)
   const deck = (events: DeckEvent[], extra: { previewState?: 'pressed' } = {}) => (
-    <TonightCard events={events} index={0} onIndexChange={noop} onOpen={noop} width={DECK_WIDTH} height={DECK_HEIGHT} {...extra} />
+    <TonightCard events={events} onIndexChange={noop} onOpen={noop} width={DECK_WIDTH} height={DECK_HEIGHT} {...extra} />
   )
   return (
     <Section title="TonightCard" note="the hero card with a 2 pt ink outline · two fanned back-cards · pips · H.select as a swiped card settles">
@@ -203,7 +203,7 @@ function Tonight() {
         {deck(DECK, { previewState: 'pressed' })}
       </Cell>
       <Cell label="live · swipe it" testID="ds-tonight-live">
-        <TonightCard events={DECK} index={index} onIndexChange={setIndex} onOpen={noop} width={DECK_WIDTH} height={DECK_HEIGHT} testID="ds-tonight-live-deck" />
+        <TonightCard events={DECK} onIndexChange={setIndex} onOpen={noop} width={DECK_WIDTH} height={DECK_HEIGHT} testID="ds-tonight-live-deck" />
       </Cell>
     </Section>
   )
