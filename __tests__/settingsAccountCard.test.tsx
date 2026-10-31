@@ -227,7 +227,10 @@ describe('Delete account while it runs', () => {
     await act(async () => fireEvent(step1[step1.length - 1], 'pressIn'))
     expect(H.destructive).toHaveBeenCalledTimes(1)
     fireEvent.press(step1[step1.length - 1])
-    fireEvent.press(await screen.findByRole('button', { name: 'Delete my account' }))
+    const confirm = await screen.findByRole('button', { name: 'Delete my account' })
+    // "For good?" asks for the password first (SCRUM-944 (3)).
+    await act(async () => fireEvent.changeText(screen.getByTestId('delete-password'), 'hunter22'))
+    fireEvent.press(confirm)
     expect(await screen.findByLabelText('Deleting account…')).toBeTruthy()
     await act(async () => finish({ success: false }))
     // It did not go through: the row is Delete account again.
