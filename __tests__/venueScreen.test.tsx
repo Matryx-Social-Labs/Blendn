@@ -45,7 +45,8 @@ jest.mock('expo-linear-gradient', () => {
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getVenue: jest.fn(), getVenueUpcoming: jest.fn(), goLive: jest.fn(), queuedRequest: jest.fn().mockResolvedValue({ success: false }) } }))
-jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
+const mockLive = { id: null as string | null, title: null as string | null }
+jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), useLiveEventId: () => mockLive.id, useLiveTitle: () => mockLive.title }))
 jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn(), checkInChanged: jest.fn(), subscribeCheckInChanged: () => () => {} }))
 jest.mock('../lib/socketClient', () => ({ subscribeToLiveEnded: (cb: never) => { mockEnded.push(cb); return () => {} } }))
 // The real useGoLive runs: only the phone's position, the network and the paywall are stood in for.
@@ -396,6 +397,22 @@ describe('the dock', () => {
     const radios = screen.getAllByRole('radio')
     expect(radios[0].props.accessibilityState).toMatchObject({ checked: true })
     expect(goLiveApi).not.toHaveBeenCalled()
+  })
+
+  // SCRUM-635: going live here while checked in at an event left it without a word.
+  it('checked in somewhere else, the dial names the room going live here leaves', async () => {
+    mockLive.id = 'evt-elsewhere'
+    mockLive.title = 'Vinyl Night'
+    try {
+      await mount()
+      await act(async () => {
+        fireEvent.press(screen.getByTestId('venue-go-live'))
+      })
+      expect(screen.getByText('Leaves Vinyl Night. You can end it anytime.')).toBeTruthy()
+    } finally {
+      mockLive.id = null
+      mockLive.title = null
+    }
   })
 
   const settle = () => act(async () => { jest.advanceTimersByTime(1000) })

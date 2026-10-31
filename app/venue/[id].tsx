@@ -34,7 +34,7 @@ import {
 } from '../../components/venue/VenueSections'
 import { VenueGateScreen, VenueSkeleton } from '../../components/venue/VenueStates'
 import { apiClient, type VenueDetail } from '../../lib/apiClient'
-import { openBlendn } from '../../lib/blendnOverlay'
+import { openBlendn, useLiveEventId, useLiveTitle } from '../../lib/blendnOverlay'
 import { checkOutOf, subscribeCheckInChanged } from '../../lib/checkIn'
 import { claimUrlFrom } from '../../lib/claimLink'
 import { COLOR, FONT_FAMILY, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -271,6 +271,10 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
 
   const live = detail?.live
   const venueDayId = live?.venueDayId ?? null
+  // Checked in or live somewhere else: going live here leaves it, and the dial says so first (SCRUM-635).
+  const liveId = useLiveEventId()
+  const liveTitle = useLiveTitle()
+  const liveElsewhere = liveId && liveId !== venueDayId ? (liveTitle ?? 'your other event') : null
   // Your window ended here — expiry, an event starting, a switch: the server says so.
   useEffect(
     () =>
@@ -571,6 +575,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         event={refusal?.eventId && tonight?.id === refusal.eventId ? tonight.title : ''}
         onRefusalAction={refusalAction}
         onRefusalAlt={refusalAlt}
+        leaving={liveElsewhere}
         testID="venue-dial"
       />
       <SessionHost

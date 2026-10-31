@@ -55,6 +55,13 @@ describe('<GoLiveSheet>', () => {
     expect(screen.getByText('You can end it anytime.')).toBeTruthy()
   })
 
+  // SCRUM-635: going live here while checked in somewhere else took you out of it without a word.
+  it('checked in somewhere else: says which room going live here leaves, before the hold', async () => {
+    await render(sheet({ leaving: 'Vinyl Night' }))
+    expect(screen.getByText('Leaves Vinyl Night. You can end it anytime.')).toBeTruthy()
+    expect(screen.getByTestId('g-hold').props.accessibilityHint).toBe('Leaves Vinyl Night.')
+  })
+
   it('the dial: H.select on a change, nothing on the picked one', async () => {
     const onChoice = jest.fn()
     await render(sheet({ onChoice }))
