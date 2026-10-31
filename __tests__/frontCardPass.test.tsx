@@ -7,7 +7,7 @@
  * ("You're too far away" for a far card), its "Hold to switch" and the event the
  * hold checks in are all read off the card in front.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react-native'
 import React from 'react'
 
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
@@ -232,21 +232,13 @@ describe('checked in elsewhere: Hold to switch follows the card', () => {
 describe('an event page waiting for the Room (SCRUM-966)', () => {
   it('says the Room is up once it is whole, and not before or after', async () => {
     mockInside = null
-    let up = false
-    function Probe() {
-      up = useRoomUp('A')
-      return null
-    }
-    await render(
-      <>
-        <BlendnScreen />
-        <Probe />
-      </>
-    )
-    expect(up).toBe(false)
+    await render(<BlendnScreen />)
+    // Read from its own root: the page that waits is another screen, not a sibling of the overlay.
+    const waiting = await renderHook(() => useRoomUp('A'))
+    expect(waiting.result.current).toBe(false)
     await act(async () => mockRoomIn('A'))
-    expect(up).toBe(true)
+    expect(waiting.result.current).toBe(true)
     await act(async () => mockRoomReset())
-    expect(up).toBe(false)
+    expect(waiting.result.current).toBe(false)
   })
 })
