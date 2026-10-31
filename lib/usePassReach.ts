@@ -10,11 +10,11 @@ const REREAD_MS = 30_000
 /**
  * Whether the docked pass's hold is offered (`passReach`, owner ruling 2026-10-28): inside the fence, or not plainly away,
  * it is; a fresh precise fix more than `TOO_FAR_M` from the event, or location off, disables it with one short line.
- * Measured from the phone's own fix when there is one and the event's coordinates, else the server's distance. Never prompts.
+ * Measured from the phone's own fix when there is one and the event's coordinates, else the server's distance; a read that finds location off says so, for a door with no Tonight to ask (the event page). Never prompts.
  */
 export function usePassReach(door: TonightEvent | null, insideEventId: string | null, location: TonightLocation): PassReach {
   // Keyed by the door it was measured for: another door starts unknown, without a reset in the effect.
-  const [measured, setMeasured] = useState<{ id: string; m: number | null } | null>(null)
+  const [measured, setMeasured] = useState<{ id: string; m: number | null; off: boolean } | null>(null)
   const id = door?.id ?? null
   const lat = door?.latitude ?? null
   const lon = door?.longitude ?? null
@@ -28,12 +28,13 @@ export function usePassReach(door: TonightEvent | null, insideEventId: string | 
     const read = () =>
       Promise.resolve()
         .then(quietLocation)
-        .then(({ coords }) => {
+        .then(({ coords, location: fixLocation }) => {
           if (!live) return
           // 0,0 is an unset coordinate in this schema.
           const placed = typeof lat === 'number' && typeof lon === 'number' && !(lat === 0 && lon === 0)
           setMeasured({
             id,
+            off: fixLocation === 'off',
             m: coords && !coords.approximate && placed ? getDistanceMetres(coords.latitude, coords.longitude, lat, lon) : typeof km === 'number' && Number.isFinite(km) ? km * 1000 : null,
           })
         })
@@ -47,5 +48,5 @@ export function usePassReach(door: TonightEvent | null, insideEventId: string | 
   }, [id, inside, lat, lon, km])
 
   const distanceM = measured && measured.id === id ? measured.m : null
-  return id === null ? 'open' : passReach({ inside, location, distanceM })
+  return id === null ? 'open' : passReach({ inside, location: measured?.id === id && measured.off ? 'off' : location, distanceM })
 }

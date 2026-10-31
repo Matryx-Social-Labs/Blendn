@@ -21,6 +21,8 @@ import { linkRefusalCard } from '../../lib/linkRefusalCard'
 import { eventLoadFailure, type EventLoadFailure } from '../../lib/eventLinkRefusal'
 import type { MenuItem } from '../ds/ContextMenu'
 import { OfflineBanner } from '../OfflineBanner'
+import { EventHold } from '../scene/EventHold'
+import { useEventCheckIn } from '../scene/useEventCheckIn'
 import { SceneBar } from '../scene/SceneBar'
 import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
 import { changeLines, parseEventChange, type EventChange } from '../../lib/eventChange'
@@ -33,8 +35,8 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { askPushInContext } from '../../lib/pushAsk'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
-import { attendancePhase, doorOf, sceneCtaState } from '../../lib/attendanceState'
-import { openBlendn, openPass } from '../../lib/blendnOverlay'
+import { attendancePhase, sceneCtaState } from '../../lib/attendanceState'
+import { openBlendn } from '../../lib/blendnOverlay'
 import { useToast } from '../Toast'
 import { useToastDock } from '../toastDock'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
@@ -747,6 +749,7 @@ export default function EventDetail() {
   const openInMaps = () => {
     if (event) void openPlaceInMaps(event)
   }
+  const { hold, overlays } = useEventCheckIn({ id: String(id), event, openMaps: openInMaps })
 
   /*
    * What this event may say in a link: null for a private one or a draft, and then there is no share control at all
@@ -825,24 +828,14 @@ export default function EventDetail() {
 
 
   /*
-   * The check-in is the pass's (Flow 3 Discovery #04–#06, Flow 4): "Blend in"
-   * opens this event's VenuePass in the Blend'n overlay, whose hold is the one
-   * check-in in the app; outside the fence the server refuses it there ("Not
-   * quite there yet"). Once checked in the CTA reads "You're in" and leads to
-   * the Room. Back to the tabs first: the overlay is under the root stack.
+   * The check-in is this page's own hold (SCRUM-966, owner 2026-10-31): "Blend in" is the VenuePass's hold, `useEventCheckIn`, with
+   * the server's refusals ("Not quite there yet", "Doors aren't open") said here. Once checked in the CTA reads "You're in" and
+   * leads to the Room. Back to the tabs first: the overlay is under the root stack.
    */
   const toTheOverlay = (open: () => void) => {
     router.dismissTo('/(tabs)/events')
     open()
   }
-  const openThisPass = () =>
-    event &&
-    toTheOverlay(() =>
-      // Today's window and the coordinates, so the pass can say "too far" itself (`lib/attendanceState.ts`, SCRUM-882).
-      // Closing the Room comes back to this page (ROOM-13): it is dismissed to show the overlay, and re-opened after.
-      openPass(doorOf({ ...event, id: String(id) }, { going: rsvpStatus === 'going', hereCount: hereNow ?? detailHere ?? 0 }), { returnToEvent: true })
-    )
-
   // The attendance flow's one state (`lib/attendanceState.ts`): the Going card, the disc and this CTA cannot disagree.
   const ctaNow = (): SceneCTAState => sceneCtaState({ phase: event ? attendancePhase(event) : 'upcoming', rsvpStatus, checkedIn: isCheckedIn, attended })
 
@@ -866,8 +859,8 @@ export default function EventDetail() {
       case 'waitlisted':
         void handleToggleRsvp()
         return
+      // The hold is the button: there is no press to handle.
       case 'join':
-        openThisPass()
         return
       case 'cancelled':
         return
@@ -1270,16 +1263,21 @@ export default function EventDetail() {
             <BringSomeoneRow eventTitle={event.title} onWhatsApp={() => void bringViaWhatsApp()} onShare={handleShare} testID="scene-bring" />
           </Animated.View>
         ) : null}
-        <SceneCTA
-          state={ctaState}
-          pending={rsvpPending}
-          alone={checkInCount <= 1}
-          note={betweenLine ?? undefined}
-          onPress={cancelled ? undefined : primaryActionPress}
-          iconKey={ctaIcon ?? undefined}
-          icon={ctaIcon ? (color) => <Icon name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}
-        />
+        {ctaState === 'join' ? (
+          <EventHold {...hold} />
+        ) : (
+          <SceneCTA
+            state={ctaState}
+            pending={rsvpPending}
+            alone={checkInCount <= 1}
+            note={betweenLine ?? undefined}
+            onPress={cancelled ? undefined : primaryActionPress}
+            iconKey={ctaIcon ?? undefined}
+            icon={ctaIcon ? (color) => <Icon name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}
+          />
+        )}
       </Dock>
+      {overlays}
 
       <SceneLightbox
         items={playlist}

@@ -40,7 +40,7 @@ jest.mock('../components/board/BoardSections', () => {
   const { View } = jest.requireActual('react-native')
   return { BoardEntry: () => <View testID="board-entry" /> }
 })
-jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn() }))
+jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn(), openRoomOf: jest.fn(), useRoomUp: () => false }))
 jest.mock('../lib/calendar', () => ({ addToCalendar: jest.fn() }))
 jest.mock('../lib/openInMaps', () => ({ openInMaps: jest.fn() }))
 jest.mock('../lib/safetyUtils', () => ({ showEventReportOptions: jest.fn() }))
@@ -724,14 +724,15 @@ describe('the Board row (ROOM-08, flow3.js:68)', () => {
   })
 })
 
-describe('Blend in docks THIS event’s pass (owner ruling 2026-10-28, SCRUM-882)', () => {
-  it('live and not checked in: Blend in opens the pass with today’s window and the event’s coordinates', async () => {
+describe('Blend in is the hold itself (SCRUM-966)', () => {
+  it('live and not checked in: the dock is the hold, and nothing is docked in Blend’n first', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { openPass } = require('../lib/blendnOverlay') as { openPass: jest.Mock }
     api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2) }) as never)
     await open()
-    await fireEvent.press(await screen.findByRole('button', { name: 'Blend in' }))
-    expect(openPass).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1', latitude: 12.9, longitude: 77.6 }), { returnToEvent: true })
+    expect(await screen.findByRole('button', { name: 'Hold to blend in' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Blend in' })).toBeNull()
+    expect(openPass).not.toHaveBeenCalled()
   })
 
   it('a cancelled night happening now is "Cancelled", never Blend in', async () => {

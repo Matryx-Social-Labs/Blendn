@@ -76,6 +76,17 @@ export function setDoor(event: TonightEvent): void {
   notify()
 }
 
+/**
+ * Open the overlay on the Room an event page has just checked someone into (SCRUM-966): the overlay draws the Room's skeleton
+ * rather than Tonight while it loads, and closing it comes back to that page (ROOM-13).
+ */
+export function openRoomOf(eventId: string): void {
+  liveEventId = eventId
+  returnTo = eventId
+  notify()
+  set(true)
+}
+
 /** The event to return to once, as the overlay closes: reading it clears it. */
 export function takeReturnTo(): string | null {
   const id = returnTo
@@ -122,6 +133,20 @@ export function getLiveEventId(): string | null {
 }
 export function useLiveEventId(): string | null {
   return useSyncExternalStore(subscribe, getLiveEventId, getLiveEventId)
+}
+
+/**
+ * The event whose Room the overlay is showing, whole. An event page that checked someone in keeps its "You're in" pour over
+ * itself until this says the Room is behind it, then steps aside onto it (SCRUM-966).
+ */
+let roomUpId: string | null = null
+export function setRoomUp(eventId: string | null): void {
+  if (roomUpId === eventId) return
+  roomUpId = eventId
+  notify()
+}
+export function useRoomUp(eventId: string): boolean {
+  return useSyncExternalStore(subscribe, () => roomUpId === eventId, () => roomUpId === eventId)
 }
 
 /** Called by the overlay once its closing transition has finished. */

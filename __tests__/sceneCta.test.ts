@@ -189,9 +189,10 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     expect(detail).not.toContain('secondaryRow')
     expect(detail).not.toContain('ellipsis-horizontal')
 
-    // Nothing spins here now: the check-in is the pass's, in the Blend'n overlay (Flow 3 #04–#06, Flow 4).
+    // The check-in is this page's hold (SCRUM-966): the one flow, `useEventCheckIn`, with no pass docked in Blend'n first.
     expect(detail).not.toContain('checkingIn')
-    expect(detail).toContain('openPass(doorOf(')
+    expect(detail).toContain('useEventCheckIn(')
+    expect(detail).not.toContain('openPass(')
   })
 
   it('check out really is where this screen says it moved to', () => {
