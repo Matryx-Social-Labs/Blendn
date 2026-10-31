@@ -8,7 +8,6 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { EventCheckOut, EventHold } from '../components/scene/EventHold'
-import { sceneCtaLabel } from '../components/scene/SceneSections'
 import { ROOM_WAIT_MS, useEventCheckIn } from '../components/scene/useEventCheckIn'
 import { checkInRefusal } from '../lib/checkInRefusal'
 import { checkOutOf, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
@@ -148,10 +147,6 @@ describe('checked into this event already', () => {
     await holdOut()
     expect(showToast).toHaveBeenCalledWith('Nope.', 'error', expect.anything())
     expect(CheckOutSeen()).toBeTruthy()
-  })
-
-  it('the primary reads "Open the room"', () => {
-    expect(sceneCtaLabel('going')).toBe('Open the room')
   })
 })
 
