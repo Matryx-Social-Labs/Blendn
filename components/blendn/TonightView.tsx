@@ -4,6 +4,7 @@ import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
 import { passReachLine, type PassReach } from '../../lib/attendanceState'
+import { SWITCH_LABEL, switchCaption } from '../../lib/switchCopy'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
@@ -265,8 +266,8 @@ export function TonightView({
               hereCount={door.hereCount}
               tasteCount={door.tasteMatchCount}
               onConfirm={onCheckIn}
-              holdLabel={switchFrom ? 'Hold to switch' : undefined}
-              note={passReachLine(reach) ?? (switchFrom ? `You’ll leave ${switchFrom}` : undefined)}
+              holdLabel={switchFrom ? SWITCH_LABEL : undefined}
+              note={passReachLine(reach) ?? (switchFrom ? switchCaption(switchFrom) : undefined)}
               disabled={reach !== 'open'}
               busy={checkingIn && !youreIn}
               confirmed={youreIn}

@@ -176,6 +176,8 @@ describe('the event screen hears check-in changes', () => {
     // "Blend in" (join) is the hold itself, so it has no press; checked in, "You're in" (going) leads to the Room. One switch on the CTA's own state.
     expect(screen).toMatch(/case 'join':\s*return/)
     expect(screen).toMatch(/case 'going':\s*toTheOverlay\(openBlendn\)/)
+    // …and under "Open the room" the quiet way out is the hold that checks you out of this event (SCRUM-970).
+    expect(screen).toMatch(/ctaState === 'going' \? <EventCheckOut/)
   })
 
   it('apiClient drops only the detail, not the attendee list', () => {

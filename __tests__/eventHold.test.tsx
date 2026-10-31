@@ -7,10 +7,11 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
-import { EventHold } from '../components/scene/EventHold'
+import { EventCheckOut, EventHold } from '../components/scene/EventHold'
+import { sceneCtaLabel } from '../components/scene/SceneSections'
 import { ROOM_WAIT_MS, useEventCheckIn } from '../components/scene/useEventCheckIn'
 import { checkInRefusal } from '../lib/checkInRefusal'
-import { submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
+import { checkOutOf, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
@@ -27,7 +28,7 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: '
 jest.mock('../lib/apiClient', () => ({ apiClient: { setMatchPreferences: jest.fn(async () => ({ success: true })) } }))
 jest.mock('../lib/locationFix', () => ({ warmLocationFix: jest.fn(async () => {}), getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.59, accuracy: 8 })) }))
 jest.mock('../lib/roomVisibilityStorage', () => ({}))
-jest.mock('../lib/checkIn', () => ({ ...jest.requireActual('../lib/checkIn'), submitCheckIn: jest.fn(), revealOffer: jest.fn() }))
+jest.mock('../lib/checkIn', () => ({ ...jest.requireActual('../lib/checkIn'), submitCheckIn: jest.fn(), revealOffer: jest.fn(), checkOutOf: jest.fn() }))
 const mockFix = jest.fn()
 jest.mock('../lib/useTonight', () => ({ quietLocation: () => mockFix() }))
 jest.mock('../lib/blendnOverlay', () => ({ ...jest.requireActual('../lib/blendnOverlay'), openRoomOf: jest.fn(), openPass: jest.fn() }))
@@ -35,6 +36,8 @@ jest.mock('../lib/blendnOverlay', () => ({ ...jest.requireActual('../lib/blendnO
 const { router } = jest.requireMock('expo-router') as { router: { dismissTo: jest.Mock; push: jest.Mock } }
 const { openPass } = jest.requireMock('../lib/blendnOverlay') as { openPass: jest.Mock }
 const submit = submitCheckIn as jest.Mock
+const checkOut = checkOutOf as jest.Mock
+const showToast = jest.fn()
 const HIDDEN = { includeHiddenElements: true }
 const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
 const fresh: CheckInOutcome = { kind: 'checkedIn', checkInId: 'c1', askIntent: false, revealSuggestion: false, left: [] }
@@ -44,11 +47,11 @@ const refused = (errorCode: string, message: string): CheckInOutcome => ({ kind:
 const soon = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString()
 const event = { id: 'e1', title: 'Vinyl Night', venue_name: 'Toit', latitude: 12.9791, longitude: 77.6408, start_time: soon(-1), end_time: soon(2), status: 'published' }
 
-function Page({ openMaps = jest.fn() }: { openMaps?: () => void }) {
-  const { hold, overlays } = useEventCheckIn({ id: 'e1', event: event as never, openMaps })
+function Page({ openMaps = jest.fn(), going = false }: { openMaps?: () => void; going?: boolean }) {
+  const { hold, checkOut: out, overlays } = useEventCheckIn({ id: 'e1', event: event as never, openMaps, showToast })
   return (
     <>
-      <EventHold {...hold} />
+      {going ? <EventCheckOut {...out} /> : <EventHold {...hold} />}
       {overlays}
     </>
   )
@@ -105,16 +108,50 @@ describe('in another room already', () => {
     await render(<Page />)
     await act(async () => {})
     expect(screen.getByRole('button', { name: 'Hold to switch' })).toBeTruthy()
-    expect(screen.getByText('You’ll leave your current room', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('Leaves your other event and checks you in here.', HIDDEN)).toBeTruthy()
     setLiveHint(null)
   })
 
-  it('names the room, the way Tonight does, once the poll knows its title', async () => {
+  it('names the event it leaves, and the same sentence is the hint', async () => {
     setLiveHint('other', 'Fandom')
     await render(<Page />)
     await act(async () => {})
-    expect(screen.getByText('You’ll leave Fandom', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('Leaves Fandom and checks you in here.', HIDDEN)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Hold to switch' }).props.accessibilityHint).toBe('Leaves Fandom and checks you in here.')
     setLiveHint(null)
+  })
+})
+
+describe('checked into this event already', () => {
+  const CheckOutSeen = () => screen.queryByRole('button', { name: 'Hold to check out' })
+  const holdOut = () =>
+    act(async () => fireEvent(screen.getByRole('button', { name: 'Hold to check out' }), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
+
+  it('is "Hold to check out", saying which event it checks you out of, and the same sentence is the hint', async () => {
+    await render(<Page going />)
+    expect(CheckOutSeen()).toBeTruthy()
+    expect(screen.getByText('Checks you out of Vinyl Night.', HIDDEN)).toBeTruthy()
+    expect(CheckOutSeen()?.props.accessibilityHint).toBe('Checks you out of Vinyl Night.')
+  })
+
+  it('checks out through the Room’s own call, for this event', async () => {
+    checkOut.mockResolvedValue({ success: true })
+    await render(<Page going />)
+    await holdOut()
+    expect(checkOut).toHaveBeenCalledWith('e1')
+    expect(showToast).not.toHaveBeenCalled()
+  })
+
+  it('says so, and stays, when the server refuses', async () => {
+    checkOut.mockResolvedValue({ success: false, error: 'Nope.' })
+    await render(<Page going />)
+    await holdOut()
+    expect(showToast).toHaveBeenCalledWith('Nope.', 'error', expect.anything())
+    expect(CheckOutSeen()).toBeTruthy()
+  })
+
+  it('the primary reads "Open the room"', () => {
+    expect(sceneCtaLabel('going')).toBe('Open the room')
   })
 })
 
