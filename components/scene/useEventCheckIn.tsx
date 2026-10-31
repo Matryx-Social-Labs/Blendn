@@ -1,5 +1,6 @@
 import { router } from 'expo-router'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { StyleSheet, View } from 'react-native'
 
 import { doorOf } from '../../lib/attendanceState'
 import { openRoomOf, useRoomUp } from '../../lib/blendnOverlay'
@@ -48,10 +49,15 @@ export function useEventCheckIn({ id, event, openMaps }: { id: string; event: Pa
     overlays: (
       <>
         {flow.pours > 0 ? (
-          <MomentPour key={flow.pours} testID="scene-pour" venue={event?.venue_name ?? ''} ready={roomUp || waitedPour === flow.pours} asks={flow.asks} onDone={flow.pourDone} />
+          // Over the page's own bar (zIndex 10): the pour covers all of it.
+          <View style={styles.cover} pointerEvents="box-none">
+            <MomentPour key={flow.pours} testID="scene-pour" ground venue={event?.venue_name ?? ''} ready={roomUp || waitedPour === flow.pours} asks={flow.asks} onDone={flow.pourDone} />
+          </View>
         ) : null}
         <CheckInTray tray={tray} onClose={flow.dismissTray} testID="scene-tray" />
       </>
     ),
   }
 }
+
+const styles = StyleSheet.create({ cover: { ...StyleSheet.absoluteFillObject, zIndex: 20 } })

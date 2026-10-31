@@ -11,7 +11,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
-import { blendnClosed, getDoor, openPass } from '../lib/blendnOverlay'
+import { blendnClosed, getDoor, openPass, useRoomUp } from '../lib/blendnOverlay'
 import { submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import type { TonightEvent } from '../lib/useTonight'
 
@@ -226,5 +226,27 @@ describe('checked in elsewhere: Hold to switch follows the card', () => {
     await act(async () => fireEvent.press(screen.getByTestId('hold', HIDDEN)))
     expect(submit.mock.calls[0][0]).toBe('C')
     expect(getDoor()?.id).toBe('C')
+  })
+})
+
+describe('an event page waiting for the Room (SCRUM-966)', () => {
+  it('says the Room is up once it is whole, and not before or after', async () => {
+    mockInside = null
+    let up = false
+    function Probe() {
+      up = useRoomUp('A')
+      return null
+    }
+    await render(
+      <>
+        <BlendnScreen />
+        <Probe />
+      </>
+    )
+    expect(up).toBe(false)
+    await act(async () => mockRoomIn('A'))
+    expect(up).toBe(true)
+    await act(async () => mockRoomReset())
+    expect(up).toBe(false)
   })
 })

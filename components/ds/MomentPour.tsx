@@ -71,6 +71,7 @@ export const MomentPour = memo(function MomentPour({
   ready = true,
   asks = false,
   frame,
+  ground = false,
   testID,
 }: {
   venue: string
@@ -84,6 +85,8 @@ export const MomentPour = memo(function MomentPour({
    * panel is #9's own, inset under the top bar and over the home indicator.
    */
   frame?: PourFrame
+  /** Over a page that is not Tonight's dark ground (the event page): the page darkens to solid ink with the flood, so none of it shows around the panel. */
+  ground?: boolean
   testID?: string
 }) {
   const reduceMotion = useReducedMotion()
@@ -115,6 +118,7 @@ export const MomentPour = memo(function MomentPour({
   })
 
   useEffect(() => {
+    if (ground) scrim.set(fade(1, duration.base))
     if (reduceMotion) {
       floodOpacity.set(fade(1, duration.base))
       text.set(fade(1, duration.base))
@@ -177,7 +181,7 @@ export const MomentPour = memo(function MomentPour({
   const textStyle = useAnimatedStyle(() => ({ opacity: text.get() }))
 
   return (
-    <MomentStage testID={testID} modal={false} done={done} label={`You’re in. ${venue}.`} scrimAlpha={0} scrim={scrim} orbs="moment" orbsOpacity={orbs} orbsOnInk={false} onSkip={skip}>
+    <MomentStage testID={testID} modal={false} done={done} label={`You’re in. ${venue}.`} scrimAlpha={ground ? 1 : 0} scrim={scrim} orbs="moment" orbsOpacity={orbs} orbsOnInk={false} onSkip={skip}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, stageStyle]}>
         <View
           testID={testID && `${testID}-panel`}

@@ -5,13 +5,15 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo } from 'react-native'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { EventHold } from '../components/scene/EventHold'
 import { ROOM_WAIT_MS, useEventCheckIn } from '../components/scene/useEventCheckIn'
 import { checkInRefusal } from '../lib/checkInRefusal'
 import { submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
+import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { tint } from '../lib/theme'
 import { openRoomOf, setRoomUp } from '../lib/blendnOverlay'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -111,6 +113,14 @@ describe('the server says yes', () => {
     await act(async () => setRoomUp('e1'))
     await advance(1)
     expect(router.dismissTo).toHaveBeenCalledWith('/(tabs)/events')
+  })
+
+  it('the page is darkened to solid ink under the pour: none of it shows around the panel', async () => {
+    submit.mockResolvedValue(fresh)
+    await render(<Page />)
+    await activate()
+    const ink = StyleSheet.flatten(screen.getByTestId('scene-pour-scrim', HIDDEN).props.style).backgroundColor
+    expect(ink).toBe(tint(COLOR.ink, 1))
   })
 
   it('a Room that never loads does not hold the pour for good', async () => {

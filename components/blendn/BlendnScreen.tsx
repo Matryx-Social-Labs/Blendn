@@ -19,7 +19,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { usePassReach } from '../../lib/usePassReach'
-import { blendnClosed, isLiveHint, openPass, setDoor, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { blendnClosed, isLiveHint, openPass, setDoor, setRoomUp, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -497,6 +497,12 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   }, [controls, onClose])
 
   const eventId = room.event?.id ?? null
+  // An event page that checked someone in keeps its "You're in" pour up until this Room is whole behind it (SCRUM-966).
+  const roomWhole = mode === 'room' && room.settled
+  useEffect(() => {
+    setRoomUp(roomWhole ? eventId : null)
+    return () => setRoomUp(null)
+  }, [roomWhole, eventId])
   const eventTitle = room.event?.title ?? ''
   const chatGroupId = room.chatGroupId
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
