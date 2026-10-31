@@ -21,6 +21,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getEvent: jest.fn(),
     getRoomPreview: jest.fn(() => Promise.resolve({ success: false })),
+    getActiveCheckins: jest.fn(() => Promise.resolve({ success: true, data: { checkIns: [] } })),
     toggleInterest: jest.fn(),
     rsvpToEvent: jest.fn(),
     cancelRsvp: jest.fn(),

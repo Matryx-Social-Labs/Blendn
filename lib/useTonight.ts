@@ -10,7 +10,7 @@ import { settleWithin } from './fetchTimeout'
 import { getDistanceKm, roundCoord } from './geo'
 import { Logger } from './logger'
 import { printable } from './pulseSections'
-import { pickTonight } from './roomMoments'
+import { tonightDeck } from './roomMoments'
 import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
 import { getRoomSignal, subscribeRoomSignal } from './roomSignal'
 import { useLiveSync } from './useLiveSync'
@@ -194,9 +194,11 @@ export function useTonight(): TonightState {
     const goingIds = new Set<string>(
       (rsvps?.data?.events ?? []).filter((e) => e.rsvpStatus === 'going').map((e) => e.id)
     )
-    const next = pickTonight(
+    // The centre button's "today" events are in the deck, in front, whatever the horizon (SCRUM-971).
+    const next = tonightDeck(
       result.data.map((e) => toTonight(e, coords, goingIds)),
-      Date.now()
+      Date.now(),
+      getRoomSignal().todayEventIds
     )
     eventsRef.current = next
     setEvents(next)

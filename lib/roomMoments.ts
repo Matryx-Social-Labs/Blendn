@@ -333,3 +333,12 @@ export function pickTonight<T extends TonightCandidate>(
       return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
     })
 }
+
+/**
+ * Tonight's deck: `pickTonight`, with the events the centre button points at (`todayIds`, yours and today in their own zone,
+ * soonest first) kept even past the horizon and leading it (SCRUM-971): the disc and the deck are one answer to "what's tonight".
+ */
+export function tonightDeck<T extends TonightCandidate>(events: readonly T[], now: number, todayIds: readonly string[] = []): T[] {
+  const today = todayIds.flatMap((id) => events.filter((e) => e.id === id))
+  return [...today, ...pickTonight(events, now).filter((e) => !todayIds.includes(e.id))]
+}

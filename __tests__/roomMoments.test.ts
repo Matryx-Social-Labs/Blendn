@@ -5,6 +5,7 @@ import {
   hereNowStack,
   meetNext,
   pickTonight,
+  tonightDeck,
   reasonLine,
   shuffleCountdownLabel,
   startsLabel,
@@ -319,5 +320,33 @@ describe('pickTonight', () => {
   it('does not keep an event with no end time live for ever', () => {
     expect(pickTonight([ev('open', -60, null, 1)], NOW)).toHaveLength(1)
     expect(pickTonight([ev('stale', -7 * 60, null, 1)], NOW)).toHaveLength(0)
+  })
+})
+
+describe('tonightDeck (SCRUM-971: the disc’s target is in the deck it opens, in front)', () => {
+  const ev = (id: string, startMin: number, endMin: number, distanceKm: number | null, going = false) => ({
+    id,
+    startsAt: minutesFromNow(startMin),
+    endsAt: minutesFromNow(endMin),
+    distanceKm,
+    going,
+  })
+
+  it('keeps an event of yours today that starts past the six-hour horizon, and puts it in front', () => {
+    // 23.5 h away is "tonight" in its own zone, and the disc points at it; the near ones are only the horizon's.
+    const late = ev('late', 23 * 60, 25 * 60, 40, true)
+    const deck = tonightDeck([ev('near', 10, 200, 0.5), ev('live', -30, 120, 1), late], NOW, ['late']).map((e) => e.id)
+    expect(deck).toEqual(['late', 'near', 'live'])
+  })
+
+  it('is pickTonight with no disc target, and ignores a target the feed does not have', () => {
+    const events = [ev('a', 10, 200, 1), ev('b', 60, 200, 2)]
+    expect(tonightDeck(events, NOW, [])).toEqual(pickTonight(events, NOW))
+    expect(tonightDeck(events, NOW, ['gone'])).toEqual(pickTonight(events, NOW))
+  })
+
+  it('lists a target that is also within the horizon once, in front', () => {
+    const events = [ev('a', 10, 200, 0.1, true), ev('b', 60, 200, 2)]
+    expect(tonightDeck(events, NOW, ['b']).map((e) => e.id)).toEqual(['b', 'a'])
   })
 })
