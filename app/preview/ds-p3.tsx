@@ -351,7 +351,7 @@ const COMPOSERS: [string, Partial<ComposerProps>][] = [
   ['focused', { previewState: 'focused' }],
   ['the counter · 100 left', { value: 'x'.repeat(900) }],
 ]
-const LOCKED: ComposerState[] = ['muted', 'automuted', 'locked', 'closed', 'ratelimited', 'notcheckedin']
+const LOCKED: ComposerState[] = ['muted', 'automuted', 'closed', 'ratelimited', 'notcheckedin']
 
 function Composers() {
   const [value, setValue] = useState('')

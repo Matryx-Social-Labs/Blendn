@@ -166,14 +166,13 @@ it('draws Live now, Requests, People and Past rooms, with a request’s note ver
   expect(screen.getByLabelText('Decline the request from Quiet Otter')).toBeTruthy()
 })
 
-it('says a locked room’s state as a chip, not as its last message', async () => {
+it('a room with a `locked` status says no organizer lock (SCRUM-893): its last message, like any past room', async () => {
   await open()
-  expect(screen.getByText(/Locked by the organizer/)).toBeTruthy()
-  expect(screen.queryByText(/Thanks all/)).toBeNull()
+  expect(screen.queryByText(/Locked by the organi/)).toBeNull()
+  expect(screen.getByText(/Thanks all/)).toBeTruthy()
 })
 
 it('line 2 is your unsent message, then your draft — never another account’s', async () => {
-  // An open room: a locked one says its state before anything of yours.
   serve({ rooms: [liveRoom, { ...pastRoom, status: 'open' }] })
   keepFailed(dmThread('c1', 'u-a'), [{ id: 'local-1' }])
   setDraft(roomThread('g-past', 'u-a'), 'see you at   ten')

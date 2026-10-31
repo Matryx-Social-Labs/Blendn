@@ -27,7 +27,8 @@ export function lockFor(errorCode: string | null | undefined, serverText?: strin
     case 'USER_MUTED':
       return { state: 'muted', reason: serverText }
     case 'CHAT_LOCKED':
-      return { state: 'locked', reason: serverText }
+      // No organizer lock (SCRUM-893): a server that still answers it is a room that is closed to you.
+      return { state: 'closed', reason: serverText }
     case 'NOT_CHECKED_IN':
       return { state: 'notcheckedin', reason: serverText }
     case 'CHAT_CLOSED': {
@@ -54,7 +55,6 @@ export function lockForReason(reason: string | null | undefined, serverText?: st
     case 'muted':
       return { state: 'muted', reason: text }
     case 'locked':
-      return { state: 'locked', reason: text }
     case 'window_closed':
     case 'archived':
       return { state: 'closed', reason: text }
@@ -78,7 +78,7 @@ export function saidWrite(data: RoomWriteRead | ChatHistoryData | null | undefin
 
 /**
  * What `GET /events/:id/chat` says about whether you may write, as the composer's lock on open (ROOM-05): the room's
- * own `status: 'locked'`, else your `write.reason`. A room that has not opened yet is the countdown's, not a lock here.
+ * own `status: 'locked'` (read as closed; nothing writes it, SCRUM-893), else your `write.reason`. A room that has not opened yet is the countdown's, not a lock here.
  */
 export function lockFromDoor(data: RoomWriteRead | ChatHistoryData | null | undefined): ComposerLock | null {
   const d = writeReadOf(data)
@@ -89,12 +89,12 @@ export function lockFromDoor(data: RoomWriteRead | ChatHistoryData | null | unde
 }
 
 /**
- * A lock no retry gets past: the organiser locked the room, its window closed, its event was hidden. Unlike a mute, a
+ * A lock no retry gets past: the room's window closed, its event was hidden. Unlike a mute, a
  * rate limit or an RSVP away, waiting does not open it, so a "Not sent · Tap to retry" under it is a promise it cannot
  * keep (RC drive 4 D-6).
  */
 export function isReadOnlyLock(lock: ComposerLock | null | undefined): boolean {
-  return lock?.state === 'locked' || lock?.state === 'closed' || lock?.state === 'hidden'
+  return lock?.state === 'closed' || lock?.state === 'hidden'
 }
 
 export function useComposerLock() {

@@ -56,7 +56,6 @@ import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership,
 import { opensRoomCard, roomCardRoute } from '../../lib/roomCard'
 import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
-import { roomLockedIn } from '../../lib/roomState'
 import { blockStep, messageReportStep } from '../../lib/safetyUtils'
 import { REMOVED_AFTER_DELIVERY, sendOutcome } from '../../lib/sendOutcome'
 import { showSheet } from '../../lib/sheet'
@@ -281,31 +280,15 @@ function GroupChatInner() {
     if (wasClosed.current && !countingDown && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility('The room is open')
     wasClosed.current = !!countingDown
   }, [countingDown])
-  /*
-   * A room the organiser locked opens read-only (TG-02): its row in the Banter's list says so (`status`, the same cached
-   * read as `useRoomRow`). Before, the lock was learnt only from a send it refused, so it opened with a live composer.
-   */
   /** The event this room is, to ask its own door (`GET /events/:id/chat`), which knows when it opens. */
   const roomEventId = eventRoom ? (roomInfo.eventId ?? idParam(params.eventId)) : null
   /*
-   * A room muted for you, locked by the organiser or closed opens read-only (TG-02, ROOM-05): an event's room asks its
-   * own door, which says so by `status` and `write.reason`; before, the lock was learnt from a send it refused, and the
-   * Banter's row (page 1 of a cached list) said it first. Any other room's lock is on its row in that list.
+   * A room muted for you or closed opens read-only (ROOM-05): an event's room asks its own door, which says so by
+   * `write.reason`; before, the lock was learnt from a send it refused. There is no organizer lock (SCRUM-893).
    */
   const setComposerLock = composer.setLock
   /** Whether the history read said anything about writing: a server older than SV-5 does not, and the door is asked instead. */
   const historySaidWrite = useRef(false)
-  // The Banter's row of this room (cached): a lock the list already knows (TG-02). Waits for nothing.
-  useEffect(() => {
-    if (!chatRoomId) return
-    let live = true
-    void apiClient.getChatGroups().then((result) => {
-      if (live && result.success && roomLockedIn(result.data, roomId)) setComposerLock({ state: 'locked' })
-    })
-    return () => {
-      live = false
-    }
-  }, [chatRoomId, roomId, setComposerLock])
   // Older server only: an event's room asks its own door for `write` / `status`, once the history has been read and not
   // for somebody out of the room (that door is `askEventDoor`'s). `limit: 1`: the lock is wanted, not the history.
   const lockReadable = !loading && !outOfRoom

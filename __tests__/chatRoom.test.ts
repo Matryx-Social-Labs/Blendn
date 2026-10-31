@@ -322,7 +322,7 @@ describe('the send button does not pretend the message is still in flight', () =
 
   it('locks only for a reason it can name, in the server’s words', () => {
     const src = COMPOSER()
-    for (const state of ['muted', 'automuted', 'locked', 'closed', 'ratelimited', 'notcheckedin', 'notopen', 'hidden']) {
+    for (const state of ['muted', 'automuted', 'closed', 'ratelimited', 'notcheckedin', 'notopen', 'hidden']) {
       expect(src).toMatch(new RegExp(`${state}: \\{\\s*icon: '`))
     }
     expect(src).toContain('const body = reason ?? fallback')
@@ -337,7 +337,7 @@ describe('the send button does not pretend the message is still in flight', () =
 
   it('turns the server’s refusal into a lock, alongside the kept failed bubble', () => {
     const lock = LOCK()
-    for (const [code, state] of [['USER_MUTED', 'muted'], ['CHAT_LOCKED', 'locked'], ['NOT_CHECKED_IN', 'notcheckedin'], ['RATE_LIMITED', 'ratelimited']]) {
+    for (const [code, state] of [['USER_MUTED', 'muted'], ['CHAT_LOCKED', 'closed'], ['NOT_CHECKED_IN', 'notcheckedin'], ['RATE_LIMITED', 'ratelimited']]) {
       expect(lock).toMatch(new RegExp(`case '${code}':[\\s\\S]*?state: '${state}'`))
     }
     // A rate limit lifts on its own; the server says when, and the clock counts it down.

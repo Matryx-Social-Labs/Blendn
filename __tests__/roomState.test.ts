@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { myRoomFace, roomLockedIn, roomStateFrom, roomStateLine } from '../lib/roomState'
+import { myRoomFace, roomStateFrom, roomStateLine } from '../lib/roomState'
 
 /*
  * A muted member's room stays in the list, with a reason (SCRUM-178).
@@ -12,8 +12,8 @@ import { myRoomFace, roomLockedIn, roomStateFrom, roomStateLine } from '../lib/r
 describe('roomStateFrom', () => {
   it('reads the membership first, then the room', () => {
     expect(roomStateFrom({ membership: { status: 'muted' }, status: 'active' })).toBe('muted')
-    expect(roomStateFrom({ membership: { status: 'active' }, status: 'locked' })).toBe('locked')
-    // Muted in a locked room: the mute is the more personal fact.
+    // SCRUM-893 (decided by lean 2026-11-01): there is no organizer lock, so a room's own `locked` status says nothing here.
+    expect(roomStateFrom({ membership: { status: 'active' }, status: 'locked' })).toBeNull()
     expect(roomStateFrom({ membership: { status: 'muted' }, status: 'locked' })).toBe('muted')
     expect(roomStateFrom({ membership: { status: 'active' }, status: 'active' })).toBeNull()
     // Older servers send neither field.
@@ -24,7 +24,6 @@ describe('roomStateFrom', () => {
 describe('roomStateLine', () => {
   it('says what the person can and cannot do', () => {
     expect(roomStateLine('muted')).toBe('Muted — you can read, not post')
-    expect(roomStateLine('locked')).toBe('Locked by the organizer — read only')
     expect(roomStateLine(null)).toBeNull()
   })
 })
@@ -39,18 +38,11 @@ describe('the Banter list', () => {
   })
 })
 
-describe('roomLockedIn (TG-02: a locked room opens read-only)', () => {
-  it('finds the room in either list and reads its own status, a mute or not', () => {
-    const payload = {
-      groups: [{ id: 'g1', status: 'locked', membership: { status: 'muted' } }, { id: 'g2', status: 'active' }],
-      rooms: [{ id: 'c1', kind: 'crew', status: 'locked' }],
+describe('no organizer lock (SCRUM-893)', () => {
+  it('the app never says a room was locked by the organizer', () => {
+    for (const f of [['app', '(tabs)', 'chat.tsx'], ['app', 'chat', '[id].tsx'], ['lib', 'roomState.ts'], ['components', 'ds', 'Composer.tsx']]) {
+      expect(readFileSync(join(__dirname, '..', ...f), 'utf8')).not.toMatch(/locked by the organi[sz]er|organizer locked/i)
     }
-    expect(roomLockedIn(payload, 'g1')).toBe(true)
-    expect(roomLockedIn(payload, 'c1')).toBe(true)
-    expect(roomLockedIn(payload, 'g2')).toBe(false)
-    expect(roomLockedIn(payload, 'nope')).toBe(false)
-    expect(roomLockedIn([{ chat_room_id: 'g3', status: 'locked' }], 'g3')).toBe(true)
-    expect(roomLockedIn(null, 'g1')).toBe(false)
   })
 })
 

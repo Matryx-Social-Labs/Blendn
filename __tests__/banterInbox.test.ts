@@ -162,10 +162,10 @@ describe('the room you are standing in', () => {
     expect(PARTS()).toContain('<RollingNumber value={count}')
   })
 
-  it('says a locked room as a status, not as speech (Flow 5 #08)', () => {
-    expect(SCREEN()).toContain("'Locked by the organizer · read only'")
+  it('says a muted room as a status, not as speech (Flow 5 #08); there is no organizer lock (SCRUM-893)', () => {
+    expect(SCREEN()).not.toMatch(/Locked by the organi/)
     expect(SCREEN()).toContain("const stateLine = roomStateLine(c.room_state)")
-    expect(SCREEN()).toContain("{ kind: 'chip', icon: c.room_state === 'locked' ? 'lock' : 'mic-off', text: stateLine, warn: c.room_state === 'locked' }")
+    expect(SCREEN()).toContain("{ kind: 'chip', icon: 'mic-off', text: stateLine }")
   })
 })
 
