@@ -100,6 +100,20 @@ describe('the affirmative is lit in the world the sheet is asked from', () => {
   })
 })
 
+describe('a strong action is the DS white button, whatever hue the sheet is asked from (SYS-05)', () => {
+  it.each(['rose', 'violet'] as const)('%s: white fill, ink label', async (hue) => {
+    await render(<SheetHost />)
+    await act(async () =>
+      showSheet({ kind: 'actions', hue, title: 'Clear all notifications?', actions: [{ label: 'Clear all', variant: 'strong', then: jest.fn() }, { label: 'Cancel', cancel: true }] })
+    )
+    const button = screen.getByRole('button', { name: 'Clear all' })
+    expect(StyleSheet.flatten(button.props.style).backgroundColor).toBe(COLOR.textPrimary)
+    expect(StyleSheet.flatten(screen.getByText('Clear all').props.style).color).toBe(COLOR.ink)
+    // The frame's strong button is the 56 pt one (a lit action is what stacks a sheet at 48).
+    expect(StyleSheet.flatten(button.props.style).height).toBe(56)
+  })
+})
+
 describe('a reason sheet', () => {
   const reasons = (run: (reason: string, note?: string) => Promise<SheetOutcome>) =>
     showSheet({

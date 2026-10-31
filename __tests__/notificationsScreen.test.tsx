@@ -506,14 +506,14 @@ describe('the ⋯ menu and Clear all', () => {
     expect(router.push).toHaveBeenCalledWith('/notification-settings')
   })
 
-  it('draws the Clear all confirm strong (white), not red: nothing is destroyed (SYS-05, E13)', async () => {
+  it('asks for the strong (white) Clear all confirm, not red and not the rose lit one (SYS-05, E13)', async () => {
     const show = jest.spyOn(sheetModule, 'showSheet')
     await render(<Screen />)
     await screen.findByText('You have a new match')
     await openMenu()
     fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
     const sheet = show.mock.calls[0][0] as { actions: { label: string; variant?: string }[] }
-    expect(sheet.actions.find((a) => a.label === 'Clear all')?.variant).toBe('primary')
+    expect(sheet.actions.find((a) => a.label === 'Clear all')?.variant).toBe('strong')
     show.mockRestore()
   })
 

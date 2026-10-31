@@ -33,6 +33,9 @@ const STRONG_STAYS: Record<string, { count: number; why: string }> = {
   'components/system/AccountStateScreen.tsx': { count: 3, why: 'a suspended or signed-out account: a system screen with no world' },
   'app/+not-found.tsx': { count: 1, why: 'a system screen with no world' },
   'lib/linkRefusalCard.ts': { count: 2, why: 'the card a refused link lands on, before any screen has a world' },
+  'lib/sheet.ts': { count: 1, why: 'the sheet action variant that asks for the frame’s white button (SYS-05)' },
+  'components/SheetHost.tsx': { count: 1, why: 'maps that variant to the DS strong kind' },
+  'app/notifications.tsx': { count: 1, why: 'the Clear all confirm: flow-9 frame 9.7 draws the white button, owner ruling 2026-10-31 (SCRUM-842)' },
   'components/ds/HoldToConfirm.tsx': { count: 1, why: 'its screen-reader fallback mirrors the hold’s own white ink' },
 }
 

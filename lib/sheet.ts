@@ -42,8 +42,12 @@ export type SheetOutcome =
 
 export type SheetAction = {
   label: string
-  /** `tertiary`: a quiet text action beside the sheet's real choices ("What's kept"), drawn as Cancel is. */
-  variant?: 'primary' | 'secondary' | 'tertiary' | 'destructive'
+  /**
+   * `primary`: the affirmative, lit in the sheet's `hue`. `strong`: the DS's white button, for a frame that draws one
+   * ("Clear all", "Open Settings"): it is never tinted by the hue. `tertiary`: a quiet text action beside the sheet's
+   * real choices ("What's kept"), drawn as Cancel is.
+   */
+  variant?: 'primary' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
   /** A row's glyph, in a `rows` sheet (the DM's options). */
   icon?: IconName
   /** A state, not an action ("Requested"): the row is drawn quiet and does nothing. */
