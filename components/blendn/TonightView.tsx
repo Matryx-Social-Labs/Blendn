@@ -58,18 +58,13 @@ export function deckEvent(e: TonightEvent, now: number): DeckEvent {
 function EventDeck({ events, now, onOpen, maxHeight }: { events: TonightEvent[]; now: number; onOpen: (id: string) => void; maxHeight: number }) {
   const { width: screen } = useWindowDimensions()
   const deck = events.slice(0, DECK_MAX)
-  const [index, setIndex] = useState(0)
   const width = screen - DECK_INSET * 2
   const fit = maxHeight > 0 ? maxHeight - FAN_DROP - (deck.length > 1 ? PIPS : 0) : Infinity
   const height = Math.max(MIN_CARD, Math.min(Math.round(width * DECK_ASPECT), fit))
-  // The list can shrink under the deck (an event ends); never point past it.
-  const shown = Math.min(index, deck.length - 1)
   return (
     <View style={styles.deck}>
       <TonightCard
         events={deck.map((e) => deckEvent(e, now))}
-        index={shown}
-        onIndexChange={setIndex}
         onOpen={(i) => deck[i] && onOpen(deck[i].id)}
         width={width}
         height={height}

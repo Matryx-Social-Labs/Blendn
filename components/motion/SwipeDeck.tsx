@@ -147,6 +147,7 @@ export function SwipeDeck<T>({
   cardStyle,
   accessibilityLabel,
   accessibilityHint,
+  accessibilityValue,
   nextLabel = 'Next',
 }: {
   items: readonly T[]
@@ -167,6 +168,8 @@ export function SwipeDeck<T>({
   cardStyle?: StyleProp<ViewStyle>
   accessibilityLabel: string
   accessibilityHint?: string
+  /** Where the pile is, spoken after each adjust ("1 of 3"). */
+  accessibilityValue?: { text: string }
   /** The VoiceOver action that does the swap. */
   nextLabel?: string
 }) {
@@ -261,6 +264,7 @@ export function SwipeDeck<T>({
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
+        accessibilityValue={accessibilityValue}
         accessibilityActions={
           count > 1 ? [{ name: 'activate' }, { name: 'increment', label: nextLabel }] : [{ name: 'activate' }]
         }
