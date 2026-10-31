@@ -15,26 +15,39 @@ import type { FlatList, ScrollView } from 'react-native'
 export interface FollowEnd {
   onContentSizeChange: () => void
   onScrollBeginDrag: () => void
-  /** From `onScroll`: back at the end by hand means follow again. */
+  /** Back at the end: follow again. */
   noteAtEnd: (atEnd: boolean) => void
+  /**
+   * From `onScroll`. Once `stop`ped, only a reader's own drag lets it follow again: a jump that lands short of a list
+   * still laying out clamps to its end, and following from there carried the thread past the first unread (SCRUM-958).
+   */
+  noteScroll: (atEnd: boolean) => void
   /** Stop following — the thread opened somewhere else, at its first unread. */
   stop: () => void
 }
 
 export function followEnd(scrollToEnd: () => void): FollowEnd {
   let following = true
+  let held = false
   return {
     onContentSizeChange: () => {
       if (following) scrollToEnd()
     },
     onScrollBeginDrag: () => {
       following = false
+      held = false
     },
     noteAtEnd: (atEnd) => {
-      if (atEnd) following = true
+      if (!atEnd) return
+      following = true
+      held = false
+    },
+    noteScroll: (atEnd) => {
+      if (!held && atEnd) following = true
     },
     stop: () => {
       following = false
+      held = true
     },
   }
 }

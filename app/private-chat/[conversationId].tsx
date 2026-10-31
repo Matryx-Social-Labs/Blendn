@@ -296,7 +296,12 @@ function PrivateChatInner() {
       .finally(() => setRevealBusy(false))
   }
 
-  const scrollToBottom = (animated = true) => scrollListToEnd(flatListRef.current, animated)
+  // The unread rule is kept in place, layout pass by layout pass, until the reader's hand or a scroll to the end takes over.
+  const ruleHeldRef = useRef(false)
+  const scrollToBottom = (animated = true) => {
+    ruleHeldRef.current = false
+    scrollListToEnd(flatListRef.current, animated)
+  }
   const follow = useFollowEnd(() => scrollToBottom(false))
 
   const loadMessages = (cursor?: string, limit = DM_PAGE) =>
@@ -603,13 +608,22 @@ function PrivateChatInner() {
     }, [awaitingReceipt, reloadRef])
   )
 
-  /* Scroll to the unread rule once it is in the list (SCRUM-406). */
+  /*
+   * Scroll to the unread rule once it is in the list (SCRUM-406), and keep it there while rows lay out. A jump into rows
+   * not yet measured lands by an estimate, and the rows above the rule then measure taller or shorter, so one scroll opened
+   * ~110 messages short of it on Android (SCRUM-958). Older pages also keep arriving above it, so its index moves: every
+   * scroll, and the retry after one that failed, reads where it is now.
+   */
   const anchoredRef = useRef(false)
   const dividerIndex = chatItems.findIndex((i) => i.kind === 'unread')
+  const ruleAt = useLatest(dividerIndex)
+  const scrollToRule = () => ruleAt.current >= 0 && flatListRef.current?.scrollToIndex({ index: ruleAt.current, viewPosition: 0.1, animated: false })
   useEffect(() => {
     if (anchoredRef.current || dividerIndex < 0) return
     anchoredRef.current = true
-    requestAnimationFrame(() => flatListRef.current?.scrollToIndex({ index: dividerIndex, viewPosition: 0.1, animated: false }))
+    ruleHeldRef.current = true
+    requestAnimationFrame(scrollToRule)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dividerIndex])
 
   /* The long-press for a DM (R3-D5 5.2): no reactions; Reply · Copy (· Report… on theirs); Not sent opens its sheet. */
@@ -768,7 +782,12 @@ function PrivateChatInner() {
    * Say hi outgrow the frame, so pinning the end hid the opener's faces and "You both said" under the reveal bar on open
    * (RC drive 3 D-A). It opens at its start; the first message (Say hi included) follows the end as before.
    */
-  const followFeed = feed.length ? follow.onContentSizeChange : undefined
+  const followFeed = feed.length
+    ? () => {
+        follow.onContentSizeChange()
+        if (ruleHeldRef.current) scrollToRule()
+      }
+    : undefined
 
   return (
     <View style={styles.screen}>
@@ -803,6 +822,8 @@ function PrivateChatInner() {
               windowSize={10}
               initialNumToRender={25}
               onStartReached={() => void loadOlderMessages()}
+              // Older pages go in above the reader: the row in view stays in view, so the unread rule stays under the thumb (SCRUM-958).
+              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
               ListHeaderComponent={
                 <View>
                   {/* Permanent, not an empty state: seen by both, whoever types first. */}
@@ -847,15 +868,18 @@ function PrivateChatInner() {
               onContentSizeChange={followFeed}
               onScrollToIndexFailed={(info) => {
                 // Not measured yet: get close by the average row, then land on it.
-                flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false })
-                setTimeout(() => flatListRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.1, animated: false }), 120)
+                flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * Math.max(ruleAt.current, 0), animated: false })
+                setTimeout(scrollToRule, 120)
               }}
-              onScrollBeginDrag={follow.onScrollBeginDrag}
+              onScrollBeginDrag={() => {
+                ruleHeldRef.current = false
+                follow.onScrollBeginDrag()
+              }}
               onScroll={(e) => {
                 const { contentSize, contentOffset, layoutMeasurement } = e.nativeEvent
                 const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
                 isAtBottomRef.current = atBottom
-                follow.noteAtEnd(atBottom)
+                follow.noteScroll(atBottom)
                 setAwayFromEnd(!atBottom)
                 if (atBottom) setNewWhileAway(0)
               }}
