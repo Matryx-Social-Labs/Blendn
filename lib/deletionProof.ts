@@ -1,6 +1,7 @@
 import * as AppleAuthentication from 'expo-apple-authentication'
 import { Platform } from 'react-native'
 
+import { googleSignInConfig } from './googleConfig'
 import { Logger } from './logger'
 
 /**
@@ -21,7 +22,10 @@ export type DeletionProof = {
 
 export const DELETION_REFUSED = { password: 'PASSWORD_INCORRECT', provider: 'REAUTH_REQUIRED' } as const
 
-/** The Apple sheet once more. Null when it is cancelled, unavailable (Android) or fails: then nothing is deleted. */
+/**
+ * The Apple sheet once more. Null when it is cancelled, unavailable or fails: then nothing is deleted. Android has no Sign
+ * in with Apple, and the app offers none there, so an Apple-only account never holds an Android session to delete from.
+ */
 export async function appleProofForDeletion(): Promise<DeletionProof | null> {
   try {
     if (!(await AppleAuthentication.isAvailableAsync())) return null
@@ -47,11 +51,7 @@ export async function googleProofForDeletion(): Promise<DeletionProof | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { GoogleSignin } = require('@react-native-google-signin/google-signin') as typeof import('@react-native-google-signin/google-signin')
-    GoogleSignin.configure({
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
-      offlineAccess: true,
-    })
+    GoogleSignin.configure(googleSignInConfig())
     if (Platform.OS === 'android') await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true })
     const result = await GoogleSignin.signIn()
     const idToken = result.data?.idToken

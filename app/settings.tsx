@@ -297,9 +297,12 @@ function SettingsScreenContent() {
    * provider once more. Without it, or with a wrong one, nothing is deleted and the sheet says why.
    */
   const deletePassword = useRef('')
+  // Read when "for good?" is built, not when the first step was: the method can arrive while that step is open.
+  const authMethodNow = useLatest(authMethod)
   const confirmDeleteSheet = useCallback((): Sheet => {
     // An account whose method is not known yet is asked for a password, the server's own first answer (`signInMethod`).
-    const method = authMethod ?? 'password'
+    const known = authMethodNow.current
+    const method = known ?? 'password'
     deletePassword.current = ''
     return {
       kind: 'actions',
@@ -328,7 +331,7 @@ function SettingsScreenContent() {
               const result = await deleteAccount(proof)
               if (!result.success) {
                 setDeleting(false)
-                return { ok: false, error: deletionRefusal(method, result) }
+                return { ok: false, error: deletionRefusal(known, result) }
               }
               /*
                * The session is already gone and the guard is on its way to sign-in.
@@ -344,8 +347,12 @@ function SettingsScreenContent() {
         },
         { label: 'Cancel', cancel: true },
       ],
+      // Not kept past the sheet: Cancel, the backdrop and Android back forget the typed password.
+      onDismiss: () => {
+        deletePassword.current = ''
+      },
     }
-  }, [authMethod])
+  }, [authMethodNow])
 
   const explainDeleteSheet = useCallback(
     (storePlus: PlusStatus['source'] | null): Sheet => {
@@ -633,11 +640,16 @@ const deletionAsk = (method: AuthMethod): string =>
 const deletionProofMissing = (method: AuthMethod): string =>
   method === 'password' ? 'Enter your password to delete your account.' : `Sign in with ${PROVIDER_NAME[method]} to delete your account.`
 
-/** The server said no. Its two proof refusals in the app's words; anything else is its own sentence. */
-function deletionRefusal(method: AuthMethod, result: { error?: string; errorCode?: string }): string {
+/**
+ * The server said no. Its two proof refusals in the app's words; anything else is its own sentence. `known` is null when
+ * the phone guessed a password: a provider account asked for one breaks the loop by signing in again, which records how.
+ */
+function deletionRefusal(known: AuthMethod | null, result: { error?: string; errorCode?: string }): string {
   if (result.errorCode === DELETION_REFUSED.password) return 'That password isn’t right.'
-  if (result.errorCode === DELETION_REFUSED.provider)
-    return method === 'password' ? 'Enter your password to delete your account.' : `Sign in with ${PROVIDER_NAME[method]} again to delete your account.`
+  if (result.errorCode === DELETION_REFUSED.provider) {
+    if (known === 'google' || known === 'apple') return `Sign in with ${PROVIDER_NAME[known]} again to delete your account.`
+    return known ? 'Enter your password to delete your account.' : 'Sign out and sign in again, then delete your account.'
+  }
   return result.error || "Your account wasn’t deleted. Try again."
 }
 
