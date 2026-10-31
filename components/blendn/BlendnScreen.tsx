@@ -819,7 +819,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     <View style={styles.fill}>
       {/* Below the Room: Tonight (or the Recap, or the skeleton), held under a hand-off until its crossfade is done. */}
       {!tonightUp ? null : mode === 'ended' && recap ? (
-        <Animated.View key="ended" style={styles.layer} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)}>
+        <Animated.View key="ended" style={styles.layer} exiting={FadeOut.duration(DURATION.quick)}>
           {/* Under People from tonight the Recap is not there for a screen reader: a swipe never walks past the deck. */}
           <View
             style={[styles.layer, peopleOpen && styles.underPeople]}
@@ -906,7 +906,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           onLayout={() => setRoomLaidOut(true)}
           // Out of a pour the crossfade is `roomFade`'s; otherwise the Room's own entrance.
           entering={pourEntrance ? undefined : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
-          exiting={FadeOut.duration(DURATION.quick)}
+          // Gone at once when the night is over: the Recap beneath is opaque from its first frame and must not have the Room's faces through it (SCRUM-962).
+          exiting={mode === 'ended' ? undefined : FadeOut.duration(DURATION.quick)}
           pointerEvents={mode === 'room' ? 'auto' : 'none'}
           // Under the cancelled card the Room is not there for a screen reader: a swipe never walks past it.
           accessibilityElementsHidden={mode !== 'room' || !!cancelled}
