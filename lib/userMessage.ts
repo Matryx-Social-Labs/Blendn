@@ -20,7 +20,6 @@ const SPOKEN_CODES = new Set([
   'SPAM_BLOCKED',
   'USER_MUTED',
   'USER_BANNED',
-  'CHAT_LOCKED',
   'CHAT_CLOSED',
   'LEFT_ROOM',
   'NOT_CHECKED_IN',

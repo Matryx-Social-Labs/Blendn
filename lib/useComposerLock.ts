@@ -27,8 +27,9 @@ export function lockFor(errorCode: string | null | undefined, serverText?: strin
     case 'USER_MUTED':
       return { state: 'muted', reason: serverText }
     case 'CHAT_LOCKED':
-      // No organizer lock (SCRUM-893): a server that still answers it is a room that is closed to you.
-      return { state: 'closed', reason: serverText }
+      // No organizer lock (SCRUM-893): a server that still answers it is a room closed to you, in the closed state's own
+      // words: the server's sentence for it still says "locked by the organizer".
+      return { state: 'closed' }
     case 'NOT_CHECKED_IN':
       return { state: 'notcheckedin', reason: serverText }
     case 'CHAT_CLOSED': {
@@ -55,6 +56,7 @@ export function lockForReason(reason: string | null | undefined, serverText?: st
     case 'muted':
       return { state: 'muted', reason: text }
     case 'locked':
+      return { state: 'closed' }
     case 'window_closed':
     case 'archived':
       return { state: 'closed', reason: text }
