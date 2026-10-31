@@ -19,7 +19,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { usePassReach } from '../../lib/usePassReach'
-import { blendnClosed, isLiveHint, openPass, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { blendnClosed, isLiveHint, openPass, setDoor, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -297,13 +297,19 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   )
 
   /*
-   * The pass Tonight docks: the event an event page's "Blend in" asked for
-   * (Flow 3 #04–#06; the server is the gate, so it docks inside the fence or
-   * not), else the one whose fence you're standing in. Tonight's own copy of
-   * it wins when it has one: its counts are live.
+   * The pass Tonight docks follows the deck's front card (SCRUM-965, owner 2026-10-31): the card in front owns the hold, its
+   * reach and its "Hold to switch". The deck leads with the anchor, the event an event page's "Blend in" asked for (Flow 3
+   * #04–#06; the server is the gate), else the fence you stand in, so that card is in front when Tonight opens. With no
+   * anchor there is no pass: the deck alone. Tonight's own copy of an event wins when it has one: its counts are live.
    */
   const door = useDoor()
-  const liveInside = (door ? (tonight.events.find((e) => e.id === door.id) ?? door) : tonight.events.find((e) => e.id === tonight.insideEventId)) ?? null
+  const anchor = (door ? (tonight.events.find((e) => e.id === door.id) ?? door) : tonight.events.find((e) => e.id === tonight.insideEventId)) ?? null
+  const liveDeck = useMemo(() => (anchor ? [anchor, ...tonight.events.filter((e) => e.id !== anchor.id)] : tonight.events), [anchor, tonight.events])
+  /** The one front-card index, kept with the anchor it was swiped under: another anchor starts at its own card. */
+  const [swiped, setSwiped] = useState<{ anchorId: string | null; index: number }>({ anchorId: null, index: 0 })
+  const frontIndex = Math.min(swiped.anchorId === (anchor?.id ?? null) ? swiped.index : 0, Math.max(liveDeck.length - 1, 0))
+  const livePass = anchor ? liveDeck[frontIndex] : null
+  const onFront = useCallback((index: number) => setSwiped({ anchorId: anchor?.id ?? null, index }), [anchor?.id])
   /*
    * Tonight as it was when the hold committed, held until the check-in is done
    * (and, under a hand-off, its crossfade).
@@ -312,11 +318,12 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
    * landed mid-pour: the deck vanished, the pass changed under the flood and
    * the Room's "is this the one" test lost its event (PR #401 drive 2).
    */
-  const [held, setHeld] = useState<{ events: TonightEvent[]; insideEvent: TonightEvent | null } | null>(null)
-  const tonightEvents = held ? held.events : tonight.events
-  const insideEvent = held ? held.insideEvent : liveInside
+  const [held, setHeld] = useState<{ events: TonightEvent[]; insideEvent: TonightEvent | null; deckKey: string | null } | null>(null)
+  const tonightEvents = held ? held.events : liveDeck
+  const insideEvent = held ? held.insideEvent : livePass
+  const deckKey = held ? held.deckKey : (anchor?.id ?? null)
   // Away from the door, or location off: the pass docks with its hold disabled (owner ruling 2026-10-28).
-  const passReachNow = usePassReach(liveInside, tonight.insideEventId, tonight.location)
+  const passReachNow = usePassReach(livePass, tonight.insideEventId, tonight.location)
   /*
    * The Room is there to hand off to: loaded, or waited for long enough.
    * ponytail: a fixed ceiling, so a room that doesn't load straight after the
@@ -366,6 +373,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
    * places am I inside" from the server (SCRUM-704).
    */
   const switchFrom = room.status === 'ready' && room.event && door && door.id !== room.event.id && !roomOver ? room.event : null
+  /** The front card is the room you are in: nothing to switch, the pass reads "You're in". */
+  const passIsRoom = !!switchFrom && insideEvent?.id === switchFrom.id
   const switchFromNow = useLatest(switchFrom)
   const insideEventNow = useLatest(insideEvent)
   /** The room a switch left, and the event it switched into: the toast is for that landing only. */
@@ -388,6 +397,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       // The server names the room it took you out of (`left`); the screen's own switch is the fallback for an older one.
       const leftTitle = outcome.left[0] ?? from?.title
       leftRoom.current = leftTitle && insideEventNow.current ? { title: leftTitle, toId: insideEventNow.current.id } : null
+      // The card checked into is the door now: the room it opens is this one, not a switch from the old door's.
+      if (insideEventNow.current) setDoor(insideEventNow.current)
       setPourEntrance(true)
       setPourPlaying(true)
       setPourStill(false)
@@ -871,13 +882,15 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             offline={tonight.offline}
             location={tonight.location}
             onRetry={() => void tonight.refresh()}
+            deckKey={deckKey}
+            onFront={onFront}
             insideEvent={insideEvent}
             // Judged before the hold, never during it: a check-in in flight is the server's to answer.
             reach={held || checkIn.checkingIn ? 'open' : passReachNow}
-            switchFrom={switchFrom?.title}
+            switchFrom={switchFrom && !passIsRoom ? switchFrom.title : undefined}
             // Under the hand-off the check-in is over, but the pass fading out still reads "You're in", never a re-armed hold.
             checkingIn={checkIn.checkingIn || mode === 'room'}
-            youreIn={checkIn.youreIn || mode === 'room'}
+            youreIn={checkIn.youreIn || mode === 'room' || passIsRoom}
             onPassFrame={setPassFrame}
             onOpenEvent={(id) => router.push({ pathname: '/event/[id]', params: { id } as never })}
             onSeeAll={() => router.push('/nearby-events')}
@@ -886,12 +899,12 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
               router.navigate('/(tabs)/events')
             }}
             onCheckIn={() => {
-              setHeld({ events: tonight.events, insideEvent: liveInside })
+              setHeld({ events: liveDeck, insideEvent: livePass, deckKey: anchor?.id ?? null })
               void checkIn.start()
             }}
             onRoomRetry={room.status === 'error' ? room.retry : undefined}
             // Not while the pour plays: the pass growing under it moved the flood (R2-D1's row comes after).
-            crewStrip={pourPlaying || mode === 'room' ? null : <PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
+            crewStrip={pourPlaying || mode === 'room' || !checkIn.youreIn ? null : <PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
             topInset={topInset}
             bottomInset={insets.bottom}
           />

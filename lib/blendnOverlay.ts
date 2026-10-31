@@ -70,6 +70,12 @@ export function openPass(event: TonightEvent, options?: { returnToEvent?: boolea
   set(true)
 }
 
+/** The pass moved to another event (the card checked into): the same overlay, a new door. */
+export function setDoor(event: TonightEvent): void {
+  door = event
+  notify()
+}
+
 /** The event to return to once, as the overlay closes: reading it clears it. */
 export function takeReturnTo(): string | null {
   const id = returnTo
