@@ -4,7 +4,8 @@ import { StyleSheet, View } from 'react-native'
 
 import { doorOf } from '../../lib/attendanceState'
 import { checkOutOf } from '../../lib/checkIn'
-import { openRoomOf, setLeftNotice, useLiveEventId, useLiveTitle, useRoomUp } from '../../lib/blendnOverlay'
+import { apiClient } from '../../lib/apiClient'
+import { openRoomOf, setLeftNotice, setLiveHint, useLiveEventId, useLiveTitle, useRoomUp } from '../../lib/blendnOverlay'
 import { usePassReach } from '../../lib/usePassReach'
 import { CHECKOUT_FAILED } from '../../lib/useRoomControls'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
@@ -39,6 +40,23 @@ export function useEventCheckIn({
   const { tray, showTray, closeTray } = useCheckInTray()
   const liveId = useLiveEventId()
   const liveTitle = useLiveTitle()
+  // Opened cold (a link, the app not running), the tab bar has not read which room you are in yet: read it once, so the hold
+  // says "Hold to switch" and names the room before anyone holds (SCRUM-971). The tab bar's poll takes it from here.
+  const hintKnown = liveId !== null
+  useEffect(() => {
+    if (hintKnown) return
+    let live = true
+    apiClient
+      .getActiveCheckins()
+      .then((r) => {
+        const active = live && r.success ? (r.data?.checkIns?.[0] ?? null) : null
+        if (active) setLiveHint(active.eventId, active.event?.title ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [hintKnown])
   const door = useMemo(() => (event ? doorOf({ ...event, id }, { going: false }) : null), [event, id])
   const reach = usePassReach(door, null, 'on')
   const flow = useCheckInFlow({

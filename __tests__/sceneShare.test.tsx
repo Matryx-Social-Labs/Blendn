@@ -19,7 +19,7 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getEvent: jest.fn(), getRoomPreview: jest.fn(() => Promise.resolve({ success: false })), toggleInterest: jest.fn(), rsvpToEvent: jest.fn(), cancelRsvp: jest.fn() },
+  apiClient: { getEvent: jest.fn(), getRoomPreview: jest.fn(() => Promise.resolve({ success: false })), getActiveCheckins: jest.fn(() => Promise.resolve({ success: true, data: { checkIns: [] } })), toggleInterest: jest.fn(), rsvpToEvent: jest.fn(), cancelRsvp: jest.fn() },
 }))
 jest.mock('../lib/socketClient', () => ({ subscribeToEventCheckIn: () => () => {}, subscribeToEventInterest: () => () => {} }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))

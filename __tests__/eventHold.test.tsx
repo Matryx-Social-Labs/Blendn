@@ -24,7 +24,8 @@ jest.mock('react-native-gesture-handler', () => ({
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), dismissTo: jest.fn() } }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u1', name: 'Sam Rao', image: null } }) }))
-jest.mock('../lib/apiClient', () => ({ apiClient: { setMatchPreferences: jest.fn(async () => ({ success: true })) } }))
+const mockActive = jest.fn()
+jest.mock('../lib/apiClient', () => ({ apiClient: { setMatchPreferences: jest.fn(async () => ({ success: true })), getActiveCheckins: () => mockActive() } }))
 jest.mock('../lib/locationFix', () => ({ warmLocationFix: jest.fn(async () => {}), getCurrentLocation: jest.fn(async () => ({ latitude: 12.97, longitude: 77.59, accuracy: 8 })) }))
 jest.mock('../lib/roomVisibilityStorage', () => ({}))
 jest.mock('../lib/checkIn', () => ({ ...jest.requireActual('../lib/checkIn'), submitCheckIn: jest.fn(), revealOffer: jest.fn(), checkOutOf: jest.fn() }))
@@ -65,6 +66,7 @@ beforeEach(() => {
   setRoomUp(null)
   setLiveHint(null)
   setLeftNotice(null)
+  mockActive.mockResolvedValue({ success: true, data: { checkIns: [] } })
   mockFix.mockResolvedValue(fix(12.9792, 77.6408))
   jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(H, 'error').mockImplementation(() => {})
@@ -117,6 +119,32 @@ describe('in another room already', () => {
     await act(async () => {})
     expect(screen.getByText('Leaves Fandom and checks you in here.', HIDDEN)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Hold to switch' }).props.accessibilityHint).toBe('Leaves Fandom and checks you in here.')
+    setLiveHint(null)
+  })
+})
+
+describe('opened cold, before the tab bar has read which room you are in (SCRUM-971)', () => {
+  it('reads it once itself: Hold to switch, naming the room it leaves', async () => {
+    mockActive.mockResolvedValue({ success: true, data: { checkIns: [{ eventId: 'other', event: { title: 'Fandom' } }] } })
+    await render(<Page />)
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: 'Hold to switch' })).toBeTruthy()
+    expect(screen.getByText('Leaves Fandom and checks you in here.', HIDDEN)).toBeTruthy()
+    setLiveHint(null)
+  })
+
+  it('stays "Hold to blend in" when you are in no room, or the read fails', async () => {
+    mockActive.mockRejectedValueOnce(new Error('offline'))
+    await render(<Page />)
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: 'Hold to blend in' })).toBeTruthy()
+  })
+
+  it('does not ask when the tab bar already has the answer', async () => {
+    setLiveHint('other', 'Fandom')
+    await render(<Page />)
+    await act(async () => {})
+    expect(mockActive).not.toHaveBeenCalled()
     setLiveHint(null)
   })
 })
