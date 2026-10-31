@@ -56,7 +56,7 @@ const GENDERS: { label: string; value: OnboardingGender }[] = [
 /** What the date's hint says while there is nothing to correct (Flow 2 basics 01). */
 const DOB_HINT = 'Your age will be private and used only for verification.'
 /** Under the name: what rooms show of it (SCRUM-493). */
-const NAME_HINT = 'In event rooms you go by a made-up name. If you choose to show yours, people there see your full name.'
+const NAME_HINT = 'In event rooms you go by a made-up name. If you choose to show yours, people there see your first name. Your full name is for people you match or talk with.'
 const NOT_A_DATE = 'That is not a date we recognise.'
 
 function BasicsScreenInner() {
@@ -163,8 +163,7 @@ function BasicsScreenInner() {
       <>
         {/*
       Full name; a made-up name in rooms until the person shows theirs, and
-      then the whole of it (`roomIdentity`, admin lib/identity.ts). The
-      helper said "only your first name" and nothing shortens it (SCRUM-493).
+      then the first word of it (`roomIdentity` + `firstName`, admin, SCRUM-493).
 
       `User.name` is one field and holds whatever signup wrote, so collecting
       the whole thing costs nothing and the room is protected by the pseudonym

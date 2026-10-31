@@ -46,7 +46,7 @@ import { useReducedMotion } from '../../lib/motion'
  * halves, and "just here for the event" is a first-class answer rather than a
  * failure to choose.
  *
- * **Reveal** — whether your real name and photo are visible in this room.
+ * **Reveal** — whether your first name and photo are visible in this room.
  * Default off. Per event, deliberately: choosing to be visible at a work meetup
  * is not choosing to be visible at a club, and one global switch would make
  * that decision once for every room you ever enter.
@@ -229,7 +229,7 @@ function EventPreferencesContent() {
       {askIntent ? (
         <SectionHeader
           title="Can people see who you are?"
-          caption="By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your real name and photo to people in this room."
+          caption="By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your first name and photo to people in this room."
         />
       ) : (
         <View style={styles.headline}>
@@ -237,7 +237,7 @@ function EventPreferencesContent() {
             Can people see who you are?
           </Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-            By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your real name and photo to people in this room.
+            By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your first name and photo to people in this room.
           </Text>
         </View>
       )}
