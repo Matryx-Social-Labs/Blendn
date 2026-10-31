@@ -167,6 +167,34 @@ describe('a check-in', () => {
 
     expect(await done).toBe('checkedIn')
     expect(props.onEnterRoom).not.toHaveBeenCalled()
+    // SCRUM-977: no room comes to step aside onto, so the pour goes too, rather than leaving its scrim over the page.
+    expect(flow.pours).toBe(0)
+    expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
+  })
+
+  it('a pour whose check-in fails after it (the reveal offer throwing) clears too, leaving the failure sheet over the page', async () => {
+    offer.mockRejectedValueOnce(new Error('offline'))
+    const { done } = await checkIn(fresh({ revealSuggestion: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    await advance(DURATION.base)
+
+    expect(await done).toBe('failed')
+    expect(props.showTray).toHaveBeenCalledWith('Check-in failed', expect.any(String), expect.any(Array), expect.anything())
+    expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
+  })
+
+  it('the next pour after a cleared one is a new pour, not the old one remounted', async () => {
+    const { done } = await checkIn(fresh({ askIntent: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    await advance(DURATION.base)
+    await act(async () => intentAnswered('abandoned'))
+    await done
+    submit.mockResolvedValue(fresh())
+    await act(async () => {
+      void flow.start()
+    })
+    expect(flow.pours).toBe(2)
+    expect(screen.getByTestId('pour', HIDDEN)).toBeTruthy()
   })
 
   it('offers the reveal after the pour has cleared, then the intent, then the room', async () => {
