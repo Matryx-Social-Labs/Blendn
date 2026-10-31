@@ -170,11 +170,11 @@ describe('the event screen hears check-in changes', () => {
     expect(screen).toMatch(/subscribeCheckInChanged\(\(\) => void fetchEventDetails\(\)\)/)
   })
 
-  it('checks in only through the pass: "Blend in" opens this event’s VenuePass (Flow 3 #04–#06, Flow 4)', () => {
+  it('checks in only through the one flow: "Blend in" is the page’s hold (SCRUM-966), "You’re in" leads to the Room', () => {
     expect(screen).not.toContain('useCheckInFlow(')
     expect(screen).not.toContain('<MomentPour')
-    // "Blend in" (join) docks the pass; checked in, "You're in" (going) leads to the Room. One switch on the CTA's own state.
-    expect(screen).toMatch(/case 'join':\s*openThisPass\(\)/)
+    // "Blend in" (join) is the hold itself, so it has no press; checked in, "You're in" (going) leads to the Room. One switch on the CTA's own state.
+    expect(screen).toMatch(/case 'join':\s*return/)
     expect(screen).toMatch(/case 'going':\s*toTheOverlay\(openBlendn\)/)
   })
 
