@@ -202,7 +202,9 @@ export class RequestQueue {
     } catch (error) {
       this.errorCount++
 
-      Logger.error('api', `Request #${requestId} failed`, {
+      // The id is a detail, not the sentence: the sentence is the Sentry issue's fingerprint (lib/logger).
+      Logger.error('api', 'Request failed', {
+        requestId,
         error,
         duration: Date.now() - startTime,
         type: item.type,
@@ -2058,10 +2060,14 @@ class ApiClientClass {
 
     if (isGet) {
       this.inFlight.set(key, promise as Promise<ApiResponse<unknown>>)
-      promise.finally(() => {
-        // Only its own entry: a forget may have let a newer read take the key.
-        if (this.inFlight.get(key) === promise) this.inFlight.delete(key)
-      })
+      promise
+        .finally(() => {
+          // Only its own entry: a forget may have let a newer read take the key.
+          if (this.inFlight.get(key) === promise) this.inFlight.delete(key)
+        })
+        // `finally` returns a second promise that rejects with the first: the caller handles the first, nobody this one.
+        // Unhandled, every failed GET was also an unhandled rejection ("Request queue cleared", BLENDN-1Y/2J/2B).
+        .catch(() => {})
     }
 
     return promise

@@ -511,8 +511,11 @@ export async function connect(opts: { force?: boolean } = {}): Promise<boolean> 
          * which cost real time to establish by hand. engine.io attaches a
          * `description` (the underlying event or HTTP status) and `context`.
          */
-        const detail = error as Error & { description?: unknown; context?: unknown }
-        Logger.error("socket", "Connection error", {
+        const detail = error as Error & { description?: unknown; context?: unknown; type?: unknown }
+        // A transport that could not reach the server ("xhr poll error", "websocket error") is the network, and the manager
+        // retries it: a warning (a breadcrumb). A refusal from the server's middleware is still an error. BLENDN-1C, W, 2G.
+        const log = detail.type === "TransportError" ? Logger.warn : Logger.error
+        log("socket", "Connection error", {
           error: detail.message,
           description:
             detail.description instanceof Error
