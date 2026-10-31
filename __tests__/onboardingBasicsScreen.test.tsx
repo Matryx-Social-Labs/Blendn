@@ -8,13 +8,14 @@ import React from 'react'
 import { H } from '../lib/haptics'
 
 const mockCommit = jest.fn(async () => true)
+const mockUpdate = jest.fn()
 const mockSignOut = jest.fn(async () => {})
 let mockDraft: Record<string, unknown> = {}
 jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() } }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 jest.mock('../lib/useOnboarding', () => ({
-  useOnboarding: () => ({ draft: mockDraft, loaded: true, saving: false, commit: mockCommit, skip: jest.fn(), goBack: jest.fn() }),
+  useOnboarding: () => ({ draft: mockDraft, loaded: true, saving: false, commit: mockCommit, update: mockUpdate, skip: jest.fn(), goBack: jest.fn() }),
 }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { name: 'Sam Mehta' } }), signOut: () => mockSignOut() }))
 
@@ -160,4 +161,16 @@ it('a name past 100 is not cut: it stays, says by how much, and Continue waits (
 it('the name shows no counter far from its cap', async () => {
   await render(<BasicsScreen />)
   expect(screen.queryByText(/^\d+\/100$/, { includeHiddenElements: true })).toBeNull()
+})
+
+it('signing out keeps what was typed in the draft, as the sheet promises (SCRUM-658)', async () => {
+  await render(<BasicsScreen />)
+  await fireEvent.changeText(screen.getByTestId('onboarding-name-input'), 'Sam M')
+  await fireEvent.press(screen.getByLabelText('Woman'))
+  await dob('14', '03', '1998')
+  await fireEvent.press(screen.getByTestId('onboarding-secondary'))
+  await fireEvent.press(screen.getByLabelText('Sign out'))
+  expect(mockUpdate).toHaveBeenCalledWith({ name: 'Sam M', gender: 'woman', dateOfBirth: '1998-03-14' })
+  expect(mockSignOut).toHaveBeenCalled()
+  expect(mockUpdate.mock.invocationCallOrder[0]).toBeLessThan(mockSignOut.mock.invocationCallOrder[0])
 })

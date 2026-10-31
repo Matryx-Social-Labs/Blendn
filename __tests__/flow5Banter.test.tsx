@@ -185,6 +185,19 @@ it('line 2 is your unsent message, then your draft — never another account’s
   expect(screen.queryByText(/somebody else’s draft/)).toBeNull()
 })
 
+it('the Live now card says your unsent message too, not your last sent one (SCRUM-633)', async () => {
+  keepFailed(roomThread('g-live', 'u-a'), [{ id: 'local-1' }])
+  await open()
+  expect(within(screen.getByTestId('banter-live-g-live')).getByText('Not sent · Tap to retry')).toBeTruthy()
+  expect(screen.queryByText(/Stage is open/)).toBeNull()
+})
+
+it('the Live now card shows your draft before the room’s last message', async () => {
+  setDraft(roomThread('g-live', 'u-a'), 'meet at the bar')
+  await open()
+  expect(within(screen.getByTestId('banter-live-g-live')).getByText(/Draft · meet at the bar/)).toBeTruthy()
+})
+
 it('shows B none of A’s drafts or unsent messages', async () => {
   keepFailed(dmThread('c1', 'u-a'), [{ id: 'local-1' }])
   setDraft(roomThread('g-past', 'u-a'), 'A’s draft')
