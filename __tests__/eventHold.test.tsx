@@ -14,7 +14,7 @@ import { submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
-import { openRoomOf, setLiveHint, setRoomUp } from '../lib/blendnOverlay'
+import { getLeftNotice, openRoomOf, setLeftNotice, setLiveHint, setRoomUp } from '../lib/blendnOverlay'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-gesture-handler', () => ({
@@ -62,6 +62,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   setRoomUp(null)
   setLiveHint(null)
+  setLeftNotice(null)
   mockFix.mockResolvedValue(fix(12.9792, 77.6408))
   jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(H, 'error').mockImplementation(() => {})
@@ -133,6 +134,34 @@ describe('the server says yes', () => {
     await act(async () => setRoomUp('e1'))
     await advance(1)
     expect(router.dismissTo).toHaveBeenCalledWith('/(tabs)/events')
+  })
+
+  describe('switching out of another room', () => {
+    const switchHold = () =>
+      act(async () => fireEvent(screen.getByRole('button', { name: 'Hold to switch' }), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
+
+    it('tells the Room which room it left, from the poll, so the Room can say "You left {room}."', async () => {
+      setLiveHint('other', 'Fandom')
+      submit.mockResolvedValue(fresh)
+      await render(<Page />)
+      await switchHold()
+      expect(getLeftNotice()).toEqual({ title: 'Fandom', toId: 'e1' })
+    })
+
+    it('prefers the name the server gave for the room it took you out of', async () => {
+      setLiveHint('other', 'Fandom')
+      submit.mockResolvedValue({ ...fresh, left: ['Toit'] })
+      await render(<Page />)
+      await switchHold()
+      expect(getLeftNotice()).toEqual({ title: 'Toit', toId: 'e1' })
+    })
+
+    it('says nothing when it left no room', async () => {
+      submit.mockResolvedValue(fresh)
+      await render(<Page />)
+      await activate()
+      expect(getLeftNotice()).toBeNull()
+    })
   })
 
   it('the page is darkened to solid ink under the pour: none of it shows around the panel', async () => {
