@@ -60,4 +60,4 @@ export function useEventCheckIn({ id, event, openMaps }: { id: string; event: Pa
   }
 }
 
-const styles = StyleSheet.create({ cover: { ...StyleSheet.absoluteFillObject, zIndex: 20 } })
+const styles = StyleSheet.create({ cover: { ...StyleSheet.absoluteFill, zIndex: 20 } })
