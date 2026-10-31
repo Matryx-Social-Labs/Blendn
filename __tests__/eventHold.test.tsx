@@ -161,6 +161,20 @@ describe('checked into this event already', () => {
     expect(CheckOutSeen()?.props.accessibilityHint).toBe('Checks you out of Vinyl Night.')
   })
 
+  it('is the quiet hold, not a second gradient under "Open the room" (A-31): the lit kind, its hue pouring in', async () => {
+    await render(<Page going />)
+    // The lit kind's own layers: its rim and the hue's flare as the fill. The gradient stays the one primary's.
+    expect(screen.getByTestId('scene-checkout-pill-rim', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('scene-checkout-pill-fill-ground', HIDDEN)).toBeTruthy()
+  })
+
+  it('the check-in hold keeps the gradient', async () => {
+    await render(<Page />)
+    expect(screen.getByTestId('scene-hold-pill', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('scene-hold-pill-rim', HIDDEN)).toBeNull()
+    expect(screen.queryByTestId('scene-hold-pill-fill-ground', HIDDEN)).toBeNull()
+  })
+
   it('checks out through the Room’s own call, for this event', async () => {
     checkOut.mockResolvedValue({ success: true })
     await render(<Page going />)

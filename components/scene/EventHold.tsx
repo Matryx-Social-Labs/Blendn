@@ -53,14 +53,15 @@ const styles = StyleSheet.create({
 
 /**
  * The event you are checked into, from its own page (SCRUM-970): "Open the room" is the dock's primary; this is the quiet way
- * out under it. The same hold as the check-in, saying whose room it takes you out of.
+ * out under it. The same hold as the check-in, saying whose room it takes you out of, in the DS's quiet hold (`kind="lit"`, the
+ * hue pouring in, A-31): the gradient stays the one primary's, so it is never a second gradient under the room's.
  */
 export function EventCheckOut({ name, onConfirm, busy }: { name: string | null; onConfirm: () => void; busy: boolean }) {
   const bold = useBoldText()
   const caption = checkOutCaption(name)
   return (
     <View testID="scene-checkout" style={styles.wrap}>
-      <HoldToConfirm label={CHECK_OUT_LABEL} srLabel="Check out" consequence={caption} onConfirm={onConfirm} busy={busy} testID="scene-checkout-pill" />
+      <HoldToConfirm kind="lit" label={CHECK_OUT_LABEL} srLabel="Check out" consequence={caption} onConfirm={onConfirm} busy={busy} testID="scene-checkout-pill" />
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} accessibilityElementsHidden importantForAccessibility="no" style={[font('caption', bold), styles.line]}>
         {caption}
       </Text>
