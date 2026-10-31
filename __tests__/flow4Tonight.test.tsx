@@ -162,13 +162,19 @@ describe('the banners', () => {
 })
 
 describe('the pass (#06, #07)', () => {
-  it('docks the door’s VenuePass, the copy as drawn, and keeps its event off the deck', async () => {
+  it('docks the door’s VenuePass, the copy as drawn', async () => {
     await draw({ insideEvent: event('door', { title: 'Vinyl Night', hereCount: 12, tasteMatchCount: 3 }) })
     expect(screen.getByTestId('tonight-pass', HIDDEN)).toBeTruthy()
     expect(screen.getByText('YOU’RE HERE', HIDDEN)).toBeTruthy()
     expect(screen.getByText('3+ here share your taste', HIDDEN)).toBeTruthy()
     expect(screen.getByText('Checks you in. Other people at this event will see you.', HIDDEN)).toBeTruthy()
-    expect(screen.queryByText('Event door', HIDDEN)).toBeNull()
+  })
+
+  it('the pass’s event is the deck’s front card, not a card taken out of it (SCRUM-965)', async () => {
+    const door = event('door', { title: 'Vinyl Night' })
+    await draw({ events: [door, event('a')], insideEvent: door })
+    expect(screen.getAllByText('Vinyl Night', HIDDEN).length).toBeGreaterThan(1)
+    expect(screen.getByTestId('tonight-deck-pip-1', HIDDEN)).toBeTruthy()
   })
 
   it('the pass alone when nothing else is on', async () => {

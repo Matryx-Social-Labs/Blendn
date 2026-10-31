@@ -55,7 +55,7 @@ export function deckEvent(e: TonightEvent, now: number): DeckEvent {
 }
 
 /** The deck, sized to the room it has (`maxHeight`, 0 while unmeasured). Flicks are the TonightCard's. */
-function EventDeck({ events, now, onOpen, maxHeight }: { events: TonightEvent[]; now: number; onOpen: (id: string) => void; maxHeight: number }) {
+function EventDeck({ events, now, onOpen, onFront, maxHeight }: { events: TonightEvent[]; now: number; onOpen: (id: string) => void; onFront?: (index: number) => void; maxHeight: number }) {
   const { width: screen } = useWindowDimensions()
   const deck = events.slice(0, DECK_MAX)
   const width = screen - DECK_INSET * 2
@@ -66,6 +66,7 @@ function EventDeck({ events, now, onOpen, maxHeight }: { events: TonightEvent[];
       <TonightCard
         events={deck.map((e) => deckEvent(e, now))}
         onOpen={(i) => deck[i] && onOpen(deck[i].id)}
+        onIndexChange={onFront}
         width={width}
         height={height}
         testID="tonight-deck"
@@ -84,7 +85,12 @@ export type TonightViewProps = {
   offline?: boolean
   location?: TonightLocation
   onRetry: () => void
+  /** The pass's event: the deck's front card (SCRUM-965), or null when there is no pass. */
   insideEvent: TonightEvent | null
+  /** The front card changed (a swipe), with its index into `events`: the screen derives the pass from it. */
+  onFront?: (index: number) => void
+  /** Another key starts the deck again at its first card. */
+  deckKey?: string | null
   /**
    * Whether the docked pass's hold is offered (`lib/attendanceState.ts` `passReach`): away from the door or with location off
    * the same pass shows, its hold disabled, with one short line (owner ruling 2026-10-28).
@@ -128,6 +134,8 @@ export function TonightView({
   location = 'on',
   onRetry,
   insideEvent,
+  onFront,
+  deckKey,
   reach = 'open',
   switchFrom,
   checkingIn,
@@ -157,7 +165,7 @@ export function TonightView({
   const [headHeight, setHeadHeight] = useState(0)
   // R3-D4 4.7: with approximate location no door can be confirmed, so no pass is offered.
   const door = location === 'approximate' ? null : insideEvent
-  const list = door ? events.filter((e) => e.id !== door.id) : events
+  const list = events
   const deckRoom = viewport ? viewport - topInset - headHeight - SPACE.xl : 0
   const sub =
     location === 'approximate'
@@ -239,7 +247,7 @@ export function TonightView({
               />
             </View>
           ) : list.length > 0 ? (
-            <EventDeck events={list} now={now} onOpen={onOpenEvent} maxHeight={deckRoom} />
+            <EventDeck key={deckKey ?? undefined} events={list} now={now} onOpen={onOpenEvent} onFront={onFront} maxHeight={deckRoom} />
           ) : null}
         </Animated.ScrollView>
       </GestureDetector>
