@@ -62,12 +62,12 @@ export function DraggableTile({
   const startY = useSharedValue(0)
   const lift = useSharedValue(0)
 
-  // The grid was measured, or resized: every tile goes where its slot now is, without travelling.
+  // The grid was measured or resized, or a saved order gave this tile a new index: it goes to its home slot, without travelling.
+  // Home, not `positions[index]`: the new index arrives while `positions` still holds the old order for one commit, which parked the tile in the old slot.
   useEffect(() => {
-    const to = slotXY(positions.get()[index] ?? index, grid)
-    x.set(to.x)
-    y.set(to.y)
-  }, [grid, index, positions, x, y])
+    x.set(home.x)
+    y.set(home.y)
+  }, [home.x, home.y, x, y])
 
   // Another tile made room, or the order was saved or put back: this one steps to its slot.
   useAnimatedReaction(
@@ -78,7 +78,7 @@ export function DraggableTile({
       x.set(reduceMotion ? to.x : withSpring(to.x, SPRING.snap))
       y.set(reduceMotion ? to.y : withSpring(to.y, SPRING.snap))
     },
-    [grid, reduceMotion]
+    [grid, index, reduceMotion]
   )
 
   const liftChanged = onLift ?? noLift
