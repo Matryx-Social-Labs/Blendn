@@ -109,6 +109,9 @@ describe('a check-in', () => {
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
     expect(await done).toBe('checkedIn')
     expect(flow.youreIn).toBe(false)
+    // The Room takes over from it: the pour stays mounted to clear itself over the Room (SCRUM-977 clears only the rest).
+    expect(flow.pours).toBe(1)
+    expect(screen.getByTestId('pour', HIDDEN)).toBeTruthy()
     await advance(1000)
     // The pour's haptic is the check-in's only one: the hook plays none of its own.
     expect(success).toHaveBeenCalledTimes(1)
@@ -167,6 +170,34 @@ describe('a check-in', () => {
 
     expect(await done).toBe('checkedIn')
     expect(props.onEnterRoom).not.toHaveBeenCalled()
+    // SCRUM-977: no room comes to step aside onto, so the pour goes too, rather than leaving its scrim over the page.
+    expect(flow.pours).toBe(0)
+    expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
+  })
+
+  it('a pour whose check-in fails after it (the reveal offer throwing) clears too, leaving the failure sheet over the page', async () => {
+    offer.mockRejectedValueOnce(new Error('offline'))
+    const { done } = await checkIn(fresh({ revealSuggestion: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    await advance(DURATION.base)
+
+    expect(await done).toBe('failed')
+    expect(props.showTray).toHaveBeenCalledWith('Check-in failed', expect.any(String), expect.any(Array), expect.anything())
+    expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
+  })
+
+  it('the next pour after a cleared one counts on from it (a new key, so the Room wait starts again)', async () => {
+    const { done } = await checkIn(fresh({ askIntent: true }))
+    await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
+    await advance(DURATION.base)
+    await act(async () => intentAnswered('abandoned'))
+    await done
+    submit.mockResolvedValue(fresh())
+    await act(async () => {
+      void flow.start()
+    })
+    expect(flow.pours).toBe(2)
+    expect(screen.getByTestId('pour', HIDDEN)).toBeTruthy()
   })
 
   it('offers the reveal after the pour has cleared, then the intent, then the room', async () => {

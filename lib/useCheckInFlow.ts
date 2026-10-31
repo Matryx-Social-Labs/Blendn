@@ -82,9 +82,11 @@ export function useCheckInFlow({
    * Counts fresh check-ins, for `<MomentPour key={pours} onDone={pourDone} />`
    * once it is above 0. It bumps when the server says yes, and the pour plays
    * the success haptic itself, so the check-in plays none (§10). "You were
-   * already in" doesn't count: that isn't news.
+   * already in" doesn't count: that isn't news. Returned as 0 once a pour has no
+   * room to step aside onto (SCRUM-977), so its scrim never stays over the page.
    */
   const [pours, setPours] = useState(0)
+  const [pouring, setPouring] = useState(false)
   /** Settles the running check-in's wait for its pour to hand off. */
   const pourHandedOff = useRef<(() => void) | null>(null)
   const pourDone = () => {
@@ -179,6 +181,7 @@ export function useCheckInFlow({
 
   const run = async (): Promise<CheckInFlowResult> => {
     trayHolds.current = false
+    let enteringRoom = false
     setCheckingIn(true)
 
     try {
@@ -262,6 +265,7 @@ export function useCheckInFlow({
         await new Promise<void>((handOff) => {
           pourHandedOff.current = handOff
           setPours((n) => n + 1)
+          setPouring(true)
         })
 
         // What follows a check-in is decided in `lib/checkIn.ts`, the same for
@@ -306,6 +310,7 @@ export function useCheckInFlow({
           if ((await answered) === 'abandoned') return 'checkedIn'
         }
         await onEnterRoom?.()
+        enteringRoom = true
         return 'checkedIn'
       }
     } catch (error) {
@@ -322,10 +327,12 @@ export function useCheckInFlow({
       )
       return 'failed'
     } finally {
+      // The Room takes over from the pour; anything else (a link, a failure) leaves the page under it, so it goes.
+      if (!enteringRoom) setPouring(false)
       setArrival(null)
       if (!trayHolds.current) setCheckingIn(false)
     }
   }
 
-  return { checkingIn, youreIn: arrival !== null, asks: arrival?.asks ?? false, pours, pourDone, dismissTray, start, getCurrentLocation }
+  return { checkingIn, youreIn: arrival !== null, asks: arrival?.asks ?? false, pours: pouring ? pours : 0, pourDone, dismissTray, start, getCurrentLocation }
 }
