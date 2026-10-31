@@ -45,7 +45,7 @@ jest.mock('../lib/notifications', () => ({
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-jest.mock('../lib/appleRevocation', () => ({ ...jest.requireActual('../lib/appleRevocation'), appleCodeForDeletion: jest.fn() }))
+jest.mock('../lib/deletionProof', () => ({ ...jest.requireActual('../lib/deletionProof'), appleProofForDeletion: jest.fn(), googleProofForDeletion: jest.fn() }))
 
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
@@ -56,7 +56,7 @@ import { H } from '../lib/haptics'
 import { apiClient } from '../lib/apiClient'
 import { resetMutedRooms } from '../lib/mutedRooms'
 import { deleteAccount, signOut } from '../lib/useAuth'
-import { APPLE_UNLINK_HINT, appleCodeForDeletion } from '../lib/appleRevocation'
+import { appleProofForDeletion, googleProofForDeletion } from '../lib/deletionProof'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const plusStatus = (o: Partial<{ active: boolean; gated: boolean; source: 'apple' | 'google' | 'grant' | null }> = {}) => ({
@@ -225,76 +225,106 @@ describe('Delete account', () => {
     return all[all.length - 1]
   }
 
-  it('asks twice, then says the account was deleted once it was', async () => {
-    ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
-    await render(<Screen />)
-    await openTray()
-
-    fireEvent.press(lastButton('Delete account'))
-    expect(await screen.findByText('Delete your account for good?')).toBeTruthy()
-    expect(deleteAccount).not.toHaveBeenCalled()
-
-    fireEvent.press(screen.getByRole('button', { name: 'Delete my account' }))
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
-    expect(deleteAccount).toHaveBeenCalledTimes(1)
+  const typePassword = (value: string) => act(async () => fireEvent.changeText(screen.getByTestId('delete-password'), value))
+  const asMethod = (method: 'apple' | 'google' | 'password') => {
+    ;(mockAuth.user as { signInMethod?: string }).signInMethod = method
+  }
+  afterEach(() => {
+    delete (mockAuth.user as { signInMethod?: string }).signInMethod
   })
 
-  it('keeps the tray open with the reason when deleting fails, and offers Try again', async () => {
-    ;(deleteAccount as jest.Mock).mockResolvedValue({ success: false, error: 'Server said no.' })
-    await render(<Screen />)
-    await openTray()
-    fireEvent.press(lastButton('Delete account'))
-    fireEvent.press(await screen.findByRole('button', { name: 'Delete my account' }))
+  // SCRUM-944 (3): a bearer token alone no longer deletes. A password account types its password into "for good?".
+  describe('a password account', () => {
+    it('asks twice, the second time for the password, then says the account was deleted once it was', async () => {
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+      await render(<Screen />)
+      await openTray()
 
-    expect(await screen.findByText('Server said no.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
-    expect(mockShowToast).not.toHaveBeenCalled()
-  })
+      fireEvent.press(lastButton('Delete account'))
+      expect(await screen.findByText('Delete your account for good?')).toBeTruthy()
+      expect(screen.getByText(/Enter your password to confirm\.$/)).toBeTruthy()
+      expect(deleteAccount).not.toHaveBeenCalled()
 
-  // Negative control: with app/settings.tsx at 7521c4c0 (no Apple step), all three fail.
-  describe('an Apple account (5.1.1(v): its Apple grant is revoked)', () => {
-    const asApple = (method: 'apple' | 'password') => {
-      ;(mockAuth.user as { signInMethod?: string }).signInMethod = method
-    }
-    afterEach(() => {
-      delete (mockAuth.user as { signInMethod?: string }).signInMethod
+      await typePassword('hunter22')
+      fireEvent.press(screen.getByRole('button', { name: 'Delete my account' }))
+      await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
+      expect(deleteAccount).toHaveBeenCalledWith({ password: 'hunter22' })
+      expect(appleProofForDeletion).not.toHaveBeenCalled()
+      expect(googleProofForDeletion).not.toHaveBeenCalled()
     })
-    const confirm = async () => {
+
+    it('with no password typed, asks for it and sends nothing', async () => {
       await render(<Screen />)
       await openTray()
       fireEvent.press(lastButton('Delete account'))
       fireEvent.press(await screen.findByRole('button', { name: 'Delete my account' }))
+      expect(await screen.findByText('Enter your password to delete your account.')).toBeTruthy()
+      expect(deleteAccount).not.toHaveBeenCalled()
+    })
+
+    it('a wrong password keeps the tray open, says so, and offers Try again', async () => {
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: false, error: 'Forbidden', errorCode: 'PASSWORD_INCORRECT' })
+      asMethod('password')
+      await render(<Screen />)
+      await openTray()
+      fireEvent.press(lastButton('Delete account'))
+      await screen.findByText('Delete your account for good?')
+      await typePassword('wrong')
+      fireEvent.press(screen.getByRole('button', { name: 'Delete my account' }))
+      expect(await screen.findByText('That password isn’t right.')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+      expect(mockShowToast).not.toHaveBeenCalled()
+    })
+
+    it('any other refusal is the server’s own sentence', async () => {
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: false, error: 'Server said no.' })
+      await render(<Screen />)
+      await openTray()
+      fireEvent.press(lastButton('Delete account'))
+      await screen.findByText('Delete your account for good?')
+      await typePassword('hunter22')
+      fireEvent.press(screen.getByRole('button', { name: 'Delete my account' }))
+      expect(await screen.findByText('Server said no.')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy()
+    })
+  })
+
+  describe.each([
+    ['apple', 'Apple', appleProofForDeletion, { appleIdentityToken: 'id', appleAuthorizationCode: 'c0de' }],
+    ['google', 'Google', googleProofForDeletion, { googleIdToken: 'g-id' }],
+  ] as const)('a %s account signs in with its provider once more', (method, name, proofFor, proof) => {
+    const confirm = async () => {
+      asMethod(method)
+      await render(<Screen />)
+      await openTray()
+      fireEvent.press(lastButton('Delete account'))
+      expect(await screen.findByText(`This can’t be undone. You’d need a new account to use Blend’n again. Sign in with ${name} once more to confirm.`)).toBeTruthy()
+      expect(screen.queryByTestId('delete-password')).toBeNull()
+      fireEvent.press(screen.getByRole('button', { name: 'Delete my account' }))
     }
 
-    it('asks Apple for a fresh code and sends it with the delete', async () => {
-      asApple('apple')
-      ;(appleCodeForDeletion as jest.Mock).mockResolvedValue('c0de')
+    it('and sends the fresh token with the delete', async () => {
+      ;(proofFor as jest.Mock).mockResolvedValue(proof)
       ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
       await confirm()
       await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
-      expect(appleCodeForDeletion).toHaveBeenCalledTimes(1)
-      expect(deleteAccount).toHaveBeenCalledWith('c0de')
+      expect(proofFor).toHaveBeenCalledTimes(1)
+      expect(deleteAccount).toHaveBeenCalledWith(proof)
     })
 
-    it('still deletes when the Apple sheet is cancelled, and says how to remove Blend’n from Apple ID', async () => {
-      asApple('apple')
-      ;(appleCodeForDeletion as jest.Mock).mockResolvedValue(null)
-      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+    it('a cancelled sheet deletes nothing and says what it needs', async () => {
+      ;(proofFor as jest.Mock).mockResolvedValue(null)
       await confirm()
-      await waitFor(() =>
-        expect(mockShowToast).toHaveBeenCalledWith(`Your account has been deleted. ${APPLE_UNLINK_HINT}`, 'success')
-      )
-      expect(deleteAccount).toHaveBeenCalledWith(undefined)
-      expect(APPLE_UNLINK_HINT).toBe('You can also remove Blend’n from Apple ID › Sign in with Apple.')
+      expect(await screen.findByText(`Sign in with ${name} to delete your account.`)).toBeTruthy()
+      expect(deleteAccount).not.toHaveBeenCalled()
     })
 
-    it('never opens the Apple sheet for an account that is not Apple', async () => {
-      asApple('password')
-      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: true })
+    it('a stale or foreign token the server refuses asks again', async () => {
+      ;(proofFor as jest.Mock).mockResolvedValue(proof)
+      ;(deleteAccount as jest.Mock).mockResolvedValue({ success: false, error: 'Forbidden', errorCode: 'REAUTH_REQUIRED' })
       await confirm()
-      await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Your account has been deleted.', 'success'))
-      expect(appleCodeForDeletion).not.toHaveBeenCalled()
-      expect(deleteAccount).toHaveBeenCalledWith(undefined)
+      expect(await screen.findByText(`Sign in with ${name} again to delete your account.`)).toBeTruthy()
+      expect(mockShowToast).not.toHaveBeenCalled()
     })
   })
 

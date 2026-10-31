@@ -5,6 +5,7 @@ import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-nat
 import Animated, { LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Banner } from '../components/ds/Banner'
+import { TextField } from '../components/ds/TextField'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
@@ -19,7 +20,8 @@ import { showSheet, type Sheet } from '../lib/sheet'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 import { apiClient } from '../lib/apiClient'
 import { useAuthMethod } from '../lib/authMethod'
-import { APPLE_UNLINK_HINT, appleCodeForDeletion } from '../lib/appleRevocation'
+import { appleProofForDeletion, DELETION_REFUSED, googleProofForDeletion } from '../lib/deletionProof'
+import type { AuthMethod } from '../lib/authMethod'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
 import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
 import { settleWithin } from '../lib/fetchTimeout'
@@ -289,45 +291,61 @@ function SettingsScreenContent() {
     [showToast]
   )
 
-  /** Deleting is two steps in one sheet: what it does, then "for good?". The confirm's own haptic is H.destructive (SheetHost). */
-  const confirmDeleteSheet = useCallback((): Sheet => ({
-    kind: 'actions',
-    hue: 'violet',
-    icon: 'trash-2',
-    title: 'Delete your account for good?',
-    message: 'This can’t be undone. You’d need a new account to use Blend’n again.',
-    actions: [
-      {
-        label: 'Delete my account',
-        variant: 'destructive',
-        // On failure the sheet stays, says why, and the button becomes Try again.
-        run: async () => {
-          setDeleting(true)
-          try {
-            // An Apple account's grant is revoked with a fresh code from the Apple sheet; without one it is deleted anyway (5.1.1(v)).
-            const apple = authMethod === 'apple'
-            const appleCode = apple ? await appleCodeForDeletion() : null
-            const result = await deleteAccount(appleCode ?? undefined)
-            if (!result.success) {
+  /**
+   * Deleting is two steps in one sheet: what it does, then "for good?". The confirm's own haptic is H.destructive (SheetHost).
+   * "For good?" also asks for proof that it is the account's owner (SCRUM-944 (3)): the password, or the account's
+   * provider once more. Without it, or with a wrong one, nothing is deleted and the sheet says why.
+   */
+  const deletePassword = useRef('')
+  const confirmDeleteSheet = useCallback((): Sheet => {
+    // An account whose method is not known yet is asked for a password, the server's own first answer (`signInMethod`).
+    const method = authMethod ?? 'password'
+    deletePassword.current = ''
+    return {
+      kind: 'actions',
+      hue: 'violet',
+      icon: 'trash-2',
+      title: 'Delete your account for good?',
+      message: `This can’t be undone. You’d need a new account to use Blend’n again. ${deletionAsk(method)}`,
+      content: method === 'password' ? <DeletePasswordField onChange={(value) => (deletePassword.current = value)} /> : undefined,
+      actions: [
+        {
+          label: 'Delete my account',
+          variant: 'destructive',
+          // On failure the sheet stays, says why, and the button becomes Try again.
+          run: async () => {
+            const proof =
+              method === 'password'
+                ? deletePassword.current
+                  ? { password: deletePassword.current }
+                  : null
+                : method === 'apple'
+                  ? await appleProofForDeletion()
+                  : await googleProofForDeletion()
+            if (!proof) return { ok: false, error: deletionProofMissing(method) }
+            setDeleting(true)
+            try {
+              const result = await deleteAccount(proof)
+              if (!result.success) {
+                setDeleting(false)
+                return { ok: false, error: deletionRefusal(method, result) }
+              }
+              /*
+               * The session is already gone and the guard is on its way to sign-in.
+               * The toast sits above the navigator, so it lands there too: without it
+               * the account vanished with no word that deleting it had worked.
+               */
+              return { ok: true, toast: 'Your account has been deleted.' }
+            } catch {
               setDeleting(false)
-              return { ok: false, error: result.error || "Your account wasn’t deleted. Try again." }
+              return { ok: false, error: "Your account wasn’t deleted. Check your connection and try again." }
             }
-            /*
-             * The session is already gone and the guard is on its way to sign-in.
-             * The toast sits above the navigator, so it lands there too: without it
-             * the account vanished with no word that deleting it had worked.
-             */
-            const deleted = 'Your account has been deleted.'
-            return { ok: true, toast: apple && !appleCode ? `${deleted} ${APPLE_UNLINK_HINT}` : deleted }
-          } catch {
-            setDeleting(false)
-            return { ok: false, error: "Your account wasn’t deleted. Check your connection and try again." }
-          }
+          },
         },
-      },
-      { label: 'Cancel', cancel: true },
-    ],
-  }), [authMethod])
+        { label: 'Cancel', cancel: true },
+      ],
+    }
+  }, [authMethod])
 
   const explainDeleteSheet = useCallback(
     (storePlus: PlusStatus['source'] | null): Sheet => {
@@ -602,6 +620,45 @@ function SettingsScreenContent() {
         <TopBar title="Settings" state={bar.state} onBack={() => router.back()} testID="settings-top" />
       </View>
     </View>
+  )
+}
+
+const PROVIDER_NAME = { google: 'Google', apple: 'Apple' } as const
+
+/** The line "for good?" ends on: what it will ask for. */
+const deletionAsk = (method: AuthMethod): string =>
+  method === 'password' ? 'Enter your password to confirm.' : `Sign in with ${PROVIDER_NAME[method]} once more to confirm.`
+
+/** No proof to send: an empty password, or a provider sheet that was cancelled or failed. Nothing was asked of the server. */
+const deletionProofMissing = (method: AuthMethod): string =>
+  method === 'password' ? 'Enter your password to delete your account.' : `Sign in with ${PROVIDER_NAME[method]} to delete your account.`
+
+/** The server said no. Its two proof refusals in the app's words; anything else is its own sentence. */
+function deletionRefusal(method: AuthMethod, result: { error?: string; errorCode?: string }): string {
+  if (result.errorCode === DELETION_REFUSED.password) return 'That password isn’t right.'
+  if (result.errorCode === DELETION_REFUSED.provider)
+    return method === 'password' ? 'Enter your password to delete your account.' : `Sign in with ${PROVIDER_NAME[method]} again to delete your account.`
+  return result.error || "Your account wasn’t deleted. Try again."
+}
+
+/** The password under "for good?": the DS field, its value handed up as it is typed. */
+function DeletePasswordField({ onChange }: { onChange: (value: string) => void }) {
+  const [value, setValue] = useState('')
+  return (
+    <TextField
+      label="Password"
+      value={value}
+      onChangeText={(next) => {
+        setValue(next)
+        onChange(next)
+      }}
+      secure
+      autoComplete="current-password"
+      textContentType="password"
+      autoCapitalize="none"
+      autoCorrect={false}
+      testID="delete-password"
+    />
   )
 }
 

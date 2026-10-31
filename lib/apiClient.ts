@@ -38,6 +38,7 @@ import { msUntilExpiry, REFRESH_SKEW_MS } from './socketAuth'
 import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
 import { SEARCH_TOO_SHORT, searchTermOf } from './searchTerm'
+import type { DeletionProof } from './deletionProof'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -2227,11 +2228,12 @@ class ApiClientClass {
     )
   }
 
-  /** `appleAuthorizationCode`: a fresh Sign in with Apple code, so the server can revoke the Apple grant (lib/appleRevocation). */
-  async deleteAccount(appleAuthorizationCode?: string): Promise<ApiResponse<{ deleted: boolean }>> {
+  /** `proof`: the password, or a fresh Google / Apple token (lib/deletionProof). Only the keys it has go on the wire. */
+  async deleteAccount(proof: DeletionProof = {}): Promise<ApiResponse<{ deleted: boolean }>> {
+    const body = Object.fromEntries(Object.entries(proof).filter(([, value]) => typeof value === 'string' && value.length > 0))
     const result = await this.request<{ deleted: boolean }>('/api/mobile/account', {
       method: 'DELETE',
-      ...(appleAuthorizationCode ? { body: JSON.stringify({ appleAuthorizationCode }) } : {}),
+      ...(Object.keys(body).length ? { body: JSON.stringify(body) } : {}),
     })
 
     if (result.success) {
