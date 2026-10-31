@@ -106,7 +106,12 @@ function DeckCard({
     }
   })
 
-  return <Animated.View style={[styles.card, cardStyle, style]}>{children}</Animated.View>
+  // Rasterised once and moved as a texture on Android: a rounded, clipped, rotating card is otherwise re-drawn through an offscreen layer every frame.
+  return (
+    <Animated.View renderToHardwareTextureAndroid style={[styles.card, cardStyle, style]}>
+      {children}
+    </Animated.View>
+  )
 }
 
 /**

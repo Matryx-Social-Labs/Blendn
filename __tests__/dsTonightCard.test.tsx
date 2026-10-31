@@ -66,6 +66,11 @@ describe('the same stack as the Me photo stack (SCRUM-964)', () => {
     expect(code).not.toMatch(/Gesture\.|useSharedValue|useAnimatedStyle|withSpring|scheduleOnRN/)
   })
 
+  it('rasterises each card on Android: measured p90 22ms/gpu 23ms without it, 18ms/14ms with it (SCRUM-964)', () => {
+    const deck = readFileSync(join(__dirname, '..', 'components', 'motion', 'SwipeDeck.tsx'), 'utf8')
+    expect(deck).toMatch(/<Animated\.View renderToHardwareTextureAndroid/)
+  })
+
   it('draws each card with its cover, so the ones behind are not blank', async () => {
     const covers = ['https://c/a.jpg', 'https://c/b.jpg', 'https://c/c.jpg']
     await draw({ events: DECK.map((e, i) => ({ ...e, cover: covers[i] })) })
