@@ -109,6 +109,9 @@ describe('a check-in', () => {
     expect(props.onEnterRoom).toHaveBeenCalledTimes(1)
     expect(await done).toBe('checkedIn')
     expect(flow.youreIn).toBe(false)
+    // The Room takes over from it: the pour stays mounted to clear itself over the Room (SCRUM-977 clears only the rest).
+    expect(flow.pours).toBe(1)
+    expect(screen.getByTestId('pour', HIDDEN)).toBeTruthy()
     await advance(1000)
     // The pour's haptic is the check-in's only one: the hook plays none of its own.
     expect(success).toHaveBeenCalledTimes(1)
@@ -183,7 +186,7 @@ describe('a check-in', () => {
     expect(screen.queryByTestId('pour', HIDDEN)).toBeNull()
   })
 
-  it('the next pour after a cleared one is a new pour, not the old one remounted', async () => {
+  it('the next pour after a cleared one counts on from it (a new key, so the Room wait starts again)', async () => {
     const { done } = await checkIn(fresh({ askIntent: true }))
     await fireEvent.press(screen.getByTestId('pour-skip', HIDDEN))
     await advance(DURATION.base)

@@ -309,8 +309,8 @@ export function useCheckInFlow({
           // Closed for a link (or asked again): they went elsewhere, so the room is not pushed over it. Still checked in.
           if ((await answered) === 'abandoned') return 'checkedIn'
         }
-        enteringRoom = true
         await onEnterRoom?.()
+        enteringRoom = true
         return 'checkedIn'
       }
     } catch (error) {
