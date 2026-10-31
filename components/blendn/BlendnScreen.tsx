@@ -27,7 +27,7 @@ import type { TrayButton, TrayExtra } from '../../lib/locationFix'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
-import { useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
+import { firstNameOf, useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
 import { useOffline } from '../OfflineBanner'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
@@ -505,7 +505,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
   const myPseudonym = room.match?.you ?? room.pseudonym ?? null
   const myPhoto = myMainPhoto(user)
-  const myName = user?.name?.trim() || 'You'
+  const myName = firstNameOf(user?.name?.trim() || 'You')
   /** The creature's seed while anonymous: never your real name. */
   const myMarkSeed = myPseudonym ?? markSeed('You', eventId ?? 'room')
   /** Your face as this room knows it: your photo when you are named, else your creature (once its pseudonym is known). */

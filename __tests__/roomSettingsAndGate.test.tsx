@@ -84,3 +84,10 @@ describe("the banner names your pseudonym (ROOM-02, SV-3)", () => {
     expect(code).toContain("room.match?.you ?? room.pseudonym")
   })
 })
+
+describe("the banner names you the way the room does", () => {
+  // Others in the room see the first name only (SCRUM-493); "as Asha Ramaswamy" told you they saw all of it.
+  it("says your first name when you are named, not the profile's full name", () => {
+    expect(code).toContain("const myName = firstNameOf(user?.name?.trim() || 'You')")
+  })
+})
