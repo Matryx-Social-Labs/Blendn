@@ -369,13 +369,16 @@ describe('every door is this flow', () => {
     }
   )
 
-  it('the event page’s "Blend in" opens this event’s pass, never a check-in of its own (Flow 3 #04–#06)', () => {
+  it('the event page’s "Blend in" is the hold: this flow, from the page, with no stop in Tonight (SCRUM-966)', () => {
     const src = read('components/screens/EventDetailScreen.tsx')
+    // The page itself still sends nothing: the hook is `useEventCheckIn`, which runs this one flow.
     expect(src).not.toContain('useCheckInFlow(')
     expect(src).not.toContain('submitCheckIn(')
-    expect(src).toMatch(/openThisPass = \(\) =>[\s\S]{0,300}openPass\(doorOf\(/)
+    expect(src).toContain('useEventCheckIn(')
+    expect(read('components/scene/useEventCheckIn.tsx')).toContain('useCheckInFlow({')
     // To the tabs first: the overlay is under the root stack.
     expect(src).toContain("router.dismissTo('/(tabs)/events')")
+    expect(read('components/scene/useEventCheckIn.tsx')).toContain("router.dismissTo('/(tabs)/events')")
   })
 
   it('the Pulse’s "Blend in" opens the Blend’n pass rather than checking in on its own', () => {

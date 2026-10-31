@@ -2,7 +2,7 @@ import { barHeight, barTop } from '../../lib/barGeometry'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, View } from 'react-native'
 import Animated, {
   Easing,
   FadeIn,
@@ -19,11 +19,10 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { usePassReach } from '../../lib/usePassReach'
-import { blendnClosed, isLiveHint, openPass, setDoor, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { blendnClosed, isLiveHint, openPass, setDoor, setRoomUp, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
-import type { TrayButton, TrayExtra } from '../../lib/locationFix'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
@@ -63,6 +62,7 @@ import { Toast, type ToastKind } from '../ds/Toast'
 import { ConnectSheet } from '../grid/ConnectSheet'
 import ScalePress from '../motion/ScalePress'
 import { Material } from '../ui/Material'
+import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { faceOf, RoomSkeleton, useNow } from './RoomSections'
 import { FriendsHere } from './FriendsHere'
@@ -131,8 +131,6 @@ function chooseAs(crews: CrewsAtEvent['myCrews'], title: string): Promise<string
   )
 }
 
-type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
-const NO_TRAY: Tray = { visible: false, title: '', message: '', buttons: [] }
 /** round4/r4.js, "The Room". */
 const ROOM_COACH_TEXT = 'People here can’t see your name or photo until you choose to show them. You decide, per event.'
 
@@ -282,19 +280,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   }, [recapEventId])
 
   // --- sheets (check-in flow) -------------------------------------------------
-  const [tray, setTray] = useState<Tray>(NO_TRAY)
-  const closeTray = useCallback(() => setTray((t) => ({ ...t, visible: false })), [])
-  const showTray = useCallback(
-    (title: string, message: string, buttons?: TrayButton[], extra?: TrayExtra) =>
-      setTray({
-        visible: true,
-        title,
-        message,
-        buttons: buttons?.length ? buttons : [{ label: 'Close', kind: 'secondary', onPress: closeTray }],
-        extra,
-      }),
-    [closeTray]
-  )
+  const { tray, showTray, closeTray } = useCheckInTray()
 
   /*
    * The pass Tonight docks follows the deck's front card (SCRUM-965, owner 2026-10-31): the card in front owns the hold, its
@@ -511,6 +497,12 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   }, [controls, onClose])
 
   const eventId = room.event?.id ?? null
+  // An event page that checked someone in keeps its "You're in" pour up until this Room is whole behind it (SCRUM-966).
+  const roomWhole = mode === 'room' && room.settled
+  useEffect(() => {
+    setRoomUp(roomWhole ? eventId : null)
+    return () => setRoomUp(null)
+  }, [roomWhole, eventId])
   const eventTitle = room.event?.title ?? ''
   const chatGroupId = room.chatGroupId
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
@@ -1199,17 +1191,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         <MomentPour key={checkIn.pours} testID="blendn-pour" frame={passFrame ?? undefined} venue={insideEvent?.venue ?? ''} ready={pourMayHandOff} asks={checkIn.asks} onDone={onPourDone} />
       ) : null}
 
-      <Sheet
-        visible={tray.visible}
-        onClose={checkIn.dismissTray}
-        title={tray.title}
-        body={tray.message}
-        icon={tray.extra?.icon}
-        actions={tray.buttons.map((b) => ({ label: b.label, onPress: b.onPress, loading: b.loading, disabled: b.disabled, kind: b.kind ?? (b.variant === 'primary' ? 'primary' : b.variant === 'destructive' ? 'destructive' : 'secondary') }))}
-        testID="blendn-tray"
-      >
-        {tray.extra?.detail ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>{tray.extra.detail}</Text> : null}
-      </Sheet>
+      <CheckInTray tray={tray} onClose={checkIn.dismissTray} testID="blendn-tray" />
 
       <Sheet
         visible={confirmingOut}
