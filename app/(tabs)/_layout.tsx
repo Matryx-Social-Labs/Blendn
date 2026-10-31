@@ -1,6 +1,6 @@
 import { usePathname } from 'expo-router'
 import { Tabs } from 'expo-router/js-tabs'
-import React, { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, Easing, Platform, StyleSheet, View } from 'react-native'
 
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
@@ -12,7 +12,7 @@ import { ForegroundBanners } from '../../components/notifications/ForegroundBann
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
 import { banterUnread, useInboxBadge, useInboxBadgeSync } from '../../lib/inboxBadge'
-import { blendnClosed, openBlendn, setLiveHint, useBlendnOpen } from '../../lib/blendnOverlay'
+import { blendnClosed, openBlendn, setLiveHint, useBlendnOpen, useLiveTitle } from '../../lib/blendnOverlay'
 import { onClosingForLink } from '../../lib/linkClosers'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { refreshAuthUserOnForeground, useAuth } from '../../lib/useAuth'
@@ -127,6 +127,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   useEffect(() => {
     let cancelled = false
     let activeEventId: string | null = null
+    let activeTitle: string | null = null
     // The live room's unread, for the disc's badge (T3); one watcher per room you are in.
     let unread = 0
     let watcher: ReturnType<typeof watchRoomUnread> | null = null
@@ -138,7 +139,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
       setInsideCount(signal.insideCount)
       // SCRUM-630: waves are heard while you are checked in, overlay open or not.
       listenForWaves(activeEventId)
-      setLiveHint(activeEventId)
+      setLiveHint(activeEventId, activeTitle)
       setTarget(
         roomButtonTarget({
           activeEventId,
@@ -156,7 +157,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         if (cancelled || !r.success) return
         const active = r.data?.checkIns?.[0] ?? null
         activeEventId = active?.eventId ?? null
-        setActiveRoomTitle(active?.event?.title ?? null)
+        activeTitle = active?.event?.title ?? null
         if (activeEventId !== watchedEvent) {
           watcher?.stop()
           unread = 0
@@ -269,26 +270,6 @@ function WaveFromTheTabs({ room }: { room: string | null }) {
   )
 }
 
-/** The room you're checked into, by title, for the wave banner's context line. Written by the bar's poll. */
-let activeRoomTitle: string | null = null
-const roomTitleListeners = new Set<() => void>()
-function setActiveRoomTitle(title: string | null) {
-  if (title === activeRoomTitle) return
-  activeRoomTitle = title
-  for (const fn of roomTitleListeners) fn()
-}
-function useActiveRoomTitle() {
-  return useSyncExternalStore(
-    (fn) => {
-      roomTitleListeners.add(fn)
-      return () => {
-        roomTitleListeners.delete(fn)
-      }
-    },
-    () => activeRoomTitle
-  )
-}
-
 export default function TabLayout() {
   const blendnOpen = useBlendnOpen()
   /*
@@ -296,7 +277,7 @@ export default function TabLayout() {
    * switched the tab under it and the Room stayed on top. Told before the link navigates (lib/pendingRoute).
    */
   useEffect(() => (blendnOpen ? onClosingForLink(blendnClosed) : undefined), [blendnOpen])
-  const activeRoom = useActiveRoomTitle()
+  const activeRoom = useLiveTitle()
   return (
     <View style={styles.host}>
     {/*

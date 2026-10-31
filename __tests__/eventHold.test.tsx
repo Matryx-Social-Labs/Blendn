@@ -107,6 +107,14 @@ describe('in another room already', () => {
     expect(screen.getByText('You’ll leave your current room', HIDDEN)).toBeTruthy()
     setLiveHint(null)
   })
+
+  it('names the room, the way Tonight does, once the poll knows its title', async () => {
+    setLiveHint('other', 'Fandom')
+    await render(<Page />)
+    await act(async () => {})
+    expect(screen.getByText('You’ll leave Fandom', HIDDEN)).toBeTruthy()
+    setLiveHint(null)
+  })
 })
 
 describe('the server says yes', () => {

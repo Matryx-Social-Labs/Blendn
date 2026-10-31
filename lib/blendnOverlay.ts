@@ -119,10 +119,14 @@ export function peekPendingPerson(): string | null {
  * than Tonight's. A hint only; the Room's own load decides.
  */
 let liveEventId: string | null = null
+/** That room's title (the same poll), so a page that is not the Room can name it: "You'll leave {room}". */
+let liveTitle: string | null = null
 /** The event you are checked into (the disc's poll), or null. The Going card says "You’re in" for it (SCRUM-882). */
-export function setLiveHint(eventId: string | null): void {
-  if (liveEventId === eventId) return
+export function setLiveHint(eventId: string | null, title: string | null = null): void {
+  const nextTitle = eventId ? title : null
+  if (liveEventId === eventId && liveTitle === nextTitle) return
   liveEventId = eventId
+  liveTitle = nextTitle
   notify()
 }
 export function isLiveHint(): boolean {
@@ -133,6 +137,9 @@ export function getLiveEventId(): string | null {
 }
 export function useLiveEventId(): string | null {
   return useSyncExternalStore(subscribe, getLiveEventId, getLiveEventId)
+}
+export function useLiveTitle(): string | null {
+  return useSyncExternalStore(subscribe, () => liveTitle, () => liveTitle)
 }
 
 /**
