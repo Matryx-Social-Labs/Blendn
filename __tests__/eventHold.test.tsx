@@ -170,7 +170,9 @@ describe('checked into this event already', () => {
 
   it('the check-in hold keeps the gradient', async () => {
     await render(<Page />)
+    expect(screen.getByTestId('scene-hold-pill', HIDDEN)).toBeTruthy()
     expect(screen.queryByTestId('scene-hold-pill-rim', HIDDEN)).toBeNull()
+    expect(screen.queryByTestId('scene-hold-pill-fill-ground', HIDDEN)).toBeNull()
   })
 
   it('checks out through the Room’s own call, for this event', async () => {
