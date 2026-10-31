@@ -6,6 +6,7 @@ import { doorOf } from '../../lib/attendanceState'
 import { checkOutOf } from '../../lib/checkIn'
 import { apiClient } from '../../lib/apiClient'
 import { openRoomOf, setLeftNotice, setLiveHint, useLiveEventId, useLiveTitle, useRoomUp } from '../../lib/blendnOverlay'
+import { activeRoomName } from '../../lib/leftRooms'
 import { usePassReach } from '../../lib/usePassReach'
 import { CHECKOUT_FAILED } from '../../lib/useRoomControls'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
@@ -50,7 +51,7 @@ export function useEventCheckIn({
       .getActiveCheckins()
       .then((r) => {
         const active = live && r.success ? (r.data?.checkIns?.[0] ?? null) : null
-        if (active) setLiveHint(active.eventId, active.event?.title ?? null)
+        if (active) setLiveHint(active.eventId, activeRoomName(active))
       })
       .catch(() => {})
     return () => {
