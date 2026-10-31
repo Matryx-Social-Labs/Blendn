@@ -248,7 +248,6 @@ describe('a send the server refuses', () => {
 
   it.each([
     ['USER_MUTED', 'You have been muted in this chat', 'Muted'],
-    ['CHAT_LOCKED', 'This chat has been locked by the organizer', 'Read only'],
     ['CHAT_CLOSED', 'This chat opens 24 hours before the event starts.', 'Not open yet'],
     ['CHAT_CLOSED', 'This event is no longer available.', 'This room is hidden'],
     ['NOT_CHECKED_IN', 'RSVP to this event to chat', 'RSVP to this event to join the chat'],
@@ -261,13 +260,13 @@ describe('a send the server refuses', () => {
   })
 })
 
-it('TG-02: a room the organizer locked opens read-only, before any send', async () => {
-  api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, status: 'locked' }] } } as never)
+it('CHAT_LOCKED (no organizer lock, SCRUM-893): the closed room in its own words, never the server\'s "locked by the organizer"', async () => {
+  api.sendChatMessage.mockResolvedValue({ success: false, errorCode: 'CHAT_LOCKED', error: 'This chat has been locked by the organizer' } as never)
   await open()
-  expect(screen.getByLabelText('Read only. The organizer locked posting in this room.')).toBeTruthy()
+  await send('hello')
+  expect(screen.getByLabelText('This chat has closed. Event chats stay open for 24 hours after the event ends.')).toBeTruthy()
+  expect(screen.queryByText(/locked by the organi/i, { includeHiddenElements: true })).toBeNull()
   expect(screen.queryByLabelText('Message')).toBeNull()
-  expect(screen.queryByLabelText('Send')).toBeNull()
-  expect(api.sendChatMessage).not.toHaveBeenCalled()
 })
 
 describe('a room that will not take a send again (drive 4 D-6)', () => {

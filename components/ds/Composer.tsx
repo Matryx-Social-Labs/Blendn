@@ -29,7 +29,6 @@ export type ComposerState =
   | 'failed'
   | 'muted'
   | 'automuted'
-  | 'locked'
   | 'closed'
   | 'ratelimited'
   | 'notcheckedin'
@@ -49,7 +48,6 @@ const LOCKED: Record<Locked, { icon: IconName; title: string; body?: string }> =
     title: 'Muted',
     body: 'You are muted in this room. Your messages have been flagged for policy violations.',
   },
-  locked: { icon: 'lock', title: 'Read only', body: 'The organizer locked posting in this room.' },
   closed: { icon: 'door-closed', title: 'This chat has closed', body: 'Event chats stay open for 24 hours after the event ends.' },
   ratelimited: { icon: 'timer', title: 'Slow down a moment', body: 'Too many messages.' },
   notcheckedin: { icon: 'map-pin', title: 'RSVP to this event to join the chat' },

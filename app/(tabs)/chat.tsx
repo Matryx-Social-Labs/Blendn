@@ -277,9 +277,7 @@ function ChatInner() {
         const text = sponsored ? '' : c.last_message?.trim() ? previewWithSender(c.last_message, { fromMe: c.last_sender_is_me, name: c.last_sender_name }) : 'No messages yet'
         // The room's state is a status, never drawn like speech (Flow 5 #08).
         const stateLine = roomStateLine(c.room_state)
-        const state: RowLine | null = stateLine
-          ? { kind: 'chip', icon: c.room_state === 'locked' ? 'lock' : 'mic-off', text: stateLine, warn: c.room_state === 'locked' }
-          : null
+        const state: RowLine | null = stateLine ? { kind: 'chip', icon: 'mic-off', text: stateLine } : null
         return {
           key: `g:${c.chat_room_id}`,
           title: c.event_title,
@@ -465,7 +463,7 @@ function ChatInner() {
               here={c.is_place}
               unread={c.unread_count}
               muted={roomMuted(c.chat_room_id)}
-              line={c.room_state === 'locked' ? 'Locked by the organizer · read only' : liveLine(c)}
+              line={liveLine(c)}
               onPress={() => openRoom(c)}
             />
           ))}
