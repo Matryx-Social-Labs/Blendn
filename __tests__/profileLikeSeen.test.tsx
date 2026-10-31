@@ -2,7 +2,7 @@
  * A profile opened from a room knows what the room knows (SCRUM-953): a person you already liked reads "Liked", not "Like",
  * and one you matched with reads "Message", not "Connect" — the roster and the card said so, the profile asked nobody.
  */
-import { render, screen } from '@testing-library/react-native'
+import { act, render, screen } from '@testing-library/react-native'
 import { Dimensions, StyleSheet } from 'react-native'
 
 let mockParams: Record<string, string> = { id: 'u_ben' }
@@ -26,6 +26,14 @@ jest.mock('../lib/apiClient', () => ({
     likeAtEvent: jest.fn(),
     respondToMessageRequest: jest.fn(),
     sendFriendRequest: jest.fn(),
+  },
+}))
+let mockMatchHandler: ((d: { eventId: string; otherUserId: string; conversationId: string; name: string }) => void) | null = null
+jest.mock('../lib/socketClient', () => ({
+  ...jest.requireActual('../lib/socketClient'),
+  subscribeToRoomMatch: (cb: typeof mockMatchHandler) => {
+    mockMatchHandler = cb
+    return () => { mockMatchHandler = null }
   },
 }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
@@ -92,6 +100,8 @@ const open = async (params: Record<string, string>) => {
   api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [] } } as never)
   await render(<UserProfile />)
   await screen.findByText('Dancing Gecko')
+  // The page's own CTA lookup has settled; a match is what changes it after that.
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
 }
 
 it('offers Like to somebody you have not liked', async () => {
@@ -109,6 +119,34 @@ it('offers Message, not Connect, when the room says you matched', async () => {
   await open({ liked: '1', conversationId: 'c1' })
   expect(screen.getByText('Message')).toBeTruthy()
   expect(screen.queryByText('Connect')).toBeNull()
+})
+
+describe('a match that arrives while the profile is open (SCRUM-960)', () => {
+  const match = (over: Partial<{ eventId: string; otherUserId: string }> = {}) =>
+    act(async () => mockMatchHandler?.({ eventId: 'e1', otherUserId: 'rh_ben', conversationId: 'c9', name: 'Dancing Gecko', ...over }))
+
+  it('flips an open, liked profile from Connect to Message', async () => {
+    await open({ liked: '1' })
+    expect(screen.getByText('Connect')).toBeTruthy()
+    await match()
+    expect(await screen.findByText('Message')).toBeTruthy()
+    expect(screen.queryByText('Connect')).toBeNull()
+  })
+
+  it('also marks a profile that was not yet liked here as Liked', async () => {
+    await open({})
+    await match()
+    expect(await screen.findByText('Liked')).toBeTruthy()
+  })
+
+  it.each([
+    ['another person', { otherUserId: 'rh_other' }],
+    ['another room', { eventId: 'e2' }],
+  ])('ignores a match with %s', async (_n, over) => {
+    await open({ liked: '1' })
+    await match(over)
+    expect(screen.getByText('Connect')).toBeTruthy()
+  })
 })
 
 it('the Room card hands what it knows to the profile it opens', () => {

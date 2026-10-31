@@ -25,6 +25,7 @@ import { Icon } from '../../components/ui/Icon'
 import { apiClient, type PublicProfile } from '../../lib/apiClient'
 import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { likeRefusal } from '../../lib/likeRefusal'
+import { subscribeToRoomMatch } from '../../lib/socketClient'
 import { heroFoldHeight } from '../../lib/profileFold'
 import { interestNames } from '../../lib/meProfile'
 import { useWorkFields } from '../../components/profile/useWorkFields'
@@ -469,6 +470,21 @@ function UserProfileInner() {
       setLikeBusy(false)
     }
   }, [eventId, profile, liked, likeBusy, showToast])
+
+  /*
+   * The other half of a mutual like arrives while this page is open (SCRUM-960): the room draws the moment, and the page
+   * says what it now is. `otherUserId` is the room's handle for them, the same `id` a room opens this page with.
+   */
+  useEffect(() => {
+    if (!eventId) return
+    return subscribeToRoomMatch((data) => {
+      if (data.eventId !== String(eventId) || data.otherUserId !== id) return
+      setLiked(true)
+      setConversationId(data.conversationId)
+      setCtaMode('message')
+      setCtaMessage(CTA_HINT.message)
+    })
+  }, [eventId, id])
 
   /* Sending reveals you. `ConnectSheet` says so before anything is typed. */
   const sendConnect = useCallback(async (message: string) => {
