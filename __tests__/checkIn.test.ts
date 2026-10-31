@@ -154,6 +154,18 @@ describe('a check-in change drops the cached event detail too', () => {
     expect(getEventDetailCache('e2')).not.toBeNull()
   })
 
+  it('the room a switch took you out of is dropped too: its page must not still say you are in (SCRUM-970)', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { left: [{ eventId: 'e0', kind: 'event', name: 'Vinyl Night' }] } })
+    setEventDetailCache('e0', { userStatus: { isCheckedIn: true } })
+    setEventDetailCache('e1', { userStatus: { isCheckedIn: false } })
+    setEventDetailCache('e2', { userStatus: { isCheckedIn: false } })
+    await submitCheckIn('e1', at)
+    expect(mockApi.forgetEvent).toHaveBeenCalledWith('e0')
+    expect(getEventDetailCache('e0')).toBeNull()
+    expect(getEventDetailCache('e1')).toBeNull()
+    expect(getEventDetailCache('e2')).not.toBeNull()
+  })
+
   it('and not on a refusal that changed nothing', async () => {
     mockApi.checkIn.mockResolvedValue({ success: false, errorCode: 'EVENT_ENDED', error: 'over' })
     await submitCheckIn('e1', at)

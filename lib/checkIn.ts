@@ -1,7 +1,7 @@
 import { validAccuracy } from './geo'
 import type { Href } from 'expo-router'
 import { Platform } from 'react-native'
-import { apiClient } from './apiClient'
+import { apiClient, type LeftRoom } from './apiClient'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
 import { forgetEventDetailCache } from './eventDetailCache'
 import { reasonOf } from './sessionEnd'
@@ -47,14 +47,16 @@ const listeners = new Set<() => void>()
  * SWR-cached detail on focus or on the socket's check-in, was handed the
  * pre-check-in `isCheckedIn: false` and went back to "Blend in".
  */
-export function checkInChanged(eventId?: string): void {
+export function checkInChanged(eventId?: string, left: readonly Pick<LeftRoom, 'eventId'>[] = []): void {
   apiClient.forgetActiveCheckins()
   // A place's page carries your window there (Go Live, step 5).
   apiClient.forgetVenues()
   // Without an id — a Go Live whose answer never came — every reader re-reads anyway.
-  if (eventId) {
-    apiClient.forgetEvent(eventId)
-    forgetEventDetailCache(eventId)
+  // The rooms a switch took you out of changed too: their pages still say you are in (SCRUM-970).
+  for (const id of [eventId, ...left.map((l) => l.eventId)]) {
+    if (!id) continue
+    apiClient.forgetEvent(id)
+    forgetEventDetailCache(id)
   }
   for (const fn of listeners) fn()
 }
@@ -127,7 +129,7 @@ export async function submitCheckIn(
     }
   }
 
-  checkInChanged(eventId)
+  checkInChanged(eventId, Array.isArray(result.data?.left) ? result.data.left : [])
   return {
     kind: 'checkedIn',
     // The route's shape is `checkIn: { id }`; `checkInId` was never on it (ROOM-11).

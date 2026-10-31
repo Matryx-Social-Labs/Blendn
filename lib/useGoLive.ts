@@ -195,7 +195,7 @@ export function useGoLive({
         if (userId) {
           await rememberLiveSession({ userId, venueDayId: result.data.venueDayId, venueId: place.id, venueName: place.name, choice })
         }
-        checkInChanged(result.data.venueDayId)
+        checkInChanged(result.data.venueDayId, Array.isArray(result.data.left) ? result.data.left : [])
         // Never a silent switch: the room this took you out of, named by the server (ROOM-10). Queued ahead of the caller's own toast.
         const left = youLeftLine(result.data)
         if (left) showToast(left, 'info')

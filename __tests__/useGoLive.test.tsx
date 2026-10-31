@@ -85,7 +85,7 @@ describe('useGoLive', () => {
     const { ok, onLive } = await run({ minutes: 20 })
     expect(ok).toBe(true)
     expect(await readLiveSession('u1')).toEqual({ userId: 'u1', venueDayId: 'day-1', venueId: 'v1', venueName: 'The Humming Tree', prompted: false, choice: { minutes: 20 } })
-    expect(checkInChanged).toHaveBeenCalledWith('day-1')
+    expect(checkInChanged).toHaveBeenCalledWith('day-1', [])
     expect(onLive).toHaveBeenCalledWith(live)
   })
 
