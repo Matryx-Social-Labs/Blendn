@@ -60,7 +60,7 @@ const NAME_HINT = 'In event rooms you go by a made-up name. If you choose to sho
 const NOT_A_DATE = 'That is not a date we recognise.'
 
 function BasicsScreenInner() {
-  const { draft, loaded, saving, commit } = useOnboarding('basics')
+  const { draft, loaded, saving, commit, update } = useOnboarding('basics')
 
   const [name, setName] = useState('')
   // The length sentence waits for the person to leave the field: one letter typed is not yet a mistake.
@@ -104,12 +104,14 @@ function BasicsScreenInner() {
    * and cannot continue, had no exit: no back button here, swipe-back off at
    * the root, and Settings is behind the flow. Confirmed first because it
    * ends the session; what they have typed stays on this phone (the draft is
-   * keyed by account), so signing back in resumes here.
+   * keyed by account, and `leave` writes it first: the fields alone are screen
+   * state, SCRUM-658), so signing back in resumes here.
    */
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const leave = async () => {
     setSigningOut(true)
+    update(patch)
     // The root layout routes to the entry screen when the user clears.
     await signOut()
     setSigningOut(false)
