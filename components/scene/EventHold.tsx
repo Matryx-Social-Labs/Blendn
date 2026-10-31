@@ -12,17 +12,18 @@ export type EventHoldProps = {
   busy: boolean
   /** The server said yes: the fill stays full under "You’re in" while the pour plays. */
   confirmed: boolean
-  /** Another room is the one you are in: checking in here takes you out of it (ROUND4 8.3 #06; the page does not know its name). */
+  /** Another room is the one you are in: checking in here takes you out of it (ROUND4 8.3 #06). Its title when the poll has it, as Tonight names it. */
   switching?: boolean
+  leaving?: string | null
 }
 
 /**
  * The event page's "Blend in" (SCRUM-966): the hold itself, the VenuePass's own, in the dock. Dimmed with one short line when the
  * phone is plainly not at the door (`passReach`, the same rule as the docked pass); the server is the judge otherwise.
  */
-export function EventHold({ reach, onConfirm, busy, confirmed, switching = false }: EventHoldProps) {
+export function EventHold({ reach, onConfirm, busy, confirmed, switching = false, leaving = null }: EventHoldProps) {
   const bold = useBoldText()
-  const line = passReachLine(reach) ?? (switching ? 'You’ll leave your current room' : null)
+  const line = passReachLine(reach) ?? (switching ? `You’ll leave ${leaving ?? 'your current room'}` : null)
   return (
     <View testID="scene-hold" style={styles.wrap}>
       <HoldToConfirm

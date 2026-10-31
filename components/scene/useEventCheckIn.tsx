@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import { doorOf } from '../../lib/attendanceState'
-import { openRoomOf, useLiveEventId, useRoomUp } from '../../lib/blendnOverlay'
+import { openRoomOf, useLiveEventId, useLiveTitle, useRoomUp } from '../../lib/blendnOverlay'
 import { usePassReach } from '../../lib/usePassReach'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { CheckInTray, useCheckInTray } from '../blendn/CheckInTray'
@@ -37,6 +37,7 @@ export function useEventCheckIn({ id, event, openMaps }: { id: string; event: Pa
   })
   const roomUp = useRoomUp(id)
   const liveId = useLiveEventId()
+  const liveTitle = useLiveTitle()
   // The pour that has waited long enough for the Room (kept as its own number, so the next pour starts unwaited).
   const [waitedPour, setWaitedPour] = useState(0)
   useEffect(() => {
@@ -46,7 +47,7 @@ export function useEventCheckIn({ id, event, openMaps }: { id: string; event: Pa
   }, [flow.pours])
 
   return {
-    hold: { reach, onConfirm: () => void flow.start(), busy: flow.checkingIn && !flow.youreIn, confirmed: flow.youreIn, switching: liveId !== null && liveId !== id },
+    hold: { reach, onConfirm: () => void flow.start(), busy: flow.checkingIn && !flow.youreIn, confirmed: flow.youreIn, switching: liveId !== null && liveId !== id, leaving: liveTitle },
     overlays: (
       <>
         {flow.pours > 0 ? (
