@@ -154,6 +154,18 @@ describe('a check-in change drops the cached event detail too', () => {
     expect(getEventDetailCache('e2')).not.toBeNull()
   })
 
+  it('the room a switch took you out of is dropped too: its page must not still say you are in (SCRUM-970)', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { left: [{ eventId: 'e0', kind: 'event', name: 'Vinyl Night' }] } })
+    setEventDetailCache('e0', { userStatus: { isCheckedIn: true } })
+    setEventDetailCache('e1', { userStatus: { isCheckedIn: false } })
+    setEventDetailCache('e2', { userStatus: { isCheckedIn: false } })
+    await submitCheckIn('e1', at)
+    expect(mockApi.forgetEvent).toHaveBeenCalledWith('e0')
+    expect(getEventDetailCache('e0')).toBeNull()
+    expect(getEventDetailCache('e1')).toBeNull()
+    expect(getEventDetailCache('e2')).not.toBeNull()
+  })
+
   it('and not on a refusal that changed nothing', async () => {
     mockApi.checkIn.mockResolvedValue({ success: false, errorCode: 'EVENT_ENDED', error: 'over' })
     await submitCheckIn('e1', at)
@@ -176,6 +188,8 @@ describe('the event screen hears check-in changes', () => {
     // "Blend in" (join) is the hold itself, so it has no press; checked in, "You're in" (going) leads to the Room. One switch on the CTA's own state.
     expect(screen).toMatch(/case 'join':\s*return/)
     expect(screen).toMatch(/case 'going':\s*toTheOverlay\(openBlendn\)/)
+    // …and under "Open the room" the quiet way out is the hold that checks you out of this event (SCRUM-970).
+    expect(screen).toMatch(/ctaState === 'going' \? <EventCheckOut/)
   })
 
   it('apiClient drops only the detail, not the attendee list', () => {

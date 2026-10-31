@@ -10,7 +10,7 @@ import { revealReadiness } from './reveal'
 import { useAuth } from './useAuth'
 
 const REVEAL_FAILED = "Couldn’t change who can see you. Nothing has changed."
-const CHECKOUT_FAILED = "Couldn’t check you out. You’re still in this room."
+export const CHECKOUT_FAILED = "Couldn’t check you out. You’re still in this room."
 
 /**
  * Your own controls in a room: who can see you, whether you are listed, and

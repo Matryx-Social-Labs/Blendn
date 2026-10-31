@@ -477,6 +477,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     if (roomEventId === left.toId) say(`You left ${left.title}.`)
     setLeftNotice(null)
   }, [mode, roomEventId, say])
+  // A notice nobody saw dies with the overlay: it is not for the next time it opens.
+  useEffect(() => () => setLeftNotice(null), [])
   // The pass moved on to another door: a switch it was carrying is no longer this one. (An event page's hold has no door of its own.)
   const doorId = door?.id ?? null
   useEffect(() => {

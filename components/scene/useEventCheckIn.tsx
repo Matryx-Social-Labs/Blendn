@@ -1,14 +1,16 @@
 import { router } from 'expo-router'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import { doorOf } from '../../lib/attendanceState'
+import { checkOutOf } from '../../lib/checkIn'
 import { openRoomOf, setLeftNotice, useLiveEventId, useLiveTitle, useRoomUp } from '../../lib/blendnOverlay'
 import { usePassReach } from '../../lib/usePassReach'
+import { CHECKOUT_FAILED } from '../../lib/useRoomControls'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { CheckInTray, useCheckInTray } from '../blendn/CheckInTray'
 import { MomentPour } from '../ds/MomentPour'
-import type { EventHoldProps } from './EventHold'
+import type { EventCheckOut, EventHoldProps } from './EventHold'
 
 /** How long the pour waits for the Room behind it before giving up on it (the Blend'n overlay's own ceiling). */
 export const ROOM_WAIT_MS = 4000
@@ -19,8 +21,19 @@ export const ROOM_WAIT_MS = 4000
  * page, filled, until that Room is up (`useRoomUp`), and the page then steps aside onto it. Refusals are the tray, on this page.
  * Returns the hold's props and the pour and tray to draw over the whole screen.
  */
-export function useEventCheckIn({ id, event, openMaps }: { id: string; event: Parameters<typeof doorOf>[0] | null; openMaps: () => void }): {
+export function useEventCheckIn({
+  id,
+  event,
+  openMaps,
+  showToast,
+}: {
+  id: string
+  event: (Parameters<typeof doorOf>[0] & { title?: string | null }) | null
+  openMaps: () => void
+  showToast: (text: string, kind: 'error', options?: { haptic?: 'error' }) => void
+}): {
   hold: EventHoldProps
+  checkOut: ComponentProps<typeof EventCheckOut>
   overlays: ReactNode
 } {
   const { tray, showTray, closeTray } = useCheckInTray()
@@ -43,6 +56,20 @@ export function useEventCheckIn({ id, event, openMaps }: { id: string; event: Pa
     onEnterRoom: () => router.dismissTo('/(tabs)/events'),
   })
   const roomUp = useRoomUp(id)
+  // The way out of this event's room, with the Room's own call (`checkOutOf`): the page re-reads itself when it lands.
+  const [checkingOut, setCheckingOut] = useState(false)
+  const onCheckOut = async () => {
+    if (checkingOut) return
+    setCheckingOut(true)
+    try {
+      const result = await checkOutOf(id)
+      if (!result.success) showToast(result.error || CHECKOUT_FAILED, 'error', { haptic: 'error' })
+    } catch {
+      showToast(CHECKOUT_FAILED, 'error', { haptic: 'error' })
+    } finally {
+      setCheckingOut(false)
+    }
+  }
   // The pour that has waited long enough for the Room (kept as its own number, so the next pour starts unwaited).
   const [waitedPour, setWaitedPour] = useState(0)
   useEffect(() => {
@@ -52,6 +79,7 @@ export function useEventCheckIn({ id, event, openMaps }: { id: string; event: Pa
   }, [flow.pours])
 
   return {
+    checkOut: { name: event?.title ?? null, onConfirm: () => void onCheckOut(), busy: checkingOut },
     hold: { reach, onConfirm: () => void flow.start(), busy: flow.checkingIn && !flow.youreIn, confirmed: flow.youreIn, switching: liveId !== null && liveId !== id, leaving: liveTitle },
     overlays: (
       <>

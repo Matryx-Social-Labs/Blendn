@@ -212,7 +212,7 @@ describe('the pass (#06, #07)', () => {
   it('in another room already: the hold is a switch out of it (ROUND4 8.3 #06)', async () => {
     await draw({ insideEvent: event('door'), switchFrom: 'Vinyl Night' })
     expect(screen.getAllByText('Hold to switch', HIDDEN).length).toBeGreaterThan(0)
-    expect(screen.getByText('You’ll leave Vinyl Night', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('Leaves Vinyl Night and checks you in here.', HIDDEN)).toBeTruthy()
   })
 
   it('after the server’s yes the pass holds "You’re in" and Tell your crew (R2-D1 "success")', async () => {

@@ -21,7 +21,7 @@ import { linkRefusalCard } from '../../lib/linkRefusalCard'
 import { eventLoadFailure, type EventLoadFailure } from '../../lib/eventLinkRefusal'
 import type { MenuItem } from '../ds/ContextMenu'
 import { OfflineBanner } from '../OfflineBanner'
-import { EventHold } from '../scene/EventHold'
+import { EventCheckOut, EventHold } from '../scene/EventHold'
 import { useEventCheckIn } from '../scene/useEventCheckIn'
 import { SceneBar } from '../scene/SceneBar'
 import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
@@ -749,7 +749,7 @@ export default function EventDetail() {
   const openInMaps = () => {
     if (event) void openPlaceInMaps(event)
   }
-  const { hold, overlays } = useEventCheckIn({ id: String(id), event, openMaps: openInMaps })
+  const { hold, checkOut, overlays } = useEventCheckIn({ id: String(id), event, openMaps: openInMaps, showToast })
 
   /*
    * What this event may say in a link: null for a private one or a draft, and then there is no share control at all
@@ -1266,15 +1266,19 @@ export default function EventDetail() {
         {ctaState === 'join' ? (
           <EventHold {...hold} />
         ) : (
-          <SceneCTA
-            state={ctaState}
-            pending={rsvpPending}
-            alone={checkInCount <= 1}
-            note={betweenLine ?? undefined}
-            onPress={cancelled ? undefined : primaryActionPress}
-            iconKey={ctaIcon ?? undefined}
-            icon={ctaIcon ? (color) => <Icon name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}
-          />
+          <>
+            <SceneCTA
+              state={ctaState}
+              pending={rsvpPending}
+              alone={checkInCount <= 1}
+              note={betweenLine ?? undefined}
+              onPress={cancelled ? undefined : primaryActionPress}
+              iconKey={ctaIcon ?? undefined}
+              icon={ctaIcon ? (color) => <Icon name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}
+            />
+            {/* In this event's room: "Open the room" above is the primary; the way out is the quiet hold under it (SCRUM-970). */}
+            {ctaState === 'going' ? <EventCheckOut {...checkOut} /> : null}
+          </>
         )}
       </Dock>
       {overlays}

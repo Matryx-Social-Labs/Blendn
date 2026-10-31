@@ -16,6 +16,7 @@ describe('the RSVP slot', () => {
     expect(rsvpCtaState('going')).toBe('rsvpd')
     expect(rsvpCtaState('waitlisted')).toBe('waitlisted')
     expect(rsvpCtaState(null)).toBe('rsvp')
+    expect(sceneCtaLabel('going')).toBe('Open the room')
     expect(sceneCtaLabel('waitlisted')).toBe('On the waitlist')
     expect(sceneCtaLabel('waitlisted')).not.toMatch(/going/i)
   })

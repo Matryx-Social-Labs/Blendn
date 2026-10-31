@@ -290,7 +290,7 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
   // A waitlist place is not a seat: never "You're going" (A78 review).
   waitlisted: 'On the waitlist',
   join: 'Blend in',
-  going: "You’re in",
+  going: 'Open the room',
   ended: "See what’s on tonight",
   rate: 'Rate who you met',
   // The organiser called it off (Flow 15 #10): one neutral line, and nothing to press.
@@ -321,7 +321,7 @@ export function sceneCtaLabel(state: SceneCTAState, alone = false): string {
  * the same reason `going` is not accompanied by a "leave" button: one slot,
  * one subject, and the state tells you which way the tap goes.
  */
-const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'waitlisted', 'going', 'ended', 'cancelled']
+const CTA_QUIET: readonly SceneCTAState[] = ['rsvpd', 'waitlisted', 'ended', 'cancelled']
 
 /** Before the doors: the RSVP slot's state from the server's answer. One copy, with the rest of the attendance state. */
 export { rsvpCtaState } from '../../lib/attendanceState'
