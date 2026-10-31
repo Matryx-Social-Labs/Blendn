@@ -512,7 +512,8 @@ export const signInWithEmail = async (
 
       return { success: true }
     } else {
-      Logger.error('auth', 'Email sign in failed', { error: result.error })
+      // A wrong password or a limit is the person's answer, already on screen; the server reports its own failures (BLENDN-1H, T).
+      Logger.warn('auth', 'Email sign in failed', { error: result.error })
       updateAuthState({ loading: false })
       // The server's "Too many requests" drops the wait it sent (SCRUM-487).
       if (result.errorCode === 'RATE_LIMITED') {

@@ -3,6 +3,7 @@
 // Production-ready with development gating
 
 import Constants from 'expo-constants'
+import { isNetworkFailure, isTimeoutError } from './fetchTimeout'
 import { Sentry } from './sentry'
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -56,12 +57,15 @@ function reportToSentry(level: 'warn' | 'error', context: LogContext, message: s
   })
 
   const errorCandidate = details?.error
-  if (level === 'error') {
-    if (errorCandidate instanceof Error) {
-      Sentry.captureException(errorCandidate, { tags: { context }, extra: { message, ...details } })
-    } else {
-      Sentry.captureMessage(`[${context}] ${message}`, { level: 'error', tags: { context }, extra: details })
-    }
+  if (level !== 'error') return
+  // The network not carrying a request, or our own deadline, is the phone's weather, not a defect: the breadcrumb above is enough.
+  if (isNetworkFailure(errorCandidate) || isTimeoutError(errorCandidate)) return
+  // One issue per logged sentence: grouped by the stack, a minified frame ("b", "baseLog") split one sentence over many issues.
+  const fingerprint = ['logger', context, message]
+  if (errorCandidate instanceof Error) {
+    Sentry.captureException(errorCandidate, { tags: { context }, extra: { message, ...details }, fingerprint })
+  } else {
+    Sentry.captureMessage(`[${context}] ${message}`, { level: 'error', tags: { context }, extra: details, fingerprint })
   }
 }
 
