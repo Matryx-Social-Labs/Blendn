@@ -548,7 +548,8 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         eventTitle={handoffTitle}
         busy={busy}
         onHeight={setDockHeight}
-        onGoLive={() => (mode.kind === 'goLive' && mode.again ? void goLive(mode.again) : openDial())}
+        // One tap goes live again, unless that would leave a room somewhere else: then the dial, which says so (SCRUM-635).
+        onGoLive={() => (mode.kind === 'goLive' && mode.again && !liveElsewhere ? void goLive(mode.again) : openDial())}
         onPickAnother={openDial}
         onOpenRoom={openRoom}
         onPill={() => setSheet('session')}

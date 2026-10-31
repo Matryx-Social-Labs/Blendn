@@ -605,6 +605,27 @@ describe('the dock', () => {
     expect(goLiveApi).not.toHaveBeenCalled()
   })
 
+  // SCRUM-635 drive: the one-tap Go live again took somebody checked in at an event out of it without a word.
+  it('checked in somewhere else, Go live again opens the dial and its warning instead of going live in one tap', async () => {
+    mockLiveSession = { userId: 'u1', venueDayId: 'd', venueId: 'v1', venueName: 'The Humming Tree', prompted: true, choice: { minutes: 45 }, dayEndsAt: min(600) }
+    mockLive.id = 'evt-elsewhere'
+    mockLive.title = 'Vinyl Night'
+    try {
+      await mount()
+      await act(async () => {
+        await Promise.resolve()
+      })
+      await act(async () => {
+        fireEvent.press(screen.getByRole('button', { name: 'Go live again · 45 minutes' }))
+      })
+      expect(goLiveApi).not.toHaveBeenCalled()
+      expect(screen.getByText('Leaves Vinyl Night. You can end it anytime.')).toBeTruthy()
+    } finally {
+      mockLive.id = null
+      mockLive.title = null
+    }
+  })
+
   it('after a window ends, Go live again repeats it in one tap, with Pick another time under it (PL-M05)', async () => {
     mockLiveSession = { userId: 'u1', venueDayId: 'd', venueId: 'v1', venueName: 'The Humming Tree', prompted: true, choice: { minutes: 45 }, dayEndsAt: min(600) }
     await mount()
