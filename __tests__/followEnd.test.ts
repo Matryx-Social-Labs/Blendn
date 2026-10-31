@@ -48,6 +48,38 @@ describe('followEnd', () => {
   })
 })
 
+describe('a thread opened at its first unread (SCRUM-958)', () => {
+  // The jump to the rule overshoots a list that has laid out a few rows: the clamped offset reads as "at the end", and
+  // following the end from there dragged the thread to its newest message, away from the rule.
+  it('is not pulled to its end by the jump landing short', () => {
+    const toEnd = jest.fn()
+    const f = followEnd(toEnd)
+    f.stop()
+    f.noteScroll(true)
+    f.onContentSizeChange()
+    expect(toEnd).not.toHaveBeenCalled()
+  })
+
+  it('follows again once the reader has dragged back to the end', () => {
+    const toEnd = jest.fn()
+    const f = followEnd(toEnd)
+    f.stop()
+    f.onScrollBeginDrag()
+    f.noteScroll(true)
+    f.onContentSizeChange()
+    expect(toEnd).toHaveBeenCalledTimes(1)
+  })
+
+  it('follows at once when the reader sends', () => {
+    const toEnd = jest.fn()
+    const f = followEnd(toEnd)
+    f.stop()
+    f.noteAtEnd(true)
+    f.onContentSizeChange()
+    expect(toEnd).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('scrollListToEnd', () => {
   it("asks the ScrollView, not FlatList’s estimate", () => {
     const native = { scrollToEnd: jest.fn() }

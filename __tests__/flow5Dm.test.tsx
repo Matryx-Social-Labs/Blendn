@@ -332,6 +332,60 @@ describe('the thread’s states', () => {
     }
   })
 
+  /*
+   * SCRUM-958: with 65 unread the first one is a page back, so the thread opens, loads that page, then scrolls to the rule.
+   * Three things moved it off screen on Android: older pages put above it (the list's top asks for them), the jump landing
+   * short of rows not yet measured (so it must be kept in place while they lay out), and that short landing reading as "at
+   * the end", which followed the thread to its newest message. The rule is scrolled to by its index now, not the one from
+   * the failed scroll.
+   */
+  it('65 unread: scrolls to the rule and keeps it there until the reader drags; the jump never follows the end', async () => {
+    const message = (n: number) => ({ ...theirs, id: `m${n}`, isRead: false, createdAt: '2026-10-15T19:00:00.000Z' })
+    const newest = Array.from({ length: 50 }, (_, i) => message(100 - i)) // the API answers newest first
+    const older = Array.from({ length: 50 }, (_, i) => message(50 - i))
+    api.getConversationMessages.mockImplementation((async (_c: string, q: { before?: string }) =>
+      q.before
+        ? { success: true, data: { messages: older, hasMore: false, nextCursor: null } }
+        : { success: true, data: { messages: newest, hasMore: true, nextCursor: 'm51', firstUnreadId: 'm36', unreadCount: 65 } }) as never)
+    const scrollToIndex = jest.spyOn(FlatList.prototype, 'scrollToIndex').mockImplementation(() => {})
+    const scrollToEnd = jest.fn()
+    const responder = jest.spyOn(FlatList.prototype, 'getScrollResponder').mockReturnValue({ scrollToEnd } as never)
+    try {
+      await open()
+      await act(async () => new Promise((r) => setTimeout(r, 50)))
+      const feed = screen.getByTestId('dm-feed')
+      const rule = (feed.props.data as { kind: string }[]).findIndex((i) => i.kind === 'unread')
+      expect(rule).toBeGreaterThan(30)
+      expect(scrollToIndex).toHaveBeenCalledWith(expect.objectContaining({ index: rule }))
+      // A scroll that failed while pages were still arriving names an index from before them: the retry goes to the rule.
+      scrollToIndex.mockClear()
+      await act(async () => {
+        feed.props.onScrollToIndexFailed({ index: 2, highestMeasuredFrameIndex: 1, averageItemLength: 60 })
+        await new Promise((r) => setTimeout(r, 200))
+      })
+      expect(scrollToIndex).toHaveBeenCalledTimes(1)
+      expect(scrollToIndex).toHaveBeenCalledWith(expect.objectContaining({ index: rule }))
+      expect(feed.props.maintainVisibleContentPosition).toBeTruthy() // FlatList moves minIndexForVisible past its header
+      // Rows laid out after the jump moved the rule: while nobody has touched the list, every layout pass puts it back.
+      scrollToIndex.mockClear()
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'contentSizeChange', 393, 4000))
+      expect(scrollToIndex).toHaveBeenCalledWith(expect.objectContaining({ index: rule }))
+      // The jump landing short reads as "at the end" while the list lays out: that must not follow the end, past the rule.
+      const atEnd = { contentSize: { height: 2000 }, contentOffset: { y: 1200 }, layoutMeasurement: { height: 800 } }
+      await act(async () => fireEvent.scroll(screen.getByTestId('dm-feed'), { nativeEvent: atEnd }))
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'contentSizeChange', 393, 2600))
+      expect(scrollToEnd).not.toHaveBeenCalled()
+      // A drag is the reader's: the list is theirs from then on.
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'scrollBeginDrag'))
+      scrollToIndex.mockClear()
+      await act(async () => fireEvent(screen.getByTestId('dm-feed'), 'contentSizeChange', 393, 4600))
+      expect(scrollToIndex).not.toHaveBeenCalled()
+    } finally {
+      responder.mockRestore()
+      scrollToIndex.mockRestore()
+    }
+  })
+
   it('a read that fails says so and offers to try again', async () => {
     api.getConversationMessages.mockResolvedValue({ success: false, error: 'Network request failed' } as never)
     await open()
