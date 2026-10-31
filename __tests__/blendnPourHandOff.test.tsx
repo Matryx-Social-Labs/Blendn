@@ -133,7 +133,8 @@ jest.mock('../components/blendn/RoomStage', () => {
 jest.mock('../components/blendn/RoomSections', () => ({
   faceOf: () => ({ kind: 'creature', pseudonym: 'Night Cat' }),
   RoomSkeleton: () => null,
-  useNow: () => Date.now(),
+  // Still between ticks, as the real hook is: a fresh Date.now() per render never settles the meet-next latch (frontCardPass.test.tsx).
+  useNow: () => jest.requireActual('react').useState(Date.now)[0],
   useGridCell: () => 100,
 }))
 /* The Room, counting its mounts: the one pre-mounted under the pour must be the one that stays. */

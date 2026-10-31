@@ -55,6 +55,14 @@ jest.mock('../lib/useRoom', () => {
   }
 })
 
+/*
+ * Every Date.now() is a new millisecond here, as on the CI runner that went red: a screen that only settles when two renders
+ * share a millisecond fails on this machine too, not only there.
+ */
+const mockRealNow = Date.now
+let mockTick = mockRealNow()
+Date.now = () => (mockTick += 1)
+
 /* The phone stands inside both overlapping fences (12.95075, 77.585065); the signal names the first. */
 const at = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString()
 const event = (id: string, latitude: number, longitude: number): TonightEvent => ({
@@ -98,7 +106,17 @@ jest.mock('../components/blendn/RoomStage', () => {
     useStage: () => ({ scrollY: jest.requireActual('react-native-reanimated').makeMutable(0), pan: {} }),
   }
 })
-jest.mock('../components/blendn/RoomSections', () => ({ faceOf: () => ({ kind: 'creature', pseudonym: 'Night Cat' }), RoomSkeleton: () => null, useNow: () => Date.now(), useGridCell: () => 100 }))
+/*
+ * `useNow` is still between its ticks, as the real hook is. A bare `() => Date.now()` is a new value on every render, and the
+ * Room's meet-next latch (`heldPicks`) re-sets in render whenever it changes: on a runner slow enough that every render lands
+ * on a new millisecond, that never settled and failed CI with "Too many re-renders" (client dev, 2026-10-31).
+ */
+jest.mock('../components/blendn/RoomSections', () => ({
+  faceOf: () => ({ kind: 'creature', pseudonym: 'Night Cat' }),
+  RoomSkeleton: () => null,
+  useNow: () => jest.requireActual('react').useState(Date.now)[0],
+  useGridCell: () => 100,
+}))
 jest.mock('../components/blendn/RoomView', () => {
   const { View } = jest.requireActual('react-native')
   return { RoomView: () => <View testID="room" /> }
