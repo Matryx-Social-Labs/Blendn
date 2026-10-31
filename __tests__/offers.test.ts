@@ -91,8 +91,11 @@ describe('an offer from a place', () => {
     request.mockResolvedValue({ success: true, data: {} })
     await offersApi.report('o1', 'misleading')
     expect(request).toHaveBeenLastCalledWith('/api/mobile/offers/o1/report', { method: 'POST', body: '{"reason":"misleading"}' }, true, 2)
+    // One switch carries both answers: the audience and the push's yes (SCRUM-628, App Store 4.5.4).
     await offersApi.setOffersFromPlaces(false)
-    expect(request).toHaveBeenLastCalledWith('/api/mobile/me/offers', { method: 'PUT', body: '{"enabled":false}' }, true, 2)
+    expect(request).toHaveBeenLastCalledWith('/api/mobile/me/offers', { method: 'PUT', body: '{"enabled":false,"pushes":false}' }, true, 2)
+    await offersApi.setOffersFromPlaces(true)
+    expect(request).toHaveBeenLastCalledWith('/api/mobile/me/offers', { method: 'PUT', body: '{"enabled":true,"pushes":true}' }, true, 2)
   })
 })
 

@@ -80,13 +80,17 @@ export const offersApi = {
     return apiClient.queuedRequest(`/api/mobile/offers/${enc(offerId)}/report`, { method: 'POST', body: JSON.stringify(body) }, true, 2)
   },
 
-  /** "Offers from places": one switch for every place. */
-  offersFromPlaces(): Promise<ApiResponse<{ enabled: boolean }>> {
+  /** "Offers from places": one switch for every place. `pushes` is the server's record of a yes to offer notifications. */
+  offersFromPlaces(): Promise<ApiResponse<{ enabled: boolean; pushes?: boolean }>> {
     return apiClient.queuedRequest('/api/mobile/me/offers')
   },
 
-  setOffersFromPlaces(enabled: boolean): Promise<ApiResponse<{ enabled: boolean }>> {
-    return apiClient.queuedRequest('/api/mobile/me/offers', { method: 'PUT', body: JSON.stringify({ enabled }) }, true, 2)
+  /**
+   * On is two yeses, off is two nos: the audience, and the notification (a venue's offer is a promotion, and App Store 4.5.4
+   * allows its push only after a yes given in the app, SCRUM-628). The switch's words ask for the notification.
+   */
+  setOffersFromPlaces(on: boolean): Promise<ApiResponse<{ enabled: boolean; pushes?: boolean }>> {
+    return apiClient.queuedRequest('/api/mobile/me/offers', { method: 'PUT', body: JSON.stringify({ enabled: on, pushes: on }) }, true, 2)
   },
 }
 
