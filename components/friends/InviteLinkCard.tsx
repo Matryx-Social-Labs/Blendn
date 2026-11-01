@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
 import { Spinner } from '../ds/Loader'
-import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText, useAnnounced } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
@@ -38,6 +38,8 @@ export function shortInviteLink(url: string): string {
  * (The frame also draws a QR code beside the name. There is no QR library in the app, and a drawn stand-in that does not scan is worse
  * than none, so the card has none.)
  */
+const LINK_FAILED = 'Your link didn’t load. Check your connection and try again.'
+
 export function InviteLinkCard({
   url,
   failed,
@@ -56,6 +58,7 @@ export function InviteLinkCard({
   const contrast = useIncreaseContrast()
   const largeText = useLargeText()
   const who = name?.trim() || null
+  useAnnounced(failed && !url ? LINK_FAILED : null)
   return (
     <View testID="invite-link-card" style={[styles.card, contrast ? styles.cardContrast : styles.cardEdge]}>
       {who ? (
@@ -90,8 +93,8 @@ export function InviteLinkCard({
         ) : failed ? (
           <>
             <Icon name="circle-alert" size={ICON.control} color={COLOR.destructive} />
-            <Text accessibilityRole="alert" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.message]}>
-              Your link didn’t load. Check your connection and try again.
+            <Text accessibilityRole="alert" accessibilityLiveRegion="polite" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.message]}>
+              {LINK_FAILED}
             </Text>
           </>
         ) : (

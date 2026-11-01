@@ -103,8 +103,9 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
   const { height } = useWindowDimensions()
   const screen = variant === 'screen'
 
+  // Said on arrival, inline too: a load that fails where "Loading" was read must say so. Inline queues, so it never cuts off what is being read (M4).
   useEffect(() => {
-    if (screen) AccessibilityInfo.announceForAccessibility(body ? `${title}. ${body}` : title)
+    AccessibilityInfo.announceForAccessibilityWithOptions(body ? `${title}. ${body}` : title, { queue: !screen })
   }, [screen, title, body])
 
   const content = (

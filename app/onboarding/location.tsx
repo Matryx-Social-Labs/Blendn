@@ -2,7 +2,7 @@ import * as Location from 'expo-location'
 import { useCallback, useEffect, useState } from 'react'
 import { AppState, StyleSheet, Text, View } from 'react-native'
 
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, useBoldText, useAnnounced } from '../../components/ds/shared'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { LocationIllustration } from '../../components/onboarding/PermissionIllustration'
@@ -61,6 +61,7 @@ export default function LocationScreen() {
   const [asking, setAsking] = useState(false)
   const [settingsPrompt, setSettingsPrompt] = useState(false)
   const precise = usePreciseLocationOff()
+  useAnnounced(precise.off ? PRECISE_OFF_NOTICE : null)
   // The city the person has browsed, when there is one: "Near you · Bengaluru". Before any, the line says only "Near you".
   const [city, setCity] = useState<string | null>(null)
   useEffect(() => {
@@ -101,7 +102,7 @@ export default function LocationScreen() {
       onBack={goBack}
     >
       {precise.off ? (
-        <View testID="precise-off-notice" accessibilityRole="alert" style={styles.notice}>
+        <View testID="precise-off-notice" accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.notice}>
           <Icon name="triangle-alert" size={ICON.control} color={COLOR.warning} />
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noticeText]}>{PRECISE_OFF_NOTICE}</Text>
         </View>

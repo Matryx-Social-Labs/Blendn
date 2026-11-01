@@ -4,7 +4,7 @@ import Animated, { type AnimatedProps } from 'react-native-reanimated'
 import { Button } from '../ds/Button'
 import { UploadRing } from '../ds/ChatBubble'
 import { ScrimPill, monoCaption } from '../ds/MonoFamily'
-import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection, useAnnounced } from '../ds/shared'
 import { OptimizedImage } from '../OptimizedImage'
 import { Icon } from '../ui/Icon'
 import type { PhotoTile as Tile } from './photoTiles'
@@ -75,6 +75,7 @@ export function PhotoTile({
   retryDisabled?: boolean
   animation?: Pick<AnimatedProps<object>, 'layout' | 'exiting' | 'entering'>
 }) {
+  useAnnounced(tile.state === 'failed' ? `Photo ${index + 1} didn’t upload` : null)
   const bold = useBoldText()
   const sel = useSelection()
   const contrast = useIncreaseContrast()
@@ -119,7 +120,7 @@ export function PhotoTile({
       ) : null}
 
       {tile.state === 'failed' ? (
-        <View style={styles.failed} accessibilityRole="alert">
+        <View style={styles.failed} accessibilityRole="alert" accessibilityLiveRegion="polite">
           <Icon name="circle-alert" size={ICON.nav} color={COLOR.textPrimary} />
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>Didn’t upload</Text>
           <Button label="Retry" kind="lit" size="sm" onPress={onRetry} disabled={retryDisabled} testID={`photo-retry-${index}`} style={styles.centred} />

@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { Button } from '../ds/Button'
 import { Spinner } from '../ds/Loader'
-import { font, useBoldText } from '../ds/shared'
+import { font, useBoldText, useAnnounced } from '../ds/shared'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 export type ListStatus = 'loading' | 'error' | 'ready'
@@ -26,6 +26,7 @@ export function ListLoadState({
   onRetry: () => void
 }) {
   const bold = useBoldText()
+  useAnnounced(status === 'loading' ? null : `Couldn’t load the ${what}.`)
   if (status === 'loading') {
     return (
       <View testID="list-loading" style={styles.row} accessibilityRole="progressbar" accessibilityLabel={`Loading ${what}`} accessibilityState={{ busy: true }}>
@@ -36,7 +37,7 @@ export function ListLoadState({
   }
   return (
     <View style={styles.row}>
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityRole="alert" style={[font('meta', bold), styles.message]}>{`Couldn’t load the ${what}.`}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityRole="alert" accessibilityLiveRegion="polite" style={[font('meta', bold), styles.message]}>{`Couldn’t load the ${what}.`}</Text>
       <Button label="Try again" kind="tertiary" size="sm" onPress={onRetry} />
     </View>
   )
