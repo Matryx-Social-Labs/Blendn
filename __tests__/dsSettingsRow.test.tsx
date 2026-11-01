@@ -145,6 +145,8 @@ describe('<SettingsRow>', () => {
     const onValueChange = jest.fn()
     await render(push({ disabled: true, onValueChange }))
     expect(flat('r').opacity).toBe(OPACITY.disabled)
+    // The dim fades, never snaps (M10: a master switch dimmed a whole block in one frame).
+    expect(String((flat('r') as { transition?: string }).transition)).toMatch(/^opacity 160ms/)
     expect(screen.getByTestId('r').props.accessibilityState).toMatchObject({ disabled: true })
     await fireEvent.press(screen.getByTestId('r'))
     expect(onValueChange).not.toHaveBeenCalled()

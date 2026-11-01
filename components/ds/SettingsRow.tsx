@@ -9,7 +9,7 @@ import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
 import { Spinner } from './Loader'
-import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useMinMeasure, useSelection } from './shared'
+import { font, IC_HAIRLINE, LIGHT, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useMinMeasure, useSelection, quickTransition } from './shared'
 import { Toggle } from './Toggle'
 
 export type SettingsTrail = 'switch' | 'chevron' | 'external' | 'none'
@@ -96,6 +96,9 @@ const textEdge = (row: unknown, large: boolean) => {
  * text a column one to three words wide, four screens tall (RC drive 3 D-D).
  * Increase Contrast whitens the trailing glyph.
  */
+/** A row dimming (or coming back) fades over `DURATION.quick`, as Button's does: a block switched off never snaps (M10). */
+const DISABLE_FADE = quickTransition('opacity')
+
 export function SettingsRow({
   icon,
   leading,
@@ -174,6 +177,7 @@ export function SettingsRow({
         ((pressed && Platform.OS !== 'android') || previewState === 'pressed') && {
           backgroundColor: PRESSED_WASH[Platform.OS === 'android' ? 'android' : 'ios'],
         },
+        DISABLE_FADE,
         disabled && { opacity: OPACITY.disabled },
       ]}
     >

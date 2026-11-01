@@ -2,7 +2,7 @@
  * Notification settings (Flow 9 · 9.6): the master switch, the phone blocking, the kinds dimming with the master,
  * and the degrade: no per-kind switch until the server sends them.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { within, act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { Linking, Platform } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
@@ -107,12 +107,15 @@ describe('the master switch', () => {
   })
 
   it('dims the kinds when it is off, and they take no touch', async () => {
+    kinds = { success: true, data: { matches: true, crew: true, night: true } }
     api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: false } } } as never)
     await render(<Screen />)
     await waitFor(() => expect(screen.getByRole('switch', { name: /^Push notifications/ }).props.accessibilityState.checked).toBe(false))
-    const kindsBlock = screen.getByTestId('notification-settings-kinds')
-    expect(kindsBlock.props.pointerEvents).toBe('none')
-    expect(kindsBlock.props.style).toMatchObject({ opacity: 0.45 })
+    // Each row says dimmed and refuses, so a screen reader cannot switch a kind the dim says is off (M10); pointerEvents never stopped that.
+    const rows = await within(screen.getByTestId('notification-settings-kinds')).findAllByTestId(/^pref-[a-zA-Z_]+$/)
+    expect(rows.length).toBeGreaterThan(1)
+    for (const row of rows) expect(row.props.accessibilityState.disabled).toBe(true)
+    expect(screen.getByRole('switch', { name: /^Push notifications/ }).props.accessibilityState.disabled).toBe(false)
   })
 })
 
