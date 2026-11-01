@@ -38,7 +38,7 @@ import { backByLabel, outageNote } from '../lib/outage'
 import { useReducedMotion } from '../lib/motion'
 import { useAutoRetry } from '../lib/useAutoRetry'
 import { HeldLink } from '../components/system/HeldLink'
-import { INTRO_DOCK_AT_MS, IntroLights, IntroMark, IntroWordmark, useIntroLine, useIntroProgress } from '../components/onboarding/LandingIntro'
+import { INTRO_DOCK_AT_MS, IntroLights, IntroMark, IntroWordmark, useIntroDock, useIntroLine, useIntroProgress } from '../components/onboarding/LandingIntro'
 
 /** The mark alone, used only on the brief holding state (Flow 1 landing 08). */
 const MONOGRAM_HEIGHT = 96
@@ -72,6 +72,7 @@ function IndexInner() {
   const reduceMotion = useReducedMotion()
   const intro = useIntroProgress()
   const introLine = useIntroLine(intro)
+  const introDock = useIntroDock(intro)
   const brandTop = window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP)
   const markHeight = largeText ? INTRO_MARK_HEIGHT_LARGE : INTRO_MARK_HEIGHT
   /*
@@ -345,6 +346,7 @@ function IndexInner() {
         <PendingInvite />
       </Animated.View>
 
+      <Animated.View style={introDock}>
       <Dock gap={SPACE.md} testID="landing-dock">
         {/*
           * Announced to screen readers as an alert, so someone mid-gesture is
@@ -457,6 +459,7 @@ function IndexInner() {
           <LegalLine lead="By continuing you" />
         </FadeInUp>
       </Dock>
+      </Animated.View>
     </View>
   )
 }

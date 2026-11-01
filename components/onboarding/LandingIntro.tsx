@@ -20,7 +20,7 @@ export const INTRO_MS = 2000
 export const INTRO_DOCK_AT_MS = 1600
 
 const LIGHT_SIZE = 460
-const HEART_SIZE = 240
+const HEART_SIZE = 320
 /** The mark's outline in its own units, measured with getTotalLength: the light's dash runs exactly once round it. */
 const MARK_OUTLINE = 1654
 const AnimatedPath = Animated.createAnimatedComponent(Path)
@@ -34,7 +34,10 @@ const TRACE_OUT: readonly [number, number] = [1270, 1540]
 const FILL: readonly [number, number] = [1000, 1420]
 const WORD: readonly [number, number] = [1300, 1650]
 const LINE: readonly [number, number] = [1420, 1760]
-const REST_OFFSET = { x: 90, y: 70 }
+const DOCK: readonly [number, number] = [INTRO_DOCK_AT_MS, 1950]
+/** Far enough to start below any screen's foot, whatever the dock's height. */
+const DOCK_FROM = 420
+const REST_OFFSET = { x: 118, y: 92 }
 const FROM_OFFSET = { x: 290, y: 330 }
 
 /** 0 to 1 across a slice of the opening. A worklet: the styles below read it on the UI thread. */
@@ -144,6 +147,14 @@ export function IntroWordmark({ progress }: { progress: SharedValue<number> }) {
       <Image source={WORDMARK} resizeMode="contain" style={{ height: WORDMARK_HEIGHT, width: WORDMARK_HEIGHT * WORDMARK_ASPECT }} />
     </Animated.View>
   )
+}
+
+/** The dock comes up from below rather than fading: it is glass, and an empty panel should never wait on screen. */
+export function useIntroDock(progress: SharedValue<number>) {
+  return useAnimatedStyle(() => {
+    const p = slice(progress.get(), DOCK)
+    return { transform: [{ translateY: DOCK_FROM * (1 - p) * (1 - p) * (1 - p) }] }
+  })
 }
 
 /** The tagline's slice, for whoever draws the line: it is the screen's own words, so it stays with the screen. */
