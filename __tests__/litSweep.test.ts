@@ -37,6 +37,7 @@ const STRONG_STAYS: Record<string, { count: number; why: string }> = {
   'components/SheetHost.tsx': { count: 1, why: 'maps that variant to the DS strong kind' },
   'app/notifications.tsx': { count: 1, why: 'the Clear all confirm: flow-9 frame 9.7 draws the white button, owner ruling 2026-10-31 (SCRUM-842)' },
   'components/ds/HoldToConfirm.tsx': { count: 1, why: 'its screen-reader fallback mirrors the hold’s own white ink' },
+  'components/onboarding/OnboardingScreen.tsx': { count: 1, why: 'onboarding’s primary is the landing’s white button: direction A, owner’s pick 2026-11-01 (SCRUM-1002)' },
 }
 
 const found = Object.fromEntries(

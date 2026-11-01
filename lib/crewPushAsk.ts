@@ -1,3 +1,5 @@
+import { Platform } from 'react-native'
+
 import { initializePushNotifications } from './notifications'
 import { clearPushDeclined } from './pushDecline'
 import { readPushPermission } from './pushStatus'
@@ -10,7 +12,10 @@ export const CREW_PUSH_BODY = 'We’ll tell you when someone from your crew arri
 /** Whether the phone can still be asked: it has not said yes or no yet. A phone that will not say is not asked. */
 export async function mayAskForPush(): Promise<boolean> {
   const permission = await readPushPermission()
-  return permission !== 'unavailable' && permission.status === 'undetermined' && permission.canAskAgain
+  if (permission === 'unavailable' || !permission.canAskAgain) return false
+  // Android 13+ reads a never-asked app as denied (notifications are off until POST_NOTIFICATIONS is granted) while the OS can
+  // still show its dialog: that is "not asked yet" there. On iOS denied is the person's answer (Android drive, SCRUM-1002).
+  return permission.status === 'undetermined' || (Platform.OS === 'android' && permission.status === 'denied')
 }
 
 /**

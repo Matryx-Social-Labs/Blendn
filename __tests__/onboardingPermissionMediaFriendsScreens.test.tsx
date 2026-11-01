@@ -4,9 +4,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
 
-import { TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
@@ -35,6 +33,12 @@ jest.mock('../lib/photoUtils', () => ({
 jest.mock('../lib/pulledNotices', () => ({ markPulledSeen: (...args: unknown[]) => mockSeen(...args) }))
 jest.mock('../lib/useFriendInvite', () => ({ useFriendInvite: () => mockInvite() }))
 jest.mock('../lib/cityStorage', () => ({ readStoredCity: jest.fn(async () => ({ city: 'Bengaluru', source: 'chosen' })) }))
+// Every creature is drawn by this one component: a marker in its place makes "no creature on onboarding" checkable (direction A).
+jest.mock('../components/ds/Creature', () => {
+  const { View: MockView } = jest.requireActual('react-native')
+  return { ...jest.requireActual('../components/ds/Creature'), Creature: () => <MockView testID="creature-glyph" /> }
+})
+const noCreature = () => expect(screen.queryByTestId('creature-glyph', { includeHiddenElements: true })).toBeNull()
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockPerm(...args),
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'denied' })),
@@ -54,12 +58,15 @@ beforeEach(() => {
 })
 
 describe('location', () => {
-  it('names no city, even with a browsed one stored: it was wrong abroad (SCRUM-997)', async () => {
+  it('a still of the lit map, naming no city even with a browsed one stored (SCRUM-997), and no creature', async () => {
     mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
     await render(<LocationScreen />)
-    expect(await screen.findByText('NEAR YOU', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.queryByText(/BENGALURU|·/, { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('header', { name: 'See what’s on near you' })).toBeTruthy()
+    expect(await screen.findByTestId('location-map', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/BENGALURU|NEAR YOU|·/, { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByTestId('precise-off-notice')).toBeNull()
+    expect(screen.getByText('Maybe later')).toBeTruthy()
+    noCreature()
   })
 
   it('Precise Location off is said above the map, and the map shortens to make room', async () => {
@@ -81,11 +88,49 @@ describe('location', () => {
 describe('photos', () => {
   const picked = { ok: true, uri: 'file://one.jpg' }
 
-  it('an empty step is one large well, and Continue sends nothing it has not got', async () => {
+  it('an empty step is one large well, and its primary is Choose a photo: the picker, never a save of nothing', async () => {
+    mockSelect.mockResolvedValue({ ok: false, cancelled: true })
     await render(<MediaScreen />)
+    expect(screen.getByRole('header', { name: 'Add a photo' })).toBeTruthy()
     expect(screen.getByLabelText('Add your main photo')).toBeTruthy()
+    expect(screen.queryByTestId('media-you-they')).toBeNull()
+    expect(screen.getByText('Choose a photo')).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(mockSelect).toHaveBeenCalledTimes(1)
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(screen.getByText('Skip')).toBeTruthy()
+    noCreature()
+  })
+
+  it('coming back and removing the last saved photo keeps Continue, which saves the removal (control: a first visit offers the picker)', async () => {
+    mockDraft = { photos: ['https://cdn/one.jpg'] }
+    await render(<MediaScreen />)
+    await fireEvent.press(screen.getByLabelText(/^Remove/))
+    expect(screen.getByText('Continue')).toBeTruthy()
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(mockCommit).toHaveBeenCalledWith({ photos: [] })
+  })
+
+  it('two quick taps open one picker', async () => {
+    let resolve: (v: unknown) => void = () => {}
+    mockSelect.mockReturnValue(new Promise((r) => (resolve = r)))
+    await render(<MediaScreen />)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    await fireEvent.press(screen.getByLabelText('Add your main photo'))
+    expect(mockSelect).toHaveBeenCalledTimes(1)
+    resolve({ ok: false, cancelled: true })
+  })
+
+  it('with a main photo up it is shown twice, clear and blurred ("You see · They see"), and Continue saves it', async () => {
+    mockDraft = { photos: ['https://cdn/one.jpg'] }
+    await render(<MediaScreen />)
+    const pair = screen.getByTestId('media-you-they')
+    expect(pair.props.accessibilityLabel).toBe('Your photo, and how it looks to people before you show who you are: blurred')
+    expect(screen.getByText('YOU SEE · THEY SEE', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByTestId('media-they-see', { includeHiddenElements: true }).props.blurRadius).toBeGreaterThan(0)
+    expect(screen.getByTestId('media-you-see', { includeHiddenElements: true }).props.blurRadius ?? 0).toBe(0)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://cdn/one.jpg'] })
   })
 
   it('an empty step draws its six places: the main well marked "Main photo", and five small slots under it (GO-11, A11)', async () => {
@@ -313,12 +358,21 @@ describe('Bring your friends', () => {
 })
 
 describe('preferences', () => {
-  it('anonymous by default; the switch flips it, and what is stored is the inverse', async () => {
+  it('asks one question, its key words lit, with no creature anywhere on the step', async () => {
     await render(<PreferencesScreen />)
-    // A sentence in Satoshi meta like its siblings, not Geist Mono (GO-11, A12).
-    expect(StyleSheet.flatten(screen.getByText('You’d appear under a made-up name').props.style).fontFamily).toBe(TYPE.meta.fontFamily)
-    await fireEvent.press(screen.getByTestId('onboarding-anonymous'))
-    expect(screen.getByText('Your name and photo, if you say so')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'What brings you out?' })).toBeTruthy()
+    noCreature()
+  })
+
+  it('anonymity is one line with its switch: on by default, flipped, and what is stored is the inverse', async () => {
+    await render(<PreferencesScreen />)
+    const row = screen.getByTestId('onboarding-anonymous')
+    expect(row.props.accessibilityState).toMatchObject({ checked: true })
+    expect(screen.getByText('Stay anonymous at events')).toBeTruthy()
+    // Printed under the switch, not only a screen-reader hint: what the switch does is the SCRUM-493 promise.
+    expect(screen.getByText('Join rooms under a made-up name. Off, we’ll offer to show your name and photo when you check in.')).toBeTruthy()
+    await fireEvent.press(row)
+    expect(screen.getByTestId('onboarding-anonymous').props.accessibilityState).toMatchObject({ checked: false })
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(mockCommit).toHaveBeenCalledWith(expect.objectContaining({ reveal_by_default: true }))
   })
@@ -356,11 +410,38 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
   })
 
-  it('draws the looking-for tiles as the design system’s, and a minor never sees Dating', async () => {
+  it('two photo cards and a plain third: Making friends, Networking, and Both (the flow walk’s three); no Dating tile', async () => {
     mockDraft = { dateOfBirth: `${new Date().getFullYear() - 16}-01-01` }
     await render(<PreferencesScreen />)
+    expect(screen.getByLabelText('Making friends')).toBeTruthy()
+    expect(screen.getByLabelText('Networking')).toBeTruthy()
+    expect(screen.getByTestId('looking-for-both')).toBeTruthy()
     expect(screen.queryByLabelText('Dating')).toBeNull()
-    expect(screen.getByLabelText('Friendship')).toBeTruthy()
     expect(screen.queryByLabelText(/^Bisexual/)).toBeNull()
+  })
+
+  it('Both stores the two intents it means, and a resumed pair shows Both picked', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(screen.getByTestId('looking-for-both'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship', 'networking'])
+  })
+
+  it('a resumed pair of intents shows Both picked (control: a single one shows its card)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['networking', 'friendship'] }
+    await render(<PreferencesScreen />)
+    expect(screen.getByRole('radio', { name: 'Both, depends on the night' }).props.accessibilityState).toMatchObject({ checked: true })
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['networking'] }
+    await render(<PreferencesScreen />)
+    expect(screen.getByTestId('looking-for-networking').props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByRole('radio', { name: 'Both, depends on the night' }).props.accessibilityState).toMatchObject({ checked: false })
+  })
+
+  it('an adult’s resumed intent the step does not show (dating) is kept when nothing is picked', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['dating'] }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['dating'])
   })
 })

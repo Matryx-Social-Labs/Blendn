@@ -486,7 +486,7 @@ export function isOverAccountAge(value: string | undefined): boolean {
 }
 
 /** Whole years from a `YYYY-MM-DD` to today (UTC), or `null` if it is not a real date. */
-function wholeYearsSince(value: string | undefined): number | null {
+export function wholeYearsSince(value: string | undefined): number | null {
   if (!value) return null
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
   if (!match) return null

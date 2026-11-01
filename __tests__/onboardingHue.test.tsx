@@ -12,7 +12,6 @@ import { StyleSheet } from 'react-native'
 import { LookingForCard } from '../components/ds/LookingForCard'
 import { ProgressBar } from '../components/ds/ProgressBar'
 import { HueProvider, type Hue } from '../components/ds/shared'
-import { LocationIllustration } from '../components/onboarding/PermissionIllustration'
 import { PhotoTile } from '../components/onboarding/PhotoTile'
 import { COLOR } from '../lib/design/tokens'
 
@@ -56,11 +55,6 @@ describe('in the violet world', () => {
   it('only the main photo carries it', async () => {
     await inHue('violet', photo(1))
     expect(flat('photo-tile-1').borderColor).toBeUndefined()
-  })
-
-  it('the “you” marker on the map is violet', async () => {
-    await inHue('violet', <LocationIllustration />)
-    expect(flat('you-ring').backgroundColor).toBe(COLOR.brandViolet)
   })
 
   it('the progress fill and a picked looking-for card follow the hue', async () => {

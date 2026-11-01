@@ -19,7 +19,7 @@ export const INTRO_MS = 2000
 /** When the ways in start to rise: the person can act before the last light has settled. */
 export const INTRO_DOCK_AT_MS = 1600
 
-const LIGHT_SIZE = 460
+export const LIGHT_SIZE = 460
 const HEART_SIZE = 320
 /** The mark's outline in its own units, measured with getTotalLength: the light's dash runs exactly once round it. */
 const MARK_OUTLINE = 1654
@@ -57,14 +57,21 @@ export function useIntroProgress(): SharedValue<number> {
   return progress
 }
 
-function Light({ id, color, size = LIGHT_SIZE }: { id: string; color: string; size?: number }) {
+/** A light's falloff, centre to edge. Shared with the onboarding steps' lights, which measure their text against it. */
+export const LIGHT_STOPS = [
+  { offset: 0, alpha: 0.9 },
+  { offset: 0.45, alpha: 0.42 },
+  { offset: 1, alpha: 0 },
+] as const
+
+export function Light({ id, color, size = LIGHT_SIZE }: { id: string; color: string; size?: number }) {
   return (
     <Svg width={size} height={size}>
       <Defs>
         <RadialGradient id={id} cx="50%" cy="50%" r="50%">
-          <Stop offset="0" stopColor={color} stopOpacity={0.9} />
-          <Stop offset="0.45" stopColor={color} stopOpacity={0.42} />
-          <Stop offset="1" stopColor={color} stopOpacity={0} />
+          {LIGHT_STOPS.map((stop) => (
+            <Stop key={stop.offset} offset={stop.offset} stopColor={color} stopOpacity={stop.alpha} />
+          ))}
         </RadialGradient>
       </Defs>
       <Circle cx={size / 2} cy={size / 2} r={size / 2} fill={`url(#${id})`} />

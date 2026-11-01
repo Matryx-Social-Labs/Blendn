@@ -1,74 +1,62 @@
-import { Fragment } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import { LookingForCard } from '../ds/LookingForCard'
+import { RadioCard } from '../ds/RadioCard'
 import { SPACE } from '../../lib/design/tokens'
 
 /**
- * "Why you go out" as the design system's picture tiles, two across, one choice (Flow 2 preferences 01; round 4 2.1,
- * "'Looking for' becomes intent"). The values are the server's `intent_default` enum, so the answer reaches matching and
- * the Board's "complete profile" gate rather than sitting in free text.
- *
- * The frame draws these as image tiles rather than chips, and the difference is doing work: five words in a row of pills is
- * a form, five pictures is a question about how you want to spend an evening.
+ * "What brings you out?" (direction A, the flow walk's "friends, networking, both"): two photo cards, one under the other, and
+ * "Both, depends on the night" as a plain third. The values are the server's `intent_default` enum, so the answer reaches
+ * matching and the Board's "complete profile" gate rather than sitting in free text. Dating and "just here for the event"
+ * are not asked here; Edit profile offers all four.
  *
  * Images are committed rather than linked: Figma's URLs expire in about a week, so a build referencing one loses its artwork
  * seven days later.
  */
-export type Intent = 'dating' | 'friendship' | 'networking' | 'just_here'
 
-export const LOOKING_FOR_OPTIONS: readonly { value: Intent; label: string; art: number }[] = [
-  { value: 'dating', label: 'Dating', art: require('../../assets/onboarding/looking-dating.jpg') },
-  { value: 'friendship', label: 'Friendship', art: require('../../assets/onboarding/looking-friendship.jpg') },
+export type Intent = 'dating' | 'friendship' | 'networking' | 'just_here'
+/** The step's three answers. */
+export type Outing = 'friendship' | 'networking' | 'both'
+
+const CARDS: readonly { value: Exclude<Outing, 'both'>; label: string; art: number }[] = [
+  { value: 'friendship', label: 'Making friends', art: require('../../assets/onboarding/looking-friendship.jpg') },
   { value: 'networking', label: 'Networking', art: require('../../assets/onboarding/looking-networking.jpg') },
-  { value: 'just_here', label: 'Just here for the event', art: require('../../assets/onboarding/looking-open.jpg') },
 ]
 
-/** Each intent's tile word, for the places that say it back (the review step). */
-export const INTENT_LABELS: Readonly<Record<Intent, string>> = Object.fromEntries(
-  LOOKING_FOR_OPTIONS.map((option) => [option.value, option.label])
-) as Record<Intent, string>
+/** What an answer stores. */
+export function intentsOf(outing: Outing): Intent[] {
+  return outing === 'both' ? ['friendship', 'networking'] : [outing]
+}
 
-/** Two to a row. */
-const PER_ROW = 2
+/** The answer a stored list reads as, or `null` when it holds something this step does not offer (dating, just here). */
+export function outingOf(intents: readonly Intent[] | undefined): Outing | null {
+  const set = new Set(intents ?? [])
+  if (set.size === 2 && set.has('friendship') && set.has('networking')) return 'both'
+  if (set.size === 1 && (set.has('friendship') || set.has('networking'))) return [...set][0] as Outing
+  return null
+}
 
-export function LookingForCards({
-  selected,
-  onSelect,
-  withoutDating = false,
-}: {
-  selected: Intent | null
-  onSelect: (value: Intent) => void
-  /** Under 18: dating is refused, so it is not offered (SCRUM-294). Not disabled: a minor never sees it. */
-  withoutDating?: boolean
-}) {
-  const options = withoutDating ? LOOKING_FOR_OPTIONS.filter((option) => option.value !== 'dating') : LOOKING_FOR_OPTIONS
-  const rows = Array.from({ length: Math.ceil(options.length / PER_ROW) }, (_, i) => options.slice(i * PER_ROW, (i + 1) * PER_ROW))
+export function LookingForCards({ selected, onSelect }: { selected: Outing | null; onSelect: (value: Outing) => void }) {
   return (
-    <View style={styles.grid}>
-      {rows.map((row) => (
-        <View key={row[0].value} style={styles.row}>
-          {row.map((option) => (
-            <Fragment key={option.value}>
-              <LookingForCard
-                label={option.label}
-                image={option.art}
-                selected={selected === option.value}
-                onPress={() => onSelect(option.value)}
-                testID={`looking-for-${option.value}`}
-              />
-            </Fragment>
-          ))}
-          {/* An odd tile keeps its half of the row. */}
-          {row.length < PER_ROW ? <View style={styles.filler} /> : null}
+    <View style={styles.list}>
+      {CARDS.map((card) => (
+        // A row, so the card's own `flex: 1` takes the width rather than a share of an unmeasured height.
+        <View key={card.value} style={styles.row}>
+          <LookingForCard
+            label={card.label}
+            image={card.art}
+            selected={selected === card.value}
+            onPress={() => onSelect(card.value)}
+            testID={`looking-for-${card.value}`}
+          />
         </View>
       ))}
+      <RadioCard title="Both, depends on the night" selected={selected === 'both'} onPress={() => onSelect('both')} testID="looking-for-both" />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  grid: { gap: SPACE.md },
-  row: { flexDirection: 'row', gap: SPACE.md },
-  filler: { flex: 1 },
+  list: { gap: SPACE.md },
+  row: { flexDirection: 'row' },
 })

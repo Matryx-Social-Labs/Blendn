@@ -65,6 +65,7 @@ const KNOWN_ORPHANS: Record<string, string> = {
   /* The P3 chat and gesture components (ROUND3 B4), built ahead of Flow 5; the room and the DM adopt them, the Banter takes SwipeRow. */
   /* The P2 events and people (ROUND3 B4), built ahead of their flows; each goes with the first flow that adopts it. */
   /* P4, the rest of R2-D0 (ROUND3 B4), built ahead of Flows 9–16; each goes with the first flow that adopts it. */
+  'ProgressBar.tsx': 'the DS determinate bar; onboarding moved to five segments (direction A, SCRUM-1002), the next determinate wait adopts it',
   'OfferCard.tsx': 'redesign P4 component; replaces the offer screen’s card with the Regulars redesign and the Passes & offers list (Flow 13, ROUND3 G3)',
 }
 

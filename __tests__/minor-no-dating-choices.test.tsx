@@ -46,15 +46,11 @@ describe('mayDate: the client twin of the server rule', () => {
 })
 
 describe('Looking for', () => {
-  it('offers Dating to an adult', async () => {
+  // Direction A asks friends, networking or both (the flow walk); Dating is Edit profile's, so no one sees it here.
+  it('offers the three answers and no Dating tile', async () => {
     await render(<LookingForCards selected={null} onSelect={noop} />)
-    expect(screen.getByLabelText('Dating')).toBeTruthy()
-  })
-
-  it('does not offer Dating to a minor, and keeps the other four', async () => {
-    await render(<LookingForCards selected={null} onSelect={noop} withoutDating />)
     expect(screen.queryByLabelText('Dating')).toBeNull()
-    for (const option of ['Friendship', 'Networking', 'Just here for the event']) {
+    for (const option of ['Making friends', 'Networking', 'Both, depends on the night']) {
       expect(screen.getByLabelText(option)).toBeTruthy()
     }
   })
@@ -88,8 +84,8 @@ describe('every screen asks', () => {
     expect(src).toMatch(/if \(savedIntents\.includes\('dating'\)\)/)
   })
 
-  it('onboarding hides the card and does not send a stale "Dating" for a minor', () => {
+  it('onboarding offers no Dating card and does not send a stale "Dating" for a minor', () => {
     const src = read('app/onboarding/preferences.tsx')
-    expect(src).toMatch(/<LookingForCards[^>]*withoutDating=\{under18\}/)
+    expect(src).toContain("filter((i) => !(under18 && i === 'dating'))")
   })
 })

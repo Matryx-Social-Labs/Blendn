@@ -23,7 +23,7 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getCategories: () => mockCat
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
 
 import DetailsScreen from '../app/onboarding/details'
-import { COLOR } from '../lib/design/tokens'
+import { COLOR, SIZE } from '../lib/design/tokens'
 import { tint } from '../lib/theme'
 
 const primary = () => screen.getByTestId('onboarding-primary')
@@ -87,14 +87,39 @@ describe('details', () => {
     expect(screen.getByTestId('onboarding-bio-input').props.value).toBe('x'.repeat(495))
   })
 
-  it('stops at ten interests (the server’s cap), dims the rest, and says n of 10', async () => {
+  it('asks one question, the interests first and the bio after them, the chips at the 44 pt size', async () => {
+    mockCategories.mockResolvedValue(tree(2))
+    await render(<DetailsScreen />)
+    await screen.findByText('Interest 0')
+    expect(screen.getByRole('header', { name: 'What are you into?' })).toBeTruthy()
+    const tree_ = JSON.stringify(screen.toJSON())
+    expect(tree_.indexOf('Interest 0')).toBeLessThan(tree_.indexOf('onboarding-bio-input'))
+    expect(StyleSheet.flatten(screen.getByLabelText(/^Interest 0\b/).props.style).minHeight).toBe(SIZE.targetIos)
+  })
+
+  it('a group past a dozen folds behind "+n more" (large data; control: a dozen shows whole)', async () => {
+    mockCategories.mockResolvedValue(tree(20))
+    await render(<DetailsScreen />)
+    await screen.findByText('Interest 0')
+    expect(screen.getByText('+8 more')).toBeTruthy()
+    expect(screen.queryByText('Interest 12')).toBeNull()
+    mockCategories.mockResolvedValue(tree(12))
+    await render(<DetailsScreen />)
+    expect(await screen.findByText('Interest 11')).toBeTruthy()
+    expect(screen.queryByText(/^\+\d+ more$/)).toBeNull()
+  })
+
+  it('stops at ten interests (the server’s cap), dims the rest, and keeps "n picked" over the button', async () => {
     mockCategories.mockResolvedValue(tree(12))
     await render(<DetailsScreen />)
     await screen.findByText('Interest 0')
-    for (let i = 0; i < 10; i++) await fireEvent.press(screen.getByLabelText(new RegExp(`^Interest ${i}\\b`)))
-    expect(screen.getByText('10 of 10')).toBeTruthy()
+    expect(screen.getByTestId('onboarding-dock-caption').props.children).toBe('None picked yet')
+    await fireEvent.press(screen.getByLabelText(/^Interest 0\b/))
+    expect(screen.getByTestId('onboarding-dock-caption').props.children).toBe('1 picked')
+    for (let i = 1; i < 10; i++) await fireEvent.press(screen.getByLabelText(new RegExp(`^Interest ${i}\\b`)))
+    expect(screen.getByTestId('onboarding-dock-caption').props.children).toBe('10 picked, the most')
     await fireEvent.press(screen.getByLabelText(/^Interest 10\b/))
-    expect(screen.getByText('10 of 10')).toBeTruthy()
+    expect(screen.getByTestId('onboarding-dock-caption').props.children).toBe('10 picked, the most')
     await fireEvent.press(primary())
     expect(mockCommit).toHaveBeenCalledWith(expect.objectContaining({ interestIds: expect.any(Array) }))
     expect((mockCommit.mock.calls[0][0] as { interestIds: string[] }).interestIds).toHaveLength(10)

@@ -71,6 +71,8 @@ function MoreChevron({ expanded, testID }: { expanded: boolean; testID?: string 
 }
 
 export type ChipVariant = 'default' | 'outline'
+/** `lg`: the 44 pt capsule in body, for a set that is the screen's one question (onboarding's interests, direction A). */
+export type ChipSize = 'md' | 'lg'
 /** `single` picks one of a set; `multi` is pick-any and draws the + / ✓ slot. */
 export type ChipSelection = 'single' | 'multi'
 
@@ -101,6 +103,7 @@ export type ChipProps = {
   shared?: boolean
   /** `outline`: no fill, a 1 pt edge at 22% white; read-only labels on a card (A31). */
   variant?: ChipVariant
+  size?: ChipSize
   /** Read-only only: what it is read as, when that is more than the label ("Jazz, shared"). */
   accessibilityLabel?: string
   /**
@@ -142,6 +145,7 @@ export function Chip({
   disabled = false,
   shared = false,
   variant = 'default',
+  size = 'md',
   accessibilityLabel,
   lines = 1,
   previewState,
@@ -206,7 +210,7 @@ export function Chip({
         <Glyph name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} play={selected} />
       ) : null}
       <Text
-        style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
+        style={[font(size === 'lg' ? 'body' : 'meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
         maxFontSizeMultiplier={CONTROL_FONT_CAP}
         // Past its lines it ends in an ellipsis; it is read whole either way (the label is the accessibility label).
         numberOfLines={lines}
@@ -249,6 +253,7 @@ export function Chip({
   )
   const look = [
     styles.chip,
+    size === 'lg' && styles.chipLg,
     {
       borderRadius: radius,
       backgroundColor: outline ? 'transparent' : chipRest(ground),
@@ -331,5 +336,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
     overflow: 'hidden',
   },
+  chipLg: { minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
   wash: { backgroundColor: PRESSED_WASH.android },
 })
