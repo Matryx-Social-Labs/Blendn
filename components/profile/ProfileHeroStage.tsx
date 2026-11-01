@@ -150,7 +150,7 @@ export function ProfileHeroStage({ width, height: fitted, scrollY, photos, blurr
           {age ? (
             <>
               {', '}
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.mono[700]), styles.age]}>{age}</Text>
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.mono[700])]}>{age}</Text>
             </>
           ) : null}
         </Text>
@@ -172,6 +172,4 @@ const styles = StyleSheet.create({
   pill: { alignSelf: 'center' },
   nameBlock: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter, bottom: NAME_FROM_FOOT, gap: SPACE.xs },
   ink: { color: COLOR.textPrimary },
-  // design-exception: Flow 6 draws the age in Geist Mono 700 at 32, beside the name at 34
-  age: { fontSize: 32, lineHeight: 40 },
 })

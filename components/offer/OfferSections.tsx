@@ -10,7 +10,7 @@ import { LiquidDisc } from '../ds/LiquidDisc'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { monoCaption } from '../ds/MonoFamily'
 import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { endedLabel, knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
 
 /** The disc at the ticket's middle (Flow 13 pass.js: 200). */
@@ -115,8 +115,6 @@ export function DoorTicket({
   )
 }
 
-// design-exception: the regular card's fact titles are 15/20 (flow13.js `regular`: strongCss at 15px / 20px); no role is.
-const FACT_TITLE = { fontSize: 15, lineHeight: 20 } as const
 
 /** One row of the regular card: a glyph, what it says, and the plain words. */
 function FactRow({ icon, title, text }: { icon: IconName; title?: string; text: string }) {
@@ -125,7 +123,7 @@ function FactRow({ icon, title, text }: { icon: IconName; title?: string; text: 
     <View style={styles.fact}>
       <Icon name={icon} size={ICON.control} color={COLOR.textPrimary} />
       <View style={styles.fill}>
-        {title ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), FACT_TITLE, styles.ink]}>{title}</Text> : null}
+        {title ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink]}>{title}</Text> : null}
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), title ? styles.secondary : styles.ink]}>{text}</Text>
       </View>
     </View>

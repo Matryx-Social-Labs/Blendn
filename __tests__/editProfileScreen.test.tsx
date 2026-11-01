@@ -82,6 +82,18 @@ it('counts the interests picked as "n of max"', async () => {
   expect(screen.queryByText(/\d+ \/ \d+/)).toBeNull()
 })
 
+it('says one interest is not enough to be matched, and stops saying it at two (SCRUM-519)', async () => {
+  await render(<EditProfile />)
+  await screen.findByDisplayValue('Sam')
+  expect(screen.getByText('Pick at least 2 so we can match you.')).toBeTruthy()
+  await act(async () => mockPickInterests(['a']))
+  expect(screen.getByText('1 of 10')).toBeTruthy()
+  expect(screen.getByText('Pick at least 2 so we can match you.')).toBeTruthy()
+  await act(async () => mockPickInterests(['a', 'b']))
+  expect(screen.getByText('2 of 10')).toBeTruthy()
+  expect(screen.queryByText('Pick at least 2 so we can match you.')).toBeNull()
+})
+
 it('is the six fields’ shape while it loads, then the fields', async () => {
   api.getProfile.mockReturnValue(new Promise(() => {}))
   await render(<EditProfile />)

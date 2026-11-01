@@ -65,7 +65,7 @@ export function MeIdentity({
           {age ? (
             <>
               {', '}
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.mono[700]), styles.age]}>{age}</Text>
+              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.mono[700])]}>{age}</Text>
             </>
           ) : null}
         </Text>
@@ -183,8 +183,6 @@ const styles = StyleSheet.create({
   text: { flex: 1, minWidth: 0, gap: IDENTITY_GAP },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },
-  // design-exception: Flow 6 draws the age in Geist Mono 700 at 32, beside the name at 34
-  age: { fontSize: 32, lineHeight: 40 },
   edit: { alignSelf: 'flex-start', marginTop: SPACE.sm },
   stats: { flexDirection: 'row', paddingVertical: SPACE.lg, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surfaceSunken },
   statColumn: { flex: 1 },

@@ -15,6 +15,7 @@ import { TagsField } from '../components/profile/TagsField'
 import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker, MAX_INTERESTS } from '../components/InterestPicker'
+import { MIN_INTERESTS } from '../lib/meProfile'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { useToast } from '../components/Toast'
@@ -81,6 +82,7 @@ function formSnapshot(f: {
 }
 
 function EditProfileContent() {
+  const bold = useBoldText()
   const { user: authUser } = useAuth()
   const reduceMotion = useReducedMotion()
   const { showToast } = useToast()
@@ -712,6 +714,12 @@ function EditProfileContent() {
               </View>
             ) : (
               <>
+                {/* Under two, matching can't rank you and the board refuses a post (SCRUM-519): said, never refused. */}
+                {interestIds.length < MIN_INTERESTS ? (
+                  <Text testID="edit-profile-interests-floor" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.floor]}>
+                    {`Pick at least ${MIN_INTERESTS} so we can match you.`}
+                  </Text>
+                ) : null}
                 <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
                 <WhoSees field="interests" />
               </>
@@ -804,6 +812,7 @@ const styles = StyleSheet.create({
   // FieldLabel's inset, so the card's label and the set labels inside it start on one edge (r7 L8).
   cardTitle: { color: COLOR.textSecondary, paddingLeft: SPACE.xs },
   cardSub: { color: COLOR.textTertiary },
+  floor: { color: COLOR.textSecondary, paddingLeft: SPACE.xs },
   // Form fields: the design system's TextField / TextArea, one gap between them.
   fields: { gap: SPACE.lg },
   skeletonField: { gap: SPACE.sm },

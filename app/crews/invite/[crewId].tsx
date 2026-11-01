@@ -20,7 +20,7 @@ import { askCrewPush } from '../../../lib/crewPushAsk'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, findInvite, type CrewInvite } from '../../../lib/crews'
 import { crewsApi } from '../../../lib/crewsApi'
 import { inviteWho } from '../../../lib/crewsScreens'
-import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../../lib/design/tokens'
 import { H } from '../../../lib/haptics'
 import { showSheet } from '../../../lib/sheet'
 import { useAuth } from '../../../lib/useAuth'
@@ -30,9 +30,6 @@ type Load = { kind: 'loading' } | { kind: 'ready'; invite: CrewInvite } | { kind
 const EMBLEM = 160
 /** How long "Joined" shows before the chat opens. */
 const JOINED_MS = 700
-/** flow10.js `invite`: the anonymity line is the strong label at 15/20, a size the type roles do not have. */
-// design-exception: flow10.js invite draws the keep-anonymous label at 15/20, between meta and body
-const ANON_LABEL = { fontSize: 15, lineHeight: 20 } as const
 const NOT_OPEN = 'This invite isn’t open any more'
 
 /**
@@ -207,7 +204,7 @@ function CrewInviteScreenContent() {
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
           </View>
           <View style={styles.anon}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), ANON_LABEL, styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
             <Toggle value={keepAnonymous} onValueChange={setKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
           </View>
         </View>
