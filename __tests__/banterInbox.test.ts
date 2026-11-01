@@ -17,7 +17,7 @@ const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
  */
 const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
-/** The request card moved to one row both the strip and the See all screen draw. */
+/** The request card, as the Requests page draws it. */
 const REQUEST_ROW = () => stripComments(read('components/banter/RequestRow.tsx'))
 const SCREEN = () => stripComments(read('app/(tabs)/chat.tsx'))
 const PARTS = () => stripComments(read('components/banter/BanterParts.tsx'))
@@ -85,7 +85,8 @@ describe('message requests', () => {
     expect(INBOX()).toContain('loadMessageRequests')
     expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'accept')")
     expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'decline')")
-    expect(SCREEN()).toContain('<RequestRow')
+    expect(stripComments(read('app/message-requests.tsx'))).toContain('<RequestRow')
+    expect(stripComments(read('app/message-requests.tsx'))).toContain('crews.invites')
   })
 
   it('show the note verbatim, in two lines (four at the accessibility sizes: RC drive 5) (ROUND3 C11)', () => {
@@ -108,16 +109,16 @@ describe('message requests', () => {
   })
 
   it('leave with a fade while the rest close the gap', () => {
-    const src = SCREEN()
-    expect(src).toContain('exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}')
-    expect(src).toContain('layout={reduceMotion ? undefined : REQUEST_REFLOW}')
+    // The Banter's one row fades when the last request is answered; the page's cards close the gap themselves.
+    expect(SCREEN()).toContain('exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}')
+    expect(stripComments(read('app/message-requests.tsx'))).toContain('itemLayoutAnimation={reduceMotion ? undefined : REQUEST_REFLOW}')
   })
 
   it('show crew invites as requests, with Join opening the invite, which holds the consent (R2-D2 #02)', () => {
-    const src = SCREEN()
+    const src = stripComments(read('components/banter/RequestRow.tsx'))
     expect(src).toContain('accept="Join"')
     expect(src).toContain("pathname: '/crews/invite/[crewId]'")
-    expect(src).toContain('crews.decline(invite)')
+    expect(stripComments(read('app/message-requests.tsx'))).toContain('onDecline={decline}')
   })
 })
 

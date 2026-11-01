@@ -161,9 +161,9 @@ it('draws Live now, Requests, People and Past rooms, with a request’s note ver
   await open()
   for (const heading of ['Live now', 'Requests', 'People', 'Past rooms']) expect(screen.getAllByText(heading).length).toBeGreaterThan(0)
   expect(screen.getAllByText('Vinyl Night').length).toBeGreaterThan(0)
-  expect(screen.getByText('Loved your take on the set — coffee next week?')).toBeTruthy()
-  expect(screen.getByLabelText('Accept the request from Quiet Otter')).toBeTruthy()
-  expect(screen.getByLabelText('Decline the request from Quiet Otter')).toBeTruthy()
+  // Answers live on the Requests page: the Banter says who and how many, in one row.
+  expect(screen.getByLabelText('Requests, 1')).toBeTruthy()
+  expect(screen.queryByLabelText('Accept the request from Quiet Otter')).toBeNull()
 })
 
 it('a room with a `locked` status says no organizer lock (SCRUM-893): its last message, like any past room', async () => {
@@ -614,19 +614,16 @@ describe('a Banter of thousands (SCRUM-760 b)', () => {
     expect(screen.getAllByText('Fox 1').length).toBeGreaterThan(0)
   })
 
-  it('the Requests section is a strip of three with the server’s true count and a "See all" to the screen of them', async () => {
-    const rs = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${from + i}`, senderId: `s${from + i}`, sender: { id: `s${from + i}`, name: `Asker ${from + i}` }, message: `hello ${from + i}`, createdAt: at }))
+  it('Requests is one row with the server’s true count, so 140 waiting never push a chat below the fold', async () => {
+    const rs = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${from + i}`, senderId: `s${from + i}`, sender: { id: `s${from + i}`, name: `Fox ${from + i}` }, createdAt: '2026-01-01T00:00:00Z' }))
     api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 20), totalCount: 140 } } as never)
     await open()
-    expect(screen.getByLabelText('Requests, 140')).toBeTruthy()
-    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
-    await act(async () => fireEvent.press(screen.getByLabelText('See all 140')))
+    expect(screen.queryByLabelText(/^Accept the request from/)).toBeNull()
+    await act(async () => fireEvent.press(screen.getByLabelText('Requests, 140')))
     expect(router.push).toHaveBeenCalledWith('/message-requests')
-    // The strip stays a strip: nothing expands in place.
-    expect(screen.getAllByLabelText(/^Accept the request from/)).toHaveLength(3)
   })
 
-  it('a few requests are all shown, with no "Show all"', async () => {
+  it('one request is still the row, and says one', async () => {
     serve()
     await open()
     expect(screen.getByLabelText('Requests, 1')).toBeTruthy()
@@ -685,7 +682,7 @@ it('reads the room’s own line from lastMessage.type: system has no "You:", a p
 })
 
 describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
-  const requestCard = 'Loved your take on the set — coffee next week?'
+  const requestRow = 'Requests, 1'
   // The server has the request; the SWR copy is still the empty list, and only a forced read has it.
   const serveRequestAfterSwr = () =>
     api.getMessageRequests.mockImplementation((async (_p?: unknown, o?: { force?: boolean }) => ({
@@ -697,14 +694,14 @@ describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
     // Arrange: the Banter loaded with no requests (and cached that); then someone sends one.
     serve({ requests: [] })
     await open()
-    expect(screen.queryByText(requestCard)).toBeNull()
+    expect(screen.queryByLabelText(requestRow)).toBeNull()
     serveRequestAfterSwr()
     // Act: the bell's row for it lands (lib/inboxBadge), and the Banter syncs.
     forgetMessageRequests()
     await act(async () => void (await mockSync.onSync?.()))
     await flush()
     // Assert
-    expect(screen.getByText(requestCard)).toBeTruthy()
+    expect(screen.getByLabelText(requestRow)).toBeTruthy()
   })
 
   it('a Banter that has only just mounted (what View on a notification pushes) reads the server, not the stale copy', async () => {
@@ -713,7 +710,7 @@ describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
     serve({ requests: [] })
     serveRequestAfterSwr()
     await open()
-    expect(screen.getByText(requestCard)).toBeTruthy()
+    expect(screen.getByLabelText(requestRow)).toBeTruthy()
     expect(api.getMessageRequests).toHaveBeenLastCalledWith({ status: 'pending' }, { force: true })
   })
 
@@ -744,13 +741,13 @@ describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
   it('a read that fails leaves the requests on screen: it is not "no requests"', async () => {
     serve()
     await open()
-    expect(screen.getByText(requestCard)).toBeTruthy()
+    expect(screen.getByLabelText(requestRow)).toBeTruthy()
     api.getMessageRequests.mockResolvedValue({ success: false, error: 'offline' } as never)
     forgetMessageRequests()
     await act(async () => void (await mockSync.onSync?.()))
     await flush()
     expect(api.getMessageRequests).toHaveBeenCalledTimes(2)
-    expect(screen.getByText(requestCard)).toBeTruthy()
+    expect(screen.getByLabelText(requestRow)).toBeTruthy()
   })
 
   it('a room you opened stays read when a background sync repaints from the cache behind you', async () => {
