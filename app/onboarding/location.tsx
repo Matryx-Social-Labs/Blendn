@@ -1,5 +1,5 @@
 import * as Location from 'expo-location'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, StyleSheet, Text, View } from 'react-native'
 
 import { font, useBoldText, useAnnounced } from '../../components/ds/shared'
@@ -9,6 +9,9 @@ import { LocationIllustration } from '../../components/onboarding/PermissionIllu
 import { isPreciseLocationOff } from '../../lib/preciseLocation'
 import { Icon } from '../../components/ui/Icon'
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { roughFix } from '../../lib/locationFix'
+import type { LngLat } from '../../lib/mapLit'
+import { useReducedMotion } from '../../lib/motion'
 import { askOsPermission } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -32,6 +35,10 @@ import { useOnboarding } from '../../lib/useOnboarding'
  */
 const SETTINGS_HINT = 'Blend’n uses your location to show events near you, and to check you in when you arrive at one.'
 const PRECISE_OFF_NOTICE = 'Precise location is off, so check-in can’t confirm you’re inside the venue. Turn it on in Settings.'
+/** After Allow, how long a fix is waited for before the step moves on without the flight. */
+const FIX_DEADLINE_MS = 3000
+/** The flight to you and the lighting of what is near, at most this long: the step never waits on the map. */
+const SHOWN_CAP_MS = 5000
 
 /**
  * Whether location is allowed but only roughly: asked on arrival, after each answer, and on coming back from Settings
@@ -61,6 +68,20 @@ export default function LocationScreen() {
   const [settingsPrompt, setSettingsPrompt] = useState(false)
   const precise = usePreciseLocationOff()
   useAnnounced(precise.off ? PRECISE_OFF_NOTICE : null)
+  const reduceMotion = useReducedMotion()
+  const [you, setYou] = useState<LngLat | null>(null)
+  const shown = useRef<(() => void) | null>(null)
+
+  /** On Allow, with motion: the map flies to the fix and lights what is near before the step moves on (owner, 2026-11-01). */
+  const showWhereYouAre = async () => {
+    const fix = await roughFix(FIX_DEADLINE_MS).catch(() => null)
+    if (!fix) return
+    await new Promise<void>((resolve) => {
+      shown.current = resolve
+      setTimeout(resolve, SHOWN_CAP_MS)
+      setYou([fix.coords.longitude, fix.coords.latitude])
+    })
+  }
 
   const ask = async () => {
     setAsking(true)
@@ -77,6 +98,11 @@ export default function LocationScreen() {
       return
     }
 
+    if (granted && !reduceMotion) {
+      setAsking(true)
+      await showWhereYouAre()
+      setAsking(false)
+    }
     await commit({ share_location: granted })
   }
 
@@ -101,7 +127,7 @@ export default function LocationScreen() {
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noticeText]}>{PRECISE_OFF_NOTICE}</Text>
         </View>
       ) : null}
-      <LocationIllustration notice={precise.off} />
+      <LocationIllustration notice={precise.off} you={you} onShown={() => shown.current?.()} />
       <SettingsTray
         visible={settingsPrompt}
         icon="map-pin-off"

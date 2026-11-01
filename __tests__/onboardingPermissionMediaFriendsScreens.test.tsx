@@ -39,10 +39,23 @@ jest.mock('../components/ds/Creature', () => {
   return { ...jest.requireActual('../components/ds/Creature'), Creature: () => <MockView testID="creature-glyph" /> }
 })
 const noCreature = () => expect(screen.queryByTestId('creature-glyph', { includeHiddenElements: true })).toBeNull()
+const mockRequest = jest.fn(async () => ({ status: 'denied' }))
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockPerm(...args),
-  requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'denied' })),
+  requestForegroundPermissionsAsync: () => mockRequest(),
 }))
+// The live map is native (MapLibre): a stand-in that records what the step hands it (its own tests: liveCityMap.test.tsx).
+const mockLive = jest.fn()
+jest.mock('../components/onboarding/LiveCityMap', () => ({
+  LiveCityMap: (p: unknown) => {
+    mockLive(p)
+    return null
+  },
+}))
+const mockFix = jest.fn()
+jest.mock('../lib/locationFix', () => ({ ...jest.requireActual('../lib/locationFix'), roughFix: (...a: unknown[]) => mockFix(...a) }))
+let mockReduce = false
+jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => mockReduce }))
 
 import FriendsIntroScreen from '../app/onboarding/friends'
 import LocationScreen from '../app/onboarding/location'
@@ -54,6 +67,8 @@ import { stepPayload } from '../lib/onboarding'
 beforeEach(() => {
   jest.clearAllMocks()
   mockDraft = {}
+  mockReduce = false
+  mockRequest.mockImplementation(async () => ({ status: 'denied' }))
   mockPulled.mockImplementation(async () => ({ pulled: [], live: null }))
 })
 
@@ -67,6 +82,47 @@ describe('location', () => {
     expect(screen.queryByTestId('precise-off-notice')).toBeNull()
     expect(screen.getByText('Maybe later')).toBeTruthy()
     noCreature()
+  })
+
+  type LiveProps = { you: [number, number] | null; onShown?: () => void }
+  const lastLive = () => mockLive.mock.calls[mockLive.mock.calls.length - 1][0] as LiveProps
+  const allow = async () => {
+    mockPerm.mockResolvedValue({ granted: false, canAskAgain: true, status: 'undetermined' })
+    mockRequest.mockImplementation(async () => ({ status: 'granted' }))
+    await render(<LocationScreen />)
+    fireEvent.press(screen.getByRole('button', { name: 'Allow location' }))
+  }
+
+  it('the live map sits over the still, with nowhere to fly to before Allow', async () => {
+    mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
+    await render(<LocationScreen />)
+    expect(lastLive().you).toBeNull()
+  })
+
+  it('on Allow the map flies to the fix and lights what is near; the step moves on only once it has (owner, 2026-11-01)', async () => {
+    mockFix.mockResolvedValue({ coords: { longitude: 77.6, latitude: 12.97 } })
+    await allow()
+    await waitFor(() => expect(lastLive().you).toEqual([77.6, 12.97]))
+    // Still flying: nothing committed yet.
+    expect(mockCommit).not.toHaveBeenCalled()
+    await act(async () => lastLive().onShown?.())
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
+  })
+
+  it('on Allow with no fix in time, the step moves on without a flight', async () => {
+    mockFix.mockRejectedValue(new Error('timeout'))
+    await allow()
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
+    expect(lastLive().you).toBeNull()
+  })
+
+  it('under Reduce Motion there is no live map, only the still, and Allow asks for no fix', async () => {
+    mockReduce = true
+    await allow()
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
+    expect(mockLive).not.toHaveBeenCalled()
+    expect(mockFix).not.toHaveBeenCalled()
+    expect(screen.getByTestId('location-map', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('Precise Location off is said above the map, and the map shortens to make room', async () => {
