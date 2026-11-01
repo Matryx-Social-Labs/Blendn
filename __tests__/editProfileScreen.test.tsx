@@ -382,3 +382,28 @@ it('swaps an interest at the cap: removes before it adds, because the server che
   expect(api.removeProfileInterests).toHaveBeenCalledWith('me', ['held'])
   expect(api.addProfileInterests).toHaveBeenCalledWith('me', ['new'])
 })
+
+describe('the field of work at its daily limit (SCRUM-986)', () => {
+  const save = async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await fireEvent.changeText(screen.getByTestId('edit-profile-location'), 'Mysuru')
+    await fireEvent.press(screen.getByTestId('matching-work-field-software'))
+    await fireEvent.press(screen.getByText('Save'))
+  }
+  beforeEach(() => {
+    api.getWorkFields.mockResolvedValue({ success: true, data: { workFields: [{ slug: 'software', label: 'Software' }], expertiseByField: {} } } as never)
+  })
+
+  it('goes alone, so its refusal costs nothing else, and says why', async () => {
+    api.updateProfile.mockResolvedValueOnce({ success: true } as never)
+    api.updateProfile.mockResolvedValueOnce({ success: false, error: 'limit', errorCode: 'RATE_LIMITED' } as never)
+    await save()
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalledTimes(2))
+    expect(api.updateProfile.mock.calls[0][1]).toEqual(expect.objectContaining({ location: 'Mysuru' }))
+    expect(api.updateProfile.mock.calls[0][1]).not.toHaveProperty('work_field')
+    expect(api.updateProfile.mock.calls[1][1]).toEqual({ work_field: 'software', expertise: [] })
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/^Saved, except your field of work/), 'error', expect.anything()))
+    expect(mockShowToast).not.toHaveBeenCalledWith('Profile saved', 'success', expect.anything())
+  })
+})

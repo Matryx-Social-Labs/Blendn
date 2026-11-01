@@ -50,6 +50,8 @@ interface UserProfile {
 
 const AGE_DIGITS = 3
 /** D20 (D-M14): the free occupation field, named for what it is and who sees it; the matching chip is "What do you do?". */
+const FIELD_OF_WORK_LIMIT_LINE = 'Saved, except your field of work: you’ve changed it three times today. Try again tomorrow.'
+
 export const JOB_TITLE_LABEL = 'Job title · shown once you reveal'
 
 /**
@@ -441,12 +443,25 @@ function EditProfileContent() {
         if (!same(interestedIn, matchingAtLoad.interestedIn)) updateData.interested_in = interestedIn
       }
 
-      const result = await apiClient.updateProfile(authUser.id, updateData)
+      /*
+       * The field of work is limited to three changes a day, and one refused PUT writes nothing: at the limit a new bio was
+       * lost with it. So it goes alone, with its expertise (the server prunes one against the other), after the rest.
+       */
+      const { work_field: newWorkField, ...rest } = updateData
+      const fieldOfWork = newWorkField === undefined ? null : { work_field: newWorkField, expertise }
+      if (fieldOfWork) delete rest.expertise
+      const result = fieldOfWork && !Object.keys(rest).length ? { success: true as const } : await apiClient.updateProfile(authUser.id, rest)
 
       if (!result.success) {
         Logger.error('profile', 'EditProfile: Profile update error', { error: result.error })
         throw new Error(result.error || 'Failed to update profile')
       }
+      const fieldResult = fieldOfWork ? await apiClient.updateProfile(authUser.id, fieldOfWork) : null
+      if (fieldResult && !fieldResult.success && fieldResult.errorCode !== 'RATE_LIMITED') {
+        Logger.error('profile', 'EditProfile: Field of work update error', { error: fieldResult.error })
+        throw new Error(fieldResult.error || 'Failed to update profile')
+      }
+      const fieldRefused = fieldResult?.success === false
 
       /*
        * Interests are a separate pair of endpoints, and a diff rather than a
@@ -473,7 +488,7 @@ function EditProfileContent() {
       }
       setInterestsAtLoad(interestIds)
       // Saved: nothing is unsaved any more, so the OK below leaves without asking.
-      setSavedSnapshot(currentSnapshot)
+      if (!fieldRefused) setSavedSnapshot(currentSnapshot)
 
       // Invalidate caches so profile tab shows fresh data
       ProfileCache.clear()
@@ -487,6 +502,10 @@ function EditProfileContent() {
        * returns to already shows the change. The baseline moved above, so
        * the leave guard lets this through without asking.
        */
+      if (fieldRefused) {
+        showToast(FIELD_OF_WORK_LIMIT_LINE, 'error', { haptic: 'error' })
+        return
+      }
       showToast('Profile saved', 'success', { haptic: 'success' })
       setLeaveAfterSave(true)
 
