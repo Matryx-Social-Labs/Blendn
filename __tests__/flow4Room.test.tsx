@@ -22,8 +22,22 @@ jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
+const mockStage = { scrolled: false, atTop: jest.fn() }
+const mockMaterialMounts = { count: 0 }
+jest.mock('../components/ui/Material', () => {
+  const { useEffect } = jest.requireActual('react')
+  const { View } = jest.requireActual('react-native')
+  return {
+    Material: ({ role: _role, ...rest }: Record<string, unknown>) => {
+      useEffect(() => {
+        mockMaterialMounts.count += 1
+      }, [])
+      return <View {...rest} />
+    },
+  }
+})
 jest.mock('../components/blendn/RoomStage', () => ({
-  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: mockStage.scrolled, atTop: mockStage.atTop }),
 }))
 let mockNetwork = 'online'
 jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => mockNetwork, subscribeNetworkState: () => () => {} }))
@@ -67,8 +81,7 @@ const person = (id: string, o: Partial<RoomPerson> = {}): RoomPerson =>
     ...o,
   }) as RoomPerson
 
-const room = (props: Partial<RoomViewProps> = {}) =>
-  render(
+const roomElement = (props: Partial<RoomViewProps> = {}) => (
     <RoomView
       title="Vinyl Night"
       hereCount={14}
@@ -104,7 +117,8 @@ const room = (props: Partial<RoomViewProps> = {}) =>
       bottomInset={34}
       {...props}
     />
-  )
+)
+const room = (props: Partial<RoomViewProps> = {}) => render(roomElement(props))
 
 beforeEach(() => {
   mockNetwork = 'online'
@@ -268,5 +282,48 @@ describe('B8 (Prompt 10): the Room’s glass pills rise; the glass never fades',
     expect(src).toMatch(/withInitialValues\(\{ opacity: 1, transform: \[\{ translateY: GLASS_RISE \}\] \}\)/)
     expect(src).toContain('entering={reduceMotion ? undefined : glassRise} style={styles.topActions}')
     expect(src).toContain('<Animated.Text entering={glassContentsIn}')
+  })
+})
+
+describe('where the list holds its place (found in SCRUM-502)', () => {
+  it('at the top it does not, so a header that grows keeps the title on screen', async () => {
+    mockStage.scrolled = false
+    await room()
+    expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toBeUndefined()
+  })
+  it('scrolled, it does: nothing moves under a thumb', async () => {
+    mockStage.scrolled = true
+    await room()
+    expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toBeTruthy()
+    mockStage.scrolled = false
+  })
+})
+
+describe('switching People and Crews', () => {
+  it('reports the new list at its top, so the old offset does not count as scrolled', async () => {
+    const view = await room({ view: 'people' })
+    mockStage.atTop.mockClear()
+    await view.rerender(roomElement({ view: 'crews' }))
+    expect(mockStage.atTop).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the dock glass (found in SCRUM-155: reopening the room lost it)', () => {
+  it('is rebuilt once the entrances are over, and only once', async () => {
+    jest.useFakeTimers()
+    try {
+      await room()
+      const before = mockMaterialMounts.count
+      await act(async () => {
+        jest.advanceTimersByTime(999)
+      })
+      expect(mockMaterialMounts.count).toBe(before)
+      await act(async () => {
+        jest.advanceTimersByTime(5000)
+      })
+      expect(mockMaterialMounts.count).toBe(before + 1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })
