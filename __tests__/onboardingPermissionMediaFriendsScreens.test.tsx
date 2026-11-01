@@ -410,38 +410,65 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
   })
 
-  it('two photo cards and a plain third: Making friends, Networking, and Both (the flow walk’s three); no Dating tile', async () => {
+  const tile = (name: string) => screen.getByTestId(`looking-for-${name}`)
+  const picked = (name: string) => tile(name).props.accessibilityState.selected
+
+  it('Edit profile’s intents, in its words: Friendship, Networking and Dating tiles, and Just here (owner, 2026-11-01)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    for (const label of ['Friendship', 'Networking', 'Dating']) expect(screen.getByLabelText(label)).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Just here, no matching' })).toBeTruthy()
+    expect(screen.queryByText('Both, depends on the night')).toBeNull()
+    noCreature()
+  })
+
+  it('a minor sees no Dating tile, and no orientation', async () => {
     mockDraft = { dateOfBirth: `${new Date().getFullYear() - 16}-01-01` }
     await render(<PreferencesScreen />)
-    expect(screen.getByLabelText('Making friends')).toBeTruthy()
-    expect(screen.getByLabelText('Networking')).toBeTruthy()
-    expect(screen.getByTestId('looking-for-both')).toBeTruthy()
+    expect(screen.getByLabelText('Friendship')).toBeTruthy()
     expect(screen.queryByLabelText('Dating')).toBeNull()
     expect(screen.queryByLabelText(/^Bisexual/)).toBeNull()
   })
 
-  it('Both stores the two intents it means, and a resumed pair shows Both picked', async () => {
+  it('more than one can be picked, and Dating saves as dating (the same field and values as Edit profile)', async () => {
     mockDraft = { dateOfBirth: '1990-01-01' }
     await render(<PreferencesScreen />)
-    await fireEvent.press(screen.getByTestId('looking-for-both'))
+    await fireEvent.press(tile('networking'))
+    await fireEvent.press(tile('dating'))
+    expect(picked('networking') && picked('dating')).toBe(true)
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
-    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship', 'networking'])
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['networking', 'dating'])
   })
 
-  it('a resumed pair of intents shows Both picked (control: a single one shows its card)', async () => {
-    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['networking', 'friendship'] }
+  it('a second tap takes a tile back off', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
     await render(<PreferencesScreen />)
-    expect(screen.getByRole('radio', { name: 'Both, depends on the night' }).props.accessibilityState).toMatchObject({ checked: true })
-    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['networking'] }
-    await render(<PreferencesScreen />)
-    expect(screen.getByTestId('looking-for-networking').props.accessibilityState).toMatchObject({ selected: true })
-    expect(screen.getByRole('radio', { name: 'Both, depends on the night' }).props.accessibilityState).toMatchObject({ checked: false })
+    await fireEvent.press(tile('friendship'))
+    await fireEvent.press(tile('dating'))
+    await fireEvent.press(tile('dating'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship'])
   })
 
-  it('an adult’s resumed intent the step does not show (dating) is kept when nothing is picked', async () => {
-    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['dating'] }
+  it('Just here means not looking: it clears the tiles, and a tile clears it (the server refuses the mix, SCRUM-518)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
     await render(<PreferencesScreen />)
+    await fireEvent.press(tile('friendship'))
+    await fireEvent.press(tile('just_here'))
+    expect(picked('friendship')).toBe(false)
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
-    expect(sentOnContinue(mockDraft).intent_default).toEqual(['dating'])
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['just_here'])
+    await fireEvent.press(tile('networking'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['networking'])
+  })
+
+  it('a resumed answer shows picked, dating included, and is sent as it was when nothing is touched', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['friendship', 'dating'] }
+    await render(<PreferencesScreen />)
+    expect(picked('friendship') && picked('dating')).toBe(true)
+    expect(picked('networking')).toBe(false)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship', 'dating'])
   })
 })
