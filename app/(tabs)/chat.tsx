@@ -437,7 +437,7 @@ function ChatInner() {
   const pull = usePullToRefresh({ refreshing: inbox.refreshing, onRefresh: () => void inbox.onRefresh(), indicatorTop: listTop })
   const invites = crews.invites
   // The server's count, not the page held, with the crew invites answered on the same page.
-  const requestsWaiting = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length) + invites.length
+  const requestsWaiting = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length) + Math.max(crews.invitesTotal, invites.length)
   // The list's own "Couldn’t load your chats" is up (the empty list's failed state): its Try again is the one.
   const failedState = inbox.listFailed && !inbox.loading && !trimmed && shown.length === 0
   const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0

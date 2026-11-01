@@ -221,9 +221,12 @@ const MESSAGE_REQUESTS_CACHE_TTL = 60 * 1000
 const CHAT_BACKGROUND_REFRESH_THROTTLE_MS = 15 * 1000
 
 /**
- * `requestsOnly`: the "See all" requests screen reads and answers the same requests through this hook and nothing else:
+ * `requestsOnly`: the Requests page reads and answers the same requests through this hook and nothing else:
  * no rooms, no conversations, no sockets for them.
  */
+/** The cached requests page carries the server's total, so a paint from it cannot leave an old count beside new rows. */
+type CachedRequests = { incoming: MessageRequest[]; outgoing: MessageRequest[]; total: number | null }
+
 /** Check-in changes that come together are read as one (`reloadForCheckIn`). */
 const CHECK_IN_RELOAD_DEBOUNCE_MS = 300
 
@@ -272,6 +275,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
   const [moreFailed, setMoreFailed] = useState<'rooms' | 'people' | null>(null)
   /** Pending message requests on the server, when it says: the count is this, not the page held. */
   const [requestsTotal, setRequestsTotal] = useState<number | null>(null)
+  const [requestsFailed, setRequestsFailed] = useState(false)
   const [requestsLoadingMore, setRequestsLoadingMore] = useState(false)
 
   /*
@@ -321,10 +325,11 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
    */
   const loadMessageRequests = async (loadId?: number, cacheKey?: string, force = false, fresh = force) => {
     if (cacheKey && !fresh) {
-      const cached = queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(cacheKey)
+      const cached = queryCache.get<CachedRequests>(cacheKey)
       if (cached) {
         if (loadId !== undefined && latestLoadIdRef.current !== loadId) return
         setIncomingRequests((prev) => laidOver(cached.incoming, prev, (r) => r.request_id, olderRequestIds.current))
+        setRequestsTotal(cached.total)
         return
       }
     }
@@ -338,20 +343,26 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
         // A forced load starts over; a quiet one lays the newest page over the older ones already loaded.
         const requests = force || !olderRequestIds.current.size ? page : laidOver(page, incomingRef.current, (r) => r.request_id, olderRequestIds.current)
         if (force || !olderRequestIds.current.size) olderRequestIds.current = new Set()
+        setRequestsFailed(false)
         setRequestsTotal(total)
         setIncomingRequests(requests)
         Logger.info('chat', 'Message requests loaded', { count: requests.length })
         if (cacheKey) {
-          queryCache.set(cacheKey, { incoming: requests, outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
+          queryCache.set<CachedRequests>(cacheKey, { incoming: requests, outgoing: [], total }, MESSAGE_REQUESTS_CACHE_TTL)
         }
       } else if (result.success) {
+        setRequestsFailed(false)
+        setRequestsTotal(0)
         setIncomingRequests([])
         if (cacheKey) {
-          queryCache.set(cacheKey, { incoming: [], outgoing: [] }, MESSAGE_REQUESTS_CACHE_TTL)
+          queryCache.set<CachedRequests>(cacheKey, { incoming: [], outgoing: [], total: 0 }, MESSAGE_REQUESTS_CACHE_TTL)
         }
+      } else {
+        // A refusal or a dropped connection leaves what is drawn (as the list loaders do): it is not "no requests".
+        setRequestsFailed(true)
       }
-      // A refusal or a dropped connection leaves what is drawn (as the list loaders do): it is not "no requests".
     } catch (e) {
+      setRequestsFailed(true)
       Logger.error('chat', 'loadMessageRequests failed', { error: e })
     }
   }
@@ -482,14 +493,17 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
     const cachedPersonalChats = force || chatDirty ? null : queryCache.get<PersonalChat[]>(personalCacheKey)
     const cachedRequests = force
       ? null
-      : queryCache.get<{ incoming: MessageRequest[]; outgoing: MessageRequest[] }>(requestsCacheKey)
+      : queryCache.get<CachedRequests>(requestsCacheKey)
 
     // The cache holds the newest page only: a paint from it lays that over the older pages already loaded.
     if (cachedGroupChats) setGroupChats((prev) => laidOver(cachedGroupChats, prev, (c) => c.chat_room_id, olderGroupIds.current))
     const cachedCrewRooms = force ? null : queryCache.get<CrewRoomRow[]>(`${groupCacheKey}_rooms`)
     if (cachedCrewRooms) setCrewRooms(cachedCrewRooms)
     if (cachedPersonalChats) setPersonalChats((prev) => laidOver(cachedPersonalChats, prev, (c) => c.conversation_id, olderPersonalIds.current))
-    if (cachedRequests) setIncomingRequests((prev) => laidOver(cachedRequests.incoming, prev, (r) => r.request_id, olderRequestIds.current))
+    if (cachedRequests) {
+      setIncomingRequests((prev) => laidOver(cachedRequests.incoming, prev, (r) => r.request_id, olderRequestIds.current))
+      setRequestsTotal(cachedRequests.total)
+    }
 
     const hasCachedList = !!cachedGroupChats && !!cachedPersonalChats
     const hasCachedRequests = !!cachedRequests
@@ -830,6 +844,10 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
     maxDisconnectedIntervalMs: 30000,
   })
 
+  /** The Requests page holds older pages: answering row 45 reads the newest over them, never starts the list over. */
+  const reloadAfterAnswer = () =>
+    requestsOnly && user ? loadMessageRequests(undefined, `${MESSAGE_REQUESTS_KEY}${user.id}`, false, true) : loadChats(true, true)
+
   const respondToRequest = useCallback(async (request: MessageRequest, action: 'accept' | 'decline') => {
     const requestId = request.request_id
     if (requestPending[requestId]) return
@@ -861,10 +879,10 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
         })
       }
 
-      // `force`: the cached requests list still holds the card that was just
+      // Fresh: the cached requests list still holds the card that was just
       // animated away, and the un-forced load put it straight back on screen
       // until a pull-to-refresh (SCRUM-165).
-      await loadChats(true, true)
+      await reloadAfterAnswer()
     } catch (e) {
       Logger.error('chat', `Error ${action}ing request`, { requestId, error: e })
       showToast(`Couldn’t ${action} that request. Try again.`, 'error', { haptic: 'error' })
@@ -905,7 +923,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
               return { ok: false, error: userMessage(result, "Couldn’t block them. Try again.") }
             }
             setIncomingRequests((prev) => prev.filter((r) => r.request_id !== request.request_id))
-            void loadChats(true, true)
+            void reloadAfterAnswer()
             return { ok: true, toast: `${name} is blocked` }
           },
         },
@@ -958,6 +976,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
     loadingMore,
     moreFailed,
     requestsTotal,
+    requestsFailed,
     loadMoreRequests,
     requestsLoadingMore,
   }
