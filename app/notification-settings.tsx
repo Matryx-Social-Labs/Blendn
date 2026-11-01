@@ -11,7 +11,6 @@ import { OffersFromPlacesRow } from '../components/notifications/OffersFromPlace
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { openChannelSettings } from '../lib/channelSettings'
 import { muteEnds, mutedRoomRoute, useMutedRooms } from '../lib/mutedRooms'
-import { OPACITY } from '../lib/theme'
 import { PREF_ROWS, PREFS_FOOT } from '../lib/notificationPrefs'
 import { useNotificationPrefs } from '../lib/useNotificationPrefs'
 import { usePushPreference } from '../lib/usePushPreference'
@@ -88,7 +87,8 @@ function NotificationSettingsContent() {
           )}
         </SettingsGroup>
 
-        <View style={masterOff ? styles.dim : null} pointerEvents={masterOff ? 'none' : 'auto'} testID="notification-settings-kinds">
+        {/* Off: each row says dimmed and refuses, which a screen reader honours (pointerEvents never stopped it), and fades (M10). */}
+        <View testID="notification-settings-kinds">
           <SettingsGroup title="Tell me about">
             {PREF_ROWS.map((row) =>
               // Android's rows open the phone's channel page, except one the account turned off elsewhere (iOS): the phone's channel is still on, so only a switch can turn it back on (SYS-08).
@@ -101,10 +101,11 @@ function NotificationSettingsContent() {
                   value={kinds.prefs[row.key]}
                   onValueChange={() => void kinds.toggle(row.key)}
                   busy={kinds.saving.has(row.key)}
+                  disabled={masterOff}
                   testID={`pref-${row.key}`}
                 />
               ) : ANDROID ? (
-                <SettingsRow key={row.key} icon={row.icon} title={row.title} trail="external" opens="opens your phone’s settings" onPress={() => void openChannelSettings(row.channel)} testID={`pref-${row.key}`} />
+                <SettingsRow key={row.key} icon={row.icon} title={row.title} trail="external" opens="opens your phone’s settings" disabled={masterOff} onPress={() => void openChannelSettings(row.channel)} testID={`pref-${row.key}`} />
               ) : null
             )}
             {/* One offers row on both platforms, once a place has regulars on (D21): the account's switch, held while push can't arrive. */}
@@ -160,7 +161,6 @@ function NotificationSettingsContent() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
-  dim: { opacity: OPACITY.disabled },
   // On the section labels' inset (SettingsGroup's 16), not a third edge of its own (r7 L9).
   foot: { color: COLOR.textTertiary, paddingHorizontal: SPACE.lg },
 })
