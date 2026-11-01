@@ -60,12 +60,15 @@ beforeEach(() => {
 })
 
 describe('location', () => {
-  it('names no city, even with a browsed one stored: it was wrong abroad (SCRUM-997)', async () => {
+  it('a still of the lit map, naming no city even with a browsed one stored (SCRUM-997), and no creature', async () => {
     mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
     await render(<LocationScreen />)
-    expect(await screen.findByText('NEAR YOU', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.queryByText(/BENGALURU|·/, { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByRole('header', { name: 'See what’s on near you' })).toBeTruthy()
+    expect(await screen.findByTestId('location-map', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/BENGALURU|NEAR YOU|·/, { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByTestId('precise-off-notice')).toBeNull()
+    expect(screen.getByText('Not now')).toBeTruthy()
+    noCreature()
   })
 
   it('Precise Location off is said above the map, and the map shortens to make room', async () => {

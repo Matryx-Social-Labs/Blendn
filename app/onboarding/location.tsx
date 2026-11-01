@@ -83,16 +83,16 @@ export default function LocationScreen() {
   return (
     <OnboardingScreen
       step="location"
-      title="See who’s around"
-      subtitle="Blend’n uses your location to show events near you, and to check you in when you arrive at one."
+      title="See what’s on "
+      titleAccent="near you"
+      subtitle="Used to show what’s nearby and to check you in at the door. Never shared with strangers."
       ctaLabel="Allow location"
       ctaBusy={saving || asking}
       onContinue={() => void ask()}
-      secondaryLabel="Maybe later"
+      secondaryLabel="Not now"
       // The same bug in the second of two places — see the note in
       // `notifications.tsx`. Declining left `share_location` at `@default(true)`.
       onSecondary={() => void commit({ share_location: false })}
-      footerNote="Your precise location is never shared with strangers."
       onBack={goBack}
     >
       {precise.off ? (
