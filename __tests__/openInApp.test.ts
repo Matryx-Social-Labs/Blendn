@@ -54,3 +54,42 @@ it('no screen opens one of our pages through Linking any more', () => {
     expect(read(file)).not.toMatch(/Linking\.openURL\((BLENDN_LINKS|COMMUNITY_GUIDELINES_URL)/)
   }
 })
+
+/*
+ * SCRUM-994 / SCRUM-911: "What's kept" closes the Delete-account sheet and opens a page in the same tick. iOS presented
+ * the browser on the sheet's Modal, still on screen; React Native then dismissed that Modal with
+ * `[modal dismissViewControllerAnimated:]`, which UIKit applies to its presented child (the browser), so the empty Modal
+ * stayed over the app and took every touch until a relaunch. The page waits for the Modal holding the screen to go.
+ */
+describe('iOS: never over a Modal that is closing (SCRUM-994)', () => {
+  const { Platform } = require('react-native')
+  const turns = require('../lib/modalTurn') as typeof import('../lib/modalTurn')
+  const os = Platform.OS
+  beforeEach(() => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+    turns.resetModalTurns()
+    open.mockClear()
+  })
+  afterEach(() => {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+    turns.resetModalTurns()
+  })
+
+  it('opens only once the sheet that held the screen has gone', async () => {
+    const sheet = {}
+    turns.requestTurn(sheet)
+    const opening = openInApp(BLENDN_LINKS.deleteAccount)
+    await Promise.resolve()
+    expect(open).not.toHaveBeenCalled()
+
+    turns.releaseTurn(sheet)
+    await opening
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it('with nothing on screen, opens at once', async () => {
+    void openInApp(BLENDN_LINKS.deleteAccount)
+    await Promise.resolve()
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+})

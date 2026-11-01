@@ -40,13 +40,19 @@ export async function openInApp(url: string): Promise<void> {
     throw new Error('Not one of our pages')
   }
   // Holds the screen while the browser is up: a sheet that comes due under it waits (lib/modalTurn).
-  await holdTurnWhile(() =>
-    WebBrowser.openBrowserAsync(url, {
-      controlsColor: COLOR.textPrimary,
-      toolbarColor: COLOR.ink,
-      dismissButtonStyle: 'close',
-      enableBarCollapsing: true,
-    })
+  // `afterClosing`: a sheet's action ("What's kept") opens it in the tick the sheet closes. Presented on that Modal while
+  // it is still up, React Native's dismissal closes the browser instead and leaves the empty Modal over the app, taking
+  // every touch (SCRUM-994), so it waits for the Modal holding the screen to go. One that stays up is presented over
+  // after MODAL_GONE_FALLBACK_MS.
+  await holdTurnWhile(
+    () =>
+      WebBrowser.openBrowserAsync(url, {
+        controlsColor: COLOR.textPrimary,
+        toolbarColor: COLOR.ink,
+        dismissButtonStyle: 'close',
+        enableBarCollapsing: true,
+      }),
+    { afterClosing: true }
   )
 }
 
