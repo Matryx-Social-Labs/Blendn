@@ -462,12 +462,13 @@ function EditProfileContent() {
        * diffed against a state the server never reached — the interest the
        * person thought they had added was never sent again.
        */
-      if (added.length > 0) {
-        const r = await apiClient.addProfileInterests(authUser.id, added)
-        if (!r.success) throw new Error(r.error || 'Could not save your interests')
-      }
+      // Remove first, as onboarding does (`syncInterests`): the server checks an add against what is held, so a swap at the cap of ten was refused.
       if (removed.length > 0) {
         const r = await apiClient.removeProfileInterests(authUser.id, removed)
+        if (!r.success) throw new Error(r.error || 'Could not save your interests')
+      }
+      if (added.length > 0) {
+        const r = await apiClient.addProfileInterests(authUser.id, added)
         if (!r.success) throw new Error(r.error || 'Could not save your interests')
       }
       setInterestsAtLoad(interestIds)

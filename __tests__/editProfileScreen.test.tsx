@@ -34,7 +34,8 @@ jest.mock('../components/PhotoManager', () => {
     ),
   }
 })
-jest.mock('../components/InterestPicker', () => ({ InterestPicker: () => null, MAX_INTERESTS: 10 }))
+let mockPickInterests: (ids: string[]) => void = () => {}
+jest.mock('../components/InterestPicker', () => ({ InterestPicker: (p: { onChange: (ids: string[]) => void }) => { mockPickInterests = p.onChange; return null }, MAX_INTERESTS: 10 }))
 jest.mock('../lib/apiClient', () => ({
   ProfileCache: { clear: jest.fn() },
   apiClient: {
@@ -366,4 +367,18 @@ describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
     await screen.findByDisplayValue('Sam')
     expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
   })
+})
+
+it('swaps an interest at the cap: removes before it adds, because the server checks an add against what is held (SCRUM-747)', async () => {
+  const calls: string[] = []
+  api.removeProfileInterests.mockImplementation(async () => { calls.push('remove'); return { success: true } as never })
+  api.addProfileInterests.mockImplementation(async () => { calls.push('add'); return { success: true } as never })
+  api.getProfile.mockResolvedValue({ ...LOADED, data: { ...LOADED.data, interests: [{ id: 'held' }] } } as never)
+  await render(<EditProfile />)
+  await screen.findByDisplayValue('Sam')
+  await act(async () => mockPickInterests(['new']))
+  await fireEvent.press(screen.getByText('Save'))
+  await waitFor(() => expect(calls).toEqual(['remove', 'add']))
+  expect(api.removeProfileInterests).toHaveBeenCalledWith('me', ['held'])
+  expect(api.addProfileInterests).toHaveBeenCalledWith('me', ['new'])
 })
