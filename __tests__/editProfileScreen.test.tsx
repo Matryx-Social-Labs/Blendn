@@ -34,7 +34,8 @@ jest.mock('../components/PhotoManager', () => {
     ),
   }
 })
-jest.mock('../components/InterestPicker', () => ({ InterestPicker: () => null, MAX_INTERESTS: 10 }))
+let mockPickInterests: (ids: string[]) => void = () => {}
+jest.mock('../components/InterestPicker', () => ({ InterestPicker: (p: { onChange: (ids: string[]) => void }) => { mockPickInterests = p.onChange; return null }, MAX_INTERESTS: 10 }))
 jest.mock('../lib/apiClient', () => ({
   ProfileCache: { clear: jest.fn() },
   apiClient: {
@@ -365,5 +366,63 @@ describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
     expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+  })
+})
+
+it('swaps an interest at the cap: removes before it adds, because the server checks an add against what is held (SCRUM-747)', async () => {
+  const calls: string[] = []
+  api.removeProfileInterests.mockImplementation(async () => { calls.push('remove'); return { success: true } as never })
+  api.addProfileInterests.mockImplementation(async () => { calls.push('add'); return { success: true } as never })
+  api.getProfile.mockResolvedValue({ ...LOADED, data: { ...LOADED.data, interests: [{ id: 'held' }] } } as never)
+  await render(<EditProfile />)
+  await screen.findByDisplayValue('Sam')
+  await act(async () => mockPickInterests(['new']))
+  await fireEvent.press(screen.getByText('Save'))
+  await waitFor(() => expect(calls).toEqual(['remove', 'add']))
+  expect(api.removeProfileInterests).toHaveBeenCalledWith('me', ['held'])
+  expect(api.addProfileInterests).toHaveBeenCalledWith('me', ['new'])
+})
+
+describe('the field of work at its daily limit (SCRUM-986)', () => {
+  const save = async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await fireEvent.changeText(screen.getByTestId('edit-profile-location'), 'Mysuru')
+    await fireEvent.press(screen.getByTestId('matching-work-field-software'))
+    await fireEvent.press(screen.getByText('Save'))
+  }
+  beforeEach(() => {
+    api.getWorkFields.mockResolvedValue({ success: true, data: { workFields: [{ slug: 'software', label: 'Software' }], expertiseByField: {} } } as never)
+  })
+
+  it('goes alone, so its refusal costs nothing else, and says why', async () => {
+    api.updateProfile.mockResolvedValueOnce({ success: true } as never)
+    api.updateProfile.mockResolvedValueOnce({ success: false, error: 'limit', errorCode: 'RATE_LIMITED' } as never)
+    await save()
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalledTimes(2))
+    expect(api.updateProfile.mock.calls[0][1]).toEqual(expect.objectContaining({ location: 'Mysuru' }))
+    expect(api.updateProfile.mock.calls[0][1]).not.toHaveProperty('work_field')
+    expect(api.updateProfile.mock.calls[1][1]).toEqual({ work_field: 'software', expertise: [] })
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Saved, except your field of work. limit', 'error', expect.anything()))
+    expect(mockShowToast).not.toHaveBeenCalledWith('Profile saved', 'success', expect.anything())
+    // It reads the form again, so what was saved is the baseline and the field goes back.
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalledTimes(2))
+  })
+
+  it('says "Not saved" when the field was all there was, in the server’s words', async () => {
+    api.updateProfile.mockResolvedValueOnce({ success: false, error: 'Three times a day.', errorCode: 'RATE_LIMITED' } as never)
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await fireEvent.press(screen.getByTestId('matching-work-field-software'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Not saved. Three times a day.', 'error', expect.anything()))
+    expect(api.updateProfile).toHaveBeenCalledTimes(1)
+  })
+
+  it('any other failure of the field stays a plain failure', async () => {
+    api.updateProfile.mockResolvedValueOnce({ success: true } as never)
+    api.updateProfile.mockResolvedValueOnce({ success: false, error: 'boom', errorCode: 'SERVER_ERROR' } as never)
+    await save()
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t save your profile. Try again.', 'error', expect.anything()))
   })
 })

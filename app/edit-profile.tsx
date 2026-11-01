@@ -441,12 +441,25 @@ function EditProfileContent() {
         if (!same(interestedIn, matchingAtLoad.interestedIn)) updateData.interested_in = interestedIn
       }
 
-      const result = await apiClient.updateProfile(authUser.id, updateData)
+      /*
+       * The field of work is limited to three changes a day, and one refused PUT writes nothing: at the limit a new bio was
+       * lost with it. So it goes alone, with its expertise (the server prunes one against the other), after the rest.
+       */
+      const { work_field: newWorkField, ...rest } = updateData
+      const fieldOfWork = newWorkField === undefined ? null : { work_field: newWorkField, expertise }
+      if (fieldOfWork) delete rest.expertise
+      const result = fieldOfWork && !Object.keys(rest).length ? { success: true as const } : await apiClient.updateProfile(authUser.id, rest)
 
       if (!result.success) {
         Logger.error('profile', 'EditProfile: Profile update error', { error: result.error })
         throw new Error(result.error || 'Failed to update profile')
       }
+      const fieldResult = fieldOfWork ? await apiClient.updateProfile(authUser.id, fieldOfWork) : null
+      if (fieldResult && !fieldResult.success && fieldResult.errorCode !== 'RATE_LIMITED') {
+        Logger.error('profile', 'EditProfile: Field of work update error', { error: fieldResult.error })
+        throw new Error(fieldResult.error || 'Failed to update profile')
+      }
+      const fieldRefused = fieldResult?.success === false
 
       /*
        * Interests are a separate pair of endpoints, and a diff rather than a
@@ -462,12 +475,13 @@ function EditProfileContent() {
        * diffed against a state the server never reached — the interest the
        * person thought they had added was never sent again.
        */
-      if (added.length > 0) {
-        const r = await apiClient.addProfileInterests(authUser.id, added)
-        if (!r.success) throw new Error(r.error || 'Could not save your interests')
-      }
+      // Remove first, as onboarding does (`syncInterests`): the server checks an add against what is held, so a swap at the cap of ten was refused.
       if (removed.length > 0) {
         const r = await apiClient.removeProfileInterests(authUser.id, removed)
+        if (!r.success) throw new Error(r.error || 'Could not save your interests')
+      }
+      if (added.length > 0) {
+        const r = await apiClient.addProfileInterests(authUser.id, added)
         if (!r.success) throw new Error(r.error || 'Could not save your interests')
       }
       setInterestsAtLoad(interestIds)
@@ -486,6 +500,13 @@ function EditProfileContent() {
        * returns to already shows the change. The baseline moved above, so
        * the leave guard lets this through without asking.
        */
+      if (fieldRefused) {
+        // The server's sentence: this code is also the per-minute limiter, so "tomorrow" is only true when it says so.
+        showToast(`${Object.keys(rest).length ? 'Saved, except your field of work.' : 'Not saved.'} ${fieldResult?.error ?? ''}`.trim(), 'error', { haptic: 'error' })
+        // Read the form again: what was saved is the new baseline, and the refused field goes back to what it still is.
+        setLoadAttempt((n) => n + 1)
+        return
+      }
       showToast('Profile saved', 'success', { haptic: 'success' })
       setLeaveAfterSave(true)
 
