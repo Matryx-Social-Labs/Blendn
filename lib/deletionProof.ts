@@ -20,7 +20,7 @@ export type DeletionProof = {
   appleAuthorizationCode?: string
 }
 
-export const DELETION_REFUSED = { password: 'PASSWORD_INCORRECT', provider: 'REAUTH_REQUIRED' } as const
+export { DELETION_REFUSED } from './signInRefusal'
 
 /**
  * The Apple sheet once more. Null when it is cancelled, unavailable or fails: then nothing is deleted. Android has no Sign

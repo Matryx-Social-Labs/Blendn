@@ -17,7 +17,7 @@ import { resetRoomMembership } from './roomMembership'
 import { forgetRosters } from './rosterMemory'
 import { forgetHeldForm } from './heldSignInForm'
 import { forgetEventDetails } from './eventDetailCache'
-import { rateLimitedMessage } from './signInRefusal'
+import { DELETION_REFUSED, rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
 
@@ -690,7 +690,12 @@ export const deleteAccount = async (proof: DeletionProof = {}): Promise<{ succes
     const result = await apiClient.deleteAccount(proof)
 
     if (!result.success) {
-      Logger.error('auth', 'Account deletion failed', { error: result.error, errorCode: result.errorCode })
+      // A wrong password is somebody mistyping, not a defect; only the rest reaches Sentry.
+      if (result.errorCode && (Object.values(DELETION_REFUSED) as string[]).includes(result.errorCode)) {
+        Logger.warn('auth', 'Account deletion refused', { errorCode: result.errorCode })
+      } else {
+        Logger.error('auth', 'Account deletion failed', { error: result.error, errorCode: result.errorCode })
+      }
       return { success: false, error: result.error || 'Failed to delete account', errorCode: result.errorCode }
     }
 

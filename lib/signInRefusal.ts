@@ -53,3 +53,6 @@ function waitPhrase(seconds: number | undefined): string {
   const hours = Math.ceil(minutes / 60)
   return hours === 1 ? 'in an hour' : `in ${hours} hours`
 }
+
+/** How the server refuses a delete with a wrong or missing proof (`DELETE /account`, SCRUM-944). Here so `useAuth` reads it without the Apple module. */
+export const DELETION_REFUSED = { password: 'PASSWORD_INCORRECT', provider: 'REAUTH_REQUIRED' } as const
