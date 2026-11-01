@@ -293,6 +293,7 @@ export default function TabLayout() {
     */}
     <View
       collapsable={false}
+      testID="tabs-host"
       style={styles.tabs}
       accessibilityElementsHidden={blendnOpen}
       importantForAccessibility={blendnOpen ? 'no-hide-descendants' : 'auto'}
