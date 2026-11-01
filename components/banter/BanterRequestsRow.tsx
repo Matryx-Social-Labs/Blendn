@@ -20,7 +20,8 @@ export function BanterRequestsRow({ requests, total }: { requests: readonly Mess
     <SettingsGroup>
       <SettingsRow
         testID="banter-requests"
-        leading={<Facepile faces={requests.slice(0, FACES).map(faceOf)} total={Math.min(requests.length, FACES)} size={24} ring={COLOR.surface} />}
+        // Crew invites alone have no faces to show.
+        leading={requests.length ? <Facepile faces={requests.slice(0, FACES).map(faceOf)} total={Math.min(requests.length, FACES)} size={24} ring={COLOR.surface} /> : undefined}
         title="Requests"
         label={`Requests, ${total}`}
         accessory={<Badge text={total > 99 ? '99+' : total} size={22} />}

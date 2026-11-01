@@ -115,10 +115,10 @@ describe('message requests', () => {
   })
 
   it('show crew invites as requests, with Join opening the invite, which holds the consent (R2-D2 #02)', () => {
-    const src = stripComments(read('app/message-requests.tsx'))
+    const src = stripComments(read('components/banter/RequestRow.tsx'))
     expect(src).toContain('accept="Join"')
     expect(src).toContain("pathname: '/crews/invite/[crewId]'")
-    expect(src).toContain('crews.decline(invite)')
+    expect(stripComments(read('app/message-requests.tsx'))).toContain('onDecline={decline}')
   })
 })
 

@@ -17,10 +17,13 @@ import { useBlends } from './useBlends'
 export function useCrewInbox(onError: (text: string) => void) {
   const [crews, setCrews] = useState<Crew[]>([])
   const [invites, setInvites] = useState<CrewInvite[]>([])
+  /** The first read has answered, either way: until then "no invites" is not known. */
+  const [loaded, setLoaded] = useState(false)
   const { blends } = useBlends()
 
   const load = useCallback(async () => {
     const result = await crewsApi.myCrews()
+    setLoaded(true)
     if (!result.success || !result.data) return Logger.warn('chat', 'Crews for the Banter did not load', { error: result.error })
     setCrews(result.data.crews)
     setInvites(result.data.invites)
@@ -75,5 +78,5 @@ export function useCrewInbox(onError: (text: string) => void) {
     [onError]
   )
 
-  return { invites, seedFor, blendFor, decline }
+  return { invites, loaded, seedFor, blendFor, decline }
 }

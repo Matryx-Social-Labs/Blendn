@@ -43,6 +43,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn(
 
 /* eslint-disable import/first */
 import MessageRequests from '../app/message-requests'
+import { BanterRequestsRow } from '../components/banter/BanterRequestsRow'
 import { apiClient } from '../lib/apiClient'
 import { queryCache } from '../lib/queryCache'
 /* eslint-enable import/first */
@@ -109,4 +110,41 @@ it('a crew invite is answered here too, since the Banter now only counts it', as
   } finally {
     mockInvites.splice(0, mockInvites.length)
   }
+})
+
+const invitesOf = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ crewId: `c${i}`, name: `Crew ${i}`, invitedBy: 'Asha', invitedAt: '2026-01-01T00:00:00Z', emblemSeed: 's' }))
+
+it('54 crew invites are windowed with the requests, not all drawn in a header', async () => {
+  mockInvites.splice(0, mockInvites.length, ...invitesOf(54))
+  try {
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
+    await render(<MessageRequests />)
+    await flush()
+    expect(screen.getByText('54 waiting')).toBeTruthy()
+    const drawn = screen.getAllByText('Asha invited you to the crew').length
+    expect(drawn).toBeGreaterThan(0)
+    expect(drawn).toBeLessThan(54)
+  } finally {
+    mockInvites.splice(0, mockInvites.length)
+  }
+})
+
+it('says nothing is waiting only once the invites have answered too', async () => {
+  const { crewsApi } = jest.requireMock('../lib/crewsApi')
+  let answer: (v: unknown) => void = () => {}
+  crewsApi.myCrews.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+  api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
+  await render(<MessageRequests />)
+  await flush()
+  expect(screen.queryByText('No requests waiting')).toBeNull()
+  await act(async () => answer({ success: true, data: { crews: [], invites: [] } }))
+  await flush()
+  expect(screen.getByText('No requests waiting')).toBeTruthy()
+})
+
+it('the Banter row with invites only draws no empty face stack', async () => {
+  await render(<BanterRequestsRow requests={[]} total={54} />)
+  expect(screen.getByLabelText('Requests, 54')).toBeTruthy()
+  expect(screen.queryByLabelText('0 people here')).toBeNull()
 })

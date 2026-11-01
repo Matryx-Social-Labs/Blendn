@@ -1,16 +1,15 @@
 import { router } from 'expo-router'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { FlatList, StyleSheet, View } from 'react-native'
 
-import { RequestCard, RequestFace } from '../components/banter/BanterParts'
-import { inboxTimeLabel } from '../components/banter/inbox'
-import { RequestRow } from '../components/banter/RequestRow'
+import { InviteRow, RequestRow } from '../components/banter/RequestRow'
 import { Button } from '../components/ds/Button'
 import { HueProvider } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { COLOR, SPACE } from '../lib/design/tokens'
 import { useBanterInbox, type MessageRequest } from '../lib/useBanterInbox'
+import type { CrewInvite } from '../lib/crews'
 import { useCrewInbox } from '../lib/useCrewInbox'
 import { useToast } from '../components/Toast'
 import { useTopBarOverlay } from '../lib/useTopBarState'
@@ -18,8 +17,10 @@ import { useTopBarOverlay } from '../lib/useTopBarState'
 /**
  * Every message request waiting on you and every crew invite (the Banter's Requests row leads here; SCRUM-760). The answers
  * live here, a page at a time as the end comes near by `loadMoreRequests`,
- * windowed. Nothing else of the Banter loads here (`requestsOnly`).
+ * windowed. Of the Banter's chats, nothing loads here (`requestsOnly`).
  */
+type Waiting = { kind: 'invite'; invite: CrewInvite } | { kind: 'request'; request: MessageRequest }
+
 function RequestsScreen() {
   const inbox = useBanterInbox({ requestsOnly: true })
   const bar = useTopBarOverlay()
@@ -32,14 +33,23 @@ function RequestsScreen() {
   const invites = crews.invites
   const waiting = total + invites.length
 
-  const renderItem = useCallback(({ item }: { item: MessageRequest }) => <RequestRow request={item} inbox={inbox} />, [inbox])
+  // One windowed list: an account can hold dozens of invites, as many as it holds requests.
+  const data = useMemo<Waiting[]>(
+    () => [...invites.map((invite) => ({ kind: 'invite' as const, invite })), ...incomingRequests.map((request) => ({ kind: 'request' as const, request }))],
+    [invites, incomingRequests]
+  )
+  const { decline } = crews
+  const renderItem = useCallback(
+    ({ item }: { item: Waiting }) => (item.kind === 'invite' ? <InviteRow invite={item.invite} onDecline={decline} /> : <RequestRow request={item.request} inbox={inbox} />),
+    [decline, inbox]
+  )
 
   return (
     <View style={styles.screen}>
       <FlatList
         testID="requests-list"
-        data={incomingRequests}
-        keyExtractor={(r) => r.request_id}
+        data={data}
+        keyExtractor={(w) => (w.kind === 'invite' ? `i:${w.invite.crewId}` : w.request.request_id)}
         renderItem={renderItem}
         ItemSeparatorComponent={Gap}
         onEndReached={() => {
@@ -48,28 +58,8 @@ function RequestsScreen() {
         onEndReachedThreshold={1.5}
         initialNumToRender={8}
         windowSize={9}
-        ListHeaderComponent={
-          invites.length ? (
-            <View style={styles.invites}>
-              {invites.map((invite) => (
-                <RequestCard
-                  key={invite.crewId}
-                  testID={`requests-invite-${invite.crewId}`}
-                  face={<RequestFace emblemSeed={invite.emblemSeed} />}
-                  name={invite.name}
-                  note={`${invite.invitedBy} invited you to the crew`}
-                  time={inboxTimeLabel(invite.invitedAt)}
-                  accept="Join"
-                  // Join is the consent screen (Flow 10 · 10.3): it reveals you to the crew, so it asks there.
-                  onAccept={() => router.push({ pathname: '/crews/invite/[crewId]', params: { crewId: invite.crewId } })}
-                  onDecline={() => crews.decline(invite)}
-                />
-              ))}
-            </View>
-          ) : null
-        }
         ListEmptyComponent={
-          inbox.loading || invites.length ? null : (
+          inbox.loading || !crews.loaded ? null : (
             <StateScreen icon="message-circle" title="No requests waiting" body="Somebody asking to message you shows up here." testID="requests-empty" />
           )
         }
@@ -97,7 +87,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   content: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl },
   gap: { height: SPACE.md },
-  invites: { gap: SPACE.md, marginBottom: SPACE.md },
   footer: { alignItems: 'center', paddingVertical: SPACE.lg },
 })
 
