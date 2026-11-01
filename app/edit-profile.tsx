@@ -50,8 +50,6 @@ interface UserProfile {
 
 const AGE_DIGITS = 3
 /** D20 (D-M14): the free occupation field, named for what it is and who sees it; the matching chip is "What do you do?". */
-const FIELD_OF_WORK_LIMIT_LINE = 'Saved, except your field of work: you’ve made three changes today to it, your languages, home state or sign. Try again tomorrow.'
-
 export const JOB_TITLE_LABEL = 'Job title · shown once you reveal'
 
 /**
@@ -488,7 +486,7 @@ function EditProfileContent() {
       }
       setInterestsAtLoad(interestIds)
       // Saved: nothing is unsaved any more, so the OK below leaves without asking.
-      if (!fieldRefused) setSavedSnapshot(currentSnapshot)
+      setSavedSnapshot(currentSnapshot)
 
       // Invalidate caches so profile tab shows fresh data
       ProfileCache.clear()
@@ -503,7 +501,10 @@ function EditProfileContent() {
        * the leave guard lets this through without asking.
        */
       if (fieldRefused) {
-        showToast(FIELD_OF_WORK_LIMIT_LINE, 'error', { haptic: 'error' })
+        // The server's sentence: this code is also the per-minute limiter, so "tomorrow" is only true when it says so.
+        showToast(`${Object.keys(rest).length ? 'Saved, except your field of work.' : 'Not saved.'} ${fieldResult?.error ?? ''}`.trim(), 'error', { haptic: 'error' })
+        // Read the form again: what was saved is the new baseline, and the refused field goes back to what it still is.
+        setLoadAttempt((n) => n + 1)
         return
       }
       showToast('Profile saved', 'success', { haptic: 'success' })

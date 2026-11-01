@@ -403,7 +403,26 @@ describe('the field of work at its daily limit (SCRUM-986)', () => {
     expect(api.updateProfile.mock.calls[0][1]).toEqual(expect.objectContaining({ location: 'Mysuru' }))
     expect(api.updateProfile.mock.calls[0][1]).not.toHaveProperty('work_field')
     expect(api.updateProfile.mock.calls[1][1]).toEqual({ work_field: 'software', expertise: [] })
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.stringMatching(/^Saved, except your field of work/), 'error', expect.anything()))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Saved, except your field of work. limit', 'error', expect.anything()))
     expect(mockShowToast).not.toHaveBeenCalledWith('Profile saved', 'success', expect.anything())
+    // It reads the form again, so what was saved is the baseline and the field goes back.
+    await waitFor(() => expect(api.getProfile).toHaveBeenCalledTimes(2))
+  })
+
+  it('says "Not saved" when the field was all there was, in the server’s words', async () => {
+    api.updateProfile.mockResolvedValueOnce({ success: false, error: 'Three times a day.', errorCode: 'RATE_LIMITED' } as never)
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await fireEvent.press(screen.getByTestId('matching-work-field-software'))
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Not saved. Three times a day.', 'error', expect.anything()))
+    expect(api.updateProfile).toHaveBeenCalledTimes(1)
+  })
+
+  it('any other failure of the field stays a plain failure', async () => {
+    api.updateProfile.mockResolvedValueOnce({ success: true } as never)
+    api.updateProfile.mockResolvedValueOnce({ success: false, error: 'boom', errorCode: 'SERVER_ERROR' } as never)
+    await save()
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t save your profile. Try again.', 'error', expect.anything()))
   })
 })
