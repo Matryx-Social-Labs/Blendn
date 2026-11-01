@@ -56,7 +56,7 @@ describe('the steps', () => {
 })
 
 describe('a stored step from the eight-step flow', () => {
-  it('resumes on the notifications step at preferences, the step that followed it', () => {
+  it('resumes on the notifications step at preferences, the first step it had not reached', () => {
     expect(parseStoredOnboarding(stored('notifications', ['basics']))?.progress).toEqual({
       step: 'preferences',
       completed: ['basics'],
