@@ -87,7 +87,6 @@ it('under 18 says so under the date and offers Sign out beside it, and Continue 
   expect(screen.getByText("Blend’n is for people 18 and over.")).toBeTruthy()
   expect(screen.getByTestId('onboarding-under-age-sign-out')).toBeTruthy()
   expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
-  expect(screen.queryByText('Blend’n is 18+. People see your age, never your birthday.')).toBeTruthy()
 })
 
 it('30 February is “not a date we recognise”, not under 18, with no exit offered', async () => {

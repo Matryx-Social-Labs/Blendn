@@ -41,15 +41,10 @@ import { Image } from 'expo-image'
  * resolve only once the bytes are on disk.
  */
 export const ONBOARDING_IMAGES = [
+  // Direction A draws these three; the rest of the folder is the preview harness's and is not worth waiting for at the splash.
   require('../assets/onboarding/location-map.jpg'),
-  require('../assets/onboarding/you.jpg'),
-  require('../assets/onboarding/nearby-1.jpg'),
-  require('../assets/onboarding/nearby-2.jpg'),
-  require('../assets/onboarding/nearby-3.jpg'),
-  require('../assets/onboarding/looking-dating.jpg'),
   require('../assets/onboarding/looking-friendship.jpg'),
   require('../assets/onboarding/looking-networking.jpg'),
-  require('../assets/onboarding/looking-open.jpg'),
 ]
 
 /**

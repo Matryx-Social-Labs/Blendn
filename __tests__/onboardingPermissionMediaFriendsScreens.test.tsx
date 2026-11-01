@@ -4,9 +4,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
 
-import { TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
