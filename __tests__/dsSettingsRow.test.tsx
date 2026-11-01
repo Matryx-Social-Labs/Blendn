@@ -144,9 +144,10 @@ describe('<SettingsRow>', () => {
   it('disabled: 45%, announced, not pressable', async () => {
     const onValueChange = jest.fn()
     await render(push({ disabled: true, onValueChange }))
-    expect(flat('r').opacity).toBe(OPACITY.disabled)
-    // The dim fades, never snaps (M10: a master switch dimmed a whole block in one frame).
-    expect(String((flat('r') as { transition?: string }).transition)).toMatch(/^opacity 160ms/)
+    expect(flat('r-fade').opacity).toBe(OPACITY.disabled)
+    // The dim fades, never snaps (M10): on an Animated wrapper, the only place a CSS transition runs, with a value both ways.
+    expect(String(StyleSheet.flatten(screen.getByTestId('r-fade', { includeHiddenElements: true }).props.jestInlineStyle).transition)).toMatch(/^opacity 160ms/)
+    expect(flat('r').opacity).toBeUndefined()
     expect(screen.getByTestId('r').props.accessibilityState).toMatchObject({ disabled: true })
     await fireEvent.press(screen.getByTestId('r'))
     expect(onValueChange).not.toHaveBeenCalled()

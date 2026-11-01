@@ -157,6 +157,8 @@ export function SettingsRow({
   ) : null
 
   return (
+    // The dim lives on an animated wrapper with an explicit value both ways: a CSS transition runs only on an Animated component.
+    <Animated.View testID={testID && `${testID}-fade`} style={[{ opacity: disabled ? OPACITY.disabled : 1 }, DISABLE_FADE]}>
     <Pressable
       testID={testID}
       // A plain row has no action, but is not disabled: it must not read as dimmed.
@@ -177,8 +179,6 @@ export function SettingsRow({
         ((pressed && Platform.OS !== 'android') || previewState === 'pressed') && {
           backgroundColor: PRESSED_WASH[Platform.OS === 'android' ? 'android' : 'ios'],
         },
-        DISABLE_FADE,
-        disabled && { opacity: OPACITY.disabled },
       ]}
     >
       {leading ??
@@ -213,6 +213,7 @@ export function SettingsRow({
         <View testID={testID && `${testID}-focus`} pointerEvents="none" style={styles.focus} />
       ) : null}
     </Pressable>
+    </Animated.View>
   )
 }
 
