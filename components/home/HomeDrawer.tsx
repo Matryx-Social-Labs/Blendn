@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
@@ -50,6 +50,21 @@ function DrawerGroundLayers({ y, points, testID }: { y: SharedValue<number>; poi
   )
 }
 
+/**
+ * How many times the screen has come back into focus (the first focus is not a refocus). The drawer's glass is keyed on
+ * it: on the owner's phone the glass view detached while the tab was away and the drawer came back fully transparent
+ * (SCRUM-963), so each return builds a fresh one. A remount of one background view, never of the drawer or its pane.
+ */
+export function useRefocusCount(focused: boolean): number {
+  const [count, setCount] = useState(0)
+  const was = useRef(focused)
+  useEffect(() => {
+    if (focused && !was.current) setCount((n) => n + 1)
+    was.current = focused
+  }, [focused])
+  return count
+}
+
 /** Under Reduce Motion the drawer still travels, gently: a short timing on the standard curve, not an instant jump (BUILD-SPEC §0, `drawer`). */
 const REDUCED_SETTLE = { duration: REDUCE_MOTION.duration.base, easing: Easing.bezier(...EASING.standard) } as const
 
@@ -75,6 +90,7 @@ export function HomeDrawer({
   header,
   onChromeTouch,
   peek,
+  glassKey,
   children,
 }: {
   /** The drawer's top edge as it moves: the shell's, so what rides on the drawer follows it frame by frame. */
@@ -87,6 +103,8 @@ export function HomeDrawer({
   onChromeTouch?: () => void
   /** A line kept under the header while the drawer rests at `peek`, over the pane; none for a pane without one. */
   peek?: ReactNode
+  /** A new value remounts the glass (`useRefocusCount`). */
+  glassKey?: number
   children: ReactNode
 }) {
   const { height } = useWindowDimensions()
@@ -127,7 +145,7 @@ export function HomeDrawer({
   return (
     <GroundProvider value="glass">
       <Animated.View style={[styles.drawer, { top: points.full }, moved]}>
-        <Material role="sheet" pointerEvents="none" style={StyleSheet.absoluteFill} />
+        <Material key={glassKey} testID="drawer-glass" role="sheet" pointerEvents="none" style={StyleSheet.absoluteFill} />
         <Animated.View testID="drawer-opaque" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.opaque, opaque]} />
         <GestureDetector gesture={pan}>
           <View style={styles.header} onTouchStart={onChromeTouch}>

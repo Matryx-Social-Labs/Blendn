@@ -15,7 +15,7 @@ import { COLOR } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
 import type { NearPin } from '../../lib/placesPane'
-import { HomeDrawer } from './HomeDrawer'
+import { HomeDrawer, useRefocusCount } from './HomeDrawer'
 import { HomeMap } from './HomeMap'
 import { PlacesList } from './PlacesList'
 
@@ -75,6 +75,7 @@ export function HomeShell({
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
   const focused = useIsFocused()
+  const refocused = useRefocusCount(focused)
   const [segment, setSegment] = useState<Segment>('events')
   const [browse, setBrowse] = useState<HomeBrowse>({
     city: null,
@@ -210,6 +211,7 @@ export function HomeShell({
         snap={snap}
         onSnap={onSnap}
         onChromeTouch={dismissKeyboard}
+        glassKey={refocused}
         peek={
           peekExtra ? (
             <Text variant="meta" color={COLOR.textPrimary} numberOfLines={1} testID="home-peek-line">

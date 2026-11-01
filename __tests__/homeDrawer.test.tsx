@@ -100,3 +100,38 @@ describe('a pinned row inside the drawer is as opaque as the drawer (rc7 D3)', (
     expect(screen.queryByTestId('sticky-search-ground', { includeHiddenElements: true })).toBeNull()
   })
 })
+
+/*
+ * SCRUM-963: on the owner's phone the drawer went fully transparent after a tab
+ * away and back, then a drag: the glass view had detached while the tab was
+ * frozen and never came back. The glass is remounted on each refocus.
+ */
+describe('the drawer’s glass comes back after a tab switch (SCRUM-963)', () => {
+  const { useRefocusCount } = jest.requireActual('../components/home/HomeDrawer')
+  const glassed = (glassKey: number) => (
+    <HomeDrawer y={Reanimated.makeMutable(points.half)} points={points} snap="half" onSnap={jest.fn()} header={<Text>header</Text>} glassKey={glassKey}>
+      <Text>pane</Text>
+    </HomeDrawer>
+  )
+
+  it('a new glass key is a new glass view; the same key keeps it', async () => {
+    const view = await render(glassed(0))
+    const first = screen.getByTestId('drawer-glass', { includeHiddenElements: true })
+    await view.rerender(glassed(0))
+    expect(screen.getByTestId('drawer-glass', { includeHiddenElements: true })).toBe(first)
+    await view.rerender(glassed(1))
+    expect(screen.getByTestId('drawer-glass', { includeHiddenElements: true })).not.toBe(first)
+  })
+
+  it('counts refocuses only: not the first focus, not a blur', async () => {
+    const { renderHook } = jest.requireActual('@testing-library/react-native')
+    const hook = await renderHook(({ focused }: { focused: boolean }) => useRefocusCount(focused), { initialProps: { focused: true } })
+    expect(hook.result.current).toBe(0)
+    await hook.rerender({ focused: false })
+    expect(hook.result.current).toBe(0)
+    await hook.rerender({ focused: true })
+    expect(hook.result.current).toBe(1)
+    await hook.rerender({ focused: true })
+    expect(hook.result.current).toBe(1)
+  })
+})

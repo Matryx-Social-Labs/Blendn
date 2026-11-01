@@ -9,6 +9,7 @@ import { liveWindow } from './eventSession'
 import { settleWithin } from './fetchTimeout'
 import { getDistanceKm, roundCoord } from './geo'
 import { Logger } from './logger'
+import { isPreciseLocationOff } from './preciseLocation'
 import { printable } from './pulseSections'
 import { tonightDeck } from './roomMoments'
 import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
@@ -63,7 +64,7 @@ export interface TonightState {
   events: TonightEvent[]
   /**
    * `off`: no permission, so the list is by city with no distances, said in a
-   * banner with Turn on (#10). `approximate`: iOS Precise Location is off, so
+   * banner with Turn on (#10). `approximate`: Precise Location is off (iOS reduced, Android coarse), so
    * no door can be checked (R3-D4 4.7). Never prompts: read, not asked.
    */
   location: TonightLocation
@@ -98,7 +99,7 @@ async function readQuietLocation(): Promise<{ coords: QuietCoords | null; locati
   try {
     const permission = await Location.getForegroundPermissionsAsync()
     if (permission.status !== 'granted') return { coords: null, location: 'off' }
-    const location = permission.ios?.accuracy === 'reduced' ? 'approximate' : 'on'
+    const location = isPreciseLocationOff(permission) ? 'approximate' : 'on'
     const last = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS, requiredAccuracy: FIX_REQUIRED_ACCURACY_M })
     return {
       coords: last?.coords
