@@ -61,6 +61,9 @@ function lastFromHistory(raw: unknown, myId?: string): DockLine | null {
  * subscription map, so opening the chat does not join twice. "N new" counts
  * what arrived while you were here, and clears when you open the chat.
  */
+/** After the stage's fade and the Room's entrance have both finished. */
+const GLASS_REBUILD_MS = 1000
+
 export function ChatDock({
   chatGroupId,
   myId,
@@ -69,7 +72,6 @@ export function ChatDock({
   onOpenPerson,
   bottomInset,
   history,
-  glassKey,
 }: {
   chatGroupId: string | null
   /** The room's first read of the chat (`useRoom`), so the dock opens on its real line rather than fetching after. */
@@ -80,11 +82,16 @@ export function ChatDock({
   onOpen: () => void
   onOpenPerson: (userId: string) => void
   bottomInset: number
-  /** A new value rebuilds the glass (`useStageScroll`): one made while the page fades in never draws. */
-  glassKey?: number
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  // iOS glass made while the Room fades in can stay clear for good, and the text then sits on the faces under it (SCRUM-983).
+  // ponytail: one rebuild once the entrances are over; a fade that outlasts it would need the Room to say when it is visible.
+  const [glassKey, setGlassKey] = useState(0)
+  useEffect(() => {
+    const timer = setTimeout(() => setGlassKey(1), GLASS_REBUILD_MS)
+    return () => clearTimeout(timer)
+  }, [])
   const [message, setMessage] = useState<DockLine | null>(null)
   // The Android snackbar stands above this dock (the toast adds the bottom inset itself).
   const insets = useSafeAreaInsets()

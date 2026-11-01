@@ -10,7 +10,7 @@ import React from 'react'
 import { AccessibilityInfo, Text } from 'react-native'
 
 import { ChatDock } from '../components/blendn/ChatDock'
-import { ROOM_TOP_THRESHOLD, RoomView, type RoomViewProps } from '../components/blendn/RoomView'
+import { RoomView, type RoomViewProps } from '../components/blendn/RoomView'
 import type { RoomPerson } from '../lib/useRoom'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -22,7 +22,7 @@ jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
-const mockStage = { glassKey: 0 }
+const mockStage = { scrolled: false }
 const mockMaterialMounts = { count: 0 }
 jest.mock('../components/ui/Material', () => {
   const { useEffect } = jest.requireActual('react')
@@ -37,7 +37,7 @@ jest.mock('../components/ui/Material', () => {
   }
 })
 jest.mock('../components/blendn/RoomStage', () => ({
-  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, glassKey: mockStage.glassKey }),
+  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: mockStage.scrolled }),
 }))
 let mockNetwork = 'online'
 jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => mockNetwork, subscribeNetworkState: () => () => {} }))
@@ -285,22 +285,36 @@ describe('B8 (Prompt 10): the Room’s glass pills rise; the glass never fades',
   })
 })
 
-describe('someone walking in while you sit at the top of the room (found in SCRUM-502)', () => {
-  it('the list stays at the top: a section arriving above never scrolls the title away', async () => {
+describe('where the list holds its place (found in SCRUM-502)', () => {
+  it('at the top it does not, so a header that grows keeps the title on screen', async () => {
+    mockStage.scrolled = false
     await room()
-    expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toEqual(
-      expect.objectContaining({ autoscrollToTopThreshold: ROOM_TOP_THRESHOLD })
-    )
+    expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toBeUndefined()
+  })
+  it('scrolled, it does: nothing moves under a thumb', async () => {
+    mockStage.scrolled = true
+    await room()
+    expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toBeTruthy()
+    mockStage.scrolled = false
   })
 })
 
 describe('the dock glass (found in SCRUM-155: reopening the room lost it)', () => {
-  it('is rebuilt when the stage reports it settled, so a glass made under the page fade is not the one you see', async () => {
-    mockStage.glassKey = 0
-    const view = await room()
-    const before = mockMaterialMounts.count
-    mockStage.glassKey = 1
-    await view.rerender(roomElement())
-    expect(mockMaterialMounts.count).toBe(before + 1)
+  it('is rebuilt once the entrances are over, and only once', async () => {
+    jest.useFakeTimers()
+    try {
+      await room()
+      const before = mockMaterialMounts.count
+      await act(async () => {
+        jest.advanceTimersByTime(999)
+      })
+      expect(mockMaterialMounts.count).toBe(before)
+      await act(async () => {
+        jest.advanceTimersByTime(5000)
+      })
+      expect(mockMaterialMounts.count).toBe(before + 1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

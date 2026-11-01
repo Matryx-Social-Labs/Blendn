@@ -6,6 +6,7 @@ import Animated, {
   Extrapolation,
   interpolate,
   ReduceMotion,
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -28,6 +29,8 @@ const CLOSE_DISTANCE = 140
 /** A flick this fast closes from any distance. */
 const CLOSE_VELOCITY = 900
 /** #7: open 420 ms, close ~300 ms, on the standard ease; Reduce Motion a 200 ms fade. */
+/** Scrolled further than this, a list is somewhere a person put it; nearer the top, it is at the top. */
+const SCROLLED_PAST = 24
 const OPEN_MS = 420
 const CLOSE_MS = 300
 const FADE_MS = 200
@@ -56,11 +59,6 @@ interface StageApi {
   scrollY: SharedValue<number>
   /** Pass to the scroll view's `simultaneousHandlers` / a `Gesture.Native()`. */
   pan: GestureType
-  /**
-   * 1 once the page has finished fading in. A key for a glass view on the stage: iOS glass created under a parent's
-   * opacity 0 (a room reopened with its data cached) stays clear when the fade ends, so it is rebuilt then.
-   */
-  glassKey: number
 }
 
 const StageContext = createContext<StageApi | null>(null)
@@ -80,14 +78,22 @@ export const useStage = () => {
  * an iOS bounce on the same pull would move the content twice.
  */
 export function useStageScroll() {
-  const { scrollY, pan, glassKey } = useStage()
+  const { scrollY, pan } = useStage()
+  // Past this the list is somewhere a person put it, so it holds its place when the header changes (`RoomView`).
+  const [scrolled, setScrolled] = useState(false)
+  useAnimatedReaction(
+    () => scrollY.get() > SCROLLED_PAST,
+    (now, before) => {
+      if (now !== before) scheduleOnRN(setScrolled, now)
+    }
+  )
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
       scrollY.set(e.contentOffset.y)
     },
   })
   const native = useMemo(() => Gesture.Native().simultaneousWithExternalGesture(pan), [pan])
-  return { onScroll, native, scrollEventThrottle: 16 as const, glassKey }
+  return { onScroll, native, scrollEventThrottle: 16 as const, scrolled }
 }
 
 /**
@@ -129,7 +135,6 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
   const cover = 2 * Math.hypot(Math.max(origin.x, width - origin.x), origin.y) + 4
   const startScale = SIZE.disc / cover
 
-  const [glassKey, setGlassKey] = useState(0)
   const open = useSharedValue(0)
   const drag = useSharedValue(0)
   const scrollY = useSharedValue(0)
@@ -139,11 +144,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
 
   useEffect(() => {
     // Never: Reduce Motion's own 200 ms fade is chosen here, and the system setting must not skip it (or its callback).
-    open.set(
-      withTiming(1, { duration: reduceMotion ? FADE_MS : OPEN_MS, easing: EASE, reduceMotion: ReduceMotion.Never }, (done) => {
-        if (done) scheduleOnRN(setGlassKey, 1)
-      })
-    )
+    open.set(withTiming(1, { duration: reduceMotion ? FADE_MS : OPEN_MS, easing: EASE, reduceMotion: ReduceMotion.Never }))
   }, [open, reduceMotion])
 
   const close = useCallback(() => {
@@ -212,7 +213,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
     opacity: interpolate(drag.get(), [0, height * 0.5], [1, 0], Extrapolation.CLAMP),
   }))
 
-  const api = useMemo<StageApi>(() => ({ scrollY, pan, glassKey }), [scrollY, pan, glassKey])
+  const api = useMemo<StageApi>(() => ({ scrollY, pan }), [scrollY, pan])
 
   return (
     <StageContext.Provider value={api}>
