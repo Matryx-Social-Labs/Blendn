@@ -174,6 +174,34 @@ describe('LiveCityMap', () => {
     expect(askedAt(12.99).length).toBe(2)
   })
 
+  it('a fix in another city: no flight (and no jump onto tiles not loaded yet), the step is told at once', async () => {
+    const onShown = jest.fn()
+    const view = await render(<LiveCityMap you={null} onShown={onShown} />)
+    await fire('onDidFinishRenderingMapFully')
+    await settleAt([77.59, 12.97])
+    const stops = mockStops.length
+    await view.rerender(<LiveCityMap you={[-79.38, 43.65]} onShown={onShown} />)
+    expect(onShown).toHaveBeenCalled()
+    expect(mockStops).toHaveLength(stops)
+  })
+
+  it('tells the step whether there is a live map to fly, once it has drawn; and credits the map data then', async () => {
+    const onLive = jest.fn()
+    await render(<LiveCityMap you={null} onLive={onLive} />)
+    expect(onLive).toHaveBeenLastCalledWith(false)
+    expect(screen.queryByText(/OpenStreetMap/)).toBeNull()
+    await fire('onDidFinishRenderingMapFully')
+    expect(onLive).toHaveBeenLastCalledWith(true)
+    expect(screen.getByText(/OpenStreetMap/)).toBeTruthy()
+  })
+
+  it('draws no place names: the style it is given has no place labels (SCRUM-997)', async () => {
+    await render(<LiveCityMap you={null} />)
+    const layers = (mockMapProps.mapStyle as { layers: Record<string, unknown>[] }).layers
+    expect(layers.some((l) => l['source-layer'] === 'place')).toBe(false)
+    expect(layers.some((l) => l['source-layer'] === 'transportation_name')).toBe(true)
+  })
+
   it('given you with no map to fly (not drawn): says so at once, the step does not wait on it', async () => {
     const onShown = jest.fn()
     mockCities.mockResolvedValue({ success: false })

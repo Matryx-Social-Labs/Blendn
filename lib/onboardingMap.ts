@@ -1,3 +1,5 @@
+import type { StyleSpecification } from '@maplibre/maplibre-react-native'
+
 import { cityBySlug, type CityCatalogue } from './city'
 import type { LngLat } from './mapLit'
 import { MAP_THEME } from './mapTheme'
@@ -38,4 +40,14 @@ export function openingCentre(catalogue: CityCatalogue | null | undefined, regio
 export function litUpTo<F extends { properties: { id: string } }>(features: F[], order: string[], n: number): F[] {
   const on = new Set(order.slice(0, n))
   return features.filter((f) => on.has(f.properties.id))
+}
+
+/**
+ * The map's own style with no place names (city, town, neighbourhood): the step names no city (SCRUM-997), and the tiles
+ * would, in 18 pt, right where the camera opens. Road names stay. A style served from a URL cannot be filtered here, so it
+ * gets no live map (null): the still shows.
+ */
+export function unnamedStyle(style: string | StyleSpecification): StyleSpecification | null {
+  if (typeof style === 'string') return null
+  return { ...style, layers: style.layers.filter((l) => (l as { 'source-layer'?: string })['source-layer'] !== 'place') }
 }

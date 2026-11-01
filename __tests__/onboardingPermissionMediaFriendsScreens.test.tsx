@@ -46,12 +46,17 @@ jest.mock('expo-location', () => ({
 }))
 // The live map is native (MapLibre): a stand-in that records what the step hands it (its own tests: liveCityMap.test.tsx).
 const mockLive = jest.fn()
-jest.mock('../components/onboarding/LiveCityMap', () => ({
-  LiveCityMap: (p: unknown) => {
-    mockLive(p)
-    return null
-  },
-}))
+let mockMapLive = true
+jest.mock('../components/onboarding/LiveCityMap', () => {
+  const R = jest.requireActual('react')
+  return {
+    LiveCityMap: (p: { onLive?: (live: boolean) => void }) => {
+      mockLive(p)
+      R.useEffect(() => p.onLive?.(mockMapLive), [p])
+      return null
+    },
+  }
+})
 const mockFix = jest.fn()
 jest.mock('../lib/locationFix', () => ({ ...jest.requireActual('../lib/locationFix'), roughFix: (...a: unknown[]) => mockFix(...a) }))
 let mockReduce = false
@@ -68,6 +73,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockDraft = {}
   mockReduce = false
+  mockMapLive = true
   mockRequest.mockImplementation(async () => ({ status: 'denied' }))
   mockPulled.mockImplementation(async () => ({ pulled: [], live: null }))
 })
@@ -115,6 +121,21 @@ describe('location', () => {
     await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
     expect(lastLive().you).toBeNull()
   })
+
+  it('with no live map (offline, failed, still drawing) Allow asks for no fix and moves on', async () => {
+    mockMapLive = false
+    await allow()
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
+    expect(mockFix).not.toHaveBeenCalled()
+  })
+
+  it('a map that never says it has shown you: the step moves on at the cap, fix included (5 s)', async () => {
+    mockFix.mockResolvedValue({ coords: { longitude: 77.6, latitude: 12.97 } })
+    await allow()
+    await waitFor(() => expect(lastLive().you).toEqual([77.6, 12.97]))
+    expect(mockCommit).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }), { timeout: 6000 })
+  }, 10000)
 
   it('under Reduce Motion there is no live map, only the still, and Allow asks for no fix', async () => {
     mockReduce = true

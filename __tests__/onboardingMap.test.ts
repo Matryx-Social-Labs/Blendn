@@ -1,6 +1,7 @@
 import type { CityCatalogue, CityOption } from '../lib/city'
 import { MAP_THEME } from '../lib/mapTheme'
-import { FLAT_VIEW, litUpTo, OPENING_VIEW, openingCentre } from '../lib/onboardingMap'
+import { EMBER_MAP_STYLE } from '../lib/mapStyleEmber'
+import { FLAT_VIEW, litUpTo, OPENING_VIEW, openingCentre, unnamedStyle } from '../lib/onboardingMap'
 
 const city = (slug: string, latitude: number, longitude: number, over: Partial<CityOption> = {}): CityOption => ({
   city: slug,
@@ -61,5 +62,18 @@ describe('litUpTo: the places light one by one, in the order given', () => {
     expect(litUpTo(features, ['c', 'a', 'b'], 1)).toEqual([f('c'), f('c')])
     expect(litUpTo(features, ['c', 'a', 'b'], 2)).toEqual([f('a'), f('a'), f('c'), f('c')])
     expect(litUpTo(features, ['c', 'a', 'b'], 3)).toEqual(features)
+  })
+})
+
+describe('unnamedStyle: the step names no city, and neither do the tiles (SCRUM-997)', () => {
+  const sourceLayers = (layers: object[]) => layers.map((l) => (l as { 'source-layer'?: string })['source-layer'])
+  it('drops every place label and keeps the rest', () => {
+    expect(sourceLayers(EMBER_MAP_STYLE.layers)).toContain('place')
+    const style = unnamedStyle(EMBER_MAP_STYLE)
+    expect(style && sourceLayers(style.layers)).not.toContain('place')
+    expect(style?.layers.length).toBe(EMBER_MAP_STYLE.layers.length - EMBER_MAP_STYLE.layers.filter((l) => sourceLayers([l])[0] === 'place').length)
+  })
+  it('a style served from a URL cannot be filtered: no live map then', () => {
+    expect(unnamedStyle('https://tiles.example/style.json')).toBeNull()
   })
 })

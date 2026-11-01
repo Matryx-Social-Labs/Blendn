@@ -9,10 +9,12 @@ import { cameraMove, LIGHT_MIN_ZOOM, loadPins, tiltedZoom, type Bounds, type Pin
 import { Logger } from '../../lib/logger'
 import { locationSharingOn } from '../../lib/shareLocation'
 import type { LngLat } from '../../lib/mapLit'
-import { BUILDING_LAYER_ID, homeMapStyle } from '../../lib/mapStyleEmber'
+import { BUILDING_LAYER_ID, homeMapStyle, mapCreditLine } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { CAMERA_MS, FLAT_VIEW, FLY_MS, LIGHT_STEP_MS, LIT_HOLD_MS, litUpTo, OPENING_VIEW, openingCentre } from '../../lib/onboardingMap'
+import { SPACE } from '../../lib/design/tokens'
+import { CAMERA_MS, FLAT_VIEW, FLY_MS, LIGHT_STEP_MS, LIT_HOLD_MS, litUpTo, OPENING_VIEW, openingCentre, unnamedStyle } from '../../lib/onboardingMap'
 import { pinApiFor } from '../home/HomeMap'
+import { MapCredit } from '../home/MapCredit'
 import { CityBuildings, GroundGlow, LitBuildings } from '../home/MapLitLayers'
 import { useMapLighting, type MapView } from '../home/useMapLighting'
 
@@ -24,6 +26,8 @@ const PIN_LIMIT = 25
 const DRAW_DEADLINE_MS = 6000
 const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.light.position] }
 const NO_PINS: Pin[] = []
+/** The style, with no place names; null for a remote style (no live map then). */
+const STYLE = unnamedStyle(homeMapStyle())
 const keyOf = (at: LngLat | null) => (at ? at.join(',') : '')
 /** A settled view this close to where the flight went has arrived. */
 const LANDED_KM = 0.3
@@ -39,7 +43,7 @@ const LANDED_KM = 0.3
  * drawn only once it has fully drawn, so a slow or failed map leaves the still, never a broken one; the caller leaves it
  * out under Reduce Motion. One map view, released when the step goes.
  */
-export function LiveCityMap({ you, onShown }: { you: LngLat | null; onShown?: () => void }) {
+export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onShown?: () => void; onLive?: (live: boolean) => void }) {
   const map = useRef<MapRef>(null)
   const camera = useRef<CameraRef>(null)
   const view = useRef<MapView>({ bounds: null, centre: null, zoom: FLAT_VIEW.zoom, pitch: FLAT_VIEW.pitch })
@@ -53,7 +57,6 @@ export function LiveCityMap({ you, onShown }: { you: LngLat | null; onShown?: ()
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [pins, setPins] = useState<{ at: string; pins: Pin[] }>({ at: '', pins: NO_PINS })
   const [landedAt, setLandedAt] = useState('')
-  const style = useMemo(() => homeMapStyle(), [])
   const youKey = keyOf(you)
 
   // The catalogue's city for this phone's region, asked once.
@@ -141,6 +144,14 @@ export function LiveCityMap({ you, onShown }: { you: LngLat | null; onShown?: ()
 
   // Allow, and a fix: fly there. No map to fly (still frame, failed, not drawn yet): nothing to wait for.
   const live = drawn && !failed
+  const liveRef = useRef(onLive)
+  useEffect(() => {
+    liveRef.current = onLive
+  })
+  // Whether there is a map to fly: the screen asks for no fix without one.
+  useEffect(() => {
+    liveRef.current?.(live)
+  }, [live])
   useEffect(() => {
     if (!you) return
     if (!live) {
@@ -148,14 +159,13 @@ export function LiveCityMap({ you, onShown }: { you: LngLat | null; onShown?: ()
       return
     }
     const { duration } = cameraMove(view.current.centre, you, { easeMs: FLY_MS, reduceMotion: false })
-    if (duration > 0) {
-      stop({ center: you, zoom: OPENING_VIEW.zoom, pitch: OPENING_VIEW.pitch, bearing: OPENING_VIEW.bearing, duration })
+    // Across cities there is no flight (design kit motion #41), and a jump would land on tiles not loaded yet: the map
+    // stays where it is and the step moves on.
+    if (duration === 0) {
+      shownRef.current?.()
       return
     }
-    // Across cities, a jump: flat first, then there tilted, then the zoom (HomeMap `moveTo`, MapLibre iOS projects through the tilt).
-    stop({ zoom: view.current.zoom, pitch: 0, duration: 0 })
-    stop({ center: you, pitch: OPENING_VIEW.pitch, bearing: OPENING_VIEW.bearing, duration: 0 })
-    stop({ center: you, zoom: OPENING_VIEW.zoom, duration: 0 })
+    stop({ center: you, zoom: OPENING_VIEW.zoom, pitch: OPENING_VIEW.pitch, bearing: OPENING_VIEW.bearing, duration })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [youKey, live])
 
@@ -175,7 +185,7 @@ export function LiveCityMap({ you, onShown }: { you: LngLat | null; onShown?: ()
     if (you && getDistanceKm(center[1], center[0], you[1], you[0]) < LANDED_KM) setLandedAt(keyOf(you))
   }
 
-  if (!centre || failed) return null
+  if (!centre || failed || !STYLE) return null
   return (
     <View
       testID="location-live-map"
@@ -189,7 +199,7 @@ export function LiveCityMap({ you, onShown }: { you: LngLat | null; onShown?: ()
         style={StyleSheet.absoluteFill}
         // A texture view: a SurfaceView ignores the card's rounded clip and its opacity on Android.
         androidView="texture"
-        mapStyle={style}
+        mapStyle={STYLE}
         light={LIGHT}
         logo={false}
         attribution={false}
@@ -216,6 +226,8 @@ export function LiveCityMap({ you, onShown }: { you: LngLat | null; onShown?: ()
         <GroundGlow data={shown.glow} under={BUILDING_LAYER_ID} latitude={(you ?? centre)[1]} />
         <LitBuildings data={shown.bands} onPress={() => {}} over={BUILDING_LAYER_ID} />
       </Map>
+      {/* The credit is ours to show (attribution off on the map), as on the home map. */}
+      {drawn ? <MapCredit text={mapCreditLine(false)} top={SPACE.sm} gestures={0} /> : null}
     </View>
   )
 }

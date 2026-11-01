@@ -18,7 +18,17 @@ const MAP_HEIGHT = 300
 /** The map card's height with the "Precise location is off" notice above it (the frame draws 232). */
 export const MAP_HEIGHT_WITH_NOTICE = 232
 
-export function LocationIllustration({ notice = false, you = null, onShown }: { notice?: boolean; you?: LngLat | null; onShown?: () => void }) {
+export function LocationIllustration({
+  notice = false,
+  you = null,
+  onShown,
+  onLive,
+}: {
+  notice?: boolean
+  you?: LngLat | null
+  onShown?: () => void
+  onLive?: (live: boolean) => void
+}) {
   const reduceMotion = useReducedMotion()
   return (
     <View
@@ -28,7 +38,7 @@ export function LocationIllustration({ notice = false, you = null, onShown }: { 
       style={[styles.card, { height: notice ? MAP_HEIGHT_WITH_NOTICE : MAP_HEIGHT }]}
     >
       <Image source={MAP} contentFit="cover" style={StyleSheet.absoluteFill} />
-      {reduceMotion ? null : <LiveCityMap you={you} onShown={onShown} />}
+      {reduceMotion ? null : <LiveCityMap you={you} onShown={onShown} onLive={onLive} />}
     </View>
   )
 }
