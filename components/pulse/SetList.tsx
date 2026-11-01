@@ -40,7 +40,8 @@ export function splitClock(ms: number, timeZone?: string | null): { time: string
   const zone = timeZone ?? undefined
   const match = /^(\d{1,2})(?::(\d{2}))? (AM|PM)$/.exec(clockTime(ms, zone))
   if (!match) return { time: clockTime(ms, zone), meridiem: '' }
-  return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: `${match[3]}${zoneSuffix(ms, timeZone)}` }
+  // Short: the meridiem sits under the time in a fixed column ("PM ET"); a row's own line says "Toronto time".
+  return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: `${match[3]}${zoneSuffix(ms, timeZone, { short: true })}` }
 }
 
 /** What a row is read as: "10 PM. Techno in the Tunnel, at Kitty Ko, 2.9 km, 64 going". */

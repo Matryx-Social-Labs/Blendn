@@ -63,8 +63,6 @@ import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings } from './MapLitLayers'
 import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
 
-/** Where the map opens before the phone has a fix: central Bengaluru. */
-const DEFAULT_CENTRE: [number, number] = [77.5946, 12.9716]
 /** A pan settles before the server is asked; the lists allow 60 reads a minute. */
 const QUERY_DEBOUNCE_MS = 600
 /** How many pins one viewport asks for. */
@@ -138,6 +136,7 @@ const pinApi = {
 export const HomeMap = memo(function HomeMap({
   center: fix,
   cityCentre,
+  fallbackCentre,
   cityPick,
   requestLocation,
   locateVisible,
@@ -155,6 +154,11 @@ export const HomeMap = memo(function HomeMap({
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
   cityCentre: { latitude: number; longitude: number } | null
+  /**
+   * Where the map opens and returns with no fix and no city of its own: the browsed city's centre, else the
+   * catalogue's default city's (HomeShell mounts the map only once one is known). Never a city written here.
+   */
+  fallbackCentre: { latitude: number; longitude: number }
   /** Bumped by every city the person chooses; `here` when they chose where they stand. */
   cityPick: { n: number; here: boolean }
   /** Ask for the phone's position (the Pulse's own permission and "Turn on location" flow); settles when the ask does. */
@@ -336,7 +340,7 @@ export const HomeMap = memo(function HomeMap({
   const pins = useMemo(() => (loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS), [loaded, segment, now])
 
   // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
-  const startAt: [number, number] = center ? [center.longitude, center.latitude] : DEFAULT_CENTRE
+  const startAt: [number, number] = center ? [center.longitude, center.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
   // Where the first frame opens: the camera is there until something moves it.
   const [opening] = useState(startAt)
   const [ownTiles, setOwnTiles] = useState(() => drawsOwnBuildings(OWN_BUILDINGS_URL, roughView(startAt), false))
@@ -413,7 +417,7 @@ export const HomeMap = memo(function HomeMap({
     setQuery(null)
     lastQuery.current = null
     followedFix.current = null
-    moveTo({ to: cityLat !== undefined && cityLon !== undefined ? [cityLon, cityLat] : DEFAULT_CENTRE, easeMs: MAP_THEME.camera.easeMs })
+    moveTo({ to: cityLat !== undefined && cityLon !== undefined ? [cityLon, cityLat] : [fallbackCentre.longitude, fallbackCentre.latitude], easeMs: MAP_THEME.camera.easeMs })
   }, [sharing]) // eslint-disable-line react-hooks/exhaustive-deps -- only the switch moves the camera here
 
   useEffect(
@@ -586,7 +590,7 @@ export const HomeMap = memo(function HomeMap({
          */}
         <Fragment key={ownTiles ? 'own-buildings' : 'openfreemap-buildings'}>
           {ownTiles && OWN_BUILDINGS_URL ? <OwnBuildings url={OWN_BUILDINGS_URL} states={lit.states} onOpen={open} /> : <CityBuildings />}
-          <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} />
+          <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} latitude={(cityCentre ?? fallbackCentre).latitude} />
           <LitBuildings data={lit.bands} onPress={openPlace} over={buildingLayerId} />
         </Fragment>
         <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>

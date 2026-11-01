@@ -33,8 +33,6 @@ import type { Chip, Collection, LitState } from './useMapLighting'
  * changed.
  */
 
-/** The ground glow's radius: metres from the theme at every zoom, nothing else. */
-const GLOW_RADIUS = glowRadius()
 
 /** The city's buildings, under the road names. The lit copies and glows are placed against this layer. */
 export const CityBuildings = memo(function CityBuildings() {
@@ -200,16 +198,20 @@ function useLitFade(hasData: boolean) {
 export const GroundGlow = memo(function GroundGlow({
   data,
   under,
+  latitude,
 }: {
   data: Collection<GlowFeature>
+  /** The browsed city's: the ground glow's radius is the theme's metres at every zoom, at this latitude, nothing else. */
+  latitude: number
   visible?: boolean
   /** The city's buildings layer showing: the glow goes under it. */
   under: string
 }) {
   const { opacity, transition } = useLitFade(data.features.length > 0)
+  const radius = useMemo(() => glowRadius(latitude), [latitude])
   const look: NonNullable<CircleLayerSpecification['paint']> = {
     'circle-color': ['get', 'color'],
-    'circle-radius': GLOW_RADIUS,
+    'circle-radius': radius,
     'circle-blur': 1,
     // Flat on the ground, shrinking into the distance like the ground does.
     'circle-pitch-alignment': 'map',

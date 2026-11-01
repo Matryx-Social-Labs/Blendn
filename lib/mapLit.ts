@@ -340,9 +340,10 @@ const metresPerPx = (zoom: number, lat: number) => (EARTH_CIRCUMFERENCE_M * Math
  * `MAP_THEME.glow.maxZoom` (an interpolation holds its last stop). A
  * constant; never a property of a place.
  */
-export function glowRadius(): ['interpolate', ['exponential', number], ['zoom'], number, number, number, number] {
-  const { radiusM, referenceLatitude, maxZoom } = MAP_THEME.glow
-  const px = (z: number) => radiusM / metresPerPx(z, referenceLatitude)
+export function glowRadius(latitude: number): ['interpolate', ['exponential', number], ['zoom'], number, number, number, number] {
+  const { radiusM, maxZoom } = MAP_THEME.glow
+  // Metres become pixels at the browsed city's latitude: Bengaluru's 13° drew Toronto's (43.7°) glows 37% too big (SCRUM-998).
+  const px = (z: number) => radiusM / metresPerPx(z, latitude)
   return ['interpolate', ['exponential', 2], ['zoom'], 10, px(10), maxZoom, px(maxZoom)]
 }
 
@@ -371,21 +372,20 @@ export function litFade(reduceMotion: boolean): { duration: number; delay: numbe
 /* Chip text                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** Events are in India: their times read in India's zone, whatever the phone is set to. */
-const EVENT_TIME_ZONE = 'Asia/Kolkata'
 /** A start further off than this names its date, not only its weekday ("Fri" could be any Friday). */
 const WEEKDAY_ONLY_MS = 6 * 24 * 60 * 60 * 1000
 
-type ChipSource = { kind: 'event' | 'venue'; live: boolean; startsAt: string | null; bucket: LiveNow | null }
+/** `timeZone`: the event's own (SCRUM-998: every chip used to read India's, wherever the event was). */
+type ChipSource = { kind: 'event' | 'venue'; live: boolean; startsAt: string | null; bucket: LiveNow | null; timeZone?: string | null }
 
-function startLabel(startsAt: string | null, now: number, forSpeech: boolean): string | null {
+function startLabel(startsAt: string | null, now: number, forSpeech: boolean, timeZone?: string | null): string | null {
   const start = startsAt ? new Date(startsAt) : null
   if (!start || Number.isNaN(start.getTime())) return null
   const far = start.getTime() - now > WEEKDAY_ONLY_MS
   // No year: the chip's line is a pin's width, and an event a year off is not on the map (review L6).
-  const day = calendarDate(start, { weekday: far ? true : 'only', year: false, timeZone: EVENT_TIME_ZONE })
-  // Named when the phone is not in India: "8 PM IST" (the zone-name rule, `eventClock`).
-  const time = eventClock(start, EVENT_TIME_ZONE)
+  const day = calendarDate(start, { weekday: far ? true : 'only', year: false, timeZone: timeZone ?? undefined })
+  // Named when the phone is elsewhere, short: the line is a pin's width ("8 PM IST", `eventClock`).
+  const time = eventClock(start, timeZone, { short: true })
   return forSpeech ? `${day} ${time}` : `${day} · ${time}`
 }
 
@@ -393,7 +393,7 @@ function startLabel(startsAt: string | null, now: number, forSpeech: boolean): s
 export function chipLine(p: ChipSource, now: number = Date.now()): string {
   if (p.kind === 'venue') return liveNowLabel(p.bucket) ?? ''
   if (p.live) return 'LIVE ●'
-  return startLabel(p.startsAt, now, false) ?? ''
+  return startLabel(p.startsAt, now, false, p.timeZone) ?? ''
 }
 
 /** What a screen reader says for a chip: plain words, no symbols. */
@@ -403,6 +403,6 @@ export function chipSpeech(p: ChipSource & { title: string }, now: number = Date
     return label ? `${p.title}, ${label.toLowerCase()}` : p.title
   }
   if (p.live) return `${p.title}, live now`
-  const start = startLabel(p.startsAt, now, true)
+  const start = startLabel(p.startsAt, now, true, p.timeZone)
   return start ? `${p.title}, starts ${start}` : p.title
 }

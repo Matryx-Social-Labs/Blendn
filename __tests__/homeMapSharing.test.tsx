@@ -79,6 +79,7 @@ const map = (center: typeof FIX | null) => (
   <HomeMap
     center={center}
     cityCentre={CITY}
+    fallbackCentre={CITY}
     cityPick={CITY_PICK}
     requestLocation={ASK}
     locateVisible
