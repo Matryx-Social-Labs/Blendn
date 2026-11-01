@@ -23,7 +23,7 @@ jest.mock('../components/ds/Creature', () => {
 
 import { OnboardingScreen } from '../components/onboarding/OnboardingScreen'
 import { glyphColours } from '../components/onboarding/GradientWords'
-import { lightColour, StepLights, titleBandAlpha, SMALLEST_HEIGHT } from '../components/onboarding/StepLights'
+import { lightColour, StepLights, textAlpha, SMALLEST_HEIGHT } from '../components/onboarding/StepLights'
 
 const rm = Reanimated.useReducedMotion as jest.Mock
 beforeEach(() => {
@@ -101,13 +101,21 @@ describe('gradient text stays AA against its backdrop (measured)', () => {
     expect(contrast(stop, COLOR.ink)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('the lights reach the question at most faintly on the smallest phone, and every stop clears 3:1 over either light there', async () => {
-    const alpha = titleBandAlpha(SMALLEST_HEIGHT)
+  it.each([SMALLEST_HEIGHT, 932])('on a %i pt window the lights reach a question’s words faintly: every stop 3:1, the subtitle 4.5:1', async (height) => {
+    const alpha = textAlpha(height, false)
     expect(alpha).toBeLessThanOrEqual(0.3)
-    for (const stop of GRADIENT.text.colors) {
-      for (const light of [COLOR.brandOrange, COLOR.brandViolet]) {
-        expect(contrast(stop, over(COLOR.ink, light, alpha))).toBeGreaterThanOrEqual(3)
-      }
+    for (const light of [COLOR.brandOrange, COLOR.brandViolet]) {
+      for (const stop of GRADIENT.text.colors) expect(contrast(stop, over(COLOR.ink, light, alpha))).toBeGreaterThanOrEqual(3)
+      expect(contrast(COLOR.textSecondary, over(COLOR.ink, light, alpha))).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it.each([SMALLEST_HEIGHT, 932])('on a %i pt window the payoff’s words under the card stay on near-ink: its white title and grey subtitle 4.5:1', async (height) => {
+    const alpha = textAlpha(height, true)
+    expect(alpha).toBeLessThanOrEqual(0.3)
+    for (const light of [COLOR.brandOrange, COLOR.brandViolet]) {
+      expect(contrast(COLOR.textPrimary, over(COLOR.ink, light, alpha))).toBeGreaterThanOrEqual(4.5)
+      expect(contrast(COLOR.textSecondary, over(COLOR.ink, light, alpha))).toBeGreaterThanOrEqual(4.5)
     }
   })
 

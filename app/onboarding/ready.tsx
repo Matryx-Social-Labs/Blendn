@@ -77,9 +77,9 @@ export default function ReadyScreen() {
       <OnboardingScreen
         step="ready"
         hero={<PayoffCard first={first} age={wholeYearsSince(draft.dateOfBirth)} photo={draft.photos?.[0]} interest={draft.interests?.[0]} />}
-        title="You’re in"
-        titleAccent={first ? `, ${first}.` : '.'}
-        subtitle="Here’s what’s on tonight."
+        // White, as the render draws it: under the card the words sit nearer the lights than a question's do.
+        title={first ? `You’re in, ${first}.` : 'You’re in.'}
+        subtitle="This is how people see you once you choose to show who you are."
         ctaLabel="See what’s on"
         ctaBusy={saving || leaveBusy}
         onContinue={() => void complete()}

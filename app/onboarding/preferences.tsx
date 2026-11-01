@@ -230,6 +230,9 @@ export default function PreferencesScreen() {
         </Text>
         <Toggle value={anonymous} />
       </ScalePress>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.anonymityHelp]}>
+        {ANONYMITY_HELP}
+      </Text>
 
       {under18 ? null : (
         <View style={styles.section}>
@@ -295,4 +298,5 @@ const styles = StyleSheet.create({
   pillText: { color: COLOR.textPrimary },
   anonymity: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW_MIN },
   anonymityText: { flex: 1, color: COLOR.textPrimary },
+  anonymityHelp: { color: COLOR.textSecondary, marginTop: -SPACE.lg },
 })

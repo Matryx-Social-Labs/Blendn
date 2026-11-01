@@ -113,7 +113,7 @@ export function OnboardingScreen({
   return (
     <View style={styles.root}>
       {/* After the last step ("Bring your friends") the lights rest where the payoff left them. */}
-      <StepLights index={step ? stepIndex(step) : ONBOARDING_STEPS.length - 1} testID="onboarding-lights" />
+      <StepLights index={step ? stepIndex(step) : ONBOARDING_STEPS.length - 1} hero={!!hero} testID="onboarding-lights" />
 
       {/* The glass bar is there on every step, the empty one too (Bring your friends, the first step's missing back). */}
       <Material role="bar" testID="onboarding-header" style={[styles.header, { paddingTop: barTop(insets.top) }, contrast && IC_HAIRLINE]}>

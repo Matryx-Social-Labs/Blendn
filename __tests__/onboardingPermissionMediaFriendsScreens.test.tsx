@@ -371,6 +371,8 @@ describe('preferences', () => {
     const row = screen.getByTestId('onboarding-anonymous')
     expect(row.props.accessibilityState).toMatchObject({ checked: true })
     expect(screen.getByText('Stay anonymous at events')).toBeTruthy()
+    // Printed under the switch, not only a screen-reader hint: what the switch does is the SCRUM-493 promise.
+    expect(screen.getByText('Join rooms under a made-up name. Off, we’ll offer to show your name and photo when you check in.')).toBeTruthy()
     await fireEvent.press(row)
     expect(screen.getByTestId('onboarding-anonymous').props.accessibilityState).toMatchObject({ checked: false })
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
