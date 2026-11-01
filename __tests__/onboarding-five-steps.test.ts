@@ -70,6 +70,17 @@ describe('a stored step from the eight-step flow', () => {
     })
   })
 
+  it('on location with preferences unanswered (it came third then, fifth now) resumes at preferences, not past three steps', () => {
+    expect(parseStoredOnboarding(stored('location', ['basics', 'notifications']))?.progress).toEqual({
+      step: 'preferences',
+      completed: ['basics'],
+    })
+  })
+
+  it('on location after preferences (this build) stays on location (control)', () => {
+    expect(parseStoredOnboarding(stored('location', ['basics', 'preferences', 'details', 'media']))?.progress.step).toBe('location')
+  })
+
   it('keeps the draft, so nothing typed is lost', () => {
     expect(parseStoredOnboarding(stored('journey', []))?.draft).toEqual({ name: 'Émilie Tremblay' })
   })
@@ -119,7 +130,8 @@ describe('wiring', () => {
     const hook = read('lib/useOnboarding.ts')
     const finish = hook.slice(hook.indexOf('const finish'))
     expect(finish.indexOf('await markPushDeferred(userId)')).toBeGreaterThan(-1)
-    expect(finish.indexOf('await markPushDeferred(userId)')).toBeLessThan(finish.indexOf('return true'))
+    // Before the server write: a kill between `onboarded: true` and the flag would leave a new account looking pre-build.
+    expect(finish.indexOf('await markPushDeferred(userId)')).toBeLessThan(finish.indexOf('apiClient.updateProfile'))
   })
 
   it('the first "I\'m going" still asks: the in-context ask reads the decline only', () => {

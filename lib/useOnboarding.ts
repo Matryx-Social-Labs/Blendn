@@ -370,6 +370,10 @@ export function useOnboarding(step: OnboardingStep) {
         }
       }
 
+      // Push is asked at the first "I'm going", not by the tabs' start-up the moment this flow is left (lib/pushDecline.ts).
+      // Before the server write: a kill between `onboarded: true` and the flag would leave a new account looking like one
+      // from before this build, prompted at start-up. Set early it is harmless if the write fails: it only defers.
+      await markPushDeferred(userId)
       const result = await apiClient.updateProfile(userId, { ...draft, onboarded: true })
 
       if (!result.success) {
@@ -381,8 +385,6 @@ export function useOnboarding(step: OnboardingStep) {
       }
 
       await clearOnboarding(userId)
-      // Push is asked at the first "I'm going", not by the tabs' start-up the moment this flow is left (lib/pushDecline.ts).
-      await markPushDeferred(userId)
       // The flow is over for this session too, not only on this device.
       clearNewAccountFlag()
       // The in-memory user still says `onboarded: false` with no age, and the

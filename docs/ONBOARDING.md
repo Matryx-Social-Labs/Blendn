@@ -12,13 +12,16 @@ Design tokens are in [`DESIGN_SYSTEM.md`](./DESIGN_SYSTEM.md).
 | # | Route | Frame | Collects | Skippable |
 |---|---|---|---|---|
 | 1 | `/onboarding/basics` | `1141:3928` | first name, gender, **date of birth** | **no** |
-| 2 | `/onboarding/notifications` | `1141:4064` | push permission → `push_enabled` | yes |
-| 3 | `/onboarding/location` | `1141:4119` | location permission → `share_location` | yes |
-| 4 | `/onboarding/preferences` | `1141:4192` | orientations (up to 3), intent (why you go out) | yes |
-| 5 | `/onboarding/journey` | `1141:4290` | city, occupation, field of work, education | yes |
-| 6 | `/onboarding/details` | `1141:4408` | interests, bio | yes |
-| 7 | `/onboarding/media` | `1141:4502` | up to six photos | yes |
-| 8 | `/onboarding/ready` | `1141:4558` | nothing — writes `onboarded: true` | **no** |
+| 2 | `/onboarding/preferences` | `1141:4192` | orientations (up to 3), intent (why you go out) | yes |
+| 3 | `/onboarding/details` | `1141:4408` | interests, bio | yes |
+| 4 | `/onboarding/media` | `1141:4502` | up to six photos | yes |
+| 5 | `/onboarding/location` | `1141:4119` | location permission → `share_location` | yes |
+| — | `/onboarding/ready` | `1141:4558` | nothing — writes `onboarded: true` (the payoff, not counted) | **no** |
+
+**Five steps since Flow 2 (2026-11).** Notifications left the flow: push is asked at the first "I'm going"
+(`lib/pushAsk.ts`), and finishing onboarding defers the tabs' start-up prompt (`markPushDeferred`,
+`lib/pushDecline.ts`). "Your journey" (city, occupation, field of work, education) lives in Edit profile. A stored
+`notifications` / `journey` from an older build resumes at preferences / details (`RETIRED_STEPS`, `lib/onboarding.ts`).
 
 **Two frames were deliberately not built.** `1141:3888` (Phone Number) and
 `1141:4003` (OTP Verification) — there is no phone auth on the server, so those

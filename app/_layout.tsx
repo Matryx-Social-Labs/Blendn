@@ -350,7 +350,7 @@ function RootLayout() {
        *
        * What is different now:
        *
-       *  - The screens exist, all eight of them, and `resumeStep` cannot name
+       *  - The screens exist, all six of them, and `resumeStep` cannot name
        *    a route that does not — `ONBOARDING_ROUTES` is exhaustive over the
        *    step union, and a stored step this build does not recognise parses
        *    back to the first one rather than to a dead route.

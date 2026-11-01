@@ -8,7 +8,7 @@ import { KeyboardPage } from './KeyboardPage'
 import { Button } from '../ds/Button'
 import { IconButton } from '../ds/IconButton'
 import { ProgressBar } from '../ds/ProgressBar'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
@@ -196,7 +196,8 @@ const styles = StyleSheet.create({
   // Flow 2 `frame`: the glass bar is 104 (the circle 56 to 100, 4 under it); the circle starts at the inset here, as every bar does.
   header: { paddingHorizontal: SPACE.lg, paddingBottom: SPACE.xs },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
-  headerAction: { marginLeft: 'auto' },
+  // The wrapper is the target: a child's hitSlop past its parent's bounds is dead on Android, so the 44/48 lives here.
+  headerAction: { marginLeft: 'auto', minHeight: minTarget(), minWidth: minTarget(), justifyContent: 'center' },
   step: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: COLOR.textSecondary },
   progress: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm },
   scrollContent: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xxl, gap: SPACE.xl },

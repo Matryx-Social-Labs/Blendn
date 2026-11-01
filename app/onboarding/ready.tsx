@@ -1,5 +1,5 @@
 import { router } from 'expo-router'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../../components/ds/Avatar'
@@ -35,21 +35,39 @@ export default function ReadyScreen() {
   const { user } = useAuth()
 
   const [celebrating, setCelebrating] = useState(false)
+  const leaving = useRef(false)
+  const [leaveBusy, setLeaveBusy] = useState(false)
 
   // Edit my details: finish first, then the one edit screen over the tabs. Mid-flow it would sit outside onboarding (so
   // the tabs' push start-up would run before the ask was deferred), and finishing afterwards would re-send the draft over
   // whatever was just edited. The celebration and Bring your friends are skipped: the person asked to edit, not to party.
   const edit = async () => {
-    if (!(await finish())) return
+    if (leaving.current) return
+    leaving.current = true
+    setLeaveBusy(true)
+    if (!(await finish())) {
+      leaving.current = false
+      setLeaveBusy(false)
+      return
+    }
     router.replace('/(tabs)/events')
     router.push('/edit-profile')
   }
 
   const complete = async () => {
+    // Once either way out has the server's yes, the other is dead: `finish()` clears its own guard before the caller
+    // navigates, and a tap in that gap ran a second PUT and raced two navigations (react review).
+    if (leaving.current) return
+    leaving.current = true
+    setLeaveBusy(true)
     // The server said yes: the one celebration plays, and it plays the success haptic itself as its mark completes
     // (Reduce Motion: at once), so the haptic always lands on a frame where something moves. Then "Bring your friends"
     // first, then the app (see app/onboarding/friends.tsx). Once per account.
     if (await finish()) setCelebrating(true)
+    else {
+      leaving.current = false
+      setLeaveBusy(false)
+    }
     // On a failure the person stays here, rather than being pushed on regardless: this is the write that decides whether
     // the account is finished, and letting someone through would leave them permanently mid-funnel with no screen left
     // that could fix it. `finish()` has said why, in a toast that plays the one error haptic (this screen's own sentence
@@ -73,7 +91,7 @@ export default function ReadyScreen() {
         titleAccent={first ? `, ${first}.` : '.'}
         subtitle="Here’s how people will see you once you choose to show who you are."
         ctaLabel="See what’s on"
-        ctaBusy={saving}
+        ctaBusy={saving || leaveBusy}
         onContinue={() => void complete()}
         secondaryLabel="Edit my details"
         onSecondary={() => void edit()}

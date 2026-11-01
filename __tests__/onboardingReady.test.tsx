@@ -16,7 +16,7 @@ jest.mock('expo-router', () => ({ router: { replace: jest.fn(), back: jest.fn(),
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 jest.mock('../lib/useOnboarding', () => ({
-  useOnboarding: () => ({ draft: mockDraft, saving: false, finish: mockFinish, goBack: jest.fn(), jumpTo: jest.fn() }),
+  useOnboarding: () => ({ draft: mockDraft, saving: false, finish: mockFinish, goBack: jest.fn() }),
 }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: mockUser }) }))
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
@@ -185,5 +185,17 @@ describe('the payoff (Flow 2, SCRUM-1002)', () => {
     await act(async () => fireEvent.press(screen.getByLabelText('Edit my details')))
     expect(router.replace).not.toHaveBeenCalled()
     expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('once one way out has gone, the other does nothing: one PUT, one navigation', async () => {
+    let resolve!: (ok: boolean) => void
+    mockFinish.mockReturnValue(new Promise<boolean>((r) => (resolve = r)))
+    await render(<ReadyScreen />)
+    await act(async () => fireEvent.press(screen.getByLabelText('Edit my details')))
+    await act(async () => fireEvent.press(screen.getByLabelText('Start')))
+    await act(async () => resolve(true))
+    expect(mockFinish).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('ready-moment')).toBeNull()
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
   })
 })

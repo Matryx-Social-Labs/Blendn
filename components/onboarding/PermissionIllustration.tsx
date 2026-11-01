@@ -36,8 +36,8 @@ const STREETS = [
 const STREET_TILT = { vertical: '8deg', horizontal: '-6deg' } as const
 
 /**
- * The rings over the map: "you" in the middle, three creatures around, the footer line over a scrim. `city` is the browse
- * city when one is known, and only then: before a fix there is nowhere to say.
+ * The rings over the map: "you" in the middle, three creatures around, the footer line over a scrim. No city is named
+ * (SCRUM-997).
  */
 export function LocationIllustration({ notice = false }: { notice?: boolean }) {
   const bold = useBoldText()

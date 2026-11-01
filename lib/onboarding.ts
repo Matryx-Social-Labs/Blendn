@@ -576,17 +576,21 @@ export function parseStoredOnboarding(raw: string | null): StoredOnboarding | nu
 
     const record = parsed as Record<string, unknown>
     const progress = record.progress as Record<string, unknown> | undefined
-    const step = typeof progress?.step === 'string' ? (RETIRED_STEPS[progress.step] ?? progress.step) : progress?.step
+    const stored = typeof progress?.step === 'string' ? (RETIRED_STEPS[progress.step] ?? progress.step) : progress?.step
 
     // A step this build does not know about means the flow was reordered or
     // renamed under a stored record. Starting over beats navigating to a route
     // that no longer exists.
-    if (!isOnboardingStep(step)) return EMPTY_STORED
+    if (!isOnboardingStep(stored)) return EMPTY_STORED
 
     // A retired step answered on an older build is simply not a step any more.
     const completed = Array.isArray(progress?.completed)
       ? progress.completed.filter(isOnboardingStep)
       : []
+
+    // `location` came third in the eight-step flow and comes fifth now: resumed as it is, somebody who quit there would
+    // pass preferences, details and media without seeing them. Preferences unanswered means the old order.
+    const step = stored === 'location' && !completed.includes('preferences') ? 'preferences' : stored
 
     return {
       progress: { step, completed },
@@ -669,5 +673,3 @@ export function promptFits(bio: string, prompt: string, limit: number): boolean 
   return bioWithPrompt(bio, prompt, limit) !== bio
 }
 
-/** The most specialisms the server takes when it does not say (`MAX_EXPERTISE`). */
-export const DEFAULT_MAX_EXPERTISE = 3

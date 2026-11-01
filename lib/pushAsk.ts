@@ -17,7 +17,7 @@ import type { Hue } from '../components/ds/shared'
  * - only a phone that can still be asked (never answered, `mayAskForPush`): once the phone has said no, or yes,
  *   nothing here ever asks again; the bell's "Push is off" row and Settings are the way back;
  * - once per account and per moment, whatever the answer: Not now is not asked again either;
- * - a no anywhere ("Maybe later" in onboarding, or Not now at the other moment) is remembered per account
+ * - a no anywhere (Not now at either moment, or "Maybe later" on an older build's onboarding step) is remembered per account
  *   (`lib/pushDecline`) and ends the asking; Continue clears it.
  *
  * "Continue" is the one that asks the phone (the OS dialog follows); it is silent until then.
