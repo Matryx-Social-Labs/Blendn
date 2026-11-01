@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, ScrollView, StyleSheet, View } from 'react-native'
 
 import { Chip } from '../../components/ds/Chip'
 import { ChipSet } from '../../components/ds/ChipSet'
-import { monoCaption } from '../../components/ds/MonoFamily'
 import { TextArea } from '../../components/ds/TextField'
-import { FADE_END_ONLY, font, useBoldText } from '../../components/ds/shared'
+import { FADE_END_ONLY } from '../../components/ds/shared'
 import { MAX_INTERESTS } from '../../components/InterestPicker'
 import { ListLoadState, type ListStatus } from '../../components/onboarding/ListLoadState'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { SolidBarFade } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { toPickerTree, type CategoryGroup, type CategoryNode } from '../../lib/categories'
-import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { bioWithPrompt, promptFits } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
@@ -52,7 +51,6 @@ const bioOverCap = overCapMessage(BIO_LIMIT)
 
 export default function DetailsScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('details')
-  const bold = useBoldText()
 
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [groupsStatus, setGroupsStatus] = useState<ListStatus>('loading')
@@ -119,9 +117,11 @@ export default function DetailsScreen() {
   return (
     <OnboardingScreen
       step="details"
-      title="The finer "
-      titleAccent="details"
-      subtitle="A few lines about you and what you’re into. It’s what people read before they say hello."
+      title="What are "
+      titleAccent="you into?"
+      subtitle="Pick a few. It’s how you’ll find things in common."
+      // Over the button, so it stays in reach under a long wall of chips.
+      dockCaption={interestIds.length === 0 ? 'None picked yet' : atCap ? `${interestIds.length} picked, the most` : `${interestIds.length} picked`}
       ctaLabel="Continue"
       ctaBusy={saving}
       ctaDisabled={overCap}
@@ -131,13 +131,30 @@ export default function DetailsScreen() {
       onBack={goBack}
     >
       <>
-        {/*
-      Before the interest chips, not after.
+        <View style={styles.interests}>
+          {groupsStatus !== 'ready' ? <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} /> : null}
 
-      The chips are a long, scrolling wall of choices; a text field below them
-      is a field most people never reach. This is also the more personal
-      question, and asking it first means it gets answered while attention is
-      still fresh.
+          {groups.map((group) => (
+            <ChipSet
+              key={group.id}
+              label={group.name}
+              items={group.items.map((item) => ({ key: item.id, label: item.name, dimmed: atCap && !interestIds.includes(item.id) }))}
+              selection="multi"
+              selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
+              capHint={`Up to ${MAX_INTERESTS}`}
+              size="lg"
+              onToggle={(id) => {
+                const item = group.items.find((i) => i.id === id)
+                if (item) toggle(item.id, item.name)
+              }}
+              testID={`onboarding-interests-${group.id}`}
+            />
+          ))}
+        </View>
+
+        {/*
+      After the interests (direction A: the screen's one question is "What are you into?"). The bio is optional and Edit
+      profile has it too; a person who stops at the chips has answered the question asked.
     */}
         <View style={styles.bio}>
           <TextArea
@@ -180,38 +197,6 @@ export default function DetailsScreen() {
             ) : null}
           </View>
         </View>
-
-        <View style={styles.interests}>
-          <View style={styles.interestsHead}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.heading]}>
-              Interests
-            </Text>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption}
-              accessibilityLabel={`${interestIds.length} of ${MAX_INTERESTS} chosen`}
-              style={[monoCaption(bold), { color: atCap ? COLOR.warning : COLOR.textSecondary }]}
-            >
-              {`${interestIds.length} of ${MAX_INTERESTS}`}
-            </Text>
-          </View>
-
-          {groupsStatus !== 'ready' ? <ListLoadState status={groupsStatus} what="interests" onRetry={() => void loadGroups()} /> : null}
-
-          {groups.map((group) => (
-            <ChipSet
-              key={group.id}
-              label={group.name}
-              items={group.items.map((item) => ({ key: item.id, label: item.name, dimmed: atCap && !interestIds.includes(item.id) }))}
-              selection="multi"
-              selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
-              capHint={`Up to ${MAX_INTERESTS}`}
-              onToggle={(id) => {
-                const item = group.items.find((i) => i.id === id)
-                if (item) toggle(item.id, item.name)
-              }}
-              testID={`onboarding-interests-${group.id}`}
-            />
-          ))}
-        </View>
       </>
     </OnboardingScreen>
   )
@@ -224,6 +209,4 @@ const styles = StyleSheet.create({
   prompts: { gap: SPACE.sm, paddingRight: SPACE.xxxl },
   promptsFade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: SPACE.xxxl },
   interests: { gap: SPACE.lg },
-  interestsHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  heading: { color: COLOR.textPrimary },
 })
