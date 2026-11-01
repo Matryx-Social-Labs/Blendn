@@ -23,11 +23,14 @@ export function LocationIllustration({
   you = null,
   onShown,
   onLive,
+  mapOn = true,
 }: {
   notice?: boolean
   you?: LngLat | null
   onShown?: () => void
   onLive?: (live: boolean) => void
+  /** False once the step is covered by the next (it stays mounted under it): the map, and its native view, are let go. */
+  mapOn?: boolean
 }) {
   const reduceMotion = useReducedMotion()
   return (
@@ -38,7 +41,7 @@ export function LocationIllustration({
       style={[styles.card, { height: notice ? MAP_HEIGHT_WITH_NOTICE : MAP_HEIGHT }]}
     >
       <Image source={MAP} contentFit="cover" style={StyleSheet.absoluteFill} />
-      {reduceMotion ? null : <LiveCityMap you={you} onShown={onShown} onLive={onLive} />}
+      {reduceMotion || !mapOn ? null : <LiveCityMap you={you} onShown={onShown} onLive={onLive} />}
     </View>
   )
 }

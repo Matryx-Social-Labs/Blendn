@@ -1,4 +1,5 @@
 import * as Location from 'expo-location'
+import { useIsFocused } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, StyleSheet, Text, View } from 'react-native'
 
@@ -9,7 +10,7 @@ import { LocationIllustration } from '../../components/onboarding/PermissionIllu
 import { isPreciseLocationOff } from '../../lib/preciseLocation'
 import { Icon } from '../../components/ui/Icon'
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
-import { roughFix } from '../../lib/locationFix'
+import { roughFix, type FixAsk } from '../../lib/locationFix'
 import type { LngLat } from '../../lib/mapLit'
 import { useReducedMotion } from '../../lib/motion'
 import { askOsPermission } from '../../lib/onboarding'
@@ -74,17 +75,25 @@ export default function LocationScreen() {
   const [mapLive, setMapLive] = useState(false)
   // Back during the wait (the header's, or Android's) leaves the step: nothing commits after it has gone.
   const mounted = useRef(true)
+  const fixAsk = useRef<FixAsk>({ aborted: false })
   useEffect(() => {
     mounted.current = true
+    const ask = fixAsk.current
     return () => {
       mounted.current = false
+      ask.aborted = true
+      shown.current?.()
     }
   }, [])
+  // Covered by the next step (a push keeps this one mounted underneath): the map goes, and with it its native view.
+  const focused = useIsFocused()
 
   /** On Allow, with a live map: it flies to the fix and lights what is near before the step moves on (owner, 2026-11-01). */
   const showWhereYouAre = async () => {
+    // Shown already (a save that failed, Allow again): no second wait.
+    if (you) return
     const flight = (async () => {
-      const fix = await roughFix(FIX_DEADLINE_MS).catch(() => null)
+      const fix = await roughFix(FIX_DEADLINE_MS, fixAsk.current).catch(() => null)
       if (!fix || !mounted.current) return
       await new Promise<void>((resolve) => {
         shown.current = resolve
@@ -143,7 +152,7 @@ export default function LocationScreen() {
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noticeText]}>{PRECISE_OFF_NOTICE}</Text>
         </View>
       ) : null}
-      <LocationIllustration notice={precise.off} you={you} onShown={() => shown.current?.()} onLive={setMapLive} />
+      <LocationIllustration notice={precise.off} you={you} onShown={() => shown.current?.()} onLive={setMapLive} mapOn={focused} />
       <SettingsTray
         visible={settingsPrompt}
         icon="map-pin-off"

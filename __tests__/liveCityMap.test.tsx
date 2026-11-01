@@ -42,7 +42,8 @@ const mockLit = {
   chips: [],
   states: [],
 }
-jest.mock('../components/home/useMapLighting', () => ({ useMapLighting: () => ({ lit: mockLit, onFrame: jest.fn(), relight: jest.fn() }) }))
+let mockPasses = 0
+jest.mock('../components/home/useMapLighting', () => ({ useMapLighting: () => ({ lit: mockLit, onFrame: jest.fn(), relight: jest.fn(), passes: mockPasses }) }))
 // The pin reads, tagged with how they were asked: a viewport (a camera point) or through the sharing gate (a person's position).
 jest.mock('../components/home/HomeMap', () => ({ pinApiFor: (viewport: boolean) => ({ viewport }) }))
 let mockSharing = true
@@ -79,6 +80,7 @@ beforeEach(() => {
   mockBands = []
   mockCities.mockResolvedValue({ success: true, data: CATALOGUE })
   mockSharing = true
+  mockPasses = 0
   mockPins.mockClear()
 })
 afterEach(() => jest.useRealTimers())
@@ -147,6 +149,28 @@ describe('LiveCityMap', () => {
     // Not landed yet: not shown.
     expect(onShown).not.toHaveBeenCalled()
     await settleAt(you)
+    await act(async () => jest.advanceTimersByTime(LIT_HOLD_MS))
+    // Landed, but no lighting pass has finished since: what is lit is still the old view's.
+    expect(onShown).not.toHaveBeenCalled()
+    mockPasses += 1
+    await view.rerender(<LiveCityMap you={you} onShown={onShown} />)
+    await lightAll()
+    await act(async () => jest.advanceTimersByTime(LIT_HOLD_MS))
+    expect(onShown).toHaveBeenCalled()
+  })
+
+  it('with sharing off nothing near you is asked, and the step is still told once the flight has landed and a pass is done', async () => {
+    mockSharing = false
+    const onShown = jest.fn()
+    const you: [number, number] = [77.6, 12.98]
+    const view = await render(<LiveCityMap you={null} onShown={onShown} />)
+    await fire('onDidFinishRenderingMapFully')
+    await settleAt([77.59, 12.97])
+    await view.rerender(<LiveCityMap you={you} onShown={onShown} />)
+    await settleAt(you)
+    mockPasses += 1
+    await view.rerender(<LiveCityMap you={you} onShown={onShown} />)
+    await lightAll()
     await act(async () => jest.advanceTimersByTime(LIT_HOLD_MS))
     expect(onShown).toHaveBeenCalled()
   })

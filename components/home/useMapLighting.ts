@@ -100,12 +100,14 @@ export function useMapLighting({
   visible?: { top: number; bottom: number }
   /** Where the person is, so no name covers their dot. */
   userAt?: LngLat | null
-}): { lit: Lit; onFrame: () => void; relight: () => void } {
+}): { lit: Lit; onFrame: () => void; relight: () => void; passes: number } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
   const needsLight = useRef(false)
   const lastLit = useRef('')
   const pass = useRef(0)
   const seen = useRef(new Map<string, { lng: number; lat: number; building: LitBuilding | null }>())
+  /** Passes that ran to the end (published, or found nothing new to publish): "lit for this view" is one finishing after it. */
+  const [passes, setPasses] = useState(0)
 
   // New pins, or the other tiles drawing the buildings: look again once they are drawn. A pass still
   // waiting on the bridge was for the old tiles: dropped (review M1).
@@ -128,6 +130,7 @@ export function useMapLighting({
     if (v.zoom < LIGHT_MIN_ZOOM) {
       lastLit.current = ''
       publish(shown, NO_LIT)
+      setPasses((n) => n + 1)
       return
     }
     const candidates = lightCandidates(pins, v.bounds, v.centre, MAP_THEME.lit.max)
@@ -136,7 +139,10 @@ export function useMapLighting({
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
     const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}`
-    if (signature === lastLit.current) return
+    if (signature === lastLit.current) {
+      setPasses((n) => n + 1)
+      return
+    }
     const keyOf = (p: Pin) => `${tiles}:${shown}:${p.id}`
     const known = (p: Pin) => {
       const s = seen.current.get(keyOf(p))
@@ -229,6 +235,7 @@ export function useMapLighting({
     })
     // Unclean: not marked done, so the next settle asks again (not the next frame: frames keep coming while a glow fades).
     if (clean) lastLit.current = signature
+    setPasses((n) => n + 1)
   }
 
   /** On a fully drawn frame: a pass if one is due. Checked before anything async, since this runs every frame. */
@@ -242,5 +249,5 @@ export function useMapLighting({
     needsLight.current = true
   }
 
-  return { lit: litFor.segment === segment ? litFor.lit : NO_LIT, onFrame, relight }
+  return { lit: litFor.segment === segment ? litFor.lit : NO_LIT, onFrame, relight, passes }
 }

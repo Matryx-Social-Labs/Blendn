@@ -16,7 +16,8 @@ const mockUpload = jest.fn()
 const mockInvite = jest.fn()
 const mockPulled = jest.fn(async (..._a: unknown[]) => ({ pulled: [] as unknown[], live: null as string[] | null }))
 const mockSeen = jest.fn()
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() }, useFocusEffect: jest.fn() }))
+let mockFocused = true
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() }, useFocusEffect: jest.fn(), useIsFocused: () => mockFocused }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 jest.mock('../lib/useOnboarding', () => ({
@@ -74,6 +75,7 @@ beforeEach(() => {
   mockDraft = {}
   mockReduce = false
   mockMapLive = true
+  mockFocused = true
   mockRequest.mockImplementation(async () => ({ status: 'denied' }))
   mockPulled.mockImplementation(async () => ({ pulled: [], live: null }))
 })
@@ -99,10 +101,40 @@ describe('location', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Allow location' }))
   }
 
-  it('the live map sits over the still, with nowhere to fly to before Allow', async () => {
+  it('the live map sits over the still, with nowhere to fly to before Allow, and neither is read by a screen reader', async () => {
     mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
     await render(<LocationScreen />)
     expect(lastLive().you).toBeNull()
+    expect(screen.getByTestId('location-map', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByTestId('location-map')).toBeNull()
+  })
+
+  it('covered by the next step (still mounted under it), the live map is let go', async () => {
+    mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
+    mockFocused = false
+    await render(<LocationScreen />)
+    expect(mockLive).not.toHaveBeenCalled()
+  })
+
+  it('Back during the wait: the step has gone, and nothing commits after it', async () => {
+    mockFix.mockResolvedValue({ coords: { longitude: 77.6, latitude: 12.97 } })
+    await allow()
+    await waitFor(() => expect(lastLive().you).toEqual([77.6, 12.97]))
+    await act(async () => screen.unmount())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(mockCommit).not.toHaveBeenCalled()
+  })
+
+  it('Allow again after a save that failed: no second wait for a flight already shown', async () => {
+    mockFix.mockResolvedValue({ coords: { longitude: 77.6, latitude: 12.97 } })
+    mockCommit.mockResolvedValueOnce(false)
+    await allow()
+    await waitFor(() => expect(lastLive().you).toEqual([77.6, 12.97]))
+    await act(async () => lastLive().onShown?.())
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledTimes(1))
+    fireEvent.press(screen.getByRole('button', { name: 'Allow location' }))
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledTimes(2))
+    expect(mockFix).toHaveBeenCalledTimes(1)
   })
 
   it('on Allow the map flies to the fix and lights what is near; the step moves on only once it has (owner, 2026-11-01)', async () => {

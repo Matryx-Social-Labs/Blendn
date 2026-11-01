@@ -1,4 +1,4 @@
-import { Camera, Map, NativeUserLocation, type CameraRef, type CameraStop, type LightSpecification, type MapRef, type ViewStateChangeEvent } from '@maplibre/maplibre-react-native'
+import { Camera, Map, type CameraRef, type CameraStop, type LightSpecification, type MapRef, type ViewStateChangeEvent } from '@maplibre/maplibre-react-native'
 import { getLocales } from 'expo-localization'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, StyleSheet, View, type LayoutChangeEvent, type NativeSyntheticEvent } from 'react-native'
@@ -56,7 +56,8 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
   const [failed, setFailed] = useState(false)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [pins, setPins] = useState<{ at: string; pins: Pin[] }>({ at: '', pins: NO_PINS })
-  const [landedAt, setLandedAt] = useState('')
+  /** Where the flight landed, and how many lighting passes had finished then: shown once one finishes after it. */
+  const [landed, setLanded] = useState<{ at: string; passes: number } | null>(null)
   const youKey = keyOf(you)
 
   // The catalogue's city for this phone's region, asked once.
@@ -96,7 +97,7 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetKey])
 
-  const { lit, onFrame, relight } = useMapLighting({ map, view, pins: pins.pins, segment: 'events', size })
+  const { lit, onFrame, relight, passes } = useMapLighting({ map, view, pins: pins.pins, segment: 'events', size })
   // A late answer, or one for a view already settled, lights now: no frame may come to run it.
   useEffect(() => {
     relight()
@@ -108,12 +109,15 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
   const order = useMemo(() => lit.glow.features.map((f) => f.properties.id), [lit.glow])
   const orderKey = order.join('|')
   const [step, setStep] = useState({ key: '', n: 0 })
-  const n = step.key === orderKey ? step.n : 0
+  // A new pass keeps what is already lit lit (no blink); it carries on from there.
+  const n = step.key === orderKey ? step.n : Math.min(step.n, order.length)
+  // Near you the light comes twice as fast: the step is waiting on it.
+  const stepMs = you ? LIGHT_STEP_MS / 2 : LIGHT_STEP_MS
   useEffect(() => {
     if (n >= order.length) return
-    const timer = setTimeout(() => setStep({ key: orderKey, n: n + 1 }), LIGHT_STEP_MS)
+    const timer = setTimeout(() => setStep({ key: orderKey, n: n + 1 }), stepMs)
     return () => clearTimeout(timer)
-  }, [n, orderKey, order.length])
+  }, [n, orderKey, order.length, stepMs])
   const shown = useMemo(
     () => ({ bands: { ...lit.bands, features: litUpTo(lit.bands.features, order, n) }, glow: { ...lit.glow, features: litUpTo(lit.glow.features, order, n) } }),
     [lit, order, n]
@@ -137,6 +141,8 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
   const onDrawn = () => {
     if (drawn || !centre) return
     setDrawn(true)
+    // Where it is, before any region change: an Allow during the tilt then eases from here rather than reading as a jump.
+    view.current = { ...view.current, centre }
     // From flat to the opening view; iOS turns a zoom into a height before it tilts (`tiltedZoom`).
     const zoom = tiltedZoom(OPENING_VIEW.zoom, FLAT_VIEW.pitch, OPENING_VIEW.pitch, Platform.OS)
     stop({ center: centre, zoom, pitch: OPENING_VIEW.pitch, bearing: OPENING_VIEW.bearing, duration: CAMERA_MS })
@@ -170,7 +176,9 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
   }, [youKey, live])
 
   // Landed by you, your places loaded, and all of them lit: held a moment, then the step may move on.
-  const ready = !!you && landedAt === youKey && pins.at === youKey && n >= order.length
+  // With sharing off nothing is asked from your position: there is nothing near you to wait for.
+  const yourPins = pins.at === youKey || !locationSharingOn()
+  const ready = !!you && landed?.at === youKey && passes > landed.passes && yourPins && n >= order.length
   useEffect(() => {
     if (!ready) return
     const timer = setTimeout(() => shownRef.current?.(), LIT_HOLD_MS)
@@ -182,7 +190,7 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
     view.current = { bounds: bounds as Bounds, centre: center as LngLat, zoom, pitch }
     if (zoom < LIGHT_MIN_ZOOM) return
     relight()
-    if (you && getDistanceKm(center[1], center[0], you[1], you[0]) < LANDED_KM) setLandedAt(keyOf(you))
+    if (you && landed?.at !== youKey && getDistanceKm(center[1], center[0], you[1], you[0]) < LANDED_KM) setLanded({ at: youKey, passes })
   }
 
   if (!centre || failed || !STYLE) return null
@@ -221,7 +229,6 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
         importantForAccessibility="no-hide-descendants"
       >
         <Camera ref={camera} initialViewState={{ center: centre, ...FLAT_VIEW }} />
-        {you ? <NativeUserLocation mode="default" /> : null}
         <CityBuildings />
         <GroundGlow data={shown.glow} under={BUILDING_LAYER_ID} latitude={(you ?? centre)[1]} />
         <LitBuildings data={shown.bands} onPress={() => {}} over={BUILDING_LAYER_ID} />
