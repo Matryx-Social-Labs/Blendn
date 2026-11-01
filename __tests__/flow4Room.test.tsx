@@ -22,7 +22,7 @@ jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
-const mockStage = { scrolled: false }
+const mockStage = { scrolled: false, atTop: jest.fn() }
 const mockMaterialMounts = { count: 0 }
 jest.mock('../components/ui/Material', () => {
   const { useEffect } = jest.requireActual('react')
@@ -37,7 +37,7 @@ jest.mock('../components/ui/Material', () => {
   }
 })
 jest.mock('../components/blendn/RoomStage', () => ({
-  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: mockStage.scrolled }),
+  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: mockStage.scrolled, atTop: mockStage.atTop }),
 }))
 let mockNetwork = 'online'
 jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => mockNetwork, subscribeNetworkState: () => () => {} }))
@@ -296,6 +296,15 @@ describe('where the list holds its place (found in SCRUM-502)', () => {
     await room()
     expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toBeTruthy()
     mockStage.scrolled = false
+  })
+})
+
+describe('switching People and Crews', () => {
+  it('reports the new list at its top, so the old offset does not count as scrolled', async () => {
+    const view = await room({ view: 'people' })
+    mockStage.atTop.mockClear()
+    await view.rerender(roomElement({ view: 'crews' }))
+    expect(mockStage.atTop).toHaveBeenCalledTimes(1)
   })
 })
 

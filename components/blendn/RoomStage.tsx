@@ -87,13 +87,16 @@ export function useStageScroll() {
       if (now !== before) scheduleOnRN(setScrolled, now)
     }
   )
+  // A new list starts at its top, whatever the last one reported; only scroll events write this otherwise.
+  const atTop = useCallback(() => scrollY.set(0), [scrollY])
+  useEffect(atTop, [atTop])
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
       scrollY.set(e.contentOffset.y)
     },
   })
   const native = useMemo(() => Gesture.Native().simultaneousWithExternalGesture(pan), [pan])
-  return { onScroll, native, scrollEventThrottle: 16 as const, scrolled }
+  return { onScroll, native, scrollEventThrottle: 16 as const, scrolled, atTop }
 }
 
 /**
