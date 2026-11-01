@@ -12,6 +12,7 @@ import { TopBar } from '../components/ds/TopBar'
 import { bannerFadeIn, bannerIn, bannerOut } from '../components/motion/presence'
 import { OfflineBanner } from '../components/OfflineBanner'
 import { useToast } from '../components/Toast'
+import { HomeCityRow } from '../components/settings/HomeCityRow'
 import { COLOR, SPACE as DS_SPACE, SPRING, MAX_FONT_SCALE } from '../lib/design/tokens'
 import type { IconName } from '../components/ui/Icon'
 import { H } from '../lib/haptics'
@@ -529,6 +530,12 @@ function SettingsScreenContent() {
             <OfflineBanner text="Offline. Showing what you had." testID="settings-offline" />
           )}
         </Animated.View>
+
+        {user?.id ? (
+          <SettingsGroup title="Location">
+            <HomeCityRow userId={user.id} />
+          </SettingsGroup>
+        ) : null}
 
         <SettingsGroup title="Privacy">
           {/* What it does, in the row: the switch was a promise for a year (SCRUM-141). */}

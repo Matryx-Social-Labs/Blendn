@@ -27,6 +27,12 @@ export interface HomeBrowse {
   ready: boolean
   /** Where the selected city is (`/events/cities` `centre`). */
   cityCentre: { latitude: number; longitude: number } | null
+  /** Browsing another country than home's: the city chip takes a plane (travel plan §4.2). */
+  travelling?: boolean
+  /** A preview city opened to a previewer: the chip reads "Toronto · Preview". */
+  preview?: boolean
+  /** The catalogue's default city's centre (`defaultCitySlug`): where the map opens with no fix and no browsed city yet. */
+  defaultCentre?: { latitude: number; longitude: number } | null
   /**
    * Bumped by every city the person chooses, never by one the app decided: the
    * map goes there, even to the city it shows. `here` when the choice was where
@@ -82,6 +88,8 @@ export function HomeShell({
     location: null,
     ready: false,
     cityCentre: null,
+    travelling: false,
+    preview: false,
     cityPick: { n: 0, here: false },
     requestLocation: () => {},
     openCityPicker: () => {},
@@ -104,6 +112,8 @@ export function HomeShell({
   const onLayout = (e: LayoutChangeEvent) => setMapHeight(e.nativeEvent.layout.height)
   // The map's native surface is created one paint after the drawer and its skeleton, so a slow device shows them, not ink.
   const mapPainted = useAfterFirstPaint()
+  // The map opens where something says to: the browsed city, the catalogue's default city, or the fix (never a constant).
+  const fallbackCentre = browse.cityCentre ?? browse.defaultCentre ?? browse.location ?? null
   const restore = useRef<DrawerSnap | null>(null)
   const [placesOpened, setPlacesOpened] = useState(false)
   /** Places' numbered pins, and the count "Show on map" bumps to make the map fit them. */
@@ -186,10 +196,11 @@ export function HomeShell({
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={screenReader}
       >
-        {mapHeight !== null && mapPainted ? (
+        {mapHeight !== null && mapPainted && fallbackCentre ? (
           <HomeMap
             center={browse.location}
             cityCentre={browse.cityCentre}
+            fallbackCentre={fallbackCentre}
             cityPick={browse.cityPick}
             requestLocation={browse.requestLocation}
             locateVisible={snap !== 'full'}
@@ -230,7 +241,7 @@ export function HomeShell({
             items={SEGMENT_LABELS}
             selected={segment === 'events' ? 0 : 1}
             onChange={(i) => choose(i === 0 ? 'events' : 'places')}
-            trailing={<Chip label={browse.city ?? 'Choose city'} icon="map-pin" onPress={browse.openCityPicker} testID="home-city" />}
+            trailing={<Chip label={browse.city ? `${browse.city}${browse.preview ? ' · Preview' : ''}` : 'Choose city'} icon={browse.travelling ? 'plane' : 'map-pin'} onPress={browse.openCityPicker} testID="home-city" />}
             testID="home-segmented"
           />
         }

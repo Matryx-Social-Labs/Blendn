@@ -56,6 +56,8 @@ export interface Pin {
   /** An event's start and end (its session's, when it has one); null for a venue. */
   startsAt: string | null
   endsAt: string | null
+  /** An event's IANA zone, so its chip reads its own clock; null for a venue. */
+  timeZone?: string | null
   /** A venue's live bucket, for its chip; null for an event. */
   bucket: LiveNow | null
 }
@@ -70,6 +72,7 @@ type EventLike = {
   start_time: string
   end_time: string | null
   session?: { start_time: string; end_time: string } | null
+  timezone?: string | null
 }
 
 type VenueLike = { id: string; name: string; latitude: number | null; longitude: number | null; liveNow?: LiveNow | null }
@@ -118,6 +121,7 @@ export function pinsFor(
       glow: 1,
       startsAt: w.start_time,
       endsAt: w.end_time ?? null,
+      timeZone: e.timezone ?? null,
       bucket: null,
     }
     return liveAt(pin, now)
