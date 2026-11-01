@@ -445,6 +445,14 @@ describe('the day is the browse city’s, not the phone’s (travel: a phone in 
     expect(weekendWindow(now).startDate).toBe('2026-10-23T11:30:00.000Z')
   })
 
+  it('across Toronto’s DST change (Sun 1 Nov 2026) the window ends at its EST midnight', () => {
+    // Fri 30 Oct 22:30 EDT.
+    const w = weekendWindow(Date.parse('2026-10-31T02:30:00.000Z'), TORONTO)
+    expect(w.startDate).toBe('2026-10-30T21:00:00.000Z')
+    expect(w.endDate).toBe('2026-11-02T04:59:59.999Z')
+    expect(w.label).toBe('Sat 31 Oct – Sun 1 Nov')
+  })
+
   it('Sunday 18:00 in Toronto skips the weekend, though it is already Monday in Bengaluru', () => {
     const sundayEvening = Date.parse('2026-10-25T23:00:00.000Z')
     expect(weekendWindow(sundayEvening, TORONTO).skip).toBe(true)

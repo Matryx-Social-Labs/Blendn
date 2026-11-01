@@ -27,20 +27,29 @@ import { ICON } from '../lib/design/tokens'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style)
 const window = Dimensions.get('window')
-afterEach(() => Dimensions.set({ window }))
+const os = Platform.OS
+afterEach(() => {
+  Dimensions.set({ window })
+  Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+})
 
 const banner = (onDismiss = jest.fn()) => (
   <Banner kind="info" icon="plane" text="Browsing Canada. Times are Toronto time." action={{ label: 'Back to Bengaluru', onPress: jest.fn() }} onDismiss={onDismiss} testID="b" />
 )
 
-it.each(['ios', 'android'] as const)('on %s the × draws no glass and no blur on the solid banner, and is a full target', async (os) => {
-  Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+it.each(['ios', 'android'] as const)('on %s the × draws no glass and no blur on the solid banner, and is a full target', async (platform) => {
+  Object.defineProperty(Platform, 'OS', { value: platform, configurable: true })
   const onDismiss = jest.fn()
   await render(banner(onDismiss))
   expect(screen.queryByTestId('glass')).toBeNull()
   expect(screen.queryByTestId('blur')).toBeNull()
   const dismiss = screen.getByRole('button', { name: 'Dismiss' })
-  expect(ICON.control + 2 * dismiss.props.hitSlop).toBeGreaterThanOrEqual(minTarget())
+  // Real bounds (the accessibility node is the target), drawn at the glyph's size: no slop reaching over the action.
+  const target = StyleSheet.flatten(dismiss.props.style)
+  expect(target.width).toBe(minTarget())
+  expect(target.height).toBe(minTarget())
+  expect(target.margin).toBe(-(minTarget() - ICON.control) / 2)
+  expect(dismiss.props.hitSlop).toBeUndefined()
   await fireEvent.press(dismiss)
   expect(onDismiss).toHaveBeenCalledTimes(1)
 })

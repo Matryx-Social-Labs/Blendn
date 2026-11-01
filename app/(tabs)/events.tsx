@@ -421,7 +421,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   // The phone's ISO country from the same reverse geocode: sent as `X-Country`, kept in memory only.
   const [namedCountry, setNamedCountry] = useState<string | null>(null)
   // In the catalogue's spelling: the city whose box holds the fix, else the geocoder's name ("New Delhi" is the NCR row).
-  const deviceCity = sharing ? (hereCity({ available: cityOptions, point: userLocation, deviceCity: namedCity })?.city ?? namedCity) : null
+  const hereOption = sharing ? hereCity({ available: cityOptions, point: userLocation, deviceCity: namedCity }) : null
+  const deviceCity = sharing ? (hereOption?.city ?? namedCity) : null
   const deviceCountry = sharing ? namedCountry : null
   const [cityPickerOpen, setCityPickerOpen] = useState(false)
   // Bumped by every city the person chooses, so the map moves even to the city it already shows; `here` when they chose where they stand.
@@ -1268,8 +1269,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const homeCitySlug = useHomeCitySlug(user?.id)
   const chooseCity = useCallback(
     (choice: CityRef, here = false) => {
-      // By slug when the choice has one: a namesake in another country is another city.
-      const option = cityFor(cityOptions, choice)
+      // By slug when the choice has one: a namesake in another country is another city. "Where I am" (the switch offer,
+      // the locate row) carries only a name: it is the row the fix is in.
+      const option = here && !choice.slug && hereOption && sameCity(hereOption.city, choice.city) ? hereOption : cityFor(cityOptions, choice)
       const next: StoredCity = option ? storedAt(option, 'chosen') : { city: choice.city, source: 'chosen' }
       setSelection(next)
       setCityPick((p) => ({ n: p.n + 1, here }))
@@ -1279,7 +1281,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       const home = homeCitySlug === null ? homeAfterChoice({ homeCitySlug, chosen: option, deviceCountry }) : null
       if (home && user) void saveHomeCity(user.id, home)
     },
-    [cityOptions, homeCitySlug, deviceCountry, user]
+    [cityOptions, hereOption, homeCitySlug, deviceCountry, user]
   )
 
   const switchSuggestion = useMemo(
@@ -1451,7 +1453,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * one's header.
    */
   const placeKey = feedKey(selectedCity, userLocation)
-  const sectionsKey = `${placeKey}|${seedDate}|${pulls}`
+  // The zone too: a stored city draws before the catalogue names its zone, and the weekend asked for then was the phone's.
+  const sectionsKey = `${placeKey}|${cityZone ?? '-'}|${seedDate}|${pulls}`
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)

@@ -5,7 +5,8 @@ import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { MonoRun } from './MonoFamily'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
+import { OPACITY } from '../../lib/theme'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
 export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
 
@@ -120,7 +121,14 @@ export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss
       {/* A bare glyph, as SearchField's clear: a banner is solid, and glass on it has nothing to refract (C20). */}
       {onDismiss ? (
         <View testID={testID && `${testID}-dismiss-slot`} style={lineSlot}>
-          <Pressable onPress={onDismiss} hitSlop={DISMISS_SLOP()} accessibilityRole="button" accessibilityLabel="Dismiss" testID={testID && `${testID}-dismiss`}>
+          <Pressable
+            onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            android_ripple={{ color: PRESSED_WASH.android, borderless: true, radius: minTarget() / 2 }}
+            style={({ pressed }) => [dismissTarget(), pressed && Platform.OS === 'ios' && { opacity: OPACITY.pressed }]}
+            testID={testID && `${testID}-dismiss`}
+          >
             <Icon name="x" size={ICON.control} color={COLOR.textSecondary} />
           </Pressable>
         </View>
@@ -129,8 +137,14 @@ export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss
   )
 }
 
-/** Grows the 24 pt × to a full touch target (44 pt iOS, 48 dp Android). */
-const DISMISS_SLOP = () => (minTarget() - ICON.control) / 2
+/**
+ * The 20 pt × in a real full target (44 pt iOS, 48 dp Android: its bounds, not a slop, so the accessibility node is that
+ * size), drawn at the glyph's size by a negative margin: it neither grows the banner nor reaches over the action beside it.
+ */
+const dismissTarget = () => {
+  const size = minTarget()
+  return { width: size, height: size, margin: -(size - ICON.control) / 2, alignItems: 'center', justifyContent: 'center' } as const
+}
 
 export type Visibility = 'named' | 'anon' | 'hidden' | 'blocked'
 

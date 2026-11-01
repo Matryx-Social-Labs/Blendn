@@ -550,11 +550,12 @@ describe('"my location"', () => {
     const pulse = code('app/(tabs)/events.tsx')
     expect(pulse).toMatch(/setSelection\(next\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
     // Where you stand is a choice of you, not of a city centre (review L5); the picker's rows are picks.
-    expect(pulse).toMatch(/onSwitch=\{\(city\) => chooseCity\(city, true\)\}/)
+    expect(pulse).toMatch(/onSwitch=\{\(city\) => chooseCity\(\{ city \}, true\)\}/)
     expect(pulse).toMatch(/onChoose=\{chooseCity\}/)
     const picker = code('components/pulse/CityPicker.tsx')
-    expect(picker).toMatch(/choose\(deviceCity, true\)/)
-    expect(picker.match(/choose\(item\.city, false\)/g)).toHaveLength(2)
+    expect(picker).toMatch(/choose\(\{ city: deviceCity, slug: null \}, true\)/)
+    expect(picker).toMatch(/const pick = \(\) => choose\(\{ city: item\.city, slug: item\.slug \?\? null \}, false\)/)
+    expect(picker.match(/onPress=\{pick\}/g)).toHaveLength(2)
   })
 })
 

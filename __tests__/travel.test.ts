@@ -332,3 +332,10 @@ describe('cityFor: a row by its slug, a name only for an uncatalogued row (two L
     expect(cityFor(rows, null)).toBeNull()
   })
 })
+
+it('the Pulse asks for its sections again when the browse city’s zone arrives (a stored city draws before the catalogue)', () => {
+  const { readFileSync } = jest.requireActual<typeof import('fs')>('fs')
+  const { join } = jest.requireActual<typeof import('path')>('path')
+  const screen = readFileSync(join(__dirname, '..', 'app/(tabs)/events.tsx'), 'utf8')
+  expect(screen).toMatch(/const sectionsKey = `\$\{placeKey\}\|\$\{cityZone \?\? '-'\}\|/)
+})

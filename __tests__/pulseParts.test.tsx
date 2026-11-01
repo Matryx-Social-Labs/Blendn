@@ -130,7 +130,10 @@ describe('the city picker', () => {
       { code: 'GB', name: 'United Kingdom', defaultCitySlug: 'london' },
       { code: 'CA', name: 'Canada', defaultCitySlug: 'london-on' },
     ]
-    await render(picker({ cities, countries, selectedCity: 'London', selectedSlug: 'london-on', onChoose }))
+    await render(picker({ cities, countries, selectedCity: 'London', selectedSlug: 'london-on', deviceCity: 'London', deviceCountry: 'CA', onChoose }))
+    // The phone is in Ontario: only that London is where it is.
+    expect(screen.getByTestId('city-row-london-on').props.accessibilityLabel).toMatch(/your current location/)
+    expect(screen.getByTestId('city-row-london').props.accessibilityLabel).not.toMatch(/your current location/)
     expect(screen.getByTestId('city-row-london-on').props.accessibilityState).toMatchObject({ selected: true })
     expect(screen.getByTestId('city-row-london').props.accessibilityState).toMatchObject({ selected: false })
     await fireEvent.press(screen.getByTestId('city-row-london'))

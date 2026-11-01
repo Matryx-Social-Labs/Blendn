@@ -124,7 +124,8 @@ export function CityPicker({ visible, onClose, cities, countries = [], homeCount
                 const active = isCityRow(item, selected)
                 const key = item.slug ?? item.city
                 const pick = () => choose({ city: item.city, slug: item.slug ?? null }, false)
-                const here = sameCity(item.city, deviceCity)
+                // A namesake in another country is not where the phone is.
+                const here = sameCity(item.city, deviceCity) && (!deviceCountry || !item.country || item.country === deviceCountry)
                 // A city we have drawn gets its skyline; the rest stay plain rows. A coming-soon city is always a row: it has nothing on to count.
                 const art = item.access === 'comingSoon' ? null : drawableCityArt(item.city)
                 if (art) {

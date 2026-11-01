@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react'
+import { AppState } from 'react-native'
 
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
@@ -24,12 +25,14 @@ const subscribe = (listener: () => void) => {
     listeners.delete(listener)
   }
 }
+const known = (userId: string) => Object.prototype.hasOwnProperty.call(homes, userId)
 const set = (userId: string, slug: string | null) => {
+  if (known(userId) && homes[userId] === slug) return
   homes = { ...homes, [userId]: slug }
   listeners.forEach((listener) => listener())
 }
 
-/** Waits before the 2nd, 3rd and 4th read of a profile that failed; then the next screen to show the user asks again. */
+/** Waits before the 2nd, 3rd and 4th read of a profile that failed; then the app coming back to the front asks again. */
 export const HOME_RETRY_MS = [2_000, 10_000, 30_000] as const
 
 /** One read at a time per user. True when it landed. */
@@ -66,9 +69,16 @@ export function useHomeCitySlug(userId: string | null | undefined): string | nul
       })
     }
     attempt(0)
+    // Offline past the last retry: the next return to the front asks again, while home is still unknown.
+    const foreground = AppState.addEventListener('change', (state) => {
+      if (state !== 'active' || known(userId)) return
+      clearTimeout(timer)
+      attempt(0)
+    })
     return () => {
       live = false
       clearTimeout(timer)
+      foreground.remove()
     }
   }, [userId])
   return userId && Object.prototype.hasOwnProperty.call(snapshot, userId) ? snapshot[userId] : undefined
@@ -76,14 +86,18 @@ export function useHomeCitySlug(userId: string | null | undefined): string | nul
 
 /** `PUT /profiles/:id` with `homeCitySlug` (null clears). False, and nothing changed here, when the server refused. */
 export async function saveHomeCity(userId: string, slug: string | null): Promise<boolean> {
+  // Numbered before the request: a read that started earlier is dropped, and of two quick saves only the later one shows.
+  const mine = (saves[userId] ?? 0) + 1
+  saves = { ...saves, [userId]: mine }
   const response = await Promise.resolve()
     .then(() => apiClient.updateProfile(userId, { homeCitySlug: slug }))
     .catch(() => null)
   if (!response?.success) {
     Logger.warn('events', 'Could not save the home city', { error: response?.error })
+    // A read dropped for this save was right after all: ask again rather than leave home unknown.
+    if (saves[userId] === mine) void load(userId)
     return false
   }
-  saves = { ...saves, [userId]: (saves[userId] ?? 0) + 1 }
-  set(userId, slug)
+  if (saves[userId] === mine) set(userId, slug)
   return true
 }
