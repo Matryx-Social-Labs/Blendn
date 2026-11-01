@@ -396,6 +396,17 @@ describe('a page opened as its sheet closes waits for the sheet to go (SCRUM-994
     await tick(0)
     expect(open).toHaveBeenCalledTimes(1)
   })
+  it('a sheet re-opened before it went is staying: a page asked for over it opens within the wait, not never', async () => {
+    const open = jest.requireMock('expo-web-browser').openBrowserAsync as jest.Mock
+    open.mockClear()
+    const view = await render(<Sheet visible onClose={() => {}} title="Delete your account?" testID="del" />)
+    await view.rerender(<Sheet visible={false} onClose={() => {}} title="Delete your account?" testID="del" />)
+    await tick(100)
+    await view.rerender(<Sheet visible onClose={() => {}} title="Delete your account?" testID="del" />)
+    void openInApp(BLENDN_LINKS.deleteAccount)
+    await tick(MODAL_GONE_FALLBACK_MS + 50)
+    expect(open).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('a link closes a plain Modal through its own close (RC drive 6)', () => {

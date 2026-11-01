@@ -210,6 +210,8 @@ export function useTurnWatch(gate: TurnGate, modalUp: boolean, { animationMs = 0
   // Closed while it holds the screen: it is leaving, which a native screen opened now waits for (`holdTurnWhile`).
   useEffect(() => {
     if (queued && !wanted && holder === turn) leaving.add(turn)
+    // Wanted again before it went (re-opened mid-exit): it is staying, and what waits on it must not wait for its going.
+    else if (wanted) leaving.delete(turn)
   }, [queued, wanted, turn])
 
   // Not wanted and not drawn: the turn goes back once iOS says the Modal has gone (or at once if it never reached it).
@@ -303,9 +305,12 @@ export async function holdTurnWhile<T>(
       // Out of patience with a Modal that stays up: presented over it. Never over one that is leaving: React Native's
       // dismissal would close what was presented instead and leave the empty Modal on screen (SCRUM-994). Its own
       // MODAL_GONE_FALLBACK_MS releases the turn if iOS never says it has gone.
-      const timer = setTimeout(() => {
-        if (!(holder === waitingOn && leaving.has(waitingOn))) done()
-      }, waitMs)
+      // Checked again each `waitMs`, so a Modal re-opened mid-exit (no longer leaving) is presented over then.
+      const check = () => {
+        if (holder === waitingOn && leaving.has(waitingOn)) timer = setTimeout(check, waitMs)
+        else done()
+      }
+      let timer = setTimeout(check, waitMs)
       const off = subscribeTurns(() => {
         if (holder !== waitingOn) done()
       })
