@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { apiClient, AuthUser, nextSession, TokenStorage } from './apiClient'
 import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
+import type { DeletionProof } from './deletionProof'
 import { onCriticalPath } from './criticalPath'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { resetInboxBadge } from './inboxBadge'
@@ -16,7 +17,7 @@ import { resetRoomMembership } from './roomMembership'
 import { forgetRosters } from './rosterMemory'
 import { forgetHeldForm } from './heldSignInForm'
 import { forgetEventDetails } from './eventDetailCache'
-import { rateLimitedMessage } from './signInRefusal'
+import { DELETION_REFUSED, rateLimitedMessage } from './signInRefusal'
 import { Sentry } from './sentry'
 import { markSessionExpired, subscribeSessionExpired } from './sessionEvents'
 
@@ -682,15 +683,20 @@ export const refreshAuthUserOnForeground = async (now: number = Date.now()): Pro
   await refreshAuthUser()
 }
 
-export const deleteAccount = async (appleAuthorizationCode?: string): Promise<{ success: boolean; error?: string }> => {
+export const deleteAccount = async (proof: DeletionProof = {}): Promise<{ success: boolean; error?: string; errorCode?: string }> => {
   try {
     Logger.info('auth', 'Deleting account...')
 
-    const result = await apiClient.deleteAccount(appleAuthorizationCode)
+    const result = await apiClient.deleteAccount(proof)
 
     if (!result.success) {
-      Logger.error('auth', 'Account deletion failed', { error: result.error })
-      return { success: false, error: result.error || 'Failed to delete account' }
+      // A wrong password is somebody mistyping, not a defect; only the rest reaches Sentry.
+      if (result.errorCode && (Object.values(DELETION_REFUSED) as string[]).includes(result.errorCode)) {
+        Logger.warn('auth', 'Account deletion refused', { errorCode: result.errorCode })
+      } else {
+        Logger.error('auth', 'Account deletion failed', { error: result.error, errorCode: result.errorCode })
+      }
+      return { success: false, error: result.error || 'Failed to delete account', errorCode: result.errorCode }
     }
 
     await clearAuthState()

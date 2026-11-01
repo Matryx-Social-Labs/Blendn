@@ -1,4 +1,5 @@
 import { ScreenProfiler } from '../lib/perf'
+import { googleSignInConfig } from '../lib/googleConfig'
 import {
   GoogleSignin,
   statusCodes
@@ -83,11 +84,7 @@ function IndexInner() {
 
   useEffect(() => {
     // Configure Google Sign In once
-    GoogleSignin.configure({
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '',
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '',
-      offlineAccess: true,
-    })
+    GoogleSignin.configure(googleSignInConfig())
   }, [])
 
   useEffect(() => {
