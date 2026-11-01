@@ -153,7 +153,7 @@ describe('getCurrentLocation', () => {
 
   it('precise location off: its own tray with the path to the switch (R3-D4 4.7)', async () => {
     setOS('ios') // Precise Location is an iOS switch, and the path named is iOS's
-    loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', ios: { accuracy: 'reduced' } } as any)
+    loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true, ios: { accuracy: 'reduced' } } as any)
     const t = trays()
     expect(await getCurrentLocation(t)).toBeNull()
     expect(t.showTray).toHaveBeenCalledWith(
@@ -162,6 +162,21 @@ describe('getCurrentLocation', () => {
       expect.any(Array),
       { icon: 'locate-off', detail: 'Settings › Blend’n › Location › Precise Location' }
     )
+  })
+
+  it('Android approximate location is the same precise-location tray, not "GPS signal is weak" (SCRUM-634)', async () => {
+    loc.requestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true, android: { accuracy: 'coarse' } } as any)
+    loc.getCurrentPositionAsync.mockResolvedValue(fixWith(2000))
+    const t = trays()
+    expect(await getCurrentLocation(t)).toBeNull()
+    expect(t.showTray).toHaveBeenCalledTimes(1)
+    expect(t.showTray).toHaveBeenCalledWith(
+      'Precise location is off',
+      'Check-in needs your exact spot to confirm you’re inside. Turn on Precise Location for Blend’n.',
+      expect.any(Array),
+      { icon: 'locate-off', detail: 'App info › Permissions › Location › Use precise location' }
+    )
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
   })
 })
 
@@ -229,6 +244,13 @@ describe('a fix that is already there', () => {
     loc.getCurrentPositionAsync.mockResolvedValue(recentFix(9))
     expect(await locate(trays())).toEqual({ latitude: 12.97, longitude: 77.59, accuracy: 9 })
     expect(loc.getCurrentPositionAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('warming starts nothing on an approximate grant either: no fix it gives could pass the door (SCRUM-634)', async () => {
+    const { warmLocationFix } = fresh()
+    loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true, android: { accuracy: 'coarse' } } as any)
+    await warmLocationFix()
+    expect(loc.getCurrentPositionAsync).not.toHaveBeenCalled()
   })
 
   it('warming never asks for permission: without it, nothing starts', async () => {

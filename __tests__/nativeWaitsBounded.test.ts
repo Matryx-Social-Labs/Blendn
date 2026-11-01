@@ -47,11 +47,17 @@ describe('quietLocation gates the Pulse’s first load', () => {
   })
 
   it('a blocked last-known read after a granted permission does the same', async () => {
-    loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', ios: { accuracy: 'reduced' } } as never)
+    loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true, ios: { accuracy: 'reduced' } } as never)
     loc.getLastKnownPositionAsync.mockReturnValue(never())
     const pending = quietLocation()
     await jest.advanceTimersByTimeAsync(QUIET_LOCATION_MS)
     await expect(pending).resolves.toEqual({ coords: null, location: 'on' })
+  })
+
+  it('an Android approximate grant reads as approximate, as iOS reduced does (SCRUM-634)', async () => {
+    loc.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', granted: true, android: { accuracy: 'coarse' } } as never)
+    loc.getLastKnownPositionAsync.mockResolvedValue(null as never)
+    await expect(quietLocation()).resolves.toEqual({ coords: null, location: 'approximate' })
   })
 
   it('answers at once when the reads do', async () => {

@@ -6,6 +6,7 @@ import { markCheckIn, type FixSource } from './checkInTiming'
 import { validAccuracy } from './geo'
 import { H } from './haptics'
 import { Logger } from './logger'
+import { isPreciseLocationOff } from './preciseLocation'
 
 /**
  * The position a check-in is made from, and every way of not getting one.
@@ -156,7 +157,7 @@ let warming: { startedAt: number; fix: Promise<Location.LocationObject | null> }
 export async function warmLocationFix(): Promise<void> {
   if (warming && Date.now() - warming.startedAt < FRESH_FIX_MAX_AGE_MS) return
   const permission = await Location.getForegroundPermissionsAsync().catch(() => null)
-  if (permission?.status !== 'granted' || permission.ios?.accuracy === 'reduced') return
+  if (permission?.status !== 'granted' || isPreciseLocationOff(permission)) return
   warming = { startedAt: Date.now(), fix: firstGoodFix(CHECK_IN_MAX_ACCURACY_M).catch(() => null) }
 }
 
@@ -312,7 +313,7 @@ export async function getCurrentLocation({
     }
 
     const { status } = permission
-    if (status === 'granted' && permission.ios?.accuracy === 'reduced') {
+    if (isPreciseLocationOff(permission)) {
       Logger.warn('events', 'location:preciseOff')
       // R3-D4 4.7: the attempt failed, about you, so its one H.error.
       H.error()

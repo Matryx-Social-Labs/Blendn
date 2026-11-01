@@ -186,7 +186,7 @@ const commitment = (e: Pick<RoomButtonEvent, 'is_favorited' | 'rsvp_status'>): n
 
 /**
  * The phone's own fix, never rounded: it stays on the phone. `accuracy` is the radius in metres the OS gives it, and
- * `approximate` is iOS's reduced-accuracy grant (a fix good to kilometres): either makes it useless against a fence.
+ * `approximate` is iOS's reduced or Android's coarse grant (a fix good to kilometres): either makes it useless against a fence.
  */
 export type PreciseFix = { latitude: number; longitude: number; accuracy?: number | null; approximate?: boolean; timestamp?: number | null }
 
@@ -204,7 +204,7 @@ export const fixOf = (position: { coords: { latitude: number; longitude: number;
 
 /**
  * A fix is judged precise against a zone only when it is recent, says it is good to within the zone's own radius, and is
- * not iOS's approximate grant. Without a timestamp its age is unknown, and an unknown age is not trusted.
+ * not an approximate grant (iOS reduced, Android coarse). Without a timestamp its age is unknown, and an unknown age is not trusted.
  */
 const fixIsPrecise = (at: PreciseFix | null | undefined, radiusM: number, now: number): at is PreciseFix =>
   !!at &&
@@ -220,7 +220,7 @@ const fixIsPrecise = (at: PreciseFix | null | undefined, radiusM: number, now: n
  * How far the event's centre is, in metres: from the precise fix when it is good enough for this zone and the event has
  * real coordinates, else the server's `distance` (which was measured from a position rounded to ~110 m, so it can be
  * ~77 m out against a 100 m fence: SCRUM-744). A stale or coarse fix (older than `FIX_MAX_AGE_MS`, accuracy over the
- * radius, none given, or iOS's approximate grant) would be worse than the server's number, so it is not used. Null when neither is known.
+ * radius, none given, or an approximate grant) would be worse than the server's number, so it is not used. Null when neither is known.
  * (0, 0) is what a row with no coordinates was once written as.
  */
 function distanceMetresTo(e: RoomButtonEvent, at: PreciseFix | null | undefined, now: number): number | null {

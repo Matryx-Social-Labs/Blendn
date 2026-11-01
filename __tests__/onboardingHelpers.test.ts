@@ -1,5 +1,5 @@
 import { photoNote, readyPhotos, withMainFirst, type PhotoTile } from '../components/onboarding/photoTiles'
-import { isPreciseLocationOff } from '../components/onboarding/preciseLocation'
+import { isPreciseLocationOff } from '../lib/preciseLocation'
 import { bioWithPrompt, DEFAULT_MAX_EXPERTISE, promptFits, keepExpertise, stepPayload, toggleExpertise } from '../lib/onboarding'
 
 describe('bioWithPrompt', () => {
