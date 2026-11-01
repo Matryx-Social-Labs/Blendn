@@ -285,8 +285,14 @@ export default function TabLayout() {
       While Blend'n is open the tabs and the bar under it are hidden from
       VoiceOver and TalkBack: an overlay that only looks modal let a swipe
       walk straight past the room into "Pulse tab".
+
+      Never flattened (SCRUM-991): Fabric flattens a plain view away and keeps
+      one that hides its descendants, so each toggle re-parented every tab. The
+      home map's SurfaceView came off the window and MapLibre reset its renderer
+      on the main thread, waiting for the GL thread: an ANR on Android check-out.
     */}
     <View
+      collapsable={false}
       style={styles.tabs}
       accessibilityElementsHidden={blendnOpen}
       importantForAccessibility={blendnOpen ? 'no-hide-descendants' : 'auto'}

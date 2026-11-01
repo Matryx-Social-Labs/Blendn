@@ -268,3 +268,32 @@ it("the crew's ⋯ menu open, then a link: the menu closes, nothing on it runs, 
   expect(r.pathname()).toBe('/settings')
 })
 
+
+it('the tabs keep one native view while the Room opens and closes, so the home map is never detached (SCRUM-991)', async () => {
+  await mountApp()
+  // The host view that hides the tabs from a screen reader while the Room is open.
+  type Node = { props: Record<string, unknown>; children?: (Node | string)[] | null }
+  const tabsHost = () => {
+    const found: Node[] = []
+    const walk = (n: Node | string | null | undefined) => {
+      if (!n || typeof n === 'string') return
+      if (n.props.accessibilityElementsHidden !== undefined && n.props.importantForAccessibility !== undefined) found.push(n)
+      n.children?.forEach(walk)
+    }
+    const root = screen.toJSON() as unknown as Node | Node[] | null
+    ;(Array.isArray(root) ? root : [root]).forEach(walk)
+    return found
+  }
+  expect(tabsHost()).toHaveLength(1)
+  /*
+   * Fabric flattens a plain `{ flex: 1 }` view away and keeps one that hides its descendants, so toggling the hiding
+   * re-parented every tab: the map's SurfaceView came off the window and MapLibre reset its renderer on the main
+   * thread (the Android ANR on check-out). Unflattenable in both states, the children never move.
+   */
+  for (const open of [true, false, true, false]) {
+    await act(async () => (open ? openBlendn() : blendnClosed()))
+    const [host] = tabsHost()
+    expect(host.props.importantForAccessibility).toBe(open ? 'no-hide-descendants' : 'auto')
+    expect(host.props.collapsable).toBe(false)
+  }
+})
