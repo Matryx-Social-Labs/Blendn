@@ -19,7 +19,7 @@ import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
 import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isNetworkFailure, isTimeoutError, settleWithin } from './fetchTimeout'
-import type { CityOption } from './city'
+import type { CityCatalogue } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline, markTimeout } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
@@ -1176,6 +1176,8 @@ export interface ProfileFields {
     name?: string
     age?: number
     location?: string
+    /** Home, as a catalogue slug (travel P2); null when unset. */
+    homeCitySlug?: string | null
     bio?: string
     occupation?: string
     education?: string
@@ -1488,7 +1490,9 @@ class ApiClientClass {
   private buildRequestKey(endpoint: string, options: RequestInit, requireAuth: boolean): string {
     const method = (options.method || 'GET').toUpperCase()
     const body = options.body ? String(options.body) : ''
-    return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}`
+    // Headers an answer depends on (`X-Country`) keep two answers apart, in flight and in the cache.
+    const headers = options.headers ? JSON.stringify(options.headers) : ''
+    return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}${headers}`
   }
 
   private getCached<T>(key: string): { data: ApiResponse<T>; isFresh: boolean; tooOld: boolean } | null {
@@ -1621,9 +1625,9 @@ class ApiClientClass {
     }
   }
 
-  private refreshCacheInBackground<T>(endpoint: string, key: string, ttl: number) {
+  private refreshCacheInBackground<T>(endpoint: string, key: string, ttl: number, headers?: Record<string, string>) {
     const epoch = this.cacheEpoch
-    this.queuedRequest<T>(endpoint).then((result) => {
+    this.queuedRequest<T>(endpoint, headers ? { headers } : {}).then((result) => {
       if (result.success && epoch === this.cacheEpoch) {
         this.setCache(key, result, ttl)
       }
@@ -2075,18 +2079,19 @@ class ApiClientClass {
   }
 
   /** An authed GET, stale-while-revalidate: a stale entry is served while it refreshes. */
-  async cachedRequest<T>(endpoint: string, ttl: number): Promise<ApiResponse<T>> {
-    const key = this.buildRequestKey(endpoint, {}, true)
+  /** `headers` the answer depends on (the cities list on `X-Country`) are part of the key (`buildRequestKey`). */
+  async cachedRequest<T>(endpoint: string, ttl: number, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    const key = this.buildRequestKey(endpoint, headers ? { headers } : {}, true)
     const cached = this.getCached<T>(key)
 
     // Too old to show even for a moment: asked again and awaited, as if never cached (`SWR_STALE_LIMIT_MS`).
     if (cached && !cached.tooOld) {
-      if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl)
+      if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl, headers)
       return cached.data
     }
 
     const epoch = this.cacheEpoch
-    const result = await this.queuedRequest<T>(endpoint)
+    const result = await this.queuedRequest<T>(endpoint, headers ? { headers } : {})
     if (result.success && epoch === this.cacheEpoch) {
       this.setCache(key, result, ttl)
     }
@@ -2509,12 +2514,16 @@ class ApiClientClass {
    *
    * Cached for longer than the event list — a city gaining its first event is
    * not something the picker has to notice within seconds.
+   *
+   * `travel1` says this build knows "coming soon", so the server lists preview cities rather than leaving them out
+   * for builds that would open them empty. `country` is the phone's reverse-geocoded ISO code, sent as `X-Country`
+   * and stored nowhere; the answer's `device` says what the server made of it (travel plan §3.1 A1).
    */
-  async getEventCities(): Promise<ApiResponse<{ cities: CityOption[] }>> {
-    return this.cachedRequest<{ cities: CityOption[] }>(
-      '/api/mobile/events/cities',
-      5 * 60 * 1000
-    )
+  async getEventCities(country?: string | null): Promise<ApiResponse<CityCatalogue>> {
+    return this.cachedRequest<CityCatalogue>('/api/mobile/events/cities', 5 * 60 * 1000, {
+      'X-Client-Features': 'travel1',
+      ...(country ? { 'X-Country': country } : {}),
+    })
   }
 
   /**
@@ -2744,6 +2753,8 @@ class ApiClientClass {
       dateOfBirth?: string
 
       location?: string
+      /** The catalogue slug of home (travel P2); null clears it. A city the catalogue hides is a 400. */
+      homeCitySlug?: string | null
       bio?: string
       occupation?: string
       education?: string

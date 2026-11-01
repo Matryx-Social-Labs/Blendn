@@ -4,6 +4,7 @@ import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, Vie
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from './Button'
+import { IconButton } from './IconButton'
 import { MonoRun } from './MonoFamily'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
@@ -35,6 +36,8 @@ export type BannerProps = {
   action?: { label: string; onPress: () => void; icon?: IconName }
   /** The action is in flight: the button holds its flare and, after 300 ms, shows its spinner. */
   busy?: boolean
+  /** A closing ×, for a banner said once (the travel banner): the person may put it away; nothing else is undone. */
+  onDismiss?: () => void
   testID?: string
 }
 
@@ -52,7 +55,7 @@ export type BannerProps = {
  * (`useMinMeasure`: 360 dp at 1.3 drew "You're / anony / mous" beside Show who I am, RC drive 3). Increase Contrast adds the
  * 50% hairline.
  */
-export function Banner({ kind, text, mono, icon, action, busy = false, testID }: BannerProps) {
+export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss, testID }: BannerProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { fontScale } = useWindowDimensions()
@@ -113,6 +116,11 @@ export function Banner({ kind, text, mono, icon, action, busy = false, testID }:
           </View>
         ) : null}
       </View>
+      {onDismiss ? (
+        <View style={under ? styles.glyph : undefined}>
+          <IconButton icon="x" accessibilityLabel="Dismiss" onPress={onDismiss} testID={testID && `${testID}-dismiss`} />
+        </View>
+      ) : null}
     </View>
   )
 }
