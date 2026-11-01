@@ -9,6 +9,7 @@ import { liveWindow } from './eventSession'
 import { settleWithin } from './fetchTimeout'
 import { getDistanceKm, roundCoord } from './geo'
 import { Logger } from './logger'
+import { isPreciseLocationOff } from './preciseLocation'
 import { printable } from './pulseSections'
 import { tonightDeck } from './roomMoments'
 import { FIX_MAX_AGE_MS, FIX_REQUIRED_ACCURACY_M, fixOf, type PreciseFix } from './roomButton'
@@ -98,7 +99,7 @@ async function readQuietLocation(): Promise<{ coords: QuietCoords | null; locati
   try {
     const permission = await Location.getForegroundPermissionsAsync()
     if (permission.status !== 'granted') return { coords: null, location: 'off' }
-    const location = permission.ios?.accuracy === 'reduced' ? 'approximate' : 'on'
+    const location = isPreciseLocationOff(permission) ? 'approximate' : 'on'
     const last = await Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS, requiredAccuracy: FIX_REQUIRED_ACCURACY_M })
     return {
       coords: last?.coords
