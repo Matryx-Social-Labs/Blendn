@@ -10,7 +10,7 @@ import React from 'react'
 import { AccessibilityInfo, Text } from 'react-native'
 
 import { ChatDock } from '../components/blendn/ChatDock'
-import { RoomView, type RoomViewProps } from '../components/blendn/RoomView'
+import { ROOM_TOP_THRESHOLD, RoomView, type RoomViewProps } from '../components/blendn/RoomView'
 import type { RoomPerson } from '../lib/useRoom'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -22,8 +22,22 @@ jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
+const mockStage = { glassKey: 0 }
+const mockMaterialMounts = { count: 0 }
+jest.mock('../components/ui/Material', () => {
+  const { useEffect } = jest.requireActual('react')
+  const { View } = jest.requireActual('react-native')
+  return {
+    Material: ({ role: _role, ...rest }: Record<string, unknown>) => {
+      useEffect(() => {
+        mockMaterialMounts.count += 1
+      }, [])
+      return <View {...rest} />
+    },
+  }
+})
 jest.mock('../components/blendn/RoomStage', () => ({
-  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+  useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, glassKey: mockStage.glassKey }),
 }))
 let mockNetwork = 'online'
 jest.mock('../lib/networkStatus', () => ({ getNetworkState: () => mockNetwork, subscribeNetworkState: () => () => {} }))
@@ -67,8 +81,7 @@ const person = (id: string, o: Partial<RoomPerson> = {}): RoomPerson =>
     ...o,
   }) as RoomPerson
 
-const room = (props: Partial<RoomViewProps> = {}) =>
-  render(
+const roomElement = (props: Partial<RoomViewProps> = {}) => (
     <RoomView
       title="Vinyl Night"
       hereCount={14}
@@ -104,7 +117,8 @@ const room = (props: Partial<RoomViewProps> = {}) =>
       bottomInset={34}
       {...props}
     />
-  )
+)
+const room = (props: Partial<RoomViewProps> = {}) => render(roomElement(props))
 
 beforeEach(() => {
   mockNetwork = 'online'
@@ -268,5 +282,25 @@ describe('B8 (Prompt 10): the Room’s glass pills rise; the glass never fades',
     expect(src).toMatch(/withInitialValues\(\{ opacity: 1, transform: \[\{ translateY: GLASS_RISE \}\] \}\)/)
     expect(src).toContain('entering={reduceMotion ? undefined : glassRise} style={styles.topActions}')
     expect(src).toContain('<Animated.Text entering={glassContentsIn}')
+  })
+})
+
+describe('someone walking in while you sit at the top of the room (found in SCRUM-502)', () => {
+  it('the list stays at the top: a section arriving above never scrolls the title away', async () => {
+    await room()
+    expect(screen.getByTestId('room').props.maintainVisibleContentPosition).toEqual(
+      expect.objectContaining({ autoscrollToTopThreshold: ROOM_TOP_THRESHOLD })
+    )
+  })
+})
+
+describe('the dock glass (found in SCRUM-155: reopening the room lost it)', () => {
+  it('is rebuilt when the stage reports it settled, so a glass made under the page fade is not the one you see', async () => {
+    mockStage.glassKey = 0
+    const view = await room()
+    const before = mockMaterialMounts.count
+    mockStage.glassKey = 1
+    await view.rerender(roomElement())
+    expect(mockMaterialMounts.count).toBe(before + 1)
   })
 })

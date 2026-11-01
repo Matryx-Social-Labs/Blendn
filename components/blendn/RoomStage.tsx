@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useImperativeHandle, useMemo } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useState } from 'react'
 import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, {
@@ -56,6 +56,11 @@ interface StageApi {
   scrollY: SharedValue<number>
   /** Pass to the scroll view's `simultaneousHandlers` / a `Gesture.Native()`. */
   pan: GestureType
+  /**
+   * 1 once the page has finished fading in. A key for a glass view on the stage: iOS glass created under a parent's
+   * opacity 0 (a room reopened with its data cached) stays clear when the fade ends, so it is rebuilt then.
+   */
+  glassKey: number
 }
 
 const StageContext = createContext<StageApi | null>(null)
@@ -75,14 +80,14 @@ export const useStage = () => {
  * an iOS bounce on the same pull would move the content twice.
  */
 export function useStageScroll() {
-  const { scrollY, pan } = useStage()
+  const { scrollY, pan, glassKey } = useStage()
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
       scrollY.set(e.contentOffset.y)
     },
   })
   const native = useMemo(() => Gesture.Native().simultaneousWithExternalGesture(pan), [pan])
-  return { onScroll, native, scrollEventThrottle: 16 as const }
+  return { onScroll, native, scrollEventThrottle: 16 as const, glassKey }
 }
 
 /**
@@ -124,6 +129,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
   const cover = 2 * Math.hypot(Math.max(origin.x, width - origin.x), origin.y) + 4
   const startScale = SIZE.disc / cover
 
+  const [glassKey, setGlassKey] = useState(0)
   const open = useSharedValue(0)
   const drag = useSharedValue(0)
   const scrollY = useSharedValue(0)
@@ -133,7 +139,11 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
 
   useEffect(() => {
     // Never: Reduce Motion's own 200 ms fade is chosen here, and the system setting must not skip it (or its callback).
-    open.set(withTiming(1, { duration: reduceMotion ? FADE_MS : OPEN_MS, easing: EASE, reduceMotion: ReduceMotion.Never }))
+    open.set(
+      withTiming(1, { duration: reduceMotion ? FADE_MS : OPEN_MS, easing: EASE, reduceMotion: ReduceMotion.Never }, (done) => {
+        if (done) scheduleOnRN(setGlassKey, 1)
+      })
+    )
   }, [open, reduceMotion])
 
   const close = useCallback(() => {
@@ -202,7 +212,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
     opacity: interpolate(drag.get(), [0, height * 0.5], [1, 0], Extrapolation.CLAMP),
   }))
 
-  const api = useMemo<StageApi>(() => ({ scrollY, pan }), [scrollY, pan])
+  const api = useMemo<StageApi>(() => ({ scrollY, pan, glassKey }), [scrollY, pan, glassKey])
 
   return (
     <StageContext.Provider value={api}>

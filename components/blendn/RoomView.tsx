@@ -145,8 +145,11 @@ export type RoomViewProps = {
  * dock floating at the bottom. Alive through change, still otherwise: nothing
  * on the grid moves unless something happened.
  */
+/** How near the top still counts as at the top: an arrival above keeps you there (`autoscrollToTopThreshold`). */
+export const ROOM_TOP_THRESHOLD = SPACE.lg
+
 export function RoomView(props: RoomViewProps) {
-  const { onScroll, native, scrollEventThrottle } = useStageScroll()
+  const { onScroll, native, scrollEventThrottle, glassKey } = useStageScroll()
   const cell = useGridCell()
   const { view, people, enter, hidden = false } = props
   const entrance = useEntrance(enter, hidden)
@@ -218,8 +221,9 @@ export function RoomView(props: RoomViewProps) {
           scrollEventThrottle={scrollEventThrottle}
           bounces={false}
           showsVerticalScrollIndicator={false}
-          // A scrolled list keeps its place when a section above it arrives or goes: nothing jumps under a thumb.
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          // A scrolled list keeps its place when a section above it arrives or goes: nothing jumps under a thumb. At the top
+          // it stays at the top: anchored to the grid alone, an arrival's Meet next scrolled the title off the screen.
+          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: ROOM_TOP_THRESHOLD }}
           columnWrapperStyle={crewsView ? undefined : styles.gridRow}
           contentContainerStyle={{ paddingTop: props.topInset, paddingBottom: props.bottomInset + SPACE.xxxl * 2 }}
           ListHeaderComponent={header}
@@ -255,6 +259,7 @@ export function RoomView(props: RoomViewProps) {
         onOpen={props.onOpenChat}
         onOpenPerson={props.onOpenPerson}
         bottomInset={props.bottomInset}
+        glassKey={glassKey}
       />
     </View>
   )

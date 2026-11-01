@@ -69,6 +69,7 @@ export function ChatDock({
   onOpenPerson,
   bottomInset,
   history,
+  glassKey,
 }: {
   chatGroupId: string | null
   /** The room's first read of the chat (`useRoom`), so the dock opens on its real line rather than fetching after. */
@@ -79,6 +80,8 @@ export function ChatDock({
   onOpen: () => void
   onOpenPerson: (userId: string) => void
   bottomInset: number
+  /** A new value rebuilds the glass (`useStageScroll`): one made while the page fades in never draws. */
+  glassKey?: number
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -186,7 +189,7 @@ export function ChatDock({
           }}
           accessibilityLiveRegion="polite"
         >
-          <Material role="bar" style={[styles.dock, contrast && IC_HAIRLINE]}>
+          <Material key={glassKey} role="bar" style={[styles.dock, contrast && IC_HAIRLINE]}>
             <Icon name={state === 'failed' ? 'cloud-off' : 'message-circle'} size={ICON.nav} />
             <View style={styles.text}>
               <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
