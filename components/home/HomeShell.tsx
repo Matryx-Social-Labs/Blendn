@@ -175,8 +175,12 @@ export function HomeShell({
 
   return (
     <View style={styles.root} onLayout={onLayout}>
-      {/* A touch on the map (or through the top bar, which lets touches by) puts the search's keyboard away. */}
+      {/*
+        A touch on the map (or through the top bar, which lets touches by) puts the search's keyboard away.
+        Never flattened, whatever its handlers (SCRUM-991): the screen-reader toggle below would re-parent the map.
+      */}
       <View
+        collapsable={false}
         style={StyleSheet.absoluteFill}
         onTouchStart={dismissKeyboard}
         importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}

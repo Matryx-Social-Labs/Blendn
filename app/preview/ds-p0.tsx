@@ -399,7 +399,7 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
   tall: (close) => ({
     icon: 'flag',
     title: 'Report this message',
-    body: 'Tell us what’s wrong. A report goes to our team, and they are not told who sent it.',
+    body: 'Tell us what’s wrong. A report goes to our team; the person isn’t told who sent it.',
     detents: ['tall', 'medium'],
     actions: [
       { label: 'Harassment', kind: 'secondary', onPress: noop },

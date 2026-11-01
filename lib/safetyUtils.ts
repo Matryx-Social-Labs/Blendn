@@ -284,7 +284,7 @@ export const showUserSafetyActions = (
     kind: 'actions',
     hue: 'rose',
     title: userName,
-    message: 'Blocking hides you from each other. A report goes to our team, and they are not told who sent it.',
+    message: 'Blocking hides you from each other. A report goes to our team; the person isn’t told who sent it.',
     actions: [
       { label: 'Block', variant: 'destructive', next: () => blockStep(userName, userId, onBlock) },
       { label: 'Report', next: () => userReportStep(userName, userId, onReport) },
@@ -520,7 +520,7 @@ const boardReportFailed = (result: { error?: string; errorCode?: string }): Shee
 export const boardSafetySheet = (target: BoardTarget, name: string, onBlocked: () => void): Sheet => ({
   kind: 'actions',
   title: name,
-  message: 'Blocking hides you from each other here and everywhere else. A report goes to our team, and they are not told who sent it.',
+  message: 'Blocking hides you from each other here and everywhere else. A report goes to our team; the person isn’t told who sent it.',
   actions: [
     { label: 'Report', next: () => boardReportStep(target, name) },
     { label: 'Block', variant: 'destructive', next: () => boardBlockStep(target, name, onBlocked) },
