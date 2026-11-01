@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { Button } from './Button'
-import { IconButton } from './IconButton'
 import { MonoRun } from './MonoFamily'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useMinMeasure } from './shared'
 
 export type BannerKind = 'offline' | 'paused' | 'info' | 'visibility' | 'error'
 
@@ -71,6 +70,8 @@ export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss
   const [slotTop, setSlotTop] = useState(0)
   const under = !!action && (wrapped || (textHeight > 0 && slotTop >= textHeight))
   const line = TYPE.meta.lineHeight * fontScale
+  // The glyph and the × share one slot: on the first line when the action is under, centred in the row beside it.
+  const lineSlot = under ? [styles.glyph, { height: line }] : undefined
 
   // The mono part is read with the sentence the first time; a count that ticks beneath it (a wait: 0:52) never re-announces.
   const monoNow = useRef(mono)
@@ -87,7 +88,7 @@ export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss
       accessibilityRole={kind === 'error' ? 'alert' : undefined}
       style={[styles.banner, { backgroundColor: LOOK[kind].fill }, under && styles.top, contrast && IC_HAIRLINE]}
     >
-      <View testID={testID && `${testID}-glyph`} style={under ? [styles.glyph, { height: line }] : undefined}>
+      <View testID={testID && `${testID}-glyph`} style={lineSlot}>
         <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
       </View>
       {/* The sentence and its action in a row that wraps: the action goes under the sentence rather than squeeze it. */}
@@ -116,14 +117,20 @@ export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss
           </View>
         ) : null}
       </View>
+      {/* A bare glyph, as SearchField's clear: a banner is solid, and glass on it has nothing to refract (C20). */}
       {onDismiss ? (
-        <View style={under ? styles.glyph : undefined}>
-          <IconButton icon="x" accessibilityLabel="Dismiss" onPress={onDismiss} testID={testID && `${testID}-dismiss`} />
+        <View testID={testID && `${testID}-dismiss-slot`} style={lineSlot}>
+          <Pressable onPress={onDismiss} hitSlop={DISMISS_SLOP()} accessibilityRole="button" accessibilityLabel="Dismiss" testID={testID && `${testID}-dismiss`}>
+            <Icon name="x" size={ICON.control} color={COLOR.textSecondary} />
+          </Pressable>
         </View>
       ) : null}
     </View>
   )
 }
+
+/** Grows the 24 pt × to a full touch target (44 pt iOS, 48 dp Android). */
+const DISMISS_SLOP = () => (minTarget() - ICON.control) / 2
 
 export type Visibility = 'named' | 'anon' | 'hidden' | 'blocked'
 

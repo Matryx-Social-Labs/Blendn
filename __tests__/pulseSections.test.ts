@@ -416,3 +416,52 @@ describe('pickInterest (BAR-12)', () => {
     expect(pickInterest([], page('art'))).toBeUndefined()
   })
 })
+
+describe('the day is the browse city’s, not the phone’s (travel: a phone in India browsing Toronto)', () => {
+  const TORONTO = 'America/Toronto'
+  const phone = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'Asia/Kolkata'
+    refreshPhoneZone()
+  })
+  afterAll(() => {
+    process.env.TZ = phone
+    refreshPhoneZone()
+  })
+  // Sat 24 Oct 2026 08:00 in Bengaluru = Fri 23 Oct 22:30 in Toronto (EDT).
+  const now = Date.parse('2026-10-24T02:30:00.000Z')
+
+  it('the day seed is Toronto’s Friday, not Bengaluru’s Saturday', () => {
+    expect(seedDateOf(now)).toBe('2026-10-24')
+    expect(seedDateOf(now, TORONTO)).toBe('2026-10-23')
+  })
+
+  it('this weekend runs from Toronto’s Friday 17:00 to its Sunday 23:59', () => {
+    const w = weekendWindow(now, TORONTO)
+    expect(w.startDate).toBe('2026-10-23T21:00:00.000Z')
+    expect(w.endDate).toBe('2026-10-26T03:59:59.999Z')
+    expect(w.label).toBe('Sat 24 – Sun 25 Oct')
+    // The phone's own: Bengaluru's Friday 17:00, five and a half hours earlier.
+    expect(weekendWindow(now).startDate).toBe('2026-10-23T11:30:00.000Z')
+  })
+
+  it('Sunday 18:00 in Toronto skips the weekend, though it is already Monday in Bengaluru', () => {
+    const sundayEvening = Date.parse('2026-10-25T23:00:00.000Z')
+    expect(weekendWindow(sundayEvening, TORONTO).skip).toBe(true)
+    expect(weekendWindow(sundayEvening).skip).toBe(false)
+  })
+
+  it('an event with no zone of its own is Tonight by Toronto’s 06:00', () => {
+    const page: E[] = [
+      { id: 'eleven-pm', start_time: '2026-10-24T03:00:00.000Z', end_time: null, timezone: null },
+      // Sat 07:00 in Toronto: tomorrow there, though before Bengaluru's next 06:00.
+      { id: 'seven-am', start_time: '2026-10-24T11:00:00.000Z', end_time: null, timezone: null },
+    ]
+    const tonight = (timeZone?: string) =>
+      pulseSections<E>({ page, weekend: null, forYou: null, now, hasFix: false, seedDate: seedDateOf(now, timeZone), timeZone })
+        .find((s) => s.key === 'tonight')
+        ?.events.map((e) => e.id)
+    expect(tonight(TORONTO)).toEqual(['eleven-pm'])
+    expect(tonight()).toEqual(['eleven-pm', 'seven-am'])
+  })
+})

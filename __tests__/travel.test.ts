@@ -1,4 +1,5 @@
 import {
+  cityFor,
   awayNotice,
   browseCountry,
   cityDemand,
@@ -309,5 +310,25 @@ describe('parseStoredCity — v3 carries the slug and the banner it has shown', 
       travelSeen: true,
     })
     expect(parseStoredCity('{"city":"Toronto","source":"chosen","slug":7}')).toEqual({ city: 'Toronto', source: 'chosen' })
+  })
+})
+
+describe('cityFor: a row by its slug, a name only for an uncatalogued row (two Londons)', () => {
+  const rows: CityOption[] = [
+    { city: 'London', eventCount: 4, slug: 'london', country: 'GB' },
+    { city: 'London', eventCount: 1, slug: 'london-on', country: 'CA' },
+    { city: 'Hosur', eventCount: 2, slug: null, country: null },
+  ]
+  it('a slug finds its own row, never the first of that name', () => {
+    expect(cityFor(rows, { city: 'London', slug: 'london-on' })?.country).toBe('CA')
+    expect(cityFor(rows, { city: 'London', slug: 'london' })?.country).toBe('GB')
+  })
+  it('a slug the catalogue no longer lists finds nothing, rather than a namesake', () => {
+    expect(cityFor(rows, { city: 'London', slug: 'london-uk-old' })).toBeNull()
+  })
+  it('without a slug: an uncatalogued row by name, else the first by name (a record from an older build)', () => {
+    expect(cityFor(rows, { city: 'hosur' })?.city).toBe('Hosur')
+    expect(cityFor(rows, { city: 'London', slug: null })?.slug).toBe('london')
+    expect(cityFor(rows, null)).toBeNull()
   })
 })

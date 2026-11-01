@@ -100,7 +100,7 @@ describe('the city picker', () => {
     const onChoose = jest.fn()
     await render(picker({ onChoose }))
     await fireEvent.press(screen.getByTestId('city-row-Mumbai'))
-    expect(onChoose).toHaveBeenCalledWith('Mumbai', false)
+    expect(onChoose).toHaveBeenCalledWith({ city: 'Mumbai', slug: null }, false)
     expect(select).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByTestId('city-row-Bengaluru'))
     expect(select).toHaveBeenCalledTimes(1)
@@ -112,11 +112,30 @@ describe('the city picker', () => {
     const onClose = jest.fn()
     const view = await render(picker({ onChoose, onLocate, onClose, deviceCity: 'Mysuru' }))
     await fireEvent.press(screen.getByRole('button', { name: 'Use my current location, Mysuru' }))
-    expect(onChoose).toHaveBeenCalledWith('Mysuru', true)
+    expect(onChoose).toHaveBeenCalledWith({ city: 'Mysuru', slug: null }, true)
     await view.rerender(picker({ onChoose, onLocate, onClose, deviceCity: null }))
     await fireEvent.press(screen.getByRole('button', { name: 'Use my current location' }))
     expect(onLocate).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('two cities of one name in two countries are two rows: the chosen one by its slug, the other a real switch', async () => {
+    const select = jest.spyOn(H, 'select').mockImplementation(() => {})
+    const onChoose = jest.fn()
+    const cities: CityOption[] = [
+      { city: 'London', eventCount: 4, slug: 'london', country: 'GB', access: 'full' },
+      { city: 'London', eventCount: 1, slug: 'london-on', country: 'CA', access: 'full' },
+    ]
+    const countries = [
+      { code: 'GB', name: 'United Kingdom', defaultCitySlug: 'london' },
+      { code: 'CA', name: 'Canada', defaultCitySlug: 'london-on' },
+    ]
+    await render(picker({ cities, countries, selectedCity: 'London', selectedSlug: 'london-on', onChoose }))
+    expect(screen.getByTestId('city-row-london-on').props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByTestId('city-row-london').props.accessibilityState).toMatchObject({ selected: false })
+    await fireEvent.press(screen.getByTestId('city-row-london'))
+    expect(onChoose).toHaveBeenCalledWith({ city: 'London', slug: 'london' }, false)
+    expect(select).toHaveBeenCalledTimes(1)
   })
 
   it('no cities at all: the honest line, with the locate row still there', async () => {

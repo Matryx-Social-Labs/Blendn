@@ -4,7 +4,7 @@ import { SettingsRow } from '../ds/SettingsRow'
 import { CityPicker } from '../pulse/CityPicker'
 import { useToast } from '../Toast'
 import { apiClient } from '../../lib/apiClient'
-import { cityNamed, homeCity, type CatalogueCountry, type CityOption } from '../../lib/city'
+import { cityFor, homeCity, type CatalogueCountry, type CityOption, type CityRef } from '../../lib/city'
 import { saveHomeCity, useHomeCitySlug } from '../../lib/homeCity'
 
 /**
@@ -36,8 +36,8 @@ export function HomeCityRow({ userId }: { userId: string }) {
   const choosable = useMemo(() => catalogue.cities.filter((c) => !!c.slug), [catalogue.cities])
   const home = homeCity({ homeCitySlug: slug, available: choosable })
 
-  const choose = (city: string) => {
-    const option = cityNamed(choosable, city)
+  const choose = (choice: CityRef) => {
+    const option = cityFor(choosable, choice)
     setOpen(false)
     if (!option?.slug || option.slug === slug) return
     void saveHomeCity(userId, option.slug).then((saved) => {
@@ -64,6 +64,7 @@ export function HomeCityRow({ userId }: { userId: string }) {
         countries={catalogue.countries}
         homeCountry={home?.country ?? null}
         selectedCity={home?.city ?? null}
+        selectedSlug={home?.slug ?? null}
         deviceCity={null}
         onChoose={choose}
         onLocate={() => {}}

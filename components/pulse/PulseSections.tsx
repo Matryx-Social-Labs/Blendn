@@ -381,6 +381,7 @@ export const SectionStack = memo(function SectionStack({
   pending,
   featuredLayout,
   askForLocation,
+  timeZone,
 }: {
   sections: PulseSection<BlendnEvent>[]
   now: number
@@ -391,10 +392,12 @@ export const SectionStack = memo(function SectionStack({
   pending: RefObject<boolean>
   featuredLayout: (solo: boolean) => { width: number; inset: number }
   askForLocation: { denied: boolean; onAsk: () => void } | null
+  /** The browse city's zone: "This weekend" is that city's. */
+  timeZone?: string
 }) {
   const first = sections[0]?.key
   const at = (key: PulseSectionKey) => (first === key ? coachRef : undefined)
-  const weekend = weekendWindow(now)
+  const weekend = weekendWindow(now, timeZone)
   const nodes: ReactNode[] = []
   let index = 0
   const push = (key: string, node: ReactNode) =>

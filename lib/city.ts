@@ -118,6 +118,24 @@ export function cityNamed(available: readonly CityOption[], city: string | null 
   return available.find((option) => sameCity(option.city, city)) ?? null
 }
 
+/** A city as a choice or a record names it: the catalogue's slug when it has one, else just the name. */
+export type CityRef = { city: string; slug?: string | null }
+
+/**
+ * The row a choice or a record means. By slug when it carries one: two countries may share a name (London, and London,
+ * Ontario), and the first of the name would be the wrong one. A name alone is an uncatalogued (Elsewhere) row's, then,
+ * for a record an older build wrote, the first of that name.
+ */
+export function cityFor(available: readonly CityOption[], ref: CityRef | null | undefined): CityOption | null {
+  if (!ref) return null
+  if (ref.slug) return cityBySlug(available, ref.slug)
+  return available.find((option) => !option.slug && sameCity(option.city, ref.city)) ?? cityNamed(available, ref.city)
+}
+
+/** Whether a row is the one a ref names: by slug when the ref has one. */
+export const isCityRow = (option: CityOption, ref: CityRef | null | undefined): boolean =>
+  !!ref && (ref.slug ? option.slug === ref.slug : sameCity(option.city, ref.city))
+
 const inBox = (b: CityBounds, p: Point) => p.latitude >= b.minLat && p.latitude <= b.maxLat && p.longitude >= b.minLon && p.longitude <= b.maxLon
 const areaOf = (b: CityBounds) => (b.maxLat - b.minLat) * (b.maxLon - b.minLon)
 
