@@ -629,6 +629,11 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     afterCard.current = next
     setOpen(null)
   }
+  // A match or a Blend made from the card is the news: the card makes way, and the moment plays once it has gone (iOS holds one Modal at a time).
+  const momentLanded = !!room.match || !!blend
+  useEffect(() => {
+    if (momentLanded) setOpen(null)
+  }, [momentLanded])
   const cardGone = () => {
     setShownCard(null)
     const next = afterCard.current
