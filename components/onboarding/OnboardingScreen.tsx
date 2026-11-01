@@ -190,6 +190,6 @@ const styles = StyleSheet.create({
   body: { gap: SPACE.xl },
   note: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: SPACE.xs, paddingHorizontal: SPACE.sm },
   noteText: { color: COLOR.textSecondary, textAlign: 'center', flexShrink: 1 },
-  // design-exception: the frame's step label is Geist Mono 13 with 0.3 tracking
-  stepLabel: { fontFamily: FONT_FAMILY.mono[500], fontSize: 13, lineHeight: 16, letterSpacing: 0.3, fontVariant: ['tabular-nums'] },
+  // The frame's mono step label at caption's 12/16 (SCRUM-865: it was a raw 13).
+  stepLabel: { ...font('caption', false, FONT_FAMILY.mono[500]), fontVariant: ['tabular-nums'] },
 })

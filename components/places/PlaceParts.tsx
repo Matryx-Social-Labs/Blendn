@@ -7,7 +7,7 @@ import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
 import { Icon } from '../ui/Icon'
 import type { VenueListItem } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type PlaceTypeFilter } from '../../lib/placesPane'
 import { openPlace } from './openPlace'
@@ -25,12 +25,12 @@ function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem
   // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
   const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
   return (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary, small && styles.quietMeta]}>
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
       {lead}
       {distance ? (
         <>
           {lead ? ' · ' : ''}
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular, small && styles.quietMono]}>
+          <Text style={[font(small ? 'caption' : 'meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
             <MonoRun text={distance} />
           </Text>
         </>
@@ -105,7 +105,7 @@ export const QuietRow = memo(function QuietRow({ venue, n, label, testID }: { ve
       {n !== undefined ? <Badge text={n} size={22} /> : null}
       <VenuePlate type={plateFor(venue.venueType)} size={QUIET_THUMB} radius={QUIET_THUMB_RADIUS} />
       <View style={styles.rowText}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.quietName, styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink]}>
           {venue.name}
         </Text>
         <TypeLine venue={venue} area small />
@@ -147,12 +147,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
   },
   failed: { marginHorizontal: SPACE.gutter, marginBottom: SPACE.md },
-  // design-exception: places.js quiet rows are 15/20 with a 13 meta and a 12 mono — between the type roles
-  quietName: { fontSize: 15, lineHeight: 20 },
-  // design-exception: places.js quiet rows meta 13/20
-  quietMeta: { fontSize: 13 },
-  // design-exception: places.js quiet rows distance 12 mono
-  quietMono: { fontSize: 12 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   tertiary: { color: COLOR.textTertiary },
