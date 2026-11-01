@@ -408,7 +408,7 @@ describe('leaving, removing and reporting', () => {
     expect(crews.leave).toHaveBeenCalledWith('c2', 'rh_rohan')
   })
 
-  it('the ⋯ menu reports the name or bio, with reasons in the design’s words, and tells nobody', async () => {
+  it('the ⋯ menu reports the name or bio, with reasons in the design’s words, and promises only that the crew is not told (SCRUM-987)', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('member') })
     crews.report.mockResolvedValue({ success: true, data: { reported: true } })
     await render(<CrewScreen />)
@@ -418,6 +418,8 @@ describe('leaving, removing and reporting', () => {
     const sheet = sheetOf<ReasonSheet>()
     expect(sheet.kind).toBe('reasons')
     expect(sheet.title).toBe('Report Nebula')
+    // Our moderators do see who reported (the Reports queue names them); only the crew is never told.
+    expect(sheet.message).toBe('Only the crew’s name and bio are reported. The crew isn’t told who sent it.')
     expect(sheet.reasons.map((r) => r.label)).toEqual([
       'Hateful or abusive name',
       'Contact details or a handle',
@@ -425,7 +427,7 @@ describe('leaving, removing and reporting', () => {
       'Spam or a business',
       'Something else',
     ])
-    expect(await sheet.run('spam')).toEqual({ ok: true, toast: 'Reported. Thanks — nobody is told it was you.' })
+    expect(await sheet.run('spam')).toEqual({ ok: true, toast: 'Reported. Thanks — the crew isn’t told it was you.' })
     expect(crews.report).toHaveBeenCalledWith('c2', { reason: 'spam' })
   })
 

@@ -894,7 +894,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       kind: 'actions',
       hue: 'rose',
       title: name,
-      message: 'Blocking stops them asking again and hides you from each other. A report goes to our team, and they are not told who sent it.',
+      message: 'Blocking stops them asking again and hides you from each other. A report goes to our team; the person isn’t told who sent it.',
       actions: [
         {
           label: 'Block',

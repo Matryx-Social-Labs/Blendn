@@ -56,7 +56,7 @@ const SKELETON_LINE_H = 17
 const SKELETON_ROW = 56
 const LEAVE_HEIGHT = 56
 const HIDDEN_LINE = 'This crew is hidden while we look at a report. Only its members can see it.'
-const REPORT_SENT = 'Reported. Thanks — nobody is told it was you.'
+const REPORT_SENT = 'Reported. Thanks — the crew isn’t told it was you.'
 
 /**
  * One of your crews (Flow 10 · 10.4): the emblem, name, line and tags; the
@@ -254,7 +254,7 @@ function CrewScreenContent() {
       kind: 'reasons',
       hue: 'rose',
       title: `Report ${crew.name}`,
-      message: 'Only the crew’s name and bio are reported. Our team is not told who sent it, and the crew isn’t either.',
+      message: 'Only the crew’s name and bio are reported. The crew isn’t told who sent it.',
       reasons: CREW_REPORT_REASONS.map((r) => ({ value: r.value, label: r.label })),
       submitLabel: 'Send report',
       run: async (reason, note) => {
