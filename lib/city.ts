@@ -47,6 +47,8 @@ export interface StoredCity {
   slug?: string
   /** The travel banner has been dismissed for this city; a new choice writes a new record without it, so it shows once per switch. */
   travelSeen?: boolean
+  /** Where the map opens for it before the catalogue has loaded (or when it fails): kept from the catalogue's row. */
+  centre?: { latitude: number; longitude: number }
 }
 
 export interface CityBounds {
@@ -157,8 +159,14 @@ export function sameCity(a: string | null | undefined, b: string | null | undefi
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
-const inferredAt = (option: CityOption): StoredCity =>
-  option.slug ? { city: option.city, source: 'inferred', slug: option.slug } : { city: option.city, source: 'inferred' }
+/** The record for a city, as the catalogue lists it: its slug and centre carried, so the next launch need not guess again. */
+export const storedAt = (option: CityOption, source: CitySource): StoredCity => ({
+  city: option.city,
+  source,
+  ...(option.slug ? { slug: option.slug } : {}),
+  ...(option.centre ? { centre: option.centre } : {}),
+})
+const inferredAt = (option: CityOption): StoredCity => storedAt(option, 'inferred')
 
 /**
  * Which city to browse on this launch.
@@ -344,7 +352,8 @@ export function parseStoredCity(raw: string | null | undefined): StoredCity | nu
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as { city?: unknown; source?: unknown; slug?: unknown; travelSeen?: unknown }
+    const parsed = JSON.parse(trimmed) as { city?: unknown; source?: unknown; slug?: unknown; travelSeen?: unknown; centre?: { latitude?: unknown; longitude?: unknown } }
+    const centre = parsed.centre && typeof parsed.centre.latitude === 'number' && typeof parsed.centre.longitude === 'number' ? { latitude: parsed.centre.latitude, longitude: parsed.centre.longitude } : null
     const city = typeof parsed.city === 'string' ? parsed.city.trim() : ''
     if (!city) return null
     return {
@@ -352,6 +361,7 @@ export function parseStoredCity(raw: string | null | undefined): StoredCity | nu
       source: parsed.source === 'inferred' ? 'inferred' : 'chosen',
       ...(typeof parsed.slug === 'string' && parsed.slug ? { slug: parsed.slug } : {}),
       ...(parsed.travelSeen === true ? { travelSeen: true } : {}),
+      ...(centre ? { centre } : {}),
     }
   } catch {
     // Corrupt entry. A fresh inference beats throwing on the launch path.
@@ -409,7 +419,8 @@ export function isVisiting(input: { homeCountry: string | null; browseCountry: s
 export function homeAfterChoice(input: { homeCitySlug: string | null | undefined; chosen: CityOption | null; deviceCountry: string | null }): string | null {
   const { homeCitySlug, chosen, deviceCountry } = input
   if (homeCitySlug || !chosen?.slug || !chosen.country || !opens(chosen)) return null
-  if (deviceCountry && deviceCountry !== chosen.country) return null
+  // Not knowing where the phone is (sharing off, the geocode not back) is not knowing: Settings is the way to set it.
+  if (!deviceCountry || deviceCountry !== chosen.country) return null
   return chosen.slug
 }
 
@@ -437,10 +448,11 @@ export function travelBanner(input: {
  * Who is waiting where (`POST /events/demand`): the place an away phone is in, or a coming-soon city being browsed
  * (a Toronto phone on Toronto's coming-soon screen, or a tap on the row). Null for a served city.
  */
-export function cityDemand(input: { away: AwayNotice | null; selected: CityOption | null }): { city: string; country?: string } | null {
-  const { away, selected } = input
-  if (selected && !opens(selected)) return selected.country ? { city: selected.city, country: selected.country } : { city: selected.city }
-  return away ? { city: away.deviceCity } : null
+export function cityDemand(input: { away: AwayNotice | null; selected: CityOption | null; deviceCountry?: string | null }): { city: string; country?: string } | null {
+  const { away, selected, deviceCountry } = input
+  const withCountry = (city: string, country: string | null | undefined) => (country ? { city, country } : { city })
+  if (selected && !opens(selected)) return withCountry(selected.city, selected.country)
+  return away ? withCountry(away.deviceCity, deviceCountry) : null
 }
 
 export interface PickerGroup {

@@ -50,7 +50,7 @@ export function HomeCityRow({ userId }: { userId: string }) {
       <SettingsRow
         icon="map-pin"
         title="Home city"
-        hint={home?.city ?? (slug === undefined ? undefined : 'Not set')}
+        hint={home?.city ?? (slug === null ? 'Not set' : undefined)}
         trail="chevron"
         onPress={() => setOpen(true)}
         testID="settings-home-city"

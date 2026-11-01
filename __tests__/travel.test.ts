@@ -13,6 +13,7 @@ import {
   pickerGroups,
   resolveBrowseCity,
   shouldOfferSwitch,
+  storedAt,
   travelBanner,
   type CityCatalogue,
   type CityOption,
@@ -31,7 +32,7 @@ const MYSURU = row({ city: 'Mysuru', slug: 'mysuru', country: 'IN', timezone: 'A
 const BENGALURU = row({ city: 'Bengaluru', slug: 'bengaluru', country: 'IN', timezone: 'Asia/Kolkata', eventCount: 48, placeCount: 1542, isDefault: true, bounds: box(12.83, 77.45, 13.14, 77.78) })
 const MUMBAI = row({ city: 'Mumbai', slug: 'mumbai', country: 'IN', timezone: 'Asia/Kolkata', placeCount: 1206, bounds: box(18.89, 72.77, 19.28, 73.03) })
 const THANE = row({ city: 'Thane', slug: 'thane', country: 'IN', timezone: 'Asia/Kolkata', placeCount: 115, bounds: box(19.15, 72.93, 19.32, 73.1) })
-const TORONTO = row({ city: 'Toronto', slug: 'toronto', country: 'CA', timezone: 'America/Toronto', access: 'comingSoon', launchState: 'preview', isDefault: true, bounds: box(43.58, -79.64, 43.86, -79.11) })
+const TORONTO = row({ city: 'Toronto', slug: 'toronto', country: 'CA', timezone: 'America/Toronto', access: 'comingSoon', launchState: 'preview', bounds: box(43.58, -79.64, 43.86, -79.11) })
 const VANCOUVER = row({ city: 'Vancouver', slug: 'vancouver', country: 'CA', timezone: 'America/Vancouver', access: 'comingSoon', launchState: 'preview', bounds: box(49.2, -123.27, 49.32, -123.02) })
 const ELSEWHERE = row({ city: 'Hosur', slug: null, country: null, timezone: null, eventCount: 2 })
 
@@ -79,8 +80,9 @@ describe('resolveBrowseCity — the first launch, by where the phone is (SCRUM-9
   })
 
   it('an Indian device outside every box opens the country’s city the server names, not the busiest row', () => {
-    const c = catalogue({ country: 'IN', access: 'full', citySlug: 'bengaluru' })
-    expect(resolveBrowseCity({ stored: null, deviceCity: 'Panaji', point: AT.goa, ...scope(c) })?.city).toBe('Bengaluru')
+    // citySlug differs from the default here, so the device branch is what answers, not the fallback.
+    const c = catalogue({ country: 'IN', access: 'full', citySlug: 'mumbai' })
+    expect(resolveBrowseCity({ stored: null, deviceCity: 'Panaji', point: AT.goa, ...scope(c) })?.city).toBe('Mumbai')
   })
 
   it('a Toronto device while Canada is in preview opens Toronto’s coming-soon city, not Mysuru', () => {
@@ -176,7 +178,7 @@ describe('cityDemand — who is waiting where', () => {
   })
 
   it('records where an away phone is', () => {
-    expect(cityDemand({ away: { kind: 'notThere', deviceCity: 'Saarbrücken', selected: 'Bengaluru' }, selected: BENGALURU })).toEqual({ city: 'Saarbrücken' })
+    expect(cityDemand({ away: { kind: 'notThere', deviceCity: 'Saarbrücken', selected: 'Bengaluru' }, selected: BENGALURU, deviceCountry: 'DE' })).toEqual({ city: 'Saarbrücken', country: 'DE' })
   })
 
   it('records nothing for a served city', () => {
@@ -215,7 +217,8 @@ describe('home, browse country, travelling and visiting (plan §1.1)', () => {
 
   it('the first choice becomes home, unless the phone is in another country', () => {
     expect(homeAfterChoice({ homeCitySlug: null, chosen: BENGALURU, deviceCountry: 'IN' })).toBe('bengaluru')
-    expect(homeAfterChoice({ homeCitySlug: null, chosen: BENGALURU, deviceCountry: null })).toBe('bengaluru')
+    // Sharing off or the geocode not back: unknown is not India. Settings sets it instead.
+    expect(homeAfterChoice({ homeCitySlug: null, chosen: BENGALURU, deviceCountry: null })).toBeNull()
     // From Germany we do not know their home: picking Bengaluru there must not make every later visit "travel".
     expect(homeAfterChoice({ homeCitySlug: null, chosen: BENGALURU, deviceCountry: 'DE' })).toBeNull()
     // A coming-soon or Elsewhere city is not a home.
@@ -286,6 +289,14 @@ describe('pickerGroups — by country, home first (plan §4.1)', () => {
   it('an older server (no countries) is one unlabelled group, as before', () => {
     const old = CITIES.map(({ city, eventCount }) => ({ city, eventCount }))
     expect(pickerGroups({ cities: old, countries: [], homeCountry: null, deviceCountry: null, query: '' })).toEqual([{ key: 'all', label: null, cities: old }])
+  })
+})
+
+describe('storedAt — a guess keeps its slug and centre, so the next launch keeps it', () => {
+  it('a guess moved by the geocode reads back as itself, not as an old build’s slugless guess', () => {
+    const stored = { ...MUMBAI, centre: { latitude: 19.07, longitude: 72.87 } }
+    const back = parseStoredCity(JSON.stringify(storedAt(stored, 'inferred')))
+    expect(back).toEqual({ city: 'Mumbai', source: 'inferred', slug: 'mumbai', centre: { latitude: 19.07, longitude: 72.87 } })
   })
 })
 
