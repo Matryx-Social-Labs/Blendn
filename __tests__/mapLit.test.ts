@@ -275,10 +275,13 @@ describe('the ground glow', () => {
   })
 
   it('is the theme radius on the ground, and stops growing past its zoom cap', () => {
-    const [, , , z0, px0, z1, px1] = glowRadius()
-    const mpp = (z: number) => (40_075_016.686 * Math.cos((MAP_THEME.glow.referenceLatitude * Math.PI) / 180)) / (512 * 2 ** z)
+    // Toronto, not Bengaluru: a metre is fewer pixels at 13° than at 43.7°, so a fixed 13 drew Toronto's glows too big.
+    const TORONTO = 43.65
+    const [, , , z0, px0, z1, px1] = glowRadius(TORONTO)
+    const mpp = (z: number) => (40_075_016.686 * Math.cos((TORONTO * Math.PI) / 180)) / (512 * 2 ** z)
     expect(px0 * mpp(z0)).toBeCloseTo(MAP_THEME.glow.radiusM, 6)
     expect(px1 * mpp(z1)).toBeCloseTo(MAP_THEME.glow.radiusM, 6)
+    expect(glowRadius(TORONTO)[4]).toBeGreaterThan(glowRadius(13)[4])
     expect(z1).toBe(MAP_THEME.glow.maxZoom)
     expect(MAP_THEME.glow.maxZoom).toBeLessThanOrEqual(18)
   })
@@ -306,7 +309,7 @@ describe('chips above the roofs', () => {
     refreshPhoneZone()
     try {
       const now = Date.UTC(2026, 9, 9, 6, 0)
-      expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM IST')
+      expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'Asia/Kolkata' }, now)).toBe('Fri · 8 PM IST')
     } finally {
       process.env.TZ = 'Asia/Kolkata'
       refreshPhoneZone()
@@ -332,7 +335,9 @@ describe('chips above the roofs', () => {
     const now = Date.UTC(2026, 9, 9, 6, 0) // Fri 9 Oct, 11:30 IST
     expect(chipLine({ kind: 'event', live: true, startsAt: null, bucket: null }, now)).toBe('LIVE ●')
     // Fri 9 Oct 14:30Z is 8 PM in India, whatever the phone's zone.
-    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null }, now)).toBe('Fri · 8 PM')
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'Asia/Kolkata' }, now)).toBe('Fri · 8 PM')
+    // The event's own zone, not India's for everything (SCRUM-998): Toronto's 10:30 AM, named on a phone in India.
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'America/Toronto' }, now)).toBe('Fri · 10:30 AM ET')
     expect(chipLine({ kind: 'event', live: false, startsAt: 'garbage', bucket: null }, now)).toBe('')
     // Past six days, the date; never the year, even across New Year (review L6): the line is a pin's width.
     expect(chipLine({ kind: 'event', live: false, startsAt: '2027-01-02T14:30:00Z', bucket: null }, Date.UTC(2026, 11, 22, 6))).toBe('Sat 2 Jan · 8 PM')

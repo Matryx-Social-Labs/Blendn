@@ -123,7 +123,7 @@ import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
-import { eventClock } from '../../lib/time'
+import { eventClock, nameZones } from '../../lib/time'
 
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
@@ -1114,6 +1114,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     if (selection?.source === 'inferred') void storeCity(selection)
   }, [selection])
 
+  // Every time on every screen names its zone as the catalogue says it ("Toronto time", "India time"): `lib/time` nameZones.
+  useEffect(() => nameZones(cityOptions, catalogue.countries ?? []), [cityOptions, catalogue.countries])
+
   // Once the phone's country is known, the list again with `X-Country`: the answer's `device` says whether we serve it.
   useEffect(() => {
     if (!deviceCountry) return
@@ -1533,12 +1536,13 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         cityCentre: browseOption?.centre ?? null,
         travelling,
         preview: browseOption?.launchState === 'preview' && browseOption.access !== 'comingSoon',
+        defaultCentre: cityBySlug(cityOptions, catalogue.defaultCitySlug)?.centre ?? null,
         cityPick,
         requestLocation: requestLocationIfNeeded,
         openCityPicker: () => setCityPickerOpen(true),
         peekLine: isNarrowed ? null : pulsePeekLine(sections),
       }),
-    [onBrowse, selectedCity, userLocation, cityResolved, browseOption, travelling, cityPick, requestLocationIfNeeded, isNarrowed, sections]
+    [onBrowse, selectedCity, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, isNarrowed, sections]
   )
 
   const firstSection = sections[0]?.key ?? null

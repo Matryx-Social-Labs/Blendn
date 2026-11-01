@@ -214,11 +214,12 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     const radii = [...layers.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
     expect(radii.length).toBe(3)
     for (const r of radii) {
-      expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'GLOW_RADIUS']).toContain(r)
+      expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'radius']).toContain(r)
     }
-    expect(layers).toMatch(/const GLOW_RADIUS = glowRadius\(\)/)
+    // At the browsed city's latitude (SCRUM-998), and nothing a place carries.
+    expect(layers).toMatch(/const radius = useMemo\(\(\) => glowRadius\(latitude\), \[latitude\]\)/)
     // The ground glow is the theme's metres at every zoom, read off nothing.
-    expect(JSON.stringify(glowRadius())).not.toMatch(/get|feature|properties/)
+    expect(JSON.stringify(glowRadius(13))).not.toMatch(/get|feature|properties/)
   })
 
   it('lights only public shapes: the building layer the basemap drew, or the pin', () => {
@@ -471,7 +472,7 @@ describe('your position sits in the middle of the map you can see (owner, TestFl
     // Keyed on the settled snap's top, not the animated drawer value.
     expect(code('components/home/HomeShell.tsx')).toMatch(/drawerSnapTop=\{points\[snap\]\}/)
     // The map waits for its own height, so the first frame is centred too.
-    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null && mapPainted \? \(\s*<HomeMap/)
+    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null && mapPainted && fallbackCentre \? \(\s*<HomeMap/)
   })
 })
 
@@ -547,7 +548,7 @@ describe('"my location"', () => {
     // The Pulse hands over its own location flow; it never grows a second one.
     expect(code('app/(tabs)/events.tsx')).toMatch(/requestLocation: requestLocationIfNeeded/)
     const pulse = code('app/(tabs)/events.tsx')
-    expect(pulse).toMatch(/setSelection\(\{ city, source: 'chosen' \}\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
+    expect(pulse).toMatch(/setSelection\(next\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
     // Where you stand is a choice of you, not of a city centre (review L5); the picker's rows are picks.
     expect(pulse).toMatch(/onSwitch=\{\(city\) => chooseCity\(city, true\)\}/)
     expect(pulse).toMatch(/onChoose=\{chooseCity\}/)
