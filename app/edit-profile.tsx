@@ -50,7 +50,7 @@ interface UserProfile {
 
 const AGE_DIGITS = 3
 /** D20 (D-M14): the free occupation field, named for what it is and who sees it; the matching chip is "What do you do?". */
-const FIELD_OF_WORK_LIMIT_LINE = 'Saved, except your field of work: you’ve changed it three times today. Try again tomorrow.'
+const FIELD_OF_WORK_LIMIT_LINE = 'Saved, except your field of work: you’ve made three changes today to it, your languages, home state or sign. Try again tomorrow.'
 
 export const JOB_TITLE_LABEL = 'Job title · shown once you reveal'
 
