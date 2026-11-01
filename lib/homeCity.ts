@@ -23,10 +23,14 @@ const set = (next: { userId: string; slug: string | null }) => {
 }
 
 async function load(userId: string): Promise<void> {
-  const response = await apiClient.getProfile(userId).catch(() => null)
-  // A failed read leaves home unknown (no travel UI), never "unset": a write must not follow from a read that failed.
-  if (!response?.success) return
-  set({ userId, slug: response.data?.profile?.homeCitySlug ?? null })
+  try {
+    const response = await apiClient.getProfile(userId)
+    // A failed read leaves home unknown (no travel UI), never "unset": a write must not follow from a read that failed.
+    if (!response?.success) return
+    set({ userId, slug: response.data?.profile?.homeCitySlug ?? null })
+  } catch (error) {
+    Logger.warn('events', 'Could not read the home city', { error })
+  }
 }
 
 export function useHomeCitySlug(userId: string | null | undefined): string | null | undefined {
@@ -39,7 +43,9 @@ export function useHomeCitySlug(userId: string | null | undefined): string | nul
 
 /** `PUT /profiles/:id` with `homeCitySlug` (null clears). False, and nothing changed here, when the server refused. */
 export async function saveHomeCity(userId: string, slug: string | null): Promise<boolean> {
-  const response = await apiClient.updateProfile(userId, { homeCitySlug: slug }).catch(() => null)
+  const response = await Promise.resolve()
+    .then(() => apiClient.updateProfile(userId, { homeCitySlug: slug }))
+    .catch(() => null)
   if (!response?.success) {
     Logger.warn('events', 'Could not save the home city', { error: response?.error })
     return false
