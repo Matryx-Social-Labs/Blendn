@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
 import Animated from 'react-native-reanimated'
 
 import { passReachLine, type PassReach } from '../../lib/attendanceState'
+import { useFocusWhen } from '../../lib/focusReturn'
 import { SWITCH_LABEL, switchCaption } from '../../lib/switchCopy'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
@@ -92,6 +93,8 @@ export type TonightViewProps = {
   onFront?: (index: number) => void
   /** Another key starts the deck again at its first card. */
   deckKey?: string | null
+  /** Tonight is the face of the overlay now: its heading takes a screen reader's focus as it arrives. */
+  active?: boolean
   /**
    * Whether the docked pass's hold is offered (`lib/attendanceState.ts` `passReach`): away from the door or with location off
    * the same pass shows, its hold disabled, with one short line (owner ruling 2026-10-28).
@@ -137,6 +140,7 @@ export function TonightView({
   insideEvent,
   onFront,
   deckKey,
+  active = false,
   reach = 'open',
   switchFrom,
   checkingIn,
@@ -152,6 +156,8 @@ export function TonightView({
   bottomInset,
 }: TonightViewProps) {
   const bold = useBoldText()
+  const headingRef = useRef<Text>(null)
+  useFocusWhen(headingRef, active ? 'tonight' : null)
   const now = useNow(60_000)
   const { onScroll, native, scrollEventThrottle } = useStageScroll()
   // The pass's frame is the dock's place plus the pass's place in it.
@@ -190,7 +196,7 @@ export function TonightView({
         >
           <View style={styles.head} onLayout={(e) => setHeadHeight(Math.ceil(e.nativeEvent.layout.height))}>
             <View style={styles.titleRow}>
-              <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>
+              <Text ref={headingRef} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink]}>
                 Tonight
               </Text>
               {list.length > 0 ? (

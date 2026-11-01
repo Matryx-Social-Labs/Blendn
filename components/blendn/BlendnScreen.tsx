@@ -878,6 +878,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           importantForAccessibility={mode === 'room' || cancelled ? 'no-hide-descendants' : 'auto'}
         >
           <TonightView
+            active={mode === 'tonight'}
             events={tonightEvents}
             loading={tonight.status === 'loading'}
             error={tonight.status === 'error'}
