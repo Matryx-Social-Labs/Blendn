@@ -15,6 +15,7 @@ import { TagsField } from '../components/profile/TagsField'
 import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
 import { InterestPicker, MAX_INTERESTS } from '../components/InterestPicker'
+import { MIN_INTERESTS } from '../lib/meProfile'
 import { apiClient, ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { useToast } from '../components/Toast'
@@ -703,7 +704,7 @@ function EditProfileContent() {
             )}
           </EditCard>
 
-          <EditCard title="Interests" sub={isLoading ? undefined : `${interestIds.length} of ${MAX_INTERESTS}`}>
+          <EditCard title="Interests" sub={isLoading ? undefined : `${interestIds.length} of ${MAX_INTERESTS}${interestIds.length < MIN_INTERESTS ? ` · pick at least ${MIN_INTERESTS} to be matched` : ''}`}>
             {isLoading ? (
               <View style={styles.chipsSkeleton}>
                 {[...Array(5)].map((_, i) => (
