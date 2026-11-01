@@ -88,7 +88,9 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
   const actions = useSharedValue(0)
   const [live, setLive] = useState(false)
 
+  const [onStage, setOnStage] = useState(false)
   useEffect(() => {
+    if (!onStage) return
     if (reduceMotion) {
       scrim.set(fade(1, duration.base))
       orbs.set(fade(ORBS_REST, duration.base))
@@ -107,13 +109,13 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
     actions.set(fade(1, DURATION.quick, ACTIONS_AT))
     // Once, as it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onStage])
 
   const skipBeats = useBeats([
     { at: reduceMotion ? 0 : LAND_MS, run: () => H.match() },
     // Live once fully shown, so a skip tap at the foot of the screen never lands on a half-faded Say hi.
     { at: reduceMotion ? 2 * duration.base : ACTIONS_AT + DURATION.quick, run: () => setLive(true) },
-  ])
+  ], onStage)
   const skip = () => {
     scrim.set(1)
     orbs.set(ORBS_REST)
@@ -137,7 +139,7 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   return (
-    <MomentStage testID={testID} label={label} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
+    <MomentStage testID={testID} onShown={() => setOnStage(true)} label={label} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
         skip()
         onClose()
       }}>

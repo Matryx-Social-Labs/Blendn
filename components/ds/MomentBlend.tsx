@@ -84,7 +84,9 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
   const actions = useSharedValue(0)
   const [live, setLive] = useState(false)
 
+  const [onStage, setOnStage] = useState(false)
   useEffect(() => {
+    if (!onStage) return
     if (reduceMotion) {
       ;[scrim, orbs, art, text].forEach((v) => v.set(fade(1, duration.base)))
       actions.set(fade(1, duration.base, duration.base))
@@ -99,13 +101,13 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
     actions.set(fade(1, DURATION.base, ACTIONS_AT))
     // Once, as it appears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [onStage])
 
   const skipBeats = useBeats([
     { at: reduceMotion ? 0 : LAND_MS, run: () => yourLike && H.match() },
     // Live once fully shown, so a skip tap at the foot of the screen never lands on a half-faded button.
     { at: reduceMotion ? 2 * duration.base : ACTIONS_AT + DURATION.base, run: () => setLive(true) },
-  ])
+  ], onStage)
   const skip = () => {
     ;[scrim, orbs, art, text, actions].forEach((v) => v.set(1))
     leftX.set(0)
@@ -124,7 +126,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   return (
-    <MomentStage testID={testID} label={`It’s a Blend. ${spoken}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
+    <MomentStage testID={testID} onShown={() => setOnStage(true)} label={`It’s a Blend. ${spoken}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
         skip()
         onLater()
       }}>

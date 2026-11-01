@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react'
-import { AccessibilityInfo, Modal, Pressable, StyleSheet, View } from 'react-native'
+import { AccessibilityInfo, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { COLOR, EASING, SPRING } from '../../lib/design/tokens'
-import { useQueuedModal } from '../../lib/modalTurn'
+import { SHOW_WATCHDOG_MS, useQueuedModal } from '../../lib/modalTurn'
+import { useLatest } from '../../lib/useLatest'
 import { tint } from '../../lib/theme'
 import { Grain } from './Grain'
 import { Orbs, type OrbSet } from './Orbs'
@@ -38,18 +39,22 @@ export type Beat = { at: number; run: () => void }
  * at once, in order: a skipped moment still lands its haptic (it is the news,
  * not decoration) and still hands off, and nothing plays twice.
  * The beats are read at mount (a moment plays once); their callbacks are read
- * fresh when they fire.
+ * fresh when they fire. `running`: the clock starts when it turns true (the
+ * moment is on screen, `onShown`), so nothing plays out of sight.
  *
  * ponytail: a JS timer, while the moves run on the UI thread; a JS thread busy
  * mounting the moment can land a haptic a frame or two after its frame. Fire
  * it from the animation's completion (`scheduleOnRN`) if a device shows it.
  */
-export function useBeats(beats: Beat[]) {
+export function useBeats(beats: Beat[], running = true) {
   const latest = useRef(beats)
   useEffect(() => {
     latest.current = beats
   })
-  const state = useRef({ played: new Set<number>(), timers: [] as ReturnType<typeof setTimeout>[] })
+  const state = useRef({ played: new Set<number>(), timers: [] as ReturnType<typeof setTimeout>[], running })
+  useEffect(() => {
+    state.current.running = running
+  })
   const play = useCallback((i: number) => {
     const s = state.current
     if (s.played.has(i)) return
@@ -57,12 +62,15 @@ export function useBeats(beats: Beat[]) {
     latest.current[i]?.run()
   }, [])
   useEffect(() => {
+    if (!running) return
     const s = state.current
     s.timers = latest.current.map((b, i) => setTimeout(() => play(i), b.at))
     return () => s.timers.forEach(clearTimeout)
-  }, [play])
+  }, [play, running])
   return useCallback(() => {
     state.current.timers.forEach(clearTimeout)
+    // Skipped before it was ever seen (a link closing a moment still waiting its turn): spent, but nothing buzzes unseen.
+    if (!state.current.running) return latest.current.forEach((_, i) => state.current.played.add(i))
     latest.current.forEach((_, i) => play(i))
   }, [play])
 }
@@ -88,6 +96,11 @@ export type MomentStageProps = {
   onBack?: () => void
   /** `false` for a moment that hands the screen back while it clears (the pour): drawn in place, not in a Modal. */
   modal?: boolean
+  /**
+   * Told once, when the stage is really on screen. On iOS a Modal waits its turn behind whatever holds the screen (a card,
+   * the share tray), so a moment starts its clock from this and never plays behind them.
+   */
+  onShown?: () => void
   /** Once it has handed off: every touch goes through to what is under it, the screen reader no longer finds it, the orbs stop. */
   done?: boolean
   testID?: string
@@ -101,13 +114,15 @@ export type MomentStageProps = {
  * reader inside and takes system back. Reduce Transparency makes the scrim
  * opaque.
  */
-export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsOnInk = true, onSkip, onBack, modal = true, done = false, testID, children }: MomentStageProps) {
+export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsOnInk = true, onSkip, onBack, modal = true, done = false, onShown, testID, children }: MomentStageProps) {
   const reduceTransparency = useReduceTransparency()
-  useEffect(() => {
+  const arrived = useRef(false)
+  const arrive = () => {
+    if (arrived.current) return
+    arrived.current = true
     AccessibilityInfo.announceForAccessibilityWithOptions(label, { queue: true })
-    // Once, as it appears.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    onShown?.()
+  }
 
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
   const orbStyle = useAnimatedStyle(() => ({ opacity: orbsOpacity ? orbsOpacity.get() : 1 }))
@@ -118,6 +133,15 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
    * Ready, whose skip navigates) stays, and the link waits behind it like any other route.
    */
   const turn = useQueuedModal(modal, { closeForLink: onBack })
+  const arriveNow = useLatest(arrive)
+  // In place: on screen now. iOS always answers with onShow or a refusal the turn retries; Android has no watchdog, so a moment cannot wait forever there.
+  useEffect(() => {
+    if (!modal) return arriveNow.current()
+    if (Platform.OS !== 'android' || !turn.visible) return
+    const timer = setTimeout(() => arriveNow.current(), SHOW_WATCHDOG_MS)
+    return () => clearTimeout(timer)
+    // Only the turn decides; `arrive` reads the latest label and callback when it runs, and it runs once.
+  }, [modal, turn.visible, arriveNow])
 
   const stage = (
     <View
@@ -158,7 +182,10 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={onBack ?? onSkip}
-      onShow={turn.onShow}
+      onShow={() => {
+        turn.onShow()
+        arrive()
+      }}
       onDismiss={turn.onDismiss}
     >
       {stage}
