@@ -90,7 +90,7 @@ it('"community guidelines" in the copy is a link: white, underlined, and it open
   // Two links: the guidelines and, with the AI-moderation notice, the privacy policy.
   expect(screen.getAllByRole('link')).toHaveLength(2)
   await fireEvent.press(words)
-  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object))
+  await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
 })
 
 // App Review 5.1.2(i): what people post goes to OpenAI for moderation, said where they first post. The wording is a
@@ -107,7 +107,7 @@ describe('the AI-moderation notice', () => {
     const words = screen.getByText('privacy policy')
     expect(StyleSheet.flatten(words.props.style)).toMatchObject({ color: '#FFFFFF', textDecorationLine: 'underline' })
     await fireEvent.press(notice)
-    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(BLENDN_LINKS.privacy, expect.any(Object))
+    await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(BLENDN_LINKS.privacy, expect.any(Object)))
   })
 
   it('goes with the banner: once per room, like the ask', async () => {
@@ -158,7 +158,7 @@ it('shows when the stored flag cannot be read — the safe direction', async () 
 it('the link opens the guidelines', async () => {
   await openRoom('u_me', 'room_a')
   await fireEvent.press(screen.getByRole('link', { name: 'Community guidelines' }))
-  expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object))
+  await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
   // Reading the rules is not agreeing to them: the banner stays.
   expect(screen.getByTestId(BANNER)).toBeTruthy()
 })

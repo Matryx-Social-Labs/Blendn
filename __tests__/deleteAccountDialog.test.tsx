@@ -6,7 +6,7 @@
  * registration details for 180 days (IT Rules 2021), so the first step of the tray says
  * that and links to the published page for the rest.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import * as WebBrowser from 'expo-web-browser'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -66,9 +66,17 @@ it('says what is kept, and links to the page that lists it', async () => {
   expect(screen.queryByText(/personal info/)).toBeNull()
 
   const sheetGone = screen.getByTestId('sheet-host-modal', { includeHiddenElements: true }).props.onDismiss
-  fireEvent.press(screen.getByRole('button', { name: 'What’s kept' }))
-  // Not over the sheet while it is still leaving: iOS would close the page instead of the sheet (SCRUM-994).
-  expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled()
-  await act(async () => sheetGone())
-  await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://www.blendn.app/delete-account', expect.any(Object)))
+  jest.useFakeTimers()
+  try {
+    await fireEvent.press(screen.getByRole('button', { name: 'What’s kept' }))
+    await act(async () => void (await jest.advanceTimersByTimeAsync(0)))
+    // Not over the sheet while it is still leaving: iOS would close the page instead of the sheet (SCRUM-994).
+    expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled()
+    // iOS says the sheet has gone: the page opens then, on that word and not on a clock.
+    await act(async () => sheetGone())
+    await act(async () => void (await jest.advanceTimersByTimeAsync(0)))
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://www.blendn.app/delete-account', expect.any(Object))
+  } finally {
+    jest.useRealTimers()
+  }
 })
