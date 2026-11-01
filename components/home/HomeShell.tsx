@@ -27,6 +27,10 @@ export interface HomeBrowse {
   ready: boolean
   /** Where the selected city is (`/events/cities` `centre`). */
   cityCentre: { latitude: number; longitude: number } | null
+  /** Browsing another country than home's: the city chip takes a plane (travel plan §4.2). */
+  travelling?: boolean
+  /** A preview city opened to a previewer: the chip reads "Toronto · Preview". */
+  preview?: boolean
   /**
    * Bumped by every city the person chooses, never by one the app decided: the
    * map goes there, even to the city it shows. `here` when the choice was where
@@ -82,6 +86,8 @@ export function HomeShell({
     location: null,
     ready: false,
     cityCentre: null,
+    travelling: false,
+    preview: false,
     cityPick: { n: 0, here: false },
     requestLocation: () => {},
     openCityPicker: () => {},
@@ -230,7 +236,7 @@ export function HomeShell({
             items={SEGMENT_LABELS}
             selected={segment === 'events' ? 0 : 1}
             onChange={(i) => choose(i === 0 ? 'events' : 'places')}
-            trailing={<Chip label={browse.city ?? 'Choose city'} icon="map-pin" onPress={browse.openCityPicker} testID="home-city" />}
+            trailing={<Chip label={browse.city ? `${browse.city}${browse.preview ? ' · Preview' : ''}` : 'Choose city'} icon={browse.travelling ? 'plane' : 'map-pin'} onPress={browse.openCityPicker} testID="home-city" />}
             testID="home-segmented"
           />
         }

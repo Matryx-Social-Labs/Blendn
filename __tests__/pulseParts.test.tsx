@@ -53,6 +53,23 @@ const CITIES: CityOption[] = [
 ]
 
 describe('the city picker', () => {
+  it('groups by country, home first, with Toronto coming soon and Elsewhere last (travel plan §4.1)', async () => {
+    const cities: CityOption[] = [
+      { city: 'Bengaluru', eventCount: 48, slug: 'bengaluru', country: 'IN', access: 'full' },
+      { city: 'Toronto', eventCount: 0, placeCount: 0, slug: 'toronto', country: 'CA', access: 'comingSoon' },
+      { city: 'Hosur', eventCount: 2, slug: null, country: null, access: 'full' },
+    ]
+    const countries = [
+      { code: 'IN', name: 'India', defaultCitySlug: 'bengaluru' },
+      { code: 'CA', name: 'Canada', defaultCitySlug: 'toronto' },
+    ]
+    await render(<CityPicker visible onClose={jest.fn()} cities={cities} countries={countries} homeCountry="IN" selectedCity="Bengaluru" deviceCity={null} onChoose={jest.fn()} onLocate={jest.fn()} />)
+    expect(screen.getAllByRole('header').map((h) => h.props.children)).toEqual(expect.arrayContaining(['INDIA · HOME', 'CANADA', 'ELSEWHERE']))
+    expect(screen.getByLabelText('Toronto, coming soon')).toBeTruthy()
+    await fireEvent.changeText(screen.getByTestId('city-search-input'), 'tor')
+    expect(screen.queryByTestId('city-group-IN')).toBeNull()
+    expect(screen.getByTestId('city-group-CA')).toBeTruthy()
+  })
   const picker = (over: Partial<React.ComponentProps<typeof CityPicker>> = {}) => (
     <CityPicker visible onClose={jest.fn()} cities={CITIES} selectedCity="Bengaluru" deviceCity={null} onChoose={jest.fn()} onLocate={jest.fn()} {...over} />
   )
@@ -118,12 +135,27 @@ describe('the banners', () => {
   })
   it('the switch offer has its one action; the away notice has none', async () => {
     const onSwitch = jest.fn()
-    await render(<PulseBanners {...base} switchTo="Mumbai" onSwitch={onSwitch} away={{ deviceCity: 'Mysuru', selected: 'Bengaluru' }} />)
+    await render(<PulseBanners {...base} switchTo="Mumbai" onSwitch={onSwitch} away={{ kind: 'notThere', deviceCity: 'Saarbrücken', selected: 'Bengaluru' }} />)
     expect(screen.getByText('You’re in Mumbai. Browse events here?')).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'Switch' }))
     expect(onSwitch).toHaveBeenCalledWith('Mumbai')
-    expect(screen.getByText('You’re in Mysuru. Nothing here yet. Showing Bengaluru.')).toBeTruthy()
+    expect(screen.getByText('We’re not in Saarbrücken yet. You’re browsing Bengaluru.')).toBeTruthy()
     expect(within(screen.getByTestId('pulse-away')).queryByRole('button')).toBeNull()
+  })
+  it('a coming-soon city the phone is in is said to be coming, not near', async () => {
+    await render(<PulseBanners {...base} away={{ kind: 'comingSoon', deviceCity: 'Toronto', selected: 'Bengaluru' }} />)
+    expect(screen.getByText('Toronto is coming soon. You’re browsing Bengaluru.')).toBeTruthy()
+  })
+  it('the travel banner goes back home, and can be put away', async () => {
+    const onTravelBack = jest.fn()
+    const onTravelDismiss = jest.fn()
+    const travel = { kind: 'browsing' as const, text: 'Browsing Canada. Times are Toronto time. Check-in opens when you’re there.', back: 'Bengaluru' }
+    await render(<PulseBanners {...base} travel={travel} onTravelBack={onTravelBack} onTravelDismiss={onTravelDismiss} />)
+    expect(screen.getByText(travel.text)).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Back to Bengaluru' }))
+    expect(onTravelBack).toHaveBeenCalledTimes(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(onTravelDismiss).toHaveBeenCalledTimes(1)
   })
   it('denied sends to Settings; a failed refresh offers Try again', async () => {
     const onOpenSettings = jest.fn()

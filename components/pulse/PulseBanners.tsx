@@ -6,6 +6,7 @@ import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
 import { RateLimitedBanner } from '../system/RateLimitedBanner'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
 import { SPACE, SPRING } from '../../lib/design/tokens'
+import type { AwayNotice } from '../../lib/city'
 import type { SocketConnectionStatus } from '../../lib/socketClient'
 import { useReducedMotion } from '../../lib/motion'
 
@@ -14,8 +15,12 @@ type BannersProps = {
   /** The phone is in a city we serve that is not the one browsed: "You're in Mumbai. Browse events here?" */
   switchTo: string | null
   onSwitch: (city: string) => void
-  /** The phone is somewhere we have no events: passive, no action. */
-  away: { deviceCity: string; selected: string } | null
+  /** The phone is somewhere we do not serve, or whose city is coming soon: passive, no action. */
+  away: AwayNotice | null
+  /** Browsing another country than home's (`travelBanner`): once per switch, with the way back. */
+  travel?: { kind: 'browsing' | 'visiting'; text: string; back: string } | null
+  onTravelBack?: () => void
+  onTravelDismiss?: () => void
   /** Location is denied and Nearby is not already asking. */
   locationDenied: boolean
   onOpenSettings: () => void
@@ -39,7 +44,7 @@ type BannersProps = {
  * The first-run tip is not a banner any more (it is the one-off coach mark), and a switch offer and the away notice
  * are never both: `lib/city.ts` pins that across every combination.
  */
-export function PulseBanners({ socketStatus, switchTo, onSwitch, away, locationDenied, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout }: BannersProps) {
+export function PulseBanners({ socketStatus, switchTo, onSwitch, away, travel = null, onTravelBack = () => {}, onTravelDismiss, locationDenied, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout }: BannersProps) {
   const reduceMotion = useReducedMotion()
   const enter = reduceMotion ? bannerFadeIn : bannerIn
   const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
@@ -51,9 +56,14 @@ export function PulseBanners({ socketStatus, switchTo, onSwitch, away, locationD
           <Banner kind="info" text={`You’re in ${switchTo}. Browse events here?`} action={{ label: 'Switch', onPress: () => onSwitch(switchTo) }} testID="pulse-switch" />
         </Animated.View>
       ) : null}
+      {travel ? (
+        <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
+          <Banner kind="info" icon="plane" text={travel.text} action={{ label: `Back to ${travel.back}`, onPress: onTravelBack }} onDismiss={onTravelDismiss} testID="pulse-travel" />
+        </Animated.View>
+      ) : null}
       {away ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
-          <Banner kind="info" icon="map-pin" text={`You’re in ${away.deviceCity}. Nothing here yet. Showing ${away.selected}.`} testID="pulse-away" />
+          <Banner kind="info" icon="map-pin" text={awayText(away)} testID="pulse-away" />
         </Animated.View>
       ) : null}
       {locationDenied ? (
@@ -73,6 +83,13 @@ export function PulseBanners({ socketStatus, switchTo, onSwitch, away, locationD
       ) : null}
     </Animated.View>
   )
+}
+
+/** Where the phone is, said plainly; never "near you" for a place we do not serve (travel plan §4.4). */
+export function awayText(away: AwayNotice): string {
+  return away.kind === 'comingSoon'
+    ? `${away.deviceCity} is coming soon. You’re browsing ${away.selected}.`
+    : `We’re not in ${away.deviceCity} yet. You’re browsing ${away.selected}.`
 }
 
 const styles = StyleSheet.create({
