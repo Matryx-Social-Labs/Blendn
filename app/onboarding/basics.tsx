@@ -1,5 +1,7 @@
+import { useFocusEffect } from 'expo-router'
+
 import { ScreenProfiler } from '../../lib/perf'
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { AccessibilityInfo, BackHandler, StyleSheet, View } from 'react-native'
 
 import { Button } from '../../components/ds/Button'
@@ -70,15 +72,18 @@ function BasicsScreenInner() {
   const [gender, setGender] = useState<OnboardingGender | undefined>()
   const [dob, setDob] = useState({ day: '', month: '', year: '' })
   const [page, setPage] = useState<'name' | 'birthday'>('name')
-  // Android's back on the birthday screen goes to the name, as the header's back does, not out of the flow.
-  useEffect(() => {
-    if (page !== 'birthday') return
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setPage('name')
-      return true
-    })
-    return () => sub.remove()
-  }, [page])
+  // Android's back on the birthday screen goes to the name, as the header's back does, not out of the flow. Only while this
+  // screen is focused: under the next step it stays mounted, and a listener there took that step's back (Android drive).
+  useFocusEffect(
+    useCallback(() => {
+      if (page !== 'birthday') return
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        setPage('name')
+        return true
+      })
+      return () => sub.remove()
+    }, [page])
+  )
 
   // Prefilled once storage has answered, not on every render — otherwise a
   // rehydrate landing mid-edit would overwrite what is being typed. Done during

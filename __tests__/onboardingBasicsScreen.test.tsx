@@ -5,13 +5,20 @@
 import { fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 
+import { BackHandler } from 'react-native'
+
 import { H } from '../lib/haptics'
 
 const mockCommit = jest.fn(async () => true)
 const mockUpdate = jest.fn()
 const mockSignOut = jest.fn(async () => {})
 let mockDraft: Record<string, unknown> = {}
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() } }))
+let mockFocused = true
+jest.mock('expo-router', () => {
+  const { useEffect } = jest.requireActual('react')
+  // Focus as the stack has it: a step under another one is not focused, so its focus effect never runs.
+  return { router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() }, useFocusEffect: (effect: () => void | (() => void)) => useEffect(() => (mockFocused ? effect() : undefined), [effect]) }
+})
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 jest.mock('../lib/useOnboarding', () => ({
@@ -25,6 +32,7 @@ const year = new Date().getFullYear()
 beforeEach(() => {
   jest.clearAllMocks()
   mockDraft = {}
+  mockFocused = true
 })
 
 const dob = async (day: string, month: string, y: string) => {
@@ -58,6 +66,25 @@ it('Continue on the name opens the birthday screen inside step 1: the name kept 
   expect(mockUpdate).toHaveBeenCalledWith({ name: 'Sam Mehta' })
   expect(mockCommit).not.toHaveBeenCalled()
   expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
+})
+
+it('Android back on the birthday screen returns to the name while the screen is focused', async () => {
+  const listen = jest.spyOn(BackHandler, 'addEventListener')
+  await render(<BasicsScreen />)
+  await toBirthday()
+  const handler = listen.mock.calls.at(-1)?.[1] as () => boolean
+  expect(handler()).toBe(true)
+  expect(await screen.findByTestId('onboarding-name-input')).toBeTruthy()
+  listen.mockRestore()
+})
+
+it('a step on top of it keeps Android back: the birthday screen underneath takes no press (drive, Android)', async () => {
+  mockFocused = false
+  const listen = jest.spyOn(BackHandler, 'addEventListener')
+  await render(<BasicsScreen />)
+  await toBirthday()
+  expect(listen).not.toHaveBeenCalled()
+  listen.mockRestore()
 })
 
 it('back on the birthday screen returns to the name, as typed (control: the name screen has no back)', async () => {
