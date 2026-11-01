@@ -45,7 +45,7 @@ const UPLOAD = 'https://media.example/profile/u_1/1790846575859-7w473i-profile_1
 const UPLOAD_2 = 'https://media.example/profile/u_1/1790846575999-k2p1aa-profile_2.jpg'
 const SEALED = 'https://media.example/profile/u_1/1790846661493-rbjp8j-sealed'
 const SEALED_2 = 'https://media.example/profile/u_1/1790846661600-q8c0zz-sealed'
-const ALL_BEFORE_READY: OnboardingStep[] = ['basics', 'notifications', 'location', 'preferences', 'journey', 'details', 'media']
+const ALL_BEFORE_READY: OnboardingStep[] = ['basics', 'preferences', 'details', 'media', 'location']
 
 beforeEach(() => {
   jest.clearAllMocks()

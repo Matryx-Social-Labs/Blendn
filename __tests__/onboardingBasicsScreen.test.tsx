@@ -38,7 +38,7 @@ it('opens with the account’s name in, the date’s hint, and Continue off', as
   await render(<BasicsScreen />)
   expect(screen.getByTestId('onboarding-name-input').props.value).toBe('Sam Mehta')
   expect(screen.getByText('Your age will be private and used only for verification.')).toBeTruthy()
-  expect(screen.getByText('Step 1 of 8')).toBeTruthy()
+  expect(screen.getByText('Step 1 of 5')).toBeTruthy()
   expect(primary().props.accessibilityState).toMatchObject({ disabled: true })
 })
 
@@ -134,7 +134,7 @@ it('the docked primary plays H.primary on press-in, once, as every design-system
 it('the header is the glass bar with the step, no back on the first step, and the 4 pt progress under it', async () => {
   await render(<BasicsScreen />)
   expect(screen.getByTestId('onboarding-header')).toBeTruthy()
-  expect(screen.getByText('Step 1 of 8')).toBeTruthy()
+  expect(screen.getByText('Step 1 of 5')).toBeTruthy()
   expect(screen.queryByTestId('onboarding-back')).toBeNull()
   expect(screen.getByTestId('onboarding-progress', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.getByTestId('onboarding-dock')).toBeTruthy()

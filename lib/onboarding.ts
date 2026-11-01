@@ -23,12 +23,10 @@ import { dateIn } from './time'
 /** One step, in order. The key is what gets stored, so it outlives a reorder. */
 export const ONBOARDING_STEPS = [
   'basics',
-  'notifications',
-  'location',
   'preferences',
-  'journey',
   'details',
   'media',
+  'location',
   'ready',
 ] as const
 
@@ -42,12 +40,10 @@ export type OnboardingStep = (typeof ONBOARDING_STEPS)[number]
  */
 export const ONBOARDING_ROUTES: Record<OnboardingStep, string> = {
   basics: '/onboarding/basics',
-  notifications: '/onboarding/notifications',
-  location: '/onboarding/location',
   preferences: '/onboarding/preferences',
-  journey: '/onboarding/journey',
   details: '/onboarding/details',
   media: '/onboarding/media',
+  location: '/onboarding/location',
   ready: '/onboarding/ready',
 }
 
@@ -80,7 +76,15 @@ export function previousStep(step: OnboardingStep): OnboardingStep | null {
  * it stays right when a step is added.
  */
 export function progress(step: OnboardingStep): number {
-  return (stepIndex(step) + 1) / ONBOARDING_STEPS.length
+  return Math.min(1, (stepIndex(step) + 1) / QUESTION_COUNT)
+}
+
+/** The questions, without the payoff: `ready` answers nothing, so "Step 6 of 6" would count a step nobody takes. */
+const QUESTION_COUNT = ONBOARDING_STEPS.length - 1
+
+/** "Step 2 of 5" for a question; `null` on the payoff, which is past the flow. */
+export function stepLabel(step: OnboardingStep): string | null {
+  return step === 'ready' ? null : `Step ${stepIndex(step) + 1} of ${QUESTION_COUNT}`
 }
 
 export function progressPercent(step: OnboardingStep): number {
@@ -173,8 +177,8 @@ export function advance(
  * Everything onboarding can collect, all optional.
  *
  * One draft rather than a shape per step, because it is saved as one object and
- * because two steps write to the same profile: `journey` sets `location` and
- * `basics` sets `name`, and both end up in the same `PUT /profiles/:userId`.
+ * because every step writes to the same profile: `basics` sets `name`,
+ * `details` sets `interests`, and both end up in the same `PUT /profiles/:userId`.
  */
 export type OnboardingGender = 'woman' | 'man' | 'non_binary' | 'prefer_not_to_say'
 
@@ -257,12 +261,10 @@ export interface OnboardingDraft {
  */
 const STEP_FIELDS: Record<OnboardingStep, readonly (keyof OnboardingDraft)[]> = {
   basics: ['name', 'gender', 'dateOfBirth'],
-  notifications: ['push_enabled'],
-  location: ['share_location'],
   preferences: ['orientations', 'show_orientation', 'intent_default', 'reveal_by_default'],
-  journey: ['location', 'occupation', 'education', 'work_field', 'expertise'],
   details: ['interests', 'bio'],
   media: ['photos'],
+  location: ['share_location'],
   ready: [],
 }
 
@@ -531,6 +533,19 @@ export interface StoredOnboarding {
 
 const EMPTY_STORED: StoredOnboarding = { progress: EMPTY_PROGRESS, draft: {} }
 
+/**
+ * Steps the eight-step flow had and this one does not (Flow 2, 2026-11), mapped to where their owner resumes.
+ *
+ * Notifications moved to the first "I'm going" (`lib/pushAsk.ts`); "your journey" lives in Edit profile. Each maps to
+ * the first step of this flow they could not have answered yet (both sit after `basics`; journey also after
+ * `preferences`), so somebody who quit on one picks up there rather than back on step one. Keep these
+ * as long as a build that wrote them may still be installed: a stored name is read on every launch.
+ */
+const RETIRED_STEPS: Readonly<Record<string, OnboardingStep>> = {
+  notifications: 'preferences',
+  journey: 'details',
+}
+
 /** The inverse, for prefilling the three boxes when resuming. */
 export function splitDateOfBirth(value: string | undefined): {
   day: string
@@ -561,13 +576,14 @@ export function parseStoredOnboarding(raw: string | null): StoredOnboarding | nu
 
     const record = parsed as Record<string, unknown>
     const progress = record.progress as Record<string, unknown> | undefined
-    const step = progress?.step
+    const step = typeof progress?.step === 'string' ? (RETIRED_STEPS[progress.step] ?? progress.step) : progress?.step
 
     // A step this build does not know about means the flow was reordered or
     // renamed under a stored record. Starting over beats navigating to a route
     // that no longer exists.
     if (!isOnboardingStep(step)) return EMPTY_STORED
 
+    // A retired step answered on an older build is simply not a step any more.
     const completed = Array.isArray(progress?.completed)
       ? progress.completed.filter(isOnboardingStep)
       : []
@@ -655,21 +671,3 @@ export function promptFits(bio: string, prompt: string, limit: number): boolean 
 
 /** The most specialisms the server takes when it does not say (`MAX_EXPERTISE`). */
 export const DEFAULT_MAX_EXPERTISE = 3
-
-type Expertises = Readonly<Record<string, readonly { slug: string }[]>>
-
-/**
- * The specialisms that still belong to `field` (Flow 2 journey, expertise as step two of the field of work). A slug carries
- * its field, so changing the field clears what no longer fits, as the server's `pruneExpertise` would on the next write;
- * choosing nothing clears them all.
- */
-export function keepExpertise(expertise: readonly string[], field: string | undefined, byField: Expertises | undefined): string[] {
-  const allowed = new Set((field ? byField?.[field] : undefined)?.map((entry) => entry.slug))
-  return expertise.filter((slug) => allowed.has(slug))
-}
-
-/** A specialism picked or put back; at the cap a new one is refused (the chips beyond it are dimmed, never hidden). */
-export function toggleExpertise(expertise: readonly string[], slug: string, max: number = DEFAULT_MAX_EXPERTISE): string[] {
-  if (expertise.includes(slug)) return expertise.filter((held) => held !== slug)
-  return expertise.length >= max ? [...expertise] : [...expertise, slug]
-}

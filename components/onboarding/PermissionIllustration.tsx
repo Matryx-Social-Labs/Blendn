@@ -1,66 +1,21 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
-import { DiscMark } from '../ds/DiscMark'
-import { Orbs } from '../ds/Orbs'
 import { font, useBoldText, useSelection } from '../ds/shared'
-import { monoCaption } from '../ds/MonoFamily'
 import { SolidBarFade } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
-import FadeInUp from '../motion/FadeInUp'
-import { COLOR, ICON, RADIUS, RISE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 
 /**
- * The picture in the middle of a permission step (Flow 2 notifications 01, location 01), drawn from design-system parts: no
- * stock photographs. Both are decorative, hidden from a screen reader (the title and sentence say what the step is for), and
- * a preview of something the product really does, so they are views, not screenshots that go stale with the copy.
+ * The picture in the middle of a permission step (Flow 2 location 01), drawn from design-system parts: no
+ * stock photographs. It is decorative, hidden from a screen reader (the title and sentence say what the step is for), and
+ * a preview of something the product really does, so it is a view, not a screenshot that go stale with the copy.
  */
 
-const NOTIFICATION_HEIGHT = 260
 const MAP_HEIGHT = 300
 /** The map card's height with the "Precise location is off" notice above it (the frame draws 232). */
 export const MAP_HEIGHT_WITH_NOTICE = 232
-/** The orbs behind the notification, at the page's strength for a card (`orbs-moment` at 0.35). */
-const MOMENT_LEVEL = 0.35
-/** The sample app icon on the notification, 40 pt. */
-const APP_ICON = 40
 
-/** The moon-and-orbs card, with a sample notification dropped over it (it lands once). */
-export function NotificationIllustration() {
-  const bold = useBoldText()
-  return (
-    <View
-      testID="notification-illustration"
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[styles.card, { height: NOTIFICATION_HEIGHT }]}
-    >
-      <View style={[StyleSheet.absoluteFill, { opacity: MOMENT_LEVEL }]}>
-        <Orbs set="moment" />
-      </View>
-      {/* The banner is a solid raised surface (Tier B): it previews the real thing. It drops in once; Reduce Motion fades it. */}
-      <FadeInUp distance={-RISE.modal} style={styles.bannerSlot}>
-        <View style={styles.banner}>
-          <View style={styles.appIcon}>
-            <DiscMark height={ICON.nav} fill="gradient" />
-          </View>
-          <View style={styles.bannerText}>
-            <View style={styles.bannerTop}>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.app]}>Blend’n</Text>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.when]}>Just now</Text>
-            </View>
-            {/* Plain words, as a real push reads (audit A34): no Title Case, no exclamation mark. */}
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('button', bold), styles.bannerTitle]}>Someone’s around</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.bannerBody]}>A person you’d get on with just checked in.</Text>
-          </View>
-          <Icon name="zap" size={ICON.control} color={COLOR.textPrimary} />
-        </View>
-      </FadeInUp>
-    </View>
-  )
-}
-
-/** Where the three nearby creatures sit, as fractions of the card (never strangers' faces: everyone is anonymous by default). */
 const NEARBY = [
   { pseudonym: 'Quiet Heron', x: 0.2, y: 0.28 },
   { pseudonym: 'Velvet Lynx', x: 0.76, y: 0.22 },
@@ -84,7 +39,7 @@ const STREET_TILT = { vertical: '8deg', horizontal: '-6deg' } as const
  * The rings over the map: "you" in the middle, three creatures around, the footer line over a scrim. `city` is the browse
  * city when one is known, and only then: before a fix there is nowhere to say.
  */
-export function LocationIllustration({ city, notice = false }: { city?: string | null; notice?: boolean }) {
+export function LocationIllustration({ notice = false }: { notice?: boolean }) {
   const bold = useBoldText()
   const sel = useSelection()
   const height = notice ? MAP_HEIGHT_WITH_NOTICE : MAP_HEIGHT
@@ -130,7 +85,8 @@ export function LocationIllustration({ city, notice = false }: { city?: string |
         </View>
         <View style={styles.footerRow}>
           <Icon name="map-pin" size={ICON.inline} color={COLOR.textPrimary} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.footerLabel]}>{city ? `NEAR YOU · ${city.toUpperCase()}` : 'NEAR YOU'}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.footerLabel]}>NEAR YOU</Text>
+          {/* No city: until the catalogue knows where the person is, a named one is a guess, and was wrong (SCRUM-997). */}
         </View>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.footerBody]}>Check-in only works while you’re inside the venue.</Text>
       </View>
@@ -145,25 +101,6 @@ const SCRIM_SOLID = 2
 const styles = StyleSheet.create({
   card: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline, overflow: 'hidden' },
   map: { backgroundColor: COLOR.surfaceSunken },
-  bannerSlot: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, top: 0, bottom: 0, justifyContent: 'center' },
-  banner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: SPACE.md,
-    borderRadius: RADIUS.sheet,
-    backgroundColor: COLOR.surfaceRaised,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLOR.hairlineStrong,
-    paddingVertical: SPACE.md,
-    paddingHorizontal: SPACE.lg,
-  },
-  appIcon: { width: APP_ICON, height: APP_ICON, borderRadius: RADIUS.thumb, backgroundColor: COLOR.ink, alignItems: 'center', justifyContent: 'center' },
-  bannerText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
-  bannerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  app: { color: COLOR.textSecondary },
-  when: { color: COLOR.textTertiary },
-  bannerTitle: { color: COLOR.textPrimary },
-  bannerBody: { color: COLOR.textPrimary },
   streetV: { position: 'absolute', top: 0, bottom: 0, width: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
   streetH: { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
   ring: { position: 'absolute', left: '50%', top: '50%', borderWidth: 1, borderColor: COLOR.hairlineStrong },

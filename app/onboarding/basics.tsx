@@ -159,8 +159,8 @@ function BasicsScreenInner() {
       ctaRefused={refused}
       ctaBusy={saving}
       onContinue={submit}
-      secondaryLabel="Not you? Sign out"
-      onSecondary={() => setConfirmSignOut(true)}
+      // Top-right, not under Continue: a way out beside the primary invited a mis-tap (Flow 2 walk).
+      headerAction={{ label: 'Not you?', accessibilityLabel: 'Not you? Sign out', onPress: () => setConfirmSignOut(true) }}
     >
       <>
         {/*

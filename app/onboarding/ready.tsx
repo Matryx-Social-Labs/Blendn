@@ -11,11 +11,12 @@ import { INTENT_LABELS } from '../../components/onboarding/LookingForCards'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
+import { firstNameOf } from '../../lib/profileIdentity'
 import { useAuth } from '../../lib/useAuth'
 import { useOnboarding } from '../../lib/useOnboarding'
 
 /**
- * Step eight — the review, and the only place `onboarded` is written.
+ * The payoff, after the five steps: the review, and the only place `onboarded` is written.
  *
  * That column has existed since the first schema and the dashboard funnel has
  * always counted it. **Nothing had ever set it.** The API has accepted it on
@@ -30,10 +31,19 @@ import { useOnboarding } from '../../lib/useOnboarding'
  * chance to fix a typo before it is on a card in a room.
  */
 export default function ReadyScreen() {
-  const { draft, saving, finish, goBack, jumpTo } = useOnboarding('ready')
+  const { draft, saving, finish, goBack } = useOnboarding('ready')
   const { user } = useAuth()
 
   const [celebrating, setCelebrating] = useState(false)
+
+  // Edit my details: finish first, then the one edit screen over the tabs. Mid-flow it would sit outside onboarding (so
+  // the tabs' push start-up would run before the ask was deferred), and finishing afterwards would re-send the draft over
+  // whatever was just edited. The celebration and Bring your friends are skipped: the person asked to edit, not to party.
+  const edit = async () => {
+    if (!(await finish())) return
+    router.replace('/(tabs)/events')
+    router.push('/edit-profile')
+  }
 
   const complete = async () => {
     // The server said yes: the one celebration plays, and it plays the success haptic itself as its mark completes
@@ -49,6 +59,8 @@ export default function ReadyScreen() {
   // The draft holds a name only once Basics saved one; an account that came with a name (Google, Apple) may never have
   // typed it. The account's name, then; never a placeholder that reads as someone else's card (audit A3).
   const name = draft.name?.trim() || user?.name?.trim() || undefined
+  // First name only on the payoff: "You're in, Émilie." reads warmer than a full name (Flow 2 walk).
+  const first = name ? firstNameOf(name) : undefined
   const primaryPhoto = draft.photos?.[0]
   const bold = useBoldText()
   const sel = useSelection()
@@ -57,14 +69,14 @@ export default function ReadyScreen() {
     <>
       <OnboardingScreen
         step="ready"
-        title="You’re all set"
-        titleAccent={name ? `, ${name}` : undefined}
-        subtitle="Your profile is ready for the community. Review it before you start blending."
-        ctaLabel="Start Blend’n"
+        title="You’re in"
+        titleAccent={first ? `, ${first}.` : '.'}
+        subtitle="Here’s how people will see you once you choose to show who you are."
+        ctaLabel="See what’s on"
         ctaBusy={saving}
         onContinue={() => void complete()}
         secondaryLabel="Edit my details"
-        onSecondary={() => jumpTo('basics')}
+        onSecondary={() => void edit()}
         onBack={goBack}
       >
         <View style={styles.card}>
@@ -130,7 +142,7 @@ export default function ReadyScreen() {
         {draft.intent_default?.[0] ? <Summary icon="users" label="Why you go out" value={INTENT_LABELS[draft.intent_default[0]] ?? ''} /> : null}
       </OnboardingScreen>
       {celebrating ? (
-        <MomentReady testID="ready-moment" name={name} onDone={() => router.replace('/onboarding/friends')} />
+        <MomentReady testID="ready-moment" name={first} onDone={() => router.replace('/onboarding/friends')} />
       ) : null}
     </>
   )

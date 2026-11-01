@@ -11,11 +11,11 @@ const read = (file: string) =>
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '')
 
-describe('push permission waits for the onboarding step that explains it', () => {
+describe('push permission waits until onboarding is over', () => {
   const layout = read('app/_layout.tsx')
 
   it('starts push only outside onboarding', () => {
-    const call = layout.indexOf('initializePushNotifications({ prompt: !declined })')
+    const call = layout.indexOf('initializePushNotifications({ prompt })')
     const gate = layout.lastIndexOf('if (!inOnboarding && !pushInitRef.current) {', call)
     expect(call).toBeGreaterThan(-1)
     expect(gate).toBeGreaterThan(-1)
@@ -45,7 +45,7 @@ describe('an onboarding save that fails stays on the step', () => {
 })
 
 describe('the permission steps wait for an answer', () => {
-  it.each(['app/onboarding/notifications.tsx', 'app/onboarding/location.tsx'])('%s', (file) => {
+  it.each(['app/onboarding/location.tsx'])('%s', (file) => {
     const src = read(file)
     expect(src).not.toContain('Alert.alert')
     // The tray, then return: commit is not on the next line any more.
@@ -57,7 +57,7 @@ describe('the permission steps wait for an answer', () => {
 describe('a way out of onboarding', () => {
   it('offers sign-out on the first step and beside the under-18 message', () => {
     const basics = read('app/onboarding/basics.tsx')
-    expect(basics).toContain('secondaryLabel="Not you? Sign out"')
+    expect(basics).toContain("headerAction={{ label: 'Not you?', accessibilityLabel: 'Not you? Sign out', onPress: () => setConfirmSignOut(true) }}")
     expect(basics).toMatch(/\{underAge \? \(\s*<Button\s+label="Sign out"[\s\S]*?onPress=\{\(\) => setConfirmSignOut\(true\)\}/)
     expect(basics).toContain('const underAge = isUnderAccountAge(dateOfBirth)')
     expect(basics).toContain('await signOut()')
@@ -67,7 +67,6 @@ describe('a way out of onboarding', () => {
 describe('the server-fed pickers say when they are loading or failed', () => {
   it.each([
     ['app/onboarding/details.tsx', 'interests'],
-    ['app/onboarding/journey.tsx', 'fields of work'],
   ])('%s', (file, what) => {
     const src = read(file)
     expect(src).toContain(`what="${what}"`)

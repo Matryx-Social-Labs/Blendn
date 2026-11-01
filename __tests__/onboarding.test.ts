@@ -53,9 +53,9 @@ describe('the step list', () => {
   })
 
   it('walks forwards and backwards, and stops at both ends', () => {
-    expect(nextStep('basics')).toBe('notifications')
+    expect(nextStep('basics')).toBe('preferences')
     expect(nextStep('ready')).toBeNull()
-    expect(previousStep('notifications')).toBe('basics')
+    expect(previousStep('preferences')).toBe('basics')
     expect(previousStep('basics')).toBeNull()
   })
 
@@ -88,8 +88,8 @@ describe('resuming', () => {
     // this case is indistinguishable from an ordinary launch and the person
     // lands on the events tab with a half-filled profile.
     expect(
-      resumeStep({ finishedOnServer: false, stored: stored('journey'), isNewAccount: false })
-    ).toBe('journey')
+      resumeStep({ finishedOnServer: false, stored: stored('details'), isNewAccount: false })
+    ).toBe('details')
   })
 
   it('lets the server override a stale local record', () => {
@@ -143,7 +143,7 @@ describe('mayParticipate', () => {
 describe('advance', () => {
   it('records the step and moves to the next', () => {
     expect(advance({ step: 'basics', completed: [] }, 'basics')).toEqual({
-      step: 'notifications',
+      step: 'preferences',
       completed: ['basics'],
     })
   })
@@ -274,7 +274,7 @@ describe('canContinue', () => {
 
 describe('parsing what is on disk', () => {
   it('reads back what was written', () => {
-    const value = { progress: { step: 'journey', completed: ['basics'] }, draft: { name: 'A' } }
+    const value = { progress: { step: 'details', completed: ['basics'] }, draft: { name: 'A' } }
     expect(parseStoredOnboarding(JSON.stringify(value))).toEqual(value)
   })
 
@@ -301,10 +301,10 @@ describe('parsing what is on disk', () => {
 
   it('drops unknown steps out of the completed list', () => {
     const mixed = JSON.stringify({
-      progress: { step: 'journey', completed: ['basics', 'welcome', 'notifications'] },
+      progress: { step: 'details', completed: ['basics', 'welcome', 'preferences'] },
       draft: {},
     })
-    expect(parseStoredOnboarding(mixed)?.progress.completed).toEqual(['basics', 'notifications'])
+    expect(parseStoredOnboarding(mixed)?.progress.completed).toEqual(['basics', 'preferences'])
   })
 })
 

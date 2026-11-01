@@ -54,10 +54,11 @@ beforeEach(() => {
 })
 
 describe('location', () => {
-  it('draws the map with the browse city when there is one', async () => {
+  it('names no city, even with a browsed one stored: it was wrong abroad (SCRUM-997)', async () => {
     mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
     await render(<LocationScreen />)
-    expect(await screen.findByText('NEAR YOU · BENGALURU', { includeHiddenElements: true })).toBeTruthy()
+    expect(await screen.findByText('NEAR YOU', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/BENGALURU|·/, { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByTestId('precise-off-notice')).toBeNull()
   })
 

@@ -13,17 +13,17 @@ import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
 import { useKeyboardShown } from '../../lib/keyboard'
-import { ONBOARDING_STEPS, progress, stepIndex, type OnboardingStep } from '../../lib/onboarding'
+import { progress, stepLabel, type OnboardingStep } from '../../lib/onboarding'
 
 /**
  * The frame every onboarding screen sits in (guidelines/flow-2, `frame`).
  *
- * Eight screens share a header, a scrolling middle and a pinned dock, and the only things that differ are the headline, the
- * fields and the label on the button. Written once here rather than eight times: the parts that are easy to get subtly
- * different across eight files (the safe-area maths, the keyboard behaviour, the progress arithmetic) are exactly the parts
+ * Every step shares a header, a scrolling middle and a pinned dock, and the only things that differ are the headline, the
+ * fields and the label on the button. Written once here rather than per screen: the parts that are easy to get subtly
+ * different across files (the safe-area maths, the keyboard behaviour, the progress arithmetic) are exactly the parts
  * nobody notices are inconsistent until a device shows it.
  *
- * L0 the brand orbs at 0.45 (held while the keyboard is up), L2 a glass header with the back circle and "Step n of 8", the
+ * L0 the brand orbs at 0.45 (held while the keyboard is up), L2 a glass header with the back circle and "Step n of 5", the
  * 4 pt progress bar under it, the body, and an L2 glass dock with the gradient primary, a text secondary and the lock note (a sentence in meta).
  */
 
@@ -38,7 +38,7 @@ interface Props {
   titleAccent?: string
   subtitle?: string
   /**
-   * The form body. Optional because the two permission screens have no form: their content is an illustration, which is
+   * The form body. Optional because a permission screen has no form: its content is an illustration, which is
    * still a child. A screen with nothing to scroll does not scroll.
    *
    * The page follows the focused field by itself (`KeyboardPage`): a text field needs nothing spread onto it.
@@ -65,6 +65,9 @@ interface Props {
   footerNote?: string
 
   onBack?: () => void
+
+  /** A quiet way out in the header's top-right, kept out of the primary column (step 1's "Not you?", Flow 2). */
+  headerAction?: { label: string; accessibilityLabel: string; onPress: () => void }
 }
 
 /** The subtitle's reading measure, from the frame. */
@@ -86,6 +89,7 @@ export function OnboardingScreen({
   onSecondary,
   footerNote,
   onBack,
+  headerAction,
 }: Props) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -104,11 +108,23 @@ export function OnboardingScreen({
           {onBack ? (
             <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onBack} testID="onboarding-back" />
           ) : null}
-          {step ? (
+          {step && stepLabel(step) ? (
             // Bar chrome in a row the circle's height: it stops where a control does (RC drive 5: 40 pt under the back circle).
             <Text testID="onboarding-step" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[styles.stepLabel, styles.step]}>
-              {`Step ${stepIndex(step) + 1} of ${ONBOARDING_STEPS.length}`}
+              {stepLabel(step)}
             </Text>
+          ) : null}
+          {headerAction ? (
+            <View style={styles.headerAction}>
+              <Button
+                label={headerAction.label}
+                accessibilityLabel={headerAction.accessibilityLabel}
+                kind="tertiary"
+                size="sm"
+                onPress={headerAction.onPress}
+                testID="onboarding-header-action"
+              />
+            </View>
           ) : null}
         </View>
       </Material>
@@ -180,6 +196,7 @@ const styles = StyleSheet.create({
   // Flow 2 `frame`: the glass bar is 104 (the circle 56 to 100, 4 under it); the circle starts at the inset here, as every bar does.
   header: { paddingHorizontal: SPACE.lg, paddingBottom: SPACE.xs },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
+  headerAction: { marginLeft: 'auto' },
   step: { position: 'absolute', left: 0, right: 0, textAlign: 'center', color: COLOR.textSecondary },
   progress: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm },
   scrollContent: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xxl, gap: SPACE.xl },
