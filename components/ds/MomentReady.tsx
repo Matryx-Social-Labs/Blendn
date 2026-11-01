@@ -43,6 +43,9 @@ const REVEAL_MIN = 0.001
  *
  * Reduce Motion: the mark fades in over 200 ms, the orbs hold, the haptic at once.
  */
+/** Longest Ready waits for its Modal before it plays anyway: onboarding never ends on a screen with nothing to tap. */
+export const READY_MAX_WAIT_MS = 3000
+
 export function MomentReady({ name, onDone, testID }: { name?: string; onDone: () => void; testID?: string }) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
@@ -56,6 +59,11 @@ export function MomentReady({ name, onDone, testID }: { name?: string; onDone: (
   const [done, setDone] = useState(false)
 
   const [onStage, setOnStage] = useState(false)
+  // The end of onboarding: if the screen is never handed over (a turn held elsewhere), it still plays and hands off.
+  useEffect(() => {
+    const timer = setTimeout(() => setOnStage(true), READY_MAX_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [])
   useEffect(() => {
     if (!onStage) return
     if (reduceMotion) {

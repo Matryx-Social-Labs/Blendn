@@ -630,10 +630,13 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     setOpen(null)
   }
   // A match or a Blend made from the card is the news: the card makes way, and the moment plays once it has gone (iOS holds one Modal at a time).
-  const momentLanded = !!room.match || !!blend
-  useEffect(() => {
-    if (momentLanded) setOpen(null)
-  }, [momentLanded])
+  // Each new one, not just the first (a second match can replace the first without passing through none); state adjusted in render.
+  const landed: object | string | null = room.match?.conversationId ?? blend ?? null
+  const [madeWayFor, setMadeWayFor] = useState<object | string | null>(null)
+  if (landed && landed !== madeWayFor) {
+    setMadeWayFor(landed)
+    setOpen(null)
+  }
   const cardGone = () => {
     setShownCard(null)
     const next = afterCard.current
@@ -1164,6 +1167,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       */}
       {room.match ? (
         <MomentMatch
+          // A new match is a new moment: it plays, buzzes and is said again.
+          key={room.match.conversationId}
           you={myRoomFace({ revealed: controls.revealed, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}
           them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}
           name={room.match.name}

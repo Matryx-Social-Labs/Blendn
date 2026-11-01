@@ -4,6 +4,7 @@ import Animated, { Easing, ReduceMotion, useAnimatedStyle, withDelay, withSpring
 
 import { COLOR, EASING, SPRING } from '../../lib/design/tokens'
 import { SHOW_WATCHDOG_MS, useQueuedModal } from '../../lib/modalTurn'
+import { useLatest } from '../../lib/useLatest'
 import { tint } from '../../lib/theme'
 import { Grain } from './Grain'
 import { Orbs, type OrbSet } from './Orbs'
@@ -51,6 +52,7 @@ export function useBeats(beats: Beat[], running = true) {
     latest.current = beats
   })
   const state = useRef({ played: new Set<number>(), timers: [] as ReturnType<typeof setTimeout>[] })
+  const live = useLatest(running)
   const play = useCallback((i: number) => {
     const s = state.current
     if (s.played.has(i)) return
@@ -65,8 +67,10 @@ export function useBeats(beats: Beat[], running = true) {
   }, [play, running])
   return useCallback(() => {
     state.current.timers.forEach(clearTimeout)
+    // Skipped before it was ever seen (a link closing a moment still waiting its turn): spent, but nothing buzzes unseen.
+    if (!live.current) return latest.current.forEach((_, i) => state.current.played.add(i))
     latest.current.forEach((_, i) => play(i))
-  }, [play])
+  }, [play, live])
 }
 
 export type MomentStageProps = {
@@ -127,15 +131,15 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
    * Ready, whose skip navigates) stays, and the link waits behind it like any other route.
    */
   const turn = useQueuedModal(modal, { closeForLink: onBack })
+  const arriveNow = useLatest(arrive)
   // In place: on screen now. iOS always answers with onShow or a refusal the turn retries; Android has no watchdog, so a moment cannot wait forever there.
   useEffect(() => {
-    if (!modal) return arrive()
+    if (!modal) return arriveNow.current()
     if (Platform.OS !== 'android' || !turn.visible) return
-    const timer = setTimeout(arrive, SHOW_WATCHDOG_MS)
+    const timer = setTimeout(() => arriveNow.current(), SHOW_WATCHDOG_MS)
     return () => clearTimeout(timer)
     // Only the turn decides; `arrive` reads the latest label and callback when it runs, and it runs once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modal, turn.visible])
+  }, [modal, turn.visible, arriveNow])
 
   const stage = (
     <View

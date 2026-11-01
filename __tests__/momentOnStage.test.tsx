@@ -9,9 +9,10 @@ import { AccessibilityInfo, Platform } from 'react-native'
 
 import { MomentBlend } from '../components/ds/MomentBlend'
 import { MomentMatch } from '../components/ds/MomentMatch'
-import { MomentReady } from '../components/ds/MomentReady'
+import { MomentReady, READY_MAX_WAIT_MS } from '../components/ds/MomentReady'
 import { H } from '../lib/haptics'
 import { releaseTurn, requestTurn, resetModalTurns, SHOW_WATCHDOG_MS } from '../lib/modalTurn'
+import { dismissModals } from '../lib/pendingRoute'
 
 // The test Modal without jest.setup's onShow: this file decides when it is on screen.
 jest.mock('react-native/Libraries/Modal/Modal', () => ({ __esModule: true, default: jest.requireActual('@react-native/jest-preset/jest/mocks/Modal').default }))
@@ -88,5 +89,27 @@ it('Android, with no watchdog, starts by the backstop if onShow never comes, so 
 
 it('the Room closes the person card when a match or a Blend lands', () => {
   const src = readFileSync(join(__dirname, '../components/blendn/BlendnScreen.tsx'), 'utf8')
-  expect(src).toMatch(/const momentLanded = !!room\.match \|\| !!blend\s+useEffect\(\(\) => \{\s+if \(momentLanded\) setOpen\(null\)/)
+  expect(src).toMatch(/const landed: object \| string \| null = room\.match\?\.conversationId \?\? blend \?\? null[\s\S]{0,120}if \(landed && landed !== madeWayFor\) \{\s+setMadeWayFor\(landed\)\s+setOpen\(null\)/)
+  expect(src).toContain('key={room.match.conversationId}')
+})
+
+it('a skip before it was seen (a link closing it while it waits) buzzes nothing', async () => {
+  const sheet = {}
+  requestTurn(sheet)
+  await render(match())
+  await act(async () => dismissModals())
+  await act(async () => releaseTurn(sheet))
+  await advance(LONG_AFTER_ANY_BEAT)
+  expect(haptic).not.toHaveBeenCalled()
+})
+
+it('Ready never strands onboarding: with the screen held elsewhere, it plays and hands off after its longest wait', async () => {
+  requestTurn({})
+  const onDone = jest.fn()
+  await render(<MomentReady onDone={onDone} testID="r" />)
+  await advance(READY_MAX_WAIT_MS - 1)
+  expect(onDone).not.toHaveBeenCalled()
+  await advance(1)
+  await advance(LONG_AFTER_ANY_BEAT)
+  expect(onDone).toHaveBeenCalledTimes(1)
 })
