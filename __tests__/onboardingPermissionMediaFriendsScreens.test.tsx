@@ -463,6 +463,21 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft).intent_default).toEqual(['networking'])
   })
 
+  it('a resumed Dating taken back off, leaving nothing, is withdrawn: an empty list is sent, never the old answer kept', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['dating'] }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(tile('dating'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual([])
+  })
+
+  it('nothing stored and nothing touched: no intent is sent (control for the withdrawal above)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
+  })
+
   it('a resumed answer shows picked, dating included, and is sent as it was when nothing is touched', async () => {
     mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['friendship', 'dating'] }
     await render(<PreferencesScreen />)

@@ -196,7 +196,9 @@ export default function PreferencesScreen() {
                 show_orientation: orientationConsent(orientations, showOrientation),
               }),
           // Always present, so a stale draft value (a minor's old 'dating') is overwritten rather than carried: stepPayload drops undefined.
-          intent_default: intents.length ? intents : undefined,
+          // Everything taken off is an answer too: an empty list withdraws what was stored (a resumed dating). Untouched and empty,
+          // nothing is sent.
+          intent_default: intents.length ? intents : picked ? [] : undefined,
           reveal_by_default: !anonymous,
         })
       }
