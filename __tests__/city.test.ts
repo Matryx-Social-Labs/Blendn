@@ -166,7 +166,7 @@ describe('awayNotice — the half that speaks when switching is not an option', 
     // heading they had to infer the meaning of.
     expect(
       awayNotice({ selected: 'Bengaluru', deviceCity: 'Saarbrücken', available: AVAILABLE })
-    ).toEqual({ deviceCity: 'Saarbrücken', selected: 'Bengaluru' })
+    ).toEqual({ kind: 'notThere', deviceCity: 'Saarbrücken', selected: 'Bengaluru' })
   })
 
   it('stays quiet when the switch offer will speak instead', () => {
