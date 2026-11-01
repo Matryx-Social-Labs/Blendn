@@ -1,6 +1,6 @@
 import { Text } from 'react-native'
 
-import { GRADIENT } from '../../lib/design/tokens'
+import { GRADIENT, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { colourAt } from '../../lib/mapLit'
 
 /**
@@ -21,7 +21,7 @@ export function GradientWords({ text }: { text: string }) {
   return (
     <>
       {Array.from(text).map((glyph, i) => (
-        <Text key={i} style={{ color: colours[i] }}>
+        <Text key={i} maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={{ color: colours[i] }}>
           {glyph}
         </Text>
       ))}

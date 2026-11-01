@@ -57,7 +57,7 @@ const GENDERS: { label: string; value: OnboardingGender }[] = [
 /** Under the birthday question. Profiles show the age (`/profiles/:id`), never the date. */
 const DOB_SUBTITLE = 'Blend’n is 18+. People see your age, never your birthday.'
 /** Under the name question: what rooms show of it (SCRUM-493). */
-const NAME_SUBTITLE = 'In rooms you’re a made-up name until you choose to show yours. People you match or talk with see your name.'
+const NAME_HINT = 'In rooms you’re a made-up name. If you show yours, people there see your first name. Your full name is for people you match or talk with.'
 const NOT_A_DATE = 'That is not a date we recognise.'
 
 function BasicsScreenInner() {
@@ -168,7 +168,7 @@ function BasicsScreenInner() {
       step="basics"
       title={onName ? 'What should we ' : 'When’s your '}
       titleAccent={onName ? 'call you?' : 'birthday?'}
-      subtitle={onName ? NAME_SUBTITLE : DOB_SUBTITLE}
+      subtitle={onName ? NAME_HINT : DOB_SUBTITLE}
       ctaLabel="Continue"
       ctaDisabled={onName ? !nameReady : !ready}
       // Tapping the dead button says why, when why is the name: the sentence under it, and the primary's refusal.
@@ -181,11 +181,7 @@ function BasicsScreenInner() {
       onContinue={onName ? toBirthday : submit}
       onBack={onName ? undefined : () => setPage('name')}
       // Top-right, not under Continue: a way out beside the primary invited a mis-tap (Flow 2 walk).
-      headerAction={{
-        label: 'Not you?',
-        accessibilityLabel: 'Not you? Sign out',
-        onPress: () => setConfirmSignOut(true),
-      }}
+      headerAction={{ label: 'Not you?', accessibilityLabel: 'Not you? Sign out', onPress: () => setConfirmSignOut(true) }}
     >
       <>
         {/*

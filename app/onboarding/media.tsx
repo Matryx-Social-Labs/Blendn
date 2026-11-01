@@ -190,7 +190,7 @@ function MediaScreenInner() {
       ctaBusy={saving}
       ctaDisabled={uploading}
       onContinue={() => void (tiles.length === 0 ? add() : commit({ photos: readyPhotos(tiles) }))}
-      secondaryLabel="Later"
+      secondaryLabel="Skip"
       onSecondary={() => void skip()}
       onBack={goBack}
     >

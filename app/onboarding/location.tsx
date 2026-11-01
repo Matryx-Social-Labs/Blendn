@@ -89,7 +89,7 @@ export default function LocationScreen() {
       ctaLabel="Allow location"
       ctaBusy={saving || asking}
       onContinue={() => void ask()}
-      secondaryLabel="Not now"
+      secondaryLabel="Maybe later"
       // The same bug in the second of two places — see the note in
       // `notifications.tsx`. Declining left `share_location` at `@default(true)`.
       onSecondary={() => void commit({ share_location: false })}

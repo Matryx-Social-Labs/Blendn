@@ -59,9 +59,9 @@ export function useIntroProgress(): SharedValue<number> {
 
 /** A light's falloff, centre to edge. Shared with the onboarding steps' lights, which measure their text against it. */
 export const LIGHT_STOPS = [
-  { offset: 0, opacity: 0.9 },
-  { offset: 0.45, opacity: 0.42 },
-  { offset: 1, opacity: 0 },
+  { offset: 0, alpha: 0.9 },
+  { offset: 0.45, alpha: 0.42 },
+  { offset: 1, alpha: 0 },
 ] as const
 
 export function Light({ id, color, size = LIGHT_SIZE }: { id: string; color: string; size?: number }) {
@@ -70,7 +70,7 @@ export function Light({ id, color, size = LIGHT_SIZE }: { id: string; color: str
       <Defs>
         <RadialGradient id={id} cx="50%" cy="50%" r="50%">
           {LIGHT_STOPS.map((stop) => (
-            <Stop key={stop.offset} offset={stop.offset} stopColor={color} stopOpacity={stop.opacity} />
+            <Stop key={stop.offset} offset={stop.offset} stopColor={color} stopOpacity={stop.alpha} />
           ))}
         </RadialGradient>
       </Defs>

@@ -41,7 +41,7 @@ function alphaAt(d: number): number {
   const stops = LIGHT_STOPS
   const i = stops.findIndex((s, k) => k > 0 && d <= s.offset)
   const [a, b] = [stops[i - 1], stops[i]]
-  return OPACITY * (a.opacity + ((b.opacity - a.opacity) * (d - a.offset)) / (b.offset - a.offset))
+  return OPACITY * (a.alpha + ((b.alpha - a.alpha) * (d - a.offset)) / (b.offset - a.offset))
 }
 
 /** The most either light shows at the foot of the question on a window this tall: what the gradient words are measured against. */

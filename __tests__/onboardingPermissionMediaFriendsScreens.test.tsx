@@ -67,7 +67,7 @@ describe('location', () => {
     expect(await screen.findByTestId('location-map', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.queryByText(/BENGALURU|NEAR YOU|·/, { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByTestId('precise-off-notice')).toBeNull()
-    expect(screen.getByText('Not now')).toBeTruthy()
+    expect(screen.getByText('Maybe later')).toBeTruthy()
     noCreature()
   })
 
@@ -100,7 +100,7 @@ describe('photos', () => {
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(mockSelect).toHaveBeenCalledTimes(1)
     expect(mockCommit).not.toHaveBeenCalled()
-    expect(screen.getByText('Later')).toBeTruthy()
+    expect(screen.getByText('Skip')).toBeTruthy()
     noCreature()
   })
 
@@ -109,7 +109,7 @@ describe('photos', () => {
     await render(<MediaScreen />)
     const pair = screen.getByTestId('media-you-they')
     expect(pair.props.accessibilityLabel).toBe('Your photo, and how it looks to people before you show who you are: blurred')
-    expect(screen.getByText('You see · They see', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('YOU SEE · THEY SEE', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getByTestId('media-they-see', { includeHiddenElements: true }).props.blurRadius).toBeGreaterThan(0)
     expect(screen.getByTestId('media-you-see', { includeHiddenElements: true }).props.blurRadius ?? 0).toBe(0)
     await fireEvent.press(screen.getByTestId('onboarding-primary'))

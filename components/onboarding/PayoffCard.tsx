@@ -16,6 +16,8 @@ const CARD_WIDTH = 232
 const PHOTO_HEIGHT = 200
 const TILT = '-4deg'
 const GLOW = 420
+/** The glow sits under the card at a little over half the landing's settled light. */
+const GLOW_OPACITY = 0.6
 
 export function PayoffCard({ first, age, photo, interest }: { first?: string; age?: number | null; photo?: string; interest?: string }) {
   const bold = useBoldText()
@@ -53,7 +55,7 @@ export function PayoffCard({ first, age, photo, interest }: { first?: string; ag
 
 const styles = StyleSheet.create({
   stage: { alignItems: 'center', justifyContent: 'center', paddingVertical: SPACE.xl },
-  glow: { position: 'absolute', alignSelf: 'center', opacity: 0.6 },
+  glow: { position: 'absolute', alignSelf: 'center', opacity: GLOW_OPACITY },
   card: {
     width: CARD_WIDTH,
     borderRadius: RADIUS.card,
