@@ -13,6 +13,7 @@ import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { COLOR, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
+import { H } from '../../lib/haptics'
 import { useKeyboardShown } from '../../lib/keyboard'
 import { ONBOARDING_STEPS, stepIndex, type OnboardingStep } from '../../lib/onboarding'
 
@@ -160,7 +161,8 @@ export function OnboardingScreen({
             ) : null}
             {/* A disabled primary takes no press: the wrapper does, so a tap on it can say why it is off. */}
             <Pressable accessible={false} disabled={!ctaDisabled || !onCtaDisabledPress} onPress={onCtaDisabledPress} testID="onboarding-primary-frame">
-              <Button label={ctaLabel} kind="strong" onPress={onContinue} disabled={ctaDisabled} refused={ctaRefused} loading={ctaBusy} testID="onboarding-primary" />
+              {/* The landing's white primary; still the screen's one primary, so it keeps the primary's press-in haptic. */}
+              <Button label={ctaLabel} kind="strong" pressHaptic={H.primary} onPress={onContinue} disabled={ctaDisabled} refused={ctaRefused} loading={ctaBusy} testID="onboarding-primary" />
             </Pressable>
             {/* The way out stays with the button; only the note waits for the keyboard to go. Off while the primary saves: a Skip during a save navigated twice. */}
             {secondaryLabel && onSecondary ? (
