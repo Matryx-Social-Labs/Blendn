@@ -249,6 +249,16 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     expect(screen.getByTestId('scene-day-2').props.accessibilityLabel).toMatch(/, day 2 of 3, next$/)
   })
 
+  it('an ended run whose last day was called off promises no next doors (SCRUM-981)', async () => {
+    // Days 1-2 over, day 3 cancelled: the server's session is the last day it held, already ended, and the hero says Ended.
+    const over = { startTime: hours(-30), endTime: hours(-27) }
+    const ended = { timezone: ZONE, days: [day(-2, over), day(-1, over), day(0, { cancelled: true })], dayCount: 3, daysFrom: 1, dayNumber: 2 }
+    api.getEvent.mockResolvedValue(detail({ ...ended, startTime: hours(-54), endTime: hours(-27), session: over }) as never)
+    await open()
+    const tile = await screen.findByTestId('scene-tile-doors')
+    expect(tile.props.accessibilityLabel).toMatch(/^DOORS, \d/)
+  })
+
   it('the hero says the run\'s own dates in place of the next doors (frame 04)', async () => {
     api.getEvent.mockResolvedValue(detail(run(true)) as never)
     await open()

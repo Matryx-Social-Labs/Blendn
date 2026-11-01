@@ -1018,7 +1018,8 @@ export default function EventDetail() {
    */
   const sessionToday = event?.days ? sessionIsToday(event.days, event.timezone, now) : false
   const dayWords = event?.days && sessionToday ? dayOfWords(event.days) : null
-  const doorsLabel = event?.days && event.days.dayNumber && !sessionToday ? 'NEXT DOORS' : 'DOORS'
+  // An ended run has no next doors, even when its last day was called off (SCRUM-981).
+  const doorsLabel = event?.days && event.days.dayNumber && !sessionToday && !isEnded ? 'NEXT DOORS' : 'DOORS'
   // Between days, to somebody who is going: the next door, said where "You're going" was (frame 06). Nothing else changes.
   const betweenLine =
     event?.days && ctaState === 'rsvpd' && !sessionToday && heroStart && Date.parse(event.start_time) <= now
