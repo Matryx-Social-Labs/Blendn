@@ -39,6 +39,13 @@ export async function openInApp(url: string): Promise<void> {
     Logger.warn('general', 'Refused to open a page that is not ours in the in-app browser', { host: hostOf(url) })
     throw new Error('Not one of our pages')
   }
+  /*
+   * A sheet's action ("What's kept") opens this in the tick the sheet closes. Presented on that Modal while it is still up,
+   * React Native's dismissal closes the browser instead and leaves the empty Modal over the app, taking every touch
+   * (SCRUM-994). One macrotask lets React commit the close, so `holdTurnWhile` sees the sheet as leaving and waits for it
+   * to go; a Modal that stays up (Tonight's Terms) is presented over at once, as before.
+   */
+  await new Promise((resolve) => setTimeout(resolve, 0))
   // Holds the screen while the browser is up: a sheet that comes due under it waits (lib/modalTurn).
   await holdTurnWhile(() =>
     WebBrowser.openBrowserAsync(url, {

@@ -13,7 +13,8 @@ import { AppState, Platform } from 'react-native'
 import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { RouteModal } from '../components/system/RouteModal'
 import { Sheet } from '../components/ds/Sheet'
-import { HOLD_MAX_MS, holdTurnWhile, holdsTurn, requestTurn, resetModalTurns, retryDelay } from '../lib/modalTurn'
+import { BLENDN_LINKS, openInApp } from '../lib/links'
+import { HOLD_MAX_MS, holdTurnWhile, holdsTurn, MODAL_GONE_FALLBACK_MS, requestTurn, resetModalTurns, retryDelay } from '../lib/modalTurn'
 import { afterSheetDismissed, HANDOFF_MS } from '../lib/sheetDismissed'
 import { dismissModals } from '../lib/pendingRoute'
 
@@ -367,7 +368,7 @@ describe('afterSheetDismissed leaves no stale waiter (review LOW)', () => {
   })
 })
 
-it('a link opened from a sheet that stays up (Delete account → What’s kept) opens at once, over it', async () => {
+it('a native screen opened over a sheet that stays up (no afterClosing) opens at once, over it', async () => {
   await render(<Sheet visible onClose={() => {}} title="Delete account?" testID="del" />)
   let opened = false
   void holdTurnWhile(async () => {
@@ -375,6 +376,37 @@ it('a link opened from a sheet that stays up (Delete account → What’s kept) 
   })
   await act(async () => Promise.resolve())
   expect(opened).toBe(true)
+})
+
+describe('a page opened as its sheet closes waits for the sheet to go (SCRUM-994)', () => {
+  it('not over the leaving Modal, not even when the wait runs out; at once when iOS says it has gone', async () => {
+    const open = jest.requireMock('expo-web-browser').openBrowserAsync as jest.Mock
+    open.mockClear()
+    const view = await render(<Sheet visible onClose={() => {}} title="Delete your account?" testID="del" />)
+    const gone = screen.getByTestId('del-modal', HIDDEN).props.onDismiss
+    // "What's kept": the sheet closes, and the page is asked for in the same tick.
+    await view.rerender(<Sheet visible={false} onClose={() => {}} title="Delete your account?" testID="del" />)
+    void openInApp(BLENDN_LINKS.deleteAccount)
+    await tick(0)
+    expect(open).not.toHaveBeenCalled()
+    // holdTurnWhile's own wait is over; the sheet is still leaving, so the page still waits.
+    await tick(MODAL_GONE_FALLBACK_MS + 50)
+    expect(open).not.toHaveBeenCalled()
+    await act(async () => gone())
+    await tick(0)
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+  it('a sheet re-opened before it went is staying: a page asked for over it opens within the wait, not never', async () => {
+    const open = jest.requireMock('expo-web-browser').openBrowserAsync as jest.Mock
+    open.mockClear()
+    const view = await render(<Sheet visible onClose={() => {}} title="Delete your account?" testID="del" />)
+    await view.rerender(<Sheet visible={false} onClose={() => {}} title="Delete your account?" testID="del" />)
+    await tick(100)
+    await view.rerender(<Sheet visible onClose={() => {}} title="Delete your account?" testID="del" />)
+    void openInApp(BLENDN_LINKS.deleteAccount)
+    await tick(MODAL_GONE_FALLBACK_MS + 50)
+    expect(open).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('a link closes a plain Modal through its own close (RC drive 6)', () => {
