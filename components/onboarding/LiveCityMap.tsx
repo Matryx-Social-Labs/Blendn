@@ -7,11 +7,12 @@ import { apiClient } from '../../lib/apiClient'
 import { getDistanceKm } from '../../lib/geo'
 import { cameraMove, LIGHT_MIN_ZOOM, loadPins, tiltedZoom, type Bounds, type Pin } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
+import { locationSharingOn } from '../../lib/shareLocation'
 import type { LngLat } from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, homeMapStyle } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { CAMERA_MS, FLAT_VIEW, FLY_MS, LIGHT_STEP_MS, LIT_HOLD_MS, litUpTo, OPENING_VIEW, openingCentre } from '../../lib/onboardingMap'
-import { pinApi } from '../home/HomeMap'
+import { pinApiFor } from '../home/HomeMap'
 import { CityBuildings, GroundGlow, LitBuildings } from '../home/MapLitLayers'
 import { useMapLighting, type MapView } from '../home/useMapLighting'
 
@@ -70,14 +71,17 @@ export function LiveCityMap({ you, onShown }: { you: LngLat | null; onShown?: ()
     }
   }, [])
 
-  // The places to light, around wherever the map is going.
+  // The places to light, around wherever the map is going. The catalogue's city is a camera point (a viewport read); your own
+  // position is not, so it goes through the sharing gate (`toQuery`), and with sharing off it is not asked at all.
   const target = you ?? centre
   const targetKey = keyOf(target)
   useEffect(() => {
     if (!target) return
+    if (you && !locationSharingOn()) return
     let alive = true
     const q = { lat: target[1], lon: target[0], radius: PIN_RADIUS_KM }
-    Promise.all([loadPins('events', q, pinApi, PIN_LIMIT), loadPins('places', q, pinApi, PIN_LIMIT)])
+    const api = pinApiFor(!you)
+    Promise.all([loadPins('events', q, api, PIN_LIMIT), loadPins('places', q, api, PIN_LIMIT)])
       .then((answers) => {
         if (alive) setPins({ at: targetKey, pins: answers.flatMap((a) => (a.kind === 'pins' ? a.pins : [])) })
       })

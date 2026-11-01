@@ -86,14 +86,19 @@ const roughView = ([lng, lat]: [number, number]): Bounds => [lng - 0.006, lat - 
 /** `MAP_THEME.light`, as the spec's (mutable) type. */
 const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.light.position] }
 
-/** The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger. */
-export const pinApi = {
+/**
+ * The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger.
+ * `viewport`: the point is where a camera looks, so it goes even with sharing off. A person's own position is never a
+ * viewport: it goes through the sharing gate (`toQuery`).
+ */
+export const pinApiFor = (viewport: boolean) => ({
   getEvents: async (q: PinQuery & { limit: number }) => {
-    const res = await apiClient.getEvents(q, { force: true, viewport: true })
+    const res = await apiClient.getEvents(q, { force: true, viewport })
     return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi) } : undefined }
   },
-  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport: true }),
-}
+  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport }),
+})
+const pinApi = pinApiFor(true)
 
 /**
  * The map behind the home drawer (plan v2 §4, step 2 PR B; restyled step 2c):

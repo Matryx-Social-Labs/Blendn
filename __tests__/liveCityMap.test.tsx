@@ -43,7 +43,10 @@ const mockLit = {
   states: [],
 }
 jest.mock('../components/home/useMapLighting', () => ({ useMapLighting: () => ({ lit: mockLit, onFrame: jest.fn(), relight: jest.fn() }) }))
-jest.mock('../components/home/HomeMap', () => ({ pinApi: {} }))
+// The pin reads, tagged with how they were asked: a viewport (a camera point) or through the sharing gate (a person's position).
+jest.mock('../components/home/HomeMap', () => ({ pinApiFor: (viewport: boolean) => ({ viewport }) }))
+let mockSharing = true
+jest.mock('../lib/shareLocation', () => ({ ...jest.requireActual('../lib/shareLocation'), locationSharingOn: () => mockSharing }))
 const mockPins = jest.fn(async (..._a: unknown[]) => ({ kind: 'pins', pins: [], truncated: false }))
 jest.mock('../lib/homeMap', () => ({ ...jest.requireActual('../lib/homeMap'), loadPins: (...a: unknown[]) => mockPins(...a) }))
 const mockCities = jest.fn()
@@ -75,6 +78,8 @@ beforeEach(() => {
   mockStops.length = 0
   mockBands = []
   mockCities.mockResolvedValue({ success: true, data: CATALOGUE })
+  mockSharing = true
+  mockPins.mockClear()
 })
 afterEach(() => jest.useRealTimers())
 
@@ -144,6 +149,29 @@ describe('LiveCityMap', () => {
     await settleAt(you)
     await act(async () => jest.advanceTimersByTime(LIT_HOLD_MS))
     expect(onShown).toHaveBeenCalled()
+  })
+
+  const askedAt = (lat: number) => mockPins.mock.calls.filter((c) => (c[1] as { lat: number }).lat === lat)
+
+  it("asks for the catalogue city's places as a camera point, and your own places through the sharing gate (never as a viewport)", async () => {
+    const view = await render(<LiveCityMap you={null} />)
+    expect(askedAt(12.97).length).toBe(2)
+    for (const c of askedAt(12.97)) expect(c[2]).toEqual({ viewport: true })
+    await view.rerender(<LiveCityMap you={[77.6, 12.98]} />)
+    expect(askedAt(12.98).length).toBe(2)
+    for (const c of askedAt(12.98)) expect(c[2]).toEqual({ viewport: false })
+  })
+
+  it('with "Share location" off, nothing is asked from your position at all (control: on, it is)', async () => {
+    mockSharing = false
+    const view = await render(<LiveCityMap you={null} />)
+    await view.rerender(<LiveCityMap you={[77.6, 12.98]} />)
+    expect(askedAt(12.98)).toEqual([])
+    // The catalogue's city is no one's position: still asked.
+    expect(askedAt(12.97).length).toBe(2)
+    mockSharing = true
+    await view.rerender(<LiveCityMap you={[77.61, 12.99]} />)
+    expect(askedAt(12.99).length).toBe(2)
   })
 
   it('given you with no map to fly (not drawn): says so at once, the step does not wait on it', async () => {
