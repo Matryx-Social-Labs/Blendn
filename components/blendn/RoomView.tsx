@@ -146,12 +146,14 @@ export type RoomViewProps = {
  * on the grid moves unless something happened.
  */
 export function RoomView(props: RoomViewProps) {
-  const { onScroll, native, scrollEventThrottle } = useStageScroll()
+  const { onScroll, native, scrollEventThrottle, scrolled, atTop } = useStageScroll()
   const cell = useGridCell()
   const { view, people, enter, hidden = false } = props
   const entrance = useEntrance(enter, hidden)
   const reduceMotion = useReducedMotion()
   const crewsView = view === 'crews'
+  // People and Crews are separate lists (`key={view}`), so a switch lands on a new one at its top.
+  useEffect(atTop, [atTop, view])
   const empty = people.length === 0
 
   const header = (
@@ -218,8 +220,9 @@ export function RoomView(props: RoomViewProps) {
           scrollEventThrottle={scrollEventThrottle}
           bounces={false}
           showsVerticalScrollIndicator={false}
-          // A scrolled list keeps its place when a section above it arrives or goes: nothing jumps under a thumb.
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          // A scrolled list keeps its place when a section above it arrives or goes: nothing jumps under a thumb. Only then:
+          // at the top the anchor pushed the title off the screen when the header grew, on an arrival or on opening.
+          maintainVisibleContentPosition={scrolled ? { minIndexForVisible: 0 } : undefined}
           columnWrapperStyle={crewsView ? undefined : styles.gridRow}
           contentContainerStyle={{ paddingTop: props.topInset, paddingBottom: props.bottomInset + SPACE.xxxl * 2 }}
           ListHeaderComponent={header}

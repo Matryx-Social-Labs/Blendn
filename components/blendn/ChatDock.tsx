@@ -61,6 +61,9 @@ function lastFromHistory(raw: unknown, myId?: string): DockLine | null {
  * subscription map, so opening the chat does not join twice. "N new" counts
  * what arrived while you were here, and clears when you open the chat.
  */
+/** After the stage's fade and the Room's entrance have both finished. */
+const GLASS_REBUILD_MS = 1000
+
 export function ChatDock({
   chatGroupId,
   myId,
@@ -82,6 +85,13 @@ export function ChatDock({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  // iOS glass made while the Room fades in can stay clear for good, and the text then sits on the faces under it (SCRUM-983).
+  // ponytail: one rebuild once the entrances are over; a fade that outlasts it would need the Room to say when it is visible.
+  const [glassKey, setGlassKey] = useState(0)
+  useEffect(() => {
+    const timer = setTimeout(() => setGlassKey(1), GLASS_REBUILD_MS)
+    return () => clearTimeout(timer)
+  }, [])
   const [message, setMessage] = useState<DockLine | null>(null)
   // The Android snackbar stands above this dock (the toast adds the bottom inset itself).
   const insets = useSafeAreaInsets()
@@ -186,7 +196,7 @@ export function ChatDock({
           }}
           accessibilityLiveRegion="polite"
         >
-          <Material role="bar" style={[styles.dock, contrast && IC_HAIRLINE]}>
+          <Material key={glassKey} role="bar" style={[styles.dock, contrast && IC_HAIRLINE]}>
             <Icon name={state === 'failed' ? 'cloud-off' : 'message-circle'} size={ICON.nav} />
             <View style={styles.text}>
               <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>

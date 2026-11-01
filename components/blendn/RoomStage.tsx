@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useImperativeHandle, useMemo } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useState } from 'react'
 import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, {
@@ -6,6 +6,7 @@ import Animated, {
   Extrapolation,
   interpolate,
   ReduceMotion,
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -28,6 +29,8 @@ const CLOSE_DISTANCE = 140
 /** A flick this fast closes from any distance. */
 const CLOSE_VELOCITY = 900
 /** #7: open 420 ms, close ~300 ms, on the standard ease; Reduce Motion a 200 ms fade. */
+/** Scrolled further than this, a list is somewhere a person put it; nearer the top, it is at the top. */
+const SCROLLED_PAST = 24
 const OPEN_MS = 420
 const CLOSE_MS = 300
 const FADE_MS = 200
@@ -76,13 +79,24 @@ export const useStage = () => {
  */
 export function useStageScroll() {
   const { scrollY, pan } = useStage()
+  // Past this the list is somewhere a person put it, so it holds its place when the header changes (`RoomView`).
+  const [scrolled, setScrolled] = useState(false)
+  useAnimatedReaction(
+    () => scrollY.get() > SCROLLED_PAST,
+    (now, before) => {
+      if (now !== before) scheduleOnRN(setScrolled, now)
+    }
+  )
+  // A new list starts at its top, whatever the last one reported; only scroll events write this otherwise.
+  const atTop = useCallback(() => scrollY.set(0), [scrollY])
+  useEffect(atTop, [atTop])
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
       scrollY.set(e.contentOffset.y)
     },
   })
   const native = useMemo(() => Gesture.Native().simultaneousWithExternalGesture(pan), [pan])
-  return { onScroll, native, scrollEventThrottle: 16 as const }
+  return { onScroll, native, scrollEventThrottle: 16 as const, scrolled, atTop }
 }
 
 /**
