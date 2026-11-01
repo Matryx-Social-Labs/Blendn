@@ -84,8 +84,6 @@ import {
 import { readStoredCity, storeCity } from '../../lib/cityStorage'
 import { saveHomeCity, useHomeCitySlug } from '../../lib/homeCity'
 
-type CatalogueMeta = Omit<CityCatalogue, 'cities'>
-const catalogueMeta = (data: CityCatalogue | null): CatalogueMeta => ({ countries: data?.countries, defaultCitySlug: data?.defaultCitySlug, device: data?.device })
 import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { FIX_MAX_AGE_MS, fixOf, type PreciseFix } from '../../lib/roomButton'
@@ -124,6 +122,9 @@ import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { eventClock, nameZones } from '../../lib/time'
+
+type CatalogueMeta = Omit<CityCatalogue, 'cities'>
+const catalogueMeta = (data: CityCatalogue | null): CatalogueMeta => ({ countries: data?.countries, defaultCitySlug: data?.defaultCitySlug, device: data?.device })
 
 /*
  * One shared definition, in `lib/api.ts`, derived from the API mapping itself.
@@ -1121,8 +1122,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   useEffect(() => {
     if (!deviceCountry) return
     let cancelled = false
-    apiClient
-      .getEventCities(deviceCountry)
+    Promise.resolve()
+      .then(() => apiClient.getEventCities(deviceCountry))
       .then((response) => {
         if (cancelled || !response.success || !response.data) return
         setCityOptions(response.data.cities)

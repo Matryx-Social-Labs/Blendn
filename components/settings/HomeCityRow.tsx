@@ -20,8 +20,8 @@ export function HomeCityRow({ userId }: { userId: string }) {
 
   useEffect(() => {
     let cancelled = false
-    apiClient
-      .getEventCities()
+    Promise.resolve()
+      .then(() => apiClient.getEventCities())
       .then((response) => {
         if (cancelled || !response.success || !response.data) return
         setCatalogue({ cities: response.data.cities, countries: response.data.countries ?? [] })
