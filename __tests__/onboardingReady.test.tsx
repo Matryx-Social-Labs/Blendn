@@ -23,12 +23,32 @@ jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null })
 jest.mock('../components/onboarding/OnboardingScreen', () => {
   const { Pressable, Text, View } = jest.requireActual('react-native')
   return {
-    OnboardingScreen: ({ onContinue, children }: { onContinue: () => void; children: React.ReactNode }) => (
+    OnboardingScreen: ({
+      title,
+      titleAccent,
+      onContinue,
+      secondaryLabel,
+      onSecondary,
+      children,
+    }: {
+      title: string
+      titleAccent?: string
+      onContinue: () => void
+      secondaryLabel?: string
+      onSecondary?: () => void
+      children: React.ReactNode
+    }) => (
       <View>
+        <Text testID="title">{`${title}${titleAccent ?? ''}`}</Text>
         {children}
         <Pressable accessibilityRole="button" accessibilityLabel="Start" onPress={onContinue}>
           <Text>Start</Text>
         </Pressable>
+        {secondaryLabel ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={secondaryLabel} onPress={onSecondary}>
+            <Text>{secondaryLabel}</Text>
+          </Pressable>
+        ) : null}
       </View>
     ),
   }
@@ -134,4 +154,36 @@ it('says the chosen intent with the tile\'s own words under "Why you go out", an
   mockDraft = { name: 'Sam', photos: [], interests: [] }
   await render(<ReadyScreen />)
   expect(screen.queryByText('Why you go out')).toBeNull()
+})
+
+describe('the payoff (Flow 2, SCRUM-1002)', () => {
+  it('greets by first name only: "You’re in, Émilie."', async () => {
+    mockDraft = { name: 'Émilie Tremblay', photos: [], interests: [] }
+    await render(<ReadyScreen />)
+    expect(screen.getByTestId('title').props.children).toBe('You’re in, Émilie.')
+  })
+
+  it('without a name it still reads as a sentence (control for the comma)', async () => {
+    mockDraft = { photos: [], interests: [] }
+    await render(<ReadyScreen />)
+    expect(screen.getByTestId('title').props.children).toBe('You’re in.')
+  })
+
+  it('Edit my details finishes, then opens the one edit screen over the tabs, not step 1', async () => {
+    mockFinish.mockResolvedValue(true)
+    await render(<ReadyScreen />)
+    await act(async () => fireEvent.press(screen.getByLabelText('Edit my details')))
+    expect(mockFinish).toHaveBeenCalledTimes(1)
+    expect(router.replace).toHaveBeenCalledWith('/(tabs)/events')
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+    expect(screen.queryByTestId('ready-moment')).toBeNull()
+  })
+
+  it('Edit my details stays put when the server says no, as Start does', async () => {
+    mockFinish.mockResolvedValue(false)
+    await render(<ReadyScreen />)
+    await act(async () => fireEvent.press(screen.getByLabelText('Edit my details')))
+    expect(router.replace).not.toHaveBeenCalled()
+    expect(router.push).not.toHaveBeenCalled()
+  })
 })

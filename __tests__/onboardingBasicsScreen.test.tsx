@@ -116,7 +116,7 @@ it('nothing is said while the boxes are half full', async () => {
 
 it('Not you? Sign out asks first, and only the sheet’s Sign out ends the session', async () => {
   await render(<BasicsScreen />)
-  await fireEvent.press(screen.getByTestId('onboarding-secondary'))
+  await fireEvent.press(screen.getByTestId('onboarding-header-action'))
   expect(screen.getByText('Sign out?')).toBeTruthy()
   expect(mockSignOut).not.toHaveBeenCalled()
   await fireEvent.press(screen.getByLabelText('Sign out'))
@@ -168,9 +168,16 @@ it('signing out keeps what was typed in the draft, as the sheet promises (SCRUM-
   await fireEvent.changeText(screen.getByTestId('onboarding-name-input'), 'Sam M')
   await fireEvent.press(screen.getByLabelText('Woman'))
   await dob('14', '03', '1998')
-  await fireEvent.press(screen.getByTestId('onboarding-secondary'))
+  await fireEvent.press(screen.getByTestId('onboarding-header-action'))
   await fireEvent.press(screen.getByLabelText('Sign out'))
   expect(mockUpdate).toHaveBeenCalledWith({ name: 'Sam M', gender: 'woman', dateOfBirth: '1998-03-14' })
   expect(mockSignOut).toHaveBeenCalled()
   expect(mockUpdate.mock.invocationCallOrder[0]).toBeLessThan(mockSignOut.mock.invocationCallOrder[0])
+})
+
+it('the way out sits in the header’s top-right, out of the primary column (Flow 2, SCRUM-1002)', async () => {
+  await render(<BasicsScreen />)
+  expect(screen.queryByTestId('onboarding-secondary')).toBeNull()
+  expect(screen.getByTestId('onboarding-header-action')).toBeTruthy()
+  expect(screen.getByLabelText('Not you? Sign out')).toBeTruthy()
 })
