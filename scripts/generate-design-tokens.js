@@ -118,8 +118,8 @@ function build(json) {
   const maxScale = Object.fromEntries(Object.entries(type.roles).map(([role, r]) => [camel(role), r.maxScale]))
 
   const tokens = {
-    COLOR: camelKeys(omit(color, ['gradient-brand', 'gradient-fill'])),
-    GRADIENT: { brand: percentGradient(color['gradient-brand']), fill: percentGradient(color['gradient-fill']) },
+    COLOR: camelKeys(omit(color, ['gradient-brand', 'gradient-fill', 'gradient-text'])),
+    GRADIENT: { brand: percentGradient(color['gradient-brand']), fill: percentGradient(color['gradient-fill']), text: percentGradient(color['gradient-text']) },
     MATERIAL: {
       ...camelKeys(omit(material, ['glass-edge', 'solid-inner-highlight', 'glow-check-in'])),
       glassEdge: border(material['glass-edge']),

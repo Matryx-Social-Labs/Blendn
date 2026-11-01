@@ -85,6 +85,11 @@ export const GRADIENT = {
     colors: ['#D83F0F', '#BB556B', '#925DA9'],
     locations: [0, 0.5, 1],
   },
+  text: {
+    angle: 90,
+    colors: ['#F05423', '#BE5C71', '#A47BBF'],
+    locations: [0, 0.5, 1],
+  },
 } as const
 
 /** Material tiers (§5): glass (iOS 26+), blur (iOS 16.4–25), solid (Android Tier B, Reduce Transparency). Drawn only by `<Material>`. */
