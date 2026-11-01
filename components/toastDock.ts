@@ -30,7 +30,7 @@ export const ToastDockContext = createContext<(id: string, height: number) => ()
 export const ToastInsetContext = createContext(0)
 
 /** Whether this screen is the one in front (a stack keeps the screens under it mounted). Without a navigator (a test, a preview) it is. */
-function useFocused(): boolean {
+export function useFocused(): boolean {
   // ponytail: useNavigation throws outside a navigator (the design gallery, a bare test); whether there is one never changes
   // for a mounted tree, so the hook order is stable. Upgrade to a NavigationContext read if expo-router exports it.
   try {

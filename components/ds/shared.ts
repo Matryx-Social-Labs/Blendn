@@ -180,6 +180,17 @@ export function announceOutcome(text: string) {
 }
 
 /**
+ * An alert that appears in place (a failed sign-in, an upload that didn't go), said when its text arrives or changes:
+ * announced on iOS; on Android the element that shows it carries `accessibilityLiveRegion`, so it is not read twice.
+ * `accessibilityRole="alert"` alone says nothing (motion audit M3).
+ */
+export function useAnnounced(text: string | null | undefined | false, { queue = false }: { queue?: boolean } = {}) {
+  useEffect(() => {
+    if (text && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibilityWithOptions(text, { queue })
+  }, [text, queue])
+}
+
+/**
  * What a control sits on (prompt 13 §0): the ink page, a surface card, or glass (a Sheet on iOS, the home drawer). Chip and
  * SegmentedControl read it, so a call site never passes a fill.
  */

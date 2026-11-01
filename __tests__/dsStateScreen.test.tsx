@@ -74,8 +74,24 @@ describe('<StateScreen>', () => {
     expect(screen.getByRole('button', { name: 'Try again' }).props.accessibilityState).toMatchObject({ busy: true })
   })
 
+  it('inline: said too, queued behind what is being read (M4: a failed load replacing "Loading" said nothing)', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+    await render(<StateScreen icon="cloud-off" title="Couldn’t load your chats" body="Check your connection." testID="s" />)
+    expect(announce).toHaveBeenCalledWith('Couldn’t load your chats. Check your connection.', { queue: true })
+    announce.mockRestore()
+  })
+
+  it('a state whose title follows the typing says one fixed line, once, not a line per keystroke', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+    const r = await render(<StateScreen icon="search" title="No chats match “a”" announce="No chats match your search" />)
+    await r.rerender(<StateScreen icon="search" title="No chats match “ab”" announce="No chats match your search" />)
+    expect(announce).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('No chats match your search', { queue: true })
+    announce.mockRestore()
+  })
+
   it('full screen: the 80 well, the actions docked, and the screen announced on arrival', async () => {
-    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
     await render(
       <StateScreen
         variant="screen"
@@ -88,7 +104,7 @@ describe('<StateScreen>', () => {
     )
     expect(flat('s-well').width).toBe(80)
     expect(screen.getByTestId('s-dock')).toBeTruthy()
-    expect(announce).toHaveBeenCalledWith('Not open to you. This event is 21+.')
+    expect(announce).toHaveBeenCalledWith('Not open to you. This event is 21+.', { queue: false })
   })
 
   it('Increase Contrast: the well’s hairline, a white glyph, white body text', async () => {

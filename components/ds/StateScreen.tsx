@@ -1,4 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
+
+import { useLatest } from '../../lib/useLatest'
+import { useFocused } from '../toastDock'
 import { AccessibilityInfo, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -83,6 +86,11 @@ export type StateScreenProps = {
    * action stop at the page's margins instead of running edge to edge. Off by default: a card or a padded list already has them.
    */
   gutter?: boolean
+  /**
+   * What a screen reader is told on arrival, when not the title and body: a fixed line for a state whose title changes as you
+   * type ("No chats match …"), or `false` for one its screen already says.
+   */
+  announce?: string | false
   testID?: string
 }
 
@@ -96,16 +104,20 @@ export type StateScreenProps = {
  * Text scales freely; the well never does. Increase Contrast: the well's
  * hairline, a white glyph, secondary text lifted to white.
  */
-export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono = false, actions = [], foot, busy = false, variant = 'inline', gutter = false, testID }: StateScreenProps) {
+export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono = false, actions = [], foot, busy = false, variant = 'inline', gutter = false, announce, testID }: StateScreenProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
   const screen = variant === 'screen'
 
+  // Said on arrival, inline too: a load that fails where "Loading" was read must say so. Inline queues, so it never cuts off
+  // what is being read (M4); and an inline state on a screen behind another (a tab, a pushed route) stays quiet.
+  const said = announce === false ? null : (announce ?? (body ? `${title}. ${body}` : title))
+  const inFront = useLatest(useFocused())
   useEffect(() => {
-    if (screen) AccessibilityInfo.announceForAccessibility(body ? `${title}. ${body}` : title)
-  }, [screen, title, body])
+    if (said && (screen || inFront.current)) AccessibilityInfo.announceForAccessibilityWithOptions(said, { queue: !screen })
+  }, [screen, said, inFront])
 
   const content = (
     <View style={styles.column}>

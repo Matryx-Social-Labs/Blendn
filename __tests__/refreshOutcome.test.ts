@@ -44,7 +44,7 @@ describe('a session the server ended is explained on the entry screen (SCRUM-142
     expect(events).toMatch(/await s\.removeItem\(ENDED_KEY\)/)
     expect(entry).toContain('consumeSessionEnd().then((end) => {')
     // The notice is capped at its role (DS-22): `maxFontSizeMultiplier` may stand before the style.
-    expect(entry).toMatch(/\{!error && notice && \(\s*<Text (?:maxFontSizeMultiplier=\{[^}]*\} )?style=\{\[[^}]*styles\.notice\]\} accessibilityRole="alert">/)
+    expect(entry).toMatch(/\{!error && notice && \(\s*<Text (?:maxFontSizeMultiplier=\{[^}]*\} )?style=\{\[[^}]*styles\.notice\]\} accessibilityRole="alert" accessibilityLiveRegion="polite">/)
   })
 
   it('says what happened and what to do', () => {

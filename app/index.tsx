@@ -18,7 +18,7 @@ import FadeInUp from '../components/motion/FadeInUp'
 import ScalePress from '../components/motion/ScalePress'
 import { DiscMark } from '../components/ds/DiscMark'
 import { Spinner } from '../components/ds/Loader'
-import { font, PRESSED_WASH, useBoldText, useLargeText } from '../components/ds/shared'
+import { font, PRESSED_WASH, useBoldText, useLargeText, useAnnounced } from '../components/ds/shared'
 import { Icon } from '../components/ui/Icon'
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
@@ -108,6 +108,7 @@ function IndexInner() {
    * explanation. Same slot as a sign-in failure — it is the same kind of news.
    */
   const [notice, setNotice] = useState<string | null>(null)
+  useAnnounced(error || notice)
   useEffect(() => {
     if (user || loading || unreachable) return
     consumeSessionEnd().then((end) => {
@@ -349,20 +350,19 @@ function IndexInner() {
       <Animated.View style={introDock}>
       <Dock gap={SPACE.md} testID="landing-dock">
         {/*
-          * Announced to screen readers as an alert, so someone mid-gesture is
-          * told rather than left waiting. A toast would auto-dismiss and be
-          * missed entirely.
+          * Said to screen readers as it arrives (`useAnnounced`, the live region on Android), so someone mid-gesture is
+          * told rather than left waiting. A toast would auto-dismiss and be missed entirely.
           */}
         {error && (
           <View style={styles.message}>
             <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.errorText]} accessibilityRole="alert">
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.errorText]} accessibilityRole="alert" accessibilityLiveRegion="assertive">
               {error}
             </Text>
           </View>
         )}
         {!error && notice && (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert">
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert" accessibilityLiveRegion="polite">
             {notice}
           </Text>
         )}

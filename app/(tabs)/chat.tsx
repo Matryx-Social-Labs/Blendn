@@ -553,6 +553,7 @@ function ChatInner() {
             <StateScreen
               icon="search"
               title={`No chats match “${query.trim()}”`}
+              announce="No chats match your search"
               actions={[{ label: 'Clear search', kind: 'lit', onPress: () => setQuery('') }]}
               testID="banter-no-match"
             />

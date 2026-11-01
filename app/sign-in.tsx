@@ -13,7 +13,7 @@ import { Banner } from '../components/ds/Banner'
 import { Button } from '../components/ds/Button'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { TextField } from '../components/ds/TextField'
-import { font, useBoldText } from '../components/ds/shared'
+import { font, useBoldText, useAnnounced } from '../components/ds/shared'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { setAccountState } from '../lib/accountState'
 import { accountRefusalOf } from '../lib/sessionEnd'
@@ -115,6 +115,8 @@ export default function SignIn() {
   const params = useLocalSearchParams<{ notice?: string }>()
   const notice = typeof params.notice === 'string' && params.notice ? params.notice : null
 
+  // The error has its own Banner, which says itself.
+  useAnnounced(notice && !error ? notice : null)
   const isSignup = mode === 'signup'
   const trimmedEmail = email.trim().toLowerCase()
 
@@ -285,7 +287,7 @@ export default function SignIn() {
           <PendingInvite signIn />
 
           {notice && !error ? (
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert">
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert" accessibilityLiveRegion="polite">
               {notice}
             </Text>
           ) : null}
