@@ -102,7 +102,7 @@ it('a crew invite is answered here too, since the Banter now only counts it', as
   mockInvites.splice(0, mockInvites.length, { crewId: 'c1', name: 'Run Club', invitedBy: 'Asha', invitedAt: '2026-01-01T00:00:00Z', emblemSeed: 's' })
   try {
     api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
-    render(<MessageRequests />)
+    await render(<MessageRequests />)
     await flush()
     expect(screen.getByText('Asha invited you to the crew')).toBeTruthy()
     expect(screen.queryByText('No requests waiting')).toBeNull()
