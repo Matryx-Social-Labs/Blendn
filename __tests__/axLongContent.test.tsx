@@ -44,7 +44,7 @@ describe('display headlines never break inside a word', () => {
     expect(WIDEST_HEADLINE_WORD_EM * TYPE.display.fontSize * MAX_FONT_SCALE.display).toBeLessThanOrEqual(NARROWEST_HEADLINE_LINE)
   })
 
-  it('the onboarding frame: the headline stops at the display cap, the bar’s "Step n of 8" at a control’s, the subtitle at body’s', async () => {
+  it('the onboarding frame: the headline stops at the display cap, the bar’s "Step n of 5" at a control’s, the subtitle at body’s', async () => {
     await at(402, AX_XXXL)
     await render(<OnboardingScreen step="preferences" title="Your " titleAccent="preferences" subtitle="Who you’d like to meet." ctaLabel="Continue" onContinue={jest.fn()} />)
     expect(screen.getByTestId('onboarding-title', hidden).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.display)

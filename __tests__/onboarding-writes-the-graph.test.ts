@@ -202,22 +202,17 @@ describe('syncInterests makes the server match the picker', () => {
 
 describe('"Maybe later" is an answer, and gets recorded', () => {
   it.each([
-    ['app/onboarding/notifications.tsx', 'push_enabled'],
     ['app/onboarding/location.tsx', 'share_location'],
   ])('%s records false rather than skipping', (file, field) => {
     /*
-     * Both columns are `@default(true)`, and both screens called `skip()` on
-     * the decline path — which writes progress and draft and nothing else. So
-     * the profile said this person wants push notifications and wants to share
-     * their location, when they had said neither.
-     *
-     * `notifications.tsx`'s own docstring has always claimed the opposite:
-     * "push_enabled records the answer either way." One more comment describing
-     * behaviour the code did not have.
+     * The column is `@default(true)`, and the screen called `skip()` on the
+     * decline path — which writes progress and draft and nothing else. So the
+     * profile said this person wants to share their location, when they had
+     * said no. (The notifications step had the same fault; it left the flow in
+     * Flow 2's five steps.)
      */
     const src = read(file)
-    // Directly, or through the notifications step's `answer`, which also
-    // remembers the decline so push start-up does not ask the OS.
+    // Directly, or through a step's `answer` helper.
     const direct = new RegExp(`onSecondary=\\{\\(\\) => void commit\\(\\{ ${field}: false \\}\\)\\}`)
     const viaAnswer =
       /onSecondary=\{\(\) => void answer\(false\)\}/.test(src) &&

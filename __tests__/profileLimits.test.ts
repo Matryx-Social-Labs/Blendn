@@ -44,7 +44,7 @@ describe('source shape: Edit profile and onboarding keep no cap of their own and
   })
 
   it('the onboarding steps slice nothing and take their caps from the same constant', () => {
-    for (const file of ['app/onboarding/basics.tsx', 'app/onboarding/journey.tsx']) {
+    for (const file of ['app/onboarding/basics.tsx']) {
       const src = read(file)
       expect(src).not.toMatch(/value\.slice\(0, /)
       expect(src).toMatch(/PROFILE_LIMITS\./)

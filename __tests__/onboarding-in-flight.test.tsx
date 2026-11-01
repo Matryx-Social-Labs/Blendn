@@ -56,13 +56,13 @@ async function mounted(step: Parameters<typeof useOnboarding>[0]) {
 it('pushes the next step once for a double-tapped Continue', async () => {
   const save = deferred()
   update.mockReturnValueOnce(save.promise)
-  const { result } = await mounted('journey')
+  const { result } = await mounted('details')
 
   let first!: Promise<boolean>
   let second!: Promise<boolean>
   await act(async () => {
-    first = result.current.commit({ occupation: 'Designer' })
-    second = result.current.commit({ occupation: 'Designer' })
+    first = result.current.commit({ bio: 'Designer' })
+    second = result.current.commit({ bio: 'Designer' })
   })
   expect(await second).toBe(false)
 
@@ -78,11 +78,11 @@ it('pushes the next step once for a double-tapped Continue', async () => {
 it('ignores Skip while a save is in flight', async () => {
   const save = deferred()
   update.mockReturnValueOnce(save.promise)
-  const { result } = await mounted('journey')
+  const { result } = await mounted('details')
 
   let saving!: Promise<boolean>
   await act(async () => {
-    saving = result.current.commit({ occupation: 'Designer' })
+    saving = result.current.commit({ bio: 'Designer' })
     await result.current.skip()
   })
   expect(router.push).not.toHaveBeenCalled()
@@ -95,18 +95,18 @@ it('ignores Skip while a save is in flight', async () => {
 })
 
 it('lets a failed save be retried', async () => {
-  update.mockResolvedValueOnce({ success: false, error: 'Bad city' }).mockResolvedValueOnce({ success: true })
-  const { result } = await mounted('journey')
+  update.mockResolvedValueOnce({ success: false, error: 'Bad bio' }).mockResolvedValueOnce({ success: true })
+  const { result } = await mounted('details')
 
   let outcome!: boolean
   await act(async () => {
-    outcome = await result.current.commit({ occupation: 'Designer' })
+    outcome = await result.current.commit({ bio: 'Designer' })
   })
   expect(outcome).toBe(false)
-  expect(mockShowToast).toHaveBeenCalledWith('Bad city', 'error', { haptic: 'error' })
+  expect(mockShowToast).toHaveBeenCalledWith('Bad bio', 'error', { haptic: 'error' })
 
   await act(async () => {
-    outcome = await result.current.commit({ occupation: 'Designer' })
+    outcome = await result.current.commit({ bio: 'Designer' })
   })
   expect(outcome).toBe(true)
   expect(router.push).toHaveBeenCalledTimes(1)

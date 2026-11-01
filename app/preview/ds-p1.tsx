@@ -434,7 +434,7 @@ function Progress() {
   return (
     <Section title="ProgressBar" note="4 pt, white on surfaceSunken · grows on M.settle after 200 ms; Reduce Motion jumps · hidden from screen readers">
       {[1, 2, 4, 6, 8].map((s) => (
-        <Cell key={s} label={`step ${s} of 8`} testID={`ds-progress-${s}`}>
+        <Cell key={s} label={`step ${s} of 5`} testID={`ds-progress-${s}`}>
           <Counter step={s} />
           <ProgressBar progress={s / 8} />
         </Cell>
@@ -448,9 +448,9 @@ function Progress() {
   )
 }
 
-/** The header's "Step n of 8", which is what a screen reader hears. */
+/** The header's "Step n of 5", which is what a screen reader hears. */
 function Counter({ step }: { step: number }) {
-  return <Text style={styles.counter}>{`Step ${step} of 8`}</Text>
+  return <Text style={styles.counter}>{`Step ${step} of 5`}</Text>
 }
 
 const IDLE: RoomButtonTarget = { state: 'idle', eventId: null, badge: 0 }

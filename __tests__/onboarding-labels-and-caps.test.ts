@@ -13,7 +13,7 @@ import { PROFILE_LIMITS } from '../lib/profileLimits'
 const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 
 describe('onboarding secondaries wired to skip()', () => {
-  it.each(['journey', 'details', 'preferences'])('%s does not call it "Save"', (screen) => {
+  it.each(['details', 'preferences'])('%s does not call it "Save"', (screen) => {
     const src = read(`app/onboarding/${screen}.tsx`)
     const label = src.match(/secondaryLabel="([^"]+)"/)?.[1] ?? ''
     expect(src).toContain('onSecondary={() => void skip()}')
@@ -24,17 +24,15 @@ describe('onboarding secondaries wired to skip()', () => {
 describe('one word per meaning for the secondary (GO-11, D12)', () => {
   it.each([
     ['preferences', 'Skip'],
-    ['journey', 'Skip'],
     ['details', 'Skip'],
     ['media', 'Skip'],
     ['location', 'Maybe later'],
-    ['notifications', 'Maybe later'],
   ])('%s says "%s"', (screen, label) => {
     expect(read(`app/onboarding/${screen}.tsx`).match(/secondaryLabel="([^"]+)"/)?.[1]).toBe(label)
   })
 
   it('"Skip for now" is retired', () => {
-    for (const screen of ['preferences', 'journey', 'details', 'media', 'location', 'notifications', 'friends']) expect(read(`app/onboarding/${screen}.tsx`)).not.toContain('Skip for now')
+    for (const screen of ['preferences', 'details', 'media', 'location', 'friends']) expect(read(`app/onboarding/${screen}.tsx`)).not.toContain('Skip for now')
   })
 })
 

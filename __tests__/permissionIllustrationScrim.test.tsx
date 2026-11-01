@@ -20,7 +20,7 @@ import { tint } from '../lib/theme'
 const HIDDEN = { includeHiddenElements: true }
 
 it('fades clear to the sunken surface with the DS fade, then is solid under the words; no CSS gradient', async () => {
-  await render(<LocationIllustration city="Bengaluru" />)
+  await render(<LocationIllustration />)
   const fade = screen.getByTestId('location-scrim-fade', HIDDEN)
   expect(fade.props.colors).toEqual([tint(COLOR.surfaceSunken, 0), COLOR.surfaceSunken])
   const styleOf = (node: unknown) => StyleSheet.flatten((node as { props: { style?: object } }).props.style) as { flex?: number; backgroundColor?: string }
@@ -30,5 +30,7 @@ it('fades clear to the sunken surface with the DS fade, then is solid under the 
   const fadeFlex = styleOf(fade).flex as number
   expect(fadeFlex / (fadeFlex + (solid.flex as number))).toBeCloseTo(0.6)
   expect(JSON.stringify(screen.toJSON())).not.toContain('linear-gradient')
-  expect(screen.getByText('NEAR YOU · BENGALURU', HIDDEN)).toBeTruthy()
+  // No city named until the catalogue knows where the person is (SCRUM-997).
+  expect(screen.getByText('NEAR YOU', HIDDEN)).toBeTruthy()
+  expect(screen.queryByText(/·/, HIDDEN)).toBeNull()
 })

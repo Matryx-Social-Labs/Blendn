@@ -199,7 +199,7 @@ export async function registerForPushNotificationsAsync(
 
     if (existingStatus !== 'granted') {
       if (!prompt) {
-        Logger.info('notifications', 'Push declined during onboarding; not asking')
+        Logger.info('notifications', 'Push declined or deferred; not asking')
         return null
       }
       const answer = await Notifications.requestPermissionsAsync()

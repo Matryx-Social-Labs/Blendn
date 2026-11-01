@@ -47,7 +47,7 @@ jest.mock('../lib/sentry', () => ({
   Sentry: { wrap: (c: unknown) => c, captureException: jest.fn(), captureMessage: jest.fn(), addBreadcrumb: jest.fn() },
 }))
 jest.mock('../lib/onboardingStorage', () => ({ readOnboarding: jest.fn(async () => null) }))
-jest.mock('../lib/pushDecline', () => ({ hasDeclinedPush: jest.fn(async () => false) }))
+jest.mock('../lib/pushDecline', () => ({ mayPromptAtStartUp: jest.fn(async () => true) }))
 jest.mock('../lib/onboardingAssets', () => ({ ONBOARDING_IMAGES: [], prefetchOnboardingImages: jest.fn() }))
 jest.mock('../lib/coachMarks', () => ({ useCoachMark: () => ({ visible: false, dismiss: () => {} }), markCoachUsed: () => {} }))
 jest.mock('../components/PresenceMonitor', () => ({ PresenceMonitor: () => null }))

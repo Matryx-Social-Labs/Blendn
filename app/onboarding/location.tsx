@@ -8,7 +8,6 @@ import { SettingsTray } from '../../components/onboarding/SettingsTray'
 import { LocationIllustration } from '../../components/onboarding/PermissionIllustration'
 import { isPreciseLocationOff } from '../../lib/preciseLocation'
 import { Icon } from '../../components/ui/Icon'
-import { readStoredCity } from '../../lib/cityStorage'
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { askOsPermission } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
@@ -62,11 +61,6 @@ export default function LocationScreen() {
   const [settingsPrompt, setSettingsPrompt] = useState(false)
   const precise = usePreciseLocationOff()
   useAnnounced(precise.off ? PRECISE_OFF_NOTICE : null)
-  // The city the person has browsed, when there is one: "Near you · Bengaluru". Before any, the line says only "Near you".
-  const [city, setCity] = useState<string | null>(null)
-  useEffect(() => {
-    void readStoredCity().then((stored) => setCity(stored?.city ?? null))
-  }, [])
 
   const ask = async () => {
     setAsking(true)
@@ -107,7 +101,7 @@ export default function LocationScreen() {
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noticeText]}>{PRECISE_OFF_NOTICE}</Text>
         </View>
       ) : null}
-      <LocationIllustration city={city} notice={precise.off} />
+      <LocationIllustration notice={precise.off} />
       <SettingsTray
         visible={settingsPrompt}
         icon="map-pin-off"

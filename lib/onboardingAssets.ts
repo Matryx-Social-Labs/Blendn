@@ -41,7 +41,6 @@ import { Image } from 'expo-image'
  * resolve only once the bytes are on disk.
  */
 export const ONBOARDING_IMAGES = [
-  require('../assets/onboarding/notifications.jpg'),
   require('../assets/onboarding/location-map.jpg'),
   require('../assets/onboarding/you.jpg'),
   require('../assets/onboarding/nearby-1.jpg'),

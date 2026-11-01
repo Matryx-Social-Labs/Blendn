@@ -21,7 +21,7 @@ import { ReducedMotionFollower, useReducedMotion } from '../lib/motion';
 import { refreshPhoneZone } from '../lib/time';
 import { openWhenReady, setLinkNavigator, setRouteReady, takePendingRoute } from '../lib/pendingRoute';
 import { readOnboarding } from '../lib/onboardingStorage';
-import { hasDeclinedPush } from '../lib/pushDecline';
+import { mayPromptAtStartUp } from '../lib/pushDecline';
 import { PresenceMonitor } from '../components/PresenceMonitor';
 import { LiveAtVenue } from '../components/LiveAtVenue';
 import { notePathname } from '../lib/paywall';
@@ -350,7 +350,7 @@ function RootLayout() {
        *
        * What is different now:
        *
-       *  - The screens exist, all eight of them, and `resumeStep` cannot name
+       *  - The screens exist, all six of them, and `resumeStep` cannot name
        *    a route that does not — `ONBOARDING_ROUTES` is exhaustive over the
        *    step union, and a stored step this build does not recognise parses
        *    back to the first one rather than to a dead route.
@@ -447,21 +447,21 @@ function RootLayout() {
          *
          * `initializePushNotifications` asks the OS for permission. Run on
          * sign-in, it put the system dialog over onboarding's first screen,
-         * two seconds in, before the notifications step that exists to explain
-         * it had been reached, and iOS asks only once. Onboarding's step asks;
-         * this registers the token once somebody is through. For an account
+         * two seconds in, before anything had explained it, and iOS asks only
+         * once. This registers the token once somebody is through. For an account
          * already onboarded it is the same moment as before: the first screen
          * after sign-in, deferred so the UI renders first.
          *
-         * "Maybe later" on that step is respected: a declined account never
-         * sees the OS dialog from here (lib/pushDecline.ts). Settings asks.
+         * A declined account never sees the OS dialog from here, and nor does
+         * one that finished onboarding on a build without the notifications
+         * step: it is asked at its first "I'm going" (lib/pushDecline.ts).
          */
         if (!inOnboarding && !pushInitRef.current) {
           pushInitRef.current = true;
           const userId = user.id;
           setTimeout(() => {
-            hasDeclinedPush(userId)
-              .then((declined) => initializePushNotifications({ prompt: !declined }))
+            mayPromptAtStartUp(userId)
+              .then((prompt) => initializePushNotifications({ prompt }))
               .catch(() => {});
           }, 2000);
         }

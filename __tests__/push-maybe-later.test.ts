@@ -1,5 +1,5 @@
 /**
- * "Maybe later" on onboarding's notifications step is respected.
+ * A "not now" to push is respected.
  *
  * Push start-up asks the OS for permission when somebody reaches the tabs,
  * which put the system dialog in front of the person who had just declined.
@@ -63,16 +63,15 @@ describe('registration without a prompt', () => {
 })
 
 describe('wiring', () => {
-  it('the root layout passes the decline into push start-up', () => {
+  it('the root layout passes the decline (and the deferral) into push start-up', () => {
     const layout = read('app/_layout.tsx')
-    expect(layout).toMatch(/hasDeclinedPush\(userId\)\s*\.then\(\(declined\) => initializePushNotifications\(\{ prompt: !declined \}\)\)/)
+    expect(layout).toMatch(/mayPromptAtStartUp\(userId\)\s*\.then\(\(prompt\) => initializePushNotifications\(\{ prompt \}\)\)/)
   })
 
-  it('"Maybe later" and "Not now" record the decline; a yes clears it', () => {
-    const step = read('app/onboarding/notifications.tsx')
-    expect(step).toContain('onSecondary={() => void answer(false)}')
-    expect(step).toMatch(/enabled \? clearPushDeclined\(user\.id\) : markPushDeclined\(user\.id\)/)
-    expect(step).not.toMatch(/commit\(\{ push_enabled: false \}\)/)
+  it('"Not now" on the in-context sheet records the decline; its yes clears it', () => {
+    const ask = read('lib/pushAsk.ts')
+    expect(ask).toContain("then: () => void markPushDeclined(user.id)")
+    expect(ask).toMatch(/void clearPushDeclined\(user\.id\)\.then\(\(\) => initializePushNotifications\(\)\)/)
   })
 
   it('turning notifications on in Settings clears it and asks', () => {
