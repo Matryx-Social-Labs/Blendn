@@ -38,7 +38,8 @@ describe('segmented progress', () => {
     await frame('preferences')
     const bar = screen.getByRole('progressbar')
     expect(bar.props.accessibilityLabel).toBe('Step 2 of 5')
-    expect(bar.props.accessibilityValue).toEqual({ min: 1, max: 5, now: 2 })
+    // No numeric value: both platforms would read it as a percentage ("Step 2 of 5, 25 percent").
+    expect(bar.props.accessibilityValue).toBeUndefined()
     const lit = [0, 1, 2, 3, 4].map((i) => StyleSheet.flatten(screen.getByTestId(`onboarding-progress-segment-${i}`).props.style).backgroundColor)
     expect(lit).toEqual([COLOR.textPrimary, COLOR.textPrimary, COLOR.hairlineStrong, COLOR.hairlineStrong, COLOR.hairlineStrong])
     expect(screen.queryByText('Step 2 of 5')).toBeNull()
@@ -60,6 +61,14 @@ describe('the question', () => {
     expect(colours).toHaveLength('you out?'.length)
     expect(colours[0]).toBe(GRADIENT.text.colors[0])
     expect(colours[colours.length - 1]).toBe(GRADIENT.text.colors[GRADIENT.text.colors.length - 1])
+  })
+
+  it('a name in a script that shapes across letters (Devanagari) or carries combining marks is coloured word by word, never split mid-word', async () => {
+    // The comma, the space, the whole name.
+    expect(glyphColours(', प्रिया.')).toHaveLength(3)
+    expect(glyphColours(', E\u0301milie.')).toHaveLength(3)
+    // Control: precomposed Latin still goes glyph by glyph.
+    expect(glyphColours(', Émilie.')).toHaveLength(', Émilie.'.length)
   })
 
   it('a key word of one glyph takes the first stop rather than dividing by zero', async () => {

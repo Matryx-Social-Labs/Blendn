@@ -97,6 +97,18 @@ describe('details', () => {
     expect(StyleSheet.flatten(screen.getByLabelText(/^Interest 0\b/).props.style).minHeight).toBe(SIZE.targetIos)
   })
 
+  it('a group past a dozen folds behind "+n more" (large data; control: a dozen shows whole)', async () => {
+    mockCategories.mockResolvedValue(tree(20))
+    await render(<DetailsScreen />)
+    await screen.findByText('Interest 0')
+    expect(screen.getByText('+8 more')).toBeTruthy()
+    expect(screen.queryByText('Interest 12')).toBeNull()
+    mockCategories.mockResolvedValue(tree(12))
+    await render(<DetailsScreen />)
+    expect(await screen.findByText('Interest 11')).toBeTruthy()
+    expect(screen.queryByText(/^\+\d+ more$/)).toBeNull()
+  })
+
   it('stops at ten interests (the server’s cap), dims the rest, and keeps "n picked" over the button', async () => {
     mockCategories.mockResolvedValue(tree(12))
     await render(<DetailsScreen />)

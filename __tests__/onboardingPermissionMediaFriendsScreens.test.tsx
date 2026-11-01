@@ -104,6 +104,25 @@ describe('photos', () => {
     noCreature()
   })
 
+  it('coming back and removing the last saved photo keeps Continue, which saves the removal (control: a first visit offers the picker)', async () => {
+    mockDraft = { photos: ['https://cdn/one.jpg'] }
+    await render(<MediaScreen />)
+    await fireEvent.press(screen.getByLabelText(/^Remove/))
+    expect(screen.getByText('Continue')).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(mockCommit).toHaveBeenCalledWith({ photos: [] })
+  })
+
+  it('two quick taps open one picker', async () => {
+    let resolve: (v: unknown) => void = () => {}
+    mockSelect.mockReturnValue(new Promise((r) => (resolve = r)))
+    await render(<MediaScreen />)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    await fireEvent.press(screen.getByLabelText('Add your main photo'))
+    expect(mockSelect).toHaveBeenCalledTimes(1)
+    resolve({ ok: false, cancelled: true })
+  })
+
   it('with a main photo up it is shown twice, clear and blurred ("You see · They see"), and Continue saves it', async () => {
     mockDraft = { photos: ['https://cdn/one.jpg'] }
     await render(<MediaScreen />)

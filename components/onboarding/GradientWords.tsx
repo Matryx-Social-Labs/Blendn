@@ -11,8 +11,22 @@ import { colourAt } from '../../lib/mapLit'
  * the lit backdrop in `__tests__/onboardingDirectionA.test.tsx`.
  */
 export function glyphColours(text: string): string[] {
-  const glyphs = Array.from(text)
+  const glyphs = pieces(text)
   return glyphs.map((_, i) => colourAt(GRADIENT.text.colors, glyphs.length > 1 ? i / (glyphs.length - 1) : 0))
+}
+
+/**
+ * Latin (Basic, Latin-1, Extended-A and B) and its punctuation, with no combining marks: safe to split into code points.
+ * Plain ranges rather than `\p{Script=…}`, which an older Hermes may not parse.
+ */
+const SPLITS_CLEANLY = /^[\u0020-\u024F\u2018-\u201F\u2026]*$/
+
+/**
+ * What gets a colour of its own. A name in a script that shapes across letters (Devanagari, Tamil, Arabic) or that carries
+ * combining marks would come apart in separate spans, so it goes word by word, each word whole.
+ */
+function pieces(text: string): string[] {
+  return SPLITS_CLEANLY.test(text) ? Array.from(text) : text.split(/(\s+)/).filter(Boolean)
 }
 
 /** The question's key words in the brand gradient. Nested in the question's `<Text>`, so a screen reader reads one sentence. */
@@ -20,7 +34,7 @@ export function GradientWords({ text }: { text: string }) {
   const colours = glyphColours(text)
   return (
     <>
-      {Array.from(text).map((glyph, i) => (
+      {pieces(text).map((glyph, i) => (
         <Text key={i} maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={{ color: colours[i] }}>
           {glyph}
         </Text>

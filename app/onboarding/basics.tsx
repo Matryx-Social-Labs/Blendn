@@ -1,6 +1,6 @@
 import { ScreenProfiler } from '../../lib/perf'
 import { useEffect, useState } from 'react'
-import { BackHandler, StyleSheet, View } from 'react-native'
+import { AccessibilityInfo, BackHandler, StyleSheet, View } from 'react-native'
 
 import { Button } from '../../components/ds/Button'
 import { ChipSet } from '../../components/ds/ChipSet'
@@ -144,6 +144,8 @@ function BasicsScreenInner() {
     if (!nameReady) return
     update({ name: patch.name })
     setPage('birthday')
+    // The page changes in place under the same button: a screen reader is told the new question.
+    AccessibilityInfo.announceForAccessibility('When’s your birthday?')
   }
   const onName = page === 'name'
 

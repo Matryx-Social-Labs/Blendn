@@ -22,7 +22,7 @@ const GLOW_OPACITY = 0.6
 export function PayoffCard({ first, age, photo, interest }: { first?: string; age?: number | null; photo?: string; interest?: string }) {
   const bold = useBoldText()
   const sel = useSelection()
-  const name = first ? (age ? `${first}, ${age}` : first) : undefined
+  const name = first ? (age != null && age > 0 ? `${first}, ${age}` : first) : undefined
   return (
     <View style={styles.stage}>
       <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.glow}>

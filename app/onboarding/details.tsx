@@ -46,6 +46,8 @@ const BIO_PROMPTS = ['A perfect Sunday for me is…', 'Lately I’ve been learni
  * reading "412/300" and was cut on the first keystroke (SCRUM-185). One
  * number, and the server owns it.
  */
+/** Chips drawn per group before the rest fold away. */
+const INTERESTS_SHOWN = 12
 const BIO_LIMIT = PROFILE_LIMITS.bio
 const bioOverCap = overCapMessage(BIO_LIMIT)
 
@@ -143,6 +145,9 @@ export default function DetailsScreen() {
               selected={group.items.filter((item) => interests.includes(item.name)).map((item) => item.id)}
               capHint={`Up to ${MAX_INTERESTS}`}
               size="lg"
+              // A group past a dozen folds behind "+n more", a chosen one staying out: a category can run to hundreds.
+              foldAfter={INTERESTS_SHOWN}
+              foldNoun="more interests"
               onToggle={(id) => {
                 const item = group.items.find((i) => i.id === id)
                 if (item) toggle(item.id, item.name)

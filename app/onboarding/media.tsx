@@ -1,5 +1,5 @@
 import { ScreenProfiler } from '../../lib/perf'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 
@@ -143,9 +143,14 @@ function MediaScreenInner() {
     H.error()
   }
 
+  // One picker at a time: the primary and the well both open it, and a tile only appears once the pick comes back.
+  const picking = useRef(false)
   const add = async () => {
-    if (!user?.id || uploading || tiles.length >= SLOTS) return
-    const picked = await selectPhoto({ main: tiles.length === 0 })
+    if (!user?.id || uploading || tiles.length >= SLOTS || picking.current) return
+    picking.current = true
+    const picked = await selectPhoto({ main: tiles.length === 0 }).finally(() => {
+      picking.current = false
+    })
     // A cancelled picker is not a failure. Anything else says why, in the
     // validator's or the server's words ("Photo must be less than 5MB"); it
     // used to say nothing, and the empty slot looked like a tap that missed.
@@ -164,6 +169,7 @@ function MediaScreenInner() {
     await upload(key, picked.uri)
   }
 
+  const choosing = tiles.length === 0 && !draft.photos?.length
   const remove = (key: string) => setTiles((current) => current.filter((tile) => tile.key !== key))
 
   /** Move a photo to the front. `photos[0]` is what everyone else sees. */
@@ -186,10 +192,11 @@ function MediaScreenInner() {
       titleAccent="a photo"
       subtitle="Until you choose to show who you are, people see it blurred."
       // Empty, the primary is the picker (direction A): a Continue that saves nothing was a dead end dressed as progress.
-      ctaLabel={tiles.length === 0 ? 'Choose a photo' : 'Continue'}
+      // Back here with a saved photo removed, it stays Continue: that is how the removal is saved.
+      ctaLabel={choosing ? 'Choose a photo' : 'Continue'}
       ctaBusy={saving}
       ctaDisabled={uploading}
-      onContinue={() => void (tiles.length === 0 ? add() : commit({ photos: readyPhotos(tiles) }))}
+      onContinue={() => void (choosing ? add() : commit({ photos: readyPhotos(tiles) }))}
       secondaryLabel="Skip"
       onSecondary={() => void skip()}
       onBack={goBack}

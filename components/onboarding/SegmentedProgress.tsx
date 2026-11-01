@@ -4,7 +4,7 @@ import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 
 /**
  * Five segments for five questions (direction A): the ones reached are lit white, the rest a hairline. Said, not printed:
- * a screen reader hears "Step 2 of 5" and the progress value.
+ * a screen reader hears "Step 2 of 5". No numeric value: both platforms read one as a percentage ("25 percent").
  */
 export function SegmentedProgress({ current, total, testID }: { current: number; total: number; testID?: string }) {
   return (
@@ -13,7 +13,6 @@ export function SegmentedProgress({ current, total, testID }: { current: number;
       accessible
       accessibilityRole="progressbar"
       accessibilityLabel={`Step ${current} of ${total}`}
-      accessibilityValue={{ min: 1, max: total, now: current }}
       style={styles.row}
     >
       {Array.from({ length: total }, (_, i) => (
