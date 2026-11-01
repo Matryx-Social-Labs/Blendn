@@ -46,50 +46,12 @@ describe('mayDate: the client twin of the server rule', () => {
 })
 
 describe('Looking for', () => {
-  it('offers Dating to an adult', async () => {
+  // Direction A asks friends, networking or both (the flow walk); dating is Edit profile's, so no one, minor or adult, sees it here.
+  it('offers the three answers and no Dating tile', async () => {
     await render(<LookingForCards selected={null} onSelect={noop} />)
-    expect(screen.getByLabelText('Dating')).toBeTruthy()
-  })
-
-  it('does not offer Dating to a minor, and keeps the other four', async () => {
-    await render(<LookingForCards selected={null} onSelect={noop} withoutDating />)
     expect(screen.queryByLabelText('Dating')).toBeNull()
-    for (const option of ['Friendship', 'Networking', 'Just here for the event']) {
+    for (const option of ['Making friends', 'Networking', 'Both, depends on the night']) {
       expect(screen.getByLabelText(option)).toBeTruthy()
     }
-  })
-})
-
-describe('What are you open to?', () => {
-  it('offers Dating and its questions to someone who may date', async () => {
-    await render(fields({ intents: ['dating'] }))
-    expect(screen.getByText(/^Dating/)).toBeTruthy()
-    expect(screen.getByText('YOU IDENTIFY AS')).toBeTruthy()
-  })
-
-  it('offers a minor neither the chip nor the questions — even with a stale dating intent', async () => {
-    await render(fields({ offerDating: false, intents: ['dating'] }))
-    expect(screen.queryByText(/^Dating/)).toBeNull()
-    expect(screen.queryByText('YOU ARE')).toBeNull()
-    expect(screen.queryByText('YOU IDENTIFY AS')).toBeNull()
-    expect(screen.getByText(/^Friendship/)).toBeTruthy()
-  })
-})
-
-describe('every screen asks', () => {
-  const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
-
-  it('Edit profile decides from the age being typed, else the one the server holds, and does not send a hidden Dating', () => {
-    const src = read('app/edit-profile.tsx')
-    expect(src).toMatch(/const liveAge = age\.trim\(\) && Number\.isInteger\(typedAge\) \? typedAge : profile\?\.age/)
-    expect(src).toMatch(/offerDating=\{mayDate\(liveAge\)\}/)
-    expect(src).toMatch(/const savedIntents = mayDate\(liveAge\) \? intents : intents\.filter\(\(i\) => i !== 'dating'\)/)
-    expect(src).toMatch(/updateData\.intent_default = savedIntents/)
-    expect(src).toMatch(/if \(savedIntents\.includes\('dating'\)\)/)
-  })
-
-  it('onboarding hides the card and does not send a stale "Dating" for a minor', () => {
-    const src = read('app/onboarding/preferences.tsx')
-    expect(src).toMatch(/<LookingForCards[^>]*withoutDating=\{under18\}/)
   })
 })

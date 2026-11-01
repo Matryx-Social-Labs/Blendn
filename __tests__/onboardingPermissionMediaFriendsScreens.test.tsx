@@ -35,6 +35,12 @@ jest.mock('../lib/photoUtils', () => ({
 jest.mock('../lib/pulledNotices', () => ({ markPulledSeen: (...args: unknown[]) => mockSeen(...args) }))
 jest.mock('../lib/useFriendInvite', () => ({ useFriendInvite: () => mockInvite() }))
 jest.mock('../lib/cityStorage', () => ({ readStoredCity: jest.fn(async () => ({ city: 'Bengaluru', source: 'chosen' })) }))
+// Every creature is drawn by this one component: a marker in its place makes "no creature on onboarding" checkable (direction A).
+jest.mock('../components/ds/Creature', () => {
+  const { View: MockView } = jest.requireActual('react-native')
+  return { ...jest.requireActual('../components/ds/Creature'), Creature: () => <MockView testID="creature-glyph" /> }
+})
+const noCreature = () => expect(screen.queryByTestId('creature-glyph', { includeHiddenElements: true })).toBeNull()
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockPerm(...args),
   requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'denied' })),
@@ -313,12 +319,19 @@ describe('Bring your friends', () => {
 })
 
 describe('preferences', () => {
-  it('anonymous by default; the switch flips it, and what is stored is the inverse', async () => {
+  it('asks one question, its key words lit, with no creature anywhere on the step', async () => {
     await render(<PreferencesScreen />)
-    // A sentence in Satoshi meta like its siblings, not Geist Mono (GO-11, A12).
-    expect(StyleSheet.flatten(screen.getByText('You’d appear under a made-up name').props.style).fontFamily).toBe(TYPE.meta.fontFamily)
-    await fireEvent.press(screen.getByTestId('onboarding-anonymous'))
-    expect(screen.getByText('Your name and photo, if you say so')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'What brings you out?' })).toBeTruthy()
+    noCreature()
+  })
+
+  it('anonymity is one line with its switch: on by default, flipped, and what is stored is the inverse', async () => {
+    await render(<PreferencesScreen />)
+    const row = screen.getByTestId('onboarding-anonymous')
+    expect(row.props.accessibilityState).toMatchObject({ checked: true })
+    expect(screen.getByText('Stay anonymous at events')).toBeTruthy()
+    await fireEvent.press(row)
+    expect(screen.getByTestId('onboarding-anonymous').props.accessibilityState).toMatchObject({ checked: false })
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(mockCommit).toHaveBeenCalledWith(expect.objectContaining({ reveal_by_default: true }))
   })
@@ -356,11 +369,38 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
   })
 
-  it('draws the looking-for tiles as the design system’s, and a minor never sees Dating', async () => {
+  it('two photo cards and a plain third: Making friends, Networking, and Both (the flow walk’s three); no Dating tile', async () => {
     mockDraft = { dateOfBirth: `${new Date().getFullYear() - 16}-01-01` }
     await render(<PreferencesScreen />)
+    expect(screen.getByLabelText('Making friends')).toBeTruthy()
+    expect(screen.getByLabelText('Networking')).toBeTruthy()
+    expect(screen.getByTestId('looking-for-both')).toBeTruthy()
     expect(screen.queryByLabelText('Dating')).toBeNull()
-    expect(screen.getByLabelText('Friendship')).toBeTruthy()
     expect(screen.queryByLabelText(/^Bisexual/)).toBeNull()
+  })
+
+  it('Both stores the two intents it means, and a resumed pair shows Both picked', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(screen.getByTestId('looking-for-both'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship', 'networking'])
+  })
+
+  it('a resumed pair of intents shows Both picked (control: a single one shows its card)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['networking', 'friendship'] }
+    await render(<PreferencesScreen />)
+    expect(screen.getByRole('radio', { name: 'Both, depends on the night' }).props.accessibilityState).toMatchObject({ checked: true })
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['networking'] }
+    await render(<PreferencesScreen />)
+    expect(screen.getByTestId('looking-for-networking').props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.getByRole('radio', { name: 'Both, depends on the night' }).props.accessibilityState).toMatchObject({ checked: false })
+  })
+
+  it('an adult’s resumed intent the step does not show (dating) is kept when nothing is picked', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['dating'] }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['dating'])
   })
 })

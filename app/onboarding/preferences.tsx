@@ -1,14 +1,12 @@
 import { useState } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
-import Animated, { FadeIn } from 'react-native-reanimated'
 
-import { Avatar } from '../../components/ds/Avatar'
 import { ChipSet } from '../../components/ds/ChipSet'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Toggle } from '../../components/ds/Toggle'
 import { font, minTarget, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import ScalePress from '../../components/motion/ScalePress'
-import { LookingForCards, type Intent } from '../../components/onboarding/LookingForCards'
+import { intentsOf, LookingForCards, outingOf, type Intent, type Outing } from '../../components/onboarding/LookingForCards'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import {
   ORIENTATIONS as ORIENTATION_VALUES,
@@ -19,7 +17,6 @@ import {
 } from '../../lib/dating'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MAX_FONT_SCALE, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { anonymousByDefault, isUnder18, orientationConsent } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -72,7 +69,8 @@ import { useOnboarding } from '../../lib/useOnboarding'
  *
  * ## "Why you go out" is the intent, not free text
  *
- * The four tiles are the server's `intent_default` enum (`dating | friendship | networking | just_here`), one choice. It is
+ * The answers are the server's `intent_default` enum: friends, networking, or both (`LookingForCards`); dating and "just
+ * here" are Edit profile's, and a resumed one is kept until something here is picked. It is
  * what matching ranks on and what the Board's profile gate needs: an account that never wrote it could not post, and was
  * asked again at its first check-in. `looking_for` (free text) is no longer written; old profiles keep what they have.
  */
@@ -88,7 +86,7 @@ import { useOnboarding } from '../../lib/useOnboarding'
  *
  * "Demisexual" is in the frame and not in the server's list, so it is not
  * offered — a chip that 400s on save is worse than an absent one.
- * The four intent tiles live in `LookingForCards`, beside their artwork.
+ * The intent cards live in `LookingForCards`, beside their artwork.
  */
 const ORIENTATIONS = ORIENTATION_VALUES.map((value) => ({
   value,
@@ -98,8 +96,6 @@ const ORIENTATIONS = ORIENTATION_VALUES.map((value) => ({
 /** What the anonymity switch says it does, in the app's words (SCRUM-493): off only means the app offers the reveal at check-in. */
 const ANONYMITY_HELP = 'Join rooms under a made-up name. Off, we’ll offer to show your name and photo when you check in.'
 const ORIENTATION_PRIVACY = 'Only people you match or talk with will see it. Never a room.'
-/** The anonymous example drawn beside the switch: decorative, a creature on its plate, never this person's real room name. */
-const EXAMPLE_PSEUDONYM = 'Quiet Heron'
 /** The anonymity row is as tall as its face. */
 const ROW_MIN = 48
 /** The "Show on profile" switch is drawn at 0.8 in its pill, with its 5 pt of slack taken out of the margin (Flow 2 preferences). */
@@ -142,11 +138,10 @@ function ShowOnProfile({ value, onValueChange }: { value: boolean; onValueChange
 export default function PreferencesScreen() {
   const { draft, loaded, saving, commit, skip, goBack } = useOnboarding('preferences')
   const bold = useBoldText()
-  const reduceMotion = useReducedMotion()
 
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [showOrientation, setShowOrientation] = useState(false)
-  const [intent, setIntent] = useState<Intent | null>(null)
+  const [outing, setOuting] = useState<Outing | null>(null)
   /*
    * Holds *anonymity*, not its opposite.
    *
@@ -173,19 +168,21 @@ export default function PreferencesScreen() {
     setPrefilled(true)
     setOrientations((draft.orientations ?? []) as Orientation[])
     setShowOrientation(draft.show_orientation ?? false)
-    setIntent(draft.intent_default?.[0] ?? null)
+    setOuting(outingOf(draft.intent_default as Intent[] | undefined))
     setAnonymous(anonymousByDefault(draft))
   }
 
   // A draft written before the birth date said otherwise can hold a stale 'dating'.
-  const chosen: Intent | null = under18 && intent === 'dating' ? null : intent
+  // A pick wins; nothing picked keeps what was stored (a resumed dating), except that a minor never sends dating.
+  const kept = ((draft.intent_default ?? []) as Intent[]).filter((i) => !(under18 && i === 'dating'))
+  const intents: Intent[] = outing ? intentsOf(outing) : kept
 
   return (
     <OnboardingScreen
       step="preferences"
-      title="Your "
-      titleAccent="preferences"
-      subtitle="Who you’d like to meet and why you go out. It shapes who you’re introduced to."
+      title="What brings "
+      titleAccent="you out?"
+      subtitle="It shapes who you’re introduced to."
       ctaLabel="Continue"
       ctaBusy={saving}
       onContinue={() =>
@@ -199,7 +196,7 @@ export default function PreferencesScreen() {
                 show_orientation: orientationConsent(orientations, showOrientation),
               }),
           // Always present, so a stale draft value (a minor's old 'dating') is overwritten rather than carried: stepPayload drops undefined.
-          intent_default: chosen ? [chosen] : undefined,
+          intent_default: intents.length ? intents : undefined,
           reveal_by_default: !anonymous,
         })
       }
@@ -207,6 +204,33 @@ export default function PreferencesScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
+      <LookingForCards selected={outing} onSelect={setOuting} />
+
+      {/*
+        Anonymity is one line with its switch (direction A), and still phrased as *turning anonymity off* rather than as
+        turning visibility on: every surface afterwards (the check-in warning, the room banner, the pseudonym on your own
+        messages) says "anonymous", so a person who met the idea here recognises it there. What it does is the hint.
+      */}
+      <ScalePress
+        testID="onboarding-anonymous"
+        onPress={() => {
+          H.toggle(!anonymous)
+          setAnonymous(!anonymous)
+        }}
+        accessibilityRole="switch"
+        accessibilityLabel="Stay anonymous at events"
+        accessibilityHint={ANONYMITY_HELP}
+        accessibilityState={{ checked: anonymous }}
+        pressedScale={Platform.OS === 'android' ? 1 : PRESS.scale}
+        android_ripple={{ color: PRESSED_WASH.android }}
+        style={styles.anonymity}
+      >
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.anonymityText]}>
+          Stay anonymous at events
+        </Text>
+        <Toggle value={anonymous} />
+      </ScalePress>
+
       {under18 ? null : (
         <View style={styles.section}>
           <SectionHeader
@@ -251,52 +275,6 @@ export default function PreferencesScreen() {
           />
         </View>
       )}
-
-      {/*
-        Named "Anonymity" rather than "At an event", and the toggle is phrased
-        as *turning anonymity off* rather than as turning visibility on.
-
-        The concept has to be learned somewhere, and this is the only screen
-        that gets to teach it. Every surface afterwards — the check-in warning,
-        the room banner, the pseudonym on your own messages — says "anonymous",
-        so a person who met the idea here recognises it there. "Let people see
-        who I am" describes the same switch and teaches nothing.
-      */}
-      <View style={styles.section}>
-        <SectionHeader title="Anonymity" caption="You can change this in any room." />
-        <View style={styles.card}>
-          <ScalePress
-            testID="onboarding-anonymous"
-            onPress={() => {
-              H.toggle(!anonymous)
-              setAnonymous(!anonymous)
-            }}
-            accessibilityRole="switch"
-            accessibilityLabel="Stay anonymous at events"
-            accessibilityHint={ANONYMITY_HELP}
-            accessibilityState={{ checked: anonymous }}
-            pressedScale={Platform.OS === 'android' ? 1 : PRESS.scale}
-            android_ripple={{ color: PRESSED_WASH.android }}
-            style={styles.cardRow}
-          >
-            <Avatar kind="creature" pseudonym={EXAMPLE_PSEUDONYM} size={48} ring={COLOR.surface} />
-            <View style={styles.cardText}>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Stay anonymous at events</Text>
-              {/* The preview line changes with the switch (Flow 2 preferences 04): the new one fades in on `quick`. */}
-              <Animated.Text key={anonymous ? 'anon' : 'named'} entering={FadeIn.duration(motionTokens(reduceMotion).duration.quick)} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>
-                {anonymous ? 'You’d appear under a made-up name' : 'Your name and photo, if you say so'}
-              </Animated.Text>
-            </View>
-            <Toggle value={anonymous} />
-          </ScalePress>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{ANONYMITY_HELP}</Text>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionHeader title="Why you go out" caption="What brings you to Blend’n today?" />
-        <LookingForCards selected={chosen} onSelect={setIntent} withoutDating={under18} />
-      </View>
     </OnboardingScreen>
   )
 }
@@ -315,17 +293,6 @@ const styles = StyleSheet.create({
   },
   pillSwitch: { transform: [{ scale: PILL_SWITCH_SCALE }], marginHorizontal: -PILL_SWITCH_SLACK },
   pillText: { color: COLOR.textPrimary },
-  card: {
-    gap: SPACE.md,
-    padding: SPACE.lg,
-    borderRadius: RADIUS.card,
-    backgroundColor: COLOR.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: COLOR.hairline,
-  },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW_MIN },
-  cardText: { flex: 1, gap: SPACE.xxs },
-  ink: { color: COLOR.textPrimary },
-  secondary: { color: COLOR.textSecondary },
-  tertiary: { color: COLOR.textTertiary },
+  anonymity: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW_MIN },
+  anonymityText: { flex: 1, color: COLOR.textPrimary },
 })
