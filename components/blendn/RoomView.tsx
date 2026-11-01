@@ -163,6 +163,7 @@ export function RoomView(props: RoomViewProps) {
       </View>
       <Animated.View style={entrance.heroStyle}>
         <RoomHero
+          active={!hidden}
           title={props.title}
           hereCount={props.hereCount}
           checkedInAt={props.checkedInAt}

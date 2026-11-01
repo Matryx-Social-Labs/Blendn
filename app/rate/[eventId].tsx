@@ -11,6 +11,7 @@ import { Dock } from '../../components/ds/Dock'
 import { TopBar } from '../../components/ds/TopBar'
 import { GoneCard } from '../../components/system/GoneCard'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
+import { useFocusWhen } from '../../lib/focusReturn'
 import { RadioCard } from '../../components/ds/RadioCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -305,6 +306,9 @@ function RatePeersContent() {
 
   const people = load.kind === 'ready' ? load.people : []
   const person = index >= 0 ? people[index] : undefined
+  // Submit and Skip swap the whole form: the next person's heading takes focus, with how far through you are.
+  const personRef = useRef<Text>(null)
+  useFocusWhen(personRef, person ? index : null)
   const noteTooLong = noteLength(note) > NOTE_LIMIT
 
   const submit = useCallback(async () => {
@@ -495,7 +499,7 @@ function RatePeersContent() {
                   ) : (
                     <Avatar kind="creature" pseudonym={person.name} size={FACE} label={person.name} />
                   )}
-                  <Text accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, styles.centreText]}>
+                  <Text ref={personRef} accessibilityLabel={`${person.name}, ${index + 1} of ${people.length}`} accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, styles.centreText]}>
                     {person.name}
                   </Text>
                   <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centreText]}>

@@ -1,4 +1,7 @@
+import { useEffect, type RefObject } from 'react'
 import { AccessibilityInfo } from 'react-native'
+
+import { DURATION } from './design/tokens'
 
 /**
  * Where a screen reader's focus goes back to when an overlay closes (WCAG 2.4.3, a11y audit L6): the control that
@@ -27,4 +30,21 @@ export function openerNow(): Node | null {
 /** Focus back on the opener, once the overlay has gone. */
 export function returnFocus(node: Node | null): void {
   if (node) AccessibilityInfo.sendAccessibilityEvent(node, 'focus')
+}
+
+/** How long an arrival is given to settle before focus is sent: iOS drops a focus sent before the view is on screen. */
+export const FOCUS_SETTLE_MS = DURATION.quick
+
+/**
+ * Focus to `ref` each time `key` changes to a value (null, undefined or false: not yet): a heading that arrived with a new
+ * screen or a new step, so a screen reader is told where it now is (motion audit M5).
+ */
+export function useFocusWhen(ref: RefObject<unknown>, key: unknown): void {
+  useEffect(() => {
+    if (key == null || key === false) return
+    const timer = setTimeout(() => {
+      if (ref.current) AccessibilityInfo.sendAccessibilityEvent(ref.current as Node, 'focus')
+    }, FOCUS_SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [ref, key])
 }
