@@ -14,6 +14,7 @@ import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import ScalePress from '../../components/motion/ScalePress'
 import { RepositionHost } from '../../components/profile/Reposition'
+import { YouSeeTheySee } from '../../components/onboarding/YouSeeTheySee'
 import { loadPulledPhotos, selectPhoto, uploadPhoto } from '../../lib/photoUtils'
 import { mainWasPulled, type PulledPhoto } from '../../lib/photoStates'
 import { markPulledSeen } from '../../lib/pulledNotices'
@@ -181,14 +182,15 @@ function MediaScreenInner() {
   return (
     <OnboardingScreen
       step="media"
-      title="Add your "
-      titleAccent="photos"
-      subtitle="Up to six. Recent photos where your face is clear work best."
-      ctaLabel="Continue"
+      title="Add "
+      titleAccent="a photo"
+      subtitle="Until you choose to show who you are, people see it blurred."
+      // Empty, the primary is the picker (direction A): a Continue that saves nothing was a dead end dressed as progress.
+      ctaLabel={tiles.length === 0 ? 'Choose a photo' : 'Continue'}
       ctaBusy={saving}
       ctaDisabled={uploading}
-      onContinue={() => void commit({ photos: readyPhotos(tiles) })}
-      secondaryLabel="Skip"
+      onContinue={() => void (tiles.length === 0 ? add() : commit({ photos: readyPhotos(tiles) }))}
+      secondaryLabel="Later"
       onSecondary={() => void skip()}
       onBack={goBack}
     >
@@ -202,6 +204,7 @@ function MediaScreenInner() {
       ) : (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>{photoNote(tiles.length)}</Text>
       )}
+      {tiles[0]?.state === 'ready' ? <YouSeeTheySee uri={tiles[0].url} /> : null}
       {/* The reposition step a chosen photo goes through (6.3 #08); it draws nothing until one is asked. */}
       <RepositionHost />
 

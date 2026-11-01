@@ -87,11 +87,30 @@ describe('location', () => {
 describe('photos', () => {
   const picked = { ok: true, uri: 'file://one.jpg' }
 
-  it('an empty step is one large well, and Continue sends nothing it has not got', async () => {
+  it('an empty step is one large well, and its primary is Choose a photo: the picker, never a save of nothing', async () => {
+    mockSelect.mockResolvedValue({ ok: false, cancelled: true })
     await render(<MediaScreen />)
+    expect(screen.getByRole('header', { name: 'Add a photo' })).toBeTruthy()
     expect(screen.getByLabelText('Add your main photo')).toBeTruthy()
+    expect(screen.queryByTestId('media-you-they')).toBeNull()
+    expect(screen.getByText('Choose a photo')).toBeTruthy()
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
-    expect(mockCommit).toHaveBeenCalledWith({ photos: [] })
+    expect(mockSelect).toHaveBeenCalledTimes(1)
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(screen.getByText('Later')).toBeTruthy()
+    noCreature()
+  })
+
+  it('with a main photo up it is shown twice, clear and blurred ("You see · They see"), and Continue saves it', async () => {
+    mockDraft = { photos: ['https://cdn/one.jpg'] }
+    await render(<MediaScreen />)
+    const pair = screen.getByTestId('media-you-they')
+    expect(pair.props.accessibilityLabel).toBe('Your photo, and how it looks to people before you show who you are: blurred')
+    expect(screen.getByText('You see · They see', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByTestId('media-they-see', { includeHiddenElements: true }).props.blurRadius).toBeGreaterThan(0)
+    expect(screen.getByTestId('media-you-see', { includeHiddenElements: true }).props.blurRadius ?? 0).toBe(0)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://cdn/one.jpg'] })
   })
 
   it('an empty step draws its six places: the main well marked "Main photo", and five small slots under it (GO-11, A11)', async () => {
