@@ -14,6 +14,15 @@ jest.mock('expo-router', () => {
   }
 })
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+const mockInvites: { crewId: string; name: string; invitedBy: string; invitedAt: string; emblemSeed: string }[] = []
+jest.mock('../lib/crewsApi', () => ({
+  crewMessage: () => 'failed',
+  crewsApi: {
+    myCrews: jest.fn(async () => ({ success: true, data: { crews: [], invites: mockInvites } })),
+    blends: jest.fn(async () => ({ success: true, data: { blends: [] } })),
+    decline: jest.fn(),
+  },
+}))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn(), journey: jest.fn() } }))
 // One user object: the inbox reloads when the user changes identity.
 const mockAuth = { user: { id: 'u-a' }, loading: false }
@@ -87,4 +96,17 @@ it('an empty screen says so', async () => {
   await render(<MessageRequests />)
   await flush()
   expect(screen.getByText('No requests waiting')).toBeTruthy()
+})
+
+it('a crew invite is answered here too, since the Banter now only counts it', async () => {
+  mockInvites.splice(0, mockInvites.length, { crewId: 'c1', name: 'Run Club', invitedBy: 'Asha', invitedAt: '2026-01-01T00:00:00Z', emblemSeed: 's' })
+  try {
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
+    render(<MessageRequests />)
+    await flush()
+    expect(screen.getByText('Asha invited you to the crew')).toBeTruthy()
+    expect(screen.queryByText('No requests waiting')).toBeNull()
+  } finally {
+    mockInvites.splice(0, mockInvites.length)
+  }
 })

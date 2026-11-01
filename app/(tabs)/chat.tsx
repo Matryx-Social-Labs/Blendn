@@ -11,8 +11,6 @@ import {
   BlendLiveCard,
   LiveHero,
   NewAbovePill,
-  RequestCard,
-  RequestFace,
   rowLabel,
   banterHeaderHeight,
   type RowFace,
@@ -32,7 +30,7 @@ import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Button } from '../../components/ds/Button'
-import { RequestRow } from '../../components/banter/RequestRow'
+import { BanterRequestsRow } from '../../components/banter/BanterRequestsRow'
 import { PageFooter } from '../../components/chat/PageFooter'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -51,7 +49,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import { printable } from '../../lib/pulseSections'
 import { isMuted, useRoomMembership } from '../../lib/roomMembership'
 import { roomStateLine } from '../../lib/roomState'
-import { SPONSORED, useBanterInbox, type GroupChat, type MessageRequest, type PersonalChat } from '../../lib/useBanterInbox'
+import { SPONSORED, useBanterInbox, type GroupChat, type PersonalChat } from '../../lib/useBanterInbox'
 import { useCrewInbox } from '../../lib/useCrewInbox'
 import { TAB_BAR_CLEARANCE } from './_layout'
 import { useReducedMotion } from '../../lib/motion'
@@ -84,8 +82,6 @@ type Item =
 const COAST_MIN_VELOCITY = 0.1
 const REORDER = LinearTransition.delay(300).springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 const SEARCH_GAP = SPACE.sm
-/** Message requests show this many before "Show all": a Requests section stays a strip however many are waiting. */
-const REQUESTS_PREVIEW = 3
 /** A press held this long is a hold, not a tap (Pressable's own long-press delay). */
 const HELD_PRESS_MS = 500
 
@@ -95,8 +91,8 @@ const HELD_PRESS_MS = 500
  *
  * A glass header (the bell, search, Mark all read); then, top to bottom:
  * **Live now** (the room you're standing in, as the hero; an open Blend),
- * **Requests** (message requests with their notes, crew invites, the Board's
- * asks), **Crews**, **People** (DMs) and **Past rooms**. People are circles,
+ * **Requests** (one row to the page of message requests and crew invites, then
+ * the Board's asks), **Crews**, **People** (DMs) and **Past rooms**. People are circles,
  * rooms and crews rounded squares. Unread is three changes and a dot, never
  * a height change. A room row swipes to Mute or Leave, a DM to Mark read.
  * Rooms you're checked into are lifted out, never repeated; never-used
@@ -440,8 +436,8 @@ function ChatInner() {
   /* #18: the branded pull (monogram, H.threshold), under the header; Android keeps the platform control, offset the same. */
   const pull = usePullToRefresh({ refreshing: inbox.refreshing, onRefresh: () => void inbox.onRefresh(), indicatorTop: listTop })
   const invites = crews.invites
-  const requestsTotal = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
-  const shownRequests = incomingRequests.slice(0, REQUESTS_PREVIEW)
+  // The server's count, not the page held, with the crew invites answered on the same page.
+  const requestsWaiting = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length) + invites.length
   // The list's own "Couldn’t load your chats" is up (the empty list's failed state): its Try again is the one.
   const failedState = inbox.listFailed && !inbox.loading && !trimmed && shown.length === 0
   const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
@@ -483,34 +479,10 @@ function ChatInner() {
         </View>
       ) : null}
 
-      {!trimmed && (incomingRequests.length || invites.length) ? (
-        <View style={styles.section}>
-          {/* The server's count, not the page held: "Requests, 140" over the three shown and a way to the rest. */}
-          <SectionHeader
-            title="Requests"
-            count={requestsTotal + invites.length}
-            action={requestsTotal > REQUESTS_PREVIEW ? { label: `See all ${requestsTotal}`, onPress: pressGuard(() => router.push('/message-requests')) } : undefined}
-            testID="banter-requests"
-          />
-          {invites.map((invite) => (
-            <Reanimated.View key={`i:${invite.crewId}`} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} layout={reduceMotion ? undefined : REQUEST_REFLOW}>
-              <RequestCard
-                testID={`banter-invite-${invite.crewId}`}
-                face={<RequestFace emblemSeed={invite.emblemSeed} />}
-                name={invite.name}
-                note={`${invite.invitedBy} invited you to the crew`}
-                time={inboxTimeLabel(invite.invitedAt)}
-                accept="Join"
-                // Join is the consent screen (Flow 10 · 10.3): it reveals you to the crew, so it asks there.
-                onAccept={() => router.push({ pathname: '/crews/invite/[crewId]', params: { crewId: invite.crewId } })}
-                onDecline={() => crews.decline(invite)}
-              />
-            </Reanimated.View>
-          ))}
-          {shownRequests.map((r: MessageRequest) => (
-            <RequestRow key={r.request_id} request={r} inbox={inbox} />
-          ))}
-        </View>
+      {!trimmed && requestsWaiting > 0 ? (
+        <Reanimated.View exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}>
+          <BanterRequestsRow requests={incomingRequests} total={requestsWaiting} />
+        </Reanimated.View>
       ) : null}
 
       {/* Beside message requests: somebody asking to start talking. Behind BOARD_ENABLED until the board's safety half ships. */}
@@ -642,7 +614,6 @@ function ChatInner() {
 
 /** The search field's height (SearchField: a 48 pt capsule). */
 const SEARCH_FIELD = 48
-const REQUEST_REFLOW = LinearTransition.duration(DURATION.base).easing(Easing.bezier(...EASING.standard))
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
