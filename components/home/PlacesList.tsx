@@ -370,7 +370,7 @@ export function PlacesList({
           return (
             <View style={styles.state} testID="places-empty">
               {item.reason === 'search' ? (
-                <StateScreen icon="search" title={`No places match “${term}”`} body="Try another name or area." />
+                <StateScreen icon="search" title={`No places match “${term}”`} body="Try another name or area." announce="No places match your search" />
               ) : item.reason === 'filters' ? (
                 <StateScreen
                   icon="sliders-horizontal"

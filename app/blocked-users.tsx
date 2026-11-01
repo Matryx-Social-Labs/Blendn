@@ -220,7 +220,7 @@ function BlockedUsersContent() {
           renderItem={renderBlockedUser}
           // The foot is the list's own padding: a wrapper that insets the screen cuts the scroll on a line above the home indicator.
           contentContainerStyle={[blockedUsers.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
-          ListEmptyComponent={renderEmptyState}
+          ListEmptyComponent={renderEmptyState()}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.5}
           ListFooterComponent={footer}

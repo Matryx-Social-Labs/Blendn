@@ -81,6 +81,15 @@ describe('<StateScreen>', () => {
     announce.mockRestore()
   })
 
+  it('a state whose title follows the typing says one fixed line, once, not a line per keystroke', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+    const r = await render(<StateScreen icon="search" title="No chats match “a”" announce="No chats match your search" />)
+    await r.rerender(<StateScreen icon="search" title="No chats match “ab”" announce="No chats match your search" />)
+    expect(announce).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('No chats match your search', { queue: true })
+    announce.mockRestore()
+  })
+
   it('full screen: the 80 well, the actions docked, and the screen announced on arrival', async () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
     await render(

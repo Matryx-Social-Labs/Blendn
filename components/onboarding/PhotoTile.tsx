@@ -75,7 +75,7 @@ export function PhotoTile({
   retryDisabled?: boolean
   animation?: Pick<AnimatedProps<object>, 'layout' | 'exiting' | 'entering'>
 }) {
-  useAnnounced(tile.state === 'failed' ? `Photo ${index + 1} didn’t upload` : null)
+  useAnnounced(tile.state === 'failed' ? 'A photo didn’t upload' : null)
   const bold = useBoldText()
   const sel = useSelection()
   const contrast = useIncreaseContrast()
