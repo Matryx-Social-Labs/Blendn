@@ -235,7 +235,7 @@ describe('the facts are the design system\'s tiles', () => {
     expect(detail).toContain('<AmenityGrid tiles={tiles}')
     for (const label of ["'WHERE'", "'ENTRY'"]) expect(detail).toContain(`label: ${label}`)
     // Doors is named through `doorsLabel` (NEXT DOORS between days), and a run's today reads TODAY (RC drive 2 D-9).
-    expect(detail).toContain("'NEXT DOORS' : 'DOORS'")
+    expect(detail).toContain("!isEnded ? 'NEXT DOORS' : 'DOORS'")
     expect(detail).toContain("label: 'TODAY'")
     expect(detail).toContain('...amenities.map(')
   })
