@@ -76,6 +76,7 @@ import {
   resolveBrowseCity,
   sameCity,
   shouldOfferSwitch,
+  storedAt,
   travelBanner,
   type CityCatalogue,
   type CityOption,
@@ -411,6 +412,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const [cityOptions, setCityOptions] = useState<CityOption[]>([])
   // The rest of `GET /events/cities` (travel P2): its countries, its default city, and what it made of `X-Country`.
   const [catalogue, setCatalogue] = useState<CatalogueMeta>({})
+  const countryAnswered = useRef(false)
   // "Share location for nearby events" off: the fix is never turned into a place, so no city is inferred, offered or reported (SCRUM-908).
   const sharing = useLocationSharing()
   const [namedCity, setNamedCity] = useState<string | null>(null)
@@ -1094,8 +1096,12 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
       const data = response.success && 'data' in response && response.data ? response.data : null
       const available = data?.cities ?? []
-      setCityOptions(available)
-      setCatalogue(catalogueMeta(data))
+      // An answer with the phone's country may have landed first: the plain one never replaces it (its `device` is null).
+      if (!countryAnswered.current) {
+        nameZones(available, data?.countries ?? [])
+        setCityOptions(available)
+        setCatalogue(catalogueMeta(data))
+      }
       setSelection((current) => {
         // Never overwrite a choice, stored or made while this was in flight. A guess with no slug was written by an
         // older build, whose fallback opened the busiest row (Mysuru) for everyone: it is guessed again (SCRUM-997).
@@ -1115,9 +1121,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     if (selection?.source === 'inferred') void storeCity(selection)
   }, [selection])
 
-  // Every time on every screen names its zone as the catalogue says it ("Toronto time", "India time"): `lib/time` nameZones.
-  useEffect(() => nameZones(cityOptions, catalogue.countries ?? []), [cityOptions, catalogue.countries])
-
   // Once the phone's country is known, the list again with `X-Country`: the answer's `device` says whether we serve it.
   useEffect(() => {
     if (!deviceCountry) return
@@ -1126,6 +1129,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       .then(() => apiClient.getEventCities(deviceCountry))
       .then((response) => {
         if (cancelled || !response.success || !response.data) return
+        countryAnswered.current = true
+        // Before the state that re-renders with them: every time then names its zone as the catalogue says it.
+        nameZones(response.data.cities, response.data.countries ?? [])
         setCityOptions(response.data.cities)
         setCatalogue(catalogueMeta(response.data))
       })
@@ -1191,13 +1197,16 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         if (!current) {
           return resolveBrowseCity({ stored: null, deviceCity, available: cityOptions, point: userLocation, device: catalogue.device, defaultCitySlug: catalogue.defaultCitySlug })
         }
-        // The phone is in a coming-soon country but in neither box (Montréal): a guess goes to that country's city.
-        if (current.source === 'inferred' && !hereCity({ available: cityOptions, point: userLocation, deviceCity }) && catalogue.device?.access === 'comingSoon') {
-          const theirs = cityBySlug(cityOptions, catalogue.device.citySlug)
-          if (theirs && !sameCity(theirs.city, current.city)) return { city: theirs.city, source: 'inferred', ...(theirs.slug ? { slug: theirs.slug } : {}) }
+        // The phone is in a country we list but in no city's box (Montréal, Goa): a guess goes to the city the server names for it.
+        const scope = catalogue.device?.access
+        if (current.source === 'inferred' && !hereCity({ available: cityOptions, point: userLocation, deviceCity }) && (scope === 'comingSoon' || scope === 'full')) {
+          const theirs = cityBySlug(cityOptions, catalogue.device?.citySlug)
+          if (theirs && !sameCity(theirs.city, current.city)) return storedAt(theirs, 'inferred')
         }
         const next = cityOnResume({ stored: current, deviceCity, available: cityOptions })
-        return next ? { city: next, source: 'inferred' } : current
+        const option = next ? cityNamed(cityOptions, next) : null
+        // With its slug and centre, so the next launch keeps it rather than guessing again.
+        return next ? (option ? storedAt(option, 'inferred') : { city: next, source: 'inferred' }) : current
       })
     }
   }
@@ -1258,7 +1267,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const chooseCity = useCallback(
     (city: string, here = false) => {
       const option = cityNamed(cityOptions, city)
-      const next: StoredCity = option?.slug ? { city, source: 'chosen', slug: option.slug } : { city, source: 'chosen' }
+      const next: StoredCity = option ? storedAt(option, 'chosen') : { city, source: 'chosen' }
       setSelection(next)
       setCityPick((p) => ({ n: p.n + 1, here }))
       setCityPickerOpen(false)
@@ -1304,7 +1313,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    */
   const browseOption = useMemo(() => cityNamed(cityOptions, selectedCity), [cityOptions, selectedCity])
   // Also a coming-soon city being browsed: a Toronto phone on Toronto's screen, or a tap on its row (travel plan §2.5).
-  const demand = useMemo(() => cityDemand({ away, selected: browseOption }), [away, browseOption])
+  const demand = useMemo(() => cityDemand({ away, selected: browseOption, deviceCountry }), [away, browseOption, deviceCountry])
   const demandSentRef = useRef<string | null>(null)
   useEffect(() => {
     if (!demand) return
@@ -1534,7 +1543,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         city: selectedCity,
         location: userLocation,
         ready: cityResolved,
-        cityCentre: browseOption?.centre ?? null,
+        // The stored city's own centre until the catalogue answers (or when it fails): the map is never left blank.
+        cityCentre: browseOption?.centre ?? selection?.centre ?? null,
         travelling,
         preview: browseOption?.launchState === 'preview' && browseOption.access !== 'comingSoon',
         defaultCentre: cityBySlug(cityOptions, catalogue.defaultCitySlug)?.centre ?? null,
@@ -1543,7 +1553,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         openCityPicker: () => setCityPickerOpen(true),
         peekLine: isNarrowed ? null : pulsePeekLine(sections),
       }),
-    [onBrowse, selectedCity, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, isNarrowed, sections]
+    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, isNarrowed, sections]
   )
 
   const firstSection = sections[0]?.key ?? null
@@ -1717,8 +1727,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const banners = (
     <PulseBanners
       socketStatus={socketStatus}
-      // Abroad, "Back to {home}" is the way back: a second offer to go home would say it twice.
-      switchTo={travelling ? null : switchSuggestion}
+      // While the travel banner is up, its "Back to {home}" is the way back: never two offers at once.
+      switchTo={travel ? null : switchSuggestion}
       onSwitch={(city) => chooseCity(city, true)}
       away={away}
       travel={travel}

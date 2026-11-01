@@ -59,6 +59,12 @@ it('before the catalogue has named anything, the short name stands (control)', (
   expect(eventClock(T, 'America/Toronto')).toBe('10:30 AM ET')
 })
 
+it('a country with cities in several zones is never "Canada time"', () => {
+  nameZones([...CITIES, { city: 'Montréal', country: 'CA', timezone: 'America/Toronto' }], COUNTRIES)
+  phoneIn('Asia/Kolkata')
+  expect(eventClock(T, 'America/Toronto')).toBe('10:30 AM ET')
+})
+
 it('a zone shared across countries is named by neither', () => {
   nameZones([...CITIES, { city: 'Detroit', country: 'US', timezone: 'America/Toronto' }], COUNTRIES)
   phoneIn('Asia/Kolkata')

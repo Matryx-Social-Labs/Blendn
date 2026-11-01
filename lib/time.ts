@@ -217,12 +217,19 @@ let zonePlaces = new Map<string, string>()
 type ZoneCity = { city: string; country?: string | null; timezone?: string | null }
 export function nameZones(cities: readonly ZoneCity[], countries: readonly { code: string; name: string }[]): void {
   const byZone = new Map<string, ZoneCity[]>()
-  for (const c of cities) if (c.timezone) byZone.set(c.timezone, [...(byZone.get(c.timezone) ?? []), c])
+  for (const c of cities) {
+    if (!c.timezone) continue
+    const inZone = byZone.get(c.timezone)
+    if (inZone) inZone.push(c)
+    else byZone.set(c.timezone, [c])
+  }
+  // A country's name only when every listed city of it keeps this one zone: Canada's six zones are not "Canada time".
+  const oneZone = (code: string | null | undefined) => !!code && new Set(cities.filter((c) => c.country === code && c.timezone).map((c) => c.timezone)).size === 1
   const next = new Map<string, string>()
   for (const [zone, inZone] of byZone) {
     const countryCodes = new Set(inZone.map((c) => c.country ?? ''))
     if (inZone.length === 1) next.set(zone, inZone[0].city)
-    else if (countryCodes.size === 1) {
+    else if (countryCodes.size === 1 && oneZone(inZone[0].country)) {
       const name = countries.find((c) => c.code === inZone[0].country)?.name
       if (name) next.set(zone, name)
     }
