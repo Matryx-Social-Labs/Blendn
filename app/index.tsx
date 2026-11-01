@@ -14,8 +14,6 @@ import { currentDeviceInfo } from '../components/onboarding/authForm'
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import { Dock } from '../components/ds/Dock'
 import { GoogleMark } from '../components/onboarding/GoogleMark'
-import { Lockup } from '../components/onboarding/Lockup'
-import { useSettleIn } from '../components/onboarding/useSettleIn'
 import FadeInUp from '../components/motion/FadeInUp'
 import ScalePress from '../components/motion/ScalePress'
 import { DiscMark } from '../components/ds/DiscMark'
@@ -37,17 +35,22 @@ import { PendingInvite } from '../components/friends/PendingInvite'
 import { AccountStateScreen } from '../components/system/AccountStateScreen'
 import { SystemScreen } from '../components/system/SystemScreen'
 import { backByLabel, outageNote } from '../lib/outage'
+import { useReducedMotion } from '../lib/motion'
 import { useAutoRetry } from '../lib/useAutoRetry'
 import { HeldLink } from '../components/system/HeldLink'
+import { INTRO_DOCK_AT_MS, IntroLights, IntroMark, IntroWordmark, useIntroLine, useIntroProgress } from '../components/onboarding/LandingIntro'
 
 /** The mark alone, used only on the brief holding state (Flow 1 landing 08). */
 const MONOGRAM_HEIGHT = 96
-/** The lockup sits at 27% of the screen's height (Flow 1 landing 01). */
-const LOCKUP_TOP = 0.27
+/** The mark starts at 17% of the screen's height, so the lights have room above it and the words clear the dock. */
+const LOCKUP_TOP = 0.17
+/** The landing's mark: large at an ordinary size, smaller where the words need the room. */
+const INTRO_MARK_HEIGHT = 118
+const INTRO_MARK_HEIGHT_LARGE = 72
 /** At the accessibility sizes the lockup gives up most of its top room, so the tagline stays clear of the dock (audit A7). */
-const LOCKUP_TOP_LARGE = 0.1
-/** The buttons rise 12 pt from 200 ms in, 40 ms apart (motion #1). */
-const ENTRANCE_AT = 200
+const LOCKUP_TOP_LARGE = 0.06
+/** Under Reduce Motion the resting frame is already there, so the buttons do not wait for it (motion #1). */
+const ENTRANCE_AT_REDUCED = 200
 
 /*
  * Google's own button chrome — white fill, #1F1F1F ink — from its sign-in
@@ -66,7 +69,11 @@ function IndexInner() {
   const largeText = useLargeText()
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
-  const settle = useSettleIn()
+  const reduceMotion = useReducedMotion()
+  const intro = useIntroProgress()
+  const introLine = useIntroLine(intro)
+  const brandTop = window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP)
+  const markHeight = largeText ? INTRO_MARK_HEIGHT_LARGE : INTRO_MARK_HEIGHT
   /*
    * Which provider is in flight, not just whether one is. With one boolean,
    * tapping Apple put Google's button into its spinner — the wrong button
@@ -315,11 +322,11 @@ function IndexInner() {
   const apple = signingIn === 'apple'
   const dimmed = (own: boolean) => (signingIn && !own ? styles.dim : null)
   // Each way in rises 12 pt, 40 ms after the one above (motion #1); the message above them is not one of them.
-  const rise = (index: number) => ({ delay: ENTRANCE_AT + index * STAGGER.loose, distance: RISE.message, duration: DURATION.medium })
+  const rise = (index: number) => ({ delay: (reduceMotion ? ENTRANCE_AT_REDUCED : INTRO_DOCK_AT_MS) + index * STAGGER.loose, distance: RISE.message, duration: DURATION.medium })
 
   return (
     <View style={styles.root}>
-      <Backdrop level={ORB_LEVEL.landing} enter />
+      <IntroLights progress={intro} centre={{ x: window.width / 2, y: brandTop + markHeight / 2 }} />
 
       {/* A link tapped while signed out is held through sign-in; say so (Flow 15 15.12 02). */}
       {pendingEventLink() ? (
@@ -328,11 +335,12 @@ function IndexInner() {
         </View>
       ) : null}
 
-      <Animated.View style={[styles.brand, { paddingTop: window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP) }, settle]} testID="landing-brand">
-        <Lockup size="landing" testID="landing-lockup" />
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline]}>
+      <Animated.View style={[styles.brand, { paddingTop: brandTop }]} testID="landing-brand">
+        <IntroMark progress={intro} height={markHeight} />
+        <IntroWordmark progress={intro} />
+        <Animated.Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline, introLine]}>
           Same place. Same vibe. Instant connections.
-        </Text>
+        </Animated.Text>
         {/* Whose invite is waiting, when an invite link brought them here. */}
         <PendingInvite />
       </Animated.View>

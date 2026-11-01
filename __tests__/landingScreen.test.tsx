@@ -129,13 +129,13 @@ describe('the ways in', () => {
     expect(screen.getByText(/By continuing you/).props.children).toContain('\u00A0and ')
   })
 
-  it('the lockup starts at the frame\'s 27% of the window, not 27% less the inset (the root is not inset)', async () => {
+  it('the mark starts at 17% of the window, not 17% less the inset (the root is not inset)', async () => {
     // At an ordinary text size (jest's window is at 2, an accessibility size: GO-12 moves the lockup up there).
     const window = Dimensions.get('window')
     Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } })
     await draw()
     const brand = screen.getByTestId('landing-brand')
-    expect(StyleSheet.flatten(brand.props.style).paddingTop).toBeCloseTo(window.height * 0.27, 1)
+    expect(StyleSheet.flatten(brand.props.style).paddingTop).toBeCloseTo(window.height * 0.17, 1)
     Dimensions.set({ window, screen: window })
   })
 
@@ -404,5 +404,14 @@ describe('the entry at large text and its parallel verbs (GO-12, A7/A27/A28)', (
   it('the "or" between the ways in reads at 4.5:1: textSecondary, not tertiary', async () => {
     await draw()
     expect(StyleSheet.flatten(screen.getByText('or', { includeHiddenElements: true }).props.style).color).toBe(COLOR.textSecondary)
+  })
+})
+
+describe('the opening (owner picked two lights, 2026-11-01)', () => {
+  it('draws the official mark and wordmark and keeps the words, hidden from a screen reader as decoration', async () => {
+    await draw()
+    expect(screen.getByTestId('landing-mark', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
+    expect(screen.getByTestId('landing-wordmark', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
+    expect(screen.getByText('Same place. Same vibe. Instant connections.')).toBeTruthy()
   })
 })
