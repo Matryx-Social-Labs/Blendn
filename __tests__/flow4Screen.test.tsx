@@ -71,7 +71,7 @@ jest.mock('../components/blendn/RoomStage', () => {
   const { forwardRef } = jest.requireActual('react')
   return {
     RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
-    useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
+    useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: false, atTop: () => {} }),
     useStage: () => ({ scrollY: mockScrollY, pan: {} }),
   }
 })
