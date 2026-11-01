@@ -51,8 +51,10 @@ export function useBeats(beats: Beat[], running = true) {
   useEffect(() => {
     latest.current = beats
   })
-  const state = useRef({ played: new Set<number>(), timers: [] as ReturnType<typeof setTimeout>[] })
-  const live = useLatest(running)
+  const state = useRef({ played: new Set<number>(), timers: [] as ReturnType<typeof setTimeout>[], running })
+  useEffect(() => {
+    state.current.running = running
+  })
   const play = useCallback((i: number) => {
     const s = state.current
     if (s.played.has(i)) return
@@ -68,9 +70,9 @@ export function useBeats(beats: Beat[], running = true) {
   return useCallback(() => {
     state.current.timers.forEach(clearTimeout)
     // Skipped before it was ever seen (a link closing a moment still waiting its turn): spent, but nothing buzzes unseen.
-    if (!live.current) return latest.current.forEach((_, i) => state.current.played.add(i))
+    if (!state.current.running) return latest.current.forEach((_, i) => state.current.played.add(i))
     latest.current.forEach((_, i) => play(i))
-  }, [play, live])
+  }, [play])
 }
 
 export type MomentStageProps = {
