@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from 'react-native-reanimated'
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
@@ -75,7 +75,8 @@ function Sample({ sample, index, bold, testID }: { sample: SampleNotification; i
         <Text numberOfLines={1} maxFontSizeMultiplier={FRAME_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.primary]}>
           {sample.title}
         </Text>
-        <Text numberOfLines={1} maxFontSizeMultiplier={FRAME_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
+        {/* Two lines, as a lock screen gives a body: one cut "Someone at Rooftop Sundowner: H…" before "liked you back". */}
+        <Text numberOfLines={2} maxFontSizeMultiplier={FRAME_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
           {sample.body}
         </Text>
       </View>
@@ -86,23 +87,35 @@ function Sample({ sample, index, bold, testID }: { sample: SampleNotification; i
   )
 }
 
-/** Ember low on the left, violet high on the right: the landing's two lights, at the orbs' strengths. */
+/**
+ * Ember low on the left, violet high on the right: the landing's two lights, at the orbs' strengths. Sized from its own
+ * layout, as `Orbs` is: a percentage size stopped short of the frame's right edge on iOS (a hard seam, drive 2026-11-02).
+ */
 function Lights() {
+  const [box, setBox] = useState<{ width: number; height: number } | null>(null)
   return (
-    <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Defs>
-        <RadialGradient id="ember" cx="20%" cy="85%" r="65%">
-          <Stop offset={0} stopColor={COLOR.brandOrange} stopOpacity={COLOR.orbOrangeAlpha} />
-          <Stop offset={1} stopColor={COLOR.brandOrange} stopOpacity={0} />
-        </RadialGradient>
-        <RadialGradient id="violet" cx="85%" cy="15%" r="65%">
-          <Stop offset={0} stopColor={COLOR.brandViolet} stopOpacity={COLOR.orbVioletAlpha} />
-          <Stop offset={1} stopColor={COLOR.brandViolet} stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Rect width="100%" height="100%" fill="url(#ember)" />
-      <Rect width="100%" height="100%" fill="url(#violet)" />
-    </Svg>
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+      onLayout={(e) => setBox({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+    >
+      {box ? (
+        <Svg width={box.width} height={box.height}>
+          <Defs>
+            <RadialGradient id="ember" cx="20%" cy="85%" r="65%">
+              <Stop offset={0} stopColor={COLOR.brandOrange} stopOpacity={COLOR.orbOrangeAlpha} />
+              <Stop offset={1} stopColor={COLOR.brandOrange} stopOpacity={0} />
+            </RadialGradient>
+            <RadialGradient id="violet" cx="85%" cy="15%" r="65%">
+              <Stop offset={0} stopColor={COLOR.brandViolet} stopOpacity={COLOR.orbVioletAlpha} />
+              <Stop offset={1} stopColor={COLOR.brandViolet} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Rect width={box.width} height={box.height} fill="url(#ember)" />
+          <Rect width={box.width} height={box.height} fill="url(#violet)" />
+        </Svg>
+      ) : null}
+    </View>
   )
 }
 

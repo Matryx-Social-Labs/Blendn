@@ -42,7 +42,8 @@ describe('LockScreenPreview', () => {
     await render(<LockScreenPreview samples={SAMPLES} testID="lock" />)
     const title = screen.getByText(SAMPLES[0].title, hidden)
     expect(title.props.numberOfLines).toBe(1)
-    expect(screen.getByText(SAMPLES[1].body, hidden).props.numberOfLines).toBe(1)
+    // A body keeps two lines, so "liked you back" survives a long title in it.
+    expect(screen.getByText(SAMPLES[1].body, hidden).props.numberOfLines).toBe(2)
   })
 
   it('the samples spring in one by one, about 380 ms apart, once', async () => {
