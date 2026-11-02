@@ -39,6 +39,7 @@ import { getPushTokenRef, setPushTokenRef } from './pushTokenRef'
 import type { ChatReaction } from './chatReactions'
 import { SEARCH_TOO_SHORT, searchTermOf } from './searchTerm'
 import type { DeletionProof } from './deletionProof'
+import type { Ticket, TicketLine, TicketOrder, TicketOrderStatus, TicketQuote } from './ticketing'
 
 // API Configuration
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL
@@ -1031,6 +1032,8 @@ export interface EventApiItem {
   }
   /** The list's own RSVP read (`GET /events`): your status on this event, null when none. Absent from an older server; the detail route's is `userStatus.rsvpStatus`. */
   rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
+  /** §1 of the ticketing contract, unchecked: read it through `parseTicketing` (`lib/ticketing.ts`). Null or absent: a free event. */
+  ticketing?: unknown
   userStatus?: {
     isFavorited?: boolean
     isCheckedIn?: boolean
@@ -2734,6 +2737,32 @@ class ApiClientClass {
     )
     if (result.success) this.eventStatusChanged(eventId, { rsvpStatus: null })
     return result
+  }
+
+  /*
+   * Ticketing (contract: blendn-admin `.context/plans/ticketing-api-contract.md` §2–§6). Refusals arrive as the envelope's
+   * `errorCode` (`sold_out`, `busy`…); `lib/ticketing.ts` `refusalCopy` says them. Behind the server's TICKETING flag: off,
+   * these 404 and the detail's `ticketing` is null, so nothing calls them.
+   */
+
+  /** §2: what these lines would cost, with no hold. Re-asked on every stepper change, debounced by the sheet. */
+  async getTicketQuote(eventId: string, lines: TicketLine[]): Promise<ApiResponse<TicketQuote>> {
+    return this.queuedRequest<TicketQuote>(`/api/mobile/events/${eventId}/ticket-quote`, { method: 'POST', body: JSON.stringify({ lines }) }, true, 3)
+  }
+
+  /** §3: the order and its 10-minute hold, and the pay page to open. Not retried here: `busy` is the sheet's to retry. */
+  async createTicketOrder(eventId: string, lines: TicketLine[]): Promise<ApiResponse<TicketOrder>> {
+    return this.queuedRequest<TicketOrder>(`/api/mobile/events/${eventId}/ticket-orders`, { method: 'POST', body: JSON.stringify({ lines }) }, true, 2)
+  }
+
+  /** §5: one order, the buyer's only (anyone else is 404). Polled after the pay page closes; never cached. */
+  async getTicketOrder(orderId: string): Promise<ApiResponse<TicketOrderStatus>> {
+    return this.queuedRequest<TicketOrderStatus>(`/api/mobile/ticket-orders/${encodeURIComponent(orderId)}`, {}, true, 2)
+  }
+
+  /** §6: my tickets, all of them or one event's. The phone keeps the last answer (`lib/ticketCache.ts`), so this is not cached here. */
+  async getMyTickets(eventId?: string): Promise<ApiResponse<Ticket[]>> {
+    return this.queuedRequest<Ticket[]>(`/api/mobile/me/tickets${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`)
   }
 
   async rateEvent(

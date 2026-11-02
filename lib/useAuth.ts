@@ -360,6 +360,8 @@ const resetLocalSession = () => {
    * the auth path does.
    */
   void import('./goLive').then((m) => m.clearLiveSession()).catch(() => {})
+  // The tickets kept for the door with no signal are this account's QR codes (`lib/ticketCache.ts`).
+  void import('./ticketCache').then((m) => m.forgetTickets()).catch(() => {})
   // The next account's session reads the phone's permission afresh (`readPushPermission`).
   void import('./pushStatus').then((m) => m.forgetPushPermission()).catch(() => {})
   updateAuthState({
