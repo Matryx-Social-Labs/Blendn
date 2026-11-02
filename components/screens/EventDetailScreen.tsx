@@ -72,6 +72,7 @@ import {
   SceneBodyAccent,
   SceneByline,
   SceneCTA,
+  sceneCtaLabel,
   SceneGallery,
   SceneLocationCard,
   SceneMap,
@@ -94,6 +95,8 @@ import * as Location from 'expo-location'
 import { formatDistance, getDistanceKm } from '../../lib/geo'
 import { ROUGH_FIX_MAX_AGE_MS } from '../../lib/locationFix'
 import { useReducedMotion } from '../../lib/motion'
+import { parseTicketing, type EventTicketing } from '../../lib/ticketing'
+import { TicketDock, useEventTickets } from '../tickets/EventTickets'
 
 /*
  * What the Scene says in the app's one Sheet (lib/sheet.ts, drawn by SheetHost on the DS Sheet), in the frame's words.
@@ -202,6 +205,8 @@ interface EventDetailData {
   /** The organiser's age floor and door: the Door tile and the age pill. */
   min_age?: number | null
   door_policy?: string | null
+  /** Tickets (contract §1), checked by `parseTicketing`: null is a free event, and the page is exactly as it was. */
+  ticketing?: EventTicketing | null
 }
 
 type EventAmenity = ServerAmenity
@@ -377,6 +382,7 @@ export default function EventDetail() {
       visibility: d.visibility,
       min_age: d.minAge ?? null,
       door_policy: d.doorPolicy ?? null,
+      ticketing: parseTicketing(d.ticketing),
     })
     // Interest, check-in and RSVP from userStatus - no separate API call needed
     if (d.userStatus) {
@@ -750,6 +756,18 @@ export default function EventDetail() {
     if (event) void openPlaceInMaps(event)
   }
   const { hold, checkOut, overlays } = useEventCheckIn({ id: String(id), event, openMaps: openInMaps, showToast })
+  /* Tickets (SCRUM-1007): a refusal, a lapsed hold or a paid order reads the event again, past both caches, for its counts and `mine`. */
+  const tickets = useEventTickets({
+    event: event
+      ? { id: event.id, title: event.title, startTime: event.start_time, timezone: event.timezone, venueName: event.venue_name, coverImageUrl: event.cover_image_url }
+      : null,
+    ticketing: event?.ticketing ?? null,
+    onStale: () => {
+      apiClient.forgetEvent(String(id))
+      forgetEventDetailCache(String(id))
+      void fetchEventDetails()
+    },
+  })
 
   /*
    * What this event may say in a link: null for a private one or a draft, and then there is no share control at all
@@ -1067,6 +1085,32 @@ export default function EventDetail() {
   // attendee's one surface, and shows no staff control to anybody.
   const menu: MenuItem[] = [{ icon: 'flag', label: 'Report this event', onPress: () => showEventReportOptions(event?.title || 'this event', String(id)) }]
 
+  /*
+   * Before the doors, a ticketed event's dock is the tickets' (sell, "My ticket", or Save when nothing is on sale); an external
+   * one keeps the RSVP beside the organizer's link, since the room and check-in run on it. From the doors on it is the hold.
+   */
+  const preDoor = ctaState === 'rsvp' || ctaState === 'rsvpd' || ctaState === 'waitlisted'
+  const ticketDock =
+    tickets.dock && preDoor && !cancelled ? (
+      <TicketDock
+        model={tickets.dock}
+        rsvp={
+          <Button
+            kind="secondary"
+            onGlass
+            label={sceneCtaLabel(ctaState)}
+            icon={ctaIcon ?? undefined}
+            loading={rsvpPending}
+            pressHaptic={false}
+            onPress={primaryActionPress}
+            testID="scene-cta-rsvp"
+          />
+        }
+        saved={userInterested}
+        onSave={() => void handleToggleInterest()}
+      />
+    ) : null
+
   const onFirstLoad = loading && !event
   return (
     <View style={styles.container}>
@@ -1156,6 +1200,8 @@ export default function EventDetail() {
                 </FadeInUp>
               ) : null}
 
+              {tickets.priceLine ? <FadeInUp delay={SECTION_DELAY[0]}>{tickets.priceLine}</FadeInUp> : null}
+
               <FadeInUp delay={SECTION_DELAY[0]}>
                 <AmenityGrid tiles={tiles} testID="scene-tiles" />
               </FadeInUp>
@@ -1165,6 +1211,8 @@ export default function EventDetail() {
                   <SceneDayStrip days={event.days} today={sessionToday} testID="scene-days" />
                 </FadeInUp>
               ) : null}
+
+              {tickets.section ? <FadeInUp delay={SECTION_DELAY[1]}>{tickets.section}</FadeInUp> : null}
 
               {event?.organizer || isLive ? (
                 <FadeInUp delay={SECTION_DELAY[0]}>
@@ -1266,6 +1314,8 @@ export default function EventDetail() {
         ) : null}
         {ctaState === 'join' ? (
           <EventHold {...hold} />
+        ) : ticketDock ? (
+          ticketDock
         ) : (
           <>
             <SceneCTA
@@ -1283,6 +1333,7 @@ export default function EventDetail() {
         )}
       </Dock>
       {overlays}
+      {tickets.overlays}
 
       <SceneLightbox
         items={playlist}

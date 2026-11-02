@@ -72,9 +72,15 @@ export const MomentPour = memo(function MomentPour({
   asks = false,
   frame,
   ground = false,
+  headline = 'You’re in.',
+  label,
   testID,
 }: {
   venue: string
+  /** The words that fade in at the foot: the check-in's "You're in."; a paid ticket's "You're going" (M-A, SCRUM-1007). */
+  headline?: string
+  /** Read once as it appears; defaults to the headline and the venue line. */
+  label?: string
   onDone: () => void
   ready?: boolean
   /** A question (the reveal offer, "Why do you go out?") comes before the Room: play out, clear, then `onDone`. Read once, at mount. */
@@ -181,7 +187,7 @@ export const MomentPour = memo(function MomentPour({
   const textStyle = useAnimatedStyle(() => ({ opacity: text.get() }))
 
   return (
-    <MomentStage testID={testID} modal={false} done={done} label={`You’re in. ${venue}.`} scrimAlpha={ground ? 1 : 0} scrim={scrim} orbs="moment" orbsOpacity={orbs} orbsOnInk={false} onSkip={skip}>
+    <MomentStage testID={testID} modal={false} done={done} label={label ?? `${headline} ${venue}.`} scrimAlpha={ground ? 1 : 0} scrim={scrim} orbs="moment" orbsOpacity={orbs} orbsOnInk={false} onSkip={skip}>
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, stageStyle]}>
         <View
           testID={testID && `${testID}-panel`}
@@ -200,7 +206,7 @@ export const MomentPour = memo(function MomentPour({
             {venue}
           </Text>
           <Animated.Text testID={testID && `${testID}-youre-in`} maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[YOURE_IN_TYPE, styles.youreIn, textStyle]}>
-            You’re in.
+            {headline}
           </Animated.Text>
         </View>
       </Animated.View>
