@@ -67,6 +67,7 @@ import { shareEvent } from '../../lib/shareRow'
 import { showSheet } from '../../lib/sheet'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
+import { rememberTicketEvent, useMyTickets } from '../../lib/ticketCache'
 import { TAB_BAR_CLEARANCE } from './_layout'
 
 /**
@@ -441,6 +442,41 @@ function GoingScreenInner() {
   // The event you are checked into (the disc's poll): its Next up card says "You’re in" (SCRUM-882).
   const liveEventId = useLiveEventId()
 
+  /*
+   * The tickets you hold (SCRUM-1007), per event: from the phone's copy first, so Next up says "2 tickets" and offers My ticket
+   * with no signal. One read of `/me/tickets` for the tab, grouped here; the pass opens the event's first order.
+   */
+  const { tickets: myTickets, refresh: refreshTickets } = useMyTickets(uid)
+  // Read again on every visit: a ticket bought on the event page (or another phone) shows on the card when you come back.
+  useFocusEffect(
+    useCallback(() => {
+      void refreshTickets()
+    }, [refreshTickets])
+  )
+  const heldTickets = useMemo(() => {
+    const by = new Map<string, { count: number; orderId: string }>()
+    for (const t of myTickets) {
+      const held = by.get(t.eventId)
+      by.set(t.eventId, { count: (held?.count ?? 0) + 1, orderId: held?.orderId ?? t.orderId })
+    }
+    return by
+  }, [myTickets])
+  const openTicket = useCallback(
+    (row: RsvpEventRow, orderId: string) => {
+      if (uid) {
+        void rememberTicketEvent(uid, row.id, {
+          title: row.title,
+          startTime: row.start_time,
+          timezone: row.timezone ?? undefined,
+          venueName: row.venue_name ?? undefined,
+          coverImageUrl: row.cover_image_url,
+        })
+      }
+      router.push({ pathname: '/ticket/[orderId]', params: { orderId } } as never)
+    },
+    [uid]
+  )
+
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })
   }, [])
@@ -477,6 +513,8 @@ function GoingScreenInner() {
     const waitlisted = !cancelled && row.rsvpStatus === 'waitlisted'
     // "New time" / "New venue": what moved under you (frame 03). Said once, and not over the waitlist or a cancel, which are the news.
     const moved = changedTag(row)
+    const held = heldTickets.get(row.id)
+    const heldWords = held ? `${held.count} ${held.count === 1 ? 'ticket' : 'tickets'}` : null
     return (
       <View testID="going-next" style={[styles.inset, styles.next]}>
         <SectionLabel text="Next up" />
@@ -491,6 +529,7 @@ function GoingScreenInner() {
               when,
               place,
               cancelled ? 'Cancelled by the organizer' : waitlisted ? 'On the waitlist' : moved,
+              heldWords,
             ].filter(Boolean).join(', ')}
             accessibilityHint="Opens the event"
           >
@@ -515,6 +554,7 @@ function GoingScreenInner() {
                   </Text>
                 </View>
               ) : null}
+              {heldWords ? <StatusTag icon="ticket" text={heldWords} tint={COLOR.surfaceSunken} /> : null}
               {cancelled ? (
                 <StatusTag icon="calendar-x" text="Cancelled" tint={COLOR.destructiveTint} />
               ) : waitlisted ? (
@@ -530,6 +570,19 @@ function GoingScreenInner() {
            * (Direction C, audit C14: nothing on the tab was lit); Calendar and Share are icons.
            */}
           <View style={styles.heroActions}>
+            {/* Tickets held: My ticket comes first, lit, unless the door is open (then Blend in keeps the light, SCRUM-1007). */}
+            {held ? (
+              <Button
+                kind={action.kind === 'pass' ? 'secondary' : 'lit'}
+                size="md"
+                icon="ticket"
+                label="My ticket"
+                accessibilityHint="Opens your ticket"
+                onPress={() => openTicket(row, held.orderId)}
+                style={styles.heroLit}
+                testID="going-my-ticket"
+              />
+            ) : null}
             {action.kind === 'pass' ? (
               // Owner ruling 2026-10-28: the check-in page for THIS event (its pass and hold), never the overlay with no event.
               <Button
@@ -542,7 +595,7 @@ function GoingScreenInner() {
                 style={styles.heroLit}
                 testID="going-blend-in"
               />
-            ) : action.kind === 'directions' ? (
+            ) : action.kind === 'directions' && !held ? (
               <Button
                 kind="lit"
                 size="md"
@@ -554,11 +607,10 @@ function GoingScreenInner() {
                 testID="going-directions"
               />
             ) : null}
-            {live ? (
+            {live || held ? (
               <HeroAction icon="navigation" accessibilityLabel={`Directions to ${row.venue_name || row.title}`} onPress={() => void openInMaps(row)} />
-            ) : (
-              <HeroAction icon="calendar" accessibilityLabel={`Add ${row.title} to calendar`} onPress={() => addToCalendar(row)} />
-            )}
+            ) : null}
+            {live ? null : <HeroAction icon="calendar" accessibilityLabel={`Add ${row.title} to calendar`} onPress={() => addToCalendar(row)} />}
             <HeroAction icon="share" accessibilityLabel={`Share ${row.title}`} onPress={() => shareRow(row)} />
           </View>
           {/* The Scene's own row, under the buttons: before doors, not called off (E2). */}
@@ -570,7 +622,7 @@ function GoingScreenInner() {
         </View>
       </View>
     )
-  }, [bold, openBoard, openEvent, refreshCount, shareRow, liveEventId])
+  }, [bold, openBoard, openEvent, refreshCount, shareRow, liveEventId, heldTickets, openTicket])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:

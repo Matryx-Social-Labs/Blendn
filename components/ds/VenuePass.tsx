@@ -160,8 +160,8 @@ const TICK_MS = 1000
 const AnimatedCircle = Animated.createAnimatedComponent(Circle)
 
 /** "K7QM2X" → "K7Q M2X"; read "K 7 Q, M 2 X". */
-const grouped = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`
-const spoken = (code: string) => `Door code ${[...code.slice(0, 3)].join(' ')}, ${[...code.slice(3)].join(' ')}`
+export const groupedDoorCode = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`
+export const spokenDoorCode = (code: string) => `Door code ${[...code.slice(0, 3)].join(' ')}, ${[...code.slice(3)].join(' ')}`
 
 const STILL = {
   redeemed: { code: '· · ·', line: (at?: string) => (at ? `Redeemed ${at}` : 'Redeemed') },
@@ -212,7 +212,7 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
   useEffect(() => {
     if (!live || announced.current === code) return
     announced.current = code
-    if (active) AccessibilityInfo.announceForAccessibility(spoken(code))
+    if (active) AccessibilityInfo.announceForAccessibility(spokenDoorCode(code))
   }, [live, active, code])
 
   /*
@@ -243,7 +243,7 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
         accessible
         accessibilityLabel={
           live
-            ? spoken(code)
+            ? spokenDoorCode(code)
             : state === 'offline'
               ? 'Door code unavailable. This pass needs a connection to show its code.'
               : `${label}. ${still?.line(redeemedAt) ?? ''}`
@@ -252,7 +252,7 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
       >
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{label}</Text>
         {live ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.primary]}>{grouped(code)}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.primary]}>{groupedDoorCode(code)}</Text>
         ) : (
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.tertiary]}>{still?.code ?? '··· ···'}</Text>
         )}

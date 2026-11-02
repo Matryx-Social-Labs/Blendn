@@ -760,6 +760,11 @@ function RootLayout() {
       <Stack.Screen name="venue/[id]" options={{ headerShown: false }} />
       {/* An offer from a place and its door pass (step 12). Placeholder design (docs/PLACEHOLDER_SCREENS.md §16). */}
       <Stack.Screen name="offer/[id]" options={{ headerShown: false }} />
+      {/* A ticket's pass (T-A, SCRUM-1007): a modal you close, opened from the event page, Going and the paid moment. */}
+      <Stack.Screen
+        name="ticket/[orderId]"
+        options={{ headerShown: false, presentation: 'fullScreenModal', animation: reduceMotion ? 'fade' : Platform.OS === 'ios' ? 'default' : 'slide_from_bottom' }}
+      />
       {/* The Blendn+ paywall, a modal with "Not now" (step 11). Placeholder design (docs/PLACEHOLDER_SCREENS.md §13). */}
       <Stack.Screen
         name="plus"
