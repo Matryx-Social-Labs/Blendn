@@ -318,7 +318,11 @@ function useSheetMotion({
 
   const offset = useSharedValue(reduceMotion ? 0 : window.height)
   const scrim = useSharedValue(0)
-  /** Reduce Motion's way in and out (DS #5 rm: "200ms fade; drag still tracks"): the sheet does not travel, it fades. */
+  /*
+   * Reduce Motion's way in (DS #5 rm: "200ms fade; drag still tracks"): the sheet does not travel. What fades is what is drawn
+   * ON the glass, never the glass or anything holding it: a visual effect view under an ancestor below full opacity draws
+   * without its effect, and every sheet was see-through (SCRUM-1003, Material §5.2 rule 6). The glass appears by mounting.
+   */
   const fade = useSharedValue(reduceMotion ? 0 : 1)
   /** The flick's speed (pt/s, downward) a drag-dismiss hands to the exit, so there is no seam between the finger and the slide. */
   const flingV = useSharedValue(0)
@@ -391,7 +395,8 @@ function useSheetMotion({
     // A flick down hands its speed to the slide out: a spring that carries it, clamped at the bottom, never a fresh curve from rest.
     const v = flingV.get()
     flingV.set(0)
-    if (reduceMotion) fade.set(withTiming(0, { duration: base, easing: gentle }))
+    // Reduce Motion: the glass leaves by unmounting at once (`Sheet` drops the place view), only the scrim fades.
+    if (reduceMotion) fade.set(0)
     else offset.set(v > 0 ? withSpring(window.height, { ...SPRING.fling, velocity: v, overshootClamping: true }) : withTiming(window.height, out))
     scrim.set(withTiming(0, { duration: base, easing: gentle }))
     // A spring has no end time: give the flick the room it needs to reach the bottom before the Modal goes.
@@ -485,14 +490,23 @@ function useSheetMotion({
     // Moving: the keyboard's own frame. Still (progress 0 or 1): the exact resting value.
     const liftNow = follow && p > 0 && p < 1 ? Math.max(0, -kb.height.get()) : lift.get()
     return {
-      opacity: fade.get(),
       transform: [{ translateY: offset.get() }],
       marginBottom: liftNow,
       ...(levels ? { height: sheetHeightAt(liftNow, room.get().visibleHeight, room.get().insetTop, height.get()) } : null),
     }
   })
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
-  return { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
+  /*
+   * On the content inside the glass only (the grip and head, the scroll, the actions): never on the place view. One style
+   * per view: an animated style attached to several views drives only one of them.
+   */
+  const fadeHead = useAnimatedStyle(() => ({ opacity: fade.get() }))
+  const fadeScroll = useAnimatedStyle(() => ({ opacity: fade.get() }))
+  const fadeActions = useAnimatedStyle(() => ({ opacity: fade.get() }))
+  const contentFade = { head: fadeHead, scroll: fadeScroll, actions: fadeActions }
+  /** The hairline under a pinned header: there once the content has moved off its top, as an iOS scroll edge is. */
+  const edgeStyle = useAnimatedStyle(() => ({ opacity: headAtTop.get() ? 0 : 1 }))
+  return { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, contentFade, edgeStyle, natural, fixedHeight: !!levels }
 }
 
 /**
@@ -512,7 +526,7 @@ function useSheetMotion({
  * the finger, rubber-banding above the top detent, and settles on `M.fling`
  * with its velocity. Reduce Motion: it does not rise; the scrim fades over
  * 200 ms. Glass never fades (§5.2 rule 6), so the sheet itself appears in
- * place. Increase Contrast: the 50% hairline and the body in white.
+ * place and leaves by unmounting; only its content fades in. Increase Contrast: the 50% hairline and the body in white.
  *
  * A screen reader's focus goes to the title on open and back to the control
  * that opened it once it has gone (WCAG 2.4.3, lib/focusReturn); VoiceOver's
@@ -623,7 +637,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
     opener.current = null
   })
   const ios = Platform.OS === 'ios'
-  const { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
+  const { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, contentFade, edgeStyle, natural, fixedHeight } = useSheetMotion({
     visible,
     heights,
     opening,
@@ -735,7 +749,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
       {bodyEl}
     </>
   ) : null
-  const scrollsFromTop = hasHead && !pinHead
+  const scrolls = !!(scrollHead || children)
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
   const focusTitle = () => {
     const target = titleRef.current ?? focusRef?.current
@@ -798,6 +812,8 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
           >
             <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={dismissible ? requestClose : undefined} />
           </Animated.View>
+          {/* Under Reduce Motion a leaving sheet is gone at once: the glass never fades out (SCRUM-1003). */}
+          {visible || !reduceMotion ? (
           <Animated.View testID={testID && `${testID}-place`} accessibilityViewIsModal onAccessibilityEscape={requestClose} style={placeStyle}>
             <Material
               testID={testID}
@@ -812,7 +828,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
             >
               {/* The grip (and a pinned title row) stays above the scroll: a sheet scrolled down to its actions can still be dragged away. */}
               <GestureDetector gesture={drag}>
-                <View>
+                <Animated.View style={contentFade.head}>
                   <View testID={testID && `${testID}-grip`} style={[styles.grip, overflowing && !pinHead && { height: minTarget() }]}>
                     {dismissible ? (
                       <Pressable
@@ -827,14 +843,19 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                     ) : null}
                   </View>
                   {pinHead ? (
-                    <View testID={testID && `${testID}-pinned`} style={styles.head}>
+                    /*
+                     * Over a scroll, the 12 pt under the title is the header's, not padding inside the scroll: there it scrolled
+                     * away and a row was cut flush under the title ("Browse in" over "Mumbai"). Now a row is clipped 12 pt clear.
+                     */
+                    <View testID={testID && `${testID}-pinned`} style={[styles.head, scrolls && styles.headOverScroll]}>
                       {iconEl}
                       {titleEl}
                     </View>
                   ) : null}
-                </View>
+                  {pinHead && scrolls ? <Animated.View testID={testID && `${testID}-edge`} pointerEvents="none" style={[styles.edge, edgeStyle]} /> : null}
+                </Animated.View>
               </GestureDetector>
-              {scrollHead || children ? (
+              {scrolls ? (
                 /*
                  * The title, the body and the children scroll as one under the cap; the actions below it stay put. With only
                  * `children` inside, a header taller than the cap (AX XXXL: "Sign out?" and its body) pushed Cancel and Sign
@@ -861,9 +882,9 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                     testID={testID && `${testID}-content`}
                     // Under a pinned header the scroll keeps a floor (its content, up to two targets): pinned rows never squeeze
                     // the form to nothing (review R5).
-                    style={[styles.content, pinHead && { minHeight: Math.min(contentTall, SCROLL_FLOOR_TARGETS * minTarget()) }]}
-                    // Under a pinned title, or with no header at all, the content keeps its 12 pt from what is above it (review L8).
-                    contentContainerStyle={[styles.contentInner, !scrollsFromTop && styles.contentBelow]}
+                    style={[styles.content, contentFade.scroll, pinHead && { minHeight: Math.min(contentTall, SCROLL_FLOOR_TARGETS * minTarget()) }]}
+                    // With no header at all the content keeps its 12 pt from the grip (review L8); a pinned header holds its own.
+                    contentContainerStyle={[styles.contentInner, !hasHead && styles.contentBelow]}
                     keyboardShouldPersistTaps="handled"
                     // Capped with more below, by the keyboard or by its own height: say so, and let the hand scroll it on both
                     // platforms. Make a crew stranded a section label at the fold over the dock with nothing to say it went on
@@ -886,7 +907,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                 </GestureDetector>
               ) : null}
               {sorted.length ? (
-                <View style={[styles.actions, fixedHeight && styles.pinned]}>
+                <Animated.View style={[styles.actions, fixedHeight && styles.pinned, contentFade.actions]}>
                   {sorted.map(({ kind = 'secondary', disabled, loading, ...action }) => (
                     <Button
                       // Keyed by testID when there is one, so a label that changes in place ("Show 1 place" → "Show 2 places") keeps its Button.
@@ -899,10 +920,11 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                       {...action}
                     />
                   ))}
-                </View>
+                </Animated.View>
               ) : null}
             </Material>
           </Animated.View>
+          ) : null}
         </View>
       </GestureHandlerRootView>
       </PresentsHere.Provider>
@@ -924,6 +946,9 @@ const styles = StyleSheet.create({
    */
   grip: { height: SPACE.xl },
   head: { gap: SPACE.md },
+  headOverScroll: { paddingBottom: SPACE.md },
+  /** Full width, across the gutter, like the scroll under it. */
+  edge: { height: StyleSheet.hairlineWidth, marginHorizontal: -SPACE.gutter, backgroundColor: COLOR.hairline },
   handleHit: {
     position: 'absolute',
     top: 0,
