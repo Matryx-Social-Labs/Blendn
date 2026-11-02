@@ -219,7 +219,7 @@ export function HomeShell({
           />
         ) : null}
       </View>
-      <PulseTopBar floating actions={<NotificationBell />} />
+      <PulseTopBar floating actions={<NotificationBell onMap />} />
       <HomeDrawer
         y={drawerTop}
         points={points}

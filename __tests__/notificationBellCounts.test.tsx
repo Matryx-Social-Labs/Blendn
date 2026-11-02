@@ -14,7 +14,7 @@ jest.mock('expo-router', () => ({
 jest.mock('../lib/apiClient', () => ({ apiClient: { getNotifications: jest.fn() } }))
 jest.mock('../lib/socketClient', () => ({ subscribeToBell: () => () => {}, subscribeToUserNotifications: () => () => {} }))
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(), setBadgeCountAsync: jest.fn() }))
-jest.mock('../components/ui/Material', () => ({ Material: () => null }))
+jest.mock('../components/ui/Material', () => ({ Material: () => null, useMapInk: () => null }))
 
 /* eslint-disable import/first */
 import * as Notifications from 'expo-notifications'
