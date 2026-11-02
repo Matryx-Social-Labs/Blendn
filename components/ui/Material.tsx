@@ -2,7 +2,7 @@ import { BlurView, type BlurTint } from 'expo-blur'
 import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useState } from 'react'
-import { AccessibilityInfo, Platform, StyleSheet, View, type ViewProps } from 'react-native'
+import { AccessibilityInfo, Platform, StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { COLOR, MATERIAL } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
@@ -136,6 +136,16 @@ export function useMaterialTier(): MaterialTier {
   const reduceTransparency = useReduceTransparency()
   return materialTier({ os: Platform.OS, liquidGlass: liquidGlassAvailable(), reduceTransparency })
 }
+
+/**
+ * Chrome floating on the home map (the wordmark capsule, the bell) on the solid tier: ink, so it matches the ink drawer
+ * instead of reading grey on Android. Null on glass and blur, which stay as they are. Pass it after the role's fill.
+ */
+export function useMapInk(): ViewStyle | null {
+  return useMaterialTier() === 'solid' ? MAP_INK : null
+}
+
+const MAP_INK: ViewStyle = { backgroundColor: COLOR.ink }
 
 export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'role'> & { role: MaterialRole }) {
   const tier = useMaterialTier()

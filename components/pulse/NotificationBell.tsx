@@ -6,7 +6,7 @@ import { markBellRead, useInboxBadge, useRefreshInboxBadge } from '../../lib/inb
 import { badgeLabel } from '../../lib/notificationFormat'
 import { Badge } from '../ds/MonoFamily'
 import { Icon } from '../ui/Icon'
-import { Material } from '../ui/Material'
+import { Material, useMapInk } from '../ui/Material'
 import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
 import ScalePress from '../motion/ScalePress'
 
@@ -28,7 +28,9 @@ import ScalePress from '../motion/ScalePress'
 /** The most the server counts (`unreadCount` stops at 1000). */
 const UNREAD_CAP = 1000
 
-export function NotificationBell() {
+/** `onMap`: the bell floats on the home map, where the solid tier draws it ink like the drawer (`useMapInk`). */
+export function NotificationBell({ onMap = false }: { onMap?: boolean } = {}) {
+  const mapInk = useMapInk()
   const { unreadCount: unread } = useInboxBadge()
   const load = useRefreshInboxBadge()
 
@@ -72,7 +74,7 @@ export function NotificationBell() {
       style={[circle, styles.centre]}
       testID="notification-bell"
     >
-      <Material role="control" style={[StyleSheet.absoluteFill, { borderRadius: circle.borderRadius }]} />
+      <Material role="control" testID="notification-bell-fill" style={[StyleSheet.absoluteFill, { borderRadius: circle.borderRadius }, onMap && mapInk]} />
       <Icon name="bell" />
       {/*
         The badge fades and scales in when something is new (0 → any) and fades out when it clears (DS #28); the

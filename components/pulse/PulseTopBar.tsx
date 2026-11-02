@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLOR, RADIUS, SIZE, SPACE as DS_SPACE, TYPE as DS_TYPE } from '../../lib/design/tokens'
 import { GUTTER, SPACE, TYPE } from '../../lib/theme'
-import { Material } from '../ui/Material'
+import { Material, useMapInk } from '../ui/Material'
 
 /** Frame `1141:4819`: the bar is 64 tall, below the status bar. */
 export const TOP_BAR_HEIGHT = 64
@@ -86,6 +86,7 @@ export function PulseTopBar({
 } = {}) {
   const insets = useSafeAreaInsets()
   const interactive = Boolean(leading || actions)
+  const mapInk = useMapInk()
 
   return (
     <View
@@ -110,7 +111,7 @@ export function PulseTopBar({
             screen's own call — not a label the bar prints on every screen.
           */}
           {floating ? (
-            <Material role="control" style={styles.capsule}>
+            <Material role="control" testID="pulse-wordmark-capsule" style={[styles.capsule, mapInk]}>
               <Text style={styles.capsuleWordmark} accessibilityRole="header" maxFontSizeMultiplier={1.3}>
                 {title}
               </Text>
