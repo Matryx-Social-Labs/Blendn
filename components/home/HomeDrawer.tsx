@@ -5,7 +5,7 @@ import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSp
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
-import { Material, SOLID } from '../ui/Material'
+import { Material, SOLID, useMaterialTier } from '../ui/Material'
 import { GroundProvider } from '../ds/shared'
 import {
   DRAWER_HANDLE_HEIGHT,
@@ -24,9 +24,14 @@ import { useReducedMotion } from '../../lib/motion'
 /** The drawer at full height is ink at 96%, not glass (Flow 3 `home` 03). */
 const FULL_INK = 0.96
 
-/** The ink wash over the drawer's material: none at half, 96% ink at full. */
+/**
+ * The ink wash over the drawer's material: none at half, 96% ink at full. On the solid tier (Android, Reduce
+ * Transparency) there is no glass to show at half, only the grey sheet fill, so the wash is opaque at every snap and
+ * the drawer reads as one black surface instead of turning grey whenever it leaves full.
+ */
 function useFullInk(y: SharedValue<number>, points: Record<DrawerSnap, number>) {
-  return useAnimatedStyle(() => ({ opacity: interpolate(y.get(), [points.half, points.full], [0, 1], 'clamp') }))
+  const solid = useMaterialTier() === 'solid'
+  return useAnimatedStyle(() => ({ opacity: solid ? 1 : interpolate(y.get(), [points.half, points.full], [0, 1], 'clamp') }))
 }
 
 const DrawerMotion = createContext<{ y: SharedValue<number>; points: Record<DrawerSnap, number> } | null>(null)

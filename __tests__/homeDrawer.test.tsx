@@ -68,6 +68,20 @@ describe('the drawer\'s fill is the design system\'s, not a flat ember page', ()
     // At the half detent (y = half) the wash is fully clear; it only fills as the drawer reaches full.
     expect(StyleSheet.flatten(wash.props.style).opacity).toBe(0)
   })
+
+  it('on the solid tier (Android) the wash is opaque at every snap, so the drawer never rests on the grey sheet fill', async () => {
+    const { Platform } = jest.requireActual('react-native')
+    const original = Platform.OS
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    try {
+      reduceMotion.mockReturnValue(false)
+      await render(drawer('half'))
+      const wash = screen.getByTestId('drawer-opaque', { includeHiddenElements: true })
+      expect(StyleSheet.flatten(wash.props.style)).toMatchObject({ backgroundColor: tint(COLOR.ink, 0.96), opacity: 1 })
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: original, configurable: true })
+    }
+  })
 })
 
 describe('a pinned row inside the drawer is as opaque as the drawer (rc7 D3)', () => {
@@ -92,6 +106,14 @@ describe('a pinned row inside the drawer is as opaque as the drawer (rc7 D3)', (
     // The same ink wash as the drawer, so the row matches it at every snap: opaque at full.
     const ink = ground.children[0] as unknown as { props: { style: unknown } }
     expect(StyleSheet.flatten(ink.props.style)).toMatchObject({ backgroundColor: tint(COLOR.ink, 0.96), opacity: 1 })
+  })
+
+  it('on the solid tier the pinned row stays ink below full too, matching the drawer', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    await render(pinned(points.half))
+    const ground = screen.getByTestId('sticky-search-ground', { includeHiddenElements: true })
+    const ink = ground.children[0] as unknown as { props: { style: unknown } }
+    expect(StyleSheet.flatten(ink.props.style)).toMatchObject({ opacity: 1 })
   })
 
   it('glass has no ground to match: the bar alone, once scrolled', async () => {
