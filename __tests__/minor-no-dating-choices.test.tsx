@@ -46,13 +46,16 @@ describe('mayDate: the client twin of the server rule', () => {
 })
 
 describe('Looking for', () => {
-  // Direction A asks friends, networking or both (the flow walk); Dating is Edit profile's, so no one sees it here.
-  it('offers the three answers and no Dating tile', async () => {
-    await render(<LookingForCards selected={null} onSelect={noop} />)
+  // Edit profile's four intents (owner, 2026-11-01); a minor is never shown the Dating tile at all.
+  it('offers Dating to someone who may date', async () => {
+    await render(<LookingForCards selected={[]} onToggle={noop} offerDating />)
+    for (const option of ['Friendship', 'Networking', 'Dating']) expect(screen.getByLabelText(option)).toBeTruthy()
+  })
+
+  it('offers a minor no Dating tile, even with a stale dating intent', async () => {
+    await render(<LookingForCards selected={['dating']} onToggle={noop} offerDating={false} />)
     expect(screen.queryByLabelText('Dating')).toBeNull()
-    for (const option of ['Making friends', 'Networking', 'Both, depends on the night']) {
-      expect(screen.getByLabelText(option)).toBeTruthy()
-    }
+    expect(screen.getByLabelText('Friendship')).toBeTruthy()
   })
 })
 

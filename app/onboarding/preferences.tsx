@@ -6,7 +6,8 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Toggle } from '../../components/ds/Toggle'
 import { font, minTarget, PRESSED_WASH, useBoldText } from '../../components/ds/shared'
 import ScalePress from '../../components/motion/ScalePress'
-import { intentsOf, LookingForCards, outingOf, type Intent, type Outing } from '../../components/onboarding/LookingForCards'
+import { LookingForCards, type Intent } from '../../components/onboarding/LookingForCards'
+import { normaliseIntents, toggleIntent } from '../../lib/intents'
 import { OnboardingScreen } from '../../components/onboarding/OnboardingScreen'
 import {
   ORIENTATIONS as ORIENTATION_VALUES,
@@ -69,8 +70,8 @@ import { useOnboarding } from '../../lib/useOnboarding'
  *
  * ## "Why you go out" is the intent, not free text
  *
- * The answers are the server's `intent_default` enum: friends, networking, or both (`LookingForCards`); dating and "just
- * here" are Edit profile's, and a resumed one is kept until something here is picked. It is
+ * The answers are the server's `intent_default` enum, Edit profile's four (`LookingForCards`): any of friendship,
+ * networking and dating, or "just here" alone (`toggleIntent`). A resumed answer shows picked. It is
  * what matching ranks on and what the Board's profile gate needs: an account that never wrote it could not post, and was
  * asked again at its first check-in. `looking_for` (free text) is no longer written; old profiles keep what they have.
  */
@@ -141,7 +142,8 @@ export default function PreferencesScreen() {
 
   const [orientations, setOrientations] = useState<Orientation[]>([])
   const [showOrientation, setShowOrientation] = useState(false)
-  const [outing, setOuting] = useState<Outing | null>(null)
+  /** Null until something is tapped: the stored answer (resumed) is sent as it was. */
+  const [picked, setPicked] = useState<Intent[] | null>(null)
   /*
    * Holds *anonymity*, not its opposite.
    *
@@ -168,14 +170,12 @@ export default function PreferencesScreen() {
     setPrefilled(true)
     setOrientations((draft.orientations ?? []) as Orientation[])
     setShowOrientation(draft.show_orientation ?? false)
-    setOuting(outingOf(draft.intent_default as Intent[] | undefined))
     setAnonymous(anonymousByDefault(draft))
   }
 
-  // A draft written before the birth date said otherwise can hold a stale 'dating'.
-  // A pick wins; nothing picked keeps what was stored (a resumed dating), except that a minor never sends dating.
-  const kept = ((draft.intent_default ?? []) as Intent[]).filter((i) => !(under18 && i === 'dating'))
-  const intents: Intent[] = outing ? intentsOf(outing) : kept
+  // A draft written before the birth date said otherwise can hold a stale 'dating': a minor never sends it, or sees it picked.
+  const kept = normaliseIntents((draft.intent_default ?? []) as Intent[])
+  const intents: Intent[] = (picked ?? kept).filter((i) => !(under18 && i === 'dating'))
 
   return (
     <OnboardingScreen
@@ -196,7 +196,9 @@ export default function PreferencesScreen() {
                 show_orientation: orientationConsent(orientations, showOrientation),
               }),
           // Always present, so a stale draft value (a minor's old 'dating') is overwritten rather than carried: stepPayload drops undefined.
-          intent_default: intents.length ? intents : undefined,
+          // Everything taken off is an answer too: an empty list withdraws what was stored (a resumed dating). Untouched and empty,
+          // nothing is sent.
+          intent_default: intents.length ? intents : picked ? [] : undefined,
           reveal_by_default: !anonymous,
         })
       }
@@ -204,7 +206,7 @@ export default function PreferencesScreen() {
       onSecondary={() => void skip()}
       onBack={goBack}
     >
-      <LookingForCards selected={outing} onSelect={setOuting} />
+      <LookingForCards selected={intents} onToggle={(value) => setPicked(toggleIntent(intents, value))} offerDating={!under18} />
 
       {/*
         Anonymity is one line with its switch (direction A), and still phrased as *turning anonymity off* rather than as
