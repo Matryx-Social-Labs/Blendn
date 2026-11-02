@@ -1,5 +1,6 @@
 import * as Location from 'expo-location'
-import { useCallback, useEffect, useState } from 'react'
+import { useIsFocused } from 'expo-router'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, StyleSheet, Text, View } from 'react-native'
 
 import { font, useBoldText, useAnnounced } from '../../components/ds/shared'
@@ -9,6 +10,9 @@ import { LocationIllustration } from '../../components/onboarding/PermissionIllu
 import { isPreciseLocationOff } from '../../lib/preciseLocation'
 import { Icon } from '../../components/ui/Icon'
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { roughFix, type FixAsk } from '../../lib/locationFix'
+import type { LngLat } from '../../lib/mapLit'
+import { useReducedMotion } from '../../lib/motion'
 import { askOsPermission } from '../../lib/onboarding'
 import { useOnboarding } from '../../lib/useOnboarding'
 
@@ -32,6 +36,10 @@ import { useOnboarding } from '../../lib/useOnboarding'
  */
 const SETTINGS_HINT = 'Blend’n uses your location to show events near you, and to check you in when you arrive at one.'
 const PRECISE_OFF_NOTICE = 'Precise location is off, so check-in can’t confirm you’re inside the venue. Turn it on in Settings.'
+/** After Allow, how long a fix is waited for before the step moves on without the flight. */
+const FIX_DEADLINE_MS = 3000
+/** From Allow, the fix, the flight to you and the lighting of what is near, all within this: the step never waits on the map. */
+const SHOWN_CAP_MS = 5000
 
 /**
  * Whether location is allowed but only roughly: asked on arrival, after each answer, and on coming back from Settings
@@ -61,6 +69,41 @@ export default function LocationScreen() {
   const [settingsPrompt, setSettingsPrompt] = useState(false)
   const precise = usePreciseLocationOff()
   useAnnounced(precise.off ? PRECISE_OFF_NOTICE : null)
+  const reduceMotion = useReducedMotion()
+  const [you, setYou] = useState<LngLat | null>(null)
+  const shown = useRef<(() => void) | null>(null)
+  const [mapLive, setMapLive] = useState(false)
+  // Back during the wait (the header's, or Android's) leaves the step: nothing commits after it has gone.
+  const mounted = useRef(true)
+  const fixAsk = useRef<FixAsk>({ aborted: false })
+  useEffect(() => {
+    mounted.current = true
+    const ask = fixAsk.current
+    return () => {
+      mounted.current = false
+      ask.aborted = true
+      shown.current?.()
+    }
+  }, [])
+  // Covered by the next step (a push keeps this one mounted underneath): the map goes, and with it its native view.
+  const focused = useIsFocused()
+
+  /** On Allow, with a live map: it flies to the fix and lights what is near before the step moves on (owner, 2026-11-01). */
+  const showWhereYouAre = async () => {
+    // Shown already (a save that failed, Allow again): no second wait.
+    if (you) return
+    const flight = (async () => {
+      const fix = await roughFix(FIX_DEADLINE_MS, fixAsk.current).catch(() => null)
+      if (!fix || !mounted.current) return
+      await new Promise<void>((resolve) => {
+        shown.current = resolve
+        setYou([fix.coords.longitude, fix.coords.latitude])
+      })
+    })()
+    let cap: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([flight, new Promise<void>((resolve) => (cap = setTimeout(resolve, SHOWN_CAP_MS)))])
+    clearTimeout(cap)
+  }
 
   const ask = async () => {
     setAsking(true)
@@ -77,6 +120,13 @@ export default function LocationScreen() {
       return
     }
 
+    if (granted && !reduceMotion && mapLive) {
+      setAsking(true)
+      await showWhereYouAre()
+      if (!mounted.current) return
+      setAsking(false)
+    }
+    if (!mounted.current) return
     await commit({ share_location: granted })
   }
 
@@ -93,7 +143,8 @@ export default function LocationScreen() {
       // The same bug in the second of two places — see the note in
       // `notifications.tsx`. Declining left `share_location` at `@default(true)`.
       onSecondary={() => void commit({ share_location: false })}
-      onBack={goBack}
+      // Not while the map shows where you are: the step is about to move on.
+      onBack={() => !asking && goBack()}
     >
       {precise.off ? (
         <View testID="precise-off-notice" accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.notice}>
@@ -101,7 +152,7 @@ export default function LocationScreen() {
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.noticeText]}>{PRECISE_OFF_NOTICE}</Text>
         </View>
       ) : null}
-      <LocationIllustration notice={precise.off} />
+      <LocationIllustration notice={precise.off} you={you} onShown={() => shown.current?.()} onLive={setMapLive} mapOn={focused} />
       <SettingsTray
         visible={settingsPrompt}
         icon="map-pin-off"
