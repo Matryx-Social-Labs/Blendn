@@ -4,7 +4,6 @@
  */
 import { render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { LockScreenPreview, SAMPLE_STAGGER_MS } from '../components/ds/LockScreenPreview'
@@ -35,7 +34,7 @@ describe('LockScreenPreview', () => {
     const frame = screen.getByTestId('lock')
     expect(frame.props.accessible).toBe(true)
     expect(frame.props.accessibilityLabel).toBe(
-      'Sample notifications. A very long event title that would never fit on one line of a lock screen: New time: 7 PM. Same place. It’s mutual: Someone at Rooftop Sundowner liked you back. Your crew is heading out: 3 going tonight.'
+      'Sample notifications. A very long event title that would never fit on one line of a lock screen. New time: 7 PM. Same place. It’s mutual. Someone at Rooftop Sundowner liked you back. Your crew is heading out. 3 going tonight.'
     )
   })
 
@@ -55,14 +54,29 @@ describe('LockScreenPreview', () => {
     expect(delays[2] - delays[1]).toBe(SAMPLE_STAGGER_MS)
   })
 
+  const rest = (i: number) => {
+    const style = Reanimated.getAnimatedStyle(screen.getByTestId(`lock-sample-${i}`, hidden)) as unknown as { opacity: number; transform: Record<string, number>[] }
+    return { opacity: style.opacity, translateY: style.transform[0].translateY, scale: style.transform[1].scale }
+  }
+
   it('Reduce Motion: the stack is already there, nothing moves or fades', async () => {
     reduceMotion.mockReturnValue(true)
     await render(<LockScreenPreview samples={SAMPLES} testID="lock" />)
     expect(withDelay).not.toHaveBeenCalled()
-    SAMPLES.forEach((_s, i) => {
-      const style = StyleSheet.flatten(screen.getByTestId(`lock-sample-${i}`, hidden).props.style)
-      expect(style.opacity ?? 1).toBe(1)
-      expect(style.transform ?? []).toEqual(expect.not.arrayContaining([expect.objectContaining({ translateY: expect.any(Number) })]))
-    })
+    SAMPLES.forEach((_s, i) => expect(rest(i)).toEqual({ opacity: 1, translateY: 0, scale: 1 }))
+  })
+
+  it('Reduce Motion turned on mid-drop: every sample goes straight to rest, none is left hidden', async () => {
+    await render(<LockScreenPreview samples={SAMPLES} testID="lock" />)
+    expect(rest(2).opacity).toBe(0)
+    reduceMotion.mockReturnValue(true)
+    await screen.rerender(<LockScreenPreview samples={SAMPLES} testID="lock" />)
+    SAMPLES.forEach((_s, i) => expect(rest(i)).toEqual({ opacity: 1, translateY: 0, scale: 1 }))
+  })
+
+  it('a re-render does not replay the drop', async () => {
+    await render(<LockScreenPreview samples={SAMPLES} testID="lock" />)
+    await screen.rerender(<LockScreenPreview samples={SAMPLES} testID="lock" />)
+    expect(withDelay).toHaveBeenCalledTimes(SAMPLES.length)
   })
 })

@@ -13,13 +13,12 @@ jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/logger', () => ({ Logger: { warn: jest.fn() } }))
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
-
-import { TokenStorage } from '../lib/apiClient'
-import { initializePushNotifications } from '../lib/notifications'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import type { ReactElement } from 'react'
 
+import { TokenStorage } from '../lib/apiClient'
+import { initializePushNotifications } from '../lib/notifications'
 import { ASK_COPY, askPushInContext, askSamples } from '../lib/pushAsk'
 import { clearPushDeclined, hasDeclinedPush, markPushDeclined } from '../lib/pushDecline'
 import { showSheet, type ActionSheet } from '../lib/sheet'
@@ -131,13 +130,13 @@ describe('the lock-screen ask (SCRUM-1006)', () => {
       ['Not now', 'tertiary'],
     ])
     expect(sheet().title).toBe(ASK_COPY.rsvp.title)
-    expect(ASK_COPY.rsvp.body.length).toBeLessThanOrEqual(110)
-    expect(ASK_COPY.rsvp.body).toMatch(/new time or venue, a match, your crew heading out/)
+    // Under a 300 pt picture, three lines of body at most on a 375 pt phone: it never reaches the buttons.
+    Object.values(ASK_COPY).forEach(({ body }) => expect(body.length).toBeLessThanOrEqual(110))
   })
 
+  // Pinned by source, as eventDetails-wired.test.ts pins this screen: it has no render harness.
   it('the event detail passes the event’s title to its RSVP ask', () => {
     const src = readFileSync(join(__dirname, '..', 'components/screens/EventDetailScreen.tsx'), 'utf8')
     expect(src).toContain("askPushInContext('rsvp', planned.title)")
   })
 })
-

@@ -20,7 +20,7 @@ import type { Hue } from '../components/ds/shared'
  *   nothing here ever asks again; the bell's "Push is off" row and Settings are the way back;
  * - once per account and per moment, whatever the answer: Not now is not asked again either;
  * - a no anywhere (Not now at either moment, or "Maybe later" on an older build's onboarding step) is remembered per account
- *   (`lib/pushDecline`) and ends the asking; Continue clears it.
+ *   (`lib/pushDecline`) and ends the asking; "Turn on notifications" clears it.
  *
  * "Turn on notifications" is the one that asks the phone (the OS dialog follows); it is silent until then.
  *
@@ -39,7 +39,7 @@ export const ASK_COPY: Record<AskMoment, { title: string; body: string }> = {
   },
   like: {
     title: 'Want to know when it’s mutual?',
-    body: 'One notification if they like you back. Nothing for likes you haven’t returned. You can change this any time in Settings.',
+    body: 'One notification if they like you back. Nothing for likes you haven’t returned. Change it in Settings.',
   },
 }
 
@@ -66,7 +66,7 @@ async function alreadyAsked(userId: string, moment: AskMoment): Promise<boolean>
   }
 }
 
-/** `eventTitle`: the event the RSVP (or the like) is at, for the samples. */
+/** `eventTitle`: the event the RSVP is at, for the samples. A like's callers pass none today, so its samples name no event. */
 export async function askPushInContext(moment: AskMoment, eventTitle?: string): Promise<boolean> {
   try {
     const user = await TokenStorage.getUser()

@@ -13,7 +13,7 @@ export type SampleNotification = { title: string; body: string }
 
 /** FLOW-WALK § 2.x: each sample springs in about 380 ms after the last. */
 export const SAMPLE_STAGGER_MS = 380
-/** The first waits for the sheet to have risen. */
+/** The first starts as the sheet settles from its rise. */
 const FIRST_AT = DURATION.medium
 /** Each drops in from this far above, and from just under full size. */
 const DROP = SPACE.xl
@@ -33,17 +33,21 @@ const MARK = SIZE.tag / 2 + SPACE.xxs
  */
 export function LockScreenPreview({ samples, testID }: { samples: readonly SampleNotification[]; testID?: string }) {
   const bold = useBoldText()
-  const label = `Sample notifications. ${samples.map((s) => `${s.title}: ${s.body}`).join(' ')}`
+  const label = `Sample notifications. ${samples.map((s) => `${s.title}. ${s.body}`).join(' ')}`
   return (
     <View testID={testID} accessible accessibilityRole="image" accessibilityLabel={label} style={styles.frame}>
       <Lights />
-      <Text maxFontSizeMultiplier={FRAME_FONT_CAP} style={[font('display', bold), styles.clock]}>
-        9:41
-      </Text>
-      <View style={styles.stack}>
-        {samples.map((sample, i) => (
-          <Sample key={i} sample={sample} index={i} bold={bold} testID={testID && `${testID}-sample-${i}`} />
-        ))}
+      {/* The label above says it all; TalkBack would otherwise stop on each line too. */}
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Text maxFontSizeMultiplier={FRAME_FONT_CAP} style={[font('display', bold), styles.clock]}>
+          9:41
+        </Text>
+        <View style={styles.stack}>
+          {samples.map((sample, i) => (
+            // Keyed by its words: another ask in place of this one plays its own drop.
+            <Sample key={`${sample.title}|${sample.body}`} sample={sample} index={i} bold={bold} testID={testID && `${testID}-sample-${i}`} />
+          ))}
+        </View>
       </View>
     </View>
   )
@@ -53,16 +57,17 @@ function Sample({ sample, index, bold, testID }: { sample: SampleNotification; i
   const still = useReducedMotion()
   const p = useSharedValue(still ? 1 : 0)
   useEffect(() => {
-    if (!still) p.set(withDelay(FIRST_AT + index * SAMPLE_STAGGER_MS, withSpring(1, SPRING.settle)))
-    // Once, on mount: a sample never replays.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    // Reduce Motion turned on mid-drop: straight to rest (setting it cancels the spring).
+    if (still) p.set(1)
+    // Once: a sample that has started never replays.
+    else if (p.get() === 0) p.set(withDelay(FIRST_AT + index * SAMPLE_STAGGER_MS, withSpring(1, SPRING.settle)))
+  }, [still, index, p])
   const drop = useAnimatedStyle(() => ({
     opacity: Math.min(1, p.get()),
-    transform: [{ translateY: -DROP * (1 - p.get()) }, { scale: FROM_SCALE + (1 - FROM_SCALE) * p.get() }],
+    transform: [{ translateY: DROP * (p.get() - 1) }, { scale: FROM_SCALE + (1 - FROM_SCALE) * p.get() }],
   }))
   return (
-    <Animated.View testID={testID} style={[styles.card, !still && drop]}>
+    <Animated.View testID={testID} style={[styles.card, drop]}>
       <View style={styles.mark}>
         <DiscMark height={MARK} />
       </View>
