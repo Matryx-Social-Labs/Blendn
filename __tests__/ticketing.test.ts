@@ -12,6 +12,8 @@ import {
   spokenMoney,
   stepperMax,
   ticketDockState,
+  ticketEventOf,
+  ticketRefusal,
   TICKET_REFUSAL_CODES,
   typeRow,
   type EventTicketing,
@@ -20,6 +22,7 @@ import {
   type TicketType,
 } from '../lib/ticketing'
 import { refreshPhoneZone } from '../lib/time'
+import { userMessage } from '../lib/userMessage'
 
 // The phone is in the event's zone, so no zone name is added to a clock ("6 PM", not "6 PM IST").
 beforeAll(() => {
@@ -243,4 +246,55 @@ describe('polling the order (§4: every 1.5 s, up to 30 s)', () => {
     })
     await expect(pollOrder('o1', { get, cancelled: () => gone, sleep: async () => {} })).resolves.toEqual({ kind: 'cancelled' })
   })
+})
+
+describe('a refusal from the quote or the order, read as the RSVP’s door reads it (contract §9.7)', () => {
+  it('an under-age buyer is the 403 AGE_RESTRICTED: the RSVP’s 18+ words, no fix', () => {
+    const r = ticketRefusal({ errorCode: 'AGE_RESTRICTED', reasonCode: 'AGE_RESTRICTED', error: 'This event is 21+' })
+    expect(r).toEqual({ copy: 'This event is 18+. Blend’n events are for adults.', stale: false })
+  })
+  it('an age not on file and an unfinished profile can be fixed, and say how', () => {
+    expect(ticketRefusal({ errorCode: 'AGE_RESTRICTED', reasonCode: 'AGE_UNKNOWN' })).toEqual({
+      copy: 'Events on Blend’n are 18+. Add your date of birth once; nobody else ever sees it.',
+      stale: false,
+      fix: 'Add your age',
+    })
+    expect(ticketRefusal({ errorCode: 'FORBIDDEN', reasonCode: 'PROFILE_INCOMPLETE' })).toEqual({
+      copy: 'Finish your profile first: add a name and a photo.',
+      stale: false,
+      fix: 'Finish my profile',
+    })
+  })
+  it('an event that is gone (404) or lines that no longer fit (400) send the page back to read it again', () => {
+    expect(ticketRefusal({ errorCode: 'NOT_FOUND', error: 'Event not found' })).toEqual({ copy: 'This event isn’t available any more.', stale: true })
+    expect(ticketRefusal({ errorCode: 'VALIDATION_FAILED' })).toEqual({ copy: 'That ticket type changed. Pick again.', stale: true })
+  })
+  it('payments down (503) says nothing was charged; too many tries says to wait', () => {
+    expect(ticketRefusal({ errorCode: 'SERVER_ERROR', error: 'Payments are not available right now' }).copy).toBe(
+      'Tickets can’t be bought right now. Nothing was charged. Try again in a few minutes.'
+    )
+    expect(ticketRefusal({ errorCode: 'RATE_LIMITED', error: 'Slow down: try again in 30 seconds.' }).copy).toBe('Slow down: try again in 30 seconds.')
+  })
+  it('the contract’s own codes keep their words; the old 409 age stays as a backstop', () => {
+    expect(ticketRefusal({ errorCode: 'sold_out' })).toEqual({ copy: refusalCopy('sold_out'), stale: true })
+    expect(ticketRefusal({ errorCode: 'age' }).copy).toBe(refusalCopy('age'))
+    expect(ticketRefusal({ errorCode: 'too_many_holds' }).stale).toBe(false)
+  })
+})
+
+describe('the event a ticket carries (§8.4)', () => {
+  it('is the pass’s words, in the cache’s shape', () => {
+    const event = { id: 'e1', title: 'Rooftop', startsAt: '2026-11-08T12:30:00Z', endsAt: '2026-11-08T17:30:00Z', timezone: 'Asia/Kolkata', venueName: 'High', coverUrl: 'https://x/c.jpg' }
+    expect(ticketEventOf({ event })).toEqual({ title: 'Rooftop', startTime: '2026-11-08T12:30:00Z', timezone: 'Asia/Kolkata', venueName: 'High', coverImageUrl: 'https://x/c.jpg' })
+  })
+  it('none, or one without a title or start, is nothing (the remembered copy stands)', () => {
+    expect(ticketEventOf({})).toBeNull()
+    expect(ticketEventOf({ event: { title: 'x' } as never })).toBeNull()
+  })
+})
+
+it('the RSVP refused as ticketed is said in the server’s words wherever an RSVP is sent (the room’s I’m going too)', () => {
+  expect(userMessage({ errorCode: 'tickets_required', error: 'This event is ticketed: get a ticket to go.' }, 'Couldn’t save your RSVP. Try again.')).toBe(
+    'This event is ticketed: get a ticket to go.'
+  )
 })

@@ -54,6 +54,7 @@ import { router } from 'expo-router'
 import EventDetail from '../components/screens/EventDetailScreen'
 import { apiClient } from '../lib/apiClient'
 import { askPushInContext } from '../lib/pushAsk'
+import { showSheet } from '../lib/sheet'
 import { markOnline } from '../lib/networkStatus'
 /* eslint-enable import/first */
 
@@ -172,6 +173,14 @@ describe('native', () => {
     expect(screen.getByText('You’re going · 2 tickets')).toBeTruthy()
   })
 
+  it('never a bare I’m going on a native event (§8.6): not before buying, not on an RSVP left from before tickets', async () => {
+    await open(native())
+    expect(dock().queryByRole('button', { name: 'I’m going' })).toBeNull()
+    await open(native(), { rsvpStatus: 'going' })
+    expect(dock().queryByRole('button', { name: /going/i })).toBeNull()
+    expect(dock().getByRole('button', { name: 'Get tickets' })).toBeTruthy()
+  })
+
   it('sold out: the dock says so and offers Save, never a dead Get tickets', async () => {
     await open(native({ types: [type('t1', { status: 'sold_out' }), type('t2', { status: 'sold_out' })] }))
     expect(dock().getByText('Sold out')).toBeTruthy()
@@ -202,6 +211,17 @@ describe('external', () => {
     await fireEvent.press(screen.getByRole('link', { name: 'Find tickets on eventbrite.ca, opens in browser' }))
     await browserTurn()
     expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith('https://www.eventbrite.ca/e/123', expect.anything())
+  })
+
+  it('an RSVP refused as ticketed (409 tickets_required, the event went native under the page) says so and reads the event again', async () => {
+    api.rsvpToEvent.mockResolvedValue({ success: false, errorCode: 'tickets_required', error: 'This event is ticketed: get a ticket to go.' } as never)
+    await open(external)
+    const reads = api.getEvent.mock.calls.length
+    await fireEvent.press(dock().getByRole('button', { name: 'I’m going' }))
+    await act(async () => {})
+    expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'This event is ticketed', message: 'Your ticket is your place on the list. Get one to go.' }))
+    expect(api.getEvent.mock.calls.length).toBeGreaterThan(reads)
+    expect(api.forgetEvent).toHaveBeenCalledWith('e1')
   })
 
   it('I’m going is still the RSVP, and still asks for push in context', async () => {

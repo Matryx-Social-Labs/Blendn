@@ -64,6 +64,16 @@ it('one page per ticket of the order: its QR, its code in two groups, read chara
   expect((await readTicketCache('me')).tickets).toHaveLength(3)
 })
 
+it('the event the ticket carries (§8.4) names the pass, with no event page ever visited', async () => {
+  const event = { id: 'e1', title: 'Junction Tech Mixer', startsAt: '2026-11-13T00:00:00Z', endsAt: '2026-11-13T04:00:00Z', timezone: 'America/Toronto', venueName: 'The Drake Underground', coverUrl: null }
+  await rememberTicketEvent('me', 'e1', { title: 'An older name', startTime: '2026-11-13T00:00:00Z' })
+  api.getMyTickets.mockResolvedValue({ success: true, data: [{ ...ticket('k1'), event }] } as never)
+  await open()
+  expect(screen.getByText('Junction Tech Mixer', { includeHiddenElements: true })).toBeTruthy()
+  expect(screen.queryByText('An older name', { includeHiddenElements: true })).toBeNull()
+  expect(screen.getByText('The Drake Underground')).toBeTruthy()
+})
+
 it('no connection: the copy on the phone is the pass, and says it is offline', async () => {
   await saveTickets('me', [ticket('k1')])
   api.getMyTickets.mockResolvedValue({ success: false, error: 'Network request failed' } as never)

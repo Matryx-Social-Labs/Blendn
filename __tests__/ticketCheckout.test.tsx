@@ -13,11 +13,13 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getTicketQuote: jest.fn(), createTicketOrder: jest.fn(), getTicketOrder: jest.fn() },
+  apiClient: { getTicketQuote: jest.fn(), createTicketOrder: jest.fn(), getTicketOrder: jest.fn(), releaseTicketOrder: jest.fn() },
 }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'me' } }) }))
+jest.mock('expo-router', () => ({ router: { push: jest.fn() } }))
 
 /* eslint-disable import/first */
+import { router } from 'expo-router'
 import { CheckoutSheet } from '../components/tickets/CheckoutSheet'
 import { apiClient } from '../lib/apiClient'
 import { resetModalTurns } from '../lib/modalTurn'
@@ -59,17 +61,19 @@ const quote = (qty: number) => ({
     bookingFeeMinor: 4_191 * qty,
     totalMinor: 54_091 * qty,
     feeParts: { serviceMinor: 2_495 * qty, taxMinor: 449 * qty, processingMinor: 1_247 * qty },
+    taxLabel: 'GST',
     lines: [{ typeId: 't1', quantity: qty, unitMinor: 49_900 }],
   },
 })
 const hold = (inMs = 600_000) => new Date(Date.now() + inMs).toISOString()
-const created = () => ({ success: true, data: { orderId: 'o1', status: 'pending', totalMinor: 108_182, currency: 'INR', holdExpiresAt: hold(), payUrl: 'https://pay.blendn.app/o/o1?t=tok' } })
+const created = () => ({ success: true, data: { orderId: 'o1', status: 'pending', totalMinor: 108_182, currency: 'INR', holdExpiresAt: hold(), payUrl: 'https://pay.blendn.app/pay/o/o1?t=tok' } })
 const status = (s: string, over: object = {}) => ({ success: true, data: { orderId: 'o1', eventId: 'e1', status: s, holdExpiresAt: hold(), totalMinor: 108_182, currency: 'INR', tickets: [], ...over } })
 
 const onPaid = jest.fn()
 const onStale = jest.fn()
-const open = async (initialTypeId: string | null = 't1') => {
-  await render(<CheckoutSheet visible onClose={jest.fn()} event={event} ticketing={ticketing} initialTypeId={initialTypeId} onPaid={onPaid} onStale={onStale} />)
+const onClose = jest.fn()
+const open = async (initialTypeId: string | null = 't1', t: EventTicketing = ticketing) => {
+  await render(<CheckoutSheet visible onClose={onClose} event={event} ticketing={t as never} initialTypeId={initialTypeId} onPaid={onPaid} onStale={onStale} />)
   await act(async () => {})
 }
 const settle = async (ms = 250) => {
@@ -138,6 +142,23 @@ describe('picking', () => {
     expect(screen.getByRole('link', { name: 'terms of sale' })).toBeTruthy()
   })
 
+  it('absorbed fees: the bill is the tickets and the total, with no fee row (the quote sends no parts, §8.9)', async () => {
+    api.getTicketQuote.mockResolvedValue({ success: true, data: { currency: 'INR', subtotalMinor: 49_900, bookingFeeMinor: 0, totalMinor: 49_900, lines: [] } } as never)
+    await open('t1', { ...ticketing, feesAbsorbed: true } as EventTicketing)
+    await settle()
+    expect(screen.getByTestId('checkout-subtotal')).toHaveTextContent('₹499.00')
+    expect(screen.getByTestId('checkout-total')).toHaveTextContent('₹499.00')
+    expect(screen.queryByTestId('checkout-fee')).toBeNull()
+    expect(screen.getByLabelText('Pay ₹499.00')).toBeTruthy()
+  })
+
+  it('the tax is named by the quote (§8.8), not by the app', async () => {
+    api.getTicketQuote.mockResolvedValue({ ...quote(1), data: { ...quote(1).data, taxLabel: 'HST' } } as never)
+    await open()
+    await settle()
+    expect(screen.getByTestId('checkout-fee-parts')).toHaveTextContent(/· HST ₹4.49 ·/)
+  })
+
   it('nothing picked: no quote is asked for and Pay is off', async () => {
     await open(null)
     await settle()
@@ -171,11 +192,25 @@ describe('paying', () => {
     api.getTicketOrder.mockResolvedValueOnce(status('pending') as never).mockResolvedValue(status('paid', { tickets }) as never)
     await pay()
     expect(api.createTicketOrder).toHaveBeenCalledWith('e1', [{ typeId: 't1', quantity: 2 }])
-    expect(openBrowser).toHaveBeenCalledWith('https://pay.blendn.app/o/o1?t=tok', expect.anything())
+    expect(openBrowser).toHaveBeenCalledWith('https://pay.blendn.app/pay/o/o1?t=tok', expect.anything())
     expect(screen.getByText('Confirming your payment')).toBeTruthy()
     await settle(1500)
     expect(onPaid).toHaveBeenCalledWith(expect.objectContaining({ orderId: 'o1', status: 'paid' }))
     expect((await readTicketCache('me')).tickets.map((t) => t.ticketId)).toEqual(['k1'])
+  })
+
+  it('a pay link on the API’s own host (staging, before pay.blendn.app exists) opens as given', async () => {
+    const url = `${process.env.EXPO_PUBLIC_API_BASE_URL}/pay/o/o1?t=tok`
+    api.createTicketOrder.mockResolvedValue({ ...created(), data: { ...created().data, payUrl: url } } as never)
+    api.getTicketOrder.mockResolvedValue(status('pending') as never)
+    await pay()
+    expect(openBrowser).toHaveBeenCalledWith(url, expect.anything())
+  })
+
+  it('never opens a pay link over http, even on our host', async () => {
+    api.createTicketOrder.mockResolvedValue({ ...created(), data: { ...created().data, payUrl: 'http://pay.blendn.app/pay/o/o1?t=tok' } } as never)
+    await pay()
+    expect(openBrowser).not.toHaveBeenCalled()
   })
 
   it('never opens a pay link that is not ours', async () => {
@@ -185,8 +220,8 @@ describe('paying', () => {
     expect(screen.getByText('That didn’t go through. Try again.')).toBeTruthy()
   })
 
-  it('retries a busy hold after a second, twice at most', async () => {
-    api.createTicketOrder.mockResolvedValue({ success: false, errorCode: 'busy' } as never)
+  it('retries a busy hold after the server’s retryAfter, twice at most', async () => {
+    api.createTicketOrder.mockResolvedValue({ success: false, errorCode: 'busy', retryAfter: 1 } as never)
     await pay()
     await settle(1000)
     await settle(1000)
@@ -214,7 +249,7 @@ describe('paying', () => {
     openBrowser.mockClear()
     await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
     await settle(0)
-    expect(openBrowser).toHaveBeenCalledWith('https://pay.blendn.app/o/o1?t=tok', expect.anything())
+    expect(openBrowser).toHaveBeenCalledWith('https://pay.blendn.app/pay/o/o1?t=tok', expect.anything())
     expect(api.createTicketOrder).toHaveBeenCalledTimes(1)
   })
 
@@ -230,6 +265,48 @@ describe('paying', () => {
     await settle(0)
     expect(api.getTicketOrder.mock.calls.length).toBeGreaterThan(asked)
     expect(onPaid).toHaveBeenCalled()
+  })
+
+  it('payments down (503) says nothing was charged, and opens nothing', async () => {
+    api.createTicketOrder.mockResolvedValue({ success: false, errorCode: 'SERVER_ERROR', error: 'Payments are not available right now' } as never)
+    await pay()
+    expect(screen.getByText('Tickets can’t be bought right now. Nothing was charged. Try again in a few minutes.')).toBeTruthy()
+    expect(openBrowser).not.toHaveBeenCalled()
+  })
+
+  it('the RSVP’s door: an age not on file is said as the RSVP says it, with the fix one tap away', async () => {
+    api.createTicketOrder.mockResolvedValue({ success: false, errorCode: 'AGE_RESTRICTED', reasonCode: 'AGE_UNKNOWN', error: 'Add your age' } as never)
+    await pay()
+    expect(screen.getByText('Events on Blend’n are 18+. Add your date of birth once; nobody else ever sees it.')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Add your age' }))
+    expect(onClose).toHaveBeenCalled()
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+  })
+
+  it('Let them go releases the hold (204): the counts are read again and the sheet closes', async () => {
+    api.createTicketOrder.mockResolvedValue(created() as never)
+    api.getTicketOrder.mockResolvedValue(status('pending', { paymentFailed: true }) as never)
+    api.releaseTicketOrder.mockResolvedValue({ success: true } as never)
+    await pay()
+    await screen.findByText('Payment didn’t go through')
+    onStale.mockClear()
+    await fireEvent.press(screen.getByRole('button', { name: 'Let them go' }))
+    await settle(0)
+    expect(api.releaseTicketOrder).toHaveBeenCalledWith('o1')
+    expect(onStale).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('Let them go on an order no longer held (409 not_pending) reads the order again: it may have just been paid', async () => {
+    api.createTicketOrder.mockResolvedValue(created() as never)
+    api.getTicketOrder.mockResolvedValueOnce(status('pending', { paymentFailed: true }) as never).mockResolvedValue(status('paid') as never)
+    api.releaseTicketOrder.mockResolvedValue({ success: false, errorCode: 'not_pending' } as never)
+    await pay()
+    await screen.findByText('Payment didn’t go through')
+    await fireEvent.press(screen.getByRole('button', { name: 'Let them go' }))
+    await settle(0)
+    expect(onPaid).toHaveBeenCalledWith(expect.objectContaining({ status: 'paid' }))
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('a refused order is said plainly and nothing is opened', async () => {

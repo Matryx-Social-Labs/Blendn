@@ -14,15 +14,17 @@ import { holdTurnWhile } from './modalTurn'
  * Policy in a sentence and Settings links to the same two. Kept apart they
  * drift, and the sentence on the first screen anyone sees linked to nothing.
  */
+const TERMS_URL = 'https://blendn.app/terms'
+
 export const BLENDN_LINKS = {
   safety: 'https://blendn.app/safety',
   guidelines: COMMUNITY_GUIDELINES_URL,
   help: 'https://blendn.app/help',
-  terms: 'https://blendn.app/terms',
+  terms: TERMS_URL,
   privacy: 'https://blendn.app/privacy',
   deleteAccount: 'https://www.blendn.app/delete-account',
-  /** The ticket terms of sale the checkout sheet links (contract gap: the page is not published yet). */
-  termsOfSale: 'https://blendn.app/terms/tickets',
+  /** The ticket terms of sale (ticketing §8.7): `/terms/tickets` beside `/terms`, on the same host. */
+  termsOfSale: `${TERMS_URL}/tickets`,
 } as const
 
 /**
@@ -65,16 +67,27 @@ async function present(url: string): Promise<WebBrowser.WebBrowserResult> {
   )
 }
 
-/** The ticket pay page's one host (ticketing contract §3): an order's `payUrl` opens only there. */
-export const PAY_HOST = 'pay.blendn.app'
+/**
+ * Where an order's `payUrl` may point (ticketing §3, §9.1: `<PAY_BASE_URL>/pay/o/<orderId>?t=…`, opaque to the app): the API's
+ * own host (staging serves the pay page itself) or the configured pay host, `EXPO_PUBLIC_PAY_BASE_URL`, else pay.blendn.app.
+ * Read literally so Expo inlines both at build time.
+ */
+export function payHosts(): Set<string> {
+  return new Set(
+    [process.env.EXPO_PUBLIC_API_BASE_URL, process.env.EXPO_PUBLIC_PAY_BASE_URL || 'https://pay.blendn.app']
+      .map((u) => (u ? hostOfHttps(u) : null))
+      .filter((h): h is string => !!h)
+  )
+}
 
 /**
  * An order's pay page (contract §4), in Safari View Controller / a Chrome Custom Tab, never as an in-app purchase. Settles
  * when the person is back: iOS when the browser closes; Android resolves `opened` at once, so it waits for the app to come
- * back to the front. Refuses anything but https on `PAY_HOST`: the link arrives from data.
+ * back to the front. Opened as given, but only over https on a pay host (`payHosts`): the link arrives from data.
  */
 export async function openPayPage(url: string): Promise<void> {
-  if (hostOfHttps(url) !== PAY_HOST) {
+  const host = hostOfHttps(url)
+  if (!host || !payHosts().has(host)) {
     Logger.warn('tickets', 'Refused a pay link that is not ours', { host: hostOf(url) })
     throw new Error('Not our pay page')
   }

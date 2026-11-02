@@ -694,6 +694,7 @@ prefix**. Everything below is stored `plaintext` in EAS:
 | | Secret? | |
 |---|---|---|
 | `EXPO_PUBLIC_API_BASE_URL` | no | A hostname |
+| `EXPO_PUBLIC_PAY_BASE_URL` | no | Optional. A host a ticket order's `payUrl` may open on besides the API's own; unset is `https://pay.blendn.app` (`lib/links.ts` `payHosts`) |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | no | Public by design |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | no | Already in `app.json` and `Info.plist` in the clear |
 | `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` | **billable** | Restrict it — see below |

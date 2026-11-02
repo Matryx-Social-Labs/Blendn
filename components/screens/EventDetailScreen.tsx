@@ -115,6 +115,17 @@ const signInSheet = (title: string, message: string) =>
     ],
   })
 
+/*
+ * A plain RSVP (or its cancel) on a ticketed event is refused (ticketing §8.6, 409 `tickets_required`): the ticket is the
+ * place on the list. Said once, and the page reads the event again so its dock becomes the tickets'.
+ */
+const TICKETS_REQUIRED = 'tickets_required'
+const ticketedNotice = (cancel: boolean) =>
+  notice(
+    'This event is ticketed',
+    cancel ? 'Your ticket is your place on the list. To give it up, ask the organizer for a refund.' : 'Your ticket is your place on the list. Get one to go.'
+  )
+
 const NO_CLOCK_SUBSCRIPTION = () => () => {}
 
 /**
@@ -593,6 +604,20 @@ export default function EventDetail() {
    * "You're going" used to cancel with nothing said — and on a full event it
    * gave your waitlist place to the next person, with no way back to it.
    */
+  /** The event again, past both caches: its counts, `ticketing.mine`, or a mode that changed under the page. */
+  const refetchFresh = () => {
+    apiClient.forgetEvent(String(id))
+    forgetEventDetailCache(String(id))
+    void fetchEventDetails()
+  }
+  /** A 409 `tickets_required` is said (no error buzz: nothing went wrong) and the page re-read; false for any other refusal. */
+  const refusedAsTicketed = (result: { errorCode?: string }, cancel: boolean) => {
+    if (result.errorCode !== TICKETS_REQUIRED) return false
+    ticketedNotice(cancel)
+    refetchFresh()
+    return true
+  }
+
   /** An RSVP or a cancel is out: the CTA spins and nothing else is sent, or offered (the cancel tray). */
   const rsvpInFlight = useRef(false)
   const [rsvpPending, setRsvpPending] = useState(false)
@@ -612,8 +637,10 @@ export default function EventDetail() {
       const result = await apiClient.cancelRsvp(String(id))
       if (!result.success) {
         setRsvpStatus(prevStatus)
-        H.error()
-        notice('Couldn’t cancel your RSVP', 'Try again.')
+        if (!refusedAsTicketed(result, true)) {
+          H.error()
+          notice('Couldn’t cancel your RSVP', 'Try again.')
+        }
       } else {
         // The server's count after the change, as on the RSVP below.
         if (typeof result.data?.rsvpCount === 'number') setGoingCount(result.data.rsvpCount)
@@ -630,6 +657,8 @@ export default function EventDetail() {
     } finally {
       rsvpInFlight.current = false
     }
+    // refusedAsTicketed is redefined every render (it calls fetchEventDetails, which is too); it reads only `id`, already a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, rsvpStatus, showToast])
 
   const confirmWithdrawRsvp = useCallback(() => {
@@ -675,8 +704,10 @@ export default function EventDetail() {
       const result = await apiClient.rsvpToEvent(String(id), 'going')
       if (!result.success || !result.data) {
         setRsvpStatus(prevStatus)
-        H.error()
-        notice('Couldn’t RSVP', 'Try again.')
+        if (!refusedAsTicketed(result, false)) {
+          H.error()
+          notice('Couldn’t RSVP', 'Try again.')
+        }
       } else {
         H.success()
         setRsvpStatus(result.data.rsvpStatus)
@@ -719,6 +750,8 @@ export default function EventDetail() {
         setRsvpPending(false)
       }
     }
+    // refusedAsTicketed is redefined every render (it calls fetchEventDetails, which is too); it reads only `id`, already a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user, event, rsvpStatus, confirmWithdrawRsvp, showToast])
 
   /*
@@ -762,11 +795,7 @@ export default function EventDetail() {
       ? { id: event.id, title: event.title, startTime: event.start_time, timezone: event.timezone, venueName: event.venue_name, coverImageUrl: event.cover_image_url }
       : null,
     ticketing: event?.ticketing ?? null,
-    onStale: () => {
-      apiClient.forgetEvent(String(id))
-      forgetEventDetailCache(String(id))
-      void fetchEventDetails()
-    },
+    onStale: refetchFresh,
   })
 
   /*

@@ -3,7 +3,9 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { apiClient } from './apiClient'
 import { Logger } from './logger'
-import type { Ticket } from './ticketing'
+import type { Ticket, TicketEvent } from './ticketing'
+
+export type { TicketEvent }
 
 /*
  * The tickets on this phone (contract §6): the last `GET /me/tickets` answer, kept so the pass opens at a door with no
@@ -16,9 +18,7 @@ import type { Ticket } from './ticketing'
 
 const KEY = 'blendn.tickets.v1'
 
-/** What the pass says about the event, held beside the tickets: §6 carries none of it (contract gap, see the PR). */
-export type TicketEvent = { title: string; startTime: string; timezone?: string; venueName?: string; coverImageUrl?: string | null }
-
+/** The event's words for the pass, held beside the tickets: for a ticket from a server before §8.4, which carried none. */
 type Held = { tickets: Ticket[]; events: Record<string, TicketEvent> }
 type Stored = Held & { userId: string }
 

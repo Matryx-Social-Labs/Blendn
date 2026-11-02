@@ -29,6 +29,8 @@ const SPOKEN_CODES = new Set([
   'WAVE_TOO_SOON',
   'RECIPIENT_NOT_HERE',
   'reveal_incomplete',
+  // A plain RSVP on a ticketed event (ticketing §8.6): "This event is ticketed: get a ticket to go."
+  'tickets_required',
 ])
 
 export function userMessage(

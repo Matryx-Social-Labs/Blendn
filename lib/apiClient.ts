@@ -2760,6 +2760,11 @@ class ApiClientClass {
     return this.queuedRequest<TicketOrderStatus>(`/api/mobile/ticket-orders/${encodeURIComponent(orderId)}`, {}, true, 2)
   }
 
+  /** §8.3: let a pending hold go (204); an order no longer held is 409 `not_pending`, anyone else's is 404. */
+  async releaseTicketOrder(orderId: string): Promise<ApiResponse<void>> {
+    return this.queuedRequest<void>(`/api/mobile/ticket-orders/${encodeURIComponent(orderId)}`, { method: 'DELETE' }, true, 2)
+  }
+
   /** §6: my tickets, all of them or one event's. The phone keeps the last answer (`lib/ticketCache.ts`), so this is not cached here. */
   async getMyTickets(eventId?: string): Promise<ApiResponse<Ticket[]>> {
     return this.queuedRequest<Ticket[]>(`/api/mobile/me/tickets${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`)

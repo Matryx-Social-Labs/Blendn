@@ -11,6 +11,7 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import { QR_MAX, TicketPass } from '../../components/tickets/TicketPass'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { useMyTickets } from '../../lib/ticketCache'
+import { ticketEventOf } from '../../lib/ticketing'
 import { useAuth } from '../../lib/useAuth'
 
 /** The pass's inner padding and the QR well's, either side: what the QR gives up to fit a narrow screen. */
@@ -30,7 +31,8 @@ export default function TicketScreen() {
   const { tickets, events, offline, loaded, refresh } = useMyTickets(user?.id)
   const [page, setPage] = useState(0)
   const mine = tickets.filter((t) => t.orderId === orderId)
-  const event = mine[0] ? events[mine[0].eventId] : undefined
+  // The ticket's own event (§8.4) first; the copy remembered from the event page or Going for a ticket that carries none.
+  const event = mine[0] ? (ticketEventOf(mine[0]) ?? events[mine[0].eventId]) : undefined
   const qrSize = Math.min(QR_MAX, width - SPACE.gutter * 2 - QR_INSET)
 
   // Said once as it changes: the pass still works, it is only not fresh.

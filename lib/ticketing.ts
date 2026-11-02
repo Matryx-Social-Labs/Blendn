@@ -1,4 +1,6 @@
+import { eventLoadFailure } from './eventLinkRefusal'
 import { calendarDate, eventClock } from './time'
+import { userMessage } from './userMessage'
 
 /*
  * Ticketing (SCRUM-1007 Phase 3), against the mobile contract in blendn-admin
@@ -43,9 +45,12 @@ export type TicketLine = { typeId: string; quantity: number }
 export type TicketQuote = {
   currency: string
   subtotalMinor: number
+  /** 0 when the organizer absorbs the fees (§8.9), and then `feeParts` is not sent. */
   bookingFeeMinor: number
   totalMinor: number
-  feeParts: { serviceMinor: number; taxMinor: number; processingMinor: number }
+  feeParts?: { serviceMinor: number; taxMinor: number; processingMinor: number }
+  /** The market's name for the tax on our fee (§8.8): "GST" in India, "Tax" by default. */
+  taxLabel?: string
   lines: (TicketLine & { unitMinor: number })[]
 }
 
@@ -63,6 +68,24 @@ export type Ticket = {
   /** '<ticketId>.<mac>', derived on the server. */
   qrPayload: string
   redeemedAt: string | null
+  /** §8.4: the event, so the pass renders offline with no event page visited. Read it through `ticketEventOf`. */
+  event?: { id: string; title: string; startsAt: string; endsAt: string; timezone: string | null; venueName: string | null; coverUrl: string | null }
+}
+
+/** What the pass says about its event (title, when, where), in the device cache's shape. */
+export type TicketEvent = { title: string; startTime: string; timezone?: string; venueName?: string; coverImageUrl?: string | null }
+
+/** A ticket's own event (§8.4) as the pass's words; null when it carries none usable, and the remembered copy stands. */
+export function ticketEventOf(t: Pick<Ticket, 'event'>): TicketEvent | null {
+  const e = t.event
+  if (!e || typeof e.title !== 'string' || typeof e.startsAt !== 'string') return null
+  return {
+    title: e.title,
+    startTime: e.startsAt,
+    timezone: e.timezone ?? undefined,
+    venueName: e.venueName ?? undefined,
+    coverImageUrl: e.coverUrl ?? null,
+  }
 }
 
 export type OrderStatus = 'pending' | 'paid' | 'expired' | 'refunded' | 'cancelled'
@@ -76,10 +99,7 @@ export type TicketOrderStatus = {
   totalMinor: number
   currency: string
   tickets: Ticket[]
-  /**
-   * Not in contract v1 (gap, proposed for Phase 2): the pay page saw the payment refused or its window dismissed, while the hold
-   * still runs. Without it a pending order cannot be told from a slow webhook, and the poll says "Still confirming…".
-   */
+  /** §8.2: the latest payment attempt was refused while the hold still runs; cleared by a new attempt. */
   paymentFailed?: boolean
 }
 
@@ -114,6 +134,40 @@ const REFUSAL_FALLBACK = 'That didn’t go through. Try again.'
 export function refusalCopy(code: string | undefined | null): string {
   const key = code?.toLowerCase() as TicketRefusal | undefined
   return (key && REFUSAL_COPY[key]) || REFUSAL_FALLBACK
+}
+
+/** Refusals that mean the page's counts or the event are old: it reads the event again. */
+const STALE_CODES = new Set(['sold_out', 'not_on_sale', 'unknown_ticket_type', 'over_order_limit'])
+
+/** Quote and order refused at the RSVP's own door (§9.7), or the service down: said as the app says them elsewhere. */
+export type TicketRefusalView = { copy: string; stale: boolean; fix?: 'Add your age' | 'Finish my profile' }
+const UNAVAILABLE = 'Tickets can’t be bought right now. Nothing was charged. Try again in a few minutes.'
+
+/**
+ * A refused quote or order, in plain words. The contract's own codes first (§2, §3, the 409 `age` kept as the backstop); then
+ * the RSVP's door, read by the same `eventLoadFailure` the event page uses (403 `AGE_RESTRICTED` / `AGE_UNKNOWN`, 403
+ * `PROFILE_INCOMPLETE`, 404, 400 `VALIDATION_FAILED`), in the words of its cards (`linkRefusalCard`); a 503 (payments down,
+ * the hold given back) and a rate limit. `stale`: the page should read the event again. `fix`: the profile fix it names.
+ */
+export function ticketRefusal(result: { errorCode?: string; reasonCode?: string; error?: string }): TicketRefusalView {
+  const code = refusalOf(result)
+  if (code && code in REFUSAL_COPY) return { copy: REFUSAL_COPY[code as TicketRefusal], stale: STALE_CODES.has(code) }
+  if (result.errorCode === 'RATE_LIMITED') return { copy: userMessage(result, 'Too many tries. Wait a moment, then try again.'), stale: false }
+  if (result.errorCode === 'SERVER_ERROR') return { copy: UNAVAILABLE, stale: false }
+  switch (eventLoadFailure(result)) {
+    case 'minor':
+      return { copy: 'This event is 18+. Blend’n events are for adults.', stale: false }
+    case 'age_unknown':
+      return { copy: 'Events on Blend’n are 18+. Add your date of birth once; nobody else ever sees it.', stale: false, fix: 'Add your age' }
+    case 'profile':
+      return { copy: 'Finish your profile first: add a name and a photo.', stale: false, fix: 'Finish my profile' }
+    case 'notFound':
+      return { copy: 'This event isn’t available any more.', stale: true }
+    case 'broken':
+      return { copy: 'That ticket type changed. Pick again.', stale: true }
+    default:
+      return { copy: REFUSAL_FALLBACK, stale: false }
+  }
 }
 
 /** The refusal's code from an `ApiResponse`, lower-cased: the envelope carries `errorCode` (and `reasonCode`), not `error.code`. */

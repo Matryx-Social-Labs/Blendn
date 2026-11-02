@@ -13,8 +13,8 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getMyTickets: jest.fn() } })
 /* eslint-disable import/first */
 import { apiClient } from '../lib/apiClient'
 import { forgetTickets, readTicketCache, rememberTicketEvent, saveTickets, ticketSession, useMyTickets } from '../lib/ticketCache'
-/* eslint-enable import/first */
 import type { Ticket } from '../lib/ticketing'
+/* eslint-enable import/first */
 
 const ticket = (id: string, orderId: string, eventId = 'e1'): Ticket => ({
   ticketId: id,

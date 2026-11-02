@@ -1,6 +1,8 @@
+import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 
+import { Button } from '../ds/Button'
 import { Sheet, type SheetAction } from '../ds/Sheet'
 import { Stepper } from '../ds/Stepper'
 import { font, useAnnounced, useBoldText } from '../ds/shared'
@@ -19,7 +21,9 @@ import {
   refusalOf,
   spokenMoney,
   stepperMax,
+  ticketRefusal,
   typeRow,
+  type TicketRefusalView,
   type NativeTicketing,
   type TicketLine,
   type TicketOrder,
@@ -32,13 +36,11 @@ import { useNow } from '../../lib/useNow'
 
 /** §2: a quote 250 ms after the last stepper change. */
 export const QUOTE_DEBOUNCE_MS = 250
-/** §3: `busy` is tried again after a second, twice at most. */
+/** §3: `busy` is tried again after its `retryAfter` (1 s), twice at most. */
 const BUSY_RETRY_MS = 1000
 const BUSY_RETRIES = 2
-/** ponytail: types past this are not drawn in the sheet; the server should cap types per event (contract gap). */
+/** A guard only: the server caps types at 20 per event (§8.10). */
 const MAX_SHEET_TYPES = 50
-/** Refusals that mean the page's counts are old: it reads the event again. */
-const STALE_CODES = new Set(['sold_out', 'not_on_sale', 'unknown_ticket_type', 'over_order_limit'])
 
 export type CheckoutEvent = { id: string; title: string; startTime: string; timezone?: string }
 
@@ -84,8 +86,9 @@ export function CheckoutSheet({
   const [phase, setPhase] = useState<Phase>({ kind: 'pick' })
   const [paying, setPaying] = useState(false)
   /** The last quote or refusal, and which lines it was for: one for older lines is shown, but never paid on. */
-  const [answer, setAnswer] = useState<{ key: string; quote?: TicketQuote; refusal?: string } | null>(null)
-  const [orderRefusal, setOrderRefusal] = useState<string | null>(null)
+  const [answer, setAnswer] = useState<{ key: string; quote?: TicketQuote; refusal?: TicketRefusalView } | null>(null)
+  const [orderRefusal, setOrderRefusal] = useState<TicketRefusalView | null>(null)
+  const [releasing, setReleasing] = useState(false)
   const mounted = useRef(true)
   useEffect(
     () => () => {
@@ -119,13 +122,13 @@ export function CheckoutSheet({
         .then((r) => {
           if (!live) return
           if (r.success && r.data) return setAnswer({ key: linesKey, quote: r.data })
-          const code = refusalOf(r)
-          setAnswer({ key: linesKey, refusal: refusalCopy(code) })
-          if (code && STALE_CODES.has(code)) latestStale.current()
+          const refused = ticketRefusal(r)
+          setAnswer({ key: linesKey, refusal: refused })
+          if (refused.stale) latestStale.current()
         })
         .catch((e) => {
           Logger.warn('tickets', 'quote:failed', { error: e instanceof Error ? e.message : String(e) })
-          if (live) setAnswer({ key: linesKey, refusal: refusalCopy(undefined) })
+          if (live) setAnswer({ key: linesKey, refusal: { copy: refusalCopy(undefined), stale: false } })
         })
     }, QUOTE_DEBOUNCE_MS)
     return () => {
@@ -140,7 +143,7 @@ export function CheckoutSheet({
   const total = fresh?.quote ? formatMoney(fresh.quote.totalMinor, fresh.quote.currency, { exact: true }) : null
   useAnnounced(fresh?.quote ? `Total ${spokenMoney(fresh.quote.totalMinor, fresh.quote.currency)}` : null, { queue: true })
   // A refusal is said as it arrives (iOS; Android's live region on the line below).
-  useAnnounced(refusal)
+  useAnnounced(refusal?.copy)
 
   const settle = async (order: TicketOrder) => {
     setPhase({ kind: 'confirming', order })
@@ -177,7 +180,7 @@ export function CheckoutSheet({
     } catch (e) {
       Logger.warn('tickets', 'pay:open:failed', { error: e instanceof Error ? e.message : String(e) })
       H.error()
-      setOrderRefusal(refusalCopy(undefined))
+      setOrderRefusal({ copy: refusalCopy(undefined), stale: false })
       setPhase({ kind: 'pick' })
       return
     }
@@ -190,20 +193,44 @@ export function CheckoutSheet({
     setOrderRefusal(null)
     let r = await apiClient.createTicketOrder(event.id, lines)
     for (let tries = 0; !r.success && refusalOf(r) === 'busy' && tries < BUSY_RETRIES; tries++) {
-      await new Promise((resolve) => setTimeout(resolve, BUSY_RETRY_MS))
+      const wait = r.retryAfter ? r.retryAfter * 1000 : BUSY_RETRY_MS
+      await new Promise((resolve) => setTimeout(resolve, wait))
       if (!mounted.current) return
       r = await apiClient.createTicketOrder(event.id, lines)
     }
     if (!mounted.current) return
     setPaying(false)
     if (!r.success || !r.data) {
-      const code = refusalOf(r)
+      const refused = ticketRefusal(r)
       H.error()
-      setOrderRefusal(refusalCopy(code))
-      if (code && STALE_CODES.has(code)) latestStale.current()
+      setOrderRefusal(refused)
+      if (refused.stale) latestStale.current()
       return
     }
     await openAndSettle(r.data)
+  }
+
+  /**
+   * "Let them go" (§8.3): the hold is given back now (204), the page's counts read again, the sheet closes. An order no longer
+   * held (409 `not_pending`, or anything else) is read again instead: it may have been paid a moment ago.
+   */
+  const letGo = async (order: TicketOrder) => {
+    if (releasing) return
+    setReleasing(true)
+    const r = await apiClient.releaseTicketOrder(order.orderId).catch(() => ({ success: false }))
+    if (!mounted.current) return
+    setReleasing(false)
+    if (r.success) {
+      latestStale.current()
+      onClose()
+      return
+    }
+    await settle(order)
+  }
+
+  const fixProfile = () => {
+    onClose()
+    router.push('/edit-profile' as never)
   }
 
   const pickAgain = () => {
@@ -243,8 +270,8 @@ export function CheckoutSheet({
         icon="credit-card"
         title="Payment didn’t go through"
         actions={[
-          { label: 'Try again', kind: 'primary', onPress: () => void openAndSettle(order) },
-          { label: 'Not now', kind: 'tertiary', onPress: onClose },
+          { label: 'Try again', kind: 'primary', onPress: () => void openAndSettle(order), disabled: releasing },
+          { label: 'Let them go', kind: 'tertiary', onPress: () => void letGo(order), loading: releasing, testID: 'checkout-let-go' },
         ]}
       >
         <HoldLeft
@@ -330,14 +357,14 @@ export function CheckoutSheet({
         })}
       </View>
 
-      {quote && parts ? (
+      {quote ? (
         <View style={styles.bill} accessibilityRole="list">
           <BillLine label={`Tickets (${count})`} value={formatMoney(quote.subtotalMinor, cur, { exact: true })} testID="checkout-subtotal" />
-          {quote.bookingFeeMinor > 0 ? (
+          {quote.bookingFeeMinor > 0 && parts ? (
             <>
               <BillLine label="Booking fee" value={formatMoney(quote.bookingFeeMinor, cur, { exact: true })} testID="checkout-fee" />
               <Text testID="checkout-fee-parts" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={meta}>
-                {`Blend’n service ${formatMoney(parts.serviceMinor, cur, { exact: true })} · ${cur === 'INR' ? 'GST' : 'Tax'} ${formatMoney(parts.taxMinor, cur, { exact: true })} · Payment processing ${formatMoney(parts.processingMinor, cur, { exact: true })}`}
+                {`Blend’n service ${formatMoney(parts.serviceMinor, cur, { exact: true })} · ${quote.taxLabel ?? 'Tax'} ${formatMoney(parts.taxMinor, cur, { exact: true })} · Payment processing ${formatMoney(parts.processingMinor, cur, { exact: true })}`}
               </Text>
             </>
           ) : null}
@@ -348,9 +375,10 @@ export function CheckoutSheet({
 
       {refusal ? (
         <Text accessibilityRole="alert" accessibilityLiveRegion="polite" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.refusal]}>
-          {refusal}
+          {refusal.copy}
         </Text>
       ) : null}
+      {refusal?.fix ? <Button kind="tertiary" size="md" label={refusal.fix} onPress={fixProfile} style={styles.fix} testID="checkout-fix" /> : null}
 
       <View style={styles.policy}>
         <Icon name="info" size={ICON.inline} color={COLOR.textSecondary} />
@@ -428,4 +456,5 @@ const styles = StyleSheet.create({
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline, marginVertical: SPACE.xs },
   policy: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm, paddingTop: SPACE.lg },
   shrink: { flexShrink: 1 },
+  fix: { alignSelf: 'flex-start' },
 })
