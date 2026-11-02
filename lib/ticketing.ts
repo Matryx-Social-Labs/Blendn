@@ -180,13 +180,25 @@ function parseType(v: unknown): TicketType | null {
   }
 }
 
-function hostOfLink(url: string): string | null {
+/** The https link's host, lower-case; null for anything that is not https. */
+function httpsHost(url: string): string | null {
   try {
     const u = new URL(url)
-    return u.protocol === 'https:' ? u.hostname.replace(/^www\./, '') : null
+    return u.protocol === 'https:' ? u.hostname.toLowerCase() : null
   } catch {
     return null
   }
+}
+
+/**
+ * The site the row names is the link's own host, never a separate claim: "Tickets on eventbrite.ca" must open eventbrite.ca
+ * (security review: a payload could otherwise name one site and open another). The server's name is kept only when the
+ * link's host is that site or a subdomain of it ("showpass.com" for tickets.showpass.com); `www.` is dropped either way.
+ */
+function siteOf(host: string, claimed: unknown): string {
+  const own = host.replace(/^www\./, '')
+  const named = typeof claimed === 'string' ? claimed.trim().toLowerCase().replace(/^www\./, '') : ''
+  return named && (own === named || own.endsWith(`.${named}`)) ? named : own
 }
 
 /**
@@ -197,9 +209,9 @@ export function parseTicketing(raw: unknown): EventTicketing | null {
   if (!isObject(raw)) return null
   if (raw.mode === 'external') {
     const externalUrl = str(raw.externalUrl)
-    const host = externalUrl ? hostOfLink(externalUrl) : null
+    const host = externalUrl ? httpsHost(externalUrl) : null
     if (!externalUrl || !host) return null
-    return { mode: 'external', externalUrl, externalSite: str(raw.externalSite) || host }
+    return { mode: 'external', externalUrl, externalSite: siteOf(host, raw.externalSite) }
   }
   if (raw.mode !== 'native') return null
   const currency = str(raw.currency)

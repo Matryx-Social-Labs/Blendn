@@ -10,7 +10,7 @@ import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, SPACE } from '../../lib/desig
 import { H } from '../../lib/haptics'
 import { BLENDN_LINKS, openInApp, openPayPage } from '../../lib/links'
 import { Logger } from '../../lib/logger'
-import { saveTickets } from '../../lib/ticketCache'
+import { saveTickets, ticketSession } from '../../lib/ticketCache'
 import {
   formatMoney,
   pollOrder,
@@ -144,10 +144,12 @@ export function CheckoutSheet({
 
   const settle = async (order: TicketOrder) => {
     setPhase({ kind: 'confirming', order })
+    // A sign-out during the poll: the paid tickets are not written into the next session's copy.
+    const since = ticketSession()
     const end = await pollOrder(order.orderId, { get: (id) => apiClient.getTicketOrder(id), cancelled: () => !mounted.current })
     switch (end.kind) {
       case 'paid':
-        if (user?.id) await saveTickets(user.id, end.order.tickets, { orderId: end.order.orderId })
+        if (user?.id) await saveTickets(user.id, end.order.tickets, { orderId: end.order.orderId, since })
         onPaid(end.order)
         return
       case 'failed':

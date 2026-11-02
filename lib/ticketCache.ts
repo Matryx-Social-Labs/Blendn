@@ -42,10 +42,19 @@ export async function readTicketCache(userId: string): Promise<Held> {
   return s && s.userId === userId ? { tickets: s.tickets, events: s.events } : EMPTY
 }
 
+/*
+ * The session the copy belongs to: `forgetTickets` (sign-out) moves it on, and a write begun in an older one is dropped.
+ * Without it a `/me/tickets` answer or a paid order landing after sign-out wrote the last account's QR codes back
+ * (security review). `since`: the session the caller's read began in, when it began before this call.
+ */
+let session = 0
+export const ticketSession = () => session
+
 /* One write at a time: a paid order and a remembered event landing together must not each overwrite the other. */
 let chain: Promise<unknown> = Promise.resolve()
-function update(userId: string, change: (held: Held) => Held): Promise<void> {
+function update(userId: string, change: (held: Held) => Held, since = session): Promise<void> {
   const next = chain.then(async () => {
+    if (since !== session) return
     const held = await readTicketCache(userId)
     await AsyncStorage.setItem(KEY, JSON.stringify({ userId, ...change(held) } satisfies Stored))
   })
@@ -54,11 +63,15 @@ function update(userId: string, change: (held: Held) => Held): Promise<void> {
 }
 
 /** A full `/me/tickets` answer replaces the list; with `orderId` (an order just paid) only that order's tickets are replaced. */
-export function saveTickets(userId: string, tickets: Ticket[], { orderId }: { orderId?: string } = {}): Promise<void> {
-  return update(userId, (held) => ({
-    ...held,
-    tickets: orderId ? [...held.tickets.filter((t) => t.orderId !== orderId), ...tickets] : tickets,
-  }))
+export function saveTickets(userId: string, tickets: Ticket[], { orderId, since }: { orderId?: string; since?: number } = {}): Promise<void> {
+  return update(
+    userId,
+    (held) => ({
+      ...held,
+      tickets: orderId ? [...held.tickets.filter((t) => t.orderId !== orderId), ...tickets] : tickets,
+    }),
+    since
+  )
 }
 
 /** The event's words for its pass (title, when, where), from a screen that has them: the event page, Going. */
@@ -68,6 +81,7 @@ export function rememberTicketEvent(userId: string, eventId: string, event: Tick
 
 /** Sign-out (and an expired session): gone, whoever it belonged to. */
 export async function forgetTickets(): Promise<void> {
+  session += 1
   await chain
   await AsyncStorage.removeItem(KEY).catch(() => {})
 }
@@ -80,15 +94,28 @@ export function useMyTickets(userId: string | null | undefined) {
   const [held, setHeld] = useState<Held>(EMPTY)
   const [offline, setOffline] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  // Another account (or none): nothing of the last one's is drawn, from the first render for it.
+  const [heldFor, setHeldFor] = useState(userId)
+  if (heldFor !== userId) {
+    setHeldFor(userId)
+    setHeld(EMPTY)
+    setOffline(false)
+    setLoaded(false)
+  }
 
   const load = useCallback(async () => {
     if (!userId) return
+    // Signed out (or another account) while this read was out: its answer is the last account's, and goes nowhere.
+    const since = ticketSession()
     const cached = await readTicketCache(userId)
+    if (since !== ticketSession()) return
     setHeld((h) => (h.tickets.length > 0 ? h : cached))
     try {
       const r = await apiClient.getMyTickets()
+      if (since !== ticketSession()) return
       if (!r.success || !Array.isArray(r.data)) throw new Error(r.error ?? 'No tickets in the answer')
-      await saveTickets(userId, r.data)
+      await saveTickets(userId, r.data, { since })
+      if (since !== ticketSession()) return
       setHeld({ tickets: r.data, events: cached.events })
       setOffline(false)
     } catch (e) {

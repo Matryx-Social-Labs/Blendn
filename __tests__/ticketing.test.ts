@@ -75,6 +75,29 @@ describe('the ticketing payload, read at the boundary', () => {
     expect(ok).toEqual(expect.objectContaining({ mode: 'external', externalUrl: 'https://www.eventbrite.ca/e/1', externalSite: 'eventbrite.ca' }))
   })
 
+  it('the site named is always the link’s own host: a payload naming another site cannot spoof the row (security review)', () => {
+    const t = parseTicketing({ mode: 'external', externalUrl: 'https://evil.example/e/1', externalSite: 'eventbrite.ca' })
+    expect(t).toEqual(expect.objectContaining({ externalSite: 'evil.example', externalUrl: 'https://evil.example/e/1' }))
+    // A display name that is not a host is ignored too.
+    expect(parseTicketing({ mode: 'external', externalUrl: 'https://www.eventbrite.ca/e/1', externalSite: 'Eventbrite' })).toEqual(
+      expect.objectContaining({ externalSite: 'eventbrite.ca' })
+    )
+    // The host is the named site or a subdomain of it: the name is kept.
+    expect(parseTicketing({ mode: 'external', externalUrl: 'https://tickets.showpass.com/x', externalSite: 'showpass.com' })).toEqual(
+      expect.objectContaining({ externalSite: 'showpass.com' })
+    )
+    // A subdomain named over its parent's link is not the link's host.
+    expect(parseTicketing({ mode: 'external', externalUrl: 'https://showpass.com/x', externalSite: 'tickets.showpass.com' })).toEqual(
+      expect.objectContaining({ externalSite: 'showpass.com' })
+    )
+  })
+
+  it('www. is stripped from the host it says', () => {
+    expect(parseTicketing({ mode: 'external', externalUrl: 'https://www.eventbrite.ca/e/1', externalSite: 'www.eventbrite.ca' })).toEqual(
+      expect.objectContaining({ externalSite: 'eventbrite.ca' })
+    )
+  })
+
   it('external with no site name says the link’s own host', () => {
     expect(parseTicketing({ mode: 'external', externalUrl: 'https://www.showpass.com/x' })).toEqual(expect.objectContaining({ externalSite: 'showpass.com' }))
   })

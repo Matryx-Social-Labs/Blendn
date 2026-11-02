@@ -4,10 +4,16 @@
  * holds the last one's QR codes.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { act, renderHook } from '@testing-library/react-native'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { forgetTickets, readTicketCache, rememberTicketEvent, saveTickets } from '../lib/ticketCache'
+jest.mock('../lib/apiClient', () => ({ apiClient: { getMyTickets: jest.fn() } }))
+
+/* eslint-disable import/first */
+import { apiClient } from '../lib/apiClient'
+import { forgetTickets, readTicketCache, rememberTicketEvent, saveTickets, ticketSession, useMyTickets } from '../lib/ticketCache'
+/* eslint-enable import/first */
 import type { Ticket } from '../lib/ticketing'
 
 const ticket = (id: string, orderId: string, eventId = 'e1'): Ticket => ({
@@ -63,4 +69,49 @@ it('sign-out wipes it, on the path every sign-out and every expired session take
   const src = readFileSync(join(__dirname, '..', 'lib', 'useAuth.ts'), 'utf8')
   const reset = src.slice(src.indexOf('const resetLocalSession'), src.indexOf('const clearAuthState'))
   expect(reset).toMatch(/import\('\.\/ticketCache'\)\.then\(\(m\) => m\.forgetTickets\(\)\)/)
+})
+
+describe('a sign-out while the list is being read (security review)', () => {
+  const api = apiClient as jest.Mocked<typeof apiClient>
+  const deferred = () => {
+    let resolve: (v: unknown) => void = () => {}
+    const promise = new Promise((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
+  it('an answer that lands after sign-out is neither stored nor shown', async () => {
+    const answer = deferred()
+    api.getMyTickets.mockReturnValue(answer.promise as never)
+    const { result } = await renderHook(() => useMyTickets('me'))
+    await act(async () => {})
+    expect(api.getMyTickets).toHaveBeenCalled()
+    await act(async () => {
+      await forgetTickets()
+    })
+    await act(async () => {
+      answer.resolve({ success: true, data: [ticket('k1', 'o1')] })
+    })
+    expect(result.current.tickets).toEqual([])
+    expect(await AsyncStorage.getItem('blendn.tickets.v1')).toBeNull()
+    expect((await readTicketCache('me')).tickets).toEqual([])
+  })
+
+  it('a paid order saved after sign-out (its poll began before) is dropped', async () => {
+    const since = ticketSession()
+    await forgetTickets()
+    await saveTickets('me', [ticket('k1', 'o1')], { orderId: 'o1', since })
+    expect(await AsyncStorage.getItem('blendn.tickets.v1')).toBeNull()
+  })
+
+  it('another account on the hook shows nothing of the last one’s, even before its own read lands', async () => {
+    api.getMyTickets.mockResolvedValueOnce({ success: true, data: [ticket('k1', 'o1')] } as never)
+    const { result, rerender } = await renderHook(({ id }: { id: string }) => useMyTickets(id), { initialProps: { id: 'me' } })
+    await act(async () => {})
+    expect(result.current.tickets).toHaveLength(1)
+    api.getMyTickets.mockReturnValue(new Promise(() => {}) as never)
+    await rerender({ id: 'someone-else' })
+    expect(result.current.tickets).toEqual([])
+  })
 })
