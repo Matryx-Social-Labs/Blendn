@@ -82,6 +82,8 @@ export type ActionSheet = InWorld & {
   message?: string
   /** The glyph well above the title (the design's sheets: Not sent, Leave, Mute). */
   icon?: IconName
+  /** A picture above the title, in place of the icon: the push ask's lock screen (`lib/pushAsk`). */
+  art?: ReactNode
   /**
    * `rows`: every action but Cancel as a 48 pt list row (a chevron when it
    * opens another step), the way the design draws an options or mute sheet.

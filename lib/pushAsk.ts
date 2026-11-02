@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { createElement } from 'react'
 
 import { TokenStorage } from './apiClient'
 import { mayAskForPush } from './crewPushAsk'
@@ -6,6 +7,7 @@ import { Logger } from './logger'
 import { initializePushNotifications } from './notifications'
 import { clearPushDeclined, hasDeclinedPush, markPushDeclined } from './pushDecline'
 import { showSheet } from './sheet'
+import { LockScreenPreview, type SampleNotification } from '../components/ds/LockScreenPreview'
 import type { Hue } from '../components/ds/shared'
 
 /**
@@ -20,7 +22,10 @@ import type { Hue } from '../components/ds/shared'
  * - a no anywhere (Not now at either moment, or "Maybe later" on an older build's onboarding step) is remembered per account
  *   (`lib/pushDecline`) and ends the asking; Continue clears it.
  *
- * "Continue" is the one that asks the phone (the OS dialog follows); it is silent until then.
+ * "Turn on notifications" is the one that asks the phone (the OS dialog follows); it is silent until then.
+ *
+ * What it looks like (SCRUM-1006, FLOW-WALK § 2.x): a lock screen of three of our own sample notifications, personalised
+ * with the event just RSVP'd to (`askSamples`), above the question. The like moment leads with the match.
  */
 export type AskMoment = 'rsvp' | 'like'
 
@@ -30,12 +35,24 @@ const ASK_HUE: Record<AskMoment, Hue> = { like: 'rose', rsvp: 'ember' }
 export const ASK_COPY: Record<AskMoment, { title: string; body: string }> = {
   rsvp: {
     title: 'Want a heads-up if the time or venue changes?',
-    body: 'We’ll only tell you about this event: a new time, a new venue, or if it’s called off. You can change this any time in Settings.',
+    body: 'Only what you’d want: a new time or venue, a match, your crew heading out. Change it any time in Settings.',
   },
   like: {
     title: 'Want to know when it’s mutual?',
     body: 'One notification if they like you back. Nothing for likes you haven’t returned. You can change this any time in Settings.',
   },
+}
+
+/** When a like is asked from outside an event, its samples name none. */
+const NO_EVENT = 'Your event'
+
+/** The lock screen's samples: our own notifications, never a real person's name or photo ("Someone"). */
+export function askSamples(moment: AskMoment, eventTitle?: string): SampleNotification[] {
+  const title = eventTitle?.trim()
+  const update = { title: title || NO_EVENT, body: 'New time: 7 PM. Same place.' }
+  const match = { title: 'It’s mutual', body: title ? `Someone at ${title} liked you back.` : 'Someone liked you back.' }
+  const crew = { title: 'Your crew is heading out', body: '3 going tonight.' }
+  return moment === 'like' ? [match, update, crew] : [update, match, crew]
 }
 
 const keyFor = (userId: string, moment: AskMoment) => `blendn.pushAsk.${moment}.${userId}`
@@ -49,7 +66,8 @@ async function alreadyAsked(userId: string, moment: AskMoment): Promise<boolean>
   }
 }
 
-export async function askPushInContext(moment: AskMoment): Promise<boolean> {
+/** `eventTitle`: the event the RSVP (or the like) is at, for the samples. */
+export async function askPushInContext(moment: AskMoment, eventTitle?: string): Promise<boolean> {
   try {
     const user = await TokenStorage.getUser()
     if (!user) return false
@@ -62,17 +80,17 @@ export async function askPushInContext(moment: AskMoment): Promise<boolean> {
     showSheet({
       kind: 'actions',
       hue: ASK_HUE[moment],
-      icon: 'bell',
+      art: createElement(LockScreenPreview, { samples: askSamples(moment, eventTitle), testID: 'push-ask-lock' }),
       title,
       message: body,
       actions: [
         {
-          label: 'Continue',
-          variant: 'primary',
+          label: 'Turn on notifications',
+          variant: 'strong',
           then: () => void clearPushDeclined(user.id).then(() => initializePushNotifications()).catch(() => {}),
         },
         // Not now is a no too: the next moment does not ask again.
-        { label: 'Not now', variant: 'secondary', then: () => void markPushDeclined(user.id) },
+        { label: 'Not now', variant: 'tertiary', then: () => void markPushDeclined(user.id) },
       ],
     })
     return true
