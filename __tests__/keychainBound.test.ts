@@ -18,6 +18,8 @@ let mockHeld: ((value: string) => void) | null = null
 let mockHold = false
 /** Keys whose read throws, as iOS's keychain does for a locked phone (errSecInteractionNotAllowed). */
 const mockLockedReads = new Set<string>()
+/** Slots (`key` or `legacy:key`) whose delete throws, as a keychain call that fails mid sign-out. */
+const mockFailingDeletes = new Set<string>()
 /** Every keychain write and delete, in order, with the accessibility a write asked for. */
 const mockOps: string[] = []
 /** The keychain service an option names: the old one's items are kept apart, as `legacy:<key>`. */
@@ -42,6 +44,7 @@ jest.mock('expo-secure-store', () => ({
   },
   deleteItemAsync: async (k: string, o?: MockOptions) => {
     mockOps.push(`delete ${mockSlot(k, o)}`)
+    if (mockFailingDeletes.has(mockSlot(k, o))) throw new Error('Keychain: delete failed')
     mockSecure.delete(mockSlot(k, o))
   },
 }))
@@ -70,6 +73,7 @@ beforeEach(async () => {
   mockStalledWrites.clear()
   mockHeldWrites.length = 0
   mockLockedReads.clear()
+  mockFailingDeletes.clear()
   mockExpired.mockClear()
   await TokenStorage.setTokens('access-1', 'refresh-1')
   // The keychain as a launch finds it: nothing read into memory yet (RC drive 2 D-A), so every read here asks the keychain.
@@ -319,5 +323,28 @@ describe('a locked keychain is not a missing token (SCRUM-878)', () => {
     void TokenStorage.setRefreshToken('refresh-new')
     await jest.advanceTimersByTimeAsync(1000)
     expect(mockSecure.get(`legacy:${REFRESH}`)).toBe('refresh-old')
+  })
+})
+
+describe('sign-out clears both keychain services (SCRUM-878 review)', () => {
+  it('deletes the old copy even when the new delete fails, and reports the clear as incomplete', async () => {
+    // An install whose old copy outlived a migration: both services hold the refresh token.
+    mockSecure.set(`legacy:${REFRESH}`, 'refresh-old')
+    mockFailingDeletes.add(REFRESH)
+
+    const cleared = await TokenStorage.clearAll()
+
+    expect(mockOps).toContain(`delete legacy:${REFRESH}`)
+    expect(mockSecure.has(`legacy:${REFRESH}`)).toBe(false)
+    // Not fully clear: the "signed out here" marker must stay, so the next launch clears again.
+    expect(cleared).toBe(false)
+  })
+
+  it('reports a full clear when every delete succeeds', async () => {
+    mockSecure.set(`legacy:${REFRESH}`, 'refresh-old')
+
+    expect(await TokenStorage.clearAll()).toBe(true)
+    expect(mockSecure.has(`legacy:${REFRESH}`)).toBe(false)
+    expect(mockSecure.has(REFRESH)).toBe(false)
   })
 })

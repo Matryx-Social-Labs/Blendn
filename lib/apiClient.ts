@@ -438,19 +438,29 @@ class TokenStorage {
     }
   }
 
-  private static async secureRemove(key: string): Promise<void> {
+  /**
+   * True when every copy is known gone. Each service is deleted on its own (SCRUM-878 review): a failure on the new one must
+   * not leave the old copy, which the launch's fallback read would bring back after a sign-out.
+   */
+  private static async secureRemove(key: string): Promise<boolean> {
     this.memory.set(key, null)
+    let cleared = true
     if (Platform.OS !== 'web') {
-      try {
-        await SecureStore.deleteItemAsync(key, SECURE_OPTIONS)
-        await SecureStore.deleteItemAsync(key, LEGACY_SECURE_OPTIONS)
-      } catch (error) {
-        Logger.warn('auth', 'SecureStore delete failed', { key, error })
+      for (const options of [SECURE_OPTIONS, LEGACY_SECURE_OPTIONS]) {
+        try {
+          await SecureStore.deleteItemAsync(key, options)
+        } catch (error) {
+          cleared = false
+          Logger.warn('auth', 'SecureStore delete failed', { key, service: options.keychainService, error })
+        }
       }
     }
     try {
       await AsyncStorage.removeItem(key)
-    } catch {}
+    } catch {
+      cleared = false
+    }
+    return cleared
   }
 
   static async getAccessToken(): Promise<string | null> {
@@ -494,12 +504,14 @@ class TokenStorage {
     return this.secureSet(USER_KEY, JSON.stringify(user))
   }
 
-  static async clearAll(): Promise<void> {
-    await Promise.all([
+  /** True only when every key is gone from both services: until then the "signed out here" marker stays (M2). */
+  static async clearAll(): Promise<boolean> {
+    const results = await Promise.all([
       this.secureRemove(ACCESS_TOKEN_KEY),
       this.secureRemove(REFRESH_TOKEN_KEY),
       this.secureRemove(USER_KEY),
     ])
+    return results.every(Boolean)
   }
 
   /** Mark this phone signed out (M2): called before any await at sign-out, so the write is issued whatever follows. */

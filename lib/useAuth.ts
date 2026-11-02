@@ -161,7 +161,7 @@ const initializeAuth = async (): Promise<AuthState> => {
         Logger.info('auth', 'Signed out on this phone; not restoring the keychain session')
         // Its own ending: a refresh still in flight for that session stores nothing over the clear (H1, re-review L2).
         nextSession()
-        const cleared = await settleWithin(TokenStorage.clearAll().then(() => true), REQUEST_TIMEOUT_MS, false)
+        const cleared = await settleWithin(TokenStorage.clearAll(), REQUEST_TIMEOUT_MS, false)
         if (cleared) await TokenStorage.forgetSignedOut()
         updateAuthState({ session: null, user: null, loading: false, initialized: true, unreachable: false })
         isInitializing = false
