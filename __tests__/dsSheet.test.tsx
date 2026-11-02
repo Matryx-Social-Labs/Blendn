@@ -1151,3 +1151,36 @@ describe('the Modal that has left tells whoever waited to present a native scree
     }
   })
 })
+
+/*
+ * `art` (SCRUM-1006): a picture above the title, the push ask's lock screen. It goes where the icon well would, and it
+ * scrolls with the title and body rather than pinning: a 300 pt picture pinned would leave a small phone's body no room.
+ */
+describe('art above the title (the push ask)', () => {
+  const hidden = { includeHiddenElements: true }
+  let window: ReturnType<typeof Dimensions.get>
+  beforeEach(async () => {
+    window = Dimensions.get('window')
+    await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
+  })
+  afterEach(async () => {
+    await act(async () => Dimensions.set({ window, screen: window }))
+  })
+
+  it('is drawn above the title, in the scroll, in place of the icon well', async () => {
+    await render(signOut({ art: <Text testID="art">lock screen</Text> }))
+    const content = within(screen.getByTestId('s-content', hidden))
+    expect(content.getByTestId('art', hidden)).toBeTruthy()
+    expect(screen.queryByTestId('s-pinned', hidden)).toBeNull()
+    const texts = content.getAllByText(/lock screen|Sign out\?/, hidden).map((t) => t.props.children)
+    expect(texts).toEqual(['lock screen', 'Sign out?'])
+    // No glyph well beside the picture.
+    expect(screen.queryByTestId('s-well', hidden)).toBeNull()
+  })
+
+  it('without art the sheet is as it was: icon and title pinned', async () => {
+    await render(signOut())
+    expect(screen.getByTestId('s-pinned', hidden)).toBeTruthy()
+    expect(screen.getByTestId('s-well', hidden)).toBeTruthy()
+  })
+})

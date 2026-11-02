@@ -699,7 +699,7 @@ export default function EventDetail() {
             action: { label: 'Add to calendar', onPress: () => addToCalendar(planned) },
           })
           // The first time only, and only to a phone that can still be asked (Flow 9 · 9.7).
-          void askPushInContext('rsvp')
+          void askPushInContext('rsvp', planned.title)
         }
       }
     } catch {

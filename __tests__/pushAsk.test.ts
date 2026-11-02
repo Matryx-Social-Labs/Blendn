@@ -13,10 +13,13 @@ jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/logger', () => ({ Logger: { warn: jest.fn() } }))
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+import type { ReactElement } from 'react'
 
 import { TokenStorage } from '../lib/apiClient'
 import { initializePushNotifications } from '../lib/notifications'
-import { ASK_COPY, askPushInContext } from '../lib/pushAsk'
+import { ASK_COPY, askPushInContext, askSamples } from '../lib/pushAsk'
 import { clearPushDeclined, hasDeclinedPush, markPushDeclined } from '../lib/pushDecline'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 import { forgetPushPermission } from '../lib/pushStatus'
@@ -32,6 +35,8 @@ beforeEach(async () => {
 })
 
 const sheet = () => (showSheet as jest.Mock).mock.calls[0][0] as ActionSheet
+type Sample = { title: string; body: string }
+const samplesOf = (s: ActionSheet) => (s.art as ReactElement<{ samples: Sample[] }>).props.samples
 
 describe('askPushInContext', () => {
   it('asks after a going RSVP in the frame’s words, and after a first like in its own', async () => {
@@ -70,7 +75,7 @@ describe('askPushInContext', () => {
   it('Continue clears a “maybe later” and registers (which asks the OS); Not now asks nothing', async () => {
     await askPushInContext('like')
     expect(initializePushNotifications).not.toHaveBeenCalled()
-    ;(sheet().actions.find((a) => a.label === 'Continue') as { then: () => void }).then()
+    ;(sheet().actions.find((a) => a.label === 'Turn on notifications') as { then: () => void }).then()
     await new Promise((r) => setImmediate(r))
     expect(clearPushDeclined).toHaveBeenCalledWith('me')
     expect(initializePushNotifications).toHaveBeenCalledTimes(1)
@@ -93,5 +98,45 @@ describe('askPushInContext', () => {
     ;(showSheet as jest.Mock).mockClear()
     expect(await askPushInContext('like')).toBe(false)
     expect(showSheet).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * SCRUM-1006: the ask shows what it is for. A lock screen of three of our own sample notifications, personalised with the
+ * event just RSVP'd to; the like moment leads with the match. A white "Turn on notifications", and "Not now" as text.
+ */
+describe('the lock-screen ask (SCRUM-1006)', () => {
+  it('RSVP: the lock screen leads with the event just said yes to, then a match there, then the crew', async () => {
+    expect(await askPushInContext('rsvp', 'Rooftop Sundowner')).toBe(true)
+    expect(samplesOf(sheet())).toEqual([
+      { title: 'Rooftop Sundowner', body: 'New time: 7 PM. Same place.' },
+      { title: 'It’s mutual', body: 'Someone at Rooftop Sundowner liked you back.' },
+      { title: 'Your crew is heading out', body: '3 going tonight.' },
+    ])
+    // The picture replaces the bell well.
+    expect(sheet().icon).toBeUndefined()
+  })
+
+  it('a like leads with the match; without an event it names none', () => {
+    expect(askSamples('like').map((s) => s.title)).toEqual(['It’s mutual', 'Your event', 'Your crew is heading out'])
+    expect(askSamples('like')[0].body).toBe('Someone liked you back.')
+    expect(askSamples('rsvp', '   ')[0].title).toBe('Your event')
+  })
+
+  it('a white "Turn on notifications" first, "Not now" as text; the body is short enough to stay clear of them', async () => {
+    await askPushInContext('rsvp', 'Rooftop Sundowner')
+    expect(sheet().actions.map((a) => [a.label, a.variant])).toEqual([
+      ['Turn on notifications', 'strong'],
+      ['Not now', 'tertiary'],
+    ])
+    expect(sheet().title).toBe(ASK_COPY.rsvp.title)
+    // Under a 300 pt picture, three lines of body at most on a 375 pt phone: it never reaches the buttons.
+    Object.values(ASK_COPY).forEach(({ body }) => expect(body.length).toBeLessThanOrEqual(110))
+  })
+
+  // Pinned by source, as eventDetails-wired.test.ts pins this screen: it has no render harness.
+  it('the event detail passes the event’s title to its RSVP ask', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/screens/EventDetailScreen.tsx'), 'utf8')
+    expect(src).toContain("askPushInContext('rsvp', planned.title)")
   })
 })

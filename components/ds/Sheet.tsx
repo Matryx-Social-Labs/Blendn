@@ -243,6 +243,11 @@ export type SheetProps = {
   body?: string
   /** A decorative glyph well above the title. */
   icon?: IconName
+  /**
+   * A picture above the title, in place of the icon well: the push ask's lock screen (SCRUM-1006). It scrolls with the title
+   * and body instead of pinning, so a tall picture never leaves a small phone's body without room. It owns its own label.
+   */
+  art?: ReactNode
   /** Named with the verb, never "OK"; sorted into the fixed order. `kind` defaults to `secondary`. */
   actions?: SheetAction[]
   /** The detents a drag may settle on, opening at the first. Omit for a tray as tall as its content. */
@@ -539,7 +544,7 @@ function useSheetMotion({
  *
  * ponytail: the material does not grow more opaque near full height.
  */
-export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, body, icon, actions = [], detents, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
+export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, body, icon, art, actions = [], detents, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   /*
    * One Modal on screen at a time on iOS (`lib/modalTurn.ts`, RC drive 4 D-9): asked for, `visible` waits for the
@@ -693,11 +698,12 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
       if (headAtTop.get() !== atTop) headAtTop.set(atTop)
     },
   })
-  const hasHead = !!(icon || title || headerAction || headerNote || body)
+  const hasHead = !!(art || icon || title || headerAction || headerNote || body)
   const largeText = useLargeText()
   const iconEl =
     icon ? (
       <View
+        testID={testID && `${testID}-well`}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
         style={[styles.well, { backgroundColor: android ? COLOR.surfaceSunken : MATERIAL.fillOnGlass }]}
@@ -753,12 +759,12 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
    */
   // Unless the scroll under it would be left less than its floor: at the accessibility sizes with the keyboard up, the header
   // scrolls too, so the field being typed in is never squeezed out (review R5).
-  const pinHead = (!!(headerAction || headerNote) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)
+  const pinHead = !art && (!!(headerAction || headerNote) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)
   const scrollHead = pinHead ? (
     bodyEl
   ) : hasHead ? (
     <>
-      {iconEl}
+      {art ?? iconEl}
       {titleEl}
       {bodyEl}
     </>
