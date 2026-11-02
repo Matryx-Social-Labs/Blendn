@@ -631,7 +631,13 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
     if (wanted) opener.current = openerNow()
   }, [wanted])
   // Called once it has gone, whichever way (iOS's onDismiss, Android's motion end, or never shown).
+  /** The Modal is on screen (its `onShow` has fired and it has not left): a re-open mid-exit gets no second `onShow`. */
+  const onScreen = useRef(false)
+  /** Closed while on screen, and not yet gone: a `visible` now is a re-open mid-exit. */
+  const leaving = useRef(false)
   const dismissed = useRef(() => {
+    onScreen.current = false
+    leaving.current = false
     onDismissedLatest.current?.()
     returnFocus(opener.current)
     opener.current = null
@@ -676,7 +682,8 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   // On the UI thread: the header's pull reads it without a render (review R2).
   const onContentScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      headAtTop.set(e.contentOffset.y <= 0)
+      const atTop = e.contentOffset.y <= 0
+      if (headAtTop.get() !== atTop) headAtTop.set(atTop)
     },
   })
   const hasHead = !!(icon || title || headerAction || headerNote || body)
@@ -751,10 +758,28 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   ) : null
   const scrolls = !!(scrollHead || children)
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
-  const focusTitle = () => {
+  const sendFocus = () => {
     const target = titleRef.current ?? focusRef?.current
     if (target) AccessibilityInfo.sendAccessibilityEvent(target, 'focus')
   }
+  // Under Reduce Motion the title is still fading in from 0 for `base`, and VoiceOver passes over a view at alpha 0.
+  const focusTitle = () => (reduceMotion ? setTimeout(sendFocus, motionTokens(true).duration.base) : sendFocus())
+  /*
+   * Asked for again while still leaving: the Modal never left, so no `onShow`; under Reduce Motion the place view (and the
+   * title in it) was unmounted and is new. Focus goes to the new title, a frame on, once it exists.
+   */
+  useEffect(() => {
+    if (!visible) {
+      leaving.current = onScreen.current
+      return
+    }
+    if (!leaving.current) return
+    leaving.current = false
+    const frame = requestAnimationFrame(focusTitle)
+    return () => cancelAnimationFrame(frame)
+    // On `visible` only, as the motion is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
   // The same sheet turning into another (a session into its confirm, a dial into a refusal): its new title takes focus.
   const shownTitle = useRef(title)
   useEffect(() => {
@@ -775,6 +800,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
       navigationBarTranslucent
       onRequestClose={requestClose}
       onShow={() => {
+        onScreen.current = true
         watch.onShow()
         focusTitle()
         onShown?.()
@@ -852,7 +878,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                       {titleEl}
                     </View>
                   ) : null}
-                  {pinHead && scrolls ? <Animated.View testID={testID && `${testID}-edge`} pointerEvents="none" style={[styles.edge, edgeStyle]} /> : null}
+                  {pinHead && scrolls ? <Animated.View testID={testID && `${testID}-edge`} pointerEvents="none" style={[styles.edge, contrast && { backgroundColor: MATERIAL.hairlineIncreaseContrast }, edgeStyle]} /> : null}
                 </Animated.View>
               </GestureDetector>
               {scrolls ? (

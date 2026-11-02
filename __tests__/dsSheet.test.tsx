@@ -1024,13 +1024,13 @@ describe('the swipe-to-dismiss hands its velocity on (DS #5: release on M.fling)
     it('opens with nothing above the glass below full opacity, first frame and last; the content fades in over 200', async () => {
       await render(signOut({ visible: true, testID: 'make' }))
       expect(aboveGlass().every((o) => o === 1)).toBe(true)
-      expect(opacity('make-place') ?? 1).toBe(1)
+      // The place view (the glass's holder) has no opacity at all, animated or not.
+      expect(opacity('make-place')).toBeUndefined()
       expect(opacity('make-content')).toBe(0)
       expect(withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: 200 }))
       expect(withSpring).not.toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.travel.stiffness }))
       await act(async () => jest.advanceTimersByTime(250))
-      expect(aboveGlass().every((o) => o === 1)).toBe(true)
-      expect(opacity('make-place') ?? 1).toBe(1)
+      expect(opacity('make-place')).toBeUndefined()
       expect(opacity('make-content')).toBe(1)
     })
 
@@ -1044,6 +1044,21 @@ describe('the swipe-to-dismiss hands its velocity on (DS #5: release on M.fling)
       expect(withTiming).toHaveBeenCalledWith(0, expect.objectContaining({ duration: 200 }))
       await act(async () => jest.advanceTimersByTime(250))
       expect(screen.queryByTestId('make-scrim', { includeHiddenElements: true })).toBeNull()
+    })
+
+    it('focus goes to the title once it has faded in, not while it is at 0; and again on a re-open mid-exit (no second onShow)', async () => {
+      const send = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent').mockImplementation(() => {})
+      const r = await render(signOut({ visible: true, testID: 'make' }))
+      // The test Modal fires onShow as it is drawn (jest.setup.js): nothing is sent while the title is at 0.
+      expect(send).not.toHaveBeenCalled()
+      await act(async () => jest.advanceTimersByTime(250))
+      expect(send).toHaveBeenCalledTimes(1)
+      await r.rerender(signOut({ visible: false, testID: 'make' }))
+      await act(async () => jest.advanceTimersByTime(100))
+      await r.rerender(signOut({ visible: true, testID: 'make' }))
+      await act(async () => jest.advanceTimersByTime(300))
+      expect(send).toHaveBeenCalledTimes(2)
+      send.mockRestore()
     })
 
     it('a re-open while the scrim is still leaving fades its content in again', async () => {
