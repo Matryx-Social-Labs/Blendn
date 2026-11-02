@@ -38,6 +38,7 @@ const STRONG_STAYS: Record<string, { count: number; why: string }> = {
   'app/notifications.tsx': { count: 1, why: 'the Clear all confirm: flow-9 frame 9.7 draws the white button, owner ruling 2026-10-31 (SCRUM-842)' },
   'components/ds/HoldToConfirm.tsx': { count: 1, why: 'its screen-reader fallback mirrors the hold’s own white ink' },
   'components/onboarding/OnboardingScreen.tsx': { count: 1, why: 'onboarding’s primary is the landing’s white button: direction A, owner’s pick 2026-11-01 (SCRUM-1002)' },
+  'lib/pushAsk.ts': { count: 1, why: 'the push ask’s “Turn on notifications” is the white button under its lit lock screen: owner’s idea 2026-11-01, FLOW-WALK § 2.x (SCRUM-1006)' },
 }
 
 const found = Object.fromEntries(
