@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 
-import { DrawerGround } from '../home/HomeDrawer'
+import { DrawerGround, useInDrawer } from '../home/HomeDrawer'
 import { Material, useMaterialTier } from '../ui/Material'
 import { SPACE } from '../../lib/design/tokens'
 
@@ -22,15 +22,18 @@ export const StickyScrolled = createContext(false)
  *
  * On the solid tier (Android, Reduce Transparency) the row also always stands on the drawer's own opaque ground
  * (`DrawerGround`), so it is invisible at rest and nothing scrolling under it can show through, whatever the flag says.
- * Glass has no ground to match, so there the bar alone does it.
+ * Glass has no ground to match, so there the bar alone does it. Inside a drawer on the solid tier that ink ground is the
+ * bar: laying the solid bar fill (#1A1818) over it read as a grey band once scrolled (owner, 2026-11-02).
  */
 export function StickyBar({ scrolled, children }: { scrolled?: boolean; children: ReactNode }) {
   const fromList = useContext(StickyScrolled)
   const solid = useMaterialTier() === 'solid'
+  const inDrawer = useInDrawer()
+  const groundIsBar = solid && inDrawer
   return (
     <View style={styles.row} testID="sticky-search">
       {solid ? <DrawerGround testID="sticky-search-ground" /> : null}
-      {scrolled ?? fromList ? <Material role="bar" style={StyleSheet.absoluteFill} pointerEvents="none" testID="sticky-search-bar" /> : null}
+      {(scrolled ?? fromList) && !groundIsBar ? <Material role="bar" style={StyleSheet.absoluteFill} pointerEvents="none" testID="sticky-search-bar" /> : null}
       {children}
     </View>
   )

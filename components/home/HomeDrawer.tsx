@@ -46,6 +46,11 @@ export function DrawerGround({ testID }: { testID?: string }) {
   return motion ? <DrawerGroundLayers {...motion} testID={testID} /> : null
 }
 
+/** Whether this row sits inside a drawer, i.e. whether `DrawerGround` draws anything behind it. */
+export function useInDrawer(): boolean {
+  return useContext(DrawerMotion) !== null
+}
+
 function DrawerGroundLayers({ y, points, testID }: { y: SharedValue<number>; points: Record<DrawerSnap, number>; testID?: string }) {
   const ink = useFullInk(y, points)
   return (

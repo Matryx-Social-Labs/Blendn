@@ -108,6 +108,29 @@ describe('a pinned row inside the drawer is as opaque as the drawer (rc7 D3)', (
     expect(StyleSheet.flatten(ink.props.style)).toMatchObject({ backgroundColor: tint(COLOR.ink, 0.96), opacity: 1 })
   })
 
+  it('on the solid tier, scrolled, the drawer’s ink ground is the bar: no grey bar material over it', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    await render(
+      <HomeDrawer y={Reanimated.makeMutable(points.full)} points={points} snap="full" onSnap={jest.fn()} header={<Text>header</Text>}>
+        <StickyBar scrolled>
+          <Text>search</Text>
+        </StickyBar>
+      </HomeDrawer>
+    )
+    expect(screen.getByTestId('sticky-search-ground', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByTestId('sticky-search-bar', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('on the solid tier outside a drawer the scrolled row keeps its bar, since no ground stands behind it', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+    await render(
+      <StickyBar scrolled>
+        <Text>search</Text>
+      </StickyBar>
+    )
+    expect(screen.getByTestId('sticky-search-bar', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('on the solid tier the pinned row stays ink below full too, matching the drawer', async () => {
     Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
     await render(pinned(points.half))
