@@ -1009,7 +1009,7 @@ describe('the swipe-to-dismiss hands its velocity on (DS #5: release on M.fling)
    */
   describe('(c) Reduce Motion: the glass appears in place, its content fades over 200, and the drag still tracks', () => {
     beforeEach(() => reduceMotion.mockReturnValue(true))
-    /** Every opacity on the way from the glass up to the Modal: none may be below 1, at any frame. */
+    /** The static opacities on the way from the glass up to the Modal (the animated one is `opacity('make-place')`). */
     const aboveGlass = () => {
       const seen: number[] = []
       for (let n = screen.getByTestId('glass', { includeHiddenElements: true }).parent; n; n = n.parent) {
@@ -1059,6 +1059,25 @@ describe('the swipe-to-dismiss hands its velocity on (DS #5: release on M.fling)
       await act(async () => jest.advanceTimersByTime(300))
       expect(send).toHaveBeenCalledTimes(2)
       send.mockRestore()
+    })
+
+    it('the solid tier (Android, Reduce Transparency) has no glass to break: the whole sheet fades in and out over 200, as DS #5 says', async () => {
+      on('android')
+      // The jest preset's react-native-keyboard-controller listeners return nothing; the Android path needs a subscription.
+      const kc = require('react-native-keyboard-controller')
+      const kcSpy = jest.spyOn(kc.KeyboardEvents, 'addListener').mockImplementation((() => ({ remove: () => {} })) as never)
+      const r = await render(signOut({ visible: true, testID: 'make' }))
+      expect(opacity('make-place')).toBe(0)
+      expect(opacity('make-content')).toBe(1)
+      await act(async () => jest.advanceTimersByTime(250))
+      expect(opacity('make-place')).toBe(1)
+      await r.rerender(signOut({ visible: false, testID: 'make' }))
+      // Still there, fading: not unmounted at once as the glass is.
+      await act(async () => jest.advanceTimersByTime(100))
+      expect(opacity('make-place')).toBeGreaterThan(0)
+      expect(opacity('make-place')).toBeLessThan(1)
+      r.unmount()
+      kcSpy.mockRestore()
     })
 
     it('a re-open while the scrim is still leaving fades its content in again', async () => {

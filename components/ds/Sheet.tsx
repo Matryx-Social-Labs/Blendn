@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { Material } from '../ui/Material'
+import { Material, useMaterialTier } from '../ui/Material'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { PresentsHere, useClosedByLink, useTurnGate, useTurnWatch } from '../../lib/modalTurn'
@@ -288,7 +288,10 @@ function useSheetMotion({
   visibleHeight,
   insetTop,
   headScrolls,
+  solid,
 }: {
+  /** The material is the solid tier (Android, Reduce Transparency): no visual effect view, so the whole sheet may fade. */
+  solid: boolean
   visible: boolean
   /** The header is in a scroll that has more than fits: the header drags the sheet only as a pull down from the scroll's top. */
   headScrolls: boolean
@@ -322,6 +325,7 @@ function useSheetMotion({
    * Reduce Motion's way in (DS #5 rm: "200ms fade; drag still tracks"): the sheet does not travel. What fades is what is drawn
    * ON the glass, never the glass or anything holding it: a visual effect view under an ancestor below full opacity draws
    * without its effect, and every sheet was see-through (SCRUM-1003, Material §5.2 rule 6). The glass appears by mounting.
+   * The solid tier has no effect to lose: there the whole sheet fades in and out, as DS #5 says.
    */
   const fade = useSharedValue(reduceMotion ? 0 : 1)
   /** The flick's speed (pt/s, downward) a drag-dismiss hands to the exit, so there is no seam between the finger and the slide. */
@@ -395,8 +399,8 @@ function useSheetMotion({
     // A flick down hands its speed to the slide out: a spring that carries it, clamped at the bottom, never a fresh curve from rest.
     const v = flingV.get()
     flingV.set(0)
-    // Reduce Motion: the glass leaves by unmounting at once (`Sheet` drops the place view), only the scrim fades.
-    if (reduceMotion) fade.set(0)
+    // Reduce Motion: the glass leaves by unmounting at once (`Sheet` drops the place view) while the scrim fades; solid fades out.
+    if (reduceMotion) fade.set(solid ? withTiming(0, { duration: base, easing: gentle }) : 0)
     else offset.set(v > 0 ? withSpring(window.height, { ...SPRING.fling, velocity: v, overshootClamping: true }) : withTiming(window.height, out))
     scrim.set(withTiming(0, { duration: base, easing: gentle }))
     // A spring has no end time: give the flick the room it needs to reach the bottom before the Modal goes.
@@ -490,6 +494,7 @@ function useSheetMotion({
     // Moving: the keyboard's own frame. Still (progress 0 or 1): the exact resting value.
     const liftNow = follow && p > 0 && p < 1 ? Math.max(0, -kb.height.get()) : lift.get()
     return {
+      ...(solid ? { opacity: fade.get() } : null),
       transform: [{ translateY: offset.get() }],
       marginBottom: liftNow,
       ...(levels ? { height: sheetHeightAt(liftNow, room.get().visibleHeight, room.get().insetTop, height.get()) } : null),
@@ -500,9 +505,9 @@ function useSheetMotion({
    * On the content inside the glass only (the grip and head, the scroll, the actions): never on the place view. One style
    * per view: an animated style attached to several views drives only one of them.
    */
-  const fadeHead = useAnimatedStyle(() => ({ opacity: fade.get() }))
-  const fadeScroll = useAnimatedStyle(() => ({ opacity: fade.get() }))
-  const fadeActions = useAnimatedStyle(() => ({ opacity: fade.get() }))
+  const fadeHead = useAnimatedStyle(() => ({ opacity: solid ? 1 : fade.get() }))
+  const fadeScroll = useAnimatedStyle(() => ({ opacity: solid ? 1 : fade.get() }))
+  const fadeActions = useAnimatedStyle(() => ({ opacity: solid ? 1 : fade.get() }))
   const contentFade = { head: fadeHead, scroll: fadeScroll, actions: fadeActions }
   /** The hairline under a pinned header: there once the content has moved off its top, as an iOS scroll edge is. */
   const edgeStyle = useAnimatedStyle(() => ({ opacity: headAtTop.get() ? 0 : 1 }))
@@ -548,6 +553,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
+  const solid = useMaterialTier() === 'solid'
   const titleRef = useRef<ComponentRef<typeof Text>>(null)
   /** The modal root's height: the real visible area (the whole screen on Android, translucent bars). */
   const [rootHeight, setRootHeight] = useState<number | null>(null)
@@ -630,11 +636,11 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   useEffect(() => {
     if (wanted) opener.current = openerNow()
   }, [wanted])
-  // Called once it has gone, whichever way (iOS's onDismiss, Android's motion end, or never shown).
   /** The Modal is on screen (its `onShow` has fired and it has not left): a re-open mid-exit gets no second `onShow`. */
   const onScreen = useRef(false)
   /** Closed while on screen, and not yet gone: a `visible` now is a re-open mid-exit. */
   const leaving = useRef(false)
+  // Called once it has gone, whichever way (iOS's onDismiss, Android's motion end, or never shown).
   const dismissed = useRef(() => {
     onScreen.current = false
     leaving.current = false
@@ -655,6 +661,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
     visibleHeight,
     insetTop: insets.top,
     headScrolls: overflowing,
+    solid,
     onGone: () => {
       if (!ios) dismissed.current?.()
     },
@@ -763,13 +770,24 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
     if (target) AccessibilityInfo.sendAccessibilityEvent(target, 'focus')
   }
   // Under Reduce Motion the title is still fading in from 0 for `base`, and VoiceOver passes over a view at alpha 0.
-  const focusTitle = () => (reduceMotion ? setTimeout(sendFocus, motionTokens(true).duration.base) : sendFocus())
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearFocusTimer = () => {
+    if (focusTimer.current) clearTimeout(focusTimer.current)
+    focusTimer.current = null
+  }
+  const focusTitle = () => {
+    clearFocusTimer()
+    if (reduceMotion && !solid) focusTimer.current = setTimeout(sendFocus, motionTokens(true).duration.base)
+    else sendFocus()
+  }
+  useEffect(() => clearFocusTimer, [])
   /*
    * Asked for again while still leaving: the Modal never left, so no `onShow`; under Reduce Motion the place view (and the
    * title in it) was unmounted and is new. Focus goes to the new title, a frame on, once it exists.
    */
   useEffect(() => {
     if (!visible) {
+      clearFocusTimer()
       leaving.current = onScreen.current
       return
     }
@@ -839,7 +857,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
             <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={dismissible ? requestClose : undefined} />
           </Animated.View>
           {/* Under Reduce Motion a leaving sheet is gone at once: the glass never fades out (SCRUM-1003). */}
-          {visible || !reduceMotion ? (
+          {visible || !reduceMotion || solid ? (
           <Animated.View testID={testID && `${testID}-place`} accessibilityViewIsModal onAccessibilityEscape={requestClose} style={placeStyle}>
             <Material
               testID={testID}
