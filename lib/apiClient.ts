@@ -74,8 +74,23 @@ const USER_KEY = 'blendn_user'
  */
 const SIGNED_OUT_KEY = 'blendn_signed_out'
 
-// Secure storage options
+/*
+ * Readable once the phone has been unlocked since it started, and never leaves it (SCRUM-878). iOS launches the app in the
+ * background while the phone is locked (prewarming, a push); WHEN_UNLOCKED refused the read then, and the launch took the
+ * refusal for no session.
+ *
+ * Under a new service, because the keychain keeps an item's accessibility when it is updated: changing it means a delete
+ * and an add, and a kill between the two (a write stuck on Expo's queue, RC drive 2) would lose the session. So older
+ * builds' items stay where they are, are read when the new service has none, and are deleted only once the new one is
+ * written (`secureSet`, at the next refresh). There is always one copy.
+ */
 const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainService: 'blendn.api.auth.v2',
+  requireAuthentication: false,
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+}
+/** Where builds before SCRUM-878 kept the session: read as a fallback, deleted once the new service holds it. */
+const LEGACY_SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainService: 'blendn.api.auth',
   requireAuthentication: false,
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -355,12 +370,17 @@ class TokenStorage {
   }
 
   private static async secureGet(key: string): Promise<string | null> {
+    return (await this.secureRead(key)) ?? null
+  }
+
+  /** As `secureGet`, but `undefined` when the keychain refused the read (locked): unknown, which is not "none". */
+  private static async secureRead(key: string): Promise<string | null | undefined> {
     if (this.memory.has(key)) return this.memory.get(key) ?? null
     const value = await this.readStored(key)
     // A write or a clear while the read was out is newer than what it found, and stays. The caller still gets what was
     // read: sign-out queues its reads ahead of its deletes so that the POST carries the session it is ending.
     if (value !== undefined && !this.memory.has(key)) this.memory.set(key, value)
-    return value ?? null
+    return value
   }
 
   /** The stored value, or `undefined` when the read failed (the fallback's answer, never remembered). */
@@ -375,7 +395,8 @@ class TokenStorage {
     }
     const started = Date.now()
     try {
-      return await SecureStore.getItemAsync(key, SECURE_OPTIONS)
+      // An install from before SCRUM-878 still has it under the old service until its next write.
+      return (await SecureStore.getItemAsync(key, SECURE_OPTIONS)) ?? (await SecureStore.getItemAsync(key, LEGACY_SECURE_OPTIONS))
     } catch (error) {
       // Unexpected on native (e.g. keychain access failure) — fall back but
       // log it so it's visible in Sentry rather than silently swallowed.
@@ -401,6 +422,10 @@ class TokenStorage {
     const started = Date.now()
     try {
       await SecureStore.setItemAsync(key, value, SECURE_OPTIONS)
+      // Written where it is readable while locked: the older copy goes (SCRUM-878), and AsyncStorage's if it was there.
+      try {
+        await SecureStore.deleteItemAsync(key, LEGACY_SECURE_OPTIONS)
+      } catch {}
       // Clear from AsyncStorage if it was there
       try {
         await AsyncStorage.removeItem(key)
@@ -418,6 +443,7 @@ class TokenStorage {
     if (Platform.OS !== 'web') {
       try {
         await SecureStore.deleteItemAsync(key, SECURE_OPTIONS)
+        await SecureStore.deleteItemAsync(key, LEGACY_SECURE_OPTIONS)
       } catch (error) {
         Logger.warn('auth', 'SecureStore delete failed', { key, error })
       }
@@ -437,6 +463,15 @@ class TokenStorage {
 
   static async getRefreshToken(): Promise<string | null> {
     return this.secureGet(REFRESH_TOKEN_KEY)
+  }
+
+  /** For whoever decides a session is over: `undefined` when the keychain could not be read (SCRUM-878). */
+  static async accessTokenOrUnknown(): Promise<string | null | undefined> {
+    return this.secureRead(ACCESS_TOKEN_KEY)
+  }
+
+  static async refreshTokenOrUnknown(): Promise<string | null | undefined> {
+    return this.secureRead(REFRESH_TOKEN_KEY)
   }
 
   static async setRefreshToken(token: string): Promise<void> {
@@ -1922,9 +1957,10 @@ class ApiClientClass {
     const epoch = sessionEpoch
     const work: Promise<RefreshOutcome> = (async () => {
       try {
-        const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
-        // A keychain that did not answer is not a missing token: 'failed', tried again, never the sign-out a 'rejected' is.
-        if (refreshToken === TIMED_OUT) return 'failed'
+        const refreshToken = await withinDeadline(TokenStorage.refreshTokenOrUnknown())
+        // A keychain that did not answer, or refused (locked, SCRUM-878), is not a missing token: 'failed', tried again,
+        // never the sign-out a 'rejected' is.
+        if (refreshToken === TIMED_OUT || refreshToken === undefined) return 'failed'
         if (!refreshToken || refreshToken === refusedRefreshToken) {
           return 'rejected'
         }
