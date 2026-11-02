@@ -29,10 +29,18 @@ function mockQueue<T>(name: string, body: () => T | Promise<T>): Promise<T> {
 const mockNever = () => new Promise<never>(() => {})
 /** Whether usernotificationsd answers. The stuck test runs last: a stuck read is remembered for the process. */
 let mockAnswers = true
+/*
+ * Service-aware, as the keychain is: builds before SCRUM-878 kept the session under 'blendn.api.auth', kept apart here as
+ * `legacy:<key>`. A service-agnostic mock would have the legacy delete that follows each write delete the value just written.
+ * The legacy calls go through the same queue: they are native calls like any other.
+ */
+const mockSlot = (k: string, o?: { keychainService?: string }) => (o?.keychainService === 'blendn.api.auth' ? `legacy:${k}` : k)
 jest.mock('expo-secure-store', () => ({
-  getItemAsync: (k: string) => mockQueue(`get ${k}`, () => mockSecure.get(k) ?? null),
-  setItemAsync: (k: string, v: string) => mockQueue(`set ${k}`, () => void mockSecure.set(k, v)),
-  deleteItemAsync: (k: string) => mockQueue(`delete ${k}`, () => void mockSecure.delete(k)),
+  getItemAsync: (k: string, o?: { keychainService?: string }) => mockQueue(`get ${mockSlot(k, o)}`, () => mockSecure.get(mockSlot(k, o)) ?? null),
+  setItemAsync: (k: string, v: string, o?: { keychainService?: string }) =>
+    mockQueue(`set ${mockSlot(k, o)}`, () => void mockSecure.set(mockSlot(k, o), v)),
+  deleteItemAsync: (k: string, o?: { keychainService?: string }) =>
+    mockQueue(`delete ${mockSlot(k, o)}`, () => void mockSecure.delete(mockSlot(k, o))),
 }))
 jest.mock('expo-notifications', () => ({
   // usernotificationsd never answers: the queue is blocked from here on.
