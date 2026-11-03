@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { H } from '../../lib/haptics'
@@ -36,6 +36,10 @@ export type EventCardProps = {
   here?: number
   /** A paid placement: a "PROMOTED" scrim pill top-right, read first. Editorial picks carry none. */
   promoted?: boolean
+  /** `hero` only: a label line over the title ("Featured · Club night"), in the label voice. Read with the card's own label by its caller. */
+  overline?: string
+  /** `hero` only: drawn top-right after the Promoted pill (the Pulse lead's pager pips). Decorative: not read. */
+  corner?: ReactNode
   cover?: string | null
   /**
    * `row` only: a place's type art (`VenuePlate`) in the thumb where an event would have its cover: a visit to a place, not a
@@ -134,7 +138,7 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, promoted, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
+  const { kind, title, time, venue, distance, lead, promoted, overline, corner, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
@@ -273,14 +277,19 @@ export function EventCard(props: EventCardProps) {
             </ScrimPill>
           ) : null}
         </View>
-        {promoted ? (
-          <View style={styles.promoted} testID={testID && `${testID}-promoted`}>
-            <ScrimPill>
-              <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
-                {PROMOTED_LABEL.toUpperCase()}
-              </Text>
-            </ScrimPill>
+        {promoted || corner ? (
+          <View style={styles.promoted}>
+            {promoted ? (
+              <View testID={testID && `${testID}-promoted`}>
+                <ScrimPill>
+                  <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
+                    {PROMOTED_LABEL.toUpperCase()}
+                  </Text>
+                </ScrimPill>
+              </View>
+            ) : null}
+            {hero ? corner : null}
           </View>
         ) : null}
         {saved ? (
@@ -291,6 +300,11 @@ export function EventCard(props: EventCardProps) {
           </View>
         ) : null}
         <View style={[styles.foot, hero ? styles.footHero : styles.footCompact]}>
+          {hero && overline ? (
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
+              {overline.toUpperCase()}
+            </Text>
+          ) : null}
           <Text numberOfLines={2} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font(hero ? 'title' : 'bodyStrong', bold), styles.ink]}>
             {title}
           </Text>
@@ -336,7 +350,7 @@ const styles = StyleSheet.create({
   card: { flex: 1, overflow: 'hidden', backgroundColor: COLOR.surface },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: SCRIM_HEIGHT },
   pills: { position: 'absolute', top: SPACE.md, left: SPACE.md, flexDirection: 'row', gap: SPACE.sm },
-  promoted: { position: 'absolute', top: SPACE.md, right: SPACE.md },
+  promoted: { position: 'absolute', top: SPACE.md, right: SPACE.md, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   saved: {
     position: 'absolute',
     top: SPACE.md + PILL_HEIGHT + SPACE.sm,

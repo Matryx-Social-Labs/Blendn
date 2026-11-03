@@ -8,15 +8,20 @@ import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
 import { Chip } from '../ds/Chip'
+import { IconButton } from '../ds/IconButton'
 import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
-import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
-import { COLOR } from '../../lib/design/tokens'
+import { PulseSearchRow } from '../pulse/PulseHeader'
+import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, pulseRest, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import type { Pin } from '../../lib/homeMap'
+import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
+import { useLatest } from '../../lib/useLatest'
 import type { NearPin } from '../../lib/placesPane'
 import { HomeDrawer, useRefocusCount } from './HomeDrawer'
 import { HomeMap } from './HomeMap'
+import { MapBanners } from './MapBanners'
 import { PlacesList } from './PlacesList'
 
 /** What the Pulse is browsing, so Places browses the same city from the same spot. */
@@ -45,6 +50,21 @@ export interface HomeBrowse {
   requestLocation: () => void | Promise<void>
   /** Open the Pulse's city picker: Places' empty city offers it ("Change city"). */
   openCityPicker: () => void
+  /** The lead card's venue, lit on the map; `n` is bumped by each swipe, which also moves the map there (Option C). */
+  focus?: { pin: Pin; n: number } | null
+}
+
+/**
+ * What the shell lends the Pulse (Flow 3 · Pulse, Option C): the search text, typed in the drawer's header; whether the
+ * field is open; the lead card's height at this rest; the way to the Places pane; and a slot on the map for its banners.
+ */
+export interface PulseShell {
+  query: string
+  setQuery: (next: string) => void
+  searchOpen: boolean
+  lead: number
+  openPlaces: () => void
+  setMapBanners: (node: ReactNode) => void
 }
 
 type Segment = 'events' | 'places'
@@ -76,7 +96,7 @@ export function HomeShell({
   renderEvents,
 }: {
   /** `full`: the drawer all the way up and no keyboard, so the Pulse's first card is on screen and nobody is typing (its coach mark waits for it). */
-  renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean) => ReactNode
+  renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean, shell: PulseShell) => ReactNode
 }) {
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
@@ -100,9 +120,11 @@ export function HomeShell({
   const [placesLine, setPlacesLine] = useState<string | null>(null)
   const peekText = segment === 'places' ? placesLine : (browse.peekLine ?? null)
   const peekExtra = peekText ? DRAWER_PEEK_LINE : 0
+  // Option C's rest: one whole lead card above the tab bar under the header and the chips (`pulseRest`), on every screen size.
+  const rest = useMemo(() => pulseRest({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom) }), [height, insets.top, insets.bottom])
   const points = useMemo(
-    () => drawerSnapPoints({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom), peekExtra }),
-    [height, insets.top, insets.bottom, peekExtra]
+    () => drawerSnapPoints({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom), peekExtra, half: rest.half }),
+    [height, insets.top, insets.bottom, peekExtra, rest.half]
   )
   const [snap, setSnap] = useState<DrawerSnap>('half')
   // The drawer's top edge as it moves; "my location" rides on it.
@@ -143,6 +165,16 @@ export function HomeShell({
 
   /** Someone is typing (the Pulse's search): its coach mark never pops over them. */
   const [keyboardUp, setKeyboardUp] = useState(false)
+  /** The Pulse's search: the icon beside the city chip opens the field in place of the tabs (Option C). */
+  const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const queryRef = useLatest(query)
+  const [mapBanners, setMapBanners] = useState<ReactNode>(null)
+  const closeSearch = useCallback(() => {
+    setQuery('')
+    setSearchOpen(false)
+    Keyboard.dismiss()
+  }, [])
   // The Pulse's search sits in the drawer: typing opens it fully, so the field is not under the keyboard.
   useEffect(() => {
     if (!focused) return
@@ -157,7 +189,10 @@ export function HomeShell({
     const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => move('show'))
     // Only a keyboard that actually left puts the drawer back: a frame change mid-typing is not one.
     const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', (e) => {
-      if (keyboardLeft(e, Dimensions.get('screen').height)) move('hide')
+      if (!keyboardLeft(e, Dimensions.get('screen').height)) return
+      move('hide')
+      // An empty field folds back to the icon when the keyboard leaves; one with words stays, over its results.
+      if (!queryRef.current.trim()) setSearchOpen(false)
     })
     return () => {
       show.remove()
@@ -165,7 +200,7 @@ export function HomeShell({
       // A hide missed while away must not keep the mark waiting for good.
       setKeyboardUp(false)
     }
-  }, [focused])
+  }, [focused, queryRef])
 
   const onSnap = (next: DrawerSnap) => {
     // Moved by hand: the keyboard no longer has a place to put it back to.
@@ -173,15 +208,21 @@ export function HomeShell({
     setSnap(next)
   }
 
-  const choose = (next: Segment) => {
+  const choose = useCallback((next: Segment) => {
     setSegment(next)
     if (next === 'places') setPlacesOpened(true)
-  }
+  }, [])
+  const openPlaces = useCallback(() => choose('places'), [choose])
 
   // The Pulse's media plays only while you can see it: its pane, the drawer open past peek, this tab.
   const pulseVisible = focused && segment === 'events' && snap !== 'peek'
   const pulseFull = pulseVisible && snap === 'full' && !keyboardUp
-  const events = useMemo(() => renderEvents(setBrowse, pulseVisible, pulseFull), [renderEvents, pulseVisible, pulseFull])
+  const shell = useMemo<PulseShell>(
+    () => ({ query, setQuery, searchOpen, lead: rest.lead, openPlaces, setMapBanners }),
+    [query, searchOpen, rest.lead, openPlaces]
+  )
+  const events = useMemo(() => renderEvents(setBrowse, pulseVisible, pulseFull, shell), [renderEvents, pulseVisible, pulseFull, shell])
+  const searching = segment === 'events' && searchOpen
 
   return (
     <View style={styles.root} onLayout={onLayout}>
@@ -216,16 +257,23 @@ export function HomeShell({
             // Places' five pins, at peek and half only: the full drawer covers the map.
             nearPins={segment === 'places' && snap !== 'full' ? nearPinList : NO_PINS}
             fitNear={fitNear}
+            focus={segment === 'events' ? (browse.focus ?? null) : null}
           />
         ) : null}
       </View>
+      {segment === 'events' && !screenReader ? (
+        <MapBanners drawerTop={drawerTop} drawer={points} visible={snap !== 'full'}>
+          {mapBanners}
+        </MapBanners>
+      ) : null}
       <PulseTopBar floating actions={<NotificationBell onMap />} />
       <HomeDrawer
         y={drawerTop}
         points={points}
         snap={snap}
         onSnap={onSnap}
-        onChromeTouch={dismissKeyboard}
+        // Not while the search is open in the header: a touch on its field or its × must not put the keyboard away.
+        onChromeTouch={searching ? undefined : dismissKeyboard}
         glassKey={refocused}
         peek={
           peekExtra ? (
@@ -235,15 +283,24 @@ export function HomeShell({
           ) : null
         }
         header={
-          // The pane's title is the switch: words, tap only (a drag would compete with the drawer's and the map's gestures). The
-          // city lives in the same row, so neither pane draws a title of its own.
-          <TitleTabs
-            items={SEGMENT_LABELS}
-            selected={segment === 'events' ? 0 : 1}
-            onChange={(i) => choose(i === 0 ? 'events' : 'places')}
-            trailing={<Chip label={browse.city ? `${browse.city}${browse.preview ? ' · Preview' : ''}` : 'Choose city'} icon={browse.travelling ? 'plane' : 'map-pin'} onPress={browse.openCityPicker} testID="home-city" />}
-            testID="home-segmented"
-          />
+          searching ? (
+            <PulseSearchRow query={query} onChangeQuery={setQuery} onCancel={closeSearch} />
+          ) : (
+            // The pane's title is the switch: words, tap only (a drag would compete with the drawer's and the map's gestures). The
+            // city lives in the same row, so neither pane draws a title of its own; on Events the search folds into an icon beside it.
+            <TitleTabs
+              items={SEGMENT_LABELS}
+              selected={segment === 'events' ? 0 : 1}
+              onChange={(i) => choose(i === 0 ? 'events' : 'places')}
+              trailing={
+                <View style={styles.trailing}>
+                  <Chip label={browse.city ? `${browse.city}${browse.preview ? ' · Preview' : ''}` : 'Choose city'} icon={browse.travelling ? 'plane' : 'map-pin'} onPress={browse.openCityPicker} testID="home-city" />
+                  {segment === 'events' ? <IconButton icon="search" accessibilityLabel="Search events" onPress={() => setSearchOpen(true)} testID="home-search" /> : null}
+                </View>
+              }
+              testID="home-segmented"
+            />
+          )
         }
       >
         <View style={[styles.pane, segment !== 'events' && styles.hidden]}>{events}</View>
@@ -262,5 +319,6 @@ const SEGMENT_LABELS = ['Events', 'Places'] as const
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLOR.ink },
   pane: { flex: 1 },
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexShrink: 1, minWidth: 0 },
   hidden: { display: 'none' },
 })

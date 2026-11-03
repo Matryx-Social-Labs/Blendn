@@ -13,7 +13,6 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
-jest.mock('../components/pulse/FeedMedia', () => ({ FeedMedia: () => null }))
 
 /* eslint-disable import/first */
 import { SectionStack } from '../components/pulse/PulseSections'
@@ -25,11 +24,9 @@ const stack = (sections: React.ComponentProps<typeof SectionStack>['sections']) 
     sections={sections}
     now={Date.now()}
     withDistance={false}
-    visible
     handlers={{ onPress: jest.fn(), onPressIn: jest.fn(), onLongPress: jest.fn() }}
     coachRef={React.createRef()}
     pending={{ current: false }}
-    featuredLayout={() => ({ width: 300, inset: 24 })}
     askForLocation={{ denied: false, onAsk: jest.fn() }}
   />
 )

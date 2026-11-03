@@ -63,7 +63,6 @@ jest.mock('../lib/locationFix', () => ({ ...jest.requireActual('../lib/locationF
 let mockReduce = false
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => mockReduce }))
 
-import FriendsIntroScreen from '../app/onboarding/friends'
 import LocationScreen from '../app/onboarding/location'
 import MediaScreen from '../app/onboarding/media'
 import { PhotoTile } from '../components/onboarding/PhotoTile'
@@ -414,55 +413,6 @@ describe('photos', () => {
     await fireEvent.press(screen.getByLabelText('Add your main photo'))
     expect(mockUpload).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Add your main photo')).toBeTruthy()
-  })
-})
-
-describe('Bring your friends', () => {
-  const invite = (over: object) => ({ invite: null, failed: false, share: jest.fn(async () => false), reload: jest.fn(async () => {}), ...over })
-
-  it('a link that did not load makes Try again the primary, which reloads (never a dead button)', async () => {
-    const state = invite({ failed: true })
-    mockInvite.mockReturnValue(state)
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByText('Your link didn’t load. Check your connection and try again.')).toBeTruthy()
-    const primary = screen.getByTestId('onboarding-primary')
-    expect(primary.props.accessibilityLabel).toBe('Try again')
-    expect(primary.props.accessibilityState).toMatchObject({ disabled: false })
-    await fireEvent.press(primary)
-    expect(state.reload).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows Share my link when ready, and Start Blend’n once it went somewhere', async () => {
-    const state = invite({ invite: { url: 'https://blendn.app/i/8f3a' }, share: jest.fn(async () => true) })
-    mockInvite.mockReturnValue(state)
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByTestId('onboarding-primary').props.accessibilityLabel).toBe('Share my link')
-    await fireEvent.press(screen.getByTestId('onboarding-primary'))
-    expect(await screen.findByLabelText('Start Blend’n')).toBeTruthy()
-    expect(screen.getByText('Shared. Anyone with the link can ask to be your friend.')).toBeTruthy()
-    expect(screen.getByTestId('onboarding-secondary').props.accessibilityLabel).toBe('Share again')
-  })
-
-  it('keeps the glass bar even with nothing in it, as the frame draws it', async () => {
-    mockInvite.mockReturnValue(invite({}))
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByTestId('onboarding-header')).toBeTruthy()
-    expect(screen.queryByTestId('onboarding-step')).toBeNull()
-    expect(screen.queryByTestId('onboarding-back')).toBeNull()
-  })
-
-  it('under the link it says how a friend link works, so the screen is not a card over an empty page (GO-11, A9)', async () => {
-    mockInvite.mockReturnValue(invite({ invite: { url: 'https://blendn.app/i/8f3a' } }))
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByTestId('friends-how')).toBeTruthy()
-    expect(screen.getByText('They tap it and ask to be your friend.')).toBeTruthy()
-  })
-
-  it('while the link loads the primary is busy and the card says so', async () => {
-    mockInvite.mockReturnValue(invite({}))
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByText('Getting your link')).toBeTruthy()
-    expect(screen.getByTestId('onboarding-primary').props.accessibilityState).toMatchObject({ busy: true })
   })
 })
 

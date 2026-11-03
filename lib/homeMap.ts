@@ -141,6 +141,19 @@ export function liveAt(pin: Pin, now: number): Pin {
   return live === pin.live ? pin : { ...pin, live, glow: live ? 3 : 1 }
 }
 
+/** The glow a focused pin is lit at: the brightest step (a venue at 20+). */
+export const FOCUS_GLOW = 4
+
+/**
+ * The Pulse's lead card lights its venue (Flow 3 · Pulse, Option C): the focused pin at the brightest step, the rest at
+ * their own; added when the map has not loaded it yet (the viewport query lags the camera). New pins, never the old ones.
+ */
+export function withFocus(pins: Pin[], focus: Pin | null): Pin[] {
+  if (!focus) return pins
+  const lit = (p: Pin): Pin => ({ ...p, live: true, glow: FOCUS_GLOW })
+  return pins.some((p) => p.id === focus.id) ? pins.map((p) => (p.id === focus.id ? lit(p) : p)) : [...pins, lit(focus)]
+}
+
 /** A pin's dot colour (`MAP_THEME.pin`): ember for an event, rose for a venue, brighter when live. */
 export const shadeOf = (kind: PinKind, live: boolean) => MAP_THEME.pin[kind][live ? 'live' : 'later']
 
@@ -424,6 +437,16 @@ export function locateRide(drawerTop: number, drawer: { half: number; full: numb
   // A screen too short for a half step between half and full: shown until full (review L3).
   const shown = span > 0 ? (drawerTop - drawer.full) / span : drawerTop > drawer.full ? 1 : 0
   return { translateY: drawerTop - gapPx - sizePx, opacity: Math.min(1, Math.max(0, shown)) }
+}
+
+/**
+ * The Pulse's banners on the map (Option C): a gap above "my location", riding the drawer and fading as it does
+ * (`locateRide`). `height` is the banners' own. A worklet: it runs per frame.
+ */
+export function bannerRide(drawerTop: number, drawer: { half: number; full: number }, height: number) {
+  'worklet'
+  const { translateY, opacity } = locateRide(drawerTop, drawer)
+  return { translateY: translateY - MAP_THEME.locate.gapPx - height, opacity }
 }
 
 /** How far a fix must move before the camera follows it: past GPS jitter. */

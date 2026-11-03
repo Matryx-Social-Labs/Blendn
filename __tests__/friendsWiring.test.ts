@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 
 import { ONBOARDING_STEPS } from '../lib/onboarding'
@@ -21,24 +21,16 @@ import { ONBOARDING_STEPS } from '../lib/onboarding'
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
 
 describe('after onboarding', () => {
-  it('shows "Bring your friends" once, between the last step and the app', () => {
-    expect(read('app/onboarding/ready.tsx')).toContain("router.replace('/onboarding/friends')")
-    const intro = read('app/onboarding/friends.tsx')
-    expect(intro).toContain("router.replace('/(tabs)/events')")
+  it('goes straight to the Pulse, where "Bring your friends" is a card (ledger row 14)', () => {
+    expect(read('app/onboarding/ready.tsx')).toContain("router.replace('/(tabs)/events')")
+    expect(existsSync(join(__dirname, '..', 'app/onboarding/friends.tsx'))).toBe(false)
     // Not a step: the flow still ends at `ready`, which writes `onboarded`.
     expect(ONBOARDING_STEPS).not.toContain('friends' as never)
-    // It writes nothing about the person — `ready` already did.
-    expect(intro).not.toContain('updateProfile')
-  })
-})
-
-describe('after "Bring your friends"', () => {
-  it('cannot go back into the finished onboarding steps', () => {
-    // The steps push forward, so they are still on the stack underneath.
-    expect(read('app/onboarding/_layout.tsx')).toContain('<Stack.Screen name="friends" options={{ gestureEnabled: false }} />')
-    const intro = read('app/onboarding/friends.tsx')
-    expect(intro).toContain("BackHandler.addEventListener('hardwareBackPress'")
-    expect(intro).toMatch(/hardwareBackPress', \(\) => \{\s*router\.replace\('\/\(tabs\)\/events'\)\s*return true/)
+    const card = read('components/pulse/FriendsCard.tsx')
+    expect(card).toContain('useFriendInvite')
+    // It writes nothing about the person.
+    expect(card).not.toContain('updateProfile')
+    expect(read('app/(tabs)/events.tsx')).toContain('<FriendsCard userId={user.id} />')
   })
 })
 

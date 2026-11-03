@@ -134,6 +134,12 @@ export const MATERIAL = {
       color: 'rgba(190,92,113,0.40)',
     },
   ],
+  glowLead: [
+    {
+      radius: 28,
+      color: 'rgba(240,84,35,0.45)',
+    },
+  ],
 } as const
 
 /** Registered font names by family and weight (`lib/fonts.ts` loads them). Weight lives in the name: Android ignores `fontWeight` on custom fonts. */

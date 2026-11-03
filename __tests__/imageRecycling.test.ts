@@ -21,7 +21,6 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 
 /** Files that render `OptimizedImage` inside a virtualised list. */
 const LIST_SURFACES = [
-  ['components', 'pulse', 'FeedMedia.tsx'],
   // Every Pulse, Nearby and Going card and row draws its cover through the DS EventCard.
   ['components', 'ds', 'EventCard.tsx'],
   // Every Going and Pulse row's thumb draws through it (SCRUM-480).

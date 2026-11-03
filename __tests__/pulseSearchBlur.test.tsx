@@ -11,7 +11,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React, { useState } from 'react'
 import { Dimensions, Keyboard, Platform, TextInput } from 'react-native'
 
-import { PulseSearch } from '../components/pulse/PulseHeader'
+import { PulseSearchRow } from '../components/pulse/PulseHeader'
 import { keyboardLeft } from '../lib/home'
 
 
@@ -41,7 +41,7 @@ afterEach(() => {
 
 function Search() {
   const [query, setQuery] = useState('')
-  return <PulseSearch query={query} onChangeQuery={setQuery} onPressFilter={jest.fn()} />
+  return <PulseSearchRow query={query} onChangeQuery={setQuery} onCancel={jest.fn()} />
 }
 
 async function typeInFocusedSearch(platform: 'ios' | 'android') {
@@ -83,4 +83,11 @@ it('keyboardLeft: off screen or zero height is a hide; a frame still on screen i
   expect(keyboardLeft({ endCoordinates: { screenY: HEIGHT, height: 336 } }, HEIGHT)).toBe(true)
   expect(keyboardLeft(FRAME_CHANGE, HEIGHT)).toBe(false)
   expect(keyboardLeft(undefined, HEIGHT)).toBe(true)
+})
+
+it('Cancel is the way back to the tabs (the shell clears the text and folds the field)', async () => {
+  const onCancel = jest.fn()
+  await render(<PulseSearchRow query="quiz" onChangeQuery={jest.fn()} onCancel={onCancel} />)
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Cancel' })))
+  expect(onCancel).toHaveBeenCalledTimes(1)
 })

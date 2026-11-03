@@ -121,10 +121,11 @@ function build(json) {
     COLOR: camelKeys(omit(color, ['gradient-brand', 'gradient-fill', 'gradient-text'])),
     GRADIENT: { brand: percentGradient(color['gradient-brand']), fill: percentGradient(color['gradient-fill']), text: percentGradient(color['gradient-text']) },
     MATERIAL: {
-      ...camelKeys(omit(material, ['glass-edge', 'solid-inner-highlight', 'glow-check-in'])),
+      ...camelKeys(omit(material, ['glass-edge', 'solid-inner-highlight', 'glow-check-in', 'glow-lead'])),
       glassEdge: border(material['glass-edge']),
       solidInnerHighlight: highlight(material['solid-inner-highlight']),
       glowCheckIn: glows(material['glow-check-in']),
+      glowLead: glows(material['glow-lead']),
     },
     // Only the weights a role uses: each one is a file every cold start loads.
     FONT_FAMILY: Object.fromEntries(
