@@ -25,7 +25,7 @@ import { ONBOARDING_STEPS, stepIndex, type OnboardingStep } from '../../lib/onbo
  * different across files (the safe-area maths, the keyboard behaviour, the progress arithmetic) are exactly the parts
  * nobody notices are inconsistent until a device shows it.
  *
- * Direction A (owner's pick, 2026-11-01): L0 the landing's two lights (`StepLights`), drifting towards violet step by step; L2 a
+ * Direction A (owner's pick, 2026-11-01): L0 two lights (`StepLights`), drifting towards violet step by step; L2 a
  * glass header with the back circle, five segments under it (said as "Step n of 5"), one question per screen with its key words
  * in the brand gradient, and an L2 glass dock with the landing's white primary, a text secondary and the lock note.
  */

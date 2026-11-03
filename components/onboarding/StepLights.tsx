@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { StyleSheet, View, useWindowDimensions } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg'
 
-import { Light, LIGHT_SIZE, LIGHT_STOPS } from './LandingIntro'
 import { Grain } from '../ds/Grain'
 import { COLOR, DURATION, EASING } from '../../lib/design/tokens'
 import { colourAt } from '../../lib/mapLit'
@@ -10,15 +10,38 @@ import { useReducedMotion } from '../../lib/motion'
 import { ONBOARDING_STEPS } from '../../lib/onboarding'
 
 /**
- * The landing's two lights behind every onboarding step (direction A): the ember one cools towards violet a little with each
+ * Two lights, the brand's two ends, behind every onboarding step (direction A): the ember one cools towards violet a little with each
  * step, so going through the flow reads as the blend happening. They sit away from the words (`textAlpha`), so the gradient
  * words and the subtitle stay on near-ink. L0: untouchable, hidden from a screen reader. No loop.
  */
 
+const LIGHT_SIZE = 460
+/** A light's falloff, centre to edge; the text is measured against it (`textAlpha`). */
+const LIGHT_STOPS = [
+  { offset: 0, alpha: 0.9 },
+  { offset: 0.45, alpha: 0.42 },
+  { offset: 1, alpha: 0 },
+] as const
+
+function Light({ id, color }: { id: string; color: string }) {
+  return (
+    <Svg width={LIGHT_SIZE} height={LIGHT_SIZE}>
+      <Defs>
+        <RadialGradient id={id} cx="50%" cy="50%" r="50%">
+          {LIGHT_STOPS.map((stop) => (
+            <Stop key={stop.offset} offset={stop.offset} stopColor={color} stopOpacity={stop.alpha} />
+          ))}
+        </RadialGradient>
+      </Defs>
+      <Circle cx={LIGHT_SIZE / 2} cy={LIGHT_SIZE / 2} r={LIGHT_SIZE / 2} fill={`url(#${id})`} />
+    </Svg>
+  )
+}
+
 const LAST = ONBOARDING_STEPS.length - 1
 /** How far the ember light travels towards violet by the payoff: a little, never all the way. */
 const SHIFT = 0.6
-/** Both lights rest at the landing's settled strength. */
+/** How strong both lights are. */
 const OPACITY = 0.7
 /**
  * Centres as fractions of the window. On a question they sit low, under the words (the chips, the cards and the dock take
