@@ -5,7 +5,7 @@ import {
   statusCodes
 } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import { router } from 'expo-router'
+import { router, useIsFocused } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated from 'react-native-reanimated'
@@ -68,6 +68,8 @@ function IndexInner() {
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
   const settle = useSettleIn()
+  /** The sky turns until the landing is left: held while email, or any screen, is over it (owner, 2026-11-03). */
+  const focused = useIsFocused()
   /** The tagline's box, for the ink shelf the sky draws behind it (Flow 1b: a star crossing the words stays at AA). */
   const [shelf, setShelf] = useState<Shelf | null>(null)
   /*
@@ -323,7 +325,7 @@ function IndexInner() {
 
   return (
     <View style={styles.root}>
-      <Backdrop level={ORB_LEVEL.landing} enter shelf={shelf} />
+      <Backdrop level={ORB_LEVEL.landing} enter shelf={shelf} paused={!focused} />
 
       {/* A link tapped while signed out is held through sign-in; say so (Flow 15 15.12 02). */}
       {pendingEventLink() ? (
