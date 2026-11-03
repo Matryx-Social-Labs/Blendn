@@ -182,10 +182,10 @@ describe('a narrow phone or a large size (A15: the city pill cut to "Bengal…" 
     expect(screen.getByText('Events').props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75 })
   })
 
-  it('a roomy phone at the default size is laid out as before', async () => {
+  it('a roomy phone at the default size: the words 16 apart, as the Flow 3 board’s `.ttab` (2026-11-03)', async () => {
     await at(402, 1)
     await draw({ trailing: <Text>Bengaluru</Text> })
-    expect(flat('t-words').gap).toBe(SPACE.xl)
+    expect(flat('t-words').gap).toBe(SPACE.lg)
     expect(flat('t-trailing').minWidth).toBe(0)
   })
 })

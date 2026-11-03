@@ -61,8 +61,13 @@ export type BannerProps = {
  * (`useMinMeasure`: 360 dp at 1.3 drew "You're / anony / mous" beside Show who I am, RC drive 3). Increase Contrast adds the
  * 50% hairline.
  */
-export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss, onMap = false, testID }: BannerProps) {
+/** The floating controls' glass under a banner on the map, with the map's ink where glass cannot show (`useMapInk`). */
+function MapGlass({ testID }: { testID?: string }) {
   const mapInk = useMapInk()
+  return <Material role="control" testID={testID} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.glass, mapInk]} />
+}
+
+export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss, onMap = false, testID }: BannerProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { fontScale } = useWindowDimensions()
@@ -96,7 +101,7 @@ export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss
       accessibilityRole={kind === 'error' ? 'alert' : undefined}
       style={[styles.banner, onMap && styles.onMap, { backgroundColor: onMap ? 'transparent' : LOOK[kind].fill }, under && styles.top, contrast && IC_HAIRLINE]}
     >
-      {onMap ? <Material role="control" testID={testID && `${testID}-material`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.glass, mapInk]} /> : null}
+      {onMap ? <MapGlass testID={testID && `${testID}-material`} /> : null}
       <View testID={testID && `${testID}-glyph`} style={lineSlot}>
         <Icon name={icon ?? LOOK[kind].icon} size={ICON.control} />
       </View>

@@ -161,7 +161,7 @@ describe('the sticky chips (Option C: the chips are the header)', () => {
     expect(header).toContain('{banners}')
     expect(header).not.toContain('SearchField')
     const shell = stripComments(read('components/home/HomeShell.tsx'))
-    expect(shell).toContain('<IconButton icon="search" accessibilityLabel="Search events"')
+    expect(shell).toContain('<IconButton size="sm" icon="search" accessibilityLabel="Search events"')
     expect(shell).toContain('<PulseSearchRow query={query} onChangeQuery={setQuery} onCancel={closeSearch} />')
   })
 
