@@ -39,9 +39,10 @@ import { tint } from '../../lib/theme'
 const DESIGN = { width: 390, height: 844, cy: 180 }
 /** The sky fades to ink between these fractions of the height: the collision stays in the top half, the Dock on ink. */
 const FADE = { from: 0.58, to: 0.7 }
-/** The tagline's shelf (README, Contrast): ink at 0.94 over the middle of an ellipse around the line, so the worst single
- * pixel behind it clears 4.5:1; 0.9 left one star's centre at 4.2:1. Its reach past the words, pt. */
-const SHELF = { alpha: 0.94, solid: 0.6, padX: 44, padY: 22 }
+/** The tagline's shelf (README, Contrast): ink at 0.94 under the line, so the worst single pixel behind it clears 4.5:1
+ * (0.9 left one star's centre at 4.2:1). Solid to 0.8 of the ellipse and 56 pt past the words: at the prototype's 0.6
+ * and 44 the line's ends sat where the ink thins, and an Android drive put a star there at 3.75:1. */
+const SHELF = { alpha: 0.94, solid: 0.8, padX: 56, padY: 22 }
 /** The bloom: the stars again, blurred and added at 0.55, which gives the dense knots their light. */
 const BLOOM = { alpha: 0.55, blur: 6 }
 
@@ -265,8 +266,8 @@ function Remnant({ turning, paused, shelf }: { turning: boolean; paused: boolean
   const moving = turning && !paused && active
   useEffect(() => {
     if (!moving) return
-    // What is left of the turn is read on the UI thread: the JS side's copy of a running value is its target, so a turn
-    // held by the keyboard came back with nothing left and snapped to the end (iOS drive, 2026-11-03).
+    // What is left of the turn is read on the UI thread, where the running value lives: the JS side's copy of it lags,
+    // and a turn held by the keyboard has to go on from exactly where it stopped.
     scheduleOnUI(() => {
       'worklet'
       const left = 1 - angle.get() / REMNANT_TURN.degrees

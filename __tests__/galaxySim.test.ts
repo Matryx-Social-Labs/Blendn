@@ -80,14 +80,15 @@ describe('replay', () => {
 
 describe('budget', () => {
   // The prototype measured 0.023 ms a step with a JIT and 1.29 ms interpreted (M1 Pro); a phone's UI runtime is the
-  // interpreter. Here the JIT runs it, so this only catches an accidental order-of-magnitude regression (an allocation
-  // or an O(n²) creeping into `step`), with room for a loaded CI runner.
-  const CEILING_MS = 1
+  // interpreter, and the drive is what measures it there. Under jest the worklets plugin's transform runs it about 0.8 ms
+  // a step alone, more on a loaded runner, so this only catches an order-of-magnitude regression: an allocation in
+  // `step`, or stars feeling each other (O(n²), seconds a step).
+  const CEILING_MS = 5
 
   it('a step of 2,000 stars stays far inside a frame', () => {
     const s = init(1, physics)
     for (let i = 0; i < 300; i++) step(s, dt)
-    const n = 2000
+    const n = 500
     const t0 = performance.now()
     for (let i = 0; i < n; i++) step(s, dt)
     expect(s.n).toBe(2000)
