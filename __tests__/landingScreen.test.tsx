@@ -1,7 +1,8 @@
 /*
  * `/` (Flow 1 landing 01 to 10): auth resolving (the mark alone), unreachable (Try again, answered once when it fails
  * again), the three ways in on the glass dock, Google and Apple busy (the others dim), a refusal inline with its one
- * H.error (a cancelled chooser has none), and the session-ended notice.
+ * H.error (a cancelled chooser has none), and the session-ended notice. Since 2026-11-02 (Flow 1b) the old layout again:
+ * the lockup at 27% and its line over two galaxies colliding, with an ink shelf behind the line.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -129,13 +130,13 @@ describe('the ways in', () => {
     expect(screen.getByText(/By continuing you/).props.children).toContain('\u00A0and ')
   })
 
-  it('the mark starts at 17% of the window, not 17% less the inset (the root is not inset)', async () => {
+  it('the lockup starts at the frame\'s 27% of the window, not 27% less the inset (the root is not inset)', async () => {
     // At an ordinary text size (jest's window is at 2, an accessibility size: GO-12 moves the lockup up there).
     const window = Dimensions.get('window')
     Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } })
     await draw()
     const brand = screen.getByTestId('landing-brand')
-    expect(StyleSheet.flatten(brand.props.style).paddingTop).toBeCloseTo(window.height * 0.17, 1)
+    expect(StyleSheet.flatten(brand.props.style).paddingTop).toBeCloseTo(window.height * 0.27, 1)
     Dimensions.set({ window, screen: window })
   })
 
@@ -407,11 +408,26 @@ describe('the entry at large text and its parallel verbs (GO-12, A7/A27/A28)', (
   })
 })
 
-describe('the opening (owner picked two lights, 2026-11-01)', () => {
-  it('draws the official mark and wordmark and keeps the words, hidden from a screen reader as decoration', async () => {
+describe('the old landing over the galaxies (Flow 1b, owner 2026-11-02)', () => {
+  const HIDDEN = { includeHiddenElements: true }
+  const TAGLINE = 'Same place. Same vibe. Instant connections.'
+
+  it('the lockup and its line, the collision playing behind them; no intro mark or wordmark', async () => {
     await draw()
-    expect(screen.getByTestId('landing-mark', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
-    expect(screen.getByTestId('landing-wordmark', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
-    expect(screen.getByText('Same place. Same vibe. Instant connections.')).toBeTruthy()
+    expect(screen.getByTestId('landing-lockup', HIDDEN).props.accessibilityElementsHidden).toBe(true)
+    expect(screen.getByText(TAGLINE)).toBeTruthy()
+    expect(screen.getByTestId('galaxy-live', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('landing-mark', HIDDEN)).toBeNull()
+    expect(screen.queryByTestId('landing-wordmark', HIDDEN)).toBeNull()
+  })
+
+  it('the sky draws its ink shelf behind the tagline once the line is laid out', async () => {
+    await draw()
+    const shelf = () => screen.getByTestId('galaxy-live', HIDDEN).queryAll((n) => n.type === 'sk-Group' && !!n.props.transform)[0]
+    expect(shelf()).toBeUndefined()
+    await act(async () => {
+      screen.getByText(TAGLINE).props.onLayout({ nativeEvent: { layout: { x: 24, y: 304, width: 342, height: 24 } } })
+    })
+    expect(shelf().props.transform).toEqual(expect.arrayContaining([{ translateX: 195 }, { translateY: 316 }]))
   })
 })
