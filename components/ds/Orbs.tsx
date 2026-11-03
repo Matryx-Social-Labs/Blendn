@@ -10,7 +10,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated'
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg'
+import Svg, { Circle, Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg'
 
 import { COLOR, DURATION } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
@@ -252,3 +252,35 @@ const styles = StyleSheet.create({
   /** The board covers the box and the orbs reach past it; Android does not clip by default. */
   clip: { overflow: 'hidden' },
 })
+
+/**
+ * A sheet's three brand orbs (kit.css `.orbs`, the Pulse drawer on the Flow 3 board): elliptical radials sized in the
+ * sheet's own percentages, each fading out by 70% of its radius. Still, no drift: a sheet under a list is not a moment.
+ */
+export type SheetOrb = { color: string; alpha: number; cx: number; cy: number; rx: number; ry: number }
+export const SHEET_ORBS: readonly SheetOrb[] = [
+  { color: COLOR.brandOrange, alpha: 0.18, cx: 0.08, cy: 0.06, rx: 0.6, ry: 0.34 },
+  { color: COLOR.brandViolet, alpha: 0.14, cx: 1, cy: 0.22, rx: 0.55, ry: 0.3 },
+  { color: COLOR.brandRose, alpha: 0.1, cx: 0.3, cy: 0.7, rx: 0.5, ry: 0.3 },
+]
+/** Where each orb's colour is gone, as a share of its radius (`transparent 70%`). */
+const SHEET_ORB_FADE = 0.7
+const pct = (n: number) => `${n * 100}%`
+
+export function SheetOrbs({ testID }: { testID?: string }) {
+  return (
+    <Svg testID={testID} width="100%" height="100%" pointerEvents="none">
+      <Defs>
+        {SHEET_ORBS.map((o, i) => (
+          <RadialGradient key={i} id={`sheet-orb-${i}`} cx="50%" cy="50%" r="50%">
+            <Stop offset={0} stopColor={o.color} stopOpacity={o.alpha} />
+            <Stop offset={SHEET_ORB_FADE} stopColor={o.color} stopOpacity={0} />
+          </RadialGradient>
+        ))}
+      </Defs>
+      {SHEET_ORBS.map((o, i) => (
+        <Ellipse key={i} cx={pct(o.cx)} cy={pct(o.cy)} rx={pct(o.rx)} ry={pct(o.ry)} fill={`url(#sheet-orb-${i})`} />
+      ))}
+    </Svg>
+  )
+}

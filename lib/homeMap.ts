@@ -430,23 +430,25 @@ export function visibleCentreY(padding: { top: number; bottom: number }, mapHeig
  * gap above it, fading out as it rises from half to full, like Google and
  * Apple Maps. A worklet: it runs per frame on the UI thread.
  */
-export function locateRide(drawerTop: number, drawer: { half: number; full: number }): { translateY: number; opacity: number } {
+export function locateRide(drawerTop: number, drawer: { half: number; full: number }, lift = 0) {
   'worklet'
   const { sizePx, gapPx } = MAP_THEME.locate
   const span = drawer.half - drawer.full
   // A screen too short for a half step between half and full: shown until full (review L3).
   const shown = span > 0 ? (drawerTop - drawer.full) / span : drawerTop > drawer.full ? 1 : 0
-  return { translateY: drawerTop - gapPx - sizePx, opacity: Math.min(1, Math.max(0, shown)) }
+  // `lift`: a banner on the map takes the place above the drawer (the board's `.mbn`); the button rides above it.
+  return { translateY: drawerTop - gapPx - sizePx - lift, opacity: Math.min(1, Math.max(0, shown)) }
 }
 
 /**
  * The Pulse's banners on the map (Option C): a gap above "my location", riding the drawer and fading as it does
  * (`locateRide`). `height` is the banners' own. A worklet: it runs per frame.
  */
+export const BANNER_ABOVE_DRAWER = 22
 export function bannerRide(drawerTop: number, drawer: { half: number; full: number }, height: number) {
   'worklet'
-  const { translateY, opacity } = locateRide(drawerTop, drawer)
-  return { translateY: translateY - MAP_THEME.locate.gapPx - height, opacity }
+  const { opacity } = locateRide(drawerTop, drawer)
+  return { translateY: drawerTop - BANNER_ABOVE_DRAWER - height, opacity }
 }
 
 /** How far a fix must move before the camera follows it: past GPS jitter. */

@@ -127,7 +127,7 @@ import { useLiveSync } from '../../lib/useLiveSync'
 import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
-import { eventClock, nameZones } from '../../lib/time'
+import { eventClock } from '../../lib/time'
 
 type CatalogueMeta = Omit<CityCatalogue, 'cities'>
 const catalogueMeta = (data: CityCatalogue | null): CatalogueMeta => ({ countries: data?.countries, defaultCitySlug: data?.defaultCitySlug, device: data?.device })
@@ -1101,7 +1101,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       const available = data?.cities ?? []
       // An answer with the phone's country may have landed first: the plain one never replaces it (its `device` is null).
       if (!countryAnswered.current) {
-        nameZones(available, data?.countries ?? [])
         setCityOptions(available)
         setCatalogue(catalogueMeta(data))
       }
@@ -1133,8 +1132,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       .then((response) => {
         if (cancelled || !response.success || !response.data) return
         countryAnswered.current = true
-        // Before the state that re-renders with them: every time then names its zone as the catalogue says it.
-        nameZones(response.data.cities, response.data.countries ?? [])
         setCityOptions(response.data.cities)
         setCatalogue(catalogueMeta(response.data))
       })
@@ -2147,6 +2144,6 @@ export default function Events() {
  * (its pane showing, the drawer past peek) and `full` (the drawer all the way
  * up, for the coach mark) re-render it: a settle, never a drag.
  */
-const renderPulse = (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean) => (
-  <EventsInner onBrowse={onBrowse} visible={visible} full={full} />
+const renderPulse = (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean, shell: PulseShell) => (
+  <EventsInner onBrowse={onBrowse} visible={visible} full={full} shell={shell} />
 )

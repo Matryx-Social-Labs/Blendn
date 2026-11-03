@@ -42,11 +42,6 @@ const phoneZoneListeners = new Set<() => void>()
 /** The phone's IANA zone, or undefined when nothing can say it. */
 export const phoneTimeZone = (): string | undefined => phoneZone || undefined
 
-/** Minutes ahead of UTC on the phone at `d`. */
-function phoneOffset(d: Date): number {
-  return phoneZone ? offsetIn(d, phoneZone) : -d.getTimezoneOffset()
-}
-
 /** Re-reads the phone's zone; when it moved, tells the listeners and answers true. Formatters are keyed by zone, so none is stale. */
 export function refreshPhoneZone(): boolean {
   const next = deviceZone()
@@ -149,57 +144,6 @@ export function weekdayIn(d: Date, timeZone?: string): number {
   return new Date(Date.UTC(y, m, day)).getUTCDay()
 }
 
-/**
- * The zones we serve, named the same on every engine (R6-1): Hermes on iOS calls Asia/Kolkata "GMT" in every locale, which
- * names a different time. Canada's are the generic names ("ET"), true either side of a clock change.
- */
-const ZONE_ABBREVIATIONS: Readonly<Record<string, string>> = {
-  'Asia/Kolkata': 'IST',
-  'Asia/Calcutta': 'IST',
-  'America/Toronto': 'ET',
-  'America/Montreal': 'ET',
-  'America/Winnipeg': 'CT',
-  'America/Regina': 'CT',
-  'America/Edmonton': 'MT',
-  'America/Vancouver': 'PT',
-  'America/Halifax': 'AT',
-  'America/St_Johns': 'NT',
-  UTC: 'UTC',
-  'Etc/UTC': 'UTC',
-}
-
-/** Short zone names, one formatter per (locale, zone): "IST" is only en-IN's, "CEST" en-GB's, "PDT" en-US's. */
-const ZONE_NAME_LOCALES = ['en-GB', 'en-IN', 'en-US'] as const
-const zoneNameFormatters = new Map<string, Intl.DateTimeFormat>()
-function zoneName(d: Date, timeZone: string): string {
-  const known = ZONE_ABBREVIATIONS[timeZone]
-  if (known) return known
-  for (const locale of ZONE_NAME_LOCALES) {
-    try {
-      const id = `${locale}|${timeZone}`
-      let f = zoneNameFormatters.get(id)
-      if (!f) {
-        f = new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: 'short' })
-        zoneNameFormatters.set(id, f)
-      }
-      const name = f.formatToParts(d).find((p) => p.type === 'timeZoneName')?.value ?? ''
-      // "GMT" and "GMT+5:30" are not names: the engine had none (Hermes iOS says "GMT" for IST). The offset says it instead.
-      if (name && !/^(GMT|UTC)/.test(name)) return name
-    } catch {
-      break
-    }
-  }
-  return offsetName(offsetIn(d, timeZone))
-}
-
-/** "GMT+5:30", "GMT-3", and "GMT" only at offset 0. */
-function offsetName(minutes: number): string {
-  if (minutes === 0) return 'GMT'
-  const abs = Math.abs(minutes)
-  const m = abs % 60
-  return `GMT${minutes < 0 ? '-' : '+'}${Math.floor(abs / 60)}${m ? `:${String(m).padStart(2, '0')}` : ''}`
-}
-
 /** Minutes ahead of UTC at `d` in `timeZone`. */
 function offsetIn(d: Date, timeZone: string): number {
   const [y, m, day] = zonedDate(d, timeZone)
@@ -207,59 +151,15 @@ function offsetIn(d: Date, timeZone: string): number {
   return Math.round((Date.UTC(y, m, day, h, min) - Math.floor(d.getTime() / 60_000) * 60_000) / 60_000)
 }
 
-/**
- * The zones the catalogue can name as people say them (travel plan §4.6): a zone one listed city keeps is "Toronto
- * time", one a single country's cities share is "India time". A zone shared across countries, or not listed, keeps its
- * short name. Set from `GET /events/cities` (`nameZones`), so a new country is data, not a table here.
- */
-let zonePlaces = new Map<string, string>()
-
-type ZoneCity = { city: string; country?: string | null; timezone?: string | null }
-export function nameZones(cities: readonly ZoneCity[], countries: readonly { code: string; name: string }[]): void {
-  const byZone = new Map<string, ZoneCity[]>()
-  for (const c of cities) {
-    if (!c.timezone) continue
-    const inZone = byZone.get(c.timezone)
-    if (inZone) inZone.push(c)
-    else byZone.set(c.timezone, [c])
-  }
-  // A country's name only when every listed city of it keeps this one zone: Canada's six zones are not "Canada time".
-  const oneZone = (code: string | null | undefined) => !!code && new Set(cities.filter((c) => c.country === code && c.timezone).map((c) => c.timezone)).size === 1
-  const next = new Map<string, string>()
-  for (const [zone, inZone] of byZone) {
-    const countryCodes = new Set(inZone.map((c) => c.country ?? ''))
-    if (inZone.length === 1) next.set(zone, inZone[0].city)
-    else if (countryCodes.size === 1 && oneZone(inZone[0].country)) {
-      const name = countries.find((c) => c.code === inZone[0].country)?.name
-      if (name) next.set(zone, name)
-    }
-  }
-  zonePlaces = next
-}
-
-/**
- * " Toronto time": the event's zone after its time, when it is not the phone's (review LOW, after RC drive 5 D-4: a
- * Berlin phone reading an IST night's "9 AM" should know it is Bengaluru's 9 AM). Nothing when the phone keeps the same
- * time at that moment, or with no zone known. `short` for a slot with no room ("PM ET" under a set-list time, a chip).
- */
-export function zoneSuffix(time: string | number | Date, timeZone?: string | null, { short = false }: { short?: boolean } = {}): string {
-  if (!timeZone) return ''
-  const d = new Date(time)
-  if (Number.isNaN(d.getTime())) return ''
-  if (offsetIn(d, timeZone) === phoneOffset(d)) return ''
-  const place = short ? undefined : zonePlaces.get(timeZone)
-  if (place) return ` ${place} time`
-  const name = zoneName(d, timeZone)
-  return name ? ` ${name}` : ''
-}
-
 /** A clock that wraps as one piece: its spaces no-break, so "5:50 AM" never leaves "AM" alone on the next line (rc7 D13). */
 export const unbroken = (clock: string) => clock.replace(/ /g, '\u00A0')
 
-/** An event's clock in its own zone, named when it is not the phone's: "9 AM", or "9 AM India time" on a Berlin phone. */
-export function eventClock(time: string | number | Date, timeZone?: string | null, options: { short?: boolean } = {}): string {
-  const clock = clockTime(time, timeZone ?? undefined)
-  return clock ? `${clock}${zoneSuffix(time, timeZone, options)}` : ''
+/**
+ * An event's clock in its own city's zone: "9 PM" is 9 PM where it happens, whatever the phone's clock says. Never named
+ * (owner, 2026-11-03: "just mention PM, AM"; the city on screen already says where).
+ */
+export function eventClock(time: string | number | Date, timeZone?: string | null): string {
+  return clockTime(time, timeZone ?? undefined)
 }
 
 /** The hour (0–23) of `d` in `timeZone`, or the phone's. */

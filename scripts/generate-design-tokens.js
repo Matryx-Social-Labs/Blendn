@@ -73,10 +73,13 @@ function border(css) {
 }
 
 /** `0 0 16px rgba(…),0 0 28px rgba(…)` → `[{ radius, color }, …]`, centred glows only. */
+// "0 0 16px color", or with a drop and a spread ("0 18px 60px -18px color", the Pulse's lead underglow): offsets kept only when set.
 function glows(css) {
   return splitTop(css).map((layer) => {
-    const m = /^0 0 (\d+)px (.+)$/.exec(layer) || fail('glow', layer)
-    return { radius: Number(m[1]), color: m[2] }
+    const m = /^0 (-?\d+)(?:px)? (\d+)px(?: (-?\d+)px)? (.+)$/.exec(layer) || fail('glow', layer)
+    const offsetY = Number(m[1])
+    const spread = m[3] ? Number(m[3]) : 0
+    return { ...(offsetY ? { offsetY } : {}), radius: Number(m[2]), ...(spread ? { spread } : {}), color: m[4] }
   })
 }
 

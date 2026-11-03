@@ -170,7 +170,7 @@ describe('the banners', () => {
   it('the travel banner goes back home, and can be put away', async () => {
     const onTravelBack = jest.fn()
     const onTravelDismiss = jest.fn()
-    const travel = { kind: 'browsing' as const, text: 'Browsing Canada. Times are Toronto time. Check-in opens when you’re there.', back: 'Bengaluru' }
+    const travel = { kind: 'browsing' as const, text: 'Browsing Toronto', back: 'Bengaluru' }
     await render(<PulseBanners {...base} travel={travel} onTravelBack={onTravelBack} onTravelDismiss={onTravelDismiss} />)
     expect(screen.getByText(travel.text)).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'Back to Bengaluru' }))

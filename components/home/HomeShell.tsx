@@ -1,7 +1,7 @@
 import { useIsFocused } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Dimensions, Keyboard, Platform, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
-import { useSharedValue } from 'react-native-reanimated'
+import { useDerivedValue, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { tabBarTop } from '../../app/(tabs)/_layout'
@@ -13,13 +13,13 @@ import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
 import { PulseSearchRow } from '../pulse/PulseHeader'
 import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, pulseRest, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
-import type { Pin } from '../../lib/homeMap'
+import { BANNER_ABOVE_DRAWER, type Pin } from '../../lib/homeMap'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
 import { useLatest } from '../../lib/useLatest'
 import type { NearPin } from '../../lib/placesPane'
-import { HomeDrawer, useRefocusCount } from './HomeDrawer'
+import { HomeDrawer } from './HomeDrawer'
 import { HomeMap } from './HomeMap'
 import { MapBanners } from './MapBanners'
 import { PlacesList } from './PlacesList'
@@ -101,7 +101,6 @@ export function HomeShell({
   const insets = useSafeAreaInsets()
   const { height } = useWindowDimensions()
   const focused = useIsFocused()
-  const refocused = useRefocusCount(focused)
   const [segment, setSegment] = useState<Segment>('events')
   const [browse, setBrowse] = useState<HomeBrowse>({
     city: null,
@@ -170,6 +169,9 @@ export function HomeShell({
   const [searchOpen, setSearchOpen] = useState(false)
   const queryRef = useLatest(query)
   const [mapBanners, setMapBanners] = useState<ReactNode>(null)
+  // The banners' height on the map, and how far it lifts "my location": above the banner, its gap kept (board `.mbn`).
+  const bannerHeight = useSharedValue(0)
+  const locateLift = useDerivedValue(() => (bannerHeight.get() > 0 ? BANNER_ABOVE_DRAWER + bannerHeight.get() - SPACE.sm : 0))
   const closeSearch = useCallback(() => {
     setQuery('')
     setSearchOpen(false)
@@ -258,11 +260,12 @@ export function HomeShell({
             nearPins={segment === 'places' && snap !== 'full' ? nearPinList : NO_PINS}
             fitNear={fitNear}
             focus={segment === 'events' ? (browse.focus ?? null) : null}
+            locateLift={locateLift}
           />
         ) : null}
       </View>
       {segment === 'events' && !screenReader ? (
-        <MapBanners drawerTop={drawerTop} drawer={points} visible={snap !== 'full'}>
+        <MapBanners drawerTop={drawerTop} drawer={points} visible={snap !== 'full'} height={bannerHeight}>
           {mapBanners}
         </MapBanners>
       ) : null}
@@ -274,7 +277,6 @@ export function HomeShell({
         onSnap={onSnap}
         // Not while the search is open in the header: a touch on its field or its × must not put the keyboard away.
         onChromeTouch={searching ? undefined : dismissKeyboard}
-        glassKey={refocused}
         peek={
           peekExtra ? (
             <Text variant="meta" color={COLOR.textPrimary} numberOfLines={1} testID="home-peek-line">
@@ -294,8 +296,20 @@ export function HomeShell({
               onChange={(i) => choose(i === 0 ? 'events' : 'places')}
               trailing={
                 <View style={styles.trailing}>
-                  <Chip label={browse.city ? `${browse.city}${browse.preview ? ' · Preview' : ''}` : 'Choose city'} icon={browse.travelling ? 'plane' : 'map-pin'} onPress={browse.openCityPicker} testID="home-city" />
-                  {segment === 'events' ? <IconButton icon="search" accessibilityLabel="Search events" onPress={() => setSearchOpen(true)} testID="home-search" /> : null}
+                  {/* Wrapped: a chip aligns itself to the top of its row; the board centres the city in the 48 pt tabs. */}
+                  <View>
+                    <Chip
+                      size="header"
+                      chevron
+                      label={browse.city ? `${browse.city}${browse.preview ? ' · Preview' : ''}` : 'Choose city'}
+                      icon={browse.travelling ? 'plane' : 'map-pin'}
+                      onPress={browse.openCityPicker}
+                      testID="home-city"
+                    />
+                  </View>
+                  {segment === 'events' ? (
+                    <IconButton size="sm" icon="search" accessibilityLabel="Search events" onPress={() => setSearchOpen(true)} testID="home-search" />
+                  ) : null}
                 </View>
               }
               testID="home-segmented"

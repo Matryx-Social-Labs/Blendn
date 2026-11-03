@@ -523,7 +523,7 @@ describe('"my location"', () => {
     expect(shell).toMatch(/<HomeDrawer\s+y=\{drawerTop\}/)
     expect(shell).toMatch(/drawerTop=\{drawerTop\}/)
     expect(code('components/home/HomeDrawer.tsx')).not.toMatch(/const y = useSharedValue/)
-    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer\)/)
+    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer, lift \? lift\.get\(\) : 0\)/)
   })
 
   it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {

@@ -304,12 +304,12 @@ describe('chips above the roofs', () => {
     refreshPhoneZone()
   })
 
-  it('name India’s zone on a phone that is not there: "Fri · 8 PM IST" (RC 7, the zone-name rule)', () => {
+  it('name India’s zone on a phone that is not there: "Fri · 8 PM" (RC 7, the zone-name rule)', () => {
     process.env.TZ = 'America/Los_Angeles'
     refreshPhoneZone()
     try {
       const now = Date.UTC(2026, 9, 9, 6, 0)
-      expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'Asia/Kolkata' }, now)).toBe('Fri · 8 PM IST')
+      expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'Asia/Kolkata' }, now)).toBe('Fri · 8 PM')
     } finally {
       process.env.TZ = 'Asia/Kolkata'
       refreshPhoneZone()
@@ -337,7 +337,7 @@ describe('chips above the roofs', () => {
     // Fri 9 Oct 14:30Z is 8 PM in India, whatever the phone's zone.
     expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'Asia/Kolkata' }, now)).toBe('Fri · 8 PM')
     // The event's own zone, not India's for everything (SCRUM-998): Toronto's 10:30 AM, named on a phone in India.
-    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'America/Toronto' }, now)).toBe('Fri · 10:30 AM ET')
+    expect(chipLine({ kind: 'event', live: false, startsAt: '2026-10-09T14:30:00Z', bucket: null, timeZone: 'America/Toronto' }, now)).toBe('Fri · 10:30 AM')
     expect(chipLine({ kind: 'event', live: false, startsAt: 'garbage', bucket: null }, now)).toBe('')
     // Past six days, the date; never the year, even across New Year (review L6): the line is a pin's width.
     expect(chipLine({ kind: 'event', live: false, startsAt: '2027-01-02T14:30:00Z', bucket: null }, Date.UTC(2026, 11, 22, 6))).toBe('Sat 2 Jan · 8 PM')

@@ -1,7 +1,7 @@
 import { ScrollView, StyleSheet } from 'react-native'
 
 import { Chip } from '../ds/Chip'
-import { CHIP_ROW_HEIGHT } from '../../lib/home'
+import { CHIP_ROW_HEIGHT, CHIP_ROW_LEAD } from '../../lib/home'
 import { SPACE } from '../../lib/design/tokens'
 import { withoutFilter, type EventFilters } from '../../lib/eventFilters'
 import { extraApplied, quickChips, toggleQuick, type Vibe } from '../../lib/pulseChips'
@@ -42,11 +42,12 @@ export function QuickChips({
       testID="pulse-chips"
     >
       {extras.map((a) => (
-        <Chip key={a.field} label={a.label} selected onRemove={() => onChange(withoutFilter(filters, a.field))} testID={`pulse-applied-${a.field}`} />
+        <Chip key={a.field} size="header" label={a.label} selected onRemove={() => onChange(withoutFilter(filters, a.field))} testID={`pulse-applied-${a.field}`} />
       ))}
       {quickChips({ filters, counts, nearOn, vibe }).map((c) => (
         <Chip
           key={c.key}
+          size="header"
           label={c.label}
           count={c.count}
           // The ✓ draws itself on select (Foundations C glyph verb); distance keeps its arrow either way.
@@ -58,6 +59,7 @@ export function QuickChips({
         />
       ))}
       <Chip
+        size="header"
         label="Filters"
         icon="sliders-horizontal"
         count={extras.length || undefined}
@@ -70,6 +72,6 @@ export function QuickChips({
 }
 
 const styles = StyleSheet.create({
-  scroll: { flexGrow: 0, height: CHIP_ROW_HEIGHT },
+  scroll: { flexGrow: 0, height: CHIP_ROW_HEIGHT, marginTop: CHIP_ROW_LEAD },
   row: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm, alignItems: 'center' },
 })

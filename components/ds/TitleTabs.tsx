@@ -90,7 +90,7 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
 
   return (
     <View testID={testID} accessibilityRole="tablist" style={styles.row}>
-      <View testID={testID && `${testID}-words`} style={[styles.words, { gap: compact ? SPACE.lg : SPACE.xl }]}>
+      <View testID={testID && `${testID}-words`} style={[styles.words, { gap: SPACE.lg }]}>
         {items.map((item, i) => {
           const on = i === selected
           const badge = badges?.[i] ?? null
@@ -114,7 +114,7 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
                 style={styles.word}
               >
                 <Text
-                  style={[font('title', bold), styles.shrink, { color: on ? COLOR.textPrimary : COLOR.textTertiary }]}
+                  style={[font('tab', bold), styles.shrink, { color: on ? COLOR.textPrimary : COLOR.textTertiary }]}
                   maxFontSizeMultiplier={CONTROL_FONT_CAP}
                   numberOfLines={1}
                   adjustsFontSizeToFit

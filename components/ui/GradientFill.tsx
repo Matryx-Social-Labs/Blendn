@@ -71,3 +71,10 @@ const SIDEWAYS = {
 export function SolidBarFade({ color, toward = 'bottom', ...rest }: ViewProps & { color: string; toward?: 'bottom' | keyof typeof SIDEWAYS }) {
   return <LinearGradient {...rest} colors={[tint(color, 0), color]} {...(toward === 'bottom' ? null : SIDEWAYS[toward])} />
 }
+
+/** The board's corner light on a card (`.fc`: ember at 20% from the top-left, gone by 60%), as a diagonal fade. */
+export const CORNER_GLOW = { alpha: 0.2, reach: 0.6 } as const
+export function CornerGlow({ color, ...rest }: ViewProps & { color: string }) {
+  // ponytail: expo-linear-gradient has no radial; a diagonal fade from the corner reads the same on a card this size.
+  return <LinearGradient {...rest} colors={[tint(color, CORNER_GLOW.alpha), tint(color, 0)]} locations={[0, CORNER_GLOW.reach]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+}

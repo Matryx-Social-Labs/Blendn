@@ -235,7 +235,7 @@ describe('travelBanner — once per switch, with the way back', () => {
   it('browsing another country from home', () => {
     expect(travelBanner({ home: BENGALURU, browse: previewer[4], deviceCountry: 'IN', countries, seen: false })).toEqual({
       kind: 'browsing',
-      text: 'Browsing Canada. Times are Toronto time. Check-in opens when you’re there.',
+      text: 'Browsing Toronto',
       back: 'Bengaluru',
     })
   })
@@ -243,7 +243,7 @@ describe('travelBanner — once per switch, with the way back', () => {
   it('visiting: the phone is there', () => {
     expect(travelBanner({ home: BENGALURU, browse: previewer[4], deviceCountry: 'CA', countries, seen: false })).toEqual({
       kind: 'visiting',
-      text: 'Visiting Toronto. Times are local.',
+      text: 'Visiting Toronto',
       back: 'Bengaluru',
     })
   })

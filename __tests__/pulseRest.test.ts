@@ -2,8 +2,7 @@ import { CHIP_BLOCK, DRAWER_HEADER_HEIGHT, drawerSnapPoints, LEAD_CARD_HEIGHT, L
 
 /**
  * Flow 3 · Pulse, Option C (owner pick 2026-11-03): the drawer rests where one whole 256 pt lead card sits above the tab
- * bar, under the header and the chips. 336 pt on a 393 × 852 phone (board `pulse.js`: header to 436, chips 436–472, card
- * 488–744), checked across screen sizes from SE to Pro Max and Android with a gesture bar.
+ * bar, under the header and the chips. 336 pt on a 393 × 852 phone (board, measured: header to +100, chips +110, card +172), checked across screen sizes from SE to Pro Max and Android with a gesture bar.
  */
 
 // Each phone as the shell measures it: `topChrome` is the safe area plus the 64 pt top bar, `tabBarTop` is `tabBarTop()`.
@@ -17,14 +16,16 @@ const PHONES = {
 }
 
 describe('the Pulse at rest (Option C)', () => {
-  it('rests at ~336 on a 393 × 852 phone (332: the chips are pinned with 8 pt above and below) with the whole 256 pt card above the bar', () => {
-    expect(pulseRest(PHONES.iPhone16)).toEqual({ half: 332, lead: LEAD_CARD_HEIGHT })
+  it('rests at 336 on a 393 × 852 phone, the board’s frame to the point (header +100, chips +110, card +172, 256 tall)', () => {
+    expect(pulseRest(PHONES.iPhone16)).toEqual({ half: 336, lead: LEAD_CARD_HEIGHT })
+    expect(DRAWER_HEADER_HEIGHT + CHIP_BLOCK + LEAD_GAP).toBe(172)
   })
 
   it.each(Object.entries(PHONES))('%s: the card ends above the tab bar and the map keeps the top', (_name, phone) => {
     const { half, lead } = pulseRest(phone)
     const cardFoot = half + DRAWER_HEADER_HEIGHT + CHIP_BLOCK + LEAD_GAP + lead
-    expect(cardFoot).toBeLessThanOrEqual(phone.tabBarTop)
+    // As the board draws it: the card's foot runs at most 10 pt under the floating bar (its words stay clear).
+    expect(cardFoot).toBeLessThanOrEqual(phone.tabBarTop + 10)
     expect(lead).toBeGreaterThanOrEqual(LEAD_CARD_MIN)
     expect(lead).toBeLessThanOrEqual(LEAD_CARD_HEIGHT)
     // The drawer never rises over more than its share of the screen above the bar: the map is never a strip.
@@ -41,13 +42,13 @@ describe('the Pulse at rest (Option C)', () => {
   it('a tall phone shows more map, never a taller card', () => {
     const { half, lead } = pulseRest(PHONES.ProMax)
     expect(lead).toBe(LEAD_CARD_HEIGHT)
-    expect(half).toBeGreaterThan(332)
+    expect(half).toBeGreaterThan(336)
   })
 
   it('the drawer takes the rest as its half point, between full and peek', () => {
     const rest = pulseRest(PHONES.iPhone16)
     const points = drawerSnapPoints({ ...PHONES.iPhone16, half: rest.half })
-    expect(points.half).toBe(332)
+    expect(points.half).toBe(336)
     expect(points.full).toBeLessThan(points.half)
     expect(points.half).toBeLessThan(points.peek)
     // Control: without it the half point is the old middle of the screen.

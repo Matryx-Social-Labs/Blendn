@@ -165,6 +165,12 @@ describe('the sticky chips (Option C: the chips are the header)', () => {
     expect(shell).toContain('<PulseSearchRow query={query} onChangeQuery={setQuery} onCancel={closeSearch} />')
   })
 
+  it('the shell reaches the Pulse: its search text, its open field, the lead height and the map’s banner slot', () => {
+    // Dropped once in the build (the module-level render took three arguments): the search opened over chips that stayed.
+    expect(SCREEN()).toContain('<EventsInner onBrowse={onBrowse} visible={visible} full={full} shell={shell} />')
+    expect(stripComments(read('components/home/HomeShell.tsx'))).toContain('renderEvents(setBrowse, pulseVisible, pulseFull, shell)')
+  })
+
   it('a chip or a keystroke re-renders the chips and body rows (context), not every card (renderRow does not close over them)', () => {
     const src = SCREEN()
     const render = src.slice(src.indexOf('const renderRow = useCallback'), src.indexOf('const keyExtractor'))

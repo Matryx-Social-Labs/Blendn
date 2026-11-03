@@ -384,8 +384,8 @@ function startLabel(startsAt: string | null, now: number, forSpeech: boolean, ti
   const far = start.getTime() - now > WEEKDAY_ONLY_MS
   // No year: the chip's line is a pin's width, and an event a year off is not on the map (review L6).
   const day = calendarDate(start, { weekday: far ? true : 'only', year: false, timeZone: timeZone ?? undefined })
-  // Named when the phone is elsewhere, short: the line is a pin's width ("8 PM IST", `eventClock`).
-  const time = eventClock(start, timeZone, { short: true })
+  // The event city's clock, never named (owner, 2026-11-03).
+  const time = eventClock(start, timeZone)
   return forSpeech ? `${day} ${time}` : `${day} · ${time}`
 }
 

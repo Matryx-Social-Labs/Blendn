@@ -52,6 +52,8 @@ type BannersProps = {
 export function PulseBanners({ socketStatus, switchTo, onSwitch, away, travel = null, onTravelBack = () => {}, onTravelDismiss, locationDenied, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout, only }: BannersProps) {
   const reduceMotion = useReducedMotion()
   const place = only !== 'system'
+  // The place banners ride on the map (`MapBanners`): there they are glass, as the board's `.mbn`.
+  const onMap = only === 'place'
   const system = only !== 'place'
   const enter = reduceMotion ? bannerFadeIn : bannerIn
   const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
@@ -60,17 +62,17 @@ export function PulseBanners({ socketStatus, switchTo, onSwitch, away, travel = 
       {system ? <RealtimeStatusBanner status={socketStatus} style={styles.item} showSocketIssues={false} /> : null}
       {place && switchTo ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
-          <Banner kind="info" text={`You’re in ${switchTo}. Browse events here?`} action={{ label: 'Switch', onPress: () => onSwitch(switchTo) }} testID="pulse-switch" />
+          <Banner kind="info" onMap={onMap} text={`You’re in ${switchTo}. Browse events here?`} action={{ label: 'Switch', onPress: () => onSwitch(switchTo) }} testID="pulse-switch" />
         </Animated.View>
       ) : null}
       {place && travel ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
-          <Banner kind="info" icon="plane" text={travel.text} action={{ label: `Back to ${travel.back}`, onPress: onTravelBack }} onDismiss={onTravelDismiss} testID="pulse-travel" />
+          <Banner kind="info" onMap={onMap} icon="plane" text={travel.text} action={{ label: `Back to ${travel.back}`, onPress: onTravelBack }} onDismiss={onTravelDismiss} testID="pulse-travel" />
         </Animated.View>
       ) : null}
       {place && away ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
-          <Banner kind="info" icon="map-pin" text={awayText(away)} testID="pulse-away" />
+          <Banner kind="info" onMap={onMap} icon="map-pin" text={awayText(away)} testID="pulse-away" />
         </Animated.View>
       ) : null}
       {system && locationDenied ? (
@@ -100,6 +102,7 @@ export function awayText(away: AwayNotice): string {
 }
 
 const styles = StyleSheet.create({
-  bar: { gap: SPACE.sm, paddingBottom: SPACE.sm },
-  item: { paddingHorizontal: SPACE.gutter },
+  // Each banner carries its own 8 pt below, so with none showing the bar takes no room (the lead card's rest counts on it).
+  bar: {},
+  item: { paddingHorizontal: SPACE.gutter, marginBottom: SPACE.sm },
 })

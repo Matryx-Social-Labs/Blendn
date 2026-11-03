@@ -157,6 +157,7 @@ export const HomeMap = memo(function HomeMap({
   nearPins,
   fitNear,
   focus = null,
+  locateLift,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
@@ -192,6 +193,8 @@ export const HomeMap = memo(function HomeMap({
   fitNear: number
   /** The Pulse's lead card's venue: lit at the brightest step; each new `n` (a swipe) eases the camera there (Option C). */
   focus?: { pin: Pin; n: number } | null
+  /** How far the Pulse's banners on the map lift "my location" (0 with none). */
+  locateLift?: SharedValue<number>
 }) {
   const { width, height } = useWindowDimensions()
   /*
@@ -652,6 +655,7 @@ export const HomeMap = memo(function HomeMap({
           pending={asking}
           drawerTop={drawerTop}
           drawer={drawer}
+          lift={locateLift}
           onPress={locate}
         />
       ) : null}

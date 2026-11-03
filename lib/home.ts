@@ -61,25 +61,27 @@ export function drawerSnapPoints(screen: {
 export const LEAD_CARD_HEIGHT = 256
 /** The shortest it gets on a small phone, where the map keeps its share instead. */
 export const LEAD_CARD_MIN = 180
-/** The chip row under the header: the 32 pt chip (34 at its 1.3 text cap) in a 36 pt row. */
+/** The chip row under the header: the 36 pt header chip (`SIZE.tagHeader`, board `.qc`), which its 1.3 text cap still fits. */
 export const CHIP_ROW_HEIGHT = 36
-/** The chip row as the list pins it: `StickyBar`'s 8 pt above and below. */
-export const CHIP_BLOCK = SPACE.sm + CHIP_ROW_HEIGHT + SPACE.sm
-/** From the chip block to the lead card: with the row's own slack and the bar's padding, about the board's 16 pt. */
-export const LEAD_GAP = SPACE.xs
-/** Daylight between the lead card's foot and the tab bar. */
-const LEAD_BREATH = 10
+/** The chips sit 10 pt under the header (board: header ends +100, chips at +110): `StickyBar`'s 8 and the row's own 2. */
+export const CHIP_ROW_LEAD = SPACE.xxs
+/** The chip row as the list pins it: `StickyBar`'s 8 pt above and below, and the row's own 2 above. */
+export const CHIP_BLOCK = SPACE.sm + CHIP_ROW_LEAD + CHIP_ROW_HEIGHT + SPACE.sm
+/** From the chip block to the lead card (board: chips end +146, card at +172). */
+export const LEAD_GAP = SPACE.md + SPACE.xs + SPACE.xxs
+/** The board runs the card's foot 10 pt under the floating tab bar (card 508–764, bar from 754); its words stay clear. */
+const LEAD_UNDER_BAR = 10
 /** At rest the drawer covers at most this share of the screen above the tab bar, so the map is never a strip. */
 export const REST_MAX_SHARE = 0.55
 
 /**
  * Where the Pulse's drawer rests, and how tall its lead card is (Option C): one whole card above the tab bar, under the
- * header and the chips. 332 pt on a 393 × 852 phone (the board's 336, less the chips' pinned padding; map 39%); a taller phone shows more map, never a taller card; a
+ * header and the chips: 336 pt on a 393 × 852 phone, the board's frame to the point (map 39%); a taller phone shows more map, never a taller card; a
  * short one keeps its share of map and the card gives way, down to `LEAD_CARD_MIN`. The text inside the card and the
  * chips stops growing at its cap (1.5× and 1.3×), so the largest text size rests at the same point.
  */
 export function pulseRest(screen: { height: number; topChrome: number; tabBarTop: number }): { half: number; lead: number } {
-  const chrome = DRAWER_HEADER_HEIGHT + CHIP_BLOCK + LEAD_GAP + LEAD_BREATH
+  const chrome = DRAWER_HEADER_HEIGHT + CHIP_BLOCK + LEAD_GAP - LEAD_UNDER_BAR
   const highest = Math.max(screen.topChrome, screen.tabBarTop - Math.round(screen.height * REST_MAX_SHARE))
   const half = Math.max(highest, screen.tabBarTop - chrome - LEAD_CARD_HEIGHT)
   const lead = Math.max(LEAD_CARD_MIN, Math.min(LEAD_CARD_HEIGHT, screen.tabBarTop - chrome - half))

@@ -457,9 +457,9 @@ export function travelBanner(input: {
   if (seen || !home || !browse || !opens(browse)) return null
   const where = { homeCountry: home.country ?? null, browseCountry: browse.country ?? null }
   if (!isTravelling(where)) return null
-  if (isVisiting({ ...where, deviceCountry })) return { kind: 'visiting', text: `Visiting ${browse.city}. Times are local.`, back: home.city }
-  const country = countries.find((c) => c.code === browse.country)?.name ?? browse.city
-  return { kind: 'browsing', text: `Browsing ${country}. Times are ${browse.city} time. Check-in opens when you’re there.`, back: home.city }
+  // Where, never what time (owner, 2026-11-03): the city chip and the cards already say it.
+  if (isVisiting({ ...where, deviceCountry })) return { kind: 'visiting', text: `Visiting ${browse.city}`, back: home.city }
+  return { kind: 'browsing', text: `Browsing ${browse.city}`, back: home.city }
 }
 
 /**

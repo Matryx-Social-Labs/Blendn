@@ -40,6 +40,11 @@ export type EventCardProps = {
   overline?: string
   /** `hero` only: drawn top-right after the Promoted pill (the Pulse lead's pager pips). Decorative: not read. */
   corner?: ReactNode
+  /**
+   * `hero` only: `lead`, the Pulse's lead card (Flow 3 board `.lead .foot`): the words 20 in and 18 up, and the people
+   * line under the venue ("86 going") instead of a pill beside the time.
+   */
+  layout?: 'lead'
   cover?: string | null
   /**
    * `row` only: a place's type art (`VenuePlate`) in the thumb where an event would have its cover: a visit to a place, not a
@@ -138,7 +143,7 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, promoted, overline, corner, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
+  const { kind, title, time, venue, distance, lead, promoted, overline, corner, layout, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
@@ -262,7 +267,7 @@ export function EventCard(props: EventCardProps) {
         <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={styles.scrim} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
-          {here ? (
+          {layout === 'lead' ? null : here ? (
             <ScrimPill testID={testID && `${testID}-here`}>
               <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
                 <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{here}</Text>
@@ -299,7 +304,7 @@ export function EventCard(props: EventCardProps) {
             </Text>
           </View>
         ) : null}
-        <View style={[styles.foot, hero ? styles.footHero : styles.footCompact]}>
+        <View testID={testID && `${testID}-foot`} style={[styles.foot, hero ? (layout === 'lead' ? styles.footLead : styles.footHero) : styles.footCompact]}>
           {hero && overline ? (
             <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
               {overline.toUpperCase()}
@@ -311,6 +316,12 @@ export function EventCard(props: EventCardProps) {
           <Text numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
             {[`at ${venue}`, distance].filter(Boolean).join(' · ')}
           </Text>
+          {layout === 'lead' && (here || going) ? (
+            <Text testID={testID && `${testID}-people`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
+              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{(here ?? going)?.toLocaleString('en-US')}</Text>
+              {here ? ' here now' : ' going'}
+            </Text>
+          ) : null}
         </View>
         {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
         {previewState === 'pressed' && android ? <View testID={testID && `${testID}-wash`} style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
@@ -364,6 +375,8 @@ const styles = StyleSheet.create({
   onWhite: { color: COLOR.ink },
   foot: { position: 'absolute', gap: SPACE.xxs },
   footHero: { left: SPACE.xl, right: SPACE.xl, bottom: SPACE.xl },
+  // Board `.lead .foot`: 20 in, 18 up.
+  footLead: { left: SPACE.lg + SPACE.xs, right: SPACE.lg + SPACE.xs, bottom: SPACE.lg + SPACE.xxs },
   footCompact: { left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },

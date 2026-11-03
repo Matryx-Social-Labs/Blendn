@@ -34,11 +34,16 @@ const PAGE_GAP = SPACE.md
 const OVERDRAG = SPACE.xxl
 /** Under Reduce Motion a drag this far (or a flick) is a page change, crossfaded. */
 const REDUCED_STEP = SPACE.xxl
-/** Flow 6 pips (`HeroPips`): 6 pt, the page's own 16 pt, 35% off. */
-const PIP = { on: 16, off: 6 } as const
+/** Board `.dots`: 6 pt pips, the page's own 16 pt, 5 apart, 35% off; 18 pt in from the card's top-right corner. */
+// design-exception: the board measures 5 between pips (`.dots` gap), between SPACE.xs and SPACE.sm.
+const PIP = { on: 16, off: 6, gap: 5, inset: 18 } as const
+/** Board `.promo` sits at right 66: the room the dots keep beside the Promoted pill (the card's own pill row is 12 in). */
+const PIPS_ROOM = 66 - SPACE.md - SPACE.sm
 const PIP_OFF = tint(COLOR.textPrimary, 0.35)
-/** The ember glow behind the lead: the drawer's one lit object (Foundations C, "lit from behind"). */
-const GLOW = MATERIAL.glowLead.map(({ radius, color }) => ({ offsetX: 0, offsetY: 0, blurRadius: radius, color }))
+/** The ember underglow behind the lead (board `.lead`: 0 18px 60px -18px): the drawer's one lit object (Foundations C, "lit from behind"). */
+const GLOW = MATERIAL.glowLead.map(({ offsetY, radius, spread, color }) => ({ offsetX: 0, offsetY, blurRadius: radius, spreadDistance: spread, color }))
+/** The board's 0.5 pt light rim round the card. */
+const RIM = 0.5
 const CROSSFADE = { duration: REDUCE_MOTION.duration.base, easing: Easing.bezier(...EASING.standard) } as const
 
 /** What a screen reader hears for the lead: "Featured, 1 of 3", then the card as the DS card says it (Promoted first). */
@@ -49,7 +54,7 @@ export function leadLabel(card: LeadCard, index: number, count: number): string 
 
 function Pips({ count, page }: { count: number; page: number }) {
   return (
-    <View style={styles.pips}>
+    <View pointerEvents="none" style={styles.pips}>
       {Array.from({ length: count }, (_, i) => (
         <View key={i} testID={`pulse-lead-pip-${i}`} style={[styles.pip, i === page ? styles.pipOn : styles.pipOff]} />
       ))}
@@ -174,7 +179,7 @@ export function LeadPager({
       style={[styles.frame, { width, height }]}
     >
       {/* The glow sits behind the frame, not on the sliding track: the track clips, and the light is the lead's, not a page's. */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.glow]} />
+      <View testID="pulse-lead-glow" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.glow]} />
       <View style={styles.clip}>
         <GestureDetector gesture={pan}>
           <Animated.View style={[styles.track, { width: count * step }, track]}>
@@ -182,8 +187,9 @@ export function LeadPager({
               <View key={card.id} style={{ width, height, marginRight: PAGE_GAP }} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
                 <EventCard
                   kind="hero"
+                  layout="lead"
                   {...card}
-                  corner={count > 1 && i === shown ? <Pips count={count} page={shown} /> : undefined}
+                  corner={count > 1 ? <View style={styles.pipsRoom} /> : undefined}
                   onPress={() => onOpen(i)}
                   onPressIn={onPressIn ? () => onPressIn(i) : undefined}
                   onLongPress={onLongPress ? (anchor) => onLongPress(i, anchor) : undefined}
@@ -195,6 +201,9 @@ export function LeadPager({
           </Animated.View>
         </GestureDetector>
       </View>
+      <View testID="pulse-lead-rim" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.rim]} />
+      {/* Over the pages, not on one: the dots stay put while the card slides under them, as the board's do. */}
+      {count > 1 ? <Pips count={count} page={shown} /> : null}
     </View>
   )
 }
@@ -203,8 +212,10 @@ const styles = StyleSheet.create({
   frame: { alignSelf: 'center' },
   glow: { borderRadius: RADIUS.card, backgroundColor: COLOR.ink, boxShadow: GLOW },
   clip: { flex: 1, borderRadius: RADIUS.card, overflow: 'hidden' },
+  rim: { borderRadius: RADIUS.card, borderWidth: RIM, borderColor: COLOR.hairline },
   track: { flexDirection: 'row', height: '100%' },
-  pips: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, height: SPACE.xl },
+  pips: { position: 'absolute', top: PIP.inset, right: PIP.inset, flexDirection: 'row', gap: PIP.gap },
+  pipsRoom: { width: PIPS_ROOM },
   pip: { height: PIP.off, borderRadius: RADIUS.capsule },
   pipOn: { width: PIP.on, backgroundColor: COLOR.textPrimary },
   pipOff: { width: PIP.off, backgroundColor: PIP_OFF },

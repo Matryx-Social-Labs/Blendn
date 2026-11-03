@@ -11,7 +11,7 @@ import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/des
 import { liveWindow } from '../../lib/eventSession'
 import { distanceText } from '../../lib/placesPane'
 import { clockTime } from '../../lib/roomMoments'
-import { eventClock, zoneSuffix } from '../../lib/time'
+import { eventClock } from '../../lib/time'
 import { H } from '../../lib/haptics'
 import { printable } from '../../lib/pulseSections'
 
@@ -40,8 +40,8 @@ export function splitClock(ms: number, timeZone?: string | null): { time: string
   const zone = timeZone ?? undefined
   const match = /^(\d{1,2})(?::(\d{2}))? (AM|PM)$/.exec(clockTime(ms, zone))
   if (!match) return { time: clockTime(ms, zone), meridiem: '' }
-  // Short: the meridiem sits under the time in a fixed column ("PM ET"); a row's own line says "Toronto time".
-  return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: `${match[3]}${zoneSuffix(ms, timeZone, { short: true })}` }
+  // The meridiem sits under the time in a fixed column; the zone is never named (owner, 2026-11-03).
+  return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: match[3] }
 }
 
 /** What a row is read as: "10 PM. Techno in the Tunnel, at Kitty Ko, 2.9 km, 64 going". */
