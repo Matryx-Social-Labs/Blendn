@@ -3,6 +3,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { H } from '../../lib/haptics'
+import { tint } from '../../lib/theme'
 import { measureAnchor } from './anchor'
 import type { Rect } from './chatShared'
 
@@ -88,6 +89,7 @@ const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 30
 const SCRIM_HEIGHT = '62%'
 /** The Pulse lead's scrim (board `.lead .scrim`): 70%, and 78% at large text, where the words climb higher. */
 const LEAD_SCRIM = { base: '70%', large: '78%' } as const
+const OVERLINE_ALPHA = 0.78
 /** A row's height at one line of title; a two-line title grows it (a minimum, never a box). */
 const ROW_HEIGHT = 64
 /**
@@ -148,6 +150,7 @@ export function EventCard(props: EventCardProps) {
   const { kind, title, time, venue, distance, lead, promoted, overline, corner, layout, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const { fontScale } = useWindowDimensions()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const label = props.label ?? eventLabel(props)
@@ -240,7 +243,6 @@ export function EventCard(props: EventCardProps) {
   }
 
   const hero = kind === 'hero'
-  const { fontScale } = useWindowDimensions()
   const radius = hero ? RADIUS.card : RADIUS.mediaInCard
   return (
     <View
@@ -309,7 +311,7 @@ export function EventCard(props: EventCardProps) {
         ) : null}
         <View testID={testID && `${testID}-foot`} style={[styles.foot, hero ? (layout === 'lead' ? styles.footLead : styles.footHero) : styles.footCompact]}>
           {hero && overline ? (
-            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.overline]}>
               {overline.toUpperCase()}
             </Text>
           ) : null}
@@ -383,6 +385,8 @@ const styles = StyleSheet.create({
   footCompact: { left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
+  // Board `.lead .lbl`: white at 78% on the photo's scrim, brighter than the page's secondary grey.
+  overline: { color: tint(COLOR.textPrimary, OVERLINE_ALPHA) },
   tabular: { fontVariant: ['tabular-nums'] },
   wash: { backgroundColor: PRESSED_WASH.android },
   row: { minHeight: ROW_HEIGHT, paddingVertical: SPACE.xs, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },

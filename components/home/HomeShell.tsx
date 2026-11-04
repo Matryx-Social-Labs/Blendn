@@ -13,7 +13,7 @@ import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
 import { PulseSearchRow } from '../pulse/PulseHeader'
 import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, pulseRest, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
-import { BANNER_ABOVE_DRAWER, type Pin } from '../../lib/homeMap'
+import { bannerReach, type Pin } from '../../lib/homeMap'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
@@ -171,7 +171,7 @@ export function HomeShell({
   const [mapBanners, setMapBanners] = useState<ReactNode>(null)
   // The banners' height on the map, and how far it lifts "my location": above the banner, its gap kept (board `.mbn`).
   const bannerHeight = useSharedValue(0)
-  const locateLift = useDerivedValue(() => (bannerHeight.get() > 0 ? BANNER_ABOVE_DRAWER + bannerHeight.get() - SPACE.sm : 0))
+  const locateLift = useDerivedValue(() => (bannerHeight.get() > 0 ? bannerReach(bannerHeight.get() - SPACE.sm) : 0))
   const closeSearch = useCallback(() => {
     setQuery('')
     setSearchOpen(false)

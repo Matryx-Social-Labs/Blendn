@@ -1,6 +1,6 @@
 import { pulseEmptyCopy, quietWeekEnd, whereWeAre } from '../lib/pulseFeed'
 import { leadPeekLine } from '../lib/pulseSections'
-import { withFocus, type Pin } from '../lib/homeMap'
+import { bannerReach, withFocus, type Pin } from '../lib/homeMap'
 import type { CityOption } from '../lib/city'
 
 /**
@@ -76,5 +76,12 @@ describe('withFocus', () => {
   it('no focus: the same pins, untouched', () => {
     const pins = [pin('a')]
     expect(withFocus(pins, null)).toBe(pins)
+  })
+})
+
+describe('the banner on the map (board `.mbn`)', () => {
+  it('its top sits 74 above the drawer, as the board places it; a taller one keeps its foot 22 clear', () => {
+    expect(bannerReach(48)).toBe(74)
+    expect(bannerReach(64)).toBe(86)
   })
 })

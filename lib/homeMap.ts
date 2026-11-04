@@ -445,11 +445,19 @@ export function locateRide(drawerTop: number, drawer: { half: number; full: numb
  * The Pulse's banners on the map (Option C): a gap above "my location", riding the drawer and fading as it does
  * (`locateRide`). `height` is the banners' own. A worklet: it runs per frame.
  */
-export const BANNER_ABOVE_DRAWER = 22
+/** Board `.mbn` (`top: 262` over a drawer at 336): the banner's top 74 above the drawer, growing down as it wraps... */
+export const BANNER_TOP_ABOVE_DRAWER = 74
+/** ...but its foot never closer to the drawer than this. */
+export const BANNER_FOOT_MIN = 22
+/** How far above the drawer the banner's top sits, for a banner this tall. A worklet. */
+export function bannerReach(height: number) {
+  'worklet'
+  return Math.max(BANNER_TOP_ABOVE_DRAWER, height + BANNER_FOOT_MIN)
+}
 export function bannerRide(drawerTop: number, drawer: { half: number; full: number }, height: number) {
   'worklet'
   const { opacity } = locateRide(drawerTop, drawer)
-  return { translateY: drawerTop - BANNER_ABOVE_DRAWER - height, opacity }
+  return { translateY: drawerTop - bannerReach(height), opacity }
 }
 
 /** How far a fix must move before the camera follows it: past GPS jitter. */

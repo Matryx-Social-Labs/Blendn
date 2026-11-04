@@ -5,18 +5,20 @@ import { drawableCityArt } from '../cityArt/drawable'
 import { Button } from '../ds/Button'
 import { monoCaption } from '../ds/MonoFamily'
 import { SectionHeader } from '../ds/SectionHeader'
-import { SettingsRow } from '../ds/SettingsRow'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { StateScreen } from '../ds/StateScreen'
-import type { IconName } from '../ui/Icon'
+import ScalePress from '../motion/ScalePress'
+import { Icon, type IconName } from '../ui/Icon'
 import type { CatalogueCountry, CityOption } from '../../lib/city'
-import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { whereWeAre, type PulseEmptyKind } from '../../lib/pulseFeed'
 
+/** Board `.crow`: a city row under "Where Blend'n is on". */
+const CITY_ROW_HEIGHT = 60
 /** The skyline strip over a quiet city's state (R4.1 3-7). */
 const SKYLINE_HEIGHT = 140
 
-const ICON: Record<PulseEmptyKind, IconName> = {
+const KIND_ICON: Record<PulseEmptyKind, IconName> = {
   search: 'search',
   filters: 'search',
   noCity: 'calendar',
@@ -79,7 +81,7 @@ export function PulseEmpty({
   return (
     <View style={styles.wrap} testID={`pulse-empty-${kind}`}>
       {art ? <CityArtBanner art={art} height={SKYLINE_HEIGHT} /> : null}
-      <StateScreen icon={ICON[kind]} title={copy.title} body={copy.message} actions={actions} />
+      <StateScreen icon={KIND_ICON[kind]} title={copy.title} body={copy.message} actions={actions} />
     </View>
   )
 }
@@ -111,21 +113,39 @@ function NotHereYet({
           {copy.message}
         </Text>
       </View>
-      <SectionHeader title="Where Blend’n is on" testID="pulse-where-header" />
+      <View style={styles.whereHead}>
+        <SectionHeader title="Where Blend’n is on" testID="pulse-where-header" />
+      </View>
       <View>
-        {rows.map(({ city, count }) => (
-          <SettingsRow
-            key={city.slug ?? city.city}
-            icon="map-pin"
-            title={city.city}
-            hint={countries.find((c) => c.code === city.country)?.name}
-            accessory={count ? <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), styles.secondary]}>{count}</Text> : undefined}
-            label={[city.city, count].filter(Boolean).join(', ')}
-            trail="chevron"
-            onPress={() => onChooseCity(city)}
-            testID={`pulse-where-${city.slug ?? city.city}`}
-          />
-        ))}
+        {rows.map(({ city, count }) => {
+          const country = countries.find((c) => c.code === city.country)?.name
+          return (
+            // Board `.crow`: 60 tall, the screen's width with the 24 pt gutter, a hairline under it.
+            <ScalePress
+              key={city.slug ?? city.city}
+              haptic={false}
+              onPress={() => onChooseCity(city)}
+              accessibilityRole="button"
+              accessibilityLabel={[city.city, count].filter(Boolean).join(', ')}
+              style={styles.cityRow}
+              testID={`pulse-where-${city.slug ?? city.city}`}
+            >
+              <Icon name="map-pin" size={ICON.control} color={COLOR.textSecondary} />
+              <View style={styles.cityWords}>
+                <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
+                  {city.city}
+                </Text>
+                {country ? (
+                  <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.secondary]}>
+                    {country}
+                  </Text>
+                ) : null}
+              </View>
+              {count ? <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[monoCaption(bold), styles.secondary]}>{count}</Text> : null}
+              <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
+            </ScalePress>
+          )
+        })}
       </View>
     </View>
   )
@@ -159,8 +179,20 @@ export function PulseLoadFailed({ onRetry }: { onRetry: () => void }) {
 
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl },
-  notHere: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, gap: SPACE.xl },
-  words: { gap: SPACE.sm },
+  // Board (Canada · not here yet): the title 4 under the header, 6 to its line, 22 to "Where Blend'n is on", 12 to the rows.
+  notHere: { paddingTop: SPACE.xs },
+  words: { paddingHorizontal: SPACE.gutter, gap: SPACE.xs + SPACE.xxs },
+  whereHead: { paddingHorizontal: SPACE.gutter, marginTop: SPACE.lg + SPACE.xs + SPACE.xxs, marginBottom: SPACE.md },
+  cityRow: {
+    height: CITY_ROW_HEIGHT,
+    paddingHorizontal: SPACE.gutter,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLOR.hairline,
+  },
+  cityWords: { flex: 1, minWidth: 0 },
   quiet: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.md },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },

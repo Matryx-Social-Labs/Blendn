@@ -216,8 +216,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.md,
   },
-  // Board `.mbn`: 48 tall at least, 8 above and below, 14 before the glyph, 8 after the ×, 8 between; the action is words.
-  onMap: { minHeight: SIZE.targetIos + SPACE.xs, paddingVertical: SPACE.sm, paddingLeft: SPACE.md + SPACE.xxs, paddingRight: SPACE.sm, gap: SPACE.sm },
+  // Board `.mbn`: 48 tall, 14 before the glyph, 8 after the ×, 8 between; the action is words. 6 above and below (the
+  // board's 8 holds a line of words; ours holds the DS's 36 pt text button, so the bar stays the board's 48).
+  onMap: { minHeight: SIZE.targetIos + SPACE.xs, paddingVertical: SPACE.xs + SPACE.xxs, paddingLeft: SPACE.md + SPACE.xxs, paddingRight: SPACE.sm, gap: SPACE.sm },
   /** The action is under the sentence: hang from its first line. */
   top: { alignItems: 'flex-start' },
   glyph: { justifyContent: 'center' },
