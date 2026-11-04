@@ -353,6 +353,15 @@ describe('the sheet over the landing (Flow 1c, option C)', () => {
     setLandingUnder(null)
   })
 
+  it('a tap on the sky above the sheet puts the keyboard away, and is not a control', async () => {
+    const dismiss = jest.spyOn(require('react-native').Keyboard, 'dismiss')
+    await render(<SignIn />)
+    const sky = screen.getByTestId('sign-in-sky')
+    expect(sky.props.accessible).toBe(false)
+    await fireEvent.press(sky)
+    expect(dismiss).toHaveBeenCalled()
+  })
+
   it('a link straight to it (no landing under): the remnant behind the sheet', async () => {
     await render(<SignIn />)
     expect(screen.getByTestId('galaxy-remnant', { includeHiddenElements: true })).toBeTruthy()

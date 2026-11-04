@@ -1,6 +1,6 @@
 import { router, useIsFocused } from 'expo-router'
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { BackHandler, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native'
+import { BackHandler, Keyboard, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native'
 import { KeyboardEvents, useKeyboardContext } from 'react-native-keyboard-controller'
 import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -154,6 +154,8 @@ export function EmailSheet({ title, children, dock, reveal, drivesLanding = fals
     <View testID={testID} style={StyleSheet.absoluteFill} pointerEvents={focused ? 'box-none' : 'none'} accessibilityViewIsModal>
       {/* A link straight to the form has no landing under it: the sky it would have been on. */}
       {behind ? <Backdrop level={ORB_LEVEL.landing} /> : null}
+      {/* A tap on the sky above the sheet puts the keyboard away; it is not a control, so it is not announced. */}
+      <Pressable testID={testID && `${testID}-sky`} accessible={false} onPress={Keyboard.dismiss} style={StyleSheet.absoluteFill} />
       <Animated.View style={[styles.back, { top: barTop(insets.top) }, backStyle]}>
         <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={close} testID={testID && `${testID}-back`} />
       </Animated.View>
