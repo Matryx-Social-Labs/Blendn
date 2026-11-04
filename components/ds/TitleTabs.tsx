@@ -115,7 +115,9 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
               >
                 <Text
                   style={[font('tab', bold), styles.shrink, { color: on ? COLOR.textPrimary : COLOR.textTertiary }]}
-                  maxFontSizeMultiplier={CONTROL_FONT_CAP}
+                  // The board's 22 pt at every text size (its largest-text frame grows the chips, not the tabs): a pane's
+                  // name is already large, and grown it clipped beside the city on Android at 2.0.
+                  maxFontSizeMultiplier={1}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={WORDS_MIN_SCALE}

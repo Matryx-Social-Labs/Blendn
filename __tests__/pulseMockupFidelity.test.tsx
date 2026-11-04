@@ -67,3 +67,18 @@ it('.lead .foot: the words 20 in and 18 up, and "86 going" as the foot’s last 
   expect(screen.queryByTestId('h-people', { includeHiddenElements: true })).toBeNull()
   expect(screen.getAllByText('86 going', { includeHiddenElements: true }).length).toBeGreaterThan(0)
 })
+
+it('.lead .scrim: 70% of the card, 78% at large text, so the overline never sits on bare photo (board)', async () => {
+  const { EventCard } = jest.requireActual('../components/ds/EventCard')
+  const { Dimensions } = jest.requireActual('react-native')
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
+  await render(<EventCard kind="hero" layout="lead" title="Night" time="9 PM" venue="Pebble" testID="s" />)
+  expect(StyleSheet.flatten(screen.getByTestId('s-scrim', { includeHiddenElements: true }).props.style).height).toBe('70%')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 2 }, screen: { ...window, fontScale: 2 } }))
+  expect(StyleSheet.flatten(screen.getByTestId('s-scrim', { includeHiddenElements: true }).props.style).height).toBe('78%')
+  await act(async () => Dimensions.set({ window, screen: window }))
+  // Control: the DS hero elsewhere keeps its 62%.
+  await render(<EventCard kind="hero" title="Night" time="9 PM" venue="Pebble" testID="h" />)
+  expect(StyleSheet.flatten(screen.getByTestId('h-scrim', { includeHiddenElements: true }).props.style).height).toBe('62%')
+})

@@ -66,7 +66,8 @@ describe('withFocus', () => {
   const pin = (id: string, glow = 1): Pin => ({ id, kind: 'event', latitude: 12.97, longitude: 77.59, title: id, live: false, glow, startsAt: null, endsAt: null, bucket: null })
   it('lights the focused pin brightest and leaves the others at their own level', () => {
     const out = withFocus([pin('a'), pin('b', 3)], pin('a'))
-    expect(out.find((p) => p.id === 'a')).toMatchObject({ live: true, glow: 4 })
+    // Brighter, never "live": a lit venue for a Tuesday-noon event must not read LIVE on its map chip (drive, Android).
+    expect(out.find((p) => p.id === 'a')).toMatchObject({ live: false, glow: 4 })
     expect(out.find((p) => p.id === 'b')).toMatchObject({ glow: 3 })
   })
   it('adds the focused venue when the map has not loaded its pin yet', () => {

@@ -71,7 +71,7 @@ describe('<TitleTabs>', () => {
     expect(off.color).toBe(COLOR.textTertiary)
     expect(on.fontFamily).toBe(off.fontFamily)
     expect(on.fontSize).toBe(off.fontSize)
-    expect(screen.getByText('Events').props.maxFontSizeMultiplier).toBe(1.3)
+    expect(screen.getByText('Events').props.maxFontSizeMultiplier).toBe(1)
   })
 
   it('each word is a 48 pt target, with slop either side', async () => {
@@ -180,6 +180,12 @@ describe('a narrow phone or a large size (A15: the city pill cut to "Bengal…" 
     expect(trailing.alignItems).toBe('flex-end')
     // The words shrink to fit (never below 75%) before the pill truncates.
     expect(screen.getByText('Events').props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75 })
+  })
+
+  it('the words stay the board’s 22 pt at any text size (Flow 3 board, largest text: chips grow, tabs do not)', async () => {
+    await at(411, 2)
+    await draw({ trailing: <Text>Bengaluru</Text> })
+    expect(screen.getByText('Events').props.maxFontSizeMultiplier).toBe(1)
   })
 
   it('a roomy phone at the default size: the words 16 apart, as the Flow 3 board’s `.ttab` (2026-11-03)', async () => {

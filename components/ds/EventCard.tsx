@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import { useRef, useState, type ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { H } from '../../lib/haptics'
 import { measureAnchor } from './anchor'
@@ -86,6 +86,8 @@ export type EventCardProps = {
 const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 300 }, compact: { width: 240, height: 170 } }
 /** The scrim covers the lower 62% of the photo (the page). */
 const SCRIM_HEIGHT = '62%'
+/** The Pulse lead's scrim (board `.lead .scrim`): 70%, and 78% at large text, where the words climb higher. */
+const LEAD_SCRIM = { base: '70%', large: '78%' } as const
 /** A row's height at one line of title; a two-line title grows it (a minimum, never a box). */
 const ROW_HEIGHT = 64
 /**
@@ -238,6 +240,7 @@ export function EventCard(props: EventCardProps) {
   }
 
   const hero = kind === 'hero'
+  const { fontScale } = useWindowDimensions()
   const radius = hero ? RADIUS.card : RADIUS.mediaInCard
   return (
     <View
@@ -264,7 +267,7 @@ export function EventCard(props: EventCardProps) {
         ) : (
           <CategoryPlate category={category} testID={testID && `${testID}-plate`} />
         )}
-        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={styles.scrim} />
+        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={[styles.scrim, layout === 'lead' && { height: fontScale > CONTROL_FONT_CAP ? LEAD_SCRIM.large : LEAD_SCRIM.base }]} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
           {layout === 'lead' ? null : here ? (

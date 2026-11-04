@@ -150,7 +150,8 @@ export const FOCUS_GLOW = 4
  */
 export function withFocus(pins: Pin[], focus: Pin | null): Pin[] {
   if (!focus) return pins
-  const lit = (p: Pin): Pin => ({ ...p, live: true, glow: FOCUS_GLOW })
+  // Brighter only: `live` is what its chip says ("LIVE ●"), and the lead's event need not be on now.
+  const lit = (p: Pin): Pin => ({ ...p, glow: FOCUS_GLOW })
   return pins.some((p) => p.id === focus.id) ? pins.map((p) => (p.id === focus.id ? lit(p) : p)) : [...pins, lit(focus)]
 }
 
