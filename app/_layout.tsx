@@ -592,8 +592,13 @@ function RootLayout() {
         * The two signed-out screens. Both are also listed in `isAuthRoute`
         * above — without that they mount and are replaced on the next tick.
         */}
-      <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-      <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+      {/*
+        Flow 1c, option C (owner's pick, 2026-11-04): over the landing, not in its place. Transparent modals with no
+        animation of their own: the landing keeps turning behind the glass sheet, which grows out of its Dock
+        (components/onboarding/EmailSheet.tsx). Forgot-password goes over sign-in the same way.
+      */}
+      <Stack.Screen name="sign-in" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="forgot-password" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       {/* The unmatched route draws its own screen: without this the native stack titled it "+not-found" in a white header. */}
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
       <Stack.Screen

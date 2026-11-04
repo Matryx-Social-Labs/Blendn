@@ -19,7 +19,8 @@ const mockSignInWithGoogle = jest.fn()
 const mockSignInWithApple = jest.fn()
 const mockNotice = jest.fn()
 let mockFocused = true
-jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useIsFocused: () => mockFocused }))
+let mockPath = '/'
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useIsFocused: () => mockFocused, usePathname: () => mockPath }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
@@ -70,6 +71,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   jest.useFakeTimers()
   mockFocused = true
+  mockPath = '/'
   on('ios')
   mockAuth.mockReturnValue(signedOut)
   mockNotice.mockResolvedValue(null)
@@ -439,12 +441,43 @@ describe('the old landing over the galaxies (Flow 1b, owner 2026-11-02)', () => 
     expect(shelf().props.transform).toEqual(expect.arrayContaining([{ translateX: 195 }, { translateY: 316 }]))
   })
 
-  it('the sky turns while the landing is the screen, and holds while email (or any screen) is over it', async () => {
+  const paused = () => (Backdrop as jest.Mock).mock.calls.at(-1)?.[0].paused
+
+  it('the sky turns while the landing is the screen, and holds under any other screen', async () => {
     await draw()
-    const paused = () => (Backdrop as jest.Mock).mock.calls.at(-1)?.[0].paused
     expect(paused()).toBe(false)
     mockFocused = false
+    mockPath = '/about'
     await draw()
     expect(paused()).toBe(true)
+  })
+
+  it('keeps turning under the email sheet, sign-in and forgot-password, until they sign in (owner, 2026-11-04: C)', async () => {
+    mockFocused = false
+    for (const path of ['/sign-in', '/forgot-password']) {
+      mockPath = path
+      await draw()
+      expect(paused()).toBe(false)
+    }
+  })
+
+  it('hands the sheet its Dock’s height to grow from, and takes it back when it goes', async () => {
+    const { landingUnder } = require('../lib/emailSheet') as typeof import('../lib/emailSheet')
+    const { unmount } = await render(<Index />)
+    await act(async () => {
+      screen.getByTestId('landing-dock').props.onLayout?.({ nativeEvent: { layout: { x: 0, y: 530, width: 402, height: 314 } } })
+    })
+    expect(landingUnder()).toEqual({ dockHeight: 314 })
+    await unmount()
+    expect(landingUnder()).toBeNull()
+  })
+
+  it('under the sheet it is not read: a screen reader stays on the form', async () => {
+    mockFocused = false
+    mockPath = '/sign-in'
+    await draw()
+    const root = screen.getByTestId('landing-root', { includeHiddenElements: true })
+    expect(root.props.accessibilityElementsHidden).toBe(true)
+    expect(root.props.importantForAccessibility).toBe('no-hide-descendants')
   })
 })

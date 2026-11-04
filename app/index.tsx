@@ -5,17 +5,18 @@ import {
   statusCodes
 } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import { router, useIsFocused } from 'expo-router'
+import { router, useIsFocused, usePathname } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
-import Animated from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useDerivedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { currentDeviceInfo } from '../components/onboarding/authForm'
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import type { Shelf } from '../components/onboarding/GalaxyBackdrop'
 import { Dock } from '../components/ds/Dock'
 import { GoogleMark } from '../components/onboarding/GoogleMark'
-import { Lockup } from '../components/onboarding/Lockup'
+import { Lockup, LOCKUP_HEIGHT } from '../components/onboarding/Lockup'
+import { emailSheet, handover, lockupShown, setLandingUnder } from '../lib/emailSheet'
 import { useSettleIn } from '../components/onboarding/useSettleIn'
 import FadeInUp from '../components/motion/FadeInUp'
 import ScalePress from '../components/motion/ScalePress'
@@ -68,8 +69,29 @@ function IndexInner() {
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
   const settle = useSettleIn()
-  /** The sky turns until the landing is left: held while email, or any screen, is over it (owner, 2026-11-03). */
+  /*
+   * The sky turns until they sign in or sign up (owner, 2026-11-03), and on under the email sheet, which is drawn over
+   * this screen rather than in its place (Flow 1c, option C, 2026-11-04). Any other screen over it holds it.
+   */
   const focused = useIsFocused()
+  const pathname = usePathname()
+  const underSheet = pathname === '/sign-in' || pathname === '/forgot-password'
+  /*
+   * The handover to the sheet (lib/emailSheet): the tagline and the Dock leave as it grows out of the Dock, the lockup as
+   * its edge comes up to it. The Dock's height is what it grows from.
+   */
+  const sheet = emailSheet()
+  const [dockHeight, setDockHeight] = useState(0)
+  useEffect(() => {
+    if (dockHeight > 0) setLandingUnder({ dockHeight })
+  }, [dockHeight])
+  useEffect(() => () => setLandingUnder(null), [])
+  const lockupBottom = window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP) + LOCKUP_HEIGHT.landing
+  const lockupFade = useAnimatedStyle(() => ({ opacity: lockupShown(sheet.top.get(), lockupBottom) }))
+  const taglineFade = useAnimatedStyle(() => ({ opacity: handover(sheet.progress.get()).tagline }))
+  const dockFade = useAnimatedStyle(() => ({ opacity: handover(sheet.progress.get()).dock }))
+  // The ink shelf is the tagline's: it goes with it.
+  const shelfFade = useDerivedValue(() => handover(sheet.progress.get()).tagline)
   /** The tagline's box, for the ink shelf the sky draws behind it (Flow 1b: a star crossing the words stays at AA). */
   const [shelf, setShelf] = useState<Shelf | null>(null)
   /*
@@ -324,8 +346,14 @@ function IndexInner() {
   const rise = (index: number) => ({ delay: ENTRANCE_AT + index * STAGGER.loose, distance: RISE.message, duration: DURATION.medium })
 
   return (
-    <View style={styles.root}>
-      <Backdrop level={ORB_LEVEL.landing} enter shelf={shelf} paused={!focused} />
+    <View
+      testID="landing-root"
+      style={styles.root}
+      // Under the sheet the form is the screen: a screen reader stays on it.
+      accessibilityElementsHidden={underSheet}
+      importantForAccessibility={underSheet ? 'no-hide-descendants' : 'auto'}
+    >
+      <Backdrop level={ORB_LEVEL.landing} enter shelf={shelf} shelfFade={shelfFade} paused={!focused && !underSheet} />
 
       {/* A link tapped while signed out is held through sign-in; say so (Flow 15 15.12 02). */}
       {pendingEventLink() ? (
@@ -335,15 +363,18 @@ function IndexInner() {
       ) : null}
 
       <Animated.View style={[styles.brand, { paddingTop: window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP) }, settle]} testID="landing-brand">
-        <Lockup size="landing" testID="landing-lockup" />
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline]} onLayout={(e) => setShelf(e.nativeEvent.layout)}>
+        <Animated.View style={lockupFade}>
+          <Lockup size="landing" testID="landing-lockup" />
+        </Animated.View>
+        <Animated.Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline, taglineFade]} onLayout={(e) => setShelf(e.nativeEvent.layout)}>
           Same place. Same vibe. Instant connections.
-        </Text>
+        </Animated.Text>
         {/* Whose invite is waiting, when an invite link brought them here. */}
         <PendingInvite />
       </Animated.View>
 
-      <Dock gap={SPACE.md} testID="landing-dock">
+      <Animated.View style={dockFade} pointerEvents={underSheet ? 'none' : 'auto'}>
+      <Dock gap={SPACE.md} testID="landing-dock" onHeight={setDockHeight}>
         {/*
           * Said to screen readers as it arrives (`useAnnounced`, the live region on Android), so someone mid-gesture is
           * told rather than left waiting. A toast would auto-dismiss and be missed entirely.
@@ -454,6 +485,7 @@ function IndexInner() {
           <LegalLine lead="By continuing you" />
         </FadeInUp>
       </Dock>
+      </Animated.View>
     </View>
   )
 }

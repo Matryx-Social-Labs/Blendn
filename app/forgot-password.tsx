@@ -1,16 +1,14 @@
 import { useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Linking, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { Linking, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { forgotPasswordMessage } from '../lib/signInRefusal'
-import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import { CooldownRing } from '../components/onboarding/CooldownRing'
-import { Dock } from '../components/ds/Dock'
-import { FormHeader } from '../components/onboarding/FormHeader'
+import { EmailSheet, SheetItem } from '../components/onboarding/EmailSheet'
 import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
 import { useSettleIn } from '../components/onboarding/useSettleIn'
 import { Banner } from '../components/ds/Banner'
@@ -20,7 +18,6 @@ import { TextField } from '../components/ds/TextField'
 import { font, useBoldText } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
-import { KEYBOARD_BEHAVIOR, useKeyboardShown } from '../lib/keyboard'
 
 
 /**
@@ -68,10 +65,6 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState(typeof params.email === 'string' ? params.email : '')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
-  // The page has moved under the header: it wears the bar (r7 M11). Per page, so the sent page opens with a clear header.
-  const [movedOn, setMovedOn] = useState<{ sent: boolean; y: boolean }>({ sent: false, y: false })
-  const scrolled = movedOn.y && movedOn.sent === sent
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setMovedOn({ sent, y: e.nativeEvent.contentOffset.y > 0 })
   /** The server's refusal, or ours when it never answered: a card above the primary. */
   const [error, setError] = useState<string | null>(null)
   const [waiting, setWaiting] = useState(false)
@@ -79,7 +72,6 @@ export default function ForgotPassword() {
   const [invalid, setInvalid] = useState<string | null>(null)
   const [cooldown, setCooldown] = useState(0)
   const bold = useBoldText()
-  const keyboardUp = useKeyboardShown()
   const settle = useSettleIn(ENVELOPE_FROM_SCALE)
   // One shake, one H.error per refusal, on the button that asked (Resend is its own).
   const { refused, refuse } = useRefusedPulse()
@@ -172,120 +164,112 @@ export default function ForgotPassword() {
     }
   }
 
+  /*
+   * Flow 1c (owner's pick C): the same glass sheet as sign-in, over the landing that keeps turning, grown from the sign-in
+   * sheet under it. The entry is a title, one line of why, the address and one action; sent, the envelope and the
+   * actions it has always had (the board drew two of the three; Resend stays, decided 2026-11-04).
+   */
+  if (sent) {
+    return (
+      <EmailSheet
+        testID="forgot"
+        title={null}
+        dock={
+          <>
+            <Button label="Open mail app" onPress={() => void openMail()} testID="forgot-open-mail" />
+            {/* Counting down: still readable, plainly not ready, and the ring says how long. */}
+            <Button
+              label={cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend link'}
+              kind="secondary"
+              onPress={() => void resend()}
+              disabled={cooldown > 0}
+              loading={busy}
+              refused={resendRefused}
+              leading={cooldown > 0 ? <CooldownRing left={cooldown} total={RESEND_COOLDOWN_S} testID="forgot-ring" /> : undefined}
+              testID="forgot-resend"
+            />
+            <Button
+              label="Use a different email"
+              kind="tertiary"
+              size="sm"
+              onPress={() => {
+                setSent(false)
+                setError(null)
+              }}
+              testID="forgot-different"
+              style={styles.centred}
+            />
+          </>
+        }
+      >
+        {/* The envelope settles in once, on M.settle (Reduce Motion: it fades). */}
+        <Animated.View style={[styles.well, settle]}>
+          <GlyphWell icon="mail" size="screen" testID="forgot-sent-well" />
+        </Animated.View>
+        <View style={styles.headline}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
+            Check your inbox
+          </Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.body, styles.centre]} testID="forgot-sent-body">
+            If{address.length > LONG_ADDRESS ? '\n' : ' '}
+            <Text style={[font('body', bold, FONT_FAMILY.brand[700]), styles.address]}>{address}</Text>
+            {address.length > LONG_ADDRESS ? '\n' : ' '}
+            has an account, a reset link is on its way. It opens in your browser and expires in an hour.
+          </Text>
+        </View>
+        {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
+      </EmailSheet>
+    )
+  }
+
   return (
-    <View style={styles.root}>
-      <Backdrop level={ORB_LEVEL.form} paused={keyboardUp} />
-      <FormHeader testID="forgot-header" scrolled={scrolled} />
-
-      <KeyboardAvoidingView style={styles.flex} behavior={KEYBOARD_BEHAVIOR}>
-        {sent ? (
-          <>
-            <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
-              {/* The envelope settles in once, on M.settle (Reduce Motion: it fades). */}
-              <Animated.View style={[styles.well, settle]}>
-                <GlyphWell icon="mail" size="screen" testID="forgot-sent-well" />
-              </Animated.View>
-              <View style={styles.headline}>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
-                  Check your inbox
-                </Text>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.body, styles.centre]} testID="forgot-sent-body">
-                  If{address.length > LONG_ADDRESS ? '\n' : ' '}
-                  <Text style={[font('body', bold, FONT_FAMILY.brand[700]), styles.address]}>{address}</Text>
-                  {address.length > LONG_ADDRESS ? '\n' : ' '}
-                  has an account, a reset link is on its way. It opens in your browser and expires in an hour.
-                </Text>
-              </View>
-
-              {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
-            </ScrollView>
-
-            <Dock glass={false} keyboardUp={false} testID="forgot-dock">
-              <Button label="Open mail app" onPress={() => void openMail()} testID="forgot-open-mail" />
-
-              {/* Counting down: still readable, plainly not ready, and the ring says how long. */}
-              <Button
-                label={cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend link'}
-                kind="secondary"
-                onPress={() => void resend()}
-                disabled={cooldown > 0}
-                loading={busy}
-                refused={resendRefused}
-                leading={cooldown > 0 ? <CooldownRing left={cooldown} total={RESEND_COOLDOWN_S} testID="forgot-ring" /> : undefined}
-                testID="forgot-resend"
-              />
-
-              <View style={styles.other}>
-                <Button
-                  label="Use a different email"
-                  kind="tertiary"
-                  size="sm"
-                  onPress={() => {
-                    setSent(false)
-                    setError(null)
-                  }}
-                  testID="forgot-different"
-                  style={styles.centred}
-                />
-              </View>
-            </Dock>
-          </>
-        ) : (
-          <>
-            <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} onScroll={onScroll} scrollEventThrottle={16}>
-              <View style={styles.headline}>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title]} accessibilityRole="header">
-                  Forgot your password?
-                </Text>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.body]}>
-                  Enter your email and we’ll send a link to reset it. The link opens in your browser.
-                </Text>
-              </View>
-
-              <TextField
-                label="Email"
-                value={email}
-                onChangeText={(value) => {
-                  setEmail(value)
-                  if (invalid) setInvalid(null)
-                }}
-                error={invalid ?? undefined}
-                placeholder="you@example.com"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                autoComplete="email"
-                textContentType="emailAddress"
-                returnKeyType="go"
-                onSubmitEditing={() => void submit()}
-                autoFocus={!email}
-                testID="forgot-email"
-              />
-
-              {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
-            </ScrollView>
-
-            <Dock glass={keyboardUp} keyboardUp={keyboardUp} testID="forgot-dock">
-              {/* The server's answer plays its own haptic within a second (H.success, or the refusal's H.error), so the press-in is silent. */}
-              <Button label="Send reset link" onPress={() => void submit()} loading={busy} refused={refused} pressHaptic={false} testID="forgot-send" />
-            </Dock>
-          </>
-        )}
-      </KeyboardAvoidingView>
-    </View>
+    <EmailSheet
+      testID="forgot"
+      reveal="email"
+      title={
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
+          Forgot your password?
+        </Text>
+      }
+      dock={
+        // The server's answer plays its own haptic within a second (H.success, or the refusal's H.error), so the press-in is silent.
+        <Button label="Send reset link" onPress={() => void submit()} loading={busy} refused={refused} pressHaptic={false} testID="forgot-send" />
+      }
+    >
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.body, styles.centre]}>
+        Enter your email and we’ll send a link to reset it. The link opens in your browser.
+      </Text>
+      <SheetItem name="email">
+        <TextField
+          label="Email"
+          value={email}
+          onChangeText={(value) => {
+            setEmail(value)
+            if (invalid) setInvalid(null)
+          }}
+          error={invalid ?? undefined}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          autoComplete="email"
+          textContentType="emailAddress"
+          returnKeyType="go"
+          onSubmitEditing={() => void submit()}
+          autoFocus={!email}
+          testID="forgot-email"
+        />
+      </SheetItem>
+      {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
+    </EmailSheet>
   )
 }
 
 const styles = StyleSheet.create({
   centred: { alignSelf: 'center' },
-  root: { flex: 1, backgroundColor: COLOR.ink },
-  flex: { flex: 1 },
-  scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.xl, gap: SPACE.lg },
   headline: { gap: SPACE.sm },
   title: { color: COLOR.textPrimary },
   body: { color: COLOR.textSecondary },
   centre: { textAlign: 'center' },
   address: { color: COLOR.textPrimary },
   well: { alignSelf: 'center' },
-  other: { alignItems: 'center' },
 })

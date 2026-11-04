@@ -15,6 +15,7 @@ const mockToast = jest.fn()
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useLocalSearchParams: jest.fn(() => ({})),
+  useIsFocused: () => true,
 }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/apiClient', () => ({ apiClient: { forgotPassword: (...args: unknown[]) => mockForgot(...args) } }))
@@ -162,5 +163,21 @@ describe('Check your inbox', () => {
     await sent()
     await fireEvent.press(screen.getByTestId('forgot-different'))
     expect(screen.getByText('Forgot your password?')).toBeTruthy()
+  })
+})
+
+describe('the sheet over the landing (Flow 1c, option C)', () => {
+  it('the entry is the email sheet: Back, the question as its heading, the address with no placeholder', async () => {
+    await render(<ForgotPassword />)
+    expect(screen.getByTestId('forgot-sheet', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('Back')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Forgot your password?' })).toBeTruthy()
+    expect(screen.getByTestId('forgot-email-input').props.placeholder).toBeUndefined()
+  })
+
+  it('Check your inbox is the same sheet, and keeps all three ways on: Open mail app, Resend, Use a different email', async () => {
+    await sent()
+    expect(screen.getByTestId('forgot-sheet', { includeHiddenElements: true })).toBeTruthy()
+    for (const id of ['forgot-open-mail', 'forgot-resend', 'forgot-different']) expect(screen.getByTestId(id)).toBeTruthy()
   })
 })

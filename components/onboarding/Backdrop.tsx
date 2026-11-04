@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native'
-import Animated, { FadeIn } from 'react-native-reanimated'
+import Animated, { FadeIn, type SharedValue } from 'react-native-reanimated'
 
 import { Grain } from '../ds/Grain'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
@@ -22,13 +22,21 @@ const ENTRANCE_MS = 600
  * it; it holds itself in the background and under Reduce Motion.
  * `shelf` is the landing tagline's box, for the ink band that keeps the words at AA.
  */
-export function Backdrop({ level, paused = false, enter = false, shelf, testID }: { level: number; paused?: boolean; enter?: boolean; shelf?: Shelf | null; testID?: string }) {
+export function Backdrop({ level, paused = false, enter = false, shelf, shelfFade, testID }: {
+  level: number
+  paused?: boolean
+  enter?: boolean
+  shelf?: Shelf | null
+  /** The shelf's opacity: it leaves with the tagline as the email sheet grows (Flow 1c). */
+  shelfFade?: SharedValue<number>
+  testID?: string
+}) {
   const reduceMotion = useReducedMotion()
   const fade = enter ? FadeIn.duration(reduceMotion ? motionTokens(true).duration.base : ENTRANCE_MS) : undefined
   return (
     <Animated.View testID={testID} entering={fade} pointerEvents="none" style={StyleSheet.absoluteFill}>
       <View style={[StyleSheet.absoluteFill, { opacity: level }]}>
-        <GalaxyBackdrop mode={enter ? 'collision' : 'remnant'} paused={paused} shelf={shelf} />
+        <GalaxyBackdrop mode={enter ? 'collision' : 'remnant'} paused={paused} shelf={shelf} shelfFade={shelfFade} />
       </View>
       <Grain />
     </Animated.View>

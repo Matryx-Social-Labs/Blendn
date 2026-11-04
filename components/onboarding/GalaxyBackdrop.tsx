@@ -155,13 +155,14 @@ function starLooks(stars: number) {
 
 const CORE_SCALES = CORE_LIGHTS.flatMap(({ size }) => [size / SPRITE, size / SPRITE])
 
-function Sky({ stars, cores, colors, frame, bloom, shelf, testID }: {
+function Sky({ stars, cores, colors, frame, bloom, shelf, shelfFade, testID }: {
   stars: ReturnType<typeof useRSXformBuffer>
   cores: ReturnType<typeof useRSXformBuffer>
   colors: SkColor[]
   frame: SkyFrame
   bloom: boolean
   shelf?: Shelf | null
+  shelfFade?: SharedValue<number>
   testID: string
 }) {
   const images = spriteImages()
@@ -182,7 +183,7 @@ function Sky({ stars, cores, colors, frame, bloom, shelf, testID }: {
       <Fill color={COLOR.ink} />
       {lights}
       {bloom ? <Group layer={<Paint blendMode="plus" opacity={BLOOM.alpha}><Blur blur={BLOOM.blur} /></Paint>}>{lights}</Group> : null}
-      {shelf ? <ShelfBand shelf={shelf} /> : null}
+      {shelf ? <ShelfBand shelf={shelf} fade={shelfFade} /> : null}
       <Rect x={0} y={fadeTop} width={frame.width} height={frame.height - fadeTop}>
         <LinearGradient start={vec(0, fadeTop)} end={vec(0, frame.height * FADE.to)} colors={[tint(COLOR.ink, 0), COLOR.ink]} />
       </Rect>
@@ -191,12 +192,12 @@ function Sky({ stars, cores, colors, frame, bloom, shelf, testID }: {
 }
 
 /** An ink ellipse under the tagline, part of the sky: a star crossing behind the words is dimmed to AA. */
-function ShelfBand({ shelf }: { shelf: Shelf }) {
+function ShelfBand({ shelf, fade }: { shelf: Shelf; fade?: SharedValue<number> }) {
   const rx = shelf.width / 2 + SHELF.padX
   const ry = shelf.height / 2 + SHELF.padY
   const ink = tint(COLOR.ink, SHELF.alpha)
   return (
-    <Group transform={[{ translateX: shelf.x + shelf.width / 2 }, { translateY: shelf.y + shelf.height / 2 }, { scaleX: rx / ry }]}>
+    <Group opacity={fade ?? 1} transform={[{ translateX: shelf.x + shelf.width / 2 }, { translateY: shelf.y + shelf.height / 2 }, { scaleX: rx / ry }]}>
       <Rect x={-ry} y={-ry} width={2 * ry} height={2 * ry}>
         <RadialGradient c={vec(0, 0)} r={ry} colors={[ink, ink, tint(COLOR.ink, 0)]} positions={[0, SHELF.solid, 1]} />
       </Rect>
@@ -208,7 +209,7 @@ function ShelfBand({ shelf }: { shelf: Shelf }) {
  * The landing: the physics runs from a frame callback, two steps a frame; after it only the turn is left, redrawn every
  * second frame, until the landing is left. Held in the background and while `paused` (the keyboard, another screen on top).
  */
-function Collision({ paused, shelf }: { paused: boolean; shelf?: Shelf | null }) {
+function Collision({ paused, shelf, shelfFade }: { paused: boolean; shelf?: Shelf | null; shelfFade?: SharedValue<number> }) {
   const frame = useSkyFrame()
   const [lowEnd] = useState(isLowEnd)
   const count = lowEnd ? GALAXY_B.physics.stars / 2 : GALAXY_B.physics.stars
@@ -261,14 +262,14 @@ function Collision({ paused, shelf }: { paused: boolean; shelf?: Shelf | null })
     xf.set(sc, 0, x - sc * HALF, y - sc * HALF)
   })
 
-  return <Sky testID="galaxy-live" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!lowEnd} shelf={shelf} />
+  return <Sky testID="galaxy-live" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!lowEnd} shelf={shelf} shelfFade={shelfFade} />
 }
 
 /**
  * What the collision left (assets/galaxy/remnant.json, its frame at END_AT, made by scripts/galaxy-remnant.mjs): never
  * re-simulated. Behind the forms it turns on from where the landing was left and eases to still; under Reduce Motion it is still.
  */
-function Remnant({ turning, paused, shelf }: { turning: boolean; paused: boolean; shelf?: Shelf | null }) {
+function Remnant({ turning, paused, shelf, shelfFade }: { turning: boolean; paused: boolean; shelf?: Shelf | null; shelfFade?: SharedValue<number> }) {
   const frame = useSkyFrame()
   const looks = useMemo(() => starLooks(REMNANT.n), [])
   const { scales, spin } = looks
@@ -313,7 +314,7 @@ function Remnant({ turning, paused, shelf }: { turning: boolean; paused: boolean
     xf.set(sc, 0, frame.cx + (x * c - y * s) * frame.k - sc * HALF, frame.cy + (x * s + y * c) * frame.k - sc * HALF)
   })
 
-  return <Sky testID="galaxy-remnant" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!isLowEnd()} shelf={shelf} />
+  return <Sky testID="galaxy-remnant" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!isLowEnd()} shelf={shelf} shelfFade={shelfFade} />
 }
 
 /**
@@ -322,14 +323,21 @@ function Remnant({ turning, paused, shelf }: { turning: boolean; paused: boolean
  * another screen is over it; it holds itself in the background.
  * `shelf` is the tagline's box, for the ink band behind it. Untouchable and hidden from a screen reader.
  */
-export function GalaxyBackdrop({ mode, paused = false, shelf, testID }: { mode: 'collision' | 'remnant'; paused?: boolean; shelf?: Shelf | null; testID?: string }) {
+export function GalaxyBackdrop({ mode, paused = false, shelf, shelfFade, testID }: {
+  mode: 'collision' | 'remnant'
+  paused?: boolean
+  shelf?: Shelf | null
+  /** The shelf's opacity (the email sheet's handover); whole when not given. */
+  shelfFade?: SharedValue<number>
+  testID?: string
+}) {
   const reduceMotion = useReducedMotion()
   return (
     <View testID={testID} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
       {mode === 'collision' && !reduceMotion ? (
-        <Collision paused={paused} shelf={shelf} />
+        <Collision paused={paused} shelf={shelf} shelfFade={shelfFade} />
       ) : (
-        <Remnant turning={mode === 'remnant' && !reduceMotion} paused={paused} shelf={shelf} />
+        <Remnant turning={mode === 'remnant' && !reduceMotion} paused={paused} shelf={shelf} shelfFade={shelfFade} />
       )}
     </View>
   )
