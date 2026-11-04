@@ -2,7 +2,7 @@ import { createContext, useContext, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import { DrawerGround, useInDrawer } from '../home/HomeDrawer'
-import { Material, useMaterialTier } from '../ui/Material'
+import { Material } from '../ui/Material'
 import { SPACE } from '../../lib/design/tokens'
 
 /** How far the list scrolls before the sticky search row takes its bar: the title block has gone under it. */
@@ -16,24 +16,20 @@ export const STICKY_BAR_AFTER = SPACE.xl
 export const StickyScrolled = createContext(false)
 
 /**
- * The search row's place in a list, pinned under the title (`stickyHeaderIndices`). Once the list has scrolled
- * the row gets the design system's bar `Material` behind it. It is mounted, not faded: the Material page says
- * glass never animates opacity (§5.2 rule 6), so showing and hiding it is a mount.
+ * A row's place in a list, pinned under the title (`stickyHeaderIndices`): the Pulse's chips, Places' search.
  *
- * On the solid tier (Android, Reduce Transparency) the row also always stands on the drawer's own opaque ground
- * (`DrawerGround`), so it is invisible at rest and nothing scrolling under it can show through, whatever the flag says.
- * Glass has no ground to match, so there the bar alone does it. Inside a drawer on the solid tier that ink ground is the
- * bar: laying the solid bar fill (#1A1818) over it read as a grey band once scrolled (owner, 2026-11-02).
+ * Inside a drawer the row stands on the drawer's own ink (`DrawerGround`) at every snap and every tier, and never gets a
+ * bar: the drawer is solid ink (owner, 2026-11-03), so the row is invisible at rest, nothing scrolling under it shows
+ * through, and no band reads as a rail behind the chips. Outside a drawer, once the list has scrolled, the row gets the
+ * design system's bar `Material`; it is mounted, not faded (glass never animates opacity, §5.2 rule 6).
  */
 export function StickyBar({ scrolled, children }: { scrolled?: boolean; children: ReactNode }) {
   const fromList = useContext(StickyScrolled)
-  const solid = useMaterialTier() === 'solid'
   const inDrawer = useInDrawer()
-  const groundIsBar = solid && inDrawer
   return (
     <View style={styles.row} testID="sticky-search">
-      {solid ? <DrawerGround testID="sticky-search-ground" /> : null}
-      {(scrolled ?? fromList) && !groundIsBar ? <Material role="bar" style={StyleSheet.absoluteFill} pointerEvents="none" testID="sticky-search-bar" /> : null}
+      {inDrawer ? <DrawerGround testID="sticky-search-ground" /> : null}
+      {(scrolled ?? fromList) && !inDrawer ? <Material role="bar" style={StyleSheet.absoluteFill} pointerEvents="none" testID="sticky-search-bar" /> : null}
       {children}
     </View>
   )

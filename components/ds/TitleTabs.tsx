@@ -90,7 +90,7 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
 
   return (
     <View testID={testID} accessibilityRole="tablist" style={styles.row}>
-      <View testID={testID && `${testID}-words`} style={[styles.words, { gap: compact ? SPACE.lg : SPACE.xl }]}>
+      <View testID={testID && `${testID}-words`} style={[styles.words, { gap: SPACE.lg }]}>
         {items.map((item, i) => {
           const on = i === selected
           const badge = badges?.[i] ?? null
@@ -114,8 +114,10 @@ export function TitleTabs({ items, selected, onChange, badges, trailing, testID 
                 style={styles.word}
               >
                 <Text
-                  style={[font('title', bold), styles.shrink, { color: on ? COLOR.textPrimary : COLOR.textTertiary }]}
-                  maxFontSizeMultiplier={CONTROL_FONT_CAP}
+                  style={[font('tab', bold), styles.shrink, { color: on ? COLOR.textPrimary : COLOR.textTertiary }]}
+                  // The board's 22 pt at every text size (its largest-text frame grows the chips, not the tabs): a pane's
+                  // name is already large, and grown it clipped beside the city on Android at 2.0.
+                  maxFontSizeMultiplier={1}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={WORDS_MIN_SCALE}

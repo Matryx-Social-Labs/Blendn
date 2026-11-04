@@ -523,7 +523,7 @@ describe('"my location"', () => {
     expect(shell).toMatch(/<HomeDrawer\s+y=\{drawerTop\}/)
     expect(shell).toMatch(/drawerTop=\{drawerTop\}/)
     expect(code('components/home/HomeDrawer.tsx')).not.toMatch(/const y = useSharedValue/)
-    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer\)/)
+    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer, lift \? lift\.get\(\) : 0\)/)
   })
 
   it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {
@@ -550,7 +550,7 @@ describe('"my location"', () => {
     const pulse = code('app/(tabs)/events.tsx')
     expect(pulse).toMatch(/setSelection\(next\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
     // Where you stand is a choice of you, not of a city centre (review L5); the picker's rows are picks.
-    expect(pulse).toMatch(/onSwitch=\{\(city\) => chooseCity\(\{ city \}, true\)\}/)
+    expect(pulse).toMatch(/onSwitch=\{\(city\) => bannerActions\.current\.chooseCity\(\{ city \}, true\)\}/)
     expect(pulse).toMatch(/onChoose=\{chooseCity\}/)
     const picker = code('components/pulse/CityPicker.tsx')
     expect(picker).toMatch(/choose\(\{ city: deviceCity, slug: null \}, true\)/)

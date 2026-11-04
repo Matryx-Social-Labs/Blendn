@@ -1,8 +1,9 @@
 import { Image } from 'expo-image'
-import { useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { useRef, useState, type ReactNode } from 'react'
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { H } from '../../lib/haptics'
+import { tint } from '../../lib/theme'
 import { measureAnchor } from './anchor'
 import type { Rect } from './chatShared'
 
@@ -36,6 +37,15 @@ export type EventCardProps = {
   here?: number
   /** A paid placement: a "PROMOTED" scrim pill top-right, read first. Editorial picks carry none. */
   promoted?: boolean
+  /** `hero` only: a label line over the title ("Featured · Club night"), in the label voice. Read with the card's own label by its caller. */
+  overline?: string
+  /** `hero` only: drawn top-right after the Promoted pill (the Pulse lead's pager pips). Decorative: not read. */
+  corner?: ReactNode
+  /**
+   * `hero` only: `lead`, the Pulse's lead card (Flow 3 board `.lead .foot`): the words 20 in and 18 up, and the people
+   * line under the venue ("86 going") instead of a pill beside the time.
+   */
+  layout?: 'lead'
   cover?: string | null
   /**
    * `row` only: a place's type art (`VenuePlate`) in the thumb where an event would have its cover: a visit to a place, not a
@@ -77,6 +87,9 @@ export type EventCardProps = {
 const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 300 }, compact: { width: 240, height: 170 } }
 /** The scrim covers the lower 62% of the photo (the page). */
 const SCRIM_HEIGHT = '62%'
+/** The Pulse lead's scrim (board `.lead .scrim`): 70%, and 78% at large text, where the words climb higher. */
+const LEAD_SCRIM = { base: '70%', large: '78%' } as const
+const OVERLINE_ALPHA = 0.78
 /** A row's height at one line of title; a two-line title grows it (a minimum, never a box). */
 const ROW_HEIGHT = 64
 /**
@@ -134,9 +147,10 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, promoted, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
+  const { kind, title, time, venue, distance, lead, promoted, overline, corner, layout, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const { fontScale } = useWindowDimensions()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const label = props.label ?? eventLabel(props)
@@ -255,10 +269,10 @@ export function EventCard(props: EventCardProps) {
         ) : (
           <CategoryPlate category={category} testID={testID && `${testID}-plate`} />
         )}
-        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={styles.scrim} />
+        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={[styles.scrim, layout === 'lead' && { height: fontScale > CONTROL_FONT_CAP ? LEAD_SCRIM.large : LEAD_SCRIM.base }]} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
-          {here ? (
+          {layout === 'lead' ? null : here ? (
             <ScrimPill testID={testID && `${testID}-here`}>
               <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
                 <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{here}</Text>
@@ -273,14 +287,19 @@ export function EventCard(props: EventCardProps) {
             </ScrimPill>
           ) : null}
         </View>
-        {promoted ? (
-          <View style={styles.promoted} testID={testID && `${testID}-promoted`}>
-            <ScrimPill>
-              <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
-                {PROMOTED_LABEL.toUpperCase()}
-              </Text>
-            </ScrimPill>
+        {promoted || corner ? (
+          <View style={styles.promoted}>
+            {promoted ? (
+              <View testID={testID && `${testID}-promoted`}>
+                <ScrimPill>
+                  <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
+                    {PROMOTED_LABEL.toUpperCase()}
+                  </Text>
+                </ScrimPill>
+              </View>
+            ) : null}
+            {hero ? corner : null}
           </View>
         ) : null}
         {saved ? (
@@ -290,13 +309,24 @@ export function EventCard(props: EventCardProps) {
             </Text>
           </View>
         ) : null}
-        <View style={[styles.foot, hero ? styles.footHero : styles.footCompact]}>
+        <View testID={testID && `${testID}-foot`} style={[styles.foot, hero ? (layout === 'lead' ? styles.footLead : styles.footHero) : styles.footCompact]}>
+          {hero && overline ? (
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.overline]}>
+              {overline.toUpperCase()}
+            </Text>
+          ) : null}
           <Text numberOfLines={2} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font(hero ? 'title' : 'bodyStrong', bold), styles.ink]}>
             {title}
           </Text>
           <Text numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
             {[`at ${venue}`, distance].filter(Boolean).join(' · ')}
           </Text>
+          {layout === 'lead' && (here || going) ? (
+            <Text testID={testID && `${testID}-people`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
+              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{(here ?? going)?.toLocaleString('en-US')}</Text>
+              {here ? ' here now' : ' going'}
+            </Text>
+          ) : null}
         </View>
         {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
         {previewState === 'pressed' && android ? <View testID={testID && `${testID}-wash`} style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
@@ -336,7 +366,7 @@ const styles = StyleSheet.create({
   card: { flex: 1, overflow: 'hidden', backgroundColor: COLOR.surface },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: SCRIM_HEIGHT },
   pills: { position: 'absolute', top: SPACE.md, left: SPACE.md, flexDirection: 'row', gap: SPACE.sm },
-  promoted: { position: 'absolute', top: SPACE.md, right: SPACE.md },
+  promoted: { position: 'absolute', top: SPACE.md, right: SPACE.md, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   saved: {
     position: 'absolute',
     top: SPACE.md + PILL_HEIGHT + SPACE.sm,
@@ -350,9 +380,13 @@ const styles = StyleSheet.create({
   onWhite: { color: COLOR.ink },
   foot: { position: 'absolute', gap: SPACE.xxs },
   footHero: { left: SPACE.xl, right: SPACE.xl, bottom: SPACE.xl },
+  // Board `.lead .foot`: 20 in, 18 up.
+  footLead: { left: SPACE.lg + SPACE.xs, right: SPACE.lg + SPACE.xs, bottom: SPACE.lg + SPACE.xxs },
   footCompact: { left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
+  // Board `.lead .lbl`: white at 78% on the photo's scrim, brighter than the page's secondary grey.
+  overline: { color: tint(COLOR.textPrimary, OVERLINE_ALPHA) },
   tabular: { fontVariant: ['tabular-nums'] },
   wash: { backgroundColor: PRESSED_WASH.android },
   row: { minHeight: ROW_HEIGHT, paddingVertical: SPACE.xs, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },

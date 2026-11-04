@@ -33,7 +33,7 @@ export default function ReadyScreen() {
 
   // Edit my details: finish first, then the one edit screen over the tabs. Mid-flow it would sit outside onboarding (so
   // the tabs' push start-up would run before the ask was deferred), and finishing afterwards would re-send the draft over
-  // whatever was just edited. The celebration and Bring your friends are skipped: the person asked to edit, not to party.
+  // whatever was just edited. The celebration is skipped: the person asked to edit, not to party.
   const edit = async () => {
     if (leaving.current) return
     leaving.current = true
@@ -54,8 +54,8 @@ export default function ReadyScreen() {
     leaving.current = true
     setLeaveBusy(true)
     // The server said yes: the one celebration plays, and it plays the success haptic itself as its mark completes
-    // (Reduce Motion: at once), so the haptic always lands on a frame where something moves. Then "Bring your friends"
-    // first, then the app (see app/onboarding/friends.tsx). Once per account.
+    // (Reduce Motion: at once), so the haptic always lands on a frame where something moves. Then the app: "Bring your
+    // friends" is a card on the Pulse now (ledger row 14, components/pulse/FriendsCard.tsx), not a screen in the way.
     if (await finish()) setCelebrating(true)
     else {
       leaving.current = false
@@ -88,7 +88,7 @@ export default function ReadyScreen() {
         onBack={goBack}
       />
       {celebrating ? (
-        <MomentReady testID="ready-moment" name={first} onDone={() => router.replace('/onboarding/friends')} />
+        <MomentReady testID="ready-moment" name={first} onDone={() => router.replace('/(tabs)/events')} />
       ) : null}
     </>
   )

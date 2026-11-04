@@ -4,7 +4,7 @@
  * in a plain node test.
  */
 
-import { SIZE } from './design/tokens'
+import { SIZE, SPACE } from './design/tokens'
 
 export type DrawerSnap = 'full' | 'half' | 'peek'
 
@@ -48,11 +48,62 @@ export function drawerSnapPoints(screen: {
   tabBarTop: number
   /** Extra room at `peek` for a summary line under the control (`DRAWER_PEEK_LINE`); none for a pane without one. */
   peekExtra?: number
+  /** Where the drawer rests (`pulseRest`); the middle of the screen when not given. */
+  half?: number
 }): Record<DrawerSnap, number> {
   const full = screen.topChrome
   const peek = Math.max(full, screen.tabBarTop - DRAWER_HEADER_HEIGHT - (screen.peekExtra ?? 0))
-  const half = Math.min(peek, Math.max(full, Math.round(screen.height / 2)))
+  const half = Math.min(peek, Math.max(full, screen.half ?? Math.round(screen.height / 2)))
   return { full, half, peek }
+}
+
+/** The Pulse's lead card (Flow 3 · Pulse, Option C): 256 pt on a 393 × 852 phone, the biggest photo on the screen. */
+export const LEAD_CARD_HEIGHT = 256
+/** The shortest it gets on a small phone, where the map keeps its share instead. */
+export const LEAD_CARD_MIN = 180
+/** The chip row under the header: the 36 pt header chip (`SIZE.tagHeader`, board `.qc`), which its 1.3 text cap still fits. */
+export const CHIP_ROW_HEIGHT = 36
+/** The chips sit 10 pt under the header (board: header ends +100, chips at +110): `StickyBar`'s 8 and the row's own 2. */
+export const CHIP_ROW_LEAD = SPACE.xxs
+/** The chip row as the list pins it: `StickyBar`'s 8 pt above and below, and the row's own 2 above. */
+export const CHIP_BLOCK = SPACE.sm + CHIP_ROW_LEAD + CHIP_ROW_HEIGHT + SPACE.sm
+/** From the chip block to the lead card (board: chips end +146, card at +172). */
+export const LEAD_GAP = SPACE.md + SPACE.xs + SPACE.xxs
+/** The board runs the card's foot 10 pt under the floating tab bar (card 508–764, bar from 754); its words stay clear. */
+const LEAD_UNDER_BAR = 10
+/** At rest the drawer covers at most this share of the screen above the tab bar, so the map is never a strip. */
+export const REST_MAX_SHARE = 0.55
+
+/**
+ * Where the Pulse's drawer rests, and how tall its lead card is (Option C): one whole card above the tab bar, under the
+ * header and the chips: 336 pt on a 393 × 852 phone, the board's frame to the point (map 39%); a taller phone shows more map, never a taller card; a
+ * short one keeps its share of map and the card gives way, down to `LEAD_CARD_MIN`. The text inside the card and the
+ * chips stops growing at its cap (1.5× and 1.3×), so the largest text size rests at the same point.
+ */
+export function pulseRest(screen: { height: number; topChrome: number; tabBarTop: number }): { half: number; lead: number } {
+  const chrome = DRAWER_HEADER_HEIGHT + CHIP_BLOCK + LEAD_GAP - LEAD_UNDER_BAR
+  const highest = Math.max(screen.topChrome, screen.tabBarTop - Math.round(screen.height * REST_MAX_SHARE))
+  const half = Math.max(highest, screen.tabBarTop - chrome - LEAD_CARD_HEIGHT)
+  const lead = Math.max(LEAD_CARD_MIN, Math.min(LEAD_CARD_HEIGHT, screen.tabBarTop - chrome - half))
+  return { half, lead }
+}
+
+/** A flick of the lead pager carries on to the next page past this speed (pt/s). */
+const PAGE_FLICK = 500
+
+/**
+ * The page a released drag of the lead pager settles on: the nearest to where it was let go, or the next one on a flick,
+ * never more than one page from where the drag began, never past the ends. A worklet: it runs in the gesture's end.
+ */
+export function settlePage(offset: number, velocityX: number, width: number, count: number, from?: number): number {
+  'worklet'
+  const at = -offset / width
+  const start = from ?? Math.round(at)
+  let page = Math.round(at)
+  if (velocityX <= -PAGE_FLICK) page = Math.ceil(at)
+  else if (velocityX >= PAGE_FLICK) page = Math.floor(at)
+  page = Math.min(start + 1, Math.max(start - 1, page))
+  return Math.min(count - 1, Math.max(0, page))
 }
 
 /** The snap a released drag settles on: the nearest to where its velocity would carry it. */

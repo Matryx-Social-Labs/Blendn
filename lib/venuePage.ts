@@ -25,7 +25,7 @@ import { venueDayState } from './venueHours'
 /** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
 const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
 import { clockTime } from './roomMoments'
-import { calendarDate, clockIn, eventClock, weekdayIn, zoneSuffix } from './time'
+import { calendarDate, clockIn, eventClock, weekdayIn } from './time'
 
 const MINUTE_MS = 60_000
 /** The expiry window: the last five minutes read as mm:ss and offer Extend. */
@@ -117,7 +117,7 @@ export function timeRange(startIso: string, endIso: string, timeZone?: string | 
   if (!Number.isFinite(start)) return ''
   const zone = timeZone ?? undefined
   const range = Number.isFinite(end) ? `${clockTime(start, zone)} – ${clockTime(end, zone)}` : clockTime(start, zone)
-  return `${range}${zoneSuffix(start, timeZone)}`
+  return range
 }
 
 /**

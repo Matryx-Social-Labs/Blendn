@@ -2,7 +2,7 @@ import {
   AREA_SECTIONS_READY,
   categoryChips,
   SECTION_ORDER,
-  pulsePeekLine,
+  leadPeekLine,
   DAY_RESET_HOUR,
   everythingElse,
   FEATURED_CAP,
@@ -76,12 +76,12 @@ describe('time', () => {
 })
 
 describe('Happening now', () => {
-  it('is absent with nothing live; otherwise most people here first, then earliest start; capped at 8 with the total in the count', () => {
+  it('is absent with nothing live; otherwise most people here first, then earliest start; capped at 10 with the total in the count (Option C: rail of 10, then See all)', () => {
     expect(keys([ev('a', 20)])).not.toContain('now')
-    const live = Array.from({ length: 10 }, (_, i) => ev(`l${i}`, 17, { here_count: i }))
+    const live = Array.from({ length: 12 }, (_, i) => ev(`l${i}`, 17, { here_count: i }))
     const now = pulseSections<E>({ page: live, ...empty }).find((s) => s.key === 'now')!
-    expect(now.events.map((e) => e.id)).toEqual(['l9', 'l8', 'l7', 'l6', 'l5', 'l4', 'l3', 'l2'])
-    expect(now.count).toBe(10)
+    expect(now.events.map((e) => e.id)).toEqual(['l11', 'l10', 'l9', 'l8', 'l7', 'l6', 'l5', 'l4', 'l3', 'l2'])
+    expect(now.count).toBe(12)
   })
 })
 
@@ -132,11 +132,11 @@ describe('Featured', () => {
 })
 
 describe('Tonight', () => {
-  it('upcoming before the next 06:00, earliest first, four rows, the count is all of it', () => {
-    const page = [ev('late', 23), ev('a', 20), ev('b', 21), ev('c', 22), ev('d', 22, {}, 0), ev('tomorrow', 12, {}, 1), ev('past', 9)]
+  it('upcoming before the next 06:00, earliest first, five rows, the count is all of it (Option C: 5 rows, then See all)', () => {
+    const page = [ev('late', 23), ev('a', 20), ev('b', 21), ev('c', 22), ev('d', 22, {}, 0), ev('e', 22, {}, 0), ev('tomorrow', 12, {}, 1), ev('past', 9)]
     const tonight = pulseSections<E>({ page, ...empty }).find((s) => s.key === 'tonight')!
-    expect(tonight.events.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd'])
-    expect(tonight.count).toBe(5)
+    expect(tonight.events.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd', 'e'])
+    expect(tonight.count).toBe(6)
     expect(tonight.events.map((e) => e.id)).not.toContain('tomorrow')
   })
 
@@ -222,9 +222,9 @@ describe('the floor is only claimed when the page can hide more (M7)', () => {
     expect(live.more).toBeUndefined()
   })
 
-  it('the peek line carries the plus', () => {
+  it('the section header carries the plus', () => {
     const sections = pulseSections<E>({ page: pageEndingAt(23), pageFull: true, ...empty })
-    expect(pulsePeekLine(sections)).toBe('50+ on tonight')
+    expect(sectionCountLabel(sections.find((x) => x.key === 'tonight')!)).toBe('50+')
   })
 })
 
@@ -393,12 +393,8 @@ describe('what the Everything-else chips and the peek line read', () => {
     expect(categoryChips([], options)).toEqual([])
   })
 
-  it('peek: “3 live now · 14 on tonight”; a part that is 0 is dropped; both 0 is no line', () => {
-    const sec = (key: 'now' | 'tonight', count: number) => ({ key, events: [], count })
-    expect(pulsePeekLine([sec('now', 3), sec('tonight', 14)])).toBe('3 live now · 14 on tonight')
-    expect(pulsePeekLine([sec('tonight', 6)])).toBe('6 on tonight')
-    expect(pulsePeekLine([sec('now', 2)])).toBe('2 live now')
-    expect(pulsePeekLine([])).toBeNull()
+  it('peek (Option C): the lead’s name and its time, in leadPeekLine (pulseFeedEnds.test.ts)', () => {
+    expect(leadPeekLine({ title: 'Midnight Bass', time: 'Sat · 10:30 PM' })).toBe('Midnight Bass · Sat · 10:30 PM')
   })
 })
 

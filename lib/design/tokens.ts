@@ -134,6 +134,14 @@ export const MATERIAL = {
       color: 'rgba(190,92,113,0.40)',
     },
   ],
+  glowLead: [
+    {
+      offsetY: 18,
+      radius: 60,
+      spread: -18,
+      color: 'rgba(240,84,35,0.55)',
+    },
+  ],
 } as const
 
 /** Registered font names by family and weight (`lib/fonts.ts` loads them). Weight lives in the name: Android ignores `fontWeight` on custom fonts. */
@@ -194,6 +202,18 @@ export const TYPE = {
     lineHeight: 24,
     letterSpacing: 0,
   },
+  tab: {
+    fontFamily: 'Satoshi_700Bold',
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
+  },
+  control: {
+    fontFamily: 'Satoshi_500Medium',
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: 0,
+  },
   meta: {
     fontFamily: 'Satoshi_400Regular',
     fontSize: 14,
@@ -230,6 +250,8 @@ export const MAX_FONT_SCALE = {
   button: 2,
   body: 2,
   bodyStrong: 2,
+  tab: 1.3,
+  control: 1.3,
   meta: 2,
   caption: 1.3,
   label: 2,
@@ -282,6 +304,8 @@ export const SIZE = {
   input: 56,
   control: 48,
   tag: 32,
+  tagHeader: 36,
+  circleButtonSm: 40,
   badge: 18,
   tabBar: 64,
   disc: 56,

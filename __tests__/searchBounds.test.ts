@@ -93,6 +93,7 @@ describe('what the Pulse and Places send', () => {
 it('the Pulse narrows only on a term the server takes: one letter keeps the normal screen (no harness: pinned at its source)', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const src = require('fs').readFileSync(require('path').join(__dirname, '../app/(tabs)/events.tsx'), 'utf8') as string
-  expect(src).toContain('if (searchTermOf(next) === null) setSearchTerm(\'\')')
-  expect(src).toMatch(/const term = searchTermOf\(searchInput\)\s+\/\/[^\n]*\n\s+if \(term === null\) return\s+const id = setTimeout\(\(\) => setSearchTerm\(term\)/)
+  // Under two letters the term is '' at the next tick (no debounce); two or more wait for typing to settle.
+  expect(src).toContain("const id = setTimeout(() => setSearchTerm(term ?? ''), term === null ? 0 : SEARCH_DEBOUNCE_MS)")
+  expect(src).toContain('const term = searchTermOf(searchInput)')
 })

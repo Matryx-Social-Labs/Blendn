@@ -35,15 +35,39 @@ strip, below.
 
 ---
 
-## What is built
+## Option C: the chips are the header (owner pick, 2026-11-03)
+
+The current layout, from the redesign board `mockups/redesign-2026-11/flow-3-pulse/` (FLOW-WALK § Flow 3 · Pulse). It
+supersedes the Featured rail, the search row and the onboarding friends screen described further down.
+
+- **Rest** (`pulseRest`, `lib/home.ts`): the drawer rests where one whole 256 pt lead card sits above the tab bar under
+  the header and the chips: 332 pt on a 393 × 852 phone (the board's 336 less the pinned chips' padding). A short phone keeps its map (the drawer covers at most 55% of the screen above the bar) and the card gives
+  way (down to 180 pt); a tall one shows more map.
+- **Search** is an icon beside the city chip (`HomeShell`); tapped, `PulseSearchRow` takes the header row and the
+  keyboard takes the drawer full. Cancel clears it; an empty field folds back when the keyboard leaves.
+- **Chips** (`QuickChips`, `lib/pulseChips.ts`): Tonight and This weekend with the server's `pagination.totalCount` for
+  the very filter each applies (no count under five), Within 2 km only with a fix in the browsed city, one vibe (the
+  busiest category in the loaded page), Filters. A sheet filter no chip stands for leads the row as a removable chip.
+- **Lead card** (`LeadPager`): Featured, up to three, the DS `EventCard hero` with pips, lit from behind
+  (`MATERIAL.glowLead`). A swipe moves the map to that venue and lights it (`HomeMap` `focus`, `withFocus`). One
+  adjustable element for a screen reader.
+- **Banners**: the switch offer, the travel banner and the away notice ride on the map above the drawer (`MapBanners`);
+  at full they are in the list. System banners stay over the list.
+- **Bring your friends** is a dismissible card after the lead (`FriendsCard`), remembered per account; the onboarding
+  screen is gone.
+- **Any country**: "We're not in Toronto yet" lists where Blend'n is on; a quiet week ends with "That's everything in
+  Toronto this week." (only when true: `quietWeekEnd`).
+- Featured clips no longer play on the Pulse (the old `FeedMedia` card); the Scene still plays them.
+
+## What is built (before Option C)
 
 | Element | Component | Backed by |
 |---|---|---|
 | "The **Pulse**" headline | `PulseHeader` | — |
 | City + date line | `PulseHeader` | `GET /events/cities` |
-| Search field | `PulseHeader` | `GET /events?search=` |
-| "Featured" + VIEW ALL | `SectionHeader` | — |
-| Featured cards | `FeaturedCard` | `events` with a cover image |
+| Search field | `PulseHeader` (now `PulseSearchRow`, opened from an icon) | `GET /events?search=` |
+| "Featured" + VIEW ALL | `SectionHeader` (now the lead card, no header) | — |
+| Featured cards | `FeaturedCard` (removed; now `LeadPager`) | `events` with a cover image |
 | "Upcoming" | `SectionHeader` | — |
 | Upcoming day headings + rows | `groupByDay` + `UpcomingCard` | `events` |
 | Card labels | `lib/pulse.ts` | `startTime`, `currentCapacity`, `distance` |

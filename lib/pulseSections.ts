@@ -21,8 +21,8 @@ import { dateIn, hourIn, instantIn, MONTHS, weekdayIn, WEEKDAYS } from './time'
 
 /** No count under this is printed: "here now", "going" and the live buckets (BUILD-SPEC §0). */
 export const LIVE_FLOOR = 5
-/** Featured shows at most this many per city. */
-export const FEATURED_CAP = 5
+/** Featured shows at most this many per city: the lead pager's pages (Flow 3 · Pulse, Option C). */
+export const FEATURED_CAP = 3
 /** A promoted (paid) placement is always labelled this; an editorial pick carries no label. */
 export const PROMOTED_LABEL = 'Promoted'
 /** `null`: an editorial pick is unlabelled. Set a word to label it. */
@@ -45,8 +45,8 @@ export const AREA_SECTIONS_READY = false
 
 export type PulseSectionKey = 'featured' | 'now' | 'inArea' | 'tonight' | 'aroundArea' | 'nearby' | 'forYou' | 'weekend'
 
-export const NOW_LIMIT = 8
-export const TONIGHT_LIMIT = 4
+export const NOW_LIMIT = 10
+export const TONIGHT_LIMIT = 5
 export const NEARBY_LIMIT = 4
 export const FOR_YOU_LIMIT = 8
 export const FOR_YOU_MIN = 3
@@ -312,12 +312,9 @@ export function categoryChips(
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 }
 
-/** The drawer's peek line for the Pulse: "● 3 live now · 14 on tonight"; a part that is 0 is dropped, both 0 is none. */
-export function pulsePeekLine(sections: readonly PulseSection[]): string | null {
-  const now = sections.find((s) => s.key === 'now')
-  const tonight = sections.find((s) => s.key === 'tonight')
-  const parts = [now && now.count > 0 ? `${sectionCountLabel(now)} live now` : null, tonight && tonight.count > 0 ? `${sectionCountLabel(tonight)} on tonight` : null].filter(Boolean)
-  return parts.length ? parts.join(' · ') : null
+/** The drawer's peek line for the Pulse (Option C): the lead's name and its time, "Midnight Bass · Sat · 10:30 PM"; none without a lead. */
+export function leadPeekLine(lead: { title: string; time: string } | null | undefined): string | null {
+  return lead ? [lead.title, lead.time].filter(Boolean).join(' · ') : null
 }
 
 /**

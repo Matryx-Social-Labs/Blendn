@@ -18,7 +18,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FadeInUp from '../../components/motion/FadeInUp'
 import { preloadImages } from '../../components/OptimizedImage'
-import { featuredCardLayout } from '../../components/pulse/FeaturedCard'
 import {
   EverythingHeader,
   PulseSkeleton,
@@ -29,17 +28,21 @@ import { EventCard } from '../../components/ds/EventCard'
 import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
 import { CONTROL_FONT_CAP } from '../../components/ds/shared'
-import { PULSE_HEADER_HEIGHT, PulseSearch } from '../../components/pulse/PulseHeader'
+import { LeadPager, type LeadCard } from '../../components/pulse/LeadPager'
+import { QuickChips } from '../../components/pulse/QuickChips'
+import { FriendsCard } from '../../components/pulse/FriendsCard'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
-import { PulseEmpty, PulseLoadFailed } from '../../components/pulse/PulseEmpty'
+import { PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
 import { PulsePeek, type Peek } from '../../components/pulse/PulsePeek'
 import { PullIndicator } from '../../components/pulse/PullIndicator'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
-import { HomeShell, type HomeBrowse } from '../../components/home/HomeShell'
-import { DRAWER_HEADER_HEIGHT } from '../../lib/home'
+import { HomeShell, type HomeBrowse, type PulseShell } from '../../components/home/HomeShell'
+import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
+import { pinsFor } from '../../lib/homeMap'
+import { vibeOf, type Vibe } from '../../lib/pulseChips'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useLocationSharing } from '../../lib/shareLocation'
 import { useReducedMotion } from '../../lib/motion'
@@ -52,12 +55,9 @@ import { rateLimitWaitOf } from '../../lib/rateLimited'
 import { RateLimitedBanner } from '../../components/system/RateLimitedBanner'
 import { getEvents as fetchEventsApi, type BlendnEvent } from '../../lib/api'
 import {
-  activeFilterCount,
-  appliedFilters,
   filtersToQuery,
   hasActiveFilters,
   NO_FILTERS,
-  withoutFilter,
   type EventFilters,
 } from '../../lib/eventFilters'
 import { useLatest } from '../../lib/useLatest'
@@ -96,9 +96,13 @@ import {
   categoryChips,
   everythingElse,
   nearbyEndDate,
+  FEATURED_CAP,
   feedKey,
-  pulsePeekLine,
+  featuredLabel,
+  featuredPick,
+  leadPeekLine,
   pickInterest,
+  PROMOTED_LABEL,
   pulseSections,
   seedDateOf,
   weekendWindow,
@@ -108,7 +112,7 @@ import {
 import { useNow } from '../../lib/useNow'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, STAGGER, TYPE as DESIGN_TYPE } from '../../lib/design/tokens'
-import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind } from '../../lib/pulseFeed'
+import { mergeEventPage, pageHasMore, pulseEmptyCopy, pulseEmptyKind, quietWeekEnd } from '../../lib/pulseFeed'
 import { type PeekAction } from '../../lib/pulsePeek'
 import { putSceneSeed } from '../../lib/sceneSeed'
 import { shareEvent } from '../../lib/shareRow'
@@ -120,11 +124,10 @@ import { Logger } from '../../lib/logger'
 import { usePresence } from '../../lib/usePresence'
 import { getOptimizedImageUrl } from '../../lib/photoUtils'
 import { useLiveSync } from '../../lib/useLiveSync'
-import { useMinimumVisible } from '../../lib/useMinimumVisible'
 import { useAuth } from '../../lib/useAuth'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
-import { eventClock, nameZones } from '../../lib/time'
+import { eventClock } from '../../lib/time'
 
 type CatalogueMeta = Omit<CityCatalogue, 'cities'>
 const catalogueMeta = (data: CityCatalogue | null): CatalogueMeta => ({ countries: data?.countries, defaultCitySlug: data?.defaultCitySlug, device: data?.device })
@@ -140,26 +143,27 @@ type Event = BlendnEvent
 
 /** A row under the sections: a day heading, or an event. */
 type PulseRow =
-  | { kind: 'search'; key: 'search' }
+  | { kind: 'chips'; key: 'chips' }
   | { kind: 'body'; key: 'body' }
   | { kind: 'day'; key: string; title: string; weekday: string }
   | { kind: 'event'; key: string; event: Event }
 
-/** The search is data row 0, under the list's title header (index 0): the sticky one is cell 1. */
-const STICKY_SEARCH = [1]
+/** The chips are data row 0, under the list's banner header (index 0): the sticky one is cell 1 (Option C: the chips are the header). */
+const STICKY_CHIPS = [1]
 /** The two rows before the first day or event, which the stagger does not count. */
 const LEAD_ROWS = 2
-const LEAD: PulseRow[] = [{ kind: 'search', key: 'search' }, { kind: 'body', key: 'body' }]
+const LEAD: PulseRow[] = [{ kind: 'chips', key: 'chips' }, { kind: 'body', key: 'body' }]
 
-/** What the search and body rows draw, from the screen: held in context so a keystroke re-renders those two rows and not the cards. */
-const PulseSlots = createContext<{ search: ReactNode; body: ReactNode; scrolled: boolean }>({ search: null, body: null, scrolled: false })
-function PulseSlot({ slot }: { slot: 'search' | 'body' }) {
-  const { search, body, scrolled } = useContext(PulseSlots)
+/** What the chips and body rows draw, from the screen: held in context so a chip or a keystroke re-renders those two rows and not the cards. */
+const PulseSlots = createContext<{ chips: ReactNode; body: ReactNode; scrolled: boolean }>({ chips: null, body: null, scrolled: false })
+function PulseSlot({ slot }: { slot: 'chips' | 'body' }) {
+  const { chips, body, scrolled } = useContext(PulseSlots)
   if (slot === 'body') return <>{body}</>
-  return (
-    <StickyBar scrolled={scrolled}>{search}</StickyBar>
-  )
+  return chips ? <StickyBar scrolled={scrolled}>{chips}</StickyBar> : null
 }
+
+/** A stable ref nobody reads: the section stack's coach target while the lead card holds the real one. */
+const NO_COACH = { current: null }
 
 /**
  * The page's rhythm, from the design system (`docs/DESIGN_SYSTEM.md`).
@@ -169,6 +173,8 @@ function PulseSlot({ slot }: { slot: 'search' | 'body' }) {
  * the render site with the safe-area insets.
  */
 const SCREEN_HEIGHT = Dimensions.get('window').height
+/** Typing settles this long before the search is asked. */
+const SEARCH_DEBOUNCE_MS = 350
 const MAIN_PADDING_BOTTOM = 128
 
 /**
@@ -324,12 +330,11 @@ const proximityFor = (
   return proximityMap
 }
 
-function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrowse) => void; visible: boolean; full: boolean }) {
+function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: HomeBrowse) => void; visible: boolean; full: boolean; shell?: PulseShell }) {
   const { user, loading: authLoading } = useAuth()
   const reduceMotion = useReducedMotion()
   const insets = useSafeAreaInsets()
-  // The hero card sits under the home drawer's header too (components/home/HomeDrawer.tsx).
-  const cardInsets = useMemo(() => ({ top: insets.top + DRAWER_HEADER_HEIGHT, bottom: insets.bottom }), [insets.top, insets.bottom])
+  const { width: screenWidth } = useWindowDimensions()
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -430,8 +435,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const listRef = useRef<any>(null)
   // Tapping Pulse while already on it goes back to the top (the bar emits `tabPress`).
   useScrollToTop(listRef)
-  /** Height of the banners above the header, so the Featured card still clears the bar. */
-  const [bannersHeight, setBannersHeight] = useState(0)
   const [netError, setNetError] = useState<string | null>(null)
   /** Seconds the server asked us to wait, when it refused a read for asking too fast (Flow 15 #15). */
   const [rateLimit, setRateLimit] = useState<{ seconds: number; onMore: boolean } | null>(null)
@@ -459,7 +462,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const onListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     listOffsetRef.current = e.nativeEvent.contentOffset.y
     setSearchBarOn(e.nativeEvent.contentOffset.y > STICKY_BAR_AFTER)
-    if (!coachShowingRef.current) setListAtTop(e.nativeEvent.contentOffset.y < PULSE_HEADER_HEIGHT)
+    if (!coachShowingRef.current) setListAtTop(e.nativeEvent.contentOffset.y < CHIP_ROW_HEIGHT)
   }, [])
 
   /*
@@ -473,7 +476,15 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * `GET /events` has taken a `search` parameter the whole time and no screen
    * in the app has ever sent one. This is the first.
    */
-  const [searchInput, setSearchInput] = useState('')
+  /*
+   * The text is typed in the drawer's header now (Option C: the search icon opens the field in place of the tabs), so it is
+   * the shell's; a screen with no shell (a test's) keeps its own.
+   */
+  const [ownSearch, setOwnSearch] = useState('')
+  const searchInput = shell?.query ?? ownSearch
+  const setSearchInput = shell?.setQuery ?? setOwnSearch
+  const searchOpen = shell?.searchOpen ?? false
+  const leadHeight = shell?.lead ?? LEAD_CARD_HEIGHT
   const [searchTerm, setSearchTerm] = useState('')
   const isSearching = searchTerm.trim().length > 0
 
@@ -501,21 +512,14 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    */
   const isNarrowed = isSearching || hasActiveFilters(filters)
 
-  const changeSearchInput = useCallback((next: string) => {
-    setSearchInput(next)
-    // No wait when clearing. Emptying the box is a request to see the normal
-    // screen again, and making somebody watch a spinner for a third of a second
-    // to get back to where they started reads as the app being slow. One
-    // letter is the same: the server refuses a search under 2 characters
-    // (admin #751), so the list is the normal one until there are two.
-    if (searchTermOf(next) === null) setSearchTerm('')
-  }, [])
+  const changeSearchInput = useCallback((next: string) => setSearchInput(next), [setSearchInput])
 
   useEffect(() => {
     const term = searchTermOf(searchInput)
-    // Clearing has already happened, with no wait, in `changeSearchInput`.
-    if (term === null) return
-    const id = setTimeout(() => setSearchTerm(term), 350)
+    // No wait when clearing (the next tick). Emptying the box is a request to see the normal screen again, and making
+    // somebody watch a spinner for a third of a second to get back reads as the app being slow. One letter is the same: the
+    // server refuses a search under 2 characters (admin #751), so the list is the normal one until there are two.
+    const id = setTimeout(() => setSearchTerm(term ?? ''), term === null ? 0 : SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(id)
   }, [searchInput])
 
@@ -1012,7 +1016,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const prevSelectedCityRef = useRef(selectedCity)
   const prevSearchTermRef = useRef(searchTerm)
   const prevFiltersRef = useRef(filters)
-  const [refining, setRefining] = useState(false)
 
   useEffect(() => {
     // Not before the city is known: an unscoped /events fired first, then again scoped (a second skeleton).
@@ -1030,10 +1033,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       const silent = initialLoadedRef.current && !cityChanged && refinementChanged
 
       Logger.journey('events', 'mount:authorized', { userId: user.id, city: selectedCity })
-      if (silent) setRefining(true)
-      fetchEvents({ silent }).finally(() => {
-        if (silent) setRefining(false)
-      })
+      void fetchEvents({ silent })
     }
     // fetchEvents is deliberately not a dependency here: it also changes
     // identity when userLocation changes, and a userLocation-triggered fetch
@@ -1101,7 +1101,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       const available = data?.cities ?? []
       // An answer with the phone's country may have landed first: the plain one never replaces it (its `device` is null).
       if (!countryAnswered.current) {
-        nameZones(available, data?.countries ?? [])
         setCityOptions(available)
         setCatalogue(catalogueMeta(data))
       }
@@ -1133,8 +1132,6 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       .then((response) => {
         if (cancelled || !response.success || !response.data) return
         countryAnswered.current = true
-        // Before the state that re-renders with them: every time then names its zone as the catalogue says it.
-        nameZones(response.data.cities, response.data.countries ?? [])
         setCityOptions(response.data.cities)
         setCatalogue(catalogueMeta(response.data))
       })
@@ -1464,6 +1461,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     eventsRef.current = events
   }, [events])
   const [nearbyState, setNearbyState] = useState<{ key: string; events: Event[] | null } | null>(null)
+  /** The time chips' counts (Option C): the server's total for the very query each chip applies, so the number is what a tap shows. */
+  const [chipCountState, setChipCountState] = useState<{ key: string; tonight: number | null; weekend: number | null } | null>(null)
   const sectionRequestsOn = !!user && !authLoading && feedCityReady && !isNarrowed
   useEffect(() => {
     if (!sectionRequestsOn) return
@@ -1489,8 +1488,17 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         })
         .catch((error) => Logger.warn('events', 'Nearby threw', { error: String(error) }))
     }
+    // The chip counts: `limit=1` reads of the chips' own filters, `pagination.totalCount` (no admin change needed).
+    const countFor = (when: EventFilters['when']) =>
+      Promise.resolve()
+        .then(() => apiClient.getEvents({ page: 1, limit: 1, ...where, ...filtersToQuery({ ...NO_FILTERS, when }) }))
+        .then((r) => (r.success && r.data?.pagination ? r.data.pagination.totalCount : null))
+        .catch(() => null)
+    void Promise.all([countFor('today'), countFor('weekend')]).then(([tonight, weekendCount]) => {
+      if (!cancelled) setChipCountState({ key: sectionsKey, tonight, weekend: weekendCount })
+    })
     // Request D: the city's featured events, in the server's rank order, whatever page they would be on.
-    fetchEventsApi({ page: 0, limit: 5, ...where, include: 'checkins', featured: true })
+    fetchEventsApi({ page: 0, limit: FEATURED_CAP, ...where, include: 'checkins', featured: true })
       .then(({ data, error }) => {
         if (cancelled) return
         if (error || !data) Logger.warn('events', 'Featured did not load', { error: error?.message })
@@ -1536,6 +1544,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   const nearby = nearbyState?.key === sectionsKey ? nearbyState.events : null
   const featuredRequested = featuredState?.key === sectionsKey ? featuredState.events : null
   const forYou = forYouState?.key === sectionsKey ? forYouState.value : null
+  // Kept through a chip's own narrowing (the requests pause then), dropped for another city or day.
+  const chipCounts = chipCountState?.key === sectionsKey ? chipCountState : { tonight: null, weekend: null }
 
   /** The sections, in order, each claiming its events once (`lib/pulseSections.ts`). Search and filters make the pane a flat list. */
   const sections = useMemo(
@@ -1543,6 +1553,49 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     [isNarrowed, events, hasMore, nearby, weekend, featuredRequested, forYou, now, hasFix, seedDate, cityZone]
   )
   const sectionOf = (key: PulseSectionKey) => sections.find((x) => x.key === key)
+  // Featured is the lead card now; the stack draws the rest.
+  const stackSections = useMemo(() => sections.filter((x) => x.key !== 'featured'), [sections])
+
+  /*
+   * The lead card (Option C): Featured as a pager of up to three. Under a chip it is that chip's Featured (from the
+   * narrowed page); under a search there is none (somebody who typed a name knows what they want).
+   */
+  const featuredSection = sections.find((x) => x.key === 'featured')
+  const leadEvents = useMemo(
+    () => (isSearching ? [] : isNarrowed ? featuredPick(events, now, seedDate) : (featuredSection?.events ?? [])),
+    [isSearching, isNarrowed, events, now, seedDate, featuredSection]
+  )
+  const leadCards = useMemo<LeadCard[]>(
+    () =>
+      leadEvents.map((e) => {
+        const card = homeCardProps(e, now, hasFix)
+        return {
+          id: e.id,
+          ...card,
+          promoted: featuredLabel(e) === PROMOTED_LABEL,
+          category: e.category_group ?? undefined,
+          overline: e.category ? `Featured · ${e.category}` : 'Featured',
+        }
+      }),
+    [leadEvents, now, hasFix]
+  )
+  const leadKey = leadEvents.map((e) => e.id).join('|')
+  // The page on screen, and a count of swipes: each one moves the map to that venue (`focus.n`).
+  const [leadAt, setLeadAt] = useState({ key: '', page: 0, swipes: 0 })
+  const leadPage = leadAt.key === leadKey ? Math.min(leadAt.page, Math.max(0, leadEvents.length - 1)) : 0
+  const onLeadPage = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.swipes + 1 })), [leadKey])
+  const leadEvent = leadEvents[leadPage] ?? null
+  const focusPin = useMemo(() => (leadEvent ? (pinsFor('events', { events: [leadEvent], venues: [] })[0] ?? null) : null), [leadEvent])
+  const focus = useMemo(() => (focusPin ? { pin: focusPin, n: leadAt.key === leadKey ? leadAt.swipes : 0 } : null), [focusPin, leadAt, leadKey])
+  const peekLine = isSearching ? null : leadPeekLine(leadCards[leadPage] ?? null)
+
+  /*
+   * The vibe chip: the week's busiest category, read from the unnarrowed page and held while a chip narrows it (else
+   * choosing the vibe would make it the only category there is, and choosing Tonight could swap it under the finger).
+   */
+  const [vibe, setVibe] = useState<Vibe | null>(null)
+  const freshVibe = isNarrowed || events.length === 0 ? vibe : vibeOf(events, categoryOptions)
+  if (freshVibe?.slug !== vibe?.slug) setVibe(freshVibe)
 
   // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
   useEffect(
@@ -1559,9 +1612,10 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         cityPick,
         requestLocation: requestLocationIfNeeded,
         openCityPicker: () => setCityPickerOpen(true),
-        peekLine: isNarrowed ? null : pulsePeekLine(sections),
+        peekLine,
+        focus,
       }),
-    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, isNarrowed, sections]
+    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus]
   )
 
   const firstSection = sections[0]?.key ?? null
@@ -1576,7 +1630,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   // A chip whose events are gone (a refresh) is no longer a filter.
   const chosen = category && chips.some((c) => c.slug === category) ? category : null
   const rows = useMemo<PulseRow[]>(() => {
-    if (isNarrowed) return events.map((event) => ({ kind: 'event' as const, key: event.id, event }))
+    // Under a chip the lead holds that chip's Featured: the flat list below does not draw them twice.
+    if (isNarrowed) return events.filter((e) => !leadEvents.includes(e)).map((event) => ({ kind: 'event' as const, key: event.id, event }))
     const shown = (chosen ? rest.filter((e) => e.category_group === chosen) : rest)
       .slice()
       .sort((a, b) => Date.parse(liveWindow(a).start_time) - Date.parse(liveWindow(b).start_time))
@@ -1584,7 +1639,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
       { kind: 'day' as const, key: `day-${group.key}`, title: group.title, weekday: group.weekday },
       ...group.items.map((event) => ({ kind: 'event' as const, key: event.id, event })),
     ])
-  }, [isNarrowed, events, rest, chosen, now])
+  }, [isNarrowed, events, rest, chosen, now, leadEvents])
 
   /*
    * The first card the page draws, the coach mark's hole: the first section's
@@ -1604,7 +1659,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
    * the result as the same rows, where a promoted result is not lifted or labelled differently.
    */
   const renderRow = useCallback(({ item, index }: { item: PulseRow; index: number }) => {
-    if (item.kind === 'search' || item.kind === 'body') return <PulseSlot slot={item.kind} />
+    if (item.kind === 'chips' || item.kind === 'body') return <PulseSlot slot={item.kind} />
     if (item.kind === 'day') {
       return (
         <View style={styles.dayRow}>
@@ -1670,7 +1725,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
   }, [locationStatus, requestLocationIfNeeded])
 
   const isLoading = authLoading || loading
-  const showLoadingSkeleton = useMinimumVisible(isLoading, 720)
+  // No minimum hold (M2): the skeleton goes the moment content is here, and only the first load rises in.
+  const showLoadingSkeleton = isLoading
   // The first featured card, warm once the Pulse has settled: the likeliest tap.
   const firstFeatured = showLoadingSkeleton ? undefined : sectionOf('featured')?.events[0]
   useEffect(() => {
@@ -1731,54 +1787,63 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     void (onMore ? fetchMore() : fetchEvents({ force: true }))
   }
 
-  // The banners ride in the feed's header, so they clear the bar with everything else and there is one scroll surface.
-  const banners = (
-    <PulseBanners
-      socketStatus={socketStatus}
-      // While the travel banner is up, its "Back to {home}" is the way back: never two offers at once.
-      switchTo={travel ? null : switchSuggestion}
-      onSwitch={(city) => chooseCity({ city }, true)}
-      away={away}
-      travel={travel}
-      onTravelBack={() => home && chooseCity(home, sameCity(home.city, deviceCity))}
-      onTravelDismiss={dismissTravel}
-      // Not while the Nearby section is showing its own "Open Settings" prompt (unnarrowed, no location): one ask, not two.
-      locationDenied={locationStatus === 'denied' && (isNarrowed || !!userLocation)}
-      onOpenSettings={() => void Linking.openSettings().catch(() => {})}
-      // Only over a list that is still on screen: with nothing loaded the whole page is the error (`PulseLoadFailed`).
-      refreshFailed={!!netError && events.length > 0}
-      rateLimit={rateLimit && !rateLimit.onMore ? rateLimit.seconds : null}
-      onRateLimitDone={rateLimitDone}
-      onRetry={() => fetchEvents({ force: true })}
-      onLayout={setBannersHeight}
-    />
-  )
-
-  const applied = useMemo(
+  /*
+   * The banners (Option C): where-you-are (the switch offer, the travel banner, the away notice) rides on the map above the
+   * drawer, so it never pushes the lead card under the tab bar; at full, or with no map to ride (a screen reader), it is in
+   * the list instead. The system ones (offline, location, a refused or failed read) stay over the list they are about.
+   */
+  const bannerActions = useLatest({ chooseCity, home, deviceCity, dismissTravel })
+  const placeBanners = useMemo(
     () =>
-      appliedFilters(filters, categoryOptions).map((a) => ({
-        key: a.field,
-        label: a.label,
-        onRemove: () => {
-          const next = withoutFilter(filters, a.field)
-          setFilters(next)
-          setFilterDraft(next)
-        },
-      })),
-    [filters, categoryOptions]
+      switchSuggestion || travel || away ? (
+        <PulseBanners
+          only="place"
+          socketStatus={socketStatus}
+          // While the travel banner is up, its "Back to {home}" is the way back: never two offers at once.
+          switchTo={travel ? null : switchSuggestion}
+          onSwitch={(city) => bannerActions.current.chooseCity({ city }, true)}
+          away={away}
+          travel={travel}
+          onTravelBack={() => {
+            const { chooseCity: choose, home: back, deviceCity: here } = bannerActions.current
+            if (back) choose(back, sameCity(back.city, here))
+          }}
+          onTravelDismiss={() => bannerActions.current.dismissTravel()}
+          locationDenied={false}
+          onOpenSettings={() => {}}
+          refreshFailed={false}
+          onRetry={() => {}}
+        />
+      ) : null,
+    // `travel` is a new object every render: its words are what change it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, socketStatus, bannerActions]
   )
-  const searchNode = (
-    <PulseSearch
-      query={searchInput}
-      onChangeQuery={changeSearchInput}
-      searching={refining}
-      activeFilterCount={activeFilterCount(filters)}
-      applied={applied}
-      onPressFilter={() => {
-        setFilterDraft(filters)
-        setFilterSheetOpen(true)
-      }}
-    />
+  const setMapBanners = shell?.setMapBanners
+  useEffect(() => {
+    if (!setMapBanners) return
+    setMapBanners(placeBanners)
+    return () => setMapBanners(null)
+  }, [setMapBanners, placeBanners])
+  const banners = (
+    <>
+      {full || !shell ? placeBanners : null}
+      <PulseBanners
+        only="system"
+        socketStatus={socketStatus}
+        switchTo={null}
+        onSwitch={() => {}}
+        away={null}
+        // Not while the Nearby section is showing its own "Open Settings" prompt (unnarrowed, no location): one ask, not two.
+        locationDenied={locationStatus === 'denied' && (isNarrowed || !!userLocation)}
+        onOpenSettings={() => void Linking.openSettings().catch(() => {})}
+        // Only over a list that is still on screen: with nothing loaded the whole page is the error (`PulseLoadFailed`).
+        refreshFailed={!!netError && events.length > 0}
+        rateLimit={rateLimit && !rateLimit.onMore ? rateLimit.seconds : null}
+        onRateLimitDone={rateLimitDone}
+        onRetry={() => fetchEvents({ force: true })}
+      />
+    </>
   )
 
   const emptyKind = pulseEmptyKind({
@@ -1788,19 +1853,54 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
     notLiveHere,
   })
   const emptyCopy = pulseEmptyCopy(emptyKind, { city: selectedCity, term: searchTerm })
+  const notHere = !showLoadingSkeleton && events.length === 0 && emptyKind === 'notLive'
 
   /*
-   * Under the search, as a row of the list: the loading skeleton, the empty and failed states, the results
-   * count, the sections and the "Everything else" header. The search above it is a row of its own, sticky and
-   * always in the list, so it outlives the thing it is searching (typing triggers a load, and a field that
-   * unmounted with the loaded branch lost its focus and its text).
+   * The chips are the header (Option C): sticky under the drawer's tabs. Not while the search is open (the field took the
+   * header) and not in a city we are not in yet (nothing to filter).
+   */
+  const chipsNode =
+    searchOpen || notHere ? null : (
+      <QuickChips
+        filters={filters}
+        counts={chipCounts}
+        nearOn={hasFix}
+        vibe={vibe}
+        categories={categoryOptions}
+        onChange={setFilters}
+        onOpenFilters={() => {
+          setFilterDraft(filters)
+          setFilterSheetOpen(true)
+        }}
+      />
+    )
+
+  const leadWidth = screenWidth - 2 * SPACE.gutter
+  const leadNode =
+    leadCards.length > 0 ? (
+      <View ref={coachTarget} collapsable={false} style={styles.lead} testID="pulse-lead-slot">
+        <LeadPager
+          key={leadKey}
+          cards={leadCards}
+          width={leadWidth}
+          height={leadHeight}
+          onOpen={(i) => handleEventPress(leadEvents[i])}
+          onPressIn={(i) => warmEvent(leadEvents[i])}
+          onLongPress={(i, anchor) => openPeek(leadEvents[i], anchor, 'hero')}
+          onPage={onLeadPage}
+        />
+      </View>
+    ) : null
+
+  /*
+   * Under the chips, as a row of the list: the loading skeleton, the empty and failed states, the results count, the
+   * lead card, Bring your friends, the sections and the "Everything else" header.
    */
   const bodyNode = showLoadingSkeleton ? (
     <View>
       {/*
-        Shaped like the screen it stands in for, and static: a header bar and two compact cards, a header bar and two hero
-        cards (`PulseSkeleton`); a search or filter loading for the first time shows the rows it will return instead, so
-        the swap is not itself a layout jump.
+        Shaped like the screen it stands in for, and static: the lead card and a rail (`PulseSkeleton`); a search or filter
+        loading for the first time shows the rows it will return instead, so the swap is not itself a layout jump.
       */}
       {isNarrowed ? (
         <View style={styles.narrowedSkeleton}>
@@ -1809,7 +1909,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           ))}
         </View>
       ) : (
-        <PulseSkeleton />
+        <PulseSkeleton lead={leadHeight} />
       )}
       <View style={styles.spacer} />
     </View>
@@ -1828,11 +1928,11 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
             copy={emptyCopy}
             city={selectedCity}
             canChangeCity={cityOptions.length > 0}
+            cities={cityOptions}
+            countries={catalogue.countries ?? []}
+            onChooseCity={(c) => chooseCity(c)}
             onClearSearch={() => changeSearchInput('')}
-            onClearFilters={() => {
-              setFilters(NO_FILTERS)
-              setFilterDraft(NO_FILTERS)
-            }}
+            onClearFilters={() => setFilters(NO_FILTERS)}
             onChangeCity={() => setCityPickerOpen(true)}
             onRefresh={() => fetchEvents({ force: true })}
           />
@@ -1842,7 +1942,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
         Under a search, none of the sections render: somebody who has typed a venue's name knows what they want. The pane
         is the result, flat, under its count.
       */}
-      {isNarrowed && events.length > 0 ? (
+      {isSearching && events.length > 0 ? (
         <View style={styles.resultsLabel}>
           <Text style={styles.resultsLabelText} accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP}>
             <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).text}</Text>
@@ -1850,16 +1950,17 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           </Text>
         </View>
       ) : null}
+      {leadNode}
+      {/* Bring your friends: one card after the lead, gone once shared or dismissed (ledger row 14). */}
+      {!isNarrowed && user && events.length > 0 ? <FriendsCard userId={user.id} /> : null}
       {!isNarrowed ? (
         <SectionStack
-          sections={sections}
+          sections={stackSections}
           now={now}
           withDistance={hasFix}
-          visible={visible}
           handlers={cardHandlers}
-          coachRef={coachTarget}
+          coachRef={leadNode ? NO_COACH : coachTarget}
           pending={mainRowsRevealPending}
-          featuredLayout={(solo) => featuredCardLayout(cardInsets, tabBarTop(SCREEN_HEIGHT, insets.bottom), solo, bannersHeight)}
           askForLocation={!userLocation && (locationStatus === 'denied' || locationStatus === 'undetermined') ? { denied: locationStatus === 'denied', onAsk: askForLocation } : null}
           timeZone={cityZone}
         />
@@ -1875,7 +1976,9 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
 
   const listData = useMemo(() => (showLoadingSkeleton ? LEAD : [...LEAD, ...rows]), [showLoadingSkeleton, rows])
   // Not memoised: the two nodes are new elements every render, so a memo here would never hold.
-  const slots = { search: searchNode, body: bodyNode, scrolled: searchBarOn }
+  const slots = { chips: chipsNode, body: bodyNode, scrolled: searchBarOn }
+  // A quiet week's honest end, with a way on (Canada frame): only when it is true (`quietWeekEnd`).
+  const quietEnd = !isNarrowed && !!selectedCity && quietWeekEnd(events, { hasMore, now })
 
   return (
     /*
@@ -1907,10 +2010,10 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           contentContainerStyle={[
             styles.listContainer,
             {
-              // The drawer's header above (the top bar and the status bar are above the drawer); the floating nav plus the
-              // home indicator at the bottom, which the feed still scrolls under. The frame's 128 already clears the 88 pt
-              // nav; `Math.max` so it still does if the nav grows.
-              paddingTop: SPACE.lg,
+              // None at the top: the drawer's header ends in its own 8 pt and the chips sit right under it (Option C: the rest
+              // point is measured from there, `pulseRest`). The floating nav plus the home indicator at the bottom, which the
+              // feed still scrolls under; `Math.max` so it still clears if the nav grows.
+              paddingTop: 0,
               paddingBottom: insets.bottom + Math.max(MAIN_PADDING_BOTTOM, TAB_BAR_CLEARANCE + SPACE.xl),
             },
           ]}
@@ -1931,7 +2034,7 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
           initialNumToRender={4 + LEAD_ROWS}
           maxToRenderPerBatch={5}
           windowSize={10}
-          stickyHeaderIndices={STICKY_SEARCH}
+          stickyHeaderIndices={STICKY_CHIPS}
           ListHeaderComponent={
             <View>{banners}</View>
           }
@@ -1941,6 +2044,8 @@ function EventsInner({ onBrowse, visible, full }: { onBrowse: (browse: HomeBrows
               <View style={styles.rateLimitFoot}>
                 <RateLimitedBanner seconds={rateLimit.seconds} onDone={rateLimitDone} testID="pulse-more-rate-limited" />
               </View>
+            ) : quietEnd && selectedCity ? (
+              <QuietWeekEnd city={selectedCity} onPlaces={() => shell?.openPlaces()} onChangeCity={() => setCityPickerOpen(true)} />
             ) : null
           }
         />
@@ -1996,6 +2101,8 @@ const styles = StyleSheet.create({
    * gradient. An ink of its own here drew a hard edge under the glass band.
    */
   rateLimitFoot: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md },
+  /** The lead card under the chips: Option C's 16 pt (`LEAD_GAP`), centred in the gutter. */
+  lead: { marginTop: LEAD_GAP },
   container: { flex: 1 },
   /**
    * No horizontal padding of its own: every row carries its gutter (the rails and the Set list bleed to the edge), so a
@@ -2037,6 +2144,6 @@ export default function Events() {
  * (its pane showing, the drawer past peek) and `full` (the drawer all the way
  * up, for the coach mark) re-render it: a settle, never a drag.
  */
-const renderPulse = (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean) => (
-  <EventsInner onBrowse={onBrowse} visible={visible} full={full} />
+const renderPulse = (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean, shell: PulseShell) => (
+  <EventsInner onBrowse={onBrowse} visible={visible} full={full} shell={shell} />
 )

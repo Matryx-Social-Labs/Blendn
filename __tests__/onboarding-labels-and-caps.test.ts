@@ -32,7 +32,7 @@ describe('one word per meaning for the secondary (GO-11, D12)', () => {
   })
 
   it('"Skip for now" is retired', () => {
-    for (const screen of ['preferences', 'details', 'media', 'location', 'friends']) expect(read(`app/onboarding/${screen}.tsx`)).not.toContain('Skip for now')
+    for (const screen of ['preferences', 'details', 'media', 'location']) expect(read(`app/onboarding/${screen}.tsx`)).not.toContain('Skip for now')
   })
 })
 

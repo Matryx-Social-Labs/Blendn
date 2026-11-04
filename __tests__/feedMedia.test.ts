@@ -159,7 +159,7 @@ describe('a hero clip restarts when the carousel comes back to it', () => {
    * still holds. Keying the reset on `isCurrent` fixed some returns and not
    * others.
    *
-   * `FeedVideo` never had the bug, and not by being cleverer: **mount means
+   * `FeedVideo` (the old Featured card's player, removed with Option C) never had the bug, and not by being cleverer: **mount means
    * play**. An inactive card unmounts, and the next mount is a new
    * `useVideoPlayer` at zero. There is no state to reset because no player
    * survives. The hero uses the same rule now.
@@ -186,15 +186,6 @@ describe('a hero clip restarts when the carousel comes back to it', () => {
     expect(code).not.toContain('endedOnce')
   })
 
-  it('leaves the feed on the same rule', () => {
-    const feed = readFileSync(
-      join(__dirname, '..', 'components', 'pulse', 'FeedVideo.tsx'),
-      'utf8'
-    )
-    expect(feed).toContain('player.play()')
-    // Its doc is the canonical statement of the policy both now share.
-    expect(feed).toContain('single-active-player policy')
-  })
 })
 
 describe('the detail route spells the poster thumbnailUrl (ROOM-12)', () => {

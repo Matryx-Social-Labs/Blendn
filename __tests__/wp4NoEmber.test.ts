@@ -7,7 +7,6 @@ const FILES = [
   'components/pulse/PulseTopBar.tsx',
   'components/pulse/NotificationBell.tsx',
   'components/EventCover.tsx',
-  'components/pulse/FeedMedia.tsx',
   'app/(tabs)/events.tsx',
   'app/(tabs)/going.tsx',
   'components/home/PlacesList.tsx',

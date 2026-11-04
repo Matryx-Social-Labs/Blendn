@@ -34,7 +34,7 @@ afterEach(() => {
 })
 
 const banner = (onDismiss = jest.fn()) => (
-  <Banner kind="info" icon="plane" text="Browsing Canada. Times are Toronto time." action={{ label: 'Back to Bengaluru', onPress: jest.fn() }} onDismiss={onDismiss} testID="b" />
+  <Banner kind="info" icon="plane" text="Browsing Toronto" action={{ label: 'Back to Bengaluru', onPress: jest.fn() }} onDismiss={onDismiss} testID="b" />
 )
 
 it.each(['ios', 'android'] as const)('on %s the × draws no glass and no blur on the solid banner, and is a full target', async (platform) => {

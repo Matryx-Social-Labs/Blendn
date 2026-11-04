@@ -102,7 +102,7 @@ it('the success lands as the mark completes, once, and the replace to Bring your
   expect(success).toHaveBeenCalledTimes(1)
   expect(success).toHaveBeenCalledWith({ important: true })
   await act(async () => jest.advanceTimersByTime(800))
-  expect(router.replace).toHaveBeenCalledWith('/onboarding/friends')
+  expect(router.replace).toHaveBeenCalledWith('/(tabs)/events')
   expect(success).toHaveBeenCalledTimes(1)
 })
 
@@ -114,7 +114,7 @@ it('Reduce Motion: the mark fades, the haptic is at once, the replace follows at
   await act(async () => jest.advanceTimersByTime(10))
   expect(success).toHaveBeenCalledTimes(1)
   await act(async () => jest.advanceTimersByTime(500))
-  expect(router.replace).toHaveBeenCalledWith('/onboarding/friends')
+  expect(router.replace).toHaveBeenCalledWith('/(tabs)/events')
 })
 
 it('a refusal stays on the screen: no celebration, no replace, and no haptic from here (the toast plays the error)', async () => {

@@ -39,6 +39,7 @@ import {
   type InFlight,
   type Pin,
   type PinQuery,
+  withFocus,
   compassBelow,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
@@ -155,6 +156,8 @@ export const HomeMap = memo(function HomeMap({
   glowVisible,
   nearPins,
   fitNear,
+  focus = null,
+  locateLift,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
@@ -188,6 +191,10 @@ export const HomeMap = memo(function HomeMap({
   nearPins: NearPin[]
   /** Bumped by "Show on map": fit the camera to the pins and you, in the map the half drawer leaves. */
   fitNear: number
+  /** The Pulse's lead card's venue: lit at the brightest step; each new `n` (a swipe) eases the camera there (Option C). */
+  focus?: { pin: Pin; n: number } | null
+  /** How far the Pulse's banners on the map lift "my location" (0 with none). */
+  locateLift?: SharedValue<number>
 }) {
   const { width, height } = useWindowDimensions()
   /*
@@ -342,7 +349,11 @@ export const HomeMap = memo(function HomeMap({
    */
   const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[] }>({ segment, pins: NO_PINS })
   const [now, setNow] = useState(() => Date.now())
-  const pins = useMemo(() => (loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS), [loaded, segment, now])
+  const focusPin = focus?.pin ?? null
+  const pins = useMemo(
+    () => withFocus(loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS, focusPin),
+    [loaded, segment, now, focusPin]
+  )
 
   // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
   const startAt: [number, number] = center ? [center.longitude, center.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
@@ -389,6 +400,15 @@ export const HomeMap = memo(function HomeMap({
     followedFix.current = center
     moveTo({ to: target.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: target.pitch } })
   }
+
+  // The lead card swiped to another venue: the camera eases there within the city (jumps under Reduce Motion, `cameraMove`).
+  // Moving the map for the person counts as their move: a fix arriving must not drag it back.
+  const focusN = focus?.n ?? 0
+  useEffect(() => {
+    if (!focusN || !focusPin) return
+    setTouched(true)
+    moveTo({ to: [focusPin.longitude, focusPin.latitude], easeMs: MAP_THEME.camera.easeMs })
+  }, [focusN]) // eslint-disable-line react-hooks/exhaustive-deps -- only a swipe moves the camera here
 
   // A city change: a pick goes there, a choice of where you stand shows you, one the app decided only when you have no fix (`cityPickAction`).
   const cityLat = cityCentre?.latitude
@@ -635,6 +655,7 @@ export const HomeMap = memo(function HomeMap({
           pending={asking}
           drawerTop={drawerTop}
           drawer={drawer}
+          lift={locateLift}
           onPress={locate}
         />
       ) : null}

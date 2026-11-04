@@ -42,7 +42,6 @@ import { CityPicker, matchingCities } from '../components/pulse/CityPicker'
 import { PulseBanners } from '../components/pulse/PulseBanners'
 import { PulseEmpty, PulseLoadFailed } from '../components/pulse/PulseEmpty'
 import { PulsePeek } from '../components/pulse/PulsePeek'
-import { PulseSearch } from '../components/pulse/PulseHeader'
 /* eslint-enable import/first */
 
 const CITIES: CityOption[] = [
@@ -171,7 +170,7 @@ describe('the banners', () => {
   it('the travel banner goes back home, and can be put away', async () => {
     const onTravelBack = jest.fn()
     const onTravelDismiss = jest.fn()
-    const travel = { kind: 'browsing' as const, text: 'Browsing Canada. Times are Toronto time. Check-in opens when you’re there.', back: 'Bengaluru' }
+    const travel = { kind: 'browsing' as const, text: 'Browsing Toronto', back: 'Bengaluru' }
     await render(<PulseBanners {...base} travel={travel} onTravelBack={onTravelBack} onTravelDismiss={onTravelDismiss} />)
     expect(screen.getByText(travel.text)).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'Back to Bengaluru' }))
@@ -246,20 +245,3 @@ describe('the peek', () => {
   })
 })
 
-describe('the search row', () => {
-  it('has the filter with its badge, and each applied filter as a removable chip', async () => {
-    const onRemove = jest.fn()
-    await render(
-      <PulseSearch query="" onChangeQuery={jest.fn()} onPressFilter={jest.fn()} activeFilterCount={2} applied={[{ key: 'when', label: 'This weekend', onRemove }, { key: 'radiusKm', label: 'Within 5 km', onRemove: jest.fn() }]} />
-    )
-    expect(screen.getByRole('button', { name: 'Filters' }).props.accessibilityHint).toBe('2 applied')
-    expect(screen.getByTestId('pulse-filter-badge', { includeHiddenElements: true })).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'This weekend, remove filter' }))
-    expect(onRemove).toHaveBeenCalledTimes(1)
-  })
-  it('shows no badge and no chips with no filter', async () => {
-    await render(<PulseSearch query="" onChangeQuery={jest.fn()} onPressFilter={jest.fn()} />)
-    expect(screen.queryByTestId('pulse-filter-badge', { includeHiddenElements: true })).toBeNull()
-    expect(screen.queryByTestId('pulse-applied')).toBeNull()
-  })
-})

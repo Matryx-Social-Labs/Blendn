@@ -141,6 +141,20 @@ export function liveAt(pin: Pin, now: number): Pin {
   return live === pin.live ? pin : { ...pin, live, glow: live ? 3 : 1 }
 }
 
+/** The glow a focused pin is lit at: the brightest step (a venue at 20+). */
+export const FOCUS_GLOW = 4
+
+/**
+ * The Pulse's lead card lights its venue (Flow 3 · Pulse, Option C): the focused pin at the brightest step, the rest at
+ * their own; added when the map has not loaded it yet (the viewport query lags the camera). New pins, never the old ones.
+ */
+export function withFocus(pins: Pin[], focus: Pin | null): Pin[] {
+  if (!focus) return pins
+  // Brighter only: `live` is what its chip says ("LIVE ●"), and the lead's event need not be on now.
+  const lit = (p: Pin): Pin => ({ ...p, glow: FOCUS_GLOW })
+  return pins.some((p) => p.id === focus.id) ? pins.map((p) => (p.id === focus.id ? lit(p) : p)) : [...pins, lit(focus)]
+}
+
 /** A pin's dot colour (`MAP_THEME.pin`): ember for an event, rose for a venue, brighter when live. */
 export const shadeOf = (kind: PinKind, live: boolean) => MAP_THEME.pin[kind][live ? 'live' : 'later']
 
@@ -417,13 +431,33 @@ export function visibleCentreY(padding: { top: number; bottom: number }, mapHeig
  * gap above it, fading out as it rises from half to full, like Google and
  * Apple Maps. A worklet: it runs per frame on the UI thread.
  */
-export function locateRide(drawerTop: number, drawer: { half: number; full: number }): { translateY: number; opacity: number } {
+export function locateRide(drawerTop: number, drawer: { half: number; full: number }, lift = 0) {
   'worklet'
   const { sizePx, gapPx } = MAP_THEME.locate
   const span = drawer.half - drawer.full
   // A screen too short for a half step between half and full: shown until full (review L3).
   const shown = span > 0 ? (drawerTop - drawer.full) / span : drawerTop > drawer.full ? 1 : 0
-  return { translateY: drawerTop - gapPx - sizePx, opacity: Math.min(1, Math.max(0, shown)) }
+  // `lift`: a banner on the map takes the place above the drawer (the board's `.mbn`); the button rides above it.
+  return { translateY: drawerTop - gapPx - sizePx - lift, opacity: Math.min(1, Math.max(0, shown)) }
+}
+
+/**
+ * The Pulse's banners on the map (Option C): a gap above "my location", riding the drawer and fading as it does
+ * (`locateRide`). `height` is the banners' own. A worklet: it runs per frame.
+ */
+/** Board `.mbn` (`top: 262` over a drawer at 336): the banner's top 74 above the drawer, growing down as it wraps... */
+export const BANNER_TOP_ABOVE_DRAWER = 74
+/** ...but its foot never closer to the drawer than this. */
+export const BANNER_FOOT_MIN = 22
+/** How far above the drawer the banner's top sits, for a banner this tall. A worklet. */
+export function bannerReach(height: number) {
+  'worklet'
+  return Math.max(BANNER_TOP_ABOVE_DRAWER, height + BANNER_FOOT_MIN)
+}
+export function bannerRide(drawerTop: number, drawer: { half: number; full: number }, height: number) {
+  'worklet'
+  const { opacity } = locateRide(drawerTop, drawer)
+  return { translateY: drawerTop - bannerReach(height), opacity }
 }
 
 /** How far a fix must move before the camera follows it: past GPS jitter. */
