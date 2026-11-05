@@ -235,7 +235,9 @@ export function EventCard(props: EventCardProps) {
                   {distance ? (
                     <Text testID={testID && `${testID}-distance`} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.fixed]}>
                       {venue ? '· ' : ''}
-                      <Text style={[font('note', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{distance}</Text>
+                      <Text style={[font('note', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
+                        <MonoRun text={distance} />
+                      </Text>
                     </Text>
                   ) : null}
                 </View>
