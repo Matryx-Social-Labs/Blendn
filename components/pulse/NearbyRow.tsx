@@ -143,7 +143,7 @@ function NearbyRowImpl<E extends RowEvent>({
 export const NearbyRow = memo(NearbyRowImpl) as typeof NearbyRowImpl
 
 /** A time group's heading (board `.gh`): the words, the count in Geist Mono, and its end on the right ("by 9:10 PM"). */
-export function WhenHeading({ title, count, note }: { title: string; count: number | null; note?: string }) {
+export function WhenHeading({ title, count, note, live = false }: { title: string; count: number | null; note?: string; live?: boolean }) {
   const bold = useBoldText()
   return (
     <View
@@ -152,12 +152,17 @@ export function WhenHeading({ title, count, note }: { title: string; count: numb
       accessibilityLabel={[title, count === null ? null : `${count.toLocaleString('en-US')} ${count === 1 ? 'event' : 'events'}`, note].filter(Boolean).join(', ')}
       style={styles.heading}
     >
+      {live ? (
+        <View testID="when-heading-live" style={styles.headingDot}>
+          <PresenceDot kind="live" />
+        </View>
+      ) : null}
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.ink]}>
         {title}
       </Text>
       {count === null ? null : (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-          {count.toLocaleString('en-US')}
+          {`· ${count.toLocaleString('en-US')}`}
         </Text>
       )}
       {note ? (
@@ -198,6 +203,7 @@ const styles = StyleSheet.create({
   // Board `.gh`: 24 in, 18 above, 2 below, the words and the count on one baseline, the end on the right.
   heading: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.sm, paddingHorizontal: SPACE.gutter, marginTop: SPACE.lg + SPACE.xxs, marginBottom: SPACE.xxs },
   note: { marginLeft: 'auto' },
+  headingDot: { alignSelf: 'center' },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },

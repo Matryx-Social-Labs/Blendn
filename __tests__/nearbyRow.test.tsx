@@ -87,3 +87,9 @@ it('at the default size: the time column and the photo (the control)', async () 
 it('a big count is grouped the en-US way (board N1worst: 1,240 going)', () => {
   expect(nearbyRowLabel({ ...(base as object), going_count: 1240 } as never, NOW, false)).toMatch(/1,240 going$/)
 })
+
+it('the heading draws its count as "· 2" in mono, and Happening now carries the live dot (board `.gh`)', async () => {
+  await render(<WhenHeading title="Happening now" count={2} live />)
+  expect(screen.getByText('· 2', { includeHiddenElements: true })).toBeTruthy()
+  expect(screen.getByTestId('when-heading-live', { includeHiddenElements: true })).toBeTruthy()
+})

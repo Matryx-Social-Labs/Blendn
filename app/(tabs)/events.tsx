@@ -1745,7 +1745,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const renderRow = useCallback(({ item, index }: { item: PulseRow; index: number }) => {
     if (item.kind === 'chips' || item.kind === 'body') return <PulseSlot slot={item.kind} />
-    if (item.kind === 'when') return <WhenHeading title={item.title} count={item.count} note={item.note} />
+    if (item.kind === 'when') return <WhenHeading title={item.title} count={item.count} note={item.note} live={item.key === 'when-now'} />
     if (item.kind === 'day') {
       return (
         <View style={styles.dayRow}>
