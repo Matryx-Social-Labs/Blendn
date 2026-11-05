@@ -50,8 +50,10 @@ export function QuickChips({
           size="header"
           label={c.label}
           count={c.count}
-          // The ✓ draws itself on select (Foundations C glyph verb); distance keeps its arrow either way.
+          // The ✓ draws itself on select (Foundations C glyph verb). Near me (N1 board): its arrow at rest, the ✓ on, in the
+          // DS slot that swaps the two without the chip changing width.
           icon={c.key === 'near' ? 'navigation' : c.selected ? 'check' : undefined}
+          selection={c.key === 'near' ? 'multi' : undefined}
           selected={c.selected}
           accessibilityLabel={c.accessibilityLabel}
           onPress={() => onChange(toggleQuick(filters, c.key, vibe))}
