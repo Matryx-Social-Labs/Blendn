@@ -183,9 +183,18 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   })
 
   it('adds only extruded buildings and circles: no fill or line that could outline an area', () => {
+    // Near me's reach (N1) is the one exception: fixed rings round the person (a 20-minute walk, a short ride), never an event's.
     const types = [...layers.matchAll(/type="([a-z-]+)"/g)].map((m) => m[1])
     expect(types.length).toBeGreaterThan(0)
-    expect(types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')).toEqual([])
+    const areas = types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')
+    const reach = [...layers.matchAll(/<Layer id="reach-[a-z-]+" type="([a-z-]+)"/g)].map((m) => m[1])
+    expect(reach).toEqual(['fill', 'line', 'fill', 'line'])
+    expect(areas).toEqual(reach)
+  })
+
+  it('the reach is drawn from where the person stands, with the fixed walk and ride, nothing off a payload', () => {
+    expect(component).toMatch(/reachShapes\(reach\)/)
+    expect(code('lib/homeMap.ts')).toMatch(/export function reachShapes\(c: LatLng, rideKm: number = 8\)/)
   })
 
   it('moves the camera only through one stop helper, every stop with the padding', () => {
