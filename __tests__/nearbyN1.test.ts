@@ -127,3 +127,16 @@ describe('nothing within reach says what exists and how far (board N1none)', () 
     expect(nothingNearCopy('Toronto', null, 'any').message).toBe('')
   })
 })
+
+describe('the zoom that frames the reach (owner pick (c)): the 8 km ring at the board’s radius, flat', () => {
+  const { reachZoom } = jest.requireActual('../lib/homeMap') as typeof import('../lib/homeMap')
+  it('Bengaluru on a 393 pt phone: about zoom 10.7 (a 176 pt ring), from MapLibre’s 512 pt world', () => {
+    const z = reachZoom(12.9716, 393)
+    const metresPerPt = (40075016.686 * Math.cos((12.9716 * Math.PI) / 180)) / (512 * 2 ** z)
+    expect(8000 / metresPerPt).toBeCloseTo(393 / 2 - 20, 0)
+    expect(z).toBeCloseTo(10.71, 1)
+  })
+  it('further from the equator the same ring is a closer zoom (Toronto)', () => {
+    expect(reachZoom(43.65, 393)).toBeLessThan(reachZoom(12.97, 393))
+  })
+})

@@ -536,6 +536,23 @@ export function reachShapes(c: LatLng, rideKm: number = 8) {
   }
 }
 
+/** The world's circumference at the equator, in metres (WGS 84). */
+const EARTH_CIRCUMFERENCE_M = 40_075_016.686
+/** MapLibre's world is 512 pt wide at zoom 0. */
+const WORLD_PT = 512
+/** The ring's room on each side of the phone (board `ringAt`: a 176 pt ring on a 393 pt phone leaves 20). */
+const REACH_SIDE_PT = 20
+
+/**
+ * The flat zoom at which the short ride is the board's ring (owner pick (c), 2026-11-05): true distances, the camera
+ * fitted so the 8 km ring spans the phone less 20 pt a side. Further from the equator a metre is more points, so closer.
+ */
+export function reachZoom(latitude: number, widthPt: number, rideKm: number = 8): number {
+  const radiusPt = widthPt / 2 - REACH_SIDE_PT
+  const metresPerPt = (rideKm * 1000) / radiusPt
+  return Math.log2((EARTH_CIRCUMFERENCE_M * Math.cos((latitude * Math.PI) / 180)) / (WORLD_PT * metresPerPt))
+}
+
 /** The pins inside the short ride: only these light while Near me is on. */
 export function withinReach<P extends LatLng>(pins: readonly P[], c: LatLng, rideKm: number = 8): P[] {
   return pins.filter((p) => getDistanceKm(c.latitude, c.longitude, p.latitude, p.longitude) <= rideKm)

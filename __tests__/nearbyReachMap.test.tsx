@@ -142,23 +142,32 @@ it('on: the dark, the ride ring and the walk are drawn, and only what is inside 
 })
 
 describe('the camera frames the reach (owner pick (c), 2026-11-05): true distances, the ride ring fills the map', () => {
-  const bounded = () => mockStops.filter((st) => Array.isArray(st.bounds)) as { bounds: number[] }[]
+  // The reach's frame: a flat stop far out (a city's worth); the map's own stops sit at street zoom.
+  const framing = () => mockStops.filter((st) => st.pitch === 0 && typeof st.zoom === 'number' && (st.zoom as number) < 12)
 
-  it('off: no stop to any bounds (the control)', async () => {
+  it('off: no stop zoomed out to the reach (the control)', async () => {
     await render(map(null))
     await settle()
-    expect(bounded()).toHaveLength(0)
+    expect(framing()).toHaveLength(0)
   })
 
-  it('on: one stop to the 8 km ring around you, padded to the map the drawer leaves', async () => {
+  it('on: one stop, flat, centred on you, at the zoom that puts the 8 km ring at the board’s radius', async () => {
+    const { reachZoom } = jest.requireActual('../lib/homeMap') as typeof import('../lib/homeMap')
     await render(map(FIX))
     await settle()
-    const [stop] = bounded()
-    expect(bounded()).toHaveLength(1)
-    const [w, s, e, n] = stop.bounds
-    // 8 km each way: ~0.072° of latitude, the centre in the middle.
-    expect(n - s).toBeCloseTo((2 * 8) / 110.574, 3)
-    expect((w + e) / 2).toBeCloseTo(FIX.longitude, 5)
-    expect((s + n) / 2).toBeCloseTo(FIX.latitude, 5)
+    const framed = framing()
+    expect(framed).toHaveLength(1)
+    expect(framed[0].center).toEqual([FIX.longitude, FIX.latitude])
+    const { width } = jest.requireActual('react-native').Dimensions.get('window')
+    expect(framed[0].zoom).toBeCloseTo(reachZoom(FIX.latitude, width), 5)
+  })
+
+  it('off again: the map tilts back to its own view', async () => {
+    const view = await render(map(FIX))
+    await settle()
+    mockStops.length = 0
+    await view.rerender(map(null))
+    await settle()
+    expect(mockStops.some((st) => st.pitch === 55 && st.zoom === 16)).toBe(true)
   })
 })

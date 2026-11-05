@@ -42,6 +42,7 @@ import {
   withFocus,
   withinReach,
   reachShapes,
+  reachZoom,
   compassBelow,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
@@ -363,17 +364,23 @@ export const HomeMap = memo(function HomeMap({
   }, [loaded, segment, now, focusPin, reach])
   const reachData = useMemo(() => (reach ? reachShapes(reach) : null), [reach])
 
-  // Near me turned on (owner pick (c), 2026-11-05): true distances, the camera fitted so the short ride fills the map the drawer leaves at rest, as on the board.
+  /*
+   * Near me (owner pick (c), 2026-11-05): true distances, the camera fitted like the board. On, the map lies flat on you
+   * at the zoom that makes the 8 km ring span the phone (`reachZoom`); off, it tilts back to its own street view.
+   */
   const reachOn = reachData !== null
+  const reachWas = useRef(false)
   useEffect(() => {
-    if (!reachOn || !reachData) return
-    const ring = reachData.ride.geometry.coordinates[0]
-    const lons = ring.map((p) => p[0])
-    const lats = ring.map((p) => p[1])
+    const was = reachWas.current
+    reachWas.current = reachOn
+    const duration = reduceMotion ? 0 : MAP_THEME.camera.easeMs
     const half = mapPadding({ topChrome, mapHeight, drawerTop: drawer.half })
-    const sides = SPACE.xl
-    stop({ bounds: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)], padding: { ...half, left: sides, right: sides }, duration: reduceMotion ? 0 : MAP_THEME.camera.easeMs })
-  }, [reachOn]) // eslint-disable-line react-hooks/exhaustive-deps -- only turning Near me on frames it
+    if (reachOn && reach) {
+      stop({ center: [reach.longitude, reach.latitude], zoom: reachZoom(reach.latitude, width), pitch: 0, padding: half, duration })
+    } else if (was) {
+      stop({ zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch, padding: half, duration })
+    }
+  }, [reachOn]) // eslint-disable-line react-hooks/exhaustive-deps -- only turning Near me on or off moves the camera
 
   // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
   const startAt: [number, number] = center ? [center.longitude, center.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
