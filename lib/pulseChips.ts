@@ -46,9 +46,10 @@ export function quickChips(input: {
     return { key, label, count, selected, accessibilityLabel: count ? `${label}, ${count} events` : label }
   }
   return [
+    // N1 board order: Tonight, Near me, This weekend, the vibe (Filters is the row's own last chip).
     chip('tonight', WHEN_LABELS.today, filters.when === 'today', counts.tonight),
-    chip('weekend', WHEN_LABELS.weekend, filters.when === 'weekend', counts.weekend),
     ...(nearOn ? [chip('near', 'Near me', filters.radiusKm === NEAR_KM)] : []),
+    chip('weekend', WHEN_LABELS.weekend, filters.when === 'weekend', counts.weekend),
     ...(vibe ? [chip('vibe', vibe.name, filters.categorySlug === vibe.slug)] : []),
   ]
 }

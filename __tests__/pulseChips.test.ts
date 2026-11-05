@@ -27,21 +27,21 @@ describe('chipCount', () => {
 describe('quickChips', () => {
   const base = { filters: NO_FILTERS, counts: { tonight: 214, weekend: 1038 }, nearOn: true, vibe: VIBE }
 
-  it('time first, then distance, then the vibe, with counts on the time chips only', () => {
+  it('the N1 board order: Tonight, Near me, This weekend, the vibe; counts on the time chips only', () => {
     const chips = quickChips(base)
-    expect(chips.map((c) => c.key)).toEqual(['tonight', 'weekend', 'near', 'vibe'])
-    expect(chips.map((c) => c.label)).toEqual(['Tonight', 'This weekend', 'Near me', 'Live music'])
+    expect(chips.map((c) => c.key)).toEqual(['tonight', 'near', 'weekend', 'vibe'])
+    expect(chips.map((c) => c.label)).toEqual(['Tonight', 'Near me', 'This weekend', 'Live music'])
     // N1 (SCRUM-1022): Near me reaches a short ride, the Nearby list's 8 km.
     expect(NEAR_KM).toBe(8)
     expect(chips[0].count).toBe('214')
-    expect(chips[1].count).toBe('1,038')
-    expect(chips[2].count).toBeUndefined()
+    expect(chips[1].count).toBeUndefined()
+    expect(chips[2].count).toBe('1,038')
     expect(chips[3].count).toBeUndefined()
     expect(chips.every((c) => !c.selected)).toBe(true)
   })
 
   it('reads the count in the label, so a screen reader hears it', () => {
-    const [tonight, weekend, near] = quickChips(base)
+    const [tonight, near, weekend] = quickChips(base)
     expect(tonight.accessibilityLabel).toBe('Tonight, 214 events')
     expect(weekend.accessibilityLabel).toBe('This weekend, 1,038 events')
     expect(near.accessibilityLabel).toBe('Near me')
@@ -60,7 +60,7 @@ describe('quickChips', () => {
   it('each chip is lit by the filter it applies', () => {
     const on = (f: EventFilters) => quickChips({ ...base, filters: f }).filter((c) => c.selected).map((c) => c.key)
     expect(on({ when: 'today' })).toEqual(['tonight'])
-    expect(on({ when: 'weekend', radiusKm: NEAR_KM })).toEqual(['weekend', 'near'])
+    expect(on({ when: 'weekend', radiusKm: NEAR_KM })).toEqual(['near', 'weekend'])
     expect(on({ when: 'any', categorySlug: 'music' })).toEqual(['vibe'])
     // Control: a filter the chips do not stand for lights none of them.
     expect(on({ when: 'week', radiusKm: 5, categorySlug: 'food' })).toEqual([])
