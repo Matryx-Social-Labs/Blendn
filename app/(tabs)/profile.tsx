@@ -44,6 +44,7 @@ import { pastEventRows, type PastEventRow } from '../../lib/savedEvents'
 import { useAuth } from '../../lib/useAuth'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { trackTabBarScroll, useTabBarRun } from '../../lib/tabBarSettle'
 
 /**
  * Enough attended events to cover Nights out's twelve weeks for anyone short
@@ -380,8 +381,11 @@ function ProfileInner() {
   // The branded pull (motion #18), its monogram under the floating bar; Android keeps the platform's control, offset the same.
   const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), indicatorTop: barBottom })
   const { onOffset: pullAt, wantsOffset: pullWants } = pull
+  const tabRun = useTabBarRun()
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.set(e.contentOffset.y)
+    // The tab bar settles into its pill as you read (SCRUM-1023).
+    trackTabBarScroll(tabRun, e)
     // Only above the top, or while the monogram is still up: the rest of the scroll never crosses to JS.
     if (pullWants(e.contentOffset.y)) scheduleOnRN(pullAt, e.contentOffset.y)
   })

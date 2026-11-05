@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, AppState, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, AppState, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import Animated, {
   cancelAnimation,
   Easing,
@@ -11,6 +11,7 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
+  type AnimatedStyle,
   type SharedValue,
 } from 'react-native-reanimated'
 import Svg, { Defs, Path } from 'react-native-svg'
@@ -34,6 +35,11 @@ export type DiscProps = {
   venue?: string
   /** How many events' fences you are inside; over one, (c) says "Check in · 2 here" and a tap opens the first (BAR-06). */
   here?: number
+  /**
+   * The disc's size as a fraction of its 56 pt, on the UI thread (the tab bar's compact pill: 44/56). Every state scales
+   * with it; (c)'s "Check in · {venue}" pill does not, it only rides on the disc's top edge.
+   */
+  scale?: SharedValue<number>
   testID?: string
 }
 
@@ -119,7 +125,7 @@ const AnimatedPath = Animated.createAnimatedComponent(Path)
  * haptic the disc makes; (c → d)'s `H.success` belongs to the check-in's
  * server answer, not here.
  */
-export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProps) {
+export function Disc({ target, onPress, venue, here, scale, testID = 'disc' }: DiscProps) {
   const reduceMotion = useReducedMotion()
   const look = discLook(target)
   // One shared value per channel, made once: eleven `useSharedValue`s by another name.
@@ -175,10 +181,14 @@ export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProp
   const hollowStyle = useOpacity(v.hollow)
   const dotStyle = useOpacity(v.dot)
   const pillStyle = useAnimatedStyle(() => ({ opacity: v.pill.get(), transform: [{ scale: v.pillScale.get() }] }))
+  const sized = useAnimatedStyle(() => ({ transform: [{ scale: scale ? scale.get() : 1 }] }))
+  // The disc shrinks about its centre, so its top edge comes down by (1 − s) of its radius: the label keeps its gap above it.
+  const riding = useAnimatedStyle(() => ({ transform: [{ translateY: scale ? (1 - scale.get()) * R : 0 }] }))
 
   return (
     <View style={styles.slot}>
-      {look === 'c' ? <CheckInLabel venue={venue} here={here} onPress={onPress} testID={`${testID}-label`} /> : null}
+      {look === 'c' ? <CheckInLabel venue={venue} here={here} onPress={onPress} style={riding} testID={`${testID}-label`} /> : null}
+      <Animated.View testID={`${testID}-sized`} style={[styles.slot, sized]}>
       <ScalePress
         onPress={onPress}
         pressedScale={PRESS.scaleDisc}
@@ -233,6 +243,7 @@ export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProp
           ) : null}
         </Animated.View>
       </ScalePress>
+      </Animated.View>
     </View>
   )
 }
@@ -242,9 +253,9 @@ export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProp
  * so it is mounted rather than faded (glass never fades, §5.2). Hidden from
  * screen readers: the disc says the same, with the consequence.
  */
-function CheckInLabel({ venue, here, onPress, testID }: { venue?: string; here?: number; onPress: () => void; testID: string }) {
+function CheckInLabel({ venue, here, onPress, style, testID }: { venue?: string; here?: number; onPress: () => void; style: AnimatedStyle<ViewStyle>; testID: string }) {
   return (
-    <View style={styles.labelSlot} pointerEvents="box-none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <Animated.View testID={`${testID}-slot`} style={[styles.labelSlot, style]} pointerEvents="box-none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <ScalePress onPress={onPress} haptic={H.disc} hitSlop={LABEL_SLOP} testID={testID}>
         <Material role="toast" style={styles.label}>
           <Text style={styles.labelText} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.caption}>
@@ -252,7 +263,7 @@ function CheckInLabel({ venue, here, onPress, testID }: { venue?: string; here?:
           </Text>
         </Material>
       </ScalePress>
-    </View>
+    </Animated.View>
   )
 }
 
@@ -306,7 +317,8 @@ const styles = StyleSheet.create({
   pillText: { ...TYPE.label, fontFamily: FONT_FAMILY.mono[700], fontVariant: ['tabular-nums'], color: COLOR.ink },
   labelSlot: {
     position: 'absolute',
-    bottom: SIZE.disc + SPACE.sm,
+    // 12 over the disc, so 8 over the full bar's top edge and the compact pill's alike (tab-bar board `.cin`).
+    bottom: SIZE.disc + SPACE.md,
     left: -LABEL_REACH,
     right: -LABEL_REACH,
     alignItems: 'center',

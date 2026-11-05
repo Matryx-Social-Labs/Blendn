@@ -109,8 +109,10 @@ describe('the bar does not clip what rises above the disc', () => {
     expect(bar).not.toContain("overflow: 'hidden'")
   })
 
+  // Reshaped as it settles into the compact pill (SCRUM-1023): its radius is half its height at every frame.
   it('the glass is behind the row, rounded to the capsule', () => {
-    expect(BAR()).toContain('<Material role="bar" style={[StyleSheet.absoluteFill, styles.round]} />')
+    expect(BAR()).toMatch(/<Material testID=\{`\$\{testID\}-capsule`\} role="bar" style=\{styles\.capsule\} animatedStyle=\{capsule\} \/>\s*\n\s*<View testID=\{`\$\{testID\}-row`\}/)
+    expect(BAR()).toMatch(/borderRadius: s\.radius/)
   })
 })
 

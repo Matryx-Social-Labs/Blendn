@@ -68,6 +68,7 @@ import { showSheet } from '../../lib/sheet'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { useTabListScroll } from '../../lib/tabBarSettle'
 
 /**
  * Going — the events that are yours.
@@ -349,6 +350,8 @@ function GoingScreenInner() {
   // The branded pull (motion #18); Android keeps the platform's control.
   const pullRefresh = useCallback(() => void onRefresh(), [onRefresh])
   const pull = usePullToRefresh({ refreshing, onRefresh: pullRefresh })
+  // On the UI thread: the tab bar's settle (SCRUM-1023), and the pull its offset while it is the pull's.
+  const onScroll = useTabListScroll(pull)
 
   /** Back into the list where it was, rather than at the end. */
   const restoreRow = useCallback((event: EventRow, index: number) => {
@@ -822,6 +825,7 @@ function GoingScreenInner() {
             // absolutely positioned tab bar on top of that.
             contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + SPACE.xl }}
             {...pull.listProps}
+            onScroll={onScroll}
           />
           {pull.indicator}
         </FadeInUp>
