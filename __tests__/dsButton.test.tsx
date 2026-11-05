@@ -375,6 +375,35 @@ describe('a count in the label ("Show {n} places")', () => {
     expect(screen.getByTestId('b').props.accessibilityLiveRegion).toBe('polite')
   })
 
+  it('a unit glued to the number ("Resend in {n}s") is drawn against it, not a word space away', async () => {
+    await render(<Button label="Resend in {n}s" count={30} testID="b" />)
+    const unit = screen.getByText('s')
+    expect(StyleSheet.flatten(unit.props.style).marginLeft).toBe(-SPACE.xs)
+    // A word after a space keeps the row's word space.
+    await render(<Button label="Show {n} places" count={3} testID="b" />)
+    expect(StyleSheet.flatten(screen.getByText('places').props.style).marginLeft).toBeUndefined()
+  })
+
+  it('the sentence keeps the width it first took, so a count losing a digit (10 → 9) moves nothing but the digits', async () => {
+    await render(<Button label="Resend in {n}s" count={30} testID="b" />)
+    const sentence = screen.getByTestId('b-sentence')
+    await act(async () => sentence.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 118, height: 20 } } }))
+    await screen.rerender(<Button label="Resend in {n}s" count={9} testID="b" />)
+    await act(async () => screen.getByTestId('b-sentence').props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 109, height: 20 } } }))
+    expect(StyleSheet.flatten(screen.getByTestId('b-sentence').props.style).minWidth).toBe(118)
+  })
+
+  it('a count change never plays the label swap: the words stay put while the digits roll', async () => {
+    jest.useFakeTimers()
+    await render(<Button label="Resend in {n}s" count={30} testID="b" />)
+    await screen.rerender(<Button label="Resend in {n}s" count={29} testID="b" />)
+    await act(async () => jest.advanceTimersByTime(1000))
+    const words = screen.getByText('Resend in')
+    // Plain text: not the swap's animated label, so nothing fades or lifts.
+    expect(StyleSheet.flatten(words.props.style).opacity).toBeUndefined()
+    expect(screen.getByTestId('b-count')).toBeTruthy()
+  })
+
   it('without a count the label is a plain label and nothing is a live region', async () => {
     await render(<Button label="Show places" testID="b" />)
     expect(screen.getByTestId('b').props.accessibilityLiveRegion).toBeUndefined()

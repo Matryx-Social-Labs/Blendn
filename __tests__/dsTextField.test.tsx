@@ -238,3 +238,35 @@ describe('one label, one inset', () => {
     }
   })
 })
+
+describe('labelAside: an action at the end of the label row (Flow 1c: "Forgot password?" on Password)', () => {
+  const { Text } = jest.requireActual('react-native')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const windowHook = require('react-native/Libraries/Utilities/useWindowDimensions')
+  const at = (fontScale: number) => jest.spyOn(windowHook, 'default').mockReturnValue({ width: 390, height: 844, scale: 3, fontScale })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('at the default size: in the label row, after the label, the row spreading them to its two ends', async () => {
+    at(1)
+    await render(field({ label: 'Password', secure: true, labelAside: <Text testID="aside">Forgot password?</Text> }))
+    const row = screen.getByTestId('f-label-row')
+    expect(row.queryAll((n) => n.props.testID === 'aside')).toHaveLength(1)
+    expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row', justifyContent: 'space-between' })
+    // The field itself is untouched: the eye is still the capsule's.
+    expect(screen.getByLabelText('Show password')).toBeTruthy()
+  })
+
+  it('at the accessibility sizes: stacked under the label, at the row’s end, so neither is cut', async () => {
+    at(2)
+    await render(field({ label: 'Password', secure: true, labelAside: <Text testID="aside">Forgot password?</Text> }))
+    const row = screen.getByTestId('f-label-row')
+    expect(StyleSheet.flatten(row.props.style).flexDirection).toBeUndefined()
+    expect(row.queryAll((n) => n.props.testID === 'aside')).toHaveLength(1)
+  })
+
+  it('without one, the label row is as before: the label alone, no spread', async () => {
+    at(1)
+    await render(field({ label: 'Email' }))
+    expect(StyleSheet.flatten(screen.getByTestId('f-label-row').props.style).justifyContent).toBeUndefined()
+  })
+})

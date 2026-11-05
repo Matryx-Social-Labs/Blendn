@@ -269,8 +269,14 @@ export const STEPS_PER_SECOND = 120
 /** The physics runs at full speed until FREEZE_AT - SETTLE, then slows to a stop at FREEZE_AT. */
 export const FREEZE_AT = 12
 export const SETTLE = 1.5
-/** The remnant's turn takes over as the physics slows and eases to still here; nothing is drawn after it. */
+/** The frame assets/galaxy/remnant.json records, two seconds into the turn; the landing turns on past it. */
 export const END_AT = 14
+/**
+ * Once the physics has stopped only the turn is left, and the frame is redrawn when this much time has banked: every
+ * second frame at 60 Hz, every third at 120. At 3°/s the outermost star moves a fifth of a point a redraw, which reads as
+ * smooth, and the sky costs half as much for as long as the landing is open.
+ */
+export const IDLE_REDRAW_S = 0.025
 
 /** Sim speed at film time t: 1, easing to 0 over the last SETTLE seconds before FREEZE_AT. */
 export function simSpeed(t: number): number {
@@ -282,14 +288,13 @@ export function simSpeed(t: number): number {
 }
 
 /**
- * The remnant's turn, 0 to 1 of `look.turn` (deg/s): it takes over as the physics slows, then eases out on a cosine to
- * still at END_AT. The prototype decayed it exponentially and never quite stopped; this one ends, so the frame callback can.
+ * The remnant's turn, 0 to 1 of `look.turn` (deg/s): it takes over as the physics slows and then holds at full, with no
+ * end, for as long as the landing is on screen (owner, 2026-11-03: "keep it going until they sign up or sign in").
  */
 export function turnSpeed(t: number): number {
   'worklet'
-  if (t <= FREEZE_AT - SETTLE || t >= END_AT) return 0
-  const out = t <= FREEZE_AT ? 1 : 0.5 + 0.5 * Math.cos((Math.PI * (t - FREEZE_AT)) / (END_AT - FREEZE_AT))
-  return (1 - simSpeed(t)) * out
+  if (t <= FREEZE_AT - SETTLE) return 0
+  return 1 - simSpeed(t)
 }
 
 /** +1 when the cores orbit anticlockwise in the orbital plane: the remnant turns the way the orbit went. */
@@ -359,6 +364,8 @@ export type Film = {
   acc: number
   /** The remnant's turn so far, degrees, and the camera's roll as cos/sin for the renderer. */
   turn: number
+  /** Once the physics has stopped: time banked towards the next redraw, s. */
+  wait: number
   spin: number
   ca: number
   sa: number
@@ -386,18 +393,31 @@ function setCamera(f: Film): void {
 export function startFilm(stars: number): Film {
   'worklet'
   const s = init(GALAXY_B.seed, { ...GALAXY_B.physics, stars })
-  const film: Film = { s, tau: 0, acc: 0, turn: 0, spin: orbitSense(s), ca: 1, sa: 0, slow: 0, coarse: false }
+  const film: Film = { s, tau: 0, acc: 0, turn: 0, wait: 0, spin: orbitSense(s), ca: 1, sa: 0, slow: 0, coarse: false }
   setCamera(film)
   return film
 }
 
+/** Summed frame times drift by an ulp or two: a hair under a threshold counts. */
+const EPS = 1e-6
+
 /**
  * One frame of `seconds`: the physics in fixed steps at 120 a second (2 a frame at 60 fps), or at 60 a second once frames
- * run slow (the prototype's checks hold there too), and the remnant's turn. True once the film has reached its end.
+ * run slow (the prototype's checks hold there too), and the remnant's turn. After FREEZE_AT there are no steps, only the
+ * turn, banked to IDLE_REDRAW_S. True when the frame moved and the sky should be redrawn.
  */
 export function advanceFilm(f: Film, seconds: number): boolean {
   'worklet'
   const d = Math.min(Math.max(seconds, 0), MAX_FRAME_S)
+  if (f.tau >= FREEZE_AT - EPS) {
+    f.wait += d
+    if (f.wait < IDLE_REDRAW_S - EPS) return false
+    f.turn += f.wait * GALAXY_B.look.turn * f.spin
+    f.tau += f.wait
+    f.wait = 0
+    setCamera(f)
+    return true
+  }
   f.slow = d > SLOW_FRAME_S ? f.slow + 1 : 0
   if (f.slow >= SLOW_FRAMES) f.coarse = true
   const mid = f.tau + d / 2
@@ -413,6 +433,15 @@ export function advanceFilm(f: Film, seconds: number): boolean {
   }
   if (steps === MAX_STEPS_PER_FRAME) f.acc = Math.min(f.acc, per)
   setCamera(f)
-  // A hair under END_AT counts: summed frame times drift by an ulp or two.
-  return f.tau >= END_AT - 1e-6
+  return true
+}
+
+/**
+ * How far the landing has turned past the remnant file's frame (END_AT), in degrees, unsigned and within one turn: the
+ * screens after it start their remnant from here, so the sky does not jump back when the landing is left.
+ */
+export function idleTurn(f: Film): number {
+  'worklet'
+  if (f.tau <= END_AT) return 0
+  return (GALAXY_B.look.turn * (f.tau - END_AT)) % 360
 }

@@ -165,6 +165,7 @@ export function TextField({
   measure = count,
   secure = false,
   defaultRevealed = false,
+  labelAside,
   previewState,
   inputRef,
   testID,
@@ -178,6 +179,8 @@ export function TextField({
   secure?: boolean
   /** Start with the password shown (the eye "on"). */
   defaultRevealed?: boolean
+  /** An action at the end of the label row, the field's own (Flow 1c: "Forgot password?" on Password). */
+  labelAside?: ReactNode
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -196,7 +199,12 @@ export function TextField({
 
   return (
     <View testID={testID} style={[styles.field, disabled && { opacity: OPACITY.disabled }]}>
-      {label ? <View style={styles.labelRow}><FieldLabel text={label} bold={bold} contrast={contrast} /></View> : null}
+      {label && labelAside ? (
+        // An action at the row's end (Flow 1c: "Forgot password?"): FieldHeader's spread, stacked at the accessibility sizes.
+        <FieldHeader label={label} counter={labelAside} testID={testID && `${testID}-label-row`} />
+      ) : label ? (
+        <View testID={testID && `${testID}-label-row`} style={styles.labelRow}><FieldLabel text={label} bold={bold} contrast={contrast} /></View>
+      ) : null}
       {/* The whole capsule is the target: a tap on its padding focuses the text. */}
       <Pressable
         testID={testID && `${testID}-box`}

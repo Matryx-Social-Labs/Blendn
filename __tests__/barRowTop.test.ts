@@ -12,7 +12,7 @@ const CHROME = [
   'components/ds/TopBar.tsx',
   'components/profile/ProfileBar.tsx',
   'components/scene/SceneBar.tsx',
-  'components/onboarding/FormHeader.tsx',
+  'components/onboarding/EmailSheet.tsx',
   'components/onboarding/OnboardingScreen.tsx',
   'components/ds/ImageViewer.tsx',
   'components/scene/SceneLightbox.tsx',
