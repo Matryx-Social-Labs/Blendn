@@ -19,7 +19,7 @@ const hidden = { includeHiddenElements: true }
 
 const SAMPLES = [
   { title: 'A very long event title that would never fit on one line of a lock screen', body: 'New time: 7 PM. Same place.' },
-  { title: 'It’s mutual', body: 'Someone at Rooftop Sundowner liked you back.' },
+  { title: 'It’s mutual', body: 'Someone liked you back at Rooftop Sundowner.' },
   { title: 'Your crew is heading out', body: '3 going tonight.' },
 ] as const
 
@@ -34,7 +34,7 @@ describe('LockScreenPreview', () => {
     const frame = screen.getByTestId('lock')
     expect(frame.props.accessible).toBe(true)
     expect(frame.props.accessibilityLabel).toBe(
-      'Sample notifications. A very long event title that would never fit on one line of a lock screen. New time: 7 PM. Same place. It’s mutual. Someone at Rooftop Sundowner liked you back. Your crew is heading out. 3 going tonight.'
+      'Sample notifications. A very long event title that would never fit on one line of a lock screen. New time: 7 PM. Same place. It’s mutual. Someone liked you back at Rooftop Sundowner. Your crew is heading out. 3 going tonight.'
     )
   })
 

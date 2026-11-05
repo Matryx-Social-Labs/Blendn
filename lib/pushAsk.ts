@@ -50,7 +50,8 @@ const NO_EVENT = 'Your event'
 export function askSamples(moment: AskMoment, eventTitle?: string): SampleNotification[] {
   const title = eventTitle?.trim()
   const update = { title: title || NO_EVENT, body: 'New time: 7 PM. Same place.' }
-  const match = { title: 'It’s mutual', body: title ? `Someone at ${title} liked you back.` : 'Someone liked you back.' }
+  // The words first, the title last: a body is two lines, and a long title cut there must not take "liked you back" with it.
+  const match = { title: 'It’s mutual', body: title ? `Someone liked you back at ${title}.` : 'Someone liked you back.' }
   const crew = { title: 'Your crew is heading out', body: '3 going tonight.' }
   return moment === 'like' ? [match, update, crew] : [update, match, crew]
 }
