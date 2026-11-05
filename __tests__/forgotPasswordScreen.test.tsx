@@ -22,9 +22,18 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { forgotPassword: (...args: un
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 // Wrapped to count its renders: the countdown is the Resend button's own, never the sheet's (owner: "the entire resend button is flickering").
+const mockMounts: string[] = []
 jest.mock('../components/onboarding/EmailSheet', () => {
   const actual = jest.requireActual('../components/onboarding/EmailSheet')
-  return { ...actual, EmailSheet: jest.fn(actual.EmailSheet) }
+  const { useEffect } = jest.requireActual('react')
+  return {
+    ...actual,
+    EmailSheet: jest.fn((props: { testID?: string }) => {
+      // Each sheet's own mount: the entry's and Check your inbox's are two sheets, not one carrying the other's measures.
+      useEffect(() => void mockMounts.push(String(props.testID)), []) // eslint-disable-line react-hooks/exhaustive-deps
+      return actual.EmailSheet(props)
+    }),
+  }
 })
 
 import { useLocalSearchParams } from 'expo-router'
@@ -183,9 +192,9 @@ describe('the sheet over the landing (Flow 1c, option C)', () => {
     expect(screen.getByTestId('forgot-email-input').props.placeholder).toBeUndefined()
   })
 
-  it('Check your inbox is the same sheet, and keeps all three ways on: Open mail app, Resend, Use a different email', async () => {
+  it('Check your inbox is an email sheet too, and keeps all three ways on: Open mail app, Resend, Use a different email', async () => {
     await sent()
-    expect(screen.getByTestId('forgot-sheet', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByTestId('forgot-sent-sheet', { includeHiddenElements: true })).toBeTruthy()
     for (const id of ['forgot-open-mail', 'forgot-resend', 'forgot-different']) expect(screen.getByTestId(id)).toBeTruthy()
   })
 })
@@ -207,5 +216,13 @@ describe('the Resend countdown never flickers (owner, 2026-11-05)', () => {
     expect(screen.getByTestId('forgot-resend-count')).toBeTruthy()
     await wait(3)
     expect(screen.getByText('Resend in')).toBeTruthy()
+  })
+})
+
+describe('Check your inbox is a sheet of its own (a drive, 2026-11-05)', () => {
+  it('mounts afresh, so the entry’s title leaves no empty room in it', async () => {
+    mockMounts.length = 0
+    await sent()
+    expect(mockMounts).toEqual(['forgot', 'forgot-sent'])
   })
 })

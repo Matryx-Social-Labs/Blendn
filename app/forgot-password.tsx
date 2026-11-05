@@ -166,8 +166,10 @@ export default function ForgotPassword() {
    */
   if (sent) {
     return (
+      // Its own sheet (key), grown from the entry's: one instance carried the entry's title height as empty room.
       <EmailSheet
-        testID="forgot"
+        key="sent"
+        testID="forgot-sent"
         title={null}
         dock={
           <>
@@ -209,6 +211,7 @@ export default function ForgotPassword() {
 
   return (
     <EmailSheet
+      key="entry"
       testID="forgot"
       reveal="email"
       title={

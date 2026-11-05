@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, TextInput } from 'react-native'
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import Animated, { FadeIn } from 'react-native-reanimated'
 
 import { LegalLine } from '../components/LegalLine'
@@ -247,7 +247,12 @@ export default function SignIn() {
         pressHaptic={false}
         testID="sign-in-primary"
       />
-      {!keyboardUp && isSignup ? <LegalLine lead="By creating an account you" /> : null}
+      {!keyboardUp && isSignup ? (
+        // 8 pt under the primary, as the board draws it: the dock's 4 and 4 more.
+        <View testID="sign-in-legal" style={styles.legal}>
+          <LegalLine lead="By creating an account you" />
+        </View>
+      ) : null}
     </>
   )
 
@@ -405,6 +410,7 @@ const styles = StyleSheet.create({
   notice: { color: COLOR.textSecondary, textAlign: 'center' },
   forgot: { color: COLOR.textPrimary },
   more: { gap: SPACE.lg },
+  legal: { marginTop: SPACE.xs },
 })
 
 /** "Forgot password?" is 20 pt of line on a 16 pt row: 12 pt over and under makes its 44 pt target. */

@@ -91,6 +91,12 @@ describe('mode', () => {
     expect(screen.getByText(/By creating an account you/)).toBeTruthy()
   })
 
+  it('the legal line sits 8 pt under Create account, as the board draws it', async () => {
+    await render(<SignIn />)
+    await createAccount()
+    expect(StyleSheet.flatten(screen.getByTestId('sign-in-legal').props.style).marginTop).toBe(4)
+  })
+
   it('no placeholders: the labels name the fields (the board)', async () => {
     await render(<SignIn />)
     await createAccount()
