@@ -40,6 +40,8 @@ import {
   type Pin,
   type PinQuery,
   withFocus,
+  withinReach,
+  reachShapes,
   compassBelow,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
@@ -56,7 +58,8 @@ import {
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
-import { SPACE } from '../../lib/theme'
+import { COLOR } from '../../lib/design/tokens'
+import { SPACE, tint } from '../../lib/theme'
 import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
@@ -158,6 +161,7 @@ export const HomeMap = memo(function HomeMap({
   fitNear,
   focus = null,
   locateLift,
+  reach = null,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
@@ -195,6 +199,8 @@ export const HomeMap = memo(function HomeMap({
   focus?: { pin: Pin; n: number } | null
   /** How far the Pulse's banners on the map lift "my location" (0 with none). */
   locateLift?: SharedValue<number>
+  /** Near me is on (Flow 3b · N1): where you stand. The map draws your reach and lights only what is inside it. */
+  reach?: { latitude: number; longitude: number } | null
 }) {
   const { width, height } = useWindowDimensions()
   /*
@@ -350,10 +356,12 @@ export const HomeMap = memo(function HomeMap({
   const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[] }>({ segment, pins: NO_PINS })
   const [now, setNow] = useState(() => Date.now())
   const focusPin = focus?.pin ?? null
-  const pins = useMemo(
-    () => withFocus(loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS, focusPin),
-    [loaded, segment, now, focusPin]
-  )
+  const pins = useMemo(() => {
+    const shown = withFocus(loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS, focusPin)
+    // Near me: only what you can reach lights (the dark beyond is the reach's own layer).
+    return reach ? withinReach(shown, reach) : shown
+  }, [loaded, segment, now, focusPin, reach])
+  const reachData = useMemo(() => (reach ? reachShapes(reach) : null), [reach])
 
   // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
   const startAt: [number, number] = center ? [center.longitude, center.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
@@ -618,6 +626,21 @@ export const HomeMap = memo(function HomeMap({
           <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} latitude={(cityCentre ?? fallbackCentre).latitude} />
           <LitBuildings data={lit.bands} onPress={openPlace} over={buildingLayerId} />
         </Fragment>
+        {/* Near me (board `ringAt`): dark beyond a short ride, the ride as a hairline, a 20-minute walk lit in ember. */}
+        {reachData ? (
+          <>
+            <GeoJSONSource id="reach-mask" data={reachData.mask}>
+              <Layer id="reach-mask-fill" type="fill" paint={{ 'fill-color': REACH.dark }} />
+            </GeoJSONSource>
+            <GeoJSONSource id="reach-ride" data={reachData.ride}>
+              <Layer id="reach-ride-line" type="line" paint={{ 'line-color': REACH.ride, 'line-width': 1 }} />
+            </GeoJSONSource>
+            <GeoJSONSource id="reach-walk" data={reachData.walk}>
+              <Layer id="reach-walk-fill" type="fill" paint={{ 'fill-color': REACH.walk }} />
+              <Layer id="reach-walk-edge" type="line" paint={{ 'line-color': REACH.walkEdge, 'line-width': 2 }} />
+            </GeoJSONSource>
+          </>
+        ) : null}
         <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
           <Layer
             id="pin-glow"
@@ -662,6 +685,14 @@ export const HomeMap = memo(function HomeMap({
     </>
   )
 })
+
+/** Near me's reach (board `ringAt`): the dark beyond at 58% ink, the ride ring at 28% white, the walk in ember at 16% / 75%. */
+const REACH = {
+  dark: tint(COLOR.ink, 0.58),
+  ride: tint(COLOR.textPrimary, 0.28),
+  walk: tint(COLOR.brandOrange, 0.16),
+  walkEdge: tint(COLOR.brandOrange, 0.75),
+} as const
 
 const styles = StyleSheet.create({
   // The map's own ground, so a jump between cities reads as the one surface fading, not a black flash.

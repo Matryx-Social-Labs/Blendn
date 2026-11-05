@@ -486,3 +486,50 @@ export function shouldFollowFix(
 export function compassBelow(topChrome: number): { top: number; right: number } {
   return { top: topChrome + SPACE.sm, right: SPACE.lg }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Near me's reach (Flow 3b · N1, SCRUM-1022)                                  */
+/* -------------------------------------------------------------------------- */
+
+/** The lit disc: a 20-minute walk, straight line × 1.3 at 4.8 km/h. */
+export const WALK_DISC_KM = ((20 / 60) * 4.8) / 1.3
+/** Points on a drawn circle: smooth at city zoom, cheap to send. */
+const CIRCLE_STEPS = 64
+
+type LatLng = { latitude: number; longitude: number }
+type LngLatRing = [number, number][]
+type PolygonFeature = { type: 'Feature'; properties: Record<string, never>; geometry: { type: 'Polygon'; coordinates: LngLatRing[] } }
+
+/** A circle of `km` around `c` as a closed ring of [lng, lat] (an equirectangular step: true to a few metres at this size). */
+function circle(c: LatLng, km: number): LngLatRing {
+  const dLat = km / 110.574
+  const dLng = km / (111.32 * Math.cos((c.latitude * Math.PI) / 180))
+  const ring: LngLatRing = []
+  for (let i = 0; i <= CIRCLE_STEPS; i++) {
+    const a = (i / CIRCLE_STEPS) * 2 * Math.PI
+    ring.push([c.longitude + dLng * Math.cos(a), c.latitude + dLat * Math.sin(a)])
+  }
+  return ring
+}
+
+const polygon = (coordinates: LngLatRing[]): PolygonFeature => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates } })
+
+/** The world, as one ring the reach's dark is cut from. */
+const WORLD: LngLatRing = [
+  [-180, -85],
+  [180, -85],
+  [180, 85],
+  [-180, 85],
+  [-180, -85],
+]
+
+/** What the map draws while Near me is on: the walk disc, the short-ride ring, and the dark beyond it (the world, holed). */
+export function reachShapes(c: LatLng, rideKm: number = 8): { walk: PolygonFeature; ride: PolygonFeature; mask: PolygonFeature } {
+  const ride = circle(c, rideKm)
+  return { walk: polygon([circle(c, WALK_DISC_KM)]), ride: polygon([ride]), mask: polygon([WORLD, [...ride].reverse()]) }
+}
+
+/** The pins inside the short ride: only these light while Near me is on. */
+export function withinReach<P extends LatLng>(pins: readonly P[], c: LatLng, rideKm: number = 8): P[] {
+  return pins.filter((p) => getDistanceKm(c.latitude, c.longitude, p.latitude, p.longitude) <= rideKm)
+}

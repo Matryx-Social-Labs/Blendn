@@ -77,3 +77,25 @@ describe('the Nearby screen is gone; its links land on the Pulse with the chip (
     expect(nativeIntentPath('/nearby-events?filter=forYou&categorySlug=<script>')).toBe('/events?seeAll=forYou')
   })
 })
+
+describe('the reach on the map (N1: a lit 20-minute walk, a short-ride ring, dark beyond)', () => {
+  const { reachShapes, withinReach, WALK_DISC_KM } = jest.requireActual('../lib/homeMap') as typeof import('../lib/homeMap')
+  const centre = { latitude: 12.9716, longitude: 77.5946 }
+  it('the walk disc is a 20-minute walk; the ring a short ride', () => {
+    expect(WALK_DISC_KM).toBeCloseTo((20 / 60) * 4.8 / 1.3, 3)
+    const { walk, ride, mask } = reachShapes(centre)
+    // A closed ring around the centre, each point at its radius.
+    const [lng, lat] = walk.geometry.coordinates[0][0]
+    const km = Math.hypot((lng - centre.longitude) * 111.32 * Math.cos((centre.latitude * Math.PI) / 180), (lat - centre.latitude) * 110.57)
+    expect(km).toBeCloseTo(WALK_DISC_KM, 1)
+    expect(ride.geometry.coordinates[0].length).toBeGreaterThan(32)
+    // The dark is the world with the ride circle cut out.
+    expect(mask.geometry.coordinates).toHaveLength(2)
+  })
+  it('only what is inside the ring lights', () => {
+    const pin = (id: string, latitude: number) => ({ id, latitude, longitude: centre.longitude }) as never
+    const near = pin('near', centre.latitude + 0.02) // ~2.2 km
+    const far = pin('far', centre.latitude + 0.2) // ~22 km
+    expect(withinReach([near, far], centre).map((p: { id: string }) => p.id)).toEqual(['near'])
+  })
+})

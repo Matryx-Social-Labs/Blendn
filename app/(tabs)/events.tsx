@@ -42,7 +42,7 @@ import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterC
 import { HomeShell, type HomeBrowse, type PulseShell } from '../../components/home/HomeShell'
 import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
 import { pinsFor } from '../../lib/homeMap'
-import { vibeOf, type Vibe } from '../../lib/pulseChips'
+import { NEAR_KM, vibeOf, type Vibe } from '../../lib/pulseChips'
 import { groupByWhen, SEE_ALL_KINDS, seeAllFilters, type SeeAllKind } from '../../lib/nearby'
 import { NearbyRow, WhenHeading } from '../../components/pulse/NearbyRow'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
@@ -1629,6 +1629,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const freshVibe = isNarrowed || events.length === 0 ? vibe : vibeOf(events, categoryOptions)
   if (freshVibe?.slug !== vibe?.slug) setVibe(freshVibe)
 
+  // Near me on, with a fix in the city: the map draws your reach (N1). A new object only when the fix or the chip changes.
+  const nearMeOn = hasFix && filters.radiusKm === NEAR_KM
+  const reach = useMemo(() => (nearMeOn && userLocation ? { latitude: userLocation.latitude, longitude: userLocation.longitude } : null), [nearMeOn, userLocation])
+
   // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
   useEffect(
     () =>
@@ -1646,8 +1650,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         openCityPicker: () => setCityPickerOpen(true),
         peekLine,
         focus,
+        reach,
       }),
-    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus]
+    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
   )
 
   const firstSection = sections[0]?.key ?? null

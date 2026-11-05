@@ -52,6 +52,8 @@ export interface HomeBrowse {
   openCityPicker: () => void
   /** The lead card's venue, lit on the map; `n` is bumped by each swipe, which also moves the map there (Option C). */
   focus?: { pin: Pin; n: number } | null
+  /** Near me is on with a fix in the city (N1): the map draws the reach around it. */
+  reach?: { latitude: number; longitude: number } | null
 }
 
 /**
@@ -260,6 +262,7 @@ export function HomeShell({
             nearPins={segment === 'places' && snap !== 'full' ? nearPinList : NO_PINS}
             fitNear={fitNear}
             focus={segment === 'events' ? (browse.focus ?? null) : null}
+            reach={segment === 'events' ? (browse.reach ?? null) : null}
             locateLift={locateLift}
           />
         ) : null}
