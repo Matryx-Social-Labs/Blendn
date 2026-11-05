@@ -3,7 +3,7 @@ import { chipCount, extraApplied, NEAR_KM, quickChips, toggleQuick, vibeOf } fro
 
 /**
  * The chips that are the Pulse's header (Flow 3 · Pulse, Option C): Tonight and This weekend with the server's counts,
- * Within 2 km only where distance means something, one vibe from the week's data, then Filters.
+ * Near me (N1) only where distance means something, one vibe from the week's data, then Filters.
  */
 
 const CATS = [
@@ -30,7 +30,9 @@ describe('quickChips', () => {
   it('time first, then distance, then the vibe, with counts on the time chips only', () => {
     const chips = quickChips(base)
     expect(chips.map((c) => c.key)).toEqual(['tonight', 'weekend', 'near', 'vibe'])
-    expect(chips.map((c) => c.label)).toEqual(['Tonight', 'This weekend', `Within ${NEAR_KM} km`, 'Live music'])
+    expect(chips.map((c) => c.label)).toEqual(['Tonight', 'This weekend', 'Near me', 'Live music'])
+    // N1 (SCRUM-1022): Near me reaches a short ride, the Nearby list's 8 km.
+    expect(NEAR_KM).toBe(8)
     expect(chips[0].count).toBe('214')
     expect(chips[1].count).toBe('1,038')
     expect(chips[2].count).toBeUndefined()
@@ -42,7 +44,7 @@ describe('quickChips', () => {
     const [tonight, weekend, near] = quickChips(base)
     expect(tonight.accessibilityLabel).toBe('Tonight, 214 events')
     expect(weekend.accessibilityLabel).toBe('This weekend, 1,038 events')
-    expect(near.accessibilityLabel).toBe(`Within ${NEAR_KM} km`)
+    expect(near.accessibilityLabel).toBe('Near me')
   })
 
   it('a quiet tonight shows the chip with no number', () => {

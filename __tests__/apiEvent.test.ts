@@ -121,3 +121,15 @@ describe('eventFromApi, the centre button’s fields (BAR-03, BAR-05)', () => {
     expect(eventFromApi(serverEvent()).rsvp_status).toBeNull()
   })
 })
+
+describe('the list fields N1 reads (admin #910, SCRUM-1022)', () => {
+  it('carries promoted, ticketed and a well-formed fromPrice', () => {
+    const e = eventFromApi(serverEvent({ promoted: true, ticketed: true, fromPrice: { minor: 79900, currency: 'INR' } } as never))
+    expect(e).toMatchObject({ promoted: true, ticketed: true, from_price: { minor: 79900, currency: 'INR' } })
+  })
+  it('an older server (none of them) or a malformed price reads as nothing to say', () => {
+    expect(eventFromApi(serverEvent())).toMatchObject({ promoted: false, ticketed: false, from_price: null })
+    const odd = eventFromApi(serverEvent({ ticketed: true, fromPrice: { minor: 0, currency: 'rupees' } } as never))
+    expect(odd.from_price).toBeNull()
+  })
+})

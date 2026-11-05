@@ -1,6 +1,6 @@
 /**
  * The chips that are the Pulse's header (Flow 3 · Pulse, Option C, owner pick 2026-11-03), as plain data: Tonight and
- * This weekend with counts, Within 2 km where distance means something, one vibe from the week's data, then Filters.
+ * This weekend with counts, Near me where distance means something (N1), one vibe from the week's data, then Filters.
  *
  * Each chip is a filter the feed already takes (`lib/eventFilters.ts`), so a chip is lit exactly when its filter is on
  * and a count is the server's for the same query (`GET /events` `pagination.totalCount`): the number on the chip is what
@@ -8,12 +8,13 @@
  */
 
 import { appliedFilters, WHEN_LABELS, type AppliedFilter, type EventFilters } from './eventFilters'
+import { RIDE_KM } from './nearby'
 import { categoryChips, printable } from './pulseSections'
 
 export type QuickKey = 'tonight' | 'weekend' | 'near' | 'vibe'
 
-/** "Within 2 km": the distance chip's radius. */
-export const NEAR_KM = 2
+/** "Near me" (Flow 3b · N1, SCRUM-1022): a short ride, the reach the list and the map's ring are drawn to. */
+export const NEAR_KM = RIDE_KM
 
 export type Vibe = { slug: string; name: string }
 
@@ -47,7 +48,7 @@ export function quickChips(input: {
   return [
     chip('tonight', WHEN_LABELS.today, filters.when === 'today', counts.tonight),
     chip('weekend', WHEN_LABELS.weekend, filters.when === 'weekend', counts.weekend),
-    ...(nearOn ? [chip('near', `Within ${NEAR_KM} km`, filters.radiusKm === NEAR_KM)] : []),
+    ...(nearOn ? [chip('near', 'Near me', filters.radiusKm === NEAR_KM)] : []),
     ...(vibe ? [chip('vibe', vibe.name, filters.categorySlug === vibe.slug)] : []),
   ]
 }
