@@ -33,7 +33,7 @@ import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
-import { PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
+import { NearEnd, NothingNear, PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
 import { PulsePeek, type Peek } from '../../components/pulse/PulsePeek'
 import { PullIndicator } from '../../components/pulse/PullIndicator'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
@@ -43,7 +43,7 @@ import { HomeShell, type HomeBrowse, type PulseShell } from '../../components/ho
 import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
 import { pinsFor } from '../../lib/homeMap'
 import { NEAR_KM, vibeOf, type Vibe } from '../../lib/pulseChips'
-import { groupByWhen, SEE_ALL_KINDS, seeAllFilters, type SeeAllKind } from '../../lib/nearby'
+import { groupByWhen, nearSpan, nothingNearCopy, SEE_ALL_KINDS, seeAllFilters, type Beyond, type SeeAllKind } from '../../lib/nearby'
 import { NearbyRow, WhenHeading } from '../../components/pulse/NearbyRow'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useLocationSharing } from '../../lib/shareLocation'
@@ -1633,6 +1633,42 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const nearMeOn = hasFix && filters.radiusKm === NEAR_KM
   const reach = useMemo(() => (nearMeOn && userLocation ? { latitude: userLocation.latitude, longitude: userLocation.longitude } : null), [nearMeOn, userLocation])
 
+  // Nothing within reach (board N1none): one `limit=1` read of the city by distance, for its count and its closest.
+  const nothingNear = nearMeOn && !loading && !netError && events.length === 0
+  const [beyondState, setBeyondState] = useState<{ key: string; value: Beyond | null } | null>(null)
+  const beyondKey = `${sectionsKey}|${filters.when}`
+  useEffect(() => {
+    if (!nothingNear) return
+    let cancelled = false
+    const when = filters.when === 'any' ? 'week' : filters.when
+    apiClient
+      .getEvents({
+        page: 1,
+        limit: 1,
+        city: selectedCity ?? undefined,
+        lat: roundCoord(userLocation?.latitude),
+        lon: roundCoord(userLocation?.longitude),
+        sortBy: 'distance',
+        sortOrder: 'asc',
+        ...filtersToQuery({ ...NO_FILTERS, when }),
+      })
+      .then((r) => {
+        if (cancelled) return
+        const first = r.success ? r.data?.events[0] : undefined
+        const count = r.success ? r.data?.pagination?.totalCount : undefined
+        const value = typeof count === 'number' ? { count, closest: first && first.distance != null ? { km: first.distance, venue: first.venue_name ?? null } : null } : null
+        setBeyondState({ key: beyondKey, value })
+      })
+      .catch((error) => Logger.warn('events', 'Beyond reach did not load', { error: String(error) }))
+    return () => {
+      cancelled = true
+    }
+    // The location only moves the key (to ~100 m); the request reads the live fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nothingNear, beyondKey])
+  const beyond = beyondState?.key === beyondKey ? beyondState.value : null
+  const seeCity = useCallback(() => setFilters((f) => ({ ...f, radiusKm: undefined })), [])
+
   // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
   useEffect(
     () =>
@@ -1973,7 +2009,11 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         </FadeInUp>
       ) : null}
       {/* A refused read is the banner above, and neither "couldn’t load" nor "nothing here". */}
-      {events.length === 0 && !netError && rateLimit === null ? (
+      {nothingNear && rateLimit === null && selectedCity ? (
+        <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
+          <NothingNear copy={nothingNearCopy(selectedCity, beyond, filters.when)} city={selectedCity} onSeeCity={seeCity} onPlaces={() => shell?.openPlaces()} />
+        </FadeInUp>
+      ) : events.length === 0 && !netError && rateLimit === null ? (
         <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
           <PulseEmpty
             kind={emptyKind}
@@ -2097,6 +2137,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
               <View style={styles.rateLimitFoot}>
                 <RateLimitedBanner seconds={rateLimit.seconds} onDone={rateLimitDone} testID="pulse-more-rate-limited" />
               </View>
+            ) : nearMeOn && !isSearching && !hasMore && events.length > 0 && selectedCity ? (
+              <NearEnd span={nearSpan(filters.when)} city={selectedCity} onSeeCity={seeCity} onPlaces={() => shell?.openPlaces()} />
             ) : quietEnd && selectedCity ? (
               <QuietWeekEnd city={selectedCity} onPlaces={() => shell?.openPlaces()} onChangeCity={() => setCityPickerOpen(true)} />
             ) : null

@@ -64,7 +64,7 @@ import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
 import { NearPins } from './NearPins'
-import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings } from './MapLitLayers'
+import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
 import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
 
 /** A pan settles before the server is asked; the lists allow 60 reads a minute. */
@@ -666,6 +666,7 @@ export const HomeMap = memo(function HomeMap({
           />
         </GeoJSONSource>
         <Chips chips={lit.chips} onOpen={open} />
+        {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}

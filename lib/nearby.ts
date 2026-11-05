@@ -4,9 +4,9 @@
  * over 100 km, no ride minutes), and every "See all" lands on the chip that answers it.
  */
 
-import { NO_FILTERS, type EventFilters } from './eventFilters'
+import { NO_FILTERS, type EventFilters, type When } from './eventFilters'
 import { liveWindow, type SessionSource } from './eventSession'
-import { isLiveNow, nextDayReset } from './pulseSections'
+import { isLiveNow, nextDayReset, printable } from './pulseSections'
 import { calendarDaysBetween, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
 
 /** A walk this long is still "near" (board `WALK_MAX`). */
@@ -108,4 +108,27 @@ export function seeAllFilters(kind: SeeAllKind, extra: { categorySlug?: string }
     case 'weekend':
       return { ...NO_FILTERS, when: 'weekend' }
   }
+}
+
+/** What lies beyond a short ride, read once the Near me list comes back empty: the city's count, and its closest event. */
+export type Beyond = { count: number; closest: { km: number; venue: string | null } | null }
+
+const SPAN: Record<When, string> = { any: 'this week', week: 'this week', today: 'tonight', weekend: 'this weekend' }
+/** "this week", "tonight", "this weekend": what a Near me list covers, in words. */
+export const nearSpan = (when: When): string => SPAN[when]
+
+/**
+ * Nothing within a short ride (board N1none): what exists and how far, never a bare radius. No count under five (a few),
+ * no closest past 100 km; nothing at all in the city says that; not read yet is the title alone.
+ */
+export function nothingNearCopy(city: string, beyond: Beyond | null, when: When): { title: string; message: string } {
+  const span = SPAN[when]
+  const title = `Nothing within a short ride ${span}`
+  if (!beyond) return { title, message: '' }
+  if (beyond.count === 0) return { title, message: `Nothing is on in ${city} ${span}.` }
+  const n = printable(beyond.count)
+  const has = `${city} has ${n ? `${n.toLocaleString('en-US')} events` : 'a few events'} ${span}.`
+  const far = beyond.closest ? reachLabel(beyond.closest.km) : null
+  const closest = far ? ` The closest is ${far.kind === 'walk' ? far.text : `${far.text} away`}${beyond.closest?.venue ? `, at ${beyond.closest.venue}` : ''}.` : ''
+  return { title, message: has + closest }
 }

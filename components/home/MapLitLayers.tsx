@@ -21,7 +21,8 @@ import {
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { tint } from '../../lib/theme'
 import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
 import type { Chip, Collection, LitState } from './useMapLighting'
@@ -301,7 +302,38 @@ function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id
   )
 }
 
+/**
+ * Near me's two labels (Flow 3b · N1 board `.mlabel`): "20 min walk" off the walk's south-east edge, "Short ride" just
+ * inside the ring's west. Words on the map only: the chip and the rows already say it, so a screen reader skips them.
+ */
+export const ReachLabels = memo(function ReachLabels({ walk, ride }: { walk: [number, number]; ride: [number, number] }) {
+  return (
+    <>
+      <Marker id="reach-label-walk" lngLat={walk} anchor="top-left">
+        <ReachLabel text="20 min walk" />
+      </Marker>
+      <Marker id="reach-label-ride" lngLat={ride} anchor="left" offset={[SPACE.xs + SPACE.xxs, 0]}>
+        <ReachLabel text="Short ride" />
+      </Marker>
+    </>
+  )
+})
+
+function ReachLabel({ text }: { text: string }) {
+  return (
+    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.reachLabel}>
+      <Text variant="caption" color={COLOR.textPrimary} style={styles.reachText} numberOfLines={1}>
+        {text}
+      </Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  // Board `.mlabel`: 3 / 8 in, a 10 corner, ink at 72%, Satoshi 700 12/16.
+  // design-exception: the board's 3 pt pill padding (a 22 pt label), between SPACE.xxs and SPACE.xs.
+  reachLabel: { paddingVertical: 3, paddingHorizontal: SPACE.sm, borderRadius: SPACE.sm + SPACE.xxs, backgroundColor: tint(COLOR.ink, 0.72) },
+  reachText: { fontFamily: FONT_FAMILY.brand[700] },
   chipWrap: { alignItems: 'center', justifyContent: 'flex-end', minHeight: MAP_THEME.chip.minTouchPx },
   chip: {
     flexDirection: 'row',

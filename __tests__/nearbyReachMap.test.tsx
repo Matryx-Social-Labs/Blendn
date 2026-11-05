@@ -8,6 +8,7 @@ import { makeMutable } from 'react-native-reanimated'
 
 const mockStops: Record<string, unknown>[] = []
 const mockSources: Record<string, unknown> = {}
+let mockLabels: { walk: unknown; ride: unknown } | null = null
 const mockCamera: { initial?: { center: [number, number] }; centre: [number, number] } = { centre: [0, 0] }
 let mockLoaded: (() => void) | undefined
 jest.mock('@maplibre/maplibre-react-native', () => {
@@ -57,7 +58,12 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getEvents: (...a: unknown[])
 jest.mock('../components/home/useMapLighting', () => ({
   useMapLighting: () => ({ lit: { states: [], glow: { type: 'FeatureCollection', features: [] }, bands: { type: 'FeatureCollection', features: [] }, chips: [] }, onFrame: jest.fn(), relight: jest.fn() }),
 }))
-jest.mock('../components/home/MapLitLayers', () => ({ Chips: () => null, CityBuildings: () => null, GroundGlow: () => null, LitBuildings: () => null, OwnBuildings: () => null }))
+jest.mock('../components/home/MapLitLayers', () => ({
+  ReachLabels: (p: { walk: unknown; ride: unknown }) => {
+    mockLabels = p
+    return null
+  },
+  Chips: () => null, CityBuildings: () => null, GroundGlow: () => null, LitBuildings: () => null, OwnBuildings: () => null }))
 jest.mock('../components/home/NearPins', () => ({ NearPins: () => null }))
 
 /* eslint-disable import/first */
@@ -109,6 +115,7 @@ const pinIds = () => ((mockSources.pins as { features: { properties: { id: strin
 
 beforeEach(() => {
   for (const k of Object.keys(mockSources)) delete mockSources[k]
+  mockLabels = null
   mockEvents = [event('near', FIX.latitude + 0.02), event('far', FIX.latitude + 0.2)]
 })
 
@@ -117,6 +124,7 @@ it('off: no reach is drawn and every pin lights (the control)', async () => {
   await settle()
   expect(mockSources['reach-mask']).toBeUndefined()
   expect(mockSources['reach-walk']).toBeUndefined()
+  expect(mockLabels).toBeNull()
   expect(pinIds().sort()).toEqual(['far', 'near'])
 })
 
@@ -127,4 +135,7 @@ it('on: the dark, the ride ring and the walk are drawn, and only what is inside 
   expect(mockSources['reach-ride']).toBeTruthy()
   expect(mockSources['reach-walk']).toBeTruthy()
   expect(pinIds()).toEqual(['near'])
+  // "20 min walk" and "Short ride", where the board has them.
+  expect(mockLabels?.walk).toHaveLength(2)
+  expect(mockLabels?.ride).toHaveLength(2)
 })

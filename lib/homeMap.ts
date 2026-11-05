@@ -524,9 +524,16 @@ const WORLD: LngLatRing = [
 ]
 
 /** What the map draws while Near me is on: the walk disc, the short-ride ring, and the dark beyond it (the world, holed). */
-export function reachShapes(c: LatLng, rideKm: number = 8): { walk: PolygonFeature; ride: PolygonFeature; mask: PolygonFeature } {
+export function reachShapes(c: LatLng, rideKm: number = 8) {
   const ride = circle(c, rideKm)
-  return { walk: polygon([circle(c, WALK_DISC_KM)]), ride: polygon([ride]), mask: polygon([WORLD, [...ride].reverse()]) }
+  const walk = circle(c, WALK_DISC_KM)
+  return {
+    walk: polygon([walk]),
+    ride: polygon([ride]),
+    mask: polygon([WORLD, [...ride].reverse()]),
+    // Where the board puts its labels: off the walk's south-east edge (7/8 of the way round), the ring's west point.
+    labels: { walk: walk[(CIRCLE_STEPS * 7) / 8], ride: ride[CIRCLE_STEPS / 2] },
+  }
 }
 
 /** The pins inside the short ride: only these light while Near me is on. */

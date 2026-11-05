@@ -91,11 +91,39 @@ describe('the reach on the map (N1: a lit 20-minute walk, a short-ride ring, dar
     expect(ride.geometry.coordinates[0].length).toBeGreaterThan(32)
     // The dark is the world with the ride circle cut out.
     expect(mask.geometry.coordinates).toHaveLength(2)
+    // The labels (board `.mlabel`): "20 min walk" off the walk's south-east edge, "Short ride" just inside the ring's west.
+    const { labels } = reachShapes(centre)
+    expect(labels.walk[0]).toBeGreaterThan(centre.longitude)
+    expect(labels.walk[1]).toBeLessThan(centre.latitude)
+    expect(labels.ride[0]).toBeCloseTo(ride.geometry.coordinates[0][32][0], 6)
+    expect(labels.ride[1]).toBeCloseTo(centre.latitude, 6)
   })
   it('only what is inside the ring lights', () => {
     const pin = (id: string, latitude: number) => ({ id, latitude, longitude: centre.longitude }) as never
     const near = pin('near', centre.latitude + 0.02) // ~2.2 km
     const far = pin('far', centre.latitude + 0.2) // ~22 km
     expect(withinReach([near, far], centre).map((p: { id: string }) => p.id)).toEqual(['near'])
+  })
+})
+
+describe('nothing within reach says what exists and how far (board N1none)', () => {
+  const { nothingNearCopy } = jest.requireActual('../lib/nearby') as typeof import('../lib/nearby')
+  it('the city’s count this week and the closest, by its venue', () => {
+    expect(nothingNearCopy('Toronto', { count: 6, closest: { km: 14.2, venue: 'Liberty Village' } }, 'any')).toEqual({
+      title: 'Nothing within a short ride this week',
+      message: 'Toronto has 6 events this week. The closest is 14 km away, at Liberty Village.',
+    })
+  })
+  it('tonight under Tonight; no count under five; no closest past 100 km', () => {
+    expect(nothingNearCopy('Toronto', { count: 3, closest: { km: 140, venue: 'X' } }, 'today')).toEqual({
+      title: 'Nothing within a short ride tonight',
+      message: 'Toronto has a few events tonight.',
+    })
+  })
+  it('nothing anywhere in the city: says so', () => {
+    expect(nothingNearCopy('Toronto', { count: 0, closest: null }, 'weekend').message).toBe('Nothing is on in Toronto this weekend.')
+  })
+  it('not read yet (or failed): the title alone', () => {
+    expect(nothingNearCopy('Toronto', null, 'any').message).toBe('')
   })
 })
