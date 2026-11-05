@@ -4,6 +4,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 import { KeyboardEvents } from 'react-native-keyboard-controller'
 
 import { H } from '../lib/haptics'
@@ -351,6 +352,12 @@ describe('the sheet over the landing (Flow 1c, option C)', () => {
     expect(screen.getByLabelText('Back')).toBeTruthy()
     expect(screen.queryByTestId('galaxy-remnant', { includeHiddenElements: true })).toBeNull()
     setLandingUnder(null)
+  })
+
+  it('the title keeps its own height while the keys squeeze it away, so it comes back when they go', async () => {
+    await render(<SignIn />)
+    const title = screen.getByTestId('sign-in-title', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(title.props.style).flexShrink).toBe(0)
   })
 
   it('a tap on the sky above the sheet puts the keyboard away, and is not a control', async () => {

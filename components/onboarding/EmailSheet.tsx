@@ -183,7 +183,13 @@ export function EmailSheet({ title, children, dock, reveal, drivesLanding = fals
             <Items.Provider value={(name, box) => boxes.current.set(name, box)}>
               {title ? (
                 <Animated.View style={[styles.clip, titleStyle]}>
-                  <View onLayout={(e) => titleH.set(e.nativeEvent.layout.height)}>{title}</View>
+                  {/*
+                    Its own height, never the wrapper's: collapsed under the keys, a shrinking title measured 0, the
+                    wrapper's height was then left at 0, and the title never came back (a drive, 2026-11-05).
+                  */}
+                  <View testID={testID && `${testID}-title`} style={styles.title} onLayout={(e) => e.nativeEvent.layout.height > 0 && titleH.set(e.nativeEvent.layout.height)}>
+                    {title}
+                  </View>
                 </Animated.View>
               ) : null}
               <View
@@ -217,6 +223,7 @@ const styles = StyleSheet.create({
   round: { borderTopLeftRadius: RADIUS.card, borderTopRightRadius: RADIUS.card },
   stack: { paddingTop: SHEET.padTop, paddingHorizontal: SPACE.gutter },
   clip: { overflow: 'hidden' },
+  title: { flexShrink: 0 },
   rest: { gap: SHEET.gap },
   dock: { paddingTop: SHEET.gap, paddingHorizontal: SPACE.gutter },
   dockInner: { gap: SPACE.xs },
