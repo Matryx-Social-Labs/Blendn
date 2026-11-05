@@ -95,6 +95,6 @@ describe('the sign-in screens', () => {
     expect(forgot).toContain("Linking.openURL('message:')")
     expect(forgot).toContain("Linking.openURL('mailto:')")
     // Resend waits out the cooldown, and is busy (so also off) while a request runs.
-    expect(forgot).toMatch(/disabled=\{cooldown > 0\}\s*loading=\{busy\}/)
+    expect(forgot).toMatch(/disabled=\{counting\}\s*loading=\{busy\}/)
   })
 })
