@@ -1679,7 +1679,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         // The stored city's own centre until the catalogue answers (or when it fails): the map is never left blank.
         cityCentre: browseOption?.centre ?? selection?.centre ?? null,
         travelling,
-        preview: browseOption?.launchState === 'preview' && browseOption.access !== 'comingSoon',
         defaultCentre: cityBySlug(cityOptions, catalogue.defaultCitySlug)?.centre ?? null,
         cityPick,
         requestLocation: requestLocationIfNeeded,

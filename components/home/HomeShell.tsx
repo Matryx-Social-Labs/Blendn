@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { tabBarTop } from '../../app/(tabs)/_layout'
 import { NotificationBell } from '../pulse/NotificationBell'
 import { PulseTopBar, TOP_BAR_HEIGHT } from '../pulse/PulseTopBar'
-import { Chip } from '../ds/Chip'
 import { IconButton } from '../ds/IconButton'
 import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
@@ -20,6 +19,7 @@ import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
 import { useLatest } from '../../lib/useLatest'
 import type { NearPin } from '../../lib/placesPane'
 import { HomeDrawer } from './HomeDrawer'
+import { CityChip } from './CityChip'
 import { HomeMap } from './HomeMap'
 import { MapBanners } from './MapBanners'
 import { PlacesList } from './PlacesList'
@@ -34,8 +34,6 @@ export interface HomeBrowse {
   cityCentre: { latitude: number; longitude: number } | null
   /** Browsing another country than home's: the city chip takes a plane (travel plan §4.2). */
   travelling?: boolean
-  /** A preview city opened to a previewer: the chip reads "Toronto · Preview". */
-  preview?: boolean
   /** The catalogue's default city's centre (`defaultCitySlug`): where the map opens with no fix and no browsed city yet. */
   defaultCentre?: { latitude: number; longitude: number } | null
   /**
@@ -110,7 +108,6 @@ export function HomeShell({
     ready: false,
     cityCentre: null,
     travelling: false,
-    preview: false,
     cityPick: { n: 0, here: false },
     requestLocation: () => {},
     openCityPicker: () => {},
@@ -299,17 +296,7 @@ export function HomeShell({
               onChange={(i) => choose(i === 0 ? 'events' : 'places')}
               trailing={
                 <View style={styles.trailing}>
-                  {/* Wrapped: a chip aligns itself to the top of its row; the board centres the city in the 48 pt tabs. */}
-                  <View>
-                    <Chip
-                      size="header"
-                      chevron
-                      label={browse.city ? `${browse.city}${browse.preview ? ' · Preview' : ''}` : 'Choose city'}
-                      icon={browse.travelling ? 'plane' : 'map-pin'}
-                      onPress={browse.openCityPicker}
-                      testID="home-city"
-                    />
-                  </View>
+                  <CityChip city={browse.city} travelling={!!browse.travelling} onPress={browse.openCityPicker} />
                   {segment === 'events' ? (
                     <IconButton size="sm" icon="search" accessibilityLabel="Search events" onPress={() => setSearchOpen(true)} testID="home-search" />
                   ) : null}

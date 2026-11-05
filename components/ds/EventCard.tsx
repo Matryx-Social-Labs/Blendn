@@ -224,9 +224,15 @@ export function EventCard(props: EventCardProps) {
             <View style={styles.rowMeta}>
               {leading ? null : (
                 <>
-                  <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-                    {[venue, distance].filter(Boolean).join(' · ')}
+                  {/* The venue gives way; its distance is its own slot and never does (owner 2026-11-05: no variable glued in a tight slot). */}
+                  <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+                    {venue}
                   </Text>
+                  {distance ? (
+                    <Text testID={testID && `${testID}-distance`} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.fixed]}>
+                      {`· ${distance}`}
+                    </Text>
+                  ) : null}
                   {/* Outside the run that truncates, so a long venue keeps its "·" before the time (r7 L12). */}
                   <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
                     ·
@@ -320,9 +326,17 @@ export function EventCard(props: EventCardProps) {
           <Text numberOfLines={2} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font(hero ? 'title' : 'bodyStrong', bold), styles.ink]}>
             {title}
           </Text>
-          <Text numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
-            {[`at ${venue}`, distance].filter(Boolean).join(' · ')}
-          </Text>
+          {/* "at <venue>" gives way to a long name; " · 2.2 km" is its own slot and stays whole. */}
+          <View style={styles.footWhere}>
+            <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink, styles.shrink]}>
+              {`at ${venue}`}
+            </Text>
+            {distance ? (
+              <Text testID={testID && `${testID}-distance`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink, styles.fixed]}>
+                {` · ${distance}`}
+              </Text>
+            ) : null}
+          </View>
           {layout === 'lead' && (here || going) ? (
             <Text testID={testID && `${testID}-people`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
               <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount((here ?? going) as number)}</Text>
@@ -398,4 +412,6 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, minWidth: 0 },
   rowMeta: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs },
   shrink: { flexShrink: 1 },
+  fixed: { flexShrink: 0 },
+  footWhere: { flexDirection: 'row', alignItems: 'baseline' },
 })

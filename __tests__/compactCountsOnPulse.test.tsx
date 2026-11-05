@@ -67,6 +67,8 @@ it('the set list and the search overline print compact and speak whole (source p
   const setList = readFileSync(join(__dirname, '../components/pulse/SetList.tsx'), 'utf8')
   expect(setList).toMatch(/\{compactCount\(going\)\}/)
   expect(setList).toMatch(/going\.toLocaleString\('en-US'\)\} going/)
+  // The city picker's "47 events" too; its row is heard through `cityCountLabel`, whole.
+  expect(readFileSync(join(__dirname, '../components/pulse/CityPicker.tsx'), 'utf8')).toMatch(/\{compactCount\(count\)\}/)
   const pulse = readFileSync(join(__dirname, '../app/(tabs)/events.tsx'), 'utf8')
   expect(pulse).toMatch(/accessibilityLabel=\{`\$\{resultsCount\(events\.length, totalCount\)\.label\}/)
 })

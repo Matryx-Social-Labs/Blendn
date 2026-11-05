@@ -11,6 +11,7 @@ import { cityCount, cityCountLabel, isCityRow, pickerGroups, sameCity, type Cata
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useLocationSharing } from '../../lib/shareLocation'
+import { compactCount } from '../../lib/format'
 
 /** The locate row: 52 pt, a dashed 38% hairline at the row radius (Flow 3 `city`). */
 const LOCATE_HEIGHT = 52
@@ -165,7 +166,7 @@ function CityRow({ option, active, here, first, onPress }: { option: CityOption;
       </View>
       {!soon ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count.toLocaleString('en-US')}</Text>
+          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount(count)}</Text>
           {` ${unit}`}
         </Text>
       ) : (
