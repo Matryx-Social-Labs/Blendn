@@ -895,7 +895,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             youreIn={checkIn.youreIn || mode === 'room' || passIsRoom}
             onPassFrame={setPassFrame}
             onOpenEvent={(id) => router.push({ pathname: '/event/[id]', params: { id } as never })}
-            onSeeAll={() => router.push('/nearby-events')}
+            onSeeAll={() => router.navigate({ pathname: '/(tabs)/events', params: { seeAll: 'tonight' } })}
             onBrowse={() => {
               onClose()
               router.navigate('/(tabs)/events')

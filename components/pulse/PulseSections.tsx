@@ -1,4 +1,3 @@
-import { router } from 'expo-router'
 import { memo, useCallback, type ReactNode, type RefObject } from 'react'
 import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-native'
 
@@ -14,6 +13,7 @@ import type { BlendnEvent } from '../../lib/api'
 import { RADIUS, SPACE } from '../../lib/design/tokens'
 import { categoryGlyph } from '../../lib/categoryGlyph'
 import { homeCardProps } from '../../lib/pulse'
+import type { SeeAllKind } from '../../lib/nearby'
 import { SECTION_ORDER, weekendWindow, type PulseSection, type PulseSectionKey } from '../../lib/pulseSections'
 
 /**
@@ -260,6 +260,7 @@ export const SectionStack = memo(function SectionStack({
   pending,
   askForLocation,
   timeZone,
+  onSeeAll,
 }: {
   sections: PulseSection<BlendnEvent>[]
   now: number
@@ -270,6 +271,8 @@ export const SectionStack = memo(function SectionStack({
   askForLocation: { denied: boolean; onAsk: () => void } | null
   /** The browse city's zone: "This weekend" is that city's. */
   timeZone?: string
+  /** A section's "See all": its chip, on this same list (Flow 3b · N1; the Nearby screen is gone). */
+  onSeeAll: (kind: SeeAllKind, extra?: { categorySlug?: string }) => void
 }) {
   const first = sections[0]?.key
   const at = (key: PulseSectionKey) => (first === key ? coachRef : undefined)
@@ -285,20 +288,20 @@ export const SectionStack = memo(function SectionStack({
   for (const key of SECTION_ORDER) {
     const section = sections.find((s) => s.key === key)
     if (key === 'now' && section) {
-      push(key, <NowSection section={section} now={now} withDistance={withDistance} coachRef={at('now')} {...handlers} onSeeAll={() => goSeeAll('live')} />)
+      push(key, <NowSection section={section} now={now} withDistance={withDistance} coachRef={at('now')} {...handlers} onSeeAll={() => onSeeAll('live')} />)
     } else if (key === 'tonight' && section) {
-      push(key, <TonightSection section={section} now={now} withDistance={withDistance} coachRef={at('tonight')} {...handlers} onSeeAll={() => goSeeAll('tonight')} />)
+      push(key, <TonightSection section={section} now={now} withDistance={withDistance} coachRef={at('tonight')} {...handlers} onSeeAll={() => onSeeAll('tonight')} />)
     } else if (key === 'nearby') {
-      if (section) push(key, <NearbySection section={section} now={now} coachRef={at('nearby')} {...handlers} onSeeAll={() => goSeeAll('nearby')} />)
+      if (section) push(key, <NearbySection section={section} now={now} coachRef={at('nearby')} {...handlers} onSeeAll={() => onSeeAll('nearby')} />)
       // Only in a feed that has something on: with nothing loaded the page's own state (failed, empty) is the answer, and
       // "Turn on location" under "Couldn't load events" was the wrong way back from offline (audit A24).
       else if (askForLocation && sections.length > 0) push(key, <NearbyLocationCard denied={askForLocation.denied} onAsk={askForLocation.onAsk} />)
     } else if (key === 'forYou' && section) {
-      push(key, <ForYouSection section={section} now={now} withDistance={withDistance} coachRef={at('forYou')} {...handlers} onSeeAll={() => goSeeAll('forYou', { categorySlug: section.interest?.slug ?? '' })} />)
+      push(key, <ForYouSection section={section} now={now} withDistance={withDistance} coachRef={at('forYou')} {...handlers} onSeeAll={() => onSeeAll('forYou', { categorySlug: section.interest?.slug ?? '' })} />)
     } else if (key === 'weekend' && section) {
       push(
         key,
-        <WeekendSection section={section} caption={weekend.label} now={now} withDistance={withDistance} coachRef={at('weekend')} {...handlers} onSeeAll={() => goSeeAll('weekend', { startDate: weekend.startDate, endDate: weekend.endDate })} />
+        <WeekendSection section={section} caption={weekend.label} now={now} withDistance={withDistance} coachRef={at('weekend')} {...handlers} onSeeAll={() => onSeeAll('weekend')} />
       )
     }
   }
@@ -330,11 +333,6 @@ export function PulseSkeleton({ lead }: { lead: number }) {
   )
 }
 
-/** Where "See all" goes: the full list, scoped to the section. */
-export function seeAllHref(kind: 'live' | 'tonight' | 'nearby' | 'forYou' | 'weekend', extra: Record<string, string> = {}) {
-  return { pathname: '/nearby-events', params: { filter: kind, ...extra } } as never
-}
-export const goSeeAll = (kind: Parameters<typeof seeAllHref>[0], extra?: Record<string, string>) => router.push(seeAllHref(kind, extra))
 
 
 const styles = StyleSheet.create({

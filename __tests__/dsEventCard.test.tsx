@@ -51,7 +51,8 @@ describe('hero and compact', () => {
     await render(<EventCard kind="compact" {...VINYL} testID="e" />)
     expect(StyleSheet.flatten(screen.getByTestId('scrim', { includeHiddenElements: true }).props.style).height).toBe('62%')
     expect(screen.getByTestId('scrim', { includeHiddenElements: true }).props.colors).toEqual([tint(COLOR.ink, 0), tint(COLOR.ink, PHOTO_SCRIM.foot)])
-    expect(style('at Toit · 1.2 km')).toMatchObject({ fontSize: TYPE.meta.fontSize, color: COLOR.textPrimary })
+    expect(style('at Toit')).toMatchObject({ fontSize: TYPE.meta.fontSize, color: COLOR.textPrimary })
+    expect(style(' · 1.2 km')).toMatchObject({ fontSize: TYPE.meta.fontSize, color: COLOR.textPrimary })
   })
 
   it('the time badge in Geist Mono and “N going”, top-left as scrim pills', async () => {
@@ -100,7 +101,8 @@ describe('hero and compact', () => {
 it('the words on the photo stop at 1.5×, so the foot never runs up under the pills in a fixed card', async () => {
   await render(<EventCard kind="compact" {...VINYL} />)
   expect(screen.getByText('Vinyl Night', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
-  expect(screen.getByText('at Toit · 1.2 km', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
+  expect(screen.getByText('at Toit', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
+  expect(screen.getByText(' · 1.2 km', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.5)
 })
 
 describe('the peek (onLongPress)', () => {
@@ -162,16 +164,18 @@ describe('row · lead="distance"', () => {
     expect(screen.queryByTestId('e-lead')).toBeNull()
     await render(<EventCard kind="row" {...VINYL} testID="e" />)
     expect(screen.queryByTestId('e-lead')).toBeNull()
-    expect(screen.getByText(/Toit · 1\.2 km/, { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('· 1.2 km', { includeHiddenElements: true })).toBeTruthy()
   })
 })
 
 describe('row', () => {
   it('a long venue gives way; the time is never the part cut off', async () => {
     await render(<EventCard kind="row" {...VINYL} venue="Toit Brewpub, 100 Feet Road, Indiranagar" />)
-    const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar · 1.2 km', { includeHiddenElements: true })
+    const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar', { includeHiddenElements: true })
     expect(venue.props.numberOfLines).toBe(1)
     expect(StyleSheet.flatten(venue.props.style).flexShrink).toBe(1)
+    // The distance is its own run too (owner 2026-11-05): the venue truncating never takes it.
+    expect(StyleSheet.flatten(screen.getByText('· 1.2 km', { includeHiddenElements: true }).props.style).flexShrink).toBe(0)
     // The separator before the time is its own run, so truncating the venue never takes it (r7 L12).
     const dot = screen.getByText('·', { includeHiddenElements: true })
     expect(StyleSheet.flatten(dot.props.style).flexShrink ?? 0).toBe(0)

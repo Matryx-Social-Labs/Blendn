@@ -144,8 +144,14 @@ export function filtersToQuery(
   if (f.categorySlug) q.categorySlug = f.categorySlug
 
   const { startDate, endDate } = whenToRange(f.when, now)
-  if (startDate) q.startDate = startDate
-  if (endDate) q.endDate = endDate
+  if (f.when === 'today' && endDate) {
+    // Tonight (N1): not over (the server's own bound) and starting by the day's end. A start bound would drop what is on
+    // now, so Happening now's "See all" would land on a list without it; an end bound, a night that ends after midnight.
+    q.startBefore = endDate
+  } else {
+    if (startDate) q.startDate = startDate
+    if (endDate) q.endDate = endDate
+  }
 
   // Only when asked for. See the note at the top of this file.
   if (typeof f.radiusKm === 'number') q.radius = f.radiusKm

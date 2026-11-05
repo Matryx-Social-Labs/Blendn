@@ -44,3 +44,12 @@ it('a filter from the sheet sits first as a removable chip, and removing it keep
   // Filters says how many it holds that the row cannot show.
   expect(screen.getByLabelText('Filters, 1 applied')).toBeTruthy()
 })
+
+it('Near me: its arrow at rest, the ✓ once on, like every chip on the N1 board', async () => {
+  const { StyleSheet } = jest.requireActual('react-native')
+  const checkOpacity = () => StyleSheet.flatten(screen.getByTestId('pulse-chip-near-check', { includeHiddenElements: true }).props.style).opacity
+  const view = await render(<QuickChips {...base} nearOn filters={NO_FILTERS} onChange={jest.fn()} />)
+  expect(checkOpacity()).toBe(0)
+  await view.rerender(<QuickChips {...base} nearOn filters={{ when: 'any', radiusKm: 8 }} onChange={jest.fn()} />)
+  expect(checkOpacity()).toBe(1)
+})

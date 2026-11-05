@@ -87,7 +87,7 @@ describe("the Pulse handlers keep their identity", () => {
      * the re-render count by never re-rendering.
      */
     expect(src).toMatch(
-      /\}, \[isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses,/
+      /\}, \[isNarrowed, isSearching, sections.length, firstRowId, now, hasFix, checkinStatuses,/
     )
   })
 })

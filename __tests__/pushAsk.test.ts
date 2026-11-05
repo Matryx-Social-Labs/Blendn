@@ -110,7 +110,7 @@ describe('the lock-screen ask (SCRUM-1006)', () => {
     expect(await askPushInContext('rsvp', 'Rooftop Sundowner')).toBe(true)
     expect(samplesOf(sheet())).toEqual([
       { title: 'Rooftop Sundowner', body: 'New time: 7 PM. Same place.' },
-      { title: 'It’s mutual', body: 'Someone at Rooftop Sundowner liked you back.' },
+      { title: 'It’s mutual', body: 'Someone liked you back at Rooftop Sundowner.' },
       { title: 'Your crew is heading out', body: '3 going tonight.' },
     ])
     // The picture replaces the bell well.

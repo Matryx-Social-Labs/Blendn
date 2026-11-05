@@ -78,7 +78,7 @@ describe('no route param seeds the Scene', () => {
     const pushes = sources().flatMap((f) => [...read(f).matchAll(/pathname: '\/event\/\[id\]'/g)].map((m) => ({ f, near: read(f).slice(m.index, m.index! + 300) })))
     expect(pushes.length).toBeGreaterThan(0)
     for (const { near } of pushes) expect(near).not.toMatch(/\b(title|cover|description|venue):/)
-    for (const f of ['app/(tabs)/events.tsx', 'app/nearby-events.tsx']) {
+    for (const f of ['app/(tabs)/events.tsx']) {
       expect(read(f)).toMatch(/putSceneSeed\(\{/)
       expect(read(f)).toMatch(/params: \{ id: event\.id, seed \}/)
     }
