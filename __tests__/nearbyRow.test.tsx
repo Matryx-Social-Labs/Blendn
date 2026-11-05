@@ -93,3 +93,21 @@ it('the heading draws its count as "· 2" in mono, and Happening now carries the
   expect(screen.getByText('· 2', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.getByTestId('when-heading-live', { includeHiddenElements: true })).toBeTruthy()
 })
+
+describe('tags as on the board (`.tg`, `.tg.walk`, `.tg.pr`)', () => {
+  const flat = (s: unknown) => Object.assign({}, ...([] as object[]).concat(s as object[]).flat(Infinity).filter(Boolean))
+  it('the walk is an ember pill with its rim; a price is outlined with a ticket; numbers in mono', async () => {
+    await render(
+      <NearbyRow event={{ ...(base as object), from_price: { minor: 49900, currency: 'INR' }, going_count: 41 } as never} now={NOW} withDistance onPress={jest.fn()} />
+    )
+    const walk = flat(screen.getByTestId('nearby-tag-walk', { includeHiddenElements: true }).props.style)
+    expect(walk.backgroundColor).toBe('#552D21')
+    expect(walk.borderColor).toBe('rgba(240,84,35,0.7)')
+    const price = flat(screen.getByTestId('nearby-tag-price', { includeHiddenElements: true }).props.style)
+    expect(price.backgroundColor).toBe('transparent')
+    expect(price.borderColor).toBe('rgba(255,255,255,0.16)')
+    const n = flat(screen.getByText('41', { includeHiddenElements: true }).props.style)
+    expect(n.fontFamily).toMatch(/GeistMono/)
+    expect(screen.getByText(/going/, { includeHiddenElements: true })).toBeTruthy()
+  })
+})

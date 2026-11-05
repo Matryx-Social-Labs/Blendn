@@ -8,10 +8,11 @@ import { Icon, type IconName } from '../ui/Icon'
 import type { BlendnEvent } from '../../lib/api'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { liveWindow } from '../../lib/eventSession'
-import { reachLabel } from '../../lib/nearby'
+import { reachLabel, type Reach } from '../../lib/nearby'
 import { isLiveNow, printable, PROMOTED_LABEL } from '../../lib/pulseSections'
 import { eventClock } from '../../lib/time'
 import { splitClock } from './SetList'
+import { tint } from '../../lib/theme'
 
 /** "From ₹799": a price on sale, whole units in its own currency. */
 export const priceText = (p: { minor: number; currency: string }) =>
@@ -20,11 +21,16 @@ export const priceText = (p: { minor: number; currency: string }) =>
 type RowEvent = Pick<BlendnEvent, 'id' | 'title' | 'start_time' | 'end_time' | 'timezone' | 'venue_name' | 'distance' | 'going_count' | 'cover_image_url'> &
   Partial<Pick<BlendnEvent, 'session' | 'promoted' | 'from_price'>> & { here_count?: number | null }
 
-const people = (e: RowEvent, live: boolean): string | null => {
+/** Who is there, from five: "12 here now" while it is on, else "41 going"; the number apart, for its mono. */
+const peopleParts = (e: RowEvent, live: boolean): { n: string; text: string } | null => {
   const here = live ? printable(e.here_count) : null
-  if (here) return `${here.toLocaleString('en-US')} here now`
+  if (here) return { n: here.toLocaleString('en-US'), text: ' here now' }
   const going = printable(e.going_count)
-  return going ? `${going.toLocaleString('en-US')} going` : null
+  return going ? { n: going.toLocaleString('en-US'), text: ' going' } : null
+}
+const people = (e: RowEvent, live: boolean): string | null => {
+  const p = peopleParts(e, live)
+  return p ? p.n + p.text : null
 }
 
 /** The row as one element (board: Promoted, Live, name, time, venue, reach, price, people). */
@@ -36,12 +42,20 @@ export function nearbyRowLabel(e: RowEvent, now: number, withDistance: boolean):
   return [e.promoted ? PROMOTED_LABEL : null, live ? 'Live' : null, parts.filter(Boolean).join(', ')].filter(Boolean).join('. ')
 }
 
-function Tag({ icon, text, lit = false }: { icon?: IconName; text: string; lit?: boolean }) {
+type TagLook = 'plain' | 'walk' | 'price'
+
+/** Board `.tg`: a number in Geist Mono, then its words; the walk an ember pill, a price outlined with a ticket. */
+function Tag({ icon, n, text, look = 'plain', testID }: { icon?: IconName; n?: string; text: string; look?: TagLook; testID?: string }) {
   const bold = useBoldText()
+  const walk = look === 'walk'
+  const ink = look === 'price' ? styles.secondary : styles.ink
   return (
-    <View style={styles.tag}>
-      {icon ? <Icon name={icon} size={ICON.inline - 2} color={lit ? COLOR.selectionEmberGlyph : COLOR.textSecondary} /> : null}
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.ink]}>
+    <View testID={testID} style={[styles.tag, walk ? styles.tagWalk : look === 'price' ? styles.tagPrice : null]}>
+      {icon ? (
+        <Icon name={icon} size={walk ? TAG_ICON_WALK : TAG_ICON} color={walk ? COLOR.selectionEmberGlyph : COLOR.textSecondary} />
+      ) : null}
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), ink]}>
+        {n ? <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{n}</Text> : null}
         {text}
       </Text>
     </View>
@@ -73,7 +87,7 @@ function NearbyRowImpl<E extends RowEvent>({
   const w = liveWindow(event)
   const { time, meridiem } = splitClock(Date.parse(w.start_time), event.timezone)
   const reach = withDistance ? reachLabel(event.distance) : null
-  const who = people(event, live)
+  const who = peopleParts(event, live)
   const where = [live && w.end_time ? `till ${eventClock(w.end_time, event.timezone)}` : null, event.venue_name].filter(Boolean).join(' · ')
   return (
     <Pressable
@@ -131,9 +145,9 @@ function NearbyRowImpl<E extends RowEvent>({
         {event.promoted || reach || event.from_price || who ? (
           <View style={styles.tags}>
             {event.promoted ? <Tag icon="megaphone" text={PROMOTED_LABEL} /> : null}
-            {reach ? <Tag icon={reach.kind === 'walk' ? 'footprints' : 'navigation'} text={reach.text} lit={reach.kind === 'walk'} /> : null}
-            {event.from_price ? <Tag text={priceText(event.from_price)} /> : null}
-            {who ? <Tag text={who} /> : null}
+            {reach ? <ReachTag reach={reach} /> : null}
+            {event.from_price ? <Tag icon="ticket" look="price" text={priceText(event.from_price)} testID="nearby-tag-price" /> : null}
+            {who ? <Tag n={who.n} text={who.text} /> : null}
           </View>
         ) : null}
       </View>
@@ -141,6 +155,13 @@ function NearbyRowImpl<E extends RowEvent>({
   )
 }
 export const NearbyRow = memo(NearbyRowImpl) as typeof NearbyRowImpl
+
+/** "10 min walk" (the minutes in mono, an ember pill) or "2.9 km" (the number in mono). */
+function ReachTag({ reach }: { reach: Reach }) {
+  const [n, ...rest] = reach.text.split(' ')
+  const walk = reach.kind === 'walk'
+  return <Tag icon={walk ? 'footprints' : 'navigation'} look={walk ? 'walk' : 'plain'} n={n} text={` ${rest.join(' ')}`} testID={walk ? 'nearby-tag-walk' : 'nearby-tag-km'} />
+}
 
 /** A time group's heading (board `.gh`): the words, the count in Geist Mono, and its end on the right ("by 9:10 PM"). */
 export function WhenHeading({ title, count, note, live = false }: { title: string; count: number | null; note?: string; live?: boolean }) {
@@ -179,6 +200,9 @@ const TIME_COL = 50
 const ROW_MIN = 76
 /** iOS's first accessibility size (AX1) is ~1.65× and Android's largest 2×: from here the row restacks. */
 const AX_STACK_SCALE = 1.6
+/** Board `.tg` glyphs: 13 pt, the walk's footprints 14. */
+const TAG_ICON = ICON.inline - 3
+const TAG_ICON_WALK = ICON.inline - 2
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md, paddingVertical: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.gutter, minHeight: ROW_MIN },
@@ -200,6 +224,10 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.rowInCard - SPACE.xs,
     backgroundColor: COLOR.chipFillOnGlass,
   },
+  // `.tg.walk`: the ember fill, a half-point ember rim at 70%.
+  tagWalk: { backgroundColor: COLOR.selectionEmberFill, borderWidth: StyleSheet.hairlineWidth, borderColor: tint(COLOR.brandOrange, 0.7) },
+  // `.tg.pr`: no fill, a 1 pt strong hairline, the words quiet.
+  tagPrice: { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLOR.hairlineStrong },
   // Board `.gh`: 24 in, 18 above, 2 below, the words and the count on one baseline, the end on the right.
   heading: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.sm, paddingHorizontal: SPACE.gutter, marginTop: SPACE.lg + SPACE.xxs, marginBottom: SPACE.xxs },
   note: { marginLeft: 'auto' },
