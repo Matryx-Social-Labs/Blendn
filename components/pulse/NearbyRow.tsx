@@ -129,21 +129,23 @@ function NearbyRowImpl<E extends RowEvent>({
 export const NearbyRow = memo(NearbyRowImpl) as typeof NearbyRowImpl
 
 /** A time group's heading (board `.gh`): the words, the count in Geist Mono, and its end on the right ("by 9:10 PM"). */
-export function WhenHeading({ title, count, note }: { title: string; count: number; note?: string }) {
+export function WhenHeading({ title, count, note }: { title: string; count: number | null; note?: string }) {
   const bold = useBoldText()
   return (
     <View
       accessible
       accessibilityRole="header"
-      accessibilityLabel={[title, `${count.toLocaleString('en-US')} ${count === 1 ? 'event' : 'events'}`, note].filter(Boolean).join(', ')}
+      accessibilityLabel={[title, count === null ? null : `${count.toLocaleString('en-US')} ${count === 1 ? 'event' : 'events'}`, note].filter(Boolean).join(', ')}
       style={styles.heading}
     >
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.ink]}>
         {title}
       </Text>
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-        {count.toLocaleString('en-US')}
-      </Text>
+      {count === null ? null : (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+          {count.toLocaleString('en-US')}
+        </Text>
+      )}
       {note ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary, styles.note]}>
           {note}

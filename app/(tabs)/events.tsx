@@ -149,7 +149,7 @@ type PulseRow =
   | { kind: 'body'; key: 'body' }
   | { kind: 'day'; key: string; title: string; weekday: string }
   | { kind: 'event'; key: string; event: Event }
-  | { kind: 'when'; key: string; title: string; count: number; note?: string }
+  | { kind: 'when'; key: string; title: string; count: number | null; note?: string }
 
 /** The chips are data row 0, under the list's banner header (index 0): the sticky one is cell 1 (Option C: the chips are the header). */
 const STICKY_CHIPS = [1]
@@ -1711,8 +1711,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         events.filter((e) => !leadEvents.includes(e)),
         now,
         cityZone
-      ).flatMap((g) => [
-        { kind: 'when' as const, key: `when-${g.key}`, title: g.title, count: g.events.length, note: g.note },
+      ).flatMap((g, i, all) => [
+        // The last group may go on past the loaded page: no count until it is all here (a count is never a guess).
+        { kind: 'when' as const, key: `when-${g.key}`, title: g.title, count: hasMore && i === all.length - 1 ? null : g.events.length, note: g.note },
         ...g.events.map((event) => ({ kind: 'event' as const, key: event.id, event })),
       ])
     }
@@ -1723,7 +1724,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       { kind: 'day' as const, key: `day-${group.key}`, title: group.title, weekday: group.weekday },
       ...group.items.map((event) => ({ kind: 'event' as const, key: event.id, event })),
     ])
-  }, [isNarrowed, isSearching, events, rest, chosen, now, leadEvents, cityZone])
+  }, [isNarrowed, isSearching, events, rest, chosen, now, leadEvents, cityZone, hasMore])
 
   /*
    * The first card the page draws, the coach mark's hole: the first section's

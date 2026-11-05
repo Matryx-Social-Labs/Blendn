@@ -53,3 +53,8 @@ it('a group heading is a header, read with its count and its end', async () => {
   const h = screen.getByRole('header')
   expect(h.props.accessibilityLabel).toBe('Starting soon, 2 events, by 9:10 PM')
 })
+
+it('a group still loading past the page has no count: never a guess', async () => {
+  await render(<WhenHeading title="Later tonight" count={null} />)
+  expect(screen.getByRole('header').props.accessibilityLabel).toBe('Later tonight')
+})
