@@ -57,7 +57,7 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getEvents: (...a: unknown[])
 jest.mock('../components/home/useMapLighting', () => ({
   useMapLighting: () => ({ lit: { states: [], glow: { type: 'FeatureCollection', features: [] }, bands: { type: 'FeatureCollection', features: [] }, chips: [] }, onFrame: jest.fn(), relight: jest.fn() }),
 }))
-jest.mock('../components/home/MapLitLayers', () => ({ Chips: () => null, CityBuildings: () => null, GroundGlow: () => null, LitBuildings: () => null, OwnBuildings: () => null }))
+jest.mock('../components/home/MapLitLayers', () => ({ Chips: () => null, CityBuildings: () => null, GroundGlow: () => null, LitBuildings: () => null, OwnBuildings: () => null, ReachLabels: () => null }))
 jest.mock('../components/home/NearPins', () => ({ NearPins: () => null }))
 
 /* eslint-disable import/first */
@@ -75,7 +75,7 @@ const CITY_PICK = { n: 0, here: false }
 const NO_PINS: never[] = []
 const ASK = jest.fn()
 const DRAWER_TOP = makeMutable(SHEET.half)
-const map = (center: typeof FIX | null) => (
+const map = (center: typeof FIX | null, reach: typeof FIX | null = null) => (
   <HomeMap
     center={center}
     cityCentre={CITY}
@@ -93,6 +93,7 @@ const map = (center: typeof FIX | null) => (
     glowVisible={false}
     nearPins={NO_PINS}
     fitNear={0}
+    reach={reach}
   />
 )
 // Within ~200 m of the fix: a query (rounded, bounds-derived) or a camera stop that is on the person.
@@ -183,5 +184,54 @@ describe('with sharing off and a GPS fix', () => {
     expect(mockGetEvents).toHaveBeenCalled()
     expect(mockGetEvents.mock.calls.filter(readOnFix)).toHaveLength(0)
     expect(mockGetVenues.mock.calls.filter(readOnFix)).toHaveLength(0)
+  })
+})
+
+describe('Near me and the switch (security review, 2026-11-05): after an opt-out nothing returns to the fix', () => {
+  // A wait past the viewport read's debounce, so a read the camera would make is made.
+  const settleReads = async () => {
+    await act(async () => void mockLoaded?.())
+    await act(async () => void (await new Promise((r) => setTimeout(r, 700))))
+  }
+  // Near me on, then a pan away from it (the map is now "touched": the switch's own move to the city does not run).
+  const nearMeThenPan = async () => {
+    const view = await render(map(FIX))
+    await settleReads()
+    await view.rerender(map(FIX, FIX))
+    await settleReads()
+    const [lon, lat] = [CITY.longitude, CITY.latitude]
+    await act(async () => mockRegion?.({ nativeEvent: { bounds: [lon - 0.2, lat - 0.2, lon + 0.2, lat + 0.2], center: [lon, lat], zoom: 11, pitch: 0, userInteraction: true } }))
+    mockStops.length = 0
+    mockGetEvents.mockClear()
+    return view
+  }
+
+  it('control: with sharing on, Near me going off takes the camera back to the fix', async () => {
+    const view = await nearMeThenPan()
+    await view.rerender(map(FIX, null))
+    await settleReads()
+    expect(mockStops.filter(stopOnFix).length).toBeGreaterThan(0)
+  })
+
+  it('sharing off, then Near me off: the camera goes to the city, never the fix, and nothing is read around it', async () => {
+    const view = await nearMeThenPan()
+    await act(async () => setLocationSharing(false))
+    await settleReads()
+    await view.rerender(map(FIX, null))
+    await settleReads()
+    expect(mockStops.filter(stopOnFix)).toHaveLength(0)
+    expect(mockGetEvents.mock.calls.filter(readOnFix)).toHaveLength(0)
+  })
+
+  it('sharing off while the screen still says Near me: the map ignores the reach (no frame on the fix, no ring)', async () => {
+    const view = await nearMeThenPan()
+    await act(async () => setLocationSharing(false))
+    await settleReads()
+    // A drawer snap after the switch must not re-issue the reach frame either.
+    await view.rerender(map(FIX, FIX))
+    await settleReads()
+    expect(mockStops.filter(stopOnFix)).toHaveLength(0)
+    expect(mockStops.filter((st) => st.pitch === 0 && typeof st.zoom === 'number' && (st.zoom as number) < 14)).toHaveLength(0)
+    expect(mockGetEvents.mock.calls.filter(readOnFix)).toHaveLength(0)
   })
 })

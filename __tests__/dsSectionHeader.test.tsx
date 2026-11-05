@@ -162,7 +162,8 @@ it('a count that is a floor prints "N+" and is heard the same (BAR-10), plain or
   expect(screen.getByText('50+')).toBeTruthy()
   expect(screen.getByRole('header').props.accessibilityLabel).toBe('Tonight, 50+')
   await render(<SectionHeader title="Waiting" count={1204} more countStyle="lit" testID="l" />)
-  expect(screen.getByText('1,204+')).toBeTruthy()
+  // Compact on screen past 999 (owner 2026-11-05); the floor keeps its plus.
+  expect(screen.getByText('1.2k+')).toBeTruthy()
   await render(<SectionHeader title="Exact" count={7} testID="e" />)
   expect(screen.getByText('7')).toBeTruthy()
 })

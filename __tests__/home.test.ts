@@ -169,7 +169,8 @@ describe('the Events | Places switch is the drawer’s title tabs, tap only', ()
 
   it('uses TitleTabs, which has no drag (it would compete with the drawer and map gestures), with the city chip trailing', () => {
     expect(shell).toMatch(/<TitleTabs[\s\S]*?testID="home-segmented"/)
-    expect(shell).toContain('testID="home-city"')
+    // The city chip is its own part now (`CityChip`, capped at the board's 148 pt).
+    expect(shell).toContain('<CityChip ')
     expect(shell).toContain('onPress={browse.openCityPicker}')
     expect(shell).not.toMatch(/SegmentedControl|draggable/)
   })

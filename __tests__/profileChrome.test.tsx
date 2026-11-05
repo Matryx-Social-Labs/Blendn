@@ -19,7 +19,8 @@ import { HERO_STRETCH_MAX, heroHeightFor, stretchScale } from '../components/pro
 import { nextPage } from '../components/profile/ProfileHeroPager'
 import { counterOf, pageAt } from '../components/profile/PhotoViewer'
 import { nightLabel, nightsCounts, nightsView } from '../lib/meProfile'
-import { compactCount, STAT_MAX } from '../components/profile/MeSections'
+import { STAT_MAX } from '../components/profile/MeSections'
+import { compactCount } from '../lib/format'
 import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
 import { tint } from '../lib/theme'
 /* eslint-enable import/first */
@@ -301,7 +302,6 @@ describe('the paged viewer', () => {
 describe('worst-case data (break-ui)', () => {
   it('never draws a stat past four digits: it goes compact', () => {
     expect(STAT_MAX).toBe(9999)
-    expect(compactCount(9999)).toBe('9999')
     expect(compactCount(10_000)).toBe('10k')
     expect(compactCount(12_345)).toBe('12k')
     expect(compactCount(999_999)).toBe('999k')

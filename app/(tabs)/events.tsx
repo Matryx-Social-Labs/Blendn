@@ -1,6 +1,6 @@
 import { ScreenProfiler } from '../../lib/perf'
 import * as Location from 'expo-location'
-import { router, useScrollToTop } from 'expo-router'
+import { router, useLocalSearchParams, useScrollToTop } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Dimensions,
@@ -33,7 +33,7 @@ import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
-import { PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
+import { NearEnd, NothingNear, PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
 import { PulsePeek, type Peek } from '../../components/pulse/PulsePeek'
 import { PullIndicator } from '../../components/pulse/PullIndicator'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
@@ -42,7 +42,9 @@ import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterC
 import { HomeShell, type HomeBrowse, type PulseShell } from '../../components/home/HomeShell'
 import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
 import { pinsFor } from '../../lib/homeMap'
-import { vibeOf, type Vibe } from '../../lib/pulseChips'
+import { NEAR_KM, vibeOf, type Vibe } from '../../lib/pulseChips'
+import { groupByWhen, nearSpan, nothingNearCopy, SEE_ALL_KINDS, seeAllFilters, type Beyond, type SeeAllKind } from '../../lib/nearby'
+import { NearbyRow, WhenHeading } from '../../components/pulse/NearbyRow'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useLocationSharing } from '../../lib/shareLocation'
 import { useReducedMotion } from '../../lib/motion'
@@ -147,6 +149,7 @@ type PulseRow =
   | { kind: 'body'; key: 'body' }
   | { kind: 'day'; key: string; title: string; weekday: string }
   | { kind: 'event'; key: string; event: Event }
+  | { kind: 'when'; key: string; title: string; count: number | null; note?: string }
 
 /** The chips are data row 0, under the list's banner header (index 0): the sticky one is cell 1 (Option C: the chips are the header). */
 const STICKY_CHIPS = [1]
@@ -511,6 +514,35 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * over a filtered set is not what the word means.
    */
   const isNarrowed = isSearching || hasActiveFilters(filters)
+
+  /*
+   * Every "See all" is a chip on this same list (Flow 3b · N1; the Nearby screen is gone): its question, asked here, from
+   * the top. A link or the Tonight deck arrives as `?seeAll=` and is applied once.
+   */
+  const seeAll = useCallback(
+    (kind: SeeAllKind, extra?: { categorySlug?: string }) => {
+      setFilters(seeAllFilters(kind, extra))
+      listRef.current?.scrollToOffset({ offset: 0, animated: !reduceMotion })
+    },
+    [reduceMotion]
+  )
+  const params = useLocalSearchParams<{ seeAll?: string; categorySlug?: string }>()
+  const linked = params.seeAll && SEE_ALL_KINDS.includes(params.seeAll as SeeAllKind) ? (params.seeAll as SeeAllKind) : null
+  // Applied during render (as the city's inputs are), once per arrival; the effect below only clears the link's params.
+  const [seenLink, setSeenLink] = useState<string | null>(null)
+  const linkKey = linked ? `${linked}|${params.categorySlug ?? ''}` : null
+  if (linkKey && linkKey !== seenLink) {
+    setSeenLink(linkKey)
+    setFilters(seeAllFilters(linked!, { categorySlug: params.categorySlug }))
+  } else if (!linkKey && seenLink) {
+    // Its params cleared: the same chip linked again later is a new arrival.
+    setSeenLink(null)
+  }
+  useEffect(() => {
+    if (!linkKey) return
+    listRef.current?.scrollToOffset({ offset: 0, animated: false })
+    router.setParams({ seeAll: undefined, categorySlug: undefined })
+  }, [linkKey])
 
   const changeSearchInput = useCallback((next: string) => setSearchInput(next), [setSearchInput])
 
@@ -1597,6 +1629,46 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const freshVibe = isNarrowed || events.length === 0 ? vibe : vibeOf(events, categoryOptions)
   if (freshVibe?.slug !== vibe?.slug) setVibe(freshVibe)
 
+  // Near me on, with a fix in the city: the map draws your reach (N1). A new object only when the fix or the chip changes.
+  const nearMeOn = hasFix && filters.radiusKm === NEAR_KM
+  const reach = useMemo(() => (nearMeOn && userLocation ? { latitude: userLocation.latitude, longitude: userLocation.longitude } : null), [nearMeOn, userLocation])
+
+  // Nothing within reach (board N1none): one `limit=1` read of the city by distance, for its count and its closest.
+  const nothingNear = nearMeOn && !loading && !netError && events.length === 0
+  const [beyondState, setBeyondState] = useState<{ key: string; value: Beyond | null } | null>(null)
+  const beyondKey = `${sectionsKey}|${filters.when}`
+  useEffect(() => {
+    if (!nothingNear) return
+    let cancelled = false
+    const when = filters.when === 'any' ? 'week' : filters.when
+    apiClient
+      .getEvents({
+        page: 1,
+        limit: 1,
+        city: selectedCity ?? undefined,
+        lat: roundCoord(userLocation?.latitude),
+        lon: roundCoord(userLocation?.longitude),
+        sortBy: 'distance',
+        sortOrder: 'asc',
+        ...filtersToQuery({ ...NO_FILTERS, when }),
+      })
+      .then((r) => {
+        if (cancelled) return
+        const first = r.success ? r.data?.events[0] : undefined
+        const count = r.success ? r.data?.pagination?.totalCount : undefined
+        const value = typeof count === 'number' ? { count, closest: first && first.distance != null ? { km: first.distance, venue: first.venue_name ?? null } : null } : null
+        setBeyondState({ key: beyondKey, value })
+      })
+      .catch((error) => Logger.warn('events', 'Beyond reach did not load', { error: String(error) }))
+    return () => {
+      cancelled = true
+    }
+    // The location only moves the key (to ~100 m); the request reads the live fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nothingNear, beyondKey])
+  const beyond = beyondState?.key === beyondKey ? beyondState.value : null
+  const seeCity = useCallback(() => setFilters((f) => ({ ...f, radiusKm: undefined })), [])
+
   // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
   useEffect(
     () =>
@@ -1607,15 +1679,15 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         // The stored city's own centre until the catalogue answers (or when it fails): the map is never left blank.
         cityCentre: browseOption?.centre ?? selection?.centre ?? null,
         travelling,
-        preview: browseOption?.launchState === 'preview' && browseOption.access !== 'comingSoon',
         defaultCentre: cityBySlug(cityOptions, catalogue.defaultCitySlug)?.centre ?? null,
         cityPick,
         requestLocation: requestLocationIfNeeded,
         openCityPicker: () => setCityPickerOpen(true),
         peekLine,
         focus,
+        reach,
       }),
-    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus]
+    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
   )
 
   const firstSection = sections[0]?.key ?? null
@@ -1631,7 +1703,19 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const chosen = category && chips.some((c) => c.slug === category) ? category : null
   const rows = useMemo<PulseRow[]>(() => {
     // Under a chip the lead holds that chip's Featured: the flat list below does not draw them twice.
-    if (isNarrowed) return events.filter((e) => !leadEvents.includes(e)).map((event) => ({ kind: 'event' as const, key: event.id, event }))
+    // A search is the result, flat. Under a chip (Near me, Tonight, …) the list groups by when, in plain words (N1).
+    if (isSearching) return events.map((event) => ({ kind: 'event' as const, key: event.id, event }))
+    if (isNarrowed) {
+      return groupByWhen(
+        events.filter((e) => !leadEvents.includes(e)),
+        now,
+        cityZone
+      ).flatMap((g, i, all) => [
+        // The last group may go on past the loaded page: no count until it is all here (a count is never a guess).
+        { kind: 'when' as const, key: `when-${g.key}`, title: g.title, count: hasMore && i === all.length - 1 ? null : g.events.length, note: g.note },
+        ...g.events.map((event) => ({ kind: 'event' as const, key: event.id, event })),
+      ])
+    }
     const shown = (chosen ? rest.filter((e) => e.category_group === chosen) : rest)
       .slice()
       .sort((a, b) => Date.parse(liveWindow(a).start_time) - Date.parse(liveWindow(b).start_time))
@@ -1639,7 +1723,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       { kind: 'day' as const, key: `day-${group.key}`, title: group.title, weekday: group.weekday },
       ...group.items.map((event) => ({ kind: 'event' as const, key: event.id, event })),
     ])
-  }, [isNarrowed, events, rest, chosen, now, leadEvents])
+  }, [isNarrowed, isSearching, events, rest, chosen, now, leadEvents, cityZone, hasMore])
 
   /*
    * The first card the page draws, the coach mark's hole: the first section's
@@ -1660,6 +1744,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const renderRow = useCallback(({ item, index }: { item: PulseRow; index: number }) => {
     if (item.kind === 'chips' || item.kind === 'body') return <PulseSlot slot={item.kind} />
+    if (item.kind === 'when') return <WhenHeading title={item.title} count={item.count} note={item.note} live={item.key === 'when-now'} />
     if (item.kind === 'day') {
       return (
         <View style={styles.dayRow}>
@@ -1668,6 +1753,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       )
     }
     const event = item.event
+    if (isNarrowed && !isSearching) {
+      return <NearbyRow event={event} now={now} withDistance={hasFix} onPress={handleEventPress} onPressIn={warmEvent} />
+    }
     if (isNarrowed) {
       const card = homeCardProps(event, now, hasFix)
       return (
@@ -1711,7 +1799,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         />
       </RevealRow>
     )
-  }, [isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses, interestStatuses, handleEventPress, openPeek, peekRow, warmEvent, toggleInterest])
+  }, [isNarrowed, isSearching, sections.length, firstRowId, now, hasFix, checkinStatuses, interestStatuses, handleEventPress, openPeek, peekRow, warmEvent, toggleInterest])
   const keyExtractor = useCallback((item: PulseRow) => item.key, [])
 
   const askForLocation = useCallback(() => {
@@ -1921,7 +2009,11 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         </FadeInUp>
       ) : null}
       {/* A refused read is the banner above, and neither "couldn’t load" nor "nothing here". */}
-      {events.length === 0 && !netError && rateLimit === null ? (
+      {nothingNear && rateLimit === null && selectedCity ? (
+        <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
+          <NothingNear copy={nothingNearCopy(selectedCity, beyond, filters.when)} city={selectedCity} onSeeCity={seeCity} onPlaces={() => shell?.openPlaces()} />
+        </FadeInUp>
+      ) : events.length === 0 && !netError && rateLimit === null ? (
         <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
           <PulseEmpty
             kind={emptyKind}
@@ -1944,7 +2036,13 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       */}
       {isSearching && events.length > 0 ? (
         <View style={styles.resultsLabel}>
-          <Text style={styles.resultsLabelText} accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+          <Text
+            style={styles.resultsLabelText}
+            accessibilityRole="header"
+            // "12k events" on screen, the whole count heard.
+            accessibilityLabel={`${resultsCount(events.length, totalCount).label} ${resultsCount(events.length, totalCount).noun}${selectedCity ? `, ${selectedCity}` : ''}`}
+            maxFontSizeMultiplier={CONTROL_FONT_CAP}
+          >
             <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).text}</Text>
             {` ${resultsCount(events.length, totalCount).noun}${selectedCity ? ` · ${selectedCity}` : ''}`}
           </Text>
@@ -1963,6 +2061,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           pending={mainRowsRevealPending}
           askForLocation={!userLocation && (locationStatus === 'denied' || locationStatus === 'undetermined') ? { denied: locationStatus === 'denied', onAsk: askForLocation } : null}
           timeZone={cityZone}
+          onSeeAll={seeAll}
         />
       ) : null}
       {!isNarrowed && rows.length > 0 ? (
@@ -2044,6 +2143,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
               <View style={styles.rateLimitFoot}>
                 <RateLimitedBanner seconds={rateLimit.seconds} onDone={rateLimitDone} testID="pulse-more-rate-limited" />
               </View>
+            ) : nearMeOn && !isSearching && !hasMore && events.length > 0 && selectedCity ? (
+              <NearEnd span={nearSpan(filters.when)} city={selectedCity} onSeeCity={seeCity} onPlaces={() => shell?.openPlaces()} />
             ) : quietEnd && selectedCity ? (
               <QuietWeekEnd city={selectedCity} onPlaces={() => shell?.openPlaces()} onChangeCity={() => setCityPickerOpen(true)} />
             ) : null

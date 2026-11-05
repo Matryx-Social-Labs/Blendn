@@ -8,9 +8,10 @@ import { SectionHeader } from '../ds/SectionHeader'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { StateScreen } from '../ds/StateScreen'
 import ScalePress from '../motion/ScalePress'
+import { CornerGlow } from '../ui/GradientFill'
 import { Icon, type IconName } from '../ui/Icon'
 import type { CatalogueCountry, CityOption } from '../../lib/city'
-import { COLOR, ICON, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { whereWeAre, type PulseEmptyKind } from '../../lib/pulseFeed'
 
 /** Board `.crow`: a city row under "Where Blend'n is on". */
@@ -168,6 +169,53 @@ export function QuietWeekEnd({ city, onPlaces, onChangeCity }: { city: string; o
   )
 }
 
+type NearWaysProps = { city: string; onSeeCity: () => void; onPlaces: () => void }
+
+/** Near me's ways on, the same at both of its ends: the whole city (lit), and Places. */
+function NearWays({ city, onSeeCity, onPlaces }: NearWaysProps) {
+  return (
+    <View style={styles.nearWays}>
+      <Button kind="lit" size="md" label={`See all of ${city}`} onPress={onSeeCity} testID="pulse-near-see-city" />
+      <Button kind="secondary" size="md" label="Places open now" onPress={onPlaces} testID="pulse-near-places" />
+    </View>
+  )
+}
+
+/**
+ * Nothing within a short ride (Flow 3b · N1 board `N1none`): an inline card under the chips that caused it, saying what
+ * exists and how far (`nothingNearCopy`), never a bare radius; the map above still shows the dark beyond.
+ */
+export function NothingNear({ copy, ...ways }: NearWaysProps & { copy: { title: string; message: string } }) {
+  const bold = useBoldText()
+  return (
+    <View style={styles.nearCard} testID="pulse-nothing-near">
+      <CornerGlow color={COLOR.brandOrange} pointerEvents="none" style={StyleSheet.absoluteFill} />
+      <Text style={[font('heading', bold), styles.ink]} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header">
+        {copy.title}
+      </Text>
+      {copy.message ? (
+        <Text style={[font('meta', bold), styles.secondary]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="pulse-nothing-near-message">
+          {copy.message}
+        </Text>
+      ) : null}
+      <NearWays {...ways} />
+    </View>
+  )
+}
+
+/** The end of a Near me list (board `N1canada` `.endnote`): a hairline, that it is everything in reach, the ways on. */
+export function NearEnd({ span, ...ways }: NearWaysProps & { span: string }) {
+  const bold = useBoldText()
+  return (
+    <View style={styles.nearEnd} testID="pulse-near-end">
+      <Text style={[font('meta', bold), styles.secondary]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+        {`That’s everything within a short ride ${span}.`}
+      </Text>
+      <NearWays {...ways} />
+    </View>
+  )
+}
+
 /** The first load failed: nothing on screen, and the page says why with one way forward (not a thin banner over a blank page). */
 export function PulseLoadFailed({ onRetry }: { onRetry: () => void }) {
   return (
@@ -194,6 +242,29 @@ const styles = StyleSheet.create({
   },
   cityWords: { flex: 1, minWidth: 0 },
   quiet: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.md },
+  // Board `.fc` (as the friends card): 16 under the chips, 16 / 16 / 16 / 18 in, 8 between, 4 more above the buttons.
+  nearCard: {
+    marginHorizontal: SPACE.gutter,
+    marginTop: SPACE.lg,
+    paddingTop: SPACE.lg,
+    paddingRight: SPACE.lg,
+    paddingBottom: SPACE.lg,
+    paddingLeft: SPACE.lg + SPACE.xxs,
+    gap: SPACE.sm,
+    borderRadius: RADIUS.mediaInCard,
+    backgroundColor: COLOR.surface,
+    overflow: 'hidden',
+  },
+  nearWays: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginTop: SPACE.xs },
+  // Board `.endnote`: 18 under the last row, a hairline, 16 to the words, 10 between.
+  nearEnd: {
+    marginHorizontal: SPACE.gutter,
+    marginTop: SPACE.lg + SPACE.xxs,
+    paddingTop: SPACE.lg,
+    gap: SPACE.sm + SPACE.xxs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLOR.hairline,
+  },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })

@@ -9,6 +9,7 @@ import ScalePress from '../motion/ScalePress'
 import { SkeletonBlock } from '../Skeleton'
 import { PhotoStack, STACK_HEIGHT, STACK_WIDTH } from './PhotoStack'
 import type { Rect } from '../ds/chatShared'
+import { compactCount } from '../../lib/format'
 
 /** Flow 6 `me`: the header's text column sits 6 pt apart, between the 4 and 8 steps. */
 // design-exception: the frame's name block gap is 6
@@ -16,12 +17,6 @@ const IDENTITY_GAP = 6
 /** A stat draws at most four digits: past that it is compact ("12k", "1.2M"), or five would outgrow a column of the card. The spoken label keeps the true number. */
 export const STAT_MAX = 9999
 
-/** 12,345 → "12k", 1,234,567 → "1.2M"; anything up to 9,999 is left as it is (and rolls). */
-export function compactCount(n: number): string {
-  if (n <= STAT_MAX) return String(n)
-  if (n < 1_000_000) return `${Math.floor(n / 1000)}k`
-  return `${(Math.floor(n / 100_000) / 10).toString()}M`
-}
 /** The skeleton's blocks, at the final geometry (Flow 6 `me` 07). */
 const SKELETON = { name: 36, line: 16, button: 44, buttonWidth: 140, stats: 96, nights: 220 } as const
 

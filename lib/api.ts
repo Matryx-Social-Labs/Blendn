@@ -74,6 +74,12 @@ export function eventFromApi(e: EventPayload) {
       is_featured: e.isFeatured === true,
       /** The server's placement, once it sends one (C1): `kind` decides "Promoted". */
       featured: e.featured ?? null,
+      /** A paid placement, always said in words (admin #910); false from an older server. */
+      promoted: (e as { promoted?: unknown }).promoted === true,
+      /** Tickets apply (native or the organiser's page); false from an older server. */
+      ticketed: (e as { ticketed?: unknown }).ticketed === true,
+      /** The lowest price on sale, `{ minor, currency }`, or null: only ever drawn when it is well formed. */
+      from_price: priceOf((e as { fromPrice?: unknown }).fromPrice),
       is_favorited: e.isFavorited === true,
       /** "going" / "maybe" / …, from a server that sends it (SV-2); null from an older one. Read through a cast until the payload type declares it. */
       rsvp_status: e.rsvpStatus ?? null,
@@ -112,7 +118,7 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
  * One event, in the shape the app actually holds.
  *
  * Derived from `getEvents` rather than hand-written, because it was
- * hand-written three times — `app/(tabs)/events.tsx`, `app/nearby-events.tsx`
+ * hand-written three times — `app/(tabs)/events.tsx` (and the Nearby screen, removed in N1)
  * and `components/EventCard.tsx` each declared their own `Event`, and they are
  * passed to each other, so TypeScript compared them structurally and they had
  * already drifted. Correcting a single field in one of them produced
@@ -125,6 +131,12 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
  * where the error belongs.
  */
 type MappedEvent = ReturnType<typeof eventFromApi>
+
+/** A list item's `fromPrice` (admin #910), kept only when it is a positive amount in an ISO currency. */
+function priceOf(v: unknown): { minor: number; currency: string } | null {
+  const p = v as { minor?: unknown; currency?: unknown } | null
+  return p && typeof p.minor === 'number' && p.minor > 0 && typeof p.currency === 'string' && /^[A-Z]{3}$/.test(p.currency) ? { minor: p.minor, currency: p.currency } : null
+}
 
 export interface BlendnEvent extends MappedEvent {
   /**

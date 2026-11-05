@@ -1,6 +1,6 @@
 /**
  * The chips that are the Pulse's header (Flow 3 · Pulse, Option C, owner pick 2026-11-03), as plain data: Tonight and
- * This weekend with counts, Within 2 km where distance means something, one vibe from the week's data, then Filters.
+ * This weekend with counts, Near me where distance means something (N1), one vibe from the week's data, then Filters.
  *
  * Each chip is a filter the feed already takes (`lib/eventFilters.ts`), so a chip is lit exactly when its filter is on
  * and a count is the server's for the same query (`GET /events` `pagination.totalCount`): the number on the chip is what
@@ -8,12 +8,14 @@
  */
 
 import { appliedFilters, WHEN_LABELS, type AppliedFilter, type EventFilters } from './eventFilters'
+import { RIDE_KM } from './nearby'
 import { categoryChips, printable } from './pulseSections'
+import { compactCount } from './format'
 
 export type QuickKey = 'tonight' | 'weekend' | 'near' | 'vibe'
 
-/** "Within 2 km": the distance chip's radius. */
-export const NEAR_KM = 2
+/** "Near me" (Flow 3b · N1, SCRUM-1022): a short ride, the reach the list and the map's ring are drawn to. */
+export const NEAR_KM = RIDE_KM
 
 export type Vibe = { slug: string; name: string }
 
@@ -26,10 +28,10 @@ export type QuickChip = {
   accessibilityLabel: string
 }
 
-/** A chip's count as it is printed: five and up, grouped the US way. */
+/** A chip's count as it is printed: five and up, compact past 999 ("12k"). */
 export const chipCount = (n: number | null | undefined): string | undefined => {
   const shown = printable(n)
-  return shown === null ? undefined : shown.toLocaleString('en-US')
+  return shown === null ? undefined : compactCount(shown)
 }
 
 export function quickChips(input: {
@@ -42,12 +44,14 @@ export function quickChips(input: {
   const { filters, counts, nearOn, vibe } = input
   const chip = (key: QuickKey, label: string, selected: boolean, n?: number | null): QuickChip => {
     const count = chipCount(n)
-    return { key, label, count, selected, accessibilityLabel: count ? `${label}, ${count} events` : label }
+    // Heard whole: "This weekend, 12,480 events" for the chip that shows "12k".
+    return { key, label, count, selected, accessibilityLabel: count ? `${label}, ${(n as number).toLocaleString('en-US')} events` : label }
   }
   return [
+    // N1 board order: Tonight, Near me, This weekend, the vibe (Filters is the row's own last chip).
     chip('tonight', WHEN_LABELS.today, filters.when === 'today', counts.tonight),
+    ...(nearOn ? [chip('near', 'Near me', filters.radiusKm === NEAR_KM)] : []),
     chip('weekend', WHEN_LABELS.weekend, filters.when === 'weekend', counts.weekend),
-    ...(nearOn ? [chip('near', `Within ${NEAR_KM} km`, filters.radiusKm === NEAR_KM)] : []),
     ...(vibe ? [chip('vibe', vibe.name, filters.categorySlug === vibe.slug)] : []),
   ]
 }

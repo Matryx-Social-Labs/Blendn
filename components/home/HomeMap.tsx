@@ -40,8 +40,12 @@ import {
   type Pin,
   type PinQuery,
   withFocus,
+  withinReach,
+  reachShapes,
+  reachTarget,
   compassBelow,
 } from '../../lib/homeMap'
+import { getDistanceKm } from '../../lib/geo'
 import { Logger } from '../../lib/logger'
 import { useLocationSharing } from '../../lib/shareLocation'
 import {
@@ -56,12 +60,13 @@ import {
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
-import { SPACE } from '../../lib/theme'
+import { COLOR } from '../../lib/design/tokens'
+import { SPACE, tint } from '../../lib/theme'
 import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
 import { NearPins } from './NearPins'
-import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings } from './MapLitLayers'
+import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
 import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
 
 /** A pan settles before the server is asked; the lists allow 60 reads a minute. */
@@ -77,6 +82,8 @@ type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: 
 type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { id: string; kind: string; glow: number; color: string } }
 
 const NO_PINS: Pin[] = []
+/** A held move this close to the fix is a move to the person (the reach's frame sits about a kilometre off them). */
+const FIX_NEAR_KM = 2
 
 /** Our building tiles (stage 2), when this build has them; else OpenFreeMap's buildings everywhere. */
 const OWN_BUILDINGS_ENV = parseOwnBuildingsUrl(process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL)
@@ -158,6 +165,7 @@ export const HomeMap = memo(function HomeMap({
   fitNear,
   focus = null,
   locateLift,
+  reach = null,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
@@ -195,6 +203,8 @@ export const HomeMap = memo(function HomeMap({
   focus?: { pin: Pin; n: number } | null
   /** How far the Pulse's banners on the map lift "my location" (0 with none). */
   locateLift?: SharedValue<number>
+  /** Near me is on (Flow 3b · N1): where you stand. The map draws your reach and lights only what is inside it. */
+  reach?: { latitude: number; longitude: number } | null
 }) {
   const { width, height } = useWindowDimensions()
   /*
@@ -204,6 +214,8 @@ export const HomeMap = memo(function HomeMap({
    */
   const sharing = useLocationSharing()
   const center = sharing ? fix : null
+  // Near me's reach is the person's position too: none with the switch off, whatever the screen passes.
+  const reachHere = sharing ? reach : null
   const map = useRef<MapRef>(null)
   const camera = useRef<CameraRef>(null)
   // The person has moved the map (a pan, or a city picked): a fix no longer takes it over.
@@ -350,10 +362,46 @@ export const HomeMap = memo(function HomeMap({
   const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[] }>({ segment, pins: NO_PINS })
   const [now, setNow] = useState(() => Date.now())
   const focusPin = focus?.pin ?? null
-  const pins = useMemo(
-    () => withFocus(loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS, focusPin),
-    [loaded, segment, now, focusPin]
-  )
+  const pins = useMemo(() => {
+    const shown = withFocus(loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS, focusPin)
+    // Near me: only what you can reach lights (the dark beyond is the reach's own layer).
+    return reachHere ? withinReach(shown, reachHere) : shown
+  }, [loaded, segment, now, focusPin, reachHere])
+  const reachData = useMemo(() => (reachHere ? reachShapes(reachHere) : null), [reachHere])
+
+  /*
+   * Near me (owner pick (c), 2026-11-05): true distances, the camera fitted like the board. On, the map lies flat on you
+   * at the zoom that makes the 8 km ring span the phone (`reachZoom`); off, it tilts back to its own street view.
+   */
+  const reachOn = reachData !== null
+  // Through `moveTo`, the map's one way to move: a drawer settling or a fix arriving mid-ease re-issues this move whole
+  // (zoom and tilt), instead of stopping the camera half way out; and iOS gets the zoom it lands on (`tiltedZoom`).
+  const reachAt = useRef<[number, number] | null>(null)
+  // Whether the reach was drawn: an opt-out after Near me still owes the street view back, on the city.
+  const wasReach = useRef(false)
+  useEffect(() => {
+    if (reachOn) wasReach.current = true
+  }, [reachOn])
+  const cityOrFallback = (): [number, number] =>
+    cityCentre ? [cityCentre.longitude, cityCentre.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
+  useEffect(() => {
+    // The switch is read here too, not only through `reachHere`: an effect order must never put the camera on the fix.
+    if (reachOn && reachHere && sharing) {
+      const target = reachTarget(reachHere, { width, topChrome, drawerTop: drawer.half })
+      reachAt.current = [reachHere.longitude, reachHere.latitude]
+      moveTo({ to: target.centre, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: 0 } })
+      return
+    }
+    if (!reachOn) {
+      // Back to the street view: on you while sharing; after an opt-out, on the city, never where you were.
+      const back = sharing ? reachAt.current : null
+      const owed = wasReach.current
+      reachAt.current = null
+      wasReach.current = false
+      if (back) moveTo({ to: back, easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
+      else if (!sharing && owed) moveTo({ to: cityOrFallback(), easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
+    }
+  }, [reachOn]) // eslint-disable-line react-hooks/exhaustive-deps -- only turning Near me on or off moves the camera
 
   // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
   const startAt: [number, number] = center ? [center.longitude, center.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
@@ -435,6 +483,12 @@ export const HomeMap = memo(function HomeMap({
   // The switch goes off while the camera is following the fix: what was asked or held around the person is dropped, and the map goes to the city.
   useEffect(() => {
     if (sharing) return
+    // Before the early return for a moved map: nothing held may still point at the person (security review, 2026-11-05).
+    // The reach's return move, a drawer snap's re-issue of the last move, and a move held for the map to load.
+    const near = (to: [number, number] | undefined) => !!fix && !!to && getDistanceKm(to[1], to[0], fix.latitude, fix.longitude) <= FIX_NEAR_KM
+    reachAt.current = null
+    if (near(lastMove.current?.to)) lastMove.current = null
+    if (near(pendingMove.current?.to)) pendingMove.current = null
     if (touched.current) return
     // A read pending on a fix-centred view, the circle already answered around it, and the fix followed: none survives the switch.
     if (debounce.current) clearTimeout(debounce.current)
@@ -618,6 +672,21 @@ export const HomeMap = memo(function HomeMap({
           <GroundGlow data={lit.glow} visible={glowVisible} under={buildingLayerId} latitude={(cityCentre ?? fallbackCentre).latitude} />
           <LitBuildings data={lit.bands} onPress={openPlace} over={buildingLayerId} />
         </Fragment>
+        {/* Near me (board `ringAt`): dark beyond a short ride, the ride as a hairline, a 20-minute walk lit in ember. */}
+        {reachData ? (
+          <>
+            <GeoJSONSource id="reach-mask" data={reachData.mask}>
+              <Layer id="reach-mask-fill" type="fill" paint={{ 'fill-color': REACH.dark }} />
+            </GeoJSONSource>
+            <GeoJSONSource id="reach-ride" data={reachData.ride}>
+              <Layer id="reach-ride-line" type="line" paint={{ 'line-color': REACH.ride, 'line-width': 1 }} />
+            </GeoJSONSource>
+            <GeoJSONSource id="reach-walk" data={reachData.walk}>
+              <Layer id="reach-walk-fill" type="fill" paint={{ 'fill-color': REACH.walk }} />
+              <Layer id="reach-walk-edge" type="line" paint={{ 'line-color': REACH.walkEdge, 'line-width': 2 }} />
+            </GeoJSONSource>
+          </>
+        ) : null}
         <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
           <Layer
             id="pin-glow"
@@ -643,6 +712,7 @@ export const HomeMap = memo(function HomeMap({
           />
         </GeoJSONSource>
         <Chips chips={lit.chips} onOpen={open} />
+        {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
@@ -662,6 +732,14 @@ export const HomeMap = memo(function HomeMap({
     </>
   )
 })
+
+/** Near me's reach (board `ringAt`): the dark beyond at 58% ink, the ride ring at 28% white, the walk in ember at 16% / 75%. */
+const REACH = {
+  dark: tint(COLOR.ink, 0.58),
+  ride: tint(COLOR.textPrimary, 0.28),
+  walk: tint(COLOR.brandOrange, 0.16),
+  walkEdge: tint(COLOR.brandOrange, 0.75),
+} as const
 
 const styles = StyleSheet.create({
   // The map's own ground, so a jump between cities reads as the one surface fading, not a black flash.

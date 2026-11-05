@@ -76,6 +76,7 @@ import FileText from 'lucide-react-native/icons/file-text'
 import FileX from 'lucide-react-native/icons/file-x'
 import FingerprintPattern from 'lucide-react-native/icons/fingerprint-pattern'
 import Flag from 'lucide-react-native/icons/flag'
+import Footprints from 'lucide-react-native/icons/footprints'
 import Ghost from 'lucide-react-native/icons/ghost'
 import Gift from 'lucide-react-native/icons/gift'
 import GraduationCap from 'lucide-react-native/icons/graduation-cap'
@@ -239,6 +240,7 @@ const ICONS = {
   'file-x': FileX,
   'fingerprint-pattern': FingerprintPattern,
   flag: Flag,
+  footprints: Footprints,
   ghost: Ghost,
   gift: Gift,
   'graduation-cap': GraduationCap,
