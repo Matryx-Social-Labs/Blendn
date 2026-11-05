@@ -1762,6 +1762,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         <View style={styles.mainRow}>
           <EventCard
             kind="row"
+            // A search result is the board's result row: the time over the title, the photo on the right.
+            layout={isSearching ? 'result' : undefined}
             title={card.title}
             time={card.time}
             venue={card.venue}
@@ -2044,7 +2046,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
           >
             <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).text}</Text>
-            {` ${resultsCount(events.length, totalCount).noun}${selectedCity ? ` · ${selectedCity}` : ''}`}
+            {` ${resultsCount(events.length, totalCount).noun}`}
           </Text>
         </View>
       ) : null}
@@ -2218,9 +2220,10 @@ const styles = StyleSheet.create({
   /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
   dayRow: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
   /** "6 events · Bengaluru": the flat result's label. */
-  resultsLabel: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.md },
-  resultsLabelText: { ...DESIGN_TYPE.label, color: COLOR.textSecondary },
-  resultsCount: { fontFamily: FONT_FAMILY.mono[700], color: COLOR.textPrimary },
+  // Board "C · search": "12 events" right under the field, 24 in, 8 above the first row; the number in Geist Mono.
+  resultsLabel: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
+  resultsLabelText: { ...DESIGN_TYPE.meta, color: COLOR.textSecondary },
+  resultsCount: { fontFamily: FONT_FAMILY.mono[500] },
   /** The search/filter skeleton: rows spaced like the real ones. */
   narrowedSkeleton: { paddingHorizontal: SPACE.gutter, marginTop: SPACE.xl, gap: SPACE.md },
   moreSkeleton: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: 64 },

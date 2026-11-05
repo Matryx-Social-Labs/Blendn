@@ -11,6 +11,17 @@ it('caps the results overline at CONTROL_FONT_CAP', () => {
   expect(src).toMatch(/style=\{styles\.resultsLabelText\}\s+accessibilityRole="header"[\s\S]{0,600}maxFontSizeMultiplier=\{CONTROL_FONT_CAP\}/)
 })
 
+describe('the search results, as the board draws them (Flow 3 "C · search", owner 2026-11-05)', () => {
+  const src = readFileSync(join(__dirname, '../app/(tabs)/events.tsx'), 'utf8')
+  it('the count line is "12 events": the meta voice, the number in mono, no city after it', () => {
+    expect(src).toMatch(/resultsLabelText: \{ \.\.\.DESIGN_TYPE\.meta, color: COLOR\.textSecondary \}/)
+    expect(src).toMatch(/\{` \$\{resultsCount\(events\.length, totalCount\)\.noun\}`\}/)
+  })
+  it('a search result is the result row (time over the title, the photo right); a filtered list keeps its own row', () => {
+    expect(src).toMatch(/layout=\{isSearching \? 'result' : undefined\}/)
+  })
+})
+
 import { resultsCount } from '../lib/pulseSections'
 
 describe('resultsCount (BAR-07)', () => {
