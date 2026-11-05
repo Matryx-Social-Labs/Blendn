@@ -104,7 +104,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   useEffect(() => {
     if (target.state === 'live' || (blendnOpen && target.state === 'checkin')) markCoachUsed('centre_button_checkin')
   }, [target.state, blendnOpen])
-  // Drawn by the root's CoachMarkHost: the disc is the hole, the tip above (c)'s "Check in · {venue}" pill, a `SIZE.tag` tall.
+  // Drawn by the root's CoachMarkHost: the disc is the hole, the tip above (c)'s pin-and-venue pill, a `SIZE.tag` tall.
   const discRef = useRef<View>(null)
   useCoachMarkSpot(centreCoach.visible && checkInVenue !== null, {
     target: discRef,

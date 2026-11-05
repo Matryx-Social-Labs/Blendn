@@ -318,7 +318,7 @@ describe('settling into the compact pill (SCRUM-1023, tab-bar board option B)', 
     // The disc's top edge comes down (1 − 44/56) × 28 = 6 pt inside its slot; the slot itself drops 6 with the row.
     expect(tx('disc-label-slot').translateY).toBeCloseTo((1 - SIZE.discCompact / SIZE.disc) * (SIZE.disc / 2), 6)
     expect(tx('disc-label-slot').scale).toBeUndefined()
-    expect(screen.getByText('Check in · Toit', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('Toit', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('compact: the tabs keep their names as accessibility labels, and 56 pt targets', async () => {

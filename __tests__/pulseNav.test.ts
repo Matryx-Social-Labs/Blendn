@@ -98,7 +98,7 @@ describe('the stylesheet, frame 1141:4643', () => {
 
 describe('the bar does not clip what rises above the disc', () => {
   /*
-   * The disc's (c) label, "Check in · Toit", rises above the 64 pt capsule
+   * The disc's (c) pill (a pin and "Toit") rises above the 64 pt capsule
    * (Flow 4 T10). The glass is a layer behind the row, not a clipping parent
    * around it, so nothing above the bar is cut off (components/ds/TabBar).
    */

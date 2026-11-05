@@ -14,6 +14,7 @@ import { DISC_FRAMES, discLook, discReentry, discTransition, type DiscLook, type
 import { H } from '../lib/haptics'
 import { DURATION, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
 import type { RoomButtonTarget } from '../lib/roomButton'
+import { rowThatOverflows, slotOf, WORST } from './helpers/longText'
 
 jest.mock('../lib/haptics', () => ({ H: { disc: jest.fn() } }))
 jest.mock('react-native-reanimated', () => {
@@ -214,7 +215,8 @@ describe('<Disc>', () => {
   it.each([
     ['a', 'See what’s on near you'],
     ['b', 'Open tonight’s event'],
-    ['c', 'You’re at Toit. Check in to see who else is here'],
+    // Owner, 2026-11-05: "Check in" left the pill for the label, which names the place.
+    ['c', 'Check in at Toit. See who else is here'],
     ['d', 'Open the room'],
     ['dn', 'Open the room. 3 unread messages'],
   ] as const)('(%s) is a button that says “%s”', async (look, label) => {
@@ -225,28 +227,53 @@ describe('<Disc>', () => {
 
   it('(c) inside two fences says how many, to the eye and to a screen reader (BAR-06)', async () => {
     await draw('c', { here: 2 })
-    expect(screen.getByText('Check in · 2 here', HIDDEN)).toBeTruthy()
-    expect(screen.queryByText('Check in · Toit', HIDDEN)).toBeNull()
+    expect(screen.getByText('2 here', HIDDEN)).toBeTruthy()
+    expect(screen.queryByText('Toit', HIDDEN)).toBeNull()
     expect(screen.getByRole('button').props.accessibilityLabel).toBe('You’re at 2 events. Check in to see who else is here')
     // Two events and no venue name: still the count, in the label a screen reader reads.
     await draw('c', { here: 2, venue: undefined })
     expect(screen.getByRole('button').props.accessibilityLabel).toBe('You’re at 2 events. Check in to see who else is here')
     await draw('c', { here: 1 })
-    expect(screen.getByText('Check in · Toit', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('Toit', HIDDEN)).toBeTruthy()
   })
 
-  it('(c) wears “Check in · {venue}” above the disc; no other state does', async () => {
+  /*
+   * Owner, 2026-11-05, option (b): the pill no longer glues static words onto a variable name. A pin and the venue alone,
+   * the venue taking the whole pill and cut at its end; "Check in" is in the accessibility label.
+   */
+  it('(c) wears a pin and the venue alone above the disc; no other state does', async () => {
     await draw('c')
-    expect(screen.getByText('Check in · Toit', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('Toit', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('disc-label-icon', HIDDEN)).toBeTruthy()
+    expect(screen.queryByText(/Check in/, HIDDEN)).toBeNull()
     for (const look of ['a', 'b', 'd', 'dn'] as const) {
       await draw(look)
-      expect(screen.queryByText(/Check in/, HIDDEN)).toBeNull()
+      expect(screen.queryByTestId('disc-label', HIDDEN)).toBeNull()
     }
+  })
+
+  it('(c) with no venue name still says what it is for', async () => {
+    await draw('c', { venue: undefined })
+    expect(screen.getByText('Check in', HIDDEN)).toBeTruthy()
+  })
+
+  it('(c) the label pill names the action for whoever can reach it: “Check in at {venue}”', async () => {
+    await draw('c')
+    expect(screen.getByTestId('disc-label', HIDDEN).props.accessibilityLabel).toBe('Check in at Toit')
+  })
+
+  it('(c) the longest venue takes one line, cut at its end, and its row gives way rather than running under a sibling', async () => {
+    await draw('c', { venue: WORST.venue })
+    const name = screen.getByText(WORST.venue, HIDDEN) as never
+    expect(slotOf(name)).toEqual({ lines: 1, ellipsize: 'tail' })
+    expect(rowThatOverflows(name)).toBeNull()
+    // Control: the pin is a fixed 16 pt beside it, never the thing that gives way.
+    expect(screen.getByTestId('disc-label-icon', HIDDEN)).toBeTruthy()
   })
 
   it('… hidden from screen readers: the disc says it, with the consequence', async () => {
     await draw('c')
-    expect(screen.queryByText('Check in · Toit')).toBeNull()
+    expect(screen.queryByText('Toit')).toBeNull()
   })
 
   it('(c) without a venue still says what the tap does', async () => {
@@ -295,7 +322,7 @@ describe('<Disc>', () => {
   it('tapping the (c) label is tapping the disc', async () => {
     const onPress = jest.fn()
     await draw('c', { onPress })
-    await fireEvent.press(screen.getByText('Check in · Toit', HIDDEN))
+    await fireEvent.press(screen.getByText('Toit', HIDDEN))
     expect(onPress).toHaveBeenCalledTimes(1)
   })
 

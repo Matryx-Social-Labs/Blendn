@@ -66,7 +66,7 @@ export function tabBarGeometry(screenWidth: number) {
 }
 
 /**
- * How far the centre button's "Check in · {venue}" pill (components/ds/Disc)
+ * How far the centre button's venue pill (components/ds/Disc)
  * rises above the bar's top edge: the disc is centred in the bar, the pill sits
  * `SPACE.md` over it (8 over the bar's top edge) and is a `SIZE.tag` tall. Whatever floats over the bar
  * (the Android snackbar) clears it.
