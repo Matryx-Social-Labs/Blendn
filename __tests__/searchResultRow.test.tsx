@@ -19,7 +19,10 @@ it('result: the time first in mono, the title, then "at venue · distance"; the 
   const time = screen.getByText('Sun · 12 PM')
   expect(flat(time.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
   expect(screen.getByText('Jazz brunch on the lawn')).toBeTruthy()
-  expect(screen.getByText(/^at Olive Beach · /)).toBeTruthy()
+  // "at venue" and its distance are two slots: the venue gives way, the distance stays (owner 2026-11-05).
+  expect(screen.getByTestId('r-venue')).toHaveTextContent('at Olive Beach')
+  expect(screen.getByTestId('r-distance')).toHaveTextContent('· 2.2 km')
+  expect(flat(screen.getByTestId('r-distance').props.style).flexShrink).toBe(0)
   const thumb = flat(screen.getByTestId('r-thumb').props.style)
   expect(thumb).toMatchObject({ width: 72, height: 72, borderRadius: 16 })
   // The photo is on the right: drawn after the words.
