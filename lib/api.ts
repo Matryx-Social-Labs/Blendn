@@ -118,7 +118,7 @@ export async function getEvents(params?: EventsParams, options?: { force?: boole
  * One event, in the shape the app actually holds.
  *
  * Derived from `getEvents` rather than hand-written, because it was
- * hand-written three times — `app/(tabs)/events.tsx`, `app/nearby-events.tsx`
+ * hand-written three times — `app/(tabs)/events.tsx` (and the Nearby screen, removed in N1)
  * and `components/EventCard.tsx` each declared their own `Event`, and they are
  * passed to each other, so TypeScript compared them structurally and they had
  * already drifted. Correcting a single field in one of them produced

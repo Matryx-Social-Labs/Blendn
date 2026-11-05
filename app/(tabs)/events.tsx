@@ -1,6 +1,6 @@
 import { ScreenProfiler } from '../../lib/perf'
 import * as Location from 'expo-location'
-import { router, useScrollToTop } from 'expo-router'
+import { router, useLocalSearchParams, useScrollToTop } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Dimensions,
@@ -43,6 +43,8 @@ import { HomeShell, type HomeBrowse, type PulseShell } from '../../components/ho
 import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
 import { pinsFor } from '../../lib/homeMap'
 import { vibeOf, type Vibe } from '../../lib/pulseChips'
+import { groupByWhen, SEE_ALL_KINDS, seeAllFilters, type SeeAllKind } from '../../lib/nearby'
+import { NearbyRow, WhenHeading } from '../../components/pulse/NearbyRow'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useLocationSharing } from '../../lib/shareLocation'
 import { useReducedMotion } from '../../lib/motion'
@@ -147,6 +149,7 @@ type PulseRow =
   | { kind: 'body'; key: 'body' }
   | { kind: 'day'; key: string; title: string; weekday: string }
   | { kind: 'event'; key: string; event: Event }
+  | { kind: 'when'; key: string; title: string; count: number; note?: string }
 
 /** The chips are data row 0, under the list's banner header (index 0): the sticky one is cell 1 (Option C: the chips are the header). */
 const STICKY_CHIPS = [1]
@@ -511,6 +514,35 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * over a filtered set is not what the word means.
    */
   const isNarrowed = isSearching || hasActiveFilters(filters)
+
+  /*
+   * Every "See all" is a chip on this same list (Flow 3b · N1; the Nearby screen is gone): its question, asked here, from
+   * the top. A link or the Tonight deck arrives as `?seeAll=` and is applied once.
+   */
+  const seeAll = useCallback(
+    (kind: SeeAllKind, extra?: { categorySlug?: string }) => {
+      setFilters(seeAllFilters(kind, extra))
+      listRef.current?.scrollToOffset({ offset: 0, animated: !reduceMotion })
+    },
+    [reduceMotion]
+  )
+  const params = useLocalSearchParams<{ seeAll?: string; categorySlug?: string }>()
+  const linked = params.seeAll && SEE_ALL_KINDS.includes(params.seeAll as SeeAllKind) ? (params.seeAll as SeeAllKind) : null
+  // Applied during render (as the city's inputs are), once per arrival; the effect below only clears the link's params.
+  const [seenLink, setSeenLink] = useState<string | null>(null)
+  const linkKey = linked ? `${linked}|${params.categorySlug ?? ''}` : null
+  if (linkKey && linkKey !== seenLink) {
+    setSeenLink(linkKey)
+    setFilters(seeAllFilters(linked!, { categorySlug: params.categorySlug }))
+  } else if (!linkKey && seenLink) {
+    // Its params cleared: the same chip linked again later is a new arrival.
+    setSeenLink(null)
+  }
+  useEffect(() => {
+    if (!linkKey) return
+    listRef.current?.scrollToOffset({ offset: 0, animated: false })
+    router.setParams({ seeAll: undefined, categorySlug: undefined })
+  }, [linkKey])
 
   const changeSearchInput = useCallback((next: string) => setSearchInput(next), [setSearchInput])
 
@@ -1631,7 +1663,18 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const chosen = category && chips.some((c) => c.slug === category) ? category : null
   const rows = useMemo<PulseRow[]>(() => {
     // Under a chip the lead holds that chip's Featured: the flat list below does not draw them twice.
-    if (isNarrowed) return events.filter((e) => !leadEvents.includes(e)).map((event) => ({ kind: 'event' as const, key: event.id, event }))
+    // A search is the result, flat. Under a chip (Near me, Tonight, …) the list groups by when, in plain words (N1).
+    if (isSearching) return events.map((event) => ({ kind: 'event' as const, key: event.id, event }))
+    if (isNarrowed) {
+      return groupByWhen(
+        events.filter((e) => !leadEvents.includes(e)),
+        now,
+        cityZone
+      ).flatMap((g) => [
+        { kind: 'when' as const, key: `when-${g.key}`, title: g.title, count: g.events.length, note: g.note },
+        ...g.events.map((event) => ({ kind: 'event' as const, key: event.id, event })),
+      ])
+    }
     const shown = (chosen ? rest.filter((e) => e.category_group === chosen) : rest)
       .slice()
       .sort((a, b) => Date.parse(liveWindow(a).start_time) - Date.parse(liveWindow(b).start_time))
@@ -1639,7 +1682,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       { kind: 'day' as const, key: `day-${group.key}`, title: group.title, weekday: group.weekday },
       ...group.items.map((event) => ({ kind: 'event' as const, key: event.id, event })),
     ])
-  }, [isNarrowed, events, rest, chosen, now, leadEvents])
+  }, [isNarrowed, isSearching, events, rest, chosen, now, leadEvents, cityZone])
 
   /*
    * The first card the page draws, the coach mark's hole: the first section's
@@ -1660,6 +1703,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const renderRow = useCallback(({ item, index }: { item: PulseRow; index: number }) => {
     if (item.kind === 'chips' || item.kind === 'body') return <PulseSlot slot={item.kind} />
+    if (item.kind === 'when') return <WhenHeading title={item.title} count={item.count} note={item.note} />
     if (item.kind === 'day') {
       return (
         <View style={styles.dayRow}>
@@ -1668,6 +1712,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       )
     }
     const event = item.event
+    if (isNarrowed && !isSearching) {
+      return <NearbyRow event={event} now={now} withDistance={hasFix} onPress={handleEventPress} onPressIn={warmEvent} />
+    }
     if (isNarrowed) {
       const card = homeCardProps(event, now, hasFix)
       return (
@@ -1711,7 +1758,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         />
       </RevealRow>
     )
-  }, [isNarrowed, sections.length, firstRowId, now, hasFix, checkinStatuses, interestStatuses, handleEventPress, openPeek, peekRow, warmEvent, toggleInterest])
+  }, [isNarrowed, isSearching, sections.length, firstRowId, now, hasFix, checkinStatuses, interestStatuses, handleEventPress, openPeek, peekRow, warmEvent, toggleInterest])
   const keyExtractor = useCallback((item: PulseRow) => item.key, [])
 
   const askForLocation = useCallback(() => {
@@ -1963,6 +2010,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           pending={mainRowsRevealPending}
           askForLocation={!userLocation && (locationStatus === 'denied' || locationStatus === 'undetermined') ? { denied: locationStatus === 'denied', onAsk: askForLocation } : null}
           timeZone={cityZone}
+          onSeeAll={seeAll}
         />
       ) : null}
       {!isNarrowed && rows.length > 0 ? (

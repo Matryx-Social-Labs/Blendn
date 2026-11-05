@@ -120,8 +120,26 @@ export function nativeIntentPath(path: string): string {
   if (__DEV__ && KEEPS_ITS_QUERY.some((re) => re.test(path))) return path
   const n = normalise(path)
   if (n.host !== null && !OUR_HOSTS.has(n.host)) return '/'
+  if (n.segments.length === 1 && n.segments[0].toLowerCase() === 'nearby-events') return nearbyRedirect(path)
   const target = targetOf(n)
   return target ? routeFor(target) : `/${n.segments.join('/')}${chatQuery(n.segments, path)}`
+}
+
+/** The See-all questions the old Nearby screen took as `filter` (Flow 3b · N1: it is a Pulse chip now, SCRUM-1022). */
+const SEE_ALL_KINDS: ReadonlySet<string> = new Set(['live', 'tonight', 'nearby', 'forYou', 'weekend'])
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
+
+/**
+ * `/nearby-events?filter=…` (an old link, a push, an installed build's See all) lands on the Pulse with that chip on:
+ * `/events?seeAll=<kind>`, plus the interest's slug for For you. Only these two values ride along, each checked; an
+ * unknown filter is Near me, the old screen's own default.
+ */
+function nearbyRedirect(path: string): string {
+  const query = new URLSearchParams(path.split('#', 1)[0].split('?')[1] ?? '')
+  const filter = query.get('filter') ?? ''
+  const kind = SEE_ALL_KINDS.has(filter) ? filter : 'nearby'
+  const slug = query.get('categorySlug') ?? ''
+  return `/events?seeAll=${kind}${kind === 'forYou' && SLUG.test(slug) ? `&categorySlug=${slug}` : ''}`
 }
 
 /**

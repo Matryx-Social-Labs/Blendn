@@ -53,18 +53,18 @@ function Tag({ icon, text, lit = false }: { icon?: IconName; text: string; lit?:
  * then a 56 pt photo, the name in two lines, where, and the tags in a fixed order: Promoted, reach, price, people. Live
  * says LIVE and "till 10 PM". A price only when a ticket is on sale; people only from five; no reach without a fix.
  */
-export const NearbyRow = memo(function NearbyRow({
+function NearbyRowImpl<E extends RowEvent>({
   event,
   now,
   withDistance,
   onPress,
   onPressIn,
 }: {
-  event: RowEvent
+  event: E
   now: number
   withDistance: boolean
-  onPress: (event: RowEvent) => void
-  onPressIn?: (event: RowEvent) => void
+  onPress: (event: E) => void
+  onPressIn?: (event: E) => void
 }) {
   const bold = useBoldText()
   const live = isLiveNow(event, now)
@@ -125,7 +125,8 @@ export const NearbyRow = memo(function NearbyRow({
       </View>
     </Pressable>
   )
-})
+}
+export const NearbyRow = memo(NearbyRowImpl) as typeof NearbyRowImpl
 
 /** A time group's heading (board `.gh`): the words, the count in Geist Mono, and its end on the right ("by 9:10 PM"). */
 export function WhenHeading({ title, count, note }: { title: string; count: number; note?: string }) {

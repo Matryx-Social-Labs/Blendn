@@ -63,3 +63,17 @@ describe('every "See all" is a chip', () => {
     expect(seeAllFilters('weekend')).toEqual({ ...NO_FILTERS, when: 'weekend' })
   })
 })
+
+describe('the Nearby screen is gone; its links land on the Pulse with the chip (N1)', () => {
+  const { nativeIntentPath } = jest.requireActual('../lib/shareLinks') as typeof import('../lib/shareLinks')
+  it('each See-all link keeps its question', () => {
+    expect(nativeIntentPath('/nearby-events?filter=tonight')).toBe('/events?seeAll=tonight')
+    expect(nativeIntentPath('/nearby-events?filter=live')).toBe('/events?seeAll=live')
+    expect(nativeIntentPath('/nearby-events?filter=forYou&categorySlug=music')).toBe('/events?seeAll=forYou&categorySlug=music')
+    expect(nativeIntentPath('blendn://nearby-events')).toBe('/events?seeAll=nearby')
+  })
+  it('nothing else rides along: an unknown filter is Near me, a bad slug is dropped', () => {
+    expect(nativeIntentPath('/nearby-events?filter=drop%20table')).toBe('/events?seeAll=nearby')
+    expect(nativeIntentPath('/nearby-events?filter=forYou&categorySlug=<script>')).toBe('/events?seeAll=forYou')
+  })
+})

@@ -727,7 +727,6 @@ function RootLayout() {
         `preview/profile` opened with a "< (tabs)" bar across its hero.
       */}
       <Stack.Screen name="preview" options={{ headerShown: false }} />
-      <Stack.Screen name="nearby-events" options={{ headerShown: false }} />
       {/* Notifications (the bell opens it) and its settings, from the ⋯ and from Settings. */}
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="message-requests" options={{ headerShown: false }} />

@@ -92,7 +92,8 @@ export function groupByWhen<E extends WhenEvent>(events: readonly E[], now: numb
     .map(({ rank: _rank, ...g }) => ({ ...g, events: [...g.events].sort((a, b) => startOf(a) - startOf(b)) }))
 }
 
-export type SeeAllKind = 'live' | 'tonight' | 'nearby' | 'forYou' | 'weekend'
+export const SEE_ALL_KINDS = ['live', 'tonight', 'nearby', 'forYou', 'weekend'] as const
+export type SeeAllKind = (typeof SEE_ALL_KINDS)[number]
 
 /** The chip a "See all" lands on (Pulse, N1): its section's question, asked of the same list. */
 export function seeAllFilters(kind: SeeAllKind, extra: { categorySlug?: string } = {}): EventFilters {
