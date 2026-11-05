@@ -42,7 +42,7 @@ import {
   withFocus,
   withinReach,
   reachShapes,
-  reachZoom,
+  reachTarget,
   compassBelow,
 } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
@@ -374,8 +374,9 @@ export const HomeMap = memo(function HomeMap({
   const reachAt = useRef<[number, number] | null>(null)
   useEffect(() => {
     if (reachOn && reach) {
+      const target = reachTarget(reach, { width, topChrome, drawerTop: drawer.half })
       reachAt.current = [reach.longitude, reach.latitude]
-      moveTo({ to: reachAt.current, easeMs: MAP_THEME.camera.easeMs, at: { zoom: reachZoom(reach.latitude, width), pitch: 0 } })
+      moveTo({ to: target.centre, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: 0 } })
     } else if (reachAt.current) {
       moveTo({ to: reachAt.current, easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
       reachAt.current = null

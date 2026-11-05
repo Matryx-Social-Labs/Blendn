@@ -140,3 +140,22 @@ describe('the zoom that frames the reach (owner pick (c)): the 8 km ring at the 
     expect(reachZoom(43.65, 393)).toBeLessThan(reachZoom(12.97, 393))
   })
 })
+
+describe('where the reach sits (board `ringAt`: its centre 100 pt above the drawer at rest)', () => {
+  const { reachTarget, reachZoom } = jest.requireActual('../lib/homeMap') as typeof import('../lib/homeMap')
+  const you = { latitude: 12.9784, longitude: 77.6408 }
+  it('the camera centre is moved so you land 100 pt above the drawer, not in the middle of the map', () => {
+    // iPhone 17: the map's top chrome ends at 112, the drawer rests at 354; the middle would be 233, the board wants 254.
+    const t = reachTarget(you, { width: 402, topChrome: 112, drawerTop: 354 })
+    expect(t.zoom).toBeCloseTo(reachZoom(you.latitude, 402), 6)
+    const metresPerPt = 8000 / (402 / 2 - 20)
+    const shiftPt = ((you.latitude - t.centre[1]) * 110_574) / metresPerPt
+    // You are 21 pt below the middle, so the camera's centre sits 21 pt north of you.
+    expect(shiftPt).toBeCloseTo(233 - 254, 0)
+    expect(t.centre[0]).toBe(you.longitude)
+  })
+  it('when the middle is already 100 pt above the drawer, the centre is you (the control)', () => {
+    const t = reachTarget(you, { width: 402, topChrome: 154, drawerTop: 354 })
+    expect(t.centre).toEqual([you.longitude, you.latitude])
+  })
+})

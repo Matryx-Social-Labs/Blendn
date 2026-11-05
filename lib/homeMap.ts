@@ -553,6 +553,25 @@ export function reachZoom(latitude: number, widthPt: number, rideKm: number = 8)
   return Math.log2((EARTH_CIRCUMFERENCE_M * Math.cos((latitude * Math.PI) / 180)) / (WORLD_PT * metresPerPt))
 }
 
+/** Board `ringAt`: the reach's centre sits 100 pt above the drawer at rest (236 on a 336 drawer). */
+const REACH_ABOVE_DRAWER_PT = 100
+/** Metres in a degree of latitude (near enough everywhere for a few points' nudge). */
+const METRES_PER_DEGREE_LAT = 110_574
+
+/**
+ * Where the camera goes when Near me turns on: flat at `reachZoom`, its centre moved north or south so that you land
+ * 100 pt above the drawer as on the board, not in the middle of the map the drawer leaves.
+ */
+export function reachTarget(you: LatLng, s: { width: number; topChrome: number; drawerTop: number }): { centre: [number, number]; zoom: number } {
+  const zoom = reachZoom(you.latitude, s.width)
+  const middle = (s.topChrome + s.drawerTop) / 2
+  const shiftPt = middle - (s.drawerTop - REACH_ABOVE_DRAWER_PT)
+  if (shiftPt === 0) return { centre: [you.longitude, you.latitude], zoom }
+  const metresPerPt = 8000 / (s.width / 2 - REACH_SIDE_PT)
+  // Up the screen is north: to land lower than the middle, the camera looks at a point north of you.
+  return { centre: [you.longitude, you.latitude - (shiftPt * metresPerPt) / METRES_PER_DEGREE_LAT], zoom }
+}
+
 /** The pins inside the short ride: only these light while Near me is on. */
 export function withinReach<P extends LatLng>(pins: readonly P[], c: LatLng, rideKm: number = 8): P[] {
   return pins.filter((p) => getDistanceKm(c.latitude, c.longitude, p.latitude, p.longitude) <= rideKm)

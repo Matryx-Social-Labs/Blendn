@@ -151,7 +151,7 @@ describe('the camera frames the reach (owner pick (c), 2026-11-05): true distanc
     expect(framing()).toHaveLength(0)
   })
 
-  it('on: one stop, flat, centred on you, at the zoom that puts the 8 km ring at the board’s radius', async () => {
+  it('on: one stop, flat, on you, at the zoom that puts the 8 km ring at the board’s radius', async () => {
     const { reachZoom } = jest.requireActual('../lib/homeMap') as typeof import('../lib/homeMap')
     // As on the phone: the map is up, then the chip goes on.
     const view = await render(map(null))
@@ -161,7 +161,10 @@ describe('the camera frames the reach (owner pick (c), 2026-11-05): true distanc
     await settle()
     const framed = framing()
     expect(framed).toHaveLength(1)
-    expect(framed[0].center).toEqual([FIX.longitude, FIX.latitude])
+    // On you, moved north or south so you land 100 pt above the drawer as on the board (`reachTarget`).
+    const { reachTarget } = jest.requireActual('../lib/homeMap') as typeof import('../lib/homeMap')
+    const { Dimensions: D } = jest.requireActual('react-native')
+    expect(framed[0].center).toEqual(reachTarget(FIX, { width: D.get('window').width, topChrome: 90, drawerTop: SHEET.half }).centre)
     const { Dimensions } = jest.requireActual('react-native')
     const flat = reachZoom(FIX.latitude, Dimensions.get('window').width)
     // iOS is asked for a little less, the zoom it lands on once flat from the tilt it starts at (`tiltedZoom`).
