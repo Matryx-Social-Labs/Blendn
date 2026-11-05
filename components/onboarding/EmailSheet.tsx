@@ -11,7 +11,7 @@ import { Material } from '../ui/Material'
 import { Backdrop, ORB_LEVEL } from './Backdrop'
 import { barTop } from '../../lib/barGeometry'
 import { DURATION, EASING, RADIUS, SPACE } from '../../lib/design/tokens'
-import { emailSheet, handover, landingUnder, NO_SHEET, revealOffset, SHEET, sheetHeight } from '../../lib/emailSheet'
+import { emailSheet, handover, inContent, landingUnder, NO_SHEET, revealOffset, SHEET, sheetHeight } from '../../lib/emailSheet'
 import { useReducedMotion } from '../../lib/motion'
 
 /*
@@ -129,14 +129,22 @@ export function EmailSheet({ title, children, dock, reveal, drivesLanding = fals
   const show = (name?: string | null) => {
     const box = name ? boxes.current.get(name) : undefined
     if (!box) return
-    const floor = (boxes.current.get('switch')?.bottom ?? 0) + SHEET.gap
-    scroll.current?.scrollTo({ y: revealOffset(box, view.current.visible, view.current.content, floor), animated: !reduceMotion })
+    // With the keys up the title has stepped aside (its block is 0); at rest it is there.
+    const titleBlock = Keyboard.isVisible() ? 0 : titleH.get() + (titleH.get() > 0 ? SHEET.titleGap : 0)
+    const field = inContent(box, titleBlock)
+    const floor = inContent(boxes.current.get('switch') ?? { top: 0, bottom: 0 }, titleBlock).bottom + SHEET.gap
+    scroll.current?.scrollTo({ y: revealOffset(field, view.current.visible, view.current.content, floor), animated: !reduceMotion })
   }
-  // On a new focus, and once the keyboard has landed (the sheet's room is known then).
+  // On a new focus, and once the keyboard has landed (the sheet's room is known then); when it goes, back to the top,
+  // so the title that steps back in is never left scrolled away (a drive: sign-up opened 54 pt down, its title gone).
   useEffect(() => {
     show(reveal)
-    const sub = KeyboardEvents.addListener('keyboardDidShow', () => show(reveal))
-    return () => sub.remove()
+    const shown = KeyboardEvents.addListener('keyboardDidShow', () => show(reveal))
+    const hidden = KeyboardEvents.addListener('keyboardDidHide', () => scroll.current?.scrollTo({ y: 0, animated: !reduceMotion }))
+    return () => {
+      shown.remove()
+      hidden.remove()
+    }
   }, [reveal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Under a sheet over it (forgot-password over sign-in) this one steps out of sight, and comes back with Back.

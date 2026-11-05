@@ -237,6 +237,7 @@ export function Button({
   const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : font('button', bold)
   const outlined = contrast && (kind === 'secondary' || kind === 'tertiary')
   const settled = useSettled(count)
+  const [sentenceWidth, setSentenceWidth] = useState(0)
   const swap = useLabelSwap(label, count === undefined)
   const [before, after = ''] = count === undefined ? [swap.shown, ''] : label.split('{n}')
   // The sentence a screen reader gets: the number formatted in, and only once it has stopped changing.
@@ -291,15 +292,21 @@ export function Button({
           {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={glyphInk} /> : null)}
           {count !== undefined ? (
             // A rolling number is a row of columns, not a run of text: the sentence is a row, a word space apart.
-            <View style={styles.sentence}>
+            // It keeps the widest it has been, so a count losing a digit (10 → 9, "Resend in 9s") moves only the digits.
+            <View
+              testID={testID && `${testID}-sentence`}
+              onLayout={(e) => setSentenceWidth((w) => Math.max(w, e.nativeEvent.layout.width))}
+              style={[styles.sentence, sentenceWidth > 0 ? { minWidth: sentenceWidth } : null]}
+            >
               {before.trim() ? (
-                <Text style={[labelFont, { color: ink }]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
+                <Text style={[labelFont, { color: ink }, glued(before, 'end') && styles.gluedBefore]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
                   {before.trim()}
                 </Text>
               ) : null}
               <RollingNumber value={count} role="button" grouping color={ink} testID={testID && `${testID}-count`} />
               {after.trim() ? (
-                <Text style={[labelFont, { color: ink }]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
+                // A unit written against the number ("{n}s") is drawn against it, not a word space away.
+                <Text style={[labelFont, { color: ink }, glued(after, 'start') && styles.gluedAfter]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
                   {after.trim()}
                 </Text>
               ) : null}
@@ -350,6 +357,9 @@ export function Button({
   )
 }
 
+/** Whether the words touch the number on that side: "{n}s" ("Resend in 30s") is, "{n} places" is not. */
+const glued = (words: string, side: 'start' | 'end') => (side === 'start' ? !/^\s/.test(words) : !/\s$/.test(words))
+
 const styles = StyleSheet.create({
   inline: { alignSelf: 'flex-start' },
   pressedIos: { transform: [{ scale: PRESS.scale }] },
@@ -359,6 +369,8 @@ const styles = StyleSheet.create({
   bodyText: { paddingHorizontal: 0 },
   content: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   sentence: { flexDirection: 'row', alignItems: 'center', columnGap: SPACE.xs },
+  gluedBefore: { marginRight: -SPACE.xs },
+  gluedAfter: { marginLeft: -SPACE.xs },
   hidden: { opacity: 0 },
   clip: { overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },

@@ -64,6 +64,12 @@ export function revealOffset(field: { top: number; bottom: number }, visible: nu
   return y
 }
 
+/** A field's box from its stack (under the title) to the scroll's own coordinates: the pad, and the title's block while it shows. */
+export function inContent(box: { top: number; bottom: number }, titleBlock: number): { top: number; bottom: number } {
+  const shift = SHEET.padTop + titleBlock
+  return { top: box.top + shift, bottom: box.bottom + shift }
+}
+
 const ramp = (p: number, from: number, to: number) => {
   'worklet'
   return Math.min(1, Math.max(0, (p - from) / (to - from)))

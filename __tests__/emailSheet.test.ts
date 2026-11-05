@@ -9,6 +9,7 @@
 import {
   SHEET,
   handover,
+  inContent,
   lockupShown,
   revealOffset,
   sheetCeiling,
@@ -84,5 +85,14 @@ describe('lockupShown', () => {
     expect(lockupShown(300, 288)).toBeCloseTo(0.5, 5)
     expect(lockupShown(288, 288)).toBe(0)
     expect(lockupShown(120, 288)).toBe(0)
+  })
+})
+
+describe('inContent (a field’s box in the scroll’s own coordinates)', () => {
+  // A SheetItem reports its box in the stack under the title; the scroll counts from its own top: the 24 pt pad, then
+  // the title's block while it shows. A drive found the sign-up form scrolled by exactly that block (54 pt) without it.
+  it('adds the pad, and the title’s block while the title shows', () => {
+    expect(inContent({ top: 64, bottom: 144 }, 0)).toEqual({ top: 88, bottom: 168 })
+    expect(inContent({ top: 64, bottom: 144 }, 54)).toEqual({ top: 142, bottom: 222 })
   })
 })

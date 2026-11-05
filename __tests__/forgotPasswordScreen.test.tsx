@@ -21,9 +21,15 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('../lib/apiClient', () => ({ apiClient: { forgotPassword: (...args: unknown[]) => mockForgot(...args) } }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
+// Wrapped to count its renders: the countdown is the Resend button's own, never the sheet's (owner: "the entire resend button is flickering").
+jest.mock('../components/onboarding/EmailSheet', () => {
+  const actual = jest.requireActual('../components/onboarding/EmailSheet')
+  return { ...actual, EmailSheet: jest.fn(actual.EmailSheet) }
+})
 
 import { useLocalSearchParams } from 'expo-router'
 import ForgotPassword from '../app/forgot-password'
+import { EmailSheet } from '../components/onboarding/EmailSheet'
 
 let success: jest.SpyInstance
 let error: jest.SpyInstance
@@ -126,6 +132,8 @@ describe('Check your inbox', () => {
     expect(resend.props.accessibilityState).toMatchObject({ disabled: true })
     expect(screen.getByTestId('forgot-ring', { includeHiddenElements: true })).toBeTruthy()
     await wait(12)
+    // The digits roll; the sentence a screen reader hears settles a moment after them.
+    await act(async () => jest.advanceTimersByTime(400))
     expect(screen.getByTestId('forgot-resend').props.accessibilityLabel).toBe('Resend in 18s')
     await wait(18)
     expect(screen.getByTestId('forgot-resend').props.accessibilityLabel).toBe('Resend link')
@@ -179,5 +187,25 @@ describe('the sheet over the landing (Flow 1c, option C)', () => {
     await sent()
     expect(screen.getByTestId('forgot-sheet', { includeHiddenElements: true })).toBeTruthy()
     for (const id of ['forgot-open-mail', 'forgot-resend', 'forgot-different']) expect(screen.getByTestId(id)).toBeTruthy()
+  })
+})
+
+describe('the Resend countdown never flickers (owner, 2026-11-05)', () => {
+  it('ticks inside the button: the sheet, and the screen with it, does not re-render each second', async () => {
+    await sent()
+    const before = (EmailSheet as jest.Mock).mock.calls.length
+    await wait(5)
+    expect((EmailSheet as jest.Mock).mock.calls.length).toBe(before)
+    await act(async () => jest.advanceTimersByTime(400))
+    expect(screen.getByTestId('forgot-resend').props.accessibilityLabel).toBe('Resend in 25s')
+  })
+
+  it('the words stay and only the digits roll: "Resend in", the rolling number, "s" — no label swap each second', async () => {
+    await sent()
+    expect(screen.getByText('Resend in')).toBeTruthy()
+    expect(screen.getByText('s')).toBeTruthy()
+    expect(screen.getByTestId('forgot-resend-count')).toBeTruthy()
+    await wait(3)
+    expect(screen.getByText('Resend in')).toBeTruthy()
   })
 })

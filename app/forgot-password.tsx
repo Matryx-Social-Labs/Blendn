@@ -70,7 +70,8 @@ export default function ForgotPassword() {
   const [waiting, setWaiting] = useState(false)
   /** The address is not one: under the field, in its own sentence. */
   const [invalid, setInvalid] = useState<string | null>(null)
-  const [cooldown, setCooldown] = useState(0)
+  /** Successful sends: each one starts Resend's countdown afresh (its `key`). */
+  const [sends, setSends] = useState(0)
   const bold = useBoldText()
   const settle = useSettleIn(ENVELOPE_FROM_SCALE)
   // One shake, one H.error per refusal, on the button that asked (Resend is its own).
@@ -81,12 +82,6 @@ export default function ForgotPassword() {
 
   const address = email.trim().toLowerCase()
 
-  // One tick a second while the cooldown runs, and none after.
-  useEffect(() => {
-    if (cooldown <= 0) return
-    const timer = setTimeout(() => setCooldown((s) => s - 1), 1000)
-    return () => clearTimeout(timer)
-  }, [cooldown])
 
   /** Returns whether the request landed. Both the form and Resend use it; a refusal answers on the button that asked. */
   const send = async (asked: 'form' | 'resend'): Promise<boolean> => {
@@ -118,7 +113,7 @@ export default function ForgotPassword() {
         refusedBy()
         return false
       }
-      setCooldown(RESEND_COOLDOWN_S)
+      setSends((n) => n + 1)
       return true
     } catch (e) {
       Logger.error('auth', 'Forgot password request failed', { error: e })
@@ -177,17 +172,7 @@ export default function ForgotPassword() {
         dock={
           <>
             <Button label="Open mail app" onPress={() => void openMail()} testID="forgot-open-mail" />
-            {/* Counting down: still readable, plainly not ready, and the ring says how long. */}
-            <Button
-              label={cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend link'}
-              kind="secondary"
-              onPress={() => void resend()}
-              disabled={cooldown > 0}
-              loading={busy}
-              refused={resendRefused}
-              leading={cooldown > 0 ? <CooldownRing left={cooldown} total={RESEND_COOLDOWN_S} testID="forgot-ring" /> : undefined}
-              testID="forgot-resend"
-            />
+            <ResendButton key={sends} onPress={() => void resend()} busy={busy} refused={resendRefused} />
             <Button
               label="Use a different email"
               kind="tertiary"
@@ -261,6 +246,34 @@ export default function ForgotPassword() {
       </SheetItem>
       {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
     </EmailSheet>
+  )
+}
+
+/**
+ * Resend, counting down from 30 (still readable, plainly not ready, the ring says how long). The tick is this button's
+ * own, so the sheet and the screen do not re-render each second, and the count rolls its digits ("Resend in {n}s")
+ * rather than the whole label swapping every second (owner, 2026-11-05: "the entire resend button is flickering").
+ */
+function ResendButton({ onPress, busy, refused }: { onPress: () => void; busy: boolean; refused: boolean }) {
+  const [left, setLeft] = useState(RESEND_COOLDOWN_S)
+  useEffect(() => {
+    if (left <= 0) return
+    const timer = setTimeout(() => setLeft((s) => s - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [left])
+  const counting = left > 0
+  return (
+    <Button
+      label={counting ? 'Resend in {n}s' : 'Resend link'}
+      count={counting ? left : undefined}
+      kind="secondary"
+      onPress={onPress}
+      disabled={counting}
+      loading={busy}
+      refused={refused}
+      leading={counting ? <CooldownRing left={left} total={RESEND_COOLDOWN_S} testID="forgot-ring" /> : undefined}
+      testID="forgot-resend"
+    />
   )
 }
 
