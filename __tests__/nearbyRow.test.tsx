@@ -58,3 +58,28 @@ it('a group still loading past the page has no count: never a guess', async () =
   await render(<WhenHeading title="Later tonight" count={null} />)
   expect(screen.getByRole('header').props.accessibilityLabel).toBe('Later tonight')
 })
+
+describe('at the largest text sizes the row restacks (board N1ax)', () => {
+  const RN = jest.requireActual('react-native') as typeof import('react-native')
+  let spy: jest.SpyInstance
+  beforeEach(() => {
+    spy = jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 2 })
+  })
+  afterEach(() => spy.mockRestore())
+
+  it('the time on its own line above the name, no photo, no time column', async () => {
+    await render(<NearbyRow event={{ ...(base as object), cover_image_url: 'https://x/y.jpg' } as never} now={NOW} withDistance onPress={jest.fn()} />)
+    expect(screen.getByText('8:30 PM', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByTestId('nearby-row-thumb', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByTestId('nearby-row-time-col', { includeHiddenElements: true })).toBeNull()
+  })
+})
+
+it('at the default size: the time column and the photo (the control)', async () => {
+  const RN = jest.requireActual('react-native') as typeof import('react-native')
+  const spy = jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 })
+  await render(<NearbyRow event={base} now={NOW} withDistance onPress={jest.fn()} />)
+  expect(screen.getByTestId('nearby-row-thumb', { includeHiddenElements: true })).toBeTruthy()
+  expect(screen.getByTestId('nearby-row-time-col', { includeHiddenElements: true })).toBeTruthy()
+  spy.mockRestore()
+})

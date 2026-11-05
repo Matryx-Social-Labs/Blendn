@@ -1,6 +1,6 @@
 import { Image } from 'expo-image'
 import { memo } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { PresenceDot } from '../ds/MonoFamily'
 import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
@@ -67,6 +67,8 @@ function NearbyRowImpl<E extends RowEvent>({
   onPressIn?: (event: E) => void
 }) {
   const bold = useBoldText()
+  // Largest text (board N1ax): the time moves above the name and the photo goes, so no column squeezes the name.
+  const stacked = useWindowDimensions().fontScale >= AX_STACK_SCALE
   const live = isLiveNow(event, now)
   const w = liveWindow(event)
   const { time, meridiem } = splitClock(Date.parse(w.start_time), event.timezone)
@@ -81,32 +83,44 @@ function NearbyRowImpl<E extends RowEvent>({
       android_ripple={{ color: PRESSED_WASH.android }}
       accessibilityRole="button"
       accessibilityLabel={nearbyRowLabel(event, now, withDistance)}
-      style={styles.row}
+      style={stacked ? styles.stackedRow : styles.row}
     >
-      <View style={styles.timeCol} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        {live ? (
+      {stacked ? null : (
+        <>
+          <View testID="nearby-row-time-col" style={styles.timeCol} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+            {live ? (
+              <View style={styles.live}>
+                <PresenceDot kind="live" />
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.ink]}>
+                  LIVE
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular, styles.right]}>
+                  {time}
+                </Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary, styles.right]}>
+                  {meridiem}
+                </Text>
+              </>
+            )}
+          </View>
+          <View testID="nearby-row-thumb" style={styles.thumb} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+            {event.cover_image_url ? <Image source={{ uri: event.cover_image_url }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+          </View>
+        </>
+      )}
+      <View style={styles.text} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+        {stacked ? (
           <View style={styles.live}>
-            <PresenceDot kind="live" />
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.ink]}>
-              LIVE
+            {live ? <PresenceDot kind="live" /> : null}
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular]}>
+              {live ? 'LIVE' : eventClock(w.start_time, event.timezone)}
             </Text>
           </View>
-        ) : (
-          <>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold, FONT_FAMILY.mono[700]), styles.ink, styles.tabular, styles.right]}>
-              {time}
-            </Text>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary, styles.right]}>
-              {meridiem}
-            </Text>
-          </>
-        )}
-      </View>
-      <View style={styles.thumb} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        {event.cover_image_url ? <Image source={{ uri: event.cover_image_url }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
-      </View>
-      <View style={styles.text} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold), styles.ink]}>
+        ) : null}
+        <Text numberOfLines={stacked ? 3 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold), styles.ink]}>
           {event.title}
         </Text>
         {where ? (
@@ -158,9 +172,13 @@ export function WhenHeading({ title, count, note }: { title: string; count: numb
 /** Board `.rrow`: a 50 pt time column, a 56 pt photo, 12 between, 10 above and below, 76 tall at least. */
 const TIME_COL = 50
 const ROW_MIN = 76
+/** iOS's first accessibility size (AX1) is ~1.65× and Android's largest 2×: from here the row restacks. */
+const AX_STACK_SCALE = 1.6
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md, paddingVertical: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.gutter, minHeight: ROW_MIN },
+  // Board `.ax` row: 12 above and below, 24 in, the lines 6 apart.
+  stackedRow: { paddingVertical: SPACE.md, paddingHorizontal: SPACE.gutter },
   timeCol: { width: TIME_COL, paddingTop: SPACE.xxs, alignItems: 'flex-end' },
   live: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
   right: { textAlign: 'right' },
