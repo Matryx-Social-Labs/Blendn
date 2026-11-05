@@ -39,6 +39,7 @@ jest.mock('../components/onboarding/EmailSheet', () => {
 import { useLocalSearchParams } from 'expo-router'
 import ForgotPassword from '../app/forgot-password'
 import { EmailSheet } from '../components/onboarding/EmailSheet'
+import { rowThatOverflows, slotOf, WORST } from './helpers/longText'
 
 let success: jest.SpyInstance
 let error: jest.SpyInstance
@@ -132,6 +133,15 @@ describe('Check your inbox', () => {
     ;(useLocalSearchParams as jest.Mock).mockReturnValue({ email: 'someone.with.a.long.name@subdomain.example.app' })
     await sent()
     expect(screen.getByTestId('forgot-sent-body').props.children.filter((c: unknown) => c === '\n')).toHaveLength(2)
+  })
+
+  it('the worst-case address (long-text audit) is on its own lines, wrapping whole, with no line cap and no row to push it', async () => {
+    ;(useLocalSearchParams as jest.Mock).mockReturnValue({ email: WORST.email })
+    await sent()
+    const body = screen.getByTestId('forgot-sent-body')
+    expect(body.props.children.filter((c: unknown) => c === '\n')).toHaveLength(2)
+    expect(slotOf(body as never).lines).toBeUndefined()
+    expect(rowThatOverflows(screen.getByText(WORST.email) as never)).toBeNull()
   })
 
   it('Resend counts down from 30 with a draining ring, then is ready', async () => {

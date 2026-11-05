@@ -75,7 +75,7 @@ function Sample({ sample, index, bold, testID }: { sample: SampleNotification; i
         <Text numberOfLines={1} maxFontSizeMultiplier={FRAME_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.primary]}>
           {sample.title}
         </Text>
-        {/* Two lines, as a lock screen gives a body: one cut "Someone at Rooftop Sundowner: H…" before "liked you back". */}
+        {/* Two lines, as a lock screen gives a body; a sample puts its title last, so a cut only ever takes the title (lib/pushAsk). */}
         <Text numberOfLines={2} maxFontSizeMultiplier={FRAME_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
           {sample.body}
         </Text>
