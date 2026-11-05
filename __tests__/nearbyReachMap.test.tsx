@@ -116,6 +116,7 @@ const pinIds = () => ((mockSources.pins as { features: { properties: { id: strin
 beforeEach(() => {
   for (const k of Object.keys(mockSources)) delete mockSources[k]
   mockLabels = null
+  mockStops.length = 0
   mockEvents = [event('near', FIX.latitude + 0.02), event('far', FIX.latitude + 0.2)]
 })
 
@@ -138,4 +139,26 @@ it('on: the dark, the ride ring and the walk are drawn, and only what is inside 
   // "20 min walk" and "Short ride", where the board has them.
   expect(mockLabels?.walk).toHaveLength(2)
   expect(mockLabels?.ride).toHaveLength(2)
+})
+
+describe('the camera frames the reach (owner pick (c), 2026-11-05): true distances, the ride ring fills the map', () => {
+  const bounded = () => mockStops.filter((st) => Array.isArray(st.bounds)) as { bounds: number[] }[]
+
+  it('off: no stop to any bounds (the control)', async () => {
+    await render(map(null))
+    await settle()
+    expect(bounded()).toHaveLength(0)
+  })
+
+  it('on: one stop to the 8 km ring around you, padded to the map the drawer leaves', async () => {
+    await render(map(FIX))
+    await settle()
+    const [stop] = bounded()
+    expect(bounded()).toHaveLength(1)
+    const [w, s, e, n] = stop.bounds
+    // 8 km each way: ~0.072° of latitude, the centre in the middle.
+    expect(n - s).toBeCloseTo((2 * 8) / 110.574, 3)
+    expect((w + e) / 2).toBeCloseTo(FIX.longitude, 5)
+    expect((s + n) / 2).toBeCloseTo(FIX.latitude, 5)
+  })
 })

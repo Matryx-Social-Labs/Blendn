@@ -363,6 +363,18 @@ export const HomeMap = memo(function HomeMap({
   }, [loaded, segment, now, focusPin, reach])
   const reachData = useMemo(() => (reach ? reachShapes(reach) : null), [reach])
 
+  // Near me turned on (owner pick (c), 2026-11-05): true distances, the camera fitted so the short ride fills the map the drawer leaves at rest, as on the board.
+  const reachOn = reachData !== null
+  useEffect(() => {
+    if (!reachOn || !reachData) return
+    const ring = reachData.ride.geometry.coordinates[0]
+    const lons = ring.map((p) => p[0])
+    const lats = ring.map((p) => p[1])
+    const half = mapPadding({ topChrome, mapHeight, drawerTop: drawer.half })
+    const sides = SPACE.xl
+    stop({ bounds: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)], padding: { ...half, left: sides, right: sides }, duration: reduceMotion ? 0 : MAP_THEME.camera.easeMs })
+  }, [reachOn]) // eslint-disable-line react-hooks/exhaustive-deps -- only turning Near me on frames it
+
   // Which tiles draw the buildings, by the whole view: ours once it is inside a covered city (`drawsOwnBuildings`).
   const startAt: [number, number] = center ? [center.longitude, center.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
   // Where the first frame opens: the camera is there until something moves it.
