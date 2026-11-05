@@ -20,8 +20,9 @@ const files = execSync("grep -rl 'KeyboardAvoidingView' app components --include
 
 describe('KeyboardAvoidingView behaviour', () => {
   it('found the screens, so the loop below is not empty', () => {
-    // Four since the entry screens and onboarding moved to `KeyboardPage` (keyboard-controller, motion #34).
-    expect(files.length).toBeGreaterThanOrEqual(4)
+    // Three since the entry screens and onboarding moved to `KeyboardPage` (keyboard-controller, motion #34) and
+    // forgot-password into the email sheet (Flow 1c), which rides the same controller.
+    expect(files.length).toBeGreaterThanOrEqual(3)
   })
 
   it.each(files)('%s uses KEYBOARD_BEHAVIOR and no per-platform guess', (file) => {

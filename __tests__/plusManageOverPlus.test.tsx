@@ -55,6 +55,12 @@ jest.mock('../lib/purchases', () => ({
 }))
 // The router test harness stubs Reanimated, which has no Reduce Motion hook; the root layout reads it for its transitions.
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => false }))
+{
+  // The landing's sky shares one `makeMutable` read with `.get()` (the error boundary draws it), which the stub's plain values lack.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mocked = require('react-native-reanimated')
+  mocked.makeMutable = jest.requireActual('react-native-reanimated').makeMutable
+}
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => {}),
   removePushTokenFromProfile: jest.fn(async () => {}),

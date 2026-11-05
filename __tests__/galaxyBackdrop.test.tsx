@@ -1,8 +1,9 @@
 /*
  * The landing's sky (components/onboarding/GalaxyBackdrop.tsx, Flow 1b): two galaxies collide once under real gravity
  * behind the old landing, and the forms behind it show what they left. What has to hold:
- * - the landing runs the physics from a frame callback, and that callback stops at the film's end: no loop, no work after;
- * - it holds while the app is in the background or the keyboard is up;
+ * - the landing runs the physics from a frame callback; after it the remnant turns on with no end, until the person
+ *   leaves the landing (owner, 2026-11-03), and the screens after it start from where it was left;
+ * - it holds while the app is in the background, the keyboard is up or another screen is over it (`paused`);
  * - Reduce Motion draws the committed remnant, still, and never starts the physics;
  * - the form level draws the remnant too (dimmed, turning, then still) and never re-simulates;
  * - a low-end Android phone runs half the stars;
@@ -10,7 +11,7 @@
  */
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AppState, Platform, type AppStateStatus } from 'react-native'
+import { AppState, Dimensions, Platform, type AppStateStatus } from 'react-native'
 
 type FrameInfo = { timeSincePreviousFrame: number | null }
 const mockFrame = { cb: null as null | ((info: FrameInfo) => void), setActive: jest.fn(), registered: 0 }
@@ -45,7 +46,8 @@ jest.mock('../lib/galaxySim', () => {
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import { GalaxyBackdrop } from '../components/onboarding/GalaxyBackdrop'
 import { COLOR } from '../lib/design/tokens'
-import { END_AT, advanceFilm, startFilm } from '../lib/galaxySim'
+import REMNANT from '../assets/galaxy/remnant.json'
+import { END_AT, GALAXY_B, advanceFilm, startFilm } from '../lib/galaxySim'
 import { tint } from '../lib/theme'
 
 const HIDDEN = { includeHiddenElements: true }
@@ -88,16 +90,16 @@ describe('the landing: the collision, once', () => {
     expect(advanceFilm).toHaveBeenCalledTimes(3)
   })
 
-  it('stops the frame callback at the film’s end, and nothing restarts it', async () => {
+  it('keeps the frame callback on past the film’s end, a minute and more: the remnant turns until they leave', async () => {
     await render(<GalaxyBackdrop mode="collision" />)
-    // 100 ms frames: the film's own cap per frame, so END_AT is END_AT × 10 frames away.
-    await frames(END_AT * 10 - 1, 100)
+    // 100 ms frames: the film's own cap per frame, so END_AT is END_AT × 10 frames away; then a minute more.
+    await frames(END_AT * 10 + 600, 100)
     expect(lastActive()).toBe(true)
-    await frames(1, 100)
-    expect(lastActive()).toBe(false)
+    expect(mockFrame.setActive).not.toHaveBeenCalledWith(false)
     await act(async () => appState?.('background'))
-    await act(async () => appState?.('active'))
     expect(lastActive()).toBe(false)
+    await act(async () => appState?.('active'))
+    expect(lastActive()).toBe(true)
   })
 
   it('holds while the app is in the background, and goes on when it comes back', async () => {
@@ -173,6 +175,35 @@ describe('the form level: what the collision left', () => {
     await uiThread()
     expect(mockWithTiming).toHaveBeenCalledTimes(1)
     expect(mockWithTiming.mock.calls[0][1].duration).toBeLessThanOrEqual(12000)
+  })
+
+  it('starts from where the landing was left: the landing’s turn past the file’s frame, the way it was turning', async () => {
+    /** Star 0's centre on the remnant's first frame (its sprite is offset by half its scaled size). */
+    const firstStar = () => {
+      const [stars] = drawn('galaxy-remnant', 'Atlas')
+      const xf = stars.props.transforms.value[0]
+      return { x: xf.tx + xf.scos * 32, y: xf.ty + xf.scos * 32 }
+    }
+    // A fresh landing sets the offset back to nothing.
+    await render(<GalaxyBackdrop mode="collision" />)
+    await frames(1)
+    await render(<GalaxyBackdrop mode="remnant" />)
+    const before = firstStar()
+    // The landing left ten seconds past END_AT: 30° on.
+    await render(<GalaxyBackdrop mode="collision" />)
+    await frames(END_AT * 10 + 100, 100)
+    await render(<GalaxyBackdrop mode="remnant" />)
+    const after = firstStar()
+    const { width, height } = Dimensions.get('window')
+    const cx = width / 2
+    const cy = (height * 180) / 844
+    const a = (-startFilm(2000).spin * 10 * GALAXY_B.look.turn * Math.PI) / 180
+    const dx = before.x - cx
+    const dy = before.y - cy
+    expect(Math.hypot(dx, dy)).toBeGreaterThan(1)
+    expect(after.x).toBeCloseTo(cx + dx * Math.cos(a) - dy * Math.sin(a), 2)
+    expect(after.y).toBeCloseTo(cy + dx * Math.sin(a) + dy * Math.cos(a), 2)
+    expect(REMNANT.n).toBe(2000)
   })
 
   it('every star is placed on the frame, all 2,000 and the two cores', async () => {

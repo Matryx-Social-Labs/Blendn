@@ -19,18 +19,19 @@ import {
 import * as Device from 'expo-device'
 import { useEffect, useMemo, useState } from 'react'
 import { AppState, Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
-import { cancelAnimation, Easing, useDerivedValue, useFrameCallback, useSharedValue, withTiming } from 'react-native-reanimated'
-import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets'
+import { cancelAnimation, Easing, makeMutable, useDerivedValue, useFrameCallback, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
+import { scheduleOnUI } from 'react-native-worklets'
 
 import REMNANT from '../../assets/galaxy/remnant.json'
 import { COLOR } from '../../lib/design/tokens'
-import { advanceFilm, GALAXY_B, init, orbitSense, startFilm, viewX, viewY, type Film } from '../../lib/galaxySim'
+import { advanceFilm, GALAXY_B, idleTurn, init, orbitSense, startFilm, viewX, viewY, type Film } from '../../lib/galaxySim'
 import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 
 /*
- * Flow 1b (owner's pick, variant B, 2026-11-02): two galaxies collide once under real gravity behind the landing, and
- * the screens after it show what they left. The physics is lib/galaxySim.ts; this draws it with Skia, every star one
+ * Flow 1b (owner's pick, variant B, 2026-11-02): two galaxies collide once under real gravity behind the landing, then
+ * what they left turns on, with no end, until the person leaves the landing (owner, 2026-11-03); the screens after it
+ * show it from where it was left. The physics is lib/galaxySim.ts; this draws it with Skia, every star one
  * sprite of an Atlas, added onto ink so ember over violet mixes to rose.
  * Prototype, films and contrast: mockups/redesign-2026-11/galaxies/ (README).
  */
@@ -64,6 +65,15 @@ const SIN_TILT = Math.sin(GALAXY_B.look.tilt)
 
 /** The form screens' remnant turns this far, slowing to still: the landing's turn carried on, then rest. Never a loop. */
 const REMNANT_TURN = { degrees: 8, ms: 12000 }
+/**
+ * How far the landing has turned past the remnant file's frame, degrees (lib/galaxySim `idleTurn`): written by the
+ * landing on the UI thread, read by every remnant after it, so leaving the landing a minute in does not snap the sky back.
+ * ponytail: the forms turn the projected frame in the screen's plane where the landing rolls the disk in its own, tilted
+ * 22°: off by up to 7% of a star's radius, seen only in a push's 350 ms. Store z in remnant.json if that ever shows.
+ */
+let landingTurnValue: SharedValue<number> | null = null
+/** Made on first use, on the JS thread, so it is one value for the app's life and a test's Reanimated is the one it gets. */
+const landingTurn = () => (landingTurnValue ??= makeMutable(0))
 
 /** A phone this short of memory runs half the stars and no bloom. Android only; every supported iPhone has the headroom. */
 const LOW_END_MEMORY = 3 * 1024 ** 3
@@ -145,13 +155,14 @@ function starLooks(stars: number) {
 
 const CORE_SCALES = CORE_LIGHTS.flatMap(({ size }) => [size / SPRITE, size / SPRITE])
 
-function Sky({ stars, cores, colors, frame, bloom, shelf, testID }: {
+function Sky({ stars, cores, colors, frame, bloom, shelf, shelfFade, testID }: {
   stars: ReturnType<typeof useRSXformBuffer>
   cores: ReturnType<typeof useRSXformBuffer>
   colors: SkColor[]
   frame: SkyFrame
   bloom: boolean
   shelf?: Shelf | null
+  shelfFade?: SharedValue<number>
   testID: string
 }) {
   const images = spriteImages()
@@ -172,7 +183,7 @@ function Sky({ stars, cores, colors, frame, bloom, shelf, testID }: {
       <Fill color={COLOR.ink} />
       {lights}
       {bloom ? <Group layer={<Paint blendMode="plus" opacity={BLOOM.alpha}><Blur blur={BLOOM.blur} /></Paint>}>{lights}</Group> : null}
-      {shelf ? <ShelfBand shelf={shelf} /> : null}
+      {shelf ? <ShelfBand shelf={shelf} fade={shelfFade} /> : null}
       <Rect x={0} y={fadeTop} width={frame.width} height={frame.height - fadeTop}>
         <LinearGradient start={vec(0, fadeTop)} end={vec(0, frame.height * FADE.to)} colors={[tint(COLOR.ink, 0), COLOR.ink]} />
       </Rect>
@@ -181,12 +192,12 @@ function Sky({ stars, cores, colors, frame, bloom, shelf, testID }: {
 }
 
 /** An ink ellipse under the tagline, part of the sky: a star crossing behind the words is dimmed to AA. */
-function ShelfBand({ shelf }: { shelf: Shelf }) {
+function ShelfBand({ shelf, fade }: { shelf: Shelf; fade?: SharedValue<number> }) {
   const rx = shelf.width / 2 + SHELF.padX
   const ry = shelf.height / 2 + SHELF.padY
   const ink = tint(COLOR.ink, SHELF.alpha)
   return (
-    <Group transform={[{ translateX: shelf.x + shelf.width / 2 }, { translateY: shelf.y + shelf.height / 2 }, { scaleX: rx / ry }]}>
+    <Group opacity={fade ?? 1} transform={[{ translateX: shelf.x + shelf.width / 2 }, { translateY: shelf.y + shelf.height / 2 }, { scaleX: rx / ry }]}>
       <Rect x={-ry} y={-ry} width={2 * ry} height={2 * ry}>
         <RadialGradient c={vec(0, 0)} r={ry} colors={[ink, ink, tint(COLOR.ink, 0)]} positions={[0, SHELF.solid, 1]} />
       </Rect>
@@ -194,8 +205,11 @@ function ShelfBand({ shelf }: { shelf: Shelf }) {
   )
 }
 
-/** The landing: the physics runs from a frame callback, two steps a frame, and the callback stops at the film's end. */
-function Collision({ paused, shelf }: { paused: boolean; shelf?: Shelf | null }) {
+/**
+ * The landing: the physics runs from a frame callback, two steps a frame; after it only the turn is left, redrawn every
+ * second frame, until the landing is left. Held in the background and while `paused` (the keyboard, another screen on top).
+ */
+function Collision({ paused, shelf, shelfFade }: { paused: boolean; shelf?: Shelf | null; shelfFade?: SharedValue<number> }) {
   const frame = useSkyFrame()
   const [lowEnd] = useState(isLowEnd)
   const count = lowEnd ? GALAXY_B.physics.stars / 2 : GALAXY_B.physics.stars
@@ -203,7 +217,7 @@ function Collision({ paused, shelf }: { paused: boolean; shelf?: Shelf | null })
   const { scales } = looks
   const film = useSharedValue<Film | null>(null)
   const tick = useSharedValue(0)
-  const [ended, setEnded] = useState(false)
+  const turned = landingTurn()
   const active = useAppActive()
 
   const callback = useFrameCallback((info) => {
@@ -213,11 +227,11 @@ function Collision({ paused, shelf }: { paused: boolean; shelf?: Shelf | null })
       f = startFilm(count)
       film.set(f)
     }
-    const done = advanceFilm(f, (info.timeSincePreviousFrame ?? FRAME_MS) / 1000)
+    if (!advanceFilm(f, (info.timeSincePreviousFrame ?? FRAME_MS) / 1000)) return
     tick.set(f.tau)
-    if (done) scheduleOnRN(setEnded, true)
+    turned.set(idleTurn(f))
   }, false)
-  const running = active && !paused && !ended
+  const running = active && !paused
   useEffect(() => {
     callback.setActive(running)
   }, [callback, running])
@@ -248,20 +262,21 @@ function Collision({ paused, shelf }: { paused: boolean; shelf?: Shelf | null })
     xf.set(sc, 0, x - sc * HALF, y - sc * HALF)
   })
 
-  return <Sky testID="galaxy-live" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!lowEnd} shelf={shelf} />
+  return <Sky testID="galaxy-live" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!lowEnd} shelf={shelf} shelfFade={shelfFade} />
 }
 
 /**
- * What the collision left (assets/galaxy/remnant.json, its last frame, made by scripts/galaxy-remnant.mjs): never
- * re-simulated. Behind the forms it turns on from where the landing stopped and eases to still; under Reduce Motion it is still.
+ * What the collision left (assets/galaxy/remnant.json, its frame at END_AT, made by scripts/galaxy-remnant.mjs): never
+ * re-simulated. Behind the forms it turns on from where the landing was left and eases to still; under Reduce Motion it is still.
  */
-function Remnant({ turning, paused, shelf }: { turning: boolean; paused: boolean; shelf?: Shelf | null }) {
+function Remnant({ turning, paused, shelf, shelfFade }: { turning: boolean; paused: boolean; shelf?: Shelf | null; shelfFade?: SharedValue<number> }) {
   const frame = useSkyFrame()
   const looks = useMemo(() => starLooks(REMNANT.n), [])
   const { scales, spin } = looks
   const xy = REMNANT.xy
   const n = REMNANT.n
   const angle = useSharedValue(0)
+  const turned = landingTurn()
   const active = useAppActive()
   const moving = turning && !paused && active
   useEffect(() => {
@@ -277,7 +292,7 @@ function Remnant({ turning, paused, shelf }: { turning: boolean; paused: boolean
   }, [moving, angle])
   // The landing's turn, seen on screen (y down): the orbit's sense, so the remnant carries on the way it was going.
   const rotation = useDerivedValue(() => {
-    const a = (-spin * angle.get() * Math.PI) / 180
+    const a = (-spin * (angle.get() + turned.get()) * Math.PI) / 180
     return [Math.cos(a), Math.sin(a)]
   })
 
@@ -299,22 +314,30 @@ function Remnant({ turning, paused, shelf }: { turning: boolean; paused: boolean
     xf.set(sc, 0, frame.cx + (x * c - y * s) * frame.k - sc * HALF, frame.cy + (x * s + y * c) * frame.k - sc * HALF)
   })
 
-  return <Sky testID="galaxy-remnant" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!isLowEnd()} shelf={shelf} />
+  return <Sky testID="galaxy-remnant" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!isLowEnd()} shelf={shelf} shelfFade={shelfFade} />
 }
 
 /**
- * L0 behind the entry screens: `collision` on the landing (the physics, once; the remnant under Reduce Motion), `remnant`
- * behind the forms and the quiet screens. `paused` holds it while the keyboard is up; it holds itself in the background.
+ * L0 behind the entry screens: `collision` on the landing (the physics once, then the turn until it is left; the remnant
+ * under Reduce Motion), `remnant` behind the forms and the quiet screens. `paused` holds it while the keyboard is up or
+ * another screen is over it; it holds itself in the background.
  * `shelf` is the tagline's box, for the ink band behind it. Untouchable and hidden from a screen reader.
  */
-export function GalaxyBackdrop({ mode, paused = false, shelf, testID }: { mode: 'collision' | 'remnant'; paused?: boolean; shelf?: Shelf | null; testID?: string }) {
+export function GalaxyBackdrop({ mode, paused = false, shelf, shelfFade, testID }: {
+  mode: 'collision' | 'remnant'
+  paused?: boolean
+  shelf?: Shelf | null
+  /** The shelf's opacity (the email sheet's handover); whole when not given. */
+  shelfFade?: SharedValue<number>
+  testID?: string
+}) {
   const reduceMotion = useReducedMotion()
   return (
     <View testID={testID} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
       {mode === 'collision' && !reduceMotion ? (
-        <Collision paused={paused} shelf={shelf} />
+        <Collision paused={paused} shelf={shelf} shelfFade={shelfFade} />
       ) : (
-        <Remnant turning={mode === 'remnant' && !reduceMotion} paused={paused} shelf={shelf} />
+        <Remnant turning={mode === 'remnant' && !reduceMotion} paused={paused} shelf={shelf} shelfFade={shelfFade} />
       )}
     </View>
   )
