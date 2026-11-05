@@ -202,7 +202,7 @@ export const MomentPour = memo(function MomentPour({
           <Animated.View testID={testID && `${testID}-flood`} style={[StyleSheet.absoluteFill, floodStyle]}>
             <GradientFill gradient="fill" style={StyleSheet.absoluteFill} />
           </Animated.View>
-          <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.venue]}>
+          <Text testID={testID && `${testID}-venue`} numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.venue]}>
             {venue}
           </Text>
           <Animated.Text testID={testID && `${testID}-youre-in`} maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[YOURE_IN_TYPE, styles.youreIn, textStyle]}>
@@ -217,7 +217,7 @@ export const MomentPour = memo(function MomentPour({
 const styles = StyleSheet.create({
   /** The pass: radius 24, the surface; the flood stays inside it. #9's own is inset 12 at the sides. */
   panel: { position: 'absolute', borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
-  /** #9: top left, 16 in. White on the surface and on the fill alike. */
+  /** #9: top left, 16 in. White on the surface and on the fill alike. Two lines at most: a long venue, or a paid total at the largest size, is never cut to one. */
   venue: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, top: SPACE.lg, color: COLOR.textOnGradient },
   /** #9: bottom left, 16 in and 24 up. */
   youreIn: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, bottom: SPACE.xl, color: COLOR.textOnGradient },

@@ -236,7 +236,11 @@ export type SheetProps = {
    * meta role. Two sibling Texts, never one nested in the other (Android measures a nested span in its parent's font). It
    * wraps under a long title rather than shortening it. `label` is what a screen reader gets, when more than the words.
    */
-  headerNote?: { lead?: string; text: string; label?: string }
+  /**
+   * `tail`: a fixed part after a variable `text` ("{title}" then " · Sat 8 Nov, 6 PM"): the text is cut to one line and the
+   * tail keeps its own slot, so a long title never takes the date with it.
+   */
+  headerNote?: { lead?: string; text: string; tail?: string; label?: string }
   /** What a screen reader lands on as it opens, when there is no title: the content's own header. */
   focusRef?: RefObject<ComponentRef<typeof View> | null>
   /** The consequence, above the buttons. */
@@ -724,12 +728,23 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
         {headerNote ? (
           <View
             accessible
-            accessibilityLabel={headerNote.label ?? `${headerNote.lead ?? ''}${headerNote.text}`}
+            accessibilityLabel={headerNote.label ?? `${headerNote.lead ?? ''}${headerNote.text}${headerNote.tail ?? ''}`}
             testID={testID && `${testID}-note`}
             style={styles.note}
           >
             {headerNote.lead ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.title]}>{headerNote.lead}</Text> : null}
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{headerNote.text}</Text>
+            <Text
+              numberOfLines={headerNote.tail ? 1 : undefined}
+              maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
+              style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }, headerNote.tail ? styles.noteText : null]}
+            >
+              {headerNote.text}
+            </Text>
+            {headerNote.tail ? (
+              <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+                {headerNote.tail}
+              </Text>
+            ) : null}
           </View>
         ) : null}
         {headerAction ? (
@@ -1020,6 +1035,7 @@ const styles = StyleSheet.create({
   // The title keeps its width (up to the row): a note or an action wraps under it instead of shortening it.
   titleText: { flexGrow: 1, flexShrink: 0, maxWidth: '100%' },
   note: { flexDirection: 'row', flexShrink: 1, minWidth: 0, justifyContent: 'flex-end' },
+  noteText: { flexShrink: 1 },
   title: { color: COLOR.textPrimary },
   actions: { gap: SPACE.sm, paddingTop: SPACE.md },
   /*

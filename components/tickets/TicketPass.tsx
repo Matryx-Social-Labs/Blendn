@@ -42,7 +42,7 @@ export function TicketPass({ ticket, index, total, event, qrSize }: { ticket: Ti
             {`YOUR TICKET · ${index + 1} OF ${total}`}
           </Text>
           {event?.title ? (
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={3} style={[font('title', bold), styles.primary]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={1} style={[font('title', bold), styles.primary]}>
               {event.title}
             </Text>
           ) : null}

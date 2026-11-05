@@ -312,7 +312,7 @@ export function CheckoutSheet({
   const cur = quote?.currency ?? ticketing.currency
 
   return (
-    <Sheet {...common} title="Get tickets" headerNote={{ text: `${event.title} · ${when}` }} actions={[payAction]}>
+    <Sheet {...common} title="Get tickets" headerNote={{ text: event.title, tail: ` · ${when}` }} actions={[payAction]}>
       <View style={styles.list}>
         {types.map((t) => {
           const row = typeRow(t, event.timezone)
