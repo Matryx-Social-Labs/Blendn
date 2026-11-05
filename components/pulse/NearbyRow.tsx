@@ -22,9 +22,9 @@ type RowEvent = Pick<BlendnEvent, 'id' | 'title' | 'start_time' | 'end_time' | '
 
 const people = (e: RowEvent, live: boolean): string | null => {
   const here = live ? printable(e.here_count) : null
-  if (here) return `${here} here now`
+  if (here) return `${here.toLocaleString('en-US')} here now`
   const going = printable(e.going_count)
-  return going ? `${going} going` : null
+  return going ? `${going.toLocaleString('en-US')} going` : null
 }
 
 /** The row as one element (board: Promoted, Live, name, time, venue, reach, price, people). */

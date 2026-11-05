@@ -83,3 +83,7 @@ it('at the default size: the time column and the photo (the control)', async () 
   expect(screen.getByTestId('nearby-row-time-col', { includeHiddenElements: true })).toBeTruthy()
   spy.mockRestore()
 })
+
+it('a big count is grouped the en-US way (board N1worst: 1,240 going)', () => {
+  expect(nearbyRowLabel({ ...(base as object), going_count: 1240 } as never, NOW, false)).toMatch(/1,240 going$/)
+})
