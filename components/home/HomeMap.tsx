@@ -45,6 +45,7 @@ import {
   reachTarget,
   compassBelow,
 } from '../../lib/homeMap'
+import { getDistanceKm } from '../../lib/geo'
 import { Logger } from '../../lib/logger'
 import { useLocationSharing } from '../../lib/shareLocation'
 import {
@@ -81,6 +82,8 @@ type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: 
 type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { id: string; kind: string; glow: number; color: string } }
 
 const NO_PINS: Pin[] = []
+/** A held move this close to the fix is a move to the person (the reach's frame sits about a kilometre off them). */
+const FIX_NEAR_KM = 2
 
 /** Our building tiles (stage 2), when this build has them; else OpenFreeMap's buildings everywhere. */
 const OWN_BUILDINGS_ENV = parseOwnBuildingsUrl(process.env.EXPO_PUBLIC_BUILDINGS_TILES_URL)
@@ -211,6 +214,8 @@ export const HomeMap = memo(function HomeMap({
    */
   const sharing = useLocationSharing()
   const center = sharing ? fix : null
+  // Near me's reach is the person's position too: none with the switch off, whatever the screen passes.
+  const reachHere = sharing ? reach : null
   const map = useRef<MapRef>(null)
   const camera = useRef<CameraRef>(null)
   // The person has moved the map (a pan, or a city picked): a fix no longer takes it over.
@@ -360,9 +365,9 @@ export const HomeMap = memo(function HomeMap({
   const pins = useMemo(() => {
     const shown = withFocus(loaded.segment === segment ? loaded.pins.map((p) => liveAt(p, now)) : NO_PINS, focusPin)
     // Near me: only what you can reach lights (the dark beyond is the reach's own layer).
-    return reach ? withinReach(shown, reach) : shown
-  }, [loaded, segment, now, focusPin, reach])
-  const reachData = useMemo(() => (reach ? reachShapes(reach) : null), [reach])
+    return reachHere ? withinReach(shown, reachHere) : shown
+  }, [loaded, segment, now, focusPin, reachHere])
+  const reachData = useMemo(() => (reachHere ? reachShapes(reachHere) : null), [reachHere])
 
   /*
    * Near me (owner pick (c), 2026-11-05): true distances, the camera fitted like the board. On, the map lies flat on you
@@ -372,14 +377,29 @@ export const HomeMap = memo(function HomeMap({
   // Through `moveTo`, the map's one way to move: a drawer settling or a fix arriving mid-ease re-issues this move whole
   // (zoom and tilt), instead of stopping the camera half way out; and iOS gets the zoom it lands on (`tiltedZoom`).
   const reachAt = useRef<[number, number] | null>(null)
+  // Whether the reach was drawn: an opt-out after Near me still owes the street view back, on the city.
+  const wasReach = useRef(false)
   useEffect(() => {
-    if (reachOn && reach) {
-      const target = reachTarget(reach, { width, topChrome, drawerTop: drawer.half })
-      reachAt.current = [reach.longitude, reach.latitude]
+    if (reachOn) wasReach.current = true
+  }, [reachOn])
+  const cityOrFallback = (): [number, number] =>
+    cityCentre ? [cityCentre.longitude, cityCentre.latitude] : [fallbackCentre.longitude, fallbackCentre.latitude]
+  useEffect(() => {
+    // The switch is read here too, not only through `reachHere`: an effect order must never put the camera on the fix.
+    if (reachOn && reachHere && sharing) {
+      const target = reachTarget(reachHere, { width, topChrome, drawerTop: drawer.half })
+      reachAt.current = [reachHere.longitude, reachHere.latitude]
       moveTo({ to: target.centre, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: 0 } })
-    } else if (reachAt.current) {
-      moveTo({ to: reachAt.current, easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
+      return
+    }
+    if (!reachOn) {
+      // Back to the street view: on you while sharing; after an opt-out, on the city, never where you were.
+      const back = sharing ? reachAt.current : null
+      const owed = wasReach.current
       reachAt.current = null
+      wasReach.current = false
+      if (back) moveTo({ to: back, easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
+      else if (!sharing && owed) moveTo({ to: cityOrFallback(), easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
     }
   }, [reachOn]) // eslint-disable-line react-hooks/exhaustive-deps -- only turning Near me on or off moves the camera
 
@@ -463,6 +483,12 @@ export const HomeMap = memo(function HomeMap({
   // The switch goes off while the camera is following the fix: what was asked or held around the person is dropped, and the map goes to the city.
   useEffect(() => {
     if (sharing) return
+    // Before the early return for a moved map: nothing held may still point at the person (security review, 2026-11-05).
+    // The reach's return move, a drawer snap's re-issue of the last move, and a move held for the map to load.
+    const near = (to: [number, number] | undefined) => !!fix && !!to && getDistanceKm(to[1], to[0], fix.latitude, fix.longitude) <= FIX_NEAR_KM
+    reachAt.current = null
+    if (near(lastMove.current?.to)) lastMove.current = null
+    if (near(pendingMove.current?.to)) pendingMove.current = null
     if (touched.current) return
     // A read pending on a fix-centred view, the circle already answered around it, and the fix followed: none survives the switch.
     if (debounce.current) clearTimeout(debounce.current)

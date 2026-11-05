@@ -183,3 +183,17 @@ describe('the camera frames the reach (owner pick (c), 2026-11-05): true distanc
     expect(mockStops.some((st) => st.pitch === 55 && typeof st.zoom === 'number' && Math.abs((st.zoom as number) - 16) < 1)).toBe(true)
   })
 })
+
+describe('the reach is the person’s position: none with sharing off', () => {
+  const { setLocationSharing } = jest.requireActual('../lib/shareLocation') as typeof import('../lib/shareLocation')
+  afterEach(() => setLocationSharing(true))
+  it('sharing off: no reach drawn, no ring labels, every pin lights as without Near me', async () => {
+    setLocationSharing(false)
+    await render(map(FIX))
+    await settle()
+    expect(mockSources['reach-mask']).toBeUndefined()
+    expect(mockSources['reach-walk']).toBeUndefined()
+    expect(mockLabels).toBeNull()
+    expect(pinIds().sort()).toEqual(['far', 'near'])
+  })
+})

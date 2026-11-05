@@ -193,7 +193,9 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   })
 
   it('the reach is drawn from where the person stands, with the fixed walk and ride, nothing off a payload', () => {
-    expect(component).toMatch(/reachShapes\(reach\)/)
+    expect(component).toMatch(/reachShapes\(reachHere\)/)
+    // And only while sharing is on: the reach is the person's position (security review, 2026-11-05).
+    expect(component).toMatch(/const reachHere = sharing \? reach : null/)
     expect(code('lib/homeMap.ts')).toMatch(/export function reachShapes\(c: LatLng, rideKm: number = 8\)/)
   })
 
