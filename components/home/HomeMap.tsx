@@ -369,16 +369,16 @@ export const HomeMap = memo(function HomeMap({
    * at the zoom that makes the 8 km ring span the phone (`reachZoom`); off, it tilts back to its own street view.
    */
   const reachOn = reachData !== null
-  const reachWas = useRef(false)
+  // Through `moveTo`, the map's one way to move: a drawer settling or a fix arriving mid-ease re-issues this move whole
+  // (zoom and tilt), instead of stopping the camera half way out; and iOS gets the zoom it lands on (`tiltedZoom`).
+  const reachAt = useRef<[number, number] | null>(null)
   useEffect(() => {
-    const was = reachWas.current
-    reachWas.current = reachOn
-    const duration = reduceMotion ? 0 : MAP_THEME.camera.easeMs
-    const half = mapPadding({ topChrome, mapHeight, drawerTop: drawer.half })
     if (reachOn && reach) {
-      stop({ center: [reach.longitude, reach.latitude], zoom: reachZoom(reach.latitude, width), pitch: 0, padding: half, duration })
-    } else if (was) {
-      stop({ zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch, padding: half, duration })
+      reachAt.current = [reach.longitude, reach.latitude]
+      moveTo({ to: reachAt.current, easeMs: MAP_THEME.camera.easeMs, at: { zoom: reachZoom(reach.latitude, width), pitch: 0 } })
+    } else if (reachAt.current) {
+      moveTo({ to: reachAt.current, easeMs: MAP_THEME.camera.easeMs, at: { zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch } })
+      reachAt.current = null
     }
   }, [reachOn]) // eslint-disable-line react-hooks/exhaustive-deps -- only turning Near me on or off moves the camera
 

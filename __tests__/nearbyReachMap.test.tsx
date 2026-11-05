@@ -143,7 +143,7 @@ it('on: the dark, the ride ring and the walk are drawn, and only what is inside 
 
 describe('the camera frames the reach (owner pick (c), 2026-11-05): true distances, the ride ring fills the map', () => {
   // The reach's frame: a flat stop far out (a city's worth); the map's own stops sit at street zoom.
-  const framing = () => mockStops.filter((st) => st.pitch === 0 && typeof st.zoom === 'number' && (st.zoom as number) < 12)
+  const framing = () => mockStops.filter((st) => st.pitch === 0 && typeof st.zoom === 'number' && (st.zoom as number) < 14)
 
   it('off: no stop zoomed out to the reach (the control)', async () => {
     await render(map(null))
@@ -153,21 +153,30 @@ describe('the camera frames the reach (owner pick (c), 2026-11-05): true distanc
 
   it('on: one stop, flat, centred on you, at the zoom that puts the 8 km ring at the board’s radius', async () => {
     const { reachZoom } = jest.requireActual('../lib/homeMap') as typeof import('../lib/homeMap')
-    await render(map(FIX))
+    // As on the phone: the map is up, then the chip goes on.
+    const view = await render(map(null))
+    await settle()
+    mockStops.length = 0
+    await view.rerender(map(FIX))
     await settle()
     const framed = framing()
     expect(framed).toHaveLength(1)
     expect(framed[0].center).toEqual([FIX.longitude, FIX.latitude])
-    const { width } = jest.requireActual('react-native').Dimensions.get('window')
-    expect(framed[0].zoom).toBeCloseTo(reachZoom(FIX.latitude, width), 5)
+    const { Dimensions } = jest.requireActual('react-native')
+    const flat = reachZoom(FIX.latitude, Dimensions.get('window').width)
+    // iOS is asked for a little less, the zoom it lands on once flat from the tilt it starts at (`tiltedZoom`).
+    expect(framed[0].zoom as number).toBeLessThanOrEqual(flat)
+    expect(framed[0].zoom as number).toBeGreaterThan(flat - 1)
   })
 
   it('off again: the map tilts back to its own view', async () => {
-    const view = await render(map(FIX))
+    const view = await render(map(null))
+    await settle()
+    await view.rerender(map(FIX))
     await settle()
     mockStops.length = 0
     await view.rerender(map(null))
     await settle()
-    expect(mockStops.some((st) => st.pitch === 55 && st.zoom === 16)).toBe(true)
+    expect(mockStops.some((st) => st.pitch === 55 && typeof st.zoom === 'number' && Math.abs((st.zoom as number) - 16) < 1)).toBe(true)
   })
 })
