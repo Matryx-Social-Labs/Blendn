@@ -10,6 +10,7 @@
 import { appliedFilters, WHEN_LABELS, type AppliedFilter, type EventFilters } from './eventFilters'
 import { RIDE_KM } from './nearby'
 import { categoryChips, printable } from './pulseSections'
+import { compactCount } from './format'
 
 export type QuickKey = 'tonight' | 'weekend' | 'near' | 'vibe'
 
@@ -27,10 +28,10 @@ export type QuickChip = {
   accessibilityLabel: string
 }
 
-/** A chip's count as it is printed: five and up, grouped the US way. */
+/** A chip's count as it is printed: five and up, compact past 999 ("12k"). */
 export const chipCount = (n: number | null | undefined): string | undefined => {
   const shown = printable(n)
-  return shown === null ? undefined : shown.toLocaleString('en-US')
+  return shown === null ? undefined : compactCount(shown)
 }
 
 export function quickChips(input: {
@@ -43,7 +44,8 @@ export function quickChips(input: {
   const { filters, counts, nearOn, vibe } = input
   const chip = (key: QuickKey, label: string, selected: boolean, n?: number | null): QuickChip => {
     const count = chipCount(n)
-    return { key, label, count, selected, accessibilityLabel: count ? `${label}, ${count} events` : label }
+    // Heard whole: "This weekend, 12,480 events" for the chip that shows "12k".
+    return { key, label, count, selected, accessibilityLabel: count ? `${label}, ${(n as number).toLocaleString('en-US')} events` : label }
   }
   return [
     // N1 board order: Tonight, Near me, This weekend, the vibe (Filters is the row's own last chip).

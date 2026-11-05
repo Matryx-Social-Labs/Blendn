@@ -16,6 +16,7 @@ import { printable, PROMOTED_LABEL } from '../../lib/pulseSections'
 import { categoryGlyph } from '../../lib/categoryGlyph'
 import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { compactCount } from '../../lib/format'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
 
@@ -123,7 +124,8 @@ export function eventLabel({
   saved,
 }: Pick<EventCardProps, 'title' | 'time' | 'venue' | 'distance' | 'going' | 'here' | 'promoted' | 'saved'>) {
   const { here: inside, going: coming } = crowd({ here, going })
-  const people = inside ? `${inside} here now` : coming ? `${coming} going` : null
+  // Read whole ("1,240 going") where the card shows "1.2k going".
+  const people = inside ? `${inside.toLocaleString('en-US')} here now` : coming ? `${coming.toLocaleString('en-US')} going` : null
   // "Live" leads the way "Promoted" does: it is the first thing to know about the card.
   const live = time === 'Live'
   const parts = [saved ? 'You’re going' : null, title, live ? null : time, `at ${venue}`, distance, people].filter(Boolean).join(', ')
@@ -275,14 +277,14 @@ export function EventCard(props: EventCardProps) {
           {layout === 'lead' ? null : here ? (
             <ScrimPill testID={testID && `${testID}-here`}>
               <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{here}</Text>
+                <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount(here)}</Text>
                 {' here now'}
               </Text>
             </ScrimPill>
           ) : going ? (
             <ScrimPill>
               <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                {`${going} going`}
+                {`${compactCount(going)} going`}
               </Text>
             </ScrimPill>
           ) : null}
@@ -323,7 +325,7 @@ export function EventCard(props: EventCardProps) {
           </Text>
           {layout === 'lead' && (here || going) ? (
             <Text testID={testID && `${testID}-people`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
-              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{(here ?? going)?.toLocaleString('en-US')}</Text>
+              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount((here ?? going) as number)}</Text>
               {here ? ' here now' : ' going'}
             </Text>
           ) : null}

@@ -13,6 +13,7 @@ import { isLiveNow, printable, PROMOTED_LABEL } from '../../lib/pulseSections'
 import { eventClock } from '../../lib/time'
 import { splitClock } from './SetList'
 import { tint } from '../../lib/theme'
+import { compactCount } from '../../lib/format'
 
 /** "From ₹799": a price on sale, whole units in its own currency. */
 export const priceText = (p: { minor: number; currency: string }) =>
@@ -22,15 +23,16 @@ type RowEvent = Pick<BlendnEvent, 'id' | 'title' | 'start_time' | 'end_time' | '
   Partial<Pick<BlendnEvent, 'session' | 'promoted' | 'from_price'>> & { here_count?: number | null }
 
 /** Who is there, from five: "12 here now" while it is on, else "41 going"; the number apart, for its mono. */
-const peopleParts = (e: RowEvent, live: boolean): { n: string; text: string } | null => {
+const peopleParts = (e: RowEvent, live: boolean): { n: string; text: string; whole: number } | null => {
   const here = live ? printable(e.here_count) : null
-  if (here) return { n: here.toLocaleString('en-US'), text: ' here now' }
+  if (here) return { n: compactCount(here), text: ' here now', whole: here }
   const going = printable(e.going_count)
-  return going ? { n: going.toLocaleString('en-US'), text: ' going' } : null
+  return going ? { n: compactCount(going), text: ' going', whole: going } : null
 }
+/** Read whole: "1,240 going" for the row that shows "1.2k going". */
 const people = (e: RowEvent, live: boolean): string | null => {
   const p = peopleParts(e, live)
-  return p ? p.n + p.text : null
+  return p ? p.whole.toLocaleString('en-US') + p.text : null
 }
 
 /** The row as one element (board: Promoted, Live, name, time, venue, reach, price, people). */
@@ -183,7 +185,7 @@ export function WhenHeading({ title, count, note, live = false }: { title: strin
       </Text>
       {count === null ? null : (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-          {`· ${count.toLocaleString('en-US')}`}
+          {`· ${compactCount(count)}`}
         </Text>
       )}
       {note ? (

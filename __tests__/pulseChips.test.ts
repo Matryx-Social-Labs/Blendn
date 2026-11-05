@@ -14,8 +14,9 @@ const CATS = [
 const VIBE = { slug: 'music', name: 'Live music' }
 
 describe('chipCount', () => {
-  it('groups thousands the US way and never shows a count under five', () => {
-    expect(chipCount(1038)).toBe('1,038')
+  it('compact past 999 (owner 2026-11-05) and never shows a count under five', () => {
+    expect(chipCount(1038)).toBe('1k')
+    expect(chipCount(12_480)).toBe('12k')
     expect(chipCount(214)).toBe('214')
     expect(chipCount(5)).toBe('5')
     expect(chipCount(4)).toBeUndefined()
@@ -35,7 +36,7 @@ describe('quickChips', () => {
     expect(NEAR_KM).toBe(8)
     expect(chips[0].count).toBe('214')
     expect(chips[1].count).toBeUndefined()
-    expect(chips[2].count).toBe('1,038')
+    expect(chips[2].count).toBe('1k')
     expect(chips[3].count).toBeUndefined()
     expect(chips.every((c) => !c.selected)).toBe(true)
   })

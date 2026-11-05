@@ -14,6 +14,7 @@
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
 import { fnv1a } from './pseudonymAvatar'
 import { dateIn, hourIn, instantIn, MONTHS, weekdayIn, WEEKDAYS } from './time'
+import { compactCount } from './format'
 
 /* -------------------------------------------------------------------------- */
 /* Owner defaults, pending the owner's answers: one line each to change.      */
@@ -321,13 +322,14 @@ export function leadPeekLine(lead: { title: string; time: string } | null | unde
  * The search results overline's count and noun: the server's total for the query, not the rows loaded so far (a page is 50 and
  * grows as you scroll). Never fewer than what is on screen, and the loaded count while the total is not known (BAR-07).
  */
-export function resultsCount(loaded: number, totalCount: number | null | undefined): { count: number; text: string; noun: string } {
+export function resultsCount(loaded: number, totalCount: number | null | undefined): { count: number; text: string; label: string; noun: string } {
   const count = typeof totalCount === 'number' && Number.isFinite(totalCount) ? Math.max(totalCount, loaded) : loaded
-  return { count, text: count.toLocaleString('en-US'), noun: count === 1 ? 'event' : 'events' }
+  // "12k" on screen, "12,480" heard.
+  return { count, text: compactCount(count), label: count.toLocaleString('en-US'), noun: count === 1 ? 'event' : 'events' }
 }
 
 /** A section header's count as words: "50+" when the count is a floor (BAR-10), else the number. */
-export const sectionCountLabel = (s: Pick<PulseSection, 'count' | 'more'>): string => `${s.count}${s.more ? '+' : ''}`
+export const sectionCountLabel = (s: Pick<PulseSection, 'count' | 'more'>): string => `${compactCount(s.count)}${s.more ? '+' : ''}`
 
 /** The Nearby request's and See all's upper bound: a week from now, rounded up to the hour so the pages of one list share a cache key (BAR-11). */
 export const nearbyEndDate = (now: number): string => new Date(Math.ceil((now + NEARBY_DAYS * DAY) / HOUR) * HOUR).toISOString()

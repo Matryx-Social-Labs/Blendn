@@ -2037,7 +2037,13 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       */}
       {isSearching && events.length > 0 ? (
         <View style={styles.resultsLabel}>
-          <Text style={styles.resultsLabelText} accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP}>
+          <Text
+            style={styles.resultsLabelText}
+            accessibilityRole="header"
+            // "12k events" on screen, the whole count heard.
+            accessibilityLabel={`${resultsCount(events.length, totalCount).label} ${resultsCount(events.length, totalCount).noun}${selectedCity ? `, ${selectedCity}` : ''}`}
+            maxFontSizeMultiplier={CONTROL_FONT_CAP}
+          >
             <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).text}</Text>
             {` ${resultsCount(events.length, totalCount).noun}${selectedCity ? ` · ${selectedCity}` : ''}`}
           </Text>
