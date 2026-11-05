@@ -159,3 +159,22 @@ describe('where the reach sits (board `ringAt`: its centre 100 pt above the draw
     expect(t.centre).toEqual([you.longitude, you.latitude])
   })
 })
+
+describe('a run of days between its sessions (found on the drive, 3 AM in Bengaluru)', () => {
+  it('today’s session is over and the run goes on: Tomorrow, never "Starting soon"', () => {
+    const fest = {
+      id: 'fest',
+      start_time: '2026-11-03T08:45:00Z',
+      end_time: '2026-11-08T13:10:00Z',
+      timezone: BLR,
+      // The day's session the server sent ended yesterday evening.
+      session: { start_time: '2026-11-04T08:45:00Z', end_time: '2026-11-04T13:10:00Z' },
+    }
+    const threeAm = Date.parse('2026-11-04T21:53:00Z')
+    expect(groupByWhen([fest], threeAm, BLR).map((g) => g.key)).toEqual(['tomorrow'])
+  })
+  it('control: a session that has not started yet is grouped by its start', () => {
+    const soon = at('2026-11-04T15:00:00Z')
+    expect(groupByWhen([soon], NOW, BLR).map((g) => g.key)).toEqual(['soon'])
+  })
+})

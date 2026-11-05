@@ -5,7 +5,7 @@
  */
 
 import { NO_FILTERS, type EventFilters, type When } from './eventFilters'
-import { liveWindow, type SessionSource } from './eventSession'
+import { liveWindow, sessionOver, type SessionSource } from './eventSession'
 import { isLiveNow, nextDayReset, printable } from './pulseSections'
 import { calendarDaysBetween, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
 
@@ -55,6 +55,8 @@ type WhenEvent = SessionSource & { timezone?: string | null }
 /** Which group an event is in, as `timeZone` (the browsed city's) has it; a day group carries its weekday. */
 function whenOf(e: WhenEvent, now: number, timeZone?: string): { key: WhenKey; weekday?: number } {
   if (isLiveNow(e, now)) return { key: 'now' }
+  // A run of days between its sessions (the day's session over, the run not): its next session is a later day.
+  if (sessionOver(e, now)) return { key: 'tomorrow' }
   const start = Date.parse(liveWindow(e).start_time)
   if (start <= now + SOON_MIN * MIN) return { key: 'soon' }
   if (start < nextDayReset(now, NIGHT_ENDS_HOUR, timeZone)) return { key: 'tonight' }
