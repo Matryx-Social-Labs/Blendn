@@ -9,13 +9,17 @@ import { RadioCard } from '../ds/RadioCard'
 import { Sheet } from '../ds/Sheet'
 import { Stepper } from '../ds/Stepper'
 import { TextArea } from '../ds/TextField'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
-import { Icon } from '../ui/Icon'
+import { monoCaption } from '../ds/MonoFamily'
+import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../ds/shared'
+import { Icon, type IconName } from '../ui/Icon'
 import { Text } from '../ui/Text'
-import { BOARD_MAX_POST_LENGTH, boardMarkSeed, spacesLabel } from '../../lib/board'
+import { BOARD_MAX_POST_LENGTH, boardMarkSeed } from '../../lib/board'
+import { asksWords, isFull, kindGlyph, kindWords, postAction, postAge, spotsWords } from '../../lib/lobby'
+import { Label } from './LobbyParts'
+import { PostPhoto } from './PostPhoto'
 import type { BoardPostView } from '../../lib/chatPaging'
 import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
-import { ICON, OPACITY } from '../../lib/theme'
+import { ICON, OPACITY, tint } from '../../lib/theme'
 
 /**
  * The board's pieces (Flow 4 Board, flow4.js `post` and `board`). The rules
@@ -23,8 +27,12 @@ import { ICON, OPACITY } from '../../lib/theme'
  * with one accent, the counter never the only difference, no confirm on Ask.
  */
 
-/** An offer's mark is 40; a seeking's is quieter, 28 (flow4.js `post`). */
-const MARK = { offer: 40, seeking: 28 } as const
+/** Every post's mark is 40 (L-A `.lp .ph`). */
+const MARK = 40
+/** `.lp`: 24 pt cards. */
+const CARD_RADIUS = RADIUS.sheet
+/** `.kt` / `.ks`: the kind and spots pills. */
+const PILL_HEIGHT = 26
 
 /** Up to this many spaces on an offer — the server's own bound. */
 export const MAX_SPACES = 20
@@ -52,7 +60,7 @@ export function announce(text: string) {
  *
  * Decorative: the handle beside it is what identifies somebody.
  */
-export function BoardMark({ seed, size = MARK.offer }: { seed: string; size?: number }) {
+export function BoardMark({ seed, size = MARK }: { seed: string; size?: number }) {
   return <Avatar kind="creature" pseudonym={seed} size={size} />
 }
 
@@ -90,84 +98,142 @@ export type AskState =
 export const IDLE: AskState = { kind: 'idle' }
 
 /**
- * One post (flow4.js `post`).
+ * One post (L-A, lobby.css `.lp`): the creature and the room name, how old it is, the kind pill and the spots pill, the
+ * words, its one photo, and one action — "Ask to join" on an offer, "Say hi" on a search, none on Just saying.
  *
- * ## Two shapes, one accent
+ * Creatures for everyone (decided): the Lobby is pseudonymous, so a face would hand identity over before anybody said
+ * yes. Yours is ringed in violet and says You; its action is how many asked and the way to them.
  *
- * An **offer** is a solid card (surface, radius 32) with its spaces as the
- * loudest thing on it, the count in Geist Mono: the board's one real-time
- * signal. A **seeking** (and a `chat`) is words first with no panel and a
- * smaller mark. The kind is also said in words ("Offering", "Looking"), so the
- * counter is never the only thing telling them apart.
- *
- * Memoised: a post and its ask state are stable objects, so a keystroke or one
- * card's spinner does not redraw the rest of the board.
+ * Memoised: a post and its ask state are stable objects, so one card's spinner does not redraw the rest of the Lobby.
  */
 export const BoardPostCard = memo(function BoardPostCard({
   post,
   eventId,
   ask,
+  readOnly = false,
   onAsk,
   onTakeDown,
   onMore,
+  onSeeAsks,
   onWriteNew,
 }: {
   post: BoardPostView
   eventId: string
   ask: AskState
+  /** After doors: read, never asked. */
+  readOnly?: boolean
   onAsk: (post: BoardPostView) => void
   onTakeDown: (post: BoardPostView) => void
   /** Report or block the author — anybody's post but yours. */
   onMore: (post: BoardPostView) => void
+  onSeeAsks?: () => void
   /** From a post that was taken down: the composer. */
   onWriteNew?: () => void
 }) {
   const bold = useBoldText()
   // Yours, and moderation took it down (SV9): the card says so and why, in place of the post.
   if (post.mine && post.takenDown) return <TakenDownCard onWriteNew={onWriteNew} />
-  const offer = post.kind === 'offer'
-  const spaces = offer ? spacesLabel(post.spacesLeft) : null
-  const kindWord = offer ? 'Offering' : post.kind === 'seeking' ? 'Looking' : 'Saying'
-  const full = offer && post.spacesLeft !== null && post.spacesLeft <= 0
+  const spots = spotsWords(post)
+  const full = isFull(post)
 
-  const byline = (
-    <View style={styles.byline}>
-      <BoardMark seed={boardMarkSeed(post.author, eventId, post.id)} size={offer ? MARK.offer : MARK.seeking} />
-      <View style={styles.bylineText}>
-        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{post.author}</RNText>
-        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{post.mine ? `${kindWord} · yours` : kindWord}</RNText>
-      </View>
-      {post.mine ? null : (
+  let footer: ReactNode = null
+  if (post.mine) {
+    footer = <MineFooter count={post.requestCount} onSeeAsks={onSeeAsks} />
+  } else if (ask.kind === 'settled') {
+    footer = <FooterLine line={ask.line} live />
+  } else if (!readOnly && full) {
+    footer = <FooterLine line="No spots left" />
+  } else if (!readOnly) {
+    const action = postAction(post.kind)
+    footer = action ? <AskFooter ask={ask} label={action.label} icon={action.icon} author={post.author} onAsk={() => void onAsk(post)} /> : null
+  }
+
+  return (
+    <View style={[styles.card, post.mine && styles.mineCard]}>
+      <View style={styles.byline}>
+        <BoardMark seed={boardMarkSeed(post.author, eventId, post.id)} />
+        <View style={styles.bylineText}>
+          <RNText numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>{post.author}</RNText>
+          <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[monoCaption(bold), styles.secondary]}>{postAge(post.createdAt)}</RNText>
+        </View>
+        {post.mine ? <Label text="You" fill={SELECTION.violet.fill} ink={SELECTION.violet.glyph} /> : null}
         <Pressable
-          onPress={() => onMore(post)}
+          onPress={() => (post.mine ? onTakeDown(post) : onMore(post))}
           accessibilityRole="button"
-          accessibilityLabel={`More options for ${post.author}’s post`}
+          accessibilityLabel={post.mine ? 'Take down your post' : `More options for ${post.author}’s post`}
           style={({ pressed }) => [styles.more, pressed && styles.pressed]}
         >
           <Icon name="ellipsis" size={DS_ICON.control} color={COLOR.textSecondary} />
         </Pressable>
-      )}
-    </View>
-  )
-
-  let footer: ReactNode = null
-  if (post.mine) {
-    footer = <MineFooter count={post.requestCount} onTakeDown={() => void onTakeDown(post)} />
-  } else if (post.kind !== 'chat' || ask.kind === 'settled') {
-    // A `chat` post asks nothing of anybody, so it offers nothing to ask.
-    footer = <AskFooter ask={ask} full={full} author={post.author} onAsk={() => void onAsk(post)} />
-  }
-
-  return (
-    <View style={offer ? styles.offer : styles.seeking}>
-      {offer ? byline : null}
-      {spaces ? <SpacesLine spacesLeft={post.spacesLeft} label={spaces} full={full} /> : null}
+      </View>
+      <View style={styles.pills}>
+        <View style={[styles.pill, post.kind === 'offer' ? styles.kindOffer : styles.kindOther]}>
+          <Icon name={kindGlyph(post.kind, post.subKind)} size={DS_ICON.inline} color={post.kind === 'offer' ? SELECTION.rose.glyph : COLOR.textPrimary} />
+          <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), styles.ink]}>{kindWords(post.kind, post.subKind)}</RNText>
+        </View>
+        {spots ? (
+          <View style={styles.pill}>
+            <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.mono[500]), styles.tabular, full ? styles.secondary : styles.spots]}>{spots}</RNText>
+          </View>
+        ) : null}
+      </View>
       <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{post.body}</RNText>
-      {offer ? null : byline}
+      <PostPhoto post={post} />
       {footer}
     </View>
   )
 })
+
+function FooterLine({ line, live }: { line: string; live?: boolean }) {
+  const bold = useBoldText()
+  return (
+    <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion={live ? 'polite' : undefined} style={[font('meta', bold), styles.secondary, styles.footerTop]}>
+      {line}
+    </RNText>
+  )
+}
+
+/** Yours: how many asked, and the way to answer them (the Banter's requests). */
+function MineFooter({ count, onSeeAsks }: { count: number; onSeeAsks?: () => void }) {
+  const bold = useBoldText()
+  return (
+    <View style={styles.footer}>
+      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.footerLine]}>{asksWords(count)}</RNText>
+      {onSeeAsks ? <Button label="See asks" kind="lit" size="md" onPress={onSeeAsks} style={styles.askButton} /> : null}
+    </View>
+  )
+}
+
+/**
+ * The one lit action, then the answer in place. No confirm: an ask is the moment somebody feels most exposed, and an
+ * "Are you sure?" says it is dangerous. No press haptic; `H.success` when the server records it (the screen's). A
+ * refusal is the server's sentence, and the button stays for another try.
+ */
+function AskFooter({ ask, label, icon, author, onAsk }: { ask: AskState; label: string; icon: IconName; author: string; onAsk: () => void }) {
+  const bold = useBoldText()
+  return (
+    <View style={styles.footer}>
+      {ask.kind === 'refused' ? (
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.refused, styles.footerLine]}>
+          {ask.line}
+        </RNText>
+      ) : null}
+      <Button
+        label={label}
+        kind="lit"
+        size="md"
+        icon={icon}
+        pressHaptic={false}
+        loading={ask.kind === 'asking'}
+        onPress={onAsk}
+        // The visible words first, so voice control's "tap Ask to join" works (WCAG 2.5.3).
+        accessibilityLabel={`${label}, ${author}`}
+        style={styles.askButton}
+      />
+    </View>
+  )
+}
+
 
 /**
  * "Your post was taken down." (Flow 4 · 4.10 frame 36): a solid card with the 56 pt well, the reason, and one text
@@ -201,85 +267,6 @@ function TakenDownCard({ onWriteNew }: { onWriteNew?: () => void }) {
     </View>
   )
 }
-
-/** "2 spaces left": the count in Geist Mono at the title's size, the words in the title; "Full" in textSecondary. */
-function SpacesLine({ spacesLeft, label, full }: { spacesLeft: number | null; label: string; full: boolean }) {
-  const bold = useBoldText()
-  if (full || spacesLeft === null) return <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.secondary]}>{label}</RNText>
-  const count = String(spacesLeft)
-  return (
-    <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
-      <RNText style={[font('title', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{count}</RNText>
-      {label.slice(count.length)}
-    </RNText>
-  )
-}
-
-function MineFooter({ count, onTakeDown }: { count: number; onTakeDown: () => void }) {
-  const bold = useBoldText()
-  return (
-    <View style={styles.footer}>
-      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.footerLine]}>
-        {count === 0 ? 'Nobody has asked yet' : `${count} asked. Answer in the Banter.`}
-      </RNText>
-      <Pressable
-        onPress={onTakeDown}
-        accessibilityRole="button"
-        accessibilityLabel="Take down your post"
-        hitSlop={(minTarget() - SPACE.xl) / 2}
-        style={({ pressed }) => pressed && styles.pressed}
-      >
-        <RNText maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
-          Take down
-        </RNText>
-      </Pressable>
-    </View>
-  )
-}
-
-/**
- * Ask, then the answer in place.
- *
- * No confirm dialog: the ask is the moment somebody feels most exposed, and a
- * "Are you sure?" says it is dangerous. A lit action in the event's hue, not the
- * gradient; no press haptic, `H.success` when the ask is recorded (the
- * screen's). The button holds a spinner while the request is out, then the
- * card says what happened. A refusal is the server's sentence, destructive.
- */
-function AskFooter({ ask, full, author, onAsk }: { ask: AskState; full: boolean; author: string; onAsk: () => void }) {
-  const bold = useBoldText()
-  if (ask.kind === 'settled') {
-    return (
-      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
-        {ask.line}
-      </RNText>
-    )
-  }
-  if (full) return <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>No spots left</RNText>
-
-  return (
-    <View style={styles.footer}>
-      {ask.kind === 'refused' ? (
-        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.refused, styles.footerLine]}>
-          {ask.line}
-        </RNText>
-      ) : null}
-      <Button
-        label="Ask to join"
-        kind="lit"
-        size="md"
-        icon="hand-heart"
-        pressHaptic={false}
-        loading={ask.kind === 'asking'}
-        onPress={onAsk}
-        // The visible words first, so voice control's "tap Ask to join" works (WCAG 2.5.3).
-        accessibilityLabel={`Ask to join, ${author}`}
-        style={styles.askButton}
-      />
-    </View>
-  )
-}
-
 export type ComposeKind = 'offer' | 'seeking'
 export interface BoardDraft {
   kind: ComposeKind
@@ -310,7 +297,10 @@ export function BoardComposer({
   refusal,
   onPost,
   onCancel,
+  initialKind = 'offer',
 }: {
+  /** Where the sheet opens: a start card's kind. */
+  initialKind?: ComposeKind
   visible: boolean
   posting: boolean
   refusal: string | null
@@ -318,7 +308,7 @@ export function BoardComposer({
   onCancel: () => void
 }) {
   const bold = useBoldText()
-  const [kind, setKind] = useState<ComposeKind>('offer')
+  const [kind, setKind] = useState<ComposeKind>(initialKind)
   const [body, setBody] = useState('')
   const [spaces, setSpaces] = useState(1)
   const empty = body.trim().length === 0
@@ -394,21 +384,35 @@ const styles = StyleSheet.create({
   },
   entryText: { flex: 1, gap: SPACE.xxs },
 
-  // An offer: a solid card, the counter loud.
-  offer: { gap: SPACE.sm + SPACE.xxs, padding: SPACE.lg, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
-  // A seeking: no panel, words first.
-  seeking: { gap: SPACE.sm + SPACE.xxs, paddingVertical: SPACE.xs, paddingHorizontal: SPACE.sm },
+  // lobby.css `.lp`: one card for every kind, 24 pt, a hairline; yours ringed in violet.
+  card: {
+    gap: SPACE.sm + SPACE.xxs,
+    paddingTop: SPACE.md + SPACE.xxs,
+    paddingHorizontal: SPACE.lg,
+    paddingBottom: SPACE.lg,
+    borderRadius: CARD_RADIUS,
+    backgroundColor: COLOR.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLOR.hairline,
+  },
+  mineCard: { borderWidth: 1, borderColor: tint(SELECTION.violet.edge, 0.55) },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs + SPACE.xxs },
+  pill: { minHeight: PILL_HEIGHT, paddingHorizontal: SPACE.sm + SPACE.xxs, borderRadius: RADIUS.capsule, backgroundColor: COLOR.chipFillOnGlass, flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
+  kindOffer: { backgroundColor: SELECTION.rose.fill, borderWidth: StyleSheet.hairlineWidth, borderColor: SELECTION.rose.edge },
+  kindOther: { borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairlineStrong },
+  spots: { color: SELECTION.rose.glyph },
 
   takenDown: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.lg, padding: SPACE.lg, borderRadius: RADIUS.card, backgroundColor: COLOR.surface },
   takenDownText: { flex: 1, gap: SPACE.xs },
   takenDownAction: { alignSelf: 'flex-start', marginTop: SPACE.xs },
 
-  byline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs },
+  byline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs, marginBottom: SPACE.xxs },
   bylineText: { flex: 1 },
   // A menu is a target, not an icon.
   more: { width: minTarget(), height: minTarget(), alignItems: 'center', justifyContent: 'center', marginRight: -SPACE.md },
 
-  footer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.md, marginTop: SPACE.xs },
+  footer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.md, marginTop: SPACE.xxs },
+  footerTop: { marginTop: SPACE.xxs },
   footerLine: { flex: 1 },
   askButton: { marginLeft: 'auto' },
 

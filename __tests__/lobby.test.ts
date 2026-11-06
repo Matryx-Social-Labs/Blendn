@@ -12,6 +12,13 @@ import {
   joinedLine,
   joinedTitle,
   kindGlyph,
+  asksWords,
+  freshOnTop,
+  lobbyChips,
+  lobbyLayout,
+  newPostsWords,
+  photoView,
+  readOnlyLine,
   kindWords,
   postAction,
   postAge,
@@ -146,3 +153,89 @@ describe('the alerts sheet’s switches (admin #918)', () => {
     expect(doorsAt('2026-11-08T12:30:00Z')).toBe(roomOpensAt('2026-11-08T12:30:00Z'))
   })
 })
+
+describe('the Lobby screen (L-A): what each part shows', () => {
+  const meta = (over: Partial<LobbyMeta> = {}): Partial<LobbyMeta> => ({
+    state: 'open',
+    phase: 'before',
+    counts: { all: 3, offer: 1, seeking: 1, chat: 1, offerRides: 1, mine: 0, replies: 0 },
+    ...over,
+  })
+
+  it('lays out the open Lobby: the composer, the chips, the pin on All only', () => {
+    expect(lobbyLayout(meta({ pinned: PIN }), 'all')).toEqual({ top: 'composer', chips: true, pinned: true, starts: false, liveEmpty: false })
+    expect(lobbyLayout(meta({ pinned: PIN }), 'offer').pinned).toBe(false)
+  })
+
+  it('is the two starts, and no chips, before anybody posted (control: one post brings the chips back)', () => {
+    const none = meta({ counts: { all: 0, offer: 0, seeking: 0, chat: 0, offerRides: 0, mine: 0, replies: 0 } })
+    expect(lobbyLayout(none, 'all')).toMatchObject({ chips: false, starts: true, liveEmpty: false })
+    expect(lobbyLayout(meta(), 'all')).toMatchObject({ chips: true, starts: false })
+  })
+
+  it('keeps the chips on a filter that found nothing, so it can be undone', () => {
+    const none = meta({ counts: { all: 4, offer: 4, seeking: 0, chat: 0, offerRides: 0, mine: 0, replies: 0 } })
+    expect(lobbyLayout(none, 'mine')).toMatchObject({ chips: true, starts: false })
+  })
+
+  it('after doors: read-only, no starts; empty, it says the room is open instead (4b), and keeps a pinned note', () => {
+    expect(lobbyLayout(meta({ state: 'read_only', phase: 'live' }), 'all')).toMatchObject({ top: 'readOnly', chips: true, liveEmpty: false })
+    const empty = meta({ state: 'read_only', phase: 'live', pinned: PIN, counts: { all: 0, offer: 0, seeking: 0, chat: 0, offerRides: 0, mine: 0, replies: 0 } })
+    expect(lobbyLayout(empty, 'all')).toEqual({ top: 'none', chips: false, pinned: true, starts: false, liveEmpty: true })
+  })
+
+  it('puts the gate in the composer’s slot, and the Lobby stays readable under it', () => {
+    const gated = meta({ compose: { allowed: false, message: 'x', reasonCode: 'BOARD_NOT_GOING' } })
+    expect(lobbyLayout(gated, 'all')).toMatchObject({ top: 'going', chips: true })
+    expect(lobbyLayout(meta({ compose: { allowed: false, message: 'x', reasonCode: 'BOARD_PROFILE_INCOMPLETE' } }), 'all').top).toBe('profile')
+  })
+
+  it('reads an older server (no meta at all) as the open Lobby, counting what it sent', () => {
+    expect(lobbyLayout({}, 'all', 0)).toMatchObject({ top: 'composer', chips: false, starts: true })
+    expect(lobbyLayout({}, 'all', 2)).toMatchObject({ top: 'composer', chips: false, starts: false })
+  })
+
+  it('names the chips with compact counts, and the two about you after the kinds', () => {
+    const chips = lobbyChips({ all: WORST.count, offer: 418, seeking: 1200, chat: 0, offerRides: 0, mine: 2, replies: 1 })
+    expect(chips.map((c) => `${c.label} ${c.count}`)).toEqual(['All 12k', 'Offering 418', 'Looking for 1.2k', 'Just saying 0', 'Mine 2', 'Replies to me 1'])
+  })
+
+  it('says how many new posts wait behind the pill, in one or many', () => {
+    expect(newPostsWords(1)).toBe('1 new post')
+    expect(newPostsWords(12)).toBe('12 new posts')
+    expect(newPostsWords(WORST.count)).toBe('12k new posts')
+  })
+
+  it('holds back what a background read found above the list, and nothing that was already there or yours', () => {
+    const shown = new Set(['a', 'b'])
+    const page = [{ id: 'n1', mine: false }, { id: 'n2', mine: true }, { id: 'a', mine: false }, { id: 'b', mine: false }]
+    expect(freshOnTop(page, shown)).toEqual(['n1'])
+    // Control: nothing shown yet is a first load, which holds nothing back.
+    expect(freshOnTop(page, new Set())).toEqual([])
+  })
+
+  it('says until when the Lobby can be read, and only the doors if the server did not say', () => {
+    expect(readOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('The Lobby is read-only now. You can read it until Tue 10 Nov, 12 AM.')
+    expect(readOnlyLine(undefined)).toBe('The Lobby is read-only now.')
+  })
+
+  it('counts the asks on your post', () => {
+    expect(asksWords(0)).toBe('No asks yet')
+    expect(asksWords(1)).toBe('1 ask')
+    expect(asksWords(WORST.count)).toBe('12k asks')
+  })
+
+  it('draws a photo only from https, and a pending or turned-down one only for its author', () => {
+    const url = 'https://fly.storage.tigris.dev/blendn/chat/p.jpg'
+    expect(photoView({ status: 'approved', url, alt: 'A booth' }, false)).toEqual({ kind: 'shown', url, alt: 'A booth' })
+    expect(photoView({ status: 'pending', url, alt: null }, true)).toEqual({ kind: 'pending', url, alt: 'Your photo' })
+    expect(photoView({ status: 'pending', url, alt: null }, false)).toEqual({ kind: 'none' })
+    expect(photoView({ status: 'rejected', url: null, alt: null }, true)).toEqual({ kind: 'rejected' })
+    expect(photoView({ status: 'approved', url: 'http://x.example/p.jpg', alt: null }, false)).toEqual({ kind: 'none' })
+    expect(photoView({ status: 'approved', url: 'javascript:alert(1)', alt: null }, false)).toEqual({ kind: 'none' })
+    expect(photoView(null, true)).toEqual({ kind: 'none' })
+    expect(photoView(undefined, true)).toEqual({ kind: 'none' })
+  })
+})
+
+const PIN = { id: 'h1', body: 'Music starts at 6.', host: 'Nightshift Collective', createdAt: '2026-11-06T06:00:00Z', updatedAt: '2026-11-06T06:00:00Z' }

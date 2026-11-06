@@ -256,3 +256,64 @@ export const ALERT_ROWS: readonly { key: keyof LobbyAlerts; title: string; hint:
   { key: 'offersMatch', title: 'Someone offers what you’re looking for', hint: 'A ride, a spot or a ticket you posted about' },
   { key: 'hostPosts', title: 'The host posts', hint: 'Their pinned note, when it changes' },
 ]
+
+/**
+ * The Lobby screen's parts (L-A), from the first page's meta: what sits in the composer's slot, whether the chips, the
+ * pin and the two starts show, and the live Lobby nobody posted in (4b: "Nobody posted in the Lobby. The room is
+ * open."). `listed` stands in for the counts on an older server that sends none.
+ */
+export type LobbyLayout = {
+  top: 'composer' | 'going' | 'profile' | 'readOnly' | 'none'
+  chips: boolean
+  pinned: boolean
+  starts: boolean
+  liveEmpty: boolean
+}
+export function lobbyLayout(meta: Partial<LobbyMeta>, filter: LobbyFilter, listed = 0): LobbyLayout {
+  const all = meta.counts?.all ?? listed
+  const pinned = filter === 'all' && !!meta.pinned
+  const liveEmpty = meta.state === 'read_only' && all === 0
+  if (liveEmpty) return { top: 'none', chips: false, pinned, starts: false, liveEmpty }
+  const slot = composerSlot({ state: meta.state ?? 'open', compose: meta.compose })
+  const top = slot.kind === 'gate' ? slot.gate : slot.kind
+  // An older server sends no counts, so no chip could say one.
+  const chips = !!meta.counts && (all > 0 || filter !== 'all')
+  return { top, chips, pinned, starts: top === 'composer' && all === 0 && filter === 'all', liveEmpty }
+}
+
+export function lobbyChips(counts: LobbyCounts) {
+  return LOBBY_FILTERS.map((f) => ({ key: f.key, label: f.label, count: compactCount(counts[f.count]), exact: counts[f.count] }))
+}
+
+/** The pill over a busy Lobby: the list never jumps, the new posts wait behind it. */
+export const newPostsWords = (n: number) => `${compactCount(n)} new ${n === 1 ? 'post' : 'posts'}`
+
+/**
+ * What a background read found that the list does not show yet: posts on its first page that nobody has seen, and not
+ * your own (yours go up as you post). Nothing on a first load: there is no list yet to jump.
+ */
+export function freshOnTop(page: readonly { id: string; mine: boolean }[], shown: ReadonlySet<string>): string[] {
+  if (shown.size === 0) return []
+  return page.filter((p) => !p.mine && !shown.has(p.id)).map((p) => p.id)
+}
+
+/** The doors banner's line, in the event's own clock. */
+export function readOnlyLine(closesAt: string | undefined, timeZone?: string | null): string {
+  const until = untilWords(closesAt, timeZone)
+  return until ? `The Lobby is read-only now. You can read it until ${until}.` : 'The Lobby is read-only now.'
+}
+
+export const asksWords = (n: number) => (n === 0 ? 'No asks yet' : `${compactCount(n)} ${n === 1 ? 'ask' : 'asks'}`)
+
+/**
+ * How a post's photo draws. Only an https URL is ever loaded (the server seals uploads to its own bucket; anything else
+ * is not ours). A pending photo is its author's alone, blurred until checked; a turned-down one says so to them only.
+ */
+export type PhotoView = { kind: 'none' } | { kind: 'rejected' } | { kind: 'shown' | 'pending'; url: string; alt: string }
+export function photoView(photo: LobbyPhoto | undefined, mine: boolean): PhotoView {
+  if (!photo) return { kind: 'none' }
+  if (photo.status === 'rejected') return mine ? { kind: 'rejected' } : { kind: 'none' }
+  if (!photo.url || !/^https:\/\//i.test(photo.url)) return { kind: 'none' }
+  if (photo.status === 'pending') return mine ? { kind: 'pending', url: photo.url, alt: photo.alt || 'Your photo' } : { kind: 'none' }
+  return { kind: 'shown', url: photo.url, alt: photo.alt || 'A photo with the post' }
+}

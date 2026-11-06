@@ -106,6 +106,7 @@ import Martini from 'lucide-react-native/icons/martini'
 import Megaphone from 'lucide-react-native/icons/megaphone'
 import MessageCircle from 'lucide-react-native/icons/message-circle'
 import MessageCircleOff from 'lucide-react-native/icons/message-circle-off'
+import MessageSquare from 'lucide-react-native/icons/message-square'
 import MessageSquareDashed from 'lucide-react-native/icons/message-square-dashed'
 import MessageSquareOff from 'lucide-react-native/icons/message-square-off'
 import MicOff from 'lucide-react-native/icons/mic-off'
@@ -118,6 +119,7 @@ import Plane from 'lucide-react-native/icons/plane'
 import Pause from 'lucide-react-native/icons/pause'
 import PenLine from 'lucide-react-native/icons/pen-line'
 import Pencil from 'lucide-react-native/icons/pencil'
+import Pin from 'lucide-react-native/icons/pin'
 import Play from 'lucide-react-native/icons/play'
 import Plus from 'lucide-react-native/icons/plus'
 import Radar from 'lucide-react-native/icons/radar'
@@ -272,6 +274,7 @@ const ICONS = {
   megaphone: Megaphone,
   'message-circle': MessageCircle,
   'message-circle-off': MessageCircleOff,
+  'message-square': MessageSquare,
   'message-square-dashed': MessageSquareDashed,
   'message-square-off': MessageSquareOff,
   'mic-off': MicOff,
@@ -284,6 +287,7 @@ const ICONS = {
   pause: Pause,
   'pen-line': PenLine,
   pencil: Pencil,
+  pin: Pin,
   play: Play,
   plus: Plus,
   radar: Radar,

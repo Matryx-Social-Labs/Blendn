@@ -47,9 +47,10 @@ export const goneFrom = (taken: readonly TakenDown[] | undefined): BoardPostView
     takenDown: true,
   }))
 
-/** The next page of an event's board, after `cursor`. */
-export function getBoardPage(eventId: string, cursor: string): Promise<ApiResponse<BoardPage>> {
-  return apiClient.queuedRequest<BoardPage>(`/api/mobile/events/${encodeURIComponent(eventId)}/board?cursor=${encodeURIComponent(cursor)}`)
+/** The next page of an event's board, after `cursor`, under the same chip's filter (`filterQuery`). */
+export function getBoardPage(eventId: string, cursor: string, query: Record<string, string> = {}): Promise<ApiResponse<BoardPage>> {
+  const qs = new URLSearchParams({ cursor, ...query }).toString()
+  return apiClient.queuedRequest<BoardPage>(`/api/mobile/events/${encodeURIComponent(eventId)}/board?${qs}`)
 }
 
 /**
