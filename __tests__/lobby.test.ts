@@ -16,7 +16,11 @@ import {
   freshOnTop,
   lobbyChips,
   lobbyLayout,
+  lobbyNews,
+  LOBBY_NEWS_PAGE,
+  newestPostAt,
   newPostsWords,
+  previewReadOnlyLine,
   photoView,
   readOnlyLine,
   kindWords,
@@ -80,9 +84,45 @@ describe('the chips', () => {
   })
 
   it('are compact past 999, and the badge caps at 9+', () => {
-    expect(countLine({ all: 2188, offerRides: WORST.count })).toEqual({ posts: '2.1k', rides: '12k' })
+    expect(countLine({ all: 2188, offerRides: WORST.count })).toEqual({ posts: '2.1k', postsWord: 'posts', rides: '12k', ridesWord: 'offering rides' })
     expect(badgeCount(5)).toBe('5')
     expect(badgeCount(48)).toBe('9+')
+  })
+
+  it('says one post and one ride in the singular, and leaves the rides out at none (control: 18 and 3)', () => {
+    expect(countLine({ all: 18, offerRides: 3 })).toEqual({ posts: '18', postsWord: 'posts', rides: '3', ridesWord: 'offering rides' })
+    expect(countLine({ all: 1, offerRides: 1 })).toEqual({ posts: '1', postsWord: 'post', rides: '1', ridesWord: 'offering a ride' })
+    expect(countLine({ all: 4, offerRides: 0 }).rides).toBeNull()
+  })
+})
+
+describe('Going’s "New in the Lobby"', () => {
+  const at = (min: number) => new Date(Date.parse('2026-11-08T10:00:00Z') + min * 60_000).toISOString()
+  const post = (id: string, min: number, mine = false) => ({ id, author: `Creature ${id}`, createdAt: at(min), mine })
+  const page = [post('e', 50), post('d', 40, true), post('c', 30), post('b', 20), post('a', 10)]
+
+  it('counts what others posted since you last opened the Lobby, and leads with the three newest', () => {
+    const news = lobbyNews(page, at(25))
+    expect(news.count).toBe(2)
+    expect(news.authors.map((a) => a.id)).toEqual(['e', 'c'])
+  })
+
+  it('counts everything when you never opened it, never your own, and nothing when you have seen it all (control)', () => {
+    expect(lobbyNews(page, null).count).toBe(4)
+    expect(lobbyNews(page, null).authors.map((a) => a.id)).toEqual(['e', 'c', 'b'])
+    expect(lobbyNews(page, at(50)).count).toBe(0)
+  })
+
+  it('is 9+ when a whole page is newer than you saw (the page cannot say how many more)', () => {
+    const full = Array.from({ length: LOBBY_NEWS_PAGE }, (_, i) => post(String(i), 100 - i))
+    expect(badgeCount(lobbyNews(full, at(0)).count)).toBe('9+')
+    // Control: one of them seen, so the count is exact.
+    expect(lobbyNews(full, at(91)).count).toBe(9)
+  })
+
+  it('remembers the newest post you were shown, by the server’s clock', () => {
+    expect(newestPostAt(page)).toBe(at(50))
+    expect(newestPostAt([])).toBeNull()
   })
 })
 
@@ -163,6 +203,11 @@ describe('the event page’s slot', () => {
     expect(previewView({ ...base, counts: { ...base.counts, all: 0 } })).toBe('empty')
     expect(previewView({ ...base, state: 'read_only', phase: 'live' })).toBe('readOnly')
     expect(previewView({ ...base, state: 'read_only', phase: 'live', counts: { ...base.counts, all: 0 } })).toBe('roomOpen')
+  })
+
+  it('says after doors why it is read-only, and until when in the event’s clock', () => {
+    expect(previewReadOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('The doors are open, so the Lobby is read-only. You can read it until Tue 10 Nov, 12 AM.')
+    expect(previewReadOnlyLine(undefined)).toBe('The doors are open, so the Lobby is read-only.')
   })
 })
 

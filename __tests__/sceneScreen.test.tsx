@@ -37,9 +37,9 @@ const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../components/scene/SceneHeroMedia', () => ({ SceneHeroMedia: () => null, HERO_CAPTION_FOOT: 40 }))
 jest.mock('../components/scene/SceneLightbox', () => ({ SceneLightbox: () => null }))
-jest.mock('../components/board/BoardSections', () => {
+jest.mock('../components/board/LobbyPreview', () => {
   const { View } = jest.requireActual('react-native')
-  return { BoardEntry: () => <View testID="board-entry" /> }
+  return { EventLobbyPreview: () => <View testID="lobby-preview" /> }
 })
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn(), openRoomOf: jest.fn(), useRoomUp: () => false, useLiveEventId: () => null, useLiveTitle: () => null }))
 jest.mock('../lib/calendar', () => ({ addToCalendar: jest.fn() }))
@@ -711,30 +711,31 @@ function textOf(node: { children: (string | { children: unknown[] })[] }): strin
   return node.children.map((c) => (typeof c === 'string' ? c : textOf(c as never))).join('')
 }
 
-describe('the Lobby row (ROOM-08, flow3.js:68)', () => {
+describe('the Lobby card (P-A, SCRUM-1026)', () => {
   const at = (id: string) => JSON.stringify(screen.toJSON()).indexOf(`"${id}"`)
 
-  it('follows The experience directly', async () => {
+  it('sits after the facts, before The experience', async () => {
     api.getEvent.mockResolvedValue(detail() as never)
     await open()
-    expect(await screen.findByTestId('board-entry')).toBeTruthy()
+    expect(await screen.findByTestId('lobby-preview')).toBeTruthy()
     const experience = JSON.stringify(screen.toJSON()).indexOf('The experience')
     expect(experience).toBeGreaterThan(-1)
-    expect(at('board-entry')).toBeGreaterThan(experience)
+    expect(at('lobby-preview')).toBeLessThan(experience)
+    expect(at('lobby-preview')).toBeGreaterThan(at('scene-guide'))
   })
 
   it('is absent on a cancelled night', async () => {
     api.getEvent.mockResolvedValue(detail({ status: 'cancelled' }) as never)
     await open()
     await screen.findByTestId('scene-cancelled')
-    expect(screen.queryByTestId('board-entry')).toBeNull()
+    expect(screen.queryByTestId('lobby-preview')).toBeNull()
   })
 
-  it('is absent after the doors (the server closes the Lobby at the first doors)', async () => {
+  it('stays after the doors: read-only until the close, or the room once live, as the server says (control: not the phone)', async () => {
     api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2) }) as never)
     await open()
     await screen.findByTestId('scene-guide')
-    expect(screen.queryByTestId('board-entry')).toBeNull()
+    expect(screen.getByTestId('lobby-preview')).toBeTruthy()
   })
 })
 
