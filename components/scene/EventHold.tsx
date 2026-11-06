@@ -28,8 +28,8 @@ export function EventHold({ reach, onConfirm, busy, confirmed, switching = false
   return (
     <View testID="scene-hold" style={styles.wrap}>
       <HoldToConfirm
-        label={switching ? SWITCH_LABEL : 'Hold to blend in'}
-        srLabel={switching ? 'Switch rooms' : 'Blend in'}
+        label={switching ? SWITCH_LABEL : 'Hold to Blend’n'}
+        srLabel={switching ? 'Switch rooms' : 'Blend’n'}
         consequence={line ?? 'Checks you in. Other people at this event will see you.'}
         onConfirm={onConfirm}
         disabled={reach !== 'open'}

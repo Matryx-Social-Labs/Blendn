@@ -25,13 +25,13 @@ import { SkeletonBlock } from '../../components/Skeleton'
 import { apiClient } from '../../lib/apiClient'
 import {
   askConflictLine,
-  BOARD_CLOSED_SENTENCE,
   BOARD_ENABLED,
   boardClosed,
   boardMessage,
   CLOSED_LINE,
   isSettled,
   outgoingLine,
+  saysBoardClosed,
   sortBoardPosts,
   WAITING_LINE,
   type BoardPost,
@@ -97,8 +97,8 @@ type Load =
 type EventFacts = { title: string; startTime: string | null }
 
 const REFUSED_TITLE: Record<string, string> = {
-  AGE_RESTRICTED: 'This board has an age limit',
-  NOT_FOUND: "This board isn’t here",
+  AGE_RESTRICTED: 'This Lobby has an age limit',
+  NOT_FOUND: "This Lobby isn’t here",
 }
 
 export function BoardScreen() {
@@ -176,13 +176,13 @@ export function BoardScreen() {
         setEvent({ title: facts.data.title, startTime: facts.data.startTime ?? facts.data.start_time ?? null })
       }
       if (!board.success || !board.data) {
-        if (board.error?.trim() === BOARD_CLOSED_SENTENCE) {
+        if (saysBoardClosed(board.error)) {
           setDoorsShut(true)
           return true
         }
         const code = board.errorCode
         if (code === 'FORBIDDEN' || code === 'AGE_RESTRICTED' || code === 'NOT_FOUND') {
-          setLoad({ kind: 'refused', code, line: boardMessage(board, 'This board is not open to you.') })
+          setLoad({ kind: 'refused', code, line: boardMessage(board, 'This Lobby is not open to you.') })
           return true
         }
         Logger.warn('board', 'load failed', { eventId, error: board.error })
@@ -369,7 +369,7 @@ export function BoardScreen() {
       showSheet({
         kind: 'actions',
         title: 'Take your post down?',
-        message: 'It leaves the board. Anybody who asked is not told why.',
+        message: 'It leaves the Lobby. Anybody who asked is not told why.',
         actions: [
           {
             label: 'Take down',
@@ -496,7 +496,7 @@ export function BoardScreen() {
     <View style={styles.header}>
       {offline}
       {refreshFailed && load.kind === 'ready' ? (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn’t refresh. Pull down to try again.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>The Lobby didn’t refresh. Pull down to try again.</Text>
       ) : null}
       {load.kind === 'ready' && load.posts.length > 0 && !allPosts.some((p) => p.mine) ? (
         <Button label="Write a post" onPress={() => setComposing(true)} />
@@ -520,7 +520,7 @@ export function BoardScreen() {
     content = (
       <StateScreen
         icon="lock"
-        title="The board’s closed"
+        title="The Lobby’s closed"
         body="The doors are open, so the room is open instead."
         // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
         actions={[{ label: 'Open the room', onPress: openRoomFromBoard }]}
@@ -533,7 +533,7 @@ export function BoardScreen() {
     content = (
       <StateScreen
         icon="circle-slash"
-        title={(load.code && REFUSED_TITLE[load.code]) || 'Not on this board yet'}
+        title={(load.code && REFUSED_TITLE[load.code]) || 'Not in this Lobby yet'}
         body={load.line}
         actions={[{ label: 'Back to the event', kind: 'secondary', onPress: () => router.back() }]}
         testID="board-refused"
@@ -543,7 +543,7 @@ export function BoardScreen() {
     content = (
       <StateScreen
         icon="cloud-off"
-        title="The board didn’t load"
+        title="The Lobby didn’t load"
         body="Check your connection and try again."
         actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
         testID="board-failed"
@@ -565,7 +565,7 @@ export function BoardScreen() {
             <StateScreen
               icon="search"
               title={kindFilter === 'offer' ? 'Nobody’s offering yet' : 'Nobody’s looking yet'}
-              body="Loaded so far. More come as you scroll the whole board."
+              body="Loaded so far. More come as you scroll the whole Lobby."
               actions={[{ label: 'Show every post', kind: 'secondary', onPress: () => setKindFilter(null) }]}
               testID="board-filter-empty"
             />
@@ -613,7 +613,7 @@ export function BoardScreen() {
         </View>
       )}
       <View style={bar.barPin} pointerEvents="box-none">
-        <TopBar title="The Board" sub={event?.title} state={bar.state} onBack={() => router.back()} testID="board-top" />
+        <TopBar title="The Lobby" sub={event?.title} state={bar.state} onBack={() => router.back()} testID="board-top" />
       </View>
       <BoardComposer
         key={posted}
@@ -633,7 +633,7 @@ export function BoardScreen() {
 /** Card-shaped (three offer cards), so the list does not jump when it lands. */
 function BoardSkeleton() {
   return (
-    <View style={styles.skeleton} accessibilityLabel="Loading the board">
+    <View style={styles.skeleton} accessibilityLabel="Loading the Lobby">
       {[0, 1, 2].map((i) => (
         <SkeletonBlock key={i} width="100%" height={SKELETON_CARD} borderRadius={RADIUS.card} />
       ))}

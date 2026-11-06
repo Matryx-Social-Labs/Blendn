@@ -126,7 +126,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   return (
-    <MomentStage testID={testID} onShown={() => setOnStage(true)} label={`It’s a Blend. ${spoken}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
+    <MomentStage testID={testID} onShown={() => setOnStage(true)} label={`It’s a Mix. ${spoken}.`} scrimAlpha={SCRIM} scrim={scrim} orbs="moment" orbsOpacity={orbs} onSkip={skip} onBack={() => {
         skip()
         onLater()
       }}>
@@ -143,7 +143,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
           </View>
           <Animated.View testID={testID && `${testID}-copy`} pointerEvents="none" style={[styles.copy, textStyle]}>
             <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[font('moment', bold), styles.centre]}>
-              It’s a Blend
+              It’s a Mix
             </Text>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: secondary }]}>
               {line}
@@ -164,7 +164,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
           pointerEvents={live || screenReader ? 'box-none' : 'none'}
           style={[styles.actions, { paddingBottom: insets.bottom + SPACE.xl }, actionsStyle]}
         >
-          <Button label="Open the Blend" onPress={onOpen} testID={testID && `${testID}-open`} />
+          <Button label="Open the Mix" onPress={onOpen} testID={testID && `${testID}-open`} />
           <Button label="Later" kind="tertiary" onPress={onLater} testID={testID && `${testID}-later`} />
         </Animated.View>
       </View>

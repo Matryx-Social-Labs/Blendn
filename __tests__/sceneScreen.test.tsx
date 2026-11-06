@@ -707,7 +707,7 @@ function textOf(node: { children: (string | { children: unknown[] })[] }): strin
   return node.children.map((c) => (typeof c === 'string' ? c : textOf(c as never))).join('')
 }
 
-describe('the Board row (ROOM-08, flow3.js:68)', () => {
+describe('the Lobby row (ROOM-08, flow3.js:68)', () => {
   const at = (id: string) => JSON.stringify(screen.toJSON()).indexOf(`"${id}"`)
 
   it('follows The experience directly, above the details, the gallery and the attendees', async () => {
@@ -727,7 +727,7 @@ describe('the Board row (ROOM-08, flow3.js:68)', () => {
     expect(screen.queryByTestId('board-entry')).toBeNull()
   })
 
-  it('is absent after the doors (the server closes the board at the first doors)', async () => {
+  it('is absent after the doors (the server closes the Lobby at the first doors)', async () => {
     api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2) }) as never)
     await open()
     await screen.findByTestId('scene-tiles')
@@ -741,8 +741,8 @@ describe('Blend in is the hold itself (SCRUM-966)', () => {
     const { openPass } = require('../lib/blendnOverlay') as { openPass: jest.Mock }
     api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2) }) as never)
     await open()
-    expect(await screen.findByRole('button', { name: 'Hold to blend in' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Blend in' })).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Hold to Blend’n' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Blend’n' })).toBeNull()
     expect(openPass).not.toHaveBeenCalled()
   })
 
@@ -751,7 +751,7 @@ describe('Blend in is the hold itself (SCRUM-966)', () => {
     await open()
     expect(await screen.findByTestId('scene-cancelled')).toBeTruthy()
     expect(screen.getAllByText('Cancelled').length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: 'Blend in' })).toBeNull()
-    expect(screen.queryByText('Blend in')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Blend’n' })).toBeNull()
+    expect(screen.queryByText('Blend’n')).toBeNull()
   })
 })

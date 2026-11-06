@@ -128,7 +128,7 @@ export function offerStateLine(state: OfferState, venueName: string): string | n
     case 'redeemed':
       return 'Redeemed. Enjoy it.'
     case 'used_tonight':
-      return `You’ve used a pass at ${venueName} tonight — one a night. This one works another night.`
+      return `You’ve used an offer at ${venueName} tonight — one a night. This one works another night.`
     case 'ended':
       return 'This offer has ended.'
   }
@@ -164,7 +164,7 @@ export const OFFER_REPORT_REASONS: readonly { value: OfferReportReason; label: s
 export const LIVE_LEVEL = 0.62
 
 export const LIVE_FOOT = 'Show this at the door. Staff type the code and tap Redeemed.'
-export const OFFLINE_FOOT = 'This pass needs a connection to show its code.'
+export const OFFLINE_FOOT = 'This offer code needs a connection to show.'
 export const FRESH_CODE_FOOT = 'Getting a fresh code…'
 
 /** Which face the door code wears: `offline` is "no fresh code to show", whatever the reason. */

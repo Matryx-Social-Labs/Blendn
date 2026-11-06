@@ -19,7 +19,7 @@ describe('<LikingAsChip>', () => {
   it('as a crew: the emblem and the crew’s name, a button that opens a menu', async () => {
     const onPress = jest.fn()
     await render(<LikingAsChip crew={NEBULA} pseudonym="Cosmic Panda" onPress={onPress} testID="c" />)
-    const chip = screen.getByRole('button', { name: 'Liking as Nebula' })
+    const chip = screen.getByRole('button', { name: 'Sending as Nebula' })
     expect(chip.props.accessibilityHint).toBe('Opens a menu')
     expect(screen.getByTestId('c-emblem', { includeHiddenElements: true })).toBeTruthy()
     await fireEvent.press(chip)
@@ -28,7 +28,7 @@ describe('<LikingAsChip>', () => {
 
   it('Just me: your creature', async () => {
     await render(<LikingAsChip crew={null} pseudonym="Cosmic Panda" onPress={jest.fn()} testID="c" />)
-    expect(screen.getByRole('button', { name: 'Liking as Just me' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sending as Just me' })).toBeTruthy()
     expect(screen.queryByTestId('c-emblem', { includeHiddenElements: true })).toBeNull()
   })
 

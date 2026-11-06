@@ -214,7 +214,7 @@ describe('a warning before contact details (C2, 5.10)', () => {
   })
 })
 
-describe('closed and removed rooms of a crew or a Blend (C3, C4)', () => {
+describe('closed and removed rooms of a crew or a Mix (C3, C4)', () => {
   const crewRow = { rooms: [{ id: 'g1', name: 'Nebula', kind: 'crew', crewId: 'c1' }], groups: [] }
   beforeEach(() => {
     mockParams = { id: 'g1', kind: 'crew', crewId: 'c1' }
@@ -230,12 +230,12 @@ describe('closed and removed rooms of a crew or a Blend (C3, C4)', () => {
     expect(screen.queryByLabelText('Message')).toBeNull()
   })
 
-  it('a closed Blend is the "This Blend closed" card', async () => {
+  it('a closed Mix is the "This Mix closed" card', async () => {
     mockParams = { id: 'g1', kind: 'blend', blendId: 'b1' }
     ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(refuse('CHAT_CLOSED'))
     await render(<GroupChat />)
     await flush()
-    expect(screen.getByText('This Blend closed')).toBeTruthy()
+    expect(screen.getByText('This Mix closed')).toBeTruthy()
   })
 
   it('being removed from a crew’s chat is its own line, not the card', async () => {

@@ -577,7 +577,7 @@ function ChatInner() {
               <StateScreen
                 icon="message-circle"
                 title="No conversations yet"
-                body="Blend in to an event and its room appears here — or message someone you met there."
+                body="Blend’n at an event and its room appears here — or message someone you met there."
                 actions={[{ label: 'Explore events', onPress: () => router.push('/(tabs)/events' as never) }]}
                 testID="banter-empty"
               />

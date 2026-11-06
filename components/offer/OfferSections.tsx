@@ -83,8 +83,8 @@ export function DoorTicket({
   const contrast = useIncreaseContrast()
   return (
     <View testID="door-ticket" style={[styles.ticket, contrast ? IC_HAIRLINE : styles.edge]}>
-      <View accessible accessibilityLabel={`Door pass for ${venueName}. ${offerText}. Valid ${until}.`} style={styles.top}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>DOOR PASS</Text>
+      <View accessible accessibilityLabel={`Offer code for ${venueName}. ${offerText}. Valid ${until}.`} style={styles.top}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>OFFER CODE</Text>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink]}>
           {venueName}
         </Text>
