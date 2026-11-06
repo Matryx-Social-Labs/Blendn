@@ -31,6 +31,11 @@ import { ICON, OPACITY, tint } from '../../lib/theme'
 const MARK = 40
 /** `.lp`: 24 pt cards. */
 const CARD_RADIUS = RADIUS.sheet
+/** `.lp .mo`: the ⋯ is drawn 32 wide; its slop brings the target to 44 (48 on Android). */
+const MORE_WIDTH = 32
+const MORE_SLOP = { left: (minTarget() - MORE_WIDTH) / 2, right: (minTarget() - MORE_WIDTH) / 2 }
+/** `.kt`: the kind pill's glyph is 14, a step under the inline 16, so the pill holds the words at 13. */
+const PILL_GLYPH = 14
 /** `.kt` / `.ks`: the kind and spots pills. */
 const PILL_HEIGHT = 26
 
@@ -162,6 +167,7 @@ export const BoardPostCard = memo(function BoardPostCard({
           accessibilityRole="button"
           accessibilityLabel={post.mine ? 'Take down your post' : `More options for ${post.author}’s post`}
           testID="lobby-post-more"
+          hitSlop={MORE_SLOP}
           style={({ pressed }) => [styles.more, pressed && styles.pressed]}
         >
           <Icon name="ellipsis" size={DS_ICON.control} color={COLOR.textSecondary} />
@@ -169,7 +175,7 @@ export const BoardPostCard = memo(function BoardPostCard({
       </View>
       <View style={styles.pills}>
         <View testID="lobby-post-kind" style={[styles.pill, post.kind === 'offer' ? styles.kindOffer : styles.kindOther]}>
-          <Icon name={kindGlyph(post.kind, post.subKind)} size={DS_ICON.inline} color={post.kind === 'offer' ? SELECTION.rose.glyph : COLOR.textPrimary} />
+          <Icon name={kindGlyph(post.kind, post.subKind)} size={PILL_GLYPH} color={post.kind === 'offer' ? SELECTION.rose.glyph : COLOR.textPrimary} />
           <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), styles.ink]}>{kindWords(post.kind, post.subKind)}</RNText>
         </View>
         {spots ? (
@@ -408,10 +414,11 @@ const styles = StyleSheet.create({
   takenDownText: { flex: 1, gap: SPACE.xs },
   takenDownAction: { alignSelf: 'flex-start', marginTop: SPACE.xs },
 
-  byline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs, marginBottom: SPACE.xxs },
+  byline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs },
   bylineText: { flex: 1 },
   // A menu is a target, not an icon.
-  more: { width: minTarget(), height: minTarget(), alignItems: 'center', justifyContent: 'center', marginRight: -SPACE.md },
+  // `.lp .mo`: 32 wide, a target's height, hanging 10 into the padding; the slop makes the target whole.
+  more: { width: MORE_WIDTH, height: minTarget(), alignItems: 'center', justifyContent: 'center', marginRight: -(SPACE.sm + SPACE.xxs) },
 
   footer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACE.md, marginTop: SPACE.xxs },
   footerTop: { marginTop: SPACE.xxs },

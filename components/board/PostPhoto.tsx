@@ -13,6 +13,8 @@ import { photoView } from '../../lib/lobby'
  * turned-down ones reach their author only), and `__tests__/board.test.ts` holds every other board file to no image.
  */
 
+/** `.lp .pic .pp`: the checking pill's clock is 14, as the kind pill's glyph. */
+const PILL_GLYPH = 14
 /** `.lp .pic`. */
 const PHOTO_HEIGHT = 196
 /** A pending photo, to its author: blurred until checked. */
@@ -41,7 +43,7 @@ export function PostPhoto({ post }: { post: Pick<BoardPost, 'photo' | 'mine'> })
         />
         {pending ? (
           <View style={styles.checking}>
-            <Icon name="clock" size={DS_ICON.inline} color={COLOR.textPrimary} />
+            <Icon name="clock" size={PILL_GLYPH} color={COLOR.textPrimary} />
             <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>Checking your photo</RNText>
           </View>
         ) : null}

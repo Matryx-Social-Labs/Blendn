@@ -18,6 +18,8 @@ export type TopBarProps = {
   title?: string
   /** A line under the title ("4 people · 2 here now", "60 waiting"): a leading count is set in Geist Mono. */
   sub?: string
+  /** The sub's lines: two by default; one where the board ellipsizes it (the Lobby's event, L-A). */
+  subLines?: 1 | 2
   /** The screen decides from its scroll offset. */
   state?: TopBarState
   onBack: () => void
@@ -52,7 +54,7 @@ export type TopBarProps = {
  *
  * Save is the 48 pt `md` button: Button has no 44.
  */
-export function TopBar({ title, sub, state = 'rest', onBack, close = false, actions = [], progress, save, testID }: TopBarProps) {
+export function TopBar({ title, sub, subLines = 2, state = 'rest', onBack, close = false, actions = [], progress, save, testID }: TopBarProps) {
   const android = Platform.OS === 'android'
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -86,7 +88,7 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
               >
                 {title}
               </Text>
-              {sub ? <SubLine text={sub} bold={bold} /> : null}
+              {sub ? <SubLine text={sub} bold={bold} lines={subLines} /> : null}
             </>
           )}
         </View>
@@ -126,10 +128,10 @@ export function TopBar({ title, sub, state = 'rest', onBack, close = false, acti
 /** A leading count ("60", "1,002"): the number in Geist Mono, the words after it in the sans. A whole word only, so an event title like "90s Night" stays in the sans. */
 const LEADING_COUNT = /^[\d,]+(?=\s|$)/
 
-function SubLine({ text, bold }: { text: string; bold: boolean }) {
+function SubLine({ text, bold, lines }: { text: string; bold: boolean; lines: 1 | 2 }) {
   const count = LEADING_COUNT.exec(text)?.[0]
   return (
-    <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.sub]}>
+    <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.sub]}>
       {count ? <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{count}</Text> : null}
       {count ? text.slice(count.length) : text}
     </Text>

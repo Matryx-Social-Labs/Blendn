@@ -20,6 +20,10 @@ const ROSE = SELECTION.rose
 const EMBER = SELECTION.ember
 /** lobby.css `.lp` / `.lpin` / `.lro`: the board's cards are 24, a step under the DS card's 32. */
 const CARD_RADIUS = RADIUS.sheet
+/** `.hlab` / `.you`: the Host and You capsules are 22 tall. */
+const LABEL_HEIGHT = 22
+/** `.lro .r1`: the doors glyph is 18, between the inline 16 and the control 20. */
+const BANNER_GLYPH = 18
 /** `.lcomp`: the composer row is a 52 pt capsule. */
 const COMPOSER_HEIGHT = 52
 
@@ -78,7 +82,7 @@ export function ReadOnlyBanner({ closesAt, timeZone, onOpenRoom }: { closesAt?: 
   return (
     <View testID="lobby-read-only" style={[styles.card, styles.readOnly]}>
       <View style={styles.row}>
-        <Icon name="door-open" size={ICON.control} color={ROSE.glyph} />
+        <Icon name="door-open" size={BANNER_GLYPH} color={ROSE.glyph} />
         <Line strong="group">The doors are open</Line>
       </View>
       <Line>{readOnlyLine(closesAt, timeZone)}</Line>
@@ -92,7 +96,7 @@ export function LiveEmptyCard({ onOpenRoom }: { onOpenRoom: () => void }) {
   return (
     <View testID="lobby-live-empty" style={[styles.card, styles.readOnly]}>
       <View style={styles.row}>
-        <Icon name="door-open" size={ICON.control} color={ROSE.glyph} />
+        <Icon name="door-open" size={BANNER_GLYPH} color={ROSE.glyph} />
         <Line strong="group">Nobody posted in the Lobby.</Line>
       </View>
       <Line>The room is open.</Line>
@@ -194,6 +198,8 @@ export function LobbyChips({ counts, filter, onFilter }: { counts: LobbyCounts; 
           size="header"
           selection="single"
           selected={filter === c.key}
+          // The board's selected chip leads with a check; the rest carry none (a single pick, not the + / ✓ slot).
+          icon={filter === c.key ? 'check' : undefined}
           onPress={() => onFilter(c.key)}
           accessibilityLabel={`${c.label}, ${c.exact} ${c.exact === 1 ? 'post' : 'posts'}`}
           testID={`lobby-chip-${c.key}`}
@@ -249,20 +255,21 @@ const styles = StyleSheet.create({
 
   gate: { backgroundColor: COLOR.surface, borderRadius: CARD_RADIUS, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md + SPACE.xxs, paddingHorizontal: SPACE.lg },
 
-  readOnly: { padding: SPACE.lg, gap: SPACE.xs, borderWidth: 1, borderColor: tint(ROSE.edge, 0.55) },
+  readOnly: { padding: SPACE.lg - 1, gap: SPACE.xs, borderWidth: 1, borderColor: tint(ROSE.edge, 0.55) },
   start: { alignSelf: 'flex-start', marginTop: SPACE.sm + SPACE.xxs },
   closed: { padding: SPACE.lg + SPACE.xs, gap: SPACE.xs + SPACE.xxs, alignItems: 'flex-start' },
   closedTitle: { marginTop: SPACE.xs + SPACE.xxs },
 
   startsWrap: { gap: SPACE.lg },
   starts: { flexDirection: 'row', gap: SPACE.md },
-  startCard: { flex: 1, padding: SPACE.lg, gap: SPACE.xs, borderWidth: 1, borderColor: tint(ROSE.edge, 0.45) },
+  startCard: { flex: 1, padding: SPACE.lg - 1, gap: SPACE.xs, borderWidth: 1, borderColor: tint(ROSE.edge, 0.45) },
 
-  pinned: { padding: SPACE.lg, paddingTop: SPACE.md, gap: SPACE.sm + SPACE.xxs, borderWidth: 1, borderColor: tint(EMBER.edge, 0.45) },
+  // A 1 pt edge sits inside the box, so the padding gives that point back (`.lpin` draws it as an inset shadow).
+  pinned: { padding: SPACE.lg - 1, paddingTop: SPACE.md - 1, gap: SPACE.sm + SPACE.xxs, borderWidth: 1, borderColor: tint(EMBER.edge, 0.45) },
   pinLabel: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
   pinWord: { color: EMBER.glyph, letterSpacing: 0.6 },
   hostMark: { width: 40, height: 40, borderRadius: RADIUS.capsule, backgroundColor: EMBER.fill, borderWidth: 1, borderColor: EMBER.edge, alignItems: 'center', justifyContent: 'center' },
-  label: { minHeight: 22, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, justifyContent: 'center' },
+  label: { minHeight: LABEL_HEIGHT, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, justifyContent: 'center' },
 
   chipsRow: { marginHorizontal: -SPACE.gutter },
   chips: { gap: SPACE.sm, paddingHorizontal: SPACE.gutter },

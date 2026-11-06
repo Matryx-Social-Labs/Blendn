@@ -6,7 +6,7 @@
  * a decline, and the guards that keep one tap one request.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
-import { AccessibilityInfo } from 'react-native'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 const mockParams: Record<string, string> = {}
 const mockRedirect = jest.fn()
@@ -1102,12 +1102,25 @@ describe('L-A: after doors, and after the end', () => {
 })
 
 describe('L-A: new posts wait behind the pill (the list never jumps)', () => {
+  it('at the top of the list nothing can jump, so a background read shows what is new at once, with no pill', async () => {
+    const NEW: BoardPost = { ...SEEKING, id: 'p-new', body: 'Just landed, anyone near MG Road?', author: 'Night Owl' }
+    api.getBoard.mockResolvedValue(lobby([OFFER]) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    api.getBoard.mockResolvedValue(lobby([NEW, OFFER]) as never)
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
+    expect(await screen.findByText(NEW.body)).toBeTruthy()
+    expect(screen.queryByText('1 new post')).toBeNull()
+  })
+
   it('a background read holds what is new; the pill brings it in (control: a refresh shows it at once)', async () => {
     const NEW: BoardPost = { ...SEEKING, id: 'p-new', body: 'Just landed, anyone near MG Road?', author: 'Night Owl', createdAt: '2026-10-02T10:00:00Z' }
     api.getBoard.mockResolvedValue(lobby([OFFER]) as never)
     await render(<BoardScreen />)
     await screen.findByText(OFFER.body)
 
+    // Scrolled into the list: what arrives above it waits behind the pill.
+    await fireEvent.scroll(screen.getByTestId('board-list'), { nativeEvent: { contentOffset: { x: 0, y: 400 }, contentSize: { width: 402, height: 2000 }, layoutMeasurement: { width: 402, height: 874 } } })
     api.getBoard.mockResolvedValue(lobby([NEW, OFFER]) as never)
     await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
     expect(await screen.findByText('1 new post')).toBeTruthy()
@@ -1132,5 +1145,19 @@ describe('L-A: the starts never offer a ticket the event hides', () => {
     api.getBoard.mockResolvedValue(lobby([], { counts: none, ticketsHidden }) as never)
     await render(<BoardScreen />)
     expect(await screen.findByLabelText(label)).toBeTruthy()
+  })
+})
+
+describe('L-A: the list starts under the bar as tall as it draws (AX XXXL: the bar grows past its fixed height)', () => {
+  it('a bar measured taller than the fixed top pushes the list down; a short one changes nothing (control)', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER]) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    const top = () => StyleSheet.flatten(screen.getByTestId('board-list').props.contentContainerStyle).paddingTop as number
+    const fixed = top()
+    await fireEvent(screen.getByTestId('lobby-bar'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 20 } } })
+    expect(top()).toBe(fixed)
+    await fireEvent(screen.getByTestId('lobby-bar'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 400 } } })
+    expect(top()).toBe(400 + 8)
   })
 })

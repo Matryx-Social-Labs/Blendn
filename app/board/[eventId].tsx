@@ -172,6 +172,14 @@ export function BoardScreen() {
   const reduceMotion = useReducedMotion()
   const rises = useRef<{ first: boolean; ids: ReadonlySet<string> }>({ first: true, ids: new Set() })
   const bar = useTopBarOverlay()
+  /** Scrolled into the list (the bar has gone glass): only then can something arriving above make it jump. */
+  const scrolledRef = useLatest(bar.state !== 'rest')
+  /*
+   * The bar as tall as it draws. `contentTop` is fixed, and at AX XXXL the title and the event under it grow past it,
+   * so the list would start under them; it starts under whichever is lower.
+   */
+  const [barDrawn, setBarDrawn] = useState(0)
+  const contentTop = Math.max(bar.contentTop, barDrawn + SPACE.sm)
 
   // An older server still closes the Lobby at doors, in its old sentence: the doors banner, and nothing under it.
   const [doorsShut, setDoorsShut] = useState(false)
@@ -241,7 +249,7 @@ export function BoardScreen() {
       const shown = new Set(was.kind === 'ready' ? was.posts.map((p) => p.id) : [])
       const onFirst = new Set(listed.map((p) => p.id))
       setHeld(
-        mode === 'hold'
+        mode === 'hold' && scrolledRef.current
           ? new Set([...heldRef.current, ...freshOnTop(listed, shown)].filter((pid) => onFirst.has(pid)))
           : new Set()
       )
@@ -258,7 +266,7 @@ export function BoardScreen() {
       Logger.warn('board', 'load threw', { eventId, error: String(error) })
       return false
     }
-  }, [eventId, loadRef, heldRef])
+  }, [eventId, loadRef, heldRef, scrolledRef])
 
   /*
    * A block from anywhere (a post's card here, a profile, a request in the Banter): the older pages loaded are dropped,
@@ -593,7 +601,11 @@ export function BoardScreen() {
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>The Lobby didn’t refresh. Pull down to try again.</Text>
       ) : null}
       {top}
-      {layout.chips && meta.counts ? <LobbyChips counts={meta.counts} filter={filter} onFilter={onFilter} /> : null}
+      {layout.chips && meta.counts ? (
+        <View style={styles.chipsGap}>
+          <LobbyChips counts={meta.counts} filter={filter} onFilter={onFilter} />
+        </View>
+      ) : null}
       {layout.pinned && meta.pinned ? <PinnedPost pin={meta.pinned} /> : null}
       {layout.liveEmpty ? <LiveEmptyCard onOpenRoom={openRoomFromBoard} /> : null}
       {/* #47: the first post is why the starts leave: they fade over `quick` with an 8 pt drop as the card rises in. */}
@@ -665,7 +677,7 @@ export function BoardScreen() {
         onEndReachedThreshold={1.5}
         initialNumToRender={8}
         windowSize={9}
-        contentContainerStyle={[styles.list, { paddingTop: bar.contentTop }]}
+        contentContainerStyle={[styles.list, { paddingTop: contentTop }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         {...bar.scrollProps}
         keyboardShouldPersistTaps="handled"
@@ -682,14 +694,14 @@ export function BoardScreen() {
       {load.kind === 'ready' && !card ? (
         content
       ) : (
-        <View style={[styles.fill, { paddingTop: bar.contentTop }]}>
+        <View style={[styles.fill, { paddingTop: contentTop }]}>
           <View style={styles.banner}>{offline}</View>
           <View style={card ? styles.cardSlot : styles.state}>{content}</View>
         </View>
       )}
-      {held.size > 0 && load.kind === 'ready' && !card ? <NewPostsPill count={held.size} top={bar.contentTop + SPACE.sm} onPress={showHeld} /> : null}
-      <View style={bar.barPin} pointerEvents="box-none">
-        <TopBar title="Lobby" sub={event?.title} state={bar.state} onBack={() => router.back()} testID="board-top" />
+      {held.size > 0 && load.kind === 'ready' && !card ? <NewPostsPill count={held.size} top={contentTop + SPACE.sm} onPress={showHeld} /> : null}
+      <View testID="lobby-bar" style={bar.barPin} pointerEvents="box-none" onLayout={(e) => setBarDrawn(e.nativeEvent.layout.height)}>
+        <TopBar title="Lobby" sub={event?.title} subLines={1} state={bar.state} onBack={() => router.back()} testID="board-top" />
       </View>
       <BoardComposer
         key={`${posted}-${startKind}`}
@@ -740,10 +752,12 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   centre: { textAlign: 'center' },
   // lobby.css: composer 12 above the chips, the chips 16 above the first card, cards 12 apart.
-  header: { gap: SPACE.md, marginBottom: SPACE.xxs, paddingTop: SPACE.md },
+  header: { gap: SPACE.md },
   list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.md },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, justifyContent: 'center' },
-  cardSlot: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md },
+  // lobby.css `.lposts`: 16 under the chips, where the header's rhythm is 12.
+  chipsGap: { marginBottom: SPACE.xs },
+  cardSlot: { paddingHorizontal: SPACE.gutter },
   banner: { paddingHorizontal: SPACE.gutter },
   skeleton: { gap: SPACE.lg },
 })
