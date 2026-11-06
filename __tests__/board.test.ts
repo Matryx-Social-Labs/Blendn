@@ -280,16 +280,26 @@ describe('BD-CU03: a mark is seeded on the handle, never on a person', () => {
     expect(boardMarkSeed('', 'e1', 'p1')).toBe('e1:p1')
   })
 
-  it('draws no photo and reads no user id on any board surface', () => {
+  it('a post’s photo is the post’s alone: read through photoView, never a profile or a person', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/board/PostPhoto.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(src).toMatch(/photoView\(post\.photo, post\.mine\)/)
+    expect(src).not.toMatch(/avatarUrl|profile|userId|user_id|authorId|author_id|OptimizedImage/i)
+    expect(src.match(/source=\{/g)).toHaveLength(1)
+    expect(src).toMatch(/source=\{\{ uri: view\.url \}\}/)
+  })
+
+  it('draws no photo of a person and reads no user id on any board surface', () => {
     const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
     let marks = 0
     for (const file of [
       'components/board/BoardSections.tsx',
       'components/board/BoardRequestsSection.tsx',
+      'components/board/LobbyParts.tsx',
       'app/board/[eventId].tsx',
     ]) {
-      const src = strip(readFileSync(join(__dirname, '..', file), 'utf8'))
-      expect(src).not.toMatch(/OptimizedImage|expo-image|avatarUrl|photo|userId|user_id|authorId|author_id/)
+      // A post's own photo (C-A) is drawn in one place, `PostPhoto`, from the post alone; that one line is allowed.
+      const src = strip(readFileSync(join(__dirname, '..', file), 'utf8')).replace(/<PostPhoto post=\{post\} \/>|import \{ PostPhoto \} from '\.\/PostPhoto'/g, '')
+      expect(src).not.toMatch(/OptimizedImage|expo-image|avatarUrl|photo|userId|user_id|authorId|author_id/i)
       // Every mark goes through the one seed rule.
       for (const m of src.matchAll(/(?:<BoardMark seed|markSeed|<RequestFace pseudonym)=\{([^}]*)\}/g)) {
         expect(m[1]).toMatch(/^boardMarkSeed\(/)

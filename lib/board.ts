@@ -1,3 +1,4 @@
+import type { LobbyPhoto, LobbySubKind } from './lobby'
 import { markSeed } from './pseudonymAvatar'
 
 /**
@@ -65,6 +66,10 @@ export interface BoardPost {
   mine: boolean
   /** How many have asked. A number, never who. */
   requestCount: number
+  /** What it is about (SCRUM-1026); null on a chat post and on an older server. */
+  subKind?: LobbySubKind | null
+  /** Its one photo: pending or rejected only ever reach its author. */
+  photo?: LobbyPhoto
 }
 
 export type BoardRequestStatus = 'pending' | 'accepted' | 'declined' | 'withdrawn'
