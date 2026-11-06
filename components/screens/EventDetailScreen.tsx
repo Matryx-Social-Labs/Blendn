@@ -51,7 +51,7 @@ import {
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient'
-import { COLOR, DURATION, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { COLOR, DURATION, MAX_FONT_SCALE, RADIUS, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { PosterLight, SceneHero, posterSide } from '../scene/SceneHero'
 import { EventGuide } from '../scene/EventGuide'
 import { DockRow } from '../ds/DockRow'
