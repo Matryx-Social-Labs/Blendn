@@ -75,7 +75,7 @@ export function TonightHere({
   const label = tonight ? (on ? `● Live · till ${eventClock(tonight.endTime, tonight.timezone)}` : `Tonight · ${eventClock(tonight.startTime, tonight.timezone)}`) : ''
   const busy = liveNowWord(liveNow)
   return (
-    <View>
+    <View style={styles.section}>
       <SectionHeader title="Tonight here" />
       {tonight ? (
         <ScalePress
@@ -129,7 +129,7 @@ export function UpcomingList({
 }) {
   const bold = useBoldText()
   return (
-    <View>
+    <View style={styles.section}>
       <SectionHeader title="Coming up here" count={total} action={hasMoreThanShown(total) ? { label: 'See all', onPress: onSeeAll } : undefined} />
       {rows.slice(0, UPCOMING_SHOWN).map((r) => (
         <Pressable
@@ -345,6 +345,8 @@ const styles = StyleSheet.create({
   // `.tn`: the surface, 20 corners, 12 in, a hairline; nothing on is 16 in.
   tonight: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, padding: SPACE.md, borderRadius: TONIGHT_RADIUS, backgroundColor: COLOR.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
   tonightNone: { padding: SPACE.lg },
+  // `.sh4`: 12 under the heading.
+  section: { gap: SPACE.md },
   tonightWords: { flex: 1, minWidth: 0, gap: SPACE.xxs },
   thumb: { width: THUMB, height: THUMB, borderRadius: SPACE.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: COLOR.surfaceSunken },
   live: { color: COLOR.live },

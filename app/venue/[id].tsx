@@ -491,7 +491,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         <VenueHero latitude={venue.latitude} longitude={venue.longitude} plate={plateFor(venue.venueType)} onDirections={directions} />
         {/* Flow 4 V-A: the name, then the type and area on their own line, then the hours in their own slot, only when known. */}
         <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={[venue.name, typeArea, hours?.text].filter(Boolean).join('. ')} testID="venue-head">
-          <Text testID="venue-name" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={styles.name}>
+          <Text testID="venue-name" numberOfLines={NAME_LINES} maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={styles.name}>
             {venue.name}
           </Text>
           {typeArea ? (
@@ -635,6 +635,8 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
 }
 
 const TITLE_TYPE = PAGE_TITLE
+/** A seeded place's name can be a listing's whole SEO line: three lines, then the ellipsis (the header reads it whole). */
+const NAME_LINES = 3
 // design-exception: the board puts 28 above each section (`.sh4` margin-top), between SPACE.xl and SPACE.xxl.
 const SECTION_GAP = 28
 
