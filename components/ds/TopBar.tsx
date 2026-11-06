@@ -101,7 +101,7 @@ export function TopBar({ title, sub, subLines = 2, state = 'rest', onBack, close
         </View>
       </View>
       {progress ? (
-        <View pointerEvents="none" style={[styles.condensed, { top, height: circle, left: inset, right: inset }]}>
+        <View pointerEvents="none" style={[styles.condensed, styles.pagerRow, { top, height: circle, left: inset, right: inset }]}>
           <Text
             testID={testID && `${testID}-progress`}
             accessibilityLabel={`Step ${progress}`}
@@ -154,5 +154,6 @@ const styles = StyleSheet.create({
   centre: { textAlign: 'center' },
   // design-exception: the board's pager is Geist Mono 13/20 (`.pg3`): `note`'s 13 in mono, on meta's 20 line
   pager: { lineHeight: TYPE.meta.lineHeight },
+  pagerRow: { alignItems: 'center' },
   contrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
 })

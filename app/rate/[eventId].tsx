@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Keyboard, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -138,6 +138,8 @@ const noteLength = (value: string) => value.length
 /** Never the server's sentence: it is written for an API caller. */
 const SAVE_FAILED = "Couldn’t save that. Try again."
 const SENT_LINE = 'Sent. Only we see this.'
+/** Skip is the board's 44 pt row on iOS (`.skip`), the DS's 48 dp target on Android (as the bar's Save is). */
+const SKIP_SIZE = Platform.OS === 'android' ? 'md' : 'raised'
 
 type Load =
   | { kind: 'loading' }
@@ -449,7 +451,8 @@ function RatePeersContent() {
   const ratedBefore = sent === 0 && load.rated
   // Said at the head of the form it is true of: a rating cannot be sent offline, and reads stay.
   const offlineNote = <OfflineBanner text="Offline. You can rate once you’re back." testID="rate-offline" />
-  const scrollPad = { paddingTop: bar.contentTop, paddingBottom: dockHeight + SPACE.xl }
+  // The board's column starts 16 under the circle row; the bar's own `contentTop` leaves 18.
+  const scrollPad = { paddingTop: bar.contentTop - SPACE.xxs, paddingBottom: dockHeight + SPACE.xl }
 
   return (
     <View style={styles.screen}>
@@ -584,7 +587,7 @@ function RatePeersContent() {
             <Button
               label={people.length > 0 ? 'Skip to the people' : 'Skip'}
               kind="tertiary"
-              size="md"
+              size={SKIP_SIZE}
               onPress={advance}
               disabled={submitting || nightSent}
               testID="rate-skip-night"
@@ -600,7 +603,7 @@ function RatePeersContent() {
             ) : null}
             <Button label="Submit" kind="primary" onPress={() => void submit()} disabled={rating === null || noteTooLong || offline} loading={submitting} testID="rate-submit" />
             {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
-            <Button label="Skip this person" kind="tertiary" size="md" onPress={advance} disabled={submitting} testID="rate-skip-person" />
+            <Button label="Skip this person" kind="tertiary" size={SKIP_SIZE} onPress={advance} disabled={submitting} testID="rate-skip-person" />
           </Dock>
         ) : null}
       </KeyboardFrame>
