@@ -1759,7 +1759,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     if (isNarrowed) {
       const card = homeCardProps(event, now, hasFix)
       return (
-        <View style={styles.mainRow}>
+        <View style={isSearching ? styles.resultWrap : styles.mainRow}>
           <EventCard
             kind="row"
             // A search result is the board's result row: the time over the title, the photo on the right.
@@ -2071,7 +2071,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           <EverythingHeader chips={chips} selected={chosen} onSelect={setCategory} />
         </SectionReveal>
       ) : null}
-      <View style={styles.spacer} />
+      {/* Under a search the results start right under their count (board "C · search"). */}
+      {isSearching ? null : <View style={styles.spacer} />}
     </View>
   )
 
@@ -2217,6 +2218,8 @@ const styles = StyleSheet.create({
 
   /** A row in the list under the sections: the stack's spacing, inside the gutter. */
   mainRow: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.md },
+  // Board `.urow`: results stack 88 apart, each row's own 8 above and below the only space between them.
+  resultWrap: { paddingHorizontal: SPACE.gutter },
   /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
   dayRow: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
   /** "6 events · Bengaluru": the flat result's label. */

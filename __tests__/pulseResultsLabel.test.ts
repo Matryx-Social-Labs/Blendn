@@ -17,6 +17,11 @@ describe('the search results, as the board draws them (Flow 3 "C · search", own
     expect(src).toMatch(/resultsLabelText: \{ \.\.\.DESIGN_TYPE\.meta, color: COLOR\.textSecondary \}/)
     expect(src).toMatch(/\{` \$\{resultsCount\(events\.length, totalCount\)\.noun\}`\}/)
   })
+  it('the rows start right under "12 events" and stack 88 apart, as on the board: no trailing spacer, no gap between results', () => {
+    expect(src).toMatch(/\{isSearching \? null : <View style=\{styles\.spacer\} \/>\}/)
+    expect(src).toMatch(/<View style=\{isSearching \? styles\.resultWrap : styles\.mainRow\}>/)
+    expect(src).toMatch(/resultWrap: \{ paddingHorizontal: SPACE\.gutter \}/)
+  })
   it('a search result is the result row (time over the title, the photo right); a filtered list keeps its own row', () => {
     expect(src).toMatch(/layout=\{isSearching \? 'result' : undefined\}/)
   })
