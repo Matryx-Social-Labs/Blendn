@@ -23,6 +23,7 @@ import { DURATION, REDUCE_MOTION } from './design/tokens'
 import { liveNowLabel, type LiveNow } from './home'
 import { featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
+import { dayWord } from './pulse'
 import { calendarDate, eventClock } from './time'
 
 export type Ring = number[][]
@@ -383,7 +384,7 @@ function startLabel(startsAt: string | null, now: number, forSpeech: boolean, ti
   if (!start || Number.isNaN(start.getTime())) return null
   const far = start.getTime() - now > WEEKDAY_ONLY_MS
   // No year: the chip's line is a pin's width, and an event a year off is not on the map (review L6).
-  const day = calendarDate(start, { weekday: far ? true : 'only', year: false, timeZone: timeZone ?? undefined })
+  const day = dayWord(start, new Date(now), timeZone) ?? calendarDate(start, { weekday: far ? true : 'only', year: false, timeZone: timeZone ?? undefined })
   // The event city's clock, never named (owner, 2026-11-03).
   const time = eventClock(start, timeZone)
   return forSpeech ? `${day} ${time}` : `${day} · ${time}`

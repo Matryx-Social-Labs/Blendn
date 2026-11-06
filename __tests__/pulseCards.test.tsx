@@ -26,7 +26,7 @@ const ev = (over: Partial<BlendnEvent> = {}) =>
 describe('the time on a card', () => {
   it('Live, a clock, a weekday and a clock, then a date', () => {
     expect(cardTime(ev(), NOW)).toBe('Live')
-    expect(cardTime(ev({ start_time: at(22, 30), end_time: at(23) }), NOW)).toBe('10:30 PM')
+    expect(cardTime(ev({ start_time: at(22, 30), end_time: at(23) }), NOW)).toBe('Tonight · 10:30 PM')
     expect(cardTime(ev({ start_time: at(21, 0, 4), end_time: at(23, 0, 4) }), NOW)).toMatch(/^Sat · 9 PM$/)
     expect(cardTime(ev({ start_time: at(21, 0, 12), end_time: at(23, 0, 12) }), NOW)).toBe('Sun 1 Nov · 9 PM')
   })
