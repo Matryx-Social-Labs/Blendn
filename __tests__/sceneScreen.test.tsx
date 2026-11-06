@@ -4,7 +4,7 @@
  * What it does with an RSVP, a save or a check-in is unchanged and pinned by the source tests beside this one.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
-import { StyleSheet } from 'react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -67,6 +67,7 @@ import { router as mockRouter } from 'expo-router'
 import EventDetail from '../components/screens/EventDetailScreen'
 import { apiClient } from '../lib/apiClient'
 import { openInMaps } from '../lib/openInMaps'
+import { addToCalendar } from '../lib/calendar'
 import { showEventReportOptions } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { markOffline, markOnline } from '../lib/networkStatus'
@@ -113,6 +114,8 @@ const open = async () => {
   await render(<EventDetail />)
   await act(async () => {})
 }
+/** The When row as a screen reader hears it: "Sat 8 Nov, 6 PM. Till 9 PM". */
+const whenLabel = async () => (await screen.findByTestId('scene-guide-when')).props.accessibilityLabel as string
 
 it('a missing event is the calm "No longer available" landing (Flow 15 #10), with no retry and nothing about the connection', async () => {
   api.getEvent.mockResolvedValue({ success: false, error: 'Event not found', errorCode: 'NOT_FOUND' } as never)
@@ -195,14 +198,14 @@ describe('what changed while you were going (Flow 3 · 3.1)', () => {
   it('is not drawn for somebody who has no stake in the night', async () => {
     api.getEvent.mockResolvedValue(detail(moved) as never)
     await open()
-    await screen.findByTestId('scene-tiles')
+    await screen.findByTestId('scene-guide')
     expect(screen.queryByTestId('scene-changed')).toBeNull()
   })
 
   it('is not drawn for an event that has not changed (null, [] and null), or for an older server', async () => {
     api.getEvent.mockResolvedValue(detail({ changedAt: null, changedFields: [], changedFrom: null }, { rsvpStatus: 'going' }) as never)
     await open()
-    await screen.findByTestId('scene-tiles')
+    await screen.findByTestId('scene-guide')
     expect(screen.queryByTestId('scene-changed')).toBeNull()
   })
 
@@ -230,10 +233,10 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     dayNumber: 2,
   })
 
-  it('says where today is in the Doors tile when the session is today, and draws the strip, a called-off day struck and labelled', async () => {
+  it('says where today is in the When row when the session is today, and draws the strip, a called-off day struck and labelled', async () => {
     api.getEvent.mockResolvedValue(detail(run(true)) as never)
     await open()
-    expect((await screen.findByTestId('scene-tile-doors')).props.accessibilityLabel).toBe('TODAY, Day\u00a02 of\u00a03')
+    expect(await whenLabel()).toContain('Day\u00a02 of\u00a03')
     expect(screen.getByTestId('scene-day-1').props.accessibilityLabel).toMatch(/, day 1 of 3$/)
     expect(screen.getByTestId('scene-day-2').props.accessibilityLabel).toMatch(/, day 2 of 3, today$/)
     expect(screen.getByTestId('scene-day-3').props.accessibilityLabel).toMatch(/, cancelled$/)
@@ -243,9 +246,9 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
   it('between days it keeps the clock time and says it is the NEXT doors, and the chip says next, never today', async () => {
     api.getEvent.mockResolvedValue(detail(run(false)) as never)
     await open()
-    const tile = await screen.findByTestId('scene-tile-doors')
-    expect(tile.props.accessibilityLabel).toMatch(/^NEXT DOORS, \d/)
-    expect(tile.props.accessibilityLabel).not.toMatch(/Day\s2\sof\s3/)
+    const label = await whenLabel()
+    expect(label).toMatch(/Next doors \w{3} \d+ \w{3}/)
+    expect(label).not.toMatch(/Day\s2\sof\s3/)
     expect(screen.getByTestId('scene-day-2').props.accessibilityLabel).toMatch(/, day 2 of 3, next$/)
   })
 
@@ -255,25 +258,22 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     const ended = { timezone: ZONE, days: [day(-2, over), day(-1, over), day(0, { cancelled: true })], dayCount: 3, daysFrom: 1, dayNumber: 2 }
     api.getEvent.mockResolvedValue(detail({ ...ended, startTime: hours(-54), endTime: hours(-27), session: over }) as never)
     await open()
-    const tile = await screen.findByTestId('scene-tile-doors')
-    expect(tile.props.accessibilityLabel).toMatch(/^DOORS, \d/)
+    expect(await whenLabel()).not.toMatch(/Next doors/)
   })
 
-  it('the hero says the run\'s own dates in place of the next doors (frame 04)', async () => {
+  it('the When row says the run\'s own dates in place of the next doors (frame 04)', async () => {
     api.getEvent.mockResolvedValue(detail(run(true)) as never)
     await open()
-    await screen.findByTestId('scene-when')
     // Three days: the first day's date to the last, the month said once (twice when the run crosses a month end).
-    expect(screen.getByLabelText(/^Vinyl Night\. \w{3} \d+( \w{3})? to \w{3} \d+ \w{3}\./)).toBeTruthy()
+    expect(await whenLabel()).toMatch(/^\w{3} \d+( \w{3})? – \w{3} \d+ \w{3}, /)
   })
 
   it('between days, to somebody who is going, the pill says when the next day starts and is still the RSVP\'s off-switch (frame 06)', async () => {
     api.getEvent.mockResolvedValue(detail({ ...run(false), startTime: hours(-30), endTime: hours(60), session: { startTime: hours(3), endTime: hours(6) } }, { rsvpStatus: 'going' }) as never)
     await open()
-    const pill = await screen.findByLabelText(/^Day 2 starts .*\. You’re going$/)
-    expect(pill.props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }))
-    expect(screen.queryByText('You’re going')).toBeNull()
-    await fireEvent.press(pill)
+    const state = await screen.findByLabelText(/^You’re going\. Day 2 starts /)
+    expect(screen.queryByText('Change')).toBeNull()
+    await fireEvent.press(state)
     expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Cancel your RSVP?' }))
   })
 
@@ -282,15 +282,15 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     const r = run(false)
     api.getEvent.mockResolvedValue(detail({ ...r, startTime: hours(30), endTime: hours(60) }, { rsvpStatus: 'going' }) as never)
     await open()
-    expect(await screen.findByLabelText('You’re going')).toBeTruthy()
+    expect(await screen.findByLabelText('You’re going. Change')).toBeTruthy()
     expect(screen.queryByLabelText(/starts/)).toBeNull()
   })
 
-  it('between days the pill keeps its check and says how to cancel', async () => {
+  it('between days the state is still the RSVP\'s off-switch, and says so', async () => {
     api.getEvent.mockResolvedValue(detail({ ...run(false), startTime: hours(-30), endTime: hours(60), session: { startTime: hours(3), endTime: hours(6) } }, { rsvpStatus: 'going' }) as never)
     await open()
-    const pill = await screen.findByLabelText(/^Day 2 starts .*\. You’re going$/)
-    expect(pill.props.accessibilityHint).toBe('Double-tap to cancel your RSVP')
+    const state = await screen.findByLabelText(/^You’re going\. Day 2 starts /)
+    expect(state.props.accessibilityHint).toBe('Double-tap to change your RSVP')
   })
 
   it('not going, or on the day itself, the pill is the RSVP\'s own words', async () => {
@@ -300,7 +300,7 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     expect(screen.queryByLabelText(/starts/)).toBeNull()
   })
 
-  it('the DOORS tile is the event’s own clock, not the phone’s: a Berlin phone, an IST night (drive 5 D-4)', async () => {
+  it('the When row is the event’s own clock, not the phone’s: a Berlin phone, an IST night (drive 5 D-4)', async () => {
     const zone = process.env.TZ
     process.env.TZ = 'Europe/Berlin'
     refreshPhoneZone()
@@ -308,9 +308,8 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
       const start = hours(3)
       api.getEvent.mockResolvedValue(detail({ timezone: ZONE, startTime: start, days: [day(0, { startTime: start })], dayCount: 1, daysFrom: 1, dayNumber: 1 }) as never)
       await open()
-      const tile = await screen.findByTestId('scene-tile-doors')
-      // The event's clock, named because the phone is elsewhere: "9 AM".
-      expect(tile.props.accessibilityLabel).toBe(`DOORS, ${clockTime(start, ZONE)}`)
+      // The event's clock, never named: "9 AM" where it happens.
+      expect(await whenLabel()).toContain(`, ${clockTime(start, ZONE)}`)
       expect(clockTime(start, ZONE)).not.toBe(clockTime(start))
     } finally {
       process.env.TZ = zone
@@ -321,17 +320,16 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
   it('a one-day event has no strip and keeps its doors', async () => {
     api.getEvent.mockResolvedValue(detail({ timezone: ZONE, days: [day(0)], dayCount: 1, daysFrom: 1, dayNumber: 1 }) as never)
     await open()
-    expect(await screen.findByTestId('scene-tile-doors')).toBeTruthy()
+    expect(await whenLabel()).not.toMatch(/Day\s1\sof/)
     expect(screen.queryByTestId('scene-days')).toBeNull()
-    expect(screen.getByTestId('scene-tile-doors').props.accessibilityLabel).toMatch(/^DOORS, \d/)
   })
 
-  it('every day called off says no day, and keeps the doors tile as it was', async () => {
+  it('every day called off says no day: the strip, and no "Day n of 3"', async () => {
     const r = run(true)
     api.getEvent.mockResolvedValue(detail({ ...r, days: r.days.map((d) => ({ ...d, cancelled: true })), dayNumber: null }) as never)
     await open()
     expect(await screen.findByTestId('scene-days')).toBeTruthy()
-    expect(screen.getByTestId('scene-tile-doors').props.accessibilityLabel).toMatch(/^DOORS, \d/)
+    expect(await whenLabel()).not.toMatch(/Day\s\d\sof/)
   })
 
   it('a 60-day run is a window: the whole run\'s "Day 40 of 60", the strip from a day before today\'s, and a bounded number of stops', async () => {
@@ -339,7 +337,7 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
     const days = Array.from({ length: 31 }, (_, i) => day(i - 10))
     api.getEvent.mockResolvedValue(detail({ timezone: ZONE, days, dayCount: 60, daysFrom: 30, dayNumber: 40 }) as never)
     await open()
-    expect((await screen.findByTestId('scene-tile-doors')).props.accessibilityLabel).toBe('TODAY, Day\u00a040 of\u00a060')
+    expect(await whenLabel()).toContain('Day\u00a040 of\u00a060')
     expect(screen.getByLabelText('Days 30 to 60 of 60')).toBeTruthy()
     expect(screen.getByTestId('scene-day-40').props.accessibilityLabel).toMatch(/, day 40 of 60, today$/)
     // It opens a day before today's, not at the window's start, and never draws the whole window.
@@ -396,58 +394,76 @@ it('a dropped connection is "Couldn’t load this event" with Try again, which a
   expect(await screen.findByText('The experience')).toBeTruthy()
 })
 
-it('draws the four facts as tiles: Doors, Where (how far), Going and Door, and Where opens the map', async () => {
+it('draws the facts as three rows (Flow 4 E-B): When with Add to calendar, Where with Directions, Who', async () => {
+  // At the default text size the rows carry their glyph and their action circle (the largest text drops both: below).
+  const window = Dimensions.get('window')
+  Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } })
   api.getEvent.mockResolvedValue(detail() as never)
   await open()
-  expect(await screen.findByTestId('scene-tile-doors')).toBeTruthy()
-  expect(screen.getByTestId('scene-tile-crowd').props.accessibilityLabel).toBe('GOING, 42')
-  expect(screen.getByTestId('scene-tile-door').props.accessibilityLabel).toBe('ENTRY, 18+')
-  // Never the venue again (the hero and the Location card say it): how far, from the last fix (D16).
-  expect(screen.getByTestId('scene-tile-where').props.accessibilityLabel).toBe('WHERE, 2.2km away')
-  await fireEvent.press(screen.getByTestId('scene-tile-where'))
+  expect(await whenLabel()).toMatch(/^\w{3} \d+ \w{3}, \d+(:\d\d)? (AM|PM)\. Till /)
+  // The venue, its area and how far from the last fix (D16), each in its own segment.
+  expect(screen.getByTestId('scene-guide-where').props.accessibilityLabel).toBe('Toit. Bengaluru. 2.2 km away')
+  expect(screen.getByTestId('scene-guide-who').props.accessibilityLabel).toBe('42 going · 18+. By Toit')
+  await fireEvent.press(screen.getByTestId('scene-directions', { includeHiddenElements: true }))
+  expect(openInMaps).toHaveBeenCalled()
+  await fireEvent.press(screen.getByTestId('scene-add-calendar', { includeHiddenElements: true }))
+  expect(addToCalendar).toHaveBeenCalled()
+  Dimensions.set({ window, screen: window })
+})
+
+it('at the largest text the rows drop the glyph and the circle, and keep the action for a screen reader', async () => {
+  api.getEvent.mockResolvedValue(detail() as never)
+  await open()
+  const where = await screen.findByTestId('scene-guide-where')
+  expect(screen.queryByTestId('scene-directions', { includeHiddenElements: true })).toBeNull()
+  expect(where.props.accessibilityActions).toEqual([{ name: 'activate', label: 'Directions' }])
+})
+
+it('a row\'s action is a custom action for a screen reader, named', async () => {
+  api.getEvent.mockResolvedValue(detail() as never)
+  await open()
+  const where = await screen.findByTestId('scene-guide-where')
+  expect(where.props.accessibilityActions).toEqual([{ name: 'activate', label: 'Directions' }])
+  await act(async () => where.props.onAccessibilityAction({ nativeEvent: { actionName: 'activate' } }))
   expect(openInMaps).toHaveBeenCalled()
 })
 
 describe('one word per state, and only facts the page does not already say (TG-05)', () => {
-  it('no fix: no WHERE tile, never the venue name a third time', async () => {
+  it('no fix: the area alone, never a made-up distance', async () => {
     mockLastFix.mockResolvedValue(null)
     api.getEvent.mockResolvedValue(detail() as never)
     await open()
-    await screen.findByTestId('scene-tile-doors')
-    expect(screen.queryByTestId('scene-tile-where')).toBeNull()
+    expect((await screen.findByTestId('scene-guide-where')).props.accessibilityLabel).toBe('Toit. Bengaluru')
   })
 
-  it('cancelled: no people tile and no people section (never "GOING 29" under "Your RSVP is released")', async () => {
+  it('cancelled: no people count (never "29 going" under "Your RSVP is released"), and nothing to add to a calendar', async () => {
     api.getEvent.mockResolvedValue(detail({ status: 'cancelled' }, { rsvpStatus: 'going' }) as never)
     await open()
     await screen.findByTestId('scene-cancelled')
-    expect(screen.queryByTestId('scene-tile-crowd')).toBeNull()
-    expect(screen.queryByTestId('scene-attendees')).toBeNull()
+    expect(screen.getByTestId('scene-guide-who').props.accessibilityLabel).not.toMatch(/going/)
+    expect(screen.queryByTestId('scene-add-calendar')).toBeNull()
   })
 
-  it('live: "Here now" in the tile and the section alike, with one count', async () => {
+  it('live: "here now", with the room\'s count', async () => {
     api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2), stats: { rsvpCount: 516, favoriteCount: 0, checkInCount: 483 } }) as never)
     await open()
-    expect((await screen.findByTestId('scene-tile-crowd')).props.accessibilityLabel).toBe('HERE NOW, 483')
-    expect(within(screen.getByTestId('scene-attendees')).getByRole('header', { name: 'Here now, 483' })).toBeTruthy()
+    expect((await screen.findByTestId('scene-guide-who')).props.accessibilityLabel).toMatch(/^483 here now/)
   })
 
-  it('past: "Went", and Rate who you met carries the star, not the live glyph', async () => {
+  it('past: "went", and Rate who you met carries the star, not the live glyph', async () => {
     api.getEvent.mockResolvedValue(detail({ startTime: hours(-6), endTime: hours(-3), stats: { rsvpCount: 30, favoriteCount: 0, checkInCount: 21 } }, { checkInStatus: 'checked_out' }) as never)
     await open()
-    expect((await screen.findByTestId('scene-tile-crowd')).props.accessibilityLabel).toBe('WENT, 21')
-    expect(within(screen.getByTestId('scene-attendees')).getByRole('header', { name: 'Went, 21' })).toBeTruthy()
+    expect((await screen.findByTestId('scene-guide-who')).props.accessibilityLabel).toMatch(/^21 went/)
     expect(screen.getByRole('button', { name: /Rate who you met/ })).toBeTruthy()
     expect(screen.queryAllByTestId('icon-star', { includeHiddenElements: true }).length).toBeGreaterThan(0)
     expect(screen.queryAllByTestId('icon-radio', { includeHiddenElements: true })).toHaveLength(0)
   })
 })
 
-it('says the age floor and the door in the Door tile and an age pill above 18', async () => {
+it('says the age floor and the door in the Who row, each its own segment', async () => {
   api.getEvent.mockResolvedValue(detail({ minAge: 21, doorPolicy: 'guest_list' }) as never)
   await open()
-  expect((await screen.findByTestId('scene-tile-door')).props.accessibilityLabel).toBe('ENTRY, 21+ · Guest list')
-  expect(screen.getByTestId('scene-pill-age')).toBeTruthy()
+  expect((await screen.findByTestId('scene-guide-who')).props.accessibilityLabel).toBe('42 going · 21+ · Guest list. By Toit')
 })
 
 describe('the ⋯ menu', () => {
@@ -478,20 +494,21 @@ describe('the ⋯ menu', () => {
 })
 
 describe('banners and the dock', () => {
-  it('cancelled: the banner, the quiet Cancelled button, and nothing to press', async () => {
+  it('cancelled: the banner, "Cancelled" in the dock, and nothing to press', async () => {
     api.getEvent.mockResolvedValue(detail({ status: 'cancelled' }, { rsvpStatus: 'going' }) as never)
     await open()
     expect(await screen.findByTestId('scene-cancelled')).toBeTruthy()
-    const cta = screen.getByRole('button', { name: 'Cancelled' })
-    expect(cta.props.accessibilityState).toMatchObject({ disabled: true })
+    // The state in its slot, and no action beside it.
+    expect(within(screen.getByTestId('scene-dock')).getByLabelText(/^Cancelled\. \w{3} \d+ \w{3}/)).toBeTruthy()
+    expect(within(screen.getByTestId('scene-dock')).queryAllByRole('button')).toHaveLength(0)
   })
 
-  it('waitlisted: the paused banner, and the button says so (never "You’re going")', async () => {
+  it('waitlisted: the paused banner, and the dock says so (never "You’re going")', async () => {
     api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'waitlisted' }) as never)
     await open()
     expect(await screen.findByTestId('scene-waitlisted')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'On the waitlist' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'You’re going' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'On the waitlist. Change' })).toBeTruthy()
+    expect(screen.queryByText('You’re going')).toBeNull()
   })
 
   it('before the doors the primary is "I’m going"', async () => {
@@ -515,7 +532,7 @@ describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
   it('"You’re going" asks before it lets go: Keep it, or the destructive Cancel RSVP (whose press plays the haptic)', async () => {
     api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
     await open()
-    await fireEvent.press(await screen.findByRole('button', { name: 'You’re going' }))
+    await fireEvent.press(await screen.findByRole('button', { name: /^You’re going\./ }))
     const sheet = (showSheet as jest.Mock).mock.calls[0][0]
     expect(sheet).toMatchObject({ kind: 'actions', title: 'Cancel your RSVP?' })
     expect(sheet.actions.map((a: { label: string; variant: string }) => [a.label, a.variant])).toEqual([
@@ -532,19 +549,19 @@ describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
   it('a cancel says it worked: the CTA is the RSVP again and a toast confirms it (SCRUM-881)', async () => {
     api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
     await open()
-    await fireEvent.press(await screen.findByRole('button', { name: 'You’re going' }))
+    await fireEvent.press(await screen.findByRole('button', { name: /^You’re going\./ }))
     const sheet = (showSheet as jest.Mock).mock.calls[0][0]
     api.cancelRsvp.mockResolvedValue({ success: true, data: { rsvpStatus: null, rsvpCount: 41 } } as never)
     await act(async () => sheet.actions[1].then())
     expect(mockShowToast).toHaveBeenCalledWith('RSVP cancelled.', 'success')
     expect(await screen.findByRole('button', { name: 'I’m going' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'You’re going' })).toBeNull()
+    expect(screen.queryByText('You’re going')).toBeNull()
   })
 
   it('leaving the waitlist says so', async () => {
     api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'waitlisted' }) as never)
     await open()
-    await fireEvent.press(await screen.findByRole('button', { name: 'On the waitlist' }))
+    await fireEvent.press(await screen.findByRole('button', { name: 'On the waitlist. Change' }))
     const sheet = (showSheet as jest.Mock).mock.calls[0][0]
     api.cancelRsvp.mockResolvedValue({ success: true, data: { rsvpStatus: null, rsvpCount: 42 } } as never)
     await act(async () => sheet.actions[1].then())
@@ -554,12 +571,12 @@ describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
   it('a refused cancel keeps "You’re going" and says nothing worked', async () => {
     api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
     await open()
-    await fireEvent.press(await screen.findByRole('button', { name: 'You’re going' }))
+    await fireEvent.press(await screen.findByRole('button', { name: /^You’re going\./ }))
     const sheet = (showSheet as jest.Mock).mock.calls[0][0]
     api.cancelRsvp.mockResolvedValue({ success: false, error: 'boom' } as never)
     await act(async () => sheet.actions[1].then())
     expect(mockShowToast).not.toHaveBeenCalledWith('RSVP cancelled.', 'success')
-    expect(await screen.findByRole('button', { name: 'You’re going' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /^You’re going\./ })).toBeTruthy()
   })
 
   it('a failed RSVP says so in a sheet and plays the error haptic once', async () => {
@@ -574,56 +591,34 @@ describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
   })
 })
 
-describe('the sections kept from before the redesign, on the design system, behind the frame\'s layout', () => {
-  it('the byline: who is putting it on, and the live count while it runs', async () => {
-    api.getEvent.mockResolvedValue(detail() as never)
-    await open()
-    expect(await screen.findByTestId('scene-byline')).toHaveTextContent(/By Toit/)
-  })
-
-  it('attendees: the heading read as one "Going, 42"', async () => {
-    api.getEvent.mockResolvedValue(detail() as never)
-    await open()
-    const attendees = await screen.findByTestId('scene-attendees')
-    expect(within(attendees).getByRole('header', { name: 'Going, 42' })).toBeTruthy()
-  })
-
-  it('the location card: the venue, its address and the map, and a tap opens Maps', async () => {
-    api.getEvent.mockResolvedValue(detail() as never)
-    await open()
-    const card = await screen.findByTestId('scene-location')
-    expect(card).toHaveTextContent(/Toit/)
-    expect(card).toHaveTextContent(/Indiranagar/)
-    await fireEvent.press(screen.getByRole('button', { name: 'Open Toit in Maps' }))
-    expect(openInMaps).toHaveBeenCalled()
-  })
-})
-
 describe('no people count under five is printed (the Pulse\'s rule)', () => {
-  it('a small going count: no tile number and the attendees heading has no number or stack', async () => {
+  it('a small going count: the Who row has no number', async () => {
     api.getEvent.mockResolvedValue(detail({ stats: { rsvpCount: 3, favoriteCount: 0, checkInCount: 0 } }) as never)
     await open()
-    await screen.findByTestId('scene-attendees')
-    expect(screen.queryByTestId('scene-tile-crowd')).toBeNull()
-    expect(within(screen.getByTestId('scene-attendees')).getByRole('header', { name: 'Going' })).toBeTruthy()
-    expect(screen.getByTestId('scene-attendees')).not.toHaveTextContent(/\d/)
+    expect((await screen.findByTestId('scene-guide-who')).props.accessibilityLabel).toBe('18+. By Toit')
   })
 
   it('five and up is printed', async () => {
     api.getEvent.mockResolvedValue(detail({ stats: { rsvpCount: 5, favoriteCount: 0, checkInCount: 0 } }) as never)
     await open()
-    expect((await screen.findByTestId('scene-tile-crowd')).props.accessibilityLabel).toBe('GOING, 5')
+    expect((await screen.findByTestId('scene-guide-who')).props.accessibilityLabel).toBe('5 going · 18+. By Toit')
+  })
+
+  it('nobody yet and no entry facts: "Be one of the first"', async () => {
+    api.getEvent.mockResolvedValue(detail({ minAge: null, stats: { rsvpCount: 0, favoriteCount: 0, checkInCount: 0 } }) as never)
+    await open()
+    expect((await screen.findByTestId('scene-guide-who')).props.accessibilityLabel).toBe('Be one of the first. By Toit')
   })
 })
 
-// TG-06 (B-S3, D8): the screen hands the hero its category's slug. Negative control: without `category={…}` the plate
-// draws the fill alone and `music-2` is missing.
-describe('a night with no picture draws its category plate', () => {
-  it('passes the first category’s slug to the hero', async () => {
+// Flow 4 E-B: no picture is the stamp poster, with the category's glyph. Negative control: without `category={…}` there is no `music-2`.
+describe('a night with no picture draws the stamp poster', () => {
+  it('passes the first category’s slug and the date to the poster', async () => {
     api.getEvent.mockResolvedValue(detail({ coverImageUrl: null, categories: [{ id: 'c1', name: 'Music', slug: 'music' }] }) as never)
     await open()
-    const plate = await screen.findByTestId('scene-hero-plate', { includeHiddenElements: true })
-    expect(JSON.stringify(plate)).toContain('music-2')
+    const poster = await screen.findByTestId('scene-hero-stamp')
+    expect(JSON.stringify(screen.toJSON())).toContain('music-2')
+    expect(poster.props.accessibilityLabel).toMatch(/^\w+day \d+ \w+, Toit · Bengaluru$/)
   })
 })
 
@@ -657,7 +652,7 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
   it('neither going nor saved: no line', async () => {
     api.getEvent.mockResolvedValue(detail(twoDaysOut()) as never)
     await open()
-    await screen.findByTestId('scene-tiles')
+    await screen.findByTestId('scene-guide')
     expect(screen.queryByTestId('scene-room-opens')).toBeNull()
     expect(screen.queryByTestId('scene-room-open')).toBeNull()
   })
@@ -674,9 +669,10 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
     api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
     api.getEventChat.mockResolvedValue({ success: true, data: { chatGroupId: 'g1' } } as never)
     await open()
-    const line = await screen.findByTestId('scene-room-open')
-    expect(within(line).getByText('The room is open')).toBeTruthy()
-    await fireEvent.press(within(line).getByRole('button', { name: 'Open the room' }))
+    // The dock says it, and the room is its one action.
+    const dock = await screen.findByTestId('scene-dock')
+    expect(await within(dock).findByText('The room is open')).toBeTruthy()
+    await fireEvent.press(within(dock).getByRole('button', { name: 'Open the room' }))
     await waitFor(() =>
       expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'g1', roomName: 'Vinyl Night', eventTitle: 'Vinyl Night' } })
     )
@@ -694,7 +690,7 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
       await act(async () => {
         jest.advanceTimersByTime(2 * 60_000)
       })
-      expect(screen.getByTestId('scene-room-open')).toBeTruthy()
+      expect(within(screen.getByTestId('scene-dock')).getByText('The room is open')).toBeTruthy()
       expect(screen.queryByTestId('scene-room-opens')).toBeNull()
     } finally {
       jest.useRealTimers()
@@ -710,14 +706,13 @@ function textOf(node: { children: (string | { children: unknown[] })[] }): strin
 describe('the Lobby row (ROOM-08, flow3.js:68)', () => {
   const at = (id: string) => JSON.stringify(screen.toJSON()).indexOf(`"${id}"`)
 
-  it('follows The experience directly, above the details, the gallery and the attendees', async () => {
+  it('follows The experience directly', async () => {
     api.getEvent.mockResolvedValue(detail() as never)
     await open()
     expect(await screen.findByTestId('board-entry')).toBeTruthy()
     const experience = JSON.stringify(screen.toJSON()).indexOf('The experience')
     expect(experience).toBeGreaterThan(-1)
     expect(at('board-entry')).toBeGreaterThan(experience)
-    expect(at('board-entry')).toBeLessThan(at('scene-attendees'))
   })
 
   it('is absent on a cancelled night', async () => {
@@ -730,7 +725,7 @@ describe('the Lobby row (ROOM-08, flow3.js:68)', () => {
   it('is absent after the doors (the server closes the Lobby at the first doors)', async () => {
     api.getEvent.mockResolvedValue(detail({ startTime: hours(-1), endTime: hours(2) }) as never)
     await open()
-    await screen.findByTestId('scene-tiles')
+    await screen.findByTestId('scene-guide')
     expect(screen.queryByTestId('board-entry')).toBeNull()
   })
 })

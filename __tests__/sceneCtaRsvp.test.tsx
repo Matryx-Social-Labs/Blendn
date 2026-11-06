@@ -9,36 +9,32 @@ import { join } from 'path'
 
 jest.mock('react-native-maps', () => ({ __esModule: true, default: () => null, Marker: () => null }))
 
-import { rsvpCtaState, SceneCTA, sceneCtaLabel } from '../components/scene/SceneSections'
+import { rsvpCtaState } from '../components/scene/SceneSections'
+import { DockRow } from '../components/ds/DockRow'
+import { eventDock } from '../lib/eventFacts'
 
 describe('the RSVP slot', () => {
   it('reads the server’s answer: going is a seat, waitlisted is not', () => {
     expect(rsvpCtaState('going')).toBe('rsvpd')
     expect(rsvpCtaState('waitlisted')).toBe('waitlisted')
     expect(rsvpCtaState(null)).toBe('rsvp')
-    expect(sceneCtaLabel('going')).toBe('Open the room')
-    expect(sceneCtaLabel('waitlisted')).toBe('On the waitlist')
-    expect(sceneCtaLabel('waitlisted')).not.toMatch(/going/i)
+    const dock = (cta: Parameters<typeof eventDock>[0]['cta']) => eventDock({ cta, when: 'Sat 8 Nov · 6 PM', roomOpen: false, canInvite: true, between: null, alone: false })
+    expect(dock('going')?.action?.label).toBe('Open the room')
+    expect(dock('waitlisted')?.state).toBe('On the waitlist')
+    expect(dock('waitlisted')?.state).not.toMatch(/going/i)
   })
 
   it('draws a waitlisted RSVP as "On the waitlist"', async () => {
-    await render(<SceneCTA state="waitlisted" onPress={jest.fn()} />)
-    expect(screen.getByLabelText('On the waitlist')).toBeTruthy()
+    await render(<DockRow state="On the waitlist" sub="Change" onPressState={jest.fn()} />)
+    expect(screen.getByLabelText('On the waitlist. Change')).toBeTruthy()
     expect(screen.queryByText("You’re going")).toBeNull()
   })
 
-  it('pending: a spinner, the label unchanged, nothing pressable', async () => {
-    const onPress = jest.fn()
-    await render(<SceneCTA state="rsvp" pending onPress={onPress} />)
-    expect(screen.getByTestId('scene-cta-pending', { includeHiddenElements: true })).toBeTruthy()
-    const button = screen.getByLabelText("I’m going")
-    expect(button.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true, busy: true }))
-  })
-
-  it('the pending spinner is the design system\'s, not the platform\'s (#24, #48): the last ActivityIndicator in the Scene is gone', () => {
-    const src = readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneSections.tsx'), 'utf8')
+  it('pending: the DS button\'s busy state, the label unchanged (its spinner is the design system\'s, #24, #48)', async () => {
+    await render(<DockRow state="Free" action={{ label: 'I’m going', kind: 'primary', onPress: jest.fn(), loading: true }} />)
+    expect(screen.getByLabelText('I’m going').props.accessibilityState).toEqual(expect.objectContaining({ busy: true }))
+    const src = readFileSync(join(__dirname, '..', 'components', 'ds', 'DockRow.tsx'), 'utf8')
     expect(src).not.toContain('ActivityIndicator')
-    expect(src).toContain("<Spinner testID=\"scene-cta-pending\"")
   })
 
   it('the screen is not optimistic: it marks the request pending and sets the status only from the answer', () => {
@@ -52,7 +48,7 @@ describe('the RSVP slot', () => {
     // The cancel holds the same guard, so its tray can't reopen mid-request.
     const withdraw = src.slice(src.indexOf('const withdrawRsvp'), src.indexOf('const confirmWithdrawRsvp'))
     expect(withdraw).toMatch(/if \(rsvpInFlight\.current\) return/)
-    expect(src).toContain('pending={rsvpPending}')
+    expect(src).toContain("loading: dock.action.does === 'rsvp' ? rsvpPending")
   })
 })
 

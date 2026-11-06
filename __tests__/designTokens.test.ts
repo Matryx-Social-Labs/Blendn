@@ -35,6 +35,8 @@ describe('design tokens', () => {
       'components/ds/ChatBubble.tsx', // an emoji-only message
       'components/ds/MomentPour.tsx', // motion #9's "You're in."
       'components/ds/shared.ts', // monoValue, the one mono size between 12 and 40
+      'components/scene/SceneHero.tsx', // Flow 4 E-B's stamp poster: its date is the art (20/24 words, a 120 day)
+      'components/screens/EventDetailScreen.tsx', // Flow 4 E-B's 28/33 page title, between title and display
     ])
   })
 

@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react'
+import { Share } from 'react-native'
 
 import type { ShareTarget } from '../components/ds/ShareSheet'
+import { shareText } from './shareEvent'
 
 /**
  * The share tray, opened from anywhere (Flow 16 · 16.1).
@@ -47,4 +49,17 @@ export function useShareRequest(): { id: number; target: ShareTarget } | null {
 export function resetShareTray(): void {
   current = null
   nextId = 0
+}
+
+/**
+ * The system share sheet with the target's words and link (Flow 4: the event page's Invite and its Share, "the system
+ * share sheet" on the board). Says how it ended so the caller can speak only to a failure.
+ */
+export async function shareNatively(target: ShareTarget): Promise<'shared' | 'dismissed' | 'failed'> {
+  try {
+    const result = await Share.share({ message: shareText(target) })
+    return result.action === Share.sharedAction ? 'shared' : 'dismissed'
+  } catch {
+    return 'failed'
+  }
 }

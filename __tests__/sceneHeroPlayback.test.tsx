@@ -26,7 +26,7 @@ const CLIP = { kind: 'video' as const, url: 'https://x.test/a.mp4', posterUrl: '
 const STILL = { kind: 'image' as const, url: 'https://x.test/b.jpg' }
 const hero = (playlist: FeedMediaItem[] = [CLIP]) => (
   <View>
-    <SceneHero source={undefined} playlist={playlist} title="Vinyl night" when="9 PM" place="at Toit" />
+    <SceneHero playlist={playlist} title="Vinyl night" stamp={null} venueLine="Toit" />
   </View>
 )
 const control = () => screen.getByTestId('scene-hero-playback')

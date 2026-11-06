@@ -1,15 +1,14 @@
-import { barTop } from '../../lib/barGeometry'
+import { barCircleBottom, barTop } from '../../lib/barGeometry'
 import FadeInUp from '../motion/FadeInUp'
-import { bannerFadeIn } from '../motion/presence'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { H } from '../../lib/haptics'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { InteractionManager, Linking, Platform, StyleSheet, View } from 'react-native'
+import { Linking, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated, { FadeIn, LayoutAnimationConfig, LinearTransition, ReduceMotion, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { OverflowMenu } from '../crews/OverflowMenu'
-import { AmenityGrid, type AmenityTileProps } from '../ds/AmenityTile'
+import { AmenityGrid } from '../ds/AmenityTile'
 import { Banner } from '../ds/Banner'
 import { Button } from '../ds/Button'
 import { Dock } from '../ds/Dock'
@@ -30,7 +29,6 @@ import { betweenDaysLine, dayOfWords, parseEventDays, runRange, sessionIsToday, 
 import { showSheet } from '../../lib/sheet'
 import { SkeletonBlock } from '../Skeleton'
 import { liveWindow, sessionFromApi, type EventSession } from '../../lib/eventSession'
-import { cardTime, peopleLabel } from '../../lib/pulse'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { askPushInContext } from '../../lib/pushAsk'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
@@ -43,10 +41,8 @@ import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
 import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetails'
 import { showEventReportOptions } from '../../lib/safetyUtils'
 import { takeSceneSeed } from '../../lib/sceneSeed'
-import { eventTarget, shareText } from '../../lib/shareEvent'
-import { openShare } from '../../lib/shareTray'
-import { openWhatsApp } from '../../lib/shareWhatsApp'
-import { BringSomeoneRow } from '../share/BringSomeoneRow'
+import { eventTarget } from '../../lib/shareEvent'
+import { shareNatively } from '../../lib/shareTray'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import {
@@ -55,43 +51,28 @@ import {
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient'
-import { COLOR, DURATION, RADIUS, SPACE, SPRING, STAGGER, VENUE_PLATES } from '../../lib/design/tokens'
-import { PAGE_WASH, PageWash } from '../ui/GradientFill'
-import { Icon, type IconName } from '../ui/Icon'
-import { SceneHero, sceneHeroHeight, type ScenePill } from '../scene/SceneHero'
+import { COLOR, DURATION, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { PosterLight, SceneHero, posterSide } from '../scene/SceneHero'
+import { EventGuide } from '../scene/EventGuide'
+import { DockRow } from '../ds/DockRow'
+import { dateStamp, eventDock, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
 import { SceneLightbox } from '../scene/SceneLightbox'
-import ScalePress from '../motion/ScalePress'
 import { BoardEntry } from '../board/BoardSections'
 import { boardOpen } from '../../lib/board'
-import {
-  SCENE_CTA_ICON,
-  SCENE_PADDING_HORIZONTAL,
-  SCENE_SECTION_GAP,
-  SceneAttendees,
-  SceneBody,
-  SceneBodyAccent,
-  SceneByline,
-  SceneCTA,
-  SceneGallery,
-  SceneLocationCard,
-  SceneMap,
-  SceneDetails,
-  type SceneCTAState,
-} from '../scene/SceneSections'
+import { SCENE_PADDING_HORIZONTAL, SCENE_SECTION_GAP, SceneBody, SceneBodyAccent, SceneDetails, type SceneCTAState } from '../scene/SceneSections'
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia'
 import { highlightEntities } from '../../lib/entityHighlight'
-import { doorWords, heroPillLabel, pillWords } from '../../lib/scarcity'
 import { calendarDate, eventClock } from '../../lib/time'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
+import { doorWords, heroPillLabel, pillWords } from '../../lib/scarcity'
 import { roomOpensAt } from '../../lib/preEventRoom'
 import { usePreEventRoom } from '../../lib/usePreEventRoom'
 import { useAuth } from '../../lib/useAuth'
-import { printable } from '../../lib/pulseSections'
 import { useNow } from '../../lib/useNow'
 import { forgetEventDetailCache, getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache'
 import { claimUrlFrom } from '../../lib/claimLink'
 import * as Location from 'expo-location'
-import { formatDistance, getDistanceKm } from '../../lib/geo'
+import { getDistanceKm } from '../../lib/geo'
 import { ROUGH_FIX_MAX_AGE_MS } from '../../lib/locationFix'
 import { useReducedMotion } from '../../lib/motion'
 
@@ -132,7 +113,7 @@ function useClockPassed(ms: number | null, inclusive = false): boolean {
  * How far the event is from the phone's last fix ("2.4km away"), when one is recent and location is already allowed. It
  * never asks: a Scene is read in bed as often as on the street, and no fix is simply no WHERE tile.
  */
-function useDistanceAway(latitude?: number, longitude?: number): string | null {
+function useDistanceAway(latitude?: number, longitude?: number): number | null {
   const [km, setKm] = useState<number | null>(null)
   useEffect(() => {
     // 0,0 is an unset coordinate in this schema, not the Gulf of Guinea.
@@ -147,7 +128,7 @@ function useDistanceAway(latitude?: number, longitude?: number): string | null {
       live = false
     }
   }, [latitude, longitude])
-  return formatDistance(km)
+  return km
 }
 
 interface EventDetailData {
@@ -254,6 +235,7 @@ export default function EventDetail() {
   const { id, seed: seedToken } = useLocalSearchParams<{ id?: string; seed?: string }>()
   const [seed] = useState(() => takeSceneSeed(seedToken, id))
   const insets = useSafeAreaInsets()
+  const { width } = useWindowDimensions()
   // The Android snackbar stands above the CTA dock.
   const [ctaDockHeight, setCtaDockHeight] = useState(0)
   useToastDock(ctaDockHeight)
@@ -334,8 +316,6 @@ export default function EventDetail() {
   const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus | null>(null)
   const lastFetchRef = React.useRef<number>(0)
   const [menuOpen, setMenuOpen] = useState(false)
-  /** The map mounts once the push has settled, so it does not cost the transition a frame. */
-  const [showMap, setShowMap] = useState(false)
   /** Which gallery item the lightbox is on, or null when it is closed. */
   const [lightbox, setLightbox] = useState<number | null>(null)
   /*
@@ -495,11 +475,6 @@ export default function EventDetail() {
     // read to set the organizer flag inside its own callback — adding either
     // would refetch on every render/auth-object refresh instead of once per id.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
-
-  useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => setShowMap(true))
-    return () => task?.cancel?.()
   }, [id])
 
   // Real-time event updates via Socket.io
@@ -769,11 +744,10 @@ export default function EventDetail() {
         timezone: event.timezone,
       })
     : null
-  const handleShare = shareTarget ? () => void openShare(shareTarget) : undefined
-  /** "Bring someone?": WhatsApp with the message already written; no WhatsApp, the tray. */
-  const bringViaWhatsApp = shareTarget
+  // The system share sheet (Flow 4: the bar's Share and the dock's Invite); "Bring someone?" folded into it.
+  const handleShare = shareTarget
     ? async () => {
-        if (!(await openWhatsApp(shareText(shareTarget)))) void openShare(shareTarget)
+        if ((await shareNatively(shareTarget)) === 'failed') showToast('Couldn’t open sharing. Try again.', 'error')
       }
     : undefined
 
@@ -839,35 +813,6 @@ export default function EventDetail() {
   // The attendance flow's one state (`lib/attendanceState.ts`): the Going card, the disc and this CTA cannot disagree.
   const ctaNow = (): SceneCTAState => sceneCtaState({ phase: event ? attendancePhase(event) : 'upcoming', rsvpStatus, checkedIn: isCheckedIn, attended })
 
-  /*
-   * The press does what the label says, read from the same state, so the two cannot drift. Nothing after the end is
-   * disabled: rate the people you met (the entry point `PLACEHOLDER_SCREENS.md` asks for), or, if you weren't here,
-   * what's on tonight instead of a dead pill. The overlays are hosted by the tabs, under the root stack: back to them first.
-   */
-  const primaryActionPress = () => {
-    switch (ctaNow()) {
-      case 'rate':
-        router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any })
-        return
-      case 'ended':
-      case 'going':
-        toTheOverlay(openBlendn)
-        return
-      // Before the doors, the button is the RSVP and its own off-switch.
-      case 'rsvp':
-      case 'rsvpd':
-      case 'waitlisted':
-        void handleToggleRsvp()
-        return
-      // The hold is the button: there is no press to handle.
-      case 'join':
-        return
-      case 'cancelled':
-        return
-    }
-  }
-
-
   const reduceMotion = useReducedMotion()
   // Layout glides as a banner arrives or leaves (DS #44); Reduce Motion cuts.
   const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
@@ -928,29 +873,8 @@ export default function EventDetail() {
   )
 
   /*
-   * One control, and what it offers depends on the clock.
-   *
-   * "Blend in" is a check-in, and a check-in needs the event to be **running**
-   * -- the server re-validates the time and `pickInsideEvent` requires
-   * `start <= now`. So on an event two days out the button was offering the one
-   * action that cannot succeed. A dead control in the most prominent position
-   * on the screen is the exact fault the centre nav button was redesigned to
-   * stop having.
-   *
-   * Before the doors it offers the thing that *is* available. After they open
-   * it becomes the check-in. That also retires the secondary "I'm going" pill
-   * this screen briefly grew: RSVP was never a second action alongside
-   * checking in, it is the same slot at an earlier hour.
-   */
-
-  /*
-   * The count means two different things either side of the doors.
-   *
-   * Before an event starts nobody has checked in, so an "Attendees" heading
-   * over a dash is the screen reporting emptiness for a night that has not
-   * happened yet. What is true then is how many people said they are coming --
-   * RSVPs, falling back to saves when nobody has RSVP'd, since a save is the
-   * weaker version of the same signal and a real number beats a dash.
+   * Who is there, one word per state (D17, TG-05): "going" before the doors (saves, "interested", when nobody has
+   * RSVP'd), "here now" while it runs, "went" after. A cancelled night has nobody to count.
    */
   const amenities = amenityTiles(event?.amenities)
   const detailBlocks = eventDetailBlocks(event?.details)
@@ -958,84 +882,37 @@ export default function EventDetail() {
   const claimUrl = event?.claim_url ?? null
   const cancelled = event?.status === 'cancelled'
   const waitlisted = rsvpStatus === 'waitlisted'
-
-  /*
-   * Who is there, one word per state, the same in the tile and the section (D17, TG-05): "Going" before the doors (saves,
-   * "Interested", when nobody has RSVP'd), "Here now" while it runs, "Went" after. A cancelled night has nobody to count:
-   * neither is drawn, never "GOING 29" under "Your RSVP is released".
-   */
-  const crowdWord = isEnded ? 'Went' : isLive ? 'Here now' : goingCount > 0 ? 'Going' : 'Interested'
-  const crowdCount = isEnded ? checkInCount : isLive ? (hereNow ?? detailHere ?? checkInCount) : goingCount || interestCount
-  const attendeeBlock = cancelled ? { label: crowdWord, count: 0 } : { label: crowdWord, count: crowdCount }
+  const crowdWord = isEnded ? 'went' : isLive ? 'here now' : goingCount > 0 ? 'going' : 'interested'
+  const crowdCount = cancelled ? 0 : isEnded ? checkInCount : isLive ? (hereNow ?? detailHere ?? checkInCount) : goingCount || interestCount
 
   const ctaState = ctaNow()
 
-  // "I'm going" carries no glyph; "You're going" carries the check (A78). Rating a past night is a star, never the live glyph.
-  const ctaIcon: IconName | null =
-    ctaState === 'ended'
-      ? 'arrow-up-right'
-      : ctaState === 'rate'
-        ? 'star'
-      : ctaState === 'rsvpd'
-        ? 'check'
-        : ctaState === 'waitlisted'
-          ? 'clock'
-          : ctaState === 'rsvp' || ctaState === 'cancelled'
-            ? null
-            : 'radio'
-
   /*
-   * The hero's words. The badge is the Pulse's date grammar (`cardTime`), so a card and the page it opens never
-   * disagree; read off the live window, not the run: on day 2 of a festival the hero says today's doors.
+   * The When row and the dock say the live window's doors, not the run's (on day 2 of a festival, today's), in the
+   * event city's clock with no zone named. A run of days says its own dates ("Sat 27 – Mon 29 Sep", Flow 3 · 3.2).
    */
   const heroStart = live?.start_time ?? null
-  // A run of days says its own dates ("Sat 27 – Mon 29 Sep", Flow 3 · 3.2), not just the next doors; "Live" and "Ended" stay as they were.
-  const when = isEnded ? 'Ended' : isLive ? 'Live' : event?.days ? runRange(event.days, event, event.timezone) : event ? cardTime(event, now) : ''
-  const place = event?.venue_name ? `at ${[event.venue_name, event.city].filter(Boolean).join(', ')}` : ''
-  const scarcity = heroPillLabel({
-    doorPolicy: event?.door_policy as never,
-    maxCapacity: event?.max_capacity,
-    currentCapacity: event?.current_capacity,
-    goingCount,
-  })
-  const minAge = event?.min_age ?? null
-  const people = isEnded || cancelled ? null : peopleLabel({ here_count: hereNow ?? detailHere, going_count: goingCount }, isLive)
-  const pills: ScenePill[] = [
-    ...(cancelled ? [{ key: 'cancelled', text: 'Cancelled', white: true }] : scarcity ? [{ key: 'scarcity', text: pillWords(scarcity) }] : []),
-    ...(minAge && minAge > MIN_AGE ? [{ key: 'age', text: `${minAge}+` }] : []),
-    ...(people ? [{ key: 'people', text: people }] : []),
-  ]
-
-  /*
-   * The 2 x 2 facts, then the organiser's curated ones (`AmenityGrid`: two up, "+n more" past seven). Doors and
-   * Where are always known; the crowd tile waits for a real number; Door says the age floor and the organiser's door.
-   */
-  const door = [`${minAge ?? MIN_AGE}+`, doorWords(event?.door_policy)].filter(Boolean).join(' · ')
-  /*
-   * A run of days says where today is in it where the doors' time was (Flow 3 · 3.2), but only when the day the session is on is
-   * today in the event's own zone. Between days it is the NEXT day's doors, and the tile keeps its clock time and says so; a
-   * one-day event keeps its doors as always.
-   */
-  const sessionToday = event?.days ? sessionIsToday(event.days, event.timezone, now) : false
-  const dayWords = event?.days && sessionToday ? dayOfWords(event.days) : null
-  // An ended run has no next doors, even when its last day was called off (SCRUM-981).
-  const doorsLabel = event?.days && event.days.dayNumber && !sessionToday && !isEnded ? 'NEXT DOORS' : 'DOORS'
-  // Between days, to somebody who is going: the next door, said where "You're going" was (frame 06). Nothing else changes.
+  const tz = event?.timezone
+  const startDay = heroStart ? calendarDate(heroStart, { weekday: true, timeZone: tz, now }) : ''
+  const startClock = heroStart ? eventClock(heroStart, tz) : null
+  const dockWhen = [startDay, startClock].filter(Boolean).join(' · ')
+  const sessionToday = event?.days ? sessionIsToday(event.days, tz, now) : false
+  // Between days, to somebody who is going: the next door, said where "Change" was (frame 06). Nothing else changes.
   const betweenLine =
     event?.days && ctaState === 'rsvpd' && !sessionToday && heroStart && Date.parse(event.start_time) <= now
-      ? betweenDaysLine(event.days, heroStart, event.timezone)
+      ? betweenDaysLine(event.days, heroStart, tz)
       : null
   /*
    * Said to the people who had heard of the night (going, maybe, waitlisted, saved): what moved, and what it was. A cancel is
    * the banner's, so it is no line here.
    */
   const heardOfIt = (rsvpStatus !== null && rsvpStatus !== 'not_going') || userInterested
-  // Before the doors, to somebody going or saved: "Room opens Sat 24 Oct 9 PM", then "The room is open" and Open the room.
+  // Before the doors, to somebody going or saved: "Room opens Sat 24 Oct 9 PM", then the dock's "The room is open".
   const roomOpens = roomOpensAt(event?.start_time)
   const roomLine =
     event && !cancelled && !hasStarted && roomOpens !== null && (rsvpStatus === 'going' || userInterested)
       ? roomOpensIn
-        ? { open: false as const, when: `${calendarDate(roomOpens, { weekday: true, timeZone: event.timezone, now })} ${eventClock(roomOpens, event.timezone)}` }
+        ? { open: false as const, when: `${calendarDate(roomOpens, { weekday: true, timeZone: tz, now })} ${eventClock(roomOpens, tz)}` }
         : { open: true as const }
       : null
   const openRoom = async () => {
@@ -1050,26 +927,47 @@ export default function EventDetail() {
     }
   }
   const changeRows = event?.change && heardOfIt ? changeLines(event.change, event, now) : []
-  const tiles: AmenityTileProps[] = [
-    ...(dayWords
-      // TODAY, not DOORS: "DOORS: Day 2 of 2" read as a time for the doors (RC drive 2 D-9).
-      ? [{ label: 'TODAY', value: dayWords, mono: true, testID: 'scene-tile-doors' }]
-      : heroStart
-        ? [{ label: doorsLabel, value: eventClock(new Date(heroStart).getTime(), event?.timezone), mono: true, testID: 'scene-tile-doors' }]
-        : []),
-    ...(away ? [{ label: 'WHERE', value: away, onPress: openInMaps, testID: 'scene-tile-where' }] : []),
-    ...(!cancelled && printable(crowdCount) !== null ? [{ label: crowdWord.toUpperCase(), value: String(crowdCount), mono: true, testID: 'scene-tile-crowd' }] : []),
-    { label: 'ENTRY', value: door, testID: 'scene-tile-door' },
-    ...amenities.map((a) => ({ label: a.title.toUpperCase(), value: a.subtitle || 'Included', testID: `scene-tile-${a.id}` })),
-  ]
 
   // The ⋯: report, for anyone. An organiser edits, announces and deletes on the dashboard (Flow 15 #2, owner ruling D3): the Scene is the
   // attendee's one surface, and shows no staff control to anybody.
   const menu: MenuItem[] = [{ icon: 'flag', label: 'Report this event', onPress: () => showEventReportOptions(event?.title || 'this event', String(id)) }]
 
+  /** The dock's state and its one action (`lib/eventFacts.ts`); null at the doors, where the hold is the dock. */
+  const dock = eventDock({ cta: ctaState, when: dockWhen, roomOpen: roomLine?.open === true, canInvite: !!shareTarget, between: betweenLine, alone: checkInCount <= 1 })
+  const dockPress: Record<DockDoes, () => void> = {
+    rsvp: () => void handleToggleRsvp(),
+    invite: () => void (handleShare && handleShare()),
+    openRoom: () => void openRoom(),
+    room: () => toTheOverlay(openBlendn),
+    tonight: () => toTheOverlay(openBlendn),
+    rate: () => router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any }),
+  }
+  /*
+   * A run of days says where today is in it under its dates ("Day 2 of 3 · Till 2 AM", Flow 3 · 3.2), but only when the
+   * session is today in the event's own zone. Between days it says the next doors; an ended run promises none (SCRUM-981).
+   */
+  const runLine = event?.days
+    ? sessionToday
+      ? [dayOfWords(event.days), untilWords(live?.end_time, tz)].filter(Boolean).join(' · ')
+      : event.days.dayNumber && !isEnded
+        ? `Next doors ${startDay}`
+        : null
+    : null
+  // How full it is, in the Pulse's words ("Full", "8 spots left"): a fact in the Who row, never a pill on the poster.
+  const scarcity = heroPillLabel({ doorPolicy: event?.door_policy as never, maxCapacity: event?.max_capacity, currentCapacity: event?.current_capacity, goingCount })
+  const door = doorWords(event?.door_policy)
+  // The pill's own words can be the door's ("Guest list only"): said once.
+  const spots = cancelled || !scarcity || (door && pillWords(scarcity).startsWith(door)) ? null : pillWords(scarcity)
+  const stamp = dateStamp(heroStart, tz)
+  const area = event?.area || event?.city || ''
+  const minAge = event?.min_age ?? null
+  const posterTop = barCircleBottom(insets.top, Platform.OS === 'android') + SPACE.sm
+
   const onFirstLoad = loading && !event
   return (
     <View style={styles.container}>
+      {/* The poster's light, fixed behind the page: it fades with the poster as the page scrolls, never to nothing. */}
+      <PosterLight scrollY={scrollY} />
       {/* First in the tree: Back is the first thing a screen reader reaches. */}
       <SceneBar
         title={event?.title || ''}
@@ -1079,6 +977,7 @@ export default function EventDetail() {
         onShare={handleShare}
         onMore={() => setMenuOpen(true)}
         scrollY={scrollY}
+        reveal={posterSide(width)}
       />
 
       <Animated.ScrollView
@@ -1086,28 +985,22 @@ export default function EventDetail() {
         onScroll={onScroll}
         scrollEventThrottle={16}
         // Room for the dock, and no more: `/event/[id]` is a root stack route, there is no tab bar beneath it.
-        contentContainerStyle={{ paddingBottom: ctaDockHeight + SPACE.xl }}
+        contentContainerStyle={{ paddingTop: posterTop, paddingBottom: ctaDockHeight + SPACE.xl }}
       >
-        {/*
-          The hero fades in over the skeleton's slot instead of cutting in.
-          `skipEntering` means a cached event, which paints the hero first,
-          doesn't fade — only the skeleton-to-hero swap does.
-        */}
+        {/* The poster fades in over the skeleton's slot; a cached event, which paints it first, doesn't fade. */}
         <LayoutAnimationConfig skipEntering>
           {onFirstLoad ? (
-            <SkeletonBlock width="100%" height={sceneHeroHeight()} borderRadius={0} />
+            <View style={styles.posterSlot}>
+              <SkeletonBlock width={posterSide(width)} height={posterSide(width)} borderRadius={RADIUS.disc} />
+            </View>
           ) : (
             <Animated.View entering={HERO_FADE_IN}>
               <SceneHero
                 playlist={playlist}
-                source={event?.cover_image_url ? { uri: event.cover_image_url } : undefined}
                 title={event?.title || ''}
-                when={when}
-                whenSpoken={when.replace(' – ', ' to ')}
-                struck={cancelled}
-                pills={pills}
-                place={place}
                 category={event?.category_slug}
+                stamp={stamp}
+                venueLine={[event?.venue_name, area].filter(Boolean).join(' · ')}
                 onPressMedia={(i) => setLightbox(i)}
                 scrollY={scrollY}
               />
@@ -1115,181 +1008,148 @@ export default function EventDetail() {
           )}
         </LayoutAnimationConfig>
 
-        {/* The warm wash under the hero: the page is the hero's, not a black sheet laid under it. */}
-        <PageWash color={VENUE_PLATES.brewery[1]} pointerEvents="none" style={styles.wash} />
-
         <Animated.View layout={glide} style={styles.content}>
-          <OfflineBanner text="Offline. Showing what you had." testID="scene-offline" />
-          {cancelled ? <Banner kind="offline" text="Cancelled. The organizer called this one off. Your RSVP is released." testID="scene-cancelled" /> : null}
-          {waitlisted && !cancelled ? <Banner kind="paused" text="On the waitlist. You’ll be first in line in the order you joined." testID="scene-waitlisted" /> : null}
-          {/* Keyed by state, so the tick-over is a new banner: announced (iOS) and read (Android's live region) as news. */}
-          {roomLine ? (
-            roomLine.open ? (
-              <Banner
-                key="room-open"
-                kind="info"
-                icon="door-open"
-                text="The room is open"
-                action={{ label: 'Open the room', onPress: () => void openRoom() }}
-                busy={roomOpening}
-                testID="scene-room-open"
-              />
-            ) : (
-              <Banner key="room-opens" kind="info" icon="clock" text="Room opens" mono={roomLine.when} testID="scene-room-opens" />
-            )
-          ) : null}
-
           {onFirstLoad ? (
             <View testID="scene-skeleton" accessibilityLabel="Loading the event" accessibilityState={{ busy: true }} style={styles.skeleton}>
-              <SkeletonBlock width="60%" height={30} borderRadius={RADIUS.thumb} />
-              <View style={styles.skeletonTiles}>
-                {[0, 1, 2, 3].map((i) => (
-                  <SkeletonBlock key={i} width="47%" height={76} borderRadius={RADIUS.rowInCard} />
-                ))}
-              </View>
+              <SkeletonBlock width="80%" height={TITLE_LINE} borderRadius={RADIUS.thumb} />
+              {[0, 1, 2].map((i) => (
+                <SkeletonBlock key={i} width="100%" height={SPACE.xxxl} borderRadius={RADIUS.thumb} />
+              ))}
             </View>
           ) : (
             <>
-              {changeRows.length > 0 ? (
-                <FadeInUp delay={SECTION_DELAY[0]}>
-                  <SceneChangedLines lines={changeRows} changedAt={event?.change?.changedAt} testID="scene-changed" />
-                </FadeInUp>
-              ) : null}
+              <Text testID="scene-title" accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={styles.title}>
+                {event?.title || ''}
+              </Text>
+
+              {/* The state's own slot under the title (never glued to a value): offline, called off, waitlisted, the room's hour, what moved. */}
+              <View style={styles.state}>
+                <OfflineBanner text="Offline. Showing what you had." testID="scene-offline" />
+                {cancelled ? <Banner kind="offline" text="Cancelled. The organizer called this one off. Your RSVP is released." testID="scene-cancelled" /> : null}
+                {waitlisted && !cancelled ? <Banner kind="paused" text="On the waitlist. You’ll be first in line in the order you joined." testID="scene-waitlisted" /> : null}
+                {roomLine && !roomLine.open ? <Banner key="room-opens" kind="info" icon="clock" text="Room opens" mono={roomLine.when} testID="scene-room-opens" /> : null}
+                {changeRows.length > 0 ? <SceneChangedLines lines={changeRows} changedAt={event?.change?.changedAt} testID="scene-changed" /> : null}
+              </View>
 
               <FadeInUp delay={SECTION_DELAY[0]}>
-                <AmenityGrid tiles={tiles} testID="scene-tiles" />
+                <EventGuide
+                  when={{
+                    day: event?.days ? runRange(event.days, event, tz) : startDay,
+                    time: startClock,
+                    until: runLine ?? untilWords(live?.end_time, tz),
+                    add: event && !cancelled && !isEnded ? { label: 'Add to calendar', icon: 'calendar-plus', onPress: () => addToCalendar(event), testID: 'scene-add-calendar' } : undefined,
+                  }}
+                  where={
+                    event?.venue_name
+                      ? { venue: event.venue_name, area: area || null, distance: shortDistance(away), directions: { label: 'Directions', icon: 'navigation', onPress: openInMaps, testID: 'scene-directions' } }
+                      : null
+                  }
+                  who={{ ...whoLine({ count: crowdCount, word: crowdWord, minAge, door, spots }), host: event?.organizer || null }}
+                />
               </FadeInUp>
 
-              {event?.days ? (
-                <FadeInUp delay={SECTION_DELAY[0]}>
-                  <SceneDayStrip days={event.days} today={sessionToday} testID="scene-days" />
-                </FadeInUp>
-              ) : null}
+              <View style={styles.sections}>
+                {/* Flow 4b's Tickets section (rows A) lands here, above the experience, when ticketing ships. */}
+                {event?.days ? (
+                  <FadeInUp delay={SECTION_DELAY[1]}>
+                    <SceneDayStrip days={event.days} today={sessionToday} testID="scene-days" />
+                  </FadeInUp>
+                ) : null}
 
-              {event?.organizer || isLive ? (
-                <FadeInUp delay={SECTION_DELAY[0]}>
-                  <SceneByline host={event?.organizer} hereNow={isLive ? hereNow ?? detailHere : null} />
-                </FadeInUp>
-              ) : null}
+                {event?.description ? (
+                  <FadeInUp delay={SECTION_DELAY[1]}>
+                    <View testID="scene-experience" style={styles.section}>
+                      <SectionHeader title="The experience" />
+                      <SceneBody>
+                        {highlightEntities(event.description, entities).map((seg, i) =>
+                          seg.entity ? <SceneBodyAccent key={i}>{seg.text}</SceneBodyAccent> : seg.text
+                        )}
+                      </SceneBody>
+                    </View>
+                  </FadeInUp>
+                ) : null}
 
-              {event?.description ? (
-                <FadeInUp delay={SECTION_DELAY[1]} style={styles.section}>
-                  <SectionHeader title="The experience" />
-                  <SceneBody>
-                    {highlightEntities(event.description, entities).map((seg, i) =>
-                      seg.entity ? <SceneBodyAccent key={i}>{seg.text}</SceneBodyAccent> : seg.text
-                    )}
-                  </SceneBody>
-                </FadeInUp>
-              ) : null}
+                {/*
+                  The Lobby: going alone, and looking for somebody to go with. Before doors only; the one gate is `boardOpen`
+                  (lib/board.ts), which the Going tab asks too.
+                */}
+                {event && boardOpen(event) ? (
+                  <FadeInUp delay={SECTION_DELAY[2]}>
+                    <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
+                  </FadeInUp>
+                ) : null}
 
-              {/*
-                The board: going alone, and looking for somebody to go with. Before doors only — after them the room is
-                the place, and the board is closed. Reading needs an RSVP or a save; the board itself says so if
-                neither. Not on a cancelled night. The run's start, not today's session: the server closes the board at the first doors.
-                The one gate is `boardOpen` (lib/board.ts), which the Going tab asks too.
-              */}
-              {event && boardOpen(event) ? (
-                <FadeInUp delay={SECTION_DELAY[1]}>
-                  <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
-                </FadeInUp>
-              ) : null}
+                {/* What the organiser wrote: house rules, FAQ, accessibility. Wrapped only when it draws something. */}
+                {detailBlocks.length > 0 ? (
+                  <FadeInUp delay={SECTION_DELAY[2]}>
+                    <SceneDetails blocks={detailBlocks} />
+                  </FadeInUp>
+                ) : null}
 
-              {/*
-                What the organiser actually wrote: house rules, FAQ, accessibility, and the rest. Accessibility is
-                the one somebody needs *before* deciding whether they can come. `eventDetailBlocks` has already
-                dropped anything malformed, so an empty list means the organiser wrote nothing; wrapped only when
-                it draws something, since an empty wrapper still takes a gap.
-              */}
-              {detailBlocks.length > 0 ? (
-                <FadeInUp delay={SECTION_DELAY[2]}>
-                  <SceneDetails blocks={detailBlocks} />
-                </FadeInUp>
-              ) : null}
+                {/* The organiser's curated facilities, two up ("+n more" past seven). */}
+                {amenities.length > 0 ? (
+                  <FadeInUp delay={SECTION_DELAY[3]}>
+                    <AmenityGrid tiles={amenities.map((a) => ({ label: a.title.toUpperCase(), value: a.subtitle || 'Included', testID: `scene-tile-${a.id}` }))} testID="scene-tiles" />
+                  </FadeInUp>
+                ) : null}
 
-              {/* Only when there is more than the cover: a "gallery" of one is a heading over the picture already at the top. */}
-              {playlist.length > 1 ? (
-                <FadeInUp delay={SECTION_DELAY[3]}>
-                  <SceneGallery items={playlist} onOpen={(i) => setLightbox(i)} />
-                </FadeInUp>
-              ) : null}
-
-              {attendeeBlock.count > 0 ? (
-                <FadeInUp delay={SECTION_DELAY[3]}>
-                  <SceneAttendees count={attendeeBlock.count} label={attendeeBlock.label} seed={event?.id || 'scene'} />
-                </FadeInUp>
-              ) : null}
-
-              {event?.venue_name ? (
-                <FadeInUp delay={SECTION_DELAY[3]}>
-                  {/* No haptic: it leaves the app, and the Maps hand-off is the feedback. */}
-                  <ScalePress pressedScale={0.98} haptic={false} onPress={openInMaps} accessibilityRole="button" accessibilityLabel={`Open ${event.venue_name} in Maps`}>
-                    <SceneLocationCard
-                      venue={event.venue_name}
-                      area={event.address || event.city || ''}
-                      map={showMap && event.latitude && event.longitude ? <SceneMap latitude={event.latitude} longitude={event.longitude} /> : null}
+                {/*
+                  Only on a curated event nobody has claimed, which the server decides. It leaves the app for the public
+                  claim page on the dashboard host: the app refuses host accounts by design, and that page needs no account.
+                */}
+                {claimUrl ? (
+                  <FadeInUp delay={SECTION_DELAY[3]} style={styles.claim}>
+                    <Button
+                      kind="tertiary"
+                      size="md"
+                      icon="external-link"
+                      label="Running this event? Claim it"
+                      accessibilityHint="Opens the Blend’n dashboard in your browser"
+                      onPress={() => openClaimPage(claimUrl)}
+                      testID="claim-event-link"
                     />
-                  </ScalePress>
-                </FadeInUp>
-              ) : null}
-
-              {/*
-                Only on a curated event nobody has claimed, which the server decides. It leaves the app for the public
-                claim page on the dashboard host: the app refuses host accounts by design, and that page needs no
-                account. Filing there grants nothing until a person reviews it.
-              */}
-              {claimUrl ? (
-                <FadeInUp delay={SECTION_DELAY[3]} style={styles.claim}>
-                  <Button
-                    kind="tertiary"
-                    size="md"
-                    icon="external-link"
-                    label="Running this event? Claim it"
-                    accessibilityHint="Opens the Blend’n dashboard in your browser"
-                    onPress={() => openClaimPage(claimUrl)}
-                    testID="claim-event-link"
-                  />
-                </FadeInUp>
-              ) : null}
+                  </FadeInUp>
+                ) : null}
+              </View>
             </>
           )}
         </Animated.View>
       </Animated.ScrollView>
 
-      {/* The dock: a glass bar outside the scroll, so the one action stays where the thumb is. */}
-      <Dock floating onHeight={setCtaDockHeight} testID="scene-dock">
-        {/* Going, not yet there, and shareable: the moment somebody most wants to send the night on. Never after check-in. */}
-        {ctaState === 'rsvpd' && event && shareTarget && handleShare && bringViaWhatsApp ? (
-          <Animated.View entering={bannerFadeIn}>
-            <BringSomeoneRow eventTitle={event.title} onWhatsApp={() => void bringViaWhatsApp()} onShare={handleShare} testID="scene-bring" />
-          </Animated.View>
-        ) : null}
-        {ctaState === 'join' ? (
+      {/* The dock: one line, the state on the left and one action on the right; at the doors the hold. */}
+      {dock ? (
+        <Dock floating line onHeight={setCtaDockHeight} testID="scene-dock">
+          <DockRow
+            testID="scene-cta"
+            state={dock.state}
+            sub={dock.sub}
+            subIsLink={dock.change && dock.sub === 'Change'}
+            onPressState={dock.change ? () => void handleToggleRsvp() : undefined}
+            stateHint={dock.change ? 'Double-tap to change your RSVP' : undefined}
+            action={
+              dock.action
+                ? {
+                    ...dock.action,
+                    onPress: dockPress[dock.action.does],
+                    loading: dock.action.does === 'rsvp' ? rsvpPending : dock.action.does === 'openRoom' ? roomOpening : false,
+                    // I'm going: the answer plays the haptic (§10.2), never the press as well.
+                    pressHaptic: dock.action.does !== 'rsvp',
+                    testID: `scene-cta-${dock.action.does}`,
+                  }
+                : undefined
+            }
+          />
+          {/* In this event's room: "Open the room" is the primary; the way out is the quiet hold under it (SCRUM-970). */}
+          {ctaState === 'going' ? <EventCheckOut {...checkOut} /> : null}
+        </Dock>
+      ) : (
+        <Dock floating onHeight={setCtaDockHeight} testID="scene-dock">
           <EventHold {...hold} />
-        ) : (
-          <>
-            <SceneCTA
-              state={ctaState}
-              pending={rsvpPending}
-              alone={checkInCount <= 1}
-              note={betweenLine ?? undefined}
-              onPress={cancelled ? undefined : primaryActionPress}
-              iconKey={ctaIcon ?? undefined}
-              icon={ctaIcon ? (color) => <Icon name={ctaIcon} size={SCENE_CTA_ICON} color={color} /> : undefined}
-            />
-            {/* In this event's room: "Open the room" above is the primary; the way out is the quiet hold under it (SCRUM-970). */}
-            {ctaState === 'going' ? <EventCheckOut {...checkOut} /> : null}
-          </>
-        )}
-      </Dock>
+        </Dock>
+      )}
       {overlays}
 
-      <SceneLightbox
-        items={playlist}
-        initialIndex={lightbox ?? 0}
-        visible={lightbox !== null}
-        onClose={() => setLightbox(null)}
-      />
+      <SceneLightbox items={playlist} initialIndex={lightbox ?? 0} visible={lightbox !== null} onClose={() => setLightbox(null)} />
 
       {/* The ⋯: Report. */}
       <OverflowMenu visible={menuOpen} items={menu} onClose={() => setMenuOpen(false)} testID="scene-menu" />
@@ -1297,18 +1157,22 @@ export default function EventDetail() {
   )
 }
 
-/** Strictly 18+: an age pill appears only above the floor. */
-const MIN_AGE = 18
+/** E-B's title (`.t28`): 28/33, 700, -0.5; display's cap (1.5×) at the largest text. */
+// design-exception: the board's page title is 28/33 (`.t28`), between TYPE.title (24) and TYPE.display (34).
+const TITLE_TYPE = { fontFamily: FONT_FAMILY.brand[700], fontSize: 28, lineHeight: 33, letterSpacing: -0.5 }
+const TITLE_LINE = TITLE_TYPE.lineHeight
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
-  // The warm wash under the hero's foot (PageWash's own 300).
-  wash: { position: 'absolute', left: 0, right: 0, top: sceneHeroHeight() - 1, height: PAGE_WASH.height },
-  content: { paddingHorizontal: SCENE_PADDING_HORIZONTAL, paddingTop: SPACE.xl, gap: SCENE_SECTION_GAP },
-  section: { gap: SPACE.lg },
+  posterSlot: { alignItems: 'center' },
+  content: { paddingHorizontal: SCENE_PADDING_HORIZONTAL, paddingTop: SPACE.xl },
+  title: { ...TITLE_TYPE, color: COLOR.textPrimary },
+  // The state slot: empty takes no room; each banner 16 below the title.
+  state: { gap: SPACE.lg, paddingTop: SPACE.lg },
+  sections: { marginTop: SPACE.xxl, gap: SCENE_SECTION_GAP },
+  section: { gap: SPACE.md },
   claim: { alignSelf: 'flex-start' },
   skeleton: { gap: SPACE.lg },
-  skeletonTiles: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.md },
   stateBar: { position: 'absolute', left: SPACE.lg, zIndex: 2 },
   stateBody: { flex: 1, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl * 4 },
 })

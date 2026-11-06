@@ -71,8 +71,8 @@ describe('decoration is hidden from the accessibility tree', () => {
 })
 
 describe('the Scene keeps what the earlier pass gave it', () => {
-  it('groups the hero caption instead of leaving four fragments', () => {
-    expect(read('components', 'scene', 'SceneHero.tsx')).toContain('accessibilityRole="header"')
+  it('the page title is the header (Flow 4 E-B: the title left the hero for the page, under the poster)', () => {
+    expect(read('components', 'screens', 'EventDetailScreen.tsx')).toMatch(/testID="scene-title" accessibilityRole="header"/)
   })
 
   it('keeps the bar\'s small title out of the reading order (the hero\'s own title is the header)', () => {

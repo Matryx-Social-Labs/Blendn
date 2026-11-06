@@ -37,6 +37,7 @@ import BellOff from 'lucide-react-native/icons/bell-off'
 import Bookmark from 'lucide-react-native/icons/bookmark'
 import Briefcase from 'lucide-react-native/icons/briefcase'
 import Calendar from 'lucide-react-native/icons/calendar'
+import CalendarPlus from 'lucide-react-native/icons/calendar-plus'
 import CalendarCheck from 'lucide-react-native/icons/calendar-check'
 import CalendarOff from 'lucide-react-native/icons/calendar-off'
 import CalendarX from 'lucide-react-native/icons/calendar-x'
@@ -201,6 +202,7 @@ const ICONS = {
   bookmark: Bookmark,
   briefcase: Briefcase,
   calendar: Calendar,
+  'calendar-plus': CalendarPlus,
   'calendar-check': CalendarCheck,
   'calendar-off': CalendarOff,
   'calendar-x': CalendarX,

@@ -15,9 +15,11 @@ const walk = (dir: string): string[] =>
   })
 
 describe('one tray for every surface', () => {
-  it('nothing outside the host calls the OS share sheet with its own text', () => {
+  it('nothing outside the host and `shareNatively` calls the OS share sheet with its own text', () => {
+    // `shareNatively` is the event page's (Flow 4: Invite and Share are the system sheet), with the one link builder's words.
     const offenders = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => /Share\.share\(/.test(read(f)))
-    expect(offenders).toEqual(['components/share/ShareHost.tsx'])
+    expect(offenders).toEqual(['components/share/ShareHost.tsx', 'lib/shareTray.ts'])
+    expect(read('lib/shareTray.ts')).toMatch(/Share\.share\(\{ message: shareText\(target\) \}\)/)
   })
 
   it('the host is mounted once, at the root, where the other app-wide sheets are', () => {
@@ -25,7 +27,7 @@ describe('one tray for every surface', () => {
   })
 
   it.each([
-    ['the Scene', 'components/screens/EventDetailScreen.tsx', /openShare\(shareTarget\)/],
+    ['the event page (the system sheet, Flow 4)', 'components/screens/EventDetailScreen.tsx', /shareNatively\(shareTarget\)/],
     ['the venue page', 'app/venue/[id].tsx', /openShare\(venueTarget\(/],
     ['Add friends and the onboarding step (both through the one invite hook)', 'lib/useFriendInvite.ts', /openShare\(\{ kind: 'invite', url: inviteLink\(/],
     ['the Going card', 'app/(tabs)/going.tsx', /shareEvent\(event\)/],

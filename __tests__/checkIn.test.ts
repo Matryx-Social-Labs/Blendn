@@ -185,9 +185,9 @@ describe('the event screen hears check-in changes', () => {
   it('checks in only through the one flow: "Blend in" is the page’s hold (SCRUM-966), "You’re in" leads to the Room', () => {
     expect(screen).not.toContain('useCheckInFlow(')
     expect(screen).not.toContain('<MomentPour')
-    // "Blend in" (join) is the hold itself, so it has no press; checked in, "You're in" (going) leads to the Room. One switch on the CTA's own state.
-    expect(screen).toMatch(/case 'join':\s*return/)
-    expect(screen).toMatch(/case 'going':\s*toTheOverlay\(openBlendn\)/)
+    // At the doors the hold is the dock (Hold to Blend’n: the dock row is null); checked in, "You're in" leads to the Room.
+    expect(screen).toMatch(/\{dock \? \([\s\S]*\) : \([\s\S]*<EventHold \{\.\.\.hold\} \/>/)
+    expect(screen).toMatch(/room: \(\) => toTheOverlay\(openBlendn\)/)
     // …and under "Open the room" the quiet way out is the hold that checks you out of this event (SCRUM-970).
     expect(screen).toMatch(/ctaState === 'going' \? <EventCheckOut/)
   })

@@ -30,7 +30,7 @@ import {
 } from './shared'
 
 export type ButtonKind = 'primary' | 'lit' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
-export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised'
+export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised' | 'dock'
 
 /**
  * 56 the screen primary and dock actions · 48 a secondary in a dock · 36 an
@@ -40,7 +40,12 @@ export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised'
 export const ROW_ACTION_HEIGHT = 36
 const RAISED_HEIGHT = 44
 const ROW_ACTION_MIN_WIDTH = 72
-const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT }
+/** Flow 4's one-line dock (`.dock4 .db`): 52 tall, 22 in, an 18 pt glyph, beside the state it acts on. */
+const DOCK_HEIGHT = SIZE.tabBarCompact
+// design-exception: the board's dock button is 22 pt in (`.db` padding 0 22px) and its glyph 18 (`ic(icon,18)`); both off-scale.
+const DOCK_PAD = 22
+const DOCK_GLYPH = 18
+const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT, dock: DOCK_HEIGHT }
 
 /** #20: translateX 0, −8, 8, −6, 6, −3, 0, as fractions of `SHAKE.distance`. */
 const SHAKE_STEPS = [-1, 1, -0.75, 0.75, -0.375, 0]
@@ -272,7 +277,7 @@ export function Button({
         accessibilityState={{ disabled, busy: loading }}
         style={[
           styles.body,
-          textOnly ? styles.bodyText : sm ? styles.bodySm : styles.bodyLg,
+          textOnly ? styles.bodyText : sm ? styles.bodySm : size === 'dock' ? styles.bodyDock : styles.bodyLg,
           { height, backgroundColor: fill(kind, size, onGlass, sel) },
           // Enabled ↔ disabled crosses over `quick` (a count arriving, a field becoming valid), never snaps.
           { opacity: disabled ? OPACITY.disabled : 1 },
@@ -289,7 +294,7 @@ export function Button({
         ) : null}
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
         <View style={[styles.content, spinner && styles.hidden]}>
-          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={glyphInk} /> : null)}
+          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : size === 'dock' ? DOCK_GLYPH : ICON.control} color={glyphInk} /> : null)}
           {count !== undefined ? (
             // A rolling number is a row of columns, not a run of text: the sentence is a row, a word space apart.
             // It keeps the widest it has been, so a count losing a digit (10 → 9, "Resend in 9s") moves only the digits.
@@ -365,6 +370,7 @@ const styles = StyleSheet.create({
   pressedIos: { transform: [{ scale: PRESS.scale }] },
   body: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   bodyLg: { paddingHorizontal: SPACE.lg },
+  bodyDock: { paddingHorizontal: DOCK_PAD },
   bodySm: { paddingHorizontal: SPACE.lg, minWidth: ROW_ACTION_MIN_WIDTH },
   bodyText: { paddingHorizontal: 0 },
   content: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
