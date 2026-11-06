@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
-import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { IconButton } from './IconButton'
 import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shared'
@@ -28,8 +28,9 @@ export type TopBarProps = {
   /** Glass circles on the right, named by what they do. */
   actions?: readonly { icon: IconName; label: string; onPress: () => void }[]
   /**
-   * Where you are in a short run of people ("2 of 5", Rate): Geist Mono in `meta`, `textSecondary`, at the right after the
-   * actions. Read as "Person 2 of 5". It is the type's cap that holds the bar's height, as the title's does.
+   * Where you are in a short run of steps ("2 of 3", Rate: the night, then each person): Geist Mono 13/20, `textSecondary`,
+   * centred in the circle row (Flow 4 `rate`, `.pg3`). Read as "Step 2 of 3". It is the type's cap that holds the bar's
+   * height, as the title's does.
    */
   progress?: string
   /** The Save pill: `H.primary` on press-in; `H.success` is the screen's, when the save lands. */
@@ -96,19 +97,21 @@ export function TopBar({ title, sub, subLines = 2, state = 'rest', onBack, close
           {actions.map((a) => (
             <IconButton key={a.label} icon={a.icon} accessibilityLabel={a.label} onPress={a.onPress} />
           ))}
-          {progress ? (
-            <Text
-              testID={testID && `${testID}-progress`}
-              accessibilityLabel={`Person ${progress}`}
-              maxFontSizeMultiplier={CONTROL_FONT_CAP}
-              style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.sub]}
-            >
-              {progress}
-            </Text>
-          ) : null}
           {save ? <Button label="Save" size={android ? "md" : "raised"} onPress={save.onPress} loading={save.saving} disabled={save.disabled} /> : null}
         </View>
       </View>
+      {progress ? (
+        <View pointerEvents="none" style={[styles.condensed, { top, height: circle, left: inset, right: inset }]}>
+          <Text
+            testID={testID && `${testID}-progress`}
+            accessibilityLabel={`Step ${progress}`}
+            maxFontSizeMultiplier={CONTROL_FONT_CAP}
+            style={[font('note', bold, FONT_FAMILY.mono[500]), styles.sub, styles.centre, styles.pager]}
+          >
+            {progress}
+          </Text>
+        </View>
+      ) : null}
       {condensed && title ? (
         <View testID={testID && `${testID}-condensed`} pointerEvents="none" style={[styles.condensed, { top, height: circle, left: inset, right: inset }]}>
           <Text
@@ -149,5 +152,7 @@ const styles = StyleSheet.create({
   right: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   condensed: { position: 'absolute', justifyContent: 'center' },
   centre: { textAlign: 'center' },
+  // design-exception: the board's pager is Geist Mono 13/20 (`.pg3`): `note`'s 13 in mono, on meta's 20 line
+  pager: { lineHeight: TYPE.meta.lineHeight },
   contrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
 })
