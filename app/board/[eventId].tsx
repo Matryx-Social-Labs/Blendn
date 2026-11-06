@@ -11,6 +11,7 @@ import { TopBar } from '../../components/ds/TopBar'
 import { announce, BoardPostCard, IDLE, type AskState } from '../../components/board/BoardSections'
 import { LobbyAlertsSheet } from '../../components/board/LobbyAlertsSheet'
 import { LobbyCompose } from '../../components/board/LobbyCompose'
+import { useLinkedPost } from '../../components/board/useLinkedPost'
 import { ClosedCard, LiveEmptyCard, LobbyChips, LobbyComposerRow, LobbyGate, LobbyStarts, NewPostsPill, PinnedPost, ReadOnlyBanner } from '../../components/board/LobbyParts'
 import { emptyOut, fadeIn, riseDelay, riseIn } from '../../components/board/boardMotion'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -104,7 +105,8 @@ const REFUSED_TITLE: Record<string, string> = {
 
 export function BoardScreen() {
   // `compose=1`: Post something on the event page's card (P-A), which opens the composer once, if posting is open.
-  const { eventId, compose: composeAsked } = useLocalSearchParams<{ eventId: string; compose?: string }>()
+  // `post`: a post link or a match push (6/6), the post to scroll to (`useLinkedPost`).
+  const { eventId, compose: composeAsked, post: postAsked } = useLocalSearchParams<{ eventId: string; compose?: string; post?: string }>()
   const composeOnce = useRef(composeAsked === '1')
   const [alertsOpen, setAlertsOpen] = useState(false)
   const bold = useBoldText()
@@ -143,6 +145,8 @@ export function BoardScreen() {
   const [held, setHeld] = useState<ReadonlySet<string>>(new Set())
   const heldRef = useLatest(held)
   const listRef = useRef<FlatList<BoardPostView>>(null)
+  /** A linked post (`useLinkedPost`), laid on top of All while no page lists it. */
+  const linkedPost = useRef<BoardPostView | null>(null)
 
   /*
    * A read is sequenced, and it merges rather than replaces.
@@ -270,7 +274,10 @@ export function BoardScreen() {
       }
       // Yours just posted, until the server lists it: on the chips it would be on.
       const yours = [...created.current.values()].filter((p) => chip === 'all' || chip === 'mine' || chip === p.kind)
-      setLoad({ kind: 'ready', posts: [...(chip === 'all' || chip === 'mine' ? gone : []), ...yours, ...listed, ...older.current] })
+      const onPages = [...yours, ...listed, ...older.current]
+      const link = linkedPost.current
+      const linkedOnTop = chip === 'all' && link && !removed.current.has(link.id) && !onPages.some((p) => p.id === link.id) ? [link] : []
+      setLoad({ kind: 'ready', posts: [...(chip === 'all' || chip === 'mine' ? gone : []), ...linkedOnTop, ...onPages] })
       setRefreshFailed(false)
       return true
     } catch (error) {
@@ -347,6 +354,19 @@ export function BoardScreen() {
 
   const posts = useMemo(() => (load.kind === 'ready' ? sortBoardPosts(load.posts).filter((p) => !held.has(p.id)) : []), [load, held])
   const layout = lobbyLayout(meta, filter, posts.length)
+  const linked = useLinkedPost({
+    eventId,
+    postParam: postAsked,
+    linkedRef: linkedPost,
+    posts: load.kind === 'ready' ? posts : null,
+    listRef,
+    viewOffset: contentTop,
+    animated: !reduceMotion,
+    onClosed: useCallback(() => setClosed(true), []),
+    onFound: useCallback((post: BoardPostView) => {
+      setLoad((prev) => (prev.kind === 'ready' && !prev.posts.some((p) => p.id === post.id) ? { kind: 'ready', posts: [post, ...prev.posts] } : prev))
+    }, []),
+  })
   const readOnly = meta.state === 'read_only'
 
   /** A chip: the server's filter, from its first page; the older pages and their cursor were for the other chip. */
@@ -611,6 +631,9 @@ export function BoardScreen() {
       {refreshFailed && load.kind === 'ready' ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>The Lobby didn’t refresh. Pull down to try again.</Text>
       ) : null}
+      {linked.note ? (
+        <Text testID="board-link-note" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>{linked.note}</Text>
+      ) : null}
       {top}
       {layout.chips && meta.counts ? (
         <View style={styles.chipsGap}>
@@ -686,6 +709,7 @@ export function BoardScreen() {
           if (moreState !== 'failed') void loadMore()
         }}
         onEndReachedThreshold={1.5}
+        onScrollToIndexFailed={linked.onScrollToIndexFailed}
         initialNumToRender={8}
         windowSize={9}
         contentContainerStyle={[styles.list, { paddingTop: contentTop }]}
