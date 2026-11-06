@@ -1,0 +1,241 @@
+/**
+ * The Lobby's pure rules (SCRUM-1026, board `mockups/redesign-2026-11/lobby/`): the words each post carries, the
+ * composer's slot, the sheet's choices, the room card's rows and the event page's state.
+ */
+import {
+  badgeCount,
+  codePoints,
+  composerSlot,
+  countLine,
+  doorsAt,
+  filterQuery,
+  joinedLine,
+  joinedTitle,
+  kindGlyph,
+  asksWords,
+  freshOnTop,
+  lobbyChips,
+  lobbyLayout,
+  newPostsWords,
+  photoView,
+  readOnlyLine,
+  kindWords,
+  postAction,
+  postAge,
+  previewView,
+  spotsWords,
+  subKindChips,
+  takesSpots,
+  untilWords,
+  type LobbyMeta,
+} from '../lib/lobby'
+import { WORST } from './helpers/longText'
+
+const ALL: LobbyMeta['subKinds'] = { offer: ['ride', 'spots', 'ticket'], seeking: ['ride', 'buddy', 'ticket'], chat: [] }
+
+describe('a post’s words', () => {
+  it('names the kind in plain words, with the number in its own slot', () => {
+    expect(kindWords('offer', 'ride')).toBe('Offering a ride')
+    expect(kindWords('offer', 'ticket')).toBe('Offering a spare ticket')
+    expect(kindWords('seeking', 'buddy')).toBe('Looking for someone to go with')
+    expect(kindWords('chat', null)).toBe('Just saying')
+    // An installed build posts with no sub-kind.
+    expect(kindWords('offer', null)).toBe('Offering spots')
+    expect(kindGlyph('offer', 'ride')).toBe('car')
+    expect(kindGlyph('chat', null)).toBe('message-square')
+  })
+
+  it('counts spots, a spare ticket as "1 left", and an offer at 0 as Full', () => {
+    expect(spotsWords({ kind: 'offer', spacesLeft: 2, subKind: 'ride' })).toBe('2 spots left')
+    expect(spotsWords({ kind: 'offer', spacesLeft: 1, subKind: 'spots' })).toBe('1 spot left')
+    expect(spotsWords({ kind: 'offer', spacesLeft: 1, subKind: 'ticket' })).toBe('1 left')
+    expect(spotsWords({ kind: 'offer', spacesLeft: 0, subKind: 'ride' })).toBe('Full')
+    expect(spotsWords({ kind: 'seeking', spacesLeft: null })).toBeNull()
+    expect(spotsWords({ kind: 'offer', spacesLeft: null })).toBeNull()
+  })
+
+  it('carries one action: Ask to join on an offer, Say hi on a search, none on a chat post (the server refuses that ask)', () => {
+    expect(postAction('offer')?.label).toBe('Ask to join')
+    expect(postAction('seeking')?.label).toBe('Say hi')
+    expect(postAction('chat')).toBeNull()
+  })
+
+  it('says its age as the cards do', () => {
+    const now = Date.parse('2026-11-08T12:00:00Z')
+    expect(postAge('2026-11-08T11:59:40Z', now)).toBe('now')
+    expect(postAge('2026-11-08T11:48:00Z', now)).toBe('12 min')
+    expect(postAge('2026-11-08T09:00:00Z', now)).toBe('3 h')
+    expect(postAge('2026-11-07T10:00:00Z', now)).toBe('1 d')
+  })
+})
+
+describe('the chips', () => {
+  it('ask the server, which filters', () => {
+    expect(filterQuery('all')).toEqual({})
+    expect(filterQuery('offer')).toEqual({ kind: 'offer' })
+    expect(filterQuery('mine')).toEqual({ filter: 'mine' })
+    expect(filterQuery('replies')).toEqual({ filter: 'replies' })
+  })
+
+  it('are compact past 999, and the badge caps at 9+', () => {
+    expect(countLine({ all: 2188, offerRides: WORST.count })).toEqual({ posts: '2.1k', rides: '12k' })
+    expect(badgeCount(5)).toBe('5')
+    expect(badgeCount(48)).toBe('9+')
+  })
+})
+
+describe('the composer’s slot', () => {
+  it('is the composer, a gate with its one way forward, or the doors', () => {
+    expect(composerSlot({ state: 'open', compose: { allowed: true, message: null, reasonCode: null } })).toEqual({ kind: 'composer' })
+    expect(composerSlot({ state: 'open', compose: { allowed: false, message: 'x', reasonCode: 'BOARD_NOT_GOING' } })).toEqual({ kind: 'gate', gate: 'going' })
+    expect(composerSlot({ state: 'open', compose: { allowed: false, message: 'x', reasonCode: 'BOARD_PROFILE_INCOMPLETE' } })).toEqual({ kind: 'gate', gate: 'profile' })
+    // A cap has no button that fixes it: the composer stays and the sheet says the server's sentence.
+    expect(composerSlot({ state: 'open', compose: { allowed: false, message: 'x', reasonCode: 'BOARD_WEEKLY_LIMIT' } })).toEqual({ kind: 'composer' })
+    expect(composerSlot({ state: 'read_only', compose: { allowed: false, message: 'x', reasonCode: 'LOBBY_READ_ONLY' } })).toEqual({ kind: 'readOnly' })
+  })
+})
+
+describe('the compose sheet', () => {
+  it('offers each type its sub-kinds, without the ticket ones where tickets are sold on Blend’n', () => {
+    expect(subKindChips('offer', ALL, false).map((c) => c.label)).toEqual(['Ride', 'Spots', 'Spare ticket'])
+    expect(subKindChips('seeking', { ...ALL, seeking: ['ride', 'buddy'] }, true).map((c) => c.label)).toEqual(['A ride', 'Someone to go with'])
+    expect(subKindChips('offer', null, true).map((c) => c.subKind)).toEqual(['ride', 'spots'])
+    expect(subKindChips('chat', ALL, false)).toEqual([])
+  })
+
+  it('counts spots only on an offer of a ride or spots, and the words in code points', () => {
+    expect(takesSpots('offer', 'ride')).toBe(true)
+    expect(takesSpots('offer', 'ticket')).toBe(false)
+    expect(takesSpots('seeking', 'ride')).toBe(false)
+    expect(codePoints('🚗🚗')).toBe(2)
+  })
+})
+
+describe('the clock', () => {
+  it('opens the doors 90 minutes before the start, and says "until" in the event’s clock with no zone', () => {
+    expect(doorsAt('2026-11-08T12:30:00Z')).toBe(Date.parse('2026-11-08T11:00:00Z'))
+    expect(doorsAt(null)).toBeNull()
+    expect(untilWords('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('Tue 10 Nov, 12 AM')
+    expect(untilWords('2026-11-15T03:00:00Z', 'America/Toronto')).toBe('Sat 14 Nov, 10 PM')
+  })
+})
+
+describe('From the Lobby', () => {
+  it('names what you are in, and who with, by pseudonym', () => {
+    expect(joinedTitle({ kind: 'offer', subKind: 'ride' })).toBe('Your ride')
+    expect(joinedTitle({ kind: 'offer', subKind: 'spots' })).toBe('Your group')
+    expect(joinedLine({ mine: false, author: 'Lunar Fox', others: 3, body: 'From Indiranagar at 5:30' })).toBe('With Lunar Fox and 2 others: From Indiranagar at 5:30')
+    expect(joinedLine({ mine: false, author: 'Lunar Fox', others: 1, body: 'x' })).toBe('With Lunar Fox: x')
+    expect(joinedLine({ mine: true, author: 'Me', others: 1, body: 'x' })).toBe('1 other with you: x')
+  })
+})
+
+describe('the event page’s slot', () => {
+  const base = { state: 'open' as const, phase: 'before' as const, canRead: true, counts: { all: 18, offer: 5, seeking: 9, chat: 4, offerRides: 3 } }
+  it('is the gate, the posts, empty, read-only, or the room once live and nobody posted', () => {
+    expect(previewView(base)).toBe('posts')
+    expect(previewView({ ...base, canRead: false })).toBe('gate')
+    expect(previewView({ ...base, counts: { ...base.counts, all: 0 } })).toBe('empty')
+    expect(previewView({ ...base, state: 'read_only', phase: 'live' })).toBe('readOnly')
+    expect(previewView({ ...base, state: 'read_only', phase: 'live', counts: { ...base.counts, all: 0 } })).toBe('roomOpen')
+  })
+})
+
+describe('the alerts sheet’s switches (admin #918)', () => {
+  it('shows only the two real opt-ins; asks and accepts always push, so there is no replies switch', () => {
+    const { ALERT_ROWS } = jest.requireActual('../lib/lobby') as typeof import('../lib/lobby')
+    expect(ALERT_ROWS.map((r) => r.key)).toEqual(['offersMatch', 'hostPosts'])
+  })
+
+  it('doors are the room’s opening, one moment (control: an hour and a half before the start)', () => {
+    const { doorsAt } = jest.requireActual('../lib/lobby') as typeof import('../lib/lobby')
+    const { roomOpensAt } = jest.requireActual('../lib/preEventRoom') as typeof import('../lib/preEventRoom')
+    expect(doorsAt('2026-11-08T12:30:00Z')).toBe(roomOpensAt('2026-11-08T12:30:00Z'))
+  })
+})
+
+describe('the Lobby screen (L-A): what each part shows', () => {
+  const meta = (over: Partial<LobbyMeta> = {}): Partial<LobbyMeta> => ({
+    state: 'open',
+    phase: 'before',
+    counts: { all: 3, offer: 1, seeking: 1, chat: 1, offerRides: 1, mine: 0, replies: 0 },
+    ...over,
+  })
+
+  it('lays out the open Lobby: the composer, the chips, the pin on All only', () => {
+    expect(lobbyLayout(meta({ pinned: PIN }), 'all')).toEqual({ top: 'composer', chips: true, pinned: true, starts: false, liveEmpty: false })
+    expect(lobbyLayout(meta({ pinned: PIN }), 'offer').pinned).toBe(false)
+  })
+
+  it('is the two starts, and no chips, before anybody posted (control: one post brings the chips back)', () => {
+    const none = meta({ counts: { all: 0, offer: 0, seeking: 0, chat: 0, offerRides: 0, mine: 0, replies: 0 } })
+    expect(lobbyLayout(none, 'all')).toMatchObject({ chips: false, starts: true, liveEmpty: false })
+    expect(lobbyLayout(meta(), 'all')).toMatchObject({ chips: true, starts: false })
+  })
+
+  it('keeps the chips on a filter that found nothing, so it can be undone', () => {
+    const none = meta({ counts: { all: 4, offer: 4, seeking: 0, chat: 0, offerRides: 0, mine: 0, replies: 0 } })
+    expect(lobbyLayout(none, 'mine')).toMatchObject({ chips: true, starts: false })
+  })
+
+  it('after doors: read-only, no starts; empty, it says the room is open instead (4b), and keeps a pinned note', () => {
+    expect(lobbyLayout(meta({ state: 'read_only', phase: 'live' }), 'all')).toMatchObject({ top: 'readOnly', chips: true, liveEmpty: false })
+    const empty = meta({ state: 'read_only', phase: 'live', pinned: PIN, counts: { all: 0, offer: 0, seeking: 0, chat: 0, offerRides: 0, mine: 0, replies: 0 } })
+    expect(lobbyLayout(empty, 'all')).toEqual({ top: 'none', chips: false, pinned: true, starts: false, liveEmpty: true })
+  })
+
+  it('puts the gate in the composer’s slot, and the Lobby stays readable under it', () => {
+    const gated = meta({ compose: { allowed: false, message: 'x', reasonCode: 'BOARD_NOT_GOING' } })
+    expect(lobbyLayout(gated, 'all')).toMatchObject({ top: 'going', chips: true })
+    expect(lobbyLayout(meta({ compose: { allowed: false, message: 'x', reasonCode: 'BOARD_PROFILE_INCOMPLETE' } }), 'all').top).toBe('profile')
+  })
+
+  it('reads an older server (no meta at all) as the open Lobby, counting what it sent', () => {
+    expect(lobbyLayout({}, 'all', 0)).toMatchObject({ top: 'composer', chips: false, starts: true })
+    expect(lobbyLayout({}, 'all', 2)).toMatchObject({ top: 'composer', chips: false, starts: false })
+  })
+
+  it('names the chips with compact counts, and the two about you after the kinds', () => {
+    const chips = lobbyChips({ all: WORST.count, offer: 418, seeking: 1200, chat: 0, offerRides: 0, mine: 2, replies: 1 })
+    expect(chips.map((c) => `${c.label} ${c.count}`)).toEqual(['All 12k', 'Offering 418', 'Looking for 1.2k', 'Just saying 0', 'Mine 2', 'Replies to me 1'])
+  })
+
+  it('says how many new posts wait behind the pill, in one or many', () => {
+    expect(newPostsWords(1)).toBe('1 new post')
+    expect(newPostsWords(12)).toBe('12 new posts')
+    expect(newPostsWords(WORST.count)).toBe('12k new posts')
+  })
+
+  it('holds back what a background read found above the list, and nothing that was already there or yours', () => {
+    const shown = new Set(['a', 'b'])
+    const page = [{ id: 'n1', mine: false }, { id: 'n2', mine: true }, { id: 'a', mine: false }, { id: 'b', mine: false }]
+    expect(freshOnTop(page, shown)).toEqual(['n1'])
+    // Control: nothing shown yet is a first load, which holds nothing back.
+    expect(freshOnTop(page, new Set())).toEqual([])
+  })
+
+  it('says until when the Lobby can be read, and only the doors if the server did not say', () => {
+    expect(readOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('The Lobby is read-only now. You can read it until Tue 10 Nov, 12 AM.')
+    expect(readOnlyLine(undefined)).toBe('The Lobby is read-only now.')
+  })
+
+  it('counts the asks on your post', () => {
+    expect(asksWords(0)).toBe('No asks yet')
+    expect(asksWords(1)).toBe('1 ask')
+    expect(asksWords(WORST.count)).toBe('12k asks')
+  })
+
+  it('draws a photo only from https, and a pending or turned-down one only for its author', () => {
+    const url = 'https://fly.storage.tigris.dev/blendn/chat/p.jpg'
+    expect(photoView({ status: 'approved', url, alt: 'A booth' }, false)).toEqual({ kind: 'shown', url, alt: 'A booth' })
+    expect(photoView({ status: 'pending', url, alt: null }, true)).toEqual({ kind: 'pending', url, alt: 'Your photo' })
+    expect(photoView({ status: 'pending', url, alt: null }, false)).toEqual({ kind: 'none' })
+    expect(photoView({ status: 'rejected', url: null, alt: null }, true)).toEqual({ kind: 'rejected' })
+    expect(photoView({ status: 'approved', url: 'http://x.example/p.jpg', alt: null }, false)).toEqual({ kind: 'none' })
+    expect(photoView({ status: 'approved', url: 'javascript:alert(1)', alt: null }, false)).toEqual({ kind: 'none' })
+    expect(photoView(null, true)).toEqual({ kind: 'none' })
+    expect(photoView(undefined, true)).toEqual({ kind: 'none' })
+  })
+})
+
+const PIN = { id: 'h1', body: 'Music starts at 6.', host: 'Nightshift Collective', createdAt: '2026-11-06T06:00:00Z', updatedAt: '2026-11-06T06:00:00Z' }

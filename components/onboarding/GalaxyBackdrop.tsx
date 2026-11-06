@@ -1,30 +1,35 @@
 import {
   AlphaType,
   Atlas,
+  BlendMode,
   Blur,
   Canvas,
   ColorType,
   Fill,
   Group,
+  Image,
   LinearGradient,
   Paint,
   RadialGradient,
   Rect,
   Skia,
+  TileMode,
   useRSXformBuffer,
   vec,
   type SkColor,
   type SkImage,
+  type SkRect,
+  type SkRSXform,
 } from '@shopify/react-native-skia'
 import * as Device from 'expo-device'
 import { useEffect, useMemo, useState } from 'react'
-import { AppState, Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
+import { AppState, PixelRatio, Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
 import { cancelAnimation, Easing, makeMutable, useDerivedValue, useFrameCallback, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
-import { scheduleOnUI } from 'react-native-worklets'
+import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets'
 
 import REMNANT from '../../assets/galaxy/remnant.json'
 import { COLOR } from '../../lib/design/tokens'
-import { advanceFilm, GALAXY_B, idleTurn, init, orbitSense, startFilm, viewX, viewY, type Film } from '../../lib/galaxySim'
+import { advanceFilm, frozen, GALAXY_B, idleTurn, init, orbitSense, startFilm, viewX, viewY, type Film } from '../../lib/galaxySim'
 import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 
@@ -32,7 +37,8 @@ import { tint } from '../../lib/theme'
  * Flow 1b (owner's pick, variant B, 2026-11-02): two galaxies collide once under real gravity behind the landing, then
  * what they left turns on, with no end, until the person leaves the landing (owner, 2026-11-03); the screens after it
  * show it from where it was left. The physics is lib/galaxySim.ts; this draws it with Skia, every star one
- * sprite of an Atlas, added onto ink so ember over violet mixes to rose.
+ * sprite of an Atlas, added onto ink so ember over violet mixes to rose. Once the physics stops (FREEZE_AT) the stars are
+ * drawn once into one image and that image is turned, for the battery (owner, 2026-11-06, SCRUM-1015).
  * Prototype, films and contrast: mockups/redesign-2026-11/galaxies/ (README).
  */
 
@@ -154,35 +160,120 @@ function starLooks(stars: number) {
 }
 
 const CORE_SCALES = CORE_LIGHTS.flatMap(({ size }) => [size / SPRITE, size / SPRITE])
+let cores: { rects: SkRect[]; colors: SkColor[] } | null = null
+/** The two cores' sprites, each a halo and a light: made once, on first use, like the sprite images. */
+const coreLights = () =>
+  (cores ??= {
+    rects: CORE_SCALES.map(() => Skia.XYWHRect(0, 0, SPRITE, SPRITE)),
+    colors: CORE_LIGHTS.flatMap(({ alpha }) => [colour(CORE_WHITE, alpha), colour(CORE_WHITE, alpha)]),
+  })
 
-function Sky({ stars, cores, colors, frame, bloom, shelf, shelfFade, testID }: {
+/** How far past the farthest point the sky shows the baked image must reach: the widest light's half (a core's halo)
+ * and the bloom's (3σ), so a star just outside still lights its edge. */
+const BAKE_MARGIN = Math.max(...CORE_LIGHTS.map(({ size }) => size)) / 2 + 3 * BLOOM.blur
+type BakeBox = { x: number; y: number; size: number; px: number; density: number }
+
+/**
+ * The square the landing's remnant is baked into: about the sky's centre, reaching every point it shows at any turn (the
+ * farthest corner above the fade, below which the sky is solid ink), on whole device pixels so it lands 1:1 before it turns.
+ * ponytail: full device density, about 35 MB of texture on a 390 pt phone at 3x while the landing is up; bake at 2x if
+ * memory ever shows (the stars are soft sprites).
+ */
+function bakeBox(frame: SkyFrame, density: number): BakeBox {
+  const bottom = frame.height * FADE.to
+  const reach = Math.hypot(Math.max(frame.cx, frame.width - frame.cx), Math.max(frame.cy, bottom - frame.cy)) + BAKE_MARGIN
+  const px = Math.ceil(2 * reach * density) + 1
+  return { x: Math.floor((frame.cx - reach) * density) / density, y: Math.floor((frame.cy - reach) * density) / density, size: px / density, px, density }
+}
+
+type Lights = { star: SkImage; core: SkImage; scales: number[]; colors: SkColor[]; coreRects: SkRect[]; coreColors: SkColor[] }
+
+/**
+ * The landing past the freeze, drawn once: every star and core where the film left them, and the bloom, the same draws as
+ * `Sky`'s lights (an Atlas's `blendMode` is its paint's, its `colorBlendMode` the call's), onto a transparent `box` that the
+ * sky adds onto ink and turns. Null with no GPU surface: the sky then stays live, as it was before.
+ */
+function bakeLights(f: Film, lights: Lights, frame: SkyFrame, box: BakeBox, bloom: boolean): SkImage | null {
+  'worklet'
+  const surface = Skia.Surface.MakeOffscreen(box.px, box.px)
+  if (!surface) return null
+  const canvas = surface.getCanvas()
+  canvas.scale(box.density, box.density)
+  canvas.translate(-box.x, -box.y)
+  const sprite = Skia.XYWHRect(0, 0, SPRITE, SPRITE)
+  const at = (sc: number, x: number, y: number) => Skia.RSXform(sc, 0, frame.cx + x * frame.k - sc * HALF, frame.cy + y * frame.k - sc * HALF)
+  const p = f.s.pos
+  const c = f.s.core
+  const starRects: SkRect[] = []
+  const starXf: SkRSXform[] = []
+  for (let i = 0; i < f.s.n; i++) {
+    const j = 3 * i
+    starRects.push(sprite)
+    starXf.push(at(lights.scales[i], viewX(p[j], p[j + 1], f.ca, f.sa), viewY(p[j], p[j + 1], p[j + 2], f.ca, f.sa, COS_TILT, SIN_TILT)))
+  }
+  const coreXf: SkRSXform[] = []
+  for (let i = 0; i < CORE_SCALES.length; i++) {
+    const o = (i % 2) * 6
+    coreXf.push(at(CORE_SCALES[i], viewX(c[o], c[o + 1], f.ca, f.sa), viewY(c[o], c[o + 1], c[o + 2], f.ca, f.sa, COS_TILT, SIN_TILT)))
+  }
+  const plus = Skia.Paint()
+  plus.setBlendMode(BlendMode.Plus)
+  const draw = () => {
+    canvas.drawAtlas(lights.star, starRects, starXf, plus, BlendMode.Modulate, lights.colors)
+    canvas.drawAtlas(lights.core, lights.coreRects, coreXf, plus, BlendMode.Modulate, lights.coreColors)
+  }
+  draw()
+  if (bloom) {
+    const layer = Skia.Paint()
+    layer.setBlendMode(BlendMode.Plus)
+    layer.setAlphaf(BLOOM.alpha)
+    layer.setImageFilter(Skia.ImageFilter.MakeBlur(BLOOM.blur, BLOOM.blur, TileMode.Decal, null))
+    canvas.saveLayer(layer)
+    draw()
+    canvas.restore()
+  }
+  surface.flush()
+  return surface.makeImageSnapshot()
+}
+
+/** The baked remnant and its turn, radians about the sky's centre. */
+type Baked = { image: SharedValue<SkImage | null>; box: BakeBox; spin: SharedValue<{ rotate: number }[]> }
+
+function Sky({ stars, cores: coreXf, colors, frame, bloom, baked, shelf, shelfFade, testID }: {
   stars: ReturnType<typeof useRSXformBuffer>
   cores: ReturnType<typeof useRSXformBuffer>
   colors: SkColor[]
   frame: SkyFrame
   bloom: boolean
+  /** Past the freeze: the one image, drawn instead of the stars and their bloom (both are in it). */
+  baked?: Baked
   shelf?: Shelf | null
   shelfFade?: SharedValue<number>
   testID: string
 }) {
   const images = spriteImages()
   const starRects = useMemo(() => colors.map(() => Skia.XYWHRect(0, 0, SPRITE, SPRITE)), [colors])
-  const core = useMemo(
-    () => ({ rects: CORE_SCALES.map(() => Skia.XYWHRect(0, 0, SPRITE, SPRITE)), colors: CORE_LIGHTS.flatMap(({ alpha }) => [colour(CORE_WHITE, alpha), colour(CORE_WHITE, alpha)]) }),
-    []
-  )
+  const core = coreLights()
   const lights = (
     <>
       <Atlas image={images.star} sprites={starRects} transforms={stars} colors={colors} colorBlendMode="modulate" blendMode="plus" />
-      <Atlas image={images.core} sprites={core.rects} transforms={cores} colors={core.colors} colorBlendMode="modulate" blendMode="plus" />
+      <Atlas image={images.core} sprites={core.rects} transforms={coreXf} colors={core.colors} colorBlendMode="modulate" blendMode="plus" />
     </>
   )
   const fadeTop = frame.height * FADE.from
   return (
     <Canvas testID={testID} style={StyleSheet.absoluteFill}>
       <Fill color={COLOR.ink} />
-      {lights}
-      {bloom ? <Group layer={<Paint blendMode="plus" opacity={BLOOM.alpha}><Blur blur={BLOOM.blur} /></Paint>}>{lights}</Group> : null}
+      {baked ? (
+        <Group transform={baked.spin} origin={vec(frame.cx, frame.cy)}>
+          <Image image={baked.image} x={baked.box.x} y={baked.box.y} width={baked.box.size} height={baked.box.size} blendMode="plus" />
+        </Group>
+      ) : (
+        <>
+          {lights}
+          {bloom ? <Group layer={<Paint blendMode="plus" opacity={BLOOM.alpha}><Blur blur={BLOOM.blur} /></Paint>}>{lights}</Group> : null}
+        </>
+      )}
       {shelf ? <ShelfBand shelf={shelf} fade={shelfFade} /> : null}
       <Rect x={0} y={fadeTop} width={frame.width} height={frame.height - fadeTop}>
         <LinearGradient start={vec(0, fadeTop)} end={vec(0, frame.height * FADE.to)} colors={[tint(COLOR.ink, 0), COLOR.ink]} />
@@ -208,6 +299,7 @@ function ShelfBand({ shelf, fade }: { shelf: Shelf; fade?: SharedValue<number> }
 /**
  * The landing: the physics runs from a frame callback, two steps a frame; after it only the turn is left, redrawn every
  * second frame, until the landing is left. Held in the background and while `paused` (the keyboard, another screen on top).
+ * At the freeze the stars are baked into one image (`bakeLights`) and from then on only its angle changes: no per-star work.
  */
 function Collision({ paused, shelf, shelfFade }: { paused: boolean; shelf?: Shelf | null; shelfFade?: SharedValue<number> }) {
   const frame = useSkyFrame()
@@ -219,6 +311,21 @@ function Collision({ paused, shelf, shelfFade }: { paused: boolean; shelf?: Shel
   const tick = useSharedValue(0)
   const turned = landingTurn()
   const active = useAppActive()
+  const bloom = !lowEnd
+  const density = PixelRatio.get()
+  const box = useMemo(() => bakeBox(frame, density), [frame, density])
+  const sprites = useMemo(() => {
+    const { star, core } = spriteImages()
+    return star && core ? { star, core, scales, colors: looks.colors, coreRects: coreLights().rects, coreColors: coreLights().colors } : null
+  }, [scales, looks.colors])
+  // Copied to the UI runtime once: the frame callback is registered again on every render, and would carry 2,000 colours each time.
+  const lights = useSharedValue<Lights | null>(sprites)
+  const image = useSharedValue<SkImage | null>(null)
+  const bakeTried = useSharedValue(false)
+  const bakedTurn = useSharedValue(0)
+  const angle = useSharedValue(0)
+  const spin = useDerivedValue(() => [{ rotate: angle.get() }])
+  const [baked, setBaked] = useState(false)
 
   const callback = useFrameCallback((info) => {
     'worklet'
@@ -228,8 +335,24 @@ function Collision({ paused, shelf, shelfFade }: { paused: boolean; shelf?: Shel
       film.set(f)
     }
     if (!advanceFilm(f, (info.timeSincePreviousFrame ?? FRAME_MS) / 1000)) return
-    tick.set(f.tau)
     turned.set(idleTurn(f))
+    if (image.get()) {
+      // The turn on screen (y down), the orbit's way: the same sense as the forms' remnant.
+      angle.set((-(f.turn - bakedTurn.get()) * Math.PI) / 180)
+      return
+    }
+    const sky = lights.get()
+    if (frozen(f) && !bakeTried.get() && sky) {
+      bakeTried.set(true)
+      const made = bakeLights(f, sky, frame, box, bloom)
+      if (made) {
+        bakedTurn.set(f.turn)
+        image.set(made)
+        scheduleOnRN(setBaked, true)
+        return
+      }
+    }
+    tick.set(f.tau)
   }, false)
   const running = active && !paused
   useEffect(() => {
@@ -262,7 +385,19 @@ function Collision({ paused, shelf, shelfFade }: { paused: boolean; shelf?: Shel
     xf.set(sc, 0, x - sc * HALF, y - sc * HALF)
   })
 
-  return <Sky testID="galaxy-live" stars={stars} cores={cores} colors={looks.colors} frame={frame} bloom={!lowEnd} shelf={shelf} shelfFade={shelfFade} />
+  return (
+    <Sky
+      testID="galaxy-live"
+      stars={stars}
+      cores={cores}
+      colors={looks.colors}
+      frame={frame}
+      bloom={bloom}
+      baked={baked ? { image, box, spin } : undefined}
+      shelf={shelf}
+      shelfFade={shelfFade}
+    />
+  )
 }
 
 /**

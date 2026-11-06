@@ -401,6 +401,12 @@ export function startFilm(stars: number): Film {
 /** Summed frame times drift by an ulp or two: a hair under a threshold counts. */
 const EPS = 1e-6
 
+/** True once the physics has stopped: from here on only the turn changes, so the stars can be drawn once and turned. */
+export function frozen(f: Film): boolean {
+  'worklet'
+  return f.tau >= FREEZE_AT - EPS
+}
+
 /**
  * One frame of `seconds`: the physics in fixed steps at 120 a second (2 a frame at 60 fps), or at 60 a second once frames
  * run slow (the prototype's checks hold there too), and the remnant's turn. After FREEZE_AT there are no steps, only the
@@ -409,7 +415,7 @@ const EPS = 1e-6
 export function advanceFilm(f: Film, seconds: number): boolean {
   'worklet'
   const d = Math.min(Math.max(seconds, 0), MAX_FRAME_S)
-  if (f.tau >= FREEZE_AT - EPS) {
+  if (frozen(f)) {
     f.wait += d
     if (f.wait < IDLE_REDRAW_S - EPS) return false
     f.turn += f.wait * GALAXY_B.look.turn * f.spin

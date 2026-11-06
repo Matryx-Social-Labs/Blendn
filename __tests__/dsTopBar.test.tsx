@@ -207,3 +207,13 @@ describe('progress: where you are in a short run of people (Rate)', () => {
     expect(screen.getByTestId('bar-progress')).toBeTruthy()
   })
 })
+
+describe('subLines (Lobby, L-A: the event under "Lobby" is one line, ellipsized)', () => {
+  const long = 'Kerala Design Festival 2026: Late Night Print Fair, Riso Workshop & Closing Party Edition'
+  it('draws the sub in one line when asked; the default stays two (control)', async () => {
+    await render(<TopBar title="Lobby" sub={long} subLines={1} onBack={() => {}} />)
+    expect(screen.getByText(long).props.numberOfLines).toBe(1)
+    await render(<TopBar title="Lobby" sub={long} onBack={() => {}} />)
+    expect(screen.getByText(long).props.numberOfLines).toBe(2)
+  })
+})
