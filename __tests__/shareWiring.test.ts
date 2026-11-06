@@ -16,7 +16,7 @@ const walk = (dir: string): string[] =>
 
 describe('one tray for every surface', () => {
   it('nothing outside the host and `shareNatively` calls the OS share sheet with its own text', () => {
-    // `shareNatively` is the event page's (Flow 4: Invite and Share are the system sheet), with the one link builder's words.
+    // `shareNatively` is the event page's Invite (Flow 4, option B: the system sheet), with the one link builder's words.
     const offenders = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => /Share\.share\(/.test(read(f)))
     expect(offenders).toEqual(['components/share/ShareHost.tsx', 'lib/shareTray.ts'])
     expect(read('lib/shareTray.ts')).toMatch(/Share\.share\(\{ message: shareText\(target\) \}\)/)
@@ -27,13 +27,20 @@ describe('one tray for every surface', () => {
   })
 
   it.each([
-    ['the event page (the system sheet, Flow 4)', 'components/screens/EventDetailScreen.tsx', /shareNatively\(shareTarget\)/],
+    ['the event page’s bar Share (Flow 4, option B)', 'components/screens/EventDetailScreen.tsx', /onShare=\{[^}]*openShare\(shareTarget\)/],
     ['the venue page', 'app/venue/[id].tsx', /openShare\(venueTarget\(/],
     ['Add friends and the onboarding step (both through the one invite hook)', 'lib/useFriendInvite.ts', /openShare\(\{ kind: 'invite', url: inviteLink\(/],
     ['the Going card', 'app/(tabs)/going.tsx', /shareEvent\(event\)/],
     ['the Pulse’s peek', 'app/(tabs)/events.tsx', /shareEvent\(event\)/],
   ])('%s opens the tray', (_name, file, shape) => {
     expect(read(file)).toMatch(shape)
+  })
+
+  it('the event page’s Invite is the system sheet, and only Invite (control for the tray above)', () => {
+    const scene = read('components/screens/EventDetailScreen.tsx')
+    expect(scene.match(/shareNatively\(/g)).toHaveLength(1)
+    expect(scene).toMatch(/invite: [^\n]*handleInvite/)
+    expect(scene).toMatch(/shareNatively\(shareTarget\)/)
   })
 
   it('links are built in `lib/shareLinks.ts` alone: no other code writes the host in front of an id', () => {

@@ -1,11 +1,13 @@
 /**
- * The event page's ways to share (Flow 4 E-B): the share circle in its bar, and Invite in its dock once you are going,
- * both the system share sheet ("Bring someone?" folded into Invite). Hidden, never disabled, for what may not be linked;
- * an unlisted event shares its area only; never after check-in.
+ * The event page's ways to share (Flow 4 E-B, option B): the share circle in its bar opens the one tray (Flow 16:
+ * WhatsApp first, the Story card), and Invite in its dock once you are going is the system share sheet ("Bring
+ * someone?" folded into it). Hidden, never disabled, for what may not be linked; an unlisted event shares its area
+ * only; never after check-in.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 
-const mockOpenShare = jest.fn((_target?: unknown) => Promise.resolve('shared'))
+const mockOpenShare = jest.fn((_target?: unknown) => Promise.resolve(true))
+const mockShareNatively = jest.fn((_target?: unknown) => Promise.resolve('shared'))
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -38,7 +40,7 @@ jest.mock('react-native-maps', () => {
 })
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
-jest.mock('../lib/shareTray', () => ({ shareNatively: (t: unknown) => mockOpenShare(t) }))
+jest.mock('../lib/shareTray', () => ({ openShare: (t: unknown) => mockOpenShare(t), shareNatively: (t: unknown) => mockShareNatively(t) }))
 
 /* eslint-disable import/first */
 import EventDetail from '../components/screens/EventDetailScreen'
@@ -87,9 +89,10 @@ const open = async (data: ReturnType<typeof detail>) => {
 }
 
 describe('the share circle', () => {
-  it('opens the system share sheet with the event card and its /event/ link', async () => {
+  it('opens the one tray (not the system sheet) with the event card and its /event/ link', async () => {
     await open(detail())
     await fireEvent.press(await screen.findByRole('button', { name: 'Share' }))
+    expect(mockShareNatively).not.toHaveBeenCalled()
     expect(mockOpenShare).toHaveBeenCalledWith({
       kind: 'event',
       event: expect.objectContaining({ title: 'Vinyl Night', venue: 'Toit', area: 'Indiranagar', url: 'https://www.blendn.app/event/e1', unlisted: false, cancelled: false }),
@@ -116,13 +119,14 @@ describe('the share circle', () => {
 describe('Invite, in the dock once you are going', () => {
   const invite = () => screen.queryByRole('button', { name: 'Invite' })
 
-  it('is the dock’s action beside "You’re going", and opens the system share sheet with the event', async () => {
+  it('is the dock’s action beside "You’re going", and opens the system share sheet (not the tray) with the event', async () => {
     // Two days out: the room is not open yet (it opens a day before the doors, and then the dock is Open the room).
     await open(detail({ startTime: hours(48), endTime: hours(51) }, { rsvpStatus: 'going' }))
     expect(await screen.findByText('You’re going')).toBeTruthy()
     await fireEvent.press(within(screen.getByTestId('scene-dock')).getByRole('button', { name: 'Invite' }))
     await act(async () => {})
-    expect(mockOpenShare).toHaveBeenCalledWith(expect.objectContaining({ kind: 'event', event: expect.objectContaining({ url: 'https://www.blendn.app/event/e1' }) }))
+    expect(mockOpenShare).not.toHaveBeenCalled()
+    expect(mockShareNatively).toHaveBeenCalledWith(expect.objectContaining({ kind: 'event', event: expect.objectContaining({ url: 'https://www.blendn.app/event/e1' }) }))
   })
 
   it('is not there before you are going (control: I’m going is)', async () => {
