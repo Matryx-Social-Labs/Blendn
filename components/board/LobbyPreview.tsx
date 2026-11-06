@@ -29,6 +29,7 @@ const ROSE = SELECTION.rose
 const PREVIEW_MARK = 32
 /** `.stk`: Going's stacked creatures are 24, overlapping by 8, ringed 2 in the row's fill. */
 const STACK_MARK = 24
+const STACK_RING = 2
 /** `.nbg`: the unread badge is a 24 pt capsule. */
 const BADGE = 24
 /** `.lpc.lroom`: the door glyph is 24, a step over the control's 20. */
@@ -36,6 +37,10 @@ const DOOR_GLYPH = 24
 // design-exception: the board's room card glows rose from under it (`.lpc.lroom`: 0 18px 50px -24px, 70%), the 4b card's
 // one lit object; `glowLead` is ember and larger, so no token holds it.
 const ROOM_GLOW = [{ offsetX: 0, offsetY: 18, blurRadius: 50, spreadDistance: -24, color: tint(SELECTION.rose.edge, 0.7) }]
+/** The board's hairlines are inset shadows that take no room; ours are borders, so the padding gives theirs back. */
+const HAIR = StyleSheet.hairlineWidth
+const PILL_ABOVE = 15
+const PILL_BELOW = 5
 /** The preview shows two posts. */
 const PREVIEW_POSTS = 2
 
@@ -92,8 +97,9 @@ export function EventLobbyPreview({ eventId, timeZone, here, onOpenRoom }: { eve
     </Text>
   )
   const postSomething = <Button kind="lit" size="md" icon="pen" label="Post something" onPress={() => openLobby(eventId, true)} style={styles.act} testID="lobby-preview-post" />
+  // The board's notes are the section's body (`.sec4 p`, 17/24, wins over `.bnote`), as The experience under it is.
   const note = (text: string, gap: object) => (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('lede', bold), styles.secondary, gap]}>
+    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary, gap]}>
       {text}
     </Text>
   )
@@ -118,7 +124,9 @@ export function EventLobbyPreview({ eventId, timeZone, here, onOpenRoom }: { eve
   return (
     <HueProvider value="rose">
       <View testID="lobby-preview">
-        <SectionHeader title="Lobby" action={seeAll ? { label: 'See all', onPress: () => openLobby(eventId) } : undefined} />
+        <View style={styles.head}>
+          <SectionHeader title="Lobby" action={seeAll ? { label: 'See all', onPress: () => openLobby(eventId) } : undefined} />
+        </View>
         <View style={styles.card}>{body.map((part, i) => <View key={i}>{part}</View>)}</View>
       </View>
     </HueProvider>
@@ -132,12 +140,14 @@ function PreviewPost({ post, eventId }: { post: LobbyPreview['latest'][number]; 
       <Avatar kind="creature" pseudonym={boardMarkSeed(post.author, eventId, post.id)} size={PREVIEW_MARK} />
       <View style={styles.postText}>
         <View style={styles.byline}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('control', bold), styles.ink, styles.shrink]}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('control', bold), styles.ink, styles.nameShrink]}>
             {post.author}
           </Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[monoCaption(bold), styles.tertiary]}>{postAge(post.createdAt)}</Text>
         </View>
-        <KindPill kind={post.kind} subKind={post.subKind} small />
+        <View style={styles.pillLine}>
+          <KindPill kind={post.kind} subKind={post.subKind} small />
+        </View>
         <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('control', bold, FONT_FAMILY.brand[400]), styles.secondary]}>
           {post.body}
         </Text>
@@ -226,14 +236,19 @@ const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
 
   // `.lpc`: the Lobby's 24 pt card, a hairline, 14 16 16.
-  card: { backgroundColor: COLOR.surface, borderRadius: RADIUS.sheet, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline, paddingTop: SPACE.md + SPACE.xxs, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.lg },
+  // `.lpv .shd`: 10 under the header.
+  head: { marginBottom: SPACE.sm + SPACE.xxs },
+  card: { backgroundColor: COLOR.surface, borderRadius: RADIUS.sheet, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline, paddingTop: SPACE.md + SPACE.xxs - HAIR, paddingHorizontal: SPACE.lg, paddingBottom: SPACE.lg - HAIR },
   gateGap: { marginTop: SPACE.sm },
   noteGap: { marginTop: SPACE.xs + SPACE.xxs },
   act: { marginTop: SPACE.md + SPACE.xxs, alignSelf: 'stretch' },
 
   // `.lpr`: 10 between the creature and the words, 12 above and below, a hairline under.
-  post: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm + SPACE.xxs, paddingVertical: SPACE.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLOR.hairline },
-  postText: { flex: 1, minWidth: 0, gap: SPACE.xs },
+  post: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm + SPACE.xxs, paddingTop: SPACE.md, paddingBottom: SPACE.md - HAIR, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: COLOR.hairline },
+  postText: { flex: 1, minWidth: 0 },
+  // `.lpr`: the pill sits in its own line box on the board, 15 over it and 5 under (pA-rest `previewPost` 126 tall).
+  pillLine: { paddingTop: PILL_ABOVE, paddingBottom: PILL_BELOW },
+  nameShrink: { flexShrink: 1, minWidth: 0 },
   byline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
 
   // `.lpc.lroom`: a rose rim and its glow; 14 between the door, the words and the chevron.
@@ -252,7 +267,8 @@ const styles = StyleSheet.create({
   // `.nlb`: rose fill, a hairline rose rim, 16 pt corners, 10 12.
   news: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs, paddingVertical: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.md, borderRadius: RADIUS.rowInCard, backgroundColor: ROSE.fill, borderWidth: StyleSheet.hairlineWidth, borderColor: ROSE.edge },
   stack: { flexDirection: 'row' },
-  stackRing: { borderRadius: RADIUS.capsule, borderWidth: 2, borderColor: ROSE.fill },
-  stackOverlap: { marginLeft: -SPACE.sm },
+  // `.stk .crt`: the 2 pt ring is a shadow on the board, outside the box, so it gives its room back.
+  stackRing: { borderRadius: RADIUS.capsule, borderWidth: STACK_RING, borderColor: ROSE.fill, margin: -STACK_RING },
+  stackOverlap: { marginLeft: -SPACE.sm - STACK_RING },
   badge: { minWidth: BADGE, height: BADGE, paddingHorizontal: SPACE.xs + 3, borderRadius: BADGE / 2, backgroundColor: ROSE.edge, alignItems: 'center', justifyContent: 'center' },
 })

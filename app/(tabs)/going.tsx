@@ -1180,8 +1180,8 @@ const styles = StyleSheet.create({
   },
   // The details' 6 gap plus the group's 4 above it; the details' 8 below.
   heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
-  // `.nlb`: 12 under the place, and 16 over the buttons (their own 10, plus 6).
-  heroLobby: { marginHorizontal: SPACE.md, marginTop: SPACE.md, marginBottom: SPACE.xs + SPACE.xxs },
+  // `.nlb`: 16 from the place's glyphs (measured on going-new), and 16 over the buttons (their own 10, plus 6).
+  heroLobby: { marginHorizontal: SPACE.md, marginTop: SPACE.md + SPACE.xxs + 1, marginBottom: SPACE.xs + SPACE.xxs },
   heroAction: {
     height: SIZE.control,
     flexDirection: 'row',
