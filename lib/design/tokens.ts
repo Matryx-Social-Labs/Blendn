@@ -232,6 +232,13 @@ export const TYPE = {
     lineHeight: 18,
     letterSpacing: 0,
   },
+  /** The boards' secondary line, 15/22 (owner 2026-11-06): a card's sentence under its title, in the secondary ink. */
+  lede: {
+    fontFamily: 'Satoshi_400Regular',
+    fontSize: 15,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
   meta: {
     fontFamily: 'Satoshi_400Regular',
     fontSize: 14,
@@ -273,6 +280,7 @@ export const MAX_FONT_SCALE = {
   rowTitle: 1.5,
   group: 1.5,
   note: 1.5,
+  lede: 2,
   meta: 2,
   caption: 1.3,
   label: 2,

@@ -20,6 +20,8 @@ import {
   photoView,
   readOnlyLine,
   kindWords,
+  lobbyDraft,
+  mayPost,
   postAction,
   postAge,
   previewView,
@@ -108,6 +110,29 @@ describe('the compose sheet', () => {
     expect(takesSpots('offer', 'ticket')).toBe(false)
     expect(takesSpots('seeking', 'ride')).toBe(false)
     expect(codePoints('🚗🚗')).toBe(2)
+  })
+
+  it('never offers a ticket where tickets are hidden, even when a server lists one', () => {
+    expect(subKindChips('offer', ALL, true).map((c) => c.subKind)).toEqual(['ride', 'spots'])
+    expect(subKindChips('seeking', ALL, true).map((c) => c.subKind)).toEqual(['ride', 'buddy'])
+  })
+
+  it('sends what the server takes: a sub-kind but not a chat, spots on a ride or spots only, the photo and its alt', () => {
+    const base = { body: '  Two seats  ', spots: 2, photoUrl: null, alt: '' }
+    expect(lobbyDraft({ ...base, kind: 'offer', subKind: 'ride' })).toEqual({ kind: 'offer', subKind: 'ride', body: 'Two seats', spacesLeft: 2 })
+    expect(lobbyDraft({ ...base, kind: 'offer', subKind: 'ticket' })).toEqual({ kind: 'offer', subKind: 'ticket', body: 'Two seats' })
+    expect(lobbyDraft({ ...base, kind: 'seeking', subKind: 'buddy' })).toEqual({ kind: 'seeking', subKind: 'buddy', body: 'Two seats' })
+    expect(lobbyDraft({ ...base, kind: 'chat', subKind: 'ride' })).toEqual({ kind: 'chat', body: 'Two seats' })
+    expect(lobbyDraft({ ...base, kind: 'chat', subKind: null, photoUrl: 'https://x/p.jpg', alt: '  ' })).toEqual({ kind: 'chat', body: 'Two seats', photo: { url: 'https://x/p.jpg' } })
+    expect(lobbyDraft({ ...base, kind: 'chat', subKind: null, photoUrl: 'https://x/p.jpg', alt: ' Sunset ' }).photo).toEqual({ url: 'https://x/p.jpg', alt: 'Sunset' })
+  })
+
+  it('posts once there are words inside 280 code points and no photo still on its way', () => {
+    expect(mayPost({ body: '   ', uploading: false })).toBe(false)
+    expect(mayPost({ body: 'Hi', uploading: true })).toBe(false)
+    expect(mayPost({ body: 'Hi', uploading: false })).toBe(true)
+    expect(mayPost({ body: '🚗'.repeat(280), uploading: false })).toBe(true)
+    expect(mayPost({ body: '🚗'.repeat(281), uploading: false })).toBe(false)
   })
 })
 

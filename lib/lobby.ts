@@ -169,7 +169,7 @@ const SUB_KIND_CHIPS: Record<BoardPostKind, readonly { subKind: LobbySubKind; la
 }
 export function subKindChips(kind: BoardPostKind, allowed: LobbyMeta['subKinds'] | null | undefined, ticketsHidden: boolean) {
   const offered = allowed?.[kind]
-  return SUB_KIND_CHIPS[kind].filter((c) => (offered ? offered.includes(c.subKind) : !(ticketsHidden && c.subKind === 'ticket')))
+  return SUB_KIND_CHIPS[kind].filter((c) => (!offered || offered.includes(c.subKind)) && !(ticketsHidden && c.subKind === 'ticket'))
 }
 
 /** Spots are counted on an offer of a ride or spots; a spare ticket is one, and a search has none. */
@@ -181,6 +181,28 @@ export const codePoints = (text: string) => [...text].length
 
 /** Alt text: optional, the server's 200 at most. */
 export const LOBBY_ALT_MAX = 200
+
+/** What `POST /events/:eventId/board` takes from the sheet (admin #919). */
+export type LobbyDraft = { kind: BoardPostKind; subKind?: LobbySubKind; body: string; spacesLeft?: number; photo?: { url: string; alt?: string } }
+
+/** The sheet's fields as the server takes them: a chat has no sub-kind, only a ride or spots counts spots. */
+export function lobbyDraft(f: { kind: BoardPostKind; subKind: LobbySubKind | null; body: string; spots: number; photoUrl: string | null; alt: string }): LobbyDraft {
+  const subKind = f.kind === 'chat' ? null : f.subKind
+  const alt = f.alt.trim()
+  return {
+    kind: f.kind,
+    ...(subKind && { subKind }),
+    body: f.body.trim(),
+    ...(subKind && takesSpots(f.kind, subKind) && { spacesLeft: f.spots }),
+    ...(f.photoUrl && { photo: { url: f.photoUrl, ...(alt && { alt }) } }),
+  }
+}
+
+/** Post waits for words inside the counter and for a photo still on its way. */
+export const mayPost = (f: { body: string; uploading: boolean }) => {
+  const n = codePoints(f.body.trim())
+  return n > 0 && n <= LOBBY_POST_MAX && !f.uploading
+}
 
 /** "From the Lobby" in the room: `GET /events/:eventId/board/summary`. `hasContent: false` is no card at all. */
 export type LobbySummary = {

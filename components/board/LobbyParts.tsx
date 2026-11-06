@@ -27,10 +27,10 @@ const BANNER_GLYPH = 18
 /** `.lcomp`: the composer row is a 52 pt capsule. */
 const COMPOSER_HEIGHT = 52
 
-function Line({ children, strong, style, testID }: { children: string; strong?: 'group' | 'rowTitle' | 'heading'; style?: object; testID?: string }) {
+function Line({ children, strong, lede, style, testID }: { children: string; strong?: 'group' | 'rowTitle' | 'heading'; lede?: boolean; style?: object; testID?: string }) {
   const bold = useBoldText()
-  // The banners' second line is 15 pt regular: the control role in the regular cut (the board's 22 pt leading is not a role).
-  const role = strong ? font(strong, bold) : font('control', bold, FONT_FAMILY.brand[400])
+  // A second line is 15 pt regular: 15/22 where the board draws it so (`.lro`, `.lend`: the lede role), else 15/20.
+  const role = strong ? font(strong, bold) : lede ? font('lede', bold) : font('control', bold, FONT_FAMILY.brand[400])
   return (
     <Text testID={testID} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[role, strong ? styles.ink : styles.secondary, style]}>
       {children}
@@ -85,7 +85,7 @@ export function ReadOnlyBanner({ closesAt, timeZone, onOpenRoom }: { closesAt?: 
         <Icon name="door-open" size={BANNER_GLYPH} color={ROSE.glyph} />
         <Line strong="group">The doors are open</Line>
       </View>
-      <Line>{readOnlyLine(closesAt, timeZone)}</Line>
+      <Line lede>{readOnlyLine(closesAt, timeZone)}</Line>
       <Button kind="primary" size="raised" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
     </View>
   )
@@ -99,7 +99,7 @@ export function LiveEmptyCard({ onOpenRoom }: { onOpenRoom: () => void }) {
         <Icon name="door-open" size={BANNER_GLYPH} color={ROSE.glyph} />
         <Line strong="group">Nobody posted in the Lobby.</Line>
       </View>
-      <Line>The room is open.</Line>
+      <Line lede>The room is open.</Line>
       <Button kind="primary" size="raised" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
     </View>
   )
@@ -111,7 +111,7 @@ export function ClosedCard() {
     <View testID="lobby-closed" style={[styles.card, styles.closed]}>
       <Icon name="door-closed" size={ICON.nav} color={ROSE.glyph} />
       <Line strong="heading" style={styles.closedTitle}>The Lobby has closed</Line>
-      <Line>The Lobby and the room close a day after the event ends. Your friends, chats and crews are where they were.</Line>
+      <Line lede>The Lobby and the room close a day after the event ends. Your friends, chats and crews are where they were.</Line>
     </View>
   )
 }
