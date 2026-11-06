@@ -60,7 +60,7 @@ export const CONSENT_LINE =
   'Anyone in this crew can reveal the crew — your name and photos — to people you match with.'
 export const KEEP_ANONYMOUS_LABEL = 'Keep me anonymous even when my crew reveals'
 
-export const BLEND_CLOSED_LINE = 'This Blend has closed'
+export const BLEND_CLOSED_LINE = 'This Mix has closed'
 export const CREW_GONE_LINE = 'This crew isn’t here any more'
 /** A crew chat that removed you (a ban written into it): you, not the crew, are gone. */
 export const CREW_REMOVED_LINE = 'You’re no longer in this crew’s chat'
@@ -306,7 +306,7 @@ export const UNKNOWN_ROOM_NAME = 'Chat'
 
 /** The header's name for a room opened without one (from a push, say). */
 export function defaultRoomName(kind: 'crew' | 'blend' | null): string {
-  return kind === 'crew' ? 'Crew chat' : kind === 'blend' ? 'Your Blend' : 'Event chat'
+  return kind === 'crew' ? 'Crew chat' : kind === 'blend' ? 'Your Mix' : 'Event chat'
 }
 
 /**
@@ -463,12 +463,12 @@ function sideName(side: BlendSide): string {
  * the frame's "Crew " before a crew's name doubled real ones ("Blend with Crew RC4 Crew Y") and differed from the Banter's
  * "Blend with RC4 Crew Y" (RC audit C24).
  */
-export const blendWith = (theirName: string) => `Blend with ${theirName}`
+export const blendWith = (theirName: string) => `Mix with ${theirName}`
 
 /** The room's header (flow10b.js `blendRoom`) and the Banter's card: `blendWith` the other side. */
 export function blendTitle(blend: Blend, myId: string | null | undefined): string {
   const { theirs } = blendSides(blend, myId)
-  return theirs ? blendWith(sideName(theirs)) : 'Your Blend'
+  return theirs ? blendWith(sideName(theirs)) : 'Your Mix'
 }
 
 /* -------------------------------------------------------------------------- */
@@ -510,7 +510,7 @@ export function crewRoomsFrom(payload: unknown): CrewRoomRow[] {
       {
         id: r.id,
         kind,
-        name: typeof r.name === 'string' ? r.name : kind === 'crew' ? 'Crew chat' : 'Blend',
+        name: typeof r.name === 'string' ? r.name : kind === 'crew' ? 'Crew chat' : 'Mix',
         crewId: typeof r.crewId === 'string' ? r.crewId : null,
         blendId: typeof r.blendId === 'string' ? r.blendId : null,
         closesAt: typeof r.closesAt === 'string' ? r.closesAt : null,
@@ -532,7 +532,7 @@ export function crewRoomsFrom(payload: unknown): CrewRoomRow[] {
 
 /** "Blend · Lot S9 × Nebula S9" — a Blend says what it is in the list; a crew's chat is its name. */
 export function crewRoomTitle(row: Pick<CrewRoomRow, 'kind' | 'name'>): string {
-  return row.kind === 'blend' ? `Blend · ${row.name}` : row.name
+  return row.kind === 'blend' ? `Mix · ${row.name}` : row.name
 }
 
 /* -------------------------------------------------------------------------- */

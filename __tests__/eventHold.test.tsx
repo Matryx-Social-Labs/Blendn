@@ -1,5 +1,5 @@
 /**
- * SCRUM-966: the event page's "Blend in" is the hold itself. Nothing is docked in Blend'n first: the hold runs the one
+ * SCRUM-966: the event page's "Blend’n" is the hold itself. Nothing is docked in Blend'n first: the hold runs the one
  * check-in flow (`useCheckInFlow`) from the page, "You're in" pours over the page, and the Room overlay (opened underneath
  * at the server's yes) is stepped onto once it is up. A refusal is drawn on the page.
  */
@@ -57,7 +57,7 @@ function Page({ openMaps = jest.fn(), going = false }: { openMaps?: () => void; 
   )
 }
 const activate = () =>
-  act(async () => fireEvent(screen.getByRole('button', { name: 'Hold to blend in' }), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
+  act(async () => fireEvent(screen.getByRole('button', { name: 'Hold to Blend’n' }), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
 const fix = (latitude: number, longitude: number) => ({ coords: { latitude, longitude, accuracy: 10, timestamp: Date.now(), approximate: false }, location: 'on' })
 
 beforeEach(() => {
@@ -78,10 +78,10 @@ beforeEach(() => {
 afterEach(() => jest.useRealTimers())
 
 describe('the hold is the button', () => {
-  it('reads "Hold to blend in", enabled at the door, and docks no pass in Blend’n', async () => {
+  it('reads "Hold to Blend’n", enabled at the door, and docks no pass in Blend’n', async () => {
     await render(<Page />)
     await act(async () => {})
-    const hold = screen.getByRole('button', { name: 'Hold to blend in' })
+    const hold = screen.getByRole('button', { name: 'Hold to Blend’n' })
     expect(hold.props.accessibilityState).toMatchObject({ disabled: false })
     expect(openPass).not.toHaveBeenCalled()
   })
@@ -90,7 +90,7 @@ describe('the hold is the button', () => {
     mockFix.mockResolvedValue(fix(12.9575, 77.6408))
     await render(<Page />)
     await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Hold to blend in' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' }).props.accessibilityState).toMatchObject({ disabled: true })
     expect(screen.getByText('You’re too far away', HIDDEN)).toBeTruthy()
   })
 
@@ -98,7 +98,7 @@ describe('the hold is the button', () => {
     mockFix.mockResolvedValue({ coords: null, location: 'off' })
     await render(<Page />)
     await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Hold to blend in' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' }).props.accessibilityState).toMatchObject({ disabled: true })
     expect(screen.getByText('Location is off', HIDDEN)).toBeTruthy()
   })
 })
@@ -133,11 +133,11 @@ describe('opened cold, before the tab bar has read which room you are in (SCRUM-
     setLiveHint(null)
   })
 
-  it('stays "Hold to blend in" when you are in no room, or the read fails', async () => {
+  it('stays "Hold to Blend’n" when you are in no room, or the read fails', async () => {
     mockActive.mockRejectedValueOnce(new Error('offline'))
     await render(<Page />)
     await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Hold to blend in' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' })).toBeTruthy()
   })
 
   it('does not ask when the tab bar already has the answer', async () => {
@@ -291,7 +291,7 @@ describe('the server says no: said on the page, nothing opens', () => {
     expect(router.dismissTo).not.toHaveBeenCalled()
     expect(screen.queryByTestId('scene-pour', HIDDEN)).toBeNull()
     // The hold drains: it can be held again.
-    expect(screen.getByRole('button', { name: 'Hold to blend in' }).props.accessibilityState).toMatchObject({ disabled: false, busy: false })
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' }).props.accessibilityState).toMatchObject({ disabled: false, busy: false })
   })
 
   it('Not quite there yet offers Open Maps, which opens the page’s own map', async () => {

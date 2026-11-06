@@ -554,7 +554,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       const theirs: BlendCrew = { kind: 'crew', name: card.name, emblemSeed: card.emblemSeed, count: card.presentCount }
       setBlend({
         ref,
-        title: `Blend with ${card.name}`,
+        title: `Mix with ${card.name}`,
         sides: ours
           ? { ours: { kind: 'crew', name: ours.name, emblemSeed: emblemOf(ours.crewId), count: ours.presentCount }, theirs }
           : { ours: { kind: 'person', pseudonym: myMarkSeed }, theirs },
@@ -562,7 +562,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     },
   })
   /** The chip's menu: your crews here and "Just me". Cancel changes nothing. */
-  const chooseLikingAs = async (among = myCrewsHere, title = 'Liking as…') => {
+  const chooseLikingAs = async (among = myCrewsHere, title = 'Sending as…') => {
     const answer = await chooseAs(among, title)
     if (answer !== undefined) setLikingAs(answer)
     return answer
@@ -734,7 +734,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       if (result.data.blend && crew) {
         setBlend({
           ref: result.data.blend,
-          title: `Blend with ${p.name}`,
+          title: `Mix with ${p.name}`,
           sides: { ours: { kind: 'crew', name: crew.name, emblemSeed: emblemOf(crew.crewId), count: crew.presentCount }, theirs: { kind: 'person', pseudonym: p.name } },
         })
       } else say('Liked for your crew', 'success')

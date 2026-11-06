@@ -80,7 +80,7 @@ describe('"I’m going" → "You’re going" is one sequence (A78, Prompt 10)', 
 describe('what the button says', () => {
   it('says Blend in, and no state is a dead end', () => {
     const src = SRC()
-    expect(src).toContain("join: 'Blend in'")
+    expect(src).toContain("join: 'Blend’n'")
     expect(src).toContain('"You\'re in"')
     /*
      * `blendn-admin/docs/CHECKIN.md:39` — "Check-in does not refuse at capacity". A full
@@ -103,7 +103,7 @@ describe('what the button says', () => {
  * control. Replacing one with the other would lose behaviour.
  *
  * What they do have to agree on is the *language*, and nothing enforced that —
- * the harness said "Blend in" while the real button said "Blend'n", and the
+ * the harness said "Blend’n" while the real button said "Blend'n", and the
  * only way to notice was to sign in and look.
  */
 const DETAIL = () =>
@@ -120,18 +120,17 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
    * The gap is closed — the screen renders `SceneCTA` — so these assertions
    * move to the new structure rather than being deleted. Each keeps its intent.
    */
-  it('labels the check-in action with the verb, not the brand', () => {
+  it('labels the check-in action with the product name, never the retired verb', () => {
     /*
-     * Unchanged rule, new home. `SceneCTA` owns the label now, so the check
-     * reads the component instead of the screen — and the brand-as-verb is
-     * still what must never come back: `Blend'n` names the product, where the
-     * other two states are things you can do.
+     * `SceneCTA` owns the label. Owner 2026-11-05 (naming review, SCRUM-1027):
+     * the check-in action is the product name, "Blend’n", and the verb "blend
+     * in" is retired everywhere.
      */
     const cta = SRC().slice(SRC().indexOf('const CTA_LABEL'))
     const table = cta.slice(0, cta.indexOf('}'))
-    expect(table).toContain('Blend in')
+    expect(table).toContain("join: 'Blend’n'")
     expect(table).not.toContain('Blend&apos;n')
-    expect(table).not.toContain("Blend’n")
+    expect(table).not.toMatch(/blend in/i)
   })
 
   it('has one pill and no tray behind it', () => {
@@ -168,7 +167,7 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
      */
     const detail = DETAIL()
 
-    // The CTA is time-aware. "Blend in" before the event cannot succeed --
+    // The CTA is time-aware. "Blend’n" before the event cannot succeed --
     // check-in requires the event to be running -- so it must not be offered.
     // One state for every surface (`lib/attendanceState.ts`, SCRUM-882): upcoming → the RSVP slot, live → Blend in.
     expect(detail).toContain('sceneCtaState({ phase: event ? attendancePhase(event)')

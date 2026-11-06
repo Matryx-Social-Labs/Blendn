@@ -211,10 +211,10 @@ function States() {
         <StateScreen icon="calendar" title="Nothing saved yet" body="Events you save show up here." actions={[{ label: 'Find something tonight', onPress: () => {} }]} />
       </Cell>
       <Cell label="load error" testID="ds-state-error">
-        <StateScreen icon="cloud-off" title="Couldn’t load the board" body="Check your connection and try again." actions={[{ label: 'Try again', kind: 'secondary', onPress: () => {} }]} />
+        <StateScreen icon="cloud-off" title="Couldn’t load the Lobby" body="Check your connection and try again." actions={[{ label: 'Try again', kind: 'secondary', onPress: () => {} }]} />
       </Cell>
       <Cell label="busy" testID="ds-state-busy">
-        <StateScreen icon="cloud-off" title="Couldn’t load the board" body="Check your connection and try again." busy actions={[{ label: 'Try again', onPress: () => {} }]} />
+        <StateScreen icon="cloud-off" title="Couldn’t load the Lobby" body="Check your connection and try again." busy actions={[{ label: 'Try again', onPress: () => {} }]} />
       </Cell>
       <Cell label="full screen · refusal" testID="ds-state-screen" style={styles.tall}>
         <SafeAreaInsetsContext.Provider value={NO_INSETS}>

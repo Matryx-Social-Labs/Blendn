@@ -45,12 +45,12 @@ describe('<StateScreen>', () => {
     await render(
       <StateScreen
         icon="cloud-off"
-        title="Couldn’t load the board"
+        title="Couldn’t load the Lobby"
         body="Check your connection and try again."
         actions={[{ label: 'Try again', kind: 'secondary', onPress: retry }]}
       />
     )
-    expect(screen.getByRole('header', { name: 'Couldn’t load the board' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Couldn’t load the Lobby' })).toBeTruthy()
     expect(text('Check your connection and try again.').color).toBe(COLOR.textSecondary)
     await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
     expect(retry).toHaveBeenCalledTimes(1)
@@ -69,7 +69,7 @@ describe('<StateScreen>', () => {
 
   it('busy: the primary action shows its busy state', async () => {
     await render(
-      <StateScreen icon="cloud-off" title="Couldn’t load the board" busy actions={[{ label: 'Try again', onPress: jest.fn() }]} />
+      <StateScreen icon="cloud-off" title="Couldn’t load the Lobby" busy actions={[{ label: 'Try again', onPress: jest.fn() }]} />
     )
     expect(screen.getByRole('button', { name: 'Try again' }).props.accessibilityState).toMatchObject({ busy: true })
   })

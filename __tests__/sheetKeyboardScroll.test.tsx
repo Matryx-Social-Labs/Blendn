@@ -56,11 +56,11 @@ const keyboardUp = async () => {
 }
 const scroll = () => screen.getByTestId('board-composer-content', { includeHiddenElements: true })
 
-describe('the Board composer over the keyboard', () => {
+describe('the Lobby composer over the keyboard', () => {
   it('the Spaces stepper is inside the scrollable content, not beside it', async () => {
     await render(composer())
     await keyboardUp()
-    expect(within(scroll()).getByLabelText('Spaces')).toBeTruthy()
+    expect(within(scroll()).getByLabelText('Spots')).toBeTruthy()
     // And so are the field and the kind cards: one scroll holds every control above the pinned Post.
     expect(within(scroll()).getByLabelText('Your post')).toBeTruthy()
     expect(within(scroll()).getByTestId('board-kind-offer')).toBeTruthy()

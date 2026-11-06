@@ -199,7 +199,7 @@ read-only. A minor is not offered Dating.
 
 Before this, onboarding wrote only `looking_for`, so a new account had an empty
 `intent_default`: matching could not use the answer, `profileIsComplete` refused
-its first Board post, and the first check-in asked again. No backfill: the
+its first Lobby post, and the first check-in asked again. No backfill: the
 first-door ask covers older accounts.
 
 ### 3. The fourth gender chip says what it stores

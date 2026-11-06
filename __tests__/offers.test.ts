@@ -117,7 +117,7 @@ describe('the pass’s face (passView)', () => {
 
   it('live with a stale code: no code (L2) — it needs a connection after a failed ask, else a fresh one is coming', () => {
     const stale = at('2026-10-11T20:00:33Z')
-    expect(passView(live, stale, true)).toMatchObject({ door: 'offline', foot: 'This pass needs a connection to show its code.' })
+    expect(passView(live, stale, true)).toMatchObject({ door: 'offline', foot: 'This offer code needs a connection to show.' })
     expect(passView(live, stale, false)).toMatchObject({ door: 'offline', foot: 'Getting a fresh code…' })
   })
 

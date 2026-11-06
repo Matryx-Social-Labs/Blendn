@@ -10,6 +10,7 @@ import {
   acceptConflictLine,
   askConflictLine,
   BOARD_CLOSED_SENTENCE,
+  saysBoardClosed,
   BOARD_ENABLED,
   BOARD_MAX_POST_LENGTH,
   boardClosed,
@@ -80,8 +81,8 @@ describe('the order a board reads in', () => {
 
 describe("an offer’s spaces", () => {
   it('counts them, says full at zero, and says nothing for a post that is not an offer', () => {
-    expect(spacesLabel(2)).toBe('2 spaces left')
-    expect(spacesLabel(1)).toBe('1 space left')
+    expect(spacesLabel(2)).toBe('2 spots left')
+    expect(spacesLabel(1)).toBe('1 spot left')
     expect(spacesLabel(0)).toBe('Full')
     expect(spacesLabel(null)).toBeNull()
   })
@@ -147,10 +148,10 @@ describe('BD-CU01: a refusal says which gate, in the server’s words', () => {
     ],
     ['FORBIDDEN', 'You have 5 asks waiting for an answer. Give them a moment.'],
     ['FORBIDDEN', 'You have sent a lot of requests this week. Try again in a few days.'],
-    ['FORBIDDEN', 'The board closes when the doors open — the room is open instead'],
+    ['FORBIDDEN', 'The Lobby closes when the doors open — the room is open instead'],
     ['FORBIDDEN', "Finish setting up your profile first. Blend’n is for people 18 and over."],
     ['AGE_RESTRICTED', 'This event is 21+. Add your age to your profile to check in.'],
-    ['NOT_FOUND', 'That post is no longer on the board'],
+    ['NOT_FOUND', 'That post is no longer in the Lobby'],
     ['RATE_LIMITED', 'Too many requests'],
   ]
 
@@ -228,8 +229,17 @@ describe('a 409 has fixed words, never the server’s', () => {
     expect(acceptConflictLine({ errorCode: 'CONFLICT', error })).toBe(line)
   })
 
-  it('knows the doors by the server’s sentence', () => {
-    expect(BOARD_CLOSED_SENTENCE).toBe('The board closes when the doors open — the room is open instead')
+  it('knows the doors by the server’s sentence, in the Lobby wording and the one before it', () => {
+    expect(BOARD_CLOSED_SENTENCE).toBe('The Lobby closes when the doors open — the room is open instead')
+    expect(saysBoardClosed('The Lobby closes when the doors open — the room is open instead')).toBe(true)
+    expect(saysBoardClosed(' The board closes when the doors open — the room is open instead ')).toBe(true)
+    expect(saysBoardClosed('That offer is full')).toBe(false)
+    expect(saysBoardClosed(undefined)).toBe(false)
+  })
+
+  it('shows the closed sentence in the Lobby wording whichever one the server sent', () => {
+    const before = { errorCode: 'FORBIDDEN', error: 'The board closes when the doors open — the room is open instead' }
+    expect(boardMessage(before, 'fallback')).toBe(BOARD_CLOSED_SENTENCE)
   })
 })
 

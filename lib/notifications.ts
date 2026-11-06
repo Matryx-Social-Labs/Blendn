@@ -127,7 +127,7 @@ export async function ensureNotificationChannels(): Promise<void> {
     Notifications.setNotificationChannelAsync('crew', {
       ...base,
       name: 'Your crew',
-      description: 'Crew invites, “we’re here” and Blends',
+      description: 'Crew invites, “we’re here” and Mixes',
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: PRIVATE,
     }),

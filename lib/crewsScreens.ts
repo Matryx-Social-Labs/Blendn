@@ -257,7 +257,7 @@ export function clockOf(iso: string): string | null {
 /** "This Blend closes at 4 am". */
 export function closesAtLine(closesAt: string): string | null {
   const clock = clockOf(closesAt)
-  return clock ? `This Blend closes at ${clock}` : null
+  return clock ? `This Mix closes at ${clock}` : null
 }
 
 /** The first-open card's body: "Made at Toit · closes 4 am. Everyone here is on tonight’s names until they reveal." */

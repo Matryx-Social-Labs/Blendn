@@ -121,7 +121,7 @@ export function CrewsHead({
         right={
           ready && likingAs !== undefined ? (
             <View style={styles.likingAs}>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Liking as</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Sending as</Text>
               <LikingAsChip crew={likingAs} pseudonym={pseudonym} onPress={onLikingAs} testID="room-liking-as" />
             </View>
           ) : undefined

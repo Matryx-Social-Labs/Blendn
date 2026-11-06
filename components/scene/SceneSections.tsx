@@ -289,7 +289,7 @@ const CTA_LABEL: Record<SceneCTAState, string> = {
   rsvpd: "You’re going",
   // A waitlist place is not a seat: never "You're going" (A78 review).
   waitlisted: 'On the waitlist',
-  join: 'Blend in',
+  join: 'Blend’n',
   going: 'Open the room',
   ended: "See what’s on tonight",
   rate: 'Rate who you met',

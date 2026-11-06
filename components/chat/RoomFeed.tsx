@@ -271,7 +271,7 @@ export function RoomOutside({
       const left = outside.kind === 'left'
       // A Blend you left is over for both sides: nothing to rejoin (10-10, proposed copy).
       if (roomKind === 'blend') {
-        return <StateScreen variant="screen" icon="door-open" title="You left this Blend" body="Nothing you wrote has gone anywhere." actions={back} testID="room-left" />
+        return <StateScreen variant="screen" icon="door-open" title="You left this Mix" body="Nothing you wrote has gone anywhere." actions={back} testID="room-left" />
       }
       // A crew's room has no event to check in at (5-1, "a crew room falls through here with event wording").
       const words = roomKind === 'crew' ? CREW_WORDS : EVENT_WORDS

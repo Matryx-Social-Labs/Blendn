@@ -348,7 +348,7 @@ function RadioCards() {
         {pair({ selected: true }, { disabled: true, hint: 'Add a photo to your profile first. That’s what other people would see.' })}
       </Cell>
       <Cell label="the glyph form" testID="ds-radiocard-glyph" style={styles.pair}>
-        <RadioCard title="I have space" hint="You’re offering a ride or a table." icon="car" selected onPress={noop} />
+        <RadioCard title="I have spots" hint="You’re offering a ride or a table." icon="car" selected onPress={noop} />
         <RadioCard title="I’m looking" hint="You want to join someone’s." icon="hand" onPress={noop} />
       </Cell>
     </Section>
@@ -401,8 +401,8 @@ function Steppers() {
   const [n, setN] = useState(2)
   const row = (props: Partial<ComponentProps<typeof Stepper>>) => (
     <View style={styles.spread}>
-      <Text style={styles.body}>Spaces</Text>
-      <Stepper label="Spaces" value={2} onChange={noop} {...props} />
+      <Text style={styles.body}>Spots</Text>
+      <Stepper label="Spots" value={2} onChange={noop} {...props} />
     </View>
   )
   return (

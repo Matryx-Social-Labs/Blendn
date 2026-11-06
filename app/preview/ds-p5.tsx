@@ -98,7 +98,7 @@ export default function DsP5Preview() {
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: insets.top + SPACE.xl, paddingBottom: insets.bottom + SPACE.xxl }]}>
         <Text style={styles.display}>P5 · sets and moments</Text>
 
-        <Section title="Moments" note="Each plays once from its button; tap anywhere to skip. Say hi, Keep looking, Open the Blend and Later close it.">
+        <Section title="Moments" note="Each plays once from its button; tap anywhere to skip. Say hi, Keep looking, Open the Mix and Later close it.">
           {PLAYS.map((play) => (
             <Button key={play} testID={`ds-play-${play}`} label={`Play: ${play}`} kind="secondary" size="md" onPress={() => setMoment({ play, key: Date.now() })} />
           ))}
@@ -162,7 +162,7 @@ export default function DsP5Preview() {
             ))}
           </View>
         </Section>
-        <Section title="Crew emblems · sizes" note="24 chip · 40 row · 56 Banter · 96 card · 160 detail and the Blend">
+        <Section title="Crew emblems · sizes" note="24 chip · 40 row · 56 Banter · 96 card · 160 detail and the Mix">
           <View style={[styles.wrap, styles.bottom]}>
             {EMBLEM_SIZES.map((size) => (
               <View key={size} testID={`ds-emblem-size-${size}`}>

@@ -6,7 +6,7 @@ import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
 /** What no plan buys (Flow 12 `NEVER`): the product's promise. */
 export const NEVER_FOR_SALE = [
   'Seeing who liked you',
-  'More asks or board requests than the caps allow',
+  'More asks or Lobby requests than the caps allow',
   'Seeing a venue’s room without going live there',
   'A way round the reveal',
   'Boosting yourself in someone’s Grid',

@@ -9,7 +9,7 @@ import { COLOR, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import type { RoomButtonTarget } from '../../lib/roomButton'
 
 /**
- * The centre disc in every state, and the night played one step at a time.
+ * The center disc in every state, and the night played one step at a time.
  *
  * Deep-link `exp+blendn:///preview/ds-disc`.
  *
@@ -38,7 +38,7 @@ export default function DsDiscPreview() {
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACE.xl }]}>
-      <Text style={styles.title}>The centre disc</Text>
+      <Text style={styles.title}>The center disc</Text>
       <Text style={styles.meta}>Variant A, “the disc fills”. Each state as a still.</Text>
 
       <View style={styles.grid}>

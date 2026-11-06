@@ -66,7 +66,7 @@ describe('<VenuePass>', () => {
     expect(screen.getByLabelText('You’re here. Vinyl Night. 14 inside now.')).toBeTruthy()
     expect(screen.getByLabelText('3 or more people here share your taste')).toBeTruthy()
     expect(screen.getAllByText('?', { includeHiddenElements: true })).toHaveLength(3)
-    const hold = screen.getByRole('button', { name: 'Hold to blend in' })
+    const hold = screen.getByRole('button', { name: 'Hold to Blend’n' })
     expect(hold.props.accessibilityHint).toBe('Checks you in. Other people at this event will see you.')
   })
 
@@ -204,7 +204,7 @@ describe('<DoorCode>', () => {
     await render(<DoorCode state="offline" testID="d" />)
     expect(style('··· ···').color).toBe(COLOR.textTertiary)
     expect(screen.getByTestId('d-offline', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByLabelText('Door code unavailable. This pass needs a connection to show its code.')).toBeTruthy()
+    expect(screen.getByLabelText('Door code unavailable. It needs a connection to show.')).toBeTruthy()
   })
 
   it('redeemed, used tonight and ended are still and neutral', async () => {

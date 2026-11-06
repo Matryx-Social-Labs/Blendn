@@ -120,7 +120,7 @@ const serve = (...blends: Blend[]) => crews.blends.mockResolvedValue({ success: 
 const sheetOf = () => (showSheet as jest.Mock).mock.calls.at(-1)[0] as ActionSheet
 const open = async () => {
   await render(<Room />)
-  await waitFor(() => screen.getByText('Blend with Five'))
+  await waitFor(() => screen.getByText('Mix with Five'))
 }
 
 beforeEach(() => {
@@ -135,7 +135,7 @@ beforeEach(() => {
   api.getEvent.mockResolvedValue({ success: true, data: { venueName: 'Toit' } } as never)
 })
 
-describe('an open Blend', () => {
+describe('an open Mix', () => {
   it('names both sides, yours first, with how many are on tonight’s names', async () => {
     serve(blend({ sides: [mineCrew(), theirCrew({ revealed: 0, keptPrivate: 0, people: [theirCrew().people[0], { ...theirCrew().people[1], name: null, photo: null }] })] }))
     await open()
@@ -145,7 +145,7 @@ describe('an open Blend', () => {
     expect(screen.getAllByTestId(/^blend-(mine|theirs)$/).map((n) => n.props.testID)).toEqual(['blend-mine', 'blend-theirs'])
   })
 
-  it('names only whoever revealed in this Blend; the one who kept private stays a creature, counted not named', async () => {
+  it('names only whoever revealed in this Mix; the one who kept private stays a creature, counted not named', async () => {
     serve(blend())
     await open()
     expect(screen.getByLabelText('Five, 1 revealed · 1 keeps it private')).toBeTruthy()
@@ -169,8 +169,8 @@ describe('revealing', () => {
     crews.reveal.mockResolvedValue({ success: true, data: { revealed: true } })
     await open()
     await fireEvent.press(screen.getByLabelText('Reveal my crew'))
-    expect(screen.getByText('Reveal Two to this Blend?')).toBeTruthy()
-    expect(screen.getByText(/shown by first name and one photo to the people in this Blend — and nobody else/)).toBeTruthy()
+    expect(screen.getByText('Reveal Two to this Mix?')).toBeTruthy()
+    expect(screen.getByText(/shown by first name and one photo to the people in this Mix — and nobody else/)).toBeTruthy()
     expect(screen.queryByText(/to the \d+ people/)).toBeNull()
     expect(screen.getByText('You can’t undo a reveal.')).toBeTruthy()
     expect(crews.reveal).not.toHaveBeenCalled()
@@ -194,9 +194,9 @@ describe('revealing', () => {
     )
     await render(<Room />)
     // One person facing a crew: "Blend with Five", not "Crew Five" (flow10b.js `blendRoom`, solo).
-    await waitFor(() => screen.getByText('Blend with Five'))
+    await waitFor(() => screen.getByText('Mix with Five'))
     await fireEvent.press(screen.getByLabelText('Reveal me'))
-    expect(screen.getByText('Reveal yourself to this Blend?')).toBeTruthy()
+    expect(screen.getByText('Reveal yourself to this Mix?')).toBeTruthy()
   })
 
   it('two taps on Reveal in the same render send one reveal', async () => {
@@ -216,11 +216,11 @@ describe('revealing', () => {
 
   it('a reveal the server refuses says so and leaves the action', async () => {
     serve(blend())
-    crews.reveal.mockResolvedValue({ success: false, error: 'Blend not found', errorCode: 'CHAT_CLOSED' })
+    crews.reveal.mockResolvedValue({ success: false, error: 'Mix not found', errorCode: 'CHAT_CLOSED' })
     await open()
     await fireEvent.press(screen.getByLabelText('Reveal my crew'))
     await fireEvent.press(screen.getByLabelText('Reveal Two'))
-    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('This Blend has closed.', 'error', { haptic: 'error' }))
+    await waitFor(() => expect(mockToast).toHaveBeenCalledWith('This Mix has closed.', 'error', { haptic: 'error' }))
     expect(screen.getByLabelText('Reveal my crew')).toBeTruthy()
   })
 
@@ -252,10 +252,10 @@ describe('revealing', () => {
   })
 })
 
-describe('the Blend closes on the server’s clock, not the phone’s', () => {
+describe('the Mix closes on the server’s clock, not the phone’s', () => {
   afterEach(() => noteServerDate(new Date().toUTCString()))
 
-  it('a phone that runs slow does not keep a closed Blend open', async () => {
+  it('a phone that runs slow does not keep a closed Mix open', async () => {
     // By the phone it closes in 30 minutes; the server is an hour ahead, so it has closed.
     serve(blend({ closesAt: new Date(Date.now() + 30 * 60_000).toISOString() }))
     noteServerDate(new Date(Date.now() + 60 * 60_000).toUTCString())
@@ -264,7 +264,7 @@ describe('the Blend closes on the server’s clock, not the phone’s', () => {
     expect(screen.queryByTestId('blend-mine')).toBeNull()
   })
 
-  it('a phone that runs fast does not close a Blend early', async () => {
+  it('a phone that runs fast does not close a Mix early', async () => {
     // By the phone it closed a minute ago; the server is two minutes behind, so it is still open.
     serve(blend({ closesAt: new Date(Date.now() - 60_000).toISOString() }))
     noteServerDate(new Date(Date.now() - 120_000).toUTCString())
@@ -283,14 +283,14 @@ describe('closing and closed', () => {
   it('in the last hour it says when it closes, quietly', async () => {
     serve(blend({ closesAt: new Date(Date.now() + 30 * 60_000).toISOString() }))
     await open()
-    expect(screen.getByText(/^This Blend closes at \d{1,2}(:\d\d)? (am|pm)$/)).toBeTruthy()
+    expect(screen.getByText(/^This Mix closes at \d{1,2}(:\d\d)? (am|pm)$/)).toBeTruthy()
     expect(screen.getByText('Closes in 30m')).toBeTruthy()
   })
 
   it('earlier than that it says nothing', async () => {
     serve(blend())
     await open()
-    expect(screen.queryByText(/^This Blend closes at/)).toBeNull()
+    expect(screen.queryByText(/^This Mix closes at/)).toBeNull()
   })
 
   it('one that is not open draws nothing: the room says it is closed', async () => {
@@ -314,10 +314,10 @@ describe('closing and closed', () => {
     await render(<Room />)
     await waitFor(() => expect(crews.blends).toHaveBeenCalled())
     expect(await screen.findByText(blendTitle(closed, mockUserId))).toBeTruthy()
-    expect(blendTitle(closed, mockUserId)).toMatch(/^Blend with /)
+    expect(blendTitle(closed, mockUserId)).toMatch(/^Mix with /)
   })
 
-  it('a Blend that was listed and then is not (a block across the sides refuses your door) is gone for you, and its chrome goes', async () => {
+  it('a Mix that was listed and then is not (a block across the sides refuses your door) is gone for you, and its chrome goes', async () => {
     serve(blend())
     api.blockUser.mockResolvedValue({ success: true, data: { blocked: true } })
     await open()
@@ -334,14 +334,14 @@ describe('closing and closed', () => {
     expect(screen.queryByTestId('blend-mine')).toBeNull()
   })
 
-  it('never listed is not gone: a Blend that never loaded is not a closed one', async () => {
+  it('never listed is not gone: a Mix that never loaded is not a closed one', async () => {
     serve()
     await render(<Room />)
     await waitFor(() => expect(crews.blends).toHaveBeenCalled())
     expect(screen.queryByTestId('gone')).toBeNull()
   })
 
-  it('a failed re-read keeps the Blend: a network error is not a closing', async () => {
+  it('a failed re-read keeps the Mix: a network error is not a closing', async () => {
     serve(blend())
     api.blockUser.mockResolvedValue({ success: true, data: { blocked: true } })
     await open()
@@ -357,29 +357,29 @@ describe('closing and closed', () => {
     expect(screen.getByTestId('blend-mine')).toBeTruthy()
   })
 
-  it('M6: a failed read is not a closed Blend: nothing is drawn, and nothing claims it closed', async () => {
+  it('M6: a failed read is not a closed Mix: nothing is drawn, and nothing claims it closed', async () => {
     crews.blends.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
     await render(<Room />)
     await waitFor(() => expect(crews.blends).toHaveBeenCalled())
     expect(screen.queryByText(/closed/i)).toBeNull()
   })
 
-  it('10-11: it says "This Blend didn’t load", with Try again, and the Blend arrives when the read lands', async () => {
+  it('10-11: it says "This Mix didn’t load", with Try again, and the Mix arrives when the read lands', async () => {
     crews.blends.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
     await render(<Room />)
-    await waitFor(() => screen.getByText('This Blend didn’t load'))
+    await waitFor(() => screen.getByText('This Mix didn’t load'))
     expect(screen.queryByTestId('gone')).toBeNull()
     serve(blend())
     await fireEvent.press(screen.getByText('Try again'))
-    await waitFor(() => screen.getByText('Blend with Five'))
-    expect(screen.queryByText('This Blend didn’t load')).toBeNull()
+    await waitFor(() => screen.getByText('Mix with Five'))
+    expect(screen.queryByText('This Mix didn’t load')).toBeNull()
   })
 
-  it('a Blend that was seen open and then failed to re-read keeps its sides, not the failure card', async () => {
+  it('a Mix that was seen open and then failed to re-read keeps its sides, not the failure card', async () => {
     serve(blend())
     await open()
     crews.blends.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
-    expect(screen.queryByText('This Blend didn’t load')).toBeNull()
+    expect(screen.queryByText('This Mix didn’t load')).toBeNull()
   })
 })
 
@@ -391,11 +391,11 @@ describe('around the room', () => {
     expect(screen.getByText('Closes in 9h')).toBeTruthy()
   })
 
-  it('the first time anyone opens a Blend, a card says what it is; Got it spends it', async () => {
+  it('the first time anyone opens a Mix, a card says what it is; Got it spends it', async () => {
     mockCoachVisible = true
     serve(blend())
     await open()
-    expect(screen.getByText('Blend with Five · 5 people')).toBeTruthy()
+    expect(screen.getByText('Mix with Five · 5 people')).toBeTruthy()
     await waitFor(() => screen.getByText(/Made at Toit · closes \d{1,2}(:\d\d)? (am|pm)\. Everyone here is on tonight’s names until they reveal\./))
     // The buttons are the 48 pt size.
     await fireEvent.press(screen.getByLabelText('Got it'))
@@ -442,16 +442,16 @@ describe('around the room', () => {
     api.leaveChatGroup.mockResolvedValue({ success: true, data: { chatGroupId: 'g1', left: true } })
     await open()
     await fireEvent.press(screen.getByLabelText('More'))
-    await fireEvent.press(within(screen.getByTestId('blend-menu')).getByLabelText('Leave this Blend'))
+    await fireEvent.press(within(screen.getByTestId('blend-menu')).getByLabelText('Leave this Mix'))
     const sheet = sheetOf()
-    expect(sheet.title).toBe('Leave this Blend?')
+    expect(sheet.title).toBe('Leave this Mix?')
     await (sheet.actions.find((a) => a.label === 'Leave') as { run: () => Promise<unknown> }).run()
     expect(api.leaveChatGroup).toHaveBeenCalledWith('g1')
     expect(markRoomLeft).toHaveBeenCalledWith('g1')
     expect(router.dismissTo).toHaveBeenCalledWith('/(tabs)/chat')
   })
 
-  it('blocks somebody on the other side by their handle in this Blend, picked from a list that has only them', async () => {
+  it('blocks somebody on the other side by their handle in this Mix, picked from a list that has only them', async () => {
     serve(blend())
     api.blockUser.mockResolvedValue({ success: true, data: { blocked: true } })
     await open()
@@ -500,7 +500,7 @@ describe('at AX XXXL (TG-04, RC audit C3)', () => {
     await open()
     const line = screen.getByText('Closes in 9h · 5 people')
     expect(line.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
-    const card = textNodes(screen.toJSON() as never).filter((n) => JSON.stringify(n.children).includes('Blend with Five ·'))
+    const card = textNodes(screen.toJSON() as never).filter((n) => JSON.stringify(n.children).includes('Mix with Five ·'))
     expect(card.map((n) => n.props.maxFontSizeMultiplier)).toEqual([MAX_FONT_SCALE.heading])
   })
 })

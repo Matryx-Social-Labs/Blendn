@@ -98,7 +98,7 @@ export default function SupportScreen() {
         </ScalePress>
 
         <SettingsGroup>
-          <SettingsRow icon="circle-question-mark" title="Help centre" hint="Answers to the common questions" trail="external" onPress={() => void openHelp()} />
+          <SettingsRow icon="circle-question-mark" title="Help center" hint="Answers to the common questions" trail="external" onPress={() => void openHelp()} />
         </SettingsGroup>
 
         <Text style={[font('meta', bold), styles.foot]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>Nothing is sent until you press Send in your mail app.</Text>

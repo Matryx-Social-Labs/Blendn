@@ -190,7 +190,7 @@ describe('leaving and removing', () => {
   })
 })
 
-describe('a Blend', () => {
+describe('a Mix', () => {
   const side = (over: Partial<BlendSide>): BlendSide => ({
     kind: 'crew',
     crewId: 'c',
@@ -242,10 +242,10 @@ describe('a Blend', () => {
 
   it('reads the closing time on the phone’s own clock', () => {
     const at = (h: number, m = 0) => new Date(2026, 9, 18, h, m).toISOString()
-    expect(closesAtLine(at(4))).toBe('This Blend closes at 4 am')
-    expect(closesAtLine(at(0))).toBe('This Blend closes at 12 am')
-    expect(closesAtLine(at(12, 30))).toBe('This Blend closes at 12:30 pm')
-    expect(closesAtLine(at(23, 5))).toBe('This Blend closes at 11:05 pm')
+    expect(closesAtLine(at(4))).toBe('This Mix closes at 4 am')
+    expect(closesAtLine(at(0))).toBe('This Mix closes at 12 am')
+    expect(closesAtLine(at(12, 30))).toBe('This Mix closes at 12:30 pm')
+    expect(closesAtLine(at(23, 5))).toBe('This Mix closes at 11:05 pm')
     expect(closesAtLine('nope')).toBeNull()
   })
 

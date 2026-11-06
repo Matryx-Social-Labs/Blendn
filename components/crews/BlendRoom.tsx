@@ -172,7 +172,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
     const unreadable = !!blendId && !gone && loaded && failed
     const bar = unreadable ? (
       <View pointerEvents="box-none" onLayout={(e) => setHeight(e.nativeEvent.layout.height)} style={[styles.bar, { top }]}>
-        <Banner kind="info" text="This Blend didn’t load" action={{ label: 'Try again', onPress: () => void reload() }} testID="blend-unreadable" />
+        <Banner kind="info" text="This Mix didn’t load" action={{ label: 'Try again', onPress: () => void reload() }} testID="blend-unreadable" />
       </View>
     ) : null
     // A Blend you were in and that has closed keeps its name in the header ("Blend with Crew Y"), never "Event chat" (rc7).
@@ -207,7 +207,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
       kind: 'actions',
       hue: 'rose',
       icon: 'log-out',
-      title: 'Leave this Blend?',
+      title: 'Leave this Mix?',
       message: 'Only you leave — it goes on for everyone else, and it leaves your Banter.',
       actions: [
         {
@@ -223,7 +223,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
             markRoomLeft(blend.chatGroupId)
             markCoachUsed('blend_first_open')
             router.dismissTo('/(tabs)/chat')
-            return { ok: true, toast: 'You left the Blend' }
+            return { ok: true, toast: 'You left the Mix' }
           },
         },
         { label: 'Cancel', cancel: true },
@@ -239,7 +239,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
       icon: 'ban',
       title: `Block ${who}?`,
       message:
-        'You won’t see each other here or anywhere else on Blend’n, and the Blend goes on for everyone else. They aren’t told. To report something said, long-press the message in the chat.',
+        'You won’t see each other here or anywhere else on Blend’n, and the Mix goes on for everyone else. They aren’t told. To report something said, long-press the message in the chat.',
       actions: [
         {
           label: 'Block',
@@ -327,7 +327,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
           onClose={() => setMenu(false)}
           items={[
             ...(theirs?.people.length ? [{ icon: 'ban' as const, label: 'Block someone', onPress: pickToBlock }] : []),
-            { icon: 'log-out', label: 'Leave this Blend', onPress: leave, destructive: true },
+            { icon: 'log-out', label: 'Leave this Mix', onPress: leave, destructive: true },
           ]}
         />
         <RevealSheet visible={asking} onClose={() => setAsking(false)} crew={crewName} onReveal={() => void reveal()} revealing={revealing} />

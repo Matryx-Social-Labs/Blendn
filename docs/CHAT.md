@@ -8,7 +8,7 @@ wins, then the flow's frames, then the motion cards, then the component pages
 (`docs/redesign/ROUND3.md`, SCREENS.md Flow 5). Built on the DS components in
 `components/ds/` — nothing here draws its own bubble, composer or sheet.
 
-**Routes:** `app/chat/[id].tsx` (the room: event rooms, crew chats and Blend
+**Routes:** `app/chat/[id].tsx` (the room: event rooms, crew chats and Mix
 rooms by `kind`), `app/chat-info/[id].tsx` (Room info),
 `app/private-chat/[conversationId].tsx` (a DM). Their pieces are in
 `components/chat/`; the pure rules in `lib/chatFeed.ts` (runs, refusals,
@@ -52,7 +52,7 @@ LongPressMenu · ReactionFlight · SenderCard
   reaction flies from the bar to its chip and the chip pops (#37).
 - **Swipe right** replies (#35). **Tap a sender** (their creature or name)
   opens the DS PersonCard from the event's roster (5.1); somebody the roster
-  doesn't list gets the thin card. Crew and Blend people are Flow 10's.
+  doesn't list gets the thin card. Crew and Mix people are Flow 10's.
 - **A send that fails stays**, marked "Not sent · Tap to retry"; the tap
   retries. Too many links is "Not sent · Two links at most". It survives
   leaving the room (`lib/chatOutbox.ts`, SCRUM-633) and shows on the Banter.
@@ -68,7 +68,7 @@ LongPressMenu · ReactionFlight · SenderCard
   now · the organizer muted you".
 - **Not in the room:** left / not a member (Rejoin), not live (Go live again),
   removed by the organizer (the server's sentence, no action), gone (404, Back),
-  a closed crew chat or Blend (Back). Each replaces the feed and the composer.
+  a closed crew chat or Mix (Back). Each replaces the feed and the composer.
 - **Links** are tappable and open through a sheet that names the host, never
   a preview (R10). The host is the parsed URL's (`linkHost`), never the link's
   text; only http(s) opens, and only to an allowlisted authority (ASCII
@@ -132,8 +132,8 @@ live again; on the Banter its Live now row says "You’re here" (5-3). The sheet
   messages don't carry the poll's id. (Server.)
 - **The pre-event countdown header** and **"Live updates off" for a refused
   socket join** are not built: the client has no signal for either. (Server.)
-- **Crew and Blend Room info** (R2-D2): ⋮ in a crew chat or a Blend still opens
-  the crew or the Blend (Flow 10's screens).
+- **Crew and Mix Room info** (R2-D2): ⋮ in a crew chat or a Mix still opens
+  the crew or the Mix (Flow 10's screens).
 - **Your side of the RevealBar** reads "You · anonymous" until you reveal: the
   server doesn't send your own pseudonym in a conversation. (Server.)
 - **The contact-details warning** (5.10) is not built: the server doesn't serve

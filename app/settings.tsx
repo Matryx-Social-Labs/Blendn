@@ -580,7 +580,7 @@ function SettingsScreenContent() {
         </SettingsGroup>
 
         <SettingsGroup title="Help">
-          <SettingsRow icon="circle-question-mark" title="Help centre" trail="external" onPress={() => openPage(BLENDN_LINKS.help)} />
+          <SettingsRow icon="circle-question-mark" title="Help center" trail="external" onPress={() => openPage(BLENDN_LINKS.help)} />
           <SettingsRow icon="mail" title="Contact support" trail="chevron" onPress={() => router.push('/support')} />
           {/* R4-2: every coach-mark sentence, to read again. Nothing replays from there. */}
           <SettingsRow icon="zap" title="Tips" trail="chevron" onPress={() => router.push('/tips')} testID="settings-tips" />
