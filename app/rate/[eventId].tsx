@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, withTiming } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { Button } from '../../components/ds/Button'
@@ -189,6 +190,7 @@ function RatePeersContent() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const { showToast } = useToast()
   const bar = useTopBarOverlay()
+  const insets = useSafeAreaInsets()
   const resetBar = bar.reset
   const bold = useBoldText()
   // An answer cannot be sent offline: the banner says so and the writes wait (reads stay), Flow 15 #16.
@@ -573,8 +575,12 @@ function RatePeersContent() {
             <Button label="Done" kind="primary" onPress={close} testID="rate-done" />
           </Dock>
         ) : onNight ? (
-          <Dock floating onHeight={setDockHeight} testID="rate-dock">
-            {/* Skipping is a first-class outcome. No nagging, no guilt copy. At the foot, as on a person (Flow 4 `.skip`). */}
+          /* Skipping is a first-class outcome. No nagging, no guilt copy. At the foot with no bar behind it (Flow 4 `.skip`). */
+          <View
+            testID="rate-dock"
+            onLayout={(e) => setDockHeight(e.nativeEvent.layout.height + SPACE.md)}
+            style={[styles.skip, { bottom: insets.bottom + SPACE.md }]}
+          >
             <Button
               label={people.length > 0 ? 'Skip to the people' : 'Skip'}
               kind="tertiary"
@@ -583,7 +589,7 @@ function RatePeersContent() {
               disabled={submitting || nightSent}
               testID="rate-skip-night"
             />
-          </Dock>
+          </View>
         ) : person ? (
           <Dock floating onHeight={setDockHeight} testID="rate-dock">
             {/* Submit stays gated on a number (D14), and says why, rather than a disabled button that can't. */}
@@ -615,6 +621,7 @@ const styles = StyleSheet.create({
   centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACE.gutter, gap: SPACE.md },
   centreText: { textAlign: 'center' },
   issues: { gap: SPACE.sm },
+  skip: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter },
   warning: { color: COLOR.destructive },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
