@@ -19,6 +19,11 @@ it('a Nearby row’s distance column', async () => {
   expect(monoRunSpaces(screen.toJSON() as never, '1.2 km', FONT_FAMILY.mono[700])).toEqual(BRAND_SPACE)
 })
 
+it('a search result’s distance (13 pt, as N1)', async () => {
+  await render(<EventCard kind="row" layout="result" title="Vinyl Night" time="Sat · 9 PM" venue="Toit" distance="1.2 km" testID="r" />)
+  expect(monoRunSpaces(screen.toJSON() as never, '1.2 km', FONT_FAMILY.mono[500])).toEqual(BRAND_SPACE)
+})
+
 it('a set list row’s distance', async () => {
   const start = new Date(Date.now() + 3_600_000).toISOString()
   const event = { id: 'a', title: 'Vinyl Night', venue_name: 'Toit', start_time: start, end_time: start, distance: 2.9, going_count: 0 } as unknown as BlendnEvent

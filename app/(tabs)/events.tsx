@@ -745,9 +745,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   }, [showToast, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   /** A card was held: lift it (its own `H.longPress` has played). The one-off coach mark is answered by the hold. */
-  const openPeek = useCallback((event: Event, anchor: Peek['anchor'], kind: Peek['kind']) => {
+  const openPeek = useCallback((event: Event, anchor: Peek['anchor'], kind: Peek['kind'], layout?: Peek['layout']) => {
     markCoachUsed(PULSE_COACH)
-    setPeek({ event, anchor, kind })
+    setPeek({ event, anchor, kind, layout })
   }, [])
 
   /** A row's hold: stable, so the rows can be memoised on their own values. */
@@ -1759,9 +1759,11 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     if (isNarrowed) {
       const card = homeCardProps(event, now, hasFix)
       return (
-        <View style={styles.mainRow}>
+        <View style={isSearching ? styles.resultWrap : styles.mainRow}>
           <EventCard
             kind="row"
+            // A search result is the board's result row: the time over the title, the photo on the right.
+            layout={isSearching ? 'result' : undefined}
             title={card.title}
             time={card.time}
             venue={card.venue}
@@ -1769,7 +1771,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
             cover={card.cover}
             onPress={() => handleEventPress(event)}
             onPressIn={() => warmEvent(event)}
-            onLongPress={(anchor) => openPeek(event, anchor, 'row')}
+            onLongPress={(anchor) => openPeek(event, anchor, 'row', 'result')}
             testID={`pulse-result-${event.id}`}
           />
         </View>
@@ -2044,7 +2046,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
             maxFontSizeMultiplier={CONTROL_FONT_CAP}
           >
             <Text style={styles.resultsCount}>{resultsCount(events.length, totalCount).text}</Text>
-            {` ${resultsCount(events.length, totalCount).noun}${selectedCity ? ` · ${selectedCity}` : ''}`}
+            {` ${resultsCount(events.length, totalCount).noun}`}
           </Text>
         </View>
       ) : null}
@@ -2069,7 +2071,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           <EverythingHeader chips={chips} selected={chosen} onSelect={setCategory} />
         </SectionReveal>
       ) : null}
-      <View style={styles.spacer} />
+      {/* Under a search the results start right under their count (board "C · search"). */}
+      {isSearching ? null : <View style={styles.spacer} />}
     </View>
   )
 
@@ -2215,12 +2218,15 @@ const styles = StyleSheet.create({
 
   /** A row in the list under the sections: the stack's spacing, inside the gutter. */
   mainRow: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.md },
+  // Board `.urow`: results stack 88 apart, each row's own 8 above and below the only space between them.
+  resultWrap: { paddingHorizontal: SPACE.gutter },
   /** A day's heading over its rows: a section gap above the first, the stack's rhythm below. */
   dayRow: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, paddingBottom: SPACE.xs },
   /** "6 events · Bengaluru": the flat result's label. */
-  resultsLabel: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, paddingBottom: SPACE.md },
-  resultsLabelText: { ...DESIGN_TYPE.label, color: COLOR.textSecondary },
-  resultsCount: { fontFamily: FONT_FAMILY.mono[700], color: COLOR.textPrimary },
+  // Board "C · search": "12 events" right under the field, 24 in, 8 above the first row; the number in Geist Mono.
+  resultsLabel: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
+  resultsLabelText: { ...DESIGN_TYPE.meta, color: COLOR.textSecondary },
+  resultsCount: { fontFamily: FONT_FAMILY.mono[500] },
   /** The search/filter skeleton: rows spaced like the real ones. */
   narrowedSkeleton: { paddingHorizontal: SPACE.gutter, marginTop: SPACE.xl, gap: SPACE.md },
   moreSkeleton: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: 64 },

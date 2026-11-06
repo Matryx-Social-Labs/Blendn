@@ -74,4 +74,10 @@ describe('the lead card at the largest text: the venue gives way, its distance n
     expect(screen.getByTestId('row-venue', { includeHiddenElements: true }).props.numberOfLines).toBe(1)
     expect(flat(screen.getByTestId('row-distance', { includeHiddenElements: true }).props.style).flexShrink).toBe(0)
   })
+  it('a search result too: the title clamps at two lines, "at venue" gives way, the distance stays', async () => {
+    await render(<EventCard kind="row" layout="result" title={WORST.title} time="Sat · 10:30 PM" venue={WORST.venue} distance={WORST.distance} onPress={jest.fn()} testID="res" />)
+    expect(screen.getByText(WORST.title, { includeHiddenElements: true }).props.numberOfLines).toBe(2)
+    expect(screen.getByTestId('res-venue', { includeHiddenElements: true }).props.numberOfLines).toBe(1)
+    expect(flat(screen.getByTestId('res-distance', { includeHiddenElements: true }).props.style).flexShrink).toBe(0)
+  })
 })
