@@ -58,7 +58,7 @@ interface Current {
 
 /**
  * The lines the Scene draws, one per thing that moved. A cancel is the Scene's own banner, so it is not a line. The old and new
- * times are in the Pulse's date grammar (`cardTime`: "9 PM", "Sat · 10:30 PM"), so a moved night reads like its card.
+ * times are in the Pulse's date grammar (`cardTime`: "Tonight · 9 PM", "Sat · 10:30 PM"), so a moved night reads like its card.
  */
 export function changeLines(change: EventChange, current: Current, now: number = Date.now()): ChangeLine[] {
   const out: ChangeLine[] = []
