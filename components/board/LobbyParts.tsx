@@ -86,7 +86,7 @@ export function ReadOnlyBanner({ closesAt, timeZone, onOpenRoom }: { closesAt?: 
         <Line strong="group">The doors are open</Line>
       </View>
       <Line lede>{readOnlyLine(closesAt, timeZone)}</Line>
-      <Button kind="primary" size="raised" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
+      <Button kind="primary" size="pill" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
     </View>
   )
 }
@@ -100,7 +100,7 @@ export function LiveEmptyCard({ onOpenRoom }: { onOpenRoom: () => void }) {
         <Line strong="group">Nobody posted in the Lobby.</Line>
       </View>
       <Line lede>The room is open.</Line>
-      <Button kind="primary" size="raised" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
+      <Button kind="primary" size="pill" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
     </View>
   )
 }
