@@ -13,7 +13,7 @@ import * as Reanimated from 'react-native-reanimated'
 import { HueProvider } from '../components/ds/shared'
 import { ProgressBar } from '../components/ds/ProgressBar'
 import { Stepper } from '../components/ds/Stepper'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPRING } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -51,6 +51,13 @@ describe('<Stepper>', () => {
     expect(flat('s-minus')).toMatchObject({ width: SIZE.control, height: SIZE.control, backgroundColor: COLOR.surfaceSunken })
     const n = StyleSheet.flatten(screen.getByText('2', { includeHiddenElements: true }).props.style)
     expect(n).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontVariant: ['tabular-nums'], fontSize: 20 })
+  })
+
+  it('compact is the Lobby sheet’s `.lstep`: 40 pt discs 4 apart around a 36 pt number, each disc still a 44 target', async () => {
+    await draw({ compact: true })
+    expect(flat('s-minus')).toMatchObject({ width: 40, height: 40 })
+    expect(screen.getByTestId('s-minus', { includeHiddenElements: true }).props.hitSlop).toBe(2)
+    expect(flat('s')).toMatchObject({ gap: SPACE.xs })
   })
 
   it('on a glass sheet the discs are 8% white', async () => {

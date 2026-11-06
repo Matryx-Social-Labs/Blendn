@@ -42,6 +42,7 @@ const AS_PAD = 14
 /** `.las`: the mark and the words, 10 apart. */
 const AS_GAP = SPACE.sm + SPACE.xxs
 const MARK = 32
+const AS_WORDS = 40
 /** `.lstep`: the spots row is a target tall. */
 const SPOTS_ROW = 44
 
@@ -101,14 +102,13 @@ export function LobbyCompose({
   const header = (
     <View style={styles.head}>
       <View style={styles.headRow}>
-        <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={(minTarget() - TYPE.rowTitle.lineHeight) / 2} style={styles.headSide} testID="board-composer-cancel">
+        <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={(minTarget() - TYPE.rowTitle.lineHeight) / 2} testID="board-composer-cancel">
           <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold), styles.secondary]}>Cancel</RNText>
         </Pressable>
         <View ref={titleRef} accessible accessibilityRole="header" style={styles.headTitle}>
           <RNText numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.ink, styles.center]}>New post</RNText>
         </View>
-        <View style={[styles.headSide, styles.headEnd]}>
-          <Button
+        <Button
             label="Post"
             kind={ready ? 'primary' : 'secondary'}
             onGlass={onGlass}
@@ -118,8 +118,8 @@ export function LobbyCompose({
             pressHaptic={false}
             onPress={() => onPost(lobbyDraft({ kind, subKind, body, spots, attachment: attached.attachment }))}
             testID="board-composer-post"
+            style={styles.post}
           />
-        </View>
       </View>
       <SegmentedControl
         compact
@@ -137,7 +137,7 @@ export function LobbyCompose({
     <Sheet visible={visible} onClose={onCancel} header={header} focusRef={titleRef} testID="board-composer">
       <View>
         {chips.length ? (
-          <View style={styles.chips} accessibilityRole="radiogroup">
+          <View style={styles.chips} accessibilityRole="radiogroup" testID="board-sub-kinds">
             {chips.map((c) => (
               <Chip
                 key={c.subKind}
@@ -153,12 +153,12 @@ export function LobbyCompose({
           </View>
         ) : null}
         {kind === 'offer' && subKind && takesSpots(kind, subKind) ? (
-          <View style={[styles.spots, chips.length ? styles.spotsUnder : null]}>
+          <View style={[styles.spots, chips.length ? styles.spotsUnder : null]} testID="board-spots">
             <View style={styles.flex}>
               <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold), styles.ink]}>Spots</RNText>
               <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>How many can join you</RNText>
             </View>
-            <Stepper label="How many can join you" value={spots} onChange={setSpots} min={1} max={MAX_SPOTS} onGlass={onGlass} disabled={posting} />
+            <Stepper label="How many can join you" value={spots} onChange={setSpots} min={1} max={MAX_SPOTS} onGlass={onGlass} disabled={posting} compact />
           </View>
         ) : null}
         <TextInput
@@ -190,11 +190,11 @@ export function LobbyCompose({
           <ComposePhoto onChange={onAttach} disabled={posting} />
         </View>
         {pseudonym ? (
-          <View style={styles.as} accessible accessibilityLabel={`Posting as ${pseudonym}, anonymous in this event`}>
+          <View style={styles.as} accessible accessibilityLabel={`Posting as ${pseudonym}, anonymous in this event`} testID="board-posting-as">
             <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>Posting as</RNText>
             <Avatar kind="creature" pseudonym={pseudonym} size={MARK} />
-            <View style={styles.flex}>
-              <RNText numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold, FONT_FAMILY.brand[500]), styles.ink]}>{pseudonym}</RNText>
+            <View style={styles.asWords}>
+              <RNText numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold, FONT_FAMILY.brand[500]), styles.ink]} testID="board-posting-name">{pseudonym}</RNText>
               <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>Anonymous in this event</RNText>
             </View>
           </View>
@@ -211,11 +211,11 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   flex: { flex: 1 },
   head: { gap: SPACE.md },
-  headRow: { height: HEAD_HEIGHT, flexDirection: 'row', alignItems: 'center' },
-  // The two ends share the width, so the title is centred on the sheet whatever Cancel and Post measure.
-  headSide: { flex: 1, alignItems: 'flex-start', justifyContent: 'center' },
-  headEnd: { alignItems: 'flex-end' },
-  headTitle: { flexShrink: 0 },
+  // `.sh`: 24 in from the sheet's gutter on both sides; the title is centred between Cancel and Post.
+  headRow: { height: HEAD_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.xl },
+  headTitle: { flex: 1 },
+  // A pill hugs the top-leading corner unless told otherwise (`Button`): Post is centred in the row.
+  post: { alignSelf: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   spots: { minHeight: SPOTS_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   spotsUnder: { marginTop: SPACE.lg },
@@ -223,6 +223,8 @@ const styles = StyleSheet.create({
   textUnder: { marginTop: SPACE.md },
   count: { alignSelf: 'flex-end', color: COLOR.textTertiary },
   attach: { marginTop: ATTACH_GAP },
+  // `.las .tx`: the name's line box is the sheet's 22, so the two lines stand 40 tall.
+  asWords: { flex: 1, minHeight: AS_WORDS },
   as: {
     flexDirection: 'row',
     alignItems: 'center',

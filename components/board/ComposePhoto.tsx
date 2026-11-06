@@ -27,6 +27,8 @@ const REMOVE = 24
 // design-exception: the warning card is 14 pt in with a 20 pt corner (`.lwarn` padding 14px, border-radius 20px); both off-scale.
 const WARN_PAD = 14
 const WARN_RADIUS = 20
+/** `.lwarn`'s rim is an inset shadow, inside its 14: the border here is too. The card sits 12 under the counter, 2 more than a photo. */
+const WARN_RIM = 1
 /** `.lpside .alt`: the alt-text chip is 32 tall. */
 const ALT_CHIP = 32
 /** `.lwarn span`: the warning's words at 82% white. */
@@ -128,7 +130,7 @@ export function ComposePhoto({ onChange, disabled = false }: { onChange: (next: 
   const shot = stage.shot
   return (
     <View style={styles.photo}>
-      <View style={styles.row}>
+      <View style={styles.row} testID="compose-photo">
         <View style={styles.tile}>
           <Image source={{ uri: shot.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessible accessibilityRole="image" accessibilityLabel={alt.trim() || 'Your photo'} />
           {stage.kind === 'sending' ? <UploadRing progress={stage.progress} label="Uploading your photo" /> : null}
@@ -145,7 +147,7 @@ export function ComposePhoto({ onChange, disabled = false }: { onChange: (next: 
         </View>
         <View style={styles.side}>
           {altOpen ? null : (
-            <Pressable accessibilityRole="button" accessibilityLabel="Add alt text" onPress={() => setAltOpen(true)} style={({ pressed }) => [styles.altChip, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Add alt text" onPress={() => setAltOpen(true)} testID="compose-alt" style={({ pressed }) => [styles.altChip, pressed && styles.pressed]}>
               <Icon name="type" size={16} color={COLOR.textPrimary} />
               <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>Add alt text</RNText>
             </Pressable>
@@ -192,7 +194,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.xs + SPACE.xxs,
   },
-  warn: { padding: WARN_PAD, gap: SPACE.xs, borderRadius: WARN_RADIUS, backgroundColor: VIOLET.fill, borderWidth: 1, borderColor: VIOLET.edge },
+  warn: { marginTop: SPACE.xxs, padding: WARN_PAD - WARN_RIM, gap: SPACE.xs, borderRadius: WARN_RADIUS, backgroundColor: VIOLET.fill, borderWidth: WARN_RIM, borderColor: VIOLET.edge },
   warnHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   warnActions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginTop: SPACE.sm },
 })

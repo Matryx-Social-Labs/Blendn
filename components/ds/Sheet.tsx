@@ -765,7 +765,8 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
    */
   // Unless the scroll under it would be left less than its floor: at the accessibility sizes with the keyboard up, the header
   // scrolls too, so the field being typed in is never squeezed out (review R5).
-  const pinHead = !art && (!!(headerAction || headerNote || header) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)
+  // A header row of its own (C-A) stays pinned at every size: its actions never scroll away, and moving it would remount it.
+  const pinHead = !art && (!!header || ((!!(headerAction || headerNote) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)))
   const scrollHead = pinHead ? (
     bodyEl
   ) : hasHead ? (
