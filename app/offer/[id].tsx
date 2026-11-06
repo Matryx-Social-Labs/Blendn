@@ -305,7 +305,8 @@ function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; last
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SPACE.lg },
+  // The board's pass sits 16 under the circles: the header's BAR_BOTTOM gives 10 of it, this the other 6 (driven: 18 at SPACE.sm).
+  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs + SPACE.xxs, gap: SPACE.lg },
   body: { gap: SPACE.lg },
   foot: { color: COLOR.textSecondary, textAlign: 'center' },
 })
