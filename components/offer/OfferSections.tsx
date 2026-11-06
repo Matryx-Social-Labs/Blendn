@@ -110,7 +110,7 @@ export function DoorTicket({
         <View style={[styles.notch, styles.notchLeft]} />
         <View style={[styles.notch, styles.notchRight]} />
       </View>
-      <View ref={codeRef} collapsable={false} style={styles.bottom}>
+      <View ref={codeRef} collapsable={false} testID="door-code-row" style={styles.bottom}>
         <DoorCode
           state={view.door}
           code={code}
