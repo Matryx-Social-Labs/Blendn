@@ -27,6 +27,7 @@ import { noteFriendGone } from './friendsGone'
 import { FRIENDS_PAGE } from './friendsPaging'
 import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, FriendsPayload, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
+import type { LobbyAlerts, LobbyMeta, LobbyPhase, LobbyPreview, LobbyState, LobbySubKind, LobbySummary } from './lobby'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { reasonOf, SESSION_END_CODES } from './sessionEnd'
 import { appBuildNumber, appVersionNumber } from './appVersion'
@@ -3986,14 +3987,46 @@ class ApiClientClass {
   // decide, and a stale one offers a seat that has gone. Every refusal on these
   // routes is a sentence for the person (`boardMessage`).
 
-  async getBoard(eventId: string): Promise<ApiResponse<{ posts: BoardPost[] }>> {
-    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board`)
+  /** The first page, with the meta every page carries; `query` is a chip's filter (`filterQuery`) and a page size. */
+  async getBoard(eventId: string, query: Record<string, string> = {}): Promise<ApiResponse<Partial<LobbyMeta> & { posts: BoardPost[] }>> {
+    const qs = new URLSearchParams(query).toString()
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board${qs ? `?${qs}` : ''}`)
   }
 
+  /** One post, for a post link: the Lobby's own gate. */
+  async getBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ state: LobbyState; phase: LobbyPhase; closesAt: string; post: BoardPost }>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}`)
+  }
+
+  /** The event page's card: counts, and the latest two for a reader. */
+  async getBoardPreview(eventId: string): Promise<ApiResponse<LobbyPreview>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/preview`)
+  }
+
+  /** "From the Lobby", for the room. `hasContent: false` is no card. */
+  async getBoardSummary(eventId: string): Promise<ApiResponse<LobbySummary>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/summary`)
+  }
+
+  async getBoardAlerts(eventId: string): Promise<ApiResponse<LobbyAlerts>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/alerts`)
+  }
+
+  /** Only the keys sent change. */
+  async setBoardAlerts(eventId: string, alerts: Partial<LobbyAlerts>): Promise<ApiResponse<LobbyAlerts>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/alerts`,
+      { method: 'PUT', body: JSON.stringify(alerts) },
+      true,
+      3
+    )
+  }
+
+  /** A photo is the `publicUrl` of a `folder: 'chat'` upload (`uploadChatPhoto`); the server strips and seals it. */
   async postToBoard(
     eventId: string,
-    post: { kind: 'offer' | 'seeking'; body: string; spacesLeft?: number }
-  ): Promise<ApiResponse<Pick<BoardPost, 'id' | 'kind' | 'body' | 'spacesLeft' | 'createdAt'>>> {
+    post: { kind: BoardPost['kind']; subKind?: LobbySubKind; body: string; spacesLeft?: number; photo?: { url: string; alt?: string } }
+  ): Promise<ApiResponse<Pick<BoardPost, 'id' | 'kind' | 'body' | 'spacesLeft' | 'createdAt'> & Partial<BoardPost>>> {
     return this.queuedRequest(
       `/api/mobile/events/${encodeURIComponent(eventId)}/board`,
       { method: 'POST', body: JSON.stringify(post) },
