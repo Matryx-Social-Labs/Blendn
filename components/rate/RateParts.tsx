@@ -1,5 +1,5 @@
 import { forwardRef } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, FadeIn } from 'react-native-reanimated'
 
 import { Avatar } from '../ds/Avatar'
@@ -29,6 +29,8 @@ const ISSUE_PAD = 14
 // design-exception: the "Sent" check is 18 (`.sent`), between the inline 16 and control 20 icons
 const SENT_ICON = 18
 const RIM = 1
+/** The accessibility text sizes (iOS AX1 is 1.8×; Android's largest steps start at 1.5×): a one-line name wraps from here. */
+const WRAP_FROM_SCALE = 1.5
 const FILL = quickTransition('backgroundColor', 'borderColor')
 const SENT_IN = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
 
@@ -78,14 +80,16 @@ export function EventRow({
  */
 export const PersonRow = forwardRef<View, { name: string; photo: string | null }>(function PersonRow({ name, photo }, ref) {
   const bold = useBoldText()
+  // One line as the board draws it; at the accessibility sizes, two, so the largest text still says who this is.
+  const lines = useWindowDimensions().fontScale >= WRAP_FROM_SCALE ? 2 : 1
   return (
     <View ref={ref} testID="rate-person" accessible accessibilityRole="header" accessibilityLabel={`${name}. You matched at this event`} style={styles.row}>
       {photo ? <Avatar kind="photo" uri={photo} size={SIZE.primary} label={name} /> : <Avatar kind="creature" pseudonym={name} size={SIZE.primary} label={name} />}
       <View style={styles.text}>
-        <Text testID="rate-person-name" numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
+        <Text testID="rate-person-name" numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
           {name}
         </Text>
-        <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+        <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
           You matched at this event
         </Text>
       </View>

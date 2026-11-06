@@ -5,7 +5,7 @@
  * a person.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
-import { AccessibilityInfo } from 'react-native'
+import { AccessibilityInfo, Dimensions } from 'react-native'
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -122,6 +122,9 @@ it('the night: one tap sends it, says "Sent. Only we see this." in place, and af
 })
 
 it('a person: their face and name in a row, "You matched at this event", and "How was meeting them?"', async () => {
+  // At the default text size (jest's own default is 2×): the board's one line.
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
   loads()
   await view()
   await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
@@ -134,6 +137,22 @@ it('a person: their face and name in a row, "You matched at this event", and "Ho
   // The issues are a radio list, "Nothing went wrong" picked to begin with.
   expect(screen.getByRole('radio', { name: 'Nothing went wrong' }).props.accessibilityState).toMatchObject({ checked: true })
   expect(screen.getByRole('radio', { name: 'They harassed me' }).props.accessibilityState).toMatchObject({ checked: false })
+  await act(async () => Dimensions.set({ window, screen: window }))
+})
+
+it('at the larger text sizes the name and its line wrap to two rather than lose who it is (driven at AX XXXL)', async () => {
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 3.571 }, screen: { ...window, fontScale: 3.571 } }))
+  try {
+    loads()
+    await view()
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
+    const row = await screen.findByTestId('rate-person')
+    expect(within(row).getByText('Night Cat').props.numberOfLines).toBe(2)
+    expect(within(row).getByText('You matched at this event').props.numberOfLines).toBe(2)
+  } finally {
+    await act(async () => Dimensions.set({ window, screen: window }))
+  }
 })
 
 it('focus moves to each new card’s header (M5): the night’s question, then the person', async () => {
