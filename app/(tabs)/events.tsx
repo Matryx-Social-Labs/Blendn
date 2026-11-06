@@ -745,9 +745,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   }, [showToast, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   /** A card was held: lift it (its own `H.longPress` has played). The one-off coach mark is answered by the hold. */
-  const openPeek = useCallback((event: Event, anchor: Peek['anchor'], kind: Peek['kind']) => {
+  const openPeek = useCallback((event: Event, anchor: Peek['anchor'], kind: Peek['kind'], layout?: Peek['layout']) => {
     markCoachUsed(PULSE_COACH)
-    setPeek({ event, anchor, kind })
+    setPeek({ event, anchor, kind, layout })
   }, [])
 
   /** A row's hold: stable, so the rows can be memoised on their own values. */
@@ -1771,7 +1771,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
             cover={card.cover}
             onPress={() => handleEventPress(event)}
             onPressIn={() => warmEvent(event)}
-            onLongPress={(anchor) => openPeek(event, anchor, 'row')}
+            onLongPress={(anchor) => openPeek(event, anchor, 'row', 'result')}
             testID={`pulse-result-${event.id}`}
           />
         </View>

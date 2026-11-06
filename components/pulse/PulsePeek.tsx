@@ -5,7 +5,8 @@ import type { BlendnEvent } from '../../lib/api'
 import { homeCardProps } from '../../lib/pulse'
 import { peekActions, type PeekAction } from '../../lib/pulsePeek'
 
-export type Peek = { event: BlendnEvent; anchor: Rect; kind: EventCardKind }
+/** `layout`: the row's own layout, so a held search result lifts as itself (board "C · search"). */
+export type Peek = { event: BlendnEvent; anchor: Rect; kind: EventCardKind; layout?: 'result' }
 
 const ITEM: Record<PeekAction, Pick<MenuItem, 'icon' | 'label'>> = {
   save: { icon: 'bookmark', label: 'Save' },
@@ -57,6 +58,7 @@ export function PulsePeek({
       {card && peek ? (
         <EventCard
           kind={peek.kind}
+          layout={peek.layout}
           title={card.title}
           time={card.time}
           venue={card.venue}
