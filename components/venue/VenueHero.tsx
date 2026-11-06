@@ -1,174 +1,96 @@
-import { Image } from 'expo-image'
-import { Animated, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { LivePill, MonoRun } from '../ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
-import { VenuePlate } from '../ds/VenuePlate'
-import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
+import { font, PRESSED_WASH, useBoldText, CONTROL_FONT_CAP } from '../ds/shared'
+import { VENUE_PLATE_GLYPHS } from '../ds/VenuePlate'
+import { PhotoScrim } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
-import type { VenueDetail } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
-import { liveNowLabel } from '../../lib/home'
-import { distanceText } from '../../lib/placesPane'
-import { useSessionTime } from '../../lib/useSessionTime'
-import { timeWords, type VenueHero as Hero } from '../../lib/venuePage'
+import { Material } from '../ui/Material'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { tint } from '../../lib/theme'
+import type { PlateKey } from '../../lib/placesPane'
+import { VenueMap } from './VenueMap'
 
-/** The hero (fullpages.js `venue`): 380 tall, under the status bar; the dock and the controls ride over it. */
-export const VENUE_HERO_HEIGHT = 380
-/** The head scrim that lets the clock and the circles read over any cover. */
-const HEAD_SCRIM = 180
-
-/**
- * "You’re live · 42 min", white on the photo. A leaf: it ticks itself (the
- * clock is the server's, and the page above it does not re-render with it).
+/*
+ * Flow 4 V-A, the map is the hero (owner's pick 2026-11-05; `flow-4/screens.js` venueA, `flow4.css` .lmap/.vpin/.dir).
+ * A 300 pt map on the venue, its type's glyph in a 44 pt ember pin at the centre (the pin glows still, never a pulse
+ * loop), the map fading into the page over its last 96 pt, and Directions on the map. The map is decoration: the rows
+ * under it carry the facts. The 6,422 seeded venues have no photos, so the page looks finished in any country.
  */
-function YouAreLivePill({ live, onZero }: { live: VenueDetail['live']; onZero: () => void }) {
-  const bold = useBoldText()
-  const time = useSessionTime(live, onZero)
-  return (
-    <View
-      accessible
-      accessibilityLabel={time ? `You’re live, ${timeWords(time)}` : 'You’re live'}
-      testID="venue-you-live"
-      style={styles.youLive}
-    >
-      <Icon name="radio" size={ICON.inline} color={COLOR.ink} />
-      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.onWhite]}>
-        You’re live
-        {time ? (
-          <>
-            {' · '}
-            <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
-              <MonoRun text={timeWords(time)} />
-            </Text>
-          </>
-        ) : null}
-      </Text>
-    </View>
-  )
-}
-
-/**
- * Overscroll at the top stretches the picture (DS #32, audit P2): scaled from
- * its foot by 1 + pull / height, which is exactly what the bounce uncovers, so
- * the top edge stays on the screen's top and no ink shows above the hero. A
- * direct manipulation (it follows the finger), so Reduce Motion keeps it.
- */
-/** The plate fades over the first quarter of the hero, by when its centred glyph would reach the circles' row. */
-export const PLATE_FADE_BY = VENUE_HERO_HEIGHT / 4
-/**
- * Where the plate's glyph sits, as a share of the hero's height: centred, or a third of the way down at the
- * accessibility sizes, where the name and its line grow up from the foot into the centre (audit C5).
- */
-const GLYPH_AT = { rest: 1 / 2, large: 1 / 3 } as const
-/** The glyph is gone by the time it scrolls up to the circles' row, a quarter of the hero down, wherever it starts. */
-export const plateFade = (scrollY: Animated.Value, glyphAt: number = GLYPH_AT.rest) =>
-  scrollY.interpolate({ inputRange: [0, VENUE_HERO_HEIGHT * (glyphAt - 1 / 4)], outputRange: [1, 0], extrapolate: 'clamp' })
-
-export const stretchScale = (scrollY: Animated.Value) =>
-  scrollY.interpolate({ inputRange: [-VENUE_HERO_HEIGHT, 0], outputRange: [2, 1], extrapolateRight: 'clamp' })
+export const VENUE_HERO_HEIGHT = 300
+/** `.mfade`: the map's foot fades to ink over 96 pt. */
+const FADE = SPACE.xxxl * 2
+/** `.vpin`: 44 pt, the ember selection fill, a 1 pt ember rim and a 24 pt ember glow. */
+const PIN = SPACE.xxl + SPACE.md
+// design-exception: the board's pin glow (`0 0 24px` ember 55%) and its 22 pt glyph (`ic(glyph,22)`).
+const PIN_GLOW = [{ offsetX: 0, offsetY: 0, blurRadius: 24, spreadDistance: 0, color: tint(COLOR.brandOrange, 0.55) }]
+const PIN_GLYPH = 22
+/** `.dir`: 40 tall, 16 in from the right, its foot 24 above the map's. */
+const DIR_HEIGHT = SPACE.xxl + SPACE.sm
+const DIR_TOP = VENUE_HERO_HEIGHT - DIR_HEIGHT - SPACE.xl
 
 export function VenueHero({
-  hero,
-  name,
-  typeLabel,
-  area,
-  km,
-  live,
-  onZero,
-  scrollY,
+  latitude,
+  longitude,
+  plate,
+  onDirections,
 }: {
-  hero: Hero
-  name: string
-  typeLabel: string
-  area: string | null
-  /** Kilometres, as the list handed it over; nothing when it did not. */
-  km: number | null
-  live: VenueDetail['live']
-  onZero: () => void
-  /** The page's scroll offset (core `Animated`, native driver): the picture stretches while it is negative. */
-  scrollY?: Animated.Value
+  latitude?: number | null
+  longitude?: number | null
+  plate: PlateKey
+  onDirections?: () => void
 }) {
   const bold = useBoldText()
-  const large = useLargeText()
-  const glyphAt = large ? GLYPH_AT.large : GLYPH_AT.rest
-  const distance = distanceText(km)
-  // At the accessibility sizes the address leaves the hero (it only truncated there, C37); Where has it in full.
-  const lead = [typeLabel, large ? null : area].filter(Boolean).join(' · ')
-  const liveText = liveNowLabel(live.liveNow)
+  const located = !!latitude && !!longitude
   return (
     <View style={styles.hero} testID="venue-hero">
-      <Animated.View
-        testID="venue-hero-media"
-        style={[
-          StyleSheet.absoluteFill,
-          scrollY && { transform: [{ scale: stretchScale(scrollY) }], transformOrigin: 'bottom' },
-          // A plate's glyph is gone before it scrolls up into the back and share circles, which have no bar under them
-          // yet (r7 L3: the cutlery read as a third button). A photograph stays.
-          scrollY && hero.kind !== 'cover' && { opacity: plateFade(scrollY, glyphAt) },
-        ]}
-      >
-        {hero.kind === 'cover' ? (
-          <Image source={{ uri: hero.uri }} contentFit="cover" cachePolicy="memory-disk" style={StyleSheet.absoluteFill} accessible={false} />
-        ) : (
-          // The plate centres its glyph in what it fills: a frame from (2·at - 1)·H to the foot is centred at `at`·H. The
-          // part above the top is under the status bar, the same ground the stretch uncovers.
-          <View testID="venue-hero-plate-frame" style={[styles.plateFrame, { top: VENUE_HERO_HEIGHT * (2 * glyphAt - 1) }]}>
-            <VenuePlate type={hero.plate} />
-          </View>
-        )}
-      </Animated.View>
-      <StatusScrim style={styles.headScrim} pointerEvents="none" />
-      <PhotoScrim style={styles.scrim} pointerEvents="none" />
-      <View style={styles.text}>
-        {liveText || live.youAreLive ? (
-          <View style={styles.pills}>
-            {liveText ? <LivePill text={liveText} testID="venue-bucket" /> : null}
-            {live.youAreLive ? <YouAreLivePill live={live} onZero={onZero} /> : null}
-          </View>
-        ) : null}
-        <View accessible accessibilityRole="header" accessibilityLabel={[name, lead, distance].filter(Boolean).join(', ')} style={styles.words}>
-          {/* The hero's one display line: capped at 1.2, where React Native clips a glyph to its line box. */}
-          <Text numberOfLines={2} maxFontSizeMultiplier={1.2} style={[font('display', bold), styles.ink]}>
-            {name}
-          </Text>
-          <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
-            {lead}
-            {distance ? (
-              <>
-                {lead ? ' · ' : ''}
-                <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
-                  <MonoRun text={distance} />
-                </Text>
-              </>
-            ) : null}
-          </Text>
+      <View style={StyleSheet.absoluteFill} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
+        {located ? <VenueMap latitude={latitude} longitude={longitude} /> : null}
+        <PhotoScrim foot={1} style={styles.fade} />
+        <View testID="venue-pin" style={styles.pin}>
+          <Icon name={VENUE_PLATE_GLYPHS[plate] ?? 'map-pin'} size={PIN_GLYPH} color={COLOR.selectionEmberGlyph} />
         </View>
       </View>
+      {located && onDirections ? (
+        <Pressable onPress={onDirections} accessibilityRole="button" accessibilityLabel="Directions" android_ripple={{ color: PRESSED_WASH.android }} style={styles.dir} testID="venue-directions">
+          <Material role="media" style={StyleSheet.absoluteFill} />
+          <Icon name="navigation" size={ICON.inline} color={COLOR.textPrimary} />
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('control', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+            Directions
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  // Not clipped: the stretched picture grows upward past the hero's top edge to fill what the bounce uncovers.
-  hero: { height: VENUE_HERO_HEIGHT, backgroundColor: COLOR.surface, justifyContent: 'flex-end' },
-  plateFrame: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  headScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: HEAD_SCRIM },
-  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '66%' },
-  text: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.sm },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs + SPACE.xxs },
-  words: { gap: SPACE.xxs },
-  youLive: {
-    height: SPACE.xl + SPACE.xs,
+  hero: { height: VENUE_HERO_HEIGHT, backgroundColor: COLOR.surfaceSunken },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: FADE },
+  pin: {
+    position: 'absolute',
+    top: VENUE_HERO_HEIGHT / 2 - PIN / 2,
+    alignSelf: 'center',
+    width: PIN,
+    height: PIN,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.selectionEmberFill,
+    borderWidth: 1,
+    borderColor: COLOR.brandOrange,
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: PIN_GLOW,
+  },
+  dir: {
+    position: 'absolute',
+    right: SPACE.lg,
+    top: DIR_TOP,
+    height: DIR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: SPACE.sm,
-    paddingHorizontal: SPACE.md,
+    gap: SPACE.xs + SPACE.xxs,
+    paddingHorizontal: SPACE.md + SPACE.xxs,
     borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.textPrimary,
+    overflow: 'hidden',
   },
   ink: { color: COLOR.textPrimary },
-  onWhite: { color: COLOR.ink },
-  tabular: { fontVariant: ['tabular-nums'] },
 })

@@ -16,7 +16,6 @@ import { announceOutcome, font, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { UpcomingSheet } from '../../components/venue/UpcomingSheet'
 import { VenueDock } from '../../components/venue/VenueDock'
-import { PAGE_WASH, PageWash } from '../../components/ui/GradientFill'
 import { Material } from '../../components/ui/Material'
 import { VenueHero, VENUE_HERO_HEIGHT } from '../../components/venue/VenueHero'
 import { VenueRegulars } from '../../components/venue/VenueRegulars'
@@ -24,7 +23,6 @@ import {
   About,
   BoardRow,
   ClaimLine,
-  EventOnCard,
   LiveCard,
   Section,
   TonightHere,
@@ -43,7 +41,7 @@ import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locati
 import { Logger } from '../../lib/logger'
 import { openInMaps } from '../../lib/openInMaps'
 import { openTonight } from '../../lib/paywall'
-import { guestTypeLabel, placeArea } from '../../lib/placesPane'
+import { guestTypeLabel, placeArea, plateFor } from '../../lib/placesPane'
 import { usePlusStatus } from '../../lib/plus'
 import { idParam } from '../../lib/routeParams'
 import { serverNow } from '../../lib/serverClock'
@@ -67,9 +65,7 @@ import {
   upcomingCount,
   upcomingRows,
   venueGate,
-  venueHero,
-  venueTiles,
-  washColor,
+  hoursLine,
   type VenueGate,
 } from '../../lib/venuePage'
 
@@ -463,7 +459,9 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const tonight = detail.tonight
   const handoffTitle = action.kind === 'handoff' && tonight?.id === action.eventId ? tonight.title : null
   const now = serverNow()
-  const tiles = venueTiles(detail, now).map((t) => ({ label: t.label, value: t.value, mono: t.mono }))
+  const area = placeArea(venue)
+  const typeArea = [guestTypeLabel(venue), area].filter(Boolean).join(' · ')
+  const hours = hoursLine(venue, now)
   const known = goodToKnow(venue.amenities)
   const upcoming = upcomingRows(venue.upcoming)
   const upcomingTotal = upcomingCount(venue, upcoming.length)
@@ -490,29 +488,28 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
-        <VenueHero
-          hero={venueHero(detail)}
-          name={venue.name}
-          typeLabel={guestTypeLabel(venue)}
-          area={placeArea(venue)}
-          km={km}
-          live={live}
-          onZero={load}
-          scrollY={scrollY}
-        />
-        <PageWash color={washColor(venueHero(detail))} pointerEvents="none" style={styles.wash} />
+        <VenueHero latitude={venue.latitude} longitude={venue.longitude} plate={plateFor(venue.venueType)} onDirections={directions} />
+        {/* Flow 4 V-A: the name, then the type and area on their own line, then the hours in their own slot, only when known. */}
+        <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={[venue.name, typeArea, hours?.text].filter(Boolean).join('. ')} testID="venue-head">
+          <Text testID="venue-name" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={styles.name}>
+            {venue.name}
+          </Text>
+          {typeArea ? (
+            <Text testID="venue-type-area" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('control', bold, FONT_FAMILY.brand[400]), styles.secondary, styles.typeArea]}>
+              {typeArea}
+            </Text>
+          ) : null}
+          {hours ? (
+            <Text testID="venue-hours" numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('control', bold), hours.open ? styles.open : styles.secondary, styles.hours]}>
+              {hours.text}
+            </Text>
+          ) : null}
+        </View>
         <View style={styles.body}>
           {/* Reads stay (the cached place); the dock's writes say why they wait. Flow 15 #15 · #16. */}
           <OfflineBanner text="Offline. Showing what you had." testID="venue-offline" />
-          {action.kind === 'handoff' ? (
-            <EventOnCard tonight={tonight?.id === action.eventId ? tonight : null} now={now} onPress={() => openEvent(action.eventId)} />
-          ) : action.kind === 'live' ? (
-            <LiveCard live={live} name={venue.name} onZero={load} />
-          ) : tiles.length ? (
-            <AmenityGrid tiles={tiles} testID="venue-tiles" />
-          ) : null}
-
-          {action.kind === 'handoff' ? null : <TonightHere tonight={tonight} venue={venue.name} km={km} now={now} onOpen={openEvent} />}
+          {action.kind === 'live' ? <LiveCard live={live} name={venue.name} onZero={load} /> : null}
+          <TonightHere tonight={tonight} liveNow={live.liveNow} now={now} onOpen={openEvent} />
           {upcoming.length ? <UpcomingList rows={upcoming} total={upcomingTotal} onOpen={openEvent} onSeeAll={() => setSheet('upcoming')} /> : null}
           <WhosHere live={live} onSeeWho={seeWhoIsHere} />
           {/* Only where somebody runs the place on Blendn: there is nobody to tell at an unclaimed one (step 12). */}
@@ -525,7 +522,8 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
               <AmenityGrid tiles={known} testID="venue-good-to-know" />
             </Section>
           ) : null}
-          <Where venue={venue} km={km} onDirections={directions} onCopy={copyAddress} />
+          {/* Flow 4 V-A: the map and its Directions are the hero; Where keeps the address and Copy. */}
+          <Where venue={venue} km={km} onCopy={copyAddress} />
           {/* Leaves the app on purpose: the app refuses venue accounts, the claim page needs none (§7). */}
           {claimUrl ? <ClaimLine onPress={() => setSheet('claim')} /> : null}
         </View>
@@ -636,11 +634,23 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   )
 }
 
+/** The venue's name, as the event page's title (`.vt`: 28/33, 700, -0.5); display's cap at the largest text. */
+// design-exception: the board's page title is 28/33 (`.vt`), between TYPE.title and TYPE.display.
+const TITLE_TYPE = { fontFamily: FONT_FAMILY.brand[700], fontSize: 28, lineHeight: 33, letterSpacing: -0.5 }
+// design-exception: the board puts 28 above each section (`.sh4` margin-top), between SPACE.xl and SPACE.xxl.
+const SECTION_GAP = 28
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  body: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl, gap: SPACE.sectionGap },
+  // `.col4` from 284: the name sits 16 up into the map's fade.
+  head: { paddingHorizontal: SPACE.gutter, marginTop: -SPACE.lg },
+  name: { ...TITLE_TYPE, color: COLOR.textPrimary },
+  typeArea: { marginTop: SPACE.xs },
+  hours: { marginTop: SPACE.xxs },
+  open: { color: COLOR.live },
+  // `.sh4` 28 above each section.
+  body: { paddingHorizontal: SPACE.gutter, paddingTop: SECTION_GAP, gap: SECTION_GAP },
   controls: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2, flexDirection: 'row', justifyContent: 'space-between' },
-  wash: { position: 'absolute', left: 0, right: 0, top: VENUE_HERO_HEIGHT - 1, height: PAGE_WASH.height },
   shield: { position: 'absolute', left: 0, right: 0, top: 0 },
   secondary: { color: COLOR.textSecondary },
 })
