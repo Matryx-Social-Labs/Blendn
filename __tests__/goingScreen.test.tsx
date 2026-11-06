@@ -370,8 +370,8 @@ describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
   })
 })
 
-describe('the category plate (GO-14, DS-12 wiring, audit C10)', () => {
-  it('a row and the Next up hero with no cover draw their category plate, not an empty box', async () => {
+describe('no cover never shows (GO-14; Flow 4 G-A)', () => {
+  it('the Next up hero with no cover draws its category plate; a row leads with its date stamp, never a plate or a box', async () => {
     const rows = [
       { ...upcoming('a', { categories: [{ slug: 'music' }] }), rsvpStatus: 'going' },
       { ...upcoming('b', { categories: [{ slug: 'music' }] }), rsvpStatus: 'going' },
@@ -379,7 +379,8 @@ describe('the category plate (GO-14, DS-12 wiring, audit C10)', () => {
     api.getMyRsvps.mockResolvedValue({ success: true, data: { events: rows, pagination: page(1, 2, false) } } as never)
     await open()
     expect(await screen.findByTestId('event-cover-plate', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getAllByTestId('going-row-b-plate', { includeHiddenElements: true })).toHaveLength(1)
+    expect(screen.queryByTestId('going-row-b-plate', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByTestId('going-row-b-thumb', { includeHiddenElements: true })).toBeTruthy()
   })
 })
 
