@@ -194,17 +194,17 @@ function blend(props: Partial<MomentBlendProps> = {}) {
   return { p, el: <MomentBlend {...p} /> }
 }
 
-describe('<MomentBlend> · It’s a Blend (Flow 10.8, §21.5)', () => {
-  it('crew × crew: the counts, nobody named, the shared facets, Open the Blend and Later', async () => {
+describe('<MomentBlend> · It’s a Mix (Flow 10.8, §21.5)', () => {
+  it('crew × crew: the counts, nobody named, the shared facets, Open the Mix and Later', async () => {
     const { p, el } = blend()
     await render(el)
-    expect(screen.getByText('It’s a Blend')).toBeTruthy()
+    expect(screen.getByText('It’s a Mix')).toBeTruthy()
     expect(screen.getByText('Nebula + Orbit · 3 + 4 people')).toBeTruthy()
     expect(screen.getByText('Nobody’s named yet. Everyone’s on tonight’s names until your crew chooses to reveal.')).toBeTruthy()
     expect(screen.getByText('You both: Dance floor · Friendship')).toBeTruthy()
-    expect(announce).toHaveBeenCalledWith('It’s a Blend. Nebula and Orbit, 7 people.', { queue: true })
+    expect(announce).toHaveBeenCalledWith('It’s a Mix. Nebula and Orbit, 7 people.', { queue: true })
     await advance(1200)
-    await fireEvent.press(screen.getByRole('button', { name: 'Open the Blend' }))
+    await fireEvent.press(screen.getByRole('button', { name: 'Open the Mix' }))
     expect(p.onOpen).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByRole('button', { name: 'Later' }))
     expect(p.onLater).toHaveBeenCalledTimes(1)

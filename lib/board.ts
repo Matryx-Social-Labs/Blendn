@@ -37,8 +37,16 @@ export const CLOSED_LINE = 'Closed'
  */
 const OFFER_FULL = 'That offer is full'
 const ALREADY_ANSWERED = 'That request has already been answered'
-/** The board's read, post and ask after doors — 403, judged on `start_time`. */
-export const BOARD_CLOSED_SENTENCE = 'The board closes when the doors open — the room is open instead'
+/** The Lobby's read, post and ask after doors — 403, judged on `start_time`. */
+export const BOARD_CLOSED_SENTENCE = 'The Lobby closes when the doors open — the room is open instead'
+/** The same sentence from a server before the Lobby rename (2026-11-05): still read, never shown. */
+const BOARD_CLOSED_SENTENCE_BEFORE_RENAME = 'The board closes when the doors open — the room is open instead'
+
+/** Whether the server said the Lobby has closed, in either wording. */
+export function saysBoardClosed(said: string | null | undefined): boolean {
+  const s = said?.trim()
+  return s === BOARD_CLOSED_SENTENCE || s === BOARD_CLOSED_SENTENCE_BEFORE_RENAME
+}
 
 /** `offer` has spaces to give, `seeking` wants one, `chat` asks nothing. */
 export type BoardPostKind = 'offer' | 'seeking' | 'chat'
@@ -107,11 +115,11 @@ export function sortBoardPosts(posts: readonly BoardPost[]): BoardPost[] {
   ]
 }
 
-/** "2 spaces left", "1 space left", "Full" — or null on anything not an offer. */
+/** "2 spots left", "1 spot left", "Full" — or null on anything not an offer. */
 export function spacesLabel(spacesLeft: number | null): string | null {
   if (spacesLeft === null || !Number.isFinite(spacesLeft)) return null
   if (spacesLeft <= 0) return 'Full'
-  return spacesLeft === 1 ? '1 space left' : `${spacesLeft} spaces left`
+  return spacesLeft === 1 ? '1 spot left' : `${spacesLeft} spots left`
 }
 
 /**
@@ -152,6 +160,7 @@ export function boardMessage(result: Refusal, fallback: string): string {
   const said = result?.error?.trim()
   if (!said) return fallback
   if (result?.errorCode === 'SERVER_ERROR') return fallback
+  if (saysBoardClosed(said)) return BOARD_CLOSED_SENTENCE
   if (/^(HTTP \d|Invalid JSON)/.test(said)) return fallback
   return said
 }

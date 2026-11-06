@@ -41,7 +41,7 @@ the route's catch-all called the caller's mistake an outage.
   empty one is no cursor.
 - A required body that is not JSON answers `400`: `VALIDATION_FAILED` from the
   route's schema, or its own missing-field `400`.
-- An optional body (reveal, leaving a DM, board requests, marking notifications
+- An optional body (reveal, leaving a DM, Lobby requests, marking notifications
   read, mute) is the default when absent, and a `400` when present but not
   JSON. A truncated body never takes the default.
 - A `limit`, `offset` or `page` that is not a whole number falls back to the
@@ -687,7 +687,7 @@ feature is worth. Rows cascade on account deletion.
 
 A venue's live room hangs off a hidden `events` row (`kind = venue_day`,
 docs/VENUES.md). Its id is **not an event** to `GET /events/:eventId`, RSVP,
-favourite, interest, the board, the room preview, rating or the plain
+favourite, interest, the Lobby, the room preview, rating or the plain
 check-in: each answers `404` as for an unknown id. Go Live is its one door. The
 room's own routes — `GET /events/:venueDayId/checkins`, `/matches`,
 `/matches/likes`, `/matches/preferences`, `/waves`, `/presence`,
@@ -911,15 +911,15 @@ Body: `{ "eventIds": ["uuid", ...] }` (max 50)
 |--------|----------|-------------|
 | GET | `/chat/groups` | List user's chat groups |
 
-**Rooms of every kind (step 7).** A room has a kind: an event's room, a board
+**Rooms of every kind (step 7).** A room has a kind: an event's room, a Lobby
 post's (its author and the askers the author accepted), a crew's (its members
-now — see Crews), and a Blend's (see Blends). The `/chat/groups/:chatGroupId/...` routes take a room of any kind and
+now — see Crews), and a Mix's (see Mixes). The `/chat/groups/:chatGroupId/...` routes take a room of any kind and
 admit whoever its owner admits — for a room that is not an event's, a
 membership row alone is not enough, and a refusal reads exactly as "not a
 member". Every id they send is a handle in that room's own scope (see Room
 handles). `GET /chat/groups` lists event rooms in `groups` (each
-`kind: "event"`, with its `event`) and crew and Blend rooms in `rooms` — see
-below; a board post's room is not listed. A board post gets its room on the
+`kind: "event"`, with its `event`) and crew and Mix rooms in `rooms` — see
+below; a Lobby post's room is not listed. A Lobby post gets its room on the
 accept that brings its second asker in (`PATCH /board/requests/:id`
 `accept`, step 10): the room and a member row for the author and every
 accepted asker, under the event room's pseudonyms, in the accept's own
@@ -927,13 +927,13 @@ transaction; each later accept adds its asker, and a row somebody left or was
 banned from is never put back. **Nobody is seated beside somebody they are kept
 apart from** — a block either way or a closed conversation, between any two
 people in it: in accept order, such an asker is accepted 1:1 as usual and
-silently not seated. A suspended or erased asker is not seated. In a board
+silently not seated. A suspended or erased asker is not seated. In a Lobby
 post's room the history, live delivery, typing and roster also leave out
-anybody you closed a conversation with, as they do anybody in a block. In a board post's room the roster (`/participants`) lists only the
+anybody you closed a conversation with, as they do anybody in a block. In a Lobby post's room the roster (`/participants`) lists only the
 people its owner admits, an asker in a block with the author is out, writes
 stop 12 hours after the event ends (`CHAT_CLOSED`), and a withdrawn or
 taken-down post closes the room (404). To block or report somebody there, use
-the board's own routes (by post or by ask): the user routes read a board
+the Lobby's own routes (by post or by ask): the user routes read a Lobby
 room's handle as an unknown id. In a crew's room people are named by **first
 name** (history, live messages, typing, roster, reply push) — they are there
 because a friend invited them and they said yes — and a member who leaves or is
@@ -942,22 +942,22 @@ removed is out of the room at once, their row kept `left` for the history.
 ### GET /chat/groups
 Lists every **event** room the caller is still a member of: `active` and **`muted`** memberships (a mute silences, it does not banish — the room stays readable and a post is refused with the reason), in `active` and **`locked`** rooms (read-only until the organizer reopens it). Each row carries `membership.status` and the room's `status` so the client can label _Muted_ / _Locked_. Banned and left memberships, and archived rooms, are not listed.
 
-**`rooms`: crews' and Blends' rooms (step 9).** Beside the paged `groups`, the
-response carries `rooms` — the caller's crews' chats and their Blends' rooms,
+**`rooms`: crews' and Mixes' rooms (step 9).** Beside the paged `groups`, the
+response carries `rooms` — the caller's crews' chats and their Mixes' rooms,
 each `{ id, kind: "crew" | "blend", name, crewId, blendId, closesAt,
 unreadCount, mute, lastMessageAt, lastMessage, membership, status }`, newest
-message first, not paged (at most ten crews and a night's few Blends) — sent
+message first, not paged (at most ten crews and a night's few Mixes) — sent
 with the first page, and `[]` on later pages. Each is
 listed as its door admits the caller now: a crew's while they are in the crew;
-a Blend's only while it is open (`closesAt` is its clock — gone from the list
+a Mix's only while it is open (`closesAt` is its clock — gone from the list
 then, sweeper or not) and never to two people a block across it parted.
 `lastMessage.user` is named as that room names people: a crewmate's first
-name; in a Blend, tonight's pseudonym (a reveal names people on `GET /blends`,
+name; in a Mix, tonight's pseudonym (a reveal names people on `GET /blends`,
 never in the chat). Own list rather
 than more `groups` rows because an installed app reads `event` off every
 `groups` row, and these rooms have none. A hidden crew's chat stays listed to
 its members — hiding takes a crew off every surface outside it, not its own
-chat (C12) — while a Blend with a hidden side is gone for everyone.
+chat (C12) — while a Mix with a hidden side is gone for everyone.
 
 **Nothing in a row comes from somebody in a block with you.** On every row,
 `groups` and `rooms` alike, `lastMessage` and `unreadCount` leave out messages
@@ -1540,7 +1540,7 @@ intent enum.
 `contact_details`, `impersonation`, `other`) files a `message_reports` row
 (`message_type: "crew"`, the name and bio as they read then). Nobody in the
 crew is told. In the admin queue a moderator can **hide** the crew — off every
-surface outside it: no card, no like, no Blend; its members keep their crew and
+surface outside it: no card, no like, no Mix; its members keep their crew and
 its chat — or **dissolve** it (D-15). Both are audited.
 
 **Inside a crew people are named** — first name and one photo, never the full
@@ -1607,15 +1607,15 @@ the crews locked first — and deletes every crew invite to or from you; each of
 those crews is then settled (dissolved below two, owner handed on). Your
 messages in a crew chat stay, as in any room.
 
-### Blends — crews matching crews, or a crew and one person
+### Mixes — crews matching crews, or a crew and one person
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/events/:eventId/crews/:crewId/like` | Like a crew here: `{ asCrewId? }` — as one of your crews here, or as yourself → `{ liked: true, blend }` |
 | POST | `/events/:eventId/matches/likes` | With `asCrewId`: like one person on your crew's behalf → `{ liked: true, blend }` |
 | PUT | `/events/:eventId/matches/preferences` | `openToCrews` — "Open to joining a crew tonight" (until the end of your occurrence) |
-| POST | `/blends/:blendId/reveal` | One tap reveals your crew **in this Blend** → `{ revealed: true }` |
-| GET | `/blends` | My open Blends: room, clock, both sides' people |
+| POST | `/blends/:blendId/reveal` | One tap reveals your crew **in this Mix** → `{ revealed: true }` |
+| GET | `/blends` | My open Mixes: room, clock, both sides' people |
 
 **No voting.** Any member of a crew that is here (two or more checked in) likes
 on the crew's behalf; the crew chat gets a line, *"liked Crew Nebula for the
@@ -1638,46 +1638,46 @@ like of a **crew** — not here, hidden, a guardrail, anybody on one side kept
 apart (a block or a closed conversation) from anybody on the other, two crews
 sharing a member — is the same 404 as a crew that does not exist. The block
 check is asked again inside the transaction that would write the like and the
-Blend: a block landing in between aborts both.
+Mix: a block landing in between aborts both.
 
-**A Blend.** Crew A liked crew B and B liked A (any members), or a crew and a
+**A Mix.** Crew A liked crew B and B liked A (any members), or a crew and a
 person liked each other: `blends` gets one row — two likes at the same instant
 still make one, under a lock on the pair and a unique per pair per occurrence —
-and a room of kind `blend`. A Blend between the pair that has closed stays
+and a room of kind `blend`. A Mix between the pair that has closed stays
 their one row for the occurrence: liking again answers `blend: null`. Everyone
 it lets in but the person whose like made it gets `blend` (`blendId`,
-`chatGroupId`): *"It's a Blend"*, naming nobody.
+`chatGroupId`): *"It's a Mix"*, naming nobody.
 
 **Who is in it: who was here when it matched.** The room gets a member row for
 each member of either crew **checked in at the occurrence at that moment**, and
 the person — a snapshot. A crewmate who arrives later is not in it (no row, and
 every door to a room starts from the row). A member who leaves their crew
-leaves its Blends (out live, refused after); a suspended or erased one is out
+leaves its Mixes (out live, refused after); a suspended or erased one is out
 too. They speak in **tonight's pseudonyms** (the ones they carry in the event's
-room), handles scoped to the Blend's room. `GET /blends` lists the snapshot as
+room), handles scoped to the Mix's room. `GET /blends` lists the snapshot as
 its door admits it now, minus anybody kept apart from you and anybody who
 turned "show online" off. Anyone may leave on their own
 (`POST /chat/groups/:id/leave`); the room stays for the rest.
 
-**A block inside a Blend hides that pair; the room goes on** (D-9). Anybody on
+**A block inside a Mix hides that pair; the room goes on** (D-9). Anybody on
 one side kept apart from anybody on the other — a block, or a closed
-conversation, either way — is refused by the Blend's door, both of them, and
+conversation, either way — is refused by the Mix's door, both of them, and
 every writer of a block takes their sockets out at once; everyone else keeps
-the room. A Blend handle (from its roster) is enough to block somebody: the
-block route opens it for the people that Blend lets in, and for nobody else.
+the room. A Mix handle (from its roster) is enough to block somebody: the
+block route opens it for the people that Mix lets in, and for nobody else.
 
 **It closes** 12 hours after the occurrence ends — the door on the clock, the
 sweeper archiving it from `blends.closes_at` (`blends_open_closes_at`) — and
 earlier when either side's crew dissolves or a moderator hides it. Crew likes
-that never made a Blend are deleted 12 hours after their occurrence ends.
+that never made a Mix are deleted 12 hours after their occurrence ends.
 
-**The crew reveal is scoped to one Blend** (owner decision (a), C2). In an open
-Blend, any member taps reveal: each member of their crew who is checked in now
-and in the Blend's room, and has not switched on "keep me anonymous" (read
+**The crew reveal is scoped to one Mix** (owner decision (a), C2). In an open
+Mix, any member taps reveal: each member of their crew who is checked in now
+and in the Mix's room, and has not switched on "keep me anonymous" (read
 again as the reveal is written) — consent was given on joining — is revealed
-**to that Blend's people only** (`blend_reveals`): first name and one photo on
+**to that Mix's people only** (`blend_reveals`): first name and one photo on
 `GET /blends`. Not to the event's room, its roster or deck, not in any DM, not
-in another Blend. The matched person in a crew ↔ person Blend reveals only
+in another Mix. The matched person in a crew ↔ person Mix reveals only
 themselves. `GET /blends` says *"N revealed · M keep it private"* for the
 **other** side only. Your own side is you and a count (`mine: true`, `count`,
 `people` = you alone, `revealed` and `keptPrivate` null), and the reveal
@@ -1771,8 +1771,8 @@ answered, and declining writes nothing at all because the row is already false.
 ### Intent is asked at the first door
 
 Onboarding never writes `intent_default`, and `profileIsComplete()` needs one
-intent before the board opens — so every account that came through onboarding
-was refused the board for a field it was never asked. The question is asked
+intent before the Lobby opens — so every account that came through onboarding
+was refused the Lobby for a field it was never asked. The question is asked
 where it makes sense: at the door of the first room.
 
 `POST /events/:eventId/checkin` returns **`intentNeeded: true`** while
@@ -2204,7 +2204,7 @@ Five consequences worth knowing about:
   `dateOfBirth` in the same call or before it. Google and Apple accounts start
   with no age, so this is where they are held. A profile already onboarded
   (including one under 18 from before the ruling) is not re-checked.
-- **Taking part needs the same.** RSVP, favourite, the board, check-in,
+- **Taking part needs the same.** RSVP, favourite, the Lobby, check-in,
   starting a conversation, a message request and a DM send answer **403**
   `FORBIDDEN` "Finish setting up your profile first. Blend'n is for people 18
   and over." to a profile that is neither onboarded nor of a known adult age
@@ -2260,11 +2260,11 @@ shipped `orientation` and `gender` together to any authenticated caller.
   "18+" — a shared link reaches that screen whatever the listing did. For a
   viewer whose derived age is **below** the line it returns 403
   `AGE_RESTRICTED` instead, like the door; an unknown age is shown the event.
-- **RSVP, favourite/interest and the board (`/rsvp`, `/favorite`, `/interest`,
+- **RSVP, favourite/interest and the Lobby (`/rsvp`, `/favorite`, `/interest`,
   `/board`, `/board/:postId/requests`) refuse 403 `AGE_RESTRICTED`** for an under-age
   *or unknown* age — these are the beginning of being there, so they take the
   door's posture, not discovery's. Until this, only the feed and the door
-  applied the rule, and a 17-year-old could RSVP to, save and read the board
+  applied the rule, and a 17-year-old could RSVP to, save and read the Lobby
   of an 18+ event by id (SCRUM-130). The rule lives in one place,
   `lib/event-access.ts`, which also answers a **draft** or a stranger's
   **private** event with 404 on every one of those routes. `DELETE /rsvp`
@@ -2346,7 +2346,7 @@ be seen.
 |--------|----------|-------------|
 | GET | `/users/:userId` | Get user profile. `:userId` may be a room handle, echoed back as `id`, and is then answered in that room's terms — see Room handles. When `identityVisible` is true it also carries `connection: { conversationId, request: "sent" \| "received" \| null }` — your open conversation and any pending message request between you; absent otherwise |
 | POST | `/users/:userId/block` | Block/unblock user (`DELETE` to unblock) |
-| GET | `/users/blocked` | The people you blocked. `blocked_id` is an **opaque ref to the block** (`bk_…`), not their account id — somebody blocked by their board post or room handle was never shown one, and this list must not be where it arrives. Send it back to `DELETE /users/:userId/block` to unblock; only a block you made is removed. A raw id still unblocks, for older clients, on your own block only. Name and photo appear only where the identity rules allow |
+| GET | `/users/blocked` | The people you blocked. `blocked_id` is an **opaque ref to the block** (`bk_…`), not their account id — somebody blocked by their Lobby post or room handle was never shown one, and this list must not be where it arrives. Send it back to `DELETE /users/:userId/block` to unblock; only a block you made is removed. A raw id still unblocks, for older clients, on your own block only. Name and photo appear only where the identity rules allow |
 | GET | `/users/:userId/favorites` | Get your saved events — your own id only (403 otherwise); drafts are dropped, cancelled ones stay with `status` set (SCRUM-176) |
 | GET | `/profiles/:userId` | Get a profile. Your own carries `email` and the whole `profile` row except `date_of_birth` (`age` derived) — `name`, `gender`, `interested_in`, `intent_default`, `reveal_by_default`, `blur_photo`, `interests`, `created_at`, `updated_at` included, and `expertise` as slugs. Anybody else's `profile` is `id, age, onboarded, location, interests, work_field, expertise` (labels), plus `bio, occupation, education, photos` if you can see who they are, else `blurPhoto`; no `email`, and `image` only if you can see who they are |
 | PUT | `/profiles/:userId` | Update profile |
@@ -2432,10 +2432,10 @@ Requires `OPENAI_API_KEY` env var. Degrades gracefully to keyword-only if absent
 | POST | `/messages/:messageId/report` | `message_reports` (`messageType: "group" \| "private"`) |
 | POST | `/events/:eventId/report` | `event_reports` |
 | POST | `/chat/groups/:chatGroupId/report` | `event_reports` with `chat_group_id` — shown as "Room" |
-| POST | `/events/:eventId/board/:postId/report` | `message_reports` with `message_type: "board_post"` — shown as "Board · offer\|seeking\|chat" |
-| POST | `/board/requests/:requestId/report` | `message_reports` with `message_type: "board_request"` — shown as "Board ask" |
+| POST | `/events/:eventId/board/:postId/report` | `message_reports` with `message_type: "board_post"` — shown as "Lobby · offer\|seeking\|chat" |
+| POST | `/board/requests/:requestId/report` | `message_reports` with `message_type: "board_request"` — shown as "Lobby ask" |
 
-### The pre-event board
+### The pre-event Lobby
 
 | Method | Endpoint | Gate |
 |--------|----------|------|
@@ -2451,7 +2451,7 @@ Going alone, and looking for somebody to go with. This is what gives
 dashboard number.
 
 **Reading is cheap and posting is not, deliberately.** A favourite is one tap,
-and somebody deciding whether to go is exactly who the board is for: *"is anyone
+and somebody deciding whether to go is exactly who the Lobby is for: *"is anyone
 else going alone"* is a reason to commit, and requiring the commitment first
 inverts it. Posting takes `going`, because offering a seat in a car you may not
 be driving to is worse than not offering.
@@ -2463,7 +2463,7 @@ requires a **complete profile**: name, age, two structured interests, one
 intent. Server-enforced, and deliberately not `profiles.onboarded`, which is a
 client-set boolean no API has ever checked.
 
-**No photo.** The board is pseudonymous, so a photo would be collected and never
+**No photo.** The Lobby is pseudonymous, so a photo would be collected and never
 shown.
 
 Two caps, bounding different abuses: **5 unanswered requests at once** bounds a
@@ -2476,25 +2476,25 @@ nowhere else. `requestCount` is a number and never a list: how many have asked
 is useful, naming them would disclose who is looking for company to everyone
 browsing.
 
-**The board closes at doors** — for reading as well as posting and asking, all
-three **403** *"The board closes when the doors open — the room is open
+**The Lobby closes at doors** — for reading as well as posting and asking, all
+three **403** *"The Lobby closes when the doors open — the room is open
 instead"*, judged on the event's `start_time`. After that the room is the place,
-and it is gated on presence rather than intent — a board that stayed open would
+and it is gated on presence rather than intent — a Lobby that stayed open would
 be a second room with a weaker gate running beside the real one, and a readable
 one would be a list of who came alone, open during the night.
 
 **Blocks apply both ways.** A post by somebody who blocked you, or whom you
-blocked, is not on your board; asking on one is refused exactly as asking on a
+blocked, is not on your Lobby; asking on one is refused exactly as asking on a
 post that is gone; and an ask from somebody blocked either way is left out of
 your incoming list.
 
 **A post is checked before it is stored** (SCRUM-301). The text gets the room's
 checks: the keyword filter, contact details, then OpenAI within one second. A
-room message that fails is stored hidden and counted toward a mute. The board has
+room message that fails is stored hidden and counted toward a mute. The Lobby has
 no moderation queue, so a failing post is refused with **422** and never stored.
-Contact details say what was found (*"This looks like a phone number. The board is
+Contact details say what was found (*"This looks like a phone number. The Lobby is
 anonymous, so contact details can't go on it."*). Anything else reads
-*"This can't go on the board."*, which tells a poster nothing about the filter.
+*"This can't go in the Lobby."*, which tells a poster nothing about the filter.
 
 If OpenAI doesn't answer inside the second, the post goes up, as a room message
 does. Then, as in the room, it is looked at again without the time limit, and
@@ -2503,7 +2503,7 @@ request's `message` gets the same checks as a post and returns the same **422**.
 It has no second look, because a request has nowhere to be hidden later.
 
 **An author can withdraw their own post** with `DELETE /events/:eventId/board/:postId`.
-It is soft (`deleted_at`): the post leaves every board read, requests filed against
+It is soft (`deleted_at`): the post leaves every Lobby read, requests filed against
 it stop counting toward their senders' caps, and `GET /board/requests` returns its
 `body` as `null`.
 
@@ -2516,14 +2516,14 @@ it stop counting toward their senders' caps, and `GET /board/requests` returns i
 | POST | `/board/requests/:requestId/report` | Either of the ask's two people |
 | POST | `/board/requests/:requestId/block` | The same |
 
-The board never gives the client a user id, so a person is reported and blocked
+The Lobby never gives the client a user id, so a person is reported and blocked
 **by the post or the ask they wrote**. The server resolves who and never returns
 it — not in these responses, and not later in `GET /users/blocked`, which lists
 an opaque ref (below). Anything the caller could not have seen, including no
 such post or ask, is the same **404** body as a missing one, so the routes cannot
 be used to probe ids. Your own post is **400**.
 
-**These stay reachable when the board does not.** They are safety actions, so
+**These stay reachable when the Lobby does not.** They are safety actions, so
 neither the doors nor a block closes them: somebody reading a message after the
 night began, or who has just been blocked by its author, can still report it and
 block back. A withdrawn or removed post can be reported too — the person most
@@ -2534,8 +2534,8 @@ motivated to take a post down is the one about to be reported for it.
   reasons), and `description` up to 500 characters. They return
   `201 { reported: true }`. They land in `message_reports` (`message_type`
   `board_post` / `board_request`), so they show in the admin reports queue beside
-  room messages and DMs, as "Board · offer", "Board · seeking", "Board · chat" or
-  "Board ask", with how many reports name the same thing. An ask is reported
+  room messages and DMs, as "Lobby · offer", "Lobby · seeking", "Lobby · chat" or
+  "Lobby ask", with how many reports name the same thing. An ask is reported
   about whichever of its two people did not file it.
 - **One report per person per post or ask while it is pending.** A second tap is
   the same `201` and no new row (a partial unique). Reports are limited to 20 a
@@ -2544,17 +2544,17 @@ motivated to take a post down is the one about to be reported for it.
 - **The evidence is kept.** A report stores the words as they were when it was
   filed (`excerpt`), and stamps the post `moderation_status = "reported"`.
   Account erasure deletes only posts with no status, so a reported post is kept
-  (and taken off the board) until it is reviewed, and an ask somebody reported
+  (and taken off the Lobby) until it is reviewed, and an ask somebody reported
   keeps its message until then. Dismissing the last pending report on a post
   clears the stamp.
 - **Blocking** is exactly `POST /users/:userId/block` once the person is known:
-  the same transaction and the same `{ blocked: true }`. Board asks between the
+  the same transaction and the same `{ blocked: true }`. Lobby asks between the
   two are left as they are — hidden from the blocker, not acceptable, and read by
   the asker as an ask on a withdrawn post.
-- **Removal** is the queue's *Remove post* on a board-post report. It marks the
+- **Removal** is the queue's *Remove post* on a Lobby-post report. It marks the
   post `moderation_status = "removed"` — whether or not its author had already
   withdrawn it — and sets `deleted_at` if it was still up, which takes it off
-  every board read and lapses the asks filed against it. It records
+  every Lobby read and lapses the asks filed against it. It records
   `report.remove_message` in `audit_logs` with the post's id and `removed: true`,
   or `removed: false` when the post was already removed. A post erased with its
   author's account cannot be removed (the button is not offered; the action is
@@ -2606,7 +2606,7 @@ and the asker was told about that one. A withdrawn pending ask becomes
 **A block reads as a withdrawn post.** To the asker, an ask to somebody blocked
 either way — pending or declined alike — shows exactly as an ask on a post its
 author took down: `post.body: null`, `live: false`, and it no longer counts
-toward their five. A live ask with the post's words, beside a board that no
+toward their five. A live ask with the post's words, beside a Lobby that no
 longer lists the post, would tell them which of the two had happened.
 
 **`GET /board/requests` pages by what still matters.** Each direction is the live
@@ -2622,7 +2622,7 @@ conversation: of two accepts racing for the last seat exactly one gets it, and
 the other is **409** *"That offer is full"* — said to the author, and the ask
 stays pending. A CHECK keeps it from going below zero. An offer that never named
 its seats (`spacesLeft: null`) has none to run out of. Asking on an offer
-already at `spacesLeft: 0` is the same **409** — the board already shows it
+already at `spacesLeft: 0` is the same **409** — the Lobby already shows it
 full.
 
 **Every refusal of an accept** (`PATCH /board/requests/:id` with
@@ -2655,7 +2655,7 @@ anticipated a distinct conversation kind that graduates; it is not needed.
 The conversation carries `origin_board_request_id`, and the reason is worth
 stating. `fromMatch` used to be **inferred**: a match snapshots both pseudonyms
 and a message-request conversation snapshots neither, so the presence of one told
-you which. A board conversation is pseudonymous too — it has to be, because a
+you which. A Lobby conversation is pseudonymous too — it has to be, because a
 conversation without pseudonyms shows real names — so the inference would call it
 a match, and the client draws the match opener on anything it calls a match. Two
 origins can be told apart by a side effect; three cannot.
@@ -2668,24 +2668,24 @@ banned. So there is no way to give somebody a handle without also giving them th
 live room — which is gated on presence deliberately, because doors close on
 people who did not come.
 
-The board therefore **derives** a handle from `(event_id, user_id)`: stable for
+The Lobby therefore **derives** a handle from `(event_id, user_id)`: stable for
 that person at that event, different at the next one, no row and no table. Before
-this every board post rendered as the literal string `"Attendee"` — a wall of one
+this every Lobby post rendered as the literal string `"Attendee"` — a wall of one
 name, on the surface whose whole job is letting people tell each other apart well
 enough to agree to travel together.
 
 Check-in then **prefers** that handle when it is free, so the name someone
-answered on the board is the name they carry into the room. Preference, not
+answered in the Lobby is the name they carry into the room. Preference, not
 override: uniqueness is enforced per chat group, and ~6,480 combinations means a
 large room collides.
 
 #### What the push says
 
 `board_request` and `board_request_accepted` carry neither the pseudonym nor a
-word of what was written. A board request is the one message in this product sent
+word of what was written. A Lobby request is the one message in this product sent
 to somebody who has not agreed to hear from the sender at all, and all of it
 renders on a lock screen other people can see. The push says that something
-happened; the board says what.
+happened; the Lobby says what.
 
 ### Reactions
 
@@ -2825,7 +2825,7 @@ them any more. Rows written before that are hidden, and retention removes them.
 | Friend request / accepted, match, reveal, board, message request | The person it is about, immediately | One each |
 | A crew invite | The friend invited (`crew_invite`, `crewId`), naming nobody | One each |
 | "We're here" | Every other crew member who has not muted the crew chat or blocked the tapper (`crew_here`, `crewId`, `chatGroupId`), once per person per night; no name, no place | One each |
-| A Blend | Everyone the Blend room lets in, but the person whose like made it (`blend`, `blendId`, `chatGroupId`); no name, nothing about who liked first | One each |
+| A Mix | Everyone the Mix room lets in, but the person whose like made it (`blend`, `blendId`, `chatGroupId`); no name, nothing about who liked first | One each |
 | An event you checked in to ends | Everyone with a check-in row, once per event, within ~5 minutes of the end (only events that ended in the last 6 hours). `data: { type: "rating_request", eventId }` → the app opens `/rate/[eventId]`. People with a mutual like to rate (blocks excluded) get "rate the people you met"; the rest "rate the night"; somebody who already rated and has nobody to rate is skipped | `rate:{eventId}` on `events`, replaced in place |
 
 A room you muted (`POST /chat/groups/:id/mute`) sends you neither the reply push
@@ -2887,7 +2887,7 @@ the live headcount (SCRUM-481).
 
 Kept for 180 days, then purged (IT Rules 2021): a copy of what they registered
 with (name, email, phone, date of birth, sign-up method), written in the same
-transaction before the scrub. No route returns it. Their board posts that
+transaction before the scrub. No route returns it. Their Lobby posts that
 moderation hid are kept too. See `docs/RETENTION.md`.
 
 ---
@@ -2948,7 +2948,7 @@ checked on the server.
 trigger). The cooldowns are the app's: at most one automatic paywall a session,
 never during onboarding, check-in or chat. 400 for anything off these lists.
 
-## Regulars, offers and the door pass (step 12)
+## Regulars, offers and the offer code (step 12)
 
 A venue on Venue Pro can send an offer — "First drink on the house, Thu–Sun
 before 10" — to its **regulars**: people who came on 3 or more nights in the
@@ -2979,7 +2979,7 @@ Newest first, at most 50. `state`: `live` (the pass can be shown), `redeemed`,
 `ended` (past its end, ended by an admin, or the venue was retired or changed
 hands). Reading the list opens nothing.
 
-### GET /offers/:offerId — the offer and its door pass
+### GET /offers/:offerId — the offer and its offer code
 
 The first call is what the venue's "opened" counts. While `live`, `pass` is
 `{ code, rotatesAt }`: six characters that change every 30 seconds. Draw the

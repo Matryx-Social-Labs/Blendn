@@ -133,7 +133,7 @@ beforeEach(() => {
 })
 
 describe('the route', () => {
-  it('opens the board now that it is on', async () => {
+  it('opens the Lobby now that it is on', async () => {
     api.getBoard.mockResolvedValue(board([]))
     await render(<BoardRoute />)
     expect(await screen.findByText("Nobody’s posted yet")).toBeTruthy()
@@ -170,7 +170,7 @@ describe('the two empty states', () => {
     api.getBoard.mockResolvedValue(board([OFFER]))
     await render(<BoardScreen />)
 
-    expect(await screen.findByText("The board’s closed")).toBeTruthy()
+    expect(await screen.findByText("The Lobby’s closed")).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Open the room'))
     // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
     const { router } = jest.requireMock('expo-router') as { router: { dismissAll: jest.Mock } }
@@ -194,7 +194,7 @@ describe('two shapes, one order', () => {
     api.getBoard.mockResolvedValue(board([SEEKING, OFFER]))
     await render(<BoardScreen />)
 
-    expect(await screen.findByText('2 spaces left')).toBeTruthy()
+    expect(await screen.findByText('2 spots left')).toBeTruthy()
     const bodies = screen.getAllByText(/Driving from Indiranagar|Going alone/).map((n) => n.props.children)
     expect(bodies).toEqual([OFFER.body, SEEKING.body])
     // The kind in words too, so the counter is never the only difference.
@@ -213,7 +213,7 @@ describe('two shapes, one order', () => {
     api.getBoard.mockResolvedValue(board([{ ...OFFER, spacesLeft: 0 }]))
     await render(<BoardScreen />)
     expect(await screen.findByText('Full')).toBeTruthy()
-    expect(screen.getByText('No spaces left')).toBeTruthy()
+    expect(screen.getByText('No spots left')).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
   })
 })
@@ -225,8 +225,8 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
     'Add your name, age, two interests and why you go out — people are deciding whether to travel with you',
     'You have 5 asks waiting for an answer. Give them a moment.',
     'You have sent a lot of requests this week. Try again in a few days.',
-    'The board closes when the doors open — the room is open instead',
-    "This looks like a phone number. The board is anonymous, so contact details can’t go on it.",
+    'The Lobby closes when the doors open — the room is open instead',
+    "This looks like a phone number. The Lobby is anonymous, so contact details can’t go on it.",
   ])('%s', async (reason) => {
     api.getBoard.mockResolvedValue(board([]))
     api.postToBoard.mockResolvedValue({ success: false, errorCode: reason.includes('phone') ? undefined : 'FORBIDDEN', error: reason })
@@ -246,7 +246,7 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
   it('shows the doors refusal even when the event could not be read', async () => {
     api.getEvent.mockResolvedValue({ success: false, error: 'No internet connection.' } as never)
     api.getBoard.mockResolvedValue(board([]))
-    const doors = 'The board closes when the doors open — the room is open instead'
+    const doors = 'The Lobby closes when the doors open — the room is open instead'
     api.postToBoard.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: doors })
     await render(<BoardScreen />)
 
@@ -310,8 +310,8 @@ describe('posting', () => {
 
     await fireEvent.press(await screen.findByLabelText('Write a post'))
     expect(screen.getByLabelText('Your post').props.value).toBe('')
-    expect(screen.getByLabelText(/^I have space/).props.accessibilityState).toEqual(expect.objectContaining({ checked: true }))
-    expect(screen.getByLabelText('Spaces').props.accessibilityValue).toEqual(expect.objectContaining({ now: 1 }))
+    expect(screen.getByLabelText(/^I have spots/).props.accessibilityState).toEqual(expect.objectContaining({ checked: true }))
+    expect(screen.getByLabelText('Spots').props.accessibilityValue).toEqual(expect.objectContaining({ now: 1 }))
   })
 
   it('sends one post for two taps', async () => {
@@ -372,7 +372,7 @@ describe('asking', () => {
 
   it('says a post that went — taken down, or a block either way — is closed', async () => {
     api.getBoard.mockResolvedValue(board([OFFER]))
-    api.askOnBoard.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'That post is no longer on the board' })
+    api.askOnBoard.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'That post is no longer in the Lobby' })
     await render(<BoardScreen />)
 
     await fireEvent.press(await screen.findByLabelText('Ask to join, Velvet Heron'))
@@ -473,11 +473,11 @@ describe('a card remembers your ask, and never says how it was answered', () => 
   })
 })
 
-describe('a board you may not read says why', () => {
+describe('a Lobby you may not read says why', () => {
   it.each([
-    ['FORBIDDEN', 'Mark yourself as going to post here', 'Not on this board yet'],
-    ['AGE_RESTRICTED', 'This event is 21+.', 'This board has an age limit'],
-    ['NOT_FOUND', 'Event not found', "This board isn’t here"],
+    ['FORBIDDEN', 'Mark yourself as going to post here', 'Not in this Lobby yet'],
+    ['AGE_RESTRICTED', 'This event is 21+.', 'This Lobby has an age limit'],
+    ['NOT_FOUND', 'Event not found', "This Lobby isn’t here"],
   ])('%s', async (errorCode, error, title) => {
     api.getBoard.mockResolvedValue({ success: false, errorCode, error })
     await render(<BoardScreen />)
@@ -493,29 +493,29 @@ describe('a board you may not read says why', () => {
     api.getBoard.mockResolvedValue({
       success: false,
       errorCode: 'FORBIDDEN',
-      error: 'The board closes when the doors open — the room is open instead',
+      error: 'The Lobby closes when the doors open — the room is open instead',
     })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board’s closed")).toBeTruthy()
+    expect(await screen.findByText("The Lobby’s closed")).toBeTruthy()
     expect(screen.getByLabelText('Open the room')).toBeTruthy()
   })
 
-  it('says the board did not load, rather than that it is empty', async () => {
-    api.getBoard.mockResolvedValue({ success: false, errorCode: 'SERVER_ERROR', error: 'Failed to load the board' })
+  it('says the Lobby did not load, rather than that it is empty', async () => {
+    api.getBoard.mockResolvedValue({ success: false, errorCode: 'SERVER_ERROR', error: 'Failed to load the Lobby' })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board didn’t load")).toBeTruthy()
+    expect(await screen.findByText("The Lobby didn’t load")).toBeTruthy()
     expect(screen.queryByText("Nobody’s posted yet")).toBeNull()
   })
 
   it('and when the request itself never came back', async () => {
     api.getBoard.mockResolvedValue({ success: false, error: 'No internet connection. Check your network and try again.' })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board didn’t load")).toBeTruthy()
+    expect(await screen.findByText("The Lobby didn’t load")).toBeTruthy()
   })
 })
 
 describe('a refresh', () => {
-  it('that fails keeps the board and says so; the next that works clears it', async () => {
+  it('that fails keeps the Lobby and says so; the next that works clears it', async () => {
     api.getBoard
       .mockResolvedValueOnce(board([OFFER]))
       .mockResolvedValueOnce({ success: false, errorCode: 'SERVER_ERROR', error: 'x' })
@@ -524,11 +524,11 @@ describe('a refresh', () => {
     await screen.findByText(OFFER.body)
 
     await pullToRefresh()
-    expect(await screen.findByText("The board didn’t refresh. Pull down to try again.")).toBeTruthy()
+    expect(await screen.findByText("The Lobby didn’t refresh. Pull down to try again.")).toBeTruthy()
     expect(screen.getByText(OFFER.body)).toBeTruthy()
 
     await pullToRefresh()
-    await waitFor(() => expect(screen.queryByText("The board didn’t refresh. Pull down to try again.")).toBeNull())
+    await waitFor(() => expect(screen.queryByText("The Lobby didn’t refresh. Pull down to try again.")).toBeNull())
   })
 })
 
@@ -551,7 +551,7 @@ describe('your own post', () => {
   it.each([
     ['taken down', { success: true, data: { id: 'p-mine', withdrawn: true } }],
     ['already gone', { success: false, errorCode: 'NOT_FOUND', error: 'Post not found' }],
-  ])('leaves the board when %s', async (_, answer) => {
+  ])('leaves the Lobby when %s', async (_, answer) => {
     api.getBoard.mockResolvedValue(board([MINE]))
     api.withdrawBoardPost.mockResolvedValue(answer as never)
     await render(<BoardScreen />)
@@ -589,7 +589,7 @@ describe('report and block, by the post', () => {
     expect(screen.queryByLabelText("More options for Lunar Fox’s post")).toBeNull()
   })
 
-  it('blocks by the post, after asking, and takes it off the board — even past a stale read', async () => {
+  it('blocks by the post, after asking, and takes it off the Lobby — even past a stale read', async () => {
     // A read already in flight still lists the post; it must not bring it back.
     api.getBoard.mockResolvedValue(board([OFFER]))
     api.blockBoardPost.mockImplementation(async () => {
@@ -640,14 +640,14 @@ it('is the Flow 4 design now: no placeholder banner, the composer kinds are Radi
   await screen.findByText(OFFER.body)
   expect(screen.queryByText(/PLACEHOLDER DESIGN/)).toBeNull()
   await fireEvent.press(screen.getByLabelText('Write a post'))
-  expect(screen.getByLabelText('I have space, You’re offering a ride or a table.')).toBeTruthy()
+  expect(screen.getByLabelText('I have spots, You’re offering a ride or a table.')).toBeTruthy()
   expect(screen.getByLabelText('I’m looking, You want to join someone’s.')).toBeTruthy()
 })
 
-describe('your post, live (PR #401 drive: "1 asked" only after reopening the board)', () => {
+describe('your post, live (PR #401 drive: "1 asked" only after reopening the Lobby)', () => {
   const MINE: BoardPost = { ...OFFER, id: 'p-mine', author: 'Lunar Fox', mine: true, requestCount: 0 }
 
-  it('re-reads the board the moment a board_request push lands, and says the new count', async () => {
+  it('re-reads the Lobby the moment a board_request push lands, and says the new count', async () => {
     api.getBoard.mockResolvedValueOnce(board([MINE])).mockResolvedValue(board([{ ...MINE, requestCount: 1 }]))
     await render(<BoardScreen />)
     expect(await screen.findByText('Nobody has asked yet')).toBeTruthy()
@@ -764,7 +764,7 @@ describe('a post taken down (C8, SV9: the server’s top-level takenDown on the 
   })
 })
 
-describe('a board of thousands: more posts as the end nears (SCRUM-760 c)', () => {
+describe('a Lobby of thousands: more posts as the end nears (SCRUM-760 c)', () => {
   const many = (from: number, n: number): BoardPost[] =>
     Array.from({ length: n }, (_, i) => ({ ...SEEKING, id: `p-${from + i}`, body: `Post number ${from + i}`, author: `Fox ${from + i}`, createdAt: `2026-10-01T${String(10 - (i % 9)).padStart(2, '0')}:00:00Z` }))
   const page = (posts: BoardPost[], nextCursor: string | null) => ({ success: true, data: { posts, pagination: { hasMore: !!nextCursor, nextCursor } } })
@@ -790,7 +790,7 @@ describe('a board of thousands: more posts as the end nears (SCRUM-760 c)', () =
     expect(apiClient.queuedRequest).not.toHaveBeenCalled()
   })
 
-  it('a page that fails keeps the board, does not loop, and retries on its own button', async () => {
+  it('a page that fails keeps the Lobby, does not loop, and retries on its own button', async () => {
     api.getBoard.mockResolvedValue(page(many(0, 3), 'c1') as never)
     ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce({ success: false, error: 'offline' })
     await render(<BoardScreen />)
@@ -898,7 +898,7 @@ describe('a busy board (TG-15, 120 posts)', () => {
     Array.from({ length: n }, (_, i) => (i % 3 === 0 ? { ...OFFER, id: `o${i}`, author: `Offer ${i}` } : { ...SEEKING, id: `s${i}`, author: `Seek ${i}` }))
   const page = (posts: BoardPost[], totalCount: number) => ({ success: true, data: { posts, pagination: { hasMore: true, nextCursor: 'c1', totalCount } } })
 
-  it('says how many the board has (the server’s count, not the page’s), and Offering / Looking narrow it', async () => {
+  it('says how many the Lobby has (the server’s count, not the page’s), and Offering / Looking narrow it', async () => {
     api.getBoard.mockResolvedValue(page(many(30), 120) as never)
     await render(<BoardScreen />)
     expect(await screen.findByRole('header', { name: 'Posts, 120' })).toBeTruthy()

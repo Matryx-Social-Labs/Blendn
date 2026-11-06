@@ -522,25 +522,25 @@ it('the feed makes room under the newest row for the Android snackbar over the c
 describe('rc8 #6: a room opened by a bare link', () => {
   const closedBlend = { success: false, error: 'Chat group not found', errorCode: 'NOT_FOUND', reasonCode: 'ROOM_CLOSED', roomKind: 'blend', roomName: 'Crew Nebula × Crew Orbit' }
 
-  it('a closed Blend the list no longer has: its stored name and the Blend’s closed state, never "Event chat"', async () => {
+  it('a closed Mix the list no longer has: its stored name and the Mix’s closed state, never "Event chat"', async () => {
     mockParams = { id: 'g9' }
     api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
     api.getChatMessages.mockResolvedValue(closedBlend as never)
     await open()
     expect(screen.getAllByText('Crew Nebula × Crew Orbit').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Blend/)).toBeTruthy()
+    expect(screen.getByText(/Mix/)).toBeTruthy()
     expect(screen.queryByText('Event chat')).toBeNull()
-    expect(screen.queryByText('Your Blend')).toBeNull()
+    expect(screen.queryByText('Your Mix')).toBeNull()
   })
 
-  it('a closed Blend opened by its own link (`kind=blend&blendId=`): its stored name, not "Your Blend"', async () => {
+  it('a closed Mix opened by its own link (`kind=blend&blendId=`): its stored name, not "Your Mix"', async () => {
     mockParams = { id: 'g9', kind: 'blend', blendId: 'b9' }
     jest.spyOn(require('../lib/crewsApi').crewsApi, 'blends').mockResolvedValue({ success: true, data: { blends: [] } })
     api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
     api.getChatMessages.mockResolvedValue(closedBlend as never)
     await open()
     expect(screen.getAllByText('Crew Nebula × Crew Orbit').length).toBeGreaterThan(0)
-    expect(screen.queryByText('Your Blend')).toBeNull()
+    expect(screen.queryByText('Your Mix')).toBeNull()
   })
 
   it('before anything says what room it is, the header does not call it an event’s', async () => {

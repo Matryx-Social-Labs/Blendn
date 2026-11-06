@@ -37,8 +37,8 @@ beforeEach(() => {
 describe('<RevealSheet>', () => {
   it('names the outcome and who will see what', async () => {
     await render(<RevealSheet visible onClose={jest.fn()} crew="Nebula" audience={7} onReveal={jest.fn()} />)
-    expect(screen.getByRole('header', { name: 'Reveal Nebula to this Blend?' })).toBeTruthy()
-    expect(screen.getByText(/shown by first name and one photo to the 7 people in this Blend — and nobody else/)).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Reveal Nebula to this Mix?' })).toBeTruthy()
+    expect(screen.getByText(/shown by first name and one photo to the 7 people in this Mix — and nobody else/)).toBeTruthy()
     expect(screen.getByText('You can’t undo a reveal.')).toBeTruthy()
   })
 
@@ -57,7 +57,7 @@ describe('<RevealSheet>', () => {
 
   it('solo: the “yourself” form', async () => {
     await render(<RevealSheet visible onClose={jest.fn()} crew={null} audience={4} onReveal={jest.fn()} />)
-    expect(screen.getByRole('header', { name: 'Reveal yourself to this Blend?' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Reveal yourself to this Mix?' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reveal me' })).toBeTruthy()
   })
 })

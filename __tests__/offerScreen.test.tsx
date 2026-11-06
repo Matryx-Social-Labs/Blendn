@@ -120,7 +120,7 @@ describe('the live pass', () => {
     await mount()
     expect(screen.getByText('K7Q 4M2')).toBeTruthy()
     expect(screen.getByLabelText('Door code K 7 Q, 4 M 2')).toBeTruthy()
-    expect(screen.getByLabelText(/^Door pass for The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
+    expect(screen.getByLabelText(/^Offer code for The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
     expect(screen.getByText('Show this at the door. Staff type the code and tap Redeemed.')).toBeTruthy()
     reads = [offer('redeemed', null)]
     // The code turns at :30; the screen asks a second before.
@@ -152,7 +152,7 @@ describe('the live pass', () => {
     request.mockImplementation(() => Promise.resolve({ success: false, error: 'offline' }))
     await act(async () => { jest.advanceTimersByTime(22_000) })
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
-    expect(screen.getByText('This pass needs a connection to show its code.')).toBeTruthy()
+    expect(screen.getByText('This offer code needs a connection to show.')).toBeTruthy()
     expect(screen.getByLabelText(/^Door code unavailable/)).toBeTruthy()
   })
 
@@ -180,18 +180,18 @@ describe('the live pass', () => {
     await seconds(33)
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
     expect(screen.getByText('Getting a fresh code…')).toBeTruthy()
-    expect(screen.queryByText('This pass needs a connection to show its code.')).toBeNull()
+    expect(screen.queryByText('This offer code needs a connection to show.')).toBeNull()
   }, CLOCK_WALK_TIMEOUT_MS)
 
   it('a refresh that failed is tried again, and the pass comes back when the server does', async () => {
     await mount()
     request.mockImplementation(() => Promise.resolve({ success: false, error: 'offline' }))
     await seconds(22)
-    expect(screen.getByText('This pass needs a connection to show its code.')).toBeTruthy()
+    expect(screen.getByText('This offer code needs a connection to show.')).toBeTruthy()
     request.mockImplementation(() => Promise.resolve(offer('live', { code: 'P3W8R5', rotatesAt: '2026-10-11T20:01:00.000Z' })))
     await seconds(3)
     expect(screen.getByText('P3W 8R5')).toBeTruthy()
-    expect(screen.queryByText('This pass needs a connection to show its code.')).toBeNull()
+    expect(screen.queryByText('This offer code needs a connection to show.')).toBeNull()
   }, CLOCK_WALK_TIMEOUT_MS)
 
   it('the ring counts down to the server’s turn: with the phone’s clock agreeing, 20 s of the 30 are left', async () => {
@@ -221,7 +221,7 @@ describe('the other faces of the pass', () => {
     reads = [offer('used_tonight', null)]
     await mount()
     expect(screen.getByLabelText('Used tonight')).toBeTruthy()
-    expect(screen.getByText(/You’ve used a pass at The Humming Tree tonight — one a night/)).toBeTruthy()
+    expect(screen.getByText(/You’ve used an offer at The Humming Tree tonight — one a night/)).toBeTruthy()
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
   })
 

@@ -47,16 +47,16 @@ export function RevealSheet({
   revealing?: boolean
 }) {
   const bold = useBoldText()
-  const reach = `to the ${audience === undefined ? '' : `${audience} `}people in this Blend — and nobody else. Not the Room, not your DMs, not another Blend.`
+  const reach = `to the ${audience === undefined ? '' : `${audience} `}people in this Mix — and nobody else. Not the Room, not your DMs, not another Mix.`
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
       icon="eye"
-      title={crew ? `Reveal ${crew} to this Blend?` : 'Reveal yourself to this Blend?'}
+      title={crew ? `Reveal ${crew} to this Mix?` : 'Reveal yourself to this Mix?'}
       body={
         crew
-          ? `Everyone from ${crew} in this Blend who hasn’t chosen to stay anonymous will be shown by first name and one photo ${reach}`
+          ? `Everyone from ${crew} in this Mix who hasn’t chosen to stay anonymous will be shown by first name and one photo ${reach}`
           : `You’ll be shown by first name and one photo ${reach}`
       }
       actions={[

@@ -259,7 +259,7 @@ function SectionHeaders() {
           count={2}
           right={
             <View style={styles.row}>
-              <Text style={styles.note}>Liking as</Text>
+              <Text style={styles.note}>Sending as</Text>
               <Avatar kind="creature" pseudonym="Night Cat" size={24} />
             </View>
           }
@@ -387,12 +387,12 @@ function Holds() {
     <Section title="HoldToConfirm" note="#8: 900 ms · H.tick at 25 / 50 / 75 · H.commit at 100 · a release rewinds on M.settle · #10: refused is H.error and a drain · #9: You’re in · a screen reader gets one button">
       {states.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-hold-${state}`}>
-          <HoldToConfirm label="Hold to blend in" onConfirm={noop} consequence="Checks you in. Other people at this event will see you." {...props} />
+          <HoldToConfirm label="Hold to Blend’n" onConfirm={noop} consequence="Checks you in. Other people at this event will see you." {...props} />
         </Cell>
       ))}
       <Cell label="live · hold it (busy for 1.5 s, then it drains)" testID="ds-hold-live">
         <HoldToConfirm
-          label="Hold to blend in"
+          label="Hold to Blend’n"
           srLabel="Check in"
           consequence="Checks you in. Other people at this event will see you."
           busy={busy}
@@ -487,7 +487,7 @@ function Ground() {
 
 function Maps() {
   return (
-    <Section title="MapCard · MapPin · MapCluster" note="the 200 pt band · the ember pin at the centre · Open in Maps · pins 10 pt in an ink ring · a cluster zooms, never lists">
+    <Section title="MapCard · MapPin · MapCluster" note="the 200 pt band · the ember pin at the center · Open in Maps · pins 10 pt in an ink ring · a cluster zooms, never lists">
       <Cell label="default" testID="ds-mapcard-default">
         <MapCard venue="Toit" map={<Ground />} onPress={noop} />
       </Cell>

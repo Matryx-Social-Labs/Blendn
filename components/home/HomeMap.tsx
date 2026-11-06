@@ -336,7 +336,7 @@ export const HomeMap = memo(function HomeMap({
           if (moves.current !== startedAt) return
           stop({ center: centred as [number, number], padding: shown.current.padding, duration: settle })
         })
-        .catch((error) => Logger.warn('events', 'Home map could not re-centre on the drawer', { error: String(error) }))
+        .catch((error) => Logger.warn('events', 'Home map could not re-center on the drawer', { error: String(error) }))
     }, 0)
     return () => clearTimeout(timer)
   }, [padding.top, padding.bottom]) // eslint-disable-line react-hooks/exhaustive-deps -- only a settled snap re-centres

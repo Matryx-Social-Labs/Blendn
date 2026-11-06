@@ -2,13 +2,13 @@
 
 **Design:** Claude Design, `guidelines/flow-5/` — the Banter frames
 (`flow5.js` `banter`), #27 in `flow5-proto.js`, and the deltas R3-D5 (5.6,
-5.7, 5.8, 5.11), R3-0 (C5, C11) and R2-D2 (crews, invites, Blends, the bell).
+5.7, 5.8, 5.11), R3-0 (C5, C11) and R2-D2 (crews, invites, Mixes, the bell).
 See `docs/CHAT.md` for the precedence.
 
 The screen is `app/(tabs)/chat.tsx`; its pieces `components/banter/BanterParts.tsx`;
-its data `lib/useBanterInbox.ts` (rooms, crew chats and Blends, DMs, requests —
+its data `lib/useBanterInbox.ts` (rooms, crew chats and Mixes, DMs, requests —
 loaded together, cached, kept live) and `lib/useCrewInbox.ts` (crew invites,
-emblems, Blend sides); its pure helpers `components/banter/inbox.ts`.
+emblems, Mix sides); its pure helpers `components/banter/inbox.ts`.
 
 ---
 
@@ -17,8 +17,8 @@ emblems, Blend sides); its pure helpers `components/banter/inbox.ts`.
 | | |
 |---|---|
 | **Header** | Bar glass: "Banter", then the bell (Notifications), search, Mark all read (dimmed when no DM is unread). Search opens a field under it that filters in place. |
-| **Live now** | The room you're standing in as the hero: its cover under a scrim, a still Live badge, a rolling "N in the room", the last line — or "Locked by the organizer · read only". An open Blend under it: the two sides' emblems, "Open now · closes 4 AM". |
-| **Requests** | Solid cards that need an answer: the asker, their note verbatim (two lines), the time, ⋯ (Block · Report · Cancel), then Decline and Accept at 48 — Decline first. Accept's `H.success` comes with the server's answer and opens the DM. A crew invite is the same card with Join (the consent screen) and Decline. The Board's asks sit beside them. |
+| **Live now** | The room you're standing in as the hero: its cover under a scrim, a still Live badge, a rolling "N in the room", the last line — or "Locked by the organizer · read only". An open Mix under it: the two sides' emblems, "Open now · closes 4 AM". |
+| **Requests** | Solid cards that need an answer: the asker, their note verbatim (two lines), the time, ⋯ (Block · Report · Cancel), then Decline and Accept at 48 — Decline first. Accept's `H.success` comes with the server's answer and opens the DM. A crew invite is the same card with Join (the consent screen) and Decline. The Lobby's asks sit beside them. |
 | **Crews** | Crew chats, each its emblem in a rounded square. |
 | **People** | DMs, round: a photo once they're a name to you, else their creature. "Mark all read" on the heading. "Asked to reveal names" is a chip until you open the thread. |
 | **Past rooms** | Rooms you're not standing in, as their covers. A locked or muted room says so as a status chip, never as speech. |

@@ -31,7 +31,7 @@ Hero (tonight's cover, else the type plate at full bleed: A87), name, type ·
 area · distance (the distance the list showed, handed over in the route). Then,
 by state: the tiles (Open · Live · Reset · Size), or the live card, or the card
 of the event that has the place. Tonight here, Coming up here, Who's here,
-Regulars, the Board, About, Good to know, Where, and last the claim line.
+Regulars, the Lobby, About, Good to know, Where, and last the claim line.
 
 The dock holds one slot: **Go live** (a dial, then the hold), **Go live again**
 in one tap with *Pick another time*, the **live pill** with *Open the room* and
@@ -46,7 +46,7 @@ client never draws a check-in boundary: it asks the server.
 | Share is the text of the place | There are no links yet (Flow 16) |
 | No "Past nights here" | Needs the venue's completed events (server) |
 | The live card holds a glyph, not your creature | Today's nickname is not on the place payload |
-| The Board row opens tonight's event board | A venue has no board of its own; the row shows only before the event's doors |
+| The Lobby row opens tonight's event Lobby | A venue has no Lobby of its own; the row shows only before the event's doors |
 | No peek summary ("3 places live") | Needs counts the list cannot know (server) |
 | ExpiryPrompt, NotLiveNotice not wired | They belong to `LiveAtVenue` and the chat room, not to these two screens |
 | The map under the pin is the platform's | The home map's OSM credit (About › Map data) is untouched; this draws none of our tiles |

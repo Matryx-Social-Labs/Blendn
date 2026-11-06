@@ -65,13 +65,13 @@ export function BoardEntry({ onPress }: { onPress: () => void }) {
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel="The Board. Going alone? See who’s looking for company, or offer a space."
+      accessibilityLabel="The Lobby. Going alone? See who’s looking for company, or offer a spot."
       style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
     >
       <Ionicons name="people-outline" size={ICON.lg} color={COLOR.textPrimary} />
       <View style={styles.entryText}>
-        <Text variant="bodyStrong">The Board</Text>
-        <Text variant="meta">Going alone? See who’s looking for company, or offer a space.</Text>
+        <Text variant="bodyStrong">The Lobby</Text>
+        <Text variant="meta">Going alone? See who’s looking for company, or offer a spot.</Text>
       </View>
       <Ionicons name="chevron-forward" size={ICON.md} color={COLOR.textSecondary} />
     </Pressable>
@@ -255,7 +255,7 @@ function AskFooter({ ask, full, author, onAsk }: { ask: AskState; full: boolean;
       </RNText>
     )
   }
-  if (full) return <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>No spaces left</RNText>
+  if (full) return <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>No spots left</RNText>
 
   return (
     <View style={styles.footer}>
@@ -288,7 +288,7 @@ export interface BoardDraft {
 }
 
 const KINDS = [
-  { value: 'offer', title: 'I have space', hint: 'You’re offering a ride or a table.', icon: 'car' },
+  { value: 'offer', title: 'I have spots', hint: 'You’re offering a ride or a table.', icon: 'car' },
   { value: 'seeking', title: 'I’m looking', hint: 'You want to join someone’s.', icon: 'hand' },
 ] as const
 
@@ -368,8 +368,8 @@ export function BoardComposer({
         />
         {kind === 'offer' ? (
           <View style={styles.spacesRow}>
-            <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.footerLine]}>Spaces</RNText>
-            <Stepper label="Spaces" value={spaces} onChange={setSpaces} min={1} max={MAX_SPACES} onGlass={Platform.OS === 'ios'} disabled={posting} />
+            <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.footerLine]}>Spots</RNText>
+            <Stepper label="Spots" value={spaces} onChange={setSpaces} min={1} max={MAX_SPACES} onGlass={Platform.OS === 'ios'} disabled={posting} />
           </View>
         ) : null}
       </View>

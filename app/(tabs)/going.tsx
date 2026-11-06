@@ -434,7 +434,7 @@ function GoingScreenInner() {
                 { label: 'Add to calendar', variant: 'secondary' as const, then: () => addToCalendar(row) },
               ]),
           // The Board serves committed people, and this is their list: the Scene's gate, before doors and not called off.
-          ...(boardOpen(row) ? [{ label: 'The Board', variant: 'secondary' as const, then: () => openBoard(row.id) }] : []),
+          ...(boardOpen(row) ? [{ label: 'The Lobby', variant: 'secondary' as const, then: () => openBoard(row.id) }] : []),
           { label: 'Cancel', cancel: true },
         ],
       }),

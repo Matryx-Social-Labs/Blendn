@@ -61,7 +61,7 @@ export function LikingAsChip({
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={`Liking as ${name}`}
+        accessibilityLabel={`Sending as ${name}`}
         accessibilityHint="Opens a menu"
         style={[styles.chip, { borderRadius: radius }]}
       >

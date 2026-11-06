@@ -219,13 +219,13 @@ export function BoardRow({ title, onPress }: { title: string; onPress: () => voi
       onPress={onPress}
       pressedScale={PRESS.scale}
       accessibilityRole="button"
-      accessibilityLabel={`The Board, tonight. Heading to ${title}? Find someone to go with.`}
+      accessibilityLabel={`The Lobby, tonight. Heading to ${title}? Find someone to go with.`}
       style={styles.boardRow}
       testID="venue-board"
     >
       <Icon name="users" size={ICON.nav} />
       <View style={styles.fill}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>The Board · tonight</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>The Lobby · tonight</Text>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
           Heading here tonight? Find someone to go with.
         </Text>

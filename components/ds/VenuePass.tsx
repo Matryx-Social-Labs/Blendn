@@ -68,7 +68,7 @@ export function VenuePass({
   cover,
   hereCount,
   tasteCount,
-  holdLabel = 'Hold to blend in',
+  holdLabel = 'Hold to Blend’n',
   note = 'Checks you in. Other people at this event will see you.',
   onConfirm,
   busy,
@@ -245,7 +245,7 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
           live
             ? spoken(code)
             : state === 'offline'
-              ? 'Door code unavailable. This pass needs a connection to show its code.'
+              ? 'Door code unavailable. It needs a connection to show.'
               : `${label}. ${still?.line(redeemedAt) ?? ''}`
         }
         style={styles.doorText}

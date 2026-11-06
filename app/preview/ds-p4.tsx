@@ -164,7 +164,7 @@ function LiveRequest() {
       <NotificationRow
         visual={{ type: 'creature', pseudonym: 'Quiet Heron' }}
         title="Quiet Heron asked to join your car"
-        context="The Board · Vinyl Night · 5h"
+        context="The Lobby · Vinyl Night · 5h"
         fresh={!state}
         state={state}
         doneText="You’re in the car"
@@ -253,7 +253,7 @@ function Crews() {
       <Cell label="liked" testID="ds-crewcard-liked">
         <CrewCard crew={two} like={{ liked: true, onPress: noop }} onMore={noop} />
       </Cell>
-      <Cell label="liking as my crew" testID="ds-crewcard-as">
+      <Cell label="sending as my crew" testID="ds-crewcard-as">
         <CrewCard crew={two} like={{ as: 'Orbit', onPress: noop }} onMore={noop} />
       </Cell>
       <Cell label="liked for my crew" testID="ds-crewcard-likedas">
@@ -339,7 +339,7 @@ function LikingAs() {
       <Cell label="beside the heading · tap to switch" testID="ds-likingas-inplace">
         <View style={styles.headingRow}>
           <Text style={styles.headingSmall}>Crews here · 2</Text>
-          <Text style={styles.note}>Liking as</Text>
+          <Text style={styles.note}>Sending as</Text>
           <LikingAsChip crew={asCrew ? { name: 'Nebula', emblemSeed: 'nebula' } : null} pseudonym="Cosmic Panda" onPress={() => setAsCrew(!asCrew)} />
         </View>
       </Cell>
@@ -822,7 +822,7 @@ function Previews() {
     ['A1 · the app', { template: 'app' }],
   ]
   return (
-    <Section title="LinkPreviewCard" note="1200 × 630 · everything that must survive in the centre 630 · the title in og:title">
+    <Section title="LinkPreviewCard" note="1200 × 630 · everything that must survive in the center 630 · the title in og:title">
       {cards.map(([label, preview]) => (
         <Cell key={label} label={label} testID={`ds-og-${label.split(' ')[0].toLowerCase()}-${label.split(' · ')[1].replace(/\s+/g, '-')}`}>
           <LinkPreviewCard preview={preview} width={w} />
