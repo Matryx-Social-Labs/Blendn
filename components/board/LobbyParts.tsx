@@ -23,12 +23,12 @@ const CARD_RADIUS = RADIUS.sheet
 /** `.lcomp`: the composer row is a 52 pt capsule. */
 const COMPOSER_HEIGHT = 52
 
-function Line({ children, strong, style }: { children: string; strong?: 'group' | 'rowTitle' | 'heading'; style?: object }) {
+function Line({ children, strong, style, testID }: { children: string; strong?: 'group' | 'rowTitle' | 'heading'; style?: object; testID?: string }) {
   const bold = useBoldText()
   // The banners' second line is 15 pt regular: the control role in the regular cut (the board's 22 pt leading is not a role).
   const role = strong ? font(strong, bold) : font('control', bold, FONT_FAMILY.brand[400])
   return (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[role, strong ? styles.ink : styles.secondary, style]}>
+    <Text testID={testID} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[role, strong ? styles.ink : styles.secondary, style]}>
       {children}
     </Text>
   )
@@ -82,7 +82,7 @@ export function ReadOnlyBanner({ closesAt, timeZone, onOpenRoom }: { closesAt?: 
         <Line strong="group">The doors are open</Line>
       </View>
       <Line>{readOnlyLine(closesAt, timeZone)}</Line>
-      <Button kind="primary" size="raised" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} />
+      <Button kind="primary" size="raised" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
     </View>
   )
 }
@@ -96,7 +96,7 @@ export function LiveEmptyCard({ onOpenRoom }: { onOpenRoom: () => void }) {
         <Line strong="group">Nobody posted in the Lobby.</Line>
       </View>
       <Line>The room is open.</Line>
-      <Button kind="primary" size="raised" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} />
+      <Button kind="primary" size="raised" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
     </View>
   )
 }
@@ -129,11 +129,11 @@ export function LobbyStarts({ ticketsHidden, onStart }: { ticketsHidden?: boolea
   )
   return (
     <View style={styles.startsWrap}>
-      <View style={styles.starts}>
+      <View testID="lobby-starts" style={styles.starts}>
         {start('offer', 'car', 'I have spots', ticketsHidden ? 'A ride or a table.' : 'A ride, a table or a spare ticket.')}
         {start('seeking', 'search', 'I’m looking', 'Going alone? Find someone to go with.')}
       </View>
-      <Line>Nobody’s posted yet. Posts go up under your room name. Nobody sees who you are unless you both say yes.</Line>
+      <Line testID="lobby-starts-line">Nobody’s posted yet. Posts go up under your room name. Nobody sees who you are unless you both say yes.</Line>
     </View>
   )
 }
@@ -154,16 +154,16 @@ export function PinnedPost({ pin }: { pin: LobbyHostPost }) {
           <Icon name="megaphone" size={ICON.control} color={EMBER.glyph} />
         </View>
         <View style={styles.flex}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
+          <Text testID="lobby-pin-host" numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
             {pin.host}
           </Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[monoCaption(bold), styles.secondary]}>
             {postAge(pin.updatedAt || pin.createdAt)}
           </Text>
         </View>
-        <Label text="Host" fill={EMBER.fill} ink={EMBER.glyph} />
+        <Label text="Host" fill={EMBER.fill} ink={EMBER.glyph} testID="lobby-pin-label" />
       </View>
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
+      <Text testID="lobby-pin-body" maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
         {pin.body}
       </Text>
     </View>
@@ -171,10 +171,10 @@ export function PinnedPost({ pin }: { pin: LobbyHostPost }) {
 }
 
 /** A small capsule beside a name: "Host" in ember, "You" in violet. */
-export function Label({ text, fill, ink }: { text: string; fill: string; ink: string }) {
+export function Label({ text, fill, ink, testID }: { text: string; fill: string; ink: string; testID?: string }) {
   const bold = useBoldText()
   return (
-    <View style={[styles.label, { backgroundColor: fill }]}>
+    <View testID={testID} style={[styles.label, { backgroundColor: fill }]}>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('caption', bold), { color: ink }]}>
         {text}
       </Text>
@@ -213,6 +213,7 @@ export function NewPostsPill({ count, top, onPress }: { count: number; top: numb
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`${words}. Show them`}
+      accessibilityLiveRegion="polite"
       style={({ pressed }) => [styles.newPill, { top }, pressed && styles.pressed]}
     >
       <Icon name="arrow-up" size={ICON.inline} color={COLOR.textPrimary} />

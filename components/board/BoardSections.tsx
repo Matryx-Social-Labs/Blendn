@@ -149,11 +149,11 @@ export const BoardPostCard = memo(function BoardPostCard({
   }
 
   return (
-    <View style={[styles.card, post.mine && styles.mineCard]}>
+    <View testID="lobby-post" style={[styles.card, post.mine && styles.mineCard]}>
       <View style={styles.byline}>
         <BoardMark seed={boardMarkSeed(post.author, eventId, post.id)} />
         <View style={styles.bylineText}>
-          <RNText numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>{post.author}</RNText>
+          <RNText testID="lobby-post-name" numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>{post.author}</RNText>
           <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[monoCaption(bold), styles.secondary]}>{postAge(post.createdAt)}</RNText>
         </View>
         {post.mine ? <Label text="You" fill={SELECTION.violet.fill} ink={SELECTION.violet.glyph} /> : null}
@@ -161,23 +161,24 @@ export const BoardPostCard = memo(function BoardPostCard({
           onPress={() => (post.mine ? onTakeDown(post) : onMore(post))}
           accessibilityRole="button"
           accessibilityLabel={post.mine ? 'Take down your post' : `More options for ${post.author}’s post`}
+          testID="lobby-post-more"
           style={({ pressed }) => [styles.more, pressed && styles.pressed]}
         >
           <Icon name="ellipsis" size={DS_ICON.control} color={COLOR.textSecondary} />
         </Pressable>
       </View>
       <View style={styles.pills}>
-        <View style={[styles.pill, post.kind === 'offer' ? styles.kindOffer : styles.kindOther]}>
+        <View testID="lobby-post-kind" style={[styles.pill, post.kind === 'offer' ? styles.kindOffer : styles.kindOther]}>
           <Icon name={kindGlyph(post.kind, post.subKind)} size={DS_ICON.inline} color={post.kind === 'offer' ? SELECTION.rose.glyph : COLOR.textPrimary} />
           <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), styles.ink]}>{kindWords(post.kind, post.subKind)}</RNText>
         </View>
         {spots ? (
-          <View style={styles.pill}>
+          <View testID="lobby-post-spots" style={styles.pill}>
             <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.mono[500]), styles.tabular, full ? styles.secondary : styles.spots]}>{spots}</RNText>
           </View>
         ) : null}
       </View>
-      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{post.body}</RNText>
+      <RNText testID="lobby-post-body" maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{post.body}</RNText>
       <PostPhoto post={post} />
       {footer}
     </View>
@@ -199,7 +200,7 @@ function MineFooter({ count, onSeeAsks }: { count: number; onSeeAsks?: () => voi
   return (
     <View style={styles.footer}>
       <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.footerLine]}>{asksWords(count)}</RNText>
-      {onSeeAsks ? <Button label="See asks" kind="lit" size="md" onPress={onSeeAsks} style={styles.askButton} /> : null}
+      {onSeeAsks ? <Button label="See asks" kind="lit" size="md" onPress={onSeeAsks} style={styles.askButton} testID="lobby-post-action" /> : null}
     </View>
   )
 }
@@ -229,6 +230,7 @@ function AskFooter({ ask, label, icon, author, onAsk }: { ask: AskState; label: 
         // The visible words first, so voice control's "tap Ask to join" works (WCAG 2.5.3).
         accessibilityLabel={`${label}, ${author}`}
         style={styles.askButton}
+        testID="lobby-post-action"
       />
     </View>
   )
