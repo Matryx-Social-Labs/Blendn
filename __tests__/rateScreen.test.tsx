@@ -5,7 +5,7 @@
  * a person.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
-import { AccessibilityInfo, Dimensions } from 'react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -360,5 +360,21 @@ describe('the night has its art, and a held Submit says why (TG-08)', () => {
     await fireEvent.press(screen.getByLabelText(/^Meeting Night Cat: 4 out of 5/))
     expect(screen.queryByTestId('rate-hint')).toBeNull()
     expect(screen.getByRole('button', { name: 'Submit' }).props.accessibilityState).not.toMatchObject({ disabled: true })
+  })
+
+  /*
+   * Driven on a 402×874 iPhone (2026-11-06): with Submit and the note kept, a floating dock sat over
+   * "They harassed me" at rest. The dock is in the flow on a person's step, so the form scrolls above it
+   * and no option is ever under it. Control: `floating` back on the person's Dock fails both.
+   */
+  it('a person: the dock is under the form, not over it, so no issue option can sit behind Submit', async () => {
+    loads()
+    await view()
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
+    await screen.findByText('Night Cat')
+    expect(StyleSheet.flatten(screen.getByTestId('rate-dock').props.style).position).not.toBe('absolute')
+    await fireEvent(screen.getByTestId('rate-dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 190 } } })
+    const pad = StyleSheet.flatten(screen.getByTestId('rate-form').props.contentContainerStyle).paddingBottom
+    expect(pad).toBeLessThan(190)
   })
 })

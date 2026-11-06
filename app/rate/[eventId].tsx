@@ -453,6 +453,8 @@ function RatePeersContent() {
   const offlineNote = <OfflineBanner text="Offline. You can rate once you’re back." testID="rate-offline" />
   // The board's column starts 16 under the circle row; the bar's own `contentTop` leaves 18.
   const scrollPad = { paddingTop: bar.contentTop - SPACE.xxs, paddingBottom: dockHeight + SPACE.xl }
+  // A person's dock is in the flow (below), so their form ends at its top: nothing to reserve.
+  const personPad = { paddingTop: scrollPad.paddingTop, paddingBottom: SPACE.xl }
 
   return (
     <View style={styles.screen}>
@@ -524,7 +526,7 @@ function RatePeersContent() {
               <ScrollView
                 ref={peerScroll}
                 testID="rate-form"
-                contentContainerStyle={[styles.scroll, scrollPad]}
+                contentContainerStyle={[styles.scroll, personPad]}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
                 scrollIndicatorInsets={{ top: bar.indicatorTop }}
@@ -594,7 +596,11 @@ function RatePeersContent() {
             />
           </View>
         ) : person ? (
-          <Dock floating onHeight={setDockHeight} testID="rate-dock">
+          /*
+            In the flow, not floating (driven 2026-11-06): with Submit and the note kept, a floating dock sat over
+            "They harassed me" on a 402×874 phone. Here the form scrolls above it and no option is ever behind it.
+          */
+          <Dock round={false} testID="rate-dock">
             {/* Submit stays gated on a number (D14), and says why, rather than a disabled button that can't. */}
             {rating === null ? (
               <Text testID="rate-hint" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centreText]}>
