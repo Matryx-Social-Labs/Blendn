@@ -187,7 +187,7 @@ function EventPreferencesContent() {
       if (!res.success) {
         // The server's sentence when it has one — "Dating is for 18+" is
         // actionable; "could not save" is not.
-        showToast(res.error || 'Could not save. Try again.', 'error', { haptic: 'error' })
+        showToast(res.error || 'Couldn’t save that. Try again.', 'error', { haptic: 'error' })
         return
       }
       // The Room and the tab bar read the reveal from caches this just made stale: say so, don't wait on a poll (ROOM-03).
@@ -195,7 +195,7 @@ function EventPreferencesContent() {
       leave()
     } catch (e) {
       Logger.error('match', 'Failed to save match preferences', { error: e })
-      showToast('Could not save. Try again.', 'error', { haptic: 'error' })
+      showToast('Couldn’t save that. Try again.', 'error', { haptic: 'error' })
     } finally {
       setSaving(false)
     }
@@ -288,7 +288,7 @@ function EventPreferencesContent() {
           </Text>
         </View>
       ) : (
-        <SectionHeader title="Why are you here tonight?" caption="Just for this event. It overrides your usual answer for tonight without changing it." />
+        <SectionHeader title="Why are you here tonight?" caption="Only for tonight. Your usual answer stays as it is." />
       )}
       <View style={styles.options}>{lookingIntents.map(intentOption)}</View>
       {justHere ? (

@@ -55,7 +55,7 @@ import {
 import { boardOpen } from '../../lib/board'
 import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
-import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { DURATION, EASING, SPRING, useReducedMotion } from '../../lib/motion'
@@ -614,7 +614,7 @@ function GoingScreenInner() {
       return (
         <GoingRow
           title={row.title}
-          cover={row.cover_image_url}
+          stamp={{ iso: liveWindow(row).start_time, timeZone: row.timezone }}
           category={row.category}
           testID={`going-row-${row.id}`}
           retry={refreshCount}
@@ -664,7 +664,7 @@ function GoingScreenInner() {
       return (
         <GoingRow
           title={row.title}
-          cover={row.cover_image_url}
+          stamp={{ iso: row.start_time, timeZone: row.timezone, past: true }}
           category={row.category}
           retry={refreshCount}
           time={featuredDateLabel(row.start_time, new Date(), row.timezone)}
@@ -698,7 +698,7 @@ function GoingScreenInner() {
       >
         <GoingRow
           title={row.title}
-          cover={row.cover_image_url}
+          stamp={{ iso: row.start_time, timeZone: row.timezone }}
           category={row.category}
           retry={refreshCount}
           time={`${featuredDateLabel(row.start_time, new Date(), row.timezone)} · ${timeLabel(row.start_time, row.timezone)}`}
@@ -943,6 +943,7 @@ function HeroAction({ icon, accessibilityLabel, onPress }: { icon: IconName; acc
 function GoingRow({
   title,
   cover,
+  stamp,
   plate,
   category,
   label,
@@ -958,6 +959,8 @@ function GoingRow({
 }: {
   title: string
   cover?: string | null
+  /** Flow 4 G-A: the date stamp leads the row in place of a cover. */
+  stamp?: { iso: string; timeZone?: string | null; past?: boolean }
   /** A place's type art in place of a cover (a visit). */
   plate?: string
   /** The event's category: with no cover, its plate (DS-12, D8), never an empty box. */
@@ -977,7 +980,7 @@ function GoingRow({
 }) {
   const row = (
     <View style={[styles.inset, styles.row]}>
-      <EventCard key={retry} kind="row" title={title} cover={cover} plate={plate} category={category} testID={testID} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
+      <EventCard key={retry} kind="row" title={title} cover={cover} stamp={stamp} plate={plate} category={category} testID={testID} label={label} inert={inert} time={time} venue={venue ?? ''} onPress={onPress} onLongPress={onLongPress ? () => onLongPress() : undefined} style={styles.shrink} />
       {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
     </View>
   )
@@ -1127,6 +1130,9 @@ const ROW_BACK = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.e
 // The reflow is M.settle (DS #16), the system's own spring, not a timed ease.
 const ROW_REFLOW = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 
+/** The Pulse lead's ember underglow (`glowLead`), on Next up (board `.nu`). */
+const NEXT_UP_GLOW = MATERIAL.glowLead.map(({ offsetY, radius, spread, color }) => ({ offsetX: 0, offsetY, blurRadius: radius, spreadDistance: spread, color }))
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   headerRow: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.lg },
@@ -1156,7 +1162,8 @@ const styles = StyleSheet.create({
   // 72 pt rows, 4 apart (the frame steps 76).
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SKELETON_ROW, marginTop: SPACE.xs },
   // Next up: a solid ticket, the photo inset 8 inside the card's 32 corner.
-  hero: { padding: SPACE.sm, backgroundColor: COLOR.surface, borderRadius: RADIUS.card },
+  // Flow 4 G-A: Next up keeps its cover and wears the Pulse lead's underglow (Foundations C, "lit from behind").
+  hero: { padding: SPACE.sm, backgroundColor: COLOR.surface, borderRadius: RADIUS.card, boxShadow: NEXT_UP_GLOW },
   heroPhoto: { borderRadius: RADIUS.mediaInCard, overflow: 'hidden' },
   heroBadge: { position: 'absolute', left: SPACE.md, top: SPACE.md },
   // 12 under the photo, then the details' 4 / 12 / 6 (flow4.js going `det`).

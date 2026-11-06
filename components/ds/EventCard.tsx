@@ -17,6 +17,7 @@ import { categoryGlyph } from '../../lib/categoryGlyph'
 import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 import { compactCount } from '../../lib/format'
+import { DateStamp } from './DateStamp'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
 
@@ -50,6 +51,11 @@ export type EventCardProps = {
    */
   layout?: 'lead' | 'result'
   cover?: string | null
+  /**
+   * `row` only: the date stamp leads the row in place of the cover (Flow 4 G-A, Going): one row shape for every event, and
+   * a missing cover can never show. `past` dims the day.
+   */
+  stamp?: { iso: string; timeZone?: string | null; past?: boolean }
   /**
    * `row` only: a place's type art (`VenuePlate`) in the thumb where an event would have its cover: a visit to a place, not a
    * night (Going › Past). A type it has no plate for draws the bar's.
@@ -153,7 +159,7 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, promoted, overline, corner, layout, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
+  const { kind, title, time, venue, distance, lead, promoted, overline, corner, layout, cover, stamp, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const { fontScale } = useWindowDimensions()
@@ -187,7 +193,9 @@ export function EventCard(props: EventCardProps) {
     const leading = !result && lead === 'distance' && !!distance
     const thumb = (
       <View testID={testID && `${testID}-thumb`} style={[styles.thumb, result && styles.resultThumb]}>
-            {cover ? (
+            {stamp ? (
+              <DateStamp iso={stamp.iso} timeZone={stamp.timeZone} past={stamp.past} />
+            ) : cover ? (
               <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
             ) : plate ? (
               <VenuePlate type={plate} />

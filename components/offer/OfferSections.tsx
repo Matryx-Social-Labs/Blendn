@@ -8,7 +8,6 @@ import { DoorCode } from '../ds/VenuePass'
 import { IconButton } from '../ds/IconButton'
 import { LiquidDisc } from '../ds/LiquidDisc'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
-import { monoCaption } from '../ds/MonoFamily'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { endedLabel, knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
@@ -83,14 +82,14 @@ export function DoorTicket({
   const contrast = useIncreaseContrast()
   return (
     <View testID="door-ticket" style={[styles.ticket, contrast ? IC_HAIRLINE : styles.edge]}>
-      <View accessible accessibilityLabel={`Offer code for ${venueName}. ${offerText}. Valid ${until}.`} style={styles.top}>
+      <View accessible accessibilityLabel={`Offer code for ${venueName}. ${offerText}. ${until}.`} style={styles.top}>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>OFFER CODE</Text>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink]}>
           {venueName}
         </Text>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{offerText}</Text>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-          Valid <Text style={monoCaption(bold)}>{until}</Text>
+          {until}
         </Text>
       </View>
       <View style={[styles.middle, view.door === 'used' && { opacity: USED_DISC_OPACITY }]}>
