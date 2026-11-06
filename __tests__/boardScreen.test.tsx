@@ -1290,6 +1290,42 @@ describe('a link to a post (SCRUM-1026, 6/6)', () => {
     expect(await screen.findByTestId('lobby-closed')).toBeTruthy()
   })
 
+  it('drops the linked post when you block somebody, as the pages do', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(OLD))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OLD.body)).toBeTruthy()
+    await act(async () => noteBlocked())
+    await waitFor(() => expect(screen.queryByText(OLD.body)).toBeNull())
+    expect(screen.getByText(OFFER.body)).toBeTruthy()
+  })
+
+  it('never lays a post on top that a block overtook while it was being read', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    let answer: (v: unknown) => void = () => {}
+    api.getBoardPost.mockReturnValue(new Promise((r) => (answer = r)) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    await act(async () => noteBlocked())
+    await act(async () => answer(one(OLD)))
+    expect(screen.queryByText(OLD.body)).toBeNull()
+  })
+
+  it('asks again on a refresh, and drops the post once the Lobby says it is gone', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.getBoardPost.mockResolvedValue(one(OLD))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OLD.body)).toBeTruthy()
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    await pullToRefresh()
+    await waitFor(() => expect(screen.queryByText(OLD.body)).toBeNull())
+    // Control: still there while the Lobby still has it.
+    expect(api.getBoardPost).toHaveBeenLastCalledWith('e1', 'p-old')
+  })
+
   it('asks for no post without a link, nor for one that is not an id', async () => {
     api.getBoard.mockResolvedValue(board([OFFER]))
     await render(<BoardScreen />)

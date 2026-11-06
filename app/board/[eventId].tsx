@@ -187,6 +187,15 @@ export function BoardScreen() {
   // An older server still closes the Lobby at doors, in its old sentence: the doors banner, and nothing under it.
   const [doorsShut, setDoorsShut] = useState(false)
 
+  /** The linked post asked for again (a refresh, a poll): gone, refused or taken down, it leaves the top of the list. */
+  const recheckLinked = useCallback(async (event: string, postId: string) => {
+    const epoch = pageEpoch.current
+    const r = await apiClient.getBoardPost(event, postId).catch(() => null)
+    if (!r || r.success || linkedPost.current?.id !== postId || epoch !== pageEpoch.current) return
+    linkedPost.current = null
+    setLoad((prev) => (prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== postId) } : prev))
+  }, [])
+
   /**
    * `hold`: a read nobody asked for (a poll, a push). What it finds above the list waits behind the pill. `show`: a
    * read somebody asked for (focus, pull, a post, a chip), which shows everything at once.
@@ -279,12 +288,14 @@ export function BoardScreen() {
       const linkedOnTop = chip === 'all' && link && !removed.current.has(link.id) && !onPages.some((p) => p.id === link.id) ? [link] : []
       setLoad({ kind: 'ready', posts: [...(chip === 'all' || chip === 'mine' ? gone : []), ...linkedOnTop, ...onPages] })
       setRefreshFailed(false)
+      // On top only while the Lobby still has it for you: asked again on every read, and dropped once it says no.
+      if (link && linkedOnTop.length) void recheckLinked(eventId, link.id)
       return true
     } catch (error) {
       Logger.warn('board', 'load threw', { eventId, error: String(error) })
       return false
     }
-  }, [eventId, loadRef, heldRef, scrolledRef])
+  }, [eventId, loadRef, heldRef, scrolledRef, recheckLinked])
 
   /*
    * A block from anywhere (a post's card here, a profile, a request in the Banter): the older pages loaded are dropped,
@@ -293,6 +304,8 @@ export function BoardScreen() {
    */
   useOnBlock(() => {
     pageEpoch.current += 1
+    // A block hides people the linked post may be from: it goes with the older pages, and comes back only if a page lists it.
+    linkedPost.current = null
     older.current = []
     setCursor(null)
     setMoreState('idle')
@@ -358,6 +371,8 @@ export function BoardScreen() {
     eventId,
     postParam: postAsked,
     linkedRef: linkedPost,
+    removedRef: removed,
+    epochRef: pageEpoch,
     posts: load.kind === 'ready' ? posts : null,
     listRef,
     viewOffset: contentTop,
@@ -564,6 +579,7 @@ export function BoardScreen() {
           // block epoch (`useOnBlock` above), which every route to a block moves.
           const blocked = post.author
           for (const [id, p] of created.current) if (!p.mine && p.author === blocked) created.current.delete(id)
+          if (linkedPost.current && !linkedPost.current.mine && linkedPost.current.author === blocked) linkedPost.current = null
           setLoad((prev) =>
             prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== post.id && (p.mine || p.author !== blocked)) } : prev
           )

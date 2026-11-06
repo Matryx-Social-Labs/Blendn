@@ -22,6 +22,9 @@ export function useLinkedPost(opts: {
   postParam: unknown
   /** The linked post once read: the screen lays it on top of All while no page lists it. */
   linkedRef: RefObject<BoardPostView | null>
+  /** Posts taken down here, and the block epoch: a post either overtook while it was read is not laid on top. */
+  removedRef: RefObject<ReadonlySet<string>>
+  epochRef: RefObject<number>
   posts: readonly BoardPostView[] | null
   listRef: RefObject<FlatList<BoardPostView> | null>
   viewOffset: number
@@ -29,7 +32,7 @@ export function useLinkedPost(opts: {
   onClosed: () => void
   onFound: (post: BoardPostView) => void
 }) {
-  const { eventId, posts, listRef, linkedRef, viewOffset, animated, onClosed, onFound } = opts
+  const { eventId, posts, listRef, linkedRef, removedRef, epochRef, viewOffset, animated, onClosed, onFound } = opts
   const asked = useRef(isLinkId(opts.postParam) ? opts.postParam : null)
   const scrolledFor = useRef<string | null>(null)
   const [target, setTarget] = useState<string | null>(null)
@@ -40,10 +43,12 @@ export function useLinkedPost(opts: {
     const postId = asked.current
     if (!ready || !eventId || !postId) return
     asked.current = null
+    const epoch = epochRef.current
     void apiClient
       .getBoardPost(eventId, postId)
       .then((r) => {
         if (r.success && r.data?.post) {
+          if (epoch !== epochRef.current || removedRef.current.has(r.data.post.id)) return
           linkedRef.current = r.data.post
           onFound(r.data.post)
           setTarget(r.data.post.id)
@@ -60,7 +65,7 @@ export function useLinkedPost(opts: {
           error: String(error),
         })
       )
-  }, [ready, eventId, linkedRef, onClosed, onFound])
+  }, [ready, eventId, linkedRef, removedRef, epochRef, onClosed, onFound])
 
   useEffect(() => {
     if (!target || !posts || scrolledFor.current === target) return

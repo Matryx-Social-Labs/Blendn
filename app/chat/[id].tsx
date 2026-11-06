@@ -1017,9 +1017,10 @@ function GroupChatInner() {
         ) : (
           <>
             <View style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace, window.fontScale).style]}>
-              {/* An event's room once its doors are open (never while it counts down): what you joined in the Lobby, pinned above the stream. */}
-              {BOARD_ENABLED && eventRoom && roomEventId && !countingDown ? (
-                <FromTheLobby eventId={roomEventId} folded={lobbyFolded} onFold={() => setLobbyFolded(true)} onUnfold={() => setLobbyFolded(false)} />
+              {/* An event's room once its doors are open (never while it counts down): what you joined in the Lobby, pinned above the stream.
+                  The event is the server's own row for this room, never a link's `eventId` (security review, PR 6). */}
+              {BOARD_ENABLED && eventRoom && roomInfo.eventId && !countingDown ? (
+                <FromTheLobby eventId={roomInfo.eventId} folded={lobbyFolded} onFold={() => setLobbyFolded(true)} onUnfold={() => setLobbyFolded(false)} />
               ) : null}
             <FlatList
               ref={flatListRef}

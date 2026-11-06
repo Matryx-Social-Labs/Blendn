@@ -509,6 +509,17 @@ describe('From the Lobby in the room (SCRUM-1026, H-A)', () => {
     expect(screen.queryByLabelText('From the Lobby: From the host')).toBeNull()
   })
 
+  it('reads the event from the room the server lists, never from a link’s eventId', async () => {
+    withNote()
+    // A room the server does not list as an event's, opened by a link naming some other event.
+    mockParams = { id: 'g9', eventId: 'e-other' }
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [] } })
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.queryByTestId('from-lobby')).toBeNull()
+    expect(apiClient.getBoardSummary).not.toHaveBeenCalledWith('e-other')
+  })
+
   it('is not there while the room counts down to its doors, nor in a crew’s room', async () => {
     withNote()
     await render(<GroupChat />)
