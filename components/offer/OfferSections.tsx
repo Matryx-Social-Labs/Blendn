@@ -12,8 +12,12 @@ import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { endedLabel, knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
 
-/** The disc at the ticket's middle (Flow 13 pass.js: 200). */
-const DISC = 200
+/** The disc at the ticket's middle (flow-4 offer board .disc4: 184). */
+const DISC = 184
+/** The board's .vp: a 48 pt tile beside the head (the API sends no venue photo, so a glyph). */
+const TILE = SIZE.control
+/** The board's head label sits inline in a 24 pt line, so the venue starts 26 under the row's top. */
+const HEAD_LABEL_LINE = SPACE.xl
 /** A used pass dims its disc to 55% (pass.js `st==='used'`). */
 const USED_DISC_OPACITY = 0.55
 /** The punched notches at the tear are 24 pt circles, half inside the card. */
@@ -83,12 +87,19 @@ export function DoorTicket({
   return (
     <View testID="door-ticket" style={[styles.ticket, contrast ? IC_HAIRLINE : styles.edge]}>
       <View accessible accessibilityLabel={`Offer code for ${venueName}. ${offerText}. ${until}.`} style={styles.top}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>OFFER CODE</Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink]}>
-          {venueName}
-        </Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{offerText}</Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+        <View style={styles.headRow}>
+          <View testID="door-tile" style={styles.tile}>
+            <Icon name="gift" size={ICON.nav} color={COLOR.textSecondary} />
+          </View>
+          <View style={styles.fill}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary, styles.headLabel]}>OFFER CODE</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink, styles.venue]}>
+              {venueName}
+            </Text>
+          </View>
+        </View>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.offerText]}>{offerText}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.until]}>
           {until}
         </Text>
       </View>
@@ -202,13 +213,22 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACE.lg, paddingBottom: BAR_BOTTOM },
   ticket: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, overflow: 'hidden' },
   edge: { borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
-  top: { gap: SPACE.xxs, paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs, paddingBottom: SPACE.lg },
-  middle: { alignItems: 'center', paddingHorizontal: SPACE.xl - SPACE.xs, paddingBottom: SPACE.xl - SPACE.xs, paddingTop: SPACE.xs },
+  /** The board's .pass: 20 round the head; then .ob 14 under it, .ov 2 under that. */
+  top: { paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  tile: { width: TILE, height: TILE, borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
+  headLabel: { lineHeight: HEAD_LABEL_LINE },
+  venue: { marginTop: SPACE.xxs },
+  offerText: { marginTop: SPACE.md + SPACE.xxs },
+  until: { marginTop: SPACE.xxs },
+  /** The disc 20 under the validity, the tear 24 under the disc. */
+  middle: { alignItems: 'center', paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs, paddingBottom: SPACE.xl },
   tear: { height: 0, borderTopWidth: 1, borderStyle: 'dashed', borderTopColor: COLOR.hairlineStrong },
   notch: { position: 'absolute', top: -NOTCH / 2, width: NOTCH, height: NOTCH, borderRadius: RADIUS.capsule, backgroundColor: COLOR.ink },
   notchLeft: { left: -NOTCH / 2 },
   notchRight: { right: -NOTCH / 2 },
-  bottom: { paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.lg, paddingBottom: SPACE.xl - SPACE.xs },
+  /** The board's .cd: 20 over, 22 under. */
+  bottom: { paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs, paddingBottom: SPACE.xl - SPACE.xxs },
   stamp: {
     height: STAMP,
     flexDirection: 'row',

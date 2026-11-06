@@ -35,7 +35,14 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 // The disc's endless wave and bubbles would run through every fake-clock walk below; it has its own test (dsLiquidDisc). The stamp over it is the screen's.
-jest.mock('../components/ds/LiquidDisc', () => ({ LiquidDisc: ({ stamp }: { stamp?: React.ReactNode }) => stamp ?? null }))
+jest.mock('../components/ds/LiquidDisc', () => {
+  const { View } = jest.requireActual('react-native')
+  return {
+    LiquidDisc: ({ stamp, size, testID }: { stamp?: React.ReactNode; size: number; testID?: string }) => (
+      <View testID={testID} style={{ width: size, height: size }}>{stamp}</View>
+    ),
+  }
+})
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { queuedRequest: jest.fn() } }))
@@ -120,8 +127,9 @@ describe('the live pass', () => {
     await mount()
     expect(screen.getByText('K7Q 4M2')).toBeTruthy()
     expect(screen.getByLabelText('Offer code K 7 Q, 4 M 2')).toBeTruthy()
-    // The naming pass's "Offer code" (2026-11-05), on the ticket's head and on the code row: never "Door code".
-    expect(screen.getAllByText('OFFER CODE')).toHaveLength(2)
+    // The naming pass's "Offer code" (2026-11-05) heads the ticket, never "Door code"; the code row says SHOW THIS CODE (the board).
+    expect(screen.getAllByText('OFFER CODE')).toHaveLength(1)
+    expect(screen.getByText('SHOW THIS CODE')).toBeTruthy()
     expect(screen.queryByText('DOOR CODE')).toBeNull()
     expect(screen.getByLabelText(/^Offer code for The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
     expect(screen.getByText('Works once, today. Staff type the code and tap Redeemed.')).toBeTruthy()
@@ -199,15 +207,15 @@ describe('the live pass', () => {
 
   it('the ring counts down to the server’s turn: with the phone’s clock agreeing, 20 s of the 30 are left', async () => {
     await mount()
-    expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('New code in 0:20', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('and on the server’s clock, not the phone’s: a phone 10 s behind the server shows 10 s, not 20', async () => {
     // The server says it is 20:00:20 while this phone says 20:00:10; the code turns at 20:00:30 server time.
     noteServerDate(new Date(NOW + 10_000).toUTCString(), NOW)
     await mount()
-    expect(screen.getByText('10 s', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.queryByText('20 s', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('New code in 0:10', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('New code in 0:20', { includeHiddenElements: true })).toBeNull()
   })
 })
 
@@ -217,9 +225,10 @@ describe('the other faces of the pass', () => {
     reads = [offer('redeemed', null, { redeemedAt: new Date(2026, 9, 11, 21, 43).toISOString() })]
     await mount()
     expect(screen.getByLabelText('Redeemed 9:43 PM')).toBeTruthy()
-    expect(screen.getAllByText('Redeemed 9:43 PM')).toHaveLength(2) // the stamp on the disc and the code row's line
+    expect(screen.getAllByText('Redeemed 9:43 PM')).toHaveLength(1) // the stamp on the disc; the code row says USED TONIGHT (the board)
+    expect(screen.getByText('USED TONIGHT')).toBeTruthy()
     expect(screen.getByText('Redeemed. Enjoy it.')).toBeTruthy()
-    expect(screen.getByText('· · ·')).toBeTruthy()
+    expect(screen.getByText('— — —')).toBeTruthy()
   })
 
   it('used tonight: still, stamped, and the server’s own sentence', async () => {
@@ -228,6 +237,12 @@ describe('the other faces of the pass', () => {
     expect(screen.getByLabelText('Used tonight')).toBeTruthy()
     expect(screen.getByText(/You’ve used an offer at The Humming Tree tonight — one a night/)).toBeTruthy()
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
+  })
+
+  it('the board’s ticket (flow-4 offer): a 48 pt glyph tile beside the head, and the 184 pt disc', async () => {
+    await mount()
+    expect(StyleSheet.flatten(screen.getByTestId('door-tile').props.style)).toMatchObject({ width: 48, height: 48 })
+    expect(StyleSheet.flatten(screen.getByTestId('door-disc').props.style)).toMatchObject({ width: 184, height: 184 })
   })
 
   it('ended: names the day, dashes for the code', async () => {
