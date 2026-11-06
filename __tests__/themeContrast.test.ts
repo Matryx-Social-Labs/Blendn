@@ -146,6 +146,14 @@ describe('type scales', () => {
     expect(DESIGN_MAX_FONT_SCALE.caption).toBeLessThan(DESIGN_MAX_FONT_SCALE.body)
     expect(Math.min(...Object.values(DESIGN_TYPE).map((r) => r.fontSize))).toBeGreaterThanOrEqual(12)
   })
+
+  it('has the boards’ 15/22 secondary line (lede, owner 2026-11-06): reading text, AA in the secondary ink on every surface', () => {
+    expect(DESIGN_TYPE.lede).toEqual({ fontFamily: 'Satoshi_400Regular', fontSize: 15, lineHeight: 22, letterSpacing: 0 })
+    expect(DESIGN_MAX_FONT_SCALE.lede).toBe(DESIGN_MAX_FONT_SCALE.body)
+    for (const bg of [COLOR.ink, COLOR.surfaceSunken, COLOR.surface, COLOR.surfaceRaised]) {
+      expect(contrast(COLOR.textSecondary, bg)).toBeGreaterThanOrEqual(4.5)
+    }
+  })
 })
 
 /** The palette today's screens still draw with, until each is redesigned. */

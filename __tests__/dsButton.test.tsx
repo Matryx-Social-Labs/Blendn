@@ -67,9 +67,17 @@ describe('kinds and sizes', () => {
     ['lg', SIZE.primary],
     ['md', SIZE.control],
     ['sm', 36],
+    ['pill', 40],
   ] as const)('%s is %i pt tall', async (size, height) => {
     await draw({ size })
     expect(flat('b').height).toBe(height)
+  })
+
+  it('pill is the board’s `.db.sm`: 40 tall, 16 in, hugging its label in control 700, no row-action minimum', async () => {
+    await draw({ size: 'pill' })
+    expect(flat('b')).toMatchObject({ height: 40, paddingHorizontal: SPACE.lg })
+    expect(flat('b').minWidth).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByText('I’m going').props.style)).toMatchObject({ fontSize: 15, lineHeight: 20, fontFamily: FONT_FAMILY.brand[700] })
   })
 
   it('primary is the fill gradient with a white label', async () => {

@@ -23,6 +23,7 @@ const DRAG_FAIL_Y = 10
 const BADGE_GAP = SPACE.xs + SPACE.xxs
 const DOT = 8
 const DIVIDER_HEIGHT = 20
+const COMPACT_HEIGHT = 44
 /** The thumb's rim in the hue's edge colour. */
 const RIM = 1
 
@@ -56,6 +57,8 @@ export type SegmentedControlProps = Choice & {
   draggable?: boolean
   /** Disabled while busy: 45% of the whole control. */
   disabled?: boolean
+  /** 44 pt, the Lobby compose sheet's type segment (`.lseg`): a 36 pt segment, its slop still the 44 target. */
+  compact?: boolean
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'focused'
   /** The design gallery only: draws this segment pressed. */
@@ -130,10 +133,12 @@ export function SegmentedControl({
   semantics = 'tabs',
   draggable = true,
   disabled = false,
+  compact = false,
   previewState,
   previewPressed,
   testID,
 }: SegmentedControlProps) {
+  const height = compact ? COMPACT_HEIGHT : SIZE.control
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -249,7 +254,7 @@ export function SegmentedControl({
           onLayout={onLayout}
           accessibilityRole={radio ? 'radiogroup' : 'tablist'}
           accessibilityLabel={pair ? `${items[0]} or ${items[1]}` : undefined}
-          style={[styles.control, trackStyle, contrast && styles.contrast, disabled && { opacity: OPACITY.disabled }]}
+          style={[styles.control, { height }, trackStyle, contrast && styles.contrast, disabled && { opacity: OPACITY.disabled }]}
         >
           {items.map((item, i) => {
             const on = i === selected
@@ -301,7 +306,7 @@ export function SegmentedControl({
         </View>
       </GestureDetector>
       {focused || previewState === 'focused'
-        ? focusRing(SIZE.control / 2).map((ring, i) => (
+        ? focusRing(height / 2).map((ring, i) => (
             <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={ring} />
           ))
         : null}

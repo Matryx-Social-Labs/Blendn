@@ -350,6 +350,7 @@ Every glass surface in the design system is one component with a `role` (`bar` Â
 | `button` | Satoshi Bold | 16 / 20 | 0 | 2.0 | Button labels |
 | `body` | Satoshi Regular | **17** / 24 | 0 | 2.0 | Reading text, inputs, messages |
 | `bodyStrong` | Satoshi Medium | 17 / 24 | 0 | 2.0 | Names, row titles, chip labels |
+| `lede` | Satoshi Regular | 15 / 22 | 0 | 2.0 | A card's secondary sentence under its title, where a board draws 15/22 (owner, 2026-11-06). Adopted per screen as its board calls for it |
 | `meta` | Satoshi Regular | **14** / 20 | 0 | 2.0 | Venue, helper text, timestamps |
 | `caption` | Satoshi Medium | **12** / 16 | +0.1 | 1.3 | Tab labels and badges only, with the iOS large-content viewer. **Floor: 12** |
 | `label` | Geist Mono Medium | 12 / 16 | +0.6, UPPER | 2.0 | Eyebrows, tags, field labels. Sparingly |

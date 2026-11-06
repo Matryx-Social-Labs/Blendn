@@ -41,6 +41,8 @@ const CARRIED: Record<string, string> = {
   'components/plus/TonightHost.tsx': '<HueProvider value="violet">',
   // A person's page is rose; your own is violet, you (rc7 D11). One provider, its value picked by whose page it is.
   'app/user/[id].tsx': '<HueProvider value={profileHue(own)}>',
+  // The photo warning in the rose Lobby's compose sheet is about you (C-A `cA-anon`: violet, Use it lit violet).
+  'components/board/ComposePhoto.tsx': '<HueProvider value="violet">',
 }
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [

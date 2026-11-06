@@ -27,6 +27,7 @@ import {
   type BoardPost,
   type BoardRequest,
 } from '../lib/board'
+import { LOBBY_POST_MAX } from '../lib/lobby'
 import { notificationTarget } from '../lib/notifications'
 
 /**
@@ -288,6 +289,16 @@ describe('BD-CU03: a mark is seeded on the handle, never on a person', () => {
     expect(src).toMatch(/source=\{\{ uri: view\.url \}\}/)
   })
 
+  it('the compose sheet’s photo is the one picked from the library, warned about, and sent only through the stripping upload', () => {
+    const src = readFileSync(join(__dirname, '..', 'components/board/ComposePhoto.tsx'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(src).not.toMatch(/avatarUrl|profile|userId|user_id|authorId|author_id|OptimizedImage|getPresignedUploadUrl|launchCamera|'camera'/i)
+    expect(src.match(/source=\{/g)).toHaveLength(1)
+    expect(src).toMatch(/source=\{\{ uri: shot\.uri \}\}/)
+    expect(src).toMatch(/pickImage\('library'\)/)
+    // `uploadChatPhoto` re-encodes first, so no location leaves the phone.
+    expect(src).toMatch(/uploadChatPhoto\(/)
+  })
+
   it('draws no photo of a person and reads no user id on any board surface', () => {
     const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
     let marks = 0
@@ -295,10 +306,15 @@ describe('BD-CU03: a mark is seeded on the handle, never on a person', () => {
       'components/board/BoardSections.tsx',
       'components/board/BoardRequestsSection.tsx',
       'components/board/LobbyParts.tsx',
+      'components/board/LobbyCompose.tsx',
       'app/board/[eventId].tsx',
     ]) {
       // A post's own photo (C-A) is drawn in one place, `PostPhoto`, from the post alone; that one line is allowed.
-      const src = strip(readFileSync(join(__dirname, '..', file), 'utf8')).replace(/<PostPhoto post=\{post\} \/>|import \{ PostPhoto \} from '\.\/PostPhoto'/g, '')
+      // The compose sheet's own picture is `ComposePhoto`'s alone (held to its own rule above); that element and import are allowed.
+      const src = strip(readFileSync(join(__dirname, '..', file), 'utf8')).replace(
+        /<PostPhoto post=\{post\} \/>|import \{ PostPhoto \} from '\.\/PostPhoto'|<ComposePhoto [^>]*\/>|import \{ ComposePhoto \} from '\.\/ComposePhoto'/g,
+        ''
+      )
       expect(src).not.toMatch(/OptimizedImage|expo-image|avatarUrl|photo|userId|user_id|authorId|author_id/i)
       // Every mark goes through the one seed rule.
       for (const m of src.matchAll(/(?:<BoardMark seed|markSeed|<RequestFace pseudonym)=\{([^}]*)\}/g)) {
@@ -361,13 +377,14 @@ describe('the event screen offers the board by the run’s doors, not the day’
 })
 
 describe('a post’s length', () => {
-  it('is the server’s, named once', () => {
+  it('is C-A’s 280 inside the server’s 500, named once', () => {
     expect(BOARD_MAX_POST_LENGTH).toBe(500)
-    const composer = readFileSync(join(__dirname, '..', 'components/board/BoardSections.tsx'), 'utf8')
-    // The TextArea counts against it and Post refuses past it (ds: never enforced by truncation).
-    expect(composer).toContain('limit={BOARD_MAX_POST_LENGTH}')
-    expect(composer).toContain('> BOARD_MAX_POST_LENGTH')
-    expect(composer).not.toMatch(/(maxLength|limit)=\{\d/)
+    expect(LOBBY_POST_MAX).toBe(280)
+    const sheet = readFileSync(join(__dirname, '..', 'components/board/LobbyCompose.tsx'), 'utf8')
+    // The counter counts against it and Post (`mayPost`) refuses past it: never enforced by truncation.
+    expect(sheet).toContain('${counted} / ${LOBBY_POST_MAX}')
+    expect(sheet).toContain('mayPost(')
+    expect(sheet).not.toMatch(/maxLength|limit=\{\d/)
   })
 })
 

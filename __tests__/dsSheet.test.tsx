@@ -153,6 +153,17 @@ describe('headerAction', () => {
   })
 })
 
+describe('header', () => {
+  it('a row of its own (C-A: Cancel, the title, Post) stays put above the scroll in place of the title row', async () => {
+    const { Text } = jest.requireActual('react-native')
+    const hidden = { includeHiddenElements: true }
+    await render(<Sheet visible onClose={jest.fn()} header={<Text>New post</Text>} testID="s"><Text>Form</Text></Sheet>)
+    expect(within(screen.getByTestId('s-pinned', hidden)).getByText('New post', hidden)).toBeTruthy()
+    expect(within(screen.getByTestId('s-content', hidden)).queryByText('New post', hidden)).toBeNull()
+    expect(within(screen.getByTestId('s-content', hidden)).getByText('Form', hidden)).toBeTruthy()
+  })
+})
+
 describe('settleDetent', () => {
   const heights = [300, 500, 800]
 
@@ -594,6 +605,25 @@ describe('what scrolls and what stays (review MEDIUM-2, L8)', () => {
     expect(flat('s-content').minHeight).toBe(88)
     await act(async () => fireEvent(scroll, 'contentSizeChange', 393, 40))
     expect(flat('s-content').minHeight).toBe(40)
+  })
+
+  it('a header row of its own stays pinned even at the accessibility sizes with the keyboard up: C-A’s Post never moves, and nothing in it remounts', async () => {
+    const { Text } = jest.requireActual('react-native')
+    const { Keyboard } = require('react-native')
+    const handlers: Record<string, (e?: { endCoordinates: { height: number; screenY: number } }) => void> = {}
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (e?: { endCoordinates: { height: number; screenY: number } }) => void) => {
+      handlers[event] = fn
+      return { remove: () => {} }
+    }) as never)
+    try {
+      await render(<Sheet visible onClose={jest.fn()} header={<Text>New post</Text>} testID="s"><Text>Form</Text></Sheet>)
+      const row = screen.getByText('New post', hidden)
+      const h = Dimensions.get('window').height
+      await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 300, screenY: h - 300 } }))
+      expect(within(screen.getByTestId('s-pinned', hidden)).getByText('New post', hidden)).toBe(row)
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('at the accessibility sizes with the keyboard up nothing is pinned: the floor could not be kept (review R5)', async () => {
