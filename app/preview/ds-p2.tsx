@@ -10,7 +10,6 @@ import { EventCard } from '../../components/ds/EventCard'
 import { FaceMark, Facepile, type Face } from '../../components/ds/Facepile'
 import { GridFace } from '../../components/ds/GridFace'
 import { HoldToConfirm } from '../../components/ds/HoldToConfirm'
-import { MapCard, MapCluster, MapPin } from '../../components/ds/MapCard'
 import { MeetNextCard } from '../../components/ds/MeetNextCard'
 import { PersonCard, PersonCardContent, type PersonCardContentProps, type PersonCardPerson, type PersonState } from '../../components/ds/PersonCard'
 import { RevealBar } from '../../components/ds/RevealBar'
@@ -53,7 +52,6 @@ export default function DsP2Preview() {
         <Holds />
         <VenuePasses />
         <DoorCodes />
-        <Maps />
         <PersonCards />
         <RollingNumbers />
         <RevealBars />
@@ -475,44 +473,7 @@ function DoorCodes() {
   )
 }
 
-/** A stand-in for the map the screen draws (the Scene's MapView): the ground and two roads. */
-function Ground() {
-  return (
-    <View style={StyleSheet.absoluteFill}>
-      <View style={[styles.road, styles.roadA]} />
-      <View style={[styles.road, styles.roadB]} />
-    </View>
-  )
-}
 
-function Maps() {
-  return (
-    <Section title="MapCard · MapPin · MapCluster" note="the 200 pt band · the ember pin at the center · Open in Maps · pins 10 pt in an ink ring · a cluster zooms, never lists">
-      <Cell label="default" testID="ds-mapcard-default">
-        <MapCard venue="Toit" map={<Ground />} onPress={noop} />
-      </Cell>
-      <Cell label="with the address and you" testID="ds-mapcard-address-you">
-        <MapCard venue="Toit" address="12th Main, Indiranagar" you map={<Ground />} onPress={noop} />
-      </Cell>
-      <Cell label="focused" testID="ds-mapcard-focused">
-        <MapCard venue="Toit" map={<Ground />} previewState="focused" onPress={noop} />
-      </Cell>
-      <Cell label="the pin family · event · venue · live · you · selected" testID="ds-mappin-family" style={[styles.row, styles.mapStage]}>
-        <MapPin kind="event" />
-        <MapPin kind="venue" />
-        <MapPin kind="live" />
-        <MapPin kind="you" />
-        <MapPin kind="event" selected />
-        <MapPin kind="event" label="Vinyl Night, 9 PM" onPress={noop} />
-      </Cell>
-      <Cell label="clusters · 3 · 12 · 120" testID="ds-mapcluster-all" style={[styles.row, styles.mapStage]}>
-        <MapCluster count={3} onPress={noop} />
-        <MapCluster count={12} onPress={noop} />
-        <MapCluster count={120} onPress={noop} />
-      </Cell>
-    </Section>
-  )
-}
 
 const PRIYA: PersonCardPerson = {
   face: photo(PHOTO_2),
@@ -679,7 +640,6 @@ const DECK_WIDTH = 280
 const DECK_HEIGHT = 300
 const HERO_HEIGHT = 300
 const NARROW_CARD = 158
-const MAP_STAGE = 96
 const ROAD = SPACE.xs
 
 const styles = StyleSheet.create({
@@ -708,7 +668,6 @@ const styles = StyleSheet.create({
   backdrop: { backgroundColor: COLOR.surfaceRaised },
   heroCard: { height: HERO_HEIGHT },
   narrowCard: { width: NARROW_CARD, height: HERO_HEIGHT / 2 + SPACE.xl },
-  mapStage: { height: MAP_STAGE, backgroundColor: COLOR.surfaceSunken, justifyContent: 'space-around' },
   road: { position: 'absolute', backgroundColor: COLOR.hairline },
   roadA: { left: 0, right: 0, top: '35%', height: ROAD, transform: [{ rotate: '-8deg' }] },
   roadB: { top: 0, bottom: 0, left: '62%', width: ROAD, transform: [{ rotate: '6deg' }] },

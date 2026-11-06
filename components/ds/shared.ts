@@ -278,3 +278,7 @@ export const LIGHT = pourStyles(DURATION.base, DURATION.quick, EASING.entrance)
  * (rc7 D7).
  */
 export const FADE_END_ONLY = { start: 0, end: SPACE.xxxl }
+
+/** Flow 4's page title (`.t28` on the event page, `.vt` on the venue page): 28/33, 700, -0.5. Capped at display's 1.5×. */
+// design-exception: the board's page title sits between TYPE.title (24) and TYPE.display (34); one place, for both pages.
+export const PAGE_TITLE = { fontFamily: FONT_FAMILY.brand[700], fontSize: 28, lineHeight: 33, letterSpacing: -0.5 } as const

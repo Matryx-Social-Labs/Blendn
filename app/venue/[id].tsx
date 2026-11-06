@@ -12,7 +12,7 @@ import { IconButton } from '../../components/ds/IconButton'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Sheet, type SheetAction } from '../../components/ds/Sheet'
 import { SessionSheet } from '../../components/ds/SessionSheet'
-import { announceOutcome, font, useBoldText } from '../../components/ds/shared'
+import { announceOutcome, font, PAGE_TITLE, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { UpcomingSheet } from '../../components/venue/UpcomingSheet'
 import { VenueDock } from '../../components/venue/VenueDock'
@@ -634,9 +634,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   )
 }
 
-/** The venue's name, as the event page's title (`.vt`: 28/33, 700, -0.5); display's cap at the largest text. */
-// design-exception: the board's page title is 28/33 (`.vt`), between TYPE.title and TYPE.display.
-const TITLE_TYPE = { fontFamily: FONT_FAMILY.brand[700], fontSize: 28, lineHeight: 33, letterSpacing: -0.5 }
+const TITLE_TYPE = PAGE_TITLE
 // design-exception: the board puts 28 above each section (`.sh4` margin-top), between SPACE.xl and SPACE.xxl.
 const SECTION_GAP = 28
 

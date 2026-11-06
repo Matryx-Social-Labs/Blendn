@@ -38,7 +38,6 @@ const iso = (ms: number) => new Date(ms).toISOString()
  * NOW is a Saturday, 21:00 (day 6).
  */
 const SAT = 6
-const hoursOf = (...rows: { day: number; open: string; close: string }[]) => rows
 
 const detail = (over: { venue?: Partial<VenueDetail['venue']>; live?: Partial<VenueDetail['live']>; tonight?: VenueDetail['tonight'] } = {}): VenueDetail => ({
   venue: { id: 'v1', name: 'Toit', address: '100 Feet Road', city: 'Bengaluru', latitude: 12.97, longitude: 77.64, venueTypeLabel: 'Brewery', claimed: false, ...over.venue },
