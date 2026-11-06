@@ -1,6 +1,7 @@
 import type { BoardPost, BoardPostKind } from './board'
 import { compactCount } from './format'
 import { calendarDate, eventClock } from './time'
+import { roomOpensAt } from './preEventRoom'
 
 /**
  * The Lobby (was the Board), as the owner picked it on 2026-11-06: L-A cards, P-A on the event page, C-A one compose
@@ -63,15 +64,8 @@ export function filterQuery(filter: LobbyFilter): Record<string, string> {
   return { kind: filter }
 }
 
-/** Doors are 90 minutes before the start, when check-in opens (the server's `CHECK_IN_LEAD_MINUTES`). */
-export const DOORS_LEAD_MINUTES = 90
-
-/** When the doors open (epoch ms), or null with no known start. */
-export function doorsAt(startTime: string | null | undefined): number | null {
-  if (!startTime) return null
-  const start = Date.parse(startTime)
-  return Number.isNaN(start) ? null : start - DOORS_LEAD_MINUTES * 60_000
-}
+/** When the doors open (epoch ms), or null with no known start: the room's opening (`lib/preEventRoom.ts`), one moment. */
+export const doorsAt = roomOpensAt
 
 /** The kind pill's words (`LKIND`): what the post is, in plain words, with the number in its own slot. */
 const KIND_WORDS: Record<BoardPostKind, Partial<Record<LobbySubKind, string>> & { none: string }> = {
@@ -253,10 +247,12 @@ export function previewView(p: Pick<LobbyPreview, 'state' | 'phase' | 'canRead' 
   return p.counts.all === 0 ? 'empty' : 'posts'
 }
 
-/** The three alert switches, all off until turned on, for one event. */
-export type LobbyAlerts = { offersMatch: boolean; replies: boolean; hostPosts: boolean }
+/**
+ * The opt-in alert switches, all off until turned on, for one event. Asks and accepts always push (admin #918); the
+ * server keeps a `replies` switch only so old apps don't error, and it controls nothing, so it is not shown.
+ */
+export type LobbyAlerts = { offersMatch: boolean; hostPosts: boolean }
 export const ALERT_ROWS: readonly { key: keyof LobbyAlerts; title: string; hint: string }[] = [
   { key: 'offersMatch', title: 'Someone offers what you’re looking for', hint: 'A ride, a spot or a ticket you posted about' },
-  { key: 'replies', title: 'Someone replies to you', hint: 'Asks and replies to your posts' },
   { key: 'hostPosts', title: 'The host posts', hint: 'Their pinned note, when it changes' },
 ]

@@ -133,3 +133,16 @@ describe('the event page’s slot', () => {
     expect(previewView({ ...base, state: 'read_only', phase: 'live', counts: { ...base.counts, all: 0 } })).toBe('roomOpen')
   })
 })
+
+describe('the alerts sheet’s switches (admin #918)', () => {
+  it('shows only the two real opt-ins; asks and accepts always push, so there is no replies switch', () => {
+    const { ALERT_ROWS } = jest.requireActual('../lib/lobby') as typeof import('../lib/lobby')
+    expect(ALERT_ROWS.map((r) => r.key)).toEqual(['offersMatch', 'hostPosts'])
+  })
+
+  it('doors are the room’s opening, one moment (control: an hour and a half before the start)', () => {
+    const { doorsAt } = jest.requireActual('../lib/lobby') as typeof import('../lib/lobby')
+    const { roomOpensAt } = jest.requireActual('../lib/preEventRoom') as typeof import('../lib/preEventRoom')
+    expect(doorsAt('2026-11-08T12:30:00Z')).toBe(roomOpensAt('2026-11-08T12:30:00Z'))
+  })
+})
