@@ -122,7 +122,28 @@ export function nativeIntentPath(path: string): string {
   if (n.host !== null && !OUR_HOSTS.has(n.host)) return '/'
   if (n.segments.length === 1 && n.segments[0].toLowerCase() === 'nearby-events') return nearbyRedirect(path)
   const target = targetOf(n)
-  return target ? routeFor(target) : `/${n.segments.join('/')}${chatQuery(n.segments, path)}`
+  if (target) return routeFor(target)
+  return lobbyPostPath(n.segments) ?? `/${n.segments.join('/')}${chatQuery(n.segments, path)}`
+}
+
+/** An id as a link carries it: the shape the server mints, checked before it rides into a route. */
+export const isLinkId = (value: unknown): value is string => typeof value === 'string' && SEGMENT.test(value)
+
+/**
+ * A Lobby post's link (SCRUM-1026, 6/6): `/board/<event>/<post>` is the Lobby scrolled to that post, `?post=` its one
+ * param, each id checked. A post id that is not one leaves the Lobby alone, and nothing else in the link rides along.
+ */
+function lobbyPostPath(segments: string[]): string | null {
+  if (segments[0]?.toLowerCase() !== 'board' || (segments.length !== 2 && segments.length !== 3)) return null
+  const [eventId, postId] = segments.slice(1).map((s) => {
+    try {
+      return decodeURIComponent(s)
+    } catch {
+      return ''
+    }
+  })
+  if (!isLinkId(eventId)) return '/'
+  return isLinkId(postId) ? `/board/${eventId}?post=${postId}` : `/board/${eventId}`
 }
 
 /** The See-all questions the old Nearby screen took as `filter` (Flow 3b · N1: it is a Pulse chip now, SCRUM-1022). */

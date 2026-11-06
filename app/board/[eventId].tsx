@@ -11,6 +11,7 @@ import { TopBar } from '../../components/ds/TopBar'
 import { announce, BoardPostCard, IDLE, type AskState } from '../../components/board/BoardSections'
 import { LobbyAlertsSheet } from '../../components/board/LobbyAlertsSheet'
 import { LobbyCompose } from '../../components/board/LobbyCompose'
+import { useLinkedPost } from '../../components/board/useLinkedPost'
 import { ClosedCard, LiveEmptyCard, LobbyChips, LobbyComposerRow, LobbyGate, LobbyStarts, NewPostsPill, PinnedPost, ReadOnlyBanner } from '../../components/board/LobbyParts'
 import { emptyOut, fadeIn, riseDelay, riseIn } from '../../components/board/boardMotion'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -104,7 +105,8 @@ const REFUSED_TITLE: Record<string, string> = {
 
 export function BoardScreen() {
   // `compose=1`: Post something on the event page's card (P-A), which opens the composer once, if posting is open.
-  const { eventId, compose: composeAsked } = useLocalSearchParams<{ eventId: string; compose?: string }>()
+  // `post`: a post link or a match push (6/6), the post to scroll to (`useLinkedPost`).
+  const { eventId, compose: composeAsked, post: postAsked } = useLocalSearchParams<{ eventId: string; compose?: string; post?: string }>()
   const composeOnce = useRef(composeAsked === '1')
   const [alertsOpen, setAlertsOpen] = useState(false)
   const bold = useBoldText()
@@ -143,6 +145,8 @@ export function BoardScreen() {
   const [held, setHeld] = useState<ReadonlySet<string>>(new Set())
   const heldRef = useLatest(held)
   const listRef = useRef<FlatList<BoardPostView>>(null)
+  /** A linked post (`useLinkedPost`), laid on top of All while no page lists it. */
+  const linkedPost = useRef<BoardPostView | null>(null)
 
   /*
    * A read is sequenced, and it merges rather than replaces.
@@ -182,6 +186,15 @@ export function BoardScreen() {
 
   // An older server still closes the Lobby at doors, in its old sentence: the doors banner, and nothing under it.
   const [doorsShut, setDoorsShut] = useState(false)
+
+  /** The linked post asked for again (a refresh, a poll): gone, refused or taken down, it leaves the top of the list. */
+  const recheckLinked = useCallback(async (event: string, postId: string) => {
+    const epoch = pageEpoch.current
+    const r = await apiClient.getBoardPost(event, postId).catch(() => null)
+    if (!r || r.success || linkedPost.current?.id !== postId || epoch !== pageEpoch.current) return
+    linkedPost.current = null
+    setLoad((prev) => (prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== postId) } : prev))
+  }, [])
 
   /**
    * `hold`: a read nobody asked for (a poll, a push). What it finds above the list waits behind the pill. `show`: a
@@ -270,14 +283,19 @@ export function BoardScreen() {
       }
       // Yours just posted, until the server lists it: on the chips it would be on.
       const yours = [...created.current.values()].filter((p) => chip === 'all' || chip === 'mine' || chip === p.kind)
-      setLoad({ kind: 'ready', posts: [...(chip === 'all' || chip === 'mine' ? gone : []), ...yours, ...listed, ...older.current] })
+      const onPages = [...yours, ...listed, ...older.current]
+      const link = linkedPost.current
+      const linkedOnTop = chip === 'all' && link && !removed.current.has(link.id) && !onPages.some((p) => p.id === link.id) ? [link] : []
+      setLoad({ kind: 'ready', posts: [...(chip === 'all' || chip === 'mine' ? gone : []), ...linkedOnTop, ...onPages] })
       setRefreshFailed(false)
+      // On top only while the Lobby still has it for you: asked again on every read, and dropped once it says no.
+      if (link && linkedOnTop.length) void recheckLinked(eventId, link.id)
       return true
     } catch (error) {
       Logger.warn('board', 'load threw', { eventId, error: String(error) })
       return false
     }
-  }, [eventId, loadRef, heldRef, scrolledRef])
+  }, [eventId, loadRef, heldRef, scrolledRef, recheckLinked])
 
   /*
    * A block from anywhere (a post's card here, a profile, a request in the Banter): the older pages loaded are dropped,
@@ -286,6 +304,8 @@ export function BoardScreen() {
    */
   useOnBlock(() => {
     pageEpoch.current += 1
+    // A block hides people the linked post may be from: it goes with the older pages, and comes back only if a page lists it.
+    linkedPost.current = null
     older.current = []
     setCursor(null)
     setMoreState('idle')
@@ -347,6 +367,21 @@ export function BoardScreen() {
 
   const posts = useMemo(() => (load.kind === 'ready' ? sortBoardPosts(load.posts).filter((p) => !held.has(p.id)) : []), [load, held])
   const layout = lobbyLayout(meta, filter, posts.length)
+  const linked = useLinkedPost({
+    eventId,
+    postParam: postAsked,
+    linkedRef: linkedPost,
+    removedRef: removed,
+    epochRef: pageEpoch,
+    posts: load.kind === 'ready' ? posts : null,
+    listRef,
+    viewOffset: contentTop,
+    animated: !reduceMotion,
+    onClosed: useCallback(() => setClosed(true), []),
+    onFound: useCallback((post: BoardPostView) => {
+      setLoad((prev) => (prev.kind === 'ready' && !prev.posts.some((p) => p.id === post.id) ? { kind: 'ready', posts: [post, ...prev.posts] } : prev))
+    }, []),
+  })
   const readOnly = meta.state === 'read_only'
 
   /** A chip: the server's filter, from its first page; the older pages and their cursor were for the other chip. */
@@ -544,6 +579,7 @@ export function BoardScreen() {
           // block epoch (`useOnBlock` above), which every route to a block moves.
           const blocked = post.author
           for (const [id, p] of created.current) if (!p.mine && p.author === blocked) created.current.delete(id)
+          if (linkedPost.current && !linkedPost.current.mine && linkedPost.current.author === blocked) linkedPost.current = null
           setLoad((prev) =>
             prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== post.id && (p.mine || p.author !== blocked)) } : prev
           )
@@ -610,6 +646,9 @@ export function BoardScreen() {
       {offline}
       {refreshFailed && load.kind === 'ready' ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>The Lobby didn’t refresh. Pull down to try again.</Text>
+      ) : null}
+      {linked.note ? (
+        <Text testID="board-link-note" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>{linked.note}</Text>
       ) : null}
       {top}
       {layout.chips && meta.counts ? (
@@ -686,6 +725,7 @@ export function BoardScreen() {
           if (moreState !== 'failed') void loadMore()
         }}
         onEndReachedThreshold={1.5}
+        onScrollToIndexFailed={linked.onScrollToIndexFailed}
         initialNumToRender={8}
         windowSize={9}
         contentContainerStyle={[styles.list, { paddingTop: contentTop }]}

@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AccessibilityInfo, FlatList, Platform, StyleSheet, useWindowDimensions, View, type ViewToken } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { FromTheLobby } from '../../components/board/FromTheLobby'
 import { useBlendRoom } from '../../components/crews/BlendRoom'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom, OpensLine, SubtitleText } from '../../components/chat/ChatHeader'
 import { BrokenLink } from '../../components/chat/BrokenLink'
@@ -26,6 +27,7 @@ import RealtimeStatusBanner from '../../components/RealtimeStatusBanner'
 import { useToast } from '../../components/Toast'
 import { useToastInset } from '../../components/toastDock'
 import { apiClient, type ChatReaction } from '../../lib/apiClient'
+import { BOARD_ENABLED } from '../../lib/board'
 import { LINKS_LINE, refusalPlace, runPlace } from '../../lib/chatFeed'
 import { emitChatListUpdate } from '../../lib/chatListUpdates'
 import { failedOf, keepFailed, roomThread, useThreadDraft } from '../../lib/chatOutbox'
@@ -175,6 +177,8 @@ function GroupChatInner() {
   const [oldestCursor, setOldestCursor] = useState<string | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [awayFromEnd, setAwayFromEnd] = useState(false)
+  /** "From the Lobby" folds to one line once you scroll the room, and opens again on a tap (SCRUM-1026, H-A). */
+  const [lobbyFolded, setLobbyFolded] = useState(false)
   /** Messages that arrived while you were reading back: the chip's count. */
   const [newWhileAway, setNewWhileAway] = useState(0)
   /* History did not load. Drawn only while there is nothing on screen. */
@@ -1012,13 +1016,19 @@ function GroupChatInner() {
           />
         ) : (
           <>
+            <View style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace, window.fontScale).style]}>
+              {/* An event's room once its doors are open (never while it counts down): what you joined in the Lobby, pinned above the stream.
+                  The event is the server's own row for this room, never a link's `eventId` (security review, PR 6). */}
+              {BOARD_ENABLED && eventRoom && roomInfo.eventId && !countingDown ? (
+                <FromTheLobby eventId={roomInfo.eventId} folded={lobbyFolded} onFold={() => setLobbyFolded(true)} onUnfold={() => setLobbyFolded(false)} />
+              ) : null}
             <FlatList
               ref={flatListRef}
               testID="room-feed"
               data={loading && !messages.length ? [] : chatItems}
               renderItem={renderChatItem}
               keyExtractor={(item) => (item.kind === 'separator' ? item.id : item.message_id)}
-              style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace, window.fontScale).style]}
+              style={styles.fill}
               contentContainerStyle={[styles.listContent, { paddingTop: chatFeedFrame(insets.top).paddingTop, paddingBottom: dockHeight + dockBottom + SPACE.md + toastInset }]}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
@@ -1085,7 +1095,10 @@ function GroupChatInner() {
               onViewableItemsChanged={onViewable}
               viewabilityConfig={VIEWABLE}
               onContentSizeChange={follow.onContentSizeChange}
-              onScrollBeginDrag={follow.onScrollBeginDrag}
+              onScrollBeginDrag={() => {
+                follow.onScrollBeginDrag()
+                setLobbyFolded(true)
+              }}
               onScroll={(e) => {
                 const { contentSize, contentOffset, layoutMeasurement } = e.nativeEvent
                 const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
@@ -1096,6 +1109,7 @@ function GroupChatInner() {
               }}
               scrollEventThrottle={80}
             />
+            </View>
 
             {awayFromEnd && messages.length ? (
               <NewestChip

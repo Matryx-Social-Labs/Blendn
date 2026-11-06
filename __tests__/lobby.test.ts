@@ -9,6 +9,9 @@ import {
   countLine,
   doorsAt,
   filterQuery,
+  fromLobbyCard,
+  FROM_LOBBY_ROWS,
+  type LobbySummary,
   joinedLine,
   joinedTitle,
   kindGlyph,
@@ -192,6 +195,58 @@ describe('From the Lobby', () => {
     expect(joinedLine({ mine: false, author: 'Lunar Fox', others: 3, body: 'From Indiranagar at 5:30' })).toBe('With Lunar Fox and 2 others: From Indiranagar at 5:30')
     expect(joinedLine({ mine: false, author: 'Lunar Fox', others: 1, body: 'x' })).toBe('With Lunar Fox: x')
     expect(joinedLine({ mine: true, author: 'Me', others: 1, body: 'x' })).toBe('1 other with you: x')
+  })
+
+  const UNTIL = '2026-11-09T18:30:00Z'
+  const ride = { postId: 'p1', kind: 'offer' as const, subKind: 'ride' as const, body: 'From Indiranagar at 5:30', mine: false, author: 'Lunar Fox', others: 3, chatGroupId: 'g1', requestId: 'r1', conversationId: 'c1' }
+  const ticket = { ...ride, postId: 'p2', subKind: 'ticket' as const, chatGroupId: null, conversationId: 'c2' }
+  const group = { ...ride, postId: 'p3', subKind: 'spots' as const, chatGroupId: null, conversationId: null }
+  const summary = (over: Partial<LobbySummary>): LobbySummary => ({ state: 'read_only', phase: 'live', readUntil: UNTIL, hasContent: true, pinned: null, joined: [], asks: { yours: 0, waitingOnYou: 0 }, ...over })
+
+  it('is no card at all when the server says there is nothing (owner, 2026-11-06)', () => {
+    expect(fromLobbyCard(summary({ hasContent: false }))).toBeNull()
+    expect(fromLobbyCard(null)).toBeNull()
+    // Control: the same summary with a row in it is a card.
+    expect(fromLobbyCard(summary({ joined: [ride] }))).not.toBeNull()
+  })
+
+  it('lists your rides, tickets and groups, then the host’s note, then Read the Lobby', () => {
+    const card = fromLobbyCard(summary({ joined: [ride, ticket, group], pinned: PIN }))!
+    expect(card.rows.map((r) => r.title)).toEqual(['Your ride', 'Your ticket', 'Your group', 'From the host'])
+    expect(card.rows.map((r) => r.glyph)).toEqual(['car', 'ticket', 'users', 'megaphone'])
+    expect(card.rows[3]).toMatchObject({ host: true, line: 'Music starts at 6.', open: null })
+    expect(card.readUntil).toBe(UNTIL)
+    expect(card.bar).toBe('Your ride · Your ticket · Your group · From the host')
+  })
+
+  it('opens a row’s room when you are seated in it, else the 1:1 your ask opened, else nothing', () => {
+    const [a, b, c] = fromLobbyCard(summary({ joined: [ride, ticket, group] }))!.rows
+    expect(a.open).toEqual({ kind: 'room', id: 'g1' })
+    expect(b.open).toEqual({ kind: 'dm', id: 'c2' })
+    expect(c.open).toBeNull()
+  })
+
+  it('is only the note when the host’s note is all there is (4b): no Read the Lobby', () => {
+    const card = fromLobbyCard(summary({ pinned: PIN }))!
+    expect(card.rows).toHaveLength(1)
+    expect(card.rows[0].host).toBe(true)
+    expect(card.readUntil).toBeNull()
+  })
+
+  it('shows three rows you joined and counts the rest', () => {
+    const many = [1, 2, 3, 4, 5].map((i) => ({ ...group, postId: `p${i}` }))
+    const card = fromLobbyCard(summary({ joined: many, pinned: PIN }))!
+    expect(card.rows.filter((r) => !r.host)).toHaveLength(FROM_LOBBY_ROWS)
+    expect(card.more).toBe(2)
+    expect(fromLobbyCard(summary({ joined: [group] }))!.more).toBe(0)
+  })
+
+  it('says what is waiting when asks are all there is, and opens them', () => {
+    const card = fromLobbyCard(summary({ asks: { yours: 1, waitingOnYou: 2 } }))!
+    expect(card.rows).toEqual([{ key: 'asks', glyph: 'hand-heart', title: 'Your asks', line: '2 asks waiting on you · 1 of yours waiting for an answer', open: { kind: 'asks' } }])
+    expect(card.readUntil).toBeNull()
+    // Control: with a row you joined, the asks are not a row of their own (the board draws none).
+    expect(fromLobbyCard(summary({ joined: [ride], asks: { yours: 1, waitingOnYou: 2 } }))!.rows.map((r) => r.key)).toEqual(['p1'])
   })
 })
 

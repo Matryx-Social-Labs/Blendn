@@ -64,6 +64,8 @@ export const GLYPH: Record<string, IconName> = {
   reveal: 'eye',
   board_request: 'hand-heart',
   board_request_accepted: 'circle-check',
+  board_match: 'users',
+  board_host_post: 'megaphone',
   message_request: 'message-circle',
   message_request_response: 'message-circle',
   crew_invite: 'users',
