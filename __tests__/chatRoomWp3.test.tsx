@@ -100,7 +100,8 @@ const HOUR = 60 * 60 * 1000
 const eventRow = (over: Record<string, unknown> = {}, event: Record<string, unknown> = {}) => ({
   id: 'g1',
   memberCount: 18,
-  event: { id: 'e1', kind: 'event', title: 'Neon Nights', startTime: new Date(Date.now() + 27 * HOUR + 20 * 60 * 1000).toISOString(), ...event },
+  event: { id: 'e1', kind: 'event', title: 'Neon Nights', startTime: new Date(Date.now() + 4 * HOUR + 50 * 60 * 1000).toISOString(), ...event },
+  // Doors, and the room, at start − 90 min: 3 h 20 m from now.
   ...over,
 })
 
@@ -138,7 +139,7 @@ describe('the pre-event room (C1, Flow 15 #8)', () => {
   it('is an ordinary room once it is open: the live count, the field', async () => {
     ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({
       success: true,
-      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + 2 * HOUR).toISOString() })] },
+      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] },
     })
     await render(<GroupChat />)
     await flush()
@@ -178,7 +179,7 @@ describe('a warning before contact details (C2, 5.10)', () => {
   beforeEach(() => {
     ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({
       success: true,
-      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + 2 * HOUR).toISOString() })] },
+      data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] },
     })
   })
 

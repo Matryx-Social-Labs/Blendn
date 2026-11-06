@@ -120,7 +120,7 @@ describe('Invite, in the dock once you are going', () => {
   const invite = () => screen.queryByRole('button', { name: 'Invite' })
 
   it('is the dock’s action beside "You’re going", and opens the system share sheet (not the tray) with the event', async () => {
-    // Two days out: the room is not open yet (it opens a day before the doors, and then the dock is Open the room).
+    // Two days out: the room is not open yet (it opens at the doors, and then the dock is Open the room).
     await open(detail({ startTime: hours(48), endTime: hours(51) }, { rsvpStatus: 'going' }))
     expect(await screen.findByText('You’re going')).toBeTruthy()
     await fireEvent.press(within(screen.getByTestId('scene-dock')).getByRole('button', { name: 'Invite' }))

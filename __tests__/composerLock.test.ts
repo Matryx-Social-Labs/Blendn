@@ -17,6 +17,9 @@ describe('lockForReason: the server\'s word, not its sentence (SV-5, ROOM-05)', 
   it('lockFor prefers reasonCode over the sentence, and falls back to the regex without it', () => {
     expect(lockFor('CHAT_CLOSED', 'This chat opens 24 hours before the event starts.', 'window_closed')?.state).toBe('closed')
     expect(lockFor('CHAT_CLOSED', 'This chat opens 24 hours before the event starts.')?.state).toBe('notopen')
+    // The server's sentence since the room opens at doors (lib/chat-window.ts there), with no reason code to lean on.
+    expect(lockFor('CHAT_CLOSED', 'The room opens when the doors open.')?.state).toBe('notopen')
+    expect(lockFor('CHAT_CLOSED', 'This chat has closed. Event chats stay open for 24 hours after the event ends.')?.state).toBe('closed')
     expect(lockFor('USER_MUTED', 'x', 'unknown_code')?.state).toBe('muted')
   })
 })

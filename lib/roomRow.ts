@@ -19,7 +19,7 @@ export type RoomRow = {
   eventId?: string
   /** The event's own title, when the room is named something else. */
   eventTitle?: string
-  /** When the event starts (ISO): the room opens a day before (`lib/preEventRoom.ts`). Absent for a crew's or a place's room. */
+  /** When the event starts (ISO): the room opens at the doors (`lib/preEventRoom.ts`). Absent for a crew's or a place's room. */
   startTime?: string
   /** A place's room: when its venue day resets (the daily close). */
   dayEndsAt?: string

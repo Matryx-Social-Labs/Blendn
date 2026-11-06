@@ -52,7 +52,7 @@ const LOCKED: Record<Locked, { icon: IconName; title: string; body?: string }> =
   ratelimited: { icon: 'timer', title: 'Slow down a moment', body: 'Too many messages.' },
   notcheckedin: { icon: 'map-pin', title: 'RSVP to this event to join the chat' },
   /* R2-D2: the server's CHAT_CLOSED reasons it words apart; the sentence is always the server's. */
-  notopen: { icon: 'clock', title: 'Not open yet', body: 'This chat opens 24 hours before the event starts.' },
+  notopen: { icon: 'clock', title: 'Not open yet', body: 'The room opens when the doors open.' },
   hidden: { icon: 'eye-off', title: 'This room is hidden', body: 'This event is no longer available.' },
 }
 

@@ -269,7 +269,7 @@ function GroupChatInner() {
   const muted = isMuted(useRoomMute(chatRoomId ? roomId : null))
   /** In the room now: the Room's number, live (`useHereCount`); a chat leave is not leaving the room. */
   const hereCount = useHereCount(roomInfo)
-  /* A day before doors the room is served but not open: its header counts down, its composer says so (Flow 15 #8). */
+  /* Before the doors the room is served but not open: its header counts down, its composer says so (Flow 15 #8). */
   const opensIn = usePreEventRoom(eventRoom ? roomInfo.startTime : null)
   /* The server's own opening, when it refused the room as not open yet: the same countdown (D-7). */
   const notOpenIn = useOpensAt(notOpen)

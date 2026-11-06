@@ -2,11 +2,16 @@ import { opensInLabel, opensInSpoken, roomOpensAt } from '../lib/preEventRoom'
 
 const HOUR = 60 * 60 * 1000
 const start = '2026-10-24T20:00:00.000Z'
-const opens = Date.parse(start) - 24 * HOUR
+const opens = Date.parse(start) - 90 * 60 * 1000
 
 describe('the pre-event room countdown', () => {
-  it('opens a day before doors', () => {
+  it('opens at the doors, 90 minutes before the start (the server’s DOORS_LEAD_MINUTES)', () => {
     expect(roomOpensAt(start)).toBe(opens)
+  })
+
+  it('is still shut two hours before the start (control: the old rule had it open since the day before)', () => {
+    expect(opensInLabel(start, Date.parse(start) - 2 * HOUR)).toBe('30m')
+    expect(opensInLabel(start, Date.parse(start) - 60 * 60 * 1000)).toBeNull()
   })
 
   it('says hours and minutes, as the frame does', () => {

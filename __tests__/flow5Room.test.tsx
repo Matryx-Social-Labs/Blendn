@@ -409,7 +409,7 @@ describe('a jump from one open room to another (RC drive 2 D-E)', () => {
 describe('an event’s room before it opens (D-7: NOT_OPEN_YET)', () => {
   const HOUR = 3_600_000
   const notMember = { success: false, errorCode: 'FORBIDDEN', error: 'You are not a member of this chat group' }
-  const notYet = (ms: number) => ({ success: false, errorCode: 'CHAT_CLOSED', reasonCode: 'NOT_OPEN_YET', error: 'This chat opens 24 hours before the event starts.', opensAt: new Date(Date.now() + ms).toISOString(), chatGroupId: 'g1' })
+  const notYet = (ms: number) => ({ success: false, errorCode: 'CHAT_CLOSED', reasonCode: 'NOT_OPEN_YET', error: 'The room opens when the doors open.', opensAt: new Date(Date.now() + ms).toISOString(), chatGroupId: 'g1' })
 
   beforeEach(() => jest.useFakeTimers({ now: Date.parse('2026-10-20T10:00:00.000Z'), doNotFake: ['nextTick', 'queueMicrotask', 'setImmediate', 'clearImmediate'] }))
   afterEach(() => jest.useRealTimers())
@@ -420,7 +420,7 @@ describe('an event’s room before it opens (D-7: NOT_OPEN_YET)', () => {
     await open()
     expect(api.getEventChat).toHaveBeenCalledWith('e1')
     expect(screen.getByText('Not open yet')).toBeTruthy()
-    expect(screen.getByText(/The room opens in 2 days 4 hours\./)).toBeTruthy()
+    expect(screen.getByText('The room opens in 2 days 4 hours, when the doors open.')).toBeTruthy()
     expect(screen.getByLabelText('Opens in 2 days 4 hours')).toBeTruthy()
     expect(screen.queryByText(/not in this room/)).toBeNull()
     expect(screen.queryByText(/Couldn’t load/)).toBeNull()
