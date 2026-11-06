@@ -16,7 +16,7 @@ export type DockRowAction = {
   onPress?: () => void
   loading?: boolean
   /** `false` where the action's own answer plays the haptic (I’m going, §10.2). */
-  pressHaptic?: boolean
+  pressHaptic?: boolean | (() => void)
   accessibilityHint?: string
   testID?: string
 }

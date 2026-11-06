@@ -51,10 +51,11 @@ import {
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient'
-import { COLOR, DURATION, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { COLOR, DURATION, MAX_FONT_SCALE, RADIUS, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { PosterLight, SceneHero, posterSide } from '../scene/SceneHero'
 import { EventGuide } from '../scene/EventGuide'
 import { DockRow } from '../ds/DockRow'
+import { PAGE_TITLE } from '../ds/shared'
 import { dateStamp, eventDock, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
 import { SceneLightbox } from '../scene/SceneLightbox'
 import { BoardEntry } from '../board/BoardSections'
@@ -1157,9 +1158,7 @@ export default function EventDetail() {
   )
 }
 
-/** E-B's title (`.t28`): 28/33, 700, -0.5; display's cap (1.5×) at the largest text. */
-// design-exception: the board's page title is 28/33 (`.t28`), between TYPE.title (24) and TYPE.display (34).
-const TITLE_TYPE = { fontFamily: FONT_FAMILY.brand[700], fontSize: 28, lineHeight: 33, letterSpacing: -0.5 }
+const TITLE_TYPE = PAGE_TITLE
 const TITLE_LINE = TITLE_TYPE.lineHeight
 
 const styles = StyleSheet.create({

@@ -2,9 +2,7 @@ import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from '../ds/Button'
-import { EventCard } from '../ds/EventCard'
-import { MapCard } from '../ds/MapCard'
-import { MonoRun, TimeBadge } from '../ds/MonoFamily'
+import { MonoRun } from '../ds/MonoFamily'
 import { SectionHeader } from '../ds/SectionHeader'
 import { font, minTarget, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { TimeRing } from '../ds/TimeRing'
@@ -13,11 +11,12 @@ import ScalePress from '../motion/ScalePress'
 import type { VenueDetail } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
-import { startsLabel } from '../../lib/roomMoments'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { liveNowWord } from '../../lib/home'
-import { hasMoreThanShown, ringWords, timeRange, UPCOMING_SHOWN, type UpcomingRow } from '../../lib/venuePage'
-import { VenueMap } from './VenueMap'
+import { DateStamp } from '../ds/DateStamp'
+import { Image } from 'expo-image'
+import { eventClock } from '../../lib/time'
+import { hasMoreThanShown, ringWords, UPCOMING_SHOWN, type UpcomingRow } from '../../lib/venuePage'
 
 /** The ring around the live card (the design's 88, a 56 face inside). */
 const RING = 88
@@ -56,99 +55,81 @@ export function LiveCard({ live, name, onZero }: { live: VenueDetail['live']; na
   )
 }
 
-/** An event has the place: the venue defers, and its card is the way in. */
-export function EventOnCard({ tonight, now, onPress }: { tonight: NonNullable<VenueDetail['tonight']> | null; now: number; onPress: () => void }) {
-  const bold = useBoldText()
-  const when = tonight ? startsLabel({ startsAt: tonight.startTime, endsAt: tonight.endTime, timeZone: tonight.timezone }, now).text : ''
-  return (
-    <ScalePress
-      testID="venue-event-on"
-      onPress={tonight ? onPress : undefined}
-      disabled={!tonight}
-      pressedScale={PRESS.scale}
-      accessibilityRole={tonight ? 'button' : 'text'}
-      accessibilityLabel={
-        tonight ? `On here tonight. ${tonight.title}. An event is on, so this room is the event’s room: check in to it.` : 'An event is on here. Check in to it to join its room.'
-      }
-      style={styles.eventOn}
-    >
-      <View style={styles.eventOnHead}>
-        {when ? <TimeBadge when={when} /> : null}
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>ON HERE TONIGHT</Text>
-      </View>
-      {tonight ? (
-        <>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>{tonight.title}</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-            {`Doors ${timeRange(tonight.startTime, tonight.endTime, tonight.timezone)}. `}
-            While an event is on, this room is the event’s room: check in to it.
-          </Text>
-        </>
-      ) : (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>An event is on here. While it is, this room is the event’s room: check in to it.</Text>
-      )}
-    </ScalePress>
-  )
-}
-
-/** Tonight here: the event's card, or one sentence about going live. */
+/*
+ * Flow 4 V-A's Tonight here (`tonightCard`, `.tn`): one surface card, the night's cover at 56, a live label in its own
+ * slot, the title over two lines and how busy it is ("20+ here now"). Nothing on: one card that says so and what to do.
+ */
 export function TonightHere({
   tonight,
-  venue,
-  km,
+  liveNow,
   now,
   onOpen,
 }: {
   tonight: VenueDetail['tonight']
-  venue: string
-  km: number | null
+  liveNow: VenueDetail['live']['liveNow']
   now: number
   onOpen: (eventId: string) => void
 }) {
   const bold = useBoldText()
-  const when = tonight ? startsLabel({ startsAt: tonight.startTime, endsAt: tonight.endTime, timeZone: tonight.timezone }, now).text : ''
+  const on = tonight && Date.parse(tonight.startTime) <= now
+  const label = tonight ? (on ? `● Live · till ${eventClock(tonight.endTime, tonight.timezone)}` : `Tonight · ${eventClock(tonight.startTime, tonight.timezone)}`) : ''
+  const busy = liveNowWord(liveNow)
   return (
-    <Section>
+    <View style={styles.section}>
       <SectionHeader title="Tonight here" />
-      {tonight && when ? (
-        <EventCard
-          kind="hero"
-          title={tonight.title}
-          time={when}
-          venue={venue}
-          distance={distanceText(km) ?? undefined}
-          cover={tonight.coverImageUrl}
+      {tonight ? (
+        <ScalePress
+          haptic={false}
           onPress={() => onOpen(tonight.id)}
-          style={styles.eventCard}
+          accessibilityRole="button"
+          accessibilityLabel={[tonight.title, label.replace('● ', ''), busy ? `${busy} here now` : null].filter(Boolean).join(', ')}
+          style={styles.tonight}
           testID="venue-tonight"
-        />
+        >
+          <View style={styles.thumb}>
+            {tonight.coverImageUrl ? <Image source={{ uri: tonight.coverImageUrl }} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : <DateStamp iso={tonight.startTime} timeZone={tonight.timezone} />}
+          </View>
+          <View style={styles.tonightWords}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), on ? styles.live : styles.secondary]}>
+              {label}
+            </Text>
+            <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('rowTitle', bold), styles.ink]}>
+              {tonight.title}
+            </Text>
+            {busy ? (
+              <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+                <Text style={{ fontFamily: FONT_FAMILY.mono[500] }}>{busy}</Text> here now
+              </Text>
+            ) : null}
+          </View>
+        </ScalePress>
       ) : (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary]}>No event tonight. When you’re here, go live and see who else is.</Text>
+        <View style={[styles.tonight, styles.tonightNone]} accessible testID="venue-tonight-none">
+          <View style={styles.tonightWords}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('rowTitle', bold), styles.ink]}>Nothing on here tonight</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>When you’re here, go live and see who else is.</Text>
+          </View>
+        </View>
       )}
-    </Section>
+    </View>
   )
 }
 
-/**
- * Coming up here: the date in Geist Mono and the title (no going count: the server sends none, SCRUM-743). Three show;
- * "See all" opens the sheet that pages the rest in, and the heading carries how many there are in all.
- */
+/** Flow 4 V-A's Coming up here: date-led rows (the stamp at 48), the title over two lines, its time in Geist Mono. */
 export function UpcomingList({
   rows,
   total,
   onOpen,
   onSeeAll,
 }: {
-  /** The page's first rows, soonest first. */
   rows: UpcomingRow[]
-  /** How many there are in all (`upcomingCount`). */
   total: number
   onOpen: (eventId: string) => void
   onSeeAll: () => void
 }) {
   const bold = useBoldText()
   return (
-    <Section>
+    <View style={styles.section}>
       <SectionHeader title="Coming up here" count={total} action={hasMoreThanShown(total) ? { label: 'See all', onPress: onSeeAll } : undefined} />
       {rows.slice(0, UPCOMING_SHOWN).map((r) => (
         <Pressable
@@ -160,29 +141,22 @@ export function UpcomingList({
           style={styles.upcoming}
           testID={`venue-upcoming-${r.id}`}
         >
-          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular, styles.day]}>
-            <MonoRun text={r.day} />
-          </Text>
-          {/* Two lines for the title; the start time and a chevron say when, and that the row opens the event (C36). */}
-          <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.upcomingTitle]}>
-            {r.title}
-          </Text>
-          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular, styles.upcomingTime]}>
-            <MonoRun text={r.time} />
-          </Text>
-          <View testID="venue-upcoming-chevron" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Icon name="chevron-right" size={ICON.inline} color={COLOR.textTertiary} />
+          <DateStamp iso={r.start} timeZone={r.timeZone} size={STAMP} />
+          <View style={styles.tonightWords}>
+            <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('rowTitle', bold), styles.ink]}>
+              {r.title}
+            </Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary]}>
+              {r.time}
+            </Text>
           </View>
+          <Icon name="chevron-right" size={ICON.control} color={COLOR.textSecondary} />
         </Pressable>
       ))}
-    </Section>
+    </View>
   )
 }
 
-/**
- * Who’s here: only somebody live here may see who. Everyone else gets the one
- * sentence; somebody live gets the bucket and the way into the room.
- */
 export function WhosHere({ live, onSeeWho }: { live: VenueDetail['live']; onSeeWho: () => void }) {
   const bold = useBoldText()
   const liveWord = liveNowWord(live.liveNow)
@@ -274,16 +248,13 @@ export function About({ text }: { text: string }) {
 export function Where({
   venue,
   km,
-  onDirections,
   onCopy,
 }: {
   venue: VenueDetail['venue']
   km: number | null
-  onDirections: () => void
   onCopy: () => void
 }) {
   const bold = useBoldText()
-  const hasCoords = !!venue.latitude && !!venue.longitude
   const distance = distanceText(km)
   // The city once: an address that already names it ("…, Bengaluru 560001") does not get it again underneath (r7 L4).
   const city = venue.city && !venue.address?.toLowerCase().includes(venue.city.toLowerCase()) ? venue.city : null
@@ -312,7 +283,6 @@ export function Where({
           </View>
         </View>
         <View style={styles.whereActions}>
-          <Button kind="secondary" size="raised" icon="navigation" label="Directions" onPress={onDirections} style={styles.fill} testID="venue-directions" />
           {venue.address ? (
             <Pressable
               onPress={onCopy}
@@ -327,15 +297,6 @@ export function Where({
           ) : null}
         </View>
       </View>
-      {hasCoords ? (
-        <MapCard
-          venue={venue.name}
-          address={venue.address ?? undefined}
-          map={<VenueMap latitude={venue.latitude as number} longitude={venue.longitude as number} />}
-          onPress={onDirections}
-          testID="venue-map"
-        />
-      ) : null}
     </Section>
   )
 }
@@ -363,6 +324,12 @@ export function ClaimLine({ onPress }: { onPress: () => void }) {
   )
 }
 
+/** The Tonight card's cover and the Coming up stamp (`th56`, `stamp(48)`). */
+const THUMB = SIZE.disc
+const STAMP = SPACE.xxxl
+// design-exception: the board's Tonight card has 20 pt corners (`.tn`), between RADIUS.rowInCard and RADIUS.mediaInCard.
+const TONIGHT_RADIUS = 20
+
 const styles = StyleSheet.create({
   section: { gap: SPACE.md },
   eventCard: { height: EVENT_HEIGHT },
@@ -373,7 +340,14 @@ const styles = StyleSheet.create({
   cardText: { flex: 1, gap: SPACE.xs },
   eventOn: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.sm },
   eventOnHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  upcoming: { minHeight: SIZE.primary, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  // `.gr4.v`: 64 at least, 8 above and below, 12 between the stamp, the words and the chevron.
+  upcoming: { minHeight: SIZE.tabBar, paddingVertical: SPACE.sm, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  // `.tn`: the surface, 20 corners, 12 in, a hairline; nothing on is 16 in.
+  tonight: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, padding: SPACE.md, borderRadius: TONIGHT_RADIUS, backgroundColor: COLOR.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
+  tonightNone: { padding: SPACE.lg },
+  tonightWords: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  thumb: { width: THUMB, height: THUMB, borderRadius: SPACE.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: COLOR.surfaceSunken },
+  live: { color: COLOR.live },
   // A date never wraps ("Sun 25 / Oct"): it is as wide as it needs, no narrower than the column, so titles still line up.
   day: { minWidth: DAY_WIDTH, flexShrink: 0 },
   upcomingTitle: { flex: 1 },

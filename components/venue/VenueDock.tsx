@@ -12,7 +12,8 @@ import type { VenueDetail } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useSessionTime } from '../../lib/useSessionTime'
-import { againLabel, spokenLeft, type DockMode } from '../../lib/venuePage'
+import { againLabel, spokenLeft, venueDockLine, type DockMode } from '../../lib/venuePage'
+import { DockRow } from '../ds/DockRow'
 
 /** The live pill is 36 tall (Flow 11 `livePill`); its chips 22 and 24. */
 const PILL_HEIGHT = 36
@@ -121,6 +122,7 @@ export function VenueDock({
   const contrast = useIncreaseContrast()
   // The Android snackbar stands above the dock.
   const [height, setHeight] = useState(0)
+  const line = (mode.kind === 'goLive' && !mode.again) || mode.kind === 'handoff'
   // The toast adds the bottom inset itself, and this dock's height already holds it.
   useToastDock(Math.max(0, height - insets.bottom))
   return (
@@ -131,9 +133,22 @@ export function VenueDock({
         setHeight(e.nativeEvent.layout.height)
       }}
       testID="venue-dock"
-      style={[styles.dock, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }, contrast && IC_HAIRLINE]}
+      style={[
+        styles.dock,
+        // Flow 4 V-A: the one-line dock (`.dock4`) is a straight bar, 12 over the row, the home indicator's room under it;
+        // a closed place is its note (`.dock4.note`, 16 over). The live session keeps its own row.
+        line ? [styles.line, { paddingBottom: Math.max(insets.bottom, SPACE.md) }] : mode.kind === 'closed' ? [styles.line, styles.note, { paddingBottom: Math.max(insets.bottom, SPACE.md) }] : { paddingBottom: Math.max(insets.bottom, SPACE.lg) },
+        contrast && IC_HAIRLINE,
+      ]}
     >
-      {mode.kind === 'goLive' ? (
+      {mode.kind === 'goLive' && !mode.again ? (
+        <DockRow
+          testID="venue-dock-row"
+          {...venueDockLine('goLive')}
+          action={{ ...venueDockLine('goLive').action, onPress: onGoLive, loading: busy, pressHaptic: () => H.primary(), testID: 'venue-go-live' }}
+        />
+      ) : null}
+      {mode.kind === 'goLive' && mode.again ? (
         <>
           <Button
             label={mode.again ? againLabel(mode.again) : 'Go live'}
@@ -157,7 +172,11 @@ export function VenueDock({
         </View>
       ) : null}
       {mode.kind === 'handoff' ? (
-        <Button label={eventTitle ? `Check in to ${eventTitle} instead` : 'Check in to the event'} kind="primary" onPress={onEvent} testID="venue-handoff" />
+        <DockRow
+          testID="venue-dock-row"
+          {...venueDockLine('handoff')}
+          action={{ ...venueDockLine('handoff').action, onPress: onEvent, accessibilityHint: eventTitle ? `Opens ${eventTitle}` : undefined, testID: 'venue-handoff' }}
+        />
       ) : null}
       {mode.kind === 'closed' ? <ClosedLine message={mode.message} reason={mode.reason} /> : null}
     </Material>
@@ -169,13 +188,13 @@ function ClosedLine({ message, reason }: { message: string; reason: string | nul
   const bold = useBoldText()
   return (
     <View testID="venue-closed" accessible accessibilityLabel={[message, reason].filter(Boolean).join(' ')} style={styles.closed}>
-      <Icon name="map-pin-off" size={ICON.control} color={COLOR.textSecondary} />
+      <Icon name="eye-off" size={ICON.control} color={COLOR.textSecondary} />
       <View style={styles.closedWords}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('group', bold), styles.ink]}>
           {message}
         </Text>
         {reason ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.secondary]}>
             {reason}
           </Text>
         ) : null}
@@ -213,8 +232,10 @@ const styles = StyleSheet.create({
   endingChip: { height: ENDING_CHIP, justifyContent: 'center', paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.warning },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
-  closed: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md, minHeight: SIZE.primary, paddingVertical: SPACE.xs },
-  closedWords: { flex: 1, gap: SPACE.xxs },
+  closed: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  closedWords: { flex: 1 },
+  line: { paddingTop: SPACE.md, paddingLeft: SPACE.gutter, paddingRight: SPACE.lg, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
+  note: { paddingTop: SPACE.lg, paddingRight: SPACE.gutter },
   onWhite: { color: COLOR.ink },
   tabular: { fontVariant: ['tabular-nums'] },
 })
