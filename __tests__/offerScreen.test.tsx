@@ -35,7 +35,14 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 // The disc's endless wave and bubbles would run through every fake-clock walk below; it has its own test (dsLiquidDisc). The stamp over it is the screen's.
-jest.mock('../components/ds/LiquidDisc', () => ({ LiquidDisc: ({ stamp }: { stamp?: React.ReactNode }) => stamp ?? null }))
+jest.mock('../components/ds/LiquidDisc', () => {
+  const { View } = jest.requireActual('react-native')
+  return {
+    LiquidDisc: ({ stamp, size, testID }: { stamp?: React.ReactNode; size: number; testID?: string }) => (
+      <View testID={testID} style={{ width: size, height: size }}>{stamp}</View>
+    ),
+  }
+})
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { queuedRequest: jest.fn() } }))
@@ -119,7 +126,11 @@ describe('the live pass', () => {
   it('shows the server’s code, and turns to "Redeemed" when the server says so', async () => {
     await mount()
     expect(screen.getByText('K7Q 4M2')).toBeTruthy()
-    expect(screen.getByLabelText('Door code K 7 Q, 4 M 2')).toBeTruthy()
+    expect(screen.getByLabelText('Offer code K 7 Q, 4 M 2')).toBeTruthy()
+    // The naming pass's "Offer code" (2026-11-05) heads the ticket, never "Door code"; the code row says SHOW THIS CODE (the board).
+    expect(screen.getAllByText('OFFER CODE')).toHaveLength(1)
+    expect(screen.getByText('SHOW THIS CODE')).toBeTruthy()
+    expect(screen.queryByText('DOOR CODE')).toBeNull()
     expect(screen.getByLabelText(/^Offer code for The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
     expect(screen.getByText('Works once, today. Staff type the code and tap Redeemed.')).toBeTruthy()
     reads = [offer('redeemed', null)]
@@ -153,7 +164,7 @@ describe('the live pass', () => {
     await act(async () => { jest.advanceTimersByTime(22_000) })
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
     expect(screen.getByText('This offer code needs a connection to show.')).toBeTruthy()
-    expect(screen.getByLabelText(/^Door code unavailable/)).toBeTruthy()
+    expect(screen.getByLabelText(/^Offer code unavailable/)).toBeTruthy()
   })
 
   /*
@@ -196,25 +207,28 @@ describe('the live pass', () => {
 
   it('the ring counts down to the server’s turn: with the phone’s clock agreeing, 20 s of the 30 are left', async () => {
     await mount()
-    expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('New code in 0:20', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('and on the server’s clock, not the phone’s: a phone 10 s behind the server shows 10 s, not 20', async () => {
     // The server says it is 20:00:20 while this phone says 20:00:10; the code turns at 20:00:30 server time.
     noteServerDate(new Date(NOW + 10_000).toUTCString(), NOW)
     await mount()
-    expect(screen.getByText('10 s', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.queryByText('20 s', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('New code in 0:10', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('New code in 0:20', { includeHiddenElements: true })).toBeNull()
   })
 })
 
 describe('the other faces of the pass', () => {
-  it('redeemed: the stamp carries the time the server gave, and the code is gone', async () => {
-    reads = [offer('redeemed', null, { redeemedAt: '2026-10-11T19:43:00.000Z' })]
+  it('redeemed: the stamp carries the time the server gave, on the phone’s clock in the app’s one grammar, and the code is gone', async () => {
+    // 9:43 PM wherever this runs: the phone's own clock, never the venue's zone and never a zone label.
+    reads = [offer('redeemed', null, { redeemedAt: new Date(2026, 9, 11, 21, 43).toISOString() })]
     await mount()
-    expect(screen.getByLabelText(/^Redeemed \d{1,2}:\d{2}/)).toBeTruthy()
+    expect(screen.getByLabelText('Redeemed 9:43 PM')).toBeTruthy()
+    expect(screen.getAllByText('Redeemed 9:43 PM')).toHaveLength(1) // the stamp on the disc; the code row says USED TONIGHT (the board)
+    expect(screen.getByText('USED TONIGHT')).toBeTruthy()
     expect(screen.getByText('Redeemed. Enjoy it.')).toBeTruthy()
-    expect(screen.getByText('· · ·')).toBeTruthy()
+    expect(screen.getByText('— — —')).toBeTruthy()
   })
 
   it('used tonight: still, stamped, and the server’s own sentence', async () => {
@@ -223,6 +237,12 @@ describe('the other faces of the pass', () => {
     expect(screen.getByLabelText('Used tonight')).toBeTruthy()
     expect(screen.getByText(/You’ve used an offer at The Humming Tree tonight — one a night/)).toBeTruthy()
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
+  })
+
+  it('the board’s ticket (flow-4 offer): a 48 pt glyph tile beside the head, and the 184 pt disc', async () => {
+    await mount()
+    expect(StyleSheet.flatten(screen.getByTestId('door-tile').props.style)).toMatchObject({ width: 48, height: 48 })
+    expect(StyleSheet.flatten(screen.getByTestId('door-disc').props.style)).toMatchObject({ width: 184, height: 184 })
   })
 
   it('ended: names the day, dashes for the code', async () => {
@@ -293,6 +313,51 @@ describe('the regulars feature is deferred: nothing shows unless the server says
     regular = { ...regular, known: true }
     await mount()
     expect(screen.getByTestId('regular-on')).toBeTruthy()
+  })
+})
+
+describe('the screen’s brightness while the code is up (expo-brightness, guarded)', () => {
+  const modules = (globalThis as unknown as { expo: { modules: Record<string, unknown> } }).expo.modules
+  const native = {
+    getBrightnessAsync: jest.fn(() => Promise.resolve(0.4)),
+    setBrightnessAsync: jest.fn(() => Promise.resolve()),
+    restoreSystemBrightnessAsync: jest.fn(() => Promise.resolve()),
+  }
+  beforeEach(() => {
+    Object.values(native).forEach((fn) => fn.mockClear())
+    modules.ExpoBrightness = native
+  })
+  afterEach(() => {
+    delete modules.ExpoBrightness
+  })
+
+  /** The brightness calls chain (read the level, then raise): every step settled. */
+  const settle = () => act(async () => { for (let i = 0; i < 6; i++) await Promise.resolve() })
+
+  it('full while the live code shows; put back when the server says redeemed', async () => {
+    await mount()
+    await settle()
+    expect(native.setBrightnessAsync.mock.calls).toEqual([[1]])
+    reads = [offer('redeemed', null)]
+    await act(async () => { jest.advanceTimersByTime(10_000) })
+    await settle()
+    expect(screen.getByText('Redeemed. Enjoy it.')).toBeTruthy()
+    expect(native.setBrightnessAsync.mock.calls).toEqual([[1], [0.4]])
+  })
+
+  it('never raised for a pass with no code to show (control)', async () => {
+    reads = [offer('used_tonight', null)]
+    await mount()
+    await settle()
+    expect(native.getBrightnessAsync).not.toHaveBeenCalled()
+    expect(native.setBrightnessAsync).not.toHaveBeenCalled()
+  })
+
+  it('a build without the module shows the live code just the same', async () => {
+    delete modules.ExpoBrightness
+    await mount()
+    expect(screen.getByText('K7Q 4M2')).toBeTruthy()
+    expect(native.setBrightnessAsync).not.toHaveBeenCalled()
   })
 })
 
