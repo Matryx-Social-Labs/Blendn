@@ -53,7 +53,7 @@ import {
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
 import { BOARD_ENABLED, boardOpen } from '../../lib/board'
-import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
+import { HAPPENING_NOW, dayAndClock, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
@@ -423,7 +423,7 @@ function GoingScreenInner() {
       showSheet({
         kind: 'actions',
         title: row.title,
-        message: [placeLabel(row), `${featuredDateLabel(liveWindow(row).start_time, new Date(), row.timezone)} · ${timeLabel(liveWindow(row).start_time, row.timezone)}`].filter(Boolean).join(' · '),
+        message: [placeLabel(row), dayAndClock(liveWindow(row).start_time, new Date(), row.timezone)].filter(Boolean).join(' · '),
         actions: [
           { label: 'Share', variant: 'secondary', then: () => shareRow(row) },
           // A night called off has nowhere to go and nothing to put in a calendar.
@@ -473,7 +473,7 @@ function GoingScreenInner() {
       ? 'Ended'
       : live || clock !== HAPPENING_NOW
         ? clock
-        : `${featuredDateLabel(today.start_time, new Date(), row.timezone)} · ${timeLabel(today.start_time, row.timezone)}`
+        : dayAndClock(today.start_time, new Date(), row.timezone)
     const action = goingCardAction(phase, liveEventId === row.id)
     const place = placeLabel(row)
     const cancelled = row.status === 'cancelled'
@@ -700,7 +700,7 @@ function GoingScreenInner() {
           stamp={{ iso: row.start_time, timeZone: row.timezone }}
           category={row.category}
           retry={refreshCount}
-          time={`${featuredDateLabel(row.start_time, new Date(), row.timezone)} · ${timeLabel(row.start_time, row.timezone)}`}
+          time={dayAndClock(row.start_time, new Date(), row.timezone)}
           venue={placeLabel(row)}
           onPress={() => openEvent(row.id)}
           onLongPress={() => rowActions(row)}
