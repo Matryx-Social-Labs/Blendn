@@ -60,8 +60,17 @@ export function SceneHeroMedia({
   paused = false,
   started = false,
   onClipInView,
+  fit = 'cover',
+  autoAdvance = true,
+  pips = 'corner',
 }: {
   playlist: FeedMediaItem[]
+  /** `contain`: the organizer's flyer as they made it, uncropped (Flow 4 E-B's poster). */
+  fit?: 'cover' | 'contain'
+  /** `false`: the pager moves only when swiped (Flow 4 M31: a gallery never advances on its own). */
+  autoAdvance?: boolean
+  /** `center`: the poster's pips, 6 pt, the page's 16, 5 apart, 12 above the foot, no capsule (board `.pips`). */
+  pips?: 'corner' | 'center'
   width: number
   height: number
   /** Opens the lightbox at the item currently shown. */
@@ -107,7 +116,7 @@ export function SceneHeroMedia({
    * motion that setting asks us not to start. The viewer swipes; a clip is its
    * poster until they press Play, then loops. Never while paused (WCAG 2.2.2).
    */
-  const autoAdvances = !manual && !reduceMotion && !paused && playlist.length > 1
+  const autoAdvances = autoAdvance && !manual && !reduceMotion && !paused && playlist.length > 1
   const autoAdvancesRef = useRef(autoAdvances)
 
   // The three refs above, refreshed on every commit rather than during render.
@@ -184,7 +193,7 @@ export function SceneHeroMedia({
             <Image
               source={{ uri: item.kind === 'image' ? item.url : item.posterUrl }}
               style={StyleSheet.absoluteFill}
-              contentFit="cover"
+              contentFit={fit}
               cachePolicy="memory-disk"
               recyclingKey={item.kind === 'image' ? item.url : item.posterUrl}
               transition={0}
@@ -227,6 +236,7 @@ export function SceneHeroMedia({
                  * looping never.
                  */
                 loop={!autoAdvances}
+                fit={fit}
                 /*
                  * A stable function, always — never `undefined`.
                  *
@@ -252,7 +262,13 @@ export function SceneHeroMedia({
         ))}
       </ScrollView>
 
-      {playlist.length > 1 ? (
+      {playlist.length > 1 && pips === 'center' ? (
+        <View testID="scene-hero-pips" style={styles.pips} pointerEvents="none">
+          {playlist.map((_, i) => (
+            <View key={i} style={[styles.pip, i === index && styles.pipOn]} />
+          ))}
+        </View>
+      ) : playlist.length > 1 ? (
         <View
           testID="scene-hero-dots"
           style={[styles.dots, { backgroundColor: reduceTransparency ? MATERIAL.scrimPillReduceTransparency : MATERIAL.scrimPill }]}
@@ -269,6 +285,9 @@ export function SceneHeroMedia({
 
 /** The empty band under the hero's caption: the pager dots live in it, so no title length can reach them. */
 export const HERO_CAPTION_FOOT = SPACE.xxl + SPACE.sm
+
+// design-exception: the board's pips are 5 apart (`.pips` gap), between SPACE.xs and SPACE.sm, as the Pulse lead's.
+const PIP = { on: SPACE.lg, off: 6, gap: 5 } as const
 
 const styles = StyleSheet.create({
   /*
@@ -296,6 +315,9 @@ const styles = StyleSheet.create({
     backgroundColor: tint(COLOR.textPrimary, 0.4),
   },
   dotActive: { backgroundColor: COLOR.textPrimary, width: 18 },
+  pips: { position: 'absolute', left: 0, right: 0, bottom: SPACE.md, flexDirection: 'row', justifyContent: 'center', gap: PIP.gap },
+  pip: { width: PIP.off, height: PIP.off, borderRadius: RADIUS.capsule, backgroundColor: tint(COLOR.textPrimary, 0.4) },
+  pipOn: { width: PIP.on, backgroundColor: COLOR.textPrimary },
 })
 
 /**
@@ -312,10 +334,12 @@ function HeroVideo({
   source,
   paused,
   loop,
+  fit,
   onEnded,
   onFailed,
 }: {
   source: string
+  fit: 'cover' | 'contain'
   /** Holds the frame it is on; Play carries on from there. */
   paused: boolean
   loop: boolean
@@ -404,7 +428,7 @@ function HeroVideo({
     <VideoView
       player={player}
       style={StyleSheet.absoluteFill}
-      contentFit="cover"
+      contentFit={fit}
       nativeControls={false}
       allowsPictureInPicture={false}
       accessible={false}

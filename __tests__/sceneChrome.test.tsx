@@ -1,6 +1,6 @@
 /**
- * The Scene's chrome and hero (Flow 3 `scene`): back plus three media circles with the ⋯ holding Report; the glass
- * bar that mounts at 8 pt of scroll; the hero's pills and words; no cover is the category plate; the day strip.
+ * The event page's chrome and poster: back plus three media circles with the ⋯ holding Report; the glass bar that
+ * mounts at 8 pt of scroll, or with a poster as the title reaches it (Flow 4 E-B); the poster and its stamp; the day strip.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -8,7 +8,7 @@ import { Platform, StyleSheet } from 'react-native'
 import { getAnimatedStyle, makeMutable } from 'react-native-reanimated'
 
 import { SceneBar, sceneBarTitleSpan } from '../components/scene/SceneBar'
-import { SceneHero } from '../components/scene/SceneHero'
+import { SceneHero, posterSide } from '../components/scene/SceneHero'
 import { SceneDayStrip, dayStripOffset } from '../components/scene/SceneChange'
 import { H } from '../lib/haptics'
 
@@ -51,6 +51,28 @@ describe('SceneBar', () => {
     on('android')
     await render(bar())
     expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
+  })
+
+  it('with a poster (Flow 4 E-B) the glass and the title wait for the page title, then fade in over 40 pt', async () => {
+    const scrollY = makeMutable(0)
+    await render(bar({ scrollY, reveal: 345 }))
+    const glass = () => getAnimatedStyle(screen.getByTestId('scene-bar-glass', { includeHiddenElements: true })).opacity
+    const title = () => getAnimatedStyle(screen.getByTestId('scene-bar-title', { includeHiddenElements: true })).opacity
+    const at = async (y: number) => {
+      await act(async () => {
+        scrollY.set(y)
+      })
+      await act(async () => jest.runOnlyPendingTimers())
+    }
+    // Control: past 8 pt, the bar without a poster is glass; with one it is still clear.
+    await at(20)
+    expect(glass()).toBe(0)
+    await at(365)
+    expect(glass()).toBeCloseTo(0.5)
+    expect(title()).toBeCloseTo(0.5)
+    await at(400)
+    expect(glass()).toBe(1)
+    expect(title()).toBe(1)
   })
 
   it('keeps the glass mounted and clear at rest, and fully there past 8 pt (no pop)', async () => {
@@ -98,48 +120,39 @@ describe('the small title\'s room', () => {
   })
 })
 
-describe('SceneHero', () => {
+describe('SceneHero: the poster, lit from behind (Flow 4 E-B)', () => {
+  const STILL = [{ kind: 'image' as const, url: 'https://example.com/c.jpg' }]
+  const STAMP = { dow: 'TUE', dd: '11', mon: 'NOV', spoken: 'Tuesday 11 November' }
   const hero = (props: Partial<React.ComponentProps<typeof SceneHero>> = {}) => (
-    <SceneHero source={{ uri: 'https://example.com/c.jpg' }} title="Vinyl Night" when="Sat 24 Oct · 9 PM" place="at Toit, Bengaluru" {...props} />
+    <SceneHero playlist={STILL} title="Vinyl Night" stamp={STAMP} venueLine="Toit · Indiranagar" category="music" {...props} />
   )
 
-  it('is one header for a screen reader: what, when, the pills, where', async () => {
-    await render(hero({ pills: [{ key: 'age', text: '21+' }, { key: 'people', text: '42 going' }] }))
-    const header = screen.getByRole('header')
-    expect(header.props.accessibilityLabel).toBe('Vinyl Night. Sat 24 Oct · 9 PM. 21+. 42 going. at Toit, Bengaluru')
-  })
-
-  it('is 420 tall, with the head and foot scrims that carry the circles and the words', async () => {
+  it('is a square the width of the page’s column (24 in each side), with the ember underglow behind it', async () => {
     await render(hero())
-    expect(screen.getByTestId('scene-hero').props.style).toEqual(expect.arrayContaining([expect.objectContaining({ height: 420 })]))
-    expect(screen.getByTestId('scene-hero-head')).toBeTruthy()
-    expect(screen.getByTestId('scene-hero-foot')).toBeTruthy()
+    const style = StyleSheet.flatten(screen.getByTestId('scene-hero').props.style)
+    expect(style.width).toBe(posterSide(393))
+    expect(style.height).toBe(style.width)
+    expect(posterSide(393)).toBe(345)
   })
 
-  // TG-06 (B-S3, D8). Negative control: the old orbs branch has no `scene-hero-plate`, so the first two expects fail.
-  it('draws its category plate where there is no cover, not a grey box and not the brand orbs', async () => {
-    await render(hero({ source: undefined, category: 'music' }))
-    expect(screen.getByTestId('scene-hero-plate', { includeHiddenElements: true })).toBeTruthy()
+  it('a cover is one image to a screen reader: "Cover for …"', async () => {
+    await render(hero())
+    expect(screen.getByLabelText('Cover for Vinyl Night')).toBeTruthy()
+    expect(screen.queryByTestId('scene-hero-stamp')).toBeNull()
+  })
+
+  // Negative control: with a cover there is no stamp (above); without one, never a grey box.
+  it('no cover is the stamp poster: the date in Geist Mono, the category’s glyph and the venue, read as the date and place', async () => {
+    await render(hero({ playlist: [] }))
+    const stamp = screen.getByTestId('scene-hero-stamp')
+    expect(stamp.props.accessibilityLabel).toBe('Tuesday 11 November, Toit · Indiranagar')
+    for (const t of ['TUE', '11', 'NOV']) expect(screen.getByText(t, { includeHiddenElements: true })).toBeTruthy()
     expect(JSON.stringify(screen.toJSON())).toContain('music-2')
-    // No category: the hue's fill alone, still never an empty box.
-    await render(hero({ source: undefined }))
-    expect(screen.getByTestId('scene-hero-plate', { includeHiddenElements: true })).toBeTruthy()
-    await render(hero({ category: 'music' }))
-    expect(screen.queryByTestId('scene-hero-plate', { includeHiddenElements: true })).toBeNull()
   })
 
-  it('a cancelled event: the DS TimeBadge strikes the time but never the middot (DS-20, B-S16), and a white Cancelled pill', async () => {
-    await render(hero({ struck: true, pills: [{ key: 'cancelled', text: 'Cancelled', white: true }] }))
-    const hidden = { includeHiddenElements: true }
-    expect(screen.getByTestId('scene-when', hidden)).toBeTruthy()
-    expect(StyleSheet.flatten(screen.getByText(' · ', hidden).props.style).textDecorationLine).toBeUndefined()
-    expect(StyleSheet.flatten(screen.getByText(/^9 PM$/, hidden).props.style).textDecorationLine).toBe('line-through')
-    expect(screen.getByTestId('scene-pill-cancelled')).toBeTruthy()
-  })
-
-  it('shows the live badge as the DS TimeBadge', async () => {
-    await render(hero({ when: 'Live' }))
-    expect(screen.getByTestId('scene-when-dot', { includeHiddenElements: true })).toBeTruthy()
+  it('a long venue line stays on one line in its own slot', async () => {
+    await render(hero({ playlist: [], venueLine: 'The Courtyard at Jayamahal Palace Hotel · Thiruvananthapuram' }))
+    expect(screen.getByText(/Jayamahal/, { includeHiddenElements: true }).props.numberOfLines).toBe(1)
   })
 })
 
