@@ -1,7 +1,9 @@
 /**
  * The pre-event room (Flow 15 #8, R4.1 "The pre-event room · countdown header"):
  * an event's room is served to people going or saved, but it only opens for
- * writing a day before doors (the server's `PRE_EVENT_CHAT_HOURS`, lib/chat-window.ts).
+ * writing at the doors, 90 minutes before the start (the server's
+ * `DOORS_LEAD_MINUTES`, lib/chat-window.ts: check-in, the room and the Lobby's
+ * read-only turn are one moment).
  * Until then the header counts down to that opening — "Opens in 3h 20m" — and
  * the composer says the server's sentence.
  *
@@ -11,8 +13,8 @@
  * server refuses locks the composer from the answer.
  */
 
-/** Hours before an event starts that its room opens. Mirrors the server's constant. */
-export const PRE_EVENT_CHAT_HOURS = 24
+/** Minutes before an event starts that its doors, and its room, open. Mirrors the server's constant. */
+export const DOORS_LEAD_MINUTES = 90
 
 const MINUTE = 60 * 1000
 const HOUR = 60 * MINUTE
@@ -22,7 +24,7 @@ const DAY = 24 * HOUR
 export function roomOpensAt(startTime: string | null | undefined): number | null {
   if (!startTime) return null
   const start = Date.parse(startTime)
-  return Number.isNaN(start) ? null : start - PRE_EVENT_CHAT_HOURS * HOUR
+  return Number.isNaN(start) ? null : start - DOORS_LEAD_MINUTES * MINUTE
 }
 
 /**

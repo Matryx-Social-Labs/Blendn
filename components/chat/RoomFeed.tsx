@@ -240,7 +240,7 @@ export function RoomOutside({
           variant="screen"
           icon="clock"
           title="Not open yet"
-          body={`The room opens in ${opensInSpoken(opensIn)}. An event’s room opens 24 hours before it starts.`}
+          body={`The room opens in ${opensInSpoken(opensIn)}, when the doors open.`}
           actions={back}
           testID="room-not-open"
         />
@@ -249,7 +249,7 @@ export function RoomOutside({
           variant="screen"
           icon="door-open"
           title="The room is open"
-          body="It opened 24 hours before the event starts."
+          body="It opened with the doors."
           actions={[{ label: 'Open the room', kind: 'lit', onPress: () => onOpenRoom?.(), loading: opening }]}
           testID="room-now-open"
         />

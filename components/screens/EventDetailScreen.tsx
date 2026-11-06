@@ -772,8 +772,8 @@ export default function EventDetail() {
   // Explained with the CTA below; read here, above the early return, because it is a hook.
   const hasStarted = useClockPassed(live ? new Date(live.start_time).getTime() : null, true)
   /*
-   * The pre-event room's countdown is the Scene's (R6-5): the room opens a day before the run's first doors (the server's
-   * `chatOpensAt`, start − 24 h), and somebody going or saved is told when, then that it is open, with the way in.
+   * The pre-event room's countdown is the Scene's (R6-5): the room opens at the run's first doors (the server's
+   * `chatOpensAt`, start − 90 min), and somebody going or saved is told when, then that it is open, with the way in.
    * "Opens in" ticks once a minute and is null once the room is open; the line is drawn below.
    */
   const roomOpensIn = usePreEventRoom(event?.start_time)

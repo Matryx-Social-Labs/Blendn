@@ -623,10 +623,10 @@ describe('a night with no picture draws the stamp poster', () => {
 })
 
 describe('the room’s countdown is the Scene’s (R6-5)', () => {
-  // A night two days out: its room opens a day before, at start − 24 h.
+  // A night two days out: its room opens at the doors, at start − 90 min.
   const start = new Date(Date.now() + 48 * 3_600_000)
   start.setMinutes(0, 0, 0)
-  const opens = new Date(start.getTime() - 24 * 3_600_000)
+  const opens = new Date(start.getTime() - 90 * 60_000)
 
   it('to somebody going, before the room opens: "Room opens", then the day and the time it opens', async () => {
     api.getEvent.mockResolvedValue(detail({ startTime: start.toISOString(), endTime: new Date(start.getTime() + 3 * 3_600_000).toISOString() }, { rsvpStatus: 'going' }) as never)
@@ -664,9 +664,17 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
     expect(screen.queryByTestId('scene-room-opens')).toBeNull()
   })
 
-  it('inside the day before: "The room is open", and Open the room opens it', async () => {
-    // The default night starts in 3 hours: its room is open.
+  it('three hours out, before the doors: still "Room opens", not "The room is open" (control for the doors)', async () => {
     api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
+    await open()
+    expect(await screen.findByTestId('scene-room-opens')).toBeTruthy()
+    expect(within(screen.getByTestId('scene-dock')).queryByText('The room is open')).toBeNull()
+  })
+
+  it('inside the doors: "The room is open", and Open the room opens it', async () => {
+    // An hour out: the doors opened 30 minutes ago, and the room with them.
+    const soon = new Date(Date.now() + 3_600_000)
+    api.getEvent.mockResolvedValue(detail({ startTime: soon.toISOString(), endTime: new Date(soon.getTime() + 3 * 3_600_000).toISOString() }, { rsvpStatus: 'going' }) as never)
     api.getEventChat.mockResolvedValue({ success: true, data: { chatGroupId: 'g1' } } as never)
     await open()
     // The dock says it, and the room is its one action.
@@ -683,7 +691,7 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
     jest.useFakeTimers({ now: Date.now() })
     try {
       // Opens in 90 seconds.
-      const soon = new Date(Date.now() + 24 * 3_600_000 + 90_000)
+      const soon = new Date(Date.now() + 90 * 60_000 + 90_000)
       api.getEvent.mockResolvedValue(detail({ startTime: soon.toISOString(), endTime: new Date(soon.getTime() + 3_600_000).toISOString() }, { rsvpStatus: 'going' }) as never)
       await open()
       expect(await screen.findByTestId('scene-room-opens')).toBeTruthy()
