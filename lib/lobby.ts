@@ -185,16 +185,19 @@ export const LOBBY_ALT_MAX = 200
 /** What `POST /events/:eventId/board` takes from the sheet (admin #919). */
 export type LobbyDraft = { kind: BoardPostKind; subKind?: LobbySubKind; body: string; spacesLeft?: number; photo?: { url: string; alt?: string } }
 
+/** The sheet's uploaded picture: its `folder: 'chat'` public URL and the alt text typed for it. */
+export type LobbyAttachment = { url: string; alt: string }
+
 /** The sheet's fields as the server takes them: a chat has no sub-kind, only a ride or spots counts spots. */
-export function lobbyDraft(f: { kind: BoardPostKind; subKind: LobbySubKind | null; body: string; spots: number; photoUrl: string | null; alt: string }): LobbyDraft {
+export function lobbyDraft(f: { kind: BoardPostKind; subKind: LobbySubKind | null; body: string; spots: number; attachment: LobbyAttachment | null }): LobbyDraft {
   const subKind = f.kind === 'chat' ? null : f.subKind
-  const alt = f.alt.trim()
+  const alt = f.attachment?.alt.trim()
   return {
     kind: f.kind,
     ...(subKind && { subKind }),
     body: f.body.trim(),
     ...(subKind && takesSpots(f.kind, subKind) && { spacesLeft: f.spots }),
-    ...(f.photoUrl && { photo: { url: f.photoUrl, ...(alt && { alt }) } }),
+    ...(f.attachment && { photo: { url: f.attachment.url, ...(alt && { alt }) } }),
   }
 }
 

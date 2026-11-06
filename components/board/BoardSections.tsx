@@ -1,19 +1,15 @@
 import { Ionicons } from '@expo/vector-icons'
-import { memo, useState, type ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text as RNText, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { GlyphWell } from '../ds/StateScreen'
-import { RadioCard } from '../ds/RadioCard'
-import { Sheet } from '../ds/Sheet'
-import { Stepper } from '../ds/Stepper'
-import { TextArea } from '../ds/TextField'
 import { monoCaption } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Text } from '../ui/Text'
-import { BOARD_MAX_POST_LENGTH, boardMarkSeed } from '../../lib/board'
+import { boardMarkSeed } from '../../lib/board'
 import { asksWords, isFull, kindGlyph, kindWords, postAction, postAge, spotsWords } from '../../lib/lobby'
 import { Label } from './LobbyParts'
 import { PostPhoto } from './PostPhoto'
@@ -38,15 +34,6 @@ const MORE_SLOP = { left: (minTarget() - MORE_WIDTH) / 2, right: (minTarget() - 
 const PILL_GLYPH = 14
 /** `.kt` / `.ks`: the kind and spots pills. */
 const PILL_HEIGHT = 26
-
-/** Up to this many spaces on an offer — the server's own bound. */
-export const MAX_SPACES = 20
-
-/** The server's zod `max(500)` counts UTF-16 units, so the counter and the cap do too. */
-const utf16Length = (value: string) => value.length
-
-/** The composer's text box: the frame's 112, not the TextArea's 160 default. */
-const COMPOSER_MIN_HEIGHT = 112
 
 /**
  * Say it aloud on iOS. Android reads `accessibilityLiveRegion`; iOS has none,
@@ -275,105 +262,6 @@ function TakenDownCard({ onWriteNew }: { onWriteNew?: () => void }) {
     </View>
   )
 }
-export type ComposeKind = 'offer' | 'seeking'
-export interface BoardDraft {
-  kind: ComposeKind
-  body: string
-  spacesLeft?: number
-}
-
-const KINDS = [
-  { value: 'offer', title: 'I have spots', hint: 'You’re offering a ride or a table.', icon: 'car' },
-  { value: 'seeking', title: 'I’m looking', hint: 'You want to join someone’s.', icon: 'hand' },
-] as const
-
-/**
- * Write a post: an L3 sheet (flow4.js board `composer-*`, A61). The kind is two
- * RadioCards in the glyph form (a glyph well and the consequence line), the
- * text with its n/500 counter, the spaces stepper (1–20) for an offer, then
- * Post and Cancel.
- *
- * Owns its draft, so typing redraws this and not the board under it. The
- * screen closes it on success, which drops the draft; on a refusal it stays
- * open with every word kept, and the server's sentence stays under the field
- * until the next try — a toast is gone before somebody has read which gate
- * they missed.
- */
-export function BoardComposer({
-  visible,
-  posting,
-  refusal,
-  onPost,
-  onCancel,
-  initialKind = 'offer',
-}: {
-  /** Where the sheet opens: a start card's kind. */
-  initialKind?: ComposeKind
-  visible: boolean
-  posting: boolean
-  refusal: string | null
-  onPost: (draft: BoardDraft) => void
-  onCancel: () => void
-}) {
-  const bold = useBoldText()
-  const [kind, setKind] = useState<ComposeKind>(initialKind)
-  const [body, setBody] = useState('')
-  const [spaces, setSpaces] = useState(1)
-  const empty = body.trim().length === 0
-  // UTF-16 units, as the server's zod `max(500)` counts them (an emoji is two).
-  const tooLong = utf16Length(body.trim()) > BOARD_MAX_POST_LENGTH
-
-  return (
-    <Sheet
-      visible={visible}
-      onClose={onCancel}
-      title="Write a post"
-      actions={[
-        {
-          label: 'Post',
-          kind: 'primary',
-          loading: posting,
-          disabled: empty || tooLong,
-          onPress: () => onPost({ kind, body: body.trim(), ...(kind === 'offer' ? { spacesLeft: spaces } : {}) }),
-        },
-        { label: 'Cancel', kind: 'tertiary', onPress: onCancel },
-      ]}
-      testID="board-composer"
-    >
-      <View style={styles.composer}>
-        <View style={styles.kinds} accessibilityRole="radiogroup">
-          {KINDS.map((k) => (
-            <RadioCard
-              key={k.value}
-              title={k.title}
-              hint={k.hint}
-              icon={k.icon}
-              selected={kind === k.value}
-              onPress={() => setKind(k.value)}
-              testID={`board-kind-${k.value}`}
-            />
-          ))}
-        </View>
-        <TextArea
-          label="Your post"
-          value={body}
-          onChangeText={setBody}
-          limit={BOARD_MAX_POST_LENGTH}
-          measure={utf16Length}
-          minHeight={COMPOSER_MIN_HEIGHT}
-          error={refusal ?? undefined}
-          placeholder={kind === 'offer' ? 'Driving over from Indiranagar at 8 — room for two.' : 'Going alone. Anyone heading over from Koramangala?'}
-        />
-        {kind === 'offer' ? (
-          <View style={styles.spacesRow}>
-            <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.footerLine]}>Spots</RNText>
-            <Stepper label="Spots" value={spaces} onChange={setSpaces} min={1} max={MAX_SPACES} onGlass={Platform.OS === 'ios'} disabled={posting} />
-          </View>
-        ) : null}
-      </View>
-    </Sheet>
-  )
-}
 
 const styles = StyleSheet.create({
   pressed: { opacity: OPACITY.pressed },
@@ -425,7 +313,4 @@ const styles = StyleSheet.create({
   footerLine: { flex: 1 },
   askButton: { marginLeft: 'auto' },
 
-  composer: { gap: SPACE.lg },
-  kinds: { flexDirection: 'row', gap: SPACE.md },
-  spacesRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 })

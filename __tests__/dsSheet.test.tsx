@@ -153,6 +153,17 @@ describe('headerAction', () => {
   })
 })
 
+describe('header', () => {
+  it('a row of its own (C-A: Cancel, the title, Post) stays put above the scroll in place of the title row', async () => {
+    const { Text } = jest.requireActual('react-native')
+    const hidden = { includeHiddenElements: true }
+    await render(<Sheet visible onClose={jest.fn()} header={<Text>New post</Text>} testID="s"><Text>Form</Text></Sheet>)
+    expect(within(screen.getByTestId('s-pinned', hidden)).getByText('New post', hidden)).toBeTruthy()
+    expect(within(screen.getByTestId('s-content', hidden)).queryByText('New post', hidden)).toBeNull()
+    expect(within(screen.getByTestId('s-content', hidden)).getByText('Form', hidden)).toBeTruthy()
+  })
+})
+
 describe('settleDetent', () => {
   const heights = [300, 500, 800]
 

@@ -237,6 +237,11 @@ export type SheetProps = {
    * wraps under a long title rather than shortening it. `label` is what a screen reader gets, when more than the words.
    */
   headerNote?: { lead?: string; text: string; label?: string }
+  /**
+   * A header row of its own in place of the title row (C-A: Cancel, the title centred, Post), pinned as a row with an action
+   * is. Additive: a sheet without one is unchanged. It owns its header role; pass `focusRef` for where a screen reader lands.
+   */
+  header?: ReactNode
   /** What a screen reader lands on as it opens, when there is no title: the content's own header. */
   focusRef?: RefObject<ComponentRef<typeof View> | null>
   /** The consequence, above the buttons. */
@@ -544,7 +549,7 @@ function useSheetMotion({
  *
  * ponytail: the material does not grow more opaque near full height.
  */
-export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, body, icon, art, actions = [], detents, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
+export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, header, body, icon, art, actions = [], detents, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   /*
    * One Modal on screen at a time on iOS (`lib/modalTurn.ts`, RC drive 4 D-9): asked for, `visible` waits for the
@@ -698,7 +703,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
       if (headAtTop.get() !== atTop) headAtTop.set(atTop)
     },
   })
-  const hasHead = !!(art || icon || title || headerAction || headerNote || body)
+  const hasHead = !!(art || icon || title || headerAction || headerNote || header || body)
   const largeText = useLargeText()
   const iconEl =
     icon ? (
@@ -711,8 +716,9 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
         <Icon name={icon} />
       </View>
     ) : null
-  const titleEl =
-    title || headerAction || headerNote ? (
+  const titleEl = header ? (
+    header
+  ) : title || headerAction || headerNote ? (
       <View style={styles.titleRow}>
         {title ? (
           <Text ref={titleRef} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.titleText]}>
@@ -759,7 +765,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
    */
   // Unless the scroll under it would be left less than its floor: at the accessibility sizes with the keyboard up, the header
   // scrolls too, so the field being typed in is never squeezed out (review R5).
-  const pinHead = !art && (!!(headerAction || headerNote) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)
+  const pinHead = !art && (!!(headerAction || headerNote || header) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)
   const scrollHead = pinHead ? (
     bodyEl
   ) : hasHead ? (

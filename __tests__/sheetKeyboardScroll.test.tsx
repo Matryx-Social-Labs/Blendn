@@ -7,7 +7,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import React from 'react'
 import { Dimensions, Platform } from 'react-native'
 
-import { BoardComposer } from '../components/board/BoardSections'
+import { LobbyCompose } from '../components/board/LobbyCompose'
 import { SPACE } from '../lib/design/tokens'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -48,7 +48,7 @@ beforeEach(() => {
 afterEach(() => spies.forEach((s) => s.mockRestore()))
 
 const composer = () => (
-  <BoardComposer visible posting={false} refusal={null} onPost={jest.fn()} onCancel={jest.fn()} />
+  <LobbyCompose visible posting={false} refusal={null} onPost={jest.fn()} onCancel={jest.fn()} />
 )
 const keyboardUp = async () => {
   await act(async () => fireEvent(screen.getByTestId('board-composer-root', { includeHiddenElements: true }), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: SCREEN } } }))
@@ -60,12 +60,13 @@ describe('the Lobby composer over the keyboard', () => {
   it('the Spaces stepper is inside the scrollable content, not beside it', async () => {
     await render(composer())
     await keyboardUp()
-    expect(within(scroll()).getByLabelText('Spots')).toBeTruthy()
-    // And so are the field and the kind cards: one scroll holds every control above the pinned Post.
+    expect(within(scroll()).getByLabelText('How many can join you')).toBeTruthy()
+    // And so are the field and the kinds: one scroll holds every control under the pinned header.
     expect(within(scroll()).getByLabelText('Your post')).toBeTruthy()
-    expect(within(scroll()).getByTestId('board-kind-offer')).toBeTruthy()
-    // The pinned actions are outside it.
+    expect(within(scroll()).getByTestId('board-sub-ride')).toBeTruthy()
+    // C-A: Post and the type are pinned above it ("Post and the type never move").
     expect(within(scroll()).queryByLabelText('Post')).toBeNull()
+    expect(within(scroll()).queryByRole('radio', { name: 'Offering' })).toBeNull()
   })
 
   it('the scroll is enabled, and shows it has more while the keyboard caps the sheet', async () => {

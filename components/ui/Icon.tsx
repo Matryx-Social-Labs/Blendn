@@ -152,6 +152,7 @@ import Timer from 'lucide-react-native/icons/timer'
 import Toilet from 'lucide-react-native/icons/toilet'
 import Trash from 'lucide-react-native/icons/trash'
 import Trees from 'lucide-react-native/icons/trees'
+import Type from 'lucide-react-native/icons/type'
 import TreePalm from 'lucide-react-native/icons/tree-palm'
 import TriangleAlert from 'lucide-react-native/icons/triangle-alert'
 import Unlink from 'lucide-react-native/icons/unlink'
@@ -323,6 +324,8 @@ const ICONS = {
   trees: Trees,
   'tree-palm': TreePalm,
   'triangle-alert': TriangleAlert,
+  // The Lobby compose sheet's Add alt text (C-A `ic('type',16)`).
+  type: Type,
   unlink: Unlink,
   user: User,
   'user-check': UserCheck,

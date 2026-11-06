@@ -232,7 +232,6 @@ export const TYPE = {
     lineHeight: 18,
     letterSpacing: 0,
   },
-  /** The boards' secondary line, 15/22 (owner 2026-11-06): a card's sentence under its title, in the secondary ink. */
   lede: {
     fontFamily: 'Satoshi_400Regular',
     fontSize: 15,

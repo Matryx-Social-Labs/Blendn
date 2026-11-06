@@ -8,15 +8,8 @@ import { PageFooter } from '../../components/chat/PageFooter'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
-import {
-  announce,
-  BoardComposer,
-  BoardPostCard,
-  IDLE,
-  type AskState,
-  type BoardDraft,
-  type ComposeKind,
-} from '../../components/board/BoardSections'
+import { announce, BoardPostCard, IDLE, type AskState } from '../../components/board/BoardSections'
+import { LobbyCompose } from '../../components/board/LobbyCompose'
 import { ClosedCard, LiveEmptyCard, LobbyChips, LobbyComposerRow, LobbyGate, LobbyStarts, NewPostsPill, PinnedPost, ReadOnlyBanner } from '../../components/board/LobbyParts'
 import { emptyOut, fadeIn, riseDelay, riseIn } from '../../components/board/boardMotion'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -41,7 +34,7 @@ import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useOnBlock } from '../../lib/useOnBlock'
 import { boardSafetySheet } from '../../lib/safetyUtils'
-import { filterQuery, freshOnTop, lobbyLayout, type LobbyFilter, type LobbyMeta } from '../../lib/lobby'
+import { filterQuery, freshOnTop, lobbyLayout, type LobbyDraft, type LobbyFilter, type LobbyMeta } from '../../lib/lobby'
 import { showSheet } from '../../lib/sheet'
 import { cursorOf, getBoardPage, goneFrom, type BoardPostView, type TakenDown } from '../../lib/chatPaging'
 import { COLOR, RADIUS, SPACE, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -81,6 +74,7 @@ const metaOf = (body: unknown): Partial<LobbyMeta> => {
     ...(d.state && { state: d.state, phase: d.phase }),
     ...(d.closesAt && { closesAt: d.closesAt }),
     ...(typeof d.ticketsHidden === 'boolean' && { ticketsHidden: d.ticketsHidden }),
+    ...(d.subKinds && { subKinds: d.subKinds }),
     ...(d.counts && { counts: d.counts }),
     ...('pinned' in d && { pinned: d.pinned ?? null }),
     ...(d.compose && { compose: d.compose }),
@@ -130,7 +124,7 @@ export function BoardScreen() {
   const [refusal, setRefusal] = useState<string | null>(null)
   /** Posts made here: the composer is keyed on it, so the next one opens on an empty draft. */
   const [posted, setPosted] = useState(0)
-  const [startKind, setStartKind] = useState<ComposeKind>('offer')
+  const [startKind, setStartKind] = useState<'offer' | 'seeking'>('offer')
   /** The going gate's own answer: in flight, and the server's sentence when it says no. */
   const [gate, setGate] = useState<{ busy: boolean; refusal: string | null }>({ busy: false, refusal: null })
 
@@ -378,7 +372,7 @@ export function BoardScreen() {
     }
   }, [eventId, gate.busy, fetchBoard])
 
-  const compose = useCallback((kind: ComposeKind = 'offer') => {
+  const compose = useCallback((kind: 'offer' | 'seeking' = 'offer') => {
     setStartKind(kind)
     setComposing(true)
   }, [])
@@ -485,7 +479,7 @@ export function BoardScreen() {
   )
 
   const submit = useCallback(
-    async (draft: BoardDraft) => {
+    async (draft: LobbyDraft) => {
       if (!eventId || postingRef.current) return
       postingRef.current = true
       setPosting(true)
@@ -703,9 +697,12 @@ export function BoardScreen() {
       <View testID="lobby-bar" style={bar.barPin} pointerEvents="box-none" onLayout={(e) => setBarDrawn(e.nativeEvent.layout.height)}>
         <TopBar title="Lobby" sub={event?.title} subLines={1} state={bar.state} onBack={() => router.back()} testID="board-top" />
       </View>
-      <BoardComposer
+      <LobbyCompose
         key={`${posted}-${startKind}`}
         initialKind={startKind}
+        pseudonym={meta.you?.pseudonym ?? null}
+        subKinds={meta.subKinds}
+        ticketsHidden={meta.ticketsHidden ?? false}
         visible={composing}
         posting={posting}
         refusal={refusal}

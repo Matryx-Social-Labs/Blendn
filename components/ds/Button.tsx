@@ -30,7 +30,7 @@ import {
 } from './shared'
 
 export type ButtonKind = 'primary' | 'lit' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
-export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised' | 'dock'
+export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised' | 'dock' | 'pill'
 
 /**
  * 56 the screen primary and dock actions · 48 a secondary in a dock · 36 an
@@ -39,13 +39,15 @@ export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised' | 'dock'
  */
 export const ROW_ACTION_HEIGHT = 36
 const RAISED_HEIGHT = 44
+/** The board's `.db.sm` (C-A's Post, the photo warning's Use it): 40 tall, 16 in, hugging its label, in the control role at 700. */
+const PILL_HEIGHT = 40
 const ROW_ACTION_MIN_WIDTH = 72
 /** Flow 4's one-line dock (`.dock4 .db`): 52 tall, 22 in, an 18 pt glyph, beside the state it acts on. */
 const DOCK_HEIGHT = SIZE.tabBarCompact
 // design-exception: the board's dock button is 22 pt in (`.db` padding 0 22px) and its glyph 18 (`ic(icon,18)`); both off-scale.
 const DOCK_PAD = 22
 const DOCK_GLYPH = 18
-const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT, dock: DOCK_HEIGHT }
+const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT, dock: DOCK_HEIGHT, pill: PILL_HEIGHT }
 
 /** #20: translateX 0, −8, 8, −6, 6, −3, 0, as fractions of `SHAKE.distance`. */
 const SHAKE_STEPS = [-1, 1, -0.75, 0.75, -0.375, 0]
@@ -234,12 +236,13 @@ export function Button({
   const ink = kind === 'strong' ? COLOR.ink : muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : COLOR.textOnGradient
   const glyphInk = lit ? sel.glyph : ink
   const sm = size === 'sm'
+  const pill = size === 'pill'
   /** Small glyphs: the row action and the raised action. */
-  const compact = sm || size === 'raised'
+  const compact = sm || pill || size === 'raised'
   const slop = (minTarget() - height) / 2
   // A small text button has no fill to pad: its label sits on the gutter, and the hit area reaches out past it instead.
   const textOnly = sm && kind === 'tertiary'
-  const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : font('button', bold)
+  const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : pill ? font('control', bold, FONT_FAMILY.brand[700]) : font('button', bold)
   const outlined = contrast && (kind === 'secondary' || kind === 'tertiary')
   const settled = useSettled(count)
   const [sentenceWidth, setSentenceWidth] = useState(0)
@@ -249,7 +252,7 @@ export function Button({
   const sentence = settled === undefined ? label : label.replace('{n}', settled.toLocaleString('en-US'))
 
   return (
-    <Animated.View layout={swap.swapped ? WIDTH_FOLLOWS : undefined} style={[sm && !StyleSheet.flatten(style)?.alignSelf ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
+    <Animated.View layout={swap.swapped ? WIDTH_FOLLOWS : undefined} style={[(sm || pill) && !StyleSheet.flatten(style)?.alignSelf ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
       <ScalePress
         testID={testID}
         onPress={onPress}

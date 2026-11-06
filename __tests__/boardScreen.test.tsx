@@ -163,7 +163,7 @@ describe('the two empty states', () => {
     expect(await screen.findByText(/Nobody’s posted yet/)).toBeTruthy()
     await fireEvent.press(screen.getByTestId('lobby-start-seeking'))
     expect(screen.getByLabelText('Your post')).toBeTruthy()
-    expect(screen.getByText('0/500', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('0 / 280', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('never closes on the phone’s clock: past the start, the Lobby is what the server says (read-only from doors)', async () => {
@@ -242,7 +242,7 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
     await fireEvent.press(screen.getByLabelText('Post'))
 
     expect(await screen.findByText(reason)).toBeTruthy()
-    expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'offer', body: 'Two seats from Indiranagar', spacesLeft: 1 })
+    expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'offer', subKind: 'ride', body: 'Two seats from Indiranagar', spacesLeft: 1 })
     // Still composing, with the words kept, so the fix can be followed and retried.
     expect(screen.getByLabelText('Your post').props.value).toBe('Two seats from Indiranagar')
     expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(reason)
@@ -277,12 +277,12 @@ describe('posting', () => {
     await render(<BoardScreen />)
 
     await fireEvent.press(await screen.findByLabelText('Post something'))
-    await fireEvent.press(within(screen.getByTestId('board-composer')).getByLabelText(/^I’m looking/))
+    await fireEvent.press(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Looking for' }))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Me too, from HSR')
     await fireEvent.press(screen.getByLabelText('Post'))
 
     await waitFor(() => expect(screen.getAllByText(/Me too, from HSR|Driving from/)[0].props.children).toBe('Me too, from HSR'))
-    expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'seeking', body: 'Me too, from HSR' })
+    expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'seeking', subKind: 'ride', body: 'Me too, from HSR' })
 
     // The next read lists it under the handle the server gave you.
     await pullToRefresh()
@@ -300,7 +300,7 @@ describe('posting', () => {
     await render(<BoardScreen />)
 
     await fireEvent.press(await screen.findByLabelText('Post something'))
-    await fireEvent.press(within(screen.getByTestId('board-composer')).getByLabelText(/^I’m looking/))
+    await fireEvent.press(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Looking for' }))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Me too, from HSR')
     await fireEvent.press(screen.getByLabelText('Post'))
     await screen.findAllByText('You')
@@ -315,8 +315,8 @@ describe('posting', () => {
 
     await fireEvent.press(await screen.findByLabelText('Post something'))
     expect(screen.getByLabelText('Your post').props.value).toBe('')
-    expect(within(screen.getByTestId('board-composer')).getByLabelText(/^I have spots/).props.accessibilityState).toEqual(expect.objectContaining({ checked: true }))
-    expect(screen.getByLabelText('Spots').props.accessibilityValue).toEqual(expect.objectContaining({ now: 1 }))
+    expect(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Offering' }).props.accessibilityState).toEqual(expect.objectContaining({ checked: true }))
+    expect(screen.getByLabelText('How many can join you').props.accessibilityValue).toEqual(expect.objectContaining({ now: 1 }))
   })
 
   it('sends one post for two taps', async () => {
@@ -639,14 +639,22 @@ describe('report and block, by the post', () => {
   })
 })
 
-it('is the Flow 4 design now: no placeholder banner, the composer kinds are RadioCards (A61)', async () => {
-  api.getBoard.mockResolvedValue(board([OFFER]))
+it('is C-A now: no placeholder banner, the type is a segment of three, and you post as your room name (SCRUM-1026)', async () => {
+  api.getBoard.mockResolvedValue(lobby([OFFER], { you: { pseudonym: 'Quiet Lynx' } }) as never)
   await render(<BoardScreen />)
   await screen.findByText(OFFER.body)
   expect(screen.queryByText(/PLACEHOLDER DESIGN/)).toBeNull()
   await fireEvent.press(screen.getByLabelText('Post something'))
-  expect(screen.getByLabelText('I have spots, You’re offering a ride or a table.')).toBeTruthy()
-  expect(screen.getByLabelText('I’m looking, You want to join someone’s.')).toBeTruthy()
+  const sheet = within(screen.getByTestId('board-composer'))
+  expect(sheet.getAllByRole('radio').slice(0, 3).map((r) => r.props.accessibilityLabel)).toEqual(['Offering', 'Looking for', 'Just saying'])
+  expect(sheet.getByText('Quiet Lynx')).toBeTruthy()
+})
+
+it('hides a ticket in the sheet where the Lobby says tickets are hidden', async () => {
+  api.getBoard.mockResolvedValue(lobby([OFFER], { ticketsHidden: true }) as never)
+  await render(<BoardScreen />)
+  await fireEvent.press(await screen.findByLabelText('Post something'))
+  expect(within(screen.getByTestId('board-composer')).queryByText('Spare ticket')).toBeNull()
 })
 
 describe('your post, live (PR #401 drive: "1 asked" only after reopening the Lobby)', () => {
@@ -677,7 +685,7 @@ describe('H.success on the server’s yes (H1)', () => {
     api.postToBoard.mockResolvedValueOnce({ success: false, errorCode: 'FORBIDDEN', error: 'Complete your profile first' } as never)
     await render(<BoardScreen />)
     await fireEvent.press(await screen.findByLabelText('Post something'))
-    await fireEvent.press(within(screen.getByTestId('board-composer')).getByLabelText(/^I’m looking/))
+    await fireEvent.press(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Looking for' }))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone from HSR?')
     await fireEvent.press(screen.getByLabelText('Post'))
     await screen.findByText('Complete your profile first')
@@ -743,7 +751,7 @@ describe('a post taken down (C8, SV9: the server’s top-level takenDown on the 
     api.postToBoard.mockResolvedValue({ success: true, data: { id: 'p-mine', kind: 'seeking', body: taken.body, spacesLeft: null, createdAt: taken.createdAt } } as never)
     await render(<BoardScreen />)
     await fireEvent.press(await screen.findByLabelText('Post something'))
-    await fireEvent.press(within(screen.getByTestId('board-composer')).getByLabelText(/^I’m looking/))
+    await fireEvent.press(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Looking for' }))
     await fireEvent.changeText(screen.getByLabelText('Your post'), taken.body)
     api.getBoard.mockResolvedValue(withTaken([OFFER], [taken]) as never)
     await fireEvent.press(screen.getByLabelText('Post'))
