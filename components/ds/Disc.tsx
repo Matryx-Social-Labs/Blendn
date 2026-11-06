@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, AppState, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, AppState, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import Animated, {
   cancelAnimation,
   Easing,
@@ -11,16 +11,18 @@ import Animated, {
   withSequence,
   withSpring,
   withTiming,
+  type AnimatedStyle,
   type SharedValue,
 } from 'react-native-reanimated'
 import Svg, { Defs, Path } from 'react-native-svg'
 
-import { COLOR, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
+import { COLOR, EASING, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { roomButtonAccessibilityLabel, type RoomButtonTarget } from '../../lib/roomButton'
 import ScalePress from '../motion/ScalePress'
 import { GradientFill } from '../ui/GradientFill'
+import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { BrandGradient, DiscMark, MONOGRAM_OPTICAL_ASPECT } from './DiscMark'
 import { DISC_FRAMES, discLook, discReentry, discTransition, type DiscChannel, type DiscFrame, type DiscStep } from './discMotion'
@@ -30,10 +32,15 @@ export type DiscProps = {
   target: RoomButtonTarget
   /** Opens the Blend'n overlay. The disc and (c)'s label both call it. */
   onPress: () => void
-  /** The venue (c)'s label names: "Check in · {venue}". */
+  /** The venue (c)'s pill names, after its pin; its label says "Check in at {venue}". */
   venue?: string
-  /** How many events' fences you are inside; over one, (c) says "Check in · 2 here" and a tap opens the first (BAR-06). */
+  /** How many events' fences you are inside; over one, (c)'s pill says "2 here" and a tap opens the first (BAR-06). */
   here?: number
+  /**
+   * The disc's size as a fraction of its 56 pt, on the UI thread (the tab bar's compact pill: 44/56). Every state scales
+   * with it; (c)'s venue pill does not, it only rides on the disc's top edge.
+   */
+  scale?: SharedValue<number>
   testID?: string
 }
 
@@ -67,12 +74,15 @@ const MARKER_ANGLE = (50 * Math.PI) / 180
 const MARKER_X = R + R * Math.sin(MARKER_ANGLE)
 const MARKER_Y = R - R * Math.cos(MARKER_ANGLE)
 
-/** (c)'s label, with the venue its pill shows, so the name a screen reader or Voice Control has matches the words on screen. */
+/** (c)'s label, naming the venue its pill shows, so the name a screen reader or Voice Control has matches the words on screen. */
 const checkInLabel = (venue: string, here = 1) =>
-  here > 1 ? `You’re at ${here} events. Check in to see who else is here` : `You’re at ${venue}. Check in to see who else is here`
+  here > 1 ? `You’re at ${here} events. Check in to see who else is here` : `Check in at ${venue}. See who else is here`
 
-/** The pill's words: the place, or how many events share the spot. */
-const checkInText = (venue: string | undefined, here = 1) => (here > 1 ? `Check in · ${here} here` : venue ? `Check in · ${venue}` : 'Check in')
+/**
+ * The pill's words, after its pin: the place alone, or how many events share it (owner, 2026-11-05, option b: no static
+ * words glued to a variable name; "Check in" is in the label). With no name at all, what it is for.
+ */
+const checkInText = (venue: string | undefined, here = 1) => (here > 1 ? `${here} here` : venue ?? 'Check in')
 
 /** (c)'s label sits this far either side of the disc at most; a long venue is truncated. */
 const LABEL_REACH = SPACE.xxxl * 2
@@ -119,7 +129,7 @@ const AnimatedPath = Animated.createAnimatedComponent(Path)
  * haptic the disc makes; (c → d)'s `H.success` belongs to the check-in's
  * server answer, not here.
  */
-export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProps) {
+export function Disc({ target, onPress, venue, here, scale, testID = 'disc' }: DiscProps) {
   const reduceMotion = useReducedMotion()
   const look = discLook(target)
   // One shared value per channel, made once: eleven `useSharedValue`s by another name.
@@ -175,10 +185,14 @@ export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProp
   const hollowStyle = useOpacity(v.hollow)
   const dotStyle = useOpacity(v.dot)
   const pillStyle = useAnimatedStyle(() => ({ opacity: v.pill.get(), transform: [{ scale: v.pillScale.get() }] }))
+  const sized = useAnimatedStyle(() => ({ transform: [{ scale: scale ? scale.get() : 1 }] }))
+  // The disc shrinks about its centre, so its top edge comes down by (1 − s) of its radius: the label keeps its gap above it.
+  const riding = useAnimatedStyle(() => ({ transform: [{ translateY: scale ? (1 - scale.get()) * R : 0 }] }))
 
   return (
     <View style={styles.slot}>
-      {look === 'c' ? <CheckInLabel venue={venue} here={here} onPress={onPress} testID={`${testID}-label`} /> : null}
+      {look === 'c' ? <CheckInLabel venue={venue} here={here} onPress={onPress} style={riding} testID={`${testID}-label`} /> : null}
+      <Animated.View testID={`${testID}-sized`} style={[styles.slot, sized]}>
       <ScalePress
         onPress={onPress}
         pressedScale={PRESS.scaleDisc}
@@ -233,6 +247,7 @@ export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProp
           ) : null}
         </Animated.View>
       </ScalePress>
+      </Animated.View>
     </View>
   )
 }
@@ -242,17 +257,28 @@ export function Disc({ target, onPress, venue, here, testID = 'disc' }: DiscProp
  * so it is mounted rather than faded (glass never fades, §5.2). Hidden from
  * screen readers: the disc says the same, with the consequence.
  */
-function CheckInLabel({ venue, here, onPress, testID }: { venue?: string; here?: number; onPress: () => void; testID: string }) {
+function CheckInLabel({ venue, here, onPress, style, testID }: { venue?: string; here?: number; onPress: () => void; style: AnimatedStyle<ViewStyle>; testID: string }) {
   return (
-    <View style={styles.labelSlot} pointerEvents="box-none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <ScalePress onPress={onPress} haptic={H.disc} hitSlop={LABEL_SLOP} testID={testID}>
+    <Animated.View testID={`${testID}-slot`} style={[styles.labelSlot, style]} pointerEvents="box-none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <ScalePress
+        onPress={onPress}
+        haptic={H.disc}
+        hitSlop={LABEL_SLOP}
+        accessibilityLabel={here && here > 1 ? `Check in at one of ${here} events here` : venue ? `Check in at ${venue}` : 'Check in'}
+        style={styles.labelPress}
+        testID={testID}
+      >
         <Material role="toast" style={styles.label}>
-          <Text style={styles.labelText} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.caption}>
+          <View testID={`${testID}-icon`}>
+            <Icon name="map-pin" size={ICON.inline} color={COLOR.textPrimary} />
+          </View>
+          {/* The venue takes the rest of the pill and is cut at its end. */}
+          <Text style={styles.labelText} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.caption}>
             {checkInText(venue, here)}
           </Text>
         </Material>
       </ScalePress>
-    </View>
+    </Animated.View>
   )
 }
 
@@ -306,11 +332,14 @@ const styles = StyleSheet.create({
   pillText: { ...TYPE.label, fontFamily: FONT_FAMILY.mono[700], fontVariant: ['tabular-nums'], color: COLOR.ink },
   labelSlot: {
     position: 'absolute',
-    bottom: SIZE.disc + SPACE.sm,
+    // 12 over the disc, so 8 over the full bar's top edge and the compact pill's alike (tab-bar board `.cin`).
+    bottom: SIZE.disc + SPACE.md,
     left: -LABEL_REACH,
     right: -LABEL_REACH,
     alignItems: 'center',
   },
-  label: { paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm, borderRadius: RADIUS.capsule },
-  labelText: { ...TYPE.caption, color: COLOR.textPrimary },
+  // Held to the slot (the board's 250 pt at most), so a long venue shrinks the text, never pushes the pill wider.
+  labelPress: { maxWidth: '100%' },
+  label: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, maxWidth: '100%', paddingHorizontal: SPACE.md, paddingVertical: SPACE.sm, borderRadius: RADIUS.capsule },
+  labelText: { ...TYPE.caption, color: COLOR.textPrimary, flexShrink: 1 },
 })

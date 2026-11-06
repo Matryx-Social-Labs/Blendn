@@ -17,6 +17,7 @@ import { COLOR, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
 import { useLatest } from '../../lib/useLatest'
+import { TAB_BAR_SETTLE } from '../../lib/tabBarSettle'
 import type { NearPin } from '../../lib/placesPane'
 import { HomeDrawer } from './HomeDrawer'
 import { CityChip } from './CityChip'
@@ -202,6 +203,12 @@ export function HomeShell({
       setKeyboardUp(false)
     }
   }, [focused, queryRef])
+
+  // The tab bar follows the drawer's position only (SCRUM-1023): full settles it into its pill, half or peek brings it back.
+  // The list inside the drawer never moves it, so the drawer's drag and the bar never fight.
+  useEffect(() => {
+    if (focused) TAB_BAR_SETTLE.drawer.set(snap === 'full' ? 1 : 0)
+  }, [focused, snap])
 
   const onSnap = (next: DrawerSnap) => {
     // Moved by hand: the keyboard no longer has a place to put it back to.

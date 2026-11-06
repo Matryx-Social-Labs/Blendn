@@ -3,6 +3,7 @@ import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'ex
 import { LinearGradient } from 'expo-linear-gradient'
 import { useEffect, useState } from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native'
+import Animated, { type AnimatedStyle } from 'react-native-reanimated'
 
 import { COLOR, MATERIAL } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
@@ -147,21 +148,39 @@ export function useMapInk(): ViewStyle | null {
 
 const MAP_INK: ViewStyle = { backgroundColor: COLOR.ink }
 
-export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'role'> & { role: MaterialRole }) {
+/** The glass, for a Material whose shape moves on the UI thread (the tab bar settling into its pill). Made on first use. */
+const makeAnimatedGlass = () => Animated.createAnimatedComponent(GlassView)
+let animatedGlass: ReturnType<typeof makeAnimatedGlass> | null = null
+const animatedGlassView = () => (animatedGlass ??= makeAnimatedGlass())
+
+type MaterialProps = Omit<ViewProps, 'role'> & {
+  role: MaterialRole
+  /**
+   * A Reanimated style on the surface itself (its size and radius, never its opacity), so the glass is reshaped rather
+   * than clipped: the rim and the specular edge follow the new shape. Fixed per caller: the surface is an animated one
+   * only when this is given.
+   */
+  animatedStyle?: AnimatedStyle<ViewStyle>
+}
+
+export function Material({ role, style, animatedStyle, children, ...rest }: MaterialProps) {
   const tier = useMaterialTier()
+  // Typed as the animated ones, which take every plain style too; the plain ones draw when nothing moves.
+  const Glass = (animatedStyle ? animatedGlassView() : GlassView) as ReturnType<typeof animatedGlassView>
+  const Box = (animatedStyle ? Animated.View : View) as typeof Animated.View
 
   if (tier === 'glass') {
     return (
-      <GlassView
+      <Glass
         {...rest}
         glassEffectStyle={role === 'media' ? 'clear' : 'regular'}
         tintColor={GLASS[role]}
         colorScheme="dark"
-        style={[styles.clip, style]}
+        style={[styles.clip, style, animatedStyle]}
       >
         {role === 'media' ? <View testID="material-media-floor" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: MEDIA_FLOOR }]} /> : null}
         {children}
-      </GlassView>
+      </Glass>
     )
   }
 
@@ -186,10 +205,10 @@ export function Material({ role, style, children, ...rest }: Omit<ViewProps, 'ro
   const surface = tier === 'blur' ? styles.edge : [round ? styles.solidRim : styles.solid, { backgroundColor: SOLID[role] }]
 
   return (
-    <View {...rest} style={[styles.clip, surface, style]}>
+    <Box {...rest} style={[styles.clip, surface, style, animatedStyle]}>
       {layers}
       {children}
-    </View>
+    </Box>
   )
 }
 

@@ -169,7 +169,7 @@ export interface RoomButtonEvent {
   rsvp_status?: string | null
   /** The event's own zone (IANA): its "tonight" is said there, not in the phone's (BAR-09). */
   timezone?: string | null
-  /** The linked venue's name, else the free-text one: the disc's (c) label "Check in · {venue}" and its coach mark (BAR-08). */
+  /** The linked venue's name, else the free-text one: the disc's (c) pill (a pin and the venue) and its coach mark (BAR-08). */
   venue?: { name?: string | null } | null
   venue_name?: string | null
 }
