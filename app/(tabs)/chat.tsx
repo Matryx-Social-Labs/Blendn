@@ -52,6 +52,7 @@ import { roomStateLine } from '../../lib/roomState'
 import { SPONSORED, useBanterInbox, type GroupChat, type PersonalChat } from '../../lib/useBanterInbox'
 import { useCrewInbox } from '../../lib/useCrewInbox'
 import { TAB_BAR_CLEARANCE } from './_layout'
+import { useTabListScroll } from '../../lib/tabBarSettle'
 import { useReducedMotion } from '../../lib/motion'
 
 /** A conversation as the Banter draws it, and what it takes to open, find and swipe it. */
@@ -435,6 +436,8 @@ function ChatInner() {
   const listTop = headerHeight + (searching ? SPACE.sm + SEARCH_FIELD + SEARCH_GAP : 0) + SPACE.lg
   /* #18: the branded pull (monogram, H.threshold), under the header; Android keeps the platform control, offset the same. */
   const pull = usePullToRefresh({ refreshing: inbox.refreshing, onRefresh: () => void inbox.onRefresh(), indicatorTop: listTop })
+  // On the UI thread: the tab bar's settle (SCRUM-1023), and the pull its offset while it is the pull's.
+  const onScroll = useTabListScroll(pull)
   const invites = crews.invites
   // The server's count, not the page held, with the crew invites answered on the same page.
   const requestsWaiting = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length) + Math.max(crews.invitesTotal, invites.length)
@@ -531,6 +534,7 @@ function ChatInner() {
           step('dragBegin')
         }}
         {...pull.listProps}
+        onScroll={onScroll}
         onScrollEndDrag={(e) => {
           pull.listProps.onScrollEndDrag(e)
           // A release with speed coasts: the momentum end settles it.

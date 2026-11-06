@@ -18,9 +18,9 @@ import { pickInsideEvents, pickTodayEvents, venueNameOf, type PreciseFix, type R
  */
 interface RoomSignal {
   insideEventId: string | null
-  /** The inside event's venue: the disc's (c) label reads "Check in · {venue}" (Flow 4 T10). */
+  /** The inside event's venue: the disc's (c) pill names it after a pin (Flow 4 T10; owner 2026-11-05). */
   insideVenue: string | null
-  /** How many running events' fences you are inside; over one, the disc says "Check in · 2 here" (BAR-06). */
+  /** How many running events' fences you are inside; over one, the disc's pill says "2 here" (BAR-06). */
   insideCount: number
   todayEventIds: string[]
 }
