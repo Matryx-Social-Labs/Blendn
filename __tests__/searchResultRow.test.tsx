@@ -33,6 +33,8 @@ it('result: the time first in mono, the title, then "at venue · distance"; the 
   expect(at('Sun · 12 PM')).toBeLessThan(at('Jazz brunch on the lawn'))
   expect(tree.indexOf('"r-thumb"')).toBeGreaterThan(at('Jazz brunch on the lawn'))
   expect(flat(screen.getByTestId('r').props.style).minHeight).toBe(88)
+  // Board `.urow .rowtx`: its three lines 2 apart, so the block is 64 and sits 12 from the row's top.
+  expect(flat(screen.getByTestId('r-words').props.style).gap).toBe(2)
 })
 
 it('without the layout: the row as it was, the 56 pt thumb on the left (the control)', async () => {

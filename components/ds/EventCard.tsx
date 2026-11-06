@@ -218,7 +218,7 @@ export function EventCard(props: EventCardProps) {
           {result ? null : thumb}
           {result ? (
             <>
-              <View style={styles.rowText}>
+              <View testID={testID && `${testID}-words`} style={[styles.rowText, styles.resultWords]}>
                 <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
                   {time}
                 </Text>
@@ -451,6 +451,7 @@ const styles = StyleSheet.create({
   // Board `.urow`: 88 tall at least, 16 between the words and a 72 pt photo with a 16 corner.
   resultRow: { minHeight: RESULT_THUMB + 2 * SPACE.sm, paddingVertical: SPACE.sm, gap: SPACE.lg },
   resultThumb: { width: RESULT_THUMB, height: RESULT_THUMB, borderRadius: RADIUS.rowInCard },
+  resultWords: { gap: SPACE.xxs },
   rowMeta: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs },
   shrink: { flexShrink: 1 },
   fixed: { flexShrink: 0 },
