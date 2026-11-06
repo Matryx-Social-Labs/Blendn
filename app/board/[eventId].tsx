@@ -9,6 +9,7 @@ import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { announce, BoardPostCard, IDLE, type AskState } from '../../components/board/BoardSections'
+import { LobbyAlertsSheet } from '../../components/board/LobbyAlertsSheet'
 import { LobbyCompose } from '../../components/board/LobbyCompose'
 import { ClosedCard, LiveEmptyCard, LobbyChips, LobbyComposerRow, LobbyGate, LobbyStarts, NewPostsPill, PinnedPost, ReadOnlyBanner } from '../../components/board/LobbyParts'
 import { emptyOut, fadeIn, riseDelay, riseIn } from '../../components/board/boardMotion'
@@ -29,12 +30,13 @@ import {
 } from '../../lib/board'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
+import { rememberLobbySeen } from '../../lib/lobbySeen'
 import { subscribeToBoardPostRemoved } from '../../lib/socketClient'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useOnBlock } from '../../lib/useOnBlock'
 import { boardSafetySheet } from '../../lib/safetyUtils'
-import { filterQuery, freshOnTop, lobbyLayout, type LobbyDraft, type LobbyFilter, type LobbyMeta } from '../../lib/lobby'
+import { composerSlot, filterQuery, freshOnTop, lobbyLayout, newestPostAt, type LobbyDraft, type LobbyFilter, type LobbyMeta } from '../../lib/lobby'
 import { showSheet } from '../../lib/sheet'
 import { cursorOf, getBoardPage, goneFrom, type BoardPostView, type TakenDown } from '../../lib/chatPaging'
 import { COLOR, RADIUS, SPACE, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -101,7 +103,10 @@ const REFUSED_TITLE: Record<string, string> = {
 }
 
 export function BoardScreen() {
-  const { eventId } = useLocalSearchParams<{ eventId: string }>()
+  // `compose=1`: Post something on the event page's card (P-A), which opens the composer once, if posting is open.
+  const { eventId, compose: composeAsked } = useLocalSearchParams<{ eventId: string; compose?: string }>()
+  const composeOnce = useRef(composeAsked === '1')
+  const [alertsOpen, setAlertsOpen] = useState(false)
   const bold = useBoldText()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const loadRef = useLatest(load)
@@ -236,8 +241,20 @@ export function BoardScreen() {
       const onPage = new Set(listed.map((p) => p.id))
       older.current = older.current.filter((p) => !onPage.has(p.id) && !removed.current.has(p.id))
       if (!older.current.length) setCursor(cursorOf(board.data))
-      setMeta((prev) => ({ ...prev, ...metaOf(board.data) }))
+      const firstMeta = metaOf(board.data)
+      setMeta((prev) => ({ ...prev, ...firstMeta }))
       setClosed(false)
+      // What you have seen, for Going's "New in the Lobby": the newest post on All (a filter shows only part of it), and only
+      // from a read that shows it (a background read holds the new ones behind the pill, unseen).
+      const newest = mode === 'show' && chip === 'all' ? newestPostAt(listed) : null
+      if (newest) void rememberLobbySeen(eventId, newest)
+      if (composeOnce.current) {
+        composeOnce.current = false
+        if (composerSlot({ state: firstMeta.state ?? 'open', compose: firstMeta.compose }).kind === 'composer') {
+          setStartKind('offer')
+          setComposing(true)
+        }
+      }
       // A background read holds what is new above the list; one somebody asked for shows it all.
       const was = loadRef.current
       const shown = new Set(was.kind === 'ready' ? was.posts.map((p) => p.id) : [])
@@ -695,8 +712,17 @@ export function BoardScreen() {
       )}
       {held.size > 0 && load.kind === 'ready' && !card ? <NewPostsPill count={held.size} top={contentTop + SPACE.sm} onPress={showHeld} /> : null}
       <View testID="lobby-bar" style={bar.barPin} pointerEvents="box-none" onLayout={(e) => setBarDrawn(e.nativeEvent.layout.height)}>
-        <TopBar title="Lobby" sub={event?.title} subLines={1} state={bar.state} onBack={() => router.back()} testID="board-top" />
+        <TopBar
+          title="Lobby"
+          sub={event?.title}
+          subLines={1}
+          state={bar.state}
+          onBack={() => router.back()}
+          actions={closed ? [] : [{ icon: 'bell', label: 'Lobby alerts', onPress: () => setAlertsOpen(true) }]}
+          testID="board-top"
+        />
       </View>
+      {eventId ? <LobbyAlertsSheet eventId={eventId} visible={alertsOpen} onClose={() => setAlertsOpen(false)} /> : null}
       <LobbyCompose
         key={`${posted}-${startKind}`}
         initialKind={startKind}

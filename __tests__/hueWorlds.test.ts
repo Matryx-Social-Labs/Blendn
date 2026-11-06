@@ -43,6 +43,8 @@ const CARRIED: Record<string, string> = {
   'app/user/[id].tsx': '<HueProvider value={profileHue(own)}>',
   // The photo warning in the rose Lobby's compose sheet is about you (C-A `cA-anon`: violet, Use it lit violet).
   'components/board/ComposePhoto.tsx': '<HueProvider value="violet">',
+  // The Lobby is rose wherever it shows (P-A on the ember event page: Post something lit rose, `pA-rest`).
+  'components/board/LobbyPreview.tsx': '<HueProvider value="rose">',
 }
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [

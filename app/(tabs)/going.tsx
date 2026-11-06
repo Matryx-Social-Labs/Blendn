@@ -52,7 +52,7 @@ import {
   type RsvpEventRow,
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
-import { boardOpen } from '../../lib/board'
+import { BOARD_ENABLED, boardOpen } from '../../lib/board'
 import { HAPPENING_NOW, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -60,7 +60,7 @@ import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { DURATION, EASING, SPRING, useReducedMotion } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
-import { BoardEntry } from '../../components/board/BoardSections'
+import { NewInLobbyRow } from '../../components/board/LobbyPreview'
 import { addToCalendar } from '../../lib/calendar'
 import { openTonight } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
@@ -528,6 +528,11 @@ function GoingScreenInner() {
             </View>
           </ScalePress>
 
+          {/* G-A's "New in the Lobby" (SCRUM-1026): only when others posted since you last opened it; not on a called-off night. */}
+          {BOARD_ENABLED && !cancelled ? (
+            <NewInLobbyRow eventId={row.id} style={styles.heroLobby} />
+          ) : null}
+
           {/*
            * Directions (or Open Blend'n) keeps its word and is the card's one positive action, so it is the world's lit button
            * (Direction C, audit C14: nothing on the tab was lit); Calendar and Share are icons.
@@ -564,16 +569,10 @@ function GoingScreenInner() {
             )}
             <HeroAction icon="share" accessibilityLabel={`Share ${row.title}`} onPress={() => shareRow(row)} />
           </View>
-          {/* The Scene's own row, under the buttons: before doors, not called off (E2). */}
-          {boardOpen(row) ? (
-            <View style={styles.heroBoard}>
-              <BoardEntry onPress={() => openBoard(row.id)} />
-            </View>
-          ) : null}
         </View>
       </View>
     )
-  }, [bold, openBoard, openEvent, refreshCount, shareRow, liveEventId])
+  }, [bold, openEvent, refreshCount, shareRow, liveEventId])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:
@@ -1181,7 +1180,8 @@ const styles = StyleSheet.create({
   },
   // The details' 6 gap plus the group's 4 above it; the details' 8 below.
   heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
-  heroBoard: { paddingHorizontal: SPACE.xs },
+  // `.nlb`: 12 under the place, and 16 over the buttons (their own 10, plus 6).
+  heroLobby: { marginHorizontal: SPACE.md, marginTop: SPACE.md, marginBottom: SPACE.xs + SPACE.xxs },
   heroAction: {
     height: SIZE.control,
     flexDirection: 'row',

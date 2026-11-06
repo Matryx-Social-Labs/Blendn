@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons'
 import { memo, type ReactNode } from 'react'
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text as RNText, View } from 'react-native'
 
@@ -8,14 +7,13 @@ import { GlyphWell } from '../ds/StateScreen'
 import { monoCaption } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
-import { Text } from '../ui/Text'
 import { boardMarkSeed } from '../../lib/board'
 import { asksWords, isFull, kindGlyph, kindWords, postAction, postAge, spotsWords } from '../../lib/lobby'
 import { Label } from './LobbyParts'
 import { PostPhoto } from './PostPhoto'
 import type { BoardPostView } from '../../lib/chatPaging'
 import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
-import { ICON, OPACITY, tint } from '../../lib/theme'
+import { OPACITY, tint } from '../../lib/theme'
 
 /**
  * The board's pieces (Flow 4 Board, flow4.js `post` and `board`). The rules
@@ -34,6 +32,8 @@ const MORE_SLOP = { left: (minTarget() - MORE_WIDTH) / 2, right: (minTarget() - 
 const PILL_GLYPH = 14
 /** `.kt` / `.ks`: the kind and spots pills. */
 const PILL_HEIGHT = 26
+/** `.lpr .kt`: the preview's pill is 22. */
+const PILL_SMALL = 22
 
 /**
  * Say it aloud on iOS. Android reads `accessibilityLiveRegion`; iOS has none,
@@ -56,25 +56,15 @@ export function BoardMark({ seed, size = MARK }: { seed: string; size?: number }
   return <Avatar kind="creature" pseudonym={seed} size={size} />
 }
 
-/**
- * The way in, on the event screen. Before doors only — after them the room is
- * the place, and the board is closed.
- */
-export function BoardEntry({ onPress }: { onPress: () => void }) {
+/** The kind pill (`.kt`): rose on an offer. `small` is the event page's preview (`.lpr .kt`: 22 tall, 12 pt). */
+export function KindPill({ kind, subKind, small = false }: { kind: BoardPostView['kind']; subKind?: BoardPostView['subKind']; small?: boolean }) {
+  const bold = useBoldText()
+  const offer = kind === 'offer'
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel="The Lobby. Going alone? See who’s looking for company, or offer a spot."
-      style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
-    >
-      <Ionicons name="people-outline" size={ICON.lg} color={COLOR.textPrimary} />
-      <View style={styles.entryText}>
-        <Text variant="bodyStrong">The Lobby</Text>
-        <Text variant="meta">Going alone? See who’s looking for company, or offer a spot.</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={ICON.md} color={COLOR.textSecondary} />
-    </Pressable>
+    <View testID="lobby-post-kind" style={[styles.pill, offer ? styles.kindOffer : styles.kindOther, small && styles.pillSmall]}>
+      <Icon name={kindGlyph(kind, subKind)} size={PILL_GLYPH} color={offer ? SELECTION.rose.glyph : COLOR.textPrimary} />
+      <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[small ? font('caption', bold) : font('note', bold, FONT_FAMILY.brand[500]), styles.ink]}>{kindWords(kind, subKind)}</RNText>
+    </View>
   )
 }
 
@@ -161,10 +151,7 @@ export const BoardPostCard = memo(function BoardPostCard({
         </Pressable>
       </View>
       <View style={styles.pills}>
-        <View testID="lobby-post-kind" style={[styles.pill, post.kind === 'offer' ? styles.kindOffer : styles.kindOther]}>
-          <Icon name={kindGlyph(post.kind, post.subKind)} size={PILL_GLYPH} color={post.kind === 'offer' ? SELECTION.rose.glyph : COLOR.textPrimary} />
-          <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), styles.ink]}>{kindWords(post.kind, post.subKind)}</RNText>
-        </View>
+        <KindPill kind={post.kind} subKind={post.subKind} />
         {spots ? (
           <View testID="lobby-post-spots" style={styles.pill}>
             <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.mono[500]), styles.tabular, full ? styles.secondary : styles.spots]}>{spots}</RNText>
@@ -270,15 +257,6 @@ const styles = StyleSheet.create({
   refused: { color: COLOR.destructive },
   tabular: { fontVariant: ['tabular-nums'] },
 
-  entry: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.lg,
-    padding: SPACE.lg,
-    borderRadius: RADIUS.rowInCard,
-    backgroundColor: COLOR.surfaceSunken,
-  },
-  entryText: { flex: 1, gap: SPACE.xxs },
 
   // lobby.css `.lp`: one card for every kind, 24 pt, a hairline; yours ringed in violet.
   card: {
@@ -294,6 +272,7 @@ const styles = StyleSheet.create({
   mineCard: { borderWidth: 1, borderColor: tint(SELECTION.violet.edge, 0.55) },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs + SPACE.xxs },
   pill: { minHeight: PILL_HEIGHT, paddingHorizontal: SPACE.sm + SPACE.xxs, borderRadius: RADIUS.capsule, backgroundColor: COLOR.chipFillOnGlass, flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
+  pillSmall: { minHeight: PILL_SMALL, paddingHorizontal: SPACE.sm, alignSelf: 'flex-start' },
   kindOffer: { backgroundColor: SELECTION.rose.fill, borderWidth: StyleSheet.hairlineWidth, borderColor: SELECTION.rose.edge },
   kindOther: { borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairlineStrong },
   spots: { color: SELECTION.rose.glyph },
