@@ -161,7 +161,7 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle)
 
 /** "K7QM2X" → "K7Q M2X"; read "K 7 Q, M 2 X". */
 const grouped = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`
-const spoken = (code: string) => `Door code ${[...code.slice(0, 3)].join(' ')}, ${[...code.slice(3)].join(' ')}`
+const spoken = (code: string) => `Offer code ${[...code.slice(0, 3)].join(' ')}, ${[...code.slice(3)].join(' ')}`
 
 const STILL = {
   redeemed: { code: '· · ·', line: (at?: string) => (at ? `Redeemed ${at}` : 'Redeemed') },
@@ -176,7 +176,7 @@ export type DoorCodeProps = {
   code?: string
   /** When this code turns (ms since the epoch). */
   rotatesAt?: number
-  /** "21:43". */
+  /** "9:43 PM", on the phone's clock (`clockTime`). */
   redeemedAt?: string
   /** The label of an ended pass ("ENDED SUNDAY"). */
   endedLabel?: string
@@ -235,7 +235,7 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
   const left = Math.min(CODE_PERIOD_S, Math.max(0, Math.ceil((rotatesAt - now) / 1000)))
   const still = state === 'redeemed' || state === 'used' || state === 'ended' ? STILL[state] : null
   const codeFont = [font('display', bold, FONT_FAMILY.mono[700]), styles.code]
-  const label = state === 'ended' && endedLabel ? endedLabel : 'DOOR CODE'
+  const label = state === 'ended' && endedLabel ? endedLabel : 'OFFER CODE'
 
   return (
     <View testID={testID} style={styles.door}>
@@ -245,7 +245,7 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
           live
             ? spoken(code)
             : state === 'offline'
-              ? 'Door code unavailable. It needs a connection to show.'
+              ? 'Offer code unavailable. It needs a connection to show.'
               : `${label}. ${still?.line(redeemedAt) ?? ''}`
         }
         style={styles.doorText}

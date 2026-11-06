@@ -32,7 +32,7 @@ export function OfferHeader({ onBack, onMore, moreLabel }: { onBack: () => void;
   )
 }
 
-/** "Redeemed 21:43": white capsule, ink text, a check (pass.js `stamp`). */
+/** "Redeemed 9:43 PM" (the phone's clock): white capsule, ink text, a check (pass.js `stamp`). */
 function Stamp({ text }: { text: string }) {
   const bold = useBoldText()
   return (

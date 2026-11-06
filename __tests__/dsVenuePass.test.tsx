@@ -143,11 +143,12 @@ describe('<DoorCode>', () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     jest.useFakeTimers({ now: NOW })
     await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 20_000} testID="d" />)
-    expect(screen.getByLabelText('Door code K 7 Q, M 2 X')).toBeTruthy()
+    expect(screen.getByLabelText('Offer code K 7 Q, M 2 X')).toBeTruthy()
+    expect(screen.getByText('OFFER CODE', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getByTestId('d-ring', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
     await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 50_000} testID="d" />)
     expect(announce).toHaveBeenCalledTimes(1)
-    expect(announce).toHaveBeenCalledWith('Door code P 4 W, N 8 R')
+    expect(announce).toHaveBeenCalledWith('Offer code P 4 W, N 8 R')
   })
 
   it('covered by another screen (`active` false): it neither ticks nor announces', async () => {
@@ -204,7 +205,7 @@ describe('<DoorCode>', () => {
     await render(<DoorCode state="offline" testID="d" />)
     expect(style('··· ···').color).toBe(COLOR.textTertiary)
     expect(screen.getByTestId('d-offline', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByLabelText('Door code unavailable. It needs a connection to show.')).toBeTruthy()
+    expect(screen.getByLabelText('Offer code unavailable. It needs a connection to show.')).toBeTruthy()
   })
 
   it('redeemed, used tonight and ended are still and neutral', async () => {
