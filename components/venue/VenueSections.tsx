@@ -345,8 +345,6 @@ const styles = StyleSheet.create({
   // `.tn`: the surface, 20 corners, 12 in, a hairline; nothing on is 16 in.
   tonight: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, padding: SPACE.md, borderRadius: TONIGHT_RADIUS, backgroundColor: COLOR.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
   tonightNone: { padding: SPACE.lg },
-  // `.sh4`: 12 under the heading.
-  section: { gap: SPACE.md },
   tonightWords: { flex: 1, minWidth: 0, gap: SPACE.xxs },
   thumb: { width: THUMB, height: THUMB, borderRadius: SPACE.md, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: COLOR.surfaceSunken },
   live: { color: COLOR.live },
