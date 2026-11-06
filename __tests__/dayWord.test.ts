@@ -16,6 +16,8 @@ const TORONTO = 'America/Toronto'
 const ist = (day: number, h: number, m = 0) => new Date(Date.UTC(2026, 10, day, h, m) - 330 * 60_000)
 /** An instant from a Toronto wall clock in November 2026 (EST from 1 Nov). */
 const tor = (day: number, h: number, m = 0) => new Date(Date.UTC(2026, 10, day, h, m) + 300 * 60_000)
+/** The way Going draws a line: one unbreakable unit. */
+const nb = (line: string) => line.replace(/ /g, '\u00a0')
 const ev = (start: Date, over: Partial<BlendnEvent> = {}) =>
   ({ id: 'e1', title: 'Vinyl Night', start_time: start.toISOString(), end_time: new Date(start.getTime() + 3 * 3600_000).toISOString(), timezone: IST, ...over }) as unknown as BlendnEvent
 const card = (start: Date, now: Date, over: Partial<BlendnEvent> = {}) => cardTime(ev(start, over), now.getTime())
@@ -76,10 +78,16 @@ describe('everywhere that tells a start without a heading', () => {
   })
 
   it('Going’s lines (the row sheet, a saved night, a called-off night inside its hours)', () => {
-    expect(dayAndClock(ist(6, 21).toISOString(), morning, IST)).toBe('Tonight · 9 PM')
-    expect(dayAndClock(ist(6, 14).toISOString(), morning, IST)).toBe('Today · 2 PM')
-    expect(dayAndClock(ist(7, 21).toISOString(), morning, IST)).toBe('Tomorrow · 9 PM')
-    expect(dayAndClock(ist(8, 21).toISOString(), morning, IST)).toBe('8 Nov · 9 PM')
+    expect(dayAndClock(ist(6, 21).toISOString(), morning, IST)).toBe(nb('Tonight · 9 PM'))
+    expect(dayAndClock(ist(6, 14).toISOString(), morning, IST)).toBe(nb('Today · 2 PM'))
+    expect(dayAndClock(ist(7, 21).toISOString(), morning, IST)).toBe(nb('Tomorrow · 9 PM'))
+    expect(dayAndClock(ist(8, 21).toISOString(), morning, IST)).toBe(nb('8 Nov · 9 PM'))
+  })
+
+  it('Going’s lines never break inside the time: the row sheet wrapped "Today · 4:50" from "PM" (iOS drive)', () => {
+    const line = dayAndClock(ist(6, 16, 50).toISOString(), morning, IST)
+    expect(line.replace(/\u00a0/g, ' ')).toBe('Today · 4:50 PM')
+    expect(line).not.toMatch(/ /)
   })
 
   it('the map chip and what it says aloud: the word for today and tomorrow, the weekday after', () => {

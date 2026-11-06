@@ -109,11 +109,14 @@ export function dayWord(start: Date, now: Date, timeZone?: string | null): 'Toni
   return null
 }
 
-/** A start where nothing on screen names its day (Going's sheet and saved rows): "Tonight · 9 PM", else "8 Nov · 9 PM". */
+/**
+ * A start where nothing on screen names its day (Going's sheet and saved rows): "Tonight · 9 PM", else "8 Nov · 9 PM".
+ * One unbreakable unit (no-break spaces): it follows a place in the row sheet's line, which wrapped "Today · 4:50" from "PM".
+ */
 export function dayAndClock(startTime: string, now: Date = new Date(), timeZone?: string | null): string {
   const start = new Date(startTime)
   const day = dayWord(start, now, timeZone) ?? featuredDateLabel(startTime, now, timeZone)
-  return `${day} · ${timeLabel(startTime, timeZone)}`
+  return `${day} · ${timeLabel(startTime, timeZone)}`.replace(/ /g, ' ')
 }
 
 /** What `nextUpLabel` says while the event is on — the Going hero draws a live dot beside it. */
