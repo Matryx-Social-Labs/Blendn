@@ -4,7 +4,8 @@
  * and the three ways it ends. Behaviour is unchanged from before the rebuild: one tap sends the night; Submit sends
  * a person.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
+import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -38,6 +39,10 @@ import { apiClient } from '../lib/apiClient'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
+/** Saturday 7 November at 20:00Z is already Sunday 8 November, 1:30 AM, in Bengaluru: the row says the event's own day. */
+const NIGHT = { title: 'Vinyl Night', startTime: '2026-11-07T20:00:00.000Z', timezone: 'Asia/Kolkata', venueName: 'High Ultra Lounge' }
+/** The night's "Sent" line holds for a beat before the people: long enough for findBy's default to miss it. */
+const AFTER_THE_BEAT = { timeout: 3000 }
 
 function loads({ peers = ['u1', 'u2'], rated = false }: { peers?: string[]; rated?: boolean } = {}) {
   api.getRatablePeers.mockResolvedValue({ success: true, data: { userIds: peers } } as never)
@@ -45,7 +50,7 @@ function loads({ peers = ['u1', 'u2'], rated = false }: { peers?: string[]; rate
     success: true,
     data: peers.map((id, i) => ({ otherUser: { id, name: i ? 'Quiet Fox' : 'Night Cat', image: null } })),
   } as never)
-  api.getEvent.mockResolvedValue({ success: true, data: { title: 'Vinyl Night' } } as never)
+  api.getEvent.mockResolvedValue({ success: true, data: NIGHT } as never)
   api.getMyEventRating.mockResolvedValue({ success: true, data: rated ? { rating: 4, ratedAt: 'x' } : { rating: null } } as never)
 }
 
@@ -80,17 +85,95 @@ it('a failed load says so and offers Try again; it never says "Nothing to rate"'
   expect(screen.queryByText('Nothing to rate')).toBeNull()
   loads()
   await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
-  expect(await screen.findByText('How was Vinyl Night?')).toBeTruthy()
+  expect(await screen.findByRole('header', { name: 'How was the night?' })).toBeTruthy()
 })
 
-it('the night: one tap on a number sends it and moves to the first person', async () => {
+it('the night: the event in a row (its title, the day in its own zone, the venue), "How was the night?", and step 1 of 3', async () => {
+  loads()
+  await view()
+  const row = await screen.findByTestId('rate-event')
+  expect(within(row).getByText('Vinyl Night')).toBeTruthy()
+  expect(within(row).getByText('Sun 8 Nov')).toBeTruthy()
+  expect(within(row).getByText('High Ultra Lounge')).toBeTruthy()
+  // Two lines at most, then an ellipsis: a long title never pushes the question down the page.
+  expect(within(row).getByText('Vinyl Night').props.numberOfLines).toBe(2)
+  expect(screen.getByRole('header', { name: 'How was the night?' })).toBeTruthy()
+  expect(screen.getByText('One tap. It helps whoever puts on the next one.')).toBeTruthy()
+  // The night, then each person: one pager across both.
+  expect(screen.getByTestId('rate-bar-progress').props.children).toBe('1 of 3')
+  expect(screen.getByLabelText('Step 1 of 3')).toBeTruthy()
+  // Skip sits at the foot, docked, as on a person.
+  expect(within(screen.getByTestId('rate-dock')).getByRole('button', { name: 'Skip to the people' })).toBeTruthy()
+})
+
+it('the night: one tap sends it, says "Sent. Only we see this." in place, and after a beat moves to the first person', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
   loads()
   await view()
   await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
   await waitFor(() => expect(api.rateEvent).toHaveBeenCalledWith('e1', 5))
-  expect(await screen.findByText('Night Cat')).toBeTruthy()
-  expect(screen.getByTestId('rate-bar-progress').props.children).toBe('1 of 2')
-  expect(screen.getByLabelText('Person 1 of 2')).toBeTruthy()
+  expect(await screen.findByText('Sent. Only we see this.')).toBeTruthy()
+  expect(announce).toHaveBeenCalledWith('Sent. Only we see this.')
+  // Still the night: the line is read before the step moves on.
+  expect(screen.queryByText('Night Cat')).toBeNull()
+  expect(await screen.findByText('Night Cat', {}, AFTER_THE_BEAT)).toBeTruthy()
+  expect(screen.getByTestId('rate-bar-progress').props.children).toBe('2 of 3')
+  expect(screen.getByLabelText('Step 2 of 3')).toBeTruthy()
+})
+
+it('a person: their face and name in a row, "You matched at this event", and "How was meeting them?"', async () => {
+  // At the default text size (jest's own default is 2×): the board's one line.
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
+  loads()
+  await view()
+  await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
+  const row = await screen.findByTestId('rate-person')
+  expect(within(row).getByText('Night Cat')).toBeTruthy()
+  expect(within(row).getByText('You matched at this event')).toBeTruthy()
+  expect(within(row).getByText('Night Cat').props.numberOfLines).toBe(1)
+  expect(screen.getByRole('header', { name: 'How was meeting them?' })).toBeTruthy()
+  expect(screen.getByRole('header', { name: 'Did anything go wrong?' })).toBeTruthy()
+  // The issues are a radio list, "Nothing went wrong" picked to begin with.
+  expect(screen.getByRole('radio', { name: 'Nothing went wrong' }).props.accessibilityState).toMatchObject({ checked: true })
+  expect(screen.getByRole('radio', { name: 'They harassed me' }).props.accessibilityState).toMatchObject({ checked: false })
+  await act(async () => Dimensions.set({ window, screen: window }))
+})
+
+it('at the larger text sizes the name and its line wrap to two rather than lose who it is (driven at AX XXXL)', async () => {
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 3.571 }, screen: { ...window, fontScale: 3.571 } }))
+  try {
+    loads()
+    await view()
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
+    const row = await screen.findByTestId('rate-person')
+    expect(within(row).getByText('Night Cat').props.numberOfLines).toBe(2)
+    expect(within(row).getByText('You matched at this event').props.numberOfLines).toBe(2)
+  } finally {
+    await act(async () => Dimensions.set({ window, screen: window }))
+  }
+})
+
+it('focus moves to each new card’s header (M5): the night’s question, then the person', async () => {
+  const focus = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent').mockImplementation(() => {})
+  loads()
+  await view()
+  await screen.findByRole('header', { name: 'How was the night?' })
+  await waitFor(() => expect(focus).toHaveBeenCalledWith(expect.anything(), 'focus'))
+  const first = focus.mock.calls.length
+  await fireEvent.press(screen.getByRole('button', { name: 'Skip to the people' }))
+  await screen.findByTestId('rate-person')
+  await waitFor(() => expect(focus.mock.calls.length).toBeGreaterThan(first))
+  const target = focus.mock.calls.at(-1)![0] as unknown as { props: { accessibilityLabel?: string } }
+  expect(target.props.accessibilityLabel).toBe('Night Cat. You matched at this event')
+})
+
+it('one step only (no night to ask, one person): no pager, for "1 of 1" says nothing', async () => {
+  loads({ peers: ['u1'], rated: true })
+  await view()
+  await screen.findByTestId('rate-person')
+  expect(screen.queryByTestId('rate-bar-progress')).toBeNull()
 })
 
 it('a person: Submit is docked and disabled until a rating; issues are one radio group; the note is labelled', async () => {
@@ -204,7 +287,7 @@ describe('the night is not open to rate (Flow 15 #11)', () => {
     api.ratePeer.mockResolvedValue({ success: false, error: 'x', errorCode: 'FORBIDDEN', reasonCode: 'NOT_CONNECTED' } as never)
     await view()
     await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
-    await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/))
+    await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/, {}, AFTER_THE_BEAT))
     await fireEvent.press(screen.getByTestId('rate-submit'))
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('You can only rate people you connected with.', 'error', { haptic: 'error' }))
     expect(screen.queryByText('Rating isn’t open for this night')).toBeNull()
@@ -216,7 +299,7 @@ describe('the night is not open to rate (Flow 15 #11)', () => {
     api.ratePeer.mockResolvedValue({ success: false, error: 'x', errorCode: 'FORBIDDEN' } as never)
     await view()
     await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
-    await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/))
+    await fireEvent.press(await screen.findByLabelText(/^Meeting Night Cat: 4 out of 5/, {}, AFTER_THE_BEAT))
     await fireEvent.press(screen.getByTestId('rate-submit'))
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That one can’t be rated.', 'error', { haptic: 'error' }))
   })
@@ -236,7 +319,7 @@ describe('the bar over a form that scrolls under it (#30)', () => {
     loads()
     await view()
     await fireEvent.press(await screen.findByLabelText(/^The night: 5 out of 5, Loved it/))
-    const form = await screen.findByTestId('rate-submit')
+    const form = await screen.findByTestId('rate-submit', {}, AFTER_THE_BEAT)
     expect(form).toBeTruthy()
     expect(screen.queryByTestId('rate-bar-bar')).toBeNull()
     await fireEvent.scroll(screen.getByTestId('rate-form'), { nativeEvent: { contentOffset: { y: 40 } } })
@@ -248,23 +331,20 @@ describe('the bar over a form that scrolls under it (#30)', () => {
 })
 
 describe('the night has its art, and a held Submit says why (TG-08)', () => {
-  it('the night step draws the cover above its question, its title balanced so it never widows', async () => {
+  it('the night’s row draws its cover as the thumb', async () => {
     loads()
-    api.getEvent.mockResolvedValue({ success: true, data: { title: 'QA Scale night 1', coverImageUrl: 'https://cdn.blendn.app/c.jpg' } } as never)
+    api.getEvent.mockResolvedValue({ success: true, data: { ...NIGHT, title: 'QA Scale night 1', coverImageUrl: 'https://cdn.blendn.app/c.jpg' } } as never)
     await view()
-    const title = await screen.findByRole('header', { name: 'How was QA Scale night 1?' })
-    expect(title.props.textBreakStrategy).toBe('balanced')
-    expect(title.props.lineBreakStrategyIOS).toBe('standard')
-    const uris = JSON.stringify(screen.toJSON())
-    expect(uris).toContain('https://cdn.blendn.app/c.jpg')
+    const row = await screen.findByTestId('rate-event')
+    expect(JSON.stringify(screen.toJSON())).toContain('https://cdn.blendn.app/c.jpg')
   })
 
   // TG-06. Negative control: with the old `load.cover ? … : null`, the step draws no art and the plate is missing.
   it('a night with no cover still has its art: the category plate', async () => {
     loads()
-    api.getEvent.mockResolvedValue({ success: true, data: { title: 'QA Scale night 1', categories: [{ id: 'c', name: 'Comedy', slug: 'comedy' }] } } as never)
+    api.getEvent.mockResolvedValue({ success: true, data: { ...NIGHT, title: 'QA Scale night 1', categories: [{ id: 'c', name: 'Comedy', slug: 'comedy' }] } } as never)
     await view()
-    await screen.findByRole('header', { name: 'How was QA Scale night 1?' })
+    await screen.findByTestId('rate-event')
     expect(screen.getByTestId('event-cover-plate', { includeHiddenElements: true })).toBeTruthy()
     expect(JSON.stringify(screen.toJSON())).toContain('mic-vocal')
   })
@@ -275,9 +355,26 @@ describe('the night has its art, and a held Submit says why (TG-08)', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
     await screen.findByText('Night Cat')
     expect(screen.getByRole('button', { name: 'Submit' }).props.accessibilityState).toMatchObject({ disabled: true })
-    expect(screen.getByTestId('rate-hint')).toHaveTextContent('Pick a number to send')
+    // Docked with Submit, so the form above sits where the board draws it.
+    expect(within(screen.getByTestId('rate-dock')).getByTestId('rate-hint')).toHaveTextContent('Pick a number to send')
     await fireEvent.press(screen.getByLabelText(/^Meeting Night Cat: 4 out of 5/))
     expect(screen.queryByTestId('rate-hint')).toBeNull()
     expect(screen.getByRole('button', { name: 'Submit' }).props.accessibilityState).not.toMatchObject({ disabled: true })
+  })
+
+  /*
+   * Driven on a 402×874 iPhone (2026-11-06): with Submit and the note kept, a floating dock sat over
+   * "They harassed me" at rest. The dock is in the flow on a person's step, so the form scrolls above it
+   * and no option is ever under it. Control: `floating` back on the person's Dock fails both.
+   */
+  it('a person: the dock is under the form, not over it, so no issue option can sit behind Submit', async () => {
+    loads()
+    await view()
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
+    await screen.findByText('Night Cat')
+    expect(StyleSheet.flatten(screen.getByTestId('rate-dock').props.style).position).not.toBe('absolute')
+    await fireEvent(screen.getByTestId('rate-dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 190 } } })
+    const pad = StyleSheet.flatten(screen.getByTestId('rate-form').props.contentContainerStyle).paddingBottom
+    expect(pad).toBeLessThan(190)
   })
 })
