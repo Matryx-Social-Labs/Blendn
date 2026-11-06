@@ -42,7 +42,7 @@ import { eventDetailBlocks, type ServerEventDetails } from '../../lib/eventDetai
 import { showEventReportOptions } from '../../lib/safetyUtils'
 import { takeSceneSeed } from '../../lib/sceneSeed'
 import { eventTarget } from '../../lib/shareEvent'
-import { shareNatively } from '../../lib/shareTray'
+import { openShare, shareNatively } from '../../lib/shareTray'
 import { apiClient, type RsvpStatus } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
 import {
@@ -745,8 +745,9 @@ export default function EventDetail() {
         timezone: event.timezone,
       })
     : null
-  // The system share sheet (Flow 4: the bar's Share and the dock's Invite); "Bring someone?" folded into it.
-  const handleShare = shareTarget
+  // Flow 4, option B: the dock's Invite is the system share sheet ("Bring someone?" folded into it); the bar's Share is
+  // the one tray (Flow 16: WhatsApp first, the Story card).
+  const handleInvite = shareTarget
     ? async () => {
         if ((await shareNatively(shareTarget)) === 'failed') showToast('Couldn’t open sharing. Try again.', 'error')
       }
@@ -937,7 +938,7 @@ export default function EventDetail() {
   const dock = eventDock({ cta: ctaState, when: dockWhen, roomOpen: roomLine?.open === true, canInvite: !!shareTarget, between: betweenLine, alone: checkInCount <= 1 })
   const dockPress: Record<DockDoes, () => void> = {
     rsvp: () => void handleToggleRsvp(),
-    invite: () => void (handleShare && handleShare()),
+    invite: () => void (handleInvite && handleInvite()),
     openRoom: () => void openRoom(),
     room: () => toTheOverlay(openBlendn),
     tonight: () => toTheOverlay(openBlendn),
@@ -975,7 +976,7 @@ export default function EventDetail() {
         saved={userInterested}
         onBack={goBack}
         onSave={handleToggleInterest}
-        onShare={handleShare}
+        onShare={shareTarget ? () => void openShare(shareTarget) : undefined}
         onMore={() => setMenuOpen(true)}
         scrollY={scrollY}
         reveal={posterSide(width)}
