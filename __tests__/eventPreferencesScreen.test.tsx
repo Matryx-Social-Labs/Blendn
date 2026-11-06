@@ -157,7 +157,7 @@ it('says it could not save when a refusal carries no sentence', async () => {
   await fireEvent.press(await screen.findByRole('checkbox', { name: /^Making friends/ }))
   await fireEvent.press(screen.getByRole('button', { name: 'Save' }))
 
-  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Could not save. Try again.', 'error', { haptic: 'error' }))
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t save that. Try again.', 'error', { haptic: 'error' }))
   expect(router.back).not.toHaveBeenCalled()
 })
 

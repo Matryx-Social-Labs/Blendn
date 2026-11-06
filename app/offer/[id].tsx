@@ -22,7 +22,7 @@ import {
   OFFER_REPORT_REASONS,
   offersApi,
   passView,
-  validUntil,
+  validityLine,
   type OfferReportReason,
   type OpenedOffer,
   type RegularPrefs,
@@ -281,7 +281,7 @@ function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; last
       <DoorTicket
         venueName={offer.venue.name}
         offerText={offer.text}
-        until={validUntil(offer.endsAt)}
+        until={validityLine(offer.endsAt)}
         endsAt={offer.endsAt}
         view={view}
         code={view.door === 'live' ? offer.pass?.code : undefined}

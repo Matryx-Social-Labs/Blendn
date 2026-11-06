@@ -121,7 +121,7 @@ describe('the live pass', () => {
     expect(screen.getByText('K7Q 4M2')).toBeTruthy()
     expect(screen.getByLabelText('Door code K 7 Q, 4 M 2')).toBeTruthy()
     expect(screen.getByLabelText(/^Offer code for The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
-    expect(screen.getByText('Show this at the door. Staff type the code and tap Redeemed.')).toBeTruthy()
+    expect(screen.getByText('Works once, today. Staff type the code and tap Redeemed.')).toBeTruthy()
     reads = [offer('redeemed', null)]
     // The code turns at :30; the screen asks a second before.
     await act(async () => { jest.advanceTimersByTime(10_000) })
