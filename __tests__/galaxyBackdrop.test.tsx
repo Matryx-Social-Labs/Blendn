@@ -7,11 +7,12 @@
  * - Reduce Motion draws the committed remnant, still, and never starts the physics;
  * - the form level draws the remnant too (dimmed, turning, then still) and never re-simulates;
  * - a low-end Android phone runs half the stars;
+ * - past the freeze the landing draws the stars once into one image and turns that, no per-star work (SCRUM-1015);
  * - it is decoration: untouchable and hidden from a screen reader.
  */
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AppState, Dimensions, Platform, type AppStateStatus } from 'react-native'
+import { AppState, Dimensions, PixelRatio, Platform, type AppStateStatus } from 'react-native'
 
 type FrameInfo = { timeSincePreviousFrame: number | null }
 const mockFrame = { cb: null as null | ((info: FrameInfo) => void), setActive: jest.fn(), registered: 0 }
@@ -47,7 +48,7 @@ import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
 import { GalaxyBackdrop } from '../components/onboarding/GalaxyBackdrop'
 import { COLOR } from '../lib/design/tokens'
 import REMNANT from '../assets/galaxy/remnant.json'
-import { END_AT, GALAXY_B, advanceFilm, startFilm } from '../lib/galaxySim'
+import { END_AT, FREEZE_AT, GALAXY_B, advanceFilm, startFilm } from '../lib/galaxySim'
 import { tint } from '../lib/theme'
 
 const HIDDEN = { includeHiddenElements: true }
@@ -137,6 +138,115 @@ describe('the landing: the collision, once', () => {
     expect(shelf?.props.transform).toEqual(expect.arrayContaining([{ translateX: 195 }, { translateY: 316 }]))
     const [solid] = shelf?.queryAll((n) => n.type === 'sk-RadialGradient')[0].props.colors
     expect(solid).toBe(tint(COLOR.ink, 0.94))
+  })
+})
+
+describe('past the freeze: the remnant drawn once, then turned as one image (SCRUM-1015)', () => {
+  type Made = { width: number; height: number; calls: unknown[][]; image: object }
+  const offscreen = (): { fail: boolean; made: Made[] } => require('@shopify/react-native-skia').offscreen
+  const calls = (m: Made, name: string) => m.calls.filter((c) => c[0] === name)
+  /** The image's turn, radians: the one group the baked sky turns about its centre. */
+  const spin = () => drawn('galaxy-live', 'Group').find((g) => g.props.origin)?.props.transform.value[0].rotate
+  const FROZEN = FREEZE_AT * 10 + 1
+  beforeEach(() => {
+    offscreen().fail = false
+    offscreen().made.length = 0
+  })
+
+  it('draws every star, live, until the physics stops: nothing is baked before FREEZE_AT', async () => {
+    await render(<GalaxyBackdrop mode="collision" />)
+    await frames(FREEZE_AT * 10 - 2, 100)
+    expect(offscreen().made).toHaveLength(0)
+    expect(drawn('galaxy-live', 'Atlas')).toHaveLength(4)
+    expect(drawn('galaxy-live', 'Image')).toHaveLength(0)
+  })
+
+  it('at the freeze draws the stars, the cores and the bloom once into one image, and from then on the sky draws only that', async () => {
+    await render(<GalaxyBackdrop mode="collision" />)
+    await frames(FROZEN, 100)
+    await frames(600, 100)
+    const [made] = offscreen().made
+    expect(offscreen().made).toHaveLength(1)
+    const atlases = calls(made, 'drawAtlas')
+    expect(atlases).toHaveLength(4)
+    const [, , srcs, dsts, paint, mode, colors] = atlases[0] as [string, unknown, unknown[], unknown[], { props: Record<string, unknown> }, number, unknown[]]
+    expect([srcs.length, dsts.length, colors.length]).toEqual([2000, 2000, 2000])
+    expect(paint.props.setBlendMode).toBe(12)
+    expect(mode).toBe(13)
+    expect((atlases[1][3] as unknown[]).length).toBe(4)
+    const [[, bloom]] = calls(made, 'saveLayer') as [string, { props: Record<string, unknown> }][]
+    expect(bloom.props).toEqual({ setBlendMode: 12, setAlphaf: 0.55, setImageFilter: { blur: [6, 6, 3, null] } })
+    await uiThread()
+    expect(drawn('galaxy-live', 'Atlas')).toHaveLength(0)
+    const images = drawn('galaxy-live', 'Image')
+    expect(images).toHaveLength(1)
+    expect(images[0].props.image.value).toBe(made.image)
+    expect(images[0].props.blendMode).toBe('plus')
+  })
+
+  it('the image covers every point the sky shows at any turn: a square about the centre out to the farthest corner above the fade', async () => {
+    await render(<GalaxyBackdrop mode="collision" />)
+    await frames(FROZEN, 100)
+    const [made] = offscreen().made
+    const { width, height } = Dimensions.get('window')
+    const cy = (height * 180) / 844
+    const reach = Math.hypot(width / 2, height * 0.7 - cy)
+    expect(made.width).toBe(made.height)
+    expect(made.width / PixelRatio.get()).toBeGreaterThanOrEqual(2 * reach)
+    await uiThread()
+    const [image] = drawn('galaxy-live', 'Image')
+    expect(image.props.x + image.props.width / 2).toBeCloseTo(width / 2, 0)
+    expect(image.props.y + image.props.height / 2).toBeCloseTo(cy, 0)
+    expect(image.props.width).toBeCloseTo(made.width / PixelRatio.get(), 5)
+  })
+
+  it('turns at the remnant’s 3°/s from the angle it was baked at, the orbit’s way, and the forms still start from where it was left', async () => {
+    await render(<GalaxyBackdrop mode="collision" />)
+    await frames(FROZEN, 100)
+    await uiThread()
+    const at = spin()
+    await frames(100, 100)
+    await uiThread()
+    const sense = startFilm(2000).spin
+    expect(spin() - at).toBeCloseTo((-sense * 10 * GALAXY_B.look.turn * Math.PI) / 180, 4)
+    expect(Math.abs(at)).toBeLessThan((GALAXY_B.look.turn * Math.PI) / 180)
+    await render(<GalaxyBackdrop mode="remnant" />)
+    expect(drawn('galaxy-remnant', 'Atlas')).toHaveLength(4)
+  })
+
+  it('a low-end phone bakes its 1,000 stars without the bloom', async () => {
+    on('android')
+    mockMemory = 2 * 1024 ** 3
+    await render(<GalaxyBackdrop mode="collision" />)
+    await frames(FROZEN, 100)
+    const [made] = offscreen().made
+    expect(calls(made, 'drawAtlas')).toHaveLength(2)
+    expect((calls(made, 'drawAtlas')[0][3] as unknown[]).length).toBe(1000)
+    expect(calls(made, 'saveLayer')).toHaveLength(0)
+  })
+
+  it('with no GPU surface the stars stay live, as before, and the bake is not tried again every frame', async () => {
+    offscreen().fail = true
+    const make = jest.spyOn(require('@shopify/react-native-skia').Skia.Surface, 'MakeOffscreen')
+    await render(<GalaxyBackdrop mode="collision" />)
+    await frames(FROZEN + 100, 100)
+    await uiThread()
+    expect(make).toHaveBeenCalledTimes(1)
+    expect(drawn('galaxy-live', 'Atlas')).toHaveLength(4)
+    expect(drawn('galaxy-live', 'Image')).toHaveLength(0)
+    make.mockRestore()
+  })
+
+  it('held while paused or in the background, as before: the turn stops with the frame callback', async () => {
+    const { rerender } = await render(<GalaxyBackdrop mode="collision" />)
+    await frames(FROZEN, 100)
+    await rerender(<GalaxyBackdrop mode="collision" paused />)
+    expect(lastActive()).toBe(false)
+    await act(async () => appState?.('background'))
+    await rerender(<GalaxyBackdrop mode="collision" />)
+    expect(lastActive()).toBe(false)
+    await act(async () => appState?.('active'))
+    expect(lastActive()).toBe(true)
   })
 })
 

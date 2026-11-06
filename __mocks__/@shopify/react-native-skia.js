@@ -25,6 +25,21 @@ const rsxform = () => {
   return xf
 }
 
+/** An offscreen surface that records what is drawn on it; `offscreen.fail` makes the next one unavailable (no GPU). */
+const offscreen = { fail: false, made: [] }
+const surface = (width, height) => {
+  const calls = []
+  const canvas = new Proxy({}, { get: (_t, name) => (...args) => calls.push([name, ...args]) })
+  const made = { width, height, calls, image: { snapshot: true, width: () => width, height: () => height } }
+  offscreen.made.push(made)
+  return { getCanvas: () => canvas, flush: () => calls.push(['flush']), makeImageSnapshot: () => made.image }
+}
+const paint = () => {
+  const p = { props: {} }
+  for (const k of ['setBlendMode', 'setAlphaf', 'setImageFilter']) p[k] = (v) => (p.props[k] = v)
+  return p
+}
+
 module.exports = {
   Canvas: node('Canvas'),
   Atlas: node('Atlas'),
@@ -34,6 +49,7 @@ module.exports = {
   Circle: node('Circle'),
   Oval: node('Oval'),
   Paint: node('Paint'),
+  Image: node('Image'),
   Blur: node('Blur'),
   RadialGradient: node('RadialGradient'),
   LinearGradient: node('LinearGradient'),
@@ -42,11 +58,17 @@ module.exports = {
   rect: (x, y, width, height) => ({ x, y, width, height }),
   AlphaType: { Premul: 2 },
   ColorType: { RGBA_8888: 4 },
+  BlendMode: { Plus: 12, Modulate: 13 },
+  TileMode: { Decal: 3 },
+  offscreen,
   Skia: {
     Color: (c) => Object.assign(new Float32Array([0, 0, 0, 1]), { source: c }),
     XYWHRect: (x, y, width, height) => ({ x, y, width, height }),
     RSXform: rsxform,
     Data: { fromBytes: (bytes) => ({ bytes }) },
     Image: { MakeImage: (info) => ({ info }) },
+    Paint: paint,
+    ImageFilter: { MakeBlur: (sx, sy, mode, input) => ({ blur: [sx, sy, mode, input] }) },
+    Surface: { MakeOffscreen: (w, h) => (offscreen.fail ? null : surface(w, h)) },
   },
 }
