@@ -54,16 +54,16 @@ export function EventRow({
         <EventCover uri={cover} height={SIZE.primary} radius={THUMB_RADIUS} category={category} />
       </View>
       <View style={styles.text}>
-        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
+        <Text testID="rate-event-title" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
           {title}
         </Text>
         {day ? (
-          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          <Text testID="rate-event-day" numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             {day}
           </Text>
         ) : null}
         {venue ? (
-          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          <Text testID="rate-event-venue" numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             {venue}
           </Text>
         ) : null}
@@ -82,7 +82,7 @@ export const PersonRow = forwardRef<View, { name: string; photo: string | null }
     <View ref={ref} testID="rate-person" accessible accessibilityRole="header" accessibilityLabel={`${name}. You matched at this event`} style={styles.row}>
       {photo ? <Avatar kind="photo" uri={photo} size={SIZE.primary} label={name} /> : <Avatar kind="creature" pseudonym={name} size={SIZE.primary} label={name} />}
       <View style={styles.text}>
-        <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
+        <Text testID="rate-person-name" numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
           {name}
         </Text>
         <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>

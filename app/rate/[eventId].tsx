@@ -482,6 +482,7 @@ function RatePeersContent() {
                 <EventRow title={load.title || 'This night'} day={load.day} venue={load.venue} cover={load.cover} category={load.category} />
                 <Text
                   ref={header}
+                  testID="rate-title"
                   accessibilityRole="header"
                   maxFontSizeMultiplier={MAX_FONT_SCALE.title}
                   style={[font('title', bold), NIGHT_TITLE, styles.ink, { marginTop: GAP.question }]}
