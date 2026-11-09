@@ -287,6 +287,7 @@ function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; last
     <>
       <DoorTicket
         venueName={offer.venue.name}
+        venueType={offer.venue.venueType}
         offerText={offer.text}
         until={validityLine(offer.endsAt)}
         endsAt={offer.endsAt}

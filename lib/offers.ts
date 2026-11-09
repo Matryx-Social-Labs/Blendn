@@ -18,7 +18,8 @@ export type OfferState = 'live' | 'redeemed' | 'used_tonight' | 'ended'
 
 export type Offer = {
   id: string
-  venue: { id: string; name: string }
+  /** `venueType`: the venue_type key ("pub_bar"), for the pass's tile; null when the venue has none, absent from an older server. */
+  venue: { id: string; name: string; venueType?: string | null }
   text: string
   sentAt: string
   endsAt: string

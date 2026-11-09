@@ -23,6 +23,7 @@ import {
   PLACE_TYPES,
   placesCount,
   plateFor,
+  plateOf,
   guestTypeLabel,
   RAIL_CAP,
   splitPlaces,
@@ -82,6 +83,18 @@ describe('the plates', () => {
     expect(plateFor('coworking')).toBe('cafe')
     expect(plateFor('stadium')).toBe('bar')
     expect(plateFor(null)).toBe('bar')
+  })
+
+  it('plateOf: the plate a type has, and null for a type with none, so a caller can draw its own fallback', () => {
+    expect(plateOf('pub_bar')).toBe('bar')
+    expect(plateOf('brewery')).toBe('brewery')
+    expect(plateOf('coworking')).toBe('cafe')
+    // Controls: a type with no plate, no type, and a key every object inherits are all none, never the bar's.
+    expect(plateOf('stadium')).toBeNull()
+    expect(plateOf(null)).toBeNull()
+    expect(plateOf(undefined)).toBeNull()
+    expect(plateOf('constructor')).toBeNull()
+    expect(plateFor('constructor')).toBe('bar')
   })
 
   it('the chip row asks the server for a type it has', () => {
