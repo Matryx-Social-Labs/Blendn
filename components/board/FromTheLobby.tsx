@@ -44,15 +44,26 @@ const GLOW = [
   },
 ]
 
-/** Read on focus, so the card says what changed while you were in a ride's room or a 1:1. A refusal draws nothing. */
-function useSummary(eventId: string): FromLobbyCard | null {
-  const [card, setCard] = useState<FromLobbyCard | null>(null)
+type Summary = { card: FromLobbyCard | null; timeZone: string | null }
+
+/** The event's zone, from the event's own record (cached: the event page and the Lobby read the same). Null if unread. */
+const eventZone = (eventId: string) =>
+  Promise.resolve()
+    .then(() => apiClient.getEvent(eventId))
+    .then((r) => (r.success ? ((r.data as { timezone?: string | null } | undefined)?.timezone ?? null) : null))
+    .catch(() => null)
+
+/**
+ * Read on focus, so the card says what changed while you were in a ride's room or a 1:1. A refusal draws nothing.
+ * The summary carries no zone, so the event's is read beside it: "Until" is the event city's day and clock.
+ */
+function useSummary(eventId: string): Summary | null {
+  const [summary, setSummary] = useState<Summary | null>(null)
   useFocusEffect(
     useCallback(() => {
       let gone = false
-      apiClient
-        .getBoardSummary(eventId)
-        .then((r) => !gone && setCard(r.success && r.data ? fromLobbyCard(r.data) : null))
+      Promise.all([apiClient.getBoardSummary(eventId), eventZone(eventId)])
+        .then(([r, timeZone]) => !gone && setSummary(r.success && r.data ? { card: fromLobbyCard(r.data), timeZone } : null))
         .catch((error) =>
           Logger.warn('board', 'summary failed', {
             eventId,
@@ -64,7 +75,7 @@ function useSummary(eventId: string): FromLobbyCard | null {
       }
     }, [eventId])
   )
-  return card
+  return summary
 }
 
 function openRow(open: FromLobbyOpen) {
@@ -83,7 +94,8 @@ function openRow(open: FromLobbyOpen) {
  * at all when the server says there is nothing (4b). Pseudonyms only: every name on it is the server's.
  */
 export function FromTheLobby({ eventId, folded, onFold, onUnfold }: { eventId: string; folded: boolean; onFold: () => void; onUnfold: () => void }) {
-  const card = useSummary(eventId)
+  const summary = useSummary(eventId)
+  const card = summary?.card
   const reduceMotion = useReducedMotion()
   const fold = useSharedValue(folded ? 1 : 0)
   const open = useSharedValue(0)
@@ -116,7 +128,7 @@ export function FromTheLobby({ eventId, folded, onFold, onUnfold }: { eventId: s
         accessibilityElementsHidden={folded}
         importantForAccessibility={folded ? 'no-hide-descendants' : 'auto'}
       >
-        <TheCard card={card} eventId={eventId} rise={!reduceMotion} onFold={onFold} />
+        <TheCard card={card} timeZone={summary?.timeZone ?? null} eventId={eventId} rise={!reduceMotion} onFold={onFold} />
       </Animated.View>
       <Animated.View
         style={[styles.barLayer, barFade]}
@@ -130,7 +142,19 @@ export function FromTheLobby({ eventId, folded, onFold, onUnfold }: { eventId: s
   )
 }
 
-function TheCard({ card, eventId, rise, onFold }: { card: FromLobbyCard; eventId: string; rise: boolean; onFold: () => void }) {
+function TheCard({
+  card,
+  timeZone,
+  eventId,
+  rise,
+  onFold,
+}: {
+  card: FromLobbyCard
+  timeZone: string | null
+  eventId: string
+  rise: boolean
+  onFold: () => void
+}) {
   const bold = useBoldText()
   return (
     <View style={styles.card}>
@@ -169,7 +193,7 @@ function TheCard({ card, eventId, rise, onFold }: { card: FromLobbyCard; eventId
             {card.more > 0 ? `Read the Lobby · ${card.more} more` : 'Read the Lobby'}
           </Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} numberOfLines={1} style={[font('note', bold), styles.secondary, styles.until]}>
-            Until {untilWords(card.readUntil)}
+            Until {untilWords(card.readUntil, timeZone)}
           </Text>
         </Pressable>
       ) : null}
@@ -294,8 +318,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: EMBER.edge,
   },
+  // Wraps: at the largest text "Until …" takes its own line rather than an ellipsis beside "Read the Lobby · N more".
   foot: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: SPACE.sm,

@@ -180,11 +180,29 @@ describe('the compose sheet', () => {
 })
 
 describe('the clock', () => {
-  it('opens the doors 90 minutes before the start, and says "until" in the event’s clock with no zone', () => {
+  it('opens the doors 90 minutes before the start', () => {
     expect(doorsAt('2026-11-08T12:30:00Z')).toBe(Date.parse('2026-11-08T11:00:00Z'))
     expect(doorsAt(null)).toBeNull()
-    expect(untilWords('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('Tue 10 Nov, 12 AM')
-    expect(untilWords('2026-11-15T03:00:00Z', 'America/Toronto')).toBe('Sat 14 Nov, 10 PM')
+  })
+
+  // The owner's one time grammar (SCRUM-1031): Tonight from 5 PM, Today before, Tomorrow, the weekday, then the date;
+  // the event city's day and clock, never a zone's name.
+  it('says "until" in the app’s time words, in the event city’s day and clock', () => {
+    const IST = 'Asia/Kolkata'
+    const morning = new Date('2026-11-09T03:00:00Z') // Mon 9 Nov, 8:30 AM in Bengaluru
+    expect(untilWords('2026-11-09T08:30:00Z', IST, morning)).toBe('Today · 2 PM')
+    expect(untilWords('2026-11-09T15:00:00Z', IST, morning)).toBe('Tonight · 8:30 PM')
+    expect(untilWords('2026-11-09T18:30:00Z', IST, morning)).toBe('Tomorrow · 12 AM')
+    expect(untilWords('2026-11-12T15:00:00Z', IST, morning)).toBe('Thu · 8:30 PM')
+    expect(untilWords('2026-11-25T15:00:00Z', IST, morning)).toBe('Wed 25 Nov · 8:30 PM')
+    expect(untilWords(null, IST, morning)).toBe('')
+  })
+
+  it('takes the day from the event’s city, not the phone’s', () => {
+    // Sat 14 Nov, 3 PM in Toronto; 1:30 AM Sunday in Bengaluru. The Lobby closes at 10 PM Toronto time.
+    const now = new Date('2026-11-14T20:00:00Z')
+    expect(untilWords('2026-11-15T03:00:00Z', 'America/Toronto', now)).toBe('Tonight · 10 PM')
+    expect(untilWords('2026-11-15T03:00:00Z', 'Asia/Kolkata', now)).toBe('Today · 8:30 AM')
   })
 })
 
@@ -261,7 +279,7 @@ describe('the event page’s slot', () => {
   })
 
   it('says after doors why it is read-only, and until when in the event’s clock', () => {
-    expect(previewReadOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('The doors are open, so the Lobby is read-only. You can read it until Tue 10 Nov, 12 AM.')
+    expect(previewReadOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata', new Date('2026-11-09T10:00:00Z'))).toBe('The doors are open, so the Lobby is read-only. You can read it until Tomorrow · 12 AM.')
     expect(previewReadOnlyLine(undefined)).toBe('The doors are open, so the Lobby is read-only.')
   })
 })
@@ -340,7 +358,7 @@ describe('the Lobby screen (L-A): what each part shows', () => {
   })
 
   it('says until when the Lobby can be read, and only the doors if the server did not say', () => {
-    expect(readOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('The Lobby is read-only now. You can read it until Tue 10 Nov, 12 AM.')
+    expect(readOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata', new Date('2026-11-09T10:00:00Z'))).toBe('The Lobby is read-only now. You can read it until Tomorrow · 12 AM.')
     expect(readOnlyLine(undefined)).toBe('The Lobby is read-only now.')
   })
 

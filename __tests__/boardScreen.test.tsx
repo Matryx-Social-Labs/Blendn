@@ -127,6 +127,8 @@ const pullToRefresh = () =>
     await screen.getByTestId('board-list').props.refreshControl.props.onRefresh()
   })
 
+// A test that pins the clock (the time words are relative) never leaves it pinned.
+afterEach(() => jest.useRealTimers())
 beforeEach(() => {
   jest.clearAllMocks()
   // Reset, not clear: a test that fails early must not leave queued answers for the next.
@@ -1082,11 +1084,13 @@ describe('L-A: the composer’s slot', () => {
 
 describe('L-A: after doors, and after the end', () => {
   it('read-only: until when, the room, the chips, and no action on any post', async () => {
+    // Only Date is faked (the owner's time words are relative to now): 10:00Z is 3:30 PM Monday in Bengaluru.
+    jest.useFakeTimers({ now: new Date('2026-11-09T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] })
     api.getEvent.mockResolvedValue({ success: true, data: { id: 'e1', title: 'Warehouse Night', startTime: PAST, timezone: 'Asia/Kolkata' } } as never)
     api.getBoard.mockResolvedValue(lobby([OFFER, SEEKING], { state: 'read_only', phase: 'live' }) as never)
     await render(<BoardScreen />)
     expect(await screen.findByText('The doors are open')).toBeTruthy()
-    expect(screen.getByText('The Lobby is read-only now. You can read it until Tue 10 Nov, 12 AM.')).toBeTruthy()
+    expect(screen.getByText('The Lobby is read-only now. You can read it until Tomorrow · 12 AM.')).toBeTruthy()
     expect(screen.getByText(OFFER.body)).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
     expect(screen.queryByLabelText('Say hi, Quiet Otter')).toBeNull()

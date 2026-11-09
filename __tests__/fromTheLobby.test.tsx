@@ -12,7 +12,7 @@ jest.mock('expo-router', () => ({
   },
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getBoardSummary: jest.fn() },
+  apiClient: { getBoardSummary: jest.fn(), getEvent: jest.fn() },
 }))
 jest.mock('../lib/logger', () => ({
   Logger: { warn: jest.fn(), debug: jest.fn() },
@@ -22,6 +22,7 @@ import { router } from 'expo-router'
 import { FromTheLobby } from '../components/board/FromTheLobby'
 import { apiClient } from '../lib/apiClient'
 import type { LobbySummary } from '../lib/lobby'
+import { refreshPhoneZone } from '../lib/time'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const PIN = {
@@ -65,7 +66,10 @@ const said = (over: Partial<LobbySummary>) =>
 const draw = (folded = false, onUnfold = jest.fn(), onFold = jest.fn()) =>
   render(<FromTheLobby eventId="e1" folded={folded} onFold={onFold} onUnfold={onUnfold} />)
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.clearAllMocks()
+  api.getEvent.mockResolvedValue({ success: true, data: { id: 'e1', timezone: 'Asia/Kolkata' } } as never)
+})
 
 it('draws nothing when the Lobby has nothing for you (4b), and nothing when it refuses', async () => {
   said({ hasContent: false })
@@ -137,4 +141,38 @@ it('folds to one line that says what is in it, and opens again on a tap', async 
   expect(bar.props.accessibilityLabel).toBe('From the Lobby: Your ride · From the host')
   await fireEvent.press(bar)
   expect(onUnfold).toHaveBeenCalled()
+})
+
+describe('Read the Lobby’s until', () => {
+  const previousZone = process.env.TZ
+  beforeEach(() => {
+    // The phone is in Berlin; the event is in Bengaluru. Only Date is faked: the card's reads still settle.
+    process.env.TZ = 'Europe/Berlin'
+    refreshPhoneZone()
+    jest.useFakeTimers({
+      now: new Date('2026-11-09T10:00:00Z'),
+      doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'],
+    })
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    process.env.TZ = previousZone
+    refreshPhoneZone()
+  })
+
+  it('reads in the app’s time words, on the event city’s day and clock (owner rule, SCRUM-1031)', async () => {
+    said({ joined: [RIDE], pinned: PIN })
+    await draw()
+    // 18:30Z is midnight in Bengaluru (tomorrow there), 7:30 PM in Berlin (tonight here).
+    expect(await screen.findByText('Until Tomorrow · 12 AM')).toBeTruthy()
+    expect(api.getEvent).toHaveBeenCalledWith('e1')
+  })
+
+  it('still says until when if the event’s own record could not be read', async () => {
+    api.getEvent.mockResolvedValue({ success: false, error: 'no' } as never)
+    said({ joined: [RIDE], pinned: PIN })
+    await draw()
+    expect(await screen.findByText('Your ride')).toBeTruthy()
+    expect(screen.getByTestId('from-lobby-read')).toBeTruthy()
+  })
 })

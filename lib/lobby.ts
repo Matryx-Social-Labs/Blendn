@@ -1,6 +1,6 @@
 import type { BoardPost, BoardPostKind } from './board'
 import { compactCount } from './format'
-import { calendarDate, eventClock } from './time'
+import { whenLabel } from './pulse'
 import { roomOpensAt } from './preEventRoom'
 
 /**
@@ -118,12 +118,9 @@ export function postAge(createdAt: string, now: number = Date.now()): string {
   return hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} d`
 }
 
-/** "Mon 10 Nov, 12 AM": until when the Lobby can be read, in the event's own clock and never a zone's name. */
-export function untilWords(at: string | null | undefined, timeZone?: string | null): string {
-  if (!at) return ''
-  const day = calendarDate(at, { weekday: true, timeZone: timeZone ?? undefined })
-  const clock = eventClock(at, timeZone)
-  return day && clock ? `${day}, ${clock}` : ''
+/** "Tomorrow · 12 AM": until when the Lobby can be read, in the app's time words (`whenLabel`), the event city's day and clock. */
+export function untilWords(at: string | null | undefined, timeZone?: string | null, now: Date = new Date()): string {
+  return at ? whenLabel(at, now, timeZone) : ''
 }
 
 /** "18 posts · 3 offering rides": the preview's count line, compact past 999; no rides part when nobody offers one. */
@@ -409,14 +406,14 @@ export function freshOnTop(page: readonly { id: string; mine: boolean }[], shown
 }
 
 /** The doors banner's line, in the event's own clock. */
-export function readOnlyLine(closesAt: string | undefined, timeZone?: string | null): string {
-  const until = untilWords(closesAt, timeZone)
+export function readOnlyLine(closesAt: string | undefined, timeZone?: string | null, now?: Date): string {
+  const until = untilWords(closesAt, timeZone, now)
   return until ? `The Lobby is read-only now. You can read it until ${until}.` : 'The Lobby is read-only now.'
 }
 
 /** The event page's card after doors (P-A `pA-ro`): why it is read-only, and until when. */
-export function previewReadOnlyLine(closesAt: string | undefined, timeZone?: string | null): string {
-  const until = untilWords(closesAt, timeZone)
+export function previewReadOnlyLine(closesAt: string | undefined, timeZone?: string | null, now?: Date): string {
+  const until = untilWords(closesAt, timeZone, now)
   return `The doors are open, so the Lobby is read-only.${until ? ` You can read it until ${until}.` : ''}`
 }
 

@@ -49,6 +49,8 @@ const drawPreview = async (props: Partial<React.ComponentProps<typeof EventLobby
   return onOpenRoom
 }
 
+// A test that pins the clock (the time words are relative) never leaves it pinned.
+afterEach(() => jest.useRealTimers())
 beforeEach(() => jest.clearAllMocks())
 
 describe('P-A, the event page’s Lobby card', () => {
@@ -92,9 +94,11 @@ describe('P-A, the event page’s Lobby card', () => {
   })
 
   it('after doors is read-only until the close, with Read the Lobby and nothing to post', async () => {
+    // Only Date is faked (the owner's time words are relative to now): 10:00Z is 3:30 PM Monday in Bengaluru.
+    jest.useFakeTimers({ now: new Date('2026-11-09T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] })
     api.getBoardPreview.mockResolvedValue(preview({ state: 'read_only', phase: 'live' }))
     await drawPreview()
-    expect(screen.getByText('The doors are open, so the Lobby is read-only. You can read it until Tue 10 Nov, 12 AM.')).toBeTruthy()
+    expect(screen.getByText('The doors are open, so the Lobby is read-only. You can read it until Tomorrow · 12 AM.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Post something' })).toBeNull()
     expect(screen.queryByText('Lunar Fox')).toBeNull()
     await fireEvent.press(screen.getByRole('button', { name: 'Read the Lobby' }))
