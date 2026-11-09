@@ -49,7 +49,20 @@ it('Tonight, the Room and each person on Rate take focus as they arrive', () => 
   expect(src('components/blendn/BlendnScreen.tsx')).toMatch(/<TonightView[\s\S]{0,80}active=\{mode === 'tonight'\}/)
   expect(src('components/blendn/RoomSections.tsx')).toMatch(/useFocusWhen\(titleRef, active \? title : null\)/)
   expect(src('components/blendn/RoomView.tsx')).toMatch(/<RoomHero[\s\S]{0,60}active=\{!hidden\}/)
-  // The person, with the progress the bar shows, read on every Submit and Skip.
-  expect(src('app/rate/[eventId].tsx')).toMatch(/useFocusWhen\(personRef, person \? index : null\)/)
-  expect(src('app/rate/[eventId].tsx')).toContain('accessibilityLabel={`${person.name}, ${index + 1} of ${people.length}`}')
+  // Rate's card rises over `base`, so its header waits that long (behaviour: rateScreen.test.tsx, M5).
+  expect(src('app/rate/[eventId].tsx')).toMatch(/useFocusWhen\(header, ready \? [^\n]+, DURATION\.base\)/)
+})
+
+it('waits as long as the arrival takes when told', async () => {
+  const send = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent').mockImplementation(() => {})
+  function Slow() {
+    const ref = useRef<Text>(null)
+    useFocusWhen(ref, 'card', FOCUS_SETTLE_MS * 2)
+    return <Text ref={ref}>Card</Text>
+  }
+  await render(<Slow />)
+  await act(async () => jest.advanceTimersByTime(FOCUS_SETTLE_MS * 2 - 1))
+  expect(send).not.toHaveBeenCalled()
+  await act(async () => jest.advanceTimersByTime(1))
+  expect(send).toHaveBeenCalledTimes(1)
 })

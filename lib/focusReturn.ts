@@ -37,14 +37,15 @@ export const FOCUS_SETTLE_MS = DURATION.quick
 
 /**
  * Focus to `ref` each time `key` changes to a value (null, undefined or false: not yet): a heading that arrived with a new
- * screen or a new step, so a screen reader is told where it now is (motion audit M5).
+ * screen or a new step, so a screen reader is told where it now is (motion audit M5). `settleMs`: an arrival that takes
+ * longer than `FOCUS_SETTLE_MS` to come in (Rate's card rises over `DURATION.base`) waits for it.
  */
-export function useFocusWhen(ref: RefObject<unknown>, key: unknown): void {
+export function useFocusWhen(ref: RefObject<unknown>, key: unknown, settleMs: number = FOCUS_SETTLE_MS): void {
   useEffect(() => {
     if (key == null || key === false) return
     const timer = setTimeout(() => {
       if (ref.current) AccessibilityInfo.sendAccessibilityEvent(ref.current as Node, 'focus')
-    }, FOCUS_SETTLE_MS)
+    }, settleMs)
     return () => clearTimeout(timer)
-  }, [ref, key])
+  }, [ref, key, settleMs])
 }
