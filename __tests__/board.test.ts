@@ -116,9 +116,11 @@ describe('boardOpen: the one gate the Scene and the Going tab share', () => {
   it('leaves an unknown start to the server', () => {
     expect(boardOpen({ start_time: undefined, status: 'published' }, now)).toBe(true)
   })
-  it('the Scene and the Going tab call it, and nothing else judges the board', () => {
+  it('the Going tab’s tray calls it; the Scene’s card (P-A) asks the server, which keeps it to the close; nothing else judges', () => {
     const read = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
-    expect(read('components/screens/EventDetailScreen.tsx')).toContain('boardOpen(event)')
+    // From doors to the close the Lobby is read-only, and the card says so (`pA-ro`): the phone's doors clock must not hide it.
+    expect(read('components/screens/EventDetailScreen.tsx')).not.toContain('boardOpen(')
+    expect(read('components/screens/EventDetailScreen.tsx')).toContain('event && BOARD_ENABLED && !cancelled ?')
     expect(read('app/(tabs)/going.tsx')).toContain('boardOpen(row)')
     expect(read('lib/savedEvents.ts')).not.toContain('boardClosed')
     expect(read('components/screens/EventDetailScreen.tsx')).not.toContain('boardClosed')
@@ -354,7 +356,8 @@ describe('the board is on, now its safety half has shipped', () => {
 
   it('reads one constant at every way in', () => {
     const src = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
-    expect(src('components/screens/EventDetailScreen.tsx')).toContain('event && boardOpen(event) ?')
+    expect(src('components/screens/EventDetailScreen.tsx')).toContain('event && BOARD_ENABLED && !cancelled ?')
+    expect(src('app/(tabs)/going.tsx')).toContain('BOARD_ENABLED && !cancelled ?')
     expect(src('lib/board.ts')).toContain('BOARD_ENABLED && event.status !== ')
     expect(src('app/(tabs)/chat.tsx')).toMatch(/\{BOARD_ENABLED && !trimmed \? <BoardRequestsSection/)
     expect(src('app/board/[eventId].tsx')).toContain('if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />')
