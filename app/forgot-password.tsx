@@ -12,6 +12,7 @@ import { EmailSheet, SheetItem } from '../components/onboarding/EmailSheet'
 import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
 import { useSettleIn } from '../components/onboarding/useSettleIn'
 import { Banner } from '../components/ds/Banner'
+import { BannerPresence } from '../components/motion/BannerPresence'
 import { Button } from '../components/ds/Button'
 import { GlyphWell } from '../components/ds/StateScreen'
 import { TextField } from '../components/ds/TextField'
@@ -204,7 +205,7 @@ export default function ForgotPassword() {
             has an account, a reset link is on its way. It opens in your browser and expires in an hour.
           </Text>
         </View>
-        {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
+        {error ? <BannerPresence><Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /></BannerPresence> : null}
       </EmailSheet>
     )
   }
@@ -247,7 +248,7 @@ export default function ForgotPassword() {
           testID="forgot-email"
         />
       </SheetItem>
-      {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /> : null}
+      {error ? <BannerPresence><Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="forgot-error" /></BannerPresence> : null}
     </EmailSheet>
   )
 }

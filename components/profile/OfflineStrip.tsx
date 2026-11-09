@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { Banner } from '../ds/Banner'
+import { BannerPresence } from '../motion/BannerPresence'
 
 /**
  * The offline banner's words for a surface that acts (Flow 15 #16, DS #44; E6): one sentence per meaning. A cached view says
@@ -19,5 +20,5 @@ export function useOffline() {
  * once as it appears. Nothing when online. On Edit profile Save is disabled while it shows.
  */
 export function OfflineStrip({ offline }: { offline: boolean }) {
-  return offline ? <Banner kind="offline" text={OFFLINE_LINE} testID="offline-banner" /> : null
+  return offline ? <BannerPresence><Banner kind="offline" text={OFFLINE_LINE} testID="offline-banner" /></BannerPresence> : null
 }

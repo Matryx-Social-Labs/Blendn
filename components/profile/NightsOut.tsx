@@ -3,6 +3,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { nightLabel, nightsView, NIGHT_TILES, type NightsStatus } from '../../lib/meProfile'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Banner } from '../ds/Banner'
+import { BannerPresence } from '../motion/BannerPresence'
 import { Button } from '../ds/Button'
 import { font, useBoldText } from '../ds/shared'
 import { SkeletonBlock } from '../Skeleton'
@@ -113,13 +114,13 @@ export function NightsOut({
       ) : null}
 
       {view.kind === 'failed' || (view.kind === 'tiles' && view.failed) ? (
-        <Banner
+        <BannerPresence><Banner
           kind="info"
           text={view.kind === 'tiles' ? NIGHTS_FAILED.withTiles : NIGHTS_FAILED.alone}
           action={{ label: 'Try again', onPress: onRetry }}
           busy={retrying}
           testID="nights-failed"
-        />
+        /></BannerPresence>
       ) : null}
 
       {view.kind === 'locked' || view.kind === 'pending' ? (

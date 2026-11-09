@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
 import { Banner } from '../../components/ds/Banner'
+import { BannerPresence } from '../../components/motion/BannerPresence'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { TopBar } from '../../components/ds/TopBar'
@@ -134,10 +135,10 @@ function AddFriendsScreenContent() {
               blank — indistinguishable from having none. Said, with a way back.
             */}
             {requests.failed && !requests.loaded ? (
-              <View style={styles.section}>
+              <BannerPresence style={styles.section}>
                 <SectionHeader title="Requests" />
                 <Banner kind="info" text="Your requests didn’t load." action={{ label: 'Try again', onPress: () => void requests.load() }} testID="requests-failed" />
-              </View>
+              </BannerPresence>
             ) : null}
 
             {/* The first few; the rest are on Requests, a page at a time. Never every one of them in a column. */}

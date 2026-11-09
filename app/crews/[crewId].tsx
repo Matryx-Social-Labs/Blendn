@@ -10,6 +10,7 @@ import { InviteFriendsSheet } from '../../components/crews/InviteFriendsSheet'
 import { OverflowMenu } from '../../components/crews/OverflowMenu'
 import { RowsCard } from '../../components/crews/RowsCard'
 import { Banner } from '../../components/ds/Banner'
+import { BannerPresence } from '../../components/motion/BannerPresence'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
@@ -297,7 +298,7 @@ function CrewScreenContent() {
   } else {
     body = (
       <Animated.View entering={arrive} style={styles.page}>
-        {crew.hidden ? <Banner kind="info" text={HIDDEN_LINE} testID="crew-hidden" /> : null}
+        {crew.hidden ? <BannerPresence><Banner kind="info" text={HIDDEN_LINE} testID="crew-hidden" /></BannerPresence> : null}
         <CrewHead crew={crew} />
         <View style={styles.section}>
           <SectionHeader title="Members" count={crew.members.length} />
