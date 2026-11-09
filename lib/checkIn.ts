@@ -2,6 +2,7 @@ import { validAccuracy } from './geo'
 import type { Href } from 'expo-router'
 import { Platform } from 'react-native'
 import { apiClient, type LeftRoom } from './apiClient'
+import { getLiveEventId, setLiveHint } from './blendnOverlay'
 import { CHECK_IN_CODES, checkInRefusal, type CheckInRefusal } from './checkInRefusal'
 import { forgetEventDetailCache } from './eventDetailCache'
 import { reasonOf } from './sessionEnd'
@@ -238,6 +239,9 @@ export async function checkOutOf(eventId: string) {
   const result = await apiClient.checkOut(eventId)
   if (result.success) {
     forgetRoster(eventId)
+    // The live hint is the tab bar's poll, and a page opened from a link has no tab bar under it to re-poll: left as it was,
+    // the next event page offered "Hold to switch · Leaves {this room}" until a restart (SCRUM-1035 drive).
+    if (getLiveEventId() === eventId) setLiveHint(null)
     checkInChanged(eventId)
   }
   return result

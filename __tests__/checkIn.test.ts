@@ -17,6 +17,7 @@ jest.mock('../lib/roomVisibilityStorage', () => ({
 /* eslint-disable import/first */
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { getLiveEventId, setLiveHint } from '../lib/blendnOverlay'
 import { askIntentRoute, checkOutOf, revealOffer, CHECK_IN_TIMEOUT_MS, submitCheckIn, subscribeCheckInChanged } from '../lib/checkIn'
 /* eslint-enable import/first */
 
@@ -211,6 +212,22 @@ describe('checkOutOf', () => {
     expect(mockForgetRoster).toHaveBeenCalledWith('e1')
     expect(heard).toHaveBeenCalledTimes(1)
     off()
+  })
+
+  it('forgets the live room it left at once, so no page offers "Hold to switch · Leaves" a room you are out of (SCRUM-1035 drive)', async () => {
+    // A page opened from a link has no tab bar under it to re-poll: the hint stayed on the room until a restart.
+    mockApi.checkOut.mockResolvedValue({ success: true, data: {} })
+    setLiveHint('e1', 'Rooftop Sundowner')
+    await checkOutOf('e1')
+    expect(getLiveEventId()).toBeNull()
+    // Leaving one room never clears another's hint (the poll says which room you are in).
+    setLiveHint('e2', 'Vinyl Night')
+    await checkOutOf('e1')
+    expect(getLiveEventId()).toBe('e2')
+    mockApi.checkOut.mockResolvedValue({ success: false, error: 'no' })
+    await checkOutOf('e2')
+    expect(getLiveEventId()).toBe('e2')
+    setLiveHint(null)
   })
 
   it('changes nothing when the server refuses', async () => {
