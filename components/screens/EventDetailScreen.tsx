@@ -4,7 +4,7 @@ import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { H } from '../../lib/haptics'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Linking, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { AccessibilityInfo, Linking, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated, { FadeIn, LayoutAnimationConfig, LinearTransition, ReduceMotion, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { OverflowMenu } from '../crews/OverflowMenu'
@@ -20,7 +20,7 @@ import { linkRefusalCard } from '../../lib/linkRefusalCard'
 import { eventLoadFailure, type EventLoadFailure } from '../../lib/eventLinkRefusal'
 import type { MenuItem } from '../ds/ContextMenu'
 import { OfflineBanner } from '../OfflineBanner'
-import { EventCheckOut, EventHold } from '../scene/EventHold'
+import { EventCheckOutSheet, EventHold } from '../scene/EventHold'
 import { useEventCheckIn } from '../scene/useEventCheckIn'
 import { SceneBar } from '../scene/SceneBar'
 import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
@@ -725,7 +725,12 @@ export default function EventDetail() {
   const openInMaps = () => {
     if (event) void openPlaceInMaps(event)
   }
-  const { hold, checkOut, overlays } = useEventCheckIn({ id: String(id), event, openMaps: openInMaps, showToast })
+  const { hold, checkOut, openCheckOut, overlays } = useEventCheckIn({ id: String(id), event, openMaps: openInMaps })
+  // The dock's "You're in · Check out": a screen reader's focus comes back to it when the sheet closes without checking out.
+  const checkOutLink = useRef<View>(null)
+  const refocusCheckOut = () => {
+    if (checkOutLink.current) AccessibilityInfo.sendAccessibilityEvent(checkOutLink.current, 'focus')
+  }
 
   /*
    * What this event may say in a link: null for a private one or a draft, and then there is no share control at all
@@ -1125,9 +1130,10 @@ export default function EventDetail() {
             testID="scene-cta"
             state={dock.state}
             sub={dock.sub}
-            subIsLink={dock.change && dock.sub === 'Change'}
-            onPressState={dock.change ? () => void handleToggleRsvp() : undefined}
-            stateHint={dock.change ? 'Double-tap to change your RSVP' : undefined}
+            subIsLink={(dock.change && dock.sub === 'Change') || dock.checkOut}
+            onPressState={dock.change ? () => void handleToggleRsvp() : dock.checkOut ? openCheckOut : undefined}
+            stateHint={dock.change ? 'Double-tap to change your RSVP' : dock.checkOut ? 'Opens check out' : undefined}
+            stateRef={dock.checkOut ? checkOutLink : undefined}
             action={
               dock.action
                 ? {
@@ -1141,8 +1147,6 @@ export default function EventDetail() {
                 : undefined
             }
           />
-          {/* In this event's room: "Open the room" is the primary; the way out is the quiet hold under it (SCRUM-970). */}
-          {ctaState === 'going' ? <EventCheckOut {...checkOut} /> : null}
         </Dock>
       ) : (
         <Dock floating onHeight={setCtaDockHeight} testID="scene-dock">
@@ -1150,6 +1154,8 @@ export default function EventDetail() {
         </Dock>
       )}
       {overlays}
+      {/* Checked in, the way out (option A, SCRUM-1035): the standard sheet with the hold, opened from the dock's "Check out". */}
+      <EventCheckOutSheet {...checkOut} visible={checkOut.visible && ctaState === 'going'} onDismissed={refocusCheckOut} />
 
       <SceneLightbox items={playlist} initialIndex={lightbox ?? 0} visible={lightbox !== null} onClose={() => setLightbox(null)} />
 

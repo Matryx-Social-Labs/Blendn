@@ -1,5 +1,5 @@
 import { router } from 'expo-router'
-import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 
 import { doorOf } from '../../lib/attendanceState'
@@ -12,7 +12,7 @@ import { CHECKOUT_FAILED } from '../../lib/useRoomControls'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { CheckInTray, useCheckInTray } from '../blendn/CheckInTray'
 import { MomentPour } from '../ds/MomentPour'
-import type { EventCheckOut, EventHoldProps } from './EventHold'
+import type { EventCheckOutSheetProps, EventHoldProps } from './EventHold'
 
 /** How long the pour waits for the Room behind it before giving up on it (the Blend'n overlay's own ceiling). */
 export const ROOM_WAIT_MS = 4000
@@ -21,21 +21,20 @@ export const ROOM_WAIT_MS = 4000
  * The event page's check-in (SCRUM-966): the one flow every door runs (`useCheckInFlow`), from the page, with no stop in Tonight.
  * At the server's yes the Room overlay is opened underneath, already asked for this event's room; "You're in." pours over the
  * page, filled, until that Room is up (`useRoomUp`), and the page then steps aside onto it. Refusals are the tray, on this page.
- * Returns the hold's props and the pour and tray to draw over the whole screen.
+ * Returns the hold's props, the check-out sheet's (and what opens it), and the pour and tray to draw over the whole screen.
  */
 export function useEventCheckIn({
   id,
   event,
   openMaps,
-  showToast,
 }: {
   id: string
   event: (Parameters<typeof doorOf>[0] & { title?: string | null }) | null
   openMaps: () => void
-  showToast: (text: string, kind: 'error', options?: { haptic?: 'error' }) => void
 }): {
   hold: EventHoldProps
-  checkOut: ComponentProps<typeof EventCheckOut>
+  checkOut: EventCheckOutSheetProps
+  openCheckOut: () => void
   overlays: ReactNode
 } {
   const { tray, showTray, closeTray } = useCheckInTray()
@@ -75,19 +74,28 @@ export function useEventCheckIn({
     onEnterRoom: () => router.dismissTo('/(tabs)/events'),
   })
   const roomUp = useRoomUp(id)
-  // The way out of this event's room, with the Room's own call (`checkOutOf`): the page re-reads itself when it lands.
+  // The way out of this event's room, with the Room's own call (`checkOutOf`), from its sheet (option A, SCRUM-1035): the page
+  // re-reads itself when it lands, and the sheet closes. A refusal stays in the sheet, in its words.
+  const [checkOutOpen, setCheckOutOpen] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
+  const [checkOutError, setCheckOutError] = useState<string | null>(null)
   const onCheckOut = async () => {
     if (checkingOut) return
+    setCheckOutError(null)
     setCheckingOut(true)
     try {
       const result = await checkOutOf(id)
-      if (!result.success) showToast(result.error || CHECKOUT_FAILED, 'error', { haptic: 'error' })
+      if (result.success) setCheckOutOpen(false)
+      else setCheckOutError(result.error || CHECKOUT_FAILED)
     } catch {
-      showToast(CHECKOUT_FAILED, 'error', { haptic: 'error' })
+      setCheckOutError(CHECKOUT_FAILED)
     } finally {
       setCheckingOut(false)
     }
+  }
+  const openCheckOut = () => {
+    setCheckOutError(null)
+    setCheckOutOpen(true)
   }
   // The pour that has waited long enough for the Room (kept as its own number, so the next pour starts unwaited).
   const [waitedPour, setWaitedPour] = useState(0)
@@ -98,7 +106,15 @@ export function useEventCheckIn({
   }, [flow.pours])
 
   return {
-    checkOut: { name: event?.title ?? null, onConfirm: () => void onCheckOut(), busy: checkingOut },
+    checkOut: {
+      visible: checkOutOpen,
+      onClose: () => setCheckOutOpen(false),
+      name: event?.title ?? null,
+      onConfirm: () => void onCheckOut(),
+      busy: checkingOut,
+      error: checkOutError,
+    },
+    openCheckOut,
     hold: { reach, onConfirm: () => void flow.start(), busy: flow.checkingIn && !flow.youreIn, confirmed: flow.youreIn, switching: liveId !== null && liveId !== id, leaving: liveTitle },
     overlays: (
       <>

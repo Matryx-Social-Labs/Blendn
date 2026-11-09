@@ -107,11 +107,16 @@ describe('eventDock: state on the left in its own slot, one action on the right'
     expect(d.change).toBe(true)
     expect(d.action).toBeUndefined()
   })
-  it('checked in: the room', () => {
+  it('checked in: the room, and the way out under the state as its own link (option A, SCRUM-1035)', () => {
     expect(eventDock({ ...base, cta: 'going' })).toEqual({
       state: 'You’re in',
+      sub: 'Check out',
+      checkOut: true,
       action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'room' },
     })
+  })
+  it('only checked in carries the check-out link', () => {
+    for (const cta of ['rsvp', 'rsvpd', 'waitlisted', 'rate', 'ended', 'cancelled'] as const) expect(dock({ cta }).checkOut).toBeUndefined()
   })
   it('after it: rate who you met, or the night when nobody else came; tonight for somebody who was not there', () => {
     expect(dock({ cta: 'rate' }).action).toEqual({ label: 'Rate who you met', kind: 'primary', icon: 'star', does: 'rate' })

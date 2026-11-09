@@ -1,3 +1,4 @@
+import type { Ref } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from './Button'
@@ -35,6 +36,7 @@ export function DockRow({
   subIsLink = false,
   onPressState,
   stateHint,
+  stateRef,
   action,
   testID,
 }: {
@@ -44,6 +46,8 @@ export function DockRow({
   subIsLink?: boolean
   onPressState?: () => void
   stateHint?: string
+  /** The state's control, for focus to come back to when what it opened closes (the check-out sheet). */
+  stateRef?: Ref<View>
   action?: DockRowAction
   testID?: string
 }) {
@@ -71,7 +75,7 @@ export function DockRow({
   return (
     <View testID={testID} style={[styles.row, large && styles.stack]}>
       {onPressState ? (
-        <Pressable testID={testID && `${testID}-left`} onPress={onPressState} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={stateHint} hitSlop={SPACE.sm} style={styles.state}>
+        <Pressable ref={stateRef} testID={testID && `${testID}-left`} onPress={onPressState} accessibilityRole="button" accessibilityLabel={label} accessibilityHint={stateHint} hitSlop={SPACE.sm} style={styles.state}>
           {words}
         </Pressable>
       ) : (

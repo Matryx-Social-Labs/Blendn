@@ -188,8 +188,10 @@ describe('the event screen hears check-in changes', () => {
     // At the doors the hold is the dock (Hold to Blend’n: the dock row is null); checked in, "You're in" leads to the Room.
     expect(screen).toMatch(/\{dock \? \([\s\S]*\) : \([\s\S]*<EventHold \{\.\.\.hold\} \/>/)
     expect(screen).toMatch(/room: \(\) => toTheOverlay\(openBlendn\)/)
-    // …and under "Open the room" the quiet way out is the hold that checks you out of this event (SCRUM-970).
-    expect(screen).toMatch(/ctaState === 'going' \? <EventCheckOut/)
+    // …and the way out is the dock's "Check out" link, opening the sheet with the hold (option A, SCRUM-1035): the dock is one line.
+    expect(screen).not.toMatch(/<EventCheckOut \{/)
+    expect(screen).toMatch(/onPressState=\{dock\.change \? [^:]+ : dock\.checkOut \? openCheckOut : undefined\}/)
+    expect(screen).toMatch(/<EventCheckOutSheet \{\.\.\.checkOut\}/)
   })
 
   it('apiClient drops only the detail, not the attendee list', () => {
