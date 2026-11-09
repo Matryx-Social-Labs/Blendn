@@ -46,6 +46,37 @@ describe('openingCentre: where the location step opens before permission (the ca
   })
 })
 
+describe("openingCentre: the phone's time zone says where it is (SCRUM-997)", () => {
+  // Zones as the server lists them (staging `cities`, 2026-11-09).
+  const zoned: CityCatalogue = {
+    ...catalogue,
+    cities: [
+      city('bengaluru', 12.97, 77.59, { isDefault: true, country: 'IN', timezone: 'Asia/Kolkata' }),
+      city('mumbai', 19.07, 72.87, { country: 'IN', timezone: 'Asia/Kolkata' }),
+      city('toronto', 43.65, -79.38, { country: 'CA', timezone: 'America/Toronto' }),
+      city('vancouver', 49.28, -123.12, { country: 'CA', timezone: 'America/Vancouver' }),
+    ],
+  }
+  const usDevice = { country: 'US', access: 'none' as const, citySlug: null }
+
+  it('opens a Toronto phone set to English (US) on Toronto, not on the catalogue default in India', () => {
+    // Driven on the Android emulator: region US, zone America/Toronto, and the step opened on Vittal Mallya Road.
+    expect(openingCentre({ ...zoned, device: usDevice }, 'US', 'America/Toronto')).toEqual([-79.38, 43.65])
+    expect(openingCentre({ ...zoned, device: usDevice }, 'US', 'America/Vancouver')).toEqual([-123.12, 49.28])
+  })
+
+  it("takes the zone's country default when several cities share it, and the zone over the region it was bought in", () => {
+    expect(openingCentre({ ...zoned, device: usDevice }, 'US', 'Asia/Kolkata')).toEqual([77.59, 12.97])
+    expect(openingCentre({ ...zoned, device: { country: 'IN', access: 'full', citySlug: 'mumbai' } }, 'IN', 'America/Toronto')).toEqual([-79.38, 43.65])
+  })
+
+  it('falls back to the region rules for a zone no city has', () => {
+    expect(openingCentre(zoned, 'CA', 'Europe/Berlin')).toEqual([-79.38, 43.65])
+    expect(openingCentre(zoned, 'DE', 'Europe/Berlin')).toEqual([77.59, 12.97])
+    expect(openingCentre(zoned, 'CA', null)).toEqual([-79.38, 43.65])
+  })
+})
+
 describe('the landing sequence (BlendnLanding LiveMap.tsx)', () => {
   it("runs from the city, flat, to the app's own opening view turned -17°", () => {
     expect(FLAT_VIEW).toEqual({ zoom: 13.4, pitch: 0, bearing: 0 })

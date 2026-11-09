@@ -22,18 +22,30 @@ export const FLY_MS = 1200
 export const LIT_HOLD_MS = 700
 
 /**
- * Where the map opens before the phone has said where it is: the city the server made of the phone's country, else that
- * country's default, else the catalogue's (a country we do not serve). Never named on screen (SCRUM-997). Null without a
- * catalogue or a centre for that city: the step shows its still frame then, never a map of nowhere.
+ * Where the map opens before the phone has said where it is. First the phone's time zone, which the network sets where
+ * the phone is: the one city in that zone, or its country's default when several share it. A Toronto phone set to
+ * English (US) has region US and zone America/Toronto, and opened on Bengaluru without this (SCRUM-997). Then the city
+ * the server made of the phone's region, else that country's default, else the catalogue's (a country we do not serve).
+ * Never named on screen (SCRUM-997). Null without a catalogue or a centre for that city: the step shows its still frame
+ * then, never a map of nowhere.
  */
-export function openingCentre(catalogue: CityCatalogue | null | undefined, region: string | null): LngLat | null {
+export function openingCentre(catalogue: CityCatalogue | null | undefined, region: string | null, timeZone: string | null = null): LngLat | null {
   if (!catalogue) return null
+  const countryDefault = (code: string | null | undefined) =>
+    code ? (catalogue.countries?.find((c) => c.code === code.toUpperCase())?.defaultCitySlug ?? null) : null
   const device = catalogue.device
   const deviceSlug = device && device.access !== 'none' && device.access !== 'hidden' ? device.citySlug : null
-  const code = region?.toUpperCase()
-  const countrySlug = code ? (catalogue.countries?.find((c) => c.code === code)?.defaultCitySlug ?? null) : null
-  const centre = cityBySlug(catalogue.cities, deviceSlug ?? countrySlug ?? catalogue.defaultCitySlug ?? null)?.centre
+  const slug = zoneCitySlug(catalogue, timeZone, countryDefault) ?? deviceSlug ?? countryDefault(region) ?? catalogue.defaultCitySlug ?? null
+  const centre = cityBySlug(catalogue.cities, slug)?.centre
   return centre ? [centre.longitude, centre.latitude] : null
+}
+
+function zoneCitySlug(catalogue: CityCatalogue, timeZone: string | null, countryDefault: (code: string | null | undefined) => string | null): string | null {
+  const inZone = timeZone ? catalogue.cities.filter((c) => c.timezone === timeZone && c.slug) : []
+  if (inZone.length === 0) return null
+  if (inZone.length === 1) return inZone[0].slug ?? null
+  const fallback = countryDefault(inZone[0].country)
+  return inZone.some((c) => c.slug === fallback) ? fallback : (inZone[0].slug ?? null)
 }
 
 /** The features of the first `n` places in `order`: every band of each, so a place lights whole. */
