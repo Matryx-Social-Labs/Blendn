@@ -7,14 +7,16 @@ import { Button } from '../ds/Button'
 import { DoorCode } from '../ds/VenuePass'
 import { IconButton } from '../ds/IconButton'
 import { LiquidDisc } from '../ds/LiquidDisc'
+import { VenuePlate } from '../ds/VenuePlate'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { endedLabel, knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
+import { plateOf } from '../../lib/placesPane'
 
 /** The disc at the ticket's middle (flow-4 offer board .disc4: 184). */
 const DISC = 184
-/** The board's .vp: a 48 pt tile beside the head (the API sends no venue photo, so a glyph). */
+/** The board's .vp: a 48 pt tile beside the head, the venue's plate (the API sends no venue photo). */
 const TILE = SIZE.control
 /** The board's head label sits inline in a 24 pt line, so the venue starts 26 under the row's top. */
 const HEAD_LABEL_LINE = SPACE.xl
@@ -58,6 +60,7 @@ function Stamp({ text }: { text: string }) {
  */
 export function DoorTicket({
   venueName,
+  venueType,
   offerText,
   until,
   endsAt,
@@ -68,6 +71,8 @@ export function DoorTicket({
   codeRef,
 }: {
   venueName: string
+  /** The venue_type key: its plate on the tile, as on the venue's page. None, or a type with no plate: the gift. */
+  venueType?: string | null
   offerText: string
   /** "until Wed, 15 Oct". */
   until: string
@@ -84,12 +89,17 @@ export function DoorTicket({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const plate = plateOf(venueType)
   return (
     <View testID="door-ticket" style={[styles.ticket, contrast ? IC_HAIRLINE : styles.edge]}>
       <View accessible accessibilityLabel={`Offer code for ${venueName}. ${offerText}. ${until}.`} style={styles.top}>
         <View style={styles.headRow}>
           <View testID="door-tile" style={styles.tile}>
-            <Icon name="gift" size={ICON.nav} color={COLOR.textSecondary} />
+            {plate ? (
+              <VenuePlate type={plate} size={TILE} radius={RADIUS.thumb} testID="door-plate" />
+            ) : (
+              <Icon name="gift" size={ICON.nav} color={COLOR.textSecondary} />
+            )}
           </View>
           <View style={styles.fill}>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary, styles.headLabel]}>OFFER CODE</Text>

@@ -55,9 +55,14 @@ export function guestTypeLabel(venue: { venueType?: string | null; venueTypeLabe
   return venue.venueType === 'other' || venue.venueTypeLabel === OTHER_LABEL ? 'Venue' : venue.venueTypeLabel
 }
 
-/** Which plate a venue_type is drawn on. */
+/** The plate a venue_type has; null for none (no type, or one with no plate), so the caller picks its own fallback. */
+export function plateOf(venueType: string | null | undefined): PlateKey | null {
+  return venueType && Object.hasOwn(PLATE_BY_TYPE, venueType) ? PLATE_BY_TYPE[venueType] : null
+}
+
+/** Which plate a venue_type is drawn on: the bar's for a type with none. */
 export function plateFor(venueType: string | null | undefined): PlateKey {
-  return (venueType && PLATE_BY_TYPE[venueType]) || 'bar'
+  return plateOf(venueType) ?? 'bar'
 }
 
 /** The area a place is named by on its lines: the server's `area` (§C4) when it sends one, else the street address, else the city. */
