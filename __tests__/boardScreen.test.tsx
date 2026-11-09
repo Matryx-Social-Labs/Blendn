@@ -1267,8 +1267,12 @@ describe('a link to a post (SCRUM-1026, 6/6)', () => {
     await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1))
     mockParams.post = 'p-gone'
     api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    const toTop = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {})
     await act(async () => screen.rerender(<BoardScreen />))
     expect(await screen.findByText('That post is no longer in the Lobby')).toBeTruthy()
+    // The line heads the list: scrolled down to the first post, you would not see it.
+    expect(toTop).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }))
+    toTop.mockRestore()
     mockParams.post = 'p-offer'
     api.getBoardPost.mockResolvedValue(one(OFFER))
     await act(async () => screen.rerender(<BoardScreen />))

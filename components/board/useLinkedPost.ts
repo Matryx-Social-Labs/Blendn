@@ -70,6 +70,8 @@ export function useLinkedPost(opts: {
         const line = boardMessage(r, 'Couldn’t open that post.')
         setNote(line)
         announce(line)
+        // The line heads the list; a link that lands on a Lobby already scrolled would leave it out of sight.
+        listRef.current?.scrollToOffset({ offset: 0, animated })
       })
       .catch((error) =>
         Logger.warn('board', 'linked post threw', {
@@ -77,7 +79,7 @@ export function useLinkedPost(opts: {
           error: String(error),
         })
       )
-  }, [ready, eventId, link, linkedRef, removedRef, epochRef, onClosed, onFound])
+  }, [ready, eventId, link, linkedRef, removedRef, epochRef, onClosed, onFound, listRef, animated])
 
   useEffect(() => {
     if (!target || !posts || scrolledFor.current === target) return
