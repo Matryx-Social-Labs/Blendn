@@ -19,7 +19,7 @@ export const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thurs
  * an older build keeps the engine's zone (the behaviour before) instead of dying at launch; and no import of `expo`,
  * whose entry drags expo-asset and expo-constants into every module that tells the time.
  */
-type Localization = { getCalendars(): { timeZone?: string | null }[] }
+type Localization = { getCalendars(): { timeZone?: string | null }[]; getLocales?(): { regionCode?: string | null }[] }
 const localization = (): Localization | undefined =>
   (globalThis as { expo?: { modules?: { ExpoLocalization?: Localization } } }).expo?.modules?.ExpoLocalization
 
@@ -41,6 +41,15 @@ const phoneZoneListeners = new Set<() => void>()
 
 /** The phone's IANA zone, or undefined when nothing can say it. */
 export const phoneTimeZone = (): string | undefined => phoneZone || undefined
+
+/** The phone's region (Settings › Language & Region: "US" for English (US), wherever the phone is), or null. */
+export function phoneRegion(): string | null {
+  try {
+    return localization()?.getLocales?.()[0]?.regionCode ?? null
+  } catch {
+    return null
+  }
+}
 
 /** Re-reads the phone's zone; when it moved, tells the listeners and answers true. Formatters are keyed by zone, so none is stale. */
 export function refreshPhoneZone(): boolean {

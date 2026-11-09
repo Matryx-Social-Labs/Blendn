@@ -4,8 +4,9 @@ import { SettingsRow } from '../ds/SettingsRow'
 import { CityPicker } from '../pulse/CityPicker'
 import { useToast } from '../Toast'
 import { apiClient } from '../../lib/apiClient'
-import { cityFor, homeCity, type CatalogueCountry, type CityOption, type CityRef } from '../../lib/city'
+import { cityFor, homeCity, phoneCountry, type CatalogueCountry, type CityOption, type CityRef } from '../../lib/city'
 import { saveHomeCity, useHomeCitySlug } from '../../lib/homeCity'
+import { phoneRegion, phoneTimeZone } from '../../lib/time'
 
 /**
  * Settings → "Home city" (travel plan §4.5): the city "travel" is measured from, so a person who moved can re-anchor it.
@@ -63,6 +64,8 @@ export function HomeCityRow({ userId }: { userId: string }) {
         cities={choosable}
         countries={catalogue.countries}
         homeCountry={home?.country ?? null}
+        // The country the phone's zone and region point to, next after home: no fix is asked for here (SCRUM-1037).
+        deviceCountry={phoneCountry(catalogue, { region: phoneRegion(), timeZone: phoneTimeZone() ?? null })}
         selectedCity={home?.city ?? null}
         selectedSlug={home?.slug ?? null}
         deviceCity={null}

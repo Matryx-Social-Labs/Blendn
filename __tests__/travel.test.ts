@@ -10,7 +10,10 @@ import {
   isServedCity,
   isTravelling,
   isVisiting,
+  keepOrGuess,
   parseStoredCity,
+  phoneCitySlug,
+  phoneCountry,
   pickerGroups,
   resolveBrowseCity,
   shouldOfferSwitch,
@@ -130,6 +133,77 @@ describe('resolveBrowseCity — the first launch, by where the phone is (SCRUM-9
   it('an older server, which names no default, keeps its busiest-first fallback', () => {
     // Control for the line above: the same list with no `defaultCitySlug` is the only case that may use row 0.
     expect(resolveBrowseCity({ stored: null, deviceCity: null, available: CITIES.map(({ city, eventCount }) => ({ city, eventCount })) })?.city).toBe('Mysuru')
+  })
+})
+
+describe('no fix: the phone’s own time zone and region pick the city (SCRUM-1037)', () => {
+  const none = catalogue(null)
+  const TORONTO_US = { region: 'US', timeZone: 'America/Toronto' }
+  const KOLKATA = { region: 'IN', timeZone: 'Asia/Kolkata' }
+  const BERLIN = { region: 'DE', timeZone: 'Europe/Berlin' }
+
+  it('phoneCitySlug: the one city in the zone, the country default when several share it, then the region', () => {
+    expect(phoneCitySlug(none, TORONTO_US)).toBe('toronto')
+    expect(phoneCitySlug(none, { region: 'US', timeZone: 'America/Vancouver' })).toBe('vancouver')
+    // Mysuru is busiest and first in the zone: the country's default is what several cities in one zone give.
+    expect(phoneCitySlug(none, KOLKATA)).toBe('bengaluru')
+    expect(phoneCitySlug(none, { region: 'CA', timeZone: 'Europe/Berlin' })).toBe('toronto')
+    // A zone and region we list nothing in: no answer, so the caller's default stands.
+    expect(phoneCitySlug(none, BERLIN)).toBeNull()
+    expect(phoneCitySlug(none, { region: null, timeZone: null })).toBeNull()
+  })
+
+  it('phoneCountry: the country of that city, sent where a geocoded one would be; none for a zone we do not list', () => {
+    expect(phoneCountry(none, TORONTO_US)).toBe('CA')
+    expect(phoneCountry(none, KOLKATA)).toBe('IN')
+    expect(phoneCountry(none, BERLIN)).toBeNull()
+    expect(phoneCountry(none, { region: 'US', timeZone: 'America/New_York' })).toBeNull()
+  })
+
+  it('a Toronto phone set to English (US) with no fix browses Toronto, not Bengaluru', () => {
+    // Control: the same launch without the phone's clues is the old answer.
+    expect(resolveBrowseCity({ stored: null, deviceCity: null, ...scope(none) })?.city).toBe('Bengaluru')
+    expect(resolveBrowseCity({ stored: null, deviceCity: null, ...scope(none), countries: COUNTRIES, phone: TORONTO_US })).toEqual({
+      city: 'Toronto',
+      source: 'inferred',
+      slug: 'toronto',
+    })
+  })
+
+  it('a Kolkata phone browses Bengaluru, never the busiest row; an unserved zone keeps today’s default', () => {
+    expect(resolveBrowseCity({ stored: null, deviceCity: null, ...scope(none), countries: COUNTRIES, phone: KOLKATA })?.city).toBe('Bengaluru')
+    expect(resolveBrowseCity({ stored: null, deviceCity: null, ...scope(none), countries: COUNTRIES, phone: BERLIN })?.city).toBe('Bengaluru')
+  })
+
+  it('a fix still wins over the clock, and a choice over both', () => {
+    const c = catalogue({ country: 'IN', access: 'full', citySlug: 'bengaluru' })
+    expect(resolveBrowseCity({ stored: null, deviceCity: 'Thane', point: AT.thane, ...scope(c), countries: COUNTRIES, phone: TORONTO_US })?.city).toBe('Thane')
+    const mumbai = storedAt(MUMBAI, 'chosen')
+    expect(resolveBrowseCity({ stored: mumbai, deviceCity: null, ...scope(none), countries: COUNTRIES, phone: TORONTO_US })).toEqual(mumbai)
+  })
+
+  describe('keepOrGuess: what the launch does with the selection already on screen', () => {
+    const toronto = storedAt(TORONTO, 'inferred')
+    const bengaluruGuess = storedAt(BENGALURU, 'inferred')
+
+    it('a stored guess that was only the default gives way to where the phone points (every no-fix phone stored Bengaluru)', () => {
+      expect(keepOrGuess(bengaluruGuess, toronto, 'bengaluru')).toBe(toronto)
+    })
+
+    it('keeps a choice, a placed guess, and a default guess the phone agrees with', () => {
+      const chosen = storedAt(BENGALURU, 'chosen')
+      expect(keepOrGuess(chosen, toronto, 'bengaluru')).toBe(chosen)
+      const mumbaiGuess = storedAt(MUMBAI, 'inferred')
+      expect(keepOrGuess(mumbaiGuess, toronto, 'bengaluru')).toBe(mumbaiGuess)
+      expect(keepOrGuess(bengaluruGuess, storedAt(BENGALURU, 'inferred'), 'bengaluru')).toBe(bengaluruGuess)
+      expect(keepOrGuess(bengaluruGuess, null, 'bengaluru')).toBe(bengaluruGuess)
+    })
+
+    it('guesses again for a slugless guess an older build wrote, and with nothing on screen (SCRUM-997)', () => {
+      expect(keepOrGuess({ city: 'Mysuru', source: 'inferred' }, toronto, 'bengaluru')).toBe(toronto)
+      expect(keepOrGuess(null, toronto, 'bengaluru')).toBe(toronto)
+      expect(keepOrGuess(null, null, 'bengaluru')).toBeNull()
+    })
   })
 })
 
