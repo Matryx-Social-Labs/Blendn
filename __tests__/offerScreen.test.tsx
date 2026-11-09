@@ -236,6 +236,26 @@ describe('the other faces of the pass', () => {
     expect(screen.getByText('— — —')).toBeTruthy()
   })
 
+  it('the stamp is the board’s .stampR: a 32 pt capsule, 6 between the check and the words, the time in Geist Mono', async () => {
+    reads = [offer('redeemed', null, { redeemedAt: new Date(2026, 9, 11, 21, 43).toISOString() })]
+    await mount()
+    const capsule = StyleSheet.flatten(screen.getByTestId('door-stamp').props.style)
+    expect(capsule).toMatchObject({ minHeight: 32, gap: 6, paddingHorizontal: 12 })
+    // At the largest text the words are wider than the 184 pt disc: they wrap inside a taller capsule, never clip ("Redeemed 5", drive 2026-11-09).
+    expect(capsule.height).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByText('Redeemed 9:43 PM').props.style)).toMatchObject({ flexShrink: 1, textAlign: 'center' })
+    expect(StyleSheet.flatten(screen.getByText('9:43 PM').props.style).fontFamily).toBe('GeistMono_500Medium')
+    // Control: the word stays in the brand face.
+    expect(StyleSheet.flatten(screen.getByText('Redeemed 9:43 PM').props.style).fontFamily).not.toBe('GeistMono_500Medium')
+  })
+
+  it('a stamp with no time ("Used tonight", or a server that sent no redeemedAt) is words alone, in the brand face', async () => {
+    reads = [offer('redeemed', null)]
+    await mount()
+    expect(screen.getByText('Redeemed')).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByText('Redeemed').props.style).fontFamily).not.toBe('GeistMono_500Medium')
+  })
+
   it('used tonight: still, stamped, and the server’s own sentence', async () => {
     reads = [offer('used_tonight', null)]
     await mount()

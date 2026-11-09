@@ -7,6 +7,7 @@ import { Button } from '../ds/Button'
 import { DoorCode } from '../ds/VenuePass'
 import { IconButton } from '../ds/IconButton'
 import { LiquidDisc } from '../ds/LiquidDisc'
+import { MonoRun } from '../ds/MonoFamily'
 import { VenuePlate } from '../ds/VenuePlate'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
@@ -24,7 +25,7 @@ const HEAD_LABEL_LINE = SPACE.xl
 const USED_DISC_OPACITY = 0.55
 /** The punched notches at the tear are 24 pt circles, half inside the card. */
 const NOTCH = SPACE.xl
-/** The stamp is a 32 pt capsule. */
+/** The stamp is a 32 pt capsule (taller only when the largest text wraps it). */
 const STAMP = SIZE.tag
 
 /** Back on the left, ⋯ on the right: two glass circles, 8 pt apart from the top inset. */
@@ -38,13 +39,28 @@ export function OfferHeader({ onBack, onMore, moreLabel }: { onBack: () => void;
   )
 }
 
-/** "Redeemed 9:43 PM" (the phone's clock): white capsule, ink text, a check (pass.js `stamp`). */
-function Stamp({ text }: { text: string }) {
+/**
+ * "Redeemed 9:43 PM" (the phone's clock): white capsule, ink text, a check (the flow-4 board's .stampR). The time is
+ * Geist Mono, as every time is, its space in the brand face (`MonoRun`).
+ */
+function Stamp({ text, clock }: { text: string; clock?: string }) {
   const bold = useBoldText()
+  const word = clock && text.endsWith(clock) ? text.slice(0, -clock.length) : null
   return (
-    <View accessible accessibilityLabel={text} style={styles.stamp}>
+    <View testID="door-stamp" accessible accessibilityLabel={text} style={styles.stamp}>
       <Icon name="check" size={ICON.inline} color={COLOR.selectionInk} active />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: COLOR.selectionInk }]}>{text}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.stampText]}>
+        {word !== null && clock ? (
+          <>
+            {word}
+            <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>
+              <MonoRun text={clock} />
+            </Text>
+          </>
+        ) : (
+          text
+        )}
+      </Text>
     </View>
   )
 }
@@ -114,7 +130,7 @@ export function DoorTicket({
         </Text>
       </View>
       <View style={[styles.middle, view.door === 'used' && { opacity: USED_DISC_OPACITY }]}>
-        <LiquidDisc size={DISC} level={view.level} still={view.spent} stamp={view.stamp ? <Stamp text={view.stamp} /> : undefined} testID="door-disc" />
+        <LiquidDisc size={DISC} level={view.level} still={view.spent} stamp={view.stamp ? <Stamp text={view.stamp} clock={view.redeemedClock} /> : undefined} testID="door-disc" />
       </View>
       <View style={styles.tear}>
         <View style={[styles.notch, styles.notchLeft]} />
@@ -239,15 +255,19 @@ const styles = StyleSheet.create({
   notchRight: { right: -NOTCH / 2 },
   /** The board's .cd: 20 over, 22 under. */
   bottom: { paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs, paddingBottom: SPACE.xl - SPACE.xxs },
+  /** At least the board's 32; taller when the largest text wraps the words inside the disc. */
   stamp: {
-    height: STAMP,
+    minHeight: STAMP,
+    maxWidth: '100%',
+    paddingVertical: SPACE.xs,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACE.xs,
+    gap: SPACE.xs + SPACE.xxs,
     paddingHorizontal: SPACE.md,
     borderRadius: RADIUS.capsule,
     backgroundColor: COLOR.selectionFill,
   },
+  stampText: { color: COLOR.selectionInk, flexShrink: 1, textAlign: 'center' },
   card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   rowCard: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
   fact: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
