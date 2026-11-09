@@ -25,6 +25,7 @@ export function Dock({
   gap = SPACE.sm,
   floating = false,
   line = false,
+  one = false,
   round = !floating,
   onHeight,
   children,
@@ -43,6 +44,8 @@ export function Dock({
    * own room below (98 pt on a 34 pt inset). The event and venue pages; the children are a `DockRow`.
    */
   line?: boolean
+  /** With `line`: one full-width action and the gutter on both sides (Flow 4's `.dock4.one`, event preferences' Save). */
+  one?: boolean
   /** The 32 pt top corner (the entry screens'); a floating dock is straight. */
   round?: boolean
   /** What the dock covers of the page: its height as laid out, and the solid tier's fade above it. The page scrolls clear of it. */
@@ -62,7 +65,7 @@ export function Dock({
     styles.dock,
     floating && styles.floating,
     round && styles.round,
-    line ? [styles.line, { paddingBottom: Math.max(insets.bottom, SPACE.md) }] : { gap, paddingBottom: keyboard ? SPACE.md : insets.bottom + SPACE.lg },
+    line ? [styles.line, one && styles.one, { paddingBottom: Math.max(insets.bottom, SPACE.md) }] : { gap, paddingBottom: keyboard ? SPACE.md : insets.bottom + SPACE.lg },
   ]
   const onLayout = (e: { nativeEvent: { layout: { height: number } } }) => setHeight(e.nativeEvent.layout.height)
   // The fade is drawn over the page above the bar, so a page padded by the bar alone ended under it: the Scene's last
@@ -100,5 +103,6 @@ const styles = StyleSheet.create({
   fade: { position: 'absolute', left: 0, right: 0, bottom: '100%', height: DOCK_FADE },
   /** `.dock4`: 12 over the row, 24 in on the left, 16 on the right (the action sits nearer the edge than the words). */
   line: { paddingTop: SPACE.md, paddingLeft: SPACE.gutter, paddingRight: SPACE.lg },
+  one: { paddingRight: SPACE.gutter },
   round: { borderTopLeftRadius: RADIUS.card, borderTopRightRadius: RADIUS.card },
 })

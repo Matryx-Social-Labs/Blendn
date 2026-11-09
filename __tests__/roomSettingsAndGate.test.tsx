@@ -1,6 +1,6 @@
 import { readFileSync } from "fs"
 import { join } from "path"
-import { pseudonymFromDoor } from "../lib/roomState"
+import { pseudonymFromDoor, pseudonymFromParam, roomSettingsRoute } from "../lib/roomState"
 
 /**
  * The room's reveal switch, and the way into the room's settings.
@@ -42,7 +42,8 @@ describe("the reveal switch when there is nothing to reveal", () => {
 
 describe("the way into the room’s settings", () => {
   it("exists", () => {
-    expect(code).toContain("'/event-preferences/[eventId]'")
+    // The path itself is pinned on `roomSettingsRoute` below.
+    expect(code).toContain("router.push(roomSettingsRoute(")
   })
 
   it("is in the bar, not hung off the visibility banner", () => {
@@ -80,6 +81,9 @@ describe("the banner names your pseudonym (ROOM-02, SV-3)", () => {
     expect(pseudonymFromDoor({})).toBeNull()
     expect(pseudonymFromDoor(null)).toBeNull()
   })
+  it("room settings carries the pseudonym and the reveal to the preferences screen (SCRUM-1025): GET /events/:id/chat would join the room", () => {
+    expect(code).toContain("roomSettingsRoute(room.event!.id, { pseudonym: myPseudonym, revealed: controls.revealed })")
+  })
   it("the screen takes it from the room, ahead of a match's", () => {
     expect(code).toContain("room.match?.you ?? room.pseudonym")
   })
@@ -89,5 +93,34 @@ describe("the banner names you the way the room does", () => {
   // Others in the room see the first name only (SCRUM-493); "as Asha Ramaswamy" told you they saw all of it.
   it("says your first name when you are named, not the profile's full name", () => {
     expect(code).toContain("const myName = firstNameOf(user?.name?.trim() || 'You')")
+  })
+})
+
+describe("a pseudonym that arrives as a route param (SCRUM-1025)", () => {
+  it("takes the server's shape, trimmed: words and a collision number", () => {
+    expect(pseudonymFromParam(" Quiet Lynx ")).toBe("Quiet Lynx")
+    expect(pseudonymFromParam("Midnight Butterfly 12")).toBe("Midnight Butterfly 12")
+  })
+  it("anything else is no pseudonym: a link cannot put words in the anonymous card", () => {
+    expect(pseudonymFromParam(undefined)).toBeNull()
+    expect(pseudonymFromParam("")).toBeNull()
+    expect(pseudonymFromParam("   ")).toBeNull()
+    expect(pseudonymFromParam(["Quiet Lynx"])).toBeNull()
+    expect(pseudonymFromParam("Ananya Rao, 9845012345")).toBeNull()
+    expect(pseudonymFromParam("Quiet Lynx".repeat(10))).toBeNull()
+  })
+})
+
+describe("room settings' route (SCRUM-1025)", () => {
+  it('routes room settings to the preferences screen with the pseudonym and the reveal the room holds (SCRUM-1025)', () => {
+    expect(roomSettingsRoute('e1', { pseudonym: 'Quiet Lynx', revealed: true })).toEqual({
+      pathname: '/event-preferences/[eventId]',
+      params: { eventId: 'e1', revealed: '1', pseudonym: 'Quiet Lynx' },
+    })
+    // No pseudonym yet: no param, and the screen says "A made-up name".
+    expect(roomSettingsRoute('e1', { pseudonym: null, revealed: false })).toEqual({
+      pathname: '/event-preferences/[eventId]',
+      params: { eventId: 'e1', revealed: '0' },
+    })
   })
 })
