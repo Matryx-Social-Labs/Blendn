@@ -24,6 +24,8 @@ const CARD_RADIUS = RADIUS.sheet
 const LABEL_HEIGHT = 22
 /** `.lro .r1`: the doors glyph is 18, between the inline 16 and the control 20. */
 const BANNER_GLYPH = 18
+/** `.lend`'s glyph is 26 pt; the DS draws 24 (`ICON.nav`), centred in the board's row so the card keeps its height. */
+const CLOSED_GLYPH_ROW = 26
 /** `.lcomp`: the composer row is a 52 pt capsule. */
 const COMPOSER_HEIGHT = 52
 
@@ -109,7 +111,9 @@ export function LiveEmptyCard({ onOpenRoom }: { onOpenRoom: () => void }) {
 export function ClosedCard() {
   return (
     <View testID="lobby-closed" style={[styles.card, styles.closed]}>
-      <Icon name="door-closed" size={ICON.nav} color={ROSE.glyph} />
+      <View testID="lobby-closed-glyph" style={styles.closedGlyph}>
+        <Icon name="door-closed" size={ICON.nav} color={ROSE.glyph} />
+      </View>
       <Line strong="heading" style={styles.closedTitle}>The Lobby has closed</Line>
       <Line lede>The Lobby and the room close a day after the event ends. Your friends, chats and crews are where they were.</Line>
     </View>
@@ -258,6 +262,7 @@ const styles = StyleSheet.create({
   readOnly: { padding: SPACE.lg - 1, gap: SPACE.xs, borderWidth: 1, borderColor: tint(ROSE.edge, 0.55) },
   start: { alignSelf: 'flex-start', marginTop: SPACE.sm + SPACE.xxs },
   closed: { padding: SPACE.lg + SPACE.xs, gap: SPACE.xs + SPACE.xxs, alignItems: 'flex-start' },
+  closedGlyph: { height: CLOSED_GLYPH_ROW, justifyContent: 'center' },
   closedTitle: { marginTop: SPACE.xs + SPACE.xxs },
 
   startsWrap: { gap: SPACE.lg },
