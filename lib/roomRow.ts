@@ -79,15 +79,18 @@ export function useRoomRow(roomId: string | null): RoomRow | null {
   useEffect(() => {
     if (!roomId) return
     let live = true
+    const take = (result: Awaited<ReturnType<typeof apiClient.getChatGroups>>) => {
+      if (!live || !result.success) return true
+      const found = roomRowFrom(result.data, roomId)
+      if (!found) return false
+      rememberRoomMute(roomId, found.mute)
+      setRow(found)
+      return true
+    }
     apiClient
       .getChatGroups()
-      .then((result) => {
-        if (!live || !result.success) return
-        const found = roomRowFrom(result.data, roomId)
-        if (!found) return
-        rememberRoomMute(roomId, found.mute)
-        setRow(found)
-      })
+      // A room joined since the list was cached (at the doors, from the event page) is not in it: ask the server once.
+      .then((result) => (take(result) ? undefined : apiClient.getChatGroups({ force: true }).then(take)))
       .catch(() => {})
     return () => {
       live = false
