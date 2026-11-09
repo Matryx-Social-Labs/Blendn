@@ -41,11 +41,14 @@ jest.mock('../lib/apiClient', () => ({
     rsvpToEvent: jest.fn(),
     reportBoardPost: jest.fn(),
     blockBoardPost: jest.fn(),
+    getBoardAlerts: jest.fn(),
+    setBoardAlerts: jest.fn(),
     // The next page of the board (lib/chatPaging) reads through the queue.
     queuedRequest: jest.fn(),
   },
 }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
+jest.mock('../lib/lobbySeen', () => ({ lobbySeenAt: jest.fn(), rememberLobbySeen: jest.fn() }))
 const mockPushListeners: ((n: { request: { content: { data: Record<string, unknown> } } }) => void)[] = []
 jest.mock('expo-notifications', () => ({
   addNotificationReceivedListener: (fn: (typeof mockPushListeners)[number]) => {
@@ -1167,5 +1170,68 @@ describe('L-A: the list starts under the bar as tall as it draws (AX XXXL: the b
     expect(top()).toBe(fixed)
     await fireEvent(screen.getByTestId('lobby-bar'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 400 } } })
     expect(top()).toBe(400 + 8)
+  })
+})
+
+describe('Lobby PR 5: the bell, what you have seen, and Post something from the event page', () => {
+  const { rememberLobbySeen } = jest.requireMock('../lib/lobbySeen') as { rememberLobbySeen: jest.Mock }
+  const newer = { ...SEEKING, id: 'p-new', createdAt: '2026-11-08T10:00:00Z' }
+  const older = { ...OFFER, createdAt: '2026-11-08T09:00:00Z' }
+
+  it('remembers the newest post it showed on All, for Going’s badge (control: a filter remembers nothing)', async () => {
+    api.getBoard.mockResolvedValue(board([newer, older]))
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    expect(rememberLobbySeen).toHaveBeenCalledWith('e1', '2026-11-08T10:00:00Z')
+    rememberLobbySeen.mockClear()
+    api.getBoard.mockResolvedValue({ success: true, data: { posts: [older], counts: { all: 2, offer: 1, seeking: 1, chat: 0, offerRides: 1, mine: 0, replies: 0 } } } as never)
+    await pullToRefresh()
+    rememberLobbySeen.mockClear()
+    await act(async () => fireEvent.press(screen.getByTestId('lobby-chip-offer')))
+    expect(rememberLobbySeen).not.toHaveBeenCalled()
+  })
+
+  it('does not mark as seen what a background read holds behind the pill (control: the shown read did)', async () => {
+    api.getBoard.mockResolvedValue(board([older]))
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    expect(rememberLobbySeen).toHaveBeenCalledWith('e1', '2026-11-08T09:00:00Z')
+    rememberLobbySeen.mockClear()
+    api.getBoard.mockResolvedValue(board([newer, older]))
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
+    expect(api.getBoard).toHaveBeenCalledTimes(2)
+    expect(rememberLobbySeen).not.toHaveBeenCalled()
+  })
+
+  it('rings the bell into the two alert switches', async () => {
+    api.getBoard.mockResolvedValue(board([older]))
+    api.getBoardAlerts.mockResolvedValue({ success: true, data: { offersMatch: false, hostPosts: true } } as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Lobby alerts' })))
+    expect(api.getBoardAlerts).toHaveBeenCalledWith('e1')
+    expect(await screen.findByRole('switch', { name: /^The host posts/ })).toBeTruthy()
+  })
+
+  it('opens the composer when the event page asked for it and posting is open (control: not without the ask)', async () => {
+    mockParams.compose = '1'
+    api.getBoard.mockResolvedValue(board([older]))
+    await render(<BoardScreen />)
+    expect(await screen.findByLabelText('Your post')).toBeTruthy()
+  })
+
+  it('keeps the gate, not the composer, when the event page asked but you cannot post yet', async () => {
+    mockParams.compose = '1'
+    api.getBoard.mockResolvedValue({ success: true, data: { posts: [older], compose: { allowed: false, message: 'Mark yourself as going', reasonCode: 'BOARD_NOT_GOING' } } } as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByTestId('lobby-gate-going')).toBeTruthy()
+    expect(screen.queryByLabelText('Your post')).toBeNull()
+  })
+
+  it('does not open the composer by itself (control)', async () => {
+    api.getBoard.mockResolvedValue(board([older]))
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    expect(screen.queryByLabelText('Your post')).toBeNull()
   })
 })

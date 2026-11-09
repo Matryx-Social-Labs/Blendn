@@ -126,13 +126,46 @@ export function untilWords(at: string | null | undefined, timeZone?: string | nu
   return day && clock ? `${day}, ${clock}` : ''
 }
 
-/** "18 posts · 3 offering rides": the preview's count line, compact past 999. */
-export function countLine(counts: Pick<LobbyCounts, 'all' | 'offerRides'>): { posts: string; rides: string } {
-  return { posts: compactCount(counts.all), rides: compactCount(counts.offerRides) }
+/** "18 posts · 3 offering rides": the preview's count line, compact past 999; no rides part when nobody offers one. */
+export function countLine(counts: Pick<LobbyCounts, 'all' | 'offerRides'>): { posts: string; postsWord: string; rides: string | null; ridesWord: string } {
+  return {
+    posts: compactCount(counts.all),
+    postsWord: counts.all === 1 ? 'post' : 'posts',
+    rides: counts.offerRides > 0 ? compactCount(counts.offerRides) : null,
+    ridesWord: counts.offerRides === 1 ? 'offering a ride' : 'offering rides',
+  }
 }
 
 /** Going's unread badge: exact to 9, then "9+". */
 export const badgeCount = (n: number) => (n > 9 ? '9+' : String(n))
+
+/** Going reads one page this long: enough to say "9+". */
+export const LOBBY_NEWS_PAGE = 10
+
+type NewsPost = Pick<BoardPost, 'id' | 'author' | 'createdAt' | 'mine'>
+
+/**
+ * Going's "New in the Lobby": what others posted after the newest post you were shown when you last opened the Lobby
+ * (all of it if you never did), newest first, and the three newest authors for the creature stack. A page that is new
+ * to its last post says nothing about the rest, so it counts as the page (9+).
+ *
+ * ponytail: one page of the newest posts, counted on the phone against a marker kept on the phone (`lib/lobbySeen.ts`);
+ * a server count (`?since=`) when the badge has to follow you across phones.
+ */
+export function lobbyNews(posts: readonly NewsPost[], seenAt: string | null, page = LOBBY_NEWS_PAGE): { count: number; authors: NewsPost[] } {
+  const seen = seenAt ? Date.parse(seenAt) : -Infinity
+  const newer = (p: NewsPost) => Date.parse(p.createdAt) > seen
+  const fresh = posts.filter((p) => !p.mine && newer(p))
+  const overflow = posts.length >= page && posts.every(newer)
+  return { count: overflow ? Math.max(fresh.length, page) : fresh.length, authors: fresh.slice(0, 3) }
+}
+
+/** The marker the Lobby leaves when it shows its newest page: the newest post's own time, the server's clock. */
+export function newestPostAt(posts: readonly Pick<BoardPost, 'createdAt'>[]): string | null {
+  let newest: string | null = null
+  for (const p of posts) if (!newest || Date.parse(p.createdAt) > Date.parse(newest)) newest = p.createdAt
+  return newest
+}
 
 /** What sits in the composer's slot: the composer, a gate with its one way forward, or the doors. */
 export type ComposerSlot = { kind: 'composer' } | { kind: 'gate'; gate: 'going' | 'profile' } | { kind: 'readOnly' }
@@ -326,6 +359,12 @@ export function freshOnTop(page: readonly { id: string; mine: boolean }[], shown
 export function readOnlyLine(closesAt: string | undefined, timeZone?: string | null): string {
   const until = untilWords(closesAt, timeZone)
   return until ? `The Lobby is read-only now. You can read it until ${until}.` : 'The Lobby is read-only now.'
+}
+
+/** The event page's card after doors (P-A `pA-ro`): why it is read-only, and until when. */
+export function previewReadOnlyLine(closesAt: string | undefined, timeZone?: string | null): string {
+  const until = untilWords(closesAt, timeZone)
+  return `The doors are open, so the Lobby is read-only.${until ? ` You can read it until ${until}.` : ''}`
 }
 
 export const asksWords = (n: number) => (n === 0 ? 'No asks yet' : `${compactCount(n)} ${n === 1 ? 'ask' : 'asks'}`)

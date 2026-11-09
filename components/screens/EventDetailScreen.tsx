@@ -58,8 +58,8 @@ import { DockRow } from '../ds/DockRow'
 import { PAGE_TITLE } from '../ds/shared'
 import { dateStamp, eventDock, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
 import { SceneLightbox } from '../scene/SceneLightbox'
-import { BoardEntry } from '../board/BoardSections'
-import { boardOpen } from '../../lib/board'
+import { EventLobbyPreview } from '../board/LobbyPreview'
+import { BOARD_ENABLED } from '../../lib/board'
 import { SCENE_PADDING_HORIZONTAL, SCENE_SECTION_GAP, SceneBody, SceneBodyAccent, SceneDetails, type SceneCTAState } from '../scene/SceneSections'
 import { clipFirst, feedPlaylist } from '../../lib/feedMedia'
 import { highlightEntities } from '../../lib/entityHighlight'
@@ -1051,6 +1051,16 @@ export default function EventDetail() {
               </FadeInUp>
 
               <View style={styles.sections}>
+                {/*
+                  P-A, the Lobby (SCRUM-1026), after the facts: its card until the close, and "The room is open" once the doors
+                  open on a Lobby nobody posted in. The server decides whether there is one to show; a refusal draws nothing.
+                */}
+                {event && BOARD_ENABLED && !cancelled ? (
+                  <FadeInUp delay={SECTION_DELAY[1]}>
+                    <EventLobbyPreview eventId={event.id} timeZone={tz} here={hereNow ?? detailHere} onOpenRoom={() => void openRoom()} />
+                  </FadeInUp>
+                ) : null}
+
                 {/* Flow 4b's Tickets section (rows A) lands here, above the experience, when ticketing ships. */}
                 {event?.days ? (
                   <FadeInUp delay={SECTION_DELAY[1]}>
@@ -1068,16 +1078,6 @@ export default function EventDetail() {
                         )}
                       </SceneBody>
                     </View>
-                  </FadeInUp>
-                ) : null}
-
-                {/*
-                  The Lobby: going alone, and looking for somebody to go with. Before doors only; the one gate is `boardOpen`
-                  (lib/board.ts), which the Going tab asks too.
-                */}
-                {event && boardOpen(event) ? (
-                  <FadeInUp delay={SECTION_DELAY[2]}>
-                    <BoardEntry onPress={() => router.push({ pathname: '/board/[eventId]', params: { eventId: event.id } } as never)} />
                   </FadeInUp>
                 ) : null}
 

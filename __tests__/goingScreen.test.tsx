@@ -20,6 +20,16 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../app/(tabs)/_layout', () => ({ TAB_BAR_CLEARANCE: 80 }))
 const mockUser = { id: 'me' }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: mockUser }) }))
+// "New in the Lobby" reads the Lobby itself; lobbyPreview.test covers it. Here: where it sits and when.
+jest.mock('../components/board/LobbyPreview', () => {
+  const { Pressable } = jest.requireActual('react-native')
+  const { router: r } = jest.requireMock('expo-router')
+  return {
+    NewInLobbyRow: ({ eventId }: { eventId: string }) => (
+      <Pressable testID="going-lobby-new" accessibilityLabel="New in the Lobby" onPress={() => r.push({ pathname: '/board/[eventId]', params: { eventId } })} />
+    ),
+  }
+})
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getUserFavorites: jest.fn(),
@@ -396,10 +406,10 @@ describe('the Lobby from Going (OUT-02, decision E2)', () => {
     return (showSheet as jest.Mock).mock.calls[0][0]
   }
 
-  it('before doors: the Next-up card carries the Scene\'s Board row, and a row\'s tray the action; both open the Lobby', async () => {
+  it('before doors: the Next-up card carries "New in the Lobby", and a row\'s tray the action; both open the Lobby', async () => {
     rsvps(two({}))
     await open()
-    await fireEvent.press(await screen.findByLabelText(/^The Lobby\./))
+    await fireEvent.press(await screen.findByTestId('going-lobby-new'))
     expect(router.push).toHaveBeenCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'a' } })
 
     const sheet = await trayOf(/^More about Event b/)
@@ -414,11 +424,11 @@ describe('the Lobby from Going (OUT-02, decision E2)', () => {
     expect(labels(await trayOf(/^More about Event s/))).toContain('The Lobby')
   })
 
-  it('after doors: neither the card row nor the tray action', async () => {
+  it('after doors: no tray action; the card’s row stays, for the server to say what is new in the read-only Lobby', async () => {
     rsvps(two({ startTime: hours(-1), endTime: hours(2) }))
     await open()
     await screen.findByTestId('going-next')
-    expect(screen.queryByLabelText(/^The Lobby\./)).toBeNull()
+    expect(screen.getByTestId('going-lobby-new')).toBeTruthy()
     expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Lobby')
   })
 
@@ -426,7 +436,7 @@ describe('the Lobby from Going (OUT-02, decision E2)', () => {
     rsvps(two({ status: 'cancelled' }))
     await open()
     await screen.findByTestId('going-next')
-    expect(screen.queryByLabelText(/^The Lobby\./)).toBeNull()
+    expect(screen.queryByTestId('going-lobby-new')).toBeNull()
     expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Lobby')
   })
 })
