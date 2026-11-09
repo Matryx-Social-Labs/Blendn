@@ -345,10 +345,11 @@ function EventPreferencesContent() {
       <ScrollView
         testID="prefs-scroll"
         {...bar.scrollProps}
-        contentContainerStyle={[styles.scroll, { paddingTop: bar.contentTop + SPACE.md, paddingBottom: dockHeight + SPACE.xl }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: bar.contentTop - SPACE.xxs, paddingBottom: dockHeight + SPACE.xl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
+        {/* The board's column starts 16 under the circle row; the bar's own `contentTop` leaves 18 (as Rate). */}
         {/*
           * Reveal leads, intent follows — unless intent is the question that brought them here (`askIntent`).
           *
@@ -369,7 +370,7 @@ function EventPreferencesContent() {
         <TopBar close state={bar.state} onBack={leave} testID="prefs-top" />
       </View>
       {/* Docked, not at the end of the scroll: with four intents it fell below the fold. The first-door answer cannot be nothing: an empty save would write an empty default. */}
-      <Dock floating onHeight={setDockHeight} testID="prefs-dock">
+      <Dock floating line one onHeight={setDockHeight} testID="prefs-dock">
         <Button
           label="Save"
           kind="primary"

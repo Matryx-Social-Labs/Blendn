@@ -212,6 +212,8 @@ describe('<RadioCard layout="lead"> (Flow 4 `.rc`, SCRUM-1025)', () => {
     await render(lead())
     expect(flat('r')).toMatchObject({ alignItems: 'flex-start', gap: 4, padding: 16 })
     expect(screen.getByTestId('r-detail').props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail', children: 'Quiet Lynx' })
+    // The card's width, so a long value ellipsizes at the card's edge.
+    expect(StyleSheet.flatten(screen.getByTestId('r-detail').props.style)).toMatchObject({ alignSelf: 'stretch' })
     expect(StyleSheet.flatten(screen.getByText('Anonymous').props.style)).toMatchObject({ fontSize: 17, lineHeight: 22, marginTop: 8 })
     expect(screen.getByRole('radio', { name: 'Anonymous, Quiet Lynx, That’s all people here see, plus what you have in common.' })).toBeTruthy()
   })

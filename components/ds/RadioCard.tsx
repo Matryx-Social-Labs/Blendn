@@ -133,7 +133,7 @@ export function RadioCard({ title, layout = 'center', detail, hint, icon, avatar
           <>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.ink, styles.leadTitle]}>{title}</Text>
             {detail ? (
-              <Text testID={testID && `${testID}-detail`} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold), styles.ink]}>
+              <Text testID={testID && `${testID}-detail`} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold), styles.ink, styles.detail]}>
                 {detail}
               </Text>
             ) : null}
@@ -170,6 +170,8 @@ const styles = StyleSheet.create({
   // Flow 4 `.rc`: 4 between the lines, 12 under the face (the gap and 8 more).
   lead: { alignItems: 'flex-start', gap: SPACE.xs },
   leadTitle: { marginTop: SPACE.sm },
+  // The slot is the card's width (Flow 4 `.rc .ps`), so a long value ellipsizes at the card's edge, not at its own.
+  detail: { alignSelf: 'stretch' },
   // Flow 4 `.jr`: 12 by 16 in, radius 20; the right keeps clear of the check disc.
   row: { alignItems: 'flex-start', gap: 0, borderRadius: ROW_RADIUS, paddingVertical: SPACE.md, paddingLeft: SPACE.lg, paddingRight: ROW_CLEAR },
   rowEdge: { borderRadius: ROW_RADIUS },

@@ -395,6 +395,12 @@ describe('the board’s cards (Flow 4 `prefs`, SCRUM-1025)', () => {
     expect(screen.getByRole('checkbox', { name: /^Just here for the event, Not looking to meet anyone$/ })).toBeTruthy()
   })
 
+  it('Save sits in Flow 4’s one-action dock: 12 above, the gutter both sides, the home indicator’s inset below', async () => {
+    await render(<EventPreferences />)
+    const { StyleSheet } = jest.requireActual('react-native')
+    expect(StyleSheet.flatten(screen.getByTestId('prefs-dock').props.style)).toMatchObject({ paddingTop: 12, paddingLeft: 24, paddingRight: 24, paddingBottom: 34 })
+  })
+
   it('the "future events" line fades out as well as in (M16)', () => {
     const src = readFileSync(join(__dirname, '..', 'app', 'event-preferences', '[eventId].tsx'), 'utf8')
     expect(src).toMatch(/entering=\{bannerFadeIn\}\s+exiting=\{bannerOut\}/)
