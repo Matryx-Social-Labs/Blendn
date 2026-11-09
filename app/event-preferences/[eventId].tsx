@@ -2,25 +2,27 @@ import { TopBar } from '../../components/ds/TopBar'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 
 import { Avatar } from '../../components/ds/Avatar'
 import { Button } from '../../components/ds/Button'
 import { Dock } from '../../components/ds/Dock'
 import { Orbs } from '../../components/ds/Orbs'
+import { LookingForCard } from '../../components/ds/LookingForCard'
 import { RadioCard } from '../../components/ds/RadioCard'
-import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsRow } from '../../components/ds/SettingsRow'
-import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
-import { fadeInFast } from '../../components/motion/presence'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { bannerFadeIn, bannerOut } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
 import { apiClient } from '../../lib/apiClient'
 import { checkInChanged, intentAnswered } from '../../lib/checkIn'
 import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
+import { firstNameOf } from '../../lib/profileIdentity'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
+import { myRoomFace, pseudonymFromParam } from '../../lib/roomState'
 import { useAuth } from '../../lib/useAuth'
 import { RouteModal } from '../../components/system/RouteModal'
 import { useReducedMotion } from '../../lib/motion'
@@ -33,11 +35,12 @@ import { useReducedMotion } from '../../lib/motion'
  *
  * ## Two questions, one primary
  *
- * A glass close at the top, the first question as the screen's `title`, the second under a `SectionHeader`,
+ * A glass close at the top, the first question as the screen's `title`, the second as a `heading`,
  * and Save docked on a glass bar so it is always in reach and never under the home indicator. Reveal is two
- * `RadioCard`s (Anonymous, Named) with the face each would show; the intents are `RadioCard`s too, each one
- * `deselectable` since a tap on a chosen intent clears it. "Just here for the event" stands apart behind an
- * "or", because choosing it clears the others and that should be visible before it happens.
+ * lead `RadioCard`s (Flow 4 `prefs`, SCRUM-1025): Anonymous with your room creature and the pseudonym itself, Named with
+ * your face and first name, each value in its own slot. The intents are onboarding's photo tiles, three across, any of
+ * them at once. "Just here for the event" stands apart behind an "or", because choosing it clears the others and that
+ * should be visible before it happens.
  *
  * ## The two things this sets
  *
@@ -71,17 +74,51 @@ const INTENTS: { value: Intent; label: string; hint: string }[] = [
   { value: 'just_here', label: 'Just here for the event', hint: 'Not looking to meet anyone' },
 ]
 
+const ART: Record<Exclude<Intent, 'just_here'>, number> = {
+  networking: require('../../assets/onboarding/looking-networking.jpg'),
+  friendship: require('../../assets/onboarding/looking-friendship.jpg'),
+  dating: require('../../assets/onboarding/looking-dating.jpg'),
+}
+
 const AVATAR = 56
+/** The anonymous card before the room has given you a pseudonym (opened from check-in, ahead of the room). */
+const NO_PSEUDONYM_YET = 'A made-up name'
+/** Flow 4 `.sub`, `.rc2`, `.t20`, `.ic3`, `.orl`: the board's gaps between the pieces, which sit off the 4-pt scale. */
+const SUB_GAP = SPACE.xs + SPACE.xxs
+const CARDS_GAP = SPACE.lg + SPACE.xxs
+const SECOND_HEAD_GAP = SPACE.xl + SPACE.xs
+const TILES_GAP = SPACE.md + SPACE.xxs
+const TILE_GAP = SPACE.sm + SPACE.xxs
+/** From the accessibility sizes the cards and the tiles stack: a half or a third of the width broke "Anonymous" and "Networking" mid-word at AX XXXL (drive). As Rate. */
+const STACK_FROM_SCALE = 1.5
+
+/** A section's question and its line: the screen's title when it leads, a heading when it follows (Flow 4 `.t24` / `.t20`). */
+function Head({ lead, title, sub, bold, testID }: { lead: boolean; title: string; sub: string; bold: boolean; testID: string }) {
+  const role = lead ? 'title' : 'heading'
+  return (
+    <View style={styles.head}>
+      <Text testID={testID} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE[role]} style={[font(role, bold), styles.ink]}>
+        {title}
+      </Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.lede} style={[font('lede', bold), styles.secondary]}>
+        {sub}
+      </Text>
+    </View>
+  )
+}
 
 function EventPreferencesContent() {
   // `revealed` arrives from the status chip, which already knows it. There is
   // no GET for per-event preferences, and adding a round trip to learn
   // something the caller is holding would be the wrong trade.
-  const { eventId, revealed: initialRevealed, askIntent: askIntentParam } = useLocalSearchParams<{
+  const { eventId, revealed: initialRevealed, askIntent: askIntentParam, pseudonym: pseudonymParam } = useLocalSearchParams<{
     eventId: string
     revealed?: string
     askIntent?: string
+    /** From the room (`roomSettingsRoute`): this screen cannot ask, because `GET /events/:id/chat` joins the room. */
+    pseudonym?: string
   }>()
+  const pseudonym = pseudonymFromParam(pseudonymParam)
   /*
    * "Why do you go out?" — asked at the door of the first room.
    *
@@ -101,6 +138,7 @@ function EventPreferencesContent() {
   const bar = useTopBarOverlay()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
+  const stacked = useWindowDimensions().fontScale >= STACK_FROM_SCALE
 
   const [intent, setIntent] = useState<Intent[]>([])
   /*
@@ -126,6 +164,7 @@ function EventPreferencesContent() {
    */
   const [canReveal, setCanReveal] = useState<RevealReadiness | null>(null)
   const [photo, setPhoto] = useState<string | null>(null)
+  const [firstName, setFirstName] = useState<string | null>(null)
   // Dating is 18+. The server refuses it (403) on this write as everywhere
   // else; hiding the card for a minor turns that refusal into a card they
   // never see rather than an error on the way into their first room.
@@ -141,8 +180,10 @@ function EventPreferencesContent() {
         const age = res.data.profile?.age
         const photos: string[] = Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : []
         setUnder18(typeof age === 'number' && age < 18)
+        const name: unknown = res.data.profile?.name || res.data.name
         setPhoto(typeof photos[0] === 'string' ? photos[0] : null)
-        setCanReveal(revealReadiness({ name: res.data.profile?.name || res.data.name, photos }))
+        setFirstName(typeof name === 'string' && name.trim() ? firstNameOf(name) : null)
+        setCanReveal(revealReadiness({ name: typeof name === 'string' ? name : undefined, photos }))
       })
       .catch(() => {
         // Fail open on the *gate*, not on the reveal: an unreachable profile
@@ -205,13 +246,13 @@ function EventPreferencesContent() {
   const lookingIntents = intents.filter((i) => i.value !== 'just_here')
   const justHere = intents.find((i) => i.value === 'just_here')
 
-  const intentOption = (opt: (typeof INTENTS)[number]) => (
-    <RadioCard
+  const tile = (opt: (typeof INTENTS)[number]) => (
+    <LookingForCard
       key={opt.value}
-      title={opt.label}
-      hint={opt.hint}
+      size="tall"
+      label={opt.label}
+      image={ART[opt.value as Exclude<Intent, 'just_here'>]}
       selected={intent.includes(opt.value)}
-      deselectable
       onPress={() => onToggleIntent(opt.value)}
       testID={`prefs-intent-${opt.value}`}
     />
@@ -220,38 +261,29 @@ function EventPreferencesContent() {
   const blocked = canReveal ? !canReveal.ok : false
   const namedHint = blocked
     ? `Add ${canReveal?.missing} to your profile first. That’s what other people would see.`
-    : 'People here see your name and photo.'
+    : 'Your first name and photo.'
   // Layout glides when the "future events" row arrives; Reduce Motion cuts (U-L11).
   const glide = reduceMotion ? undefined : LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 
   const revealBlock = (
-    <Animated.View layout={glide} style={styles.section}>
-      {askIntent ? (
-        <SectionHeader
-          title="Can people see who you are?"
-          caption="By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your first name and photo to people in this room."
-        />
-      ) : (
-        <View style={styles.headline}>
-          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
-            Can people see who you are?
-          </Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-            By default you appear as a made-up name, and people see what you have in common rather than who you are. Turning this on shows your first name and photo to people in this room.
-          </Text>
-        </View>
-      )}
-      <View style={styles.pair} accessibilityRole="radiogroup">
+    <Animated.View layout={glide} style={askIntent ? styles.second : undefined}>
+      <Head lead={!askIntent} title="Can people see who you are?" sub="Just for this room." bold={bold} testID="prefs-reveal-title" />
+      <View testID="prefs-reveal" style={[styles.pair, stacked && styles.stacked]} accessibilityRole="radiogroup">
         <RadioCard
+          layout="lead"
           title="Anonymous"
-          hint="Nobody here sees your name or photo."
-          avatar={<Avatar kind="creature" pseudonym={String(eventId)} /* the made-up face is seeded on the event, never on the person (lib/pseudonymAvatar.ts) */ size={AVATAR} ring={COLOR.surface} />}
+          detail={pseudonym ?? NO_PSEUDONYM_YET}
+          hint="That’s all people here see, plus what you have in common."
+          // The room's own face for you (lib/roomState.ts): your pseudonym's creature, or the room's stand-in before it has one.
+          avatar={<Avatar {...myRoomFace({ revealed: false, photo: null, pseudonym, eventId: String(eventId) })} size={AVATAR} ring={COLOR.surface} />}
           selected={!revealed}
           onPress={() => setRevealed(false)}
           testID="prefs-anonymous"
         />
         <RadioCard
+          layout="lead"
           title="Named"
+          detail={firstName ?? undefined}
           hint={namedHint}
           avatar={photo ? <Avatar kind="photo" uri={photo} size={AVATAR} ring={COLOR.surface} /> : undefined}
           icon={photo ? undefined : 'user'}
@@ -262,7 +294,8 @@ function EventPreferencesContent() {
         />
       </View>
       {revealed ? (
-        <Animated.View entering={reduceMotion ? undefined : fadeInFast}>
+        // M16: the line fades in and out; opacity only, so Reduce Motion keeps it.
+        <Animated.View entering={bannerFadeIn} exiting={bannerOut} style={styles.remember}>
           <SettingsRow
             icon="history"
             title="Do this at future events too"
@@ -277,30 +310,35 @@ function EventPreferencesContent() {
   )
 
   const intentBlock = (
-    <View style={styles.section}>
+    <Animated.View layout={glide} style={askIntent ? undefined : styles.second}>
       {askIntent ? (
-        <View style={styles.headline}>
-          <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
-            Why do you go out?
-          </Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-            It shapes who you’re introduced to. We’ll remember this for future events; change it any time from your profile.
-          </Text>
-        </View>
+        <Head lead testID="prefs-intent-title" title="Why do you go out?" sub="It shapes who you’re introduced to. We’ll remember this for future events; change it any time from your profile." bold={bold} />
       ) : (
-        <SectionHeader title="Why are you here tonight?" caption="Only for tonight. Your usual answer stays as it is." />
+        <Head lead={false} testID="prefs-intent-title" title="Why are you here tonight?" sub="Only for tonight. Your usual answer stays as it is." bold={bold} />
       )}
-      <View style={styles.options}>{lookingIntents.map(intentOption)}</View>
+      <View testID="prefs-intents" style={[styles.tiles, stacked && styles.stacked]}>{lookingIntents.map(tile)}</View>
       {justHere ? (
         <>
-          {/* Exclusive of the cards above: choosing it clears them, so it stands apart. */}
-          <Text accessibilityElementsHidden importantForAccessibility="no" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.or]}>
-            OR
-          </Text>
-          {intentOption(justHere)}
+          {/* Exclusive of the tiles above: choosing it clears them, so it stands apart. */}
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.or}>
+            <View style={styles.orLine} />
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+              or
+            </Text>
+            <View style={styles.orLine} />
+          </View>
+          <RadioCard
+            layout="row"
+            title={justHere.label}
+            hint={justHere.hint}
+            selected={intent.includes('just_here')}
+            deselectable
+            onPress={() => onToggleIntent('just_here')}
+            testID="prefs-intent-just_here"
+          />
         </>
       ) : null}
-    </View>
+    </Animated.View>
   )
 
   const needsAnswer = askIntent && intent.length === 0
@@ -310,10 +348,11 @@ function EventPreferencesContent() {
       <ScrollView
         testID="prefs-scroll"
         {...bar.scrollProps}
-        contentContainerStyle={[styles.scroll, { paddingTop: bar.contentTop + SPACE.md, paddingBottom: dockHeight + SPACE.xl }]}
+        contentContainerStyle={[styles.scroll, { paddingTop: bar.contentTop - SPACE.xxs, paddingBottom: dockHeight + SPACE.xl }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         showsVerticalScrollIndicator={false}
       >
+        {/* The board's column starts 16 under the circle row; the bar's own `contentTop` leaves 18 (as Rate). */}
         {/*
           * Reveal leads, intent follows — unless intent is the question that brought them here (`askIntent`).
           *
@@ -323,7 +362,6 @@ function EventPreferencesContent() {
           * equivalent — it is deliberately decided per room, every room.
           */}
         {askIntent ? intentBlock : revealBlock}
-        <View accessibilityElementsHidden importantForAccessibility="no" style={styles.divider} />
         {askIntent ? revealBlock : intentBlock}
       </ScrollView>
       {/*
@@ -335,7 +373,7 @@ function EventPreferencesContent() {
         <TopBar close state={bar.state} onBack={leave} testID="prefs-top" />
       </View>
       {/* Docked, not at the end of the scroll: with four intents it fell below the fold. The first-door answer cannot be nothing: an empty save would write an empty default. */}
-      <Dock floating onHeight={setDockHeight} testID="prefs-dock">
+      <Dock floating line one onHeight={setDockHeight} testID="prefs-dock">
         <Button
           label="Save"
           kind="primary"
@@ -352,13 +390,15 @@ function EventPreferencesContent() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  scroll: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
-  section: { gap: SPACE.lg },
-  headline: { gap: SPACE.sm },
-  pair: { flexDirection: 'row', gap: SPACE.md },
-  options: { gap: SPACE.md },
-  or: { textAlign: 'center', color: COLOR.textTertiary },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
+  scroll: { paddingHorizontal: SPACE.gutter },
+  head: { gap: SUB_GAP },
+  second: { marginTop: SECOND_HEAD_GAP },
+  pair: { flexDirection: 'row', gap: SPACE.md, marginTop: CARDS_GAP },
+  stacked: { flexDirection: 'column' },
+  remember: { marginTop: SPACE.md },
+  tiles: { flexDirection: 'row', gap: TILE_GAP, marginTop: TILES_GAP },
+  or: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginVertical: SPACE.lg },
+  orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairlineStrong },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
 })

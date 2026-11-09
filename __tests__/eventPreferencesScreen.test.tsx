@@ -50,6 +50,11 @@ jest.mock('../lib/linkClosers', () => ({
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getProfile: jest.fn(), setMatchPreferences: jest.fn(), forgetActiveCheckins: jest.fn(), forgetVenues: jest.fn(), forgetEvent: jest.fn() },
 }))
+// The faces as host nodes carrying what they were given: which creature a card draws is the pseudonym it was handed.
+jest.mock('../components/ds/Avatar', () => {
+  const { View } = jest.requireActual('react-native')
+  return { Avatar: (p: { kind: string }) => <View testID={`avatar-${p.kind}`} {...p} /> }
+})
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 
@@ -58,6 +63,7 @@ import { router } from 'expo-router'
 import EventPreferences from '../app/event-preferences/[eventId]'
 import { apiClient } from '../lib/apiClient'
 import { untilIntentAnswered } from '../lib/checkIn'
+import { markSeed } from '../lib/pseudonymAvatar'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -301,6 +307,15 @@ describe('at AX XXXL (TG-03)', () => {
   beforeEach(() => atScale(AX_XXXL))
   afterEach(resetScale)
 
+  it('the two cards stack, so "Anonymous" is never broken mid-word in a half-width card (drive, SCRUM-1025)', async () => {
+    delete mockParams.askIntent
+    await render(<EventPreferences />)
+    const { StyleSheet } = jest.requireActual('react-native')
+    expect(StyleSheet.flatten(screen.getByTestId('prefs-reveal').props.style).flexDirection).toBe('column')
+    // And the photo tiles: "Networking" broke mid-word in a third of the width.
+    expect(StyleSheet.flatten(screen.getByTestId('prefs-intents').props.style).flexDirection).toBe('column')
+  })
+
   it.each([['1'], ['0']])('askIntent=%s: the screen’s own titles and their lines stop at their caps', async (askIntent) => {
     mockParams.askIntent = askIntent
     await render(<EventPreferences />)
@@ -330,5 +345,82 @@ describe('saving tells the Room (ROOM-03)', () => {
     await save()
     await waitFor(() => expect(mockShowToast).toHaveBeenCalled())
     expect(apiClient.forgetActiveCheckins).not.toHaveBeenCalled()
+  })
+})
+
+describe('the board’s cards (Flow 4 `prefs`, SCRUM-1025)', () => {
+  const detail = (id: 'anonymous' | 'named') => screen.getByTestId(`prefs-${id}-detail`)
+
+  beforeEach(() => Object.assign(mockParams, { askIntent: undefined, pseudonym: 'Quiet Lynx' }))
+
+  it('Anonymous shows the room’s pseudonym in its own slot, under the creature the room draws for it', async () => {
+    await render(<EventPreferences />)
+    expect(detail('anonymous').props.children).toBe('Quiet Lynx')
+    expect(screen.getByRole('radio', { name: /^Anonymous, Quiet Lynx, That’s all people here see, plus what you have in common\.$/ })).toBeTruthy()
+    expect(screen.getByTestId('avatar-creature').props.pseudonym).toBe('Quiet Lynx')
+  })
+
+  it('opened from check-in with no pseudonym yet, the slot reads "A made-up name"', async () => {
+    delete mockParams.pseudonym
+    await render(<EventPreferences />)
+    expect(detail('anonymous').props.children).toBe('A made-up name')
+    // The room's stand-in face before it has one (lib/roomState myRoomFace), not a photo.
+    expect(screen.getByTestId('avatar-creature').props.pseudonym).toBe(markSeed('You', 'e1'))
+  })
+
+  it('a pseudonym param that is not the server’s shape is not shown', async () => {
+    mockParams.pseudonym = 'Call 9845012345'
+    await render(<EventPreferences />)
+    expect(detail('anonymous').props.children).toBe('A made-up name')
+  })
+
+  it('Named shows the first name alone in its slot, and "Your first name and photo."', async () => {
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Sagar Kishore', profile: { age: 27, name: 'Sagar Kishore', photos: ['p.jpg'] } } } as never)
+    await render(<EventPreferences />)
+    await waitFor(() => expect(detail('named').props.children).toBe('Sagar'))
+    expect(screen.getByRole('radio', { name: /^Named, Sagar, Your first name and photo\.$/ })).toBeTruthy()
+  })
+
+  it('long text: the pseudonym and the first name each stay on one line', async () => {
+    mockParams.pseudonym = 'Midnight Butterfly'
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Venkatalakshmi Ramasubramanian', profile: { age: 27, name: 'Venkatalakshmi Ramasubramanian', photos: ['p.jpg'] } } } as never)
+    await render(<EventPreferences />)
+    await waitFor(() => expect(detail('named').props.children).toBe('Venkatalakshmi'))
+    for (const id of ['anonymous', 'named'] as const) {
+      expect(detail(id).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail' })
+    }
+  })
+
+  it('at the default size the two cards sit side by side', async () => {
+    // React Native's jest window reports fontScale 2: the phone's default is 1.
+    await atScale(1)
+    await render(<EventPreferences />)
+    const { StyleSheet } = jest.requireActual('react-native')
+    expect(StyleSheet.flatten(screen.getByTestId('prefs-reveal').props.style).flexDirection).toBe('row')
+    resetScale()
+  })
+
+  it('heads the reveal with "Just for this room."', async () => {
+    await render(<EventPreferences />)
+    expect(screen.getByText('Just for this room.')).toBeTruthy()
+  })
+
+  it('the intents are onboarding’s photo tiles, Networking · Making friends · Dating, with "Just here" behind an "or"', async () => {
+    await render(<EventPreferences />)
+    const tiles = screen.getAllByTestId(/^prefs-intent-(networking|friendship|dating)-tile$/)
+    expect(tiles.map((t) => t.props.testID)).toEqual(['prefs-intent-networking-tile', 'prefs-intent-friendship-tile', 'prefs-intent-dating-tile'])
+    expect(screen.getByText('or', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: /^Just here for the event, Not looking to meet anyone$/ })).toBeTruthy()
+  })
+
+  it('Save sits in Flow 4’s one-action dock: 12 above, the gutter both sides, the home indicator’s inset below', async () => {
+    await render(<EventPreferences />)
+    const { StyleSheet } = jest.requireActual('react-native')
+    expect(StyleSheet.flatten(screen.getByTestId('prefs-dock').props.style)).toMatchObject({ paddingTop: 12, paddingLeft: 24, paddingRight: 24, paddingBottom: 34 })
+  })
+
+  it('the "future events" line fades out as well as in (M16)', () => {
+    const src = readFileSync(join(__dirname, '..', 'app', 'event-preferences', '[eventId].tsx'), 'utf8')
+    expect(src).toMatch(/entering=\{bannerFadeIn\}\s+exiting=\{bannerOut\}/)
   })
 })

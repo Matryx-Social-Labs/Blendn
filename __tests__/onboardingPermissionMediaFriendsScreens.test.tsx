@@ -470,7 +470,8 @@ describe('preferences', () => {
   })
 
   const tile = (name: string) => screen.getByTestId(`looking-for-${name}`)
-  const picked = (name: string) => tile(name).props.accessibilityState.selected
+  // Tiles and Just here are all checkboxes now (multi-select, SCRUM-1025): `checked` is the one state.
+  const picked = (name: string) => tile(name).props.accessibilityState.checked
 
   it('Edit profile’s intents, in its words: Friendship, Networking and Dating tiles, and Just here (owner, 2026-11-01)', async () => {
     mockDraft = { dateOfBirth: '1990-01-01' }
