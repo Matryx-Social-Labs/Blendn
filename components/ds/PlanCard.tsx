@@ -10,6 +10,7 @@ import { focusRing, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSel
 /** The page's 64 pt row and its 22 pt ring: the hue's 6 pt when picked, 35% at 1.5 pt when not. */
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
 const RING = SPACE.xl - SPACE.xxs
+const RING_COMPACT = SPACE.lg + SPACE.xs
 const RING_ON = SPACE.sm - SPACE.xxs
 const RING_OFF = 1.5
 const RING_OFF_ALPHA = 0.35
@@ -90,14 +91,17 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
   )
 }
 
-/** The 22 pt radio ring the plan rows and the Go Live dial share: white 6 pt when picked, 35% at 1.5 pt when not. */
-export function RadioRing({ selected, testID }: { selected: boolean; testID?: string }) {
+/**
+ * The 22 pt radio ring the plan rows and the Go Live dial share: the hue's 6 pt when picked, 35% at 1.5 pt when not.
+ * `compact`: the 20 pt ring of a radio list on a page (Flow 4 `rate`, `.rd`), its 6 pt dot in the hue's glyph.
+ */
+export function RadioRing({ selected, compact = false, testID }: { selected: boolean; compact?: boolean; testID?: string }) {
   const contrast = useIncreaseContrast()
   const sel = useSelection()
   const ring = selected
-    ? { borderWidth: RING_ON, borderColor: sel.edge }
+    ? { borderWidth: RING_ON, borderColor: compact ? sel.glyph : sel.edge }
     : { borderWidth: RING_OFF, borderColor: contrast ? MATERIAL.hairlineIncreaseContrast : tint(COLOR.textPrimary, RING_OFF_ALPHA) }
-  return <View testID={testID} style={[styles.ring, ring]} />
+  return <View testID={testID} style={[styles.ring, compact && styles.ringCompact, ring]} />
 }
 
 /** The Night Pass row: a one-off, 24 hours from purchase, and another adds 24 more (G2). Never "until 6 am". */
@@ -147,6 +151,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
   },
   ring: { width: RING, height: RING, borderRadius: RADIUS.capsule },
+  ringCompact: { width: RING_COMPACT, height: RING_COMPACT },
   text: { flex: 1 },
   ink: { color: COLOR.textPrimary },
   list: { borderRadius: RADIUS.sheet, overflow: 'hidden' },
