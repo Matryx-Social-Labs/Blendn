@@ -312,6 +312,8 @@ describe('at AX XXXL (TG-03)', () => {
     await render(<EventPreferences />)
     const { StyleSheet } = jest.requireActual('react-native')
     expect(StyleSheet.flatten(screen.getByTestId('prefs-reveal').props.style).flexDirection).toBe('column')
+    // And the photo tiles: "Networking" broke mid-word in a third of the width.
+    expect(StyleSheet.flatten(screen.getByTestId('prefs-intents').props.style).flexDirection).toBe('column')
   })
 
   it.each([['1'], ['0']])('askIntent=%s: the screen’s own titles and their lines stop at their caps', async (askIntent) => {

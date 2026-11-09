@@ -89,7 +89,7 @@ const CARDS_GAP = SPACE.lg + SPACE.xxs
 const SECOND_HEAD_GAP = SPACE.xl + SPACE.xs
 const TILES_GAP = SPACE.md + SPACE.xxs
 const TILE_GAP = SPACE.sm + SPACE.xxs
-/** From the accessibility sizes the two cards stack: half a phone's width broke "Anonymous" mid-word at AX XXXL (drive). As Rate. */
+/** From the accessibility sizes the cards and the tiles stack: a half or a third of the width broke "Anonymous" and "Networking" mid-word at AX XXXL (drive). As Rate. */
 const STACK_FROM_SCALE = 1.5
 
 /** A section's question and its line: the screen's title when it leads, a heading when it follows (Flow 4 `.t24` / `.t20`). */
@@ -316,7 +316,7 @@ function EventPreferencesContent() {
       ) : (
         <Head lead={false} testID="prefs-intent-title" title="Why are you here tonight?" sub="Only for tonight. Your usual answer stays as it is." bold={bold} />
       )}
-      <View testID="prefs-intents" style={styles.tiles}>{lookingIntents.map(tile)}</View>
+      <View testID="prefs-intents" style={[styles.tiles, stacked && styles.stacked]}>{lookingIntents.map(tile)}</View>
       {justHere ? (
         <>
           {/* Exclusive of the tiles above: choosing it clears them, so it stands apart. */}
