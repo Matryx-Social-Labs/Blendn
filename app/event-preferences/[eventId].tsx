@@ -91,11 +91,11 @@ const TILES_GAP = SPACE.md + SPACE.xxs
 const TILE_GAP = SPACE.sm + SPACE.xxs
 
 /** A section's question and its line: the screen's title when it leads, a heading when it follows (Flow 4 `.t24` / `.t20`). */
-function Head({ lead, title, sub, bold }: { lead: boolean; title: string; sub: string; bold: boolean }) {
+function Head({ lead, title, sub, bold, testID }: { lead: boolean; title: string; sub: string; bold: boolean; testID: string }) {
   const role = lead ? 'title' : 'heading'
   return (
     <View style={styles.head}>
-      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE[role]} style={[font(role, bold), styles.ink]}>
+      <Text testID={testID} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE[role]} style={[font(role, bold), styles.ink]}>
         {title}
       </Text>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.lede} style={[font('lede', bold), styles.secondary]}>
@@ -264,8 +264,8 @@ function EventPreferencesContent() {
 
   const revealBlock = (
     <Animated.View layout={glide} style={askIntent ? styles.second : undefined}>
-      <Head lead={!askIntent} title="Can people see who you are?" sub="Just for this room." bold={bold} />
-      <View style={styles.pair} accessibilityRole="radiogroup">
+      <Head lead={!askIntent} title="Can people see who you are?" sub="Just for this room." bold={bold} testID="prefs-reveal-title" />
+      <View testID="prefs-reveal" style={styles.pair} accessibilityRole="radiogroup">
         <RadioCard
           layout="lead"
           title="Anonymous"
@@ -309,11 +309,11 @@ function EventPreferencesContent() {
   const intentBlock = (
     <Animated.View layout={glide} style={askIntent ? undefined : styles.second}>
       {askIntent ? (
-        <Head lead title="Why do you go out?" sub="It shapes who you’re introduced to. We’ll remember this for future events; change it any time from your profile." bold={bold} />
+        <Head lead testID="prefs-intent-title" title="Why do you go out?" sub="It shapes who you’re introduced to. We’ll remember this for future events; change it any time from your profile." bold={bold} />
       ) : (
-        <Head lead={false} title="Why are you here tonight?" sub="Only for tonight. Your usual answer stays as it is." bold={bold} />
+        <Head lead={false} testID="prefs-intent-title" title="Why are you here tonight?" sub="Only for tonight. Your usual answer stays as it is." bold={bold} />
       )}
-      <View style={styles.tiles}>{lookingIntents.map(tile)}</View>
+      <View testID="prefs-intents" style={styles.tiles}>{lookingIntents.map(tile)}</View>
       {justHere ? (
         <>
           {/* Exclusive of the tiles above: choosing it clears them, so it stands apart. */}
