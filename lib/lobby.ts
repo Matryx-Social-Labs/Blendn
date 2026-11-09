@@ -118,9 +118,12 @@ export function postAge(createdAt: string, now: number = Date.now()): string {
   return hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} d`
 }
 
-/** "Tomorrow · 12 AM": until when the Lobby can be read, in the app's time words (`whenLabel`), the event city's day and clock. */
+/**
+ * "Tomorrow · 12 AM": until when the Lobby can be read, in the app's time words (`whenLabel`), the event city's day and
+ * clock. One unbreakable unit (no-break spaces, as `dayAndClock`): the read-only sentence wrapped "8:57" from "PM".
+ */
 export function untilWords(at: string | null | undefined, timeZone?: string | null, now: Date = new Date()): string {
-  return at ? whenLabel(at, now, timeZone) : ''
+  return at ? whenLabel(at, now, timeZone).replace(/ /g, '\u00a0') : ''
 }
 
 /** "18 posts · 3 offering rides": the preview's count line, compact past 999; no rides part when nobody offers one. */

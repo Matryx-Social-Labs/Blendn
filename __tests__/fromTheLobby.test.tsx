@@ -164,7 +164,7 @@ describe('Read the Lobby’s until', () => {
     said({ joined: [RIDE], pinned: PIN })
     await draw()
     // 18:30Z is midnight in Bengaluru (tomorrow there), 7:30 PM in Berlin (tonight here).
-    expect(await screen.findByText('Until Tomorrow · 12 AM')).toBeTruthy()
+    expect(await screen.findByText('Until Tomorrow\u00a0·\u00a012\u00a0AM')).toBeTruthy()
     expect(api.getEvent).toHaveBeenCalledWith('e1')
   })
 

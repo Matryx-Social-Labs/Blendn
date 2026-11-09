@@ -1090,7 +1090,7 @@ describe('L-A: after doors, and after the end', () => {
     api.getBoard.mockResolvedValue(lobby([OFFER, SEEKING], { state: 'read_only', phase: 'live' }) as never)
     await render(<BoardScreen />)
     expect(await screen.findByText('The doors are open')).toBeTruthy()
-    expect(screen.getByText('The Lobby is read-only now. You can read it until Tomorrow · 12 AM.')).toBeTruthy()
+    expect(screen.getByText('The Lobby is read-only now. You can read it until Tomorrow\u00a0·\u00a012\u00a0AM.')).toBeTruthy()
     expect(screen.getByText(OFFER.body)).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
     expect(screen.queryByLabelText('Say hi, Quiet Otter')).toBeNull()

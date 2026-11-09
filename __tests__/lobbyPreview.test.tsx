@@ -98,7 +98,7 @@ describe('P-A, the event page’s Lobby card', () => {
     jest.useFakeTimers({ now: new Date('2026-11-09T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] })
     api.getBoardPreview.mockResolvedValue(preview({ state: 'read_only', phase: 'live' }))
     await drawPreview()
-    expect(screen.getByText('The doors are open, so the Lobby is read-only. You can read it until Tomorrow · 12 AM.')).toBeTruthy()
+    expect(screen.getByText('The doors are open, so the Lobby is read-only. You can read it until Tomorrow\u00a0·\u00a012\u00a0AM.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Post something' })).toBeNull()
     expect(screen.queryByText('Lunar Fox')).toBeNull()
     await fireEvent.press(screen.getByRole('button', { name: 'Read the Lobby' }))
