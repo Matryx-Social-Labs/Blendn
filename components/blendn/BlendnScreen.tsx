@@ -43,7 +43,7 @@ import { useRoom, type RoomPerson } from '../../lib/useRoom'
 import { useRoomControls } from '../../lib/useRoomControls'
 import { myMainPhoto } from '../../lib/myPhoto'
 import { markSeed } from '../../lib/pseudonymAvatar'
-import { myRoomFace } from '../../lib/roomState'
+import { myRoomFace, roomSettingsRoute } from '../../lib/roomState'
 import { useTonight, type TonightEvent } from '../../lib/useTonight'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
@@ -1050,7 +1050,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 icon="settings-2"
                 accessibilityLabel="Room settings"
                 accessibilityHint="Why you are here tonight, and whether people can see your name"
-                onPress={() => router.push({ pathname: '/event-preferences/[eventId]', params: { eventId: room.event!.id } as never })}
+                onPress={() => router.push(roomSettingsRoute(room.event!.id, { pseudonym: myPseudonym, revealed: controls.revealed }))}
                 testID="room-settings"
               />
             </Animated.View>

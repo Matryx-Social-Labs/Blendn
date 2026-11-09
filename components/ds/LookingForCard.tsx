@@ -22,6 +22,14 @@ const SCRIM_FOOT_ALPHA = 0.78
 const SCRIM_TOP = '30%'
 /** The selected ring sits outside the tile, so the photo keeps its full frame. */
 const RING_OUT = SPACE.xxs
+/**
+ * `tall`: the tile in a page's three-across grid (Flow 4 `.icd`): 132 pt, the word 12 in and 10 up on two lines, the ring
+ * inside the tile (a grid has no room for it outside), the check 12 in.
+ */
+const TALL_HEIGHT = 132
+// design-exception: Flow 4's `.icd` tile is radius 20, between rowInCard (16) and sheet (24)
+const TALL_RADIUS = 20
+const TALL_INSET = { left: SPACE.md, bottom: SPACE.sm + SPACE.xxs }
 
 export type LookingForCardProps = {
   /** The word, and its name for a screen reader: "Friendship". */
@@ -29,6 +37,8 @@ export type LookingForCardProps = {
   /** The photo (`assets/onboarding/looking-*.jpg`). Decorative. */
   image: ImageProps['source']
   selected?: boolean
+  /** `tall` for a page's three-across grid (event preferences); `regular` (the default) for onboarding's row. */
+  size?: 'regular' | 'tall'
   onPress?: () => void
   disabled?: boolean
   /** The design gallery only: draws a transient state with no finger or keyboard. */
@@ -48,12 +58,14 @@ export type LookingForCardProps = {
  * unselected tile takes the 50% hairline. Reduce Transparency: nothing (a
  * scrim is not glass).
  */
-export function LookingForCard({ label, image, selected = false, onPress, disabled = false, previewState, testID }: LookingForCardProps) {
+export function LookingForCard({ label, image, selected = false, size = 'regular', onPress, disabled = false, previewState, testID }: LookingForCardProps) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const sel = useSelection()
   const [focused, setFocused] = useState(false)
+  const tall = size === 'tall'
+  const radius = tall ? TALL_RADIUS : RADIUS.sheet
 
   return (
     <View style={[styles.slot, previewState === 'pressed' && !android ? styles.pressedIos : null]}>
@@ -67,26 +79,34 @@ export function LookingForCard({ label, image, selected = false, onPress, disabl
         pressedScale={android ? 1 : PRESS.scale}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        accessibilityRole="button"
+        // Any of them at once, and a second tap clears one: a checkbox, as a deselectable RadioCard is.
+        accessibilityRole="checkbox"
         accessibilityLabel={label}
-        accessibilityState={{ selected, disabled }}
+        accessibilityState={{ checked: selected, disabled }}
         style={disabled && { opacity: OPACITY.disabled }}
       >
-        <View testID={testID && `${testID}-tile`} style={styles.tile}>
+        <View testID={testID && `${testID}-tile`} style={[styles.tile, tall && styles.tall]}>
           <Image source={image} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} />
           <PhotoScrim testID={testID && `${testID}-scrim`} foot={SCRIM_FOOT_ALPHA} style={styles.scrim} />
-          <Text style={[font('button', bold), styles.word]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
+          <Text
+            style={[tall ? font('control', true) /* Flow 4 `.icd b`: 700 15/20 */ : font('button', bold), styles.word, tall && styles.tallWord]}
+            maxFontSizeMultiplier={CONTROL_FONT_CAP}
+            numberOfLines={tall ? 2 : 1}
+          >
             {label}
           </Text>
-          <CheckDisc selected={selected} testID={testID && `${testID}-check`} />
+          <CheckDisc selected={selected} inset={tall ? SPACE.md : undefined} testID={testID && `${testID}-check`} />
           {contrast && !selected ? (
-            <View testID={testID && `${testID}-ring`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.edge, styles.contrast]} />
+            <View testID={testID && `${testID}-ring`} pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius }, styles.contrast]} />
+          ) : null}
+          {selected && tall ? (
+            <View testID={testID && `${testID}-ring`} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ringIn, { borderRadius: radius, borderColor: sel.edge }]} />
           ) : null}
         </View>
-        {selected ? <View testID={testID && `${testID}-ring`} pointerEvents="none" style={[styles.selected, { borderColor: sel.edge }]} /> : null}
+        {selected && !tall ? <View testID={testID && `${testID}-ring`} pointerEvents="none" style={[styles.selected, { borderColor: sel.edge }]} /> : null}
       </ScalePress>
       {focused || previewState === 'focused'
-        ? focusRing(RADIUS.sheet).map((r, i) => <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={r} />)
+        ? focusRing(radius).map((r, i) => <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={r} />)
         : null}
     </View>
   )
@@ -98,7 +118,9 @@ const styles = StyleSheet.create({
   tile: { height: TILE_HEIGHT, borderRadius: RADIUS.sheet, overflow: 'hidden', backgroundColor: COLOR.surface },
   scrim: { position: 'absolute', top: SCRIM_TOP, bottom: 0, left: 0, right: 0 },
   word: { position: 'absolute', ...WORD_INSET, right: WORD_INSET.left, color: COLOR.textPrimary },
-  edge: { borderRadius: RADIUS.sheet },
+  tall: { height: TALL_HEIGHT, borderRadius: TALL_RADIUS },
+  tallWord: { ...TALL_INSET, right: TALL_INSET.left },
+  ringIn: { borderWidth: RING_OUT },
   contrast: { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast },
   selected: {
     position: 'absolute',
