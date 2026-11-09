@@ -1,4 +1,4 @@
-import { CHECK_OUT_LABEL, OPEN_ROOM_LABEL, SWITCH_LABEL, checkOutCaption, switchCaption } from '../lib/switchCopy'
+import { CHECKING_OUT_LABEL, CHECK_OUT_LABEL, OPEN_ROOM_LABEL, SWITCH_LABEL, checkOutCaption, switchCaption } from '../lib/switchCopy'
 
 const LONG = 'The Very Long Name Of A Rooftop Sundowner With Vinyl, Small Plates And A Surprise Guest Set At The Old Mill'
 
@@ -10,6 +10,7 @@ describe('the words around switching rooms and checking out (SCRUM-970)', () => 
 
   it('names the event you check out of', () => {
     expect(CHECK_OUT_LABEL).toBe('Hold to check out')
+    expect(CHECKING_OUT_LABEL).toBe('Checking you out…')
     expect(OPEN_ROOM_LABEL).toBe('Open the room')
     expect(checkOutCaption('Vinyl Night')).toBe('Checks you out of Vinyl Night.')
   })

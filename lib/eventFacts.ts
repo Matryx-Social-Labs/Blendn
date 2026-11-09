@@ -58,6 +58,8 @@ export type EventDockModel = {
   sub?: string
   /** The state is the RSVP's own off-switch (its "Change"). */
   change?: boolean
+  /** Checked in: the state's link ("Check out") opens the check-out sheet (option A, SCRUM-1035). */
+  checkOut?: boolean
   action?: { label: string; kind: 'primary' | 'lit'; icon?: IconName; does: DockDoes }
 }
 
@@ -91,7 +93,7 @@ export function eventDock(s: {
       // A full night: nobody is asked to one somebody is still waiting for.
       return { state: 'On the waitlist', sub: 'Change', change: true }
     case 'going':
-      return { state: 'You’re in', action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'room' } }
+      return { state: 'You’re in', sub: 'Check out', checkOut: true, action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'room' } }
     case 'rate':
       return { state: 'Ended', sub: s.when, action: { label: s.alone ? 'Rate the night' : 'Rate who you met', kind: 'primary', icon: 'star', does: 'rate' } }
     case 'ended':

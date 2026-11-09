@@ -4,6 +4,8 @@
  */
 export const SWITCH_LABEL = 'Hold to switch'
 export const CHECK_OUT_LABEL = 'Hold to check out'
+/** The hold's busy words once held to the end, as the check-in's "Checking you in…". */
+export const CHECKING_OUT_LABEL = 'Checking you out…'
 export const OPEN_ROOM_LABEL = 'Open the room'
 
 const named = (name: string | null | undefined, fallback: string): string => name?.trim() || fallback

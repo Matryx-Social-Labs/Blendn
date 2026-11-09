@@ -5,7 +5,8 @@
  * under the action beside it.
  */
 import { render, screen } from '@testing-library/react-native'
-import { Dimensions } from 'react-native'
+import { createRef } from 'react'
+import { Dimensions, type View } from 'react-native'
 
 import { DockRow } from '../components/ds/DockRow'
 import { EventGuide } from '../components/scene/EventGuide'
@@ -78,5 +79,21 @@ describe('the dock line', () => {
     await render(dock())
     expect(screen.getByTestId('d').props.style).toEqual(expect.arrayContaining([expect.objectContaining({ flexDirection: 'column' })]))
     expect(slotOf(screen.getByTestId('d-sub') as never).lines).toBeUndefined()
+  })
+})
+
+describe('checked in: "You’re in" with its "Check out" link (option A, SCRUM-1035)', () => {
+  it('is one control, read as the state and its link, with a hint, and hands its ref back for focus to return to', async () => {
+    atScale(1)
+    const ref = createRef<View>()
+    await render(
+      <DockRow testID="d" state="You’re in" sub="Check out" subIsLink onPressState={jest.fn()} stateHint="Opens check out" stateRef={ref} action={{ label: 'Open the room', kind: 'primary', icon: 'door-open', onPress: jest.fn() }} />,
+    )
+    const link = screen.getByRole('button', { name: 'You’re in. Check out' })
+    expect(link.props.accessibilityHint).toBe('Opens check out')
+    expect(ref.current).not.toBeNull()
+    // The link's style: white and bold, as "Change".
+    expect(screen.getByTestId('d-sub').props.style).toEqual(expect.arrayContaining([expect.objectContaining({ color: '#FFFFFF' })]))
+    expect(slotOf(screen.getByTestId('d-sub') as never).lines).toBe(1)
   })
 })
