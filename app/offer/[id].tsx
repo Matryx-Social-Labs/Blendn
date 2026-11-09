@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated, { FadeIn, FadeOut, ReduceMotion } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
@@ -11,8 +12,9 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import { DoorTicket, OfferHeader, RegularAsk, RegularOff, RegularOn } from '../../components/offer/OfferSections'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
+import { useBrightScreen } from '../../lib/brightness'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
-import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, DURATION, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import {
@@ -33,6 +35,9 @@ import { showSheet, type Sheet } from '../../lib/sheet'
 /** The ticket's height while it loads, so the page does not jump when it lands. */
 const TICKET_SKELETON = 480
 const COACH_TEXT = 'Show this to the staff. They type the code and tap Redeemed. It works once, today.'
+/** M8: the placeholder crossfades to the pass. Opacity alone, so Reduce Motion keeps it. */
+const PASS_IN = FadeIn.duration(DURATION.base).reduceMotion(ReduceMotion.Never)
+const SKELETON_OUT = FadeOut.duration(DURATION.base).reduceMotion(ReduceMotion.Never)
 
 /** `gone`: not yours to open (404), nothing to retry. `failed`: the read did not work, with the server's own words if it gave any. */
 type Failure = { kind: 'gone' } | { kind: 'failed'; detail: string | null }
@@ -206,13 +211,13 @@ export default function OfferScreen() {
       <OfferHeader onBack={() => router.back()} onMore={offer ? openMore : undefined} moreLabel={offer ? `${offer.venue.name}’s offer, more` : 'More'} />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xxl }]} showsVerticalScrollIndicator={false}>
         {offer ? (
-          <>
+          <Animated.View entering={PASS_IN} style={styles.body}>
             <PassBody offer={offer} lastReadFailed={lastReadFailed} focused={focused} />
             {ask && prefs ? <RegularAsk venueName={offer.venue.name} prefs={prefs} saving={saving} onYes={sayYes} onLater={notNow} /> : null}
             {regulars && prefs?.known ? <RegularOn venueName={offer.venue.name} saving={saving} onOff={() => void turnOff()} /> : null}
             {regulars && turnedOff && !prefs?.known ? <RegularOff venueName={offer.venue.name} /> : null}
             <Button kind="tertiary" label={`See ${offer.venue.name}`} onPress={() => router.push(`/venue/${offer.venue.id}` as never)} />
-          </>
+          </Animated.View>
         ) : failure ? (
           <StateScreen
             icon={failure.kind === 'gone' ? 'ticket' : 'cloud-off'}
@@ -226,9 +231,9 @@ export default function OfferScreen() {
             testID="offer-failed"
           />
         ) : (
-          <View accessible accessibilityLabel="Loading the offer">
+          <Animated.View exiting={SKELETON_OUT} accessible accessibilityLabel="Loading the offer">
             <SkeletonBlock width="100%" height={TICKET_SKELETON} borderRadius={RADIUS.card} />
-          </View>
+          </Animated.View>
         )}
       </ScrollView>
     </View>
@@ -249,6 +254,8 @@ function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; last
     return () => clearInterval(timer)
   }, [])
   const view = passView(offer, now, lastReadFailed)
+  // A code held up to a counter reads at full brightness (Google Pay, UNIQLO): only while it shows and this screen is in front.
+  useBrightScreen(view.door === 'live' && focused)
 
   // The ring counts down on this phone's clock; the turn is the server's, so move it by the skew.
   const turn = offer.pass && view.door === 'live' ? Date.parse(offer.pass.rotatesAt) - serverOffset() : undefined
@@ -298,6 +305,8 @@ function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; last
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, gap: SPACE.lg },
+  // The board's pass sits 16 under the circles: the header's BAR_BOTTOM gives 10 of it, this the other 6 (driven: 18 at SPACE.sm).
+  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs + SPACE.xxs, gap: SPACE.lg },
+  body: { gap: SPACE.lg },
   foot: { color: COLOR.textSecondary, textAlign: 'center' },
 })
