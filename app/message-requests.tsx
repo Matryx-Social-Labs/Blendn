@@ -71,8 +71,6 @@ function RequestsScreen() {
         renderItem={renderItem}
         ItemSeparatorComponent={Gap}
         itemLayoutAnimation={reduceMotion ? undefined : REQUEST_REFLOW}
-        // Its rows' exits and this reflow need their views: clipping (Android's default) cuts them in one frame (SCRUM-1001).
-        removeClippedSubviews={false}
         onEndReached={loadMore}
         onEndReachedThreshold={1.5}
         initialNumToRender={8}

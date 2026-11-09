@@ -812,8 +812,6 @@ function GoingScreenInner() {
             testID="going-list"
             data={items}
             itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
-            // Its rows' exits and this reflow need their views: clipping (Android's default) cuts them in one frame (SCRUM-1001).
-            removeClippedSubviews={false}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             // Hundreds of past nights are rows drawn a screen at a time, never the whole list.

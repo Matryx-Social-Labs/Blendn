@@ -112,8 +112,7 @@ function AddFriendsScreenContent() {
         onEndReached={() => void loadMore('outgoing')}
         initialNumToRender={8}
         windowSize={7}
-        // Rows leave with an exit and the list reflows (DS #16): clipping takes their views out from under it, a one-frame cut (SCRUM-1001).
-        removeClippedSubviews={false}
+        // No removeClippedSubviews: on iOS it takes a leaving row's view out from under its exit and the reflow, a one-frame cut (SCRUM-1001).
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xl }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
         showsVerticalScrollIndicator={false}

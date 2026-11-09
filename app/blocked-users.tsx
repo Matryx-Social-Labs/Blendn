@@ -223,8 +223,6 @@ function BlockedUsersContent() {
         <Animated.FlatList
           testID="blocked-users-list"
           itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
-          // Its rows' exits and this reflow need their views: clipping (Android's default) cuts them in one frame (SCRUM-1001).
-          removeClippedSubviews={false}
           data={blockedUsers}
           keyExtractor={(item) => item.blocked_id}
           renderItem={renderBlockedUser}

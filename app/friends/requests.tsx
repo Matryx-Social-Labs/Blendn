@@ -85,8 +85,7 @@ function FriendRequestsScreenContent() {
           onEndReached={() => void loadMore('incoming')}
           initialNumToRender={6}
           windowSize={7}
-          // Rows leave with an exit and the list reflows (DS #16): clipping takes their views out from under it, a one-frame cut (SCRUM-1001).
-          removeClippedSubviews={false}
+          // No removeClippedSubviews: on iOS it takes a leaving row's view out from under its exit and the reflow, a one-frame cut (SCRUM-1001).
           ListFooterComponent={
             <PagedFooter loading={incomingPage.loadingMore} failed={incomingPage.moreFailed} onRetry={() => void loadMore('incoming')} testID="requests-more" />
           }
