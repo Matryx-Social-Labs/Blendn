@@ -22,6 +22,7 @@ export function LocateButton({
   pending,
   drawerTop,
   drawer,
+  lift,
   onPress,
 }: {
   /** False at full: still drawn while its fade finishes, but neither tapped nor read. */
@@ -33,10 +34,12 @@ export function LocateButton({
   drawerTop: SharedValue<number>
   /** The drawer's top edge at half and at full. */
   drawer: { half: number; full: number }
+  /** How far a banner on the map pushes it up (the banner's height and its gap; 0 with none). */
+  lift?: SharedValue<number>
   onPress: () => void
 }) {
   const ride = useAnimatedStyle(() => {
-    const { translateY, opacity } = locateRide(drawerTop.get(), drawer)
+    const { translateY, opacity } = locateRide(drawerTop.get(), drawer, lift ? lift.get() : 0)
     return { transform: [{ translateY }], opacity }
   })
   return (

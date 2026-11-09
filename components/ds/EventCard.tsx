@@ -1,8 +1,9 @@
 import { Image } from 'expo-image'
-import { useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { useRef, useState, type ReactNode } from 'react'
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { H } from '../../lib/haptics'
+import { tint } from '../../lib/theme'
 import { measureAnchor } from './anchor'
 import type { Rect } from './chatShared'
 
@@ -15,6 +16,8 @@ import { printable, PROMOTED_LABEL } from '../../lib/pulseSections'
 import { categoryGlyph } from '../../lib/categoryGlyph'
 import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { compactCount } from '../../lib/format'
+import { DateStamp } from './DateStamp'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
 
@@ -36,7 +39,23 @@ export type EventCardProps = {
   here?: number
   /** A paid placement: a "PROMOTED" scrim pill top-right, read first. Editorial picks carry none. */
   promoted?: boolean
+  /** `hero` only: a label line over the title ("Featured · Club night"), in the label voice. Read with the card's own label by its caller. */
+  overline?: string
+  /** `hero` only: drawn top-right after the Promoted pill (the Pulse lead's pager pips). Decorative: not read. */
+  corner?: ReactNode
+  /**
+   * `hero` only: `lead`, the Pulse's lead card (Flow 3 board `.lead .foot`): the words 20 in and 18 up, and the people
+   * line under the venue ("86 going") instead of a pill beside the time.
+   * `row` only: `result`, a search result (Flow 3 board "C · search"; owner 2026-11-05): the time over the title,
+   * "at venue · 2.2 km" under it, the photo on the right at 72 pt.
+   */
+  layout?: 'lead' | 'result'
   cover?: string | null
+  /**
+   * `row` only: the date stamp leads the row in place of the cover (Flow 4 G-A, Going): one row shape for every event, and
+   * a missing cover can never show. `past` dims the day.
+   */
+  stamp?: { iso: string; timeZone?: string | null; past?: boolean }
   /**
    * `row` only: a place's type art (`VenuePlate`) in the thumb where an event would have its cover: a visit to a place, not a
    * night (Going › Past). A type it has no plate for draws the bar's.
@@ -77,8 +96,13 @@ export type EventCardProps = {
 const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 300 }, compact: { width: 240, height: 170 } }
 /** The scrim covers the lower 62% of the photo (the page). */
 const SCRIM_HEIGHT = '62%'
+/** The Pulse lead's scrim (board `.lead .scrim`): 70%, and 78% at large text, where the words climb higher. */
+const LEAD_SCRIM = { base: '70%', large: '78%' } as const
+const OVERLINE_ALPHA = 0.78
 /** A row's height at one line of title; a two-line title grows it (a minimum, never a box). */
 const ROW_HEIGHT = 64
+/** A search result's photo (board `.urow .ph`): 72 pt. */
+const RESULT_THUMB = SIZE.primary + SPACE.lg
 /**
  * The distance column: 64 at least, so the rows' thumbs line up at the default size, and sized to its words past that
  * (a larger font scale, "9.9 km") up to 96, which holds six Geist Mono characters at the 1.3 cap. A fixed 64 clipped
@@ -110,7 +134,8 @@ export function eventLabel({
   saved,
 }: Pick<EventCardProps, 'title' | 'time' | 'venue' | 'distance' | 'going' | 'here' | 'promoted' | 'saved'>) {
   const { here: inside, going: coming } = crowd({ here, going })
-  const people = inside ? `${inside} here now` : coming ? `${coming} going` : null
+  // Read whole ("1,240 going") where the card shows "1.2k going".
+  const people = inside ? `${inside.toLocaleString('en-US')} here now` : coming ? `${coming.toLocaleString('en-US')} going` : null
   // "Live" leads the way "Promoted" does: it is the first thing to know about the card.
   const live = time === 'Live'
   const parts = [saved ? 'You’re going' : null, title, live ? null : time, `at ${venue}`, distance, people].filter(Boolean).join(', ')
@@ -134,9 +159,10 @@ export function eventLabel({
  * on the card and the scrim 20% deeper.
  */
 export function EventCard(props: EventCardProps) {
-  const { kind, title, time, venue, distance, lead, promoted, cover, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
+  const { kind, title, time, venue, distance, lead, promoted, overline, corner, layout, cover, stamp, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const { fontScale } = useWindowDimensions()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const label = props.label ?? eventLabel(props)
@@ -163,7 +189,21 @@ export function EventCard(props: EventCardProps) {
   }
 
   if (kind === 'row') {
-    const leading = lead === 'distance' && !!distance
+    const result = layout === 'result'
+    const leading = !result && lead === 'distance' && !!distance
+    const thumb = (
+      <View testID={testID && `${testID}-thumb`} style={[styles.thumb, result && styles.resultThumb]}>
+            {stamp ? (
+              <DateStamp iso={stamp.iso} timeZone={stamp.timeZone} past={stamp.past} />
+            ) : cover ? (
+              <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+            ) : plate ? (
+              <VenuePlate type={plate} />
+            ) : (
+              <CategoryPlate category={category} size={SIZE.primary} testID={testID && `${testID}-plate`} />
+            )}
+      </View>
+    )
     return (
       <View ref={box} collapsable={false} style={style}>
         <Pressable
@@ -176,52 +216,80 @@ export function EventCard(props: EventCardProps) {
           onBlur={() => setFocused(false)}
           android_ripple={{ color: PRESSED_WASH.android }}
           {...a11y}
-          style={({ pressed }) => [styles.row, (pressed || previewState === 'pressed') && !android && styles.rowPressed]}
+          style={({ pressed }) => [styles.row, result && styles.resultRow, (pressed || previewState === 'pressed') && !android && styles.rowPressed]}
         >
           {leading ? (
             <Text testID={testID && `${testID}-lead`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.lead]}>
               <MonoRun text={distance} />
             </Text>
           ) : null}
-          <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
-            {cover ? (
-              <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
-            ) : plate ? (
-              <VenuePlate type={plate} />
-            ) : (
-              <CategoryPlate category={category} size={SIZE.primary} testID={testID && `${testID}-plate`} />
-            )}
-          </View>
-          <View style={styles.rowText}>
-            <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
-              {title}
-            </Text>
-            {/*
-              The venue gives way to a long name; the time, the thing the row is for, never does. Beside the distance
-              column (Nearby) the venue has its own line: sharing one with the time at 360 dp and 1.3 left it "…" (R6-6).
-            */}
-            {leading && venue ? (
-              <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
-                {venue}
+          {result ? null : thumb}
+          {result ? (
+            <>
+              <View testID={testID && `${testID}-words`} style={[styles.rowText, styles.resultWords]}>
+                <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+                  {time}
+                </Text>
+                <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
+                  {title}
+                </Text>
+                {/* "at <venue>" gives way to a long name; " · 2.2 km" is its own slot and stays whole (owner 2026-11-05). */}
+                <View style={styles.rowMeta}>
+                  {venue ? (
+                    <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+                      {`at ${venue}`}
+                    </Text>
+                  ) : null}
+                  {distance ? (
+                    <Text testID={testID && `${testID}-distance`} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.fixed]}>
+                      {venue ? '· ' : ''}
+                      <Text style={[font('note', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
+                        <MonoRun text={distance} />
+                      </Text>
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+              {thumb}
+            </>
+          ) : (
+            <View style={styles.rowText}>
+              <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink]}>
+                {title}
               </Text>
-            ) : null}
-            <View style={styles.rowMeta}>
-              {leading ? null : (
-                <>
-                  <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-                    {[venue, distance].filter(Boolean).join(' · ')}
-                  </Text>
-                  {/* Outside the run that truncates, so a long venue keeps its "·" before the time (r7 L12). */}
-                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
-                    ·
-                  </Text>
-                </>
-              )}
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-                <MonoRun text={time} />
-              </Text>
+              {/*
+                The venue gives way to a long name; the time, the thing the row is for, never does. Beside the distance
+                column (Nearby) the venue has its own line: sharing one with the time at 360 dp and 1.3 left it "…" (R6-6).
+              */}
+              {leading && venue ? (
+                <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
+                  {venue}
+                </Text>
+              ) : null}
+              <View style={styles.rowMeta}>
+                {leading ? null : (
+                  <>
+                    {/* The venue gives way; its distance is its own slot and never does (owner 2026-11-05: no variable glued in a tight slot). */}
+                    <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+                      {venue}
+                    </Text>
+                    {distance ? (
+                      <Text testID={testID && `${testID}-distance`} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.fixed]}>
+                        {`· ${distance}`}
+                      </Text>
+                    ) : null}
+                    {/* Outside the run that truncates, so a long venue keeps its "·" before the time (r7 L12). */}
+                    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
+                      ·
+                    </Text>
+                  </>
+                )}
+                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+                  <MonoRun text={time} />
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
         </Pressable>
         {ring ? <Ring radius={RADIUS.rowInCard} testID={testID} /> : null}
       </View>
@@ -255,32 +323,37 @@ export function EventCard(props: EventCardProps) {
         ) : (
           <CategoryPlate category={category} testID={testID && `${testID}-plate`} />
         )}
-        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={styles.scrim} />
+        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={[styles.scrim, layout === 'lead' && { height: fontScale > CONTROL_FONT_CAP ? LEAD_SCRIM.large : LEAD_SCRIM.base }]} />
         <View style={styles.pills}>
           <TimeBadge when={time} />
-          {here ? (
+          {layout === 'lead' ? null : here ? (
             <ScrimPill testID={testID && `${testID}-here`}>
               <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{here}</Text>
+                <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount(here)}</Text>
                 {' here now'}
               </Text>
             </ScrimPill>
           ) : going ? (
             <ScrimPill>
               <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                {`${going} going`}
+                {`${compactCount(going)} going`}
               </Text>
             </ScrimPill>
           ) : null}
         </View>
-        {promoted ? (
-          <View style={styles.promoted} testID={testID && `${testID}-promoted`}>
-            <ScrimPill>
-              <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
-                {PROMOTED_LABEL.toUpperCase()}
-              </Text>
-            </ScrimPill>
+        {promoted || corner ? (
+          <View style={styles.promoted}>
+            {promoted ? (
+              <View testID={testID && `${testID}-promoted`}>
+                <ScrimPill>
+                  <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
+                  <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>
+                    {PROMOTED_LABEL.toUpperCase()}
+                  </Text>
+                </ScrimPill>
+              </View>
+            ) : null}
+            {hero ? corner : null}
           </View>
         ) : null}
         {saved ? (
@@ -290,13 +363,32 @@ export function EventCard(props: EventCardProps) {
             </Text>
           </View>
         ) : null}
-        <View style={[styles.foot, hero ? styles.footHero : styles.footCompact]}>
+        <View testID={testID && `${testID}-foot`} style={[styles.foot, hero ? (layout === 'lead' ? styles.footLead : styles.footHero) : styles.footCompact]}>
+          {hero && overline ? (
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.overline]}>
+              {overline.toUpperCase()}
+            </Text>
+          ) : null}
           <Text numberOfLines={2} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font(hero ? 'title' : 'bodyStrong', bold), styles.ink]}>
             {title}
           </Text>
-          <Text numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
-            {[`at ${venue}`, distance].filter(Boolean).join(' · ')}
-          </Text>
+          {/* "at <venue>" gives way to a long name; " · 2.2 km" is its own slot and stays whole. */}
+          <View style={styles.footWhere}>
+            <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink, styles.shrink]}>
+              {`at ${venue}`}
+            </Text>
+            {distance ? (
+              <Text testID={testID && `${testID}-distance`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink, styles.fixed]}>
+                {` · ${distance}`}
+              </Text>
+            ) : null}
+          </View>
+          {layout === 'lead' && (here || going) ? (
+            <Text testID={testID && `${testID}-people`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink]}>
+              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount((here ?? going) as number)}</Text>
+              {here ? ' here now' : ' going'}
+            </Text>
+          ) : null}
         </View>
         {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
         {previewState === 'pressed' && android ? <View testID={testID && `${testID}-wash`} style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
@@ -336,7 +428,7 @@ const styles = StyleSheet.create({
   card: { flex: 1, overflow: 'hidden', backgroundColor: COLOR.surface },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: SCRIM_HEIGHT },
   pills: { position: 'absolute', top: SPACE.md, left: SPACE.md, flexDirection: 'row', gap: SPACE.sm },
-  promoted: { position: 'absolute', top: SPACE.md, right: SPACE.md },
+  promoted: { position: 'absolute', top: SPACE.md, right: SPACE.md, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   saved: {
     position: 'absolute',
     top: SPACE.md + PILL_HEIGHT + SPACE.sm,
@@ -350,9 +442,13 @@ const styles = StyleSheet.create({
   onWhite: { color: COLOR.ink },
   foot: { position: 'absolute', gap: SPACE.xxs },
   footHero: { left: SPACE.xl, right: SPACE.xl, bottom: SPACE.xl },
+  // Board `.lead .foot`: 20 in, 18 up.
+  footLead: { left: SPACE.lg + SPACE.xs, right: SPACE.lg + SPACE.xs, bottom: SPACE.lg + SPACE.xxs },
   footCompact: { left: SPACE.lg, right: SPACE.lg, bottom: SPACE.lg },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
+  // Board `.lead .lbl`: white at 78% on the photo's scrim, brighter than the page's secondary grey.
+  overline: { color: tint(COLOR.textPrimary, OVERLINE_ALPHA) },
   tabular: { fontVariant: ['tabular-nums'] },
   wash: { backgroundColor: PRESSED_WASH.android },
   row: { minHeight: ROW_HEIGHT, paddingVertical: SPACE.xs, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },
@@ -360,6 +456,12 @@ const styles = StyleSheet.create({
   lead: { minWidth: LEAD_WIDTH, maxWidth: LEAD_MAX, flexShrink: 0, color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
   thumb: { width: SIZE.primary, height: SIZE.primary, borderRadius: RADIUS.thumb, overflow: 'hidden', backgroundColor: COLOR.surface },
   rowText: { flex: 1, minWidth: 0 },
+  // Board `.urow`: 88 tall at least, 16 between the words and a 72 pt photo with a 16 corner.
+  resultRow: { minHeight: RESULT_THUMB + 2 * SPACE.sm, paddingVertical: SPACE.sm, gap: SPACE.lg },
+  resultThumb: { width: RESULT_THUMB, height: RESULT_THUMB, borderRadius: RADIUS.rowInCard },
+  resultWords: { gap: SPACE.xxs },
   rowMeta: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.xs },
   shrink: { flexShrink: 1 },
+  fixed: { flexShrink: 0 },
+  footWhere: { flexDirection: 'row', alignItems: 'baseline' },
 })

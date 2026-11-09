@@ -4,7 +4,7 @@
  * centred title; glass circles on the right; the Save pill; and the
  * accessibility matrix.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
@@ -183,15 +183,17 @@ describe('the Save pill’s height is the circle’s', () => {
   })
 })
 
-describe('progress: where you are in a short run of people (Rate)', () => {
-  it('is Geist Mono in meta at textSecondary, read as "Person 2 of 5", with its font growth capped', async () => {
+describe('progress: where you are in a short run of steps (Rate)', () => {
+  it('is Geist Mono 13/20 at textSecondary, centred in the circle row (Flow 4 `.pg3`), read as "Step 2 of 5", its growth capped', async () => {
     await draw({ progress: '2 of 5', testID: 'bar' })
     const text = screen.getByTestId('bar-progress')
     expect(text.props.children).toBe('2 of 5')
-    expect(text.props.accessibilityLabel).toBe('Person 2 of 5')
+    expect(text.props.accessibilityLabel).toBe('Step 2 of 5')
     expect(text.props.maxFontSizeMultiplier).toBeDefined()
     const style = StyleSheet.flatten(text.props.style)
-    expect(style).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], fontSize: TYPE.meta.fontSize, color: COLOR.textSecondary })
+    expect(style).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], fontSize: 13, lineHeight: TYPE.meta.lineHeight, color: COLOR.textSecondary, textAlign: 'center' })
+    // Not in the actions' column at the right: its own layer over the row, so it is centred whatever is beside it.
+    expect(within(screen.getByTestId('bar-right')).queryByTestId('bar-progress')).toBeNull()
   })
 
   it('is not drawn when there is none', async () => {
@@ -199,11 +201,20 @@ describe('progress: where you are in a short run of people (Rate)', () => {
     expect(screen.queryByTestId('bar-progress')).toBeNull()
   })
 
-  it('sits at the right, after the actions', async () => {
+  it('beside actions, still centred: the actions keep the right and the pager its own layer', async () => {
     await draw({ progress: '1 of 3', actions: [{ icon: 'share', label: 'Share', onPress: () => {} }], testID: 'bar' })
-    const right = screen.getByTestId('bar-right')
-    const kinds = right.props.children.flat().filter(Boolean)
-    expect(kinds.length).toBeGreaterThanOrEqual(2)
+    expect(within(screen.getByTestId('bar-right')).getByRole('button', { name: 'Share' })).toBeTruthy()
+    expect(within(screen.getByTestId('bar-right')).queryByTestId('bar-progress')).toBeNull()
     expect(screen.getByTestId('bar-progress')).toBeTruthy()
+  })
+})
+
+describe('subLines (Lobby, L-A: the event under "Lobby" is one line, ellipsized)', () => {
+  const long = 'Kerala Design Festival 2026: Late Night Print Fair, Riso Workshop & Closing Party Edition'
+  it('draws the sub in one line when asked; the default stays two (control)', async () => {
+    await render(<TopBar title="Lobby" sub={long} subLines={1} onBack={() => {}} />)
+    expect(screen.getByText(long).props.numberOfLines).toBe(1)
+    await render(<TopBar title="Lobby" sub={long} onBack={() => {}} />)
+    expect(screen.getByText(long).props.numberOfLines).toBe(2)
   })
 })

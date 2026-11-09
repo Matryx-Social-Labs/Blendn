@@ -85,6 +85,11 @@ export const GRADIENT = {
     colors: ['#D83F0F', '#BB556B', '#925DA9'],
     locations: [0, 0.5, 1],
   },
+  text: {
+    angle: 90,
+    colors: ['#F05423', '#BE5C71', '#A47BBF'],
+    locations: [0, 0.5, 1],
+  },
 } as const
 
 /** Material tiers (§5): glass (iOS 26+), blur (iOS 16.4–25), solid (Android Tier B, Reduce Transparency). Drawn only by `<Material>`. */
@@ -127,6 +132,14 @@ export const MATERIAL = {
     {
       radius: 28,
       color: 'rgba(190,92,113,0.40)',
+    },
+  ],
+  glowLead: [
+    {
+      offsetY: 18,
+      radius: 60,
+      spread: -18,
+      color: 'rgba(240,84,35,0.55)',
     },
   ],
 } as const
@@ -189,6 +202,42 @@ export const TYPE = {
     lineHeight: 24,
     letterSpacing: 0,
   },
+  tab: {
+    fontFamily: 'Satoshi_700Bold',
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
+  },
+  control: {
+    fontFamily: 'Satoshi_500Medium',
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: 0,
+  },
+  rowTitle: {
+    fontFamily: 'Satoshi_500Medium',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
+  group: {
+    fontFamily: 'Satoshi_700Bold',
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
+  note: {
+    fontFamily: 'Satoshi_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0,
+  },
+  lede: {
+    fontFamily: 'Satoshi_400Regular',
+    fontSize: 15,
+    lineHeight: 22,
+    letterSpacing: 0,
+  },
   meta: {
     fontFamily: 'Satoshi_400Regular',
     fontSize: 14,
@@ -225,6 +274,12 @@ export const MAX_FONT_SCALE = {
   button: 2,
   body: 2,
   bodyStrong: 2,
+  tab: 1.3,
+  control: 1.3,
+  rowTitle: 1.5,
+  group: 1.5,
+  note: 1.5,
+  lede: 2,
   meta: 2,
   caption: 1.3,
   label: 2,
@@ -277,9 +332,13 @@ export const SIZE = {
   input: 56,
   control: 48,
   tag: 32,
+  tagHeader: 36,
+  circleButtonSm: 40,
   badge: 18,
   tabBar: 64,
+  tabBarCompact: 52,
   disc: 56,
+  discCompact: 44,
   circleButton: 44,
   circleButtonAndroid: 48,
   topBarAndroid: 64,

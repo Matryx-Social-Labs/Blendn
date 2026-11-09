@@ -35,7 +35,7 @@ export function lockFor(errorCode: string | null | undefined, serverText?: strin
     case 'CHAT_CLOSED': {
       // The server words its closed reasons apart (lib/chat-window.ts there); archived reads as closed.
       const text = serverText ?? ''
-      const state: ComposerState = /opens 24 hours/i.test(text) ? 'notopen' : /no longer available/i.test(text) ? 'hidden' : 'closed'
+      const state: ComposerState = /opens 24 hours|opens when the doors open/i.test(text) ? 'notopen' : /no longer available/i.test(text) ? 'hidden' : 'closed'
       return { state, reason: serverText }
     }
     case 'RATE_LIMITED':

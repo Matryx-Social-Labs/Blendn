@@ -135,12 +135,14 @@ describe('the page follows the keyboard through react-native-keyboard-controller
   })
 
   it('no screen of the entry flow keeps the hand-written reveal or React Native’s avoiding view', () => {
-    for (const rel of ['components/onboarding/OnboardingScreen.tsx', 'app/sign-in.tsx']) {
+    // The steps ride the keyboard in KeyboardPage; the email forms in their sheet (Flow 1c), on the same controller's frames.
+    for (const [rel, page] of [['components/onboarding/OnboardingScreen.tsx', 'KeyboardPage'], ['app/sign-in.tsx', 'EmailSheet'], ['app/forgot-password.tsx', 'EmailSheet']]) {
       const src = read(rel)
       expect(src).not.toMatch(/revealFocused|useRevealFocused/)
       expect(src).not.toMatch(/KeyboardAvoidingView/)
-      expect(src).toContain('KeyboardPage')
+      expect(src).toContain(page)
     }
+    expect(read('components/onboarding/EmailSheet.tsx')).toMatch(/useKeyboardContext\(\)\.reanimated/)
     expect(read('components/onboarding/KeyboardPage.tsx')).toMatch(/KeyboardAwareScrollView, KeyboardEvents, KeyboardStickyView.* \} from 'react-native-keyboard-controller'/)
   })
 })

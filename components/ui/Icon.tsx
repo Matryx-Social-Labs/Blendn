@@ -37,6 +37,7 @@ import BellOff from 'lucide-react-native/icons/bell-off'
 import Bookmark from 'lucide-react-native/icons/bookmark'
 import Briefcase from 'lucide-react-native/icons/briefcase'
 import Calendar from 'lucide-react-native/icons/calendar'
+import CalendarPlus from 'lucide-react-native/icons/calendar-plus'
 import CalendarCheck from 'lucide-react-native/icons/calendar-check'
 import CalendarOff from 'lucide-react-native/icons/calendar-off'
 import CalendarX from 'lucide-react-native/icons/calendar-x'
@@ -76,6 +77,7 @@ import FileText from 'lucide-react-native/icons/file-text'
 import FileX from 'lucide-react-native/icons/file-x'
 import FingerprintPattern from 'lucide-react-native/icons/fingerprint-pattern'
 import Flag from 'lucide-react-native/icons/flag'
+import Footprints from 'lucide-react-native/icons/footprints'
 import Ghost from 'lucide-react-native/icons/ghost'
 import Gift from 'lucide-react-native/icons/gift'
 import GraduationCap from 'lucide-react-native/icons/graduation-cap'
@@ -104,6 +106,7 @@ import Martini from 'lucide-react-native/icons/martini'
 import Megaphone from 'lucide-react-native/icons/megaphone'
 import MessageCircle from 'lucide-react-native/icons/message-circle'
 import MessageCircleOff from 'lucide-react-native/icons/message-circle-off'
+import MessageSquare from 'lucide-react-native/icons/message-square'
 import MessageSquareDashed from 'lucide-react-native/icons/message-square-dashed'
 import MessageSquareOff from 'lucide-react-native/icons/message-square-off'
 import MicOff from 'lucide-react-native/icons/mic-off'
@@ -112,9 +115,12 @@ import Moon from 'lucide-react-native/icons/moon'
 import Music from 'lucide-react-native/icons/music'
 import Music2, { __iconData as music2Data } from 'lucide-react-native/icons/music-2'
 import Navigation from 'lucide-react-native/icons/navigation'
+import Plane from 'lucide-react-native/icons/plane'
 import Pause from 'lucide-react-native/icons/pause'
+import Pen from 'lucide-react-native/icons/pen'
 import PenLine from 'lucide-react-native/icons/pen-line'
 import Pencil from 'lucide-react-native/icons/pencil'
+import Pin from 'lucide-react-native/icons/pin'
 import Play from 'lucide-react-native/icons/play'
 import Plus from 'lucide-react-native/icons/plus'
 import Radar from 'lucide-react-native/icons/radar'
@@ -147,6 +153,7 @@ import Timer from 'lucide-react-native/icons/timer'
 import Toilet from 'lucide-react-native/icons/toilet'
 import Trash from 'lucide-react-native/icons/trash'
 import Trees from 'lucide-react-native/icons/trees'
+import Type from 'lucide-react-native/icons/type'
 import TreePalm from 'lucide-react-native/icons/tree-palm'
 import TriangleAlert from 'lucide-react-native/icons/triangle-alert'
 import Unlink from 'lucide-react-native/icons/unlink'
@@ -199,6 +206,7 @@ const ICONS = {
   bookmark: Bookmark,
   briefcase: Briefcase,
   calendar: Calendar,
+  'calendar-plus': CalendarPlus,
   'calendar-check': CalendarCheck,
   'calendar-off': CalendarOff,
   'calendar-x': CalendarX,
@@ -238,6 +246,7 @@ const ICONS = {
   'file-x': FileX,
   'fingerprint-pattern': FingerprintPattern,
   flag: Flag,
+  footprints: Footprints,
   ghost: Ghost,
   gift: Gift,
   'graduation-cap': GraduationCap,
@@ -267,6 +276,7 @@ const ICONS = {
   megaphone: Megaphone,
   'message-circle': MessageCircle,
   'message-circle-off': MessageCircleOff,
+  'message-square': MessageSquare,
   'message-square-dashed': MessageSquareDashed,
   'message-square-off': MessageSquareOff,
   'mic-off': MicOff,
@@ -275,9 +285,12 @@ const ICONS = {
   music: Music,
   'music-2': Music2,
   navigation: Navigation,
+  plane: Plane,
   pause: Pause,
+  pen: Pen,
   'pen-line': PenLine,
   pencil: Pencil,
+  pin: Pin,
   play: Play,
   plus: Plus,
   radar: Radar,
@@ -313,6 +326,8 @@ const ICONS = {
   trees: Trees,
   'tree-palm': TreePalm,
   'triangle-alert': TriangleAlert,
+  // The Lobby compose sheet's Add alt text (C-A `ic('type',16)`).
+  type: Type,
   unlink: Unlink,
   user: User,
   'user-check': UserCheck,

@@ -6,7 +6,7 @@
  */
 import { render, screen } from '@testing-library/react-native'
 import * as Reanimated from 'react-native-reanimated'
-import { Text } from 'react-native'
+import { StyleSheet, Text } from 'react-native'
 
 import { LiquidDisc, stampIn } from '../components/ds/LiquidDisc'
 import { DURATION, SPRING } from '../lib/design/tokens'
@@ -76,6 +76,19 @@ describe('the Redeemed moment: the liquid settles and the stamp lands', () => {
   it('a stamp mounts with an entering animation (it lands, it does not appear)', async () => {
     await render(<LiquidDisc size={200} level={1} stamp={<Text>Redeemed 21:43</Text>} testID="d" />)
     expect(screen.getByTestId('d-stamp').props.entering).toBeDefined()
+  })
+
+  it('the stamp sits at the centre of the disc, over the mark (flow-4 offer board .stampR: left/top 50%)', async () => {
+    await render(<LiquidDisc size={184} level={1} stamp={<Text>Redeemed 21:43</Text>} testID="d" />)
+    expect(StyleSheet.flatten(screen.getByTestId('d-stamp').props.style)).toMatchObject({
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    })
   })
 
   it('no stamp, no stamp wrapper', async () => {

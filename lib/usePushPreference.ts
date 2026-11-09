@@ -107,7 +107,7 @@ export function usePushPreference() {
         const result = await apiClient.updateProfile(userId, { push_enabled: next })
         if (!result.success) throw new Error(result.error || 'Failed to save setting')
         if (next) {
-          // Turning it on is the answer onboarding's "Maybe later" deferred. It may ask the phone for the first time; read its answer back either way.
+          // Turning it on answers a decline or the deferral onboarding sets (lib/pushDecline.ts). It may ask the phone for the first time; read its answer back either way.
           void clearPushDeclined(userId)
             .then(() => initializePushNotifications())
             .catch(() => {})

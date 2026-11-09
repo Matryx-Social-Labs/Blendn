@@ -6,7 +6,7 @@
  * a decline, and the guards that keep one tap one request.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
-import { AccessibilityInfo } from 'react-native'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 const mockParams: Record<string, string> = {}
 const mockRedirect = jest.fn()
@@ -33,18 +33,23 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getBoard: jest.fn(),
+    getBoardPost: jest.fn(),
     getBoardRequests: jest.fn(),
     getEvent: jest.fn(),
     postToBoard: jest.fn(),
     askOnBoard: jest.fn(),
     withdrawBoardPost: jest.fn(),
+    rsvpToEvent: jest.fn(),
     reportBoardPost: jest.fn(),
     blockBoardPost: jest.fn(),
+    getBoardAlerts: jest.fn(),
+    setBoardAlerts: jest.fn(),
     // The next page of the board (lib/chatPaging) reads through the queue.
     queuedRequest: jest.fn(),
   },
 }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
+jest.mock('../lib/lobbySeen', () => ({ lobbySeenAt: jest.fn(), rememberLobbySeen: jest.fn() }))
 const mockPushListeners: ((n: { request: { content: { data: Record<string, unknown> } } }) => void)[] = []
 jest.mock('expo-notifications', () => ({
   addNotificationReceivedListener: (fn: (typeof mockPushListeners)[number]) => {
@@ -122,6 +127,8 @@ const pullToRefresh = () =>
     await screen.getByTestId('board-list').props.refreshControl.props.onRefresh()
   })
 
+// A test that pins the clock (the time words are relative) never leaves it pinned.
+afterEach(() => jest.useRealTimers())
 beforeEach(() => {
   jest.clearAllMocks()
   // Reset, not clear: a test that fails early must not leave queued answers for the next.
@@ -133,10 +140,10 @@ beforeEach(() => {
 })
 
 describe('the route', () => {
-  it('opens the board now that it is on', async () => {
+  it('opens the Lobby now that it is on', async () => {
     api.getBoard.mockResolvedValue(board([]))
     await render(<BoardRoute />)
-    expect(await screen.findByText("Nobody’s posted yet")).toBeTruthy()
+    expect(await screen.findByText(/Nobody’s posted yet/)).toBeTruthy()
     expect(mockRedirect).not.toHaveBeenCalled()
   })
 
@@ -159,24 +166,28 @@ describe('the two empty states', () => {
     api.getBoard.mockResolvedValue(board([]))
     await render(<BoardScreen />)
 
-    expect(await screen.findByText("Nobody’s posted yet")).toBeTruthy()
-    await fireEvent.press(screen.getByLabelText('Write a post'))
+    expect(await screen.findByText(/Nobody’s posted yet/)).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('lobby-start-seeking'))
     expect(screen.getByLabelText('Your post')).toBeTruthy()
-    expect(screen.getByText('0/500', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('0 / 280', { includeHiddenElements: true })).toBeTruthy()
   })
 
-  it('is closed once the server says the doors have opened, and offers the room', async () => {
+  it('never closes on the phone’s clock: past the start, the Lobby is what the server says (read-only from doors)', async () => {
     api.getEvent.mockResolvedValue(event(PAST))
     api.getBoard.mockResolvedValue(board([OFFER]))
     await render(<BoardScreen />)
+    expect(await screen.findByText(OFFER.body)).toBeTruthy()
+    expect(screen.queryByText('The Lobby has closed')).toBeNull()
+  })
 
-    expect(await screen.findByText("The board’s closed")).toBeTruthy()
-    await fireEvent.press(screen.getByLabelText('Open the room'))
-    // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
+  it('Open the room goes to the tabs first, then the room (Flow 4 Board #14)', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER], { state: 'read_only', phase: 'live' }) as never)
+    await render(<BoardScreen />)
+    await fireEvent.press(await screen.findByLabelText('Open the room'))
+    // The overlay is under the root stack, so opened from here it was under the board.
     const { router } = jest.requireMock('expo-router') as { router: { dismissAll: jest.Mock } }
     expect(router.dismissAll).toHaveBeenCalled()
     expect(openBlendn).toHaveBeenCalledWith()
-    expect(screen.queryByText(OFFER.body)).toBeNull()
   })
 
   it('takes the title from the server, not the link', async () => {
@@ -194,18 +205,18 @@ describe('two shapes, one order', () => {
     api.getBoard.mockResolvedValue(board([SEEKING, OFFER]))
     await render(<BoardScreen />)
 
-    expect(await screen.findByText('2 spaces left')).toBeTruthy()
+    expect(await screen.findByText('2 spots left')).toBeTruthy()
     const bodies = screen.getAllByText(/Driving from Indiranagar|Going alone/).map((n) => n.props.children)
     expect(bodies).toEqual([OFFER.body, SEEKING.body])
     // The kind in words too, so the counter is never the only difference.
-    expect(screen.getByText('Offering')).toBeTruthy()
-    expect(screen.getByText('Looking')).toBeTruthy()
+    expect(screen.getByText('Offering spots')).toBeTruthy()
+    expect(screen.getByText('Looking for someone to go with')).toBeTruthy()
   })
 
   it('offers nothing to ask on a chat post', async () => {
     api.getBoard.mockResolvedValue(board([{ ...SEEKING, id: 'p-chat', kind: 'chat', author: 'Lunar Fox' }]))
     await render(<BoardScreen />)
-    expect(await screen.findByText('Saying')).toBeTruthy()
+    expect(await screen.findByText('Just saying')).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Lunar Fox')).toBeNull()
   })
 
@@ -213,7 +224,7 @@ describe('two shapes, one order', () => {
     api.getBoard.mockResolvedValue(board([{ ...OFFER, spacesLeft: 0 }]))
     await render(<BoardScreen />)
     expect(await screen.findByText('Full')).toBeTruthy()
-    expect(screen.getByText('No spaces left')).toBeTruthy()
+    expect(screen.getByText('No spots left')).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
   })
 })
@@ -225,19 +236,19 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
     'Add your name, age, two interests and why you go out — people are deciding whether to travel with you',
     'You have 5 asks waiting for an answer. Give them a moment.',
     'You have sent a lot of requests this week. Try again in a few days.',
-    'The board closes when the doors open — the room is open instead',
-    "This looks like a phone number. The board is anonymous, so contact details can’t go on it.",
+    'The Lobby closes when the doors open — the room is open instead',
+    "This looks like a phone number. The Lobby is anonymous, so contact details can’t go on it.",
   ])('%s', async (reason) => {
     api.getBoard.mockResolvedValue(board([]))
     api.postToBoard.mockResolvedValue({ success: false, errorCode: reason.includes('phone') ? undefined : 'FORBIDDEN', error: reason })
     await render(<BoardScreen />)
 
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Two seats from Indiranagar')
     await fireEvent.press(screen.getByLabelText('Post'))
 
     expect(await screen.findByText(reason)).toBeTruthy()
-    expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'offer', body: 'Two seats from Indiranagar', spacesLeft: 1 })
+    expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'offer', subKind: 'ride', body: 'Two seats from Indiranagar', spacesLeft: 1 })
     // Still composing, with the words kept, so the fix can be followed and retried.
     expect(screen.getByLabelText('Your post').props.value).toBe('Two seats from Indiranagar')
     expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(reason)
@@ -246,11 +257,11 @@ describe('BD-CU01 on screen: a refused post names its gate', () => {
   it('shows the doors refusal even when the event could not be read', async () => {
     api.getEvent.mockResolvedValue({ success: false, error: 'No internet connection.' } as never)
     api.getBoard.mockResolvedValue(board([]))
-    const doors = 'The board closes when the doors open — the room is open instead'
+    const doors = 'The Lobby closes when the doors open — the room is open instead'
     api.postToBoard.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', error: doors })
     await render(<BoardScreen />)
 
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone?')
     await fireEvent.press(screen.getByLabelText('Post'))
     expect(await screen.findByText(doors)).toBeTruthy()
@@ -271,18 +282,18 @@ describe('posting', () => {
     })
     await render(<BoardScreen />)
 
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
-    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
+    await fireEvent.press(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Looking for' }))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Me too, from HSR')
     await fireEvent.press(screen.getByLabelText('Post'))
 
     await waitFor(() => expect(screen.getAllByText(/Me too, from HSR|Driving from/)[0].props.children).toBe('Me too, from HSR'))
-    expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'seeking', body: 'Me too, from HSR' })
+    expect(api.postToBoard).toHaveBeenCalledWith('e1', { kind: 'seeking', subKind: 'ride', body: 'Me too, from HSR' })
 
     // The next read lists it under the handle the server gave you.
     await pullToRefresh()
     expect(await screen.findByText('Lunar Fox')).toBeTruthy()
-    expect(screen.getByText('Looking · yours')).toBeTruthy()
+    expect(screen.getByText('You')).toBeTruthy()
   })
 
   it('opens the next post on an empty draft: text, kind and spaces all reset (PR #401 review)', async () => {
@@ -294,11 +305,11 @@ describe('posting', () => {
     api.withdrawBoardPost.mockResolvedValue({ success: true, data: { id: 'p-new', withdrawn: true } } as never)
     await render(<BoardScreen />)
 
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
-    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
+    await fireEvent.press(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Looking for' }))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Me too, from HSR')
     await fireEvent.press(screen.getByLabelText('Post'))
-    await screen.findByText('Looking · yours')
+    await screen.findAllByText('You')
 
     // Take it down, so the board offers Write a post again.
     await fireEvent.press(screen.getByLabelText('Take down your post'))
@@ -308,10 +319,10 @@ describe('posting', () => {
       await run()
     })
 
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
     expect(screen.getByLabelText('Your post').props.value).toBe('')
-    expect(screen.getByLabelText(/^I have space/).props.accessibilityState).toEqual(expect.objectContaining({ checked: true }))
-    expect(screen.getByLabelText('Spaces').props.accessibilityValue).toEqual(expect.objectContaining({ now: 1 }))
+    expect(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Offering' }).props.accessibilityState).toEqual(expect.objectContaining({ checked: true }))
+    expect(screen.getByLabelText('How many can join you').props.accessibilityValue).toEqual(expect.objectContaining({ now: 1 }))
   })
 
   it('sends one post for two taps', async () => {
@@ -320,7 +331,7 @@ describe('posting', () => {
     api.postToBoard.mockReturnValue(new Promise((r) => (settle = r)) as never)
     await render(<BoardScreen />)
 
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone?')
     const post = screen.getByLabelText('Post')
     await fireEvent.press(post)
@@ -372,7 +383,7 @@ describe('asking', () => {
 
   it('says a post that went — taken down, or a block either way — is closed', async () => {
     api.getBoard.mockResolvedValue(board([OFFER]))
-    api.askOnBoard.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'That post is no longer on the board' })
+    api.askOnBoard.mockResolvedValue({ success: false, errorCode: 'NOT_FOUND', error: 'That post is no longer in the Lobby' })
     await render(<BoardScreen />)
 
     await fireEvent.press(await screen.findByLabelText('Ask to join, Velvet Heron'))
@@ -473,11 +484,11 @@ describe('a card remembers your ask, and never says how it was answered', () => 
   })
 })
 
-describe('a board you may not read says why', () => {
+describe('a Lobby you may not read says why', () => {
   it.each([
-    ['FORBIDDEN', 'Mark yourself as going to post here', 'Not on this board yet'],
-    ['AGE_RESTRICTED', 'This event is 21+.', 'This board has an age limit'],
-    ['NOT_FOUND', 'Event not found', "This board isn’t here"],
+    ['FORBIDDEN', 'Mark yourself as going to post here', 'Not in this Lobby yet'],
+    ['AGE_RESTRICTED', 'This event is 21+.', 'This Lobby has an age limit'],
+    ['NOT_FOUND', 'Event not found', "This Lobby isn’t here"],
   ])('%s', async (errorCode, error, title) => {
     api.getBoard.mockResolvedValue({ success: false, errorCode, error })
     await render(<BoardScreen />)
@@ -488,34 +499,34 @@ describe('a board you may not read says why', () => {
     expect(router.back).toHaveBeenCalled()
   })
 
-  it('is the closed board when the server says the doors have opened', async () => {
+  it('an older server that still closes at doors: the doors banner and the room', async () => {
     api.getEvent.mockResolvedValue({ success: false, error: 'No internet connection.' } as never)
     api.getBoard.mockResolvedValue({
       success: false,
       errorCode: 'FORBIDDEN',
-      error: 'The board closes when the doors open — the room is open instead',
+      error: 'The Lobby closes when the doors open — the room is open instead',
     })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board’s closed")).toBeTruthy()
+    expect(await screen.findByText('The doors are open')).toBeTruthy()
     expect(screen.getByLabelText('Open the room')).toBeTruthy()
   })
 
-  it('says the board did not load, rather than that it is empty', async () => {
-    api.getBoard.mockResolvedValue({ success: false, errorCode: 'SERVER_ERROR', error: 'Failed to load the board' })
+  it('says the Lobby did not load, rather than that it is empty', async () => {
+    api.getBoard.mockResolvedValue({ success: false, errorCode: 'SERVER_ERROR', error: 'Failed to load the Lobby' })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board didn’t load")).toBeTruthy()
+    expect(await screen.findByText("The Lobby didn’t load")).toBeTruthy()
     expect(screen.queryByText("Nobody’s posted yet")).toBeNull()
   })
 
   it('and when the request itself never came back', async () => {
     api.getBoard.mockResolvedValue({ success: false, error: 'No internet connection. Check your network and try again.' })
     await render(<BoardScreen />)
-    expect(await screen.findByText("The board didn’t load")).toBeTruthy()
+    expect(await screen.findByText("The Lobby didn’t load")).toBeTruthy()
   })
 })
 
 describe('a refresh', () => {
-  it('that fails keeps the board and says so; the next that works clears it', async () => {
+  it('that fails keeps the Lobby and says so; the next that works clears it', async () => {
     api.getBoard
       .mockResolvedValueOnce(board([OFFER]))
       .mockResolvedValueOnce({ success: false, errorCode: 'SERVER_ERROR', error: 'x' })
@@ -524,11 +535,11 @@ describe('a refresh', () => {
     await screen.findByText(OFFER.body)
 
     await pullToRefresh()
-    expect(await screen.findByText("The board didn’t refresh. Pull down to try again.")).toBeTruthy()
+    expect(await screen.findByText("The Lobby didn’t refresh. Pull down to try again.")).toBeTruthy()
     expect(screen.getByText(OFFER.body)).toBeTruthy()
 
     await pullToRefresh()
-    await waitFor(() => expect(screen.queryByText("The board didn’t refresh. Pull down to try again.")).toBeNull())
+    await waitFor(() => expect(screen.queryByText("The Lobby didn’t refresh. Pull down to try again.")).toBeNull())
   })
 })
 
@@ -544,14 +555,14 @@ describe('your own post', () => {
   it('counts the asks and points to where they are answered', async () => {
     api.getBoard.mockResolvedValue(board([MINE]))
     await render(<BoardScreen />)
-    expect(await screen.findByText('2 asked. Answer in the Banter.')).toBeTruthy()
+    expect(await screen.findByText('2 asks')).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Lunar Fox')).toBeNull()
   })
 
   it.each([
     ['taken down', { success: true, data: { id: 'p-mine', withdrawn: true } }],
     ['already gone', { success: false, errorCode: 'NOT_FOUND', error: 'Post not found' }],
-  ])('leaves the board when %s', async (_, answer) => {
+  ])('leaves the Lobby when %s', async (_, answer) => {
     api.getBoard.mockResolvedValue(board([MINE]))
     api.withdrawBoardPost.mockResolvedValue(answer as never)
     await render(<BoardScreen />)
@@ -589,7 +600,7 @@ describe('report and block, by the post', () => {
     expect(screen.queryByLabelText("More options for Lunar Fox’s post")).toBeNull()
   })
 
-  it('blocks by the post, after asking, and takes it off the board — even past a stale read', async () => {
+  it('blocks by the post, after asking, and takes it off the Lobby — even past a stale read', async () => {
     // A read already in flight still lists the post; it must not bring it back.
     api.getBoard.mockResolvedValue(board([OFFER]))
     api.blockBoardPost.mockImplementation(async () => {
@@ -634,31 +645,39 @@ describe('report and block, by the post', () => {
   })
 })
 
-it('is the Flow 4 design now: no placeholder banner, the composer kinds are RadioCards (A61)', async () => {
-  api.getBoard.mockResolvedValue(board([OFFER]))
+it('is C-A now: no placeholder banner, the type is a segment of three, and you post as your room name (SCRUM-1026)', async () => {
+  api.getBoard.mockResolvedValue(lobby([OFFER], { you: { pseudonym: 'Quiet Lynx' } }) as never)
   await render(<BoardScreen />)
   await screen.findByText(OFFER.body)
   expect(screen.queryByText(/PLACEHOLDER DESIGN/)).toBeNull()
-  await fireEvent.press(screen.getByLabelText('Write a post'))
-  expect(screen.getByLabelText('I have space, You’re offering a ride or a table.')).toBeTruthy()
-  expect(screen.getByLabelText('I’m looking, You want to join someone’s.')).toBeTruthy()
+  await fireEvent.press(screen.getByLabelText('Post something'))
+  const sheet = within(screen.getByTestId('board-composer'))
+  expect(sheet.getAllByRole('radio').slice(0, 3).map((r) => r.props.accessibilityLabel)).toEqual(['Offering', 'Looking for', 'Just saying'])
+  expect(sheet.getByText('Quiet Lynx')).toBeTruthy()
 })
 
-describe('your post, live (PR #401 drive: "1 asked" only after reopening the board)', () => {
+it('hides a ticket in the sheet where the Lobby says tickets are hidden', async () => {
+  api.getBoard.mockResolvedValue(lobby([OFFER], { ticketsHidden: true }) as never)
+  await render(<BoardScreen />)
+  await fireEvent.press(await screen.findByLabelText('Post something'))
+  expect(within(screen.getByTestId('board-composer')).queryByText('Spare ticket')).toBeNull()
+})
+
+describe('your post, live (PR #401 drive: "1 asked" only after reopening the Lobby)', () => {
   const MINE: BoardPost = { ...OFFER, id: 'p-mine', author: 'Lunar Fox', mine: true, requestCount: 0 }
 
-  it('re-reads the board the moment a board_request push lands, and says the new count', async () => {
+  it('re-reads the Lobby the moment a board_request push lands, and says the new count', async () => {
     api.getBoard.mockResolvedValueOnce(board([MINE])).mockResolvedValue(board([{ ...MINE, requestCount: 1 }]))
     await render(<BoardScreen />)
-    expect(await screen.findByText('Nobody has asked yet')).toBeTruthy()
+    expect(await screen.findByText('No asks yet')).toBeTruthy()
     await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
-    expect(await screen.findByText('1 asked. Answer in the Banter.')).toBeTruthy()
+    expect(await screen.findByText('1 ask')).toBeTruthy()
   })
 
   it('ignores any other push', async () => {
     api.getBoard.mockResolvedValue(board([MINE]))
     await render(<BoardScreen />)
-    await screen.findByText('Nobody has asked yet')
+    await screen.findByText('No asks yet')
     const reads = api.getBoard.mock.calls.length
     await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'private_message' } } } })))
     expect(api.getBoard.mock.calls.length).toBe(reads)
@@ -671,8 +690,8 @@ describe('H.success on the server’s yes (H1)', () => {
     api.getBoard.mockResolvedValue(board([OFFER]))
     api.postToBoard.mockResolvedValueOnce({ success: false, errorCode: 'FORBIDDEN', error: 'Complete your profile first' } as never)
     await render(<BoardScreen />)
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
-    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
+    await fireEvent.press(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Looking for' }))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'Anyone from HSR?')
     await fireEvent.press(screen.getByLabelText('Post'))
     await screen.findByText('Complete your profile first')
@@ -691,7 +710,7 @@ describe('H.success on the server’s yes (H1)', () => {
     await render(<BoardScreen />)
     await fireEvent.press(await screen.findByLabelText('Ask to join, Velvet Heron'))
     await waitFor(() => expect(success).toHaveBeenCalledTimes(1))
-    await fireEvent.press(await screen.findByLabelText('Ask to join, Lunar Fox'))
+    await fireEvent.press(await screen.findByLabelText('Say hi, Lunar Fox'))
     await screen.findAllByText('Waiting on them')
     expect(success).toHaveBeenCalledTimes(1)
   })
@@ -737,8 +756,8 @@ describe('a post taken down (C8, SV9: the server’s top-level takenDown on the 
     api.getBoard.mockResolvedValueOnce(board([OFFER]))
     api.postToBoard.mockResolvedValue({ success: true, data: { id: 'p-mine', kind: 'seeking', body: taken.body, spacesLeft: null, createdAt: taken.createdAt } } as never)
     await render(<BoardScreen />)
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
-    await fireEvent.press(screen.getByLabelText(/^I’m looking/))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
+    await fireEvent.press(within(screen.getByTestId('board-composer')).getByRole('radio', { name: 'Looking for' }))
     await fireEvent.changeText(screen.getByLabelText('Your post'), taken.body)
     api.getBoard.mockResolvedValue(withTaken([OFFER], [taken]) as never)
     await fireEvent.press(screen.getByLabelText('Post'))
@@ -764,7 +783,7 @@ describe('a post taken down (C8, SV9: the server’s top-level takenDown on the 
   })
 })
 
-describe('a board of thousands: more posts as the end nears (SCRUM-760 c)', () => {
+describe('a Lobby of thousands: more posts as the end nears (SCRUM-760 c)', () => {
   const many = (from: number, n: number): BoardPost[] =>
     Array.from({ length: n }, (_, i) => ({ ...SEEKING, id: `p-${from + i}`, body: `Post number ${from + i}`, author: `Fox ${from + i}`, createdAt: `2026-10-01T${String(10 - (i % 9)).padStart(2, '0')}:00:00Z` }))
   const page = (posts: BoardPost[], nextCursor: string | null) => ({ success: true, data: { posts, pagination: { hasMore: !!nextCursor, nextCursor } } })
@@ -790,7 +809,7 @@ describe('a board of thousands: more posts as the end nears (SCRUM-760 c)', () =
     expect(apiClient.queuedRequest).not.toHaveBeenCalled()
   })
 
-  it('a page that fails keeps the board, does not loop, and retries on its own button', async () => {
+  it('a page that fails keeps the Lobby, does not loop, and retries on its own button', async () => {
     api.getBoard.mockResolvedValue(page(many(0, 3), 'c1') as never)
     ;(apiClient.queuedRequest as jest.Mock).mockResolvedValueOnce({ success: false, error: 'offline' })
     await render(<BoardScreen />)
@@ -883,12 +902,12 @@ describe('a jump from one board to another (RC drive 2 D-E)', () => {
   it('opens the next board on an empty composer: a draft never posts to another event', async () => {
     api.getBoard.mockResolvedValue(board([]))
     const view = await render(<BoardRoute />)
-    await fireEvent.press(await screen.findByLabelText('Write a post'))
+    await fireEvent.press(await screen.findByLabelText('Post something'))
     await fireEvent.changeText(screen.getByLabelText('Your post'), 'For e1 only')
     // A link to another event's board, on the same screen instance.
     mockParams.eventId = 'e2'
     await view.rerender(<BoardRoute />)
-    await screen.findByText("Nobody’s posted yet")
+    await screen.findByText(/Nobody’s posted yet/)
     expect(screen.queryByDisplayValue('For e1 only')).toBeNull()
   })
 })
@@ -898,24 +917,456 @@ describe('a busy board (TG-15, 120 posts)', () => {
     Array.from({ length: n }, (_, i) => (i % 3 === 0 ? { ...OFFER, id: `o${i}`, author: `Offer ${i}` } : { ...SEEKING, id: `s${i}`, author: `Seek ${i}` }))
   const page = (posts: BoardPost[], totalCount: number) => ({ success: true, data: { posts, pagination: { hasMore: true, nextCursor: 'c1', totalCount } } })
 
-  it('says how many the board has (the server’s count, not the page’s), and Offering / Looking narrow it', async () => {
-    api.getBoard.mockResolvedValue(page(many(30), 120) as never)
+  it('counts on the chips are the server’s, compact, and whole to a screen reader; a chip’s next page keeps its filter', async () => {
+    const counts = { all: 12_480, offer: 4_160, seeking: 8_000, chat: 320, offerRides: 900, mine: 1, replies: 0 }
+    api.getBoard.mockResolvedValue({ ...page(many(30), 12_480), data: { ...page(many(30), 12_480).data, counts } } as never)
     await render(<BoardScreen />)
-    expect(await screen.findByRole('header', { name: 'Posts, 120' })).toBeTruthy()
-    const filter = screen.getByTestId('board-filter')
-    await fireEvent.press(within(filter).getByText('Offering'))
-    const listed = () => screen.getByTestId('board-list').props.data as BoardPost[]
-    expect(listed()).toHaveLength(10)
-    expect(listed().every((p) => p.kind === 'offer')).toBe(true)
-    // The same chip again is every post.
-    await fireEvent.press(within(filter).getByText('Offering'))
-    expect(listed()).toHaveLength(30)
+    expect(await screen.findByLabelText('All, 12480 posts')).toBeTruthy()
+    expect(within(screen.getByTestId('lobby-chip-all')).getByText('12k')).toBeTruthy()
+
+    api.getBoard.mockResolvedValue({ success: true, data: { posts: many(30).filter((p) => p.kind === 'offer'), counts, pagination: { hasMore: true, nextCursor: 'c9' } } } as never)
+    await fireEvent.press(screen.getByTestId('lobby-chip-offer'))
+    await waitFor(() => expect(api.getBoard).toHaveBeenLastCalledWith('e1', { kind: 'offer' }))
+    api.queuedRequest.mockResolvedValue({ success: true, data: { posts: [], pagination: { hasMore: false } } } as never)
+    await act(async () => screen.getByTestId('board-list').props.onEndReached())
+    expect(api.queuedRequest).toHaveBeenCalledWith('/api/mobile/events/e1/board?cursor=c9&kind=offer')
   })
 
-  it('a handful of posts: the count, and no filter to learn', async () => {
+  it('an older server that sends no counts: no chips to learn', async () => {
     api.getBoard.mockResolvedValue(page([OFFER, SEEKING], 2) as never)
     await render(<BoardScreen />)
-    expect(await screen.findByRole('header', { name: 'Posts, 2' })).toBeTruthy()
-    expect(screen.queryByTestId('board-filter')).toBeNull()
+    await screen.findByText(OFFER.body)
+    expect(screen.queryByTestId('lobby-chips')).toBeNull()
+  })
+})
+
+/* ---------- L-A (SCRUM-1026): the Lobby to the board, mockups/redesign-2026-11/lobby/ ---------- */
+
+const COUNTS = { all: 18, offer: 5, seeking: 9, chat: 4, offerRides: 3, mine: 1, replies: 2 }
+const PINNED = { id: 'h1', body: 'Music starts at 6. Entry is from the side lane.', host: 'Nightshift Collective', createdAt: '2026-10-01T06:00:00Z', updatedAt: '2026-10-01T06:00:00Z' }
+const CLOSES = '2026-11-09T18:30:00Z'
+const lobby = (posts: BoardPost[], meta: Record<string, unknown> = {}) => ({
+  success: true,
+  data: { state: 'open', phase: 'before', doorsAt: FUTURE, closesAt: CLOSES, ticketsHidden: false, counts: COUNTS, compose: { allowed: true, message: null, reasonCode: null }, posts, ...meta },
+})
+
+describe('L-A: the pinned host post', () => {
+  it('leads All with the host’s words, labelled Host and never a person; a filter leaves it out', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER], { pinned: PINNED }) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText(PINNED.body)).toBeTruthy()
+    expect(screen.getByText('Nightshift Collective')).toBeTruthy()
+    expect(screen.getByText('Host')).toBeTruthy()
+    expect(screen.getByLabelText('Pinned')).toBeTruthy()
+
+    api.getBoard.mockResolvedValue(lobby([OFFER], { pinned: PINNED }) as never)
+    await fireEvent.press(screen.getByTestId('lobby-chip-offer'))
+    await waitFor(() => expect(screen.queryByText(PINNED.body)).toBeNull())
+  })
+})
+
+describe('L-A: filters run on the server, with their counts', () => {
+  it('asks the server for a kind, for Mine and for Replies to me, and back to everything on All', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER, SEEKING]) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    expect(screen.getByLabelText('Looking for, 9 posts')).toBeTruthy()
+
+    await fireEvent.press(screen.getByTestId('lobby-chip-seeking'))
+    await waitFor(() => expect(api.getBoard).toHaveBeenLastCalledWith('e1', { kind: 'seeking' }))
+    await fireEvent.press(screen.getByTestId('lobby-chip-mine'))
+    await waitFor(() => expect(api.getBoard).toHaveBeenLastCalledWith('e1', { filter: 'mine' }))
+    await fireEvent.press(screen.getByTestId('lobby-chip-replies'))
+    await waitFor(() => expect(api.getBoard).toHaveBeenLastCalledWith('e1', { filter: 'replies' }))
+    await fireEvent.press(screen.getByTestId('lobby-chip-all'))
+    await waitFor(() => expect(api.getBoard).toHaveBeenLastCalledWith('e1', {}))
+  })
+
+  it('a filter that found nothing says so and offers every post (control: All with posts never says it)', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER]) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    expect(screen.queryByTestId('board-filter-empty')).toBeNull()
+    api.getBoard.mockResolvedValue(lobby([]) as never)
+    await fireEvent.press(screen.getByTestId('lobby-chip-mine'))
+    expect(await screen.findByTestId('board-filter-empty')).toBeTruthy()
+  })
+})
+
+describe('L-A: one action per post', () => {
+  it('Ask to join on an offer, Say hi on a search, nothing on Just saying', async () => {
+    const CHAT: BoardPost = { ...SEEKING, id: 'p-chat', kind: 'chat', body: 'See you all there' }
+    api.getBoard.mockResolvedValue(lobby([OFFER, SEEKING, CHAT]) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByLabelText('Ask to join, Velvet Heron')).toBeTruthy()
+    expect(screen.getByLabelText('Say hi, Quiet Otter')).toBeTruthy()
+    expect(screen.getByText('Offering spots')).toBeTruthy()
+    expect(screen.getByText('Looking for someone to go with')).toBeTruthy()
+    // The chip and the post's pill.
+    expect(screen.getAllByText('Just saying')).toHaveLength(2)
+    expect(screen.getAllByRole('button').filter((b) => /^(Ask to join|Say hi)/.test(b.props.accessibilityLabel ?? ''))).toHaveLength(2)
+  })
+
+  it('your post: its asks counted, and See asks goes where they are answered', async () => {
+    const MINE: BoardPost = { ...OFFER, id: 'p-mine', author: 'Quiet Lynx', mine: true, requestCount: 3 }
+    api.getBoard.mockResolvedValue(lobby([MINE]) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('3 asks')).toBeTruthy()
+    expect(screen.getByText('You')).toBeTruthy()
+    await fireEvent.press(screen.getByText('See asks'))
+    expect(router.push).toHaveBeenCalledWith('/(tabs)/chat')
+  })
+})
+
+describe('L-A: a photo', () => {
+  const url = 'https://fly.storage.tigris.dev/blendn-chat/p.jpg'
+  it('your pending photo is yours alone, blurred, and says it is being checked', async () => {
+    const MINE = { ...OFFER, id: 'p-mine', mine: true, photo: { status: 'pending', url, alt: null } } as BoardPost
+    api.getBoard.mockResolvedValue(lobby([MINE]) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Checking your photo')).toBeTruthy()
+    expect(screen.getByText('Only you can see the photo until it’s checked.')).toBeTruthy()
+  })
+
+  it('an approved one carries its alt text (control: an http URL draws nothing)', async () => {
+    const P = { ...OFFER, photo: { status: 'approved', url, alt: 'Our booth by the DJ' } } as BoardPost
+    const Q = { ...SEEKING, photo: { status: 'approved', url: 'http://x.example/q.jpg', alt: 'Not ours' } } as BoardPost
+    api.getBoard.mockResolvedValue(lobby([P, Q]) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByLabelText('Our booth by the DJ')).toBeTruthy()
+    expect(screen.queryByLabelText('Not ours')).toBeNull()
+  })
+})
+
+describe('L-A: the composer’s slot', () => {
+  it('Post something opens the sheet', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER]) as never)
+    await render(<BoardScreen />)
+    await fireEvent.press(await screen.findByTestId('lobby-composer'))
+    expect(screen.getByTestId('board-composer')).toBeTruthy()
+  })
+
+  it('not going: the gate, and I’m going says so to the server and re-reads', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER], { compose: { allowed: false, message: 'Say you’re going first.', reasonCode: 'BOARD_NOT_GOING' } }) as never)
+    api.rsvpToEvent.mockResolvedValue({ success: true, data: { rsvpStatus: 'going', rsvpCount: 1 } } as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Say you’re going to post')).toBeTruthy()
+    expect(screen.queryByTestId('lobby-composer')).toBeNull()
+    const reads = api.getBoard.mock.calls.length
+    await fireEvent.press(screen.getByText('I’m going'))
+    expect(api.rsvpToEvent).toHaveBeenCalledWith('e1', 'going')
+    await waitFor(() => expect(api.getBoard.mock.calls.length).toBeGreaterThan(reads))
+  })
+
+  it('not going, and the server says no: its sentence, and the gate stays', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER], { compose: { allowed: false, message: 'x', reasonCode: 'BOARD_NOT_GOING' } }) as never)
+    api.rsvpToEvent.mockResolvedValue({ success: false, error: 'This event is full' } as never)
+    await render(<BoardScreen />)
+    await fireEvent.press(await screen.findByText('I’m going'))
+    expect(await screen.findByText('This event is full')).toBeTruthy()
+  })
+
+  it('profile unfinished: Finish goes to the profile', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER], { compose: { allowed: false, message: 'x', reasonCode: 'BOARD_PROFILE_INCOMPLETE' } }) as never)
+    await render(<BoardScreen />)
+    await fireEvent.press(await screen.findByText('Finish'))
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+  })
+
+  it('nobody posted yet: the two starts open the sheet', async () => {
+    api.getBoard.mockResolvedValue(lobby([], { counts: { ...COUNTS, all: 0, offer: 0, seeking: 0, chat: 0, mine: 0, replies: 0 } }) as never)
+    await render(<BoardScreen />)
+    await fireEvent.press(await screen.findByText('I have spots'))
+    expect(screen.getByTestId('board-composer')).toBeTruthy()
+    expect(screen.getByText(/Nobody’s posted yet/)).toBeTruthy()
+  })
+})
+
+describe('L-A: after doors, and after the end', () => {
+  it('read-only: until when, the room, the chips, and no action on any post', async () => {
+    // Only Date is faked (the owner's time words are relative to now): 10:00Z is 3:30 PM Monday in Bengaluru.
+    jest.useFakeTimers({ now: new Date('2026-11-09T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] })
+    api.getEvent.mockResolvedValue({ success: true, data: { id: 'e1', title: 'Warehouse Night', startTime: PAST, timezone: 'Asia/Kolkata' } } as never)
+    api.getBoard.mockResolvedValue(lobby([OFFER, SEEKING], { state: 'read_only', phase: 'live' }) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('The doors are open')).toBeTruthy()
+    expect(screen.getByText('The Lobby is read-only now. You can read it until Tomorrow\u00a0·\u00a012\u00a0AM.')).toBeTruthy()
+    expect(screen.getByText(OFFER.body)).toBeTruthy()
+    expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
+    expect(screen.queryByLabelText('Say hi, Quiet Otter')).toBeNull()
+    expect(screen.queryByTestId('lobby-composer')).toBeNull()
+    await fireEvent.press(screen.getByText('Open the room'))
+    expect(openBlendn).toHaveBeenCalled()
+  })
+
+  it('live and empty (4b): nobody posted, the room is open — under the host’s note when there is one', async () => {
+    api.getBoard.mockResolvedValue(lobby([], { state: 'read_only', phase: 'live', pinned: PINNED, counts: { ...COUNTS, all: 0, offer: 0, seeking: 0, chat: 0, mine: 0, replies: 0 } }) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Nobody posted in the Lobby.')).toBeTruthy()
+    expect(screen.getByText('The room is open.')).toBeTruthy()
+    expect(screen.getByText(PINNED.body)).toBeTruthy()
+    expect(screen.queryByText('The doors are open')).toBeNull()
+  })
+
+  it('closed a day after the end: says so, and offers nothing', async () => {
+    api.getBoard.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', reasonCode: 'LOBBY_CLOSED', error: 'The Lobby has closed. The Lobby and the room close a day after the event ends.' } as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('The Lobby has closed')).toBeTruthy()
+    expect(screen.getByText('The Lobby and the room close a day after the event ends. Your friends, chats and crews are where they were.')).toBeTruthy()
+    expect(screen.queryByText('Open the room')).toBeNull()
+  })
+
+  it('closed: the glyph takes the board’s 26 pt row, so the card is the board’s 176 pt (mockup-diff lA-closed, SCRUM-1033)', async () => {
+    api.getBoard.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', reasonCode: 'LOBBY_CLOSED', error: 'closed' } as never)
+    await render(<BoardScreen />)
+    const glyph = await screen.findByTestId('lobby-closed-glyph')
+    expect(StyleSheet.flatten(glyph.props.style)).toMatchObject({ height: 26 })
+  })
+})
+
+describe('L-A: new posts wait behind the pill (the list never jumps)', () => {
+  it('at the top of the list nothing can jump, so a background read shows what is new at once, with no pill', async () => {
+    const NEW: BoardPost = { ...SEEKING, id: 'p-new', body: 'Just landed, anyone near MG Road?', author: 'Night Owl' }
+    api.getBoard.mockResolvedValue(lobby([OFFER]) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    api.getBoard.mockResolvedValue(lobby([NEW, OFFER]) as never)
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
+    expect(await screen.findByText(NEW.body)).toBeTruthy()
+    expect(screen.queryByText('1 new post')).toBeNull()
+  })
+
+  it('a background read holds what is new; the pill brings it in (control: a refresh shows it at once)', async () => {
+    const NEW: BoardPost = { ...SEEKING, id: 'p-new', body: 'Just landed, anyone near MG Road?', author: 'Night Owl', createdAt: '2026-10-02T10:00:00Z' }
+    api.getBoard.mockResolvedValue(lobby([OFFER]) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+
+    // Scrolled into the list: what arrives above it waits behind the pill.
+    await fireEvent.scroll(screen.getByTestId('board-list'), { nativeEvent: { contentOffset: { x: 0, y: 400 }, contentSize: { width: 402, height: 2000 }, layoutMeasurement: { width: 402, height: 874 } } })
+    api.getBoard.mockResolvedValue(lobby([NEW, OFFER]) as never)
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
+    expect(await screen.findByText('1 new post')).toBeTruthy()
+    expect(screen.queryByText(NEW.body)).toBeNull()
+    await fireEvent.press(screen.getByText('1 new post'))
+    expect(await screen.findByText(NEW.body)).toBeTruthy()
+    expect(screen.queryByText('1 new post')).toBeNull()
+
+    const NEWER: BoardPost = { ...NEW, id: 'p-newer', body: 'Two seats from Whitefield' }
+    api.getBoard.mockResolvedValue(lobby([NEWER, NEW, OFFER]) as never)
+    await pullToRefresh()
+    expect(await screen.findByText(NEWER.body)).toBeTruthy()
+  })
+})
+
+describe('L-A: the starts never offer a ticket the event hides', () => {
+  const none = { ...COUNTS, all: 0, offer: 0, seeking: 0, chat: 0, mine: 0, replies: 0 }
+  it.each([
+    [true, 'I have spots. A ride or a table.'],
+    [false, 'I have spots. A ride, a table or a spare ticket.'],
+  ])('ticketsHidden %s', async (ticketsHidden, label) => {
+    api.getBoard.mockResolvedValue(lobby([], { counts: none, ticketsHidden }) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByLabelText(label)).toBeTruthy()
+  })
+})
+
+describe('L-A: the list starts under the bar as tall as it draws (AX XXXL: the bar grows past its fixed height)', () => {
+  it('a bar measured taller than the fixed top pushes the list down; a short one changes nothing (control)', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER]) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    const top = () => StyleSheet.flatten(screen.getByTestId('board-list').props.contentContainerStyle).paddingTop as number
+    const fixed = top()
+    await fireEvent(screen.getByTestId('lobby-bar'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 20 } } })
+    expect(top()).toBe(fixed)
+    await fireEvent(screen.getByTestId('lobby-bar'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 400 } } })
+    expect(top()).toBe(400 + 8)
+  })
+})
+
+describe('Lobby PR 5: the bell, what you have seen, and Post something from the event page', () => {
+  const { rememberLobbySeen } = jest.requireMock('../lib/lobbySeen') as { rememberLobbySeen: jest.Mock }
+  const newer = { ...SEEKING, id: 'p-new', createdAt: '2026-11-08T10:00:00Z' }
+  const older = { ...OFFER, createdAt: '2026-11-08T09:00:00Z' }
+
+  it('remembers the newest post it showed on All, for Going’s badge (control: a filter remembers nothing)', async () => {
+    api.getBoard.mockResolvedValue(board([newer, older]))
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    expect(rememberLobbySeen).toHaveBeenCalledWith('e1', '2026-11-08T10:00:00Z')
+    rememberLobbySeen.mockClear()
+    api.getBoard.mockResolvedValue({ success: true, data: { posts: [older], counts: { all: 2, offer: 1, seeking: 1, chat: 0, offerRides: 1, mine: 0, replies: 0 } } } as never)
+    await pullToRefresh()
+    rememberLobbySeen.mockClear()
+    await act(async () => fireEvent.press(screen.getByTestId('lobby-chip-offer')))
+    expect(rememberLobbySeen).not.toHaveBeenCalled()
+  })
+
+  it('does not mark as seen what a background read holds behind the pill (control: the shown read did)', async () => {
+    api.getBoard.mockResolvedValue(board([older]))
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    expect(rememberLobbySeen).toHaveBeenCalledWith('e1', '2026-11-08T09:00:00Z')
+    rememberLobbySeen.mockClear()
+    api.getBoard.mockResolvedValue(board([newer, older]))
+    await act(async () => mockPushListeners.forEach((fn) => fn({ request: { content: { data: { type: 'board_request' } } } })))
+    expect(api.getBoard).toHaveBeenCalledTimes(2)
+    expect(rememberLobbySeen).not.toHaveBeenCalled()
+  })
+
+  it('rings the bell into the two alert switches', async () => {
+    api.getBoard.mockResolvedValue(board([older]))
+    api.getBoardAlerts.mockResolvedValue({ success: true, data: { offersMatch: false, hostPosts: true } } as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Lobby alerts' })))
+    expect(api.getBoardAlerts).toHaveBeenCalledWith('e1')
+    expect(await screen.findByRole('switch', { name: /^The host posts/ })).toBeTruthy()
+  })
+
+  it('opens the composer when the event page asked for it and posting is open (control: not without the ask)', async () => {
+    mockParams.compose = '1'
+    api.getBoard.mockResolvedValue(board([older]))
+    await render(<BoardScreen />)
+    expect(await screen.findByLabelText('Your post')).toBeTruthy()
+  })
+
+  it('keeps the gate, not the composer, when the event page asked but you cannot post yet', async () => {
+    mockParams.compose = '1'
+    api.getBoard.mockResolvedValue({ success: true, data: { posts: [older], compose: { allowed: false, message: 'Mark yourself as going', reasonCode: 'BOARD_NOT_GOING' } } } as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByTestId('lobby-gate-going')).toBeTruthy()
+    expect(screen.queryByLabelText('Your post')).toBeNull()
+  })
+
+  it('does not open the composer by itself (control)', async () => {
+    api.getBoard.mockResolvedValue(board([older]))
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    expect(screen.queryByLabelText('Your post')).toBeNull()
+  })
+})
+
+describe('a link to a post (SCRUM-1026, 6/6)', () => {
+  const { FlatList } = require('react-native')
+  const OLD: BoardPost = { ...SEEKING, id: 'p-old', body: 'An older post, past the first page' }
+  const one = (post: BoardPost) => ({ success: true, data: { state: 'open', phase: 'before', closesAt: FUTURE, post } }) as never
+  let scrolled: jest.SpyInstance
+  beforeEach(() => {
+    scrolled = jest.spyOn(FlatList.prototype, 'scrollToIndex').mockImplementation(() => {})
+  })
+  afterEach(() => scrolled.mockRestore())
+  /** The post the list was asked to scroll to. */
+  const scrolledTo = () => screen.getByTestId('board-list').props.data[scrolled.mock.calls[0][0].index]?.id
+
+  it('scrolls to the post when it is on the page', async () => {
+    mockParams.post = 'p-seek'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(SEEKING))
+    await render(<BoardScreen />)
+    await waitFor(() => expect(scrolled).toHaveBeenCalled())
+    expect(scrolledTo()).toBe('p-seek')
+    expect(api.getBoardPost).toHaveBeenCalledWith('e1', 'p-seek')
+  })
+
+  it('asks again when a second link lands on the Lobby already open (the screen is reused, only the param changes)', async () => {
+    mockParams.post = 'p-seek'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(SEEKING))
+    await render(<BoardScreen />)
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1))
+    mockParams.post = 'p-gone'
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    const toTop = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {})
+    await act(async () => screen.rerender(<BoardScreen />))
+    expect(await screen.findByText('That post is no longer in the Lobby')).toBeTruthy()
+    // The line heads the list: scrolled down to the first post, you would not see it.
+    expect(toTop).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }))
+    toTop.mockRestore()
+    mockParams.post = 'p-offer'
+    api.getBoardPost.mockResolvedValue(one(OFFER))
+    await act(async () => screen.rerender(<BoardScreen />))
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('board-list').props.data[scrolled.mock.calls[1][0].index]?.id).toBe(OFFER.id)
+    // The gone line was about the earlier link.
+    expect(screen.queryByText('That post is no longer in the Lobby')).toBeNull()
+  })
+
+  it('lays a post older than the page on top, and scrolls to it', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(OLD))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OLD.body)).toBeTruthy()
+    await waitFor(() => expect(scrolled).toHaveBeenCalled())
+    expect(scrolledTo()).toBe('p-old')
+    // A refresh keeps it until the server lists it.
+    await pullToRefresh()
+    expect(screen.getByText(OLD.body)).toBeTruthy()
+  })
+
+  it('says the post is gone, and leaves the Lobby open', async () => {
+    mockParams.post = 'p-gone'
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('That post is no longer in the Lobby')).toBeTruthy()
+    expect(screen.getByText(OFFER.body)).toBeTruthy()
+    expect(scrolled).not.toHaveBeenCalled()
+  })
+
+  it('shows the closed Lobby when the post’s Lobby has closed', async () => {
+    mockParams.post = 'p-seek'
+    api.getBoard.mockResolvedValue(board([SEEKING]))
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'closed', reasonCode: 'LOBBY_CLOSED' } as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByTestId('lobby-closed')).toBeTruthy()
+  })
+
+  it('drops the linked post when you block somebody, as the pages do', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(OLD))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OLD.body)).toBeTruthy()
+    await act(async () => noteBlocked())
+    await waitFor(() => expect(screen.queryByText(OLD.body)).toBeNull())
+    expect(screen.getByText(OFFER.body)).toBeTruthy()
+  })
+
+  it('never lays a post on top that a block overtook while it was being read', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    let answer: (v: unknown) => void = () => {}
+    api.getBoardPost.mockReturnValue(new Promise((r) => (answer = r)) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    await act(async () => noteBlocked())
+    await act(async () => answer(one(OLD)))
+    expect(screen.queryByText(OLD.body)).toBeNull()
+  })
+
+  it('asks again on a refresh, and drops the post once the Lobby says it is gone', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.getBoardPost.mockResolvedValue(one(OLD))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OLD.body)).toBeTruthy()
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    await pullToRefresh()
+    await waitFor(() => expect(screen.queryByText(OLD.body)).toBeNull())
+    // Control: still there while the Lobby still has it.
+    expect(api.getBoardPost).toHaveBeenLastCalledWith('e1', 'p-old')
+  })
+
+  it('asks for no post without a link, nor for one that is not an id', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    mockParams.post = '../settings'
+    await render(<BoardScreen />)
+    await screen.findAllByText(OFFER.body)
+    expect(api.getBoardPost).not.toHaveBeenCalled()
   })
 })

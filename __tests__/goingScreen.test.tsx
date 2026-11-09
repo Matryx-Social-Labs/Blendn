@@ -20,6 +20,16 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../app/(tabs)/_layout', () => ({ TAB_BAR_CLEARANCE: 80 }))
 const mockUser = { id: 'me' }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: mockUser }) }))
+// "New in the Lobby" reads the Lobby itself; lobbyPreview.test covers it. Here: where it sits and when.
+jest.mock('../components/board/LobbyPreview', () => {
+  const { Pressable } = jest.requireActual('react-native')
+  const { router: r } = jest.requireMock('expo-router')
+  return {
+    NewInLobbyRow: ({ eventId }: { eventId: string }) => (
+      <Pressable testID="going-lobby-new" accessibilityLabel="New in the Lobby" onPress={() => r.push({ pathname: '/board/[eventId]', params: { eventId } })} />
+    ),
+  }
+})
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getUserFavorites: jest.fn(),
@@ -200,12 +210,12 @@ describe('a night that moved, and the row\'s ⋯', () => {
     expect(screen.getAllByText(/^New /)).toHaveLength(2)
   })
 
-  it('the ⋯ opens the row\'s actions in the app\'s Sheet: Share, Directions, Add to calendar, The Board, Cancel', async () => {
+  it('the ⋯ opens the row\'s actions in the app\'s Sheet: Share, Directions, Add to calendar, The Lobby, Cancel', async () => {
     await open()
     await fireEvent.press((await screen.findAllByLabelText(/^More about Event b/))[0])
     const sheet = (showSheet as jest.Mock).mock.calls[0][0]
     expect(sheet.title).toBe('Event b')
-    expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['Share', 'Directions', 'Add to calendar', 'The Board', 'Cancel'])
+    expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['Share', 'Directions', 'Add to calendar', 'The Lobby', 'Cancel'])
     expect(router.push).not.toHaveBeenCalled()
   })
 })
@@ -370,8 +380,8 @@ describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
   })
 })
 
-describe('the category plate (GO-14, DS-12 wiring, audit C10)', () => {
-  it('a row and the Next up hero with no cover draw their category plate, not an empty box', async () => {
+describe('no cover never shows (GO-14; Flow 4 G-A)', () => {
+  it('the Next up hero with no cover draws its category plate; a row leads with its date stamp, never a plate or a box', async () => {
     const rows = [
       { ...upcoming('a', { categories: [{ slug: 'music' }] }), rsvpStatus: 'going' },
       { ...upcoming('b', { categories: [{ slug: 'music' }] }), rsvpStatus: 'going' },
@@ -379,11 +389,12 @@ describe('the category plate (GO-14, DS-12 wiring, audit C10)', () => {
     api.getMyRsvps.mockResolvedValue({ success: true, data: { events: rows, pagination: page(1, 2, false) } } as never)
     await open()
     expect(await screen.findByTestId('event-cover-plate', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getAllByTestId('going-row-b-plate', { includeHiddenElements: true })).toHaveLength(1)
+    expect(screen.queryByTestId('going-row-b-plate', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByTestId('going-row-b-thumb', { includeHiddenElements: true })).toBeTruthy()
   })
 })
 
-describe('the Board from Going (OUT-02, decision E2)', () => {
+describe('the Lobby from Going (OUT-02, decision E2)', () => {
   const hours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString()
   const labels = (sheet: { actions: { label: string }[] }) => sheet.actions.map((a) => a.label)
   // The first RSVP is Next up (it has no ⋯); the second is a list row.
@@ -395,38 +406,38 @@ describe('the Board from Going (OUT-02, decision E2)', () => {
     return (showSheet as jest.Mock).mock.calls[0][0]
   }
 
-  it('before doors: the Next-up card carries the Scene\'s Board row, and a row\'s tray the action; both open the Board', async () => {
+  it('before doors: the Next-up card carries "New in the Lobby", and a row\'s tray the action; both open the Lobby', async () => {
     rsvps(two({}))
     await open()
-    await fireEvent.press(await screen.findByLabelText(/^The Board\./))
+    await fireEvent.press(await screen.findByTestId('going-lobby-new'))
     expect(router.push).toHaveBeenCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'a' } })
 
     const sheet = await trayOf(/^More about Event b/)
-    expect(labels(sheet)).toContain('The Board')
-    sheet.actions.find((a: { label: string }) => a.label === 'The Board').then()
+    expect(labels(sheet)).toContain('The Lobby')
+    sheet.actions.find((a: { label: string }) => a.label === 'The Lobby').then()
     expect(router.push).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'b' } })
   })
 
   it('a saved night offers it in the tray too', async () => {
     api.getUserFavorites.mockResolvedValue({ success: true, data: { events: [upcoming('s')], pagination: page(1, 1, false) } } as never)
     await open()
-    expect(labels(await trayOf(/^More about Event s/))).toContain('The Board')
+    expect(labels(await trayOf(/^More about Event s/))).toContain('The Lobby')
   })
 
-  it('after doors: neither the card row nor the tray action', async () => {
+  it('after doors: no tray action; the card’s row stays, for the server to say what is new in the read-only Lobby', async () => {
     rsvps(two({ startTime: hours(-1), endTime: hours(2) }))
     await open()
     await screen.findByTestId('going-next')
-    expect(screen.queryByLabelText(/^The Board\./)).toBeNull()
-    expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Board')
+    expect(screen.getByTestId('going-lobby-new')).toBeTruthy()
+    expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Lobby')
   })
 
   it('a cancelled night: neither', async () => {
     rsvps(two({ status: 'cancelled' }))
     await open()
     await screen.findByTestId('going-next')
-    expect(screen.queryByLabelText(/^The Board\./)).toBeNull()
-    expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Board')
+    expect(screen.queryByTestId('going-lobby-new')).toBeNull()
+    expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Lobby')
   })
 })
 
@@ -442,11 +453,11 @@ describe('Next up while it is on: the label follows the state, and the tap docks
     mockLiveEventId = null
   })
 
-  it('not checked in: "Blend in" opens Blend’n at this event’s pass, not the overlay with no event', async () => {
+  it('not checked in: "Blend’n" opens Blend’n at this event’s pass, not the overlay with no event', async () => {
     api.getMyRsvps.mockResolvedValue({ success: true, data: { events: [liveNow()], pagination: page(1, 1, false) } } as never)
     await open()
     const button = await screen.findByTestId('going-blend-in')
-    expect(screen.getAllByText('Blend in').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Blend’n').length).toBeGreaterThan(0)
     await fireEvent.press(button)
     expect(overlay.openPass).toHaveBeenCalledWith(expect.objectContaining({ id: 'live', latitude: 12.97, longitude: 77.64 }))
     expect(overlay.openBlendn).not.toHaveBeenCalled()

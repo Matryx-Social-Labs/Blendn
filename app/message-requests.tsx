@@ -16,6 +16,7 @@ import type { CrewInvite } from '../lib/crews'
 import { useCrewInbox } from '../lib/useCrewInbox'
 import { useToast } from '../components/Toast'
 import { useTopBarOverlay } from '../lib/useTopBarState'
+import { emptyAfterRowOut } from '../components/motion/presence'
 
 /**
  * Every message request waiting on you and every crew invite (the Banter's Requests row leads here; SCRUM-760). The answers
@@ -75,16 +76,21 @@ function RequestsScreen() {
         initialNumToRender={8}
         windowSize={9}
         ListEmptyComponent={
-          inbox.loading || !crews.loaded ? null : failed ? (
-            <StateScreen
-              icon="cloud-off"
-              title="Couldn’t load your requests"
-              body="Check your connection and try again."
-              actions={[{ label: 'Try again', onPress: retry }]}
-              testID="requests-failed"
-            />
-          ) : (
-            <StateScreen icon="message-circle" title="No requests waiting" body="Somebody asking to message you shows up here." testID="requests-empty" />
+          inbox.loading || !crews.loaded ? null : (
+            // After the last answer it waits for the row's fade (emptyAfterRowOut).
+            <Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>
+              {failed ? (
+                <StateScreen
+                  icon="cloud-off"
+                  title="Couldn’t load your requests"
+                  body="Check your connection and try again."
+                  actions={[{ label: 'Try again', onPress: retry }]}
+                  testID="requests-failed"
+                />
+              ) : (
+                <StateScreen icon="message-circle" title="No requests waiting" body="Somebody asking to message you shows up here." testID="requests-empty" />
+              )}
+            </Animated.View>
           )
         }
         ListFooterComponent={

@@ -6,10 +6,9 @@ import { render, screen } from '@testing-library/react-native'
 import React from 'react'
 
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
-jest.mock('../components/pulse/FeedMedia', () => ({ FeedMedia: () => null }))
 
 /* eslint-disable import/first */
-import { FeaturedCard } from '../components/pulse/FeaturedCard'
+import { leadLabel } from '../components/pulse/LeadPager'
 import { EventCard } from '../components/ds/EventCard'
 /* eslint-enable import/first */
 
@@ -18,9 +17,8 @@ it('Row: title, place and "12 here now" in one label, led by Live', async () => 
   expect(screen.getByLabelText('Live. Evening Ragas, at Chowdiah Memorial Hall, 12 here now')).toBeTruthy()
 })
 
-it('Featured: the date, place and "39 going" after the title', async () => {
-  await render(<FeaturedCard title="Jazz Brunch" dateLabel="Sun 19 Oct" placeLabel="at Olive Beach" peopleLabel="39 going" onPress={jest.fn()} />)
-  expect(screen.getByLabelText('Jazz Brunch. Sun 19 Oct, at Olive Beach, 39 going')).toBeTruthy()
+it('Featured (the lead card): "Featured, 1 of 3", then the card with "39 going"', () => {
+  expect(leadLabel({ id: 'a', title: 'Jazz Brunch', time: 'Sun · 11 AM', venue: 'Olive Beach', going: 39 }, 0, 3)).toBe('Featured, 1 of 3. Jazz Brunch, Sun · 11 AM, at Olive Beach, 39 going')
 })
 
 it('no people line, no trailing comma', async () => {

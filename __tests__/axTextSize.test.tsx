@@ -34,7 +34,7 @@ import { SectionHeader } from '../components/ds/SectionHeader'
 import { AX_FONT_SCALE, CONTROL_FONT_CAP } from '../components/ds/shared'
 import { TabBar } from '../components/ds/TabBar'
 import { BanterRow } from '../components/banter/BanterParts'
-import { SceneCTA, sceneCtaLabel } from '../components/scene/SceneSections'
+import { DockRow } from '../components/ds/DockRow'
 import { NAVIGATOR_ROUTES, TextSizeBoundary } from '../components/TextSizeBoundary'
 import { MAX_FONT_SCALE, SPACE } from '../lib/design/tokens'
 import { ChatHeader } from '../components/chat/ChatHeader'
@@ -122,9 +122,9 @@ describe('at AX XXXL (fontScale 3.571)', () => {
     expect(oneLiners(screen.toJSON())).toEqual([])
   })
 
-  it('the Scene’s Go button: its label stops at the control cap (the pill is summed into SCENE_CTA_HEIGHT, a constant)', async () => {
-    await render(<SceneCTA state="rsvp" onPress={jest.fn()} />)
-    expect(screen.getByText(sceneCtaLabel('rsvp')).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+  it('the event dock’s action: its label stops at the control cap inside its 52 pt pill (Flow 4 E-B)', async () => {
+    await render(<DockRow state="Free" sub="Sat 8 Nov · 6 PM" action={{ label: 'I’m going', kind: 'primary', onPress: jest.fn() }} />)
+    expect(screen.getByText('I’m going').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
     expect(clipped(screen.toJSON())).toEqual([])
   })
 

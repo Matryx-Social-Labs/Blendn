@@ -115,6 +115,7 @@ export function SheetHost() {
         title={current.title}
         body={current.message}
         icon={current.icon}
+        art={current.art}
         actions={current.actions.flatMap((a, i) => (rows && !('cancel' in a) ? [] : [asButton(a, i)]))}
         testID="sheet-host"
       >

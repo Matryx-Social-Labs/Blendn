@@ -15,14 +15,31 @@ const mockToast = jest.fn()
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   useLocalSearchParams: jest.fn(() => ({})),
+  useIsFocused: () => true,
 }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/apiClient', () => ({ apiClient: { forgotPassword: (...args: unknown[]) => mockForgot(...args) } }))
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
+// Wrapped to count its renders: the countdown is the Resend button's own, never the sheet's (owner: "the entire resend button is flickering").
+const mockMounts: string[] = []
+jest.mock('../components/onboarding/EmailSheet', () => {
+  const actual = jest.requireActual('../components/onboarding/EmailSheet')
+  const { useEffect } = jest.requireActual('react')
+  return {
+    ...actual,
+    EmailSheet: jest.fn((props: { testID?: string }) => {
+      // Each sheet's own mount: the entry's and Check your inbox's are two sheets, not one carrying the other's measures.
+      useEffect(() => void mockMounts.push(String(props.testID)), []) // eslint-disable-line react-hooks/exhaustive-deps
+      return actual.EmailSheet(props)
+    }),
+  }
+})
 
 import { useLocalSearchParams } from 'expo-router'
 import ForgotPassword from '../app/forgot-password'
+import { EmailSheet } from '../components/onboarding/EmailSheet'
+import { rowThatOverflows, slotOf, WORST } from './helpers/longText'
 
 let success: jest.SpyInstance
 let error: jest.SpyInstance
@@ -118,6 +135,15 @@ describe('Check your inbox', () => {
     expect(screen.getByTestId('forgot-sent-body').props.children.filter((c: unknown) => c === '\n')).toHaveLength(2)
   })
 
+  it('the worst-case address (long-text audit) is on its own lines, wrapping whole, with no line cap and no row to push it', async () => {
+    ;(useLocalSearchParams as jest.Mock).mockReturnValue({ email: WORST.email })
+    await sent()
+    const body = screen.getByTestId('forgot-sent-body')
+    expect(body.props.children.filter((c: unknown) => c === '\n')).toHaveLength(2)
+    expect(slotOf(body as never).lines).toBeUndefined()
+    expect(rowThatOverflows(screen.getByText(WORST.email) as never)).toBeNull()
+  })
+
   it('Resend counts down from 30 with a draining ring, then is ready', async () => {
     await sent()
     const resend = screen.getByTestId('forgot-resend')
@@ -125,6 +151,8 @@ describe('Check your inbox', () => {
     expect(resend.props.accessibilityState).toMatchObject({ disabled: true })
     expect(screen.getByTestId('forgot-ring', { includeHiddenElements: true })).toBeTruthy()
     await wait(12)
+    // The digits roll; the sentence a screen reader hears settles a moment after them.
+    await act(async () => jest.advanceTimersByTime(400))
     expect(screen.getByTestId('forgot-resend').props.accessibilityLabel).toBe('Resend in 18s')
     await wait(18)
     expect(screen.getByTestId('forgot-resend').props.accessibilityLabel).toBe('Resend link')
@@ -162,5 +190,49 @@ describe('Check your inbox', () => {
     await sent()
     await fireEvent.press(screen.getByTestId('forgot-different'))
     expect(screen.getByText('Forgot your password?')).toBeTruthy()
+  })
+})
+
+describe('the sheet over the landing (Flow 1c, option C)', () => {
+  it('the entry is the email sheet: Back, the question as its heading, the address with no placeholder', async () => {
+    await render(<ForgotPassword />)
+    expect(screen.getByTestId('forgot-sheet', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('Back')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Forgot your password?' })).toBeTruthy()
+    expect(screen.getByTestId('forgot-email-input').props.placeholder).toBeUndefined()
+  })
+
+  it('Check your inbox is an email sheet too, and keeps all three ways on: Open mail app, Resend, Use a different email', async () => {
+    await sent()
+    expect(screen.getByTestId('forgot-sent-sheet', { includeHiddenElements: true })).toBeTruthy()
+    for (const id of ['forgot-open-mail', 'forgot-resend', 'forgot-different']) expect(screen.getByTestId(id)).toBeTruthy()
+  })
+})
+
+describe('the Resend countdown never flickers (owner, 2026-11-05)', () => {
+  it('ticks inside the button: the sheet, and the screen with it, does not re-render each second', async () => {
+    await sent()
+    const before = (EmailSheet as jest.Mock).mock.calls.length
+    await wait(5)
+    expect((EmailSheet as jest.Mock).mock.calls.length).toBe(before)
+    await act(async () => jest.advanceTimersByTime(400))
+    expect(screen.getByTestId('forgot-resend').props.accessibilityLabel).toBe('Resend in 25s')
+  })
+
+  it('the words stay and only the digits roll: "Resend in", the rolling number, "s" — no label swap each second', async () => {
+    await sent()
+    expect(screen.getByText('Resend in')).toBeTruthy()
+    expect(screen.getByText('s')).toBeTruthy()
+    expect(screen.getByTestId('forgot-resend-count')).toBeTruthy()
+    await wait(3)
+    expect(screen.getByText('Resend in')).toBeTruthy()
+  })
+})
+
+describe('Check your inbox is a sheet of its own (a drive, 2026-11-05)', () => {
+  it('mounts afresh, so the entry’s title leaves no empty room in it', async () => {
+    mockMounts.length = 0
+    await sent()
+    expect(mockMounts).toEqual(['forgot', 'forgot-sent'])
   })
 })

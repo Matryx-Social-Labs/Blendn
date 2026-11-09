@@ -5,6 +5,7 @@ import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../l
 import { OPACITY } from '../../lib/theme'
 import { PresenceDot } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, minTarget, useBoldText, useLargeText, useSelection } from './shared'
+import { compactCount } from '../../lib/format'
 
 /** The lit count's capsule, as `Badge` at size 22. */
 const CAPSULE = 22
@@ -12,8 +13,9 @@ const CAPSULE = 22
 /** `accessibilityLabel` only when the words on screen are not enough alone ("See all" says how many); it starts with the label. */
 export type SectionAction = { label: string; onPress: () => void; busy?: boolean; accessibilityLabel?: string }
 
-/** A count in thousands is grouped ("1,204"): it reads at a glance and never wraps the header. */
+/** On screen a count in thousands is compact ("1.2k"), so it never wraps the header; heard, it is whole ("1,204"). */
 const grouped = (n: number, floor = false) => `${n.toLocaleString('en-US')}${floor ? '+' : ''}`
+const shown = (n: number, floor = false) => `${compactCount(n)}${floor ? '+' : ''}`
 
 /**
  * How every section inside a screen starts (guidelines/components/SectionHeader.html):
@@ -79,13 +81,13 @@ export function SectionHeader({
           {count != null && countStyle === 'lit' ? (
             <View testID={testID && `${testID}-count`} style={[styles.capsule, { backgroundColor: sel.fill, borderColor: sel.edge }]}>
               <Text style={[font('caption', bold, FONT_FAMILY.mono[700]), styles.capsuleText, styles.tabular]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                {grouped(count, more)}
+                {shown(count, more)}
               </Text>
             </View>
           ) : count != null ? (
             <>
               <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.muted]}>·</Text>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{grouped(count, more)}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold, FONT_FAMILY.mono[700]), styles.muted, styles.tabular]}>{shown(count, more)}</Text>
             </>
           ) : null}
         </View>

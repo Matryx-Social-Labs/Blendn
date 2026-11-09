@@ -43,7 +43,7 @@ describe('goingCardAction: the Next up card’s lit button follows the state', (
   })
 
   it('while live it is Blend in, the event page’s verb, and docks this event’s pass', () => {
-    expect(goingCardAction('live', false)).toEqual({ kind: 'pass', label: 'Blend in' })
+    expect(goingCardAction('live', false)).toEqual({ kind: 'pass', label: 'Blend’n' })
   })
 
   it('checked in here it says so, and still docks this event (the overlay shows its room)', () => {

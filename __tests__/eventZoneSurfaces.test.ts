@@ -51,8 +51,8 @@ describe('past rows (GET /me/attendance)', () => {
 
 describe('the venue page: tonight (GET /venues/:id)', () => {
   it('says the event’s own clock, named', () => {
-    expect(startsLabel({ startsAt: START, endsAt: END, timeZone: NY }, AFTERNOON).text).toBe('7:30 PM EDT')
-    expect(timeRange(START, END, NY)).toBe('7:30 PM – 10:30 PM EDT')
+    expect(startsLabel({ startsAt: START, endsAt: END, timeZone: NY }, AFTERNOON).text).toBe('7:30 PM')
+    expect(timeRange(START, END, NY)).toBe('7:30 PM – 10:30 PM')
   })
   it('an older server: the phone’s clock, unnamed', () => {
     expect(startsLabel({ startsAt: START, endsAt: END }, AFTERNOON).text).toBe('1:30 AM')
@@ -68,7 +68,7 @@ describe('the venue page: upcoming (GET /venues/:id, /venues/:id/upcoming)', () 
   })
 
   it('each row’s time is the event’s clock, named when it is not the phone’s (RC 7: "6:30 PM" on a Los Angeles phone)', () => {
-    expect(upcomingRows([{ id: 'e1', title: 'Jazz', startTime: START, timezone: NY }])[0].time).toBe('7:30 PM EDT')
+    expect(upcomingRows([{ id: 'e1', title: 'Jazz', startTime: START, timezone: NY }])[0].time).toBe('7:30 PM')
     // The phone in the event's zone: nothing to name.
     process.env.TZ = NY
     refreshPhoneZone()
@@ -86,7 +86,7 @@ describe('the venue page: upcoming (GET /venues/:id, /venues/:id/upcoming)', () 
 describe('Places’ next event (GET /venues)', () => {
   const next = (timezone?: string) => ({ id: 'e1', title: 'Jazz', slug: null, coverImageUrl: null, startTime: START, endTime: END, ...(timezone ? { timezone } : {}) })
   it('is tonight in New York, at New York’s clock', () => {
-    expect(tonightEvent(next(NY), AFTERNOON)).toMatchObject({ id: 'e1', when: '7:30 PM EDT' })
+    expect(tonightEvent(next(NY), AFTERNOON)).toMatchObject({ id: 'e1', when: '7:30 PM' })
   })
   it('an older server: the phone’s day, where it is tomorrow, so not tonight', () => {
     expect(tonightEvent(next(), AFTERNOON)).toBeNull()

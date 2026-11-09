@@ -65,6 +65,10 @@ export function useFriendRequests() {
     setBusy(new Set(inFlight.current))
     try {
       await work()
+    } catch (error) {
+      // A throw (the queue cleared under it) is said like any failure, never a silent stop (SCRUM-754).
+      Logger.warn('friends', 'request answer threw', { error })
+      showToast(FAILED_LINE, 'error', { haptic: 'error' })
     } finally {
       inFlight.current.delete(id)
       setBusy(new Set(inFlight.current))

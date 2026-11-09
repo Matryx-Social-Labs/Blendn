@@ -3,7 +3,7 @@
  * With nothing loaded (a failed load, an empty city) the page's own state is the answer, and "Turn on location" under
  * "Couldn't load events" offered the wrong way back from being offline.
  */
-import { render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
@@ -13,24 +13,23 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
-jest.mock('../components/pulse/FeedMedia', () => ({ FeedMedia: () => null }))
 
 /* eslint-disable import/first */
 import { SectionStack } from '../components/pulse/PulseSections'
 /* eslint-enable import/first */
 
 const event = { id: 'e1', title: 'Vinyl Night', venue_name: 'Toit', start_time: new Date(Date.now() + 3_600_000).toISOString(), end_time: new Date(Date.now() + 7_200_000).toISOString(), cover_image_url: null } as never
+const mockSeeAll = jest.fn()
 const stack = (sections: React.ComponentProps<typeof SectionStack>['sections']) => (
   <SectionStack
     sections={sections}
     now={Date.now()}
     withDistance={false}
-    visible
     handlers={{ onPress: jest.fn(), onPressIn: jest.fn(), onLongPress: jest.fn() }}
     coachRef={React.createRef()}
     pending={{ current: false }}
-    featuredLayout={() => ({ width: 300, inset: 24 })}
     askForLocation={{ denied: false, onAsk: jest.fn() }}
+    onSeeAll={mockSeeAll}
   />
 )
 
@@ -48,4 +47,11 @@ it('a section counted from a full page prints its count as a floor (BAR-10)', as
   await render(stack([{ key: 'tonight', events: [event], count: 50, more: true }]))
   expect(screen.getByTestId('pulse-tonight-header')).toBeTruthy()
   expect(screen.getByText('50+')).toBeTruthy()
+})
+
+it('"See all" under Tonight asks this list for Tonight (N1: the chip, not a screen)', async () => {
+  mockSeeAll.mockClear()
+  await render(stack([{ key: 'tonight', events: [event], count: 6 }]))
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: /See all/ })))
+  expect(mockSeeAll).toHaveBeenCalledWith('tonight')
 })

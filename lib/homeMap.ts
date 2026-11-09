@@ -56,6 +56,8 @@ export interface Pin {
   /** An event's start and end (its session's, when it has one); null for a venue. */
   startsAt: string | null
   endsAt: string | null
+  /** An event's IANA zone, so its chip reads its own clock; null for a venue. */
+  timeZone?: string | null
   /** A venue's live bucket, for its chip; null for an event. */
   bucket: LiveNow | null
 }
@@ -70,6 +72,7 @@ type EventLike = {
   start_time: string
   end_time: string | null
   session?: { start_time: string; end_time: string } | null
+  timezone?: string | null
 }
 
 type VenueLike = { id: string; name: string; latitude: number | null; longitude: number | null; liveNow?: LiveNow | null }
@@ -118,6 +121,7 @@ export function pinsFor(
       glow: 1,
       startsAt: w.start_time,
       endsAt: w.end_time ?? null,
+      timeZone: e.timezone ?? null,
       bucket: null,
     }
     return liveAt(pin, now)
@@ -135,6 +139,20 @@ export function liveAt(pin: Pin, now: number): Pin {
   const end = pin.endsAt ? new Date(pin.endsAt).getTime() : NaN
   const live = start <= now && Number.isFinite(end) && now < end
   return live === pin.live ? pin : { ...pin, live, glow: live ? 3 : 1 }
+}
+
+/** The glow a focused pin is lit at: the brightest step (a venue at 20+). */
+export const FOCUS_GLOW = 4
+
+/**
+ * The Pulse's lead card lights its venue (Flow 3 · Pulse, Option C): the focused pin at the brightest step, the rest at
+ * their own; added when the map has not loaded it yet (the viewport query lags the camera). New pins, never the old ones.
+ */
+export function withFocus(pins: Pin[], focus: Pin | null): Pin[] {
+  if (!focus) return pins
+  // Brighter only: `live` is what its chip says ("LIVE ●"), and the lead's event need not be on now.
+  const lit = (p: Pin): Pin => ({ ...p, glow: FOCUS_GLOW })
+  return pins.some((p) => p.id === focus.id) ? pins.map((p) => (p.id === focus.id ? lit(p) : p)) : [...pins, lit(focus)]
 }
 
 /** A pin's dot colour (`MAP_THEME.pin`): ember for an event, rose for a venue, brighter when live. */
@@ -413,13 +431,33 @@ export function visibleCentreY(padding: { top: number; bottom: number }, mapHeig
  * gap above it, fading out as it rises from half to full, like Google and
  * Apple Maps. A worklet: it runs per frame on the UI thread.
  */
-export function locateRide(drawerTop: number, drawer: { half: number; full: number }): { translateY: number; opacity: number } {
+export function locateRide(drawerTop: number, drawer: { half: number; full: number }, lift = 0) {
   'worklet'
   const { sizePx, gapPx } = MAP_THEME.locate
   const span = drawer.half - drawer.full
   // A screen too short for a half step between half and full: shown until full (review L3).
   const shown = span > 0 ? (drawerTop - drawer.full) / span : drawerTop > drawer.full ? 1 : 0
-  return { translateY: drawerTop - gapPx - sizePx, opacity: Math.min(1, Math.max(0, shown)) }
+  // `lift`: a banner on the map takes the place above the drawer (the board's `.mbn`); the button rides above it.
+  return { translateY: drawerTop - gapPx - sizePx - lift, opacity: Math.min(1, Math.max(0, shown)) }
+}
+
+/**
+ * The Pulse's banners on the map (Option C): a gap above "my location", riding the drawer and fading as it does
+ * (`locateRide`). `height` is the banners' own. A worklet: it runs per frame.
+ */
+/** Board `.mbn` (`top: 262` over a drawer at 336): the banner's top 74 above the drawer, growing down as it wraps... */
+export const BANNER_TOP_ABOVE_DRAWER = 74
+/** ...but its foot never closer to the drawer than this. */
+export const BANNER_FOOT_MIN = 22
+/** How far above the drawer the banner's top sits, for a banner this tall. A worklet. */
+export function bannerReach(height: number) {
+  'worklet'
+  return Math.max(BANNER_TOP_ABOVE_DRAWER, height + BANNER_FOOT_MIN)
+}
+export function bannerRide(drawerTop: number, drawer: { half: number; full: number }, height: number) {
+  'worklet'
+  const { opacity } = locateRide(drawerTop, drawer)
+  return { translateY: drawerTop - bannerReach(height), opacity }
 }
 
 /** How far a fix must move before the camera follows it: past GPS jitter. */
@@ -447,4 +485,94 @@ export function shouldFollowFix(
  */
 export function compassBelow(topChrome: number): { top: number; right: number } {
   return { top: topChrome + SPACE.sm, right: SPACE.lg }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Near me's reach (Flow 3b · N1, SCRUM-1022)                                  */
+/* -------------------------------------------------------------------------- */
+
+/** The lit disc: a 20-minute walk, straight line × 1.3 at 4.8 km/h. */
+export const WALK_DISC_KM = ((20 / 60) * 4.8) / 1.3
+/** Points on a drawn circle: smooth at city zoom, cheap to send. */
+const CIRCLE_STEPS = 64
+
+type LatLng = { latitude: number; longitude: number }
+type LngLatRing = [number, number][]
+type PolygonFeature = { type: 'Feature'; properties: Record<string, never>; geometry: { type: 'Polygon'; coordinates: LngLatRing[] } }
+
+/** A circle of `km` around `c` as a closed ring of [lng, lat] (an equirectangular step: true to a few metres at this size). */
+function circle(c: LatLng, km: number): LngLatRing {
+  const dLat = km / 110.574
+  const dLng = km / (111.32 * Math.cos((c.latitude * Math.PI) / 180))
+  const ring: LngLatRing = []
+  for (let i = 0; i <= CIRCLE_STEPS; i++) {
+    const a = (i / CIRCLE_STEPS) * 2 * Math.PI
+    ring.push([c.longitude + dLng * Math.cos(a), c.latitude + dLat * Math.sin(a)])
+  }
+  return ring
+}
+
+const polygon = (coordinates: LngLatRing[]): PolygonFeature => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates } })
+
+/** The world, as one ring the reach's dark is cut from. */
+const WORLD: LngLatRing = [
+  [-180, -85],
+  [180, -85],
+  [180, 85],
+  [-180, 85],
+  [-180, -85],
+]
+
+/** What the map draws while Near me is on: the walk disc, the short-ride ring, and the dark beyond it (the world, holed). */
+export function reachShapes(c: LatLng, rideKm: number = 8) {
+  const ride = circle(c, rideKm)
+  const walk = circle(c, WALK_DISC_KM)
+  return {
+    walk: polygon([walk]),
+    ride: polygon([ride]),
+    mask: polygon([WORLD, [...ride].reverse()]),
+    // Where the board puts its labels: off the walk's south-east edge (7/8 of the way round), the ring's west point.
+    labels: { walk: walk[(CIRCLE_STEPS * 7) / 8], ride: ride[CIRCLE_STEPS / 2] },
+  }
+}
+
+/** The world's circumference at the equator, in metres (WGS 84). */
+const EARTH_CIRCUMFERENCE_M = 40_075_016.686
+/** MapLibre's world is 512 pt wide at zoom 0. */
+const WORLD_PT = 512
+/** The ring's room on each side of the phone (board `ringAt`: a 176 pt ring on a 393 pt phone leaves 20). */
+const REACH_SIDE_PT = 20
+
+/**
+ * The flat zoom at which the short ride is the board's ring (owner pick (c), 2026-11-05): true distances, the camera
+ * fitted so the 8 km ring spans the phone less 20 pt a side. Further from the equator a metre is more points, so closer.
+ */
+export function reachZoom(latitude: number, widthPt: number, rideKm: number = 8): number {
+  const radiusPt = widthPt / 2 - REACH_SIDE_PT
+  const metresPerPt = (rideKm * 1000) / radiusPt
+  return Math.log2((EARTH_CIRCUMFERENCE_M * Math.cos((latitude * Math.PI) / 180)) / (WORLD_PT * metresPerPt))
+}
+
+/** Board `ringAt`: the reach's centre sits 100 pt above the drawer at rest (236 on a 336 drawer). */
+const REACH_ABOVE_DRAWER_PT = 100
+/** Metres in a degree of latitude (near enough everywhere for a few points' nudge). */
+const METRES_PER_DEGREE_LAT = 110_574
+
+/**
+ * Where the camera goes when Near me turns on: flat at `reachZoom`, its centre moved north or south so that you land
+ * 100 pt above the drawer as on the board, not in the middle of the map the drawer leaves.
+ */
+export function reachTarget(you: LatLng, s: { width: number; topChrome: number; drawerTop: number }): { centre: [number, number]; zoom: number } {
+  const zoom = reachZoom(you.latitude, s.width)
+  const middle = (s.topChrome + s.drawerTop) / 2
+  const shiftPt = middle - (s.drawerTop - REACH_ABOVE_DRAWER_PT)
+  if (shiftPt === 0) return { centre: [you.longitude, you.latitude], zoom }
+  const metresPerPt = 8000 / (s.width / 2 - REACH_SIDE_PT)
+  // Up the screen is north: to land lower than the middle, the camera looks at a point north of you.
+  return { centre: [you.longitude, you.latitude - (shiftPt * metresPerPt) / METRES_PER_DEGREE_LAT], zoom }
+}
+
+/** The pins inside the short ride: only these light while Near me is on. */
+export function withinReach<P extends LatLng>(pins: readonly P[], c: LatLng, rideKm: number = 8): P[] {
+  return pins.filter((p) => getDistanceKm(c.latitude, c.longitude, p.latitude, p.longitude) <= rideKm)
 }

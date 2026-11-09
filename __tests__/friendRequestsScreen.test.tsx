@@ -59,6 +59,22 @@ it('accepts from the list', async () => {
   expect(mockAsk).toHaveBeenCalledWith({ stillHere: expect.any(Function) })
 })
 
+// SCRUM-754: an answer that throws (the queue cleared under it, a client bug) ends the spinner with the line and can be sent again.
+// Control: without the catch in `once`, no toast is shown and the rejection is unhandled.
+it('says so when an answer throws, and the request can be answered again', async () => {
+  api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [BEN], outgoing: [] } })
+  api.respondToFriendRequest.mockRejectedValueOnce(new Error('Request queue cleared'))
+  await render(<FriendRequestsScreen />)
+
+  fireEvent.press(await screen.findByLabelText('Not now, Ben'))
+
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That didn’t go through. Try again.', 'error', { haptic: 'error' }))
+  api.respondToFriendRequest.mockResolvedValueOnce({ success: true, data: { dismissed: true } })
+  fireEvent.press(screen.getByLabelText('Not now, Ben'))
+  await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledTimes(2))
+  expect(await screen.findByText('No requests')).toBeTruthy()
+})
+
 it('does not call a failed load "No requests"', async () => {
   api.getFriendRequests.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
   await render(<FriendRequestsScreen />)

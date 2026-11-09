@@ -126,7 +126,8 @@ describe('the screen renders through the redesign', () => {
   it('keeps the end in view as the list finishes laying out', () => {
     const src = SCREEN()
     expect(src).toMatch(/onContentSizeChange=\{follow\.onContentSizeChange\}/)
-    expect(src).toMatch(/onScrollBeginDrag=\{follow\.onScrollBeginDrag\}/)
+    // A reader's drag stops the follow (and folds From the Lobby, SCRUM-1026 H-A).
+    expect(src).toMatch(/onScrollBeginDrag=\{\(\) => \{\s*follow\.onScrollBeginDrag\(\)/)
     expect(src).toMatch(/follow\.noteAtEnd\(atBottom\)/)
   })
 

@@ -5,7 +5,7 @@ import { Dimensions, StyleSheet } from 'react-native'
 
 import { CONTROL_FONT_CAP, HueProvider } from '../components/ds/shared'
 import { ScaleSteps } from '../components/ds/ScaleSteps'
-import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { AX_XXXL, clipped, uncapped } from './helpers/ax'
 
@@ -16,13 +16,16 @@ const draw = (props: Partial<React.ComponentProps<typeof ScaleSteps>> = {}) =>
     </HueProvider>,
   )
 
-it('is five equal-width pills of 48 pt, with Geist Mono digits', async () => {
+it('is five equal-width 56 pt steps at radius 16, 10 apart, with Geist Mono 700 20/24 digits (Flow 4 `.sc5`)', async () => {
   await draw()
   for (const n of [1, 2, 3, 4, 5]) {
     const step = StyleSheet.flatten(screen.getByTestId(`s-${n}`).props.style)
-    expect(step).toMatchObject({ flex: 1, height: SIZE.control })
-    expect(String(StyleSheet.flatten(screen.getByText(String(n)).props.style).fontFamily)).toMatch(/Mono/i)
+    expect(step).toMatchObject({ flex: 1, height: SIZE.primary, borderRadius: RADIUS.rowInCard })
+    expect(StyleSheet.flatten(screen.getByText(String(n)).props.style)).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontSize: 20, lineHeight: 24 })
   }
+  expect(StyleSheet.flatten(screen.getByLabelText('The night').props.style)).toMatchObject({ gap: 10 })
+  // The ends name the scale in 13/18 at textSecondary.
+  expect(StyleSheet.flatten(screen.getByText('Not great', { includeHiddenElements: true }).props.style)).toMatchObject({ fontSize: 13, lineHeight: 18, color: COLOR.textSecondary })
 })
 
 it('names the ends for a screen reader on 1 and 5, and says nothing twice', async () => {

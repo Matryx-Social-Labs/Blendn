@@ -1,9 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { passReachLine, type PassReach } from '../../lib/attendanceState'
-import { CHECK_OUT_LABEL, SWITCH_LABEL, checkOutCaption, switchCaption } from '../../lib/switchCopy'
+import { CHECKING_OUT_LABEL, CHECK_OUT_LABEL, SWITCH_LABEL, checkOutCaption, switchCaption } from '../../lib/switchCopy'
 import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { HoldToConfirm } from '../ds/HoldToConfirm'
+import { Sheet } from '../ds/Sheet'
 import { font, useBoldText } from '../ds/shared'
 
 export type EventHoldProps = {
@@ -28,8 +29,8 @@ export function EventHold({ reach, onConfirm, busy, confirmed, switching = false
   return (
     <View testID="scene-hold" style={styles.wrap}>
       <HoldToConfirm
-        label={switching ? SWITCH_LABEL : 'Hold to blend in'}
-        srLabel={switching ? 'Switch rooms' : 'Blend in'}
+        label={switching ? SWITCH_LABEL : 'Hold to Blend’n'}
+        srLabel={switching ? 'Switch rooms' : 'Blend’n'}
         consequence={line ?? 'Checks you in. Other people at this event will see you.'}
         onConfirm={onConfirm}
         disabled={reach !== 'open'}
@@ -46,25 +47,64 @@ export function EventHold({ reach, onConfirm, busy, confirmed, switching = false
   )
 }
 
+const noop = () => {}
+
 const styles = StyleSheet.create({
   wrap: { gap: SPACE.sm },
   line: { color: COLOR.textSecondary, textAlign: 'center' },
+  error: { color: COLOR.destructive },
 })
 
+export type EventCheckOutSheetProps = {
+  visible: boolean
+  onClose: () => void
+  /** Once it has left the screen: where focus goes back to (the dock's "Check out"). */
+  onDismissed?: () => void
+  name: string | null
+  onConfirm: () => void
+  /** Held to the end and the server is answering: the fill stays full, and nothing closes the sheet. */
+  busy: boolean
+  /** The server said no (or the call failed): said in the line, and the hold drains, ready again. */
+  error: string | null
+}
+
 /**
- * The event you are checked into, from its own page (SCRUM-970): "Open the room" is the dock's primary; this is the quiet way
- * out under it. The same hold as the check-in, saying whose room it takes you out of, in the DS's quiet hold (`kind="lit"`, the
- * hue pouring in, A-31): the gradient stays the one primary's, so it is never a second gradient under the room's.
+ * The way out of the event you are checked into (option A, SCRUM-1035; was the hold under "Open the room", SCRUM-970): the
+ * dock's "Check out" opens the app's standard sheet. The event's name is its title; the same deliberate hold, in the DS's
+ * quiet kind (`lit`, as GoLiveSheet's), checks you out; its line says what it does without naming the event twice (the hint
+ * does name it, for a reader). A refusal is said in the line, not a toast: a toast is drawn under the sheet's modal.
  */
-export function EventCheckOut({ name, onConfirm, busy }: { name: string | null; onConfirm: () => void; busy: boolean }) {
+export function EventCheckOutSheet({ visible, onClose, onDismissed, name, onConfirm, busy, error }: EventCheckOutSheetProps) {
   const bold = useBoldText()
-  const caption = checkOutCaption(name)
   return (
-    <View testID="scene-checkout" style={styles.wrap}>
-      <HoldToConfirm kind="lit" label={CHECK_OUT_LABEL} srLabel="Check out" consequence={caption} onConfirm={onConfirm} busy={busy} testID="scene-checkout-pill" />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} accessibilityElementsHidden importantForAccessibility="no" style={[font('caption', bold), styles.line]}>
-        {caption}
+    <Sheet
+      visible={visible}
+      onClose={busy ? noop : onClose}
+      onDismissed={onDismissed}
+      title={name?.trim() || 'Check out'}
+      actions={[{ label: 'Cancel', kind: 'tertiary', onPress: onClose, disabled: busy, testID: 'scene-checkout-cancel' }]}
+      testID="scene-checkout"
+    >
+      <HoldToConfirm
+        kind="lit"
+        label={CHECK_OUT_LABEL}
+        busyLabel={CHECKING_OUT_LABEL}
+        srLabel="Check out"
+        consequence={checkOutCaption(name)}
+        onConfirm={onConfirm}
+        busy={busy}
+        refused={!!error}
+        testID="scene-checkout-pill"
+      />
+      <Text
+        maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
+        accessibilityLiveRegion={error ? 'polite' : 'none'}
+        accessibilityElementsHidden={!error}
+        importantForAccessibility={error ? 'yes' : 'no'}
+        style={[font('meta', bold), styles.line, error ? styles.error : null]}
+      >
+        {error ?? checkOutCaption(null)}
       </Text>
-    </View>
+    </Sheet>
   )
 }

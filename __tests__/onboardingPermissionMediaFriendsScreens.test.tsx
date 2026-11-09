@@ -4,9 +4,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet } from 'react-native'
 
-import { TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
@@ -18,7 +16,8 @@ const mockUpload = jest.fn()
 const mockInvite = jest.fn()
 const mockPulled = jest.fn(async (..._a: unknown[]) => ({ pulled: [] as unknown[], live: null as string[] | null }))
 const mockSeen = jest.fn()
-jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() }, useFocusEffect: jest.fn() }))
+let mockFocused = true
+jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() }, useFocusEffect: jest.fn(), useIsFocused: () => mockFocused }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
 jest.mock('../lib/useOnboarding', () => ({
@@ -35,12 +34,35 @@ jest.mock('../lib/photoUtils', () => ({
 jest.mock('../lib/pulledNotices', () => ({ markPulledSeen: (...args: unknown[]) => mockSeen(...args) }))
 jest.mock('../lib/useFriendInvite', () => ({ useFriendInvite: () => mockInvite() }))
 jest.mock('../lib/cityStorage', () => ({ readStoredCity: jest.fn(async () => ({ city: 'Bengaluru', source: 'chosen' })) }))
+// Every creature is drawn by this one component: a marker in its place makes "no creature on onboarding" checkable (direction A).
+jest.mock('../components/ds/Creature', () => {
+  const { View: MockView } = jest.requireActual('react-native')
+  return { ...jest.requireActual('../components/ds/Creature'), Creature: () => <MockView testID="creature-glyph" /> }
+})
+const noCreature = () => expect(screen.queryByTestId('creature-glyph', { includeHiddenElements: true })).toBeNull()
+const mockRequest = jest.fn(async () => ({ status: 'denied' }))
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockPerm(...args),
-  requestForegroundPermissionsAsync: jest.fn(async () => ({ status: 'denied' })),
+  requestForegroundPermissionsAsync: () => mockRequest(),
 }))
+// The live map is native (MapLibre): a stand-in that records what the step hands it (its own tests: liveCityMap.test.tsx).
+const mockLive = jest.fn()
+let mockMapLive = true
+jest.mock('../components/onboarding/LiveCityMap', () => {
+  const R = jest.requireActual('react')
+  return {
+    LiveCityMap: (p: { onLive?: (live: boolean) => void }) => {
+      mockLive(p)
+      R.useEffect(() => p.onLive?.(mockMapLive), [p])
+      return null
+    },
+  }
+})
+const mockFix = jest.fn()
+jest.mock('../lib/locationFix', () => ({ ...jest.requireActual('../lib/locationFix'), roughFix: (...a: unknown[]) => mockFix(...a) }))
+let mockReduce = false
+jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => mockReduce }))
 
-import FriendsIntroScreen from '../app/onboarding/friends'
 import LocationScreen from '../app/onboarding/location'
 import MediaScreen from '../app/onboarding/media'
 import { PhotoTile } from '../components/onboarding/PhotoTile'
@@ -50,15 +72,109 @@ import { stepPayload } from '../lib/onboarding'
 beforeEach(() => {
   jest.clearAllMocks()
   mockDraft = {}
+  mockReduce = false
+  mockMapLive = true
+  mockFocused = true
+  mockRequest.mockImplementation(async () => ({ status: 'denied' }))
   mockPulled.mockImplementation(async () => ({ pulled: [], live: null }))
 })
 
 describe('location', () => {
-  it('draws the map with the browse city when there is one', async () => {
+  it('a still of the lit map, naming no city even with a browsed one stored (SCRUM-997), and no creature', async () => {
     mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
     await render(<LocationScreen />)
-    expect(await screen.findByText('NEAR YOU · BENGALURU', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'See what’s on near you' })).toBeTruthy()
+    expect(await screen.findByTestId('location-map', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/BENGALURU|NEAR YOU|·/, { includeHiddenElements: true })).toBeNull()
     expect(screen.queryByTestId('precise-off-notice')).toBeNull()
+    expect(screen.getByText('Maybe later')).toBeTruthy()
+    noCreature()
+  })
+
+  type LiveProps = { you: [number, number] | null; onShown?: () => void }
+  const lastLive = () => mockLive.mock.calls[mockLive.mock.calls.length - 1][0] as LiveProps
+  const allow = async () => {
+    mockPerm.mockResolvedValue({ granted: false, canAskAgain: true, status: 'undetermined' })
+    mockRequest.mockImplementation(async () => ({ status: 'granted' }))
+    await render(<LocationScreen />)
+    fireEvent.press(screen.getByRole('button', { name: 'Allow location' }))
+  }
+
+  it('the live map sits over the still, with nowhere to fly to before Allow, and neither is read by a screen reader', async () => {
+    mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
+    await render(<LocationScreen />)
+    expect(lastLive().you).toBeNull()
+    expect(screen.getByTestId('location-map', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByTestId('location-map')).toBeNull()
+  })
+
+  it('covered by the next step (still mounted under it), the live map is let go', async () => {
+    mockPerm.mockResolvedValue({ granted: false, canAskAgain: true })
+    mockFocused = false
+    await render(<LocationScreen />)
+    expect(mockLive).not.toHaveBeenCalled()
+  })
+
+  it('Back during the wait: the step has gone, and nothing commits after it', async () => {
+    mockFix.mockResolvedValue({ coords: { longitude: 77.6, latitude: 12.97 } })
+    await allow()
+    await waitFor(() => expect(lastLive().you).toEqual([77.6, 12.97]))
+    await act(async () => screen.unmount())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(mockCommit).not.toHaveBeenCalled()
+  })
+
+  it('Allow again after a save that failed: no second wait for a flight already shown', async () => {
+    mockFix.mockResolvedValue({ coords: { longitude: 77.6, latitude: 12.97 } })
+    mockCommit.mockResolvedValueOnce(false)
+    await allow()
+    await waitFor(() => expect(lastLive().you).toEqual([77.6, 12.97]))
+    await act(async () => lastLive().onShown?.())
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledTimes(1))
+    fireEvent.press(screen.getByRole('button', { name: 'Allow location' }))
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledTimes(2))
+    expect(mockFix).toHaveBeenCalledTimes(1)
+  })
+
+  it('on Allow the map flies to the fix and lights what is near; the step moves on only once it has (owner, 2026-11-01)', async () => {
+    mockFix.mockResolvedValue({ coords: { longitude: 77.6, latitude: 12.97 } })
+    await allow()
+    await waitFor(() => expect(lastLive().you).toEqual([77.6, 12.97]))
+    // Still flying: nothing committed yet.
+    expect(mockCommit).not.toHaveBeenCalled()
+    await act(async () => lastLive().onShown?.())
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
+  })
+
+  it('on Allow with no fix in time, the step moves on without a flight', async () => {
+    mockFix.mockRejectedValue(new Error('timeout'))
+    await allow()
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
+    expect(lastLive().you).toBeNull()
+  })
+
+  it('with no live map (offline, failed, still drawing) Allow asks for no fix and moves on', async () => {
+    mockMapLive = false
+    await allow()
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
+    expect(mockFix).not.toHaveBeenCalled()
+  })
+
+  it('a map that never says it has shown you: the step moves on at the cap, fix included (5 s)', async () => {
+    mockFix.mockResolvedValue({ coords: { longitude: 77.6, latitude: 12.97 } })
+    await allow()
+    await waitFor(() => expect(lastLive().you).toEqual([77.6, 12.97]))
+    expect(mockCommit).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }), { timeout: 6000 })
+  }, 10000)
+
+  it('under Reduce Motion there is no live map, only the still, and Allow asks for no fix', async () => {
+    mockReduce = true
+    await allow()
+    await waitFor(() => expect(mockCommit).toHaveBeenCalledWith({ share_location: true }))
+    expect(mockLive).not.toHaveBeenCalled()
+    expect(mockFix).not.toHaveBeenCalled()
+    expect(screen.getByTestId('location-map', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('Precise Location off is said above the map, and the map shortens to make room', async () => {
@@ -80,11 +196,49 @@ describe('location', () => {
 describe('photos', () => {
   const picked = { ok: true, uri: 'file://one.jpg' }
 
-  it('an empty step is one large well, and Continue sends nothing it has not got', async () => {
+  it('an empty step is one large well, and its primary is Choose a photo: the picker, never a save of nothing', async () => {
+    mockSelect.mockResolvedValue({ ok: false, cancelled: true })
     await render(<MediaScreen />)
+    expect(screen.getByRole('header', { name: 'Add a photo' })).toBeTruthy()
     expect(screen.getByLabelText('Add your main photo')).toBeTruthy()
+    expect(screen.queryByTestId('media-you-they')).toBeNull()
+    expect(screen.getByText('Choose a photo')).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(mockSelect).toHaveBeenCalledTimes(1)
+    expect(mockCommit).not.toHaveBeenCalled()
+    expect(screen.getByText('Skip')).toBeTruthy()
+    noCreature()
+  })
+
+  it('coming back and removing the last saved photo keeps Continue, which saves the removal (control: a first visit offers the picker)', async () => {
+    mockDraft = { photos: ['https://cdn/one.jpg'] }
+    await render(<MediaScreen />)
+    await fireEvent.press(screen.getByLabelText(/^Remove/))
+    expect(screen.getByText('Continue')).toBeTruthy()
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(mockCommit).toHaveBeenCalledWith({ photos: [] })
+  })
+
+  it('two quick taps open one picker', async () => {
+    let resolve: (v: unknown) => void = () => {}
+    mockSelect.mockReturnValue(new Promise((r) => (resolve = r)))
+    await render(<MediaScreen />)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    await fireEvent.press(screen.getByLabelText('Add your main photo'))
+    expect(mockSelect).toHaveBeenCalledTimes(1)
+    resolve({ ok: false, cancelled: true })
+  })
+
+  it('with a main photo up it is shown twice, clear and blurred ("You see · They see"), and Continue saves it', async () => {
+    mockDraft = { photos: ['https://cdn/one.jpg'] }
+    await render(<MediaScreen />)
+    const pair = screen.getByTestId('media-you-they')
+    expect(pair.props.accessibilityLabel).toBe('Your photo, and how it looks to people before you show who you are: blurred')
+    expect(screen.getByText('YOU SEE · THEY SEE', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByTestId('media-they-see', { includeHiddenElements: true }).props.blurRadius).toBeGreaterThan(0)
+    expect(screen.getByTestId('media-you-see', { includeHiddenElements: true }).props.blurRadius ?? 0).toBe(0)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(mockCommit).toHaveBeenCalledWith({ photos: ['https://cdn/one.jpg'] })
   })
 
   it('an empty step draws its six places: the main well marked "Main photo", and five small slots under it (GO-11, A11)', async () => {
@@ -262,62 +416,22 @@ describe('photos', () => {
   })
 })
 
-describe('Bring your friends', () => {
-  const invite = (over: object) => ({ invite: null, failed: false, share: jest.fn(async () => false), reload: jest.fn(async () => {}), ...over })
-
-  it('a link that did not load makes Try again the primary, which reloads (never a dead button)', async () => {
-    const state = invite({ failed: true })
-    mockInvite.mockReturnValue(state)
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByText('Your link didn’t load. Check your connection and try again.')).toBeTruthy()
-    const primary = screen.getByTestId('onboarding-primary')
-    expect(primary.props.accessibilityLabel).toBe('Try again')
-    expect(primary.props.accessibilityState).toMatchObject({ disabled: false })
-    await fireEvent.press(primary)
-    expect(state.reload).toHaveBeenCalledTimes(1)
-  })
-
-  it('shows Share my link when ready, and Start Blend’n once it went somewhere', async () => {
-    const state = invite({ invite: { url: 'https://blendn.app/i/8f3a' }, share: jest.fn(async () => true) })
-    mockInvite.mockReturnValue(state)
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByTestId('onboarding-primary').props.accessibilityLabel).toBe('Share my link')
-    await fireEvent.press(screen.getByTestId('onboarding-primary'))
-    expect(await screen.findByLabelText('Start Blend’n')).toBeTruthy()
-    expect(screen.getByText('Shared. Anyone with the link can ask to be your friend.')).toBeTruthy()
-    expect(screen.getByTestId('onboarding-secondary').props.accessibilityLabel).toBe('Share again')
-  })
-
-  it('keeps the glass bar even with nothing in it, as the frame draws it', async () => {
-    mockInvite.mockReturnValue(invite({}))
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByTestId('onboarding-header')).toBeTruthy()
-    expect(screen.queryByTestId('onboarding-step')).toBeNull()
-    expect(screen.queryByTestId('onboarding-back')).toBeNull()
-  })
-
-  it('under the link it says how a friend link works, so the screen is not a card over an empty page (GO-11, A9)', async () => {
-    mockInvite.mockReturnValue(invite({ invite: { url: 'https://blendn.app/i/8f3a' } }))
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByTestId('friends-how')).toBeTruthy()
-    expect(screen.getByText('They tap it and ask to be your friend.')).toBeTruthy()
-  })
-
-  it('while the link loads the primary is busy and the card says so', async () => {
-    mockInvite.mockReturnValue(invite({}))
-    await render(<FriendsIntroScreen />)
-    expect(screen.getByText('Getting your link')).toBeTruthy()
-    expect(screen.getByTestId('onboarding-primary').props.accessibilityState).toMatchObject({ busy: true })
-  })
-})
-
 describe('preferences', () => {
-  it('anonymous by default; the switch flips it, and what is stored is the inverse', async () => {
+  it('asks one question, its key words lit, with no creature anywhere on the step', async () => {
     await render(<PreferencesScreen />)
-    // A sentence in Satoshi meta like its siblings, not Geist Mono (GO-11, A12).
-    expect(StyleSheet.flatten(screen.getByText('You’d appear under a made-up name').props.style).fontFamily).toBe(TYPE.meta.fontFamily)
-    await fireEvent.press(screen.getByTestId('onboarding-anonymous'))
-    expect(screen.getByText('Your name and photo, if you say so')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'What brings you out?' })).toBeTruthy()
+    noCreature()
+  })
+
+  it('anonymity is one line with its switch: on by default, flipped, and what is stored is the inverse', async () => {
+    await render(<PreferencesScreen />)
+    const row = screen.getByTestId('onboarding-anonymous')
+    expect(row.props.accessibilityState).toMatchObject({ checked: true })
+    expect(screen.getByText('Stay anonymous at events')).toBeTruthy()
+    // Printed under the switch, not only a screen-reader hint: what the switch does is the SCRUM-493 promise.
+    expect(screen.getByText('Join rooms under a made-up name. Off, we’ll offer to show your name and photo when you check in.')).toBeTruthy()
+    await fireEvent.press(row)
+    expect(screen.getByTestId('onboarding-anonymous').props.accessibilityState).toMatchObject({ checked: false })
     await fireEvent.press(screen.getByTestId('onboarding-primary'))
     expect(mockCommit).toHaveBeenCalledWith(expect.objectContaining({ reveal_by_default: true }))
   })
@@ -355,11 +469,81 @@ describe('preferences', () => {
     expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
   })
 
-  it('draws the looking-for tiles as the design system’s, and a minor never sees Dating', async () => {
+  const tile = (name: string) => screen.getByTestId(`looking-for-${name}`)
+  // Tiles and Just here are all checkboxes now (multi-select, SCRUM-1025): `checked` is the one state.
+  const picked = (name: string) => tile(name).props.accessibilityState.checked
+
+  it('Edit profile’s intents, in its words: Friendship, Networking and Dating tiles, and Just here (owner, 2026-11-01)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    for (const label of ['Friendship', 'Networking', 'Dating']) expect(screen.getByLabelText(label)).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Just here, no matching' })).toBeTruthy()
+    expect(screen.queryByText('Both, depends on the night')).toBeNull()
+    noCreature()
+  })
+
+  it('a minor sees no Dating tile, and no orientation', async () => {
     mockDraft = { dateOfBirth: `${new Date().getFullYear() - 16}-01-01` }
     await render(<PreferencesScreen />)
-    expect(screen.queryByLabelText('Dating')).toBeNull()
     expect(screen.getByLabelText('Friendship')).toBeTruthy()
+    expect(screen.queryByLabelText('Dating')).toBeNull()
     expect(screen.queryByLabelText(/^Bisexual/)).toBeNull()
+  })
+
+  it('more than one can be picked, and Dating saves as dating (the same field and values as Edit profile)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(tile('networking'))
+    await fireEvent.press(tile('dating'))
+    expect(picked('networking') && picked('dating')).toBe(true)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['networking', 'dating'])
+  })
+
+  it('a second tap takes a tile back off', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(tile('friendship'))
+    await fireEvent.press(tile('dating'))
+    await fireEvent.press(tile('dating'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship'])
+  })
+
+  it('Just here means not looking: it clears the tiles, and a tile clears it (the server refuses the mix, SCRUM-518)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(tile('friendship'))
+    await fireEvent.press(tile('just_here'))
+    expect(picked('friendship')).toBe(false)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['just_here'])
+    await fireEvent.press(tile('networking'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['networking'])
+  })
+
+  it('a resumed Dating taken back off, leaving nothing, is withdrawn: an empty list is sent, never the old answer kept', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['dating'] }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(tile('dating'))
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual([])
+  })
+
+  it('nothing stored and nothing touched: no intent is sent (control for the withdrawal above)', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01' }
+    await render(<PreferencesScreen />)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft)).not.toHaveProperty('intent_default')
+  })
+
+  it('a resumed answer shows picked, dating included, and is sent as it was when nothing is touched', async () => {
+    mockDraft = { dateOfBirth: '1990-01-01', intent_default: ['friendship', 'dating'] }
+    await render(<PreferencesScreen />)
+    expect(picked('friendship') && picked('dating')).toBe(true)
+    expect(picked('networking')).toBe(false)
+    await fireEvent.press(screen.getByTestId('onboarding-primary'))
+    expect(sentOnContinue(mockDraft).intent_default).toEqual(['friendship', 'dating'])
   })
 })

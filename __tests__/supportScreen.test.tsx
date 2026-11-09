@@ -1,6 +1,6 @@
 /**
  * Contact support: the card says what the draft carries (app, phone, account), Email support opens the mail app with
- * it, no mail app is an info toast with the address, the address copies, and the Help centre failing is a toast.
+ * it, no mail app is an info toast with the address, the address copies, and the Help center failing is a toast.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import * as WebBrowser from 'expo-web-browser'
@@ -63,12 +63,12 @@ it('the address copies, and the toast names it', async () => {
   await waitFor(() => expect(mockToast).toHaveBeenCalledWith(`Copied ${SUPPORT_EMAIL}`, 'success'))
 })
 
-it('the Help centre opens in the app, and a refusal is a toast', async () => {
+it('the Help center opens in the app, and a refusal is a toast', async () => {
   await render(<SupportScreen />)
-  fireEvent.press(screen.getByLabelText(/^Help centre/))
+  fireEvent.press(screen.getByLabelText(/^Help center/))
   await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(BLENDN_LINKS.help, expect.any(Object)))
   ;(WebBrowser.openBrowserAsync as jest.Mock).mockRejectedValueOnce(new Error('no browser'))
-  fireEvent.press(screen.getByLabelText(/^Help centre/))
+  fireEvent.press(screen.getByLabelText(/^Help center/))
   await waitFor(() => expect(mockToast).toHaveBeenCalledWith("That page didn’t open. Try again.", 'error'))
 })
 

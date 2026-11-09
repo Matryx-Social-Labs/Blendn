@@ -1,13 +1,13 @@
 /**
- * SCRUM-966: the event page's "Blend in" is the hold itself. Nothing is docked in Blend'n first: the hold runs the one
+ * SCRUM-966: the event page's "Blend’n" is the hold itself. Nothing is docked in Blend'n first: the hold runs the one
  * check-in flow (`useCheckInFlow`) from the page, "You're in" pours over the page, and the Room overlay (opened underneath
  * at the server's yes) is stepped onto once it is up. A refusal is drawn on the page.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Pressable, StyleSheet } from 'react-native'
 
-import { EventCheckOut, EventHold } from '../components/scene/EventHold'
+import { EventCheckOutSheet, EventHold } from '../components/scene/EventHold'
 import { ROOM_WAIT_MS, useEventCheckIn } from '../components/scene/useEventCheckIn'
 import { checkInRefusal } from '../lib/checkInRefusal'
 import { checkOutOf, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
@@ -17,6 +17,10 @@ import { tint } from '../lib/theme'
 import { getLeftNotice, openRoomOf, setLeftNotice, setLiveHint, setRoomUp } from '../lib/blendnOverlay'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
+jest.mock('expo-glass-effect', () => {
+  const { View } = jest.requireActual('react-native')
+  return { GlassView: (props: object) => <View {...props} />, isGlassEffectAPIAvailable: jest.fn(() => true), isLiquidGlassAvailable: jest.fn(() => true) }
+})
 jest.mock('react-native-gesture-handler', () => ({
   ...jest.requireActual('react-native-gesture-handler'),
   GestureDetector: ({ children }: { children: React.ReactNode }) => children,
@@ -37,7 +41,6 @@ const { router } = jest.requireMock('expo-router') as { router: { dismissTo: jes
 const { openPass } = jest.requireMock('../lib/blendnOverlay') as { openPass: jest.Mock }
 const submit = submitCheckIn as jest.Mock
 const checkOut = checkOutOf as jest.Mock
-const showToast = jest.fn()
 const HIDDEN = { includeHiddenElements: true }
 const advance = (ms: number) => act(async () => jest.advanceTimersByTime(ms))
 const fresh: CheckInOutcome = { kind: 'checkedIn', checkInId: 'c1', askIntent: false, revealSuggestion: false, left: [] }
@@ -48,16 +51,24 @@ const soon = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString()
 const event = { id: 'e1', title: 'Vinyl Night', venue_name: 'Toit', latitude: 12.9791, longitude: 77.6408, start_time: soon(-1), end_time: soon(2), status: 'published' }
 
 function Page({ openMaps = jest.fn(), going = false }: { openMaps?: () => void; going?: boolean }) {
-  const { hold, checkOut: out, overlays } = useEventCheckIn({ id: 'e1', event: event as never, openMaps, showToast })
+  const { hold, checkOut: out, openCheckOut, overlays } = useEventCheckIn({ id: 'e1', event: event as never, openMaps })
   return (
     <>
-      {going ? <EventCheckOut {...out} /> : <EventHold {...hold} />}
+      {going ? (
+        <>
+          {/* The dock's state, as the screen draws it with DockRow: "You’re in. Check out". */}
+          <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Check out" onPress={openCheckOut} />
+          <EventCheckOutSheet {...out} />
+        </>
+      ) : (
+        <EventHold {...hold} />
+      )}
       {overlays}
     </>
   )
 }
 const activate = () =>
-  act(async () => fireEvent(screen.getByRole('button', { name: 'Hold to blend in' }), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
+  act(async () => fireEvent(screen.getByRole('button', { name: 'Hold to Blend’n' }), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
 const fix = (latitude: number, longitude: number) => ({ coords: { latitude, longitude, accuracy: 10, timestamp: Date.now(), approximate: false }, location: 'on' })
 
 beforeEach(() => {
@@ -78,10 +89,10 @@ beforeEach(() => {
 afterEach(() => jest.useRealTimers())
 
 describe('the hold is the button', () => {
-  it('reads "Hold to blend in", enabled at the door, and docks no pass in Blend’n', async () => {
+  it('reads "Hold to Blend’n", enabled at the door, and docks no pass in Blend’n', async () => {
     await render(<Page />)
     await act(async () => {})
-    const hold = screen.getByRole('button', { name: 'Hold to blend in' })
+    const hold = screen.getByRole('button', { name: 'Hold to Blend’n' })
     expect(hold.props.accessibilityState).toMatchObject({ disabled: false })
     expect(openPass).not.toHaveBeenCalled()
   })
@@ -90,7 +101,7 @@ describe('the hold is the button', () => {
     mockFix.mockResolvedValue(fix(12.9575, 77.6408))
     await render(<Page />)
     await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Hold to blend in' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' }).props.accessibilityState).toMatchObject({ disabled: true })
     expect(screen.getByText('You’re too far away', HIDDEN)).toBeTruthy()
   })
 
@@ -98,7 +109,7 @@ describe('the hold is the button', () => {
     mockFix.mockResolvedValue({ coords: null, location: 'off' })
     await render(<Page />)
     await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Hold to blend in' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' }).props.accessibilityState).toMatchObject({ disabled: true })
     expect(screen.getByText('Location is off', HIDDEN)).toBeTruthy()
   })
 })
@@ -133,11 +144,11 @@ describe('opened cold, before the tab bar has read which room you are in (SCRUM-
     setLiveHint(null)
   })
 
-  it('stays "Hold to blend in" when you are in no room, or the read fails', async () => {
+  it('stays "Hold to Blend’n" when you are in no room, or the read fails', async () => {
     mockActive.mockRejectedValueOnce(new Error('offline'))
     await render(<Page />)
     await act(async () => {})
-    expect(screen.getByRole('button', { name: 'Hold to blend in' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' })).toBeTruthy()
   })
 
   it('does not ask when the tab bar already has the answer', async () => {
@@ -149,21 +160,30 @@ describe('opened cold, before the tab bar has read which room you are in (SCRUM-
   })
 })
 
-describe('checked into this event already', () => {
-  const CheckOutSeen = () => screen.queryByRole('button', { name: 'Hold to check out' })
-  const holdOut = () =>
-    act(async () => fireEvent(screen.getByRole('button', { name: 'Hold to check out' }), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
+describe('checked into this event already: "Check out" opens the sheet with the hold (option A, SCRUM-1035)', () => {
+  const Hold = () => screen.queryByRole('button', { name: 'Hold to check out' })
+  const open = () => act(async () => fireEvent.press(screen.getByRole('button', { name: 'You’re in. Check out' })))
+  const holdOut = () => act(async () => fireEvent(screen.getByRole('button', { name: /Hold to check out|Checking you out/ }), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
+  const settle = () => advance(1000)
 
-  it('is "Hold to check out", saying which event it checks you out of, and the same sentence is the hint', async () => {
+  it('draws no hold until "Check out" is tapped', async () => {
     await render(<Page going />)
-    expect(CheckOutSeen()).toBeTruthy()
-    expect(screen.getByText('Checks you out of Vinyl Night.', HIDDEN)).toBeTruthy()
-    expect(CheckOutSeen()?.props.accessibilityHint).toBe('Checks you out of Vinyl Night.')
+    expect(Hold()).toBeNull()
   })
 
-  it('is the quiet hold, not a second gradient under "Open the room" (A-31): the lit kind, its hue pouring in', async () => {
+  it('the sheet: the event’s name as its title, the hold naming it in its hint, and the line', async () => {
     await render(<Page going />)
-    // The lit kind's own layers: its rim and the hue's flare as the fill. The gradient stays the one primary's.
+    await open()
+    expect(screen.getByRole('header', { name: 'Vinyl Night' })).toBeTruthy()
+    expect(Hold()?.props.accessibilityHint).toBe('Checks you out of Vinyl Night.')
+    // The title names it; the line does not say it twice.
+    expect(screen.getByText('Checks you out of this event.', HIDDEN)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
+  })
+
+  it('is the quiet hold, the lit kind with its hue pouring in, not the gradient', async () => {
+    await render(<Page going />)
+    await open()
     expect(screen.getByTestId('scene-checkout-pill-rim', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('scene-checkout-pill-fill-ground', HIDDEN)).toBeTruthy()
   })
@@ -175,20 +195,67 @@ describe('checked into this event already', () => {
     expect(screen.queryByTestId('scene-hold-pill-fill-ground', HIDDEN)).toBeNull()
   })
 
-  it('checks out through the Room’s own call, for this event', async () => {
-    checkOut.mockResolvedValue({ success: true })
+  it('Cancel closes it and checks nobody out', async () => {
     await render(<Page going />)
-    await holdOut()
-    expect(checkOut).toHaveBeenCalledWith('e1')
-    expect(showToast).not.toHaveBeenCalled()
+    await open()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Cancel' })))
+    await settle()
+    expect(Hold()).toBeNull()
+    expect(checkOut).not.toHaveBeenCalled()
   })
 
-  it('says so, and stays, when the server refuses', async () => {
+  it('held: checks out through the Room’s own call for this event, busy until the answer, then closes', async () => {
+    let answer: (v: { success: boolean }) => void = () => {}
+    checkOut.mockReturnValue(new Promise((r) => (answer = r)))
+    await render(<Page going />)
+    await open()
+    await holdOut()
+    expect(checkOut).toHaveBeenCalledWith('e1')
+    // Busy: the fill stays full under its busy words; Cancel is off.
+    expect(screen.getByRole('button', { name: 'Checking you out…' }).props.accessibilityState).toMatchObject({ busy: true })
+    expect(screen.getByRole('button', { name: 'Cancel' }).props.accessibilityState).toMatchObject({ disabled: true })
+    await act(async () => answer({ success: true }))
+    await settle()
+    expect(screen.queryByRole('button', { name: /Hold to check out|Checking you out/ })).toBeNull()
+  })
+
+  it('refused: stays open, says why in its line, plays the error once, and the hold is ready again', async () => {
     checkOut.mockResolvedValue({ success: false, error: 'Nope.' })
     await render(<Page going />)
+    await open()
     await holdOut()
-    expect(showToast).toHaveBeenCalledWith('Nope.', 'error', expect.anything())
-    expect(CheckOutSeen()).toBeTruthy()
+    await settle()
+    expect(screen.getByText('Nope.', HIDDEN)).toBeTruthy()
+    expect(screen.queryByText('Checks you out of this event.', HIDDEN)).toBeNull()
+    expect(H.error).toHaveBeenCalledTimes(1)
+    expect(Hold()?.props.accessibilityState).toMatchObject({ disabled: false })
+    // A second try clears the reason.
+    checkOut.mockResolvedValue({ success: true })
+    await holdOut()
+    await settle()
+    expect(screen.queryByText('Nope.', HIDDEN)).toBeNull()
+    expect(Hold()).toBeNull()
+  })
+
+  it('a call that throws says the app’s own sentence', async () => {
+    checkOut.mockRejectedValue(new Error('offline'))
+    await render(<Page going />)
+    await open()
+    await holdOut()
+    await settle()
+    expect(screen.getByText('Couldn’t check you out. You’re still in this room.', HIDDEN)).toBeTruthy()
+  })
+
+  it('opened again after a refusal, it starts clean', async () => {
+    checkOut.mockResolvedValue({ success: false, error: 'Nope.' })
+    await render(<Page going />)
+    await open()
+    await holdOut()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Cancel' })))
+    await settle()
+    await open()
+    expect(screen.queryByText('Nope.', HIDDEN)).toBeNull()
+    expect(screen.getByText('Checks you out of this event.', HIDDEN)).toBeTruthy()
   })
 })
 
@@ -291,7 +358,7 @@ describe('the server says no: said on the page, nothing opens', () => {
     expect(router.dismissTo).not.toHaveBeenCalled()
     expect(screen.queryByTestId('scene-pour', HIDDEN)).toBeNull()
     // The hold drains: it can be held again.
-    expect(screen.getByRole('button', { name: 'Hold to blend in' }).props.accessibilityState).toMatchObject({ disabled: false, busy: false })
+    expect(screen.getByRole('button', { name: 'Hold to Blend’n' }).props.accessibilityState).toMatchObject({ disabled: false, busy: false })
   })
 
   it('Not quite there yet offers Open Maps, which opens the page’s own map', async () => {

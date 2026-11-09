@@ -10,8 +10,9 @@ import { Text } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { HomeDrawer } from '../components/home/HomeDrawer'
-import { COLOR, EASING, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
-import { tint } from '../lib/theme'
+import { SHEET_ORBS } from '../components/ds/Orbs'
+import { COLOR, EASING, MATERIAL, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
+import { DRAWER_HEADER_HEIGHT } from '../lib/home'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
@@ -59,79 +60,101 @@ describe('the drawer travels', () => {
   })
 })
 
-describe('the drawer\'s fill is the design system\'s, not a flat ember page', () => {
-  it('is the sheet glass, with an ink-96% wash that is clear at half and opaque at full', async () => {
+/*
+ * Owner, 2026-11-03: the drawer must look like the approved board, "not gray". The board's `.drawer` computes to ink at 80%
+ * over the dark map (96% at full), a 0.5 pt rim (10%, 18% along the top), and three brand orbs at 60% when not full
+ * (kit.css `.orbs`). Its neutral reads #0F1012, within a few levels of ink; the grey (#171618 measured) was iOS 26's
+ * regular glass under the old Material layer, and Android stood on the sheet's grey fill.
+ */
+describe('the drawer is the board’s: ink, the rim and the three orbs, on every tier', () => {
+  const { Platform } = jest.requireActual('react-native')
+  const original = Platform.OS
+  afterEach(() => Object.defineProperty(Platform, 'OS', { value: original, configurable: true }))
+
+  it.each([
+    ['ios', 'peek'],
+    ['ios', 'half'],
+    ['ios', 'full'],
+    ['android', 'peek'],
+    ['android', 'half'],
+    ['android', 'full'],
+  ] as const)('%s at %s: an opaque ink drawer, with no glass and no wash over it', async (os, snap) => {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
     reduceMotion.mockReturnValue(false)
+    await render(drawer(snap))
+    expect(StyleSheet.flatten(screen.getByTestId('home-drawer', { includeHiddenElements: true }).props.style).backgroundColor).toBe(COLOR.ink)
+    // Control for what made it grey: the sheet glass and the fading wash are gone.
+    expect(screen.queryByTestId('drawer-glass', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByTestId('drawer-opaque', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('the rim: 0.5 pt at 10% all round, 18% along the top (kit.css `.drawer` box-shadow)', async () => {
     await render(drawer('half'))
-    const wash = screen.getByTestId('drawer-opaque', { includeHiddenElements: true })
-    expect(StyleSheet.flatten(wash.props.style).backgroundColor).toBe(tint(COLOR.ink, 0.96))
-    // At the half detent (y = half) the wash is fully clear; it only fills as the drawer reaches full.
-    expect(StyleSheet.flatten(wash.props.style).opacity).toBe(0)
+    expect(StyleSheet.flatten(screen.getByTestId('drawer-rim', { includeHiddenElements: true }).props.style)).toMatchObject({
+      borderWidth: 0.5,
+      borderColor: COLOR.hairline,
+      borderTopColor: MATERIAL.glassSpecular,
+    })
+  })
+
+  it('the orbs: 60% below full, none at full (the board’s `.full` has none)', async () => {
+    await render(drawer('half'))
+    expect(StyleSheet.flatten(screen.getByTestId('drawer-orbs', { includeHiddenElements: true }).props.style).opacity).toBe(0.6)
+    // The drawer resting at full (its edge at `points.full`).
+    await render(
+      <HomeDrawer y={Reanimated.makeMutable(points.full)} points={points} snap="full" onSnap={jest.fn()} header={<Text>header</Text>}>
+        <Text>pane</Text>
+      </HomeDrawer>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('drawer-orbs', { includeHiddenElements: true }).props.style).opacity).toBe(0)
+  })
+
+  it('the three orbs are the board’s, to the percent: ember top-left, violet right, rose low', () => {
+    expect(SHEET_ORBS).toEqual([
+      { color: COLOR.brandOrange, alpha: 0.18, cx: 0.08, cy: 0.06, rx: 0.6, ry: 0.34 },
+      { color: COLOR.brandViolet, alpha: 0.14, cx: 1, cy: 0.22, rx: 0.55, ry: 0.3 },
+      { color: COLOR.brandRose, alpha: 0.1, cx: 0.3, cy: 0.7, rx: 0.5, ry: 0.3 },
+    ])
+    expect([COLOR.brandOrange, COLOR.brandViolet, COLOR.brandRose]).toEqual(['#F05423', '#925DA9', '#BE5C71'])
   })
 })
 
-describe('a pinned row inside the drawer is as opaque as the drawer (rc7 D3)', () => {
+describe('a pinned row inside the drawer is the drawer: plain ink, never a bar (rc7 D3, owner 2026-11-03)', () => {
   const { Platform } = jest.requireActual('react-native')
   const { StickyBar } = jest.requireActual('../components/pulse/StickyBar')
-  const { SOLID } = jest.requireActual('../components/ui/Material')
-  const pinned = (y: number) => (
+  const pinned = (y: number, scrolled?: boolean) => (
     <HomeDrawer y={Reanimated.makeMutable(y)} points={points} snap="full" onSnap={jest.fn()} header={<Text>header</Text>}>
-      <StickyBar>
-        <Text>search</Text>
+      <StickyBar scrolled={scrolled}>
+        <Text>chips</Text>
       </StickyBar>
     </HomeDrawer>
   )
   const original = Platform.OS
   afterEach(() => Object.defineProperty(Platform, 'OS', { value: original, configurable: true }))
 
-  it('on the solid tier the sticky search stands on the drawer’s own ground, at rest and with no scroll flag', async () => {
-    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
-    await render(pinned(points.full))
+  it.each([
+    ['ios', false],
+    ['ios', true],
+    ['android', false],
+    ['android', true],
+  ] as const)('%s, scrolled %s: the row stands on ink, so nothing shows through and no band reads as a rail', async (os, scrolled) => {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+    await render(pinned(points.full, scrolled))
     const ground = screen.getByTestId('sticky-search-ground', { includeHiddenElements: true })
-    expect(StyleSheet.flatten(ground.props.style)).toMatchObject({ position: 'absolute', backgroundColor: SOLID.sheet })
-    // The same ink wash as the drawer, so the row matches it at every snap: opaque at full.
-    const ink = ground.children[0] as unknown as { props: { style: unknown } }
-    expect(StyleSheet.flatten(ink.props.style)).toMatchObject({ backgroundColor: tint(COLOR.ink, 0.96), opacity: 1 })
+    expect(StyleSheet.flatten(ground.props.style)).toMatchObject({ position: 'absolute', backgroundColor: COLOR.ink })
+    // The drawer's own orbs, placed where this row sits in it (under the header), so there is no band: the glow runs on.
+    const orbs = screen.getByTestId('sticky-search-ground-orbs', { includeHiddenElements: true })
+    expect(StyleSheet.flatten(orbs.props.style).top).toBe(-DRAWER_HEADER_HEIGHT)
+    expect(screen.queryByTestId('sticky-search-bar', { includeHiddenElements: true })).toBeNull()
   })
 
-  it('glass has no ground to match: the bar alone, once scrolled', async () => {
-    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
-    await render(pinned(points.full))
+  it('outside a drawer the scrolled row keeps its bar, since no ground stands behind it', async () => {
+    await render(
+      <StickyBar scrolled>
+        <Text>search</Text>
+      </StickyBar>
+    )
+    expect(screen.getByTestId('sticky-search-bar', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.queryByTestId('sticky-search-ground', { includeHiddenElements: true })).toBeNull()
-  })
-})
-
-/*
- * SCRUM-963: on the owner's phone the drawer went fully transparent after a tab
- * away and back, then a drag: the glass view had detached while the tab was
- * frozen and never came back. The glass is remounted on each refocus.
- */
-describe('the drawer’s glass comes back after a tab switch (SCRUM-963)', () => {
-  const { useRefocusCount } = jest.requireActual('../components/home/HomeDrawer')
-  const glassed = (glassKey: number) => (
-    <HomeDrawer y={Reanimated.makeMutable(points.half)} points={points} snap="half" onSnap={jest.fn()} header={<Text>header</Text>} glassKey={glassKey}>
-      <Text>pane</Text>
-    </HomeDrawer>
-  )
-
-  it('a new glass key is a new glass view; the same key keeps it', async () => {
-    const view = await render(glassed(0))
-    const first = screen.getByTestId('drawer-glass', { includeHiddenElements: true })
-    await view.rerender(glassed(0))
-    expect(screen.getByTestId('drawer-glass', { includeHiddenElements: true })).toBe(first)
-    await view.rerender(glassed(1))
-    expect(screen.getByTestId('drawer-glass', { includeHiddenElements: true })).not.toBe(first)
-  })
-
-  it('counts refocuses only: not the first focus, not a blur', async () => {
-    const { renderHook } = jest.requireActual('@testing-library/react-native')
-    const hook = await renderHook(({ focused }: { focused: boolean }) => useRefocusCount(focused), { initialProps: { focused: true } })
-    expect(hook.result.current).toBe(0)
-    await hook.rerender({ focused: false })
-    expect(hook.result.current).toBe(0)
-    await hook.rerender({ focused: true })
-    expect(hook.result.current).toBe(1)
-    await hook.rerender({ focused: true })
-    expect(hook.result.current).toBe(1)
   })
 })

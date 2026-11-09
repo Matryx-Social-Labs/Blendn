@@ -48,7 +48,7 @@ describe('what a refusal says (code → copy)', () => {
     expect(crewMessage(notFound, 'crew', 'x')).toBe(`${CREW_GONE_LINE}.`)
     expect(crewMessage(notFound, 'join', 'x')).toBe('That invite isn’t open any more.')
     expect(crewMessage(notFound, 'card', 'x')).toBe('That crew isn’t here any more.')
-    expect(crewMessage({ error: 'Blend not found', errorCode: 'NOT_FOUND' }, 'blend', 'x')).toBe(`${BLEND_CLOSED_LINE}.`)
+    expect(crewMessage({ error: 'Mix not found', errorCode: 'NOT_FOUND' }, 'blend', 'x')).toBe(`${BLEND_CLOSED_LINE}.`)
   })
 
   it('a 404 that is a sentence is the server’s sentence (inviting a non-friend on create)', () => {
@@ -62,7 +62,7 @@ describe('what a refusal says (code → copy)', () => {
     )
   })
 
-  it('CHAT_CLOSED in a Blend is the Blend closing', () => {
+  it('CHAT_CLOSED in a Mix is the Mix closing', () => {
     expect(crewMessage({ error: 'This chat has closed', errorCode: 'CHAT_CLOSED' }, 'blend', 'x')).toBe(`${BLEND_CLOSED_LINE}.`)
   })
 
@@ -102,8 +102,8 @@ describe('what a refusal says (code → copy)', () => {
   })
 })
 
-describe('a crew or Blend room that is over', () => {
-  it('a Blend reads closed for a 404, a 403 and CHAT_CLOSED alike — no oracle on why', () => {
+describe('a crew or Mix room that is over', () => {
+  it('a Mix reads closed for a 404, a 403 and CHAT_CLOSED alike — no oracle on why', () => {
     for (const code of ['NOT_FOUND', 'FORBIDDEN', 'CHAT_CLOSED']) expect(roomClosedLine('blend', code)).toBe(BLEND_CLOSED_LINE)
   })
 
@@ -123,7 +123,7 @@ describe('a crew or Blend room that is over', () => {
     expect(roomKindParam('crew')).toBe('crew')
     expect(roomKindParam(undefined)).toBeNull()
     expect(roomKindParam(['blend'])).toBeNull()
-    expect(defaultRoomName('blend')).toBe('Your Blend')
+    expect(defaultRoomName('blend')).toBe('Your Mix')
     expect(defaultRoomName(null)).toBe('Event chat')
   })
 })
@@ -206,7 +206,7 @@ describe('lines', () => {
     expect(hereNowLine({ presentCount: 3, size: 5 })).toBe('Here now · 3 of 5')
   })
 
-  it('the Blend’s clock', () => {
+  it('the Mix’s clock', () => {
     const now = Date.parse('2026-10-09T20:00:00Z')
     expect(closesLine('2026-10-10T05:00:00Z', now)).toBe('Closes in 9h')
     expect(closesLine('2026-10-09T20:25:00Z', now)).toBe('Closes in 25m')
@@ -229,7 +229,7 @@ const side = (over: Partial<BlendSide>): BlendSide => ({
   ...over,
 })
 
-describe('a Blend’s sides', () => {
+describe('a Mix’s sides', () => {
   it('yours is the side with your own id; the title is theirs', () => {
     const blend: Blend = {
       blendId: 'b1',
@@ -241,7 +241,7 @@ describe('a Blend’s sides', () => {
     expect(blendSides(blend, 'me').mine?.name).toBe('Two')
     expect(blendSides(blend, 'me').theirs?.name).toBe('Five')
     // One name on every surface (TG-11): the other side's name as given, never "Crew " before it.
-    expect(blendTitle(blend, 'me')).toBe('Blend with Five')
+    expect(blendTitle(blend, 'me')).toBe('Mix with Five')
     expect(blendTitle({ ...blend, sides: [blend.sides[0], { ...blend.sides[1], name: 'RC4 Crew Y' }] }, 'me')).toBe(blendWith('RC4 Crew Y'))
   })
 
@@ -253,11 +253,11 @@ describe('a Blend’s sides', () => {
       closesAt: '2026-10-10T05:00:00Z',
       sides: [side({ name: 'Two', mine: true, people: [person({ userId: 'me' })] }), side({ kind: 'person', name: null, people: [person({ name })] })],
     })
-    expect(blendTitle(solo(null), 'me')).toBe('Blend with Cosmic Panda')
-    expect(blendTitle(solo('Kavya'), 'me')).toBe('Blend with Kavya')
+    expect(blendTitle(solo(null), 'me')).toBe('Mix with Cosmic Panda')
+    expect(blendTitle(solo('Kavya'), 'me')).toBe('Mix with Kavya')
     const alone: Blend = { ...solo(null), sides: [side({ kind: 'person', name: null, mine: true, people: [person({ userId: 'me' })] }), side({ name: 'Nebula' })] }
-    expect(blendTitle(alone, 'me')).toBe('Blend with Nebula')
-    expect(blendTitle({ ...alone, sides: [alone.sides[0]] }, 'me')).toBe('Your Blend')
+    expect(blendTitle(alone, 'me')).toBe('Mix with Nebula')
+    expect(blendTitle({ ...alone, sides: [alone.sides[0]] }, 'me')).toBe('Your Mix')
   })
 })
 
@@ -324,7 +324,7 @@ describe('pass 2 (review of #369)', () => {
     expect(body).toEqual({ problem: 'Pick at least one friend to ask.' })
   })
 
-  it('M10: a ban closes the room — a Blend as closed, a crew chat as you being out of it', () => {
+  it('M10: a ban closes the room — a Mix as closed, a crew chat as you being out of it', () => {
     expect(roomClosedLine('blend', 'USER_BANNED')).toBe(BLEND_CLOSED_LINE)
     expect(roomClosedLine('crew', 'USER_BANNED')).toBe(CREW_REMOVED_LINE)
   })
@@ -364,7 +364,7 @@ describe('pass 2 (review of #369)', () => {
     expect(OPEN_TO_CREWS_HELPER).not.toMatch(/can see you/)
   })
 
-  it('S5: crew and Blend rooms from GET /chat/groups, and only those', () => {
+  it('S5: crew and Mix rooms from GET /chat/groups, and only those', () => {
     const rows = crewRoomsFrom({
       groups: [{ id: 'e1', kind: 'event' }],
       rooms: [
@@ -380,14 +380,14 @@ describe('pass 2 (review of #369)', () => {
     ])
     expect(rows[0].lastMessage?.user.name).toBe('Ishan')
     expect(rows[0].unreadCount).toBe(2)
-    expect(crewRoomTitle(rows[1])).toBe('Blend · Lot S9 × Nebula S9')
+    expect(crewRoomTitle(rows[1])).toBe('Mix · Lot S9 × Nebula S9')
     expect(crewRoomTitle(rows[0])).toBe('Lot S9')
     expect(crewRoomsFrom({ groups: [] })).toEqual([])
   })
 })
 
 describe('crew pushes land where they mean something, and name nobody', () => {
-  it('H2: a reply in a crew or Blend room opens as that room; an event or venue day reply as an event room', () => {
+  it('H2: a reply in a crew or Mix room opens as that room; an event or venue day reply as an event room', () => {
     expect(notificationTarget({ type: 'group_message', chatGroupId: 'g1', kind: 'blend', blendId: 'b1' })).toEqual({
       pathname: '/chat/[id]',
       params: { id: 'g1', kind: 'blend', blendId: 'b1' },
@@ -424,7 +424,7 @@ describe('crew pushes land where they mean something, and name nobody', () => {
     expect(notificationTarget({ type: 'crew_here', crewId: 'c1' })).toBe('/crews')
   })
 
-  it('a Blend opens its room, as a Blend', () => {
+  it('a Mix opens its room, as a Mix', () => {
     expect(notificationTarget({ type: 'blend', blendId: 'b1', chatGroupId: 'g1' })).toEqual({
       pathname: '/chat/[id]',
       params: { id: 'g1', kind: 'blend', blendId: 'b1' },
@@ -437,7 +437,7 @@ describe('systemPreview (TG-10, S-7)', () => {
   const last = (content: string, type?: string) => ({ content, ...(type ? { type } : null), user: { id: 'u', name: 'Rohan' } })
   it('a system like names who; any other system line is its words; a person’s message is null', () => {
     expect(systemPreview(last('liked Crew Nebula for the crew', 'system'), 'You')).toBe('You liked Crew Nebula for the crew')
-    expect(systemPreview(last('The Blend closed', 'system'), 'Rohan')).toBe('The Blend closed')
+    expect(systemPreview(last('The Mix closed', 'system'), 'Rohan')).toBe('The Mix closed')
     expect(systemPreview(last('liked Crew Nebula for the crew', 'text'), 'You')).toBeNull()
   })
   it('a server with no type falls back to the like’s words', () => {

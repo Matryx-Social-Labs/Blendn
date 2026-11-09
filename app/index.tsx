@@ -5,15 +5,19 @@ import {
   statusCodes
 } from '@react-native-google-signin/google-signin'
 import * as AppleAuthentication from 'expo-apple-authentication'
-import { router } from 'expo-router'
+import { router, useIsFocused, usePathname } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
-import Animated from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useDerivedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { currentDeviceInfo } from '../components/onboarding/authForm'
 import { Backdrop, ORB_LEVEL } from '../components/onboarding/Backdrop'
+import type { Shelf } from '../components/onboarding/GalaxyBackdrop'
 import { Dock } from '../components/ds/Dock'
 import { GoogleMark } from '../components/onboarding/GoogleMark'
+import { Lockup, LOCKUP_HEIGHT } from '../components/onboarding/Lockup'
+import { emailSheet, handover, lockupShown, setLandingUnder } from '../lib/emailSheet'
+import { useSettleIn } from '../components/onboarding/useSettleIn'
 import FadeInUp from '../components/motion/FadeInUp'
 import ScalePress from '../components/motion/ScalePress'
 import { DiscMark } from '../components/ds/DiscMark'
@@ -35,22 +39,17 @@ import { PendingInvite } from '../components/friends/PendingInvite'
 import { AccountStateScreen } from '../components/system/AccountStateScreen'
 import { SystemScreen } from '../components/system/SystemScreen'
 import { backByLabel, outageNote } from '../lib/outage'
-import { useReducedMotion } from '../lib/motion'
 import { useAutoRetry } from '../lib/useAutoRetry'
 import { HeldLink } from '../components/system/HeldLink'
-import { INTRO_DOCK_AT_MS, IntroLights, IntroMark, IntroWordmark, useIntroDock, useIntroLine, useIntroProgress } from '../components/onboarding/LandingIntro'
 
 /** The mark alone, used only on the brief holding state (Flow 1 landing 08). */
 const MONOGRAM_HEIGHT = 96
-/** The mark starts at 17% of the screen's height, so the lights have room above it and the words clear the dock. */
-const LOCKUP_TOP = 0.17
-/** The landing's mark: large at an ordinary size, smaller where the words need the room. */
-const INTRO_MARK_HEIGHT = 118
-const INTRO_MARK_HEIGHT_LARGE = 72
+/** The lockup sits at 27% of the screen's height (Flow 1 landing 01). */
+const LOCKUP_TOP = 0.27
 /** At the accessibility sizes the lockup gives up most of its top room, so the tagline stays clear of the dock (audit A7). */
-const LOCKUP_TOP_LARGE = 0.06
-/** Under Reduce Motion the resting frame is already there, so the buttons do not wait for it (motion #1). */
-const ENTRANCE_AT_REDUCED = 200
+const LOCKUP_TOP_LARGE = 0.1
+/** The buttons rise 12 pt from 200 ms in, 40 ms apart (motion #1). */
+const ENTRANCE_AT = 200
 
 /*
  * Google's own button chrome — white fill, #1F1F1F ink — from its sign-in
@@ -69,12 +68,32 @@ function IndexInner() {
   const largeText = useLargeText()
   const insets = useSafeAreaInsets()
   const window = useWindowDimensions()
-  const reduceMotion = useReducedMotion()
-  const intro = useIntroProgress()
-  const introLine = useIntroLine(intro)
-  const introDock = useIntroDock(intro)
-  const brandTop = window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP)
-  const markHeight = largeText ? INTRO_MARK_HEIGHT_LARGE : INTRO_MARK_HEIGHT
+  const settle = useSettleIn()
+  /*
+   * The sky turns until they sign in or sign up (owner, 2026-11-03), and on under the email sheet, which is drawn over
+   * this screen rather than in its place (Flow 1c, option C, 2026-11-04). Any other screen over it holds it.
+   */
+  const focused = useIsFocused()
+  const pathname = usePathname()
+  const underSheet = pathname === '/sign-in' || pathname === '/forgot-password'
+  /*
+   * The handover to the sheet (lib/emailSheet): the tagline and the Dock leave as it grows out of the Dock, the lockup as
+   * its edge comes up to it. The Dock's height is what it grows from.
+   */
+  const sheet = emailSheet()
+  const [dockHeight, setDockHeight] = useState(0)
+  useEffect(() => {
+    if (dockHeight > 0) setLandingUnder({ dockHeight })
+  }, [dockHeight])
+  useEffect(() => () => setLandingUnder(null), [])
+  const lockupBottom = window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP) + LOCKUP_HEIGHT.landing
+  const lockupFade = useAnimatedStyle(() => ({ opacity: lockupShown(sheet.top.get(), lockupBottom) }))
+  const taglineFade = useAnimatedStyle(() => ({ opacity: handover(sheet.progress.get()).tagline }))
+  const dockFade = useAnimatedStyle(() => ({ opacity: handover(sheet.progress.get()).dock }))
+  // The ink shelf is the tagline's: it goes with it.
+  const shelfFade = useDerivedValue(() => handover(sheet.progress.get()).tagline)
+  /** The tagline's box, for the ink shelf the sky draws behind it (Flow 1b: a star crossing the words stays at AA). */
+  const [shelf, setShelf] = useState<Shelf | null>(null)
   /*
    * Which provider is in flight, not just whether one is. With one boolean,
    * tapping Apple put Google's button into its spinner — the wrong button
@@ -296,7 +315,7 @@ function IndexInner() {
 
   /*
    * Auth is still resolving: the mark alone, for the frame or two the root layout takes to decide where to send
-   * them, on the orbs. Authenticated is the same frame, held so nothing flashes on the way out.
+   * them, on what the landing's collision leaves. Authenticated is the same frame, held so nothing flashes on the way out.
    */
   if (loading || user) {
     return (
@@ -316,19 +335,25 @@ function IndexInner() {
   }
 
   /*
-   * Signed out: the orbs as the hero, the lockup and its line, the ways in on a glass dock. The brand colour arrives
-   * through the mark and the orbs rather than through a button, because Google's mark has to sit on Google's chrome and
+   * Signed out: two galaxies colliding as the hero (Flow 1b), the lockup and its line, the ways in on a glass dock. The
+   * brand colour arrives through the mark and the sky rather than through a button, because Google's mark has to sit on Google's chrome and
    * Apple's button is Apple's.
    */
   const google = signingIn === 'google'
   const apple = signingIn === 'apple'
   const dimmed = (own: boolean) => (signingIn && !own ? styles.dim : null)
   // Each way in rises 12 pt, 40 ms after the one above (motion #1); the message above them is not one of them.
-  const rise = (index: number) => ({ delay: (reduceMotion ? ENTRANCE_AT_REDUCED : INTRO_DOCK_AT_MS) + index * STAGGER.loose, distance: RISE.message, duration: DURATION.medium })
+  const rise = (index: number) => ({ delay: ENTRANCE_AT + index * STAGGER.loose, distance: RISE.message, duration: DURATION.medium })
 
   return (
-    <View style={styles.root}>
-      <IntroLights progress={intro} centre={{ x: window.width / 2, y: brandTop + markHeight / 2 }} />
+    <View
+      testID="landing-root"
+      style={styles.root}
+      // Under the sheet the form is the screen: a screen reader stays on it.
+      accessibilityElementsHidden={underSheet}
+      importantForAccessibility={underSheet ? 'no-hide-descendants' : 'auto'}
+    >
+      <Backdrop level={ORB_LEVEL.landing} enter shelf={shelf} shelfFade={shelfFade} paused={!focused && !underSheet} />
 
       {/* A link tapped while signed out is held through sign-in; say so (Flow 15 15.12 02). */}
       {pendingEventLink() ? (
@@ -337,18 +362,19 @@ function IndexInner() {
         </View>
       ) : null}
 
-      <Animated.View style={[styles.brand, { paddingTop: brandTop }]} testID="landing-brand">
-        <IntroMark progress={intro} height={markHeight} />
-        <IntroWordmark progress={intro} />
-        <Animated.Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline, introLine]}>
+      <Animated.View style={[styles.brand, { paddingTop: window.height * (largeText ? LOCKUP_TOP_LARGE : LOCKUP_TOP) }, settle]} testID="landing-brand">
+        <Animated.View style={lockupFade}>
+          <Lockup size="landing" testID="landing-lockup" />
+        </Animated.View>
+        <Animated.Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.tagline, taglineFade]} onLayout={(e) => setShelf(e.nativeEvent.layout)}>
           Same place. Same vibe. Instant connections.
         </Animated.Text>
         {/* Whose invite is waiting, when an invite link brought them here. */}
         <PendingInvite />
       </Animated.View>
 
-      <Animated.View style={introDock}>
-      <Dock gap={SPACE.md} testID="landing-dock">
+      <Animated.View style={dockFade} pointerEvents={underSheet ? 'none' : 'auto'}>
+      <Dock gap={SPACE.md} testID="landing-dock" onHeight={setDockHeight}>
         {/*
           * Said to screen readers as it arrives (`useAnnounced`, the live region on Android), so someone mid-gesture is
           * told rather than left waiting. A toast would auto-dismiss and be missed entirely.

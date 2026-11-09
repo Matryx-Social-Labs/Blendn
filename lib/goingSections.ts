@@ -1,6 +1,6 @@
 import { attendancePhase, type PhaseSource } from './attendanceState'
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
-import { HAPPENING_NOW } from './pulse'
+import { HAPPENING_NOW, TONIGHT_FROM } from './pulse'
 import { calendarDaysBetween, dateIn, hourIn, weekdayIn } from './time'
 import {
   goingItems,
@@ -117,8 +117,6 @@ export function goingSections(
   ]
 }
 
-/** From 5 PM a day's plans are tonight's, as `nextUpLabel` says. */
-const TONIGHT_FROM = 17
 
 /**
  * Plans in four kinds of heading: today, the rest of this week (to Sunday), next week, then each month ("November", with

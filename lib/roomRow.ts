@@ -19,7 +19,7 @@ export type RoomRow = {
   eventId?: string
   /** The event's own title, when the room is named something else. */
   eventTitle?: string
-  /** When the event starts (ISO): the room opens a day before (`lib/preEventRoom.ts`). Absent for a crew's or a place's room. */
+  /** When the event starts (ISO): the room opens at the doors (`lib/preEventRoom.ts`). Absent for a crew's or a place's room. */
   startTime?: string
   /** A place's room: when its venue day resets (the daily close). */
   dayEndsAt?: string
@@ -79,15 +79,18 @@ export function useRoomRow(roomId: string | null): RoomRow | null {
   useEffect(() => {
     if (!roomId) return
     let live = true
+    const take = (result: Awaited<ReturnType<typeof apiClient.getChatGroups>>) => {
+      if (!live || !result.success) return true
+      const found = roomRowFrom(result.data, roomId)
+      if (!found) return false
+      rememberRoomMute(roomId, found.mute)
+      setRow(found)
+      return true
+    }
     apiClient
       .getChatGroups()
-      .then((result) => {
-        if (!live || !result.success) return
-        const found = roomRowFrom(result.data, roomId)
-        if (!found) return
-        rememberRoomMute(roomId, found.mute)
-        setRow(found)
-      })
+      // A room joined since the list was cached (at the doors, from the event page) is not in it: ask the server once.
+      .then((result) => (take(result) ? undefined : apiClient.getChatGroups({ force: true }).then(take)))
       .catch(() => {})
     return () => {
       live = false

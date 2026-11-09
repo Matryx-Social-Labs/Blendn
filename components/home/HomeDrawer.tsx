@@ -1,11 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
-import { Material, SOLID } from '../ui/Material'
+import { SheetOrbs } from '../ds/Orbs'
 import { GroundProvider } from '../ds/shared'
 import {
   DRAWER_HANDLE_HEIGHT,
@@ -17,52 +17,55 @@ import {
   stepSnap,
   type DrawerSnap,
 } from '../../lib/home'
-import { COLOR, EASING, RADIUS, REDUCE_MOTION, SPACE, SPRING } from '../../lib/design/tokens'
-import { tint } from '../../lib/theme'
+import { COLOR, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SPACE, SPRING } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 
-/** The drawer at full height is ink at 96%, not glass (Flow 3 `home` 03). */
-const FULL_INK = 0.96
+/** The board's orbs below full (`<div class="orbs" style="opacity:.6">`); the `.full` drawer has none. */
+const ORBS_BELOW_FULL = 0.6
+/** The board's rim (`.drawer` box-shadow): 0.5 pt at 10% all round, 18% along the top. */
+const RIM = 0.5
 
-/** The ink wash over the drawer's material: none at half, 96% ink at full. */
-function useFullInk(y: SharedValue<number>, points: Record<DrawerSnap, number>) {
-  return useAnimatedStyle(() => ({ opacity: interpolate(y.get(), [points.half, points.full], [0, 1], 'clamp') }))
+type Surface = { y: SharedValue<number>; points: Record<DrawerSnap, number>; orbsHeight: number }
+/** Set inside the drawer: a row pinned in it stands on the drawer's own surface (`DrawerGround`). */
+const InDrawer = createContext<Surface | null>(null)
+
+/** The orbs' opacity as the drawer moves: the board's 60% at half and below, none at full. A worklet style, per frame. */
+function useOrbsOpacity(y: SharedValue<number>, points: Record<DrawerSnap, number>) {
+  return useAnimatedStyle(() => ({ opacity: interpolate(y.get(), [points.full, points.half], [0, ORBS_BELOW_FULL], 'clamp') }))
 }
-
-const DrawerMotion = createContext<{ y: SharedValue<number>; points: Record<DrawerSnap, number> } | null>(null)
 
 /**
- * The drawer's own ground, frame by frame, for a row pinned inside it (the sticky search): on the solid tier it is
- * opaque, so content scrolling under the row never shows through it, and it matches the drawer so it is invisible at
- * rest (rc7 D3). Null outside a drawer.
+ * The drawer's surface (Flow 3 board, `.drawer` + `.orbs`): ink, and the three brand orbs laid out on the drawer as it
+ * rests at half (the board's frame), `offsetTop` above this layer's own top. The drawer draws it at 0; a pinned row draws
+ * it again from where it sits, so the row is the drawer and no band shows.
  */
-export function DrawerGround({ testID }: { testID?: string }) {
-  const motion = useContext(DrawerMotion)
-  return motion ? <DrawerGroundLayers {...motion} testID={testID} /> : null
-}
-
-function DrawerGroundLayers({ y, points, testID }: { y: SharedValue<number>; points: Record<DrawerSnap, number>; testID?: string }) {
-  const ink = useFullInk(y, points)
+function Orbs({ surface, offsetTop, testID }: { surface: Surface; offsetTop: number; testID?: string }) {
+  const opacity = useOrbsOpacity(surface.y, surface.points)
   return (
-    <View testID={testID} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.solidSheet]}>
-      <Animated.View style={[StyleSheet.absoluteFill, styles.opaque, ink]} />
-    </View>
+    <Animated.View testID={testID} pointerEvents="none" style={[styles.orbs, { top: -offsetTop, height: surface.orbsHeight }, opacity]}>
+      <SheetOrbs />
+    </Animated.View>
   )
 }
 
 /**
- * How many times the screen has come back into focus (the first focus is not a refocus). The drawer's glass is keyed on
- * it: on the owner's phone the glass view detached while the tab was away and the drawer came back fully transparent
- * (SCRUM-963), so each return builds a fresh one. A remount of one background view, never of the drawer or its pane.
+ * The drawer's own ground, for a row pinned inside it (the sticky chips): its ink and its orbs, from where the row sits
+ * (under the header), so the row is invisible at rest and nothing scrolling under it shows through (rc7 D3). Null outside
+ * a drawer.
  */
-export function useRefocusCount(focused: boolean): number {
-  const [count, setCount] = useState(0)
-  const was = useRef(focused)
-  useEffect(() => {
-    if (focused && !was.current) setCount((n) => n + 1)
-    was.current = focused
-  }, [focused])
-  return count
+export function DrawerGround({ testID }: { testID?: string }) {
+  const surface = useContext(InDrawer)
+  if (!surface) return null
+  return (
+    <View testID={testID} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ink, styles.clip]}>
+      <Orbs surface={surface} offsetTop={DRAWER_HEADER_HEIGHT} testID={testID && `${testID}-orbs`} />
+    </View>
+  )
+}
+
+/** Whether this row sits inside a drawer, i.e. whether `DrawerGround` draws anything behind it. */
+export function useInDrawer(): boolean {
+  return useContext(InDrawer) !== null
 }
 
 /** Under Reduce Motion the drawer still travels, gently: a short timing on the standard curve, not an instant jump (BUILD-SPEC §0, `drawer`). */
@@ -90,7 +93,6 @@ export function HomeDrawer({
   header,
   onChromeTouch,
   peek,
-  glassKey,
   children,
 }: {
   /** The drawer's top edge as it moves: the shell's, so what rides on the drawer follows it frame by frame. */
@@ -103,8 +105,6 @@ export function HomeDrawer({
   onChromeTouch?: () => void
   /** A line kept under the header while the drawer rests at `peek`, over the pane; none for a pane without one. */
   peek?: ReactNode
-  /** A new value remounts the glass (`useRefocusCount`). */
-  glassKey?: number
   children: ReactNode
 }) {
   const { height } = useWindowDimensions()
@@ -137,16 +137,14 @@ export function HomeDrawer({
   )
 
   const moved = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() - points.full }] }))
-  // Full height is the opaque surface (Flow 3 `home` 03: ink at 96%); the glass shows at half and peek. A wash over the glass, which itself never fades.
-  const opaque = useFullInk(y, points)
-  const motion = useMemo(() => ({ y, points }), [y, points])
+  const surface = useMemo<Surface>(() => ({ y, points, orbsHeight: height - points.half }), [y, points, height])
   const tapStep = () => onSnap(snap === 'full' ? 'half' : stepSnap(snap, 'up'))
 
   return (
     <GroundProvider value="glass">
-      <Animated.View style={[styles.drawer, { top: points.full }, moved]}>
-        <Material key={glassKey} testID="drawer-glass" role="sheet" pointerEvents="none" style={StyleSheet.absoluteFill} />
-        <Animated.View testID="drawer-opaque" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.opaque, opaque]} />
+      {/* Solid ink at every snap, on every tier (owner, 2026-11-03): glass is for the floating controls, not the drawer. */}
+      <Animated.View testID="home-drawer" style={[styles.drawer, { top: points.full }, moved]}>
+        <Orbs surface={surface} offsetTop={0} testID="drawer-orbs" />
         <GestureDetector gesture={pan}>
           <View style={styles.header} onTouchStart={onChromeTouch}>
             <Pressable
@@ -165,9 +163,10 @@ export function HomeDrawer({
           </View>
         </GestureDetector>
         <View style={{ height: drawerContentHeight(points, snap, height) }}>
-          <DrawerMotion.Provider value={motion}>{children}</DrawerMotion.Provider>
+          <InDrawer.Provider value={surface}>{children}</InDrawer.Provider>
         </View>
         {snap === 'peek' && peek ? <View style={styles.peek}>{peek}</View> : null}
+        <View testID="drawer-rim" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.rim]} />
       </Animated.View>
     </GroundProvider>
   )
@@ -182,11 +181,21 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
     overflow: 'hidden',
+    backgroundColor: COLOR.ink,
   },
-  opaque: { backgroundColor: tint(COLOR.ink, FULL_INK) },
-  solidSheet: { backgroundColor: SOLID.sheet },
+  ink: { backgroundColor: COLOR.ink },
+  clip: { overflow: 'hidden' },
+  orbs: { position: 'absolute', left: 0, right: 0 },
+  rim: {
+    borderTopLeftRadius: RADIUS.sheet,
+    borderTopRightRadius: RADIUS.sheet,
+    borderWidth: RIM,
+    borderColor: COLOR.hairline,
+    borderTopColor: MATERIAL.glassSpecular,
+  },
   peek: { position: 'absolute', left: 0, right: 0, top: DRAWER_HEADER_HEIGHT, height: DRAWER_PEEK_LINE, paddingHorizontal: SPACE.xl, backgroundColor: COLOR.ink },
-  header: { height: DRAWER_HEADER_HEIGHT, paddingHorizontal: SPACE.xl },
-  // The whole width and 44pt tall: the grabber is the drawing, this is the target.
-  handle: { height: DRAWER_HANDLE_HEIGHT, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
+  // The board's `.ttab`: 24 from the left, 16 from the right, so the search circle sits 16 in, as the bell does above it.
+  header: { height: DRAWER_HEADER_HEIGHT, paddingLeft: SPACE.xl, paddingRight: SPACE.lg },
+  // The whole width and 44pt tall: the grabber is the drawing (8 pt from the edge, kit.css `.grab`), this is the target.
+  handle: { height: DRAWER_HANDLE_HEIGHT, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'flex-start', paddingTop: SPACE.sm },
 })

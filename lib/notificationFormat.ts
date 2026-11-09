@@ -32,6 +32,10 @@ export type NotificationKind =
   | 'board_request'
   /** Your board ask was accepted. Carries `conversationId`. */
   | 'board_request_accepted'
+  /** Somebody offers what you are looking for (opt-in). Carries `eventId` and `postId`. */
+  | 'board_match'
+  /** The host's Lobby note went up or changed (opt-in). Carries `eventId` and `hostPostId`. */
+  | 'board_host_post'
   | 'friend_request'
   | 'friend_accepted'
   /** An event you checked in to has ended: rate it. Carries `eventId`. */

@@ -1,25 +1,22 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Keyboard, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Keyboard, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition, withTiming } from 'react-native-reanimated'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
-import { Avatar } from '../../components/ds/Avatar'
 import { Button } from '../../components/ds/Button'
 import { ScaleSteps } from '../../components/ds/ScaleSteps'
 import { Dock } from '../../components/ds/Dock'
 import { TopBar } from '../../components/ds/TopBar'
 import { GoneCard } from '../../components/system/GoneCard'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
-import { useFocusWhen } from '../../lib/focusReturn'
-import { RadioCard } from '../../components/ds/RadioCard'
-import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TextArea } from '../../components/ds/TextField'
-import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
-import { EventCover } from '../../components/EventCover'
+import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { fadeInFast } from '../../components/motion/presence'
 import { OfflineBanner, useOffline } from '../../components/OfflineBanner'
+import { EventRow, IssueList, PersonRow, SentLine } from '../../components/rate/RateParts'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
@@ -29,6 +26,7 @@ import { askAboutNight, ratePeople, type RatePerson } from '../../lib/ratePeople
 import { rateRefusal } from '../../lib/rateRefusal'
 import { isNightRated, markNightRated } from '../../lib/ratedNights'
 import { useReducedMotion } from '../../lib/motion'
+import { calendarDate } from '../../lib/time'
 
 /**
  * After the night: how it was, and how the people you met were (Flow 3 `rate`).
@@ -120,17 +118,28 @@ const ISSUES: { value: PeerRatingIssue; label: string }[] = [
   { value: 'harassment', label: 'They harassed me' },
 ]
 
+/** The skeleton's face: the size it was before the row (a placeholder, not on the board). */
 const FACE = 112
 /** The note's box: two lines of text and its padding, not the 160 pt of a long answer. */
 const NOTE_HEIGHT = 112
 const NOTE_LIMIT = 500
-/** The night's art above its question: a band, not a hero (the question is the point of the step). */
-const NIGHT_ART_HEIGHT = 160
+/*
+ * The board's column (Flow 4 `rate`): a row, then the question 28 under it, its line 6 under that, the scale 22 under the
+ * line, and "Sent" 20 under the scale; on a person, "Did anything go wrong?" 28 under the scale and the issues 12 under it.
+ * design-exception: 28, 22, 20 and 6 are the board's own margins (`.t28`, `.sc5`, `.sent`, `.sub`), off the 4 pt steps' pairs.
+ */
+const GAP = { question: 28, line: 6, scale: 22, sent: 20, issues: 12 } as const
+/** The night's question (`.t28`). */
+// design-exception: 28/33, between `title` 24/30 and `display` 34/40
+const NIGHT_TITLE = { fontSize: 28, lineHeight: 33 }
 /** The server's `max(500)` counts UTF-16 units. A field never truncates (the counter and Submit refuse instead). */
 const noteLength = (value: string) => value.length
 
 /** Never the server's sentence: it is written for an API caller. */
 const SAVE_FAILED = "Couldn’t save that. Try again."
+const SENT_LINE = 'Sent. Only we see this.'
+/** Skip is the board's 44 pt row on iOS (`.skip`), the DS's 48 dp target on Android (as the bar's Save is). */
+const SKIP_SIZE = Platform.OS === 'android' ? 'md' : 'raised'
 
 type Load =
   | { kind: 'loading' }
@@ -145,6 +154,9 @@ type Load =
       cover: string | null
       /** The night's first category's slug, for the plate when it has no cover. */
       category?: string
+      /** "Sat 8 Nov" in the event's own zone, or empty when the event did not load. */
+      day: string
+      venue: string | null
       /** Whether to ask about the night: not if it was already rated. */
       askEvent: boolean
       /** You rated this night already (here, or on another launch): said so, rather than "Nothing to rate". */
@@ -180,6 +192,7 @@ function RatePeersContent() {
   const { eventId } = useLocalSearchParams<{ eventId: string }>()
   const { showToast } = useToast()
   const bar = useTopBarOverlay()
+  const insets = useSafeAreaInsets()
   const resetBar = bar.reset
   const bold = useBoldText()
   // An answer cannot be sent offline: the banner says so and the writes wait (reads stay), Flow 15 #16.
@@ -198,6 +211,14 @@ function RatePeersContent() {
   const [issue, setIssue] = useState<PeerRatingIssue>('none')
   const [note, setNote] = useState('')
   const [dockHeight, setDockHeight] = useState(0)
+  /** The night's tap landed: "Sent" shows in place for a beat before the people. */
+  const [nightSent, setNightSent] = useState(false)
+  const beat = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (beat.current) clearTimeout(beat.current)
+  }, [])
+  /** Each new card's header: focus moves there once it has come in (M5), so a screen reader hears where it is. */
+  const header = useRef<View | Text>(null)
   const reduceMotion = useReducedMotion()
   const entering = reduceMotion ? fadeInStage : riseIn
   const glide = reduceMotion ? undefined : GLIDE
@@ -243,8 +264,12 @@ function RatePeersContent() {
         if (rated) markNightRated(id)
         const cover = event?.data?.coverImageUrl ?? event?.data?.cover_image_url ?? null
         const category = event?.data?.categories?.[0]?.slug || undefined
-        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, cover, category, askEvent: askEvent && !rated, rated })
-        setIndex(askEvent ? -1 : 0)
+        const start = event?.data?.startTime ?? event?.data?.start_time
+        const day = calendarDate(start, { weekday: true, year: false, timeZone: event?.data?.timezone || undefined })
+        const venue = event?.data?.venueName ?? event?.data?.venue_name ?? event?.data?.venue?.name ?? null
+        const ask = askEvent && !rated
+        setLoad({ kind: 'ready', people, title: event?.data?.title ?? null, cover, category, day, venue, askEvent: ask, rated })
+        setIndex(ask ? -1 : 0)
       })
       .catch((e) => {
         Logger.error('match', 'Failed to load ratable peers', { error: e })
@@ -292,7 +317,9 @@ function RatePeersContent() {
         }
         setSent((s) => s + 1)
         markNightRated(String(eventId))
-        advance()
+        setNightSent(true)
+        AccessibilityInfo.announceForAccessibility(SENT_LINE)
+        beat.current = setTimeout(advance, DURATION.moment)
       } catch (e) {
         Logger.error('events', 'Failed to rate the event', { error: e })
         setEventRating(null)
@@ -306,9 +333,6 @@ function RatePeersContent() {
 
   const people = load.kind === 'ready' ? load.people : []
   const person = index >= 0 ? people[index] : undefined
-  // Submit and Skip swap the whole form: the next person's heading takes focus, with how far through you are.
-  const personRef = useRef<Text>(null)
-  useFocusWhen(personRef, person ? index : null)
   const noteTooLong = noteLength(note) > NOTE_LIMIT
 
   const submit = useCallback(async () => {
@@ -346,6 +370,23 @@ function RatePeersContent() {
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/going'))
 
+  // One pager across the night and each person ("1 of 3"); none for a single step, where "1 of 1" says nothing.
+  const ready = load.kind === 'ready'
+  const steps = ready ? (load.askEvent ? 1 : 0) + people.length : 0
+  const step = ready && load.askEvent ? index + 2 : index + 1
+  const onStep = ready && (index === -1 || !!person)
+  const progress = onStep && steps > 1 ? `${step} of ${steps}` : undefined
+
+  // M5: once the new card is in (it rises over `base`), focus its header.
+  const cardKey = ready ? (index >= people.length ? 'done' : String(index)) : load.kind
+  useEffect(() => {
+    if (!ready) return
+    const timer = setTimeout(() => {
+      if (header.current) AccessibilityInfo.sendAccessibilityEvent(header.current, 'focus')
+    }, DURATION.base)
+    return () => clearTimeout(timer)
+  }, [cardKey, ready])
+
   // First in the tree, so a screen reader starts at Close. The DS bar, pinned over the form: the form scrolls under it and the
   // glass comes in behind (#30). "n of m" is Geist Mono at the right.
   const topBar = (
@@ -355,7 +396,7 @@ function RatePeersContent() {
         onBack={close}
         state={bar.state}
         testID="rate-bar"
-        progress={load.kind === 'ready' && person ? `${index + 1} of ${people.length}` : undefined}
+        progress={progress}
       />
     </View>
   )
@@ -408,10 +449,12 @@ function RatePeersContent() {
   const nothingToRate = people.length === 0 && !load.askEvent
   // Recap #04's words: you rated this night, so it says thanks rather than that there is nothing here.
   const ratedBefore = sent === 0 && load.rated
-  const docked = done || !!person
   // Said at the head of the form it is true of: a rating cannot be sent offline, and reads stay.
   const offlineNote = <OfflineBanner text="Offline. You can rate once you’re back." testID="rate-offline" />
-  const scrollPad = { paddingTop: bar.contentTop, paddingBottom: (docked ? dockHeight : 0) + SPACE.xl }
+  // The board's column starts 16 under the circle row; the bar's own `contentTop` leaves 18.
+  const scrollPad = { paddingTop: bar.contentTop - SPACE.xxs, paddingBottom: dockHeight + SPACE.xl }
+  // A person's dock is in the flow (below), so their form ends at its top: nothing to reserve.
+  const personPad = { paddingTop: scrollPad.paddingTop, paddingBottom: SPACE.xl }
 
   return (
     <View style={styles.screen}>
@@ -421,7 +464,7 @@ function RatePeersContent() {
           {done ? (
             <Animated.View key="done" style={styles.layer} entering={entering}>
               <View style={styles.centred}>
-                <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink, styles.centreText]}>
+                <Text ref={header} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.ink, styles.centreText]}>
                   {sent > 0 ? 'Thanks' : ratedBefore ? 'You rated this night' : nothingToRate ? 'Nothing to rate' : 'All done'}
                 </Text>
                 {/*
@@ -442,38 +485,35 @@ function RatePeersContent() {
             <Animated.View key="night" style={styles.layer} entering={entering} exiting={fadeOutStage}>
               <ScrollView contentContainerStyle={[styles.scroll, scrollPad]} scrollIndicatorInsets={{ top: bar.indicatorTop }} {...bar.scrollProps}>
                 {offlineNote}
-                {/* The night itself above its question, so the step is about something you can see (B-S11). */}
-                {/* No cover: the category plate (TG-06, D8); with no category either, EventCover's mark. Never no art. */}
-                <EventCover uri={load.cover} height={NIGHT_ART_HEIGHT} radius={RADIUS.sheet} category={load.category} />
-                <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.secondary]}>THE NIGHT</Text>
-                {/* `title`, not `display`: an event's name can run long, and 34pt wrapped to five lines. Balanced, so no widow. */}
+                {/* The night itself in a row (Flow 4): its cover or plate, the title, its day and venue. Never no art. */}
+                <EventRow title={load.title || 'This night'} day={load.day} venue={load.venue} cover={load.cover} category={load.category} />
                 <Text
+                  ref={header}
+                  testID="rate-title"
                   accessibilityRole="header"
-                  numberOfLines={3}
-                  maxFontSizeMultiplier={1.4}
-                  textBreakStrategy="balanced"
-                  lineBreakStrategyIOS="standard"
-                  style={[font('title', bold), styles.ink]}
+                  maxFontSizeMultiplier={MAX_FONT_SCALE.title}
+                  style={[font('title', bold), NIGHT_TITLE, styles.ink, { marginTop: GAP.question }]}
                 >
-                  How was {load.title || 'it'}?
+                  How was the night?
                 </Text>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>One tap. It helps whoever puts on the next one.</Text>
-                <Scale
-                  value={eventRating}
-                  onChoose={(n) => void rateNight(n)}
-                  low="Not great"
-                  high="Loved it"
-                  disabled={submitting || offline}
-                  subject="The night"
-                />
-                {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
-                <Button
-                  label={people.length > 0 ? 'Skip to the people' : 'Skip'}
-                  kind="tertiary"
-                  onPress={advance}
-                  disabled={submitting}
-                  testID="rate-skip-night"
-                />
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('lede', bold), styles.secondary, { marginTop: GAP.line }]}>
+                  One tap. It helps whoever puts on the next one.
+                </Text>
+                <View style={{ marginTop: GAP.scale }}>
+                  <Scale
+                    value={eventRating}
+                    onChoose={(n) => void rateNight(n)}
+                    low="Not great"
+                    high="Loved it"
+                    disabled={submitting || offline || nightSent}
+                    subject="The night"
+                  />
+                </View>
+                {nightSent ? (
+                  <View style={{ marginTop: GAP.sent }}>
+                    <SentLine />
+                  </View>
+                ) : null}
               </ScrollView>
             </Animated.View>
           ) : person ? (
@@ -486,41 +526,26 @@ function RatePeersContent() {
               <ScrollView
                 ref={peerScroll}
                 testID="rate-form"
-                contentContainerStyle={[styles.scroll, scrollPad]}
+                contentContainerStyle={[styles.scroll, personPad]}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
                 scrollIndicatorInsets={{ top: bar.indicatorTop }}
                 {...bar.scrollProps}
               >
                 {offlineNote}
-                <View style={styles.who}>
-                  {person.photo ? (
-                    <Avatar kind="photo" uri={person.photo} size={FACE} label={person.name} />
-                  ) : (
-                    <Avatar kind="creature" pseudonym={person.name} size={FACE} label={person.name} />
-                  )}
-                  <Text ref={personRef} accessibilityLabel={`${person.name}, ${index + 1} of ${people.length}`} accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, styles.centreText]}>
-                    {person.name}
-                  </Text>
-                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centreText]}>
-                    Only we see this. They will never know you rated them, or what you said.
-                  </Text>
+                <PersonRow ref={header as React.RefObject<View>} name={person.name} photo={person.photo ?? null} />
+                <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, { marginTop: GAP.question }]}>
+                  How was meeting them?
+                </Text>
+                <View style={{ marginTop: GAP.scale }}>
+                  <Scale value={rating} onChoose={chooseRating} low="Not for me" high="Would meet again" subject={`Meeting ${person.name}`} />
                 </View>
 
-                <SectionHeader title="How was meeting them?" />
-                <Scale value={rating} onChoose={chooseRating} low="Not for me" high="Would meet again" subject={`Meeting ${person.name}`} />
-                {/* Submit stays gated on a number (D14), and says why, rather than a disabled button that can't. */}
-                {rating === null ? (
-                  <Text testID="rate-hint" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-                    Pick a number to send
-                  </Text>
-                ) : null}
-
-                <SectionHeader title="Did anything go wrong?" />
-                <Animated.View layout={glide} style={styles.issues} accessibilityRole="radiogroup">
-                  {ISSUES.map((opt) => (
-                    <RadioCard key={opt.value} title={opt.label} selected={issue === opt.value} onPress={() => chooseIssue(opt.value)} testID={`rate-issue-${opt.value}`} />
-                  ))}
+                <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink, { marginTop: GAP.question }]}>
+                  Did anything go wrong?
+                </Text>
+                <Animated.View layout={glide} style={[styles.issues, { marginTop: GAP.issues }]}>
+                  <IssueList options={ISSUES} value={issue} onChoose={chooseIssue} />
                   {/* Faded, not popped: it lands mid-form, under the finger's eye line. */}
                   {issue === 'harassment' && (
                     <Animated.Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.warning]} entering={fadeInFast}>
@@ -529,7 +554,11 @@ function RatePeersContent() {
                   )}
                 </Animated.View>
 
-                <Animated.View layout={glide}>
+                {/*
+                  Kept, though the board draws neither (owner asked 2026-11-06): the note is the one place to say what
+                  happened in your own words, and Submit sends it with the rest. Below the board's column, so it sits as drawn.
+                */}
+                <Animated.View layout={glide} style={{ marginTop: GAP.question }}>
                   <TextArea
                     label="Anything you want to tell us?"
                     value={note}
@@ -550,11 +579,37 @@ function RatePeersContent() {
           <Dock floating onHeight={setDockHeight} testID="rate-dock">
             <Button label="Done" kind="primary" onPress={close} testID="rate-done" />
           </Dock>
+        ) : onNight ? (
+          /* Skipping is a first-class outcome. No nagging, no guilt copy. At the foot with no bar behind it (Flow 4 `.skip`). */
+          <View
+            testID="rate-dock"
+            onLayout={(e) => setDockHeight(e.nativeEvent.layout.height + SPACE.md)}
+            style={[styles.skip, { bottom: insets.bottom + SPACE.md }]}
+          >
+            <Button
+              label={people.length > 0 ? 'Skip to the people' : 'Skip'}
+              kind="tertiary"
+              size={SKIP_SIZE}
+              onPress={advance}
+              disabled={submitting || nightSent}
+              testID="rate-skip-night"
+            />
+          </View>
         ) : person ? (
-          <Dock floating onHeight={setDockHeight} testID="rate-dock">
+          /*
+            In the flow, not floating (driven 2026-11-06): with Submit and the note kept, a floating dock sat over
+            "They harassed me" on a 402×874 phone. Here the form scrolls above it and no option is ever behind it.
+          */
+          <Dock round={false} testID="rate-dock">
+            {/* Submit stays gated on a number (D14), and says why, rather than a disabled button that can't. */}
+            {rating === null ? (
+              <Text testID="rate-hint" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centreText]}>
+                Pick a number to send
+              </Text>
+            ) : null}
             <Button label="Submit" kind="primary" onPress={() => void submit()} disabled={rating === null || noteTooLong || offline} loading={submitting} testID="rate-submit" />
             {/* Skipping is a first-class outcome. No nagging, no guilt copy. */}
-            <Button label="Skip this person" kind="tertiary" size="md" onPress={advance} disabled={submitting} testID="rate-skip-person" />
+            <Button label="Skip this person" kind="tertiary" size={SKIP_SIZE} onPress={advance} disabled={submitting} testID="rate-skip-person" />
           </Dock>
         ) : null}
       </KeyboardFrame>
@@ -569,13 +624,13 @@ const styles = StyleSheet.create({
   pin: { zIndex: 2 },
   stage: { flex: 1 },
   layer: { ...StyleSheet.absoluteFill },
-  scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg, gap: SPACE.md },
+  scroll: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.lg },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl * 2 },
   skeleton: { alignItems: 'center', gap: SPACE.md, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl },
   centred: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACE.gutter, gap: SPACE.md },
   centreText: { textAlign: 'center' },
-  who: { alignItems: 'center', gap: SPACE.sm, paddingBottom: SPACE.lg },
   issues: { gap: SPACE.sm },
+  skip: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter },
   warning: { color: COLOR.destructive },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },

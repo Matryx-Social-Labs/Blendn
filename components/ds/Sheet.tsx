@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Icon, type IconName } from '../ui/Icon'
-import { Material } from '../ui/Material'
+import { Material, useMaterialTier } from '../ui/Material'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { PresentsHere, useClosedByLink, useTurnGate, useTurnWatch } from '../../lib/modalTurn'
@@ -237,12 +237,22 @@ export type SheetProps = {
    * wraps under a long title rather than shortening it. `label` is what a screen reader gets, when more than the words.
    */
   headerNote?: { lead?: string; text: string; label?: string }
+  /**
+   * A header row of its own in place of the title row (C-A: Cancel, the title centred, Post), pinned as a row with an action
+   * is. Additive: a sheet without one is unchanged. It owns its header role; pass `focusRef` for where a screen reader lands.
+   */
+  header?: ReactNode
   /** What a screen reader lands on as it opens, when there is no title: the content's own header. */
   focusRef?: RefObject<ComponentRef<typeof View> | null>
   /** The consequence, above the buttons. */
   body?: string
   /** A decorative glyph well above the title. */
   icon?: IconName
+  /**
+   * A picture above the title, in place of the icon well: the push ask's lock screen (SCRUM-1006). It scrolls with the title
+   * and body instead of pinning, so a tall picture never leaves a small phone's body without room. It owns its own label.
+   */
+  art?: ReactNode
   /** Named with the verb, never "OK"; sorted into the fixed order. `kind` defaults to `secondary`. */
   actions?: SheetAction[]
   /** The detents a drag may settle on, opening at the first. Omit for a tray as tall as its content. */
@@ -288,7 +298,10 @@ function useSheetMotion({
   visibleHeight,
   insetTop,
   headScrolls,
+  solid,
 }: {
+  /** The material is the solid tier (Android, Reduce Transparency): no visual effect view, so the whole sheet may fade. */
+  solid: boolean
   visible: boolean
   /** The header is in a scroll that has more than fits: the header drags the sheet only as a pull down from the scroll's top. */
   headScrolls: boolean
@@ -318,7 +331,12 @@ function useSheetMotion({
 
   const offset = useSharedValue(reduceMotion ? 0 : window.height)
   const scrim = useSharedValue(0)
-  /** Reduce Motion's way in and out (DS #5 rm: "200ms fade; drag still tracks"): the sheet does not travel, it fades. */
+  /*
+   * Reduce Motion's way in (DS #5 rm: "200ms fade; drag still tracks"): the sheet does not travel. What fades is what is drawn
+   * ON the glass, never the glass or anything holding it: a visual effect view under an ancestor below full opacity draws
+   * without its effect, and every sheet was see-through (SCRUM-1003, Material §5.2 rule 6). The glass appears by mounting.
+   * The solid tier has no effect to lose: there the whole sheet fades in and out, as DS #5 says.
+   */
   const fade = useSharedValue(reduceMotion ? 0 : 1)
   /** The flick's speed (pt/s, downward) a drag-dismiss hands to the exit, so there is no seam between the finger and the slide. */
   const flingV = useSharedValue(0)
@@ -391,7 +409,8 @@ function useSheetMotion({
     // A flick down hands its speed to the slide out: a spring that carries it, clamped at the bottom, never a fresh curve from rest.
     const v = flingV.get()
     flingV.set(0)
-    if (reduceMotion) fade.set(withTiming(0, { duration: base, easing: gentle }))
+    // Reduce Motion: the glass leaves by unmounting at once (`Sheet` drops the place view) while the scrim fades; solid fades out.
+    if (reduceMotion) fade.set(solid ? withTiming(0, { duration: base, easing: gentle }) : 0)
     else offset.set(v > 0 ? withSpring(window.height, { ...SPRING.fling, velocity: v, overshootClamping: true }) : withTiming(window.height, out))
     scrim.set(withTiming(0, { duration: base, easing: gentle }))
     // A spring has no end time: give the flick the room it needs to reach the bottom before the Modal goes.
@@ -485,14 +504,24 @@ function useSheetMotion({
     // Moving: the keyboard's own frame. Still (progress 0 or 1): the exact resting value.
     const liftNow = follow && p > 0 && p < 1 ? Math.max(0, -kb.height.get()) : lift.get()
     return {
-      opacity: fade.get(),
+      ...(solid ? { opacity: fade.get() } : null),
       transform: [{ translateY: offset.get() }],
       marginBottom: liftNow,
       ...(levels ? { height: sheetHeightAt(liftNow, room.get().visibleHeight, room.get().insetTop, height.get()) } : null),
     }
   })
   const scrimStyle = useAnimatedStyle(() => ({ opacity: scrim.get() }))
-  return { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, natural, fixedHeight: !!levels }
+  /*
+   * On the content inside the glass only (the grip and head, the scroll, the actions): never on the place view. One style
+   * per view: an animated style attached to several views drives only one of them.
+   */
+  const fadeHead = useAnimatedStyle(() => ({ opacity: solid ? 1 : fade.get() }))
+  const fadeScroll = useAnimatedStyle(() => ({ opacity: solid ? 1 : fade.get() }))
+  const fadeActions = useAnimatedStyle(() => ({ opacity: solid ? 1 : fade.get() }))
+  const contentFade = { head: fadeHead, scroll: fadeScroll, actions: fadeActions }
+  /** The hairline under a pinned header: there once the content has moved off its top, as an iOS scroll edge is. */
+  const edgeStyle = useAnimatedStyle(() => ({ opacity: headAtTop.get() ? 0 : 1 }))
+  return { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, contentFade, edgeStyle, natural, fixedHeight: !!levels }
 }
 
 /**
@@ -512,7 +541,7 @@ function useSheetMotion({
  * the finger, rubber-banding above the top detent, and settles on `M.fling`
  * with its velocity. Reduce Motion: it does not rise; the scrim fades over
  * 200 ms. Glass never fades (§5.2 rule 6), so the sheet itself appears in
- * place. Increase Contrast: the 50% hairline and the body in white.
+ * place and leaves by unmounting; only its content fades in. Increase Contrast: the 50% hairline and the body in white.
  *
  * A screen reader's focus goes to the title on open and back to the control
  * that opened it once it has gone (WCAG 2.4.3, lib/focusReturn); VoiceOver's
@@ -520,7 +549,7 @@ function useSheetMotion({
  *
  * ponytail: the material does not grow more opaque near full height.
  */
-export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, body, icon, actions = [], detents, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
+export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, header, body, icon, art, actions = [], detents, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   /*
    * One Modal on screen at a time on iOS (`lib/modalTurn.ts`, RC drive 4 D-9): asked for, `visible` waits for the
@@ -534,6 +563,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
+  const solid = useMaterialTier() === 'solid'
   const titleRef = useRef<ComponentRef<typeof Text>>(null)
   /** The modal root's height: the real visible area (the whole screen on Android, translucent bars). */
   const [rootHeight, setRootHeight] = useState<number | null>(null)
@@ -616,14 +646,20 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   useEffect(() => {
     if (wanted) opener.current = openerNow()
   }, [wanted])
+  /** The Modal is on screen (its `onShow` has fired and it has not left): a re-open mid-exit gets no second `onShow`. */
+  const onScreen = useRef(false)
+  /** Closed while on screen, and not yet gone: a `visible` now is a re-open mid-exit. */
+  const leaving = useRef(false)
   // Called once it has gone, whichever way (iOS's onDismiss, Android's motion end, or never shown).
   const dismissed = useRef(() => {
+    onScreen.current = false
+    leaving.current = false
     onDismissedLatest.current?.()
     returnFocus(opener.current)
     opener.current = null
   })
   const ios = Platform.OS === 'ios'
-  const { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, natural, fixedHeight } = useSheetMotion({
+  const { mounted, drag, headDrag, scrollNative, headAtTop, placeStyle, scrimStyle, contentFade, edgeStyle, natural, fixedHeight } = useSheetMotion({
     visible,
     heights,
     opening,
@@ -635,6 +671,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
     visibleHeight,
     insetTop: insets.top,
     headScrolls: overflowing,
+    solid,
     onGone: () => {
       if (!ios) dismissed.current?.()
     },
@@ -662,14 +699,16 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   // On the UI thread: the header's pull reads it without a render (review R2).
   const onContentScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
-      headAtTop.set(e.contentOffset.y <= 0)
+      const atTop = e.contentOffset.y <= 0
+      if (headAtTop.get() !== atTop) headAtTop.set(atTop)
     },
   })
-  const hasHead = !!(icon || title || headerAction || headerNote || body)
+  const hasHead = !!(art || icon || title || headerAction || headerNote || header || body)
   const largeText = useLargeText()
   const iconEl =
     icon ? (
       <View
+        testID={testID && `${testID}-well`}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
         style={[styles.well, { backgroundColor: android ? COLOR.surfaceSunken : MATERIAL.fillOnGlass }]}
@@ -677,8 +716,9 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
         <Icon name={icon} />
       </View>
     ) : null
-  const titleEl =
-    title || headerAction || headerNote ? (
+  const titleEl = header ? (
+    header
+  ) : title || headerAction || headerNote ? (
       <View style={styles.titleRow}>
         {title ? (
           <Text ref={titleRef} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.titleText]}>
@@ -725,22 +765,52 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
    */
   // Unless the scroll under it would be left less than its floor: at the accessibility sizes with the keyboard up, the header
   // scrolls too, so the field being typed in is never squeezed out (review R5).
-  const pinHead = (!!(headerAction || headerNote) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)
+  // A header row of its own (C-A) stays pinned at every size: its actions never scroll away, and moving it would remount it.
+  const pinHead = !art && (!!header || ((!!(headerAction || headerNote) || (!largeText && !!(icon || title))) && !(largeText && keyboardUp)))
   const scrollHead = pinHead ? (
     bodyEl
   ) : hasHead ? (
     <>
-      {iconEl}
+      {art ?? iconEl}
       {titleEl}
       {bodyEl}
     </>
   ) : null
-  const scrollsFromTop = hasHead && !pinHead
+  const scrolls = !!(scrollHead || children)
   // Once the modal is on screen: iOS presents it a frame after mount and drops a focus sent earlier.
-  const focusTitle = () => {
+  const sendFocus = () => {
     const target = titleRef.current ?? focusRef?.current
     if (target) AccessibilityInfo.sendAccessibilityEvent(target, 'focus')
   }
+  // Under Reduce Motion the title is still fading in from 0 for `base`, and VoiceOver passes over a view at alpha 0.
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearFocusTimer = () => {
+    if (focusTimer.current) clearTimeout(focusTimer.current)
+    focusTimer.current = null
+  }
+  const focusTitle = () => {
+    clearFocusTimer()
+    if (reduceMotion && !solid) focusTimer.current = setTimeout(sendFocus, motionTokens(true).duration.base)
+    else sendFocus()
+  }
+  useEffect(() => clearFocusTimer, [])
+  /*
+   * Asked for again while still leaving: the Modal never left, so no `onShow`; under Reduce Motion the place view (and the
+   * title in it) was unmounted and is new. Focus goes to the new title, a frame on, once it exists.
+   */
+  useEffect(() => {
+    if (!visible) {
+      clearFocusTimer()
+      leaving.current = onScreen.current
+      return
+    }
+    if (!leaving.current) return
+    leaving.current = false
+    const frame = requestAnimationFrame(focusTitle)
+    return () => cancelAnimationFrame(frame)
+    // On `visible` only, as the motion is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible])
   // The same sheet turning into another (a session into its confirm, a dial into a refusal): its new title takes focus.
   const shownTitle = useRef(title)
   useEffect(() => {
@@ -761,6 +831,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
       navigationBarTranslucent
       onRequestClose={requestClose}
       onShow={() => {
+        onScreen.current = true
         watch.onShow()
         focusTitle()
         onShown?.()
@@ -798,6 +869,8 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
           >
             <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={dismissible ? requestClose : undefined} />
           </Animated.View>
+          {/* Under Reduce Motion a leaving sheet is gone at once: the glass never fades out (SCRUM-1003). */}
+          {visible || !reduceMotion || solid ? (
           <Animated.View testID={testID && `${testID}-place`} accessibilityViewIsModal onAccessibilityEscape={requestClose} style={placeStyle}>
             <Material
               testID={testID}
@@ -812,7 +885,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
             >
               {/* The grip (and a pinned title row) stays above the scroll: a sheet scrolled down to its actions can still be dragged away. */}
               <GestureDetector gesture={drag}>
-                <View>
+                <Animated.View style={contentFade.head}>
                   <View testID={testID && `${testID}-grip`} style={[styles.grip, overflowing && !pinHead && { height: minTarget() }]}>
                     {dismissible ? (
                       <Pressable
@@ -827,14 +900,19 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                     ) : null}
                   </View>
                   {pinHead ? (
-                    <View testID={testID && `${testID}-pinned`} style={styles.head}>
+                    /*
+                     * Over a scroll, the 12 pt under the title is the header's, not padding inside the scroll: there it scrolled
+                     * away and a row was cut flush under the title ("Browse in" over "Mumbai"). Now a row is clipped 12 pt clear.
+                     */
+                    <View testID={testID && `${testID}-pinned`} style={[styles.head, scrolls && styles.headOverScroll]}>
                       {iconEl}
                       {titleEl}
                     </View>
                   ) : null}
-                </View>
+                  {pinHead && scrolls ? <Animated.View testID={testID && `${testID}-edge`} pointerEvents="none" style={[styles.edge, contrast && { backgroundColor: MATERIAL.hairlineIncreaseContrast }, edgeStyle]} /> : null}
+                </Animated.View>
               </GestureDetector>
-              {scrollHead || children ? (
+              {scrolls ? (
                 /*
                  * The title, the body and the children scroll as one under the cap; the actions below it stay put. With only
                  * `children` inside, a header taller than the cap (AX XXXL: "Sign out?" and its body) pushed Cancel and Sign
@@ -861,9 +939,9 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                     testID={testID && `${testID}-content`}
                     // Under a pinned header the scroll keeps a floor (its content, up to two targets): pinned rows never squeeze
                     // the form to nothing (review R5).
-                    style={[styles.content, pinHead && { minHeight: Math.min(contentTall, SCROLL_FLOOR_TARGETS * minTarget()) }]}
-                    // Under a pinned title, or with no header at all, the content keeps its 12 pt from what is above it (review L8).
-                    contentContainerStyle={[styles.contentInner, !scrollsFromTop && styles.contentBelow]}
+                    style={[styles.content, contentFade.scroll, pinHead && { minHeight: Math.min(contentTall, SCROLL_FLOOR_TARGETS * minTarget()) }]}
+                    // With no header at all the content keeps its 12 pt from the grip (review L8); a pinned header holds its own.
+                    contentContainerStyle={[styles.contentInner, !hasHead && styles.contentBelow]}
                     keyboardShouldPersistTaps="handled"
                     // Capped with more below, by the keyboard or by its own height: say so, and let the hand scroll it on both
                     // platforms. Make a crew stranded a section label at the fold over the dock with nothing to say it went on
@@ -886,7 +964,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                 </GestureDetector>
               ) : null}
               {sorted.length ? (
-                <View style={[styles.actions, fixedHeight && styles.pinned]}>
+                <Animated.View style={[styles.actions, fixedHeight && styles.pinned, contentFade.actions]}>
                   {sorted.map(({ kind = 'secondary', disabled, loading, ...action }) => (
                     <Button
                       // Keyed by testID when there is one, so a label that changes in place ("Show 1 place" → "Show 2 places") keeps its Button.
@@ -899,10 +977,11 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                       {...action}
                     />
                   ))}
-                </View>
+                </Animated.View>
               ) : null}
             </Material>
           </Animated.View>
+          ) : null}
         </View>
       </GestureHandlerRootView>
       </PresentsHere.Provider>
@@ -924,6 +1003,9 @@ const styles = StyleSheet.create({
    */
   grip: { height: SPACE.xl },
   head: { gap: SPACE.md },
+  headOverScroll: { paddingBottom: SPACE.md },
+  /** Full width, across the gutter, like the scroll under it. */
+  edge: { height: StyleSheet.hairlineWidth, marginHorizontal: -SPACE.gutter, backgroundColor: COLOR.hairline },
   handleHit: {
     position: 'absolute',
     top: 0,

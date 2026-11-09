@@ -79,3 +79,6 @@ type WorkFieldList = { slug: string; label: string }[]
 /** A stored `work_field` code ("data_ai") as its label ("Data & AI"). A code the list does not know is left out, never shown raw. */
 export const workFieldLabel = (slug: string | null | undefined, fields: WorkFieldList): string | undefined =>
   slug ? fields.find((f) => f.slug === slug)?.label : undefined
+
+/** "Karthik Subramaniam Venkataraman" is Karthik: a toast or a greeting speaks the way a friend would. */
+export const firstNameOf = (name: string): string => name.trim().split(/\s+/)[0] || name

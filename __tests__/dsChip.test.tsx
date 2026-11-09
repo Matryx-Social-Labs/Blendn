@@ -316,11 +316,11 @@ describe('pick-any: the + / ✓ slot (the sweep, chips.html)', () => {
 })
 
 describe('count, the fold chip, the caller’s label', () => {
-  it('a count is Geist Mono and secondary white, off and on', async () => {
+  it('a count is Geist Mono: secondary white off, the hue’s light tone on (Flow 3 board `.qc.on .n`, 2026-11-03)', async () => {
     await draw({ count: 12 })
     expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style)).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], color: COLOR.textSecondary })
     await screen.rerender(<Chip label="Live music" selected count={12} onPress={jest.fn()} testID="c" />)
-    expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.textSecondary)
+    expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.selectionEmberGlyph)
   })
 
   it('reads the caller’s label, else “label, count”, else the label', async () => {

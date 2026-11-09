@@ -11,9 +11,10 @@ import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/des
 import { liveWindow } from '../../lib/eventSession'
 import { distanceText } from '../../lib/placesPane'
 import { clockTime } from '../../lib/roomMoments'
-import { eventClock, zoneSuffix } from '../../lib/time'
+import { eventClock } from '../../lib/time'
 import { H } from '../../lib/haptics'
 import { printable } from '../../lib/pulseSections'
+import { compactCount } from '../../lib/format'
 
 /**
  * Tonight, as a running order (BUILD-SPEC A4; pulse.html `setlist`): a mono time
@@ -40,7 +41,8 @@ export function splitClock(ms: number, timeZone?: string | null): { time: string
   const zone = timeZone ?? undefined
   const match = /^(\d{1,2})(?::(\d{2}))? (AM|PM)$/.exec(clockTime(ms, zone))
   if (!match) return { time: clockTime(ms, zone), meridiem: '' }
-  return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: `${match[3]}${zoneSuffix(ms, timeZone)}` }
+  // The meridiem sits under the time in a fixed column; the zone is never named (owner, 2026-11-03).
+  return { time: `${match[1]}:${match[2] ?? '00'}`, meridiem: match[3] }
 }
 
 /** What a row is read as: "10 PM. Techno in the Tunnel, at Kitty Ko, 2.9 km, 64 going". */
@@ -49,7 +51,7 @@ export function setRowLabel(event: BlendnEvent, withDistance: boolean): string {
   const going = printable(event.going_count)
   return [
     eventClock(start, event.timezone),
-    [event.title, event.venue_name ? `at ${event.venue_name}` : null, withDistance ? distanceText(event.distance) : null, going ? `${going} going` : null]
+    [event.title, event.venue_name ? `at ${event.venue_name}` : null, withDistance ? distanceText(event.distance) : null, going ? `${going.toLocaleString('en-US')} going` : null]
       .filter(Boolean)
       .join(', '),
   ].join('. ')
@@ -137,7 +139,7 @@ const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn
           {going ? (
             <>
               {' · '}
-              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{going}</Text>
+              <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount(going)}</Text>
               {' going'}
             </>
           ) : null}

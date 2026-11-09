@@ -60,7 +60,6 @@ it('the warm and the page read are one request: the second is served from the fi
 describe('every caller that warms the page, and the page, use the same query', () => {
   it.each([
     ['app/(tabs)/events.tsx'],
-    ['app/nearby-events.tsx'],
     ['components/screens/EventDetailScreen.tsx'],
   ])('%s', (file) => {
     const src = read(file)

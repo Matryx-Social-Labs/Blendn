@@ -163,8 +163,6 @@ export const MAP_THEME = {
    */
   glow: {
     radiusM: 70,
-    /** Metres become pixels at this latitude (Bengaluru); within 10% for any Indian city. */
-    referenceLatitude: 13,
     /** Past this zoom the glow stops growing on screen: a huge blur is all overdraw. */
     maxZoom: 18,
     /** A lit building's glow, still. */

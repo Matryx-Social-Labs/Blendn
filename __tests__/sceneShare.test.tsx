@@ -1,11 +1,13 @@
 /**
- * The Scene's ways to share (Flow 16 · 16.1): the share circle in its bar, and “Bring someone?” in its dock once you are
- * going. Hidden, never disabled, for what may not be linked; an unlisted event shares its area only; never after check-in.
+ * The event page's ways to share (Flow 4 E-B, option B): the share circle in its bar opens the one tray (Flow 16:
+ * WhatsApp first, the Story card), and Invite in its dock once you are going is the system share sheet ("Bring
+ * someone?" folded into it). Hidden, never disabled, for what may not be linked; an unlisted event shares its area
+ * only; never after check-in.
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 
 const mockOpenShare = jest.fn((_target?: unknown) => Promise.resolve(true))
-const mockOpenWhatsApp = jest.fn()
+const mockShareNatively = jest.fn((_target?: unknown) => Promise.resolve('shared'))
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -38,8 +40,7 @@ jest.mock('react-native-maps', () => {
 })
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/checkIn', () => ({ subscribeCheckInChanged: () => () => {} }))
-jest.mock('../lib/shareTray', () => ({ openShare: (t: unknown) => mockOpenShare(t) }))
-jest.mock('../lib/shareWhatsApp', () => ({ openWhatsApp: (t: unknown) => mockOpenWhatsApp(t) }))
+jest.mock('../lib/shareTray', () => ({ openShare: (t: unknown) => mockOpenShare(t), shareNatively: (t: unknown) => mockShareNatively(t) }))
 
 /* eslint-disable import/first */
 import EventDetail from '../components/screens/EventDetailScreen'
@@ -79,7 +80,6 @@ const detail = (over: Record<string, unknown> = {}, status: Record<string, unkno
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockOpenWhatsApp.mockResolvedValue(true)
   markOnline()
 })
 const open = async (data: ReturnType<typeof detail>) => {
@@ -89,9 +89,10 @@ const open = async (data: ReturnType<typeof detail>) => {
 }
 
 describe('the share circle', () => {
-  it('opens the tray with the event card and its /event/ link', async () => {
+  it('opens the one tray (not the system sheet) with the event card and its /event/ link', async () => {
     await open(detail())
     await fireEvent.press(await screen.findByRole('button', { name: 'Share' }))
+    expect(mockShareNatively).not.toHaveBeenCalled()
     expect(mockOpenShare).toHaveBeenCalledWith({
       kind: 'event',
       event: expect.objectContaining({ title: 'Vinyl Night', venue: 'Toit', area: 'Indiranagar', url: 'https://www.blendn.app/event/e1', unlisted: false, cancelled: false }),
@@ -115,56 +116,42 @@ describe('the share circle', () => {
   })
 })
 
-describe('“Bring someone?”', () => {
-  const bring = () => screen.queryByTestId('scene-bring')
+describe('Invite, in the dock once you are going', () => {
+  const invite = () => screen.queryByRole('button', { name: 'Invite' })
 
-  it('appears in the dock once you are going, above the button', async () => {
-    await open(detail({}, { rsvpStatus: 'going' }))
-    expect(await screen.findByText('Bring someone?')).toBeTruthy()
-    expect(within(screen.getByTestId('scene-dock')).getByText('Bring someone?')).toBeTruthy()
-  })
-
-  it('WhatsApp sends the message with the link; with no WhatsApp it falls back to the tray', async () => {
-    await open(detail({}, { rsvpStatus: 'going' }))
-    await fireEvent.press(await screen.findByRole('button', { name: 'WhatsApp, send Vinyl Night' }))
+  it('is the dock’s action beside "You’re going", and opens the system share sheet (not the tray) with the event', async () => {
+    // Two days out: the room is not open yet (it opens at the doors, and then the dock is Open the room).
+    await open(detail({ startTime: hours(48), endTime: hours(51) }, { rsvpStatus: 'going' }))
+    expect(await screen.findByText('You’re going')).toBeTruthy()
+    await fireEvent.press(within(screen.getByTestId('scene-dock')).getByRole('button', { name: 'Invite' }))
     await act(async () => {})
-    expect(mockOpenWhatsApp).toHaveBeenCalledWith(expect.stringContaining('https://www.blendn.app/event/e1'))
     expect(mockOpenShare).not.toHaveBeenCalled()
-    mockOpenWhatsApp.mockResolvedValue(false)
-    await fireEvent.press(screen.getByRole('button', { name: 'WhatsApp, send Vinyl Night' }))
-    await act(async () => {})
-    expect(mockOpenShare).toHaveBeenCalledTimes(1)
+    expect(mockShareNatively).toHaveBeenCalledWith(expect.objectContaining({ kind: 'event', event: expect.objectContaining({ url: 'https://www.blendn.app/event/e1' }) }))
   })
 
-  it('its circle opens the tray', async () => {
-    await open(detail({}, { rsvpStatus: 'going' }))
-    await fireEvent.press(await screen.findByRole('button', { name: 'Share Vinyl Night' }))
-    expect(mockOpenShare).toHaveBeenCalledTimes(1)
-  })
-
-  it('is not there before you are going', async () => {
+  it('is not there before you are going (control: I’m going is)', async () => {
     await open(detail())
-    expect(await screen.findByText('Vinyl Night')).toBeTruthy()
-    expect(bring()).toBeNull()
+    expect(await screen.findByRole('button', { name: 'I’m going' })).toBeTruthy()
+    expect(invite()).toBeNull()
   })
 
   it('is not there on the waitlist, nor once the night is called off', async () => {
     await open(detail({}, { rsvpStatus: 'waitlisted' }))
-    expect(await screen.findByText('Vinyl Night')).toBeTruthy()
-    expect(bring()).toBeNull()
+    expect(await screen.findByText('On the waitlist')).toBeTruthy()
+    expect(invite()).toBeNull()
     await open(detail({ status: 'cancelled' }, { rsvpStatus: 'going' }))
-    expect(bring()).toBeNull()
+    expect(invite()).toBeNull()
   })
 
   it('is never there after check-in', async () => {
     await open(detail({ startTime: hours(-1), endTime: hours(2) }, { rsvpStatus: 'going', isCheckedIn: true }))
     expect(await screen.findByText('Vinyl Night')).toBeTruthy()
-    expect(bring()).toBeNull()
+    expect(invite()).toBeNull()
   })
 
   it('is not there for what may not be linked', async () => {
-    await open(detail({ visibility: 'private' }, { rsvpStatus: 'going' }))
-    expect(await screen.findByText('Vinyl Night')).toBeTruthy()
-    expect(bring()).toBeNull()
+    await open(detail({ visibility: 'private', startTime: hours(48), endTime: hours(51) }, { rsvpStatus: 'going' }))
+    expect(await screen.findByText('You’re going')).toBeTruthy()
+    expect(invite()).toBeNull()
   })
 })

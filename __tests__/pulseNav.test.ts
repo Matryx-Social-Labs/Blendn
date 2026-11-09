@@ -62,7 +62,8 @@ describe('the overlay header, frame 1141:4819', () => {
     expect(shell).toContain('topChrome: insets.top + TOP_BAR_HEIGHT')
     const src = SCREEN()
     expect(src).not.toContain('<PulseTopBar')
-    expect(src).toContain('paddingTop: SPACE.lg,')
+    // The chips sit right under the drawer's header (Option C), which ends in its own gap.
+    expect(src).toContain('paddingTop: 0,')
   })
 })
 
@@ -97,7 +98,7 @@ describe('the stylesheet, frame 1141:4643', () => {
 
 describe('the bar does not clip what rises above the disc', () => {
   /*
-   * The disc's (c) label, "Check in · Toit", rises above the 64 pt capsule
+   * The disc's (c) pill (a pin and "Toit") rises above the 64 pt capsule
    * (Flow 4 T10). The glass is a layer behind the row, not a clipping parent
    * around it, so nothing above the bar is cut off (components/ds/TabBar).
    */
@@ -108,8 +109,10 @@ describe('the bar does not clip what rises above the disc', () => {
     expect(bar).not.toContain("overflow: 'hidden'")
   })
 
+  // Reshaped as it settles into the compact pill (SCRUM-1023): its radius is half its height at every frame.
   it('the glass is behind the row, rounded to the capsule', () => {
-    expect(BAR()).toContain('<Material role="bar" style={[StyleSheet.absoluteFill, styles.round]} />')
+    expect(BAR()).toMatch(/<Material testID=\{`\$\{testID\}-capsule`\} role="bar" style=\{styles\.capsule\} animatedStyle=\{capsule\} \/>\s*\n\s*<View testID=\{`\$\{testID\}-row`\}/)
+    expect(BAR()).toMatch(/borderRadius: s\.radius/)
   })
 })
 
@@ -139,35 +142,41 @@ describe('a tap outside the search closes the keyboard', () => {
   it('the map and the drawer chrome close it', () => {
     const shell = stripComments(read('components/home/HomeShell.tsx'))
     expect(shell).toMatch(/style=\{StyleSheet\.absoluteFill\}\s+onTouchStart=\{dismissKeyboard\}/)
-    expect(shell).toContain('onChromeTouch={dismissKeyboard}')
+    // Except while the search is open in the header: a touch on its own field must not close its keyboard.
+    expect(shell).toContain('onChromeTouch={searching ? undefined : dismissKeyboard}')
     expect(stripComments(read('components/home/HomeDrawer.tsx'))).toContain('<View style={styles.header} onTouchStart={onChromeTouch}>')
   })
 })
 
-describe('the sticky search', () => {
-  it('the search is data row 0, pinned under the title header, and is in the list in every state (loading too)', () => {
+describe('the sticky chips (Option C: the chips are the header)', () => {
+  it('the chips are data row 0, pinned under the banner header, and in the list in every state (loading too)', () => {
     const src = SCREEN()
-    // The title header is cell 0, the search (row 0) cell 1.
-    expect(src).toContain('const STICKY_SEARCH = [1]')
-    expect(src).toContain('stickyHeaderIndices={STICKY_SEARCH}')
-    expect(src).toContain("const LEAD: PulseRow[] = [{ kind: 'search', key: 'search' }, { kind: 'body', key: 'body' }]")
-    // Loading shows the lead rows only: the field outlives the thing it searches.
+    expect(src).toContain('const STICKY_CHIPS = [1]')
+    expect(src).toContain('stickyHeaderIndices={STICKY_CHIPS}')
+    expect(src).toContain("const LEAD: PulseRow[] = [{ kind: 'chips', key: 'chips' }, { kind: 'body', key: 'body' }]")
     expect(src).toContain('showLoadingSkeleton ? LEAD : [...LEAD, ...rows]')
   })
 
-  it('the header holds only the banners: no title (the drawer’s tabs name the pane) and the search is not in ListHeaderComponent', () => {
+  it('the search is the drawer header’s, opened from an icon beside the city, never in the list', () => {
     const src = SCREEN()
     const header = src.slice(src.indexOf('ListHeaderComponent={'), src.indexOf('</PulseSlots.Provider>'))
     expect(header).toContain('{banners}')
-    expect(header).not.toContain('pulseTitle')
-    expect(header).not.toContain('searchNode')
-    expect(header).not.toContain('<PulseSearch')
+    expect(header).not.toContain('SearchField')
+    const shell = stripComments(read('components/home/HomeShell.tsx'))
+    expect(shell).toContain('<IconButton size="sm" icon="search" accessibilityLabel="Search events"')
+    expect(shell).toContain('<PulseSearchRow query={query} onChangeQuery={setQuery} onCancel={closeSearch} />')
   })
 
-  it('a keystroke re-renders the search and body rows (context), not every card (renderRow does not close over them)', () => {
+  it('the shell reaches the Pulse: its search text, its open field, the lead height and the map’s banner slot', () => {
+    // Dropped once in the build (the module-level render took three arguments): the search opened over chips that stayed.
+    expect(SCREEN()).toContain('<EventsInner onBrowse={onBrowse} visible={visible} full={full} shell={shell} />')
+    expect(stripComments(read('components/home/HomeShell.tsx'))).toContain('renderEvents(setBrowse, pulseVisible, pulseFull, shell)')
+  })
+
+  it('a chip or a keystroke re-renders the chips and body rows (context), not every card (renderRow does not close over them)', () => {
     const src = SCREEN()
     const render = src.slice(src.indexOf('const renderRow = useCallback'), src.indexOf('const keyExtractor'))
-    expect(render).not.toContain('searchNode')
+    expect(render).not.toContain('chipsNode')
     expect(render).not.toContain('bodyNode')
     expect(render).toContain('<PulseSlot slot={item.kind} />')
   })

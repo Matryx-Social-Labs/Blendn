@@ -71,6 +71,11 @@ function MoreChevron({ expanded, testID }: { expanded: boolean; testID?: string 
 }
 
 export type ChipVariant = 'default' | 'outline'
+/**
+ * `lg`: the 44 pt capsule in body, for a set that is the screen's one question (onboarding's interests, direction A).
+ * `header`: the 36 pt capsule of a header row (the Pulse's chips and city chip, board `.qc` / `.cc`).
+ */
+export type ChipSize = 'md' | 'lg' | 'header'
 /** `single` picks one of a set; `multi` is pick-any and draws the + / ✓ slot. */
 export type ChipSelection = 'single' | 'multi'
 
@@ -101,6 +106,7 @@ export type ChipProps = {
   shared?: boolean
   /** `outline`: no fill, a 1 pt edge at 22% white; read-only labels on a card (A31). */
   variant?: ChipVariant
+  size?: ChipSize
   /** Read-only only: what it is read as, when that is more than the label ("Jazz, shared"). */
   accessibilityLabel?: string
   /**
@@ -110,6 +116,8 @@ export type ChipProps = {
   lines?: 1 | 2
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'pressed' | 'focused'
+  /** A picker's chip (the Pulse's city, board `.cc`): a chevron after the label, saying it opens a choice. */
+  chevron?: boolean
   testID?: string
 }
 
@@ -142,9 +150,11 @@ export function Chip({
   disabled = false,
   shared = false,
   variant = 'default',
+  size = 'md',
   accessibilityLabel,
   lines = 1,
   previewState,
+  chevron = false,
   testID,
 }: ChipProps) {
   const more = kind === 'more'
@@ -206,7 +216,7 @@ export function Chip({
         <Glyph name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} play={selected} />
       ) : null}
       <Text
-        style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
+        style={[font(size === 'lg' ? 'body' : size === 'header' ? 'control' : 'meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
         maxFontSizeMultiplier={CONTROL_FONT_CAP}
         // Past its lines it ends in an ellipsis; it is read whole either way (the label is the accessibility label).
         numberOfLines={lines}
@@ -219,15 +229,14 @@ export function Chip({
           maxFontSizeMultiplier={CONTROL_FONT_CAP}
           style={[
             monoCaption(bold),
-            {
-              color: COLOR.textSecondary,
-            },
+            // Lit with its chip (board `.qc.on .n`): the hue's light tone on the fill, never grey on ember.
+            { color: selected ? sel.glyph : COLOR.textSecondary },
           ]}
         >
           {count}
         </Text>
       ) : null}
-      {more ? <MoreChevron expanded={expanded} testID={testID && `${testID}-chevron`} /> : null}
+      {more || chevron ? <MoreChevron expanded={expanded} testID={testID && `${testID}-chevron`} /> : null}
       {onRemove ? <Icon name="x" size={ICON.inline} color={ink} /> : null}
       <Animated.View
         testID={testID && `${testID}-edge`}
@@ -249,6 +258,8 @@ export function Chip({
   )
   const look = [
     styles.chip,
+    size === 'lg' && styles.chipLg,
+    size === 'header' && (chevron ? styles.chipPicker : styles.chipHeader),
     {
       borderRadius: radius,
       backgroundColor: outline ? 'transparent' : chipRest(ground),
@@ -331,5 +342,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
     overflow: 'hidden',
   },
+  chipLg: { minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
+  // Board `.qc`: 36 tall, 14 either side, 6 between its parts; `.cc` (a picker with a leading pin): 8 before, 10 after.
+  chipHeader: { minHeight: SIZE.tagHeader, paddingHorizontal: SPACE.md + SPACE.xxs, gap: SPACE.xs + SPACE.xxs },
+  chipPicker: { minHeight: SIZE.tagHeader, paddingLeft: SPACE.sm, paddingRight: SPACE.md - SPACE.xxs, gap: SPACE.xs + SPACE.xxs },
   wash: { backgroundColor: PRESSED_WASH.android },
 })

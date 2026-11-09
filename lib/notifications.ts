@@ -11,6 +11,7 @@ import { Logger } from './logger'
 import { forgetMessageRequests, forgetPersonalChats } from './queryCache'
 import { setPushTokenRef, getPushTokenRef } from './pushTokenRef'
 import { notePushPermission, readPushPermission, whenPermissionReadable } from './pushStatus'
+import { isLinkId } from './shareLinks'
 
 /**
  * The conversation or room on screen, spelled the way the server spells a
@@ -127,7 +128,7 @@ export async function ensureNotificationChannels(): Promise<void> {
     Notifications.setNotificationChannelAsync('crew', {
       ...base,
       name: 'Your crew',
-      description: 'Crew invites, “we’re here” and Blends',
+      description: 'Crew invites, “we’re here” and Mixes',
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: PRIVATE,
     }),
@@ -199,7 +200,7 @@ export async function registerForPushNotificationsAsync(
 
     if (existingStatus !== 'granted') {
       if (!prompt) {
-        Logger.info('notifications', 'Push declined during onboarding; not asking')
+        Logger.info('notifications', 'Push declined or deferred; not asking')
         return null
       }
       const answer = await Notifications.requestPermissionsAsync()
@@ -473,6 +474,16 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
      */
     case 'board_post_removed': {
       target = data.eventId ? { pathname: '/board/[eventId]', params: { eventId: String(data.eventId) } as any } : '/(tabs)/chat'
+      break
+    }
+    /*
+     * The Lobby's opt-in alerts (SCRUM-1026, 6/6). Somebody offers what you are looking for: their post, which the
+     * Lobby scrolls to. The host's note changed: the Lobby, where the note is pinned first. No event, nowhere to go.
+     */
+    case 'board_match':
+    case 'board_host_post': {
+      const post = notifType === 'board_match' && isLinkId(data.postId) ? { post: data.postId } : {}
+      target = isLinkId(data.eventId) ? { pathname: '/board/[eventId]', params: { eventId: data.eventId, ...post } as any } : '/(tabs)/chat'
       break
     }
     case 'friend_request': {

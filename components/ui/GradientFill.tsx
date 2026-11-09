@@ -1,5 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient'
-import type { ViewProps } from 'react-native'
+import { useId } from 'react'
+import { View, type ViewProps } from 'react-native'
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg'
 
 import { COLOR, GRADIENT } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
@@ -70,4 +72,42 @@ const SIDEWAYS = {
  */
 export function SolidBarFade({ color, toward = 'bottom', ...rest }: ViewProps & { color: string; toward?: 'bottom' | keyof typeof SIDEWAYS }) {
   return <LinearGradient {...rest} colors={[tint(color, 0), color]} {...(toward === 'bottom' ? null : SIDEWAYS[toward])} />
+}
+
+/** The board's corner light on a card (`.fc`: ember at 20% from the top-left, gone by 60%), as a diagonal fade. */
+export const CORNER_GLOW = { alpha: 0.2, reach: 0.6 } as const
+export function CornerGlow({ color, ...rest }: ViewProps & { color: string }) {
+  // ponytail: expo-linear-gradient has no radial; a diagonal fade from the corner reads the same on a card this size.
+  return <LinearGradient {...rest} colors={[tint(color, CORNER_GLOW.alpha), tint(color, 0)]} locations={[0, CORNER_GLOW.reach]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+}
+
+/**
+ * One layer of a board's `radial-gradient(<w>% <h>% at <x>% <y>%, <colour> <alpha>, transparent <reach>%)`: an ellipse of
+ * the box's own proportions, the colour at its centre fading to nothing at `reach` of its radius.
+ */
+export type RadialLayer = { color: string; alpha: number; at: readonly [number, number]; size: readonly [number, number]; reach: number }
+
+/**
+ * The washes the boards light a page with (the event poster's light, the offer's, a world's corner): CSS radial
+ * gradients, drawn with react-native-svg because expo-linear-gradient has no radial. Decorative, never under text alone.
+ */
+export function RadialWash({ layers, ...rest }: ViewProps & { layers: readonly RadialLayer[] }) {
+  const id = useId().replace(/:/g, '')
+  return (
+    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" {...rest}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          {layers.map((l, i) => (
+            <RadialGradient key={i} id={`${id}-${i}`} cx={`${l.at[0]}%`} cy={`${l.at[1]}%`} rx={`${l.size[0]}%`} ry={`${l.size[1]}%`} fx={`${l.at[0]}%`} fy={`${l.at[1]}%`}>
+              <Stop offset="0" stopColor={l.color} stopOpacity={l.alpha} />
+              <Stop offset={l.reach} stopColor={l.color} stopOpacity={0} />
+            </RadialGradient>
+          ))}
+        </Defs>
+        {layers.map((_, i) => (
+          <Rect key={i} width="100%" height="100%" fill={`url(#${id}-${i})`} />
+        ))}
+      </Svg>
+    </View>
+  )
 }

@@ -19,7 +19,7 @@ import { namedList, type NamedList } from './namedList'
 import * as SecureStore from 'expo-secure-store'
 import { AppState, Platform } from 'react-native'
 import { type ResponseHead, REQUEST_TIMEOUT_MS, TIMEOUT_MESSAGE, fetchWithTimeout, isNetworkFailure, isTimeoutError, settleWithin } from './fetchTimeout'
-import type { CityOption } from './city'
+import type { CityCatalogue } from './city'
 import { Logger } from './logger'
 import { markOffline, markOnline, markTimeout } from './networkStatus'
 import type { NotificationFeed } from './notificationFormat'
@@ -27,6 +27,7 @@ import { noteFriendGone } from './friendsGone'
 import { FRIENDS_PAGE } from './friendsPaging'
 import type { FriendInvite, FriendPerson, FriendProfile, FriendRequestsPayload, FriendsPayload, FriendState } from './friends'
 import type { BoardPost, BoardReportReason, BoardRequestStatus, BoardRequests } from './board'
+import type { LobbyAlerts, LobbyMeta, LobbyPhase, LobbyPreview, LobbyState, LobbySubKind, LobbySummary } from './lobby'
 import type { Badge, Choice, Overlap, ProfileOptions } from './aboutYou'
 import { reasonOf, SESSION_END_CODES } from './sessionEnd'
 import { appBuildNumber, appVersionNumber } from './appVersion'
@@ -74,8 +75,23 @@ const USER_KEY = 'blendn_user'
  */
 const SIGNED_OUT_KEY = 'blendn_signed_out'
 
-// Secure storage options
+/*
+ * Readable once the phone has been unlocked since it started, and never leaves it (SCRUM-878). iOS launches the app in the
+ * background while the phone is locked (prewarming, a push); WHEN_UNLOCKED refused the read then, and the launch took the
+ * refusal for no session.
+ *
+ * Under a new service, because the keychain keeps an item's accessibility when it is updated: changing it means a delete
+ * and an add, and a kill between the two (a write stuck on Expo's queue, RC drive 2) would lose the session. So older
+ * builds' items stay where they are, are read when the new service has none, and are deleted only once the new one is
+ * written (`secureSet`, at the next refresh). There is always one copy.
+ */
 const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainService: 'blendn.api.auth.v2',
+  requireAuthentication: false,
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+}
+/** Where builds before SCRUM-878 kept the session: read as a fallback, deleted once the new service holds it. */
+const LEGACY_SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainService: 'blendn.api.auth',
   requireAuthentication: false,
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -355,12 +371,17 @@ class TokenStorage {
   }
 
   private static async secureGet(key: string): Promise<string | null> {
+    return (await this.secureRead(key)) ?? null
+  }
+
+  /** As `secureGet`, but `undefined` when the keychain refused the read (locked): unknown, which is not "none". */
+  private static async secureRead(key: string): Promise<string | null | undefined> {
     if (this.memory.has(key)) return this.memory.get(key) ?? null
     const value = await this.readStored(key)
     // A write or a clear while the read was out is newer than what it found, and stays. The caller still gets what was
     // read: sign-out queues its reads ahead of its deletes so that the POST carries the session it is ending.
     if (value !== undefined && !this.memory.has(key)) this.memory.set(key, value)
-    return value ?? null
+    return value
   }
 
   /** The stored value, or `undefined` when the read failed (the fallback's answer, never remembered). */
@@ -375,7 +396,8 @@ class TokenStorage {
     }
     const started = Date.now()
     try {
-      return await SecureStore.getItemAsync(key, SECURE_OPTIONS)
+      // An install from before SCRUM-878 still has it under the old service until its next write.
+      return (await SecureStore.getItemAsync(key, SECURE_OPTIONS)) ?? (await SecureStore.getItemAsync(key, LEGACY_SECURE_OPTIONS))
     } catch (error) {
       // Unexpected on native (e.g. keychain access failure) — fall back but
       // log it so it's visible in Sentry rather than silently swallowed.
@@ -401,6 +423,10 @@ class TokenStorage {
     const started = Date.now()
     try {
       await SecureStore.setItemAsync(key, value, SECURE_OPTIONS)
+      // Written where it is readable while locked: the older copy goes (SCRUM-878), and AsyncStorage's if it was there.
+      try {
+        await SecureStore.deleteItemAsync(key, LEGACY_SECURE_OPTIONS)
+      } catch {}
       // Clear from AsyncStorage if it was there
       try {
         await AsyncStorage.removeItem(key)
@@ -413,18 +439,29 @@ class TokenStorage {
     }
   }
 
-  private static async secureRemove(key: string): Promise<void> {
+  /**
+   * True when every copy is known gone. Each service is deleted on its own (SCRUM-878 review): a failure on the new one must
+   * not leave the old copy, which the launch's fallback read would bring back after a sign-out.
+   */
+  private static async secureRemove(key: string): Promise<boolean> {
     this.memory.set(key, null)
+    let cleared = true
     if (Platform.OS !== 'web') {
-      try {
-        await SecureStore.deleteItemAsync(key, SECURE_OPTIONS)
-      } catch (error) {
-        Logger.warn('auth', 'SecureStore delete failed', { key, error })
+      for (const options of [SECURE_OPTIONS, LEGACY_SECURE_OPTIONS]) {
+        try {
+          await SecureStore.deleteItemAsync(key, options)
+        } catch (error) {
+          cleared = false
+          Logger.warn('auth', 'SecureStore delete failed', { key, service: options.keychainService, error })
+        }
       }
     }
     try {
       await AsyncStorage.removeItem(key)
-    } catch {}
+    } catch {
+      cleared = false
+    }
+    return cleared
   }
 
   static async getAccessToken(): Promise<string | null> {
@@ -437,6 +474,15 @@ class TokenStorage {
 
   static async getRefreshToken(): Promise<string | null> {
     return this.secureGet(REFRESH_TOKEN_KEY)
+  }
+
+  /** For whoever decides a session is over: `undefined` when the keychain could not be read (SCRUM-878). */
+  static async accessTokenOrUnknown(): Promise<string | null | undefined> {
+    return this.secureRead(ACCESS_TOKEN_KEY)
+  }
+
+  static async refreshTokenOrUnknown(): Promise<string | null | undefined> {
+    return this.secureRead(REFRESH_TOKEN_KEY)
   }
 
   static async setRefreshToken(token: string): Promise<void> {
@@ -459,12 +505,14 @@ class TokenStorage {
     return this.secureSet(USER_KEY, JSON.stringify(user))
   }
 
-  static async clearAll(): Promise<void> {
-    await Promise.all([
+  /** True only when every key is gone from both services: until then the "signed out here" marker stays (M2). */
+  static async clearAll(): Promise<boolean> {
+    const results = await Promise.all([
       this.secureRemove(ACCESS_TOKEN_KEY),
       this.secureRemove(REFRESH_TOKEN_KEY),
       this.secureRemove(USER_KEY),
     ])
+    return results.every(Boolean)
   }
 
   /** Mark this phone signed out (M2): called before any await at sign-out, so the write is issued whatever follows. */
@@ -1176,6 +1224,8 @@ export interface ProfileFields {
     name?: string
     age?: number
     location?: string
+    /** Home, as a catalogue slug (travel P2); null when unset. */
+    homeCitySlug?: string | null
     bio?: string
     occupation?: string
     education?: string
@@ -1488,7 +1538,9 @@ class ApiClientClass {
   private buildRequestKey(endpoint: string, options: RequestInit, requireAuth: boolean): string {
     const method = (options.method || 'GET').toUpperCase()
     const body = options.body ? String(options.body) : ''
-    return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}`
+    // Headers an answer depends on (`X-Country`) keep two answers apart, in flight and in the cache.
+    const headers = options.headers ? JSON.stringify(options.headers) : ''
+    return `${method}:${requireAuth ? 'auth' : 'anon'}:${endpoint}:${body}${headers}`
   }
 
   private getCached<T>(key: string): { data: ApiResponse<T>; isFresh: boolean; tooOld: boolean } | null {
@@ -1621,9 +1673,9 @@ class ApiClientClass {
     }
   }
 
-  private refreshCacheInBackground<T>(endpoint: string, key: string, ttl: number) {
+  private refreshCacheInBackground<T>(endpoint: string, key: string, ttl: number, headers?: Record<string, string>) {
     const epoch = this.cacheEpoch
-    this.queuedRequest<T>(endpoint).then((result) => {
+    this.queuedRequest<T>(endpoint, headers ? { headers } : {}).then((result) => {
       if (result.success && epoch === this.cacheEpoch) {
         this.setCache(key, result, ttl)
       }
@@ -1918,9 +1970,10 @@ class ApiClientClass {
     const epoch = sessionEpoch
     const work: Promise<RefreshOutcome> = (async () => {
       try {
-        const refreshToken = await withinDeadline(TokenStorage.getRefreshToken())
-        // A keychain that did not answer is not a missing token: 'failed', tried again, never the sign-out a 'rejected' is.
-        if (refreshToken === TIMED_OUT) return 'failed'
+        const refreshToken = await withinDeadline(TokenStorage.refreshTokenOrUnknown())
+        // A keychain that did not answer, or refused (locked, SCRUM-878), is not a missing token: 'failed', tried again,
+        // never the sign-out a 'rejected' is.
+        if (refreshToken === TIMED_OUT || refreshToken === undefined) return 'failed'
         if (!refreshToken || refreshToken === refusedRefreshToken) {
           return 'rejected'
         }
@@ -2075,18 +2128,19 @@ class ApiClientClass {
   }
 
   /** An authed GET, stale-while-revalidate: a stale entry is served while it refreshes. */
-  async cachedRequest<T>(endpoint: string, ttl: number): Promise<ApiResponse<T>> {
-    const key = this.buildRequestKey(endpoint, {}, true)
+  /** `headers` the answer depends on (the cities list on `X-Country`) are part of the key (`buildRequestKey`). */
+  async cachedRequest<T>(endpoint: string, ttl: number, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    const key = this.buildRequestKey(endpoint, headers ? { headers } : {}, true)
     const cached = this.getCached<T>(key)
 
     // Too old to show even for a moment: asked again and awaited, as if never cached (`SWR_STALE_LIMIT_MS`).
     if (cached && !cached.tooOld) {
-      if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl)
+      if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl, headers)
       return cached.data
     }
 
     const epoch = this.cacheEpoch
-    const result = await this.queuedRequest<T>(endpoint)
+    const result = await this.queuedRequest<T>(endpoint, headers ? { headers } : {})
     if (result.success && epoch === this.cacheEpoch) {
       this.setCache(key, result, ttl)
     }
@@ -2509,12 +2563,16 @@ class ApiClientClass {
    *
    * Cached for longer than the event list — a city gaining its first event is
    * not something the picker has to notice within seconds.
+   *
+   * `travel1` says this build knows "coming soon", so the server lists preview cities rather than leaving them out
+   * for builds that would open them empty. `country` is the phone's reverse-geocoded ISO code, sent as `X-Country`
+   * and stored nowhere; the answer's `device` says what the server made of it (travel plan §3.1 A1).
    */
-  async getEventCities(): Promise<ApiResponse<{ cities: CityOption[] }>> {
-    return this.cachedRequest<{ cities: CityOption[] }>(
-      '/api/mobile/events/cities',
-      5 * 60 * 1000
-    )
+  async getEventCities(country?: string | null): Promise<ApiResponse<CityCatalogue>> {
+    return this.cachedRequest<CityCatalogue>('/api/mobile/events/cities', 5 * 60 * 1000, {
+      'X-Client-Features': 'travel1',
+      ...(country ? { 'X-Country': country } : {}),
+    })
   }
 
   /**
@@ -2744,6 +2802,8 @@ class ApiClientClass {
       dateOfBirth?: string
 
       location?: string
+      /** The catalogue slug of home (travel P2); null clears it. A city the catalogue hides is a 400. */
+      homeCitySlug?: string | null
       bio?: string
       occupation?: string
       education?: string
@@ -3927,14 +3987,46 @@ class ApiClientClass {
   // decide, and a stale one offers a seat that has gone. Every refusal on these
   // routes is a sentence for the person (`boardMessage`).
 
-  async getBoard(eventId: string): Promise<ApiResponse<{ posts: BoardPost[] }>> {
-    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board`)
+  /** The first page, with the meta every page carries; `query` is a chip's filter (`filterQuery`) and a page size. */
+  async getBoard(eventId: string, query: Record<string, string> = {}): Promise<ApiResponse<Partial<LobbyMeta> & { posts: BoardPost[] }>> {
+    const qs = new URLSearchParams(query).toString()
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board${qs ? `?${qs}` : ''}`)
   }
 
+  /** One post, for a post link: the Lobby's own gate. */
+  async getBoardPost(eventId: string, postId: string): Promise<ApiResponse<{ state: LobbyState; phase: LobbyPhase; closesAt: string; post: BoardPost }>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/${encodeURIComponent(postId)}`)
+  }
+
+  /** The event page's card: counts, and the latest two for a reader. */
+  async getBoardPreview(eventId: string): Promise<ApiResponse<LobbyPreview>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/preview`)
+  }
+
+  /** "From the Lobby", for the room. `hasContent: false` is no card. */
+  async getBoardSummary(eventId: string): Promise<ApiResponse<LobbySummary>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/summary`)
+  }
+
+  async getBoardAlerts(eventId: string): Promise<ApiResponse<LobbyAlerts>> {
+    return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/board/alerts`)
+  }
+
+  /** Only the keys sent change. */
+  async setBoardAlerts(eventId: string, alerts: Partial<LobbyAlerts>): Promise<ApiResponse<LobbyAlerts>> {
+    return this.queuedRequest(
+      `/api/mobile/events/${encodeURIComponent(eventId)}/board/alerts`,
+      { method: 'PUT', body: JSON.stringify(alerts) },
+      true,
+      3
+    )
+  }
+
+  /** A photo is the `publicUrl` of a `folder: 'chat'` upload (`uploadChatPhoto`); the server strips and seals it. */
   async postToBoard(
     eventId: string,
-    post: { kind: 'offer' | 'seeking'; body: string; spacesLeft?: number }
-  ): Promise<ApiResponse<Pick<BoardPost, 'id' | 'kind' | 'body' | 'spacesLeft' | 'createdAt'>>> {
+    post: { kind: BoardPost['kind']; subKind?: LobbySubKind; body: string; spacesLeft?: number; photo?: { url: string; alt?: string } }
+  ): Promise<ApiResponse<Pick<BoardPost, 'id' | 'kind' | 'body' | 'spacesLeft' | 'createdAt'> & Partial<BoardPost>>> {
     return this.queuedRequest(
       `/api/mobile/events/${encodeURIComponent(eventId)}/board`,
       { method: 'POST', body: JSON.stringify(post) },

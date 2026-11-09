@@ -1,5 +1,5 @@
 import { apiClient, type ApiResponse } from './apiClient'
-import { calendarDate, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
+import { calendarDate, calendarDaysBetween, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
 
 /*
  * Offers from the places you keep going back to, and the door pass (step 12;
@@ -18,7 +18,8 @@ export type OfferState = 'live' | 'redeemed' | 'used_tonight' | 'ended'
 
 export type Offer = {
   id: string
-  venue: { id: string; name: string }
+  /** `venueType`: the venue_type key ("pub_bar"), for the pass's tile; null when the venue has none, absent from an older server. */
+  venue: { id: string; name: string; venueType?: string | null }
   text: string
   sentAt: string
   endsAt: string
@@ -128,7 +129,7 @@ export function offerStateLine(state: OfferState, venueName: string): string | n
     case 'redeemed':
       return 'Redeemed. Enjoy it.'
     case 'used_tonight':
-      return `You’ve used a pass at ${venueName} tonight — one a night. This one works another night.`
+      return `You’ve used an offer at ${venueName} tonight — one a night. This one works another night.`
     case 'ended':
       return 'This offer has ended.'
   }
@@ -163,8 +164,8 @@ export const OFFER_REPORT_REASONS: readonly { value: OfferReportReason; label: s
 /** How full the disc is while the pass is live (Flow 13 pass.js: 0.62); a spent one is full, an ended one empty. */
 export const LIVE_LEVEL = 0.62
 
-export const LIVE_FOOT = 'Show this at the door. Staff type the code and tap Redeemed.'
-export const OFFLINE_FOOT = 'This pass needs a connection to show its code.'
+export const LIVE_FOOT = 'Works once, today. Staff type the code and tap Redeemed.'
+export const OFFLINE_FOOT = 'This offer code needs a connection to show.'
 export const FRESH_CODE_FOOT = 'Getting a fresh code…'
 
 /** Which face the door code wears: `offline` is "no fresh code to show", whatever the reason. */
@@ -238,3 +239,8 @@ export const endedLabel = (endsAt: string) => `ENDED ${WEEKDAYS_LONG[weekdayIn(n
 
 /** "until Wed 15 Oct": how long the offer runs (the pass itself is for today). */
 export const validUntil = (endsAt: string) => `until ${calendarDate(endsAt, { weekday: true })}`
+
+/** The pass's validity in its own slot (Flow 4 polish): "Valid today, till 11 PM" when it ends today, else its day. */
+export function validityLine(endsAt: string, now: number = Date.now()): string {
+  return calendarDaysBetween(new Date(now), new Date(endsAt)) === 0 ? `Valid today, till ${clockTime(endsAt)}` : `Valid ${validUntil(endsAt)}`
+}

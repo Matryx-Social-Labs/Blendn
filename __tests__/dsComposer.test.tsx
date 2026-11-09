@@ -102,7 +102,7 @@ describe('<Composer>', () => {
     ['closed', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
     ['ratelimited', 'Slow down a moment. Too many messages.'],
     // R2-D2: the two CHAT_CLOSED reasons the server words apart.
-    ['notopen', 'Not open yet. This chat opens 24 hours before the event starts.'],
+    ['notopen', 'Not open yet. The room opens when the doors open.'],
     ['hidden', 'This room is hidden. This event is no longer available.'],
   ] as const)('%s: no field, the reason in the server’s words as one element, nothing plays', async (state, said) => {
     await render(composer({ state }))

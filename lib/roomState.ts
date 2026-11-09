@@ -8,6 +8,7 @@
  * There is no organizer lock (SCRUM-893): a room's `locked` status, which
  * nothing writes, says nothing here.
  */
+import type { Href } from 'expo-router'
 import type { Face } from '../components/ds/Facepile'
 import { markSeed } from './pseudonymAvatar'
 import type { EventChatData } from './apiClient'
@@ -39,6 +40,31 @@ export function myRoomFace(input: { revealed: boolean; photo: string | null; pse
 export function pseudonymFromDoor(data: EventChatData | null | undefined): string | null {
   const name = data?.you?.pseudonym
   return typeof name === 'string' && name.trim() ? name.trim() : null
+}
+
+/** The server's pseudonyms: "Adjective Noun", a collision number at most (admin lib/anonymous-names.ts). */
+const PSEUDONYM_SHAPE = /^[A-Za-z]+(?: [A-Za-z]+)+(?: \d{1,3})?$/
+const PSEUDONYM_MAX = 40
+
+/**
+ * A pseudonym handed over as a route param (the room passes yours to its settings, SCRUM-1025). A param is a URL, and a
+ * link could carry any words into the anonymous card, so only the server's shape counts; anything else is no pseudonym.
+ */
+export function pseudonymFromParam(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const name = raw.trim()
+  return name.length <= PSEUDONYM_MAX && PSEUDONYM_SHAPE.test(name) ? name : null
+}
+
+/**
+ * The room's settings: the same screen, with what the room holds. The pseudonym rides along because the screen cannot fetch it:
+ * `GET /events/:id/chat` joins the room. `revealed` so the cards open on the choice in force, not on Anonymous.
+ */
+export function roomSettingsRoute(eventId: string, room: { pseudonym: string | null; revealed: boolean }): Href {
+  return {
+    pathname: '/event-preferences/[eventId]',
+    params: { eventId, revealed: room.revealed ? '1' : '0', ...(room.pseudonym ? { pseudonym: room.pseudonym } : {}) },
+  } as Href
 }
 
 /** `write.closesAt` from `GET /events/:id/chat`: when the room's chat closes. */

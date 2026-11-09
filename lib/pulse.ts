@@ -94,6 +94,31 @@ export function featuredDateLabel(startTime: string, now: Date = new Date(), tim
   return dayGroupLabel(startTime, now, timeZone ?? undefined)?.title ?? ''
 }
 
+/** From 5 PM a day's plans are tonight's: the hour people plan around (a 10 AM start is not tonight). */
+export const TONIGHT_FROM = 17
+
+/**
+ * The word for a start today or tomorrow, as its own city has the day: "Tonight" from 5 PM, "Today" before, "Tomorrow";
+ * null for any other day. Calendar days, not elapsed hours: 12:10 AM is "Tomorrow" at ten to midnight.
+ */
+export function dayWord(start: Date, now: Date, timeZone?: string | null): 'Tonight' | 'Today' | 'Tomorrow' | null {
+  const zone = timeZone ?? undefined
+  const days = calendarDaysBetween(now, start, zone)
+  if (days === 0) return hourIn(start, zone) >= TONIGHT_FROM ? 'Tonight' : 'Today'
+  if (days === 1) return 'Tomorrow'
+  return null
+}
+
+/**
+ * A start where nothing on screen names its day (Going's sheet and saved rows): "Tonight · 9 PM", else "8 Nov · 9 PM".
+ * One unbreakable unit (no-break spaces): it follows a place in the row sheet's line, which wrapped "Today · 4:50" from "PM".
+ */
+export function dayAndClock(startTime: string, now: Date = new Date(), timeZone?: string | null): string {
+  const start = new Date(startTime)
+  const day = dayWord(start, now, timeZone) ?? featuredDateLabel(startTime, now, timeZone)
+  return `${day} · ${timeLabel(startTime, timeZone)}`.replace(/ /g, ' ')
+}
+
 /** What `nextUpLabel` says while the event is on — the Going hero draws a live dot beside it. */
 export const HAPPENING_NOW = 'Happening now'
 
@@ -125,9 +150,8 @@ export function nextUpLabel(
   }
 
   const time = timeLabel(startTime, zone)
-  const days = calendarDaysBetween(now, start, zone)
-  if (days === 0) return `${hourIn(start, zone) >= 17 ? 'Tonight' : 'Today'} · ${time}`
-  if (days === 1) return `Tomorrow · ${time}`
+  const word = dayWord(start, now, zone)
+  if (word) return `${word} · ${time}`
 
   return `${calendarDate(start, { weekday: true, now, timeZone: zone })} · ${time}`
 }
@@ -159,23 +183,33 @@ export function placeLabel(event: {
 }
 
 /**
- * The time on a home card, in the one date grammar: "Live", "9 PM" (later
- * today), "Sat · 10:30 PM" (this week), "Sat 24 Oct · 9 PM" (further out).
- * Local time: the question is when to leave the house.
+ * The time on a home card, in the one date grammar: "Live", "Tonight · 9 PM"
+ * (later today from 5 PM; "Today · 2 PM" before), "Tomorrow · 9 PM",
+ * "Sat · 10:30 PM" (this week), "Sat 24 Oct · 9 PM" (further out). A row
+ * under a heading that already names its day draws `eventClock` alone.
  */
 export function cardTime(event: SessionSource & { timezone?: string | null }, now: number): string {
   if (isLiveNow(event, now)) return 'Live'
-  const start = new Date(liveWindow(event).start_time)
-  if (Number.isNaN(start.getTime())) return ''
   // The event's own zone (RC drive 5 D-4).
-  const zone = event.timezone ?? undefined
-  // Named when the event's zone is not the phone's: "9 AM IST" (review LOW).
-  const clock = eventClock(start.getTime(), zone)
-  const days = calendarDaysBetween(new Date(now), start, zone)
+  return whenLabel(liveWindow(event).start_time, new Date(now), event.timezone)
+}
+
+/**
+ * Any moment of an event in the one date grammar, without "Live": "Tonight · 9 PM", "Today · 2 PM", "Tomorrow · 9 PM",
+ * "Sat · 10:30 PM", "Sat 24 Oct · 9 PM"; the bare clock once it is today and past. The event city's day and clock.
+ */
+export function whenLabel(at: string | number | Date, now: Date, timeZone?: string | null): string {
+  const when = new Date(at)
+  if (Number.isNaN(when.getTime())) return ''
+  const zone = timeZone ?? undefined
+  const clock = eventClock(when.getTime(), zone)
+  const word = dayWord(when, now, zone)
+  if (word) return `${word} · ${clock}`
+  const days = calendarDaysBetween(now, when, zone)
   if (days <= 0) return clock
-  if (days < 7) return `${WEEKDAYS[weekdayIn(start, zone)]} · ${clock}`
+  if (days < 7) return `${WEEKDAYS[weekdayIn(when, zone)]} · ${clock}`
   // No year, even across New Year: a card's time is one line in a fixed slot, and the weekday already says which (review L6).
-  return `${calendarDate(start, { weekday: true, year: false, timeZone: zone })} · ${clock}`
+  return `${calendarDate(when, { weekday: true, year: false, timeZone: zone })} · ${clock}`
 }
 
 /** A count a card may print: five and up (`printable`); a small number of people is not said. */

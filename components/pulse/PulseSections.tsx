@@ -1,27 +1,20 @@
-import { router } from 'expo-router'
-import { memo, useCallback, useMemo, useState, type ReactNode, type RefObject } from 'react'
-import { FlatList, StyleSheet, Text, View, type ListRenderItemInfo } from 'react-native'
+import { memo, useCallback, type ReactNode, type RefObject } from 'react'
+import { FlatList, StyleSheet, View, type ListRenderItemInfo } from 'react-native'
 
 import { Skeleton } from '../Skeleton'
-import { Button } from '../ds/Button'
 import { Chip } from '../ds/Chip'
 import type { Rect } from '../ds/chatShared'
 import { EventCard, type EventCardKind } from '../ds/EventCard'
-import { ScrimPill } from '../ds/MonoFamily'
 import { SectionHeader } from '../ds/SectionHeader'
-import { Sheet } from '../ds/Sheet'
-import { font, useBoldText } from '../ds/shared'
-import { Icon } from '../ui/Icon'
-import { FeaturedCard, FEATURED_CARD_GAP } from './FeaturedCard'
 import { LocationAskCard } from './LocationAskCard'
 import { Rail, RAIL_GAP, SectionReveal } from './Rail'
 import { SetList } from './SetList'
 import type { BlendnEvent } from '../../lib/api'
-import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { RADIUS, SPACE } from '../../lib/design/tokens'
 import { categoryGlyph } from '../../lib/categoryGlyph'
-import { feedPlaylist } from '../../lib/feedMedia'
-import { featuredDateLabel, homeCardProps, peopleLabel, placeLabel } from '../../lib/pulse'
-import { featuredLabel, isLiveNow, PROMOTED_LABEL, SECTION_ORDER, weekendWindow, type PulseSection, type PulseSectionKey } from '../../lib/pulseSections'
+import { homeCardProps } from '../../lib/pulse'
+import type { SeeAllKind } from '../../lib/nearby'
+import { SECTION_ORDER, weekendWindow, type PulseSection, type PulseSectionKey } from '../../lib/pulseSections'
 
 /**
  * The Pulse's sections as components (BUILD-SPEC §A; pulse.html). Each takes the
@@ -87,119 +80,6 @@ export const NowSection = memo(function NowSection({ section, onSeeAll, ...rest 
         <SectionHeader live title="Happening now" count={section.count} more={section.more} action={{ label: 'See all', onPress: onSeeAll }} testID="pulse-now-header" />
       </View>
       <CompactRail {...rest} events={section.events} testID="pulse-now" />
-    </View>
-  )
-})
-
-/* -------------------------------------------------------------------------- */
-/* Featured                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/** Why the section exists, in the owner's words once approved (BUILD-SPEC A3: the copy needs owner approval). */
-export const WHY_THESE = {
-  title: 'Why you’re seeing these',
-  body: 'Featured events are picked by Blend’n or paid for by the organizer. Never more than five, and the order changes every day.',
-  promoted: 'The organizer paid for this place.',
-  picked: 'Picked by Blend’n.',
-} as const
-
-function WhyThese({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const bold = useBoldText()
-  return (
-    <Sheet visible={visible} onClose={onClose} title={WHY_THESE.title} body={WHY_THESE.body} actions={[{ label: 'Got it', kind: 'lit', onPress: onClose }]} testID="why-these">
-      <View style={styles.whyRow}>
-        <ScrimPill>
-          <Icon name="megaphone" size={ICON.inline} color={COLOR.textSecondary} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{PROMOTED_LABEL.toUpperCase()}</Text>
-        </ScrimPill>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.fill]}>{WHY_THESE.promoted}</Text>
-      </View>
-      <View style={styles.whyRow}>
-        <Chip label="No label" variant="outline" />
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.fill]}>{WHY_THESE.picked}</Text>
-      </View>
-    </Sheet>
-  )
-}
-
-const FEATURED_VIEWABILITY = { itemVisiblePercentThreshold: 60, minimumViewTime: 250 }
-
-export const FeaturedSection = memo(function FeaturedSection({
-  section,
-  layout,
-  now,
-  visible,
-  coachRef,
-  onPress,
-  onPressIn,
-  onLongPress,
-}: CardHandlers & {
-  section: PulseSection<BlendnEvent>
-  layout: { width: number; inset: number }
-  now: number
-  /** The pane is on screen: only then may the settled card play its media. */
-  visible: boolean
-  coachRef?: RefObject<View | null>
-}) {
-  const [why, setWhy] = useState(false)
-  const [active, setActive] = useState(0)
-  const cards = useMemo(
-    () =>
-      section.events.map((e) => ({
-        id: e.id,
-        title: e.title,
-        tag: e.category || null,
-        playlist: feedPlaylist(e.media, e.cover_image_url),
-        dateLabel: featuredDateLabel(e.start_time, new Date(now), e.timezone),
-        placeLabel: placeLabel(e),
-        peopleLabel: peopleLabel(e, isLiveNow(e, now)),
-        promoted: featuredLabel(e) === PROMOTED_LABEL,
-        onPress: () => onPress(e),
-        onPressIn: () => onPressIn(e),
-        onLongPress: (anchor: Rect) => onLongPress(e, anchor, 'hero'),
-      })),
-    [section.events, now, onPress, onPressIn, onLongPress]
-  )
-  const onViewable = useCallback(({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
-    const first = viewableItems.find((v) => v.index !== null)
-    if (first?.index != null) setActive(first.index)
-  }, [])
-  const solo = cards.length === 1
-  return (
-    <View style={styles.section}>
-      <View style={styles.gutter}>
-        <SectionHeader
-          title="Featured"
-          count={section.count}
-          more={section.more}
-          right={
-            <Button kind="tertiary" size="sm" label="Why these?" icon="info" onPress={() => setWhy(true)} accessibilityLabel="Why these?" accessibilityHint="Explains how Featured events are chosen" testID="why-these-open" />
-          }
-          testID="pulse-featured-header"
-        />
-      </View>
-      {solo ? (
-        <View style={[styles.soloBleed, { paddingHorizontal: layout.inset }]}>
-          <View ref={coachRef}>
-            <FeaturedCard {...cards[0]} isActive={visible} width={layout.width} />
-          </View>
-        </View>
-      ) : (
-        <Rail
-          testID="pulse-featured"
-          data={cards}
-          itemWidth={layout.width}
-          gap={FEATURED_CARD_GAP}
-          onViewableItemsChanged={onViewable}
-          viewabilityConfig={FEATURED_VIEWABILITY}
-          renderItem={({ item, index }) => (
-            <View ref={index === 0 ? coachRef : undefined}>
-              <FeaturedCard {...item} isActive={visible && index === active} width={layout.width} />
-            </View>
-          )}
-        />
-      )}
-      <WhyThese visible={why} onClose={() => setWhy(false)} />
     </View>
   )
 })
@@ -375,26 +255,28 @@ export const SectionStack = memo(function SectionStack({
   sections,
   now,
   withDistance,
-  visible,
   handlers,
   coachRef,
   pending,
-  featuredLayout,
   askForLocation,
+  timeZone,
+  onSeeAll,
 }: {
   sections: PulseSection<BlendnEvent>[]
   now: number
   withDistance: boolean
-  visible: boolean
   handlers: CardHandlers
   coachRef: RefObject<View | null>
   pending: RefObject<boolean>
-  featuredLayout: (solo: boolean) => { width: number; inset: number }
   askForLocation: { denied: boolean; onAsk: () => void } | null
+  /** The browse city's zone: "This weekend" is that city's. */
+  timeZone?: string
+  /** A section's "See all": its chip, on this same list (Flow 3b · N1; the Nearby screen is gone). */
+  onSeeAll: (kind: SeeAllKind, extra?: { categorySlug?: string }) => void
 }) {
   const first = sections[0]?.key
   const at = (key: PulseSectionKey) => (first === key ? coachRef : undefined)
-  const weekend = weekendWindow(now)
+  const weekend = weekendWindow(now, timeZone)
   const nodes: ReactNode[] = []
   let index = 0
   const push = (key: string, node: ReactNode) =>
@@ -406,22 +288,20 @@ export const SectionStack = memo(function SectionStack({
   for (const key of SECTION_ORDER) {
     const section = sections.find((s) => s.key === key)
     if (key === 'now' && section) {
-      push(key, <NowSection section={section} now={now} withDistance={withDistance} coachRef={at('now')} {...handlers} onSeeAll={() => goSeeAll('live')} />)
-    } else if (key === 'featured' && section) {
-      push(key, <FeaturedSection section={section} layout={featuredLayout(section.events.length === 1)} now={now} visible={visible} coachRef={at('featured')} {...handlers} />)
+      push(key, <NowSection section={section} now={now} withDistance={withDistance} coachRef={at('now')} {...handlers} onSeeAll={() => onSeeAll('live')} />)
     } else if (key === 'tonight' && section) {
-      push(key, <TonightSection section={section} now={now} withDistance={withDistance} coachRef={at('tonight')} {...handlers} onSeeAll={() => goSeeAll('tonight')} />)
+      push(key, <TonightSection section={section} now={now} withDistance={withDistance} coachRef={at('tonight')} {...handlers} onSeeAll={() => onSeeAll('tonight')} />)
     } else if (key === 'nearby') {
-      if (section) push(key, <NearbySection section={section} now={now} coachRef={at('nearby')} {...handlers} onSeeAll={() => goSeeAll('nearby')} />)
+      if (section) push(key, <NearbySection section={section} now={now} coachRef={at('nearby')} {...handlers} onSeeAll={() => onSeeAll('nearby')} />)
       // Only in a feed that has something on: with nothing loaded the page's own state (failed, empty) is the answer, and
       // "Turn on location" under "Couldn't load events" was the wrong way back from offline (audit A24).
       else if (askForLocation && sections.length > 0) push(key, <NearbyLocationCard denied={askForLocation.denied} onAsk={askForLocation.onAsk} />)
     } else if (key === 'forYou' && section) {
-      push(key, <ForYouSection section={section} now={now} withDistance={withDistance} coachRef={at('forYou')} {...handlers} onSeeAll={() => goSeeAll('forYou', { categorySlug: section.interest?.slug ?? '' })} />)
+      push(key, <ForYouSection section={section} now={now} withDistance={withDistance} coachRef={at('forYou')} {...handlers} onSeeAll={() => onSeeAll('forYou', { categorySlug: section.interest?.slug ?? '' })} />)
     } else if (key === 'weekend' && section) {
       push(
         key,
-        <WeekendSection section={section} caption={weekend.label} now={now} withDistance={withDistance} coachRef={at('weekend')} {...handlers} onSeeAll={() => goSeeAll('weekend', { startDate: weekend.startDate, endDate: weekend.endDate })} />
+        <WeekendSection section={section} caption={weekend.label} now={now} withDistance={withDistance} coachRef={at('weekend')} {...handlers} onSeeAll={() => onSeeAll('weekend')} />
       )
     }
   }
@@ -429,15 +309,17 @@ export const SectionStack = memo(function SectionStack({
 })
 
 /**
- * Loading (BUILD-SPEC A9): the sections' own shapes as static `surfaceSunken`
- * blocks: a header bar and two compact cards, a header bar and two hero cards.
- * Nothing loops; the real header and search are above it.
+ * Loading (BUILD-SPEC A9; Option C): the page's own shapes as static `surfaceSunken` blocks: the lead card at its height,
+ * then a header bar and two compact cards. Nothing loops; the chips are above it.
  */
-const SKELETON = { bar: 26, hero: { width: 313, height: 340 }, headerNow: 160, headerFeatured: 110 } as const
-export function PulseSkeleton() {
+const SKELETON = { bar: 26, headerNow: 160 } as const
+export function PulseSkeleton({ lead }: { lead: number }) {
   return (
     <View accessibilityLabel="Loading events" accessibilityState={{ busy: true }} testID="pulse-skeleton">
-      <View style={[styles.section, styles.skeletonFirst]}>
+      <View style={[styles.gutter, styles.skeletonLead]}>
+        <Skeleton width="100%" height={lead} borderRadius={RADIUS.card} />
+      </View>
+      <View style={styles.section}>
         <View style={styles.gutter}>
           <Skeleton width={SKELETON.headerNow} height={SKELETON.bar} />
         </View>
@@ -447,39 +329,19 @@ export function PulseSkeleton() {
           ))}
         </View>
       </View>
-      <View style={styles.section}>
-        <View style={styles.gutter}>
-          <Skeleton width={SKELETON.headerFeatured} height={SKELETON.bar} />
-        </View>
-        <View style={styles.rail}>
-          {[0, 1].map((i) => (
-            <Skeleton key={`f${i}`} width={SKELETON.hero.width} height={SKELETON.hero.height} borderRadius={RADIUS.card} />
-          ))}
-        </View>
-      </View>
     </View>
   )
 }
 
-/** Where "See all" goes: the full list, scoped to the section. */
-export function seeAllHref(kind: 'live' | 'tonight' | 'nearby' | 'forYou' | 'weekend', extra: Record<string, string> = {}) {
-  return { pathname: '/nearby-events', params: { filter: kind, ...extra } } as never
-}
-export const goSeeAll = (kind: Parameters<typeof seeAllHref>[0], extra?: Record<string, string>) => router.push(seeAllHref(kind, extra))
 
 
 const styles = StyleSheet.create({
   section: { marginTop: SPACE.xxl, gap: SPACE.md },
   gutter: { paddingHorizontal: SPACE.gutter },
-  rail: { paddingHorizontal: SPACE.gutter, gap: RAIL_GAP },
-  soloBleed: {},
-  skeletonFirst: { marginTop: SPACE.lg + SPACE.xs },
+  rail: { paddingHorizontal: SPACE.gutter, flexDirection: 'row', gap: RAIL_GAP },
+  skeletonLead: { marginTop: SPACE.lg },
   nearRow: { paddingHorizontal: SPACE.gutter },
   everything: { marginTop: SPACE.xxl, gap: SPACE.md },
   chipsScroll: { flexGrow: 0 },
   chips: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
-  whyRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.sm + SPACE.xxs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
-  fill: { flex: 1 },
-  ink: { color: COLOR.textPrimary },
-  secondary: { color: COLOR.textSecondary },
 })

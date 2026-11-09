@@ -2,7 +2,7 @@ import {
   AREA_SECTIONS_READY,
   categoryChips,
   SECTION_ORDER,
-  pulsePeekLine,
+  leadPeekLine,
   DAY_RESET_HOUR,
   everythingElse,
   FEATURED_CAP,
@@ -76,12 +76,12 @@ describe('time', () => {
 })
 
 describe('Happening now', () => {
-  it('is absent with nothing live; otherwise most people here first, then earliest start; capped at 8 with the total in the count', () => {
+  it('is absent with nothing live; otherwise most people here first, then earliest start; capped at 10 with the total in the count (Option C: rail of 10, then See all)', () => {
     expect(keys([ev('a', 20)])).not.toContain('now')
-    const live = Array.from({ length: 10 }, (_, i) => ev(`l${i}`, 17, { here_count: i }))
+    const live = Array.from({ length: 12 }, (_, i) => ev(`l${i}`, 17, { here_count: i }))
     const now = pulseSections<E>({ page: live, ...empty }).find((s) => s.key === 'now')!
-    expect(now.events.map((e) => e.id)).toEqual(['l9', 'l8', 'l7', 'l6', 'l5', 'l4', 'l3', 'l2'])
-    expect(now.count).toBe(10)
+    expect(now.events.map((e) => e.id)).toEqual(['l11', 'l10', 'l9', 'l8', 'l7', 'l6', 'l5', 'l4', 'l3', 'l2'])
+    expect(now.count).toBe(12)
   })
 })
 
@@ -132,11 +132,11 @@ describe('Featured', () => {
 })
 
 describe('Tonight', () => {
-  it('upcoming before the next 06:00, earliest first, four rows, the count is all of it', () => {
-    const page = [ev('late', 23), ev('a', 20), ev('b', 21), ev('c', 22), ev('d', 22, {}, 0), ev('tomorrow', 12, {}, 1), ev('past', 9)]
+  it('upcoming before the next 06:00, earliest first, five rows, the count is all of it (Option C: 5 rows, then See all)', () => {
+    const page = [ev('late', 23), ev('a', 20), ev('b', 21), ev('c', 22), ev('d', 22, {}, 0), ev('e', 22, {}, 0), ev('tomorrow', 12, {}, 1), ev('past', 9)]
     const tonight = pulseSections<E>({ page, ...empty }).find((s) => s.key === 'tonight')!
-    expect(tonight.events.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd'])
-    expect(tonight.count).toBe(5)
+    expect(tonight.events.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd', 'e'])
+    expect(tonight.count).toBe(6)
     expect(tonight.events.map((e) => e.id)).not.toContain('tomorrow')
   })
 
@@ -222,9 +222,9 @@ describe('the floor is only claimed when the page can hide more (M7)', () => {
     expect(live.more).toBeUndefined()
   })
 
-  it('the peek line carries the plus', () => {
+  it('the section header carries the plus', () => {
     const sections = pulseSections<E>({ page: pageEndingAt(23), pageFull: true, ...empty })
-    expect(pulsePeekLine(sections)).toBe('50+ on tonight')
+    expect(sectionCountLabel(sections.find((x) => x.key === 'tonight')!)).toBe('50+')
   })
 })
 
@@ -393,12 +393,8 @@ describe('what the Everything-else chips and the peek line read', () => {
     expect(categoryChips([], options)).toEqual([])
   })
 
-  it('peek: “3 live now · 14 on tonight”; a part that is 0 is dropped; both 0 is no line', () => {
-    const sec = (key: 'now' | 'tonight', count: number) => ({ key, events: [], count })
-    expect(pulsePeekLine([sec('now', 3), sec('tonight', 14)])).toBe('3 live now · 14 on tonight')
-    expect(pulsePeekLine([sec('tonight', 6)])).toBe('6 on tonight')
-    expect(pulsePeekLine([sec('now', 2)])).toBe('2 live now')
-    expect(pulsePeekLine([])).toBeNull()
+  it('peek (Option C): the lead’s name and its time, in leadPeekLine (pulseFeedEnds.test.ts)', () => {
+    expect(leadPeekLine({ title: 'Midnight Bass', time: 'Sat · 10:30 PM' })).toBe('Midnight Bass · Sat · 10:30 PM')
   })
 })
 
@@ -414,5 +410,62 @@ describe('pickInterest (BAR-12)', () => {
     expect(pickInterest(mine, page('food', 'art'))?.slug).toBe('art')
     expect(pickInterest(mine, [])?.slug).toBe('music')
     expect(pickInterest([], page('art'))).toBeUndefined()
+  })
+})
+
+describe('the day is the browse city’s, not the phone’s (travel: a phone in India browsing Toronto)', () => {
+  const TORONTO = 'America/Toronto'
+  const phone = process.env.TZ
+  beforeAll(() => {
+    process.env.TZ = 'Asia/Kolkata'
+    refreshPhoneZone()
+  })
+  afterAll(() => {
+    process.env.TZ = phone
+    refreshPhoneZone()
+  })
+  // Sat 24 Oct 2026 08:00 in Bengaluru = Fri 23 Oct 22:30 in Toronto (EDT).
+  const now = Date.parse('2026-10-24T02:30:00.000Z')
+
+  it('the day seed is Toronto’s Friday, not Bengaluru’s Saturday', () => {
+    expect(seedDateOf(now)).toBe('2026-10-24')
+    expect(seedDateOf(now, TORONTO)).toBe('2026-10-23')
+  })
+
+  it('this weekend runs from Toronto’s Friday 17:00 to its Sunday 23:59', () => {
+    const w = weekendWindow(now, TORONTO)
+    expect(w.startDate).toBe('2026-10-23T21:00:00.000Z')
+    expect(w.endDate).toBe('2026-10-26T03:59:59.999Z')
+    expect(w.label).toBe('Sat 24 – Sun 25 Oct')
+    // The phone's own: Bengaluru's Friday 17:00, five and a half hours earlier.
+    expect(weekendWindow(now).startDate).toBe('2026-10-23T11:30:00.000Z')
+  })
+
+  it('across Toronto’s DST change (Sun 1 Nov 2026) the window ends at its EST midnight', () => {
+    // Fri 30 Oct 22:30 EDT.
+    const w = weekendWindow(Date.parse('2026-10-31T02:30:00.000Z'), TORONTO)
+    expect(w.startDate).toBe('2026-10-30T21:00:00.000Z')
+    expect(w.endDate).toBe('2026-11-02T04:59:59.999Z')
+    expect(w.label).toBe('Sat 31 Oct – Sun 1 Nov')
+  })
+
+  it('Sunday 18:00 in Toronto skips the weekend, though it is already Monday in Bengaluru', () => {
+    const sundayEvening = Date.parse('2026-10-25T23:00:00.000Z')
+    expect(weekendWindow(sundayEvening, TORONTO).skip).toBe(true)
+    expect(weekendWindow(sundayEvening).skip).toBe(false)
+  })
+
+  it('an event with no zone of its own is Tonight by Toronto’s 06:00', () => {
+    const page: E[] = [
+      { id: 'eleven-pm', start_time: '2026-10-24T03:00:00.000Z', end_time: null, timezone: null },
+      // Sat 07:00 in Toronto: tomorrow there, though before Bengaluru's next 06:00.
+      { id: 'seven-am', start_time: '2026-10-24T11:00:00.000Z', end_time: null, timezone: null },
+    ]
+    const tonight = (timeZone?: string) =>
+      pulseSections<E>({ page, weekend: null, forYou: null, now, hasFix: false, seedDate: seedDateOf(now, timeZone), timeZone })
+        .find((s) => s.key === 'tonight')
+        ?.events.map((e) => e.id)
+    expect(tonight(TORONTO)).toEqual(['eleven-pm'])
+    expect(tonight()).toEqual(['eleven-pm', 'seven-am'])
   })
 })

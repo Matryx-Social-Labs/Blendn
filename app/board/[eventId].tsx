@@ -5,44 +5,39 @@ import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
 import { PageFooter } from '../../components/chat/PageFooter'
-import { Button } from '../../components/ds/Button'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
-import { ChipSet, type ChipItem } from '../../components/ds/ChipSet'
-import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
-import {
-  announce,
-  BoardComposer,
-  BoardPostCard,
-  IDLE,
-  type AskState,
-  type BoardDraft,
-} from '../../components/board/BoardSections'
+import { announce, BoardPostCard, IDLE, type AskState } from '../../components/board/BoardSections'
+import { LobbyAlertsSheet } from '../../components/board/LobbyAlertsSheet'
+import { LobbyCompose } from '../../components/board/LobbyCompose'
+import { useLinkedPost } from '../../components/board/useLinkedPost'
+import { ClosedCard, LiveEmptyCard, LobbyChips, LobbyComposerRow, LobbyGate, LobbyStarts, NewPostsPill, PinnedPost, ReadOnlyBanner } from '../../components/board/LobbyParts'
 import { emptyOut, fadeIn, riseDelay, riseIn } from '../../components/board/boardMotion'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { apiClient } from '../../lib/apiClient'
 import {
   askConflictLine,
-  BOARD_CLOSED_SENTENCE,
   BOARD_ENABLED,
-  boardClosed,
   boardMessage,
   CLOSED_LINE,
   isSettled,
   outgoingLine,
+  saysBoardClosed,
   sortBoardPosts,
   WAITING_LINE,
   type BoardPost,
 } from '../../lib/board'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { Logger } from '../../lib/logger'
+import { rememberLobbySeen } from '../../lib/lobbySeen'
 import { subscribeToBoardPostRemoved } from '../../lib/socketClient'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useOnBlock } from '../../lib/useOnBlock'
 import { boardSafetySheet } from '../../lib/safetyUtils'
+import { composerSlot, filterQuery, freshOnTop, lobbyLayout, newestPostAt, type LobbyDraft, type LobbyFilter, type LobbyMeta } from '../../lib/lobby'
 import { showSheet } from '../../lib/sheet'
 import { cursorOf, getBoardPage, goneFrom, type BoardPostView, type TakenDown } from '../../lib/chatPaging'
 import { COLOR, RADIUS, SPACE, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -51,12 +46,15 @@ import { useTopBarOverlay } from '../../lib/useTopBarState'
 import { useReducedMotion } from '../../lib/motion'
 
 /**
- * The Board (Flow 4 Board, flow4.js `board`; the rules in docs/PLACEHOLDER_SCREENS.md §6).
+ * The Lobby (L-A, SCRUM-1026, `mockups/redesign-2026-11/lobby/`; was the Board, Flow 4).
  *
  * Going alone, and looking for somebody to go with. Posts before doors, by
- * pseudonym; an ask is one tap; the answer arrives in the Banter. Every gate is
- * the server's (`GET/POST /events/:eventId/board`, `…/requests`) and every
- * refusal says which gate, in the server's words.
+ * pseudonym; an ask is one tap; the answer arrives in the Banter. From doors
+ * (start − 90) it is read-only with the room one tap away, and a day after the
+ * end it closes with the room. The host's note is pinned first; the chips
+ * filter on the server, so a chip over thousands of posts is one read. Every
+ * gate is the server's (`GET/POST /events/:eventId/board`, `…/requests`) and
+ * every refusal says which gate, in the server's words.
  *
  * Behind `BOARD_ENABLED`: with it off the route goes home, so a deep link
  * cannot reach a board whose safety half has not shipped.
@@ -72,19 +70,23 @@ export default function BoardRoute() {
   )
 }
 
-type BoardFilter = 'offer' | 'seeking'
-/** The two kinds people come to a board for, in the cards' own words (`BoardPostCard`). */
-const FILTERS: readonly ChipItem[] = [
-  { key: 'offer', label: 'Offering' },
-  { key: 'seeking', label: 'Looking' },
-]
-/** Under this many posts the whole board is a glance: no filter to learn. */
-const FILTER_FROM = 10
-/** The board's own count, from its first page's pagination; null from an older server. */
-const totalOf = (body: unknown): number | null => {
-  const n = (body as { pagination?: { totalCount?: unknown } } | null)?.pagination?.totalCount
-  return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null
+/** The meta the first page carries (admin #914): what the Lobby is now, its counts, the pin, and whether you can post. */
+const metaOf = (body: unknown): Partial<LobbyMeta> => {
+  const d = (body ?? {}) as Partial<LobbyMeta>
+  return {
+    ...(d.state && { state: d.state, phase: d.phase }),
+    ...(d.closesAt && { closesAt: d.closesAt }),
+    ...(typeof d.ticketsHidden === 'boolean' && { ticketsHidden: d.ticketsHidden }),
+    ...(d.subKinds && { subKinds: d.subKinds }),
+    ...(d.counts && { counts: d.counts }),
+    ...('pinned' in d && { pinned: d.pinned ?? null }),
+    ...(d.compose && { compose: d.compose }),
+    ...(d.you && { you: d.you }),
+  }
 }
+
+/** A day after the end the Lobby closes with the room (admin `lobbyDoor`: 403, `LOBBY_CLOSED`). */
+const LOBBY_CLOSED = 'LOBBY_CLOSED'
 
 type Load =
   | { kind: 'loading' }
@@ -93,16 +95,20 @@ type Load =
   | { kind: 'refused'; code: string | undefined; line: string }
   | { kind: 'failed' }
 
-/** The event as the server has it: the title and the doors are its, not the link's. */
-type EventFacts = { title: string; startTime: string | null }
+/** The event as the server has it: the title and its clock are its, not the link's. */
+type EventFacts = { title: string; timeZone: string | null }
 
 const REFUSED_TITLE: Record<string, string> = {
-  AGE_RESTRICTED: 'This board has an age limit',
-  NOT_FOUND: "This board isn’t here",
+  AGE_RESTRICTED: 'This Lobby has an age limit',
+  NOT_FOUND: "This Lobby isn’t here",
 }
 
 export function BoardScreen() {
-  const { eventId } = useLocalSearchParams<{ eventId: string }>()
+  // `compose=1`: Post something on the event page's card (P-A), which opens the composer once, if posting is open.
+  // `post`: a post link or a match push (6/6), the post to scroll to (`useLinkedPost`).
+  const { eventId, compose: composeAsked, post: postAsked } = useLocalSearchParams<{ eventId: string; compose?: string; post?: string }>()
+  const composeOnce = useRef(composeAsked === '1')
+  const [alertsOpen, setAlertsOpen] = useState(false)
   const bold = useBoldText()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const loadRef = useLatest(load)
@@ -125,6 +131,22 @@ export function BoardScreen() {
   const [refusal, setRefusal] = useState<string | null>(null)
   /** Posts made here: the composer is keyed on it, so the next one opens on an empty draft. */
   const [posted, setPosted] = useState(0)
+  const [startKind, setStartKind] = useState<'offer' | 'seeking'>('offer')
+  /** The going gate's own answer: in flight, and the server's sentence when it says no. */
+  const [gate, setGate] = useState<{ busy: boolean; refusal: string | null }>({ busy: false, refusal: null })
+
+  /** What the Lobby is now (open, read-only, live), its counts, the pin and the composer's slot: the first page's. */
+  const [meta, setMeta] = useState<Partial<LobbyMeta>>({})
+  const [closed, setClosed] = useState(false)
+  /** The chip: a filter the server runs. Read through a ref so a read started under one chip is dropped under another. */
+  const [filter, setFilter] = useState<LobbyFilter>('all')
+  const filterRef = useRef<LobbyFilter>('all')
+  /** New posts a background read found, waiting behind the pill so the list never jumps under a reader's thumb. */
+  const [held, setHeld] = useState<ReadonlySet<string>>(new Set())
+  const heldRef = useLatest(held)
+  const listRef = useRef<FlatList<BoardPostView>>(null)
+  /** A linked post (`useLinkedPost`), laid on top of All while no page lists it. */
+  const linkedPost = useRef<BoardPostView | null>(null)
 
   /*
    * A read is sequenced, and it merges rather than replaces.
@@ -144,10 +166,6 @@ export function BoardScreen() {
    * Nothing to ask until the server sends a cursor: an older server's board is the one page it always was.
    */
   const [cursor, setCursor] = useState<string | null>(null)
-  /** How many posts the board has, the server's count (TG-15): what the list can show is a page of them. */
-  const [total, setTotal] = useState<number | null>(null)
-  /** Offering or Looking only, or every post: over the loaded pages, which keep loading as the end nears. */
-  const [kindFilter, setKindFilter] = useState<BoardFilter | null>(null)
   const [moreState, setMoreState] = useState<'idle' | 'loading' | 'failed'>('idle')
   const older = useRef<BoardPostView[]>([])
   const moreBusy = useRef(false)
@@ -157,32 +175,57 @@ export function BoardScreen() {
   const reduceMotion = useReducedMotion()
   const rises = useRef<{ first: boolean; ids: ReadonlySet<string> }>({ first: true, ids: new Set() })
   const bar = useTopBarOverlay()
+  /** Scrolled into the list (the bar has gone glass): only then can something arriving above make it jump. */
+  const scrolledRef = useLatest(bar.state !== 'rest')
+  /*
+   * The bar as tall as it draws. `contentTop` is fixed, and at AX XXXL the title and the event under it grow past it,
+   * so the list would start under them; it starts under whichever is lower.
+   */
+  const [barDrawn, setBarDrawn] = useState(0)
+  const contentTop = Math.max(bar.contentTop, barDrawn + SPACE.sm)
 
-  // The doors by the event's own time, or by the board saying so — whichever is known first.
+  // An older server still closes the Lobby at doors, in its old sentence: the doors banner, and nothing under it.
   const [doorsShut, setDoorsShut] = useState(false)
-  const closed = doorsShut || boardClosed(event?.startTime)
 
-  const fetchBoard = useCallback(async (): Promise<boolean> => {
+  /** The linked post asked for again (a refresh, a poll): gone, refused or taken down, it leaves the top of the list. */
+  const recheckLinked = useCallback(async (event: string, postId: string) => {
+    const epoch = pageEpoch.current
+    const r = await apiClient.getBoardPost(event, postId).catch(() => null)
+    if (!r || r.success || linkedPost.current?.id !== postId || epoch !== pageEpoch.current) return
+    linkedPost.current = null
+    setLoad((prev) => (prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== postId) } : prev))
+  }, [])
+
+  /**
+   * `hold`: a read nobody asked for (a poll, a push). What it finds above the list waits behind the pill. `show`: a
+   * read somebody asked for (focus, pull, a post, a chip), which shows everything at once.
+   */
+  const fetchBoard = useCallback(async (mode: 'show' | 'hold' = 'show'): Promise<boolean> => {
     if (!eventId) return false
     const id = ++readId.current
+    const chip = filterRef.current
     try {
       const [board, mine, facts] = await Promise.all([
-        apiClient.getBoard(eventId),
+        apiClient.getBoard(eventId, filterQuery(chip)),
         apiClient.getBoardRequests(),
         apiClient.getEvent(eventId),
       ])
-      if (id !== readId.current) return true
+      if (id !== readId.current || chip !== filterRef.current) return true
       if (facts.success && facts.data) {
-        setEvent({ title: facts.data.title, startTime: facts.data.startTime ?? facts.data.start_time ?? null })
+        setEvent({ title: facts.data.title, timeZone: (facts.data as { timezone?: string | null }).timezone ?? null })
       }
       if (!board.success || !board.data) {
-        if (board.error?.trim() === BOARD_CLOSED_SENTENCE) {
+        if (board.reasonCode === LOBBY_CLOSED) {
+          setClosed(true)
+          return true
+        }
+        if (saysBoardClosed(board.error)) {
           setDoorsShut(true)
           return true
         }
         const code = board.errorCode
         if (code === 'FORBIDDEN' || code === 'AGE_RESTRICTED' || code === 'NOT_FOUND') {
-          setLoad({ kind: 'refused', code, line: boardMessage(board, 'This board is not open to you.') })
+          setLoad({ kind: 'refused', code, line: boardMessage(board, 'This Lobby is not open to you.') })
           return true
         }
         Logger.warn('board', 'load failed', { eventId, error: board.error })
@@ -211,20 +254,48 @@ export function BoardScreen() {
       const onPage = new Set(listed.map((p) => p.id))
       older.current = older.current.filter((p) => !onPage.has(p.id) && !removed.current.has(p.id))
       if (!older.current.length) setCursor(cursorOf(board.data))
-      setTotal(totalOf(board.data))
-      // Nothing, then something (#47): what arrives rises in once; a poll that finds more does not.
+      const firstMeta = metaOf(board.data)
+      setMeta((prev) => ({ ...prev, ...firstMeta }))
+      setClosed(false)
+      // What you have seen, for Going's "New in the Lobby": the newest post on All (a filter shows only part of it), and only
+      // from a read that shows it (a background read holds the new ones behind the pill, unseen).
+      const newest = mode === 'show' && chip === 'all' ? newestPostAt(listed) : null
+      if (newest) void rememberLobbySeen(eventId, newest)
+      if (composeOnce.current) {
+        composeOnce.current = false
+        if (composerSlot({ state: firstMeta.state ?? 'open', compose: firstMeta.compose }).kind === 'composer') {
+          setStartKind('offer')
+          setComposing(true)
+        }
+      }
+      // A background read holds what is new above the list; one somebody asked for shows it all.
       const was = loadRef.current
+      const shown = new Set(was.kind === 'ready' ? was.posts.map((p) => p.id) : [])
+      const onFirst = new Set(listed.map((p) => p.id))
+      setHeld(
+        mode === 'hold' && scrolledRef.current
+          ? new Set([...heldRef.current, ...freshOnTop(listed, shown)].filter((pid) => onFirst.has(pid)))
+          : new Set()
+      )
+      // Nothing, then something (#47): what arrives rises in once; a poll that finds more does not.
       if (was.kind === 'ready' && !was.posts.length && listed.length) {
         rises.current = { ...rises.current, ids: new Set(listed.slice(0, STAGGER.itemsMax).map((p) => p.id)) }
       }
-      setLoad({ kind: 'ready', posts: [...gone, ...created.current.values(), ...listed, ...older.current] })
+      // Yours just posted, until the server lists it: on the chips it would be on.
+      const yours = [...created.current.values()].filter((p) => chip === 'all' || chip === 'mine' || chip === p.kind)
+      const onPages = [...yours, ...listed, ...older.current]
+      const link = linkedPost.current
+      const linkedOnTop = chip === 'all' && link && !removed.current.has(link.id) && !onPages.some((p) => p.id === link.id) ? [link] : []
+      setLoad({ kind: 'ready', posts: [...(chip === 'all' || chip === 'mine' ? gone : []), ...linkedOnTop, ...onPages] })
       setRefreshFailed(false)
+      // On top only while the Lobby still has it for you: asked again on every read, and dropped once it says no.
+      if (link && linkedOnTop.length) void recheckLinked(eventId, link.id)
       return true
     } catch (error) {
       Logger.warn('board', 'load threw', { eventId, error: String(error) })
       return false
     }
-  }, [eventId, loadRef])
+  }, [eventId, loadRef, heldRef, scrolledRef, recheckLinked])
 
   /*
    * A block from anywhere (a post's card here, a profile, a request in the Banter): the older pages loaded are dropped,
@@ -233,6 +304,8 @@ export function BoardScreen() {
    */
   useOnBlock(() => {
     pageEpoch.current += 1
+    // A block hides people the linked post may be from: it goes with the older pages, and comes back only if a page lists it.
+    linkedPost.current = null
     older.current = []
     setCursor(null)
     setMoreState('idle')
@@ -256,7 +329,7 @@ export function BoardScreen() {
    */
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener((n) => {
-      if (n.request.content.data?.type === 'board_request') void fetchBoard()
+      if (n.request.content.data?.type === 'board_request') void fetchBoard('hold')
     })
     return () => sub.remove()
   }, [fetchBoard])
@@ -273,7 +346,7 @@ export function BoardScreen() {
   useLiveSync({
     enabled: !!eventId,
     onSync: async () => {
-      await fetchBoard()
+      await fetchBoard('hold')
     },
     syncOnFocus: false,
     connectedIntervalMs: BOARD_POLL_MS,
@@ -292,8 +365,70 @@ export function BoardScreen() {
     }
   }, [fetchBoard])
 
-  const allPosts = useMemo(() => (load.kind === 'ready' ? sortBoardPosts(load.posts) : []), [load])
-  const posts = useMemo(() => (kindFilter ? allPosts.filter((p) => p.kind === kindFilter) : allPosts), [allPosts, kindFilter])
+  const posts = useMemo(() => (load.kind === 'ready' ? sortBoardPosts(load.posts).filter((p) => !held.has(p.id)) : []), [load, held])
+  const layout = lobbyLayout(meta, filter, posts.length)
+  const linked = useLinkedPost({
+    eventId,
+    postParam: postAsked,
+    linkedRef: linkedPost,
+    removedRef: removed,
+    epochRef: pageEpoch,
+    posts: load.kind === 'ready' ? posts : null,
+    listRef,
+    viewOffset: contentTop,
+    animated: !reduceMotion,
+    onClosed: useCallback(() => setClosed(true), []),
+    onFound: useCallback((post: BoardPostView) => {
+      setLoad((prev) => (prev.kind === 'ready' && !prev.posts.some((p) => p.id === post.id) ? { kind: 'ready', posts: [post, ...prev.posts] } : prev))
+    }, []),
+  })
+  const readOnly = meta.state === 'read_only'
+
+  /** A chip: the server's filter, from its first page; the older pages and their cursor were for the other chip. */
+  const onFilter = useCallback(
+    (next: LobbyFilter) => {
+      if (next === filterRef.current) return
+      filterRef.current = next
+      pageEpoch.current += 1
+      older.current = []
+      setCursor(null)
+      setMoreState('idle')
+      setFilter(next)
+      void fetchBoard()
+    },
+    [fetchBoard]
+  )
+
+  const showHeld = useCallback(() => {
+    setHeld(new Set())
+    listRef.current?.scrollToOffset({ offset: 0, animated: !reduceMotion })
+  }, [reduceMotion])
+
+  /** The going gate: say so here, and the Lobby re-reads with the composer in its slot. */
+  const sayGoing = useCallback(async () => {
+    if (!eventId || gate.busy) return
+    setGate({ busy: true, refusal: null })
+    try {
+      const result = await apiClient.rsvpToEvent(eventId, 'going')
+      if (!result.success) {
+        const line = boardMessage(result, "Couldn’t say you’re going. Try again.")
+        setGate({ busy: false, refusal: line })
+        announce(line)
+        return
+      }
+      H.success()
+      setGate({ busy: false, refusal: null })
+      void fetchBoard()
+    } catch {
+      setGate({ busy: false, refusal: "Couldn’t say you’re going. Try again." })
+    }
+  }, [eventId, gate.busy, fetchBoard])
+
+  const compose = useCallback((kind: 'offer' | 'seeking' = 'offer') => {
+    setStartKind(kind)
+    setComposing(true)
+  }, [])
+  const seeAsks = useCallback(() => router.push('/(tabs)/chat'), [])
 
   /* The next page as the end comes near: one at a time, appended once, and never after a refusal until it is asked again. */
   const loadMore = useCallback(async () => {
@@ -302,7 +437,7 @@ export function BoardScreen() {
     setMoreState('loading')
     const epoch = pageEpoch.current
     try {
-      const result = await getBoardPage(eventId, cursor)
+      const result = await getBoardPage(eventId, cursor, filterQuery(filterRef.current))
       if (epoch !== pageEpoch.current) {
         setMoreState('idle')
         return
@@ -369,7 +504,7 @@ export function BoardScreen() {
       showSheet({
         kind: 'actions',
         title: 'Take your post down?',
-        message: 'It leaves the board. Anybody who asked is not told why.',
+        message: 'It leaves the Lobby. Anybody who asked is not told why.',
         actions: [
           {
             label: 'Take down',
@@ -396,7 +531,7 @@ export function BoardScreen() {
   )
 
   const submit = useCallback(
-    async (draft: BoardDraft) => {
+    async (draft: LobbyDraft) => {
       if (!eventId || postingRef.current) return
       postingRef.current = true
       setPosting(true)
@@ -444,6 +579,7 @@ export function BoardScreen() {
           // block epoch (`useOnBlock` above), which every route to a block moves.
           const blocked = post.author
           for (const [id, p] of created.current) if (!p.mine && p.author === blocked) created.current.delete(id)
+          if (linkedPost.current && !linkedPost.current.mine && linkedPost.current.author === blocked) linkedPost.current = null
           setLoad((prev) =>
             prev.kind === 'ready' ? { kind: 'ready', posts: prev.posts.filter((p) => p.id !== post.id && (p.mine || p.author !== blocked)) } : prev
           )
@@ -474,15 +610,17 @@ export function BoardScreen() {
             post={item}
             eventId={eventId}
             ask={askFor(item.id)}
+            readOnly={readOnly}
             onAsk={ask}
             onTakeDown={takeDown}
             onMore={more}
-            onWriteNew={() => setComposing(true)}
+            onSeeAsks={seeAsks}
+            onWriteNew={() => compose()}
           />
         </Animated.View>
       )
     },
-    [eventId, askFor, ask, takeDown, more, reduceMotion]
+    [eventId, askFor, ask, takeDown, more, reduceMotion, readOnly, seeAsks, compose]
   )
   // What rose has risen: once drawn, the first load is over and nothing is waiting to rise (a row scrolled back in never replays).
   useEffect(() => {
@@ -492,48 +630,55 @@ export function BoardScreen() {
   /* Flow 15 #16: reads stay, and the screen says what it is showing. */
   const offline = <OfflineBanner text="Offline. Showing what you had." testID="board-offline" />
 
+  const top =
+    layout.top === 'composer' ? (
+      <LobbyComposerRow seed={meta.you?.pseudonym ?? null} onCompose={() => compose()} />
+    ) : layout.top === 'going' ? (
+      <LobbyGate gate="going" busy={gate.busy} refusal={gate.refusal} onPress={() => void sayGoing()} />
+    ) : layout.top === 'profile' ? (
+      <LobbyGate gate="profile" onPress={() => router.push('/edit-profile')} />
+    ) : layout.top === 'readOnly' ? (
+      <ReadOnlyBanner closesAt={meta.closesAt} timeZone={event?.timeZone} onOpenRoom={openRoomFromBoard} />
+    ) : null
+
   const header = (
     <View style={styles.header}>
       {offline}
       {refreshFailed && load.kind === 'ready' ? (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>The board didn’t refresh. Pull down to try again.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>The Lobby didn’t refresh. Pull down to try again.</Text>
       ) : null}
-      {load.kind === 'ready' && load.posts.length > 0 && !allPosts.some((p) => p.mine) ? (
-        <Button label="Write a post" onPress={() => setComposing(true)} />
+      {linked.note ? (
+        <Text testID="board-link-note" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>{linked.note}</Text>
       ) : null}
-      {/* A busy board (120 posts) says how many, and can be narrowed to what you came for (B-R10). */}
-      {total !== null && total > 0 ? <SectionHeader title="Posts" count={total} testID="board-count" /> : null}
-      {total !== null && total >= FILTER_FROM ? (
-        <ChipSet
-          items={FILTERS}
-          selection="single"
-          selected={kindFilter ? [kindFilter] : []}
-          onToggle={(key) => setKindFilter((now) => (now === key ? null : (key as BoardFilter)))}
-          testID="board-filter"
-        />
+      {top}
+      {layout.chips && meta.counts ? (
+        <View style={styles.chipsGap}>
+          <LobbyChips counts={meta.counts} filter={filter} onFilter={onFilter} />
+        </View>
+      ) : null}
+      {layout.pinned && meta.pinned ? <PinnedPost pin={meta.pinned} /> : null}
+      {layout.liveEmpty ? <LiveEmptyCard onOpenRoom={openRoomFromBoard} /> : null}
+      {/* #47: the first post is why the starts leave: they fade over `quick` with an 8 pt drop as the card rises in. */}
+      {layout.starts && !posts.length ? (
+        <Animated.View exiting={emptyOut(reduceMotion)}>
+          <LobbyStarts ticketsHidden={meta.ticketsHidden} onStart={compose} />
+        </Animated.View>
       ) : null}
     </View>
   )
 
   let content: ReactNode
   if (closed) {
-    content = (
-      <StateScreen
-        icon="lock"
-        title="The board’s closed"
-        body="The doors are open, so the room is open instead."
-        // To the tabs first: the overlay is under the root stack, so opened from here it was under the board (Flow 4 Board #14).
-        actions={[{ label: 'Open the room', onPress: openRoomFromBoard }]}
-        testID="board-closed"
-      />
-    )
+    content = <ClosedCard />
+  } else if (doorsShut) {
+    content = <ReadOnlyBanner onOpenRoom={openRoomFromBoard} />
   } else if (load.kind === 'loading') {
     content = <BoardSkeleton />
   } else if (load.kind === 'refused') {
     content = (
       <StateScreen
         icon="circle-slash"
-        title={(load.code && REFUSED_TITLE[load.code]) || 'Not on this board yet'}
+        title={(load.code && REFUSED_TITLE[load.code]) || 'Not in this Lobby yet'}
         body={load.line}
         actions={[{ label: 'Back to the event', kind: 'secondary', onPress: () => router.back() }]}
         testID="board-refused"
@@ -543,7 +688,7 @@ export function BoardScreen() {
     content = (
       <StateScreen
         icon="cloud-off"
-        title="The board didn’t load"
+        title="The Lobby didn’t load"
         body="Check your connection and try again."
         actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
         testID="board-failed"
@@ -553,6 +698,7 @@ export function BoardScreen() {
     content = (
       <FlatList
         testID="board-list"
+        ref={listRef}
         data={posts}
         keyExtractor={(p) => p.id}
         renderItem={renderItem}
@@ -560,27 +706,16 @@ export function BoardScreen() {
         extraData={askFor}
         ListHeaderComponent={header}
         ListEmptyComponent={
-          kindFilter && allPosts.length > 0 ? (
-            // Narrowed to nothing: the board is not empty, so it never says "Nobody's posted yet".
+          filter !== 'all' ? (
+            // Narrowed to nothing: the Lobby is not empty, so it never says "Nobody's posted yet".
             <StateScreen
               icon="search"
-              title={kindFilter === 'offer' ? 'Nobody’s offering yet' : 'Nobody’s looking yet'}
-              body="Loaded so far. More come as you scroll the whole board."
-              actions={[{ label: 'Show every post', kind: 'secondary', onPress: () => setKindFilter(null) }]}
+              title={FILTER_EMPTY[filter]}
+              body="Every post is under All."
+              actions={[{ label: 'Show every post', kind: 'secondary', onPress: () => onFilter('all') }]}
               testID="board-filter-empty"
             />
-          ) : (
-            // #47: the first post is why this leaves: it fades over `quick` with an 8 pt drop as the card rises in.
-            <Animated.View exiting={emptyOut(reduceMotion)}>
-              <StateScreen
-                icon="message-square-dashed"
-                title="Nobody’s posted yet"
-                body="Say what you’re looking for, and people on their way will see it."
-                actions={[{ label: 'Write a post', onPress: () => setComposing(true) }]}
-                testID="board-empty"
-              />
-            </Animated.View>
-          )
+          ) : null
         }
         ListFooterComponent={
           <PageFooter loading={moreState === 'loading'} failed={moreState === 'failed'} onRetry={() => void loadMore()} what="posts" testID="board-more-failed" />
@@ -590,9 +725,10 @@ export function BoardScreen() {
           if (moreState !== 'failed') void loadMore()
         }}
         onEndReachedThreshold={1.5}
+        onScrollToIndexFailed={linked.onScrollToIndexFailed}
         initialNumToRender={8}
         windowSize={9}
-        contentContainerStyle={[styles.list, { paddingTop: bar.contentTop }]}
+        contentContainerStyle={[styles.list, { paddingTop: contentTop }]}
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         {...bar.scrollProps}
         keyboardShouldPersistTaps="handled"
@@ -601,22 +737,38 @@ export function BoardScreen() {
     )
   }
 
+  // The Lobby's own cards (closed, the old doors) sit where the composer would; a whole-screen state is centred.
+  const card = closed || doorsShut
   return (
     <View style={styles.container}>
       {/* #30: the list scrolls under the bar, and the glass comes in behind the title once it has. */}
-      {load.kind === 'ready' && !closed ? (
+      {load.kind === 'ready' && !card ? (
         content
       ) : (
-        <View style={[styles.fill, { paddingTop: bar.contentTop }]}>
+        <View style={[styles.fill, { paddingTop: contentTop }]}>
           <View style={styles.banner}>{offline}</View>
-          <View style={styles.state}>{content}</View>
+          <View style={card ? styles.cardSlot : styles.state}>{content}</View>
         </View>
       )}
-      <View style={bar.barPin} pointerEvents="box-none">
-        <TopBar title="The Board" sub={event?.title} state={bar.state} onBack={() => router.back()} testID="board-top" />
+      {held.size > 0 && load.kind === 'ready' && !card ? <NewPostsPill count={held.size} top={contentTop + SPACE.sm} onPress={showHeld} /> : null}
+      <View testID="lobby-bar" style={bar.barPin} pointerEvents="box-none" onLayout={(e) => setBarDrawn(e.nativeEvent.layout.height)}>
+        <TopBar
+          title="Lobby"
+          sub={event?.title}
+          subLines={1}
+          state={bar.state}
+          onBack={() => router.back()}
+          actions={closed ? [] : [{ icon: 'bell', label: 'Lobby alerts', onPress: () => setAlertsOpen(true) }]}
+          testID="board-top"
+        />
       </View>
-      <BoardComposer
-        key={posted}
+      {eventId ? <LobbyAlertsSheet eventId={eventId} visible={alertsOpen} onClose={() => setAlertsOpen(false)} /> : null}
+      <LobbyCompose
+        key={`${posted}-${startKind}`}
+        initialKind={startKind}
+        pseudonym={meta.you?.pseudonym ?? null}
+        subKinds={meta.subKinds}
+        ticketsHidden={meta.ticketsHidden ?? false}
         visible={composing}
         posting={posting}
         refusal={refusal}
@@ -633,12 +785,21 @@ export function BoardScreen() {
 /** Card-shaped (three offer cards), so the list does not jump when it lands. */
 function BoardSkeleton() {
   return (
-    <View style={styles.skeleton} accessibilityLabel="Loading the board">
+    <View style={styles.skeleton} accessibilityLabel="Loading the Lobby">
       {[0, 1, 2].map((i) => (
         <SkeletonBlock key={i} width="100%" height={SKELETON_CARD} borderRadius={RADIUS.card} />
       ))}
     </View>
   )
+}
+
+/** A chip that found nothing, in its own words. */
+const FILTER_EMPTY: Record<Exclude<LobbyFilter, 'all'>, string> = {
+  offer: 'Nobody’s offering yet',
+  seeking: 'Nobody’s looking yet',
+  chat: 'Nobody’s just saying yet',
+  mine: 'You haven’t posted here yet',
+  replies: 'No replies to you yet',
 }
 
 /** A focused board re-reads this often when no push says an ask arrived. */
@@ -653,9 +814,13 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   ink: { color: COLOR.textPrimary },
   centre: { textAlign: 'center' },
-  header: { gap: SPACE.lg, marginBottom: SPACE.lg },
-  list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.lg },
+  // lobby.css: composer 12 above the chips, the chips 16 above the first card, cards 12 apart.
+  header: { gap: SPACE.md },
+  list: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl, gap: SPACE.md },
   state: { flex: 1, paddingHorizontal: SPACE.gutter, justifyContent: 'center' },
+  // lobby.css `.lposts`: 16 under the chips, where the header's rhythm is 12.
+  chipsGap: { marginBottom: SPACE.xs },
+  cardSlot: { paddingHorizontal: SPACE.gutter },
   banner: { paddingHorizontal: SPACE.gutter },
   skeleton: { gap: SPACE.lg },
 })

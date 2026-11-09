@@ -19,6 +19,8 @@ import {
   passView,
   spacedCode,
   validUntil,
+  validityLine,
+  LIVE_FOOT,
 } from '../lib/offers'
 
 /**
@@ -111,13 +113,13 @@ describe('the pass’s face (passView)', () => {
       level: LIVE_LEVEL,
       spent: false,
       stamp: null,
-      foot: 'Show this at the door. Staff type the code and tap Redeemed.',
+      foot: 'Works once, today. Staff type the code and tap Redeemed.',
     })
   })
 
   it('live with a stale code: no code (L2) — it needs a connection after a failed ask, else a fresh one is coming', () => {
     const stale = at('2026-10-11T20:00:33Z')
-    expect(passView(live, stale, true)).toMatchObject({ door: 'offline', foot: 'This pass needs a connection to show its code.' })
+    expect(passView(live, stale, true)).toMatchObject({ door: 'offline', foot: 'This offer code needs a connection to show.' })
     expect(passView(live, stale, false)).toMatchObject({ door: 'offline', foot: 'Getting a fresh code…' })
   })
 
@@ -138,6 +140,16 @@ describe('the pass’s face (passView)', () => {
   it('names the day an offer ended and how long it runs', () => {
     expect(endedLabel('2026-10-11T12:00:00Z')).toMatch(/^ENDED [A-Z]+$/)
     expect(validUntil('2026-10-18T12:00:00Z')).toMatch(/^until /)
+  })
+
+  it('an offer that ends today says so with its clock, in its own slot (Flow 4 polish: "Valid today, till 11 PM")', () => {
+    const now = new Date(2026, 9, 18, 20, 0).getTime()
+    expect(validityLine(new Date(2026, 9, 18, 23, 0).toISOString(), now)).toBe('Valid today, till 11 PM')
+    // Control: one that runs past today names its day.
+    expect(validityLine(new Date(2026, 9, 21, 23, 0).toISOString(), now)).toMatch(/^Valid until \w{3} 21 Oct$/)
+  })
+  it('the pass says it works once, and how staff take it', () => {
+    expect(LIVE_FOOT).toBe('Works once, today. Staff type the code and tap Redeemed.')
   })
 })
 

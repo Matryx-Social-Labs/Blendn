@@ -20,6 +20,8 @@ export type IconButtonProps = {
   onPress?: () => void
   /** `control` on the backdrop; `media` over a hero photo, which must carry its ≥45% dim gradient. */
   tier?: 'control' | 'media'
+  /** `sm`: the 40 pt circle of a header row (the Pulse's search, board `.ib`), its target kept at 44 / 48 by slop. */
+  size?: 'md' | 'sm'
   /** Set only on a toggle (save, mute): it then plays `H.select` and reads "selected". */
   selected?: boolean
   disabled?: boolean
@@ -49,6 +51,7 @@ export function IconButton({
   accessibilityLabel,
   onPress,
   tier = 'control',
+  size: sizeName = 'md',
   selected,
   disabled = false,
   accessibilityHint,
@@ -61,8 +64,10 @@ export function IconButton({
   const [focused, setFocused] = useState(false)
   const pressed = down || previewState === 'pressed'
 
-  const size = android ? SIZE.circleButtonAndroid : SIZE.circleButton
-  const round = android ? RADIUS.circleButtonAndroid : RADIUS.circleButton
+  const full = android ? SIZE.circleButtonAndroid : SIZE.circleButton
+  const size = sizeName === 'sm' ? SIZE.circleButtonSm : full
+  const round = sizeName === 'sm' ? SIZE.circleButtonSm / 2 : android ? RADIUS.circleButtonAndroid : RADIUS.circleButton
+  const slop = (full - size) / 2
   const radius = android && pressed ? RADIUS.pressedAndroid : round
   const shape = { width: size, height: size, borderRadius: radius }
   const sel = useSelection()
@@ -88,6 +93,7 @@ export function IconButton({
           onPress?.()
         }}
         disabled={disabled}
+        hitSlop={slop ? { top: slop, bottom: slop, left: slop, right: slop } : undefined}
         pressedScale={android ? 1 : PRESS.scale}
         onPressIn={() => android && setDown(true)}
         onPressOut={() => setDown(false)}

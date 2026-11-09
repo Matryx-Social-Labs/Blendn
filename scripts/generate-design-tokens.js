@@ -73,10 +73,13 @@ function border(css) {
 }
 
 /** `0 0 16px rgba(…),0 0 28px rgba(…)` → `[{ radius, color }, …]`, centred glows only. */
+// "0 0 16px color", or with a drop and a spread ("0 18px 60px -18px color", the Pulse's lead underglow): offsets kept only when set.
 function glows(css) {
   return splitTop(css).map((layer) => {
-    const m = /^0 0 (\d+)px (.+)$/.exec(layer) || fail('glow', layer)
-    return { radius: Number(m[1]), color: m[2] }
+    const m = /^0 (-?\d+)(?:px)? (\d+)px(?: (-?\d+)px)? (.+)$/.exec(layer) || fail('glow', layer)
+    const offsetY = Number(m[1])
+    const spread = m[3] ? Number(m[3]) : 0
+    return { ...(offsetY ? { offsetY } : {}), radius: Number(m[2]), ...(spread ? { spread } : {}), color: m[4] }
   })
 }
 
@@ -118,13 +121,14 @@ function build(json) {
   const maxScale = Object.fromEntries(Object.entries(type.roles).map(([role, r]) => [camel(role), r.maxScale]))
 
   const tokens = {
-    COLOR: camelKeys(omit(color, ['gradient-brand', 'gradient-fill'])),
-    GRADIENT: { brand: percentGradient(color['gradient-brand']), fill: percentGradient(color['gradient-fill']) },
+    COLOR: camelKeys(omit(color, ['gradient-brand', 'gradient-fill', 'gradient-text'])),
+    GRADIENT: { brand: percentGradient(color['gradient-brand']), fill: percentGradient(color['gradient-fill']), text: percentGradient(color['gradient-text']) },
     MATERIAL: {
-      ...camelKeys(omit(material, ['glass-edge', 'solid-inner-highlight', 'glow-check-in'])),
+      ...camelKeys(omit(material, ['glass-edge', 'solid-inner-highlight', 'glow-check-in', 'glow-lead'])),
       glassEdge: border(material['glass-edge']),
       solidInnerHighlight: highlight(material['solid-inner-highlight']),
       glowCheckIn: glows(material['glow-check-in']),
+      glowLead: glows(material['glow-lead']),
     },
     // Only the weights a role uses: each one is a file every cold start loads.
     FONT_FAMILY: Object.fromEntries(

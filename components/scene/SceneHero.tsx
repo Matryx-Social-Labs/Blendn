@@ -1,192 +1,128 @@
-import { Image } from 'expo-image'
 import { useState } from 'react'
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native'
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedStyle,
-  type SharedValue,
-} from 'react-native-reanimated'
+import Animated, { interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
 
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-
-import { CategoryPlate } from '../ds/EventCard'
 import { IconButton } from '../ds/IconButton'
-import { ScrimPill, TimeBadge } from '../ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
-import { PhotoScrim, StatusScrim } from '../ui/GradientFill'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { font, useBoldText } from '../ds/shared'
+import { RadialWash, type RadialLayer } from '../ui/GradientFill'
+import { Icon } from '../ui/Icon'
+import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
+import { categoryGlyph } from '../../lib/categoryGlyph'
+import type { Stamp } from '../../lib/eventFacts'
 import type { FeedMediaItem } from '../../lib/feedMedia'
-import { sceneBarHeight } from './SceneBar'
-import { HERO_CAPTION_FOOT, SceneHeroMedia } from './SceneHeroMedia'
 import { useReducedMotion } from '../../lib/motion'
+import { tint } from '../../lib/theme'
+import { SceneHeroMedia } from './SceneHeroMedia'
 
-/**
- * The Scene's hero (Flow 3 `scene`, 420 tall): the cover (or the organiser's clips and stills) full bleed under the
- * status bar, the head scrim that lets the clock and the circles read over any photo, and the foot scrim that carries the
- * words: the time badge and the pills, the title, then "at {venue}, {area}".
- *
- * ## No cover is the category plate, not a grey box
- *
- * An event with nothing to show draws its category plate (D8, DS-12): the category's glyph on the screen's hue fill, or
- * the fill alone when the category has no glyph. The words sit on it exactly as they sit on a photograph.
- *
- * ## Pills say only what can be defended
- *
- * The time badge is the one date grammar (`cardTime`, or "Ended"). A scarcity pill is a count the capacity really
- * supports (`lib/scarcity.ts`), the age pill the organiser's own floor, the people pill the Pulse's rule (five and up).
- * Nothing here asserts exclusivity the product has no model for.
- *
- * ## Motion
- *
- * Pulled past the top, the hero stretches from its foot (#32: the clip box scales by what the bounce uncovers, so no
- * bare page opens above it; Android's own overscroll does the rest). Scrolled, the photograph drifts at half speed and
- * the caption is gone by 45% of the hero, before the bar's small title takes over (#30). Reduce Motion keeps the
- * stretch (a direct manipulation) and drops the drift.
+/*
+ * Flow 4 E-B, "lit from behind" (owner's pick 2026-11-05; `flow-4/screens.js` eventB, `flow4.css` .posterB/.washB/.sposter).
+ * The cover sits uncropped in a square the width of the page's column, 28 pt corners, and its light pours into the page:
+ * the Pulse lead's underglow, larger, plus a radial wash behind the top of the page. With no cover it is the stamp poster.
+ * On scroll the poster eases to 0.92 over the first 220 pt and its light fades to 40% over 300 (never off); Reduce Motion
+ * keeps both still.
  */
-export const SCENE_HERO_HEIGHT = 420
-export const sceneHeroHeight = () => SCENE_HERO_HEIGHT
 
-/** The head scrim's reach (the venue page's 180). */
-const HEAD_SCRIM = 180
-/** The foot scrim's reach: tall enough that a two-line title never starts on bare photograph. */
-const FOOT_SCRIM = 260
-const CAPTION_FADE_AT = 0.45
+/** The page's column: 24 in on each side. The poster is that square. */
+export const posterSide = (width: number) => width - 2 * SPACE.gutter
+const SCALE_TO = 0.92
+const SCALE_OVER = 220
+const LIGHT_TO = 0.4
+const LIGHT_OVER = 300
+/** `.posterB` box-shadow: 0 24px 80px -14px ember 62%; and its 0.5 pt light rim. */
+// design-exception: the board's underglow (0 24 80 -14) is the Pulse lead's (`glowLead`) at poster size; no token holds it.
+const GLOW = [{ offsetX: 0, offsetY: SPACE.xl, blurRadius: 80, spreadDistance: -14, color: tint(COLOR.brandOrange, 0.62) }]
+const RIM = tint(COLOR.textPrimary, 0.12)
+/** `.washB`: 660 tall from the top of the screen, ember behind the poster and a violet corner lower right. */
+export const POSTER_WASH_HEIGHT = 660
+const WASH: readonly RadialLayer[] = [
+  { color: COLOR.brandOrange, alpha: 0.24, at: [50, 32], size: [80, 42], reach: 0.72 },
+  { color: COLOR.brandViolet, alpha: 0.1, at: [88, 58], size: [60, 30], reach: 0.7 },
+]
+/** `.sposter`: ember from below, violet in the top-right corner, on the sunken surface. */
+const STAMP_LIGHT: readonly RadialLayer[] = [
+  { color: COLOR.brandOrange, alpha: 0.48, at: [50, 88], size: [70, 70], reach: 0.7 },
+  { color: COLOR.brandViolet, alpha: 0.26, at: [88, 8], size: [60, 50], reach: 0.7 },
+]
 
-export type ScenePill = { key: string; text: string; /** The cancelled pill: white, ink on it. */ white?: boolean }
+const light = (y: number, reduceMotion: boolean) => {
+  'worklet'
+  return reduceMotion ? 1 : 1 - (1 - LIGHT_TO) * interpolate(y, [0, LIGHT_OVER], [0, 1], 'clamp')
+}
+
+/** The page's wash, fixed behind the scroll: drawn first by the screen, it fades with the poster's light. */
+export function PosterLight({ scrollY }: { scrollY?: SharedValue<number> }) {
+  const reduceMotion = useReducedMotion()
+  const style = useAnimatedStyle(() => ({ opacity: light(scrollY ? scrollY.get() : 0, reduceMotion) }))
+  return (
+    <Animated.View pointerEvents="none" style={[styles.wash, style]}>
+      <RadialWash testID="scene-poster-wash" layers={WASH} style={StyleSheet.absoluteFill} />
+    </Animated.View>
+  )
+}
 
 export function SceneHero({
-  source,
   playlist,
   title,
-  when,
-  whenSpoken,
-  struck = false,
-  pills = [],
-  place,
   category,
+  stamp,
+  venueLine,
   onPressMedia,
   scrollY,
 }: {
-  source: React.ComponentProps<typeof Image>['source']
-  /**
-   * The organiser's media, cycling (`feedPlaylist` / `clipFirst`): the same `FeedMediaItem[]` the feed cards walk. One
-   * photograph is the common case and behaves as a still. Swipeable, auto-advancing until the first swipe
-   * (`SceneHeroMedia`).
-   */
-  playlist?: FeedMediaItem[]
+  /** The organizer's media, clip first; empty draws the stamp poster. */
+  playlist: FeedMediaItem[]
+  /** For "Cover for …". */
   title: string
-  /** The badge: "Live", "Ended", "9 PM", "Sat 24 Oct · 9 PM", "Sat 27 – Mon 29 Sep". */
-  when: string
-  /** What a screen reader says for the badge when the words on it read badly aloud (a range's dash: "Sat 27 to Mon 29 Sep"). */
-  whenSpoken?: string
-  /** A cancelled event's date is struck through. */
-  struck?: boolean
-  pills?: ScenePill[]
-  /** "at Toit, Indiranagar". */
-  place: string
-  /** The event's first category's slug ("music"): with no picture, its plate (TG-06, D8). */
+  /** The first category's slug: the stamp poster's glyph. */
   category?: string
-  /** Opens the lightbox at the item currently shown. */
+  /** The date the stamp poster prints. */
+  stamp: Stamp | null
+  /** "Third Wave Coffee · Koramangala" under the stamp. */
+  venueLine: string
   onPressMedia?: (index: number) => void
   scrollY?: SharedValue<number>
 }) {
-  const h = SCENE_HERO_HEIGHT
   const { width } = useWindowDimensions()
-  const bold = useBoldText()
+  const side = posterSide(width)
   const reduceMotion = useReducedMotion()
-  const insets = useSafeAreaInsets()
-  /*
-   * WCAG 2.2.2 (audit H2): a clip that plays and loops for more than 5 s can be paused. Null until somebody chooses, so
-   * it follows Reduce Motion (the poster, nothing playing) until they press Play.
-   */
+  // The clip's pause (WCAG 2.2.2): a clip loops on the poster, so it can always be stopped; Reduce Motion starts it paused.
   const [chosen, setChosen] = useState<boolean | null>(null)
   const paused = chosen ?? reduceMotion
   const [clipInView, setClipInView] = useState(false)
 
-  const clipStyle = useAnimatedStyle(() => {
+  const scaleStyle = useAnimatedStyle(() => {
     const y = scrollY ? scrollY.get() : 0
-    if (y >= 0) return { transform: [{ translateY: 0 }, { scale: 1 }] }
-    const pull = -y
-    // Translate first so it is not itself scaled: moving up by half the growth keeps the foot where it was.
-    return { transform: [{ translateY: -pull / 2 }, { scale: (h + pull) / h }] }
+    const k = reduceMotion ? 0 : interpolate(y, [0, SCALE_OVER], [0, 1], 'clamp')
+    return { transform: [{ scale: 1 - (1 - SCALE_TO) * k }] }
   })
-  const mediaStyle = useAnimatedStyle(() => {
-    const y = scrollY ? scrollY.get() : 0
-    if (reduceMotion || y <= 0) return { transform: [{ translateY: 0 }] }
-    return { transform: [{ translateY: Math.min(y, h) * 0.5 }] }
-  })
-  // A fade, so it stays under Reduce Motion: it moves nothing, and it explains where the title went.
-  const captionStyle = useAnimatedStyle(() => {
-    const y = scrollY ? scrollY.get() : 0
-    return { opacity: interpolate(y, [0, h * CAPTION_FADE_AT], [1, 0], Extrapolation.CLAMP) }
-  })
+  const glowStyle = useAnimatedStyle(() => ({ opacity: light(scrollY ? scrollY.get() : 0, reduceMotion) }))
 
   return (
-    <View testID="scene-hero" style={[styles.hero, { height: h }]}>
-      <Animated.View style={[styles.clip, clipStyle]}>
-        <Animated.View style={[StyleSheet.absoluteFill, mediaStyle]}>
-          {playlist && playlist.length > 0 ? (
+    <Animated.View testID="scene-hero" style={[styles.poster, { width: side, height: side }, scaleStyle]}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.glow, glowStyle]} />
+      <View style={styles.clip}>
+        {playlist.length > 0 ? (
+          <View accessible={playlist.length === 1} accessibilityRole="image" accessibilityLabel={`Cover for ${title}`} style={StyleSheet.absoluteFill}>
             <SceneHeroMedia
               playlist={playlist}
-              width={width}
-              height={h}
+              width={side}
+              height={side}
+              fit="contain"
+              autoAdvance={false}
+              pips="center"
               onPress={onPressMedia}
               paused={paused}
               started={chosen !== null}
               onClipInView={setClipInView}
             />
-          ) : source ? (
-            <Image source={source} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={200} accessible={false} />
-          ) : (
-            <CategoryPlate category={category} size={h} testID="scene-hero-plate" />
-          )}
-        </Animated.View>
-        {/* Nothing here may take a touch: these cover the media the hero swipes and opens. */}
-        <StatusScrim testID="scene-hero-head" pointerEvents="none" style={styles.head} />
-        <PhotoScrim testID="scene-hero-foot" pointerEvents="none" style={styles.foot} />
-      </Animated.View>
-      {/* One node to a screen reader, in the order somebody wants it: what it is, when, how tight the door is, where. */}
-      <Animated.View
-        style={[styles.info, captionStyle]}
-        pointerEvents="none"
-        accessible
-        accessibilityRole="header"
-        accessibilityLabel={[title, whenSpoken ?? when, ...pills.map((p) => p.text), place].filter(Boolean).join('. ')}
-      >
-        <View style={styles.pills}>
-          {/* A cancelled night strikes the time, never the middot between (DS-20, B-S16). */}
-          <TimeBadge when={when} struck={struck} testID="scene-when" />
-          {pills.map((p) =>
-            p.white ? (
-              <View key={p.key} testID={`scene-pill-${p.key}`} style={styles.whitePill}>
-                <Text style={[font('caption', bold), styles.onWhite]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                  {p.text}
-                </Text>
-              </View>
-            ) : (
-              <ScrimPill key={p.key} testID={`scene-pill-${p.key}`}>
-                <Text style={[font('caption', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-                  {p.text}
-                </Text>
-              </ScrimPill>
-            )
-          )}
-        </View>
-        {/* Capped at 1.2: React Native clips a glyph to its line box, and over a photograph that is two rows of sliced letters. */}
-        <Text numberOfLines={2} maxFontSizeMultiplier={1.2} textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={[font('title', bold), styles.ink]}>
-          {title}
-        </Text>
-        {place ? (
-          // Over the photograph, in a hero of fixed height: capped like the title (D2).
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.ink]}>
-            {place}
-          </Text>
-        ) : null}
-      </Animated.View>
-      {/* Over the head scrim (the media tier's dim), under the bar's right-hand circles; above the scrims, so never dimmed. */}
-      {!!playlist?.length && clipInView ? (
-        <View style={[styles.playback, { top: sceneBarHeight(insets.top) }]}>
+          </View>
+        ) : (
+          <StampPoster stamp={stamp} category={category} venueLine={venueLine} />
+        )}
+        <View pointerEvents="none" style={styles.rim} />
+      </View>
+      {playlist.length > 0 && clipInView ? (
+        <View style={styles.playback}>
           <IconButton
             tier="media"
             icon={paused ? 'play' : 'pause'}
@@ -196,22 +132,67 @@ export function SceneHero({
           />
         </View>
       ) : null}
+    </Animated.View>
+  )
+}
+
+/** The poster for an event with no cover: its date in Geist Mono, lit from below, the category's glyph and the venue. */
+function StampPoster({ stamp, category, venueLine }: { stamp: Stamp | null; category?: string; venueLine: string }) {
+  const bold = useBoldText()
+  const glyph = category ? categoryGlyph(category) : undefined
+  return (
+    <View
+      testID="scene-hero-stamp"
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={[stamp?.spoken, venueLine].filter(Boolean).join(', ')}
+      style={styles.stamp}
+    >
+      <RadialWash layers={STAMP_LIGHT} style={StyleSheet.absoluteFill} />
+      {glyph ? (
+        <View style={styles.stampGlyph}>
+          {/* design-exception: the board's stamp glyph is 28 (a decorative size). */}
+          <Icon name={glyph} size={28} color={COLOR.selectionEmberGlyph} />
+        </View>
+      ) : null}
+      {stamp ? (
+        <View style={styles.stampDate}>
+          <Text maxFontSizeMultiplier={1} style={[styles.stampWord, { fontFamily: FONT_FAMILY.mono[500] }]}>
+            {stamp.dow}
+          </Text>
+          <Text maxFontSizeMultiplier={1} style={[styles.stampDay, { fontFamily: FONT_FAMILY.mono[700] }]}>
+            {stamp.dd}
+          </Text>
+          <Text maxFontSizeMultiplier={1} style={[styles.stampWord, { fontFamily: FONT_FAMILY.mono[500] }]}>
+            {stamp.mon}
+          </Text>
+        </View>
+      ) : null}
+      {venueLine ? (
+        <Text numberOfLines={1} maxFontSizeMultiplier={1} style={[font('control', bold), styles.stampVenue]}>
+          {venueLine}
+        </Text>
+      ) : null}
     </View>
   )
 }
 
-const PILL_HEIGHT = 28
-
 const styles = StyleSheet.create({
-  hero: { width: '100%' },
-  // The clip lives here, not on `hero`, so the stretch can grow the box above the hero's top while the caption stays unscaled.
-  clip: { ...StyleSheet.absoluteFill, overflow: 'hidden', backgroundColor: COLOR.surface },
-  head: { position: 'absolute', top: 0, left: 0, right: 0, height: HEAD_SCRIM },
-  foot: { position: 'absolute', bottom: 0, left: 0, right: 0, height: FOOT_SCRIM },
-  playback: { position: 'absolute', right: SPACE.lg },
-  info: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: SPACE.gutter, paddingBottom: HERO_CAPTION_FOOT, gap: SPACE.sm },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm, marginBottom: SPACE.xs },
-  ink: { color: COLOR.textPrimary },
-  onWhite: { color: COLOR.ink },
-  whitePill: { height: PILL_HEIGHT, justifyContent: 'center', paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary },
+  wash: { position: 'absolute', left: 0, right: 0, top: 0, height: POSTER_WASH_HEIGHT },
+  poster: { alignSelf: 'center', transformOrigin: 'top' },
+  glow: { borderRadius: RADIUS.disc, backgroundColor: COLOR.ink, boxShadow: GLOW },
+  clip: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.disc, overflow: 'hidden', backgroundColor: COLOR.surfaceSunken },
+  rim: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.disc, borderWidth: StyleSheet.hairlineWidth, borderColor: RIM },
+  playback: { position: 'absolute', top: SPACE.md, right: SPACE.md },
+  stamp: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLOR.surfaceSunken },
+  // design-exception: the board places the glyph 22 in from the corner (`.sposter .sg`).
+  stampGlyph: { position: 'absolute', left: 22, top: 22 },
+  stampDate: { alignItems: 'center' },
+  // design-exception: the stamp poster's type is the board's art (`.sposter .sd`): 20/24 words, a 120/124 day.
+  stampWord: { fontSize: 20, lineHeight: 24, letterSpacing: 2, color: COLOR.selectionEmberGlyph },
+  // design-exception: as above.
+  stampDay: { fontSize: 120, lineHeight: 124, letterSpacing: -4, color: COLOR.textPrimary },
+  // design-exception: the board's venue line sits 22 in and 20 up (`.sposter .sv`).
+  stampVenue: { position: 'absolute', left: 22, right: 22, bottom: 20, textAlign: 'center', color: COLOR.textSecondary },
 })
+

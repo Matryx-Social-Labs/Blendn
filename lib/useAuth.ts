@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AppState } from 'react-native'
 import { apiClient, AuthUser, nextSession, TokenStorage } from './apiClient'
 import { setAppIconBadge } from './appBadge'
 import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
@@ -105,6 +106,32 @@ const updateAuthState = (newState: Partial<AuthState>) => {
 }
 
 // Initialize auth system once
+/** Launch reads the keychain refused while the app was in the foreground: after this many it is taken for empty (SCRUM-878). */
+const LOCKED_READ_TRIES = 3
+const LOCKED_READ_RETRY_MS = 1000
+let lockedReadsInForeground = 0
+let readAgainPending = false
+
+/** Run the launch's restore again once the app is in the foreground (unlocked), or in a second if it already is. */
+const readAgainWhenActive = () => {
+  if (readAgainPending) return
+  readAgainPending = true
+  const again = () => {
+    readAgainPending = false
+    void initializeAuth()
+  }
+  if (AppState.currentState === 'active') {
+    lockedReadsInForeground += 1
+    setTimeout(again, LOCKED_READ_RETRY_MS)
+    return
+  }
+  const sub = AppState.addEventListener('change', (state) => {
+    if (state !== 'active') return
+    sub.remove()
+    again()
+  })
+}
+
 const initializeAuth = async (): Promise<AuthState> => {
   if (globalAuthState.initialized) {
     return globalAuthState
@@ -134,7 +161,7 @@ const initializeAuth = async (): Promise<AuthState> => {
         Logger.info('auth', 'Signed out on this phone; not restoring the keychain session')
         // Its own ending: a refresh still in flight for that session stores nothing over the clear (H1, re-review L2).
         nextSession()
-        const cleared = await settleWithin(TokenStorage.clearAll().then(() => true), REQUEST_TIMEOUT_MS, false)
+        const cleared = await settleWithin(TokenStorage.clearAll(), REQUEST_TIMEOUT_MS, false)
         if (cleared) await TokenStorage.forgetSignedOut()
         updateAuthState({ session: null, user: null, loading: false, initialized: true, unreachable: false })
         isInitializing = false
@@ -143,7 +170,21 @@ const initializeAuth = async (): Promise<AuthState> => {
 
       // Check if we have stored tokens. Both are read now, on the critical path, into memory (RC drive 2 D-A): no request or
       // refresh after this waits on the keychain, whatever is stuck on the native queue later.
-      const [accessToken] = await Promise.all([TokenStorage.getAccessToken(), TokenStorage.getRefreshToken()])
+      const [accessToken, refreshToken] = await Promise.all([TokenStorage.accessTokenOrUnknown(), TokenStorage.refreshTokenOrUnknown()])
+
+      /*
+       * The keychain refused (SCRUM-878): iOS launched the app in the background while the phone was locked (a push,
+       * prewarming). That says nothing about the session, so nothing is decided: the launch stays loading and reads again
+       * once the person opens the app, when the phone is unlocked. Only a keychain that keeps refusing in the foreground
+       * is taken for empty, as before, so a broken one cannot hold the splash for good.
+       */
+      if ((accessToken === undefined || refreshToken === undefined) && lockedReadsInForeground < LOCKED_READ_TRIES) {
+        Logger.warn('auth', 'keychain:unreadable at launch; reading again when the app is active', { appState: AppState.currentState })
+        isInitializing = false
+        initializationPromise = null
+        readAgainWhenActive()
+        return globalAuthState
+      }
 
       if (accessToken) {
         // We have a token, verify it's still valid
@@ -168,7 +209,8 @@ const initializeAuth = async (): Promise<AuthState> => {
            * the tokens if it was refused, so no tokens left means refused.
            */
           Logger.debug('auth', 'Session verification failed, attempting refresh...')
-          const outcome = (await TokenStorage.getAccessToken())
+          // A token the keychain could not read (undefined) may be there: refreshed for, never taken for refused (SCRUM-878).
+          const outcome = (await TokenStorage.accessTokenOrUnknown()) !== null
             ? await apiClient.refreshSessionOutcome()
             : 'rejected'
 
@@ -176,7 +218,7 @@ const initializeAuth = async (): Promise<AuthState> => {
             const retryResult = await apiClient.getSession()
             if (retryResult.success && retryResult.data) {
               await signInVerified(retryResult.data, 'Session refreshed successfully')
-            } else if (await TokenStorage.getAccessToken()) {
+            } else if ((await TokenStorage.accessTokenOrUnknown()) !== null) {
               // Refreshed, then the re-read did not land. Nothing refused us.
               await keepStoredSession()
             } else {

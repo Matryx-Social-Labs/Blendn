@@ -211,3 +211,22 @@ describe('a venue shared before its page exists (SYS-04)', () => {
     expect(venueTextOnly('The Daily Grind')).not.toContain('http')
   })
 })
+
+describe('a link to a Lobby post (SCRUM-1026, 6/6)', () => {
+  const POST_ID = '0d5e6f7a-91d0-4b8a-a1c2-7f3a2c4e8b9c'
+  it('opens the Lobby with the post to scroll to, from the scheme, the dev client and a bare path', () => {
+    expect(nativeIntentPath(`blendn://board/${ID}/${POST_ID}`)).toBe(`/board/${ID}?post=${POST_ID}`)
+    expect(nativeIntentPath(`/board/${ID}/${POST_ID}`)).toBe(`/board/${ID}?post=${POST_ID}`)
+    expect(nativeIntentPath(`exp+blendn://board/${ID}/${POST_ID}`)).toBe(`/board/${ID}?post=${POST_ID}`)
+    // Control: the Lobby alone stays the Lobby.
+    expect(nativeIntentPath(`blendn://board/${ID}`)).toBe(`/board/${ID}`)
+  })
+
+  it('carries nothing else a link says, and refuses an id that is not one', () => {
+    expect(nativeIntentPath(`blendn://board/${ID}/${POST_ID}?compose=1&post=evil`)).toBe(`/board/${ID}?post=${POST_ID}`)
+    expect(nativeIntentPath(`blendn://board/${ID}?compose=1`)).toBe(`/board/${ID}`)
+    expect(nativeIntentPath(`blendn://board/${ID}/%2E%2E%2Fsettings`)).toBe(`/board/${ID}`)
+    expect(nativeIntentPath(`blendn://board/${ID}/${POST_ID}/more`)).not.toContain('post=')
+    expect(nativeIntentPath(`https://evil.example/board/${ID}/${POST_ID}`)).toBe('/')
+  })
+})

@@ -12,6 +12,7 @@ import { TopBar } from '../components/ds/TopBar'
 import { bannerFadeIn, bannerIn, bannerOut } from '../components/motion/presence'
 import { OfflineBanner } from '../components/OfflineBanner'
 import { useToast } from '../components/Toast'
+import { HomeCityRow } from '../components/settings/HomeCityRow'
 import { COLOR, SPACE as DS_SPACE, SPRING, MAX_FONT_SCALE } from '../lib/design/tokens'
 import type { IconName } from '../components/ui/Icon'
 import { H } from '../lib/haptics'
@@ -530,6 +531,12 @@ function SettingsScreenContent() {
           )}
         </Animated.View>
 
+        {user?.id ? (
+          <SettingsGroup title="Location">
+            <HomeCityRow userId={user.id} />
+          </SettingsGroup>
+        ) : null}
+
         <SettingsGroup title="Privacy">
           {/* What it does, in the row: the switch was a promise for a year (SCRUM-141). */}
           {/* D-L24: the sub names what the switch does now, on or off. */}
@@ -573,7 +580,7 @@ function SettingsScreenContent() {
         </SettingsGroup>
 
         <SettingsGroup title="Help">
-          <SettingsRow icon="circle-question-mark" title="Help centre" trail="external" onPress={() => openPage(BLENDN_LINKS.help)} />
+          <SettingsRow icon="circle-question-mark" title="Help center" trail="external" onPress={() => openPage(BLENDN_LINKS.help)} />
           <SettingsRow icon="mail" title="Contact support" trail="chevron" onPress={() => router.push('/support')} />
           {/* R4-2: every coach-mark sentence, to read again. Nothing replays from there. */}
           <SettingsRow icon="zap" title="Tips" trail="chevron" onPress={() => router.push('/tips')} testID="settings-tips" />

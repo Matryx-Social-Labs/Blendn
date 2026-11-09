@@ -33,7 +33,7 @@ export function attendancePhase(e: PhaseSource, now: number = Date.now()): Atten
 export type GoingCardAction = { kind: 'directions' | 'pass'; label: string } | { kind: 'none' }
 
 export function goingCardAction(phase: AttendancePhase, checkedInHere: boolean): GoingCardAction {
-  if (phase === 'live') return { kind: 'pass', label: checkedInHere ? 'You’re in' : 'Blend in' }
+  if (phase === 'live') return { kind: 'pass', label: checkedInHere ? 'You’re in' : 'Blend’n' }
   if (phase === 'upcoming') return { kind: 'directions', label: 'Directions' }
   // Nowhere to go: over, or called off (the row tray already drops Directions for a cancelled night).
   return { kind: 'none' }

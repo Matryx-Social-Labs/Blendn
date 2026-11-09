@@ -30,6 +30,7 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn() },
   useScrollToTop: () => {},
   useIsFocused: () => mockFocused,
+  useLocalSearchParams: () => ({}),
 }))
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }))
 jest.mock('expo-location', () => ({
@@ -59,18 +60,21 @@ jest.mock('../components/home/HomeShell', () => ({
   },
 }))
 jest.mock('../app/(tabs)/_layout', () => ({ TAB_BAR_CLEARANCE: 92, tabBarTop: () => 800 }))
-jest.mock('../components/pulse/FeaturedCard', () => {
-  const { Pressable, Text } = require('react-native')
+jest.mock('../components/pulse/LeadPager', () => {
+  const { Pressable, Text, View } = require('react-native')
   return {
-    FEATURED_CARD_GAP: 16,
-    featuredCardLayout: () => ({ width: 300, photoHeight: 200, height: 300, inset: 24 }),
-    FeaturedCard: (p: { id: string; title: string; onPress: () => void; onLongPress: (frame: object) => void }) => (
-      <Pressable testID={`card-${p.id}`} onPress={p.onPress} onLongPress={() => p.onLongPress({ x: 0, y: 0, width: 300, height: 300 })}>
-        <Text>{p.title}</Text>
-      </Pressable>
+    LeadPager: (p: { cards: { id: string; title: string }[]; onOpen: (i: number) => void; onLongPress?: (i: number, frame: object) => void }) => (
+      <View>
+        {p.cards.map((c, i) => (
+          <Pressable key={c.id} testID={`card-${c.id}`} onPress={() => p.onOpen(i)} onLongPress={() => p.onLongPress?.(i, { x: 0, y: 0, width: 300, height: 256 })}>
+            <Text>{c.title}</Text>
+          </Pressable>
+        ))}
+      </View>
     ),
   }
 })
+jest.mock('../components/pulse/FriendsCard', () => ({ FriendsCard: () => null }))
 jest.mock('../components/ds/EventCard', () => {
   const { Pressable, Text } = require('react-native')
   return {
@@ -82,16 +86,10 @@ jest.mock('../components/ds/EventCard', () => {
   }
 })
 // The two sheets the header opens, each with a way to close it (the city's is opened from the shell, above).
-jest.mock('../components/pulse/PulseHeader', () => {
-  const { Pressable, View } = require('react-native')
-  return {
-    PULSE_HEADER_HEIGHT: 48,
-    PulseSearch: (p: { onPressFilter: () => void }) => (
-      <View>
-        <Pressable testID="open-filters" onPress={p.onPressFilter} />
-      </View>
-    ),
-  }
+// The filter sheet opens from the Filters chip now (Option C: the chips are the header).
+jest.mock('../components/pulse/QuickChips', () => {
+  const { Pressable } = require('react-native')
+  return { QuickChips: (p: { onOpenFilters: () => void }) => <Pressable testID="open-filters" onPress={p.onOpenFilters} /> }
 })
 jest.mock('../components/pulse/FilterControl', () => {
   const { Pressable } = require('react-native')
@@ -140,7 +138,6 @@ jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn() }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
 jest.mock('../lib/usePresence', () => ({ usePresence: () => ({ finished: false }) }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
-jest.mock('../lib/useMinimumVisible', () => ({ useMinimumVisible: (v: boolean) => v }))
 jest.mock('../lib/photoUtils', () => ({ getOptimizedImageUrl: (url: string) => url }))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },
@@ -191,7 +188,7 @@ const App = () => (
   </>
 )
 /** What the host measured: the target's instance. Every target is on screen at a fixed rect. */
-let measuredNode: { props: { children: { props: { title?: string } } } } | null = null
+let measuredNode: { props: { children: { props: { title?: string; cards?: { title: string }[] } } } } | null = null
 async function mount() {
   const view = await render(<App />)
   await settle()
@@ -243,7 +240,8 @@ describe('the Pulse’s coach mark', () => {
     mockFull = true
     await mount()
     expect(within(screen.getByTestId('coach-mark-host')).getByTestId('pulse-coach-mark')).toBeTruthy()
-    expect(measuredNode?.props.children.props.title).toBe('Event e1')
+    // The hole is the lead card (Option C), on its first page.
+    expect(measuredNode?.props.children.props.cards?.[0].title).toBe('Event e1')
     // Caret up, at the card above it; the tip starts under the hole (200 + 300 + the 8 pad + the 8 gap), and under the next
     // section's heading, so it never hides that heading and leaves its "See all" floating (rc7 D15).
     expect(StyleSheet.flatten(screen.getByTestId('pulse-coach-mark-caret').props.style)).toMatchObject({ top: -6 })

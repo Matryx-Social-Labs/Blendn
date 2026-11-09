@@ -8,20 +8,37 @@ import { join } from 'path'
 
 it('caps the results overline at CONTROL_FONT_CAP', () => {
   const src = readFileSync(join(__dirname, '../app/(tabs)/events.tsx'), 'utf8')
-  expect(src).toMatch(/<Text style=\{styles\.resultsLabelText\} accessibilityRole="header" maxFontSizeMultiplier=\{CONTROL_FONT_CAP\}>/)
+  expect(src).toMatch(/style=\{styles\.resultsLabelText\}\s+accessibilityRole="header"[\s\S]{0,600}maxFontSizeMultiplier=\{CONTROL_FONT_CAP\}/)
+})
+
+describe('the search results, as the board draws them (Flow 3 "C · search", owner 2026-11-05)', () => {
+  const src = readFileSync(join(__dirname, '../app/(tabs)/events.tsx'), 'utf8')
+  it('the count line is "12 events": the meta voice, the number in mono, no city after it', () => {
+    expect(src).toMatch(/resultsLabelText: \{ \.\.\.DESIGN_TYPE\.meta, color: COLOR\.textSecondary \}/)
+    expect(src).toMatch(/\{` \$\{resultsCount\(events\.length, totalCount\)\.noun\}`\}/)
+  })
+  it('the rows start right under "12 events" and stack 88 apart, as on the board: no trailing spacer, no gap between results', () => {
+    expect(src).toMatch(/\{isSearching \? null : <View style=\{styles\.spacer\} \/>\}/)
+    expect(src).toMatch(/<View style=\{isSearching \? styles\.resultWrap : styles\.mainRow\}>/)
+    expect(src).toMatch(/resultWrap: \{ paddingHorizontal: SPACE\.gutter \}/)
+  })
+  it('a search result is the result row (time over the title, the photo right); a filtered list keeps its own row', () => {
+    expect(src).toMatch(/layout=\{isSearching \? 'result' : undefined\}/)
+  })
 })
 
 import { resultsCount } from '../lib/pulseSections'
 
 describe('resultsCount (BAR-07)', () => {
   it('prints the server total, not the 50 loaded', () => {
-    expect(resultsCount(50, 120)).toEqual({ count: 120, text: '120', noun: 'events' })
-    expect(resultsCount(50, 1204).text).toBe('1,204')
+    expect(resultsCount(50, 120)).toEqual({ count: 120, text: '120', label: '120', noun: 'events' })
+    expect(resultsCount(50, 1204).text).toBe('1.2k')
+    expect(resultsCount(50, 1204).label).toBe('1,204')
   })
   it('falls back to the loaded rows when the total is unknown, and never prints fewer than are shown', () => {
-    expect(resultsCount(7, null)).toEqual({ count: 7, text: '7', noun: 'events' })
-    expect(resultsCount(50, 12)).toEqual({ count: 50, text: '50', noun: 'events' })
-    expect(resultsCount(1, 1)).toEqual({ count: 1, text: '1', noun: 'event' })
+    expect(resultsCount(7, null)).toEqual({ count: 7, text: '7', label: '7', noun: 'events' })
+    expect(resultsCount(50, 12)).toEqual({ count: 50, text: '50', label: '50', noun: 'events' })
+    expect(resultsCount(1, 1)).toEqual({ count: 1, text: '1', label: '1', noun: 'event' })
   })
   it('the Pulse prints it', () => {
     const src = readFileSync(join(__dirname, '../app/(tabs)/events.tsx'), 'utf8')

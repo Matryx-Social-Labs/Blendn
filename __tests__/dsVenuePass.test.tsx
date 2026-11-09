@@ -66,7 +66,7 @@ describe('<VenuePass>', () => {
     expect(screen.getByLabelText('You’re here. Vinyl Night. 14 inside now.')).toBeTruthy()
     expect(screen.getByLabelText('3 or more people here share your taste')).toBeTruthy()
     expect(screen.getAllByText('?', { includeHiddenElements: true })).toHaveLength(3)
-    const hold = screen.getByRole('button', { name: 'Hold to blend in' })
+    const hold = screen.getByRole('button', { name: 'Hold to Blend’n' })
     expect(hold.props.accessibilityHint).toBe('Checks you in. Other people at this event will see you.')
   })
 
@@ -129,25 +129,31 @@ describe('<VenuePass>', () => {
 describe('<DoorCode>', () => {
   const NOW = new Date('2026-10-15T21:40:10Z').getTime()
 
-  it('live: the code large in Geist Mono 700, in two groups, with the 30-second ring counting down', async () => {
+  it('live, the board\'s code row (flow-4 .cd): SHOW THIS CODE, the code 40/48 in Geist Mono 700, then the small ring and "New code in 0:20"', async () => {
     jest.useFakeTimers({ now: NOW })
     await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 20_000} testID="d" />)
-    expect(style('K7Q M2X')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontSize: TYPE.display.fontSize, color: COLOR.textPrimary })
-    expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByText('Changes every 30 s · Today only', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('SHOW THIS CODE', { includeHiddenElements: true })).toBeTruthy()
+    expect(style('K7Q M2X')).toMatchObject({ fontFamily: FONT_FAMILY.mono[700], fontSize: TYPE.numericDisplay.fontSize, lineHeight: 48, color: COLOR.textPrimary })
+    expect(screen.getByText('New code in 0:20', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText(/Changes every/, { includeHiddenElements: true })).toBeNull()
+    // Centred, one column: the ring sits in the line under the code, not beside it.
+    expect(flat('d')).toMatchObject({ alignItems: 'center' })
+    expect(flat('d')).not.toMatchObject({ flexDirection: 'row' })
     await act(async () => jest.advanceTimersByTime(5_000))
-    expect(screen.getByText('15 s', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('New code in 0:15', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('is read as six characters in two groups, and again when it changes; the ring is not read', async () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     jest.useFakeTimers({ now: NOW })
     await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 20_000} testID="d" />)
-    expect(screen.getByLabelText('Door code K 7 Q, M 2 X')).toBeTruthy()
+    expect(screen.getByLabelText('Offer code K 7 Q, M 2 X')).toBeTruthy()
+    // The card's title says "Offer code"; the row says what to do with it (the board), never OFFER CODE twice.
+    expect(screen.queryByText('OFFER CODE', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByTestId('d-ring', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true)
     await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 50_000} testID="d" />)
     expect(announce).toHaveBeenCalledTimes(1)
-    expect(announce).toHaveBeenCalledWith('Door code P 4 W, N 8 R')
+    expect(announce).toHaveBeenCalledWith('Offer code P 4 W, N 8 R')
   })
 
   it('covered by another screen (`active` false): it neither ticks nor announces', async () => {
@@ -155,7 +161,7 @@ describe('<DoorCode>', () => {
     jest.useFakeTimers({ now: NOW })
     await render(<DoorCode state="live" code="K7QM2X" rotatesAt={NOW + 20_000} active={false} />)
     await act(async () => jest.advanceTimersByTime(5_000))
-    expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('New code in 0:20', { includeHiddenElements: true })).toBeTruthy()
     await screen.rerender(<DoorCode state="live" code="P4WN8R" rotatesAt={NOW + 50_000} active={false} />)
     expect(announce).not.toHaveBeenCalled()
   })
@@ -204,14 +210,21 @@ describe('<DoorCode>', () => {
     await render(<DoorCode state="offline" testID="d" />)
     expect(style('··· ···').color).toBe(COLOR.textTertiary)
     expect(screen.getByTestId('d-offline', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByLabelText('Door code unavailable. This pass needs a connection to show its code.')).toBeTruthy()
+    expect(screen.getByLabelText('Offer code unavailable. It needs a connection to show.')).toBeTruthy()
   })
 
-  it('redeemed, used tonight and ended are still and neutral', async () => {
+  it('redeemed and used tonight are the board\'s still row: USED TONIGHT over dim dashes (the time is the disc\'s stamp)', async () => {
     await render(<DoorCode state="redeemed" redeemedAt="21:43" />)
-    expect(screen.getByText('Redeemed 21:43', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('USED TONIGHT', { includeHiddenElements: true })).toBeTruthy()
+    expect(style('— — —').color).toBe(COLOR.textTertiary)
+    expect(screen.queryByText('Redeemed 21:43', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByLabelText('Offer code redeemed 21:43')).toBeTruthy()
     await render(<DoorCode state="used" />)
-    expect(screen.getByText('Used tonight', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('USED TONIGHT', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('Offer code used tonight')).toBeTruthy()
+  })
+
+  it('ended keeps its day and its sentence', async () => {
     await render(<DoorCode state="ended" endedLabel="ENDED SUNDAY" />)
     expect(screen.getByText('ENDED SUNDAY', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getByText('This offer ended', { includeHiddenElements: true })).toBeTruthy()

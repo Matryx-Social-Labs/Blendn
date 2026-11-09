@@ -30,7 +30,7 @@ import {
 } from './shared'
 
 export type ButtonKind = 'primary' | 'lit' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
-export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised'
+export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised' | 'dock' | 'pill'
 
 /**
  * 56 the screen primary and dock actions · 48 a secondary in a dock · 36 an
@@ -39,8 +39,15 @@ export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised'
  */
 export const ROW_ACTION_HEIGHT = 36
 const RAISED_HEIGHT = 44
+/** The board's `.db.sm` (C-A's Post, the photo warning's Use it): 40 tall, 16 in, hugging its label, in the control role at 700. */
+const PILL_HEIGHT = 40
 const ROW_ACTION_MIN_WIDTH = 72
-const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT }
+/** Flow 4's one-line dock (`.dock4 .db`): 52 tall, 22 in, an 18 pt glyph, beside the state it acts on. */
+const DOCK_HEIGHT = SIZE.tabBarCompact
+// design-exception: the board's dock button is 22 pt in (`.db` padding 0 22px) and its glyph 18 (`ic(icon,18)`); both off-scale.
+const DOCK_PAD = 22
+const DOCK_GLYPH = 18
+const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT, dock: DOCK_HEIGHT, pill: PILL_HEIGHT }
 
 /** #20: translateX 0, −8, 8, −6, 6, −3, 0, as fractions of `SHAKE.distance`. */
 const SHAKE_STEPS = [-1, 1, -0.75, 0.75, -0.375, 0]
@@ -229,21 +236,23 @@ export function Button({
   const ink = kind === 'strong' ? COLOR.ink : muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : COLOR.textOnGradient
   const glyphInk = lit ? sel.glyph : ink
   const sm = size === 'sm'
+  const pill = size === 'pill'
   /** Small glyphs: the row action and the raised action. */
-  const compact = sm || size === 'raised'
+  const compact = sm || pill || size === 'raised'
   const slop = (minTarget() - height) / 2
   // A small text button has no fill to pad: its label sits on the gutter, and the hit area reaches out past it instead.
   const textOnly = sm && kind === 'tertiary'
-  const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : font('button', bold)
+  const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : pill ? font('control', bold, FONT_FAMILY.brand[700]) : font('button', bold)
   const outlined = contrast && (kind === 'secondary' || kind === 'tertiary')
   const settled = useSettled(count)
+  const [sentenceWidth, setSentenceWidth] = useState(0)
   const swap = useLabelSwap(label, count === undefined)
   const [before, after = ''] = count === undefined ? [swap.shown, ''] : label.split('{n}')
   // The sentence a screen reader gets: the number formatted in, and only once it has stopped changing.
   const sentence = settled === undefined ? label : label.replace('{n}', settled.toLocaleString('en-US'))
 
   return (
-    <Animated.View layout={swap.swapped ? WIDTH_FOLLOWS : undefined} style={[sm && !StyleSheet.flatten(style)?.alignSelf ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
+    <Animated.View layout={swap.swapped ? WIDTH_FOLLOWS : undefined} style={[(sm || pill) && !StyleSheet.flatten(style)?.alignSelf ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
       <ScalePress
         testID={testID}
         onPress={onPress}
@@ -271,7 +280,7 @@ export function Button({
         accessibilityState={{ disabled, busy: loading }}
         style={[
           styles.body,
-          textOnly ? styles.bodyText : sm ? styles.bodySm : styles.bodyLg,
+          textOnly ? styles.bodyText : sm ? styles.bodySm : size === 'dock' ? styles.bodyDock : styles.bodyLg,
           { height, backgroundColor: fill(kind, size, onGlass, sel) },
           // Enabled ↔ disabled crosses over `quick` (a count arriving, a field becoming valid), never snaps.
           { opacity: disabled ? OPACITY.disabled : 1 },
@@ -288,18 +297,24 @@ export function Button({
         ) : null}
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
         <View style={[styles.content, spinner && styles.hidden]}>
-          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : ICON.control} color={glyphInk} /> : null)}
+          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : size === 'dock' ? DOCK_GLYPH : ICON.control} color={glyphInk} /> : null)}
           {count !== undefined ? (
             // A rolling number is a row of columns, not a run of text: the sentence is a row, a word space apart.
-            <View style={styles.sentence}>
+            // It keeps the widest it has been, so a count losing a digit (10 → 9, "Resend in 9s") moves only the digits.
+            <View
+              testID={testID && `${testID}-sentence`}
+              onLayout={(e) => setSentenceWidth((w) => Math.max(w, e.nativeEvent.layout.width))}
+              style={[styles.sentence, sentenceWidth > 0 ? { minWidth: sentenceWidth } : null]}
+            >
               {before.trim() ? (
-                <Text style={[labelFont, { color: ink }]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
+                <Text style={[labelFont, { color: ink }, glued(before, 'end') && styles.gluedBefore]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
                   {before.trim()}
                 </Text>
               ) : null}
               <RollingNumber value={count} role="button" grouping color={ink} testID={testID && `${testID}-count`} />
               {after.trim() ? (
-                <Text style={[labelFont, { color: ink }]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
+                // A unit written against the number ("{n}s") is drawn against it, not a word space away.
+                <Text style={[labelFont, { color: ink }, glued(after, 'start') && styles.gluedAfter]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
                   {after.trim()}
                 </Text>
               ) : null}
@@ -350,15 +365,21 @@ export function Button({
   )
 }
 
+/** Whether the words touch the number on that side: "{n}s" ("Resend in 30s") is, "{n} places" is not. */
+const glued = (words: string, side: 'start' | 'end') => (side === 'start' ? !/^\s/.test(words) : !/\s$/.test(words))
+
 const styles = StyleSheet.create({
   inline: { alignSelf: 'flex-start' },
   pressedIos: { transform: [{ scale: PRESS.scale }] },
   body: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   bodyLg: { paddingHorizontal: SPACE.lg },
+  bodyDock: { paddingHorizontal: DOCK_PAD },
   bodySm: { paddingHorizontal: SPACE.lg, minWidth: ROW_ACTION_MIN_WIDTH },
   bodyText: { paddingHorizontal: 0 },
   content: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   sentence: { flexDirection: 'row', alignItems: 'center', columnGap: SPACE.xs },
+  gluedBefore: { marginRight: -SPACE.xs },
+  gluedAfter: { marginLeft: -SPACE.xs },
   hidden: { opacity: 0 },
   clip: { overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },

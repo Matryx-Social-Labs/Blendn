@@ -105,6 +105,12 @@ describe('<SegmentedControl>', () => {
     expect(Reanimated.getAnimatedStyle(screen.getByTestId('s-thumb')).left).toBe(`${200 / 3}%`)
   })
 
+  it('compact is the Lobby sheet’s 44 pt `.lseg`: a 36 pt segment whose slop still makes the 44 target', async () => {
+    await draw({ compact: true })
+    expect(flat('s')).toMatchObject({ height: 44, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface })
+    expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 4, bottom: 4 })
+  })
+
   it('each 40 pt segment reaches the 48 pt target', async () => {
     await draw()
     expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 4, bottom: 4 })

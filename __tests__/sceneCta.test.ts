@@ -1,7 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { ICON, SIZE, TYPE } from '../lib/design/tokens'
 
 /**
  * The Scene's CTA — the numbers, and the structural rules behind them.
@@ -11,88 +10,8 @@ import { ICON, SIZE, TYPE } from '../lib/design/tokens'
  * identically when wrong. Colour, blur, shadow and type-scale choices are not
  * pinned here; `npm run lint:design` enforces them.
  */
-const SRC = () =>
-  readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneSections.tsx'), 'utf8')
-
 /** Any repo file, by path segments. */
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
-
-describe('the CTA pays for its own height', () => {
-  it('SCENE_CTA_HEIGHT is the sum of what is actually in the pill', () => {
-    const src = SRC()
-    // The pill is the scale's primary-action height, holding a navigation-size
-    // icon beside the button role's own line — all three from the tokens.
-    expect(src).toContain('SCENE_CTA_HEIGHT = SIZE.primary')
-    expect(src).toContain('SCENE_CTA_ICON = ICON.nav')
-    expect(src).toContain('ctaLabel: { ...TYPE.button }')
-    const height = SIZE.primary
-    const icon = ICON.nav
-    const lineHeight = TYPE.button.lineHeight
-    const padding = Number(/paddingVertical: (\d+),/.exec(src.slice(src.indexOf('ctaFill:')))?.[1])
-
-    // 1pt border, padding, the taller of icon and line, padding, 1pt border.
-    const border = 2
-    expect(border + padding * 2 + Math.max(icon, lineHeight)).toBe(height)
-
-    // The pill is bordered padding around the taller of the 24 pt glyph and the button role's line: 56, not the frame's 74.
-    expect(Math.max(icon, lineHeight)).toBe(icon)
-  })
-
-  it('the ScrollView reserves the dock by its measured height', () => {
-    // Anything pinned over a scroll has to pay for its own height in the
-    // content inset, or it silently eats the end of the page. The dock reports it (`ds/Dock`).
-    expect(DETAIL()).toContain('paddingBottom: ctaDockHeight + SPACE.xl')
-    expect(DETAIL()).toContain('<Dock floating onHeight={setCtaDockHeight}')
-  })
-})
-
-describe('the pill keeps its height between states', () => {
-  const style = (name: string) => {
-    const src = SRC()
-    const from = src.slice(src.indexOf(`${name}: {`))
-    return from.slice(0, from.indexOf('},'))
-  }
-
-  it('keeps a border in both states, so the height never changes between them', () => {
-    // SCENE_CTA_HEIGHT counts 1 + 14 + 28 + 14 + 1.
-    expect(style('ctaFill')).toContain('borderWidth: 1')
-    expect(style('ctaFillLoud')).toContain('borderColor:')
-    expect(style('ctaFillQuiet')).toContain('borderColor:')
-  })
-})
-
-describe('"I’m going" → "You’re going" is one sequence (A78, Prompt 10)', () => {
-  it('fades the gradient to 8% white under the label, and the old label leaves as the new one arrives', () => {
-    const src = SRC()
-    expect(src).toContain('<GradientFill')
-    expect(src).toMatch(/ctaFillQuiet: \{\s*backgroundColor: MATERIAL\.fillOnGlass/)
-    expect(src).toMatch(/loud\.set\(withTiming\(quiet \? 0 : 1, \{ duration: DURATION\.base/)
-    expect(src).toContain('exiting={reduceMotion ? ctaFadeOut : ctaLabelOut}')
-    // Full width already, so nothing settles: no content-width padding, the dock stretches it.
-    expect(DETAIL()).not.toMatch(/ctaDockInner: \{[^}]*alignItems: 'center'/)
-  })
-
-  it('carries the check on "You’re going" and no glyph on "I’m going"', () => {
-    expect(DETAIL()).toMatch(/ctaState === 'rsvpd'\s*\? 'check'\s*: ctaState === 'waitlisted'\s*\? 'clock'\s*: ctaState === 'rsvp' \|\| ctaState === 'cancelled'\s*\? null/)
-  })
-})
-
-describe('what the button says', () => {
-  it('says Blend in, and no state is a dead end', () => {
-    const src = SRC()
-    expect(src).toContain("join: 'Blend in'")
-    expect(src).toContain('"You\'re in"')
-    /*
-     * `blendn-admin/docs/CHECKIN.md:39` — "Check-in does not refuse at capacity". A full
-     * event still takes people; `max_capacity` is a number the organiser
-     * watches, not a door the app keeps. A capacity-disabled CTA would block an
-     * interaction the product explicitly allows. And `ended` offers tonight
-     * rather than greying out: a finished event is somebody looking for one.
-     */
-    expect(src).toContain('const disabled = !onPress')
-    expect(src).toContain(`ended: "See what’s on tonight"`)
-  })
-})
 
 /**
  * The *shipping* screen, which is a different component from `SceneCTA`.
@@ -103,7 +22,7 @@ describe('what the button says', () => {
  * control. Replacing one with the other would lose behaviour.
  *
  * What they do have to agree on is the *language*, and nothing enforced that —
- * the harness said "Blend in" while the real button said "Blend'n", and the
+ * the harness said "Blend’n" while the real button said "Blend'n", and the
  * only way to notice was to sign in and look.
  */
 const DETAIL = () =>
@@ -120,18 +39,11 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
    * The gap is closed — the screen renders `SceneCTA` — so these assertions
    * move to the new structure rather than being deleted. Each keeps its intent.
    */
-  it('labels the check-in action with the verb, not the brand', () => {
-    /*
-     * Unchanged rule, new home. `SceneCTA` owns the label now, so the check
-     * reads the component instead of the screen — and the brand-as-verb is
-     * still what must never come back: `Blend'n` names the product, where the
-     * other two states are things you can do.
-     */
-    const cta = SRC().slice(SRC().indexOf('const CTA_LABEL'))
-    const table = cta.slice(0, cta.indexOf('}'))
-    expect(table).toContain('Blend in')
-    expect(table).not.toContain('Blend&apos;n')
-    expect(table).not.toContain("Blend’n")
+  it('labels the check-in action with the product name, never the retired verb', () => {
+    // Owner 2026-11-05 (naming review, SCRUM-1027): the check-in is "Hold to Blend’n", the hold in the dock at the doors.
+    const hold = read('components', 'scene', 'EventHold.tsx')
+    expect(hold).toContain("'Hold to Blend’n'")
+    expect(hold).not.toMatch(/[lL]abel=\{[^}]*blend in/i)
   })
 
   it('has one pill and no tray behind it', () => {
@@ -168,7 +80,7 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
      */
     const detail = DETAIL()
 
-    // The CTA is time-aware. "Blend in" before the event cannot succeed --
+    // The CTA is time-aware. "Blend’n" before the event cannot succeed --
     // check-in requires the event to be running -- so it must not be offered.
     // One state for every surface (`lib/attendanceState.ts`, SCRUM-882): upcoming → the RSVP slot, live → Blend in.
     expect(detail).toContain('sceneCtaState({ phase: event ? attendancePhase(event)')
@@ -213,55 +125,9 @@ describe('the event screen IS the Scene now, and kept what the CTA lacks', () =>
     // The whole point of the swap. If this fails, something has grown a
     // parallel Scene again — which is how the last one went unnoticed.
     const detail = DETAIL()
-    for (const c of ['SceneHero', 'SceneBar', 'SceneCTA', 'SceneGallery', 'AmenityGrid', 'Dock']) {
+    for (const c of ['SceneHero', 'SceneBar', 'EventGuide', 'DockRow', 'Dock']) {
       expect(detail).toContain(c)
     }
-  })
-})
-
-/**
- * The six deltas `docs/SCENE.md` recorded against the frame, and the two
- * accessibility gaps beside them.
- *
- * Every number is from `get_design_context`, not from the render.
- */
-const HERO = () =>
-  readFileSync(join(__dirname, '..', 'components', 'scene', 'SceneHero.tsx'), 'utf8')
-
-describe('the facts are the design system\'s tiles', () => {
-  it('draw Doors, Where, the crowd and the Door as an AmenityGrid, then the organizer\'s own', () => {
-    // 2 x 2 at 76 pt (`AmenityTile`), folding past seven: not a hand-built grid of our own.
-    const detail = DETAIL()
-    expect(detail).toContain('<AmenityGrid tiles={tiles}')
-    for (const label of ["'WHERE'", "'ENTRY'"]) expect(detail).toContain(`label: ${label}`)
-    // Doors is named through `doorsLabel` (NEXT DOORS between days), and a run's today reads TODAY (RC drive 2 D-9).
-    expect(detail).toContain("!isEnded ? 'NEXT DOORS' : 'DOORS'")
-    expect(detail).toContain("label: 'TODAY'")
-    expect(detail).toContain('...amenities.map(')
-  })
-
-  it('Where opens the map, as a tile that pushes', () => {
-    expect(DETAIL()).toMatch(/label: 'WHERE'[^\n]*onPress: openInMaps/)
-  })
-})
-
-describe('the accessibility gaps docs/SCENE.md recorded', () => {
-  it('caps dynamic type on the 48pt hero title', () => {
-    /*
-     * RN **clips** a glyph to its `lineHeight` where CSS lets it overflow. At
-     * Accessibility XXXL iOS scales by ~3.1x, which asks for a 149pt glyph
-     * inside a 56pt line: two rows of sliced letterforms over a photograph.
-     * `numberOfLines` truncates and does not rescue the line box.
-     */
-    expect(HERO()).toContain('maxFontSizeMultiplier={1.2}')
-  })
-
-  it('gives the hero caption one grouped announcement', () => {
-    // Ungrouped it reads as four fragments, two of which are icon-plus-text
-    // pairs with stops that announce nothing.
-    const hero = HERO()
-    expect(hero).toContain('accessibilityRole="header"')
-    expect(hero).toContain('[title, whenSpoken ?? when, ...pills.map((p) => p.text), place]')
   })
 })
 

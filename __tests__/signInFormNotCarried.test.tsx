@@ -8,6 +8,7 @@ jest.mock('@react-native-async-storage/async-storage', () => require('@react-nat
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn(), replace: jest.fn() },
   useLocalSearchParams: jest.fn(() => ({})),
+  useIsFocused: () => true,
 }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('../lib/logger', () => ({ Logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }))

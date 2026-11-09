@@ -15,9 +15,11 @@ const walk = (dir: string): string[] =>
   })
 
 describe('one tray for every surface', () => {
-  it('nothing outside the host calls the OS share sheet with its own text', () => {
+  it('nothing outside the host and `shareNatively` calls the OS share sheet with its own text', () => {
+    // `shareNatively` is the event page's Invite (Flow 4, option B: the system sheet), with the one link builder's words.
     const offenders = [...walk('app'), ...walk('components'), ...walk('lib')].filter((f) => /Share\.share\(/.test(read(f)))
-    expect(offenders).toEqual(['components/share/ShareHost.tsx'])
+    expect(offenders).toEqual(['components/share/ShareHost.tsx', 'lib/shareTray.ts'])
+    expect(read('lib/shareTray.ts')).toMatch(/Share\.share\(\{ message: shareText\(target\) \}\)/)
   })
 
   it('the host is mounted once, at the root, where the other app-wide sheets are', () => {
@@ -25,13 +27,20 @@ describe('one tray for every surface', () => {
   })
 
   it.each([
-    ['the Scene', 'components/screens/EventDetailScreen.tsx', /openShare\(shareTarget\)/],
+    ['the event page’s bar Share (Flow 4, option B)', 'components/screens/EventDetailScreen.tsx', /onShare=\{[^}]*openShare\(shareTarget\)/],
     ['the venue page', 'app/venue/[id].tsx', /openShare\(venueTarget\(/],
     ['Add friends and the onboarding step (both through the one invite hook)', 'lib/useFriendInvite.ts', /openShare\(\{ kind: 'invite', url: inviteLink\(/],
     ['the Going card', 'app/(tabs)/going.tsx', /shareEvent\(event\)/],
     ['the Pulse’s peek', 'app/(tabs)/events.tsx', /shareEvent\(event\)/],
   ])('%s opens the tray', (_name, file, shape) => {
     expect(read(file)).toMatch(shape)
+  })
+
+  it('the event page’s Invite is the system sheet, and only Invite (control for the tray above)', () => {
+    const scene = read('components/screens/EventDetailScreen.tsx')
+    expect(scene.match(/shareNatively\(/g)).toHaveLength(1)
+    expect(scene).toMatch(/invite: [^\n]*handleInvite/)
+    expect(scene).toMatch(/shareNatively\(shareTarget\)/)
   })
 
   it('links are built in `lib/shareLinks.ts` alone: no other code writes the host in front of an id', () => {
@@ -78,7 +87,7 @@ describe('no route param seeds the Scene', () => {
     const pushes = sources().flatMap((f) => [...read(f).matchAll(/pathname: '\/event\/\[id\]'/g)].map((m) => ({ f, near: read(f).slice(m.index, m.index! + 300) })))
     expect(pushes.length).toBeGreaterThan(0)
     for (const { near } of pushes) expect(near).not.toMatch(/\b(title|cover|description|venue):/)
-    for (const f of ['app/(tabs)/events.tsx', 'app/nearby-events.tsx']) {
+    for (const f of ['app/(tabs)/events.tsx']) {
       expect(read(f)).toMatch(/putSceneSeed\(\{/)
       expect(read(f)).toMatch(/params: \{ id: event\.id, seed \}/)
     }

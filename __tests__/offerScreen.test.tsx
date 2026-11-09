@@ -1,5 +1,5 @@
 import React from 'react'
-import { act, render, screen, fireEvent } from '@testing-library/react-native'
+import { act, render, screen, fireEvent, within } from '@testing-library/react-native'
 import { StyleSheet } from 'react-native'
 
 /*
@@ -35,7 +35,19 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 // The disc's endless wave and bubbles would run through every fake-clock walk below; it has its own test (dsLiquidDisc). The stamp over it is the screen's.
-jest.mock('../components/ds/LiquidDisc', () => ({ LiquidDisc: ({ stamp }: { stamp?: React.ReactNode }) => stamp ?? null }))
+jest.mock('../components/ds/LiquidDisc', () => {
+  const { View } = jest.requireActual('react-native')
+  return {
+    LiquidDisc: ({ stamp, size, testID }: { stamp?: React.ReactNode; size: number; testID?: string }) => (
+      <View testID={testID} style={{ width: size, height: size }}>{stamp}</View>
+    ),
+  }
+})
+// Each glyph by name, so the tile's can be read (the venue's type, or the gift).
+jest.mock('../components/ui/Icon', () => {
+  const { View } = jest.requireActual('react-native')
+  return { ...jest.requireActual('../components/ui/Icon'), Icon: ({ name }: { name: string }) => <View testID={`icon-${name}`} /> }
+})
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { queuedRequest: jest.fn() } }))
@@ -119,9 +131,13 @@ describe('the live pass', () => {
   it('shows the server’s code, and turns to "Redeemed" when the server says so', async () => {
     await mount()
     expect(screen.getByText('K7Q 4M2')).toBeTruthy()
-    expect(screen.getByLabelText('Door code K 7 Q, 4 M 2')).toBeTruthy()
-    expect(screen.getByLabelText(/^Door pass for The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
-    expect(screen.getByText('Show this at the door. Staff type the code and tap Redeemed.')).toBeTruthy()
+    expect(screen.getByLabelText('Offer code K 7 Q, 4 M 2')).toBeTruthy()
+    // The naming pass's "Offer code" (2026-11-05) heads the ticket, never "Door code"; the code row says SHOW THIS CODE (the board).
+    expect(screen.getAllByText('OFFER CODE')).toHaveLength(1)
+    expect(screen.getByText('SHOW THIS CODE')).toBeTruthy()
+    expect(screen.queryByText('DOOR CODE')).toBeNull()
+    expect(screen.getByLabelText(/^Offer code for The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
+    expect(screen.getByText('Works once, today. Staff type the code and tap Redeemed.')).toBeTruthy()
     reads = [offer('redeemed', null)]
     // The code turns at :30; the screen asks a second before.
     await act(async () => { jest.advanceTimersByTime(10_000) })
@@ -152,8 +168,8 @@ describe('the live pass', () => {
     request.mockImplementation(() => Promise.resolve({ success: false, error: 'offline' }))
     await act(async () => { jest.advanceTimersByTime(22_000) })
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
-    expect(screen.getByText('This pass needs a connection to show its code.')).toBeTruthy()
-    expect(screen.getByLabelText(/^Door code unavailable/)).toBeTruthy()
+    expect(screen.getByText('This offer code needs a connection to show.')).toBeTruthy()
+    expect(screen.getByLabelText(/^Offer code unavailable/)).toBeTruthy()
   })
 
   /*
@@ -180,49 +196,118 @@ describe('the live pass', () => {
     await seconds(33)
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
     expect(screen.getByText('Getting a fresh code…')).toBeTruthy()
-    expect(screen.queryByText('This pass needs a connection to show its code.')).toBeNull()
+    expect(screen.queryByText('This offer code needs a connection to show.')).toBeNull()
   }, CLOCK_WALK_TIMEOUT_MS)
 
   it('a refresh that failed is tried again, and the pass comes back when the server does', async () => {
     await mount()
     request.mockImplementation(() => Promise.resolve({ success: false, error: 'offline' }))
     await seconds(22)
-    expect(screen.getByText('This pass needs a connection to show its code.')).toBeTruthy()
+    expect(screen.getByText('This offer code needs a connection to show.')).toBeTruthy()
     request.mockImplementation(() => Promise.resolve(offer('live', { code: 'P3W8R5', rotatesAt: '2026-10-11T20:01:00.000Z' })))
     await seconds(3)
     expect(screen.getByText('P3W 8R5')).toBeTruthy()
-    expect(screen.queryByText('This pass needs a connection to show its code.')).toBeNull()
+    expect(screen.queryByText('This offer code needs a connection to show.')).toBeNull()
   }, CLOCK_WALK_TIMEOUT_MS)
 
   it('the ring counts down to the server’s turn: with the phone’s clock agreeing, 20 s of the 30 are left', async () => {
     await mount()
-    expect(screen.getByText('20 s', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('New code in 0:20', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('and on the server’s clock, not the phone’s: a phone 10 s behind the server shows 10 s, not 20', async () => {
     // The server says it is 20:00:20 while this phone says 20:00:10; the code turns at 20:00:30 server time.
     noteServerDate(new Date(NOW + 10_000).toUTCString(), NOW)
     await mount()
-    expect(screen.getByText('10 s', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.queryByText('20 s', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('New code in 0:10', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('New code in 0:20', { includeHiddenElements: true })).toBeNull()
   })
 })
 
 describe('the other faces of the pass', () => {
-  it('redeemed: the stamp carries the time the server gave, and the code is gone', async () => {
-    reads = [offer('redeemed', null, { redeemedAt: '2026-10-11T19:43:00.000Z' })]
+  it('redeemed: the stamp carries the time the server gave, on the phone’s clock in the app’s one grammar, and the code is gone', async () => {
+    // 9:43 PM wherever this runs: the phone's own clock, never the venue's zone and never a zone label.
+    reads = [offer('redeemed', null, { redeemedAt: new Date(2026, 9, 11, 21, 43).toISOString() })]
     await mount()
-    expect(screen.getByLabelText(/^Redeemed \d{1,2}:\d{2}/)).toBeTruthy()
+    expect(screen.getByLabelText('Redeemed 9:43 PM')).toBeTruthy()
+    expect(screen.getAllByText('Redeemed 9:43 PM')).toHaveLength(1) // the stamp on the disc; the code row says USED TONIGHT (the board)
+    expect(screen.getByText('USED TONIGHT')).toBeTruthy()
     expect(screen.getByText('Redeemed. Enjoy it.')).toBeTruthy()
-    expect(screen.getByText('· · ·')).toBeTruthy()
+    expect(screen.getByText('— — —')).toBeTruthy()
+  })
+
+  it('the stamp is the board’s .stampR: a 32 pt capsule, 6 between the check and the words, the time in Geist Mono', async () => {
+    reads = [offer('redeemed', null, { redeemedAt: new Date(2026, 9, 11, 21, 43).toISOString() })]
+    await mount()
+    const capsule = StyleSheet.flatten(screen.getByTestId('door-stamp').props.style)
+    expect(capsule).toMatchObject({ minHeight: 32, gap: 6, paddingHorizontal: 12 })
+    // At the largest text the words are wider than the 184 pt disc: they wrap inside a taller capsule, never clip ("Redeemed 5", drive 2026-11-09).
+    expect(capsule.height).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByText('Redeemed 9:43 PM').props.style)).toMatchObject({ flexShrink: 1, textAlign: 'center' })
+    expect(StyleSheet.flatten(screen.getByText('9:43 PM').props.style).fontFamily).toBe('GeistMono_500Medium')
+    // Control: the word stays in the brand face.
+    expect(StyleSheet.flatten(screen.getByText('Redeemed 9:43 PM').props.style).fontFamily).not.toBe('GeistMono_500Medium')
+  })
+
+  it('a stamp with no time ("Used tonight", or a server that sent no redeemedAt) is words alone, in the brand face', async () => {
+    reads = [offer('redeemed', null)]
+    await mount()
+    expect(screen.getByText('Redeemed')).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByText('Redeemed').props.style).fontFamily).not.toBe('GeistMono_500Medium')
   })
 
   it('used tonight: still, stamped, and the server’s own sentence', async () => {
     reads = [offer('used_tonight', null)]
     await mount()
     expect(screen.getByLabelText('Used tonight')).toBeTruthy()
-    expect(screen.getByText(/You’ve used a pass at The Humming Tree tonight — one a night/)).toBeTruthy()
+    expect(screen.getByText(/You’ve used an offer at The Humming Tree tonight — one a night/)).toBeTruthy()
     expect(screen.queryByText('K7Q 4M2')).toBeNull()
+  })
+
+  it('the board’s ticket (flow-4 offer): a 48 pt glyph tile beside the head, and the 184 pt disc', async () => {
+    await mount()
+    expect(StyleSheet.flatten(screen.getByTestId('door-tile').props.style)).toMatchObject({ width: 48, height: 48 })
+    expect(StyleSheet.flatten(screen.getByTestId('door-disc').props.style)).toMatchObject({ width: 184, height: 184 })
+  })
+
+  describe('the tile shows the venue’s type (flow-4 offer board .vp: the brewery plate and its beer)', () => {
+    const at = (venueType: string | null | undefined) =>
+      offer('live', { code: 'K7Q4M2', rotatesAt: '2026-10-11T20:00:30.000Z' }, { venue: { id: 'v1', name: 'The Humming Tree', ...(venueType === undefined ? {} : { venueType }) } })
+    // The plate is decorative (hidden from a screen reader; the venue's name beside it is read), so the query includes hidden elements.
+    const tile = () => within(screen.getByTestId('door-tile'))
+    const hidden = { includeHiddenElements: true }
+
+    it.each([
+      ['brewery', 'beer'],
+      ['pub_bar', 'wine'],
+      ['cafe', 'coffee'],
+      ['coworking', 'coffee'],
+      ['restaurant', 'utensils'],
+      ['nightclub', 'disc-3'],
+      ['live_music_venue', 'music-2'],
+      ['lounge_rooftop', 'tree-palm'],
+    ])('%s: its plate, with the %s glyph the venue’s own page draws, and no gift', async (venueType, glyph) => {
+      reads = [at(venueType)]
+      await mount()
+      expect(tile().getByTestId('door-plate', hidden)).toBeTruthy()
+      expect(tile().getByTestId(`icon-${glyph}`, hidden)).toBeTruthy()
+      expect(tile().queryByTestId('icon-gift', hidden)).toBeNull()
+    })
+
+    // Controls: no type, an older server that sends none, and a type with no plate keep the gift on the plain tile — never the bar's plate.
+    it.each([['null', null], ['absent', undefined], ['stadium', 'stadium'], ['other', 'other']])('%s: the gift on the plain tile', async (_, venueType) => {
+      reads = [at(venueType)]
+      await mount()
+      expect(tile().getByTestId('icon-gift', hidden)).toBeTruthy()
+      expect(tile().queryByTestId('door-plate', hidden)).toBeNull()
+      expect(StyleSheet.flatten(screen.getByTestId('door-tile').props.style)).toMatchObject({ width: 48, height: 48 })
+    })
+
+    it('a redeemed pass keeps its tile', async () => {
+      reads = [offer('redeemed', null, { venue: { id: 'v1', name: 'The Humming Tree', venueType: 'brewery' }, redeemedAt: '2026-10-11T16:13:00.000Z' })]
+      await mount()
+      expect(tile().getByTestId('icon-beer', hidden)).toBeTruthy()
+    })
   })
 
   it('ended: names the day, dashes for the code', async () => {
@@ -293,6 +378,51 @@ describe('the regulars feature is deferred: nothing shows unless the server says
     regular = { ...regular, known: true }
     await mount()
     expect(screen.getByTestId('regular-on')).toBeTruthy()
+  })
+})
+
+describe('the screen’s brightness while the code is up (expo-brightness, guarded)', () => {
+  const modules = (globalThis as unknown as { expo: { modules: Record<string, unknown> } }).expo.modules
+  const native = {
+    getBrightnessAsync: jest.fn(() => Promise.resolve(0.4)),
+    setBrightnessAsync: jest.fn(() => Promise.resolve()),
+    restoreSystemBrightnessAsync: jest.fn(() => Promise.resolve()),
+  }
+  beforeEach(() => {
+    Object.values(native).forEach((fn) => fn.mockClear())
+    modules.ExpoBrightness = native
+  })
+  afterEach(() => {
+    delete modules.ExpoBrightness
+  })
+
+  /** The brightness calls chain (read the level, then raise): every step settled. */
+  const settle = () => act(async () => { for (let i = 0; i < 6; i++) await Promise.resolve() })
+
+  it('full while the live code shows; put back when the server says redeemed', async () => {
+    await mount()
+    await settle()
+    expect(native.setBrightnessAsync.mock.calls).toEqual([[1]])
+    reads = [offer('redeemed', null)]
+    await act(async () => { jest.advanceTimersByTime(10_000) })
+    await settle()
+    expect(screen.getByText('Redeemed. Enjoy it.')).toBeTruthy()
+    expect(native.setBrightnessAsync.mock.calls).toEqual([[1], [0.4]])
+  })
+
+  it('never raised for a pass with no code to show (control)', async () => {
+    reads = [offer('used_tonight', null)]
+    await mount()
+    await settle()
+    expect(native.getBrightnessAsync).not.toHaveBeenCalled()
+    expect(native.setBrightnessAsync).not.toHaveBeenCalled()
+  })
+
+  it('a build without the module shows the live code just the same', async () => {
+    delete modules.ExpoBrightness
+    await mount()
+    expect(screen.getByText('K7Q 4M2')).toBeTruthy()
+    expect(native.setBrightnessAsync).not.toHaveBeenCalled()
   })
 })
 

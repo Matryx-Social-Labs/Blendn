@@ -26,7 +26,7 @@ const ev = (over: Partial<BlendnEvent> = {}) =>
 describe('the time on a card', () => {
   it('Live, a clock, a weekday and a clock, then a date', () => {
     expect(cardTime(ev(), NOW)).toBe('Live')
-    expect(cardTime(ev({ start_time: at(22, 30), end_time: at(23) }), NOW)).toBe('10:30 PM')
+    expect(cardTime(ev({ start_time: at(22, 30), end_time: at(23) }), NOW)).toBe('Tonight · 10:30 PM')
     expect(cardTime(ev({ start_time: at(21, 0, 4), end_time: at(23, 0, 4) }), NOW)).toMatch(/^Sat · 9 PM$/)
     expect(cardTime(ev({ start_time: at(21, 0, 12), end_time: at(23, 0, 12) }), NOW)).toBe('Sun 1 Nov · 9 PM')
   })
@@ -78,7 +78,9 @@ describe('<EventCard> on the Pulse', () => {
 
   it('the Nearby row is the design system’s own row: venue · distance · time, no column of its own', async () => {
     await render(<EventCard kind="row" title="Vinyl Night" time="Live" venue="Toit" distance="350 m" testID="r" />)
-    expect(screen.getByText('Toit · 350 m')).toBeTruthy()
+    // Venue and distance are two slots (owner 2026-11-05): the venue gives way, the distance stays.
+    expect(screen.getByText('Toit')).toBeTruthy()
+    expect(screen.getByText('· 350 m')).toBeTruthy()
     expect(screen.getByText('Live')).toBeTruthy()
   })
 })

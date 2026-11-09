@@ -139,12 +139,7 @@ tags:
     timeout: 20000
 - takeScreenshot: c02-ready
 - tapOn: "Start Blend’n"
-# onboarded is true from here; the invite screen comes after it.
-- extendedWaitUntil:
-    visible: "Share my link"
-    timeout: 30000
-- takeScreenshot: c02-friends
-- tapOn: "Maybe later"
+# onboarded is true from here; "Bring your friends" is a card on the Pulse now (ledger row 14).
 - extendedWaitUntil:
     visible: "The Pulse"
     timeout: 30000

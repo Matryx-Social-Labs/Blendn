@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { RefreshControl, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../components/ds/Button'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
@@ -15,6 +16,8 @@ import { fetchBlockedPage } from '../lib/blockedUsersPage'
 import { unblockUser, type BlockedUser } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { useTopBarState } from '../lib/useTopBarState'
+import { emptyAfterRowOut, rowOut, rowReflow } from '../components/motion/presence'
+import { useReducedMotion } from '../lib/motion'
 
 /** Empty pages with a cursor after them, followed on in one go before the foot waits for the next end-reach. */
 const MAX_EMPTY_HOPS = 5
@@ -42,6 +45,7 @@ function BlockedUsersContent() {
   const [moreFailed, setMoreFailed] = useState(false)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
+  const reduceMotion = useReducedMotion()
   /** The read in force: a refresh or a page that lands after a newer read began is dropped. */
   const read = useRef(0)
 
@@ -150,16 +154,19 @@ function BlockedUsersContent() {
     const name = item.blocked_user_name || 'Someone'
     const line = blockedLine(item)
     return (
-      <PersonRow
-        // A blocked person is a creature mark, never their face (E10, flow-6 blocked): the server sends no photo, and none is drawn if one slips through.
-        person={{ userId: item.blocked_id, name, photo: null }}
-        detail={line.detail}
-        detailMono={line.mono}
-        detailTail={line.tail}
-        trailing={
-          <Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${name}`} onPress={() => handleUnblock(item)} style={styles.centred} />
-        }
-      />
+      // Unblocked, the row fades and the rest close the gap (DS #16, audit M13).
+      <Animated.View exiting={reduceMotion ? undefined : rowOut}>
+        <PersonRow
+          // A blocked person is a creature mark, never their face (E10, flow-6 blocked): the server sends no photo, and none is drawn if one slips through.
+          person={{ userId: item.blocked_id, name, photo: null }}
+          detail={line.detail}
+          detailMono={line.mono}
+          detailTail={line.tail}
+          trailing={
+            <Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${name}`} onPress={() => handleUnblock(item)} style={styles.centred} />
+          }
+        />
+      </Animated.View>
     )
   }
 
@@ -213,14 +220,16 @@ function BlockedUsersContent() {
           ))}
         </View>
       ) : (
-        <FlatList
+        <Animated.FlatList
           testID="blocked-users-list"
+          itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
           data={blockedUsers}
           keyExtractor={(item) => item.blocked_id}
           renderItem={renderBlockedUser}
           // The foot is the list's own padding: a wrapper that insets the screen cuts the scroll on a line above the home indicator.
           contentContainerStyle={[blockedUsers.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
-          ListEmptyComponent={renderEmptyState()}
+          // After the last unblock it waits for the row's fade (emptyAfterRowOut).
+          ListEmptyComponent={<Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{renderEmptyState()}</Animated.View>}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.5}
           ListFooterComponent={footer}

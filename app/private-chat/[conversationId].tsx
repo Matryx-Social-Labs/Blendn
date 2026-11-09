@@ -79,6 +79,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
 import { useComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import { useReducedMotion } from '../../lib/motion'
 import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { firstNameOf } from '../../lib/friendsHere'
@@ -298,9 +299,12 @@ function PrivateChatInner() {
 
   // The unread rule is kept in place, layout pass by layout pass, until the reader's hand or a scroll to the end takes over.
   const ruleHeldRef = useRef(false)
+  // Reduce Motion: the jump to the newest still lands, without the smooth scroll (audit M9). Through a ref, because the
+  // socket handlers keep the `scrollToBottom` of the render that subscribed them, and the setting can change mid-chat.
+  const reduceMotion = useLatest(useReducedMotion())
   const scrollToBottom = (animated = true) => {
     ruleHeldRef.current = false
-    scrollListToEnd(flatListRef.current, animated)
+    scrollListToEnd(flatListRef.current, animated && !reduceMotion.current)
   }
   const follow = useFollowEnd(() => scrollToBottom(false))
 

@@ -1,6 +1,6 @@
 import { photoNote, readyPhotos, withMainFirst, type PhotoTile } from '../components/onboarding/photoTiles'
 import { isPreciseLocationOff } from '../lib/preciseLocation'
-import { bioWithPrompt, DEFAULT_MAX_EXPERTISE, promptFits, keepExpertise, stepPayload, toggleExpertise } from '../lib/onboarding'
+import { bioWithPrompt, promptFits, stepPayload } from '../lib/onboarding'
 
 describe('bioWithPrompt', () => {
   it('starts an empty bio with the prompt and a space to type after', () => {
@@ -23,25 +23,17 @@ describe('promptFits', () => {
   })
 })
 
-describe('expertise', () => {
-  const byField = { design: [{ slug: 'design_product' }, { slug: 'design_brand' }], finance: [{ slug: 'finance_banking' }] }
-  it('keeps only what belongs to the field, and nothing for no field', () => {
-    expect(keepExpertise(['design_product', 'finance_banking'], 'design', byField)).toEqual(['design_product'])
-    expect(keepExpertise(['design_product'], 'finance', byField)).toEqual([])
-    expect(keepExpertise(['design_product'], undefined, byField)).toEqual([])
-    expect(keepExpertise(['design_product'], 'design', undefined)).toEqual([])
-  })
-  it('picks, puts back, and stops at the cap without hiding anything', () => {
-    expect(toggleExpertise([], 'a')).toEqual(['a'])
-    expect(toggleExpertise(['a', 'b'], 'a')).toEqual(['b'])
-    expect(toggleExpertise(['a', 'b', 'c'], 'd')).toEqual(['a', 'b', 'c'])
-    expect(toggleExpertise(['a', 'b', 'c'], 'c')).toEqual(['a', 'b'])
-    expect(toggleExpertise(['a'], 'b', 1)).toEqual(['a'])
-    expect(DEFAULT_MAX_EXPERTISE).toBe(3)
-  })
-  it('is a journey field, sent when answered and dropped when not', () => {
-    expect(stepPayload('journey', { work_field: 'design', expertise: ['design_brand'] })).toEqual({ work_field: 'design', expertise: ['design_brand'] })
-    expect(stepPayload('journey', { work_field: 'design' })).toEqual({ work_field: 'design' })
+describe('the journey fields', () => {
+  it('belong to Edit profile now: no onboarding step sends them, even when an older draft holds them', () => {
+    const draft = { location: 'Toronto', occupation: 'Designer', work_field: 'design', expertise: ['design_brand'], interests: ['Film'] }
+    for (const step of ['basics', 'preferences', 'details', 'media', 'location', 'ready'] as const) {
+      const body = stepPayload(step, draft)
+      expect(body).not.toHaveProperty('occupation')
+      expect(body).not.toHaveProperty('work_field')
+      expect(body).not.toHaveProperty('expertise')
+      expect(body).not.toHaveProperty('location')
+    }
+    expect(stepPayload('details', draft)).toEqual({ interests: ['Film'] })
   })
 })
 

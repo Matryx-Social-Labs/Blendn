@@ -7,19 +7,25 @@ import { Button } from '../ds/Button'
 import { DoorCode } from '../ds/VenuePass'
 import { IconButton } from '../ds/IconButton'
 import { LiquidDisc } from '../ds/LiquidDisc'
+import { MonoRun } from '../ds/MonoFamily'
+import { VenuePlate } from '../ds/VenuePlate'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
-import { monoCaption } from '../ds/MonoFamily'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { endedLabel, knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
+import { plateOf } from '../../lib/placesPane'
 
-/** The disc at the ticket's middle (Flow 13 pass.js: 200). */
-const DISC = 200
+/** The disc at the ticket's middle (flow-4 offer board .disc4: 184). */
+const DISC = 184
+/** The board's .vp: a 48 pt tile beside the head, the venue's plate (the API sends no venue photo). */
+const TILE = SIZE.control
+/** The board's head label sits inline in a 24 pt line, so the venue starts 26 under the row's top. */
+const HEAD_LABEL_LINE = SPACE.xl
 /** A used pass dims its disc to 55% (pass.js `st==='used'`). */
 const USED_DISC_OPACITY = 0.55
 /** The punched notches at the tear are 24 pt circles, half inside the card. */
 const NOTCH = SPACE.xl
-/** The stamp is a 32 pt capsule. */
+/** The stamp is a 32 pt capsule (taller only when the largest text wraps it). */
 const STAMP = SIZE.tag
 
 /** Back on the left, ⋯ on the right: two glass circles, 8 pt apart from the top inset. */
@@ -33,13 +39,28 @@ export function OfferHeader({ onBack, onMore, moreLabel }: { onBack: () => void;
   )
 }
 
-/** "Redeemed 21:43": white capsule, ink text, a check (pass.js `stamp`). */
-function Stamp({ text }: { text: string }) {
+/**
+ * "Redeemed 9:43 PM" (the phone's clock): white capsule, ink text, a check (the flow-4 board's .stampR). The time is
+ * Geist Mono, as every time is, its space in the brand face (`MonoRun`).
+ */
+function Stamp({ text, clock }: { text: string; clock?: string }) {
   const bold = useBoldText()
+  const word = clock && text.endsWith(clock) ? text.slice(0, -clock.length) : null
   return (
-    <View accessible accessibilityLabel={text} style={styles.stamp}>
+    <View testID="door-stamp" accessible accessibilityLabel={text} style={styles.stamp}>
       <Icon name="check" size={ICON.inline} color={COLOR.selectionInk} active />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: COLOR.selectionInk }]}>{text}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.stampText]}>
+        {word !== null && clock ? (
+          <>
+            {word}
+            <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>
+              <MonoRun text={clock} />
+            </Text>
+          </>
+        ) : (
+          text
+        )}
+      </Text>
     </View>
   )
 }
@@ -55,6 +76,7 @@ function Stamp({ text }: { text: string }) {
  */
 export function DoorTicket({
   venueName,
+  venueType,
   offerText,
   until,
   endsAt,
@@ -65,6 +87,8 @@ export function DoorTicket({
   codeRef,
 }: {
   venueName: string
+  /** The venue_type key: its plate on the tile, as on the venue's page. None, or a type with no plate: the gift. */
+  venueType?: string | null
   offerText: string
   /** "until Wed, 15 Oct". */
   until: string
@@ -81,26 +105,38 @@ export function DoorTicket({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const plate = plateOf(venueType)
   return (
     <View testID="door-ticket" style={[styles.ticket, contrast ? IC_HAIRLINE : styles.edge]}>
-      <View accessible accessibilityLabel={`Door pass for ${venueName}. ${offerText}. Valid ${until}.`} style={styles.top}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>DOOR PASS</Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink]}>
-          {venueName}
-        </Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{offerText}</Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-          Valid <Text style={monoCaption(bold)}>{until}</Text>
+      <View accessible accessibilityLabel={`Offer code for ${venueName}. ${offerText}. ${until}.`} style={styles.top}>
+        <View style={styles.headRow}>
+          <View testID="door-tile" style={styles.tile}>
+            {plate ? (
+              <VenuePlate type={plate} size={TILE} radius={RADIUS.thumb} testID="door-plate" />
+            ) : (
+              <Icon name="gift" size={ICON.nav} color={COLOR.textSecondary} />
+            )}
+          </View>
+          <View style={styles.fill}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary, styles.headLabel]}>OFFER CODE</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink, styles.venue]}>
+              {venueName}
+            </Text>
+          </View>
+        </View>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.offerText]}>{offerText}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.until]}>
+          {until}
         </Text>
       </View>
       <View style={[styles.middle, view.door === 'used' && { opacity: USED_DISC_OPACITY }]}>
-        <LiquidDisc size={DISC} level={view.level} still={view.spent} stamp={view.stamp ? <Stamp text={view.stamp} /> : undefined} testID="door-disc" />
+        <LiquidDisc size={DISC} level={view.level} still={view.spent} stamp={view.stamp ? <Stamp text={view.stamp} clock={view.redeemedClock} /> : undefined} testID="door-disc" />
       </View>
       <View style={styles.tear}>
         <View style={[styles.notch, styles.notchLeft]} />
         <View style={[styles.notch, styles.notchRight]} />
       </View>
-      <View ref={codeRef} collapsable={false} style={styles.bottom}>
+      <View ref={codeRef} collapsable={false} testID="door-code-row" style={styles.bottom}>
         <DoorCode
           state={view.door}
           code={code}
@@ -203,22 +239,35 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACE.lg, paddingBottom: BAR_BOTTOM },
   ticket: { borderRadius: RADIUS.card, backgroundColor: COLOR.surface, overflow: 'hidden' },
   edge: { borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
-  top: { gap: SPACE.xxs, paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs, paddingBottom: SPACE.lg },
-  middle: { alignItems: 'center', paddingHorizontal: SPACE.xl - SPACE.xs, paddingBottom: SPACE.xl - SPACE.xs, paddingTop: SPACE.xs },
+  /** The board's .pass: 20 round the head; then .ob 14 under it, .ov 2 under that. */
+  top: { paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  tile: { width: TILE, height: TILE, borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
+  headLabel: { lineHeight: HEAD_LABEL_LINE },
+  venue: { marginTop: SPACE.xxs },
+  offerText: { marginTop: SPACE.md + SPACE.xxs },
+  until: { marginTop: SPACE.xxs },
+  /** The disc 20 under the validity, the tear 24 under the disc. */
+  middle: { alignItems: 'center', paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs, paddingBottom: SPACE.xl },
   tear: { height: 0, borderTopWidth: 1, borderStyle: 'dashed', borderTopColor: COLOR.hairlineStrong },
   notch: { position: 'absolute', top: -NOTCH / 2, width: NOTCH, height: NOTCH, borderRadius: RADIUS.capsule, backgroundColor: COLOR.ink },
   notchLeft: { left: -NOTCH / 2 },
   notchRight: { right: -NOTCH / 2 },
-  bottom: { paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.lg, paddingBottom: SPACE.xl - SPACE.xs },
+  /** The board's .cd: 20 over, 22 under. */
+  bottom: { paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs, paddingBottom: SPACE.xl - SPACE.xxs },
+  /** At least the board's 32; taller when the largest text wraps the words inside the disc. */
   stamp: {
-    height: STAMP,
+    minHeight: STAMP,
+    maxWidth: '100%',
+    paddingVertical: SPACE.xs,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACE.xs,
+    gap: SPACE.xs + SPACE.xxs,
     paddingHorizontal: SPACE.md,
     borderRadius: RADIUS.capsule,
     backgroundColor: COLOR.selectionFill,
   },
+  stampText: { color: COLOR.selectionInk, flexShrink: 1, textAlign: 'center' },
   card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   rowCard: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
   fact: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },

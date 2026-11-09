@@ -13,19 +13,14 @@
 import type { SessionTime } from '../components/ds/SessionSheet'
 import type { IconName } from '../components/ui/Icon'
 import type { GoLiveChoice as DialChoice } from '../components/ds/GoLiveSheet'
-import type { VenueDetail, VenueListItem } from './apiClient'
+import type { VenueDetail } from './apiClient'
 import { BOARD_ENABLED } from './board'
 import type { GoLiveRefusal as SheetKind } from '../components/ds/GoLiveSheet'
 import { countdownLabel, EXTEND_CHOICE, remainingMs, type GoLiveChoice, type GoLiveRefusal, type VenueAction } from './goLive'
-import { liveNowWord } from './home'
-import { VENUE_PLATES } from './design/tokens'
-import { distanceText, plateFor, type PlateKey } from './placesPane'
 import { venueDayState } from './venueHours'
 
-/** A restaurant reuses the café's pair (owner's ruling on A87), as `VenuePlate` does. */
-const PLATE_PAIRS: Record<PlateKey, readonly [string, string]> = { ...VENUE_PLATES, restaurant: VENUE_PLATES.cafe }
 import { clockTime } from './roomMoments'
-import { calendarDate, clockIn, eventClock, weekdayIn, zoneSuffix } from './time'
+import { calendarDate, clockIn, eventClock, weekdayIn } from './time'
 
 const MINUTE_MS = 60_000
 /** The expiry window: the last five minutes read as mm:ss and offer Extend. */
@@ -38,15 +33,6 @@ export const clock24 = (ms: number) => {
   return `${pad(h)}:${pad(m)}`
 }
 
-/** The hero: tonight's cover when there is one (the only artwork a venue has), else the type's plate. */
-export type VenueHero = { kind: 'cover'; uri: string } | { kind: 'plate'; plate: PlateKey }
-
-export function venueHero(detail: Pick<VenueDetail, 'venue' | 'tonight'>): VenueHero {
-  const uri = detail.tonight?.coverImageUrl
-  return uri ? { kind: 'cover', uri } : { kind: 'plate', plate: plateFor(detail.venue.venueType) }
-}
-
-export type TileSpec = { label: string; value: string; mono: boolean }
 
 const HOUR_MS = 60 * MINUTE_MS
 
@@ -75,28 +61,6 @@ export function tonightOpening(
   return { opensAt: latest.open, closesAt: latest.close }
 }
 
-/**
- * The page's tiles: Open · Live · Size. Each is drawn only when its field is here, and Live only for a bucket the server
- * tells that shows (a null or under-5 bucket draws nothing, never "0" or "Under 5"). No Reset tile (D6): the day's reset
- * hour is staff's clock in 24-hour time, and Open ("Till 4 AM") already answers the guest's question. Size is words, so
- * it is set in the sans (B-T5: in mono, "people" fell off at AX sizes).
- */
-export function venueTiles(detail: Pick<VenueDetail, 'venue' | 'live'>, now: number): TileSpec[] {
-  const tiles: TileSpec[] = []
-  const hours = detail.venue.hours
-  if (Array.isArray(hours) && hours.length > 0) {
-    // Hours are given: a weekday with no row, or a night that is over (up to the reset hour), is Closed.
-    const timeZone = detail.venue.timezone
-    const day = venueDayState(tonightOpening(hours, detail.venue.dayResetHour, now, timeZone), now, validReset(detail.venue.dayResetHour), timeZone)
-    tiles.push({ label: 'OPEN', value: day?.state === 'opens' ? `Opens ${day.time}` : day?.state === 'open' ? `Till ${day.time}` : 'Closed', mono: true })
-  }
-  const liveWord = liveNowWord(detail.live.liveNow)
-  if (liveWord) tiles.push({ label: 'LIVE', value: `${liveWord} so far`, mono: false })
-  const capacity = detail.venue.capacity
-  if (typeof capacity === 'number' && capacity > 0) tiles.push({ label: 'SIZE', value: `${capacity} ${capacity === 1 ? 'person' : 'people'}`, mono: false })
-  return tiles
-}
-
 /** Good to know: one tile per amenity the owner ticked (the server sends their names); a nameless one is dropped, not drawn blank. */
 export function goodToKnow(amenities: VenueDetail['venue']['amenities']): { label: string; value: string }[] {
   return (Array.isArray(amenities) ? amenities : [])
@@ -117,7 +81,7 @@ export function timeRange(startIso: string, endIso: string, timeZone?: string | 
   if (!Number.isFinite(start)) return ''
   const zone = timeZone ?? undefined
   const range = Number.isFinite(end) ? `${clockTime(start, zone)} – ${clockTime(end, zone)}` : clockTime(start, zone)
-  return `${range}${zoneSuffix(start, timeZone)}`
+  return range
 }
 
 /**
@@ -131,7 +95,7 @@ export const UPCOMING_MAX = 20
 export const UPCOMING_PAGE = 20
 
 /** A coming event: its day, its start in its own clock, named when it is not the phone's ("9 PM", "9 PM IST"), and its title. */
-export type UpcomingRow = { id: string; title: string; day: string; time: string }
+export type UpcomingRow = { id: string; title: string; day: string; time: string; /** For the date stamp (Flow 4 V-A). */ start?: string; timeZone?: string | null }
 
 export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: number = UPCOMING_MAX): UpcomingRow[] {
   return (upcoming ?? [])
@@ -142,6 +106,8 @@ export function upcomingRows(upcoming: VenueDetail['venue']['upcoming'], max: nu
       title: e.title,
       day: dayLabel(e.startTime, e.timezone),
       time: eventClock(e.startTime, e.timezone),
+      start: e.startTime,
+      timeZone: e.timezone,
     }))
 }
 
@@ -297,7 +263,21 @@ export function liveToast(result: { expiresAt: string; stay?: boolean }): string
   return Number.isFinite(end) ? `You’re live until ${clock24(end)}` : 'You’re live'
 }
 
-/** The wash under the hero: the plate's second colour, or (a cover has none) the brewery's, which is the design's own. */
-export function washColor(hero: VenueHero): string {
-  return hero.kind === 'plate' ? PLATE_PAIRS[hero.plate][1] : PLATE_PAIRS.brewery[1]
+/**
+ * Flow 4 V-A's hours line, in its own slot under the type and area (never glued to the name): "Open till 1 AM" (lit,
+ * the live colour), "Opens 10 PM", "Closed today". Null when the hours are not known: then there is no line at all.
+ */
+export function hoursLine(venue: Pick<VenueDetail['venue'], 'hours' | 'dayResetHour' | 'timezone'>, now: number): { text: string; open: boolean } | null {
+  if (!Array.isArray(venue.hours) || venue.hours.length === 0) return null
+  const day = venueDayState(tonightOpening(venue.hours, venue.dayResetHour, now, venue.timezone), now, validReset(venue.dayResetHour), venue.timezone)
+  if (day?.state === 'open') return { text: `Open till ${day.time}`, open: true }
+  if (day?.state === 'opens') return { text: `Opens ${day.time}`, open: false }
+  return { text: 'Closed today', open: false }
+}
+
+/** Flow 4 V-A's dock line for the two states that take one action; the live session and a closed place keep their own rows. */
+export function venueDockLine(kind: 'handoff' | 'goLive') {
+  return kind === 'handoff'
+    ? { state: 'On here tonight', sub: 'Check in to join its room', action: { label: 'Check in', kind: 'primary' as const, icon: 'door-open' as const } }
+    : { state: 'Nothing on here', sub: 'Go live when you’re here', action: { label: 'Go live', kind: 'lit' as const, icon: 'radio' as const } }
 }

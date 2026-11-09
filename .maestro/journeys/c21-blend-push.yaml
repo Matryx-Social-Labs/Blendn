@@ -2,8 +2,8 @@
 # not as an event's room; with nothing underneath, Back goes to the Banter.
 # Driven on the iOS sim, 2026-10-10. The sim has no push token, so the push
 # is delivered by hand:
-#   1. grant notifications once: open blendn://onboarding/notifications and
-#      tap "Turn on notifications" (writes push_enabled=true for the account);
+#   1. grant notifications once: say "I'm going" to an event and tap Continue on
+#      the push sheet (the onboarding notifications step is gone since Flow 2);
 #   2. put the app in the background (open Settings) — the app draws no
 #      banner over itself;
 #   3. start this flow, and run, every 3 s until it has tapped,

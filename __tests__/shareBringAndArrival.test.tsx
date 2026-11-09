@@ -28,7 +28,6 @@ import React from 'react'
 import { Platform, StyleSheet } from 'react-native'
 
 import { ArrivalBanner } from '../components/share/ArrivalBanner'
-import { BringSomeoneRow } from '../components/share/BringSomeoneRow'
 import { PulseArrival } from '../components/share/PulseArrival'
 import { ARRIVAL_SEEN_KEY, arrivalFromReferrer, lookUpArrival, useArrival } from '../lib/arrivalLink'
 import { H } from '../lib/haptics'
@@ -51,48 +50,6 @@ beforeEach(() => {
   spies = Object.keys(H).map((k) => jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {}))
 })
 afterEach(() => spies.forEach((s) => s.mockRestore()))
-
-describe('“Bring someone?”', () => {
-  it('says why, and offers WhatsApp first and the tray after, each named for the event', async () => {
-    await render(<BringSomeoneRow eventTitle="Neon Nights" onWhatsApp={jest.fn()} onShare={jest.fn()} testID="b" />)
-    expect(screen.getByText('Bring someone?')).toBeTruthy()
-    expect(screen.getByText('You’re going. Send the night on.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'WhatsApp, send Neon Nights' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Share Neon Nights' })).toBeTruthy()
-  })
-
-  it('WhatsApp plays H.primary on press-in and sends; the circle plays H.select and opens the tray', async () => {
-    const onWhatsApp = jest.fn()
-    const onShare = jest.fn()
-    await render(<BringSomeoneRow eventTitle="Neon Nights" onWhatsApp={onWhatsApp} onShare={onShare} testID="b" />)
-    await fireEvent(screen.getByRole('button', { name: 'WhatsApp, send Neon Nights' }), 'pressIn')
-    expect(H.primary).toHaveBeenCalledTimes(1)
-    await fireEvent.press(screen.getByRole('button', { name: 'WhatsApp, send Neon Nights' }))
-    expect(onWhatsApp).toHaveBeenCalledTimes(1)
-    await fireEvent.press(screen.getByRole('button', { name: 'Share Neon Nights' }))
-    expect(H.select).toHaveBeenCalledTimes(1)
-    expect(onShare).toHaveBeenCalledTimes(1)
-  })
-
-  it('centres the small button on the row with its own alignSelf', async () => {
-    await render(<BringSomeoneRow eventTitle="Neon Nights" onWhatsApp={jest.fn()} onShare={jest.fn()} testID="b" />)
-    // The button's placement style sits on its outer wrapper, one or two levels above the pressable.
-    let node = screen.getByTestId('b-whatsapp') as { props: { style?: unknown }; parent: unknown } | null
-    let alignSelf: string | undefined
-    while (node && !alignSelf) {
-      alignSelf = (StyleSheet.flatten(node.props.style as never) as { alignSelf?: string } | undefined)?.alignSelf
-      node = node.parent as typeof node
-    }
-    expect(alignSelf).toBe('center')
-  })
-
-  it('survives a very long event name in its label without growing the row’s words', async () => {
-    const long = 'The Very Long Festival of Independent Bengaluru Bands, B-Sides and the Occasional Encore'
-    await render(<BringSomeoneRow eventTitle={long} onWhatsApp={jest.fn()} onShare={jest.fn()} />)
-    expect(screen.getByRole('button', { name: `WhatsApp, send ${long}` })).toBeTruthy()
-    expect(screen.getByText('Bring someone?')).toBeTruthy()
-  })
-})
 
 describe('reading the install referrer', () => {
   it('takes an event or a venue link and nothing else', () => {

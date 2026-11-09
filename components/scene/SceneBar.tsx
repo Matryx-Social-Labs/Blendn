@@ -1,12 +1,12 @@
 import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
-import Animated, { interpolate, useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
+import Animated, { Easing, interpolate, useAnimatedStyle, useDerivedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { IconButton } from '../ds/IconButton'
 import { font, useBoldText } from '../ds/shared'
 import { Material } from '../ui/Material'
-import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 
 /** DS #30: the glass materialises at 8 pt of scroll (never animated opacity); the small title crossfades from 24 to 56. */
@@ -15,6 +15,9 @@ const TITLE_FROM = 24
 const TITLE_TO = 56
 /** Reduce Motion: no crossfade, the small title swaps at this offset. */
 const TITLE_SWAP = 40
+/** Flow 4: with a poster, the glass and the title fade in together over 40 pt from the moment the title reaches the bar. */
+const REVEAL_OVER = SPACE.xxxl - SPACE.sm
+const STEP = { duration: DURATION.base, easing: Easing.bezier(...EASING.standard) }
 
 const circle = () => (Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZE.circleButton)
 
@@ -43,6 +46,11 @@ export type SceneBarProps = {
   onMore: () => void
   /** The page's `contentOffset.y`, from a worklet scroll handler; absent, the bar stays at rest. */
   scrollY?: SharedValue<number>
+  /**
+   * Flow 4 E-B: the offset where the page's own title reaches the bar. The glass and the small title then fade in
+   * together over the next 40 pt (the board's `tb`), and under Reduce Motion step in with one crossfade halfway.
+   */
+  reveal?: number
 }
 
 /**
@@ -53,17 +61,31 @@ export type SceneBarProps = {
  *
  * One bar, first in the tree, so a screen reader reaches Back before the page.
  */
-export function SceneBar({ title, saved, onBack, onSave, onShare, onMore, scrollY }: SceneBarProps) {
+export function SceneBar({ title, saved, onBack, onSave, onShare, onMore, scrollY, reveal }: SceneBarProps) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
   const android = Platform.OS === 'android'
   const { width } = useWindowDimensions()
   // The glass is always mounted and comes up with the first 8 pt of scroll: mounting it popped (#30: never a blur's own opacity).
-  const glassStyle = useAnimatedStyle(() => ({ opacity: interpolate(scrollY ? scrollY.get() : 0, [0, GLASS_AT], [0, 1], 'clamp') }))
+  // Reduce Motion with a poster: one crossfade when the title passes halfway through the reveal (never tied to the finger).
+  const stepped = useDerivedValue(() => {
+    if (reveal === undefined || !reduceMotion) return 0
+    const on = (scrollY ? scrollY.get() : 0) > reveal + REVEAL_OVER / 2 ? 1 : 0
+    return withTiming(on, STEP)
+  })
+  const revealed = (y: number) => {
+    'worklet'
+    if (reveal === undefined) return null
+    return reduceMotion ? stepped.get() : interpolate(y, [reveal, reveal + REVEAL_OVER], [0, 1], 'clamp')
+  }
+  const glassStyle = useAnimatedStyle(() => {
+    const y = scrollY ? scrollY.get() : 0
+    return { opacity: revealed(y) ?? interpolate(y, [0, GLASS_AT], [0, 1], 'clamp') }
+  })
   const titleStyle = useAnimatedStyle(() => {
     const y = scrollY ? scrollY.get() : 0
-    return { opacity: reduceMotion ? (y > TITLE_SWAP ? 1 : 0) : interpolate(y, [TITLE_FROM, TITLE_TO], [0, 1], 'clamp') }
+    return { opacity: revealed(y) ?? (reduceMotion ? (y > TITLE_SWAP ? 1 : 0) : interpolate(y, [TITLE_FROM, TITLE_TO], [0, 1], 'clamp')) }
   })
 
   const height = sceneBarHeight(insets.top)

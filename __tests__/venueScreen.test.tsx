@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { AppState, Dimensions, Linking, StyleSheet } from 'react-native'
+import { AppState, Linking, StyleSheet } from 'react-native'
 
 const NOW = Date.parse('2026-10-09T20:00:00.000Z')
 const mockOpenURL = jest.fn(() => Promise.resolve())
@@ -207,38 +207,27 @@ describe('offline (OUT-06)', () => {
 })
 
 describe('the place, not live', () => {
-  it('the hero names the place, its type, area and distance; the bucket is a pill; the dock offers Go live', async () => {
-    // At an ordinary text size: at the accessibility sizes the address leaves the hero (GO-05). Jest's window is at 2.
-    const window = Dimensions.get('window')
-    Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } })
+  it('the map is the hero (Flow 4 V-A); under it the name, then the type and area on their own line; the dock offers Go live', async () => {
     await mount()
-    Dimensions.set({ window, screen: window })
-    expect(screen.getByRole('header', { name: 'The Humming Tree, Live music venue · 298, 100 Feet Road, 350 m' })).toBeTruthy()
-    expect(screen.getByText('5–9 live')).toBeTruthy()
-    expect(screen.queryByTestId('venue-you-live')).toBeNull()
+    expect(screen.getByTestId('venue-hero')).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'The Humming Tree. Live music venue · 298, 100 Feet Road' })).toBeTruthy()
+    // No hours sent: no hours line at all (control below: sent, it is drawn).
+    expect(screen.queryByTestId('venue-hours')).toBeNull()
+    expect(within(screen.getByTestId('venue-dock')).getByText('Nothing on here')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Go live' })).toBeTruthy()
   })
 
-  it('draws the tiles the server sent, and only those', async () => {
-    await mount()
-    expect(screen.getByLabelText('LIVE, 5–9 so far')).toBeTruthy()
-    expect(screen.queryByLabelText(/^OPEN/)).toBeNull()
-    expect(screen.queryByLabelText(/^SIZE/)).toBeNull()
+  it('the hours are their own line, only when known: "Open till …"', async () => {
     await mount(venue({ venue: { hours: [{ day: new Date(NOW - 6 * 3_600_000).getDay(), open: wall(NOW - 2 * 3_600_000), close: wall(NOW + 4 * 3_600_000) }], dayResetHour: 6, capacity: 300 } }))
-    expect(screen.getByLabelText(`OPEN, Till ${clockTime(NOW + 4 * 3_600_000)}`)).toBeTruthy()
-    expect(screen.queryByLabelText(/^RESET/)).toBeNull()
-    expect(screen.getByLabelText('SIZE, 300 people')).toBeTruthy()
+    expect(screen.getByTestId('venue-hours')).toHaveTextContent(`Open till ${clockTime(NOW + 4 * 3_600_000)}`)
+    // The old tiles are gone: no OPEN, LIVE or SIZE tile.
+    expect(screen.queryByLabelText(/^(OPEN|LIVE|SIZE),/)).toBeNull()
   })
 
-  it('a viewer the server tells nothing sees no live pill and no live tile', async () => {
-    await mount(venue({ live: { liveNow: null } }))
-    expect(screen.queryByTestId('venue-bucket')).toBeNull()
-    expect(screen.queryByLabelText(/^LIVE,/)).toBeNull()
-  })
-
-  it('with no event tonight, one sentence about going live; Who’s here is locked until you are', async () => {
+  it('with no event tonight, the card says so and what to do; Who’s here is locked until you are', async () => {
     await mount()
-    expect(screen.getByText('No event tonight. When you’re here, go live and see who else is.')).toBeTruthy()
+    expect(screen.getByText('Nothing on here tonight')).toBeTruthy()
+    expect(screen.getByText('When you’re here, go live and see who else is.')).toBeTruthy()
     expect(screen.getByText('Go live here to see who else is. Everyone is a creature until they choose otherwise.')).toBeTruthy()
     expect(screen.queryByTestId('venue-see-who')).toBeNull()
   })
@@ -304,14 +293,12 @@ describe('the bar under the status bar', () => {
 })
 
 describe('Coming up here', () => {
-  it('sets the date on one line, as wide as it needs and no narrower than the column', async () => {
-    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night 1', startTime: min(60 * 24) }] } }))
+  it('each row leads with its date stamp (Flow 4 V-A), 48 pt', async () => {
+    const start = min(60 * 24)
+    await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'Night 1', startTime: start }] } }))
     const row = screen.getByTestId('venue-upcoming-u1')
-    const day = within(row).getAllByText(/\d/)[0]
-    expect(day.props.numberOfLines).toBe(1)
-    const style = StyleSheet.flatten(day.props.style)
-    expect(style.width).toBeUndefined()
-    expect(style).toMatchObject({ minWidth: 84, flexShrink: 0 })
+    const day = new Date(Date.parse(start)).getDate()
+    expect(within(row).getByText(String(day), { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('a row says when and that it opens (GO-13, C36): the start time and a chevron; the title may take two lines', async () => {
@@ -319,13 +306,12 @@ describe('Coming up here', () => {
     await mount(venue({ venue: { upcoming: [{ id: 'u1', title: 'A very long night of music and talk', startTime: start }] } }))
     const row = screen.getByTestId('venue-upcoming-u1')
     expect(within(row).getByText(clockTime(Date.parse(start)))).toBeTruthy()
-    expect(within(row).getByTestId('venue-upcoming-chevron', { includeHiddenElements: true })).toBeTruthy()
     expect(within(row).getByText('A very long night of music and talk').props.numberOfLines).toBe(2)
     expect(row.props.accessibilityLabel).toContain(clockTime(Date.parse(start)))
   })
 })
 
-describe('the Where card’s map', () => {
+describe('the map hero', () => {
   it('pads top and bottom by the pill’s reach, so the map’s credit clears "Open in Maps" and the pin stays centred', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '../components/venue/VenueMap.tsx'), 'utf8') as string
     expect(src).toContain('mapPadding={MAP_PADDING}')
@@ -369,7 +355,7 @@ describe('the page, the design’s details', () => {
   it('the Where card’s distance is Geist Mono, after the city', async () => {
     await mount()
     const distances = screen.getAllByText('350 m', { includeHiddenElements: true })
-    expect(distances.length).toBeGreaterThanOrEqual(2)
+    expect(distances.length).toBeGreaterThanOrEqual(1)
     for (const d of distances) expect(JSON.stringify(d.props.style)).toMatch(/Geist/i)
   })
 
@@ -647,11 +633,13 @@ describe('the dock', () => {
   it('an event has the place: the venue defers, its card is the way in, and there is no Go live', async () => {
     await mount(venue({ live: { open: false, closedReason: 'event_live_here', eventId: 'e1' }, tonight: night(-10) }))
     expect(screen.queryByTestId('venue-go-live')).toBeNull()
-    expect(screen.getByText('ON HERE TONIGHT')).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'Check in to Vinyl Night instead' }))
+    const dock = screen.getByTestId('venue-dock')
+    expect(within(dock).getByText('On here tonight')).toBeTruthy()
+    expect(within(dock).getByText('Check in to join its room')).toBeTruthy()
+    await fireEvent.press(within(dock).getByRole('button', { name: 'Check in' }))
     expect(router.push).toHaveBeenLastCalledWith('/event/e1')
-    // The page defers: the event is not drawn twice.
-    expect(screen.queryByText('Tonight here')).toBeNull()
+    // Tonight here is the night's card (Flow 4 V-A), once.
+    expect(screen.getAllByTestId('venue-tonight')).toHaveLength(1)
   })
 
   it('no check-in area (GO-06, audit C8): a sentence and its reason, never a disabled slab or a dead gradient', async () => {
@@ -667,16 +655,14 @@ describe('the dock', () => {
 describe('live', () => {
   it('the hero says you are live and the clock steps once a minute; the pill carries it in the dock', async () => {
     await mount(venue({ live: liveOver() }))
-    expect(screen.getByLabelText('You’re live, 20 min')).toBeTruthy()
     expect(screen.getByLabelText('Live at The Humming Tree, 20 minutes left')).toBeTruthy()
     await act(async () => { jest.advanceTimersByTime(60_000) })
-    expect(screen.getByLabelText('You’re live, 19 min')).toBeTruthy()
     expect(screen.getByLabelText('Live at The Humming Tree, 19 minutes left')).toBeTruthy()
   })
 
   it('a stay window says staying, with no countdown', async () => {
     await mount(venue({ live: liveOver({ stay: true }) }))
-    expect(screen.getByLabelText('You’re live, staying')).toBeTruthy()
+    expect(screen.getByLabelText(/^Live at The Humming Tree/).props.accessibilityLabel).not.toMatch(/\d+ min/)
   })
 
   it('the last five minutes: seconds, and an Extend chip beside Ending', async () => {

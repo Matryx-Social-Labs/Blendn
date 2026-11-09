@@ -14,6 +14,7 @@
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
 import { fnv1a } from './pseudonymAvatar'
 import { dateIn, hourIn, instantIn, MONTHS, weekdayIn, WEEKDAYS } from './time'
+import { compactCount } from './format'
 
 /* -------------------------------------------------------------------------- */
 /* Owner defaults, pending the owner's answers: one line each to change.      */
@@ -21,8 +22,8 @@ import { dateIn, hourIn, instantIn, MONTHS, weekdayIn, WEEKDAYS } from './time'
 
 /** No count under this is printed: "here now", "going" and the live buckets (BUILD-SPEC §0). */
 export const LIVE_FLOOR = 5
-/** Featured shows at most this many per city. */
-export const FEATURED_CAP = 5
+/** Featured shows at most this many per city: the lead pager's pages (Flow 3 · Pulse, Option C). */
+export const FEATURED_CAP = 3
 /** A promoted (paid) placement is always labelled this; an editorial pick carries no label. */
 export const PROMOTED_LABEL = 'Promoted'
 /** `null`: an editorial pick is unlabelled. Set a word to label it. */
@@ -45,8 +46,8 @@ export const AREA_SECTIONS_READY = false
 
 export type PulseSectionKey = 'featured' | 'now' | 'inArea' | 'tonight' | 'aroundArea' | 'nearby' | 'forYou' | 'weekend'
 
-export const NOW_LIMIT = 8
-export const TONIGHT_LIMIT = 4
+export const NOW_LIMIT = 10
+export const TONIGHT_LIMIT = 5
 export const NEARBY_LIMIT = 4
 export const FOR_YOU_LIMIT = 8
 export const FOR_YOU_MIN = 3
@@ -108,6 +109,8 @@ export type PulseSectionsInput<E extends SectionEvent> = {
   hasFix: boolean
   /** 'YYYY-MM-DD', local: the day's rotation seed. */
   seedDate: string
+  /** The browse city's IANA zone: an event with no zone of its own has that city's night. The phone's when absent. */
+  timeZone?: string
 }
 
 /* -------------------------------------------------------------------------- */
@@ -136,43 +139,44 @@ export function nextDayReset(now: number, resetHour: number = DAY_RESET_HOUR, ti
 /**
  * Tonight, as the event's own city has it (as `nextUpLabel` says "Tonight" in the event's zone): it starts later than
  * now and before that city's next 06:00. A Los Angeles phone at 4:39 AM reads an IST 6:30 PM start as tonight in
- * Bengaluru; the phone's 6 AM, an hour off, dropped the section (RC 7, Android). The phone's zone for an event with none.
+ * Bengaluru; the phone's 6 AM, an hour off, dropped the section (RC 7, Android). An event with no zone has the browse city's (`cityZone`), else the phone's.
  */
-export const isTonight = (e: SectionEvent, now: number): boolean =>
-  startOf(e) > now && startOf(e) < nextDayReset(now, DAY_RESET_HOUR, e.timezone ?? undefined)
+export const isTonight = (e: SectionEvent, now: number, cityZone?: string): boolean =>
+  startOf(e) > now && startOf(e) < nextDayReset(now, DAY_RESET_HOUR, e.timezone ?? cityZone)
 
-/** The phone's date as 'YYYY-MM-DD'. */
-export function seedDateOf(now: number): string {
-  const [y, m, day] = dateIn(new Date(now))
+/** The date as 'YYYY-MM-DD' in `timeZone` (the browse city's), or the phone's. */
+export function seedDateOf(now: number, timeZone?: string): string {
+  const [y, m, day] = dateIn(new Date(now), timeZone)
   const p = (n: number) => String(n).padStart(2, '0')
   return `${y}-${p(m + 1)}-${p(day)}`
 }
 
 /**
- * This weekend's window: Friday 17:00 to Sunday 23:59:59 local, for request B.
+ * This weekend's window: Friday 17:00 to Sunday 23:59:59 in `timeZone` (the browse city's: a phone in India browsing
+ * Toronto asks for Toronto's weekend), or the phone's, for request B.
  * `skip` from Sunday 18:00 on: the weekend is nearly over. From Friday 17:00 the
  * window has begun; the request still asks from that Friday.
  */
-export function weekendWindow(now: number): { startDate: string; endDate: string; skip: boolean; label: string } {
+export function weekendWindow(now: number, timeZone?: string): { startDate: string; endDate: string; skip: boolean; label: string } {
   const d = new Date(now)
-  const dow = weekdayIn(d)
-  const [y, m, day] = dateIn(d)
+  const dow = weekdayIn(d, timeZone)
+  const [y, m, day] = dateIn(d, timeZone)
   const toFriday = (5 - dow + 7) % 7
   // Sat and Sun are inside this weekend, so the Friday is behind them.
   const fridayOffset = dow === 6 ? -1 : dow === 0 ? -2 : toFriday
-  const friday = instantIn(y, m, day + fridayOffset, 17)
-  const sunday = instantIn(y, m, day + fridayOffset + 2, 23, 59) + 59_999
-  const skip = dow === WEEKEND_SKIP_FROM.day && hourIn(d) >= WEEKEND_SKIP_FROM.hour
-  const saturday = new Date(instantIn(y, m, day + fridayOffset + 1))
-  return { startDate: new Date(friday).toISOString(), endDate: new Date(sunday).toISOString(), skip, label: weekendLabel(saturday, new Date(sunday)) }
+  const friday = instantIn(y, m, day + fridayOffset, 17, 0, timeZone)
+  const sunday = instantIn(y, m, day + fridayOffset + 2, 23, 59, timeZone) + 59_999
+  const skip = dow === WEEKEND_SKIP_FROM.day && hourIn(d, timeZone) >= WEEKEND_SKIP_FROM.hour
+  const saturday = new Date(instantIn(y, m, day + fridayOffset + 1, 0, 0, timeZone))
+  return { startDate: new Date(friday).toISOString(), endDate: new Date(sunday).toISOString(), skip, label: weekendLabel(saturday, new Date(sunday), timeZone) }
 }
 
-/** "Sat 24 – Sun 25 Oct" (the month once when it is shared), the days as the phone has them. */
-export function weekendLabel(saturday: Date, sunday: Date): string {
-  const [, satMonth, satDay] = dateIn(saturday)
-  const [, sunMonth, sunDay] = dateIn(sunday)
-  const a = `${WEEKDAYS[weekdayIn(saturday)]} ${satDay}`
-  const b = `${WEEKDAYS[weekdayIn(sunday)]} ${sunDay}`
+/** "Sat 24 – Sun 25 Oct" (the month once when it is shared), the days as `timeZone` (or the phone) has them. */
+export function weekendLabel(saturday: Date, sunday: Date, timeZone?: string): string {
+  const [, satMonth, satDay] = dateIn(saturday, timeZone)
+  const [, sunMonth, sunDay] = dateIn(sunday, timeZone)
+  const a = `${WEEKDAYS[weekdayIn(saturday, timeZone)]} ${satDay}`
+  const b = `${WEEKDAYS[weekdayIn(sunday, timeZone)]} ${sunDay}`
   return satMonth === sunMonth ? `${a} – ${b} ${MONTHS[sunMonth]}` : `${a} ${MONTHS[satMonth]} – ${b} ${MONTHS[sunMonth]}`
 }
 
@@ -218,7 +222,7 @@ function unique<E extends SectionEvent>(events: readonly E[]): E[] {
 const byStart = (a: SessionSource, b: SessionSource) => startOf(a) - startOf(b)
 
 export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<E>): PulseSection<E>[] {
-  const { now, hasFix, seedDate } = input
+  const { now, hasFix, seedDate, timeZone } = input
   const page = unique(input.page)
   /*
    * Whether the page being full says there may be more of this section (BAR-10, M7). The page is in start order: "Happening
@@ -227,7 +231,7 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
   const lastRow = page.reduce<E | null>((last, e) => (last === null || startOf(e) > startOf(last) ? e : last), null)
   const pageMayHideMore = (key: PulseSectionKey): boolean => {
     if (input.pageFull !== true || lastRow === null) return false
-    const horizon = key === 'now' ? now : key === 'tonight' ? nextDayReset(now, DAY_RESET_HOUR, lastRow.timezone ?? undefined) : -Infinity
+    const horizon = key === 'now' ? now : key === 'tonight' ? nextDayReset(now, DAY_RESET_HOUR, lastRow.timezone ?? timeZone) : -Infinity
     return startOf(lastRow) < horizon
   }
   const claimed = new Set<string>()
@@ -255,7 +259,7 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
       if (picked.length) take('featured', picked, FEATURED_CAP)
     } else if (key === 'tonight') {
       const tonight = fresh(page)
-        .filter((e) => isTonight(e, now))
+        .filter((e) => isTonight(e, now, timeZone))
         .sort(byStart)
       if (tonight.length) take('tonight', tonight, TONIGHT_LIMIT)
     } else if (key === 'nearby') {
@@ -271,7 +275,7 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
       const list = fresh(unique(input.forYou.events)).sort(byStart)
       if (list.length >= FOR_YOU_MIN) take('forYou', list, FOR_YOU_LIMIT, input.forYou.interest)
     } else if (key === 'weekend') {
-      if (!input.weekend || weekendWindow(now).skip) continue
+      if (!input.weekend || weekendWindow(now, timeZone).skip) continue
       const list = fresh(unique(input.weekend)).sort(byStart)
       if (list.length >= WEEKEND_MIN) take('weekend', list, WEEKEND_LIMIT)
     }
@@ -309,25 +313,23 @@ export function categoryChips(
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 }
 
-/** The drawer's peek line for the Pulse: "● 3 live now · 14 on tonight"; a part that is 0 is dropped, both 0 is none. */
-export function pulsePeekLine(sections: readonly PulseSection[]): string | null {
-  const now = sections.find((s) => s.key === 'now')
-  const tonight = sections.find((s) => s.key === 'tonight')
-  const parts = [now && now.count > 0 ? `${sectionCountLabel(now)} live now` : null, tonight && tonight.count > 0 ? `${sectionCountLabel(tonight)} on tonight` : null].filter(Boolean)
-  return parts.length ? parts.join(' · ') : null
+/** The drawer's peek line for the Pulse (Option C): the lead's name and its time, "Midnight Bass · Sat · 10:30 PM"; none without a lead. */
+export function leadPeekLine(lead: { title: string; time: string } | null | undefined): string | null {
+  return lead ? [lead.title, lead.time].filter(Boolean).join(' · ') : null
 }
 
 /**
  * The search results overline's count and noun: the server's total for the query, not the rows loaded so far (a page is 50 and
  * grows as you scroll). Never fewer than what is on screen, and the loaded count while the total is not known (BAR-07).
  */
-export function resultsCount(loaded: number, totalCount: number | null | undefined): { count: number; text: string; noun: string } {
+export function resultsCount(loaded: number, totalCount: number | null | undefined): { count: number; text: string; label: string; noun: string } {
   const count = typeof totalCount === 'number' && Number.isFinite(totalCount) ? Math.max(totalCount, loaded) : loaded
-  return { count, text: count.toLocaleString('en-US'), noun: count === 1 ? 'event' : 'events' }
+  // "12k" on screen, "12,480" heard.
+  return { count, text: compactCount(count), label: count.toLocaleString('en-US'), noun: count === 1 ? 'event' : 'events' }
 }
 
 /** A section header's count as words: "50+" when the count is a floor (BAR-10), else the number. */
-export const sectionCountLabel = (s: Pick<PulseSection, 'count' | 'more'>): string => `${s.count}${s.more ? '+' : ''}`
+export const sectionCountLabel = (s: Pick<PulseSection, 'count' | 'more'>): string => `${compactCount(s.count)}${s.more ? '+' : ''}`
 
 /** The Nearby request's and See all's upper bound: a week from now, rounded up to the hour so the pages of one list share a cache key (BAR-11). */
 export const nearbyEndDate = (now: number): string => new Date(Math.ceil((now + NEARBY_DAYS * DAY) / HOUR) * HOUR).toISOString()

@@ -174,7 +174,7 @@ export function BoardRequestsSection({
 
   return (
     <View style={styles.section}>
-      <SectionHeader title="The Board" count={requests.incoming.length > 0 ? requests.incoming.length : undefined} />
+      <SectionHeader title="The Lobby" count={requests.incoming.length > 0 ? requests.incoming.length : undefined} />
       {requests.incoming.map((r) => (
         <RequestCard
           key={r.id}

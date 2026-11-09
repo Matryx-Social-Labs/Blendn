@@ -2,6 +2,7 @@ import { usePathname } from 'expo-router'
 import { Tabs } from 'expo-router/js-tabs'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { AppState, Easing, Platform, StyleSheet, View } from 'react-native'
+import { useDerivedValue } from 'react-native-reanimated'
 
 import { BlendnScreen } from '../../components/blendn/BlendnScreen'
 import { InAppBanner } from '../../components/ds/InAppBanner'
@@ -25,6 +26,8 @@ import { getRoomSignal, subscribeRoomSignal } from '../../lib/roomSignal'
 import { useRoomSignalSource } from '../../lib/useRoomSignalSource'
 import { watchRoomUnread } from '../../lib/roomUnread'
 import { listenForWaves, useRoomWaves, waveShown } from '../../lib/roomWaves'
+import { useKeyboardShown } from '../../lib/keyboard'
+import { expandTabBar, TAB_BAR_PROGRESS, TAB_BAR_SETTLE } from '../../lib/tabBarSettle'
 
 /**
  * The bar. `Pulse · Going · [Blend'n] · Banter · Me`.
@@ -87,6 +90,8 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   const rereadUnread = useRef<(force?: boolean) => void>(() => {})
   useEffect(() => {
     if (!blendnOpen) rereadUnread.current(true)
+    // Blend'n closing brings the full bar back.
+    if (!blendnOpen) expandTabBar()
   }, [blendnOpen])
   const pathname = usePathname()
   const lastPath = useRef(pathname)
@@ -99,14 +104,14 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
   useEffect(() => {
     if (target.state === 'live' || (blendnOpen && target.state === 'checkin')) markCoachUsed('centre_button_checkin')
   }, [target.state, blendnOpen])
-  // Drawn by the root's CoachMarkHost: the disc is the hole, the tip above (c)'s "Check in · {venue}" pill, a `SIZE.tag` tall.
+  // Drawn by the root's CoachMarkHost: the disc is the hole, the tip above (c)'s pin-and-venue pill, a `SIZE.tag` tall.
   const discRef = useRef<View>(null)
   useCoachMarkSpot(centreCoach.visible && checkInVenue !== null, {
     target: discRef,
     text: `You’re at ${checkInVenue}. Tap the button, then hold to check in.`,
     place: 'above',
     radius: SIZE.disc / 2,
-    gap: SIZE.tag + SPACE.sm,
+    gap: SIZE.tag + SPACE.md,
     onDismiss: centreCoach.dismiss,
     onLost: centreCoach.lose,
     testID: 'centre-coach-mark',
@@ -198,6 +203,8 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         void refreshAuthUserOnForeground()
         void read()
         rereadUnread.current(true)
+        // The app returning brings the full bar back.
+        expandTabBar()
       }
     })
     return () => {
@@ -228,14 +235,34 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
     [navigation, state.index, state.routes]
   )
 
+  /*
+   * The compact pill (SCRUM-1023): the Pulse's bar answers its drawer's snap, every other tab's its list's scroll
+   * (`lib/tabBarSettle`). A tab switch brings the full bar back; arriving on the Pulse, the drawer's answer stands.
+   */
+  const selected = TAB_OF[state.routes[state.index]?.name] ?? 'pulse'
+  const onPulse = selected === 'pulse'
+  const settle = useDerivedValue(() => (onPulse ? TAB_BAR_SETTLE.drawer.get() : TAB_BAR_SETTLE.scroll.get()))
+  useEffect(() => TAB_BAR_SETTLE.scroll.set(0), [selected])
+  // It steps away while the keyboard is up, and comes back full when it goes.
+  const keyboardUp = useKeyboardShown()
+  useEffect(() => {
+    if (!keyboardUp) expandTabBar()
+  }, [keyboardUp])
+
   return (
       <TabBar
-        selected={TAB_OF[state.routes[state.index]?.name] ?? 'pulse'}
+        selected={selected}
         onSelect={select}
         disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined, here: insideCount }}
         mePhoto={mePhoto ?? undefined}
         banterUnread={banter}
         discRef={discRef}
+        settle={settle}
+        progress={TAB_BAR_PROGRESS}
+        // While the disc's coach mark points at it, the bar stays full: the hole is cut for the full disc.
+        holdFull={centreCoach.visible}
+        hidden={keyboardUp}
+        onTouch={expandTabBar}
       />
   )
 })

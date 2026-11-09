@@ -6,7 +6,7 @@
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet, Text } from 'react-native'
 import { State } from 'react-native-gesture-handler'
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
@@ -59,6 +59,51 @@ const signOut = (props: Partial<React.ComponentProps<typeof Sheet>> = {}) => (
   />
 )
 
+/*
+ * A pinned title over a list that scrolls ("Browse in" over "Mumbai", city picker): the 12 pt between the title and the
+ * content was padding INSIDE the scroll, so it scrolled away and rows were cut flush under the title's descenders. The gap
+ * is outside the scroll now (the rest layout is the same 12 pt), and a hairline marks the edge once the content has moved.
+ */
+describe('a pinned title over content that scrolls', () => {
+  const hidden = { includeHiddenElements: true }
+  const rows = <>{Array.from({ length: 30 }, (_, i) => <Text key={i}>{`City ${i}`}</Text>)}</>
+  const overflow = async () => {
+    await act(async () => fireEvent(screen.getByTestId('s-content', hidden), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 393, height: 300 } } }))
+    await act(async () => fireEvent(screen.getByTestId('s-content', hidden), 'contentSizeChange', 393, 1200))
+  }
+  // The jest preset's fontScale is 2 (the accessibility sizes, where a plain title scrolls with its content): pin 1.
+  let window: ReturnType<typeof Dimensions.get>
+  beforeEach(async () => {
+    window = Dimensions.get('window')
+    await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
+  })
+  afterEach(async () => {
+    await act(async () => Dimensions.set({ window, screen: window }))
+  })
+  const edgeOpacity = () => (Reanimated.getAnimatedStyle(screen.getByTestId('s-edge', { includeHiddenElements: true })) as { opacity: number }).opacity
+
+  it('keeps its 12 pt below the title outside the scroll, so a scrolled row is clipped 12 pt clear of the title', async () => {
+    await render(signOut({ icon: undefined, body: undefined, actions: [], title: 'Browse in', detents: ['medium', 'tall'], children: rows }))
+    expect(flat('s-pinned').paddingBottom).toBe(12)
+    const inner = StyleSheet.flatten(screen.getByTestId('s-content', hidden).props.contentContainerStyle)
+    expect(inner.paddingTop ?? 0).toBe(0)
+  })
+
+  it('shows a hairline under the title once the content has scrolled, and none at the top', async () => {
+    await render(signOut({ icon: undefined, body: undefined, actions: [], title: 'Browse in', detents: ['medium', 'tall'], children: rows }))
+    await overflow()
+    expect(edgeOpacity()).toBe(0)
+    await act(async () => fireEvent.scroll(screen.getByTestId('s-content', hidden), { nativeEvent: { contentOffset: { x: 0, y: 120 }, contentSize: { width: 393, height: 1200 }, layoutMeasurement: { width: 393, height: 300 } } }))
+    expect(edgeOpacity()).toBe(1)
+  })
+
+  it('a sheet with no header keeps its 12 pt inside the scroll, under the grip, as before', async () => {
+    await render(<Sheet visible onClose={jest.fn()} testID="s">{rows}</Sheet>)
+    expect(StyleSheet.flatten(screen.getByTestId('s-content', hidden).props.contentContainerStyle).paddingTop).toBe(12)
+    expect(screen.queryByTestId('s-edge', { includeHiddenElements: true })).toBeNull()
+  })
+})
+
 describe('headerNote (audit D5)', () => {
   const note = { lead: '1', text: ' of 3 · Name and vibe', label: 'Step 1 of 3, Name and vibe' }
 
@@ -105,6 +150,17 @@ describe('headerAction', () => {
     expect(action.props.accessibilityState).toMatchObject({ disabled: true })
     await fireEvent.press(action)
     expect(onPress).not.toHaveBeenCalled()
+  })
+})
+
+describe('header', () => {
+  it('a row of its own (C-A: Cancel, the title, Post) stays put above the scroll in place of the title row', async () => {
+    const { Text } = jest.requireActual('react-native')
+    const hidden = { includeHiddenElements: true }
+    await render(<Sheet visible onClose={jest.fn()} header={<Text>New post</Text>} testID="s"><Text>Form</Text></Sheet>)
+    expect(within(screen.getByTestId('s-pinned', hidden)).getByText('New post', hidden)).toBeTruthy()
+    expect(within(screen.getByTestId('s-content', hidden)).queryByText('New post', hidden)).toBeNull()
+    expect(within(screen.getByTestId('s-content', hidden)).getByText('Form', hidden)).toBeTruthy()
   })
 })
 
@@ -502,8 +558,9 @@ describe('what scrolls and what stays (review MEDIUM-2, L8)', () => {
     expect(within(content).queryByText('Clear all', hidden)).toBeNull()
     expect(within(content).getByText(/sign in again/, hidden)).toBeTruthy()
     expect(within(content).getByText('Form', hidden)).toBeTruthy()
-    // 12 under the pinned row, as the header's gap was.
-    expect(inner().paddingTop).toBe(12)
+    // 12 under the pinned row, as the header's gap was: the header's own now, outside the scroll, so it never scrolls away.
+    expect(StyleSheet.flatten(pinned.props.style).paddingBottom).toBe(12)
+    expect(inner().paddingTop).toBeUndefined()
   })
 
   // D-L17 (Make a crew): the indicator drew over the fields' right edge. Negative control: without the bleed both fail.
@@ -548,6 +605,25 @@ describe('what scrolls and what stays (review MEDIUM-2, L8)', () => {
     expect(flat('s-content').minHeight).toBe(88)
     await act(async () => fireEvent(scroll, 'contentSizeChange', 393, 40))
     expect(flat('s-content').minHeight).toBe(40)
+  })
+
+  it('a header row of its own stays pinned even at the accessibility sizes with the keyboard up: C-A’s Post never moves, and nothing in it remounts', async () => {
+    const { Text } = jest.requireActual('react-native')
+    const { Keyboard } = require('react-native')
+    const handlers: Record<string, (e?: { endCoordinates: { height: number; screenY: number } }) => void> = {}
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: (e?: { endCoordinates: { height: number; screenY: number } }) => void) => {
+      handlers[event] = fn
+      return { remove: () => {} }
+    }) as never)
+    try {
+      await render(<Sheet visible onClose={jest.fn()} header={<Text>New post</Text>} testID="s"><Text>Form</Text></Sheet>)
+      const row = screen.getByText('New post', hidden)
+      const h = Dimensions.get('window').height
+      await act(async () => handlers.keyboardWillShow({ endCoordinates: { height: 300, screenY: h - 300 } }))
+      expect(within(screen.getByTestId('s-pinned', hidden)).getByText('New post', hidden)).toBe(row)
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('at the accessibility sizes with the keyboard up nothing is pinned: the floor could not be kept (review R5)', async () => {
@@ -956,22 +1032,94 @@ describe('the swipe-to-dismiss hands its velocity on (DS #5: release on M.fling)
     expect(withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: 220 }))
   })
 
-  describe('(c) Reduce Motion: a 200 ms fade in and out of place, and the drag still tracks', () => {
+  /*
+   * SCRUM-1003: the place view (an ancestor of the glass) faded from 0, and a visual effect view under an ancestor with
+   * alpha < 1 draws without its effect: every sheet was see-through on iOS 26+ with Reduce Motion on. The glass is now
+   * presented in place by mounting (§5.2 rule 6); only what is drawn on it fades, and it leaves by unmounting.
+   */
+  describe('(c) Reduce Motion: the glass appears in place, its content fades over 200, and the drag still tracks', () => {
     beforeEach(() => reduceMotion.mockReturnValue(true))
+    /** The static opacities on the way from the glass up to the Modal (the animated one is `opacity('make-place')`). */
+    const aboveGlass = () => {
+      const seen: number[] = []
+      for (let n = screen.getByTestId('glass', { includeHiddenElements: true }).parent; n; n = n.parent) {
+        const o = StyleSheet.flatten(n.props?.style)?.opacity
+        if (typeof o === 'number') seen.push(o)
+      }
+      return seen
+    }
+    /** As it is now (the animated value), not the first paint's. */
+    const opacity = (id: string) => (Reanimated.getAnimatedStyle(screen.getByTestId(id, { includeHiddenElements: true })) as { opacity?: number }).opacity
 
-    it('opens by fading in over 200', async () => {
+    it('opens with nothing above the glass below full opacity, first frame and last; the content fades in over 200', async () => {
       await render(signOut({ visible: true, testID: 'make' }))
+      expect(aboveGlass().every((o) => o === 1)).toBe(true)
+      // The place view (the glass's holder) has no opacity at all, animated or not.
+      expect(opacity('make-place')).toBeUndefined()
+      expect(opacity('make-content')).toBe(0)
       expect(withTiming).toHaveBeenCalledWith(1, expect.objectContaining({ duration: 200 }))
       expect(withSpring).not.toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.travel.stiffness }))
+      await act(async () => jest.advanceTimersByTime(250))
+      expect(opacity('make-place')).toBeUndefined()
+      expect(opacity('make-content')).toBe(1)
     })
 
-    it('closes by fading out over 200: the sheet is not left opaque while only the scrim fades', async () => {
+    it('closes by unmounting the glass at once while the scrim fades over 200: it never fades and is never left behind', async () => {
       const r = await render(signOut({ visible: true, testID: 'make' }))
+      await act(async () => jest.advanceTimersByTime(250))
       withTiming.mockClear()
       await r.rerender(signOut({ visible: false, testID: 'make' }))
-      const fades = withTiming.mock.calls.filter(([to, cfg]) => to === 0 && cfg.duration === 200)
-      // The scrim and the sheet itself.
-      expect(fades.length).toBeGreaterThanOrEqual(2)
+      expect(screen.queryByTestId('glass', { includeHiddenElements: true })).toBeNull()
+      expect(screen.getByTestId('make-scrim', { includeHiddenElements: true })).toBeTruthy()
+      expect(withTiming).toHaveBeenCalledWith(0, expect.objectContaining({ duration: 200 }))
+      await act(async () => jest.advanceTimersByTime(250))
+      expect(screen.queryByTestId('make-scrim', { includeHiddenElements: true })).toBeNull()
+    })
+
+    it('focus goes to the title once it has faded in, not while it is at 0; and again on a re-open mid-exit (no second onShow)', async () => {
+      const send = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent').mockImplementation(() => {})
+      const r = await render(signOut({ visible: true, testID: 'make' }))
+      // The test Modal fires onShow as it is drawn (jest.setup.js): nothing is sent while the title is at 0.
+      expect(send).not.toHaveBeenCalled()
+      await act(async () => jest.advanceTimersByTime(250))
+      expect(send).toHaveBeenCalledTimes(1)
+      await r.rerender(signOut({ visible: false, testID: 'make' }))
+      await act(async () => jest.advanceTimersByTime(100))
+      await r.rerender(signOut({ visible: true, testID: 'make' }))
+      await act(async () => jest.advanceTimersByTime(300))
+      expect(send).toHaveBeenCalledTimes(2)
+      send.mockRestore()
+    })
+
+    it('the solid tier (Android, Reduce Transparency) has no glass to break: the whole sheet fades in and out over 200, as DS #5 says', async () => {
+      on('android')
+      // The jest preset's react-native-keyboard-controller listeners return nothing; the Android path needs a subscription.
+      const kc = require('react-native-keyboard-controller')
+      const kcSpy = jest.spyOn(kc.KeyboardEvents, 'addListener').mockImplementation((() => ({ remove: () => {} })) as never)
+      const r = await render(signOut({ visible: true, testID: 'make' }))
+      expect(opacity('make-place')).toBe(0)
+      expect(opacity('make-content')).toBe(1)
+      await act(async () => jest.advanceTimersByTime(250))
+      expect(opacity('make-place')).toBe(1)
+      await r.rerender(signOut({ visible: false, testID: 'make' }))
+      // Still there, fading: not unmounted at once as the glass is.
+      await act(async () => jest.advanceTimersByTime(100))
+      expect(opacity('make-place')).toBeGreaterThan(0)
+      expect(opacity('make-place')).toBeLessThan(1)
+      r.unmount()
+      kcSpy.mockRestore()
+    })
+
+    it('a re-open while the scrim is still leaving fades its content in again', async () => {
+      const r = await render(signOut({ visible: true, testID: 'make' }))
+      await act(async () => jest.advanceTimersByTime(250))
+      await r.rerender(signOut({ visible: false, testID: 'make' }))
+      await act(async () => jest.advanceTimersByTime(100))
+      await r.rerender(signOut({ visible: true, testID: 'make' }))
+      expect(aboveGlass().every((o) => o === 1)).toBe(true)
+      expect(opacity('make-content')).toBe(0)
+      await act(async () => jest.advanceTimersByTime(250))
+      expect(opacity('make-content')).toBe(1)
     })
 
     it('a flick still dismisses, with no travelling exit', async () => {
@@ -1031,5 +1179,38 @@ describe('the Modal that has left tells whoever waited to present a native scree
     } finally {
       jest.useRealTimers()
     }
+  })
+})
+
+/*
+ * `art` (SCRUM-1006): a picture above the title, the push ask's lock screen. It goes where the icon well would, and it
+ * scrolls with the title and body rather than pinning: a 300 pt picture pinned would leave a small phone's body no room.
+ */
+describe('art above the title (the push ask)', () => {
+  const hidden = { includeHiddenElements: true }
+  let window: ReturnType<typeof Dimensions.get>
+  beforeEach(async () => {
+    window = Dimensions.get('window')
+    await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
+  })
+  afterEach(async () => {
+    await act(async () => Dimensions.set({ window, screen: window }))
+  })
+
+  it('is drawn above the title, in the scroll, in place of the icon well', async () => {
+    await render(signOut({ art: <Text testID="art">lock screen</Text> }))
+    const content = within(screen.getByTestId('s-content', hidden))
+    expect(content.getByTestId('art', hidden)).toBeTruthy()
+    expect(screen.queryByTestId('s-pinned', hidden)).toBeNull()
+    const texts = content.getAllByText(/lock screen|Sign out\?/, hidden).map((t) => t.props.children)
+    expect(texts).toEqual(['lock screen', 'Sign out?'])
+    // No glyph well beside the picture.
+    expect(screen.queryByTestId('s-well', hidden)).toBeNull()
+  })
+
+  it('without art the sheet is as it was: icon and title pinned', async () => {
+    await render(signOut())
+    expect(screen.getByTestId('s-pinned', hidden)).toBeTruthy()
+    expect(screen.getByTestId('s-well', hidden)).toBeTruthy()
   })
 })

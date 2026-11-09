@@ -6,7 +6,7 @@ import Svg, { Circle } from 'react-native-svg'
 
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 import { HoldToConfirm } from './HoldToConfirm'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
@@ -68,7 +68,7 @@ export function VenuePass({
   cover,
   hereCount,
   tasteCount,
-  holdLabel = 'Hold to blend in',
+  holdLabel = 'Hold to Blend’n',
   note = 'Checks you in. Other people at this event will see you.',
   onConfirm,
   busy,
@@ -153,21 +153,28 @@ export function VenuePass({
 
 /** The code turns every 30 s on the server (`lib/offers/pass-code.ts`). */
 const CODE_PERIOD_S = 30
-const RING = 36
+/** The board's .ring beside "New code in". */
+const RING = 16
 const RING_STROKE = SPACE.xxs
+/** The board's code line (40/48): the numeric display's 40 with 8 of leading. */
+const CODE_LINE = TYPE.numericDisplay.fontSize + SPACE.sm
 /** The seconds beside the ring change once a second; the ring itself drains on the UI thread, and the code comes from the server. */
 const TICK_MS = 1000
 const AnimatedCircle = Animated.createAnimatedComponent(Circle)
 
 /** "K7QM2X" → "K7Q M2X"; read "K 7 Q, M 2 X". */
 const grouped = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}`
-const spoken = (code: string) => `Door code ${[...code.slice(0, 3)].join(' ')}, ${[...code.slice(3)].join(' ')}`
+const spoken = (code: string) => `Offer code ${[...code.slice(0, 3)].join(' ')}, ${[...code.slice(3)].join(' ')}`
 
+/** The still rows: the board's "Used tonight" over dim dashes (the time of a redeem is the disc's stamp). */
 const STILL = {
-  redeemed: { code: '· · ·', line: (at?: string) => (at ? `Redeemed ${at}` : 'Redeemed') },
-  used: { code: '· · ·', line: () => 'Used tonight' },
-  ended: { code: '— — —', line: () => 'This offer ended' },
+  redeemed: { label: 'USED TONIGHT', line: null, spoken: (at?: string) => (at ? `Offer code redeemed ${at}` : 'Offer code redeemed') },
+  used: { label: 'USED TONIGHT', line: null, spoken: () => 'Offer code used tonight' },
+  ended: { label: 'ENDED', line: 'This offer ended', spoken: () => 'This offer ended' },
 } as const
+const DASHES = '— — —'
+/** "0:20": the seconds to the code's turn, the board's "New code in 0:42". */
+const clock = (s: number) => `0:${String(s).padStart(2, '0')}`
 
 export type DoorCodeProps = {
   /** `GET /offers/:id`'s pass states, plus `offline` (no connection, so no code). */
@@ -176,7 +183,7 @@ export type DoorCodeProps = {
   code?: string
   /** When this code turns (ms since the epoch). */
   rotatesAt?: number
-  /** "21:43". */
+  /** "9:43 PM", on the phone's clock (`clockTime`). */
   redeemedAt?: string
   /** The label of an ended pass ("ENDED SUNDAY"). */
   endedLabel?: string
@@ -188,9 +195,10 @@ export type DoorCodeProps = {
 /**
  * The door pass's code (ROUND3 G3, guidelines/round3/r3g.js): staff type the
  * six characters on the venue dashboard and tap Redeemed, so nothing is held
- * on the phone. The code is large, in Geist Mono, beside a 30-second ring
- * that drains to its next turn; offline there is no code ("This pass needs a
- * connection to show its code."). Redeemed, used tonight and ended are still.
+ * on the phone. The board's code row (flow-4 .cd): SHOW THIS CODE, the code
+ * large in Geist Mono, then a small ring draining to its turn beside "New code
+ * in 0:42"; offline there is no code ("Needs a connection"). Redeemed and used
+ * tonight say USED TONIGHT over dim dashes; ended keeps its day.
  *
  * The ring and the code change stay under Reduce Motion (they are the pass's
  * security function, WCAG 2.2.2's essential motion); the code swaps with no
@@ -234,47 +242,41 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
 
   const left = Math.min(CODE_PERIOD_S, Math.max(0, Math.ceil((rotatesAt - now) / 1000)))
   const still = state === 'redeemed' || state === 'used' || state === 'ended' ? STILL[state] : null
-  const codeFont = [font('display', bold, FONT_FAMILY.mono[700]), styles.code]
-  const label = state === 'ended' && endedLabel ? endedLabel : 'DOOR CODE'
+  const label = state === 'ended' && endedLabel ? endedLabel : (still?.label ?? 'SHOW THIS CODE')
+  const line = font('meta', bold)
 
   return (
-    <View testID={testID} style={styles.door}>
-      <View
-        accessible
-        accessibilityLabel={
-          live
-            ? spoken(code)
-            : state === 'offline'
-              ? 'Door code unavailable. This pass needs a connection to show its code.'
-              : `${label}. ${still?.line(redeemedAt) ?? ''}`
-        }
-        style={styles.doorText}
-      >
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{label}</Text>
-        {live ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.primary]}>{grouped(code)}</Text>
-        ) : (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[...codeFont, styles.tertiary]}>{still?.code ?? '··· ···'}</Text>
-        )}
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-          {live ? `Changes every ${CODE_PERIOD_S} s · Today only` : still ? still.line(redeemedAt) : 'Today only'}
-        </Text>
-      </View>
+    <View
+      testID={testID}
+      accessible
+      accessibilityLabel={live ? spoken(code) : still ? still.spoken(redeemedAt) : 'Offer code unavailable. It needs a connection to show.'}
+      style={styles.door}
+    >
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.numericDisplay} style={[font('numericDisplay', bold), styles.code, live ? styles.primary : styles.tertiary]}>
+        {live ? grouped(code) : still ? DASHES : '··· ···'}
+      </Text>
       {live ? (
-        <View testID={testID && `${testID}-ring`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.ringCol}>
+        <View testID={testID && `${testID}-ring`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.turn}>
           <CountdownRing fraction={fraction} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>{`${left} s`}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[line, styles.secondary]}>
+            {'New code in '}
+            <Text style={[styles.mono, styles.tabular]}>{clock(left)}</Text>
+          </Text>
         </View>
-      ) : state === 'offline' ? (
-        <View testID={testID && `${testID}-offline`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.well}>
-          <Icon name="wifi-off" size={ICON.control} color={COLOR.textSecondary} />
+      ) : !still ? (
+        <View testID={testID && `${testID}-offline`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.turn}>
+          <Icon name="wifi-off" size={ICON.inline} color={COLOR.textSecondary} />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[line, styles.secondary]}>Needs a connection</Text>
         </View>
+      ) : still.line ? (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[line, styles.secondary]}>{still.line}</Text>
       ) : null}
     </View>
   )
 }
 
-/** A 36 pt ring that drains clockwise from the top: 16% white track, white arc. */
+/** A 16 pt ring (the board's .ring) that drains clockwise from the top: 16% white track, white arc. */
 function CountdownRing({ fraction }: { fraction: SharedValue<number> }) {
   const r = RING / 2 - RING_STROKE
   const c = 2 * Math.PI * r
@@ -322,17 +324,11 @@ const styles = StyleSheet.create({
   overlap: { marginLeft: -SPACE.sm },
   shrink: { flexShrink: 1 },
   note: { textAlign: 'center' },
-  door: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
-  doorText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
-  code: { letterSpacing: SPACE.xxs, fontVariant: ['tabular-nums'] },
-  ringCol: { alignItems: 'center', gap: SPACE.xs },
+  /** The board's .cd: one centred column, 6 apart. */
+  door: { alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
+  /** The board's .code: 40/48, 4 apart, so a code reads letter by letter across a counter. */
+  code: { lineHeight: CODE_LINE, letterSpacing: SPACE.xs, fontVariant: ['tabular-nums'] },
+  turn: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  mono: { fontFamily: FONT_FAMILY.mono[500] },
   ring: { transform: [{ rotate: '-90deg' }] },
-  well: {
-    width: RING,
-    height: RING,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surfaceSunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 })

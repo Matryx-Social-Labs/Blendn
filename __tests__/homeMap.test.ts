@@ -183,9 +183,20 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   })
 
   it('adds only extruded buildings and circles: no fill or line that could outline an area', () => {
+    // Near me's reach (N1) is the one exception: fixed rings round the person (a 20-minute walk, a short ride), never an event's.
     const types = [...layers.matchAll(/type="([a-z-]+)"/g)].map((m) => m[1])
     expect(types.length).toBeGreaterThan(0)
-    expect(types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')).toEqual([])
+    const areas = types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')
+    const reach = [...layers.matchAll(/<Layer id="reach-[a-z-]+" type="([a-z-]+)"/g)].map((m) => m[1])
+    expect(reach).toEqual(['fill', 'line', 'fill', 'line'])
+    expect(areas).toEqual(reach)
+  })
+
+  it('the reach is drawn from where the person stands, with the fixed walk and ride, nothing off a payload', () => {
+    expect(component).toMatch(/reachShapes\(reachHere\)/)
+    // And only while sharing is on: the reach is the person's position (security review, 2026-11-05).
+    expect(component).toMatch(/const reachHere = sharing \? reach : null/)
+    expect(code('lib/homeMap.ts')).toMatch(/export function reachShapes\(c: LatLng, rideKm: number = 8\)/)
   })
 
   it('moves the camera only through one stop helper, every stop with the padding', () => {
@@ -214,11 +225,12 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     const radii = [...layers.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
     expect(radii.length).toBe(3)
     for (const r of radii) {
-      expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'GLOW_RADIUS']).toContain(r)
+      expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'radius']).toContain(r)
     }
-    expect(layers).toMatch(/const GLOW_RADIUS = glowRadius\(\)/)
+    // At the browsed city's latitude (SCRUM-998), and nothing a place carries.
+    expect(layers).toMatch(/const radius = useMemo\(\(\) => glowRadius\(latitude\), \[latitude\]\)/)
     // The ground glow is the theme's metres at every zoom, read off nothing.
-    expect(JSON.stringify(glowRadius())).not.toMatch(/get|feature|properties/)
+    expect(JSON.stringify(glowRadius(13))).not.toMatch(/get|feature|properties/)
   })
 
   it('lights only public shapes: the building layer the basemap drew, or the pin', () => {
@@ -471,7 +483,7 @@ describe('your position sits in the middle of the map you can see (owner, TestFl
     // Keyed on the settled snap's top, not the animated drawer value.
     expect(code('components/home/HomeShell.tsx')).toMatch(/drawerSnapTop=\{points\[snap\]\}/)
     // The map waits for its own height, so the first frame is centred too.
-    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null && mapPainted \? \(\s*<HomeMap/)
+    expect(code('components/home/HomeShell.tsx')).toMatch(/\{mapHeight !== null && mapPainted && fallbackCentre \? \(\s*<HomeMap/)
   })
 })
 
@@ -522,7 +534,7 @@ describe('"my location"', () => {
     expect(shell).toMatch(/<HomeDrawer\s+y=\{drawerTop\}/)
     expect(shell).toMatch(/drawerTop=\{drawerTop\}/)
     expect(code('components/home/HomeDrawer.tsx')).not.toMatch(/const y = useSharedValue/)
-    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer\)/)
+    expect(code('components/home/LocateButton.tsx')).toMatch(/locateRide\(drawerTop\.get\(\), drawer, lift \? lift\.get\(\) : 0\)/)
   })
 
   it('is wired: a tap with no fix asks through the Pulse, and every move takes the one camera rule', () => {
@@ -547,13 +559,14 @@ describe('"my location"', () => {
     // The Pulse hands over its own location flow; it never grows a second one.
     expect(code('app/(tabs)/events.tsx')).toMatch(/requestLocation: requestLocationIfNeeded/)
     const pulse = code('app/(tabs)/events.tsx')
-    expect(pulse).toMatch(/setSelection\(\{ city, source: 'chosen' \}\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
+    expect(pulse).toMatch(/setSelection\(next\)\s*setCityPick\(\(p\) => \(\{ n: p\.n \+ 1, here \}\)\)/)
     // Where you stand is a choice of you, not of a city centre (review L5); the picker's rows are picks.
-    expect(pulse).toMatch(/onSwitch=\{\(city\) => chooseCity\(city, true\)\}/)
+    expect(pulse).toMatch(/onSwitch=\{\(city\) => bannerActions\.current\.chooseCity\(\{ city \}, true\)\}/)
     expect(pulse).toMatch(/onChoose=\{chooseCity\}/)
     const picker = code('components/pulse/CityPicker.tsx')
-    expect(picker).toMatch(/choose\(deviceCity, true\)/)
-    expect(picker.match(/choose\(item\.city, false\)/g)).toHaveLength(2)
+    expect(picker).toMatch(/choose\(\{ city: deviceCity, slug: null \}, true\)/)
+    expect(picker).toMatch(/const pick = \(\) => choose\(\{ city: item\.city, slug: item\.slug \?\? null \}, false\)/)
+    expect(picker.match(/onPress=\{pick\}/g)).toHaveLength(2)
   })
 })
 

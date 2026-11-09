@@ -29,7 +29,6 @@ const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8
 describe('text in a fixed-height box is capped', () => {
   const FIXED_BOXES: Array<[string, string[]]> = [
     ['the tab bar label (the 64 pt capsule)', ['components', 'ds', 'TabBar.tsx']],
-    ['the featured card (fixed aspect)', ['components', 'pulse', 'FeaturedCard.tsx']],
     ['the hero title (48/56)', ['components', 'scene', 'SceneHero.tsx']],
     ['the bell badge (18pt, the DS Badge)', ['components', 'ds', 'MonoFamily.tsx']],
   ]
@@ -72,8 +71,8 @@ describe('decoration is hidden from the accessibility tree', () => {
 })
 
 describe('the Scene keeps what the earlier pass gave it', () => {
-  it('groups the hero caption instead of leaving four fragments', () => {
-    expect(read('components', 'scene', 'SceneHero.tsx')).toContain('accessibilityRole="header"')
+  it('the page title is the header (Flow 4 E-B: the title left the hero for the page, under the poster)', () => {
+    expect(read('components', 'screens', 'EventDetailScreen.tsx')).toMatch(/testID="scene-title" accessibilityRole="header"/)
   })
 
   it('keeps the bar\'s small title out of the reading order (the hero\'s own title is the header)', () => {

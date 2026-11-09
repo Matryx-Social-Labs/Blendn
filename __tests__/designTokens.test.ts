@@ -31,10 +31,12 @@ describe('design tokens', () => {
       .sort()
     expect(raw).toEqual([
       'app/index.tsx', // the Google mark's label, drawn to Google's spec
+      'app/rate/[eventId].tsx', // Flow 4 rate's "How was the night?", 28/33: no role at 28
       'components/chat/ChatParts.tsx', // an emoji in flight
       'components/ds/ChatBubble.tsx', // an emoji-only message
       'components/ds/MomentPour.tsx', // motion #9's "You're in."
       'components/ds/shared.ts', // monoValue, the one mono size between 12 and 40
+      'components/scene/SceneHero.tsx', // Flow 4 E-B's stamp poster: its date is the art (20/24 words, a 120 day)
     ])
   })
 
