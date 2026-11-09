@@ -138,7 +138,6 @@ jest.mock('../lib/checkIn', () => ({ checkOutOf: jest.fn() }))
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn() }))
 jest.mock('../lib/usePresence', () => ({ usePresence: () => ({ finished: false }) }))
 jest.mock('../lib/useLiveSync', () => ({ useLiveSync: () => 'connected' }))
-jest.mock('../lib/useMinimumVisible', () => ({ useMinimumVisible: (v: boolean) => v }))
 jest.mock('../lib/photoUtils', () => ({ getOptimizedImageUrl: (url: string) => url }))
 jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() },

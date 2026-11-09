@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import Reanimated from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { FriendRequest } from '../../lib/friends'
@@ -7,6 +9,8 @@ import { inboxTimeLabel } from '../banter/inbox'
 import { monoCaption } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
 import { SkeletonBlock } from '../Skeleton'
+import { rowOut, rowReflow } from '../motion/presence'
+import { useReducedMotion } from '../../lib/motion'
 import { PersonAvatar } from './PersonRow'
 
 /** What is under the name: they came through your link, and the link is the only way in. */
@@ -17,9 +21,12 @@ export const REQUEST_LINE = 'Opened your link · asks to be your friend'
  * two answers side by side under them, Not now beside Accept, 48 pt each (`Button size="md"`, the DS has no 44). Not now is the glass-ground secondary: a `surface` fill on a `surface` card would have no edge.
  *
  * Accept is the lit button (the screen's rose, the glyph before the label), not the gradient. On Add friends, "Share my link" is the
- * screen's one primary; a column of gradient Accepts under it made two. Both answers dim while this row's answer is in flight (`busy`), and only
- * this row's, which is also what stops a second tap sending a second answer. The haptic is the outcome's, when the server says yes
- * (`useFriendRequests`), never the press.
+ * screen's one primary; a column of gradient Accepts under it made two. While this row's answer is in flight (`busy`), the answer
+ * pressed carries the wait (`loading`: busy to a screen reader, a spinner after the grace) and the other dims, which is also what stops a
+ * second tap sending a second answer. The haptic is the outcome's, when the server says yes (`useFriendRequests`), never the press.
+ *
+ * Answered, the row fades out and the rows below close the gap (DS #16); on Add friends the preview is a plain column, so the row carries
+ * the reflow itself. Reduce Motion: it goes and the column updates at once.
  */
 export function IncomingRequestRow({
   request,
@@ -32,11 +39,18 @@ export function IncomingRequestRow({
 }) {
   const bold = useBoldText()
   const largeText = useLargeText()
+  const reduceMotion = useReducedMotion()
+  const [answer, setAnswer] = useState<'accept' | 'dismiss' | null>(null)
+  const respond = (action: 'accept' | 'dismiss') => {
+    setAnswer(action)
+    onRespond(action)
+  }
+  const waiting = (action: 'accept' | 'dismiss') => busy && answer === action
   const { person } = request
   // How long they have waited (D-LM2), as Banter's request card says it: "3h", "Tue"; a count in mono, a day-word in the sans.
   const age = inboxTimeLabel(request.createdAt)
   return (
-    <View style={styles.card}>
+    <Reanimated.View exiting={reduceMotion ? undefined : rowOut} layout={reduceMotion ? undefined : rowReflow} style={styles.card}>
       <View style={styles.who}>
         <PersonAvatar person={person} />
         <View style={styles.text}>
@@ -62,8 +76,9 @@ export function IncomingRequestRow({
           label="Not now"
           onGlass
           accessibilityLabel={`Not now, ${person.name}`}
-          onPress={() => onRespond('dismiss')}
-          disabled={busy}
+          onPress={() => respond('dismiss')}
+          loading={waiting('dismiss')}
+          disabled={busy && !waiting('dismiss')}
           style={styles.action}
         />
         <Button
@@ -72,12 +87,13 @@ export function IncomingRequestRow({
           icon="user-check"
           label="Accept"
           accessibilityLabel={`Accept ${person.name}`}
-          onPress={() => onRespond('accept')}
-          disabled={busy}
+          onPress={() => respond('accept')}
+          loading={waiting('accept')}
+          disabled={busy && !waiting('accept')}
           style={styles.action}
         />
       </View>
-    </View>
+    </Reanimated.View>
   )
 }
 

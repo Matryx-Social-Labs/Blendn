@@ -1,5 +1,5 @@
-import { Easing, FadeIn, FadeOut, ReduceMotion, withDelay, withTiming } from 'react-native-reanimated'
-import { DURATION, EASING, REDUCE_MOTION, RISE } from '../../lib/design/tokens'
+import { Easing, FadeIn, FadeOut, LinearTransition, ReduceMotion, withDelay, withTiming } from 'react-native-reanimated'
+import { DURATION, EASING, REDUCE_MOTION, RISE, SPRING } from '../../lib/design/tokens'
 
 /*
  * Entering/exiting presets for small things that appear and disappear —
@@ -125,3 +125,11 @@ export const resortIn = (delay: number) => () => {
 }
 export const resortFadeIn = FadeIn.duration(REDUCE_MOTION.duration.quick).easing(ENTRANCE).reduceMotion(ReduceMotion.Never)
 export const resortOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)
+
+/*
+ * A row answered away (DS #16: a friend request, a withdrawn request, an unblocked person): it fades out over `quick` on
+ * the exit curve while the rows below close the gap on `M.settle`. Reduce Motion: pass neither; the row goes and the list
+ * updates at once. Going's saved rows carry the same values.
+ */
+export const rowOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
+export const rowReflow = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)

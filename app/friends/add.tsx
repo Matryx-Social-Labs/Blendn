@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
+import { RefreshControl, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
@@ -21,6 +22,8 @@ import { useAuth } from '../../lib/useAuth'
 import { useFriendInvite } from '../../lib/useFriendInvite'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
+import { rowOut, rowReflow } from '../../components/motion/presence'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * Add friends: your link, and the requests waiting either way.
@@ -40,6 +43,7 @@ function AddFriendsScreenContent() {
   const [reloadingLink, setReloadingLink] = useState(false)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
+  const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const { user } = useAuth()
 
@@ -78,27 +82,31 @@ function AddFriendsScreenContent() {
     <View style={styles.container}>
       <Grain />
       <TopBar title="Add friends" state={bar.state} onBack={() => router.back()} />
-      <FlatList
+      <Animated.FlatList
         testID="add-friends-list"
+        // A withdrawn request fades and the rest close the gap (DS #16, audit M13).
+        itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
         {...bar.scrollProps}
         data={outgoing}
         keyExtractor={(request) => request.id}
         renderItem={({ item: request }) => (
-          <PersonRow
-            person={request.person}
-            detail="Requested"
-            trailing={
-              <Button
-                kind="secondary"
-                size="sm"
-                label="Withdraw"
-                accessibilityLabel={`Withdraw request to ${request.person.name}`}
-                onPress={() => void withdraw(request)}
-                disabled={busy.has(request.id)}
-                style={styles.centred}
-              />
-            }
-          />
+          <Animated.View exiting={reduceMotion ? undefined : rowOut}>
+            <PersonRow
+              person={request.person}
+              detail="Requested"
+              trailing={
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  label="Withdraw"
+                  accessibilityLabel={`Withdraw request to ${request.person.name}`}
+                  onPress={() => void withdraw(request)}
+                  disabled={busy.has(request.id)}
+                  style={styles.centred}
+                />
+              }
+            />
+          </Animated.View>
         )}
         onEndReachedThreshold={1.5}
         onEndReached={() => void loadMore('outgoing')}

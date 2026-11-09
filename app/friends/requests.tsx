@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native'
+import { RefreshControl, StyleSheet, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -13,6 +14,8 @@ import { groupedCount } from '../../lib/friendsHere'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { HueProvider } from '../../components/ds/shared'
+import { rowReflow } from '../../components/motion/presence'
+import { useReducedMotion } from '../../lib/motion'
 
 /**
  * People asking to be your friend — what "Requests" on the Me tab and at the
@@ -29,6 +32,7 @@ function FriendRequestsScreenContent() {
   const [refreshing, setRefreshing] = useState(false)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
+  const reduceMotion = useReducedMotion()
   const offline = useOffline()
 
   const onRefresh = async () => {
@@ -64,7 +68,7 @@ function FriendRequestsScreenContent() {
       {!loaded && !failed ? (
         <RequestSkeleton />
       ) : (
-        <FlatList
+        <Animated.FlatList
           data={incoming}
           keyExtractor={(r) => r.id}
           renderItem={({ item }) => (
@@ -75,6 +79,8 @@ function FriendRequestsScreenContent() {
             />
           )}
           testID="requests-list"
+          // An answered request fades (the row's own exit) and the rest close the gap (DS #16).
+          itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
           onEndReachedThreshold={1.5}
           onEndReached={() => void loadMore('incoming')}
           initialNumToRender={6}
