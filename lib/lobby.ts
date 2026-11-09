@@ -1,6 +1,6 @@
 import type { BoardPost, BoardPostKind } from './board'
 import { compactCount } from './format'
-import { calendarDate, eventClock } from './time'
+import { whenLabel } from './pulse'
 import { roomOpensAt } from './preEventRoom'
 
 /**
@@ -118,12 +118,12 @@ export function postAge(createdAt: string, now: number = Date.now()): string {
   return hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} d`
 }
 
-/** "Mon 10 Nov, 12 AM": until when the Lobby can be read, in the event's own clock and never a zone's name. */
-export function untilWords(at: string | null | undefined, timeZone?: string | null): string {
-  if (!at) return ''
-  const day = calendarDate(at, { weekday: true, timeZone: timeZone ?? undefined })
-  const clock = eventClock(at, timeZone)
-  return day && clock ? `${day}, ${clock}` : ''
+/**
+ * "Tomorrow · 12 AM": until when the Lobby can be read, in the app's time words (`whenLabel`), the event city's day and
+ * clock. One unbreakable unit (no-break spaces, as `dayAndClock`): the read-only sentence wrapped "8:57" from "PM".
+ */
+export function untilWords(at: string | null | undefined, timeZone?: string | null, now: Date = new Date()): string {
+  return at ? whenLabel(at, now, timeZone).replace(/ /g, '\u00a0') : ''
 }
 
 /** "18 posts · 3 offering rides": the preview's count line, compact past 999; no rides part when nobody offers one. */
@@ -285,6 +285,59 @@ export function joinedLine(j: Pick<LobbyJoined, 'mine' | 'author' | 'others' | '
   return `${who}: ${j.body}`
 }
 
+/** Where a row of the card goes: the post's room you are seated in, the 1:1 your ask opened, or your asks in the Banter. */
+export type FromLobbyOpen = { kind: 'room' | 'dm'; id: string } | { kind: 'asks' }
+export type FromLobbyRow = {
+  key: string
+  glyph: 'car' | 'ticket' | 'users' | 'megaphone' | 'hand-heart'
+  title: string
+  line: string
+  host?: true
+  open: FromLobbyOpen | null
+}
+/** The room's card (H-A): its rows, how many joined rows it leaves out, until when Read the Lobby reads, and the folded line. */
+export type FromLobbyCard = { rows: FromLobbyRow[]; more: number; readUntil: string | null; bar: string }
+
+const joinedOpen = (j: LobbyJoined): FromLobbyOpen | null =>
+  j.chatGroupId ? { kind: 'room', id: j.chatGroupId } : j.conversationId ? { kind: 'dm', id: j.conversationId } : null
+
+function asksLine({ yours, waitingOnYou }: { yours: number; waitingOnYou: number }): string {
+  const parts = [
+    waitingOnYou > 0 ? `${compactCount(waitingOnYou)} ${waitingOnYou === 1 ? 'ask' : 'asks'} waiting on you` : null,
+    yours > 0 ? `${compactCount(yours)} of yours waiting for an answer` : null,
+  ]
+  return parts.filter(Boolean).join(' · ')
+}
+
+/**
+ * "From the Lobby" as the room draws it (board 4 and 4b). No card when the server says there is nothing. What you
+ * joined, then the host's note; only the note when that is all there is, with no Read the Lobby (nothing else to read).
+ * Asks waiting are a row only when nothing else is: the board draws none beside a ride.
+ */
+export function fromLobbyCard(s: LobbySummary | null): FromLobbyCard | null {
+  if (!s?.hasContent) return null
+  const joined = s.joined ?? []
+  const rows: FromLobbyRow[] = joined.slice(0, FROM_LOBBY_ROWS).map((j) => ({
+    key: j.postId,
+    glyph: j.subKind === 'ride' ? 'car' : j.subKind === 'ticket' ? 'ticket' : 'users',
+    title: joinedTitle(j),
+    line: joinedLine(j),
+    open: joinedOpen(j),
+  }))
+  if (s.pinned) rows.push({ key: 'host', glyph: 'megaphone', title: 'From the host', line: s.pinned.body, host: true, open: null })
+  const asks = s.asks ?? { yours: 0, waitingOnYou: 0 }
+  if (!rows.length && asks.yours + asks.waitingOnYou > 0) {
+    rows.push({ key: 'asks', glyph: 'hand-heart', title: 'Your asks', line: asksLine(asks), open: { kind: 'asks' } })
+  }
+  if (!rows.length) return null
+  return {
+    rows,
+    more: Math.max(0, joined.length - FROM_LOBBY_ROWS),
+    readUntil: joined.length ? s.readUntil : null,
+    bar: rows.map((r) => r.title).join(' · '),
+  }
+}
+
 /** The event page's card: `GET /events/:eventId/board/preview`. */
 export type LobbyPreview = {
   state: LobbyState
@@ -356,14 +409,14 @@ export function freshOnTop(page: readonly { id: string; mine: boolean }[], shown
 }
 
 /** The doors banner's line, in the event's own clock. */
-export function readOnlyLine(closesAt: string | undefined, timeZone?: string | null): string {
-  const until = untilWords(closesAt, timeZone)
+export function readOnlyLine(closesAt: string | undefined, timeZone?: string | null, now?: Date): string {
+  const until = untilWords(closesAt, timeZone, now)
   return until ? `The Lobby is read-only now. You can read it until ${until}.` : 'The Lobby is read-only now.'
 }
 
 /** The event page's card after doors (P-A `pA-ro`): why it is read-only, and until when. */
-export function previewReadOnlyLine(closesAt: string | undefined, timeZone?: string | null): string {
-  const until = untilWords(closesAt, timeZone)
+export function previewReadOnlyLine(closesAt: string | undefined, timeZone?: string | null, now?: Date): string {
+  const until = untilWords(closesAt, timeZone, now)
   return `The doors are open, so the Lobby is read-only.${until ? ` You can read it until ${until}.` : ''}`
 }
 

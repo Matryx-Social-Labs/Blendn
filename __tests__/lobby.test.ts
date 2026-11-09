@@ -9,6 +9,9 @@ import {
   countLine,
   doorsAt,
   filterQuery,
+  fromLobbyCard,
+  FROM_LOBBY_ROWS,
+  type LobbySummary,
   joinedLine,
   joinedTitle,
   kindGlyph,
@@ -176,12 +179,39 @@ describe('the compose sheet', () => {
   })
 })
 
+/** The time words with their no-break spaces read as plain ones. */
+const plain = (words: string) => words.replace(/\u00a0/g, ' ')
+
 describe('the clock', () => {
-  it('opens the doors 90 minutes before the start, and says "until" in the event’s clock with no zone', () => {
+  it('opens the doors 90 minutes before the start', () => {
     expect(doorsAt('2026-11-08T12:30:00Z')).toBe(Date.parse('2026-11-08T11:00:00Z'))
     expect(doorsAt(null)).toBeNull()
-    expect(untilWords('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('Tue 10 Nov, 12 AM')
-    expect(untilWords('2026-11-15T03:00:00Z', 'America/Toronto')).toBe('Sat 14 Nov, 10 PM')
+  })
+
+  // The owner's one time grammar (SCRUM-1031): Tonight from 5 PM, Today before, Tomorrow, the weekday, then the date;
+  // the event city's day and clock, never a zone's name.
+  it('says "until" in the app’s time words, in the event city’s day and clock', () => {
+    const IST = 'Asia/Kolkata'
+    const morning = new Date('2026-11-09T03:00:00Z') // Mon 9 Nov, 8:30 AM in Bengaluru
+    expect(plain(untilWords('2026-11-09T08:30:00Z', IST, morning))).toBe('Today · 2 PM')
+    expect(plain(untilWords('2026-11-09T15:00:00Z', IST, morning))).toBe('Tonight · 8:30 PM')
+    expect(plain(untilWords('2026-11-09T18:30:00Z', IST, morning))).toBe('Tomorrow · 12 AM')
+    expect(plain(untilWords('2026-11-12T15:00:00Z', IST, morning))).toBe('Thu · 8:30 PM')
+    expect(plain(untilWords('2026-11-25T15:00:00Z', IST, morning))).toBe('Wed 25 Nov · 8:30 PM')
+    expect(plain(untilWords(null, IST, morning))).toBe('')
+  })
+
+  it('is one unbreakable unit, so a sentence never wraps "8:57" from "PM" (iOS drive, the event page)', () => {
+    const words = untilWords('2026-11-10T15:27:00Z', 'Asia/Kolkata', new Date('2026-11-09T11:00:00Z'))
+    expect(plain(words)).toBe('Tomorrow · 8:57 PM')
+    expect(words).not.toMatch(/ /)
+  })
+
+  it('takes the day from the event’s city, not the phone’s', () => {
+    // Sat 14 Nov, 3 PM in Toronto; 1:30 AM Sunday in Bengaluru. The Lobby closes at 10 PM Toronto time.
+    const now = new Date('2026-11-14T20:00:00Z')
+    expect(plain(untilWords('2026-11-15T03:00:00Z', 'America/Toronto', now))).toBe('Tonight · 10 PM')
+    expect(plain(untilWords('2026-11-15T03:00:00Z', 'Asia/Kolkata', now))).toBe('Today · 8:30 AM')
   })
 })
 
@@ -192,6 +222,58 @@ describe('From the Lobby', () => {
     expect(joinedLine({ mine: false, author: 'Lunar Fox', others: 3, body: 'From Indiranagar at 5:30' })).toBe('With Lunar Fox and 2 others: From Indiranagar at 5:30')
     expect(joinedLine({ mine: false, author: 'Lunar Fox', others: 1, body: 'x' })).toBe('With Lunar Fox: x')
     expect(joinedLine({ mine: true, author: 'Me', others: 1, body: 'x' })).toBe('1 other with you: x')
+  })
+
+  const UNTIL = '2026-11-09T18:30:00Z'
+  const ride = { postId: 'p1', kind: 'offer' as const, subKind: 'ride' as const, body: 'From Indiranagar at 5:30', mine: false, author: 'Lunar Fox', others: 3, chatGroupId: 'g1', requestId: 'r1', conversationId: 'c1' }
+  const ticket = { ...ride, postId: 'p2', subKind: 'ticket' as const, chatGroupId: null, conversationId: 'c2' }
+  const group = { ...ride, postId: 'p3', subKind: 'spots' as const, chatGroupId: null, conversationId: null }
+  const summary = (over: Partial<LobbySummary>): LobbySummary => ({ state: 'read_only', phase: 'live', readUntil: UNTIL, hasContent: true, pinned: null, joined: [], asks: { yours: 0, waitingOnYou: 0 }, ...over })
+
+  it('is no card at all when the server says there is nothing (owner, 2026-11-06)', () => {
+    expect(fromLobbyCard(summary({ hasContent: false }))).toBeNull()
+    expect(fromLobbyCard(null)).toBeNull()
+    // Control: the same summary with a row in it is a card.
+    expect(fromLobbyCard(summary({ joined: [ride] }))).not.toBeNull()
+  })
+
+  it('lists your rides, tickets and groups, then the host’s note, then Read the Lobby', () => {
+    const card = fromLobbyCard(summary({ joined: [ride, ticket, group], pinned: PIN }))!
+    expect(card.rows.map((r) => r.title)).toEqual(['Your ride', 'Your ticket', 'Your group', 'From the host'])
+    expect(card.rows.map((r) => r.glyph)).toEqual(['car', 'ticket', 'users', 'megaphone'])
+    expect(card.rows[3]).toMatchObject({ host: true, line: 'Music starts at 6.', open: null })
+    expect(card.readUntil).toBe(UNTIL)
+    expect(card.bar).toBe('Your ride · Your ticket · Your group · From the host')
+  })
+
+  it('opens a row’s room when you are seated in it, else the 1:1 your ask opened, else nothing', () => {
+    const [a, b, c] = fromLobbyCard(summary({ joined: [ride, ticket, group] }))!.rows
+    expect(a.open).toEqual({ kind: 'room', id: 'g1' })
+    expect(b.open).toEqual({ kind: 'dm', id: 'c2' })
+    expect(c.open).toBeNull()
+  })
+
+  it('is only the note when the host’s note is all there is (4b): no Read the Lobby', () => {
+    const card = fromLobbyCard(summary({ pinned: PIN }))!
+    expect(card.rows).toHaveLength(1)
+    expect(card.rows[0].host).toBe(true)
+    expect(card.readUntil).toBeNull()
+  })
+
+  it('shows three rows you joined and counts the rest', () => {
+    const many = [1, 2, 3, 4, 5].map((i) => ({ ...group, postId: `p${i}` }))
+    const card = fromLobbyCard(summary({ joined: many, pinned: PIN }))!
+    expect(card.rows.filter((r) => !r.host)).toHaveLength(FROM_LOBBY_ROWS)
+    expect(card.more).toBe(2)
+    expect(fromLobbyCard(summary({ joined: [group] }))!.more).toBe(0)
+  })
+
+  it('says what is waiting when asks are all there is, and opens them', () => {
+    const card = fromLobbyCard(summary({ asks: { yours: 1, waitingOnYou: 2 } }))!
+    expect(card.rows).toEqual([{ key: 'asks', glyph: 'hand-heart', title: 'Your asks', line: '2 asks waiting on you · 1 of yours waiting for an answer', open: { kind: 'asks' } }])
+    expect(card.readUntil).toBeNull()
+    // Control: with a row you joined, the asks are not a row of their own (the board draws none).
+    expect(fromLobbyCard(summary({ joined: [ride], asks: { yours: 1, waitingOnYou: 2 } }))!.rows.map((r) => r.key)).toEqual(['p1'])
   })
 })
 
@@ -206,7 +288,7 @@ describe('the event page’s slot', () => {
   })
 
   it('says after doors why it is read-only, and until when in the event’s clock', () => {
-    expect(previewReadOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('The doors are open, so the Lobby is read-only. You can read it until Tue 10 Nov, 12 AM.')
+    expect(plain(previewReadOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata', new Date('2026-11-09T10:00:00Z')))).toBe('The doors are open, so the Lobby is read-only. You can read it until Tomorrow · 12 AM.')
     expect(previewReadOnlyLine(undefined)).toBe('The doors are open, so the Lobby is read-only.')
   })
 })
@@ -285,7 +367,7 @@ describe('the Lobby screen (L-A): what each part shows', () => {
   })
 
   it('says until when the Lobby can be read, and only the doors if the server did not say', () => {
-    expect(readOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata')).toBe('The Lobby is read-only now. You can read it until Tue 10 Nov, 12 AM.')
+    expect(plain(readOnlyLine('2026-11-09T18:30:00Z', 'Asia/Kolkata', new Date('2026-11-09T10:00:00Z')))).toBe('The Lobby is read-only now. You can read it until Tomorrow · 12 AM.')
     expect(readOnlyLine(undefined)).toBe('The Lobby is read-only now.')
   })
 

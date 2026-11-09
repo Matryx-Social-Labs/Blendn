@@ -190,18 +190,26 @@ export function placeLabel(event: {
  */
 export function cardTime(event: SessionSource & { timezone?: string | null }, now: number): string {
   if (isLiveNow(event, now)) return 'Live'
-  const start = new Date(liveWindow(event).start_time)
-  if (Number.isNaN(start.getTime())) return ''
   // The event's own zone (RC drive 5 D-4).
-  const zone = event.timezone ?? undefined
-  const clock = eventClock(start.getTime(), zone)
-  const word = dayWord(start, new Date(now), zone)
+  return whenLabel(liveWindow(event).start_time, new Date(now), event.timezone)
+}
+
+/**
+ * Any moment of an event in the one date grammar, without "Live": "Tonight · 9 PM", "Today · 2 PM", "Tomorrow · 9 PM",
+ * "Sat · 10:30 PM", "Sat 24 Oct · 9 PM"; the bare clock once it is today and past. The event city's day and clock.
+ */
+export function whenLabel(at: string | number | Date, now: Date, timeZone?: string | null): string {
+  const when = new Date(at)
+  if (Number.isNaN(when.getTime())) return ''
+  const zone = timeZone ?? undefined
+  const clock = eventClock(when.getTime(), zone)
+  const word = dayWord(when, now, zone)
   if (word) return `${word} · ${clock}`
-  const days = calendarDaysBetween(new Date(now), start, zone)
+  const days = calendarDaysBetween(now, when, zone)
   if (days <= 0) return clock
-  if (days < 7) return `${WEEKDAYS[weekdayIn(start, zone)]} · ${clock}`
+  if (days < 7) return `${WEEKDAYS[weekdayIn(when, zone)]} · ${clock}`
   // No year, even across New Year: a card's time is one line in a fixed slot, and the weekday already says which (review L6).
-  return `${calendarDate(start, { weekday: true, year: false, timeZone: zone })} · ${clock}`
+  return `${calendarDate(when, { weekday: true, year: false, timeZone: zone })} · ${clock}`
 }
 
 /** A count a card may print: five and up (`printable`); a small number of people is not said. */

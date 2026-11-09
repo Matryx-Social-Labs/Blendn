@@ -33,6 +33,7 @@ jest.mock('react-native-safe-area-context', () => {
 jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getBoard: jest.fn(),
+    getBoardPost: jest.fn(),
     getBoardRequests: jest.fn(),
     getEvent: jest.fn(),
     postToBoard: jest.fn(),
@@ -126,6 +127,8 @@ const pullToRefresh = () =>
     await screen.getByTestId('board-list').props.refreshControl.props.onRefresh()
   })
 
+// A test that pins the clock (the time words are relative) never leaves it pinned.
+afterEach(() => jest.useRealTimers())
 beforeEach(() => {
   jest.clearAllMocks()
   // Reset, not clear: a test that fails early must not leave queued answers for the next.
@@ -1081,11 +1084,13 @@ describe('L-A: the composer’s slot', () => {
 
 describe('L-A: after doors, and after the end', () => {
   it('read-only: until when, the room, the chips, and no action on any post', async () => {
+    // Only Date is faked (the owner's time words are relative to now): 10:00Z is 3:30 PM Monday in Bengaluru.
+    jest.useFakeTimers({ now: new Date('2026-11-09T10:00:00Z'), doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] })
     api.getEvent.mockResolvedValue({ success: true, data: { id: 'e1', title: 'Warehouse Night', startTime: PAST, timezone: 'Asia/Kolkata' } } as never)
     api.getBoard.mockResolvedValue(lobby([OFFER, SEEKING], { state: 'read_only', phase: 'live' }) as never)
     await render(<BoardScreen />)
     expect(await screen.findByText('The doors are open')).toBeTruthy()
-    expect(screen.getByText('The Lobby is read-only now. You can read it until Tue 10 Nov, 12 AM.')).toBeTruthy()
+    expect(screen.getByText('The Lobby is read-only now. You can read it until Tomorrow\u00a0·\u00a012\u00a0AM.')).toBeTruthy()
     expect(screen.getByText(OFFER.body)).toBeTruthy()
     expect(screen.queryByLabelText('Ask to join, Velvet Heron')).toBeNull()
     expect(screen.queryByLabelText('Say hi, Quiet Otter')).toBeNull()
@@ -1233,5 +1238,128 @@ describe('Lobby PR 5: the bell, what you have seen, and Post something from the 
     await render(<BoardScreen />)
     await screen.findByText(OFFER.body)
     expect(screen.queryByLabelText('Your post')).toBeNull()
+  })
+})
+
+describe('a link to a post (SCRUM-1026, 6/6)', () => {
+  const { FlatList } = require('react-native')
+  const OLD: BoardPost = { ...SEEKING, id: 'p-old', body: 'An older post, past the first page' }
+  const one = (post: BoardPost) => ({ success: true, data: { state: 'open', phase: 'before', closesAt: FUTURE, post } }) as never
+  let scrolled: jest.SpyInstance
+  beforeEach(() => {
+    scrolled = jest.spyOn(FlatList.prototype, 'scrollToIndex').mockImplementation(() => {})
+  })
+  afterEach(() => scrolled.mockRestore())
+  /** The post the list was asked to scroll to. */
+  const scrolledTo = () => screen.getByTestId('board-list').props.data[scrolled.mock.calls[0][0].index]?.id
+
+  it('scrolls to the post when it is on the page', async () => {
+    mockParams.post = 'p-seek'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(SEEKING))
+    await render(<BoardScreen />)
+    await waitFor(() => expect(scrolled).toHaveBeenCalled())
+    expect(scrolledTo()).toBe('p-seek')
+    expect(api.getBoardPost).toHaveBeenCalledWith('e1', 'p-seek')
+  })
+
+  it('asks again when a second link lands on the Lobby already open (the screen is reused, only the param changes)', async () => {
+    mockParams.post = 'p-seek'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(SEEKING))
+    await render(<BoardScreen />)
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1))
+    mockParams.post = 'p-gone'
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    const toTop = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {})
+    await act(async () => screen.rerender(<BoardScreen />))
+    expect(await screen.findByText('That post is no longer in the Lobby')).toBeTruthy()
+    // The line heads the list: scrolled down to the first post, you would not see it.
+    expect(toTop).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }))
+    toTop.mockRestore()
+    mockParams.post = 'p-offer'
+    api.getBoardPost.mockResolvedValue(one(OFFER))
+    await act(async () => screen.rerender(<BoardScreen />))
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('board-list').props.data[scrolled.mock.calls[1][0].index]?.id).toBe(OFFER.id)
+    // The gone line was about the earlier link.
+    expect(screen.queryByText('That post is no longer in the Lobby')).toBeNull()
+  })
+
+  it('lays a post older than the page on top, and scrolls to it', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(OLD))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OLD.body)).toBeTruthy()
+    await waitFor(() => expect(scrolled).toHaveBeenCalled())
+    expect(scrolledTo()).toBe('p-old')
+    // A refresh keeps it until the server lists it.
+    await pullToRefresh()
+    expect(screen.getByText(OLD.body)).toBeTruthy()
+  })
+
+  it('says the post is gone, and leaves the Lobby open', async () => {
+    mockParams.post = 'p-gone'
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('That post is no longer in the Lobby')).toBeTruthy()
+    expect(screen.getByText(OFFER.body)).toBeTruthy()
+    expect(scrolled).not.toHaveBeenCalled()
+  })
+
+  it('shows the closed Lobby when the post’s Lobby has closed', async () => {
+    mockParams.post = 'p-seek'
+    api.getBoard.mockResolvedValue(board([SEEKING]))
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'closed', reasonCode: 'LOBBY_CLOSED' } as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByTestId('lobby-closed')).toBeTruthy()
+  })
+
+  it('drops the linked post when you block somebody, as the pages do', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(OLD))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OLD.body)).toBeTruthy()
+    await act(async () => noteBlocked())
+    await waitFor(() => expect(screen.queryByText(OLD.body)).toBeNull())
+    expect(screen.getByText(OFFER.body)).toBeTruthy()
+  })
+
+  it('never lays a post on top that a block overtook while it was being read', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    let answer: (v: unknown) => void = () => {}
+    api.getBoardPost.mockReturnValue(new Promise((r) => (answer = r)) as never)
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    await act(async () => noteBlocked())
+    await act(async () => answer(one(OLD)))
+    expect(screen.queryByText(OLD.body)).toBeNull()
+  })
+
+  it('asks again on a refresh, and drops the post once the Lobby says it is gone', async () => {
+    mockParams.post = 'p-old'
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    api.getBoardPost.mockResolvedValue(one(OLD))
+    await render(<BoardScreen />)
+    expect(await screen.findByText(OLD.body)).toBeTruthy()
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    await pullToRefresh()
+    await waitFor(() => expect(screen.queryByText(OLD.body)).toBeNull())
+    // Control: still there while the Lobby still has it.
+    expect(api.getBoardPost).toHaveBeenLastCalledWith('e1', 'p-old')
+  })
+
+  it('asks for no post without a link, nor for one that is not an id', async () => {
+    api.getBoard.mockResolvedValue(board([OFFER]))
+    await render(<BoardScreen />)
+    await screen.findByText(OFFER.body)
+    mockParams.post = '../settings'
+    await render(<BoardScreen />)
+    await screen.findAllByText(OFFER.body)
+    expect(api.getBoardPost).not.toHaveBeenCalled()
   })
 })

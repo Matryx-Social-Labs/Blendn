@@ -37,6 +37,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: {
     getChatMessages: jest.fn(),
     getChatGroups: jest.fn(), getRoomPreview: jest.fn(async () => ({ success: false })),
+    getBoardSummary: jest.fn(async () => ({ success: true, data: { hasContent: false } })),
     getEventChat: jest.fn(),
     sendChatMessage: jest.fn(),
     reactToChatMessage: jest.fn(),
@@ -484,4 +485,52 @@ describe('a room that is not on the Banter’s first page opens read-only too (R
     expect(Logger.warn).toHaveBeenCalledWith('chat', expect.stringContaining('lock'), expect.anything())
   })
 
+})
+
+describe('From the Lobby in the room (SCRUM-1026, H-A)', () => {
+  const PIN = { id: 'h1', body: 'Music starts at 6.', host: 'Nightshift', createdAt: '2026-11-06T06:00:00Z', updatedAt: '2026-11-06T06:00:00Z' }
+  const openRoom = () =>
+    (apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [eventRow({}, { startTime: new Date(Date.now() + HOUR).toISOString() })] } })
+  const withNote = () =>
+    (apiClient.getBoardSummary as jest.Mock).mockResolvedValue({ success: true, data: { state: 'read_only', phase: 'live', readUntil: new Date().toISOString(), hasContent: true, pinned: PIN, joined: [] } })
+
+  it('sits above the stream of an open event room, and folds when you drag the room', async () => {
+    openRoom()
+    withNote()
+    await render(<GroupChat />)
+    await flush()
+    expect(apiClient.getBoardSummary).toHaveBeenCalledWith('e1')
+    expect(screen.getByTestId('from-lobby-row-host')).toBeTruthy()
+    // Folded: the line is what a screen reader reaches, the card is not.
+    expect(screen.queryByLabelText('From the Lobby: From the host')).toBeNull()
+    await fireEvent(screen.getByTestId('room-feed'), 'scrollBeginDrag')
+    expect(screen.getByLabelText('From the Lobby: From the host')).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('from-lobby-bar'))
+    expect(screen.queryByLabelText('From the Lobby: From the host')).toBeNull()
+  })
+
+  it('reads the event from the room the server lists, never from a link’s eventId', async () => {
+    withNote()
+    // A room the server does not list as an event's, opened by a link naming some other event.
+    mockParams = { id: 'g9', eventId: 'e-other' }
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [] } })
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.queryByTestId('from-lobby')).toBeNull()
+    expect(apiClient.getBoardSummary).not.toHaveBeenCalledWith('e-other')
+  })
+
+  it('is not there while the room counts down to its doors, nor in a crew’s room', async () => {
+    withNote()
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.getByText('Not open yet')).toBeTruthy()
+    expect(screen.queryByTestId('from-lobby')).toBeNull()
+    mockParams = { id: 'g1', kind: 'crew', crewId: 'c1' }
+    openRoom()
+    await render(<GroupChat />)
+    await flush()
+    expect(screen.queryByTestId('from-lobby')).toBeNull()
+    expect(apiClient.getBoardSummary).not.toHaveBeenCalled()
+  })
 })
