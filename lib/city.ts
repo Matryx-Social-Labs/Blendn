@@ -110,6 +110,45 @@ export interface CityCatalogue {
 
 const opens = (option: CityOption) => option.access !== 'comingSoon'
 
+/** What the phone's own settings say, with or without a fix: its time zone and its region (`lib/time`). */
+export interface PhoneClues {
+  region: string | null
+  timeZone: string | null
+}
+
+/**
+ * The city the phone's own settings point to, for a phone we have no fix for (location denied, or not back yet). First
+ * its time zone, which the network sets where the phone is: the one listed city in that zone, or its country's default
+ * when several share it. A Toronto phone set to English (US) has region US and zone America/Toronto (SCRUM-997). Then
+ * the city the server made of `X-Country`, then the region's country's default. Null for a zone and a region we list
+ * nothing in: the caller's default stands. The onboarding map and the Pulse both open by this (SCRUM-1037).
+ */
+type PhoneCatalogue = { cities: readonly CityOption[]; countries?: readonly CatalogueCountry[]; device?: DeviceScope | null }
+
+export function phoneCitySlug(catalogue: PhoneCatalogue, clues: PhoneClues): string | null {
+  const countryDefault = (code: string | null | undefined) =>
+    code ? (catalogue.countries?.find((c) => c.code === code.toUpperCase())?.defaultCitySlug ?? null) : null
+  const { device } = catalogue
+  const deviceSlug = device && device.access !== 'none' && device.access !== 'hidden' ? device.citySlug : null
+  return zoneCitySlug(catalogue.cities, clues.timeZone, countryDefault) ?? deviceSlug ?? countryDefault(clues.region)
+}
+
+function zoneCitySlug(cities: readonly CityOption[], timeZone: string | null, countryDefault: (code: string | null | undefined) => string | null): string | null {
+  const inZone = timeZone ? cities.filter((c) => c.timezone === timeZone && c.slug) : []
+  if (inZone.length === 0) return null
+  if (inZone.length === 1) return inZone[0].slug ?? null
+  const fallback = countryDefault(inZone[0].country)
+  return inZone.some((c) => c.slug === fallback) ? fallback : (inZone[0].slug ?? null)
+}
+
+/**
+ * The country a phone with no fix is sent as (`X-Country`) and ranked by (the picker): its `phoneCitySlug` city's. Null
+ * for a zone and region we list nothing in, as before SCRUM-1037. The server's own answer is left out, as it answers this.
+ */
+export function phoneCountry(catalogue: PhoneCatalogue, clues: PhoneClues): string | null {
+  return cityBySlug(catalogue.cities, phoneCitySlug({ ...catalogue, device: null }, clues))?.country ?? null
+}
+
 export function cityBySlug(available: readonly CityOption[], slug: string | null | undefined): CityOption | null {
   return slug ? available.find((option) => option.slug === slug) ?? null : null
 }
@@ -193,9 +232,10 @@ const inferredAt = (option: CityOption): StoredCity => storedAt(option, 'inferre
  *    is not a selection.
  * 2. **Where the device is**, if that city opens (`hereCity`) — inferred, so a later
  *    launch somewhere else may replace it.
- * 3. **The phone's country's city**, as the server names it from `X-Country`: a served country's city, or a
- *    coming-soon one, whose own screen says so (a Toronto phone lands on "Coming soon to Toronto", not in India).
- * 4. **The catalogue's default city** for a country we do not serve, or no location at all. Browsable, and never
+ * 3. **Where the phone's settings point** (`phoneCitySlug`): the city of its time zone, else its country's city as
+ *    the server names it from `X-Country`, else its region's: a served country's city, or a coming-soon one, whose own
+ *    screen says so (a Toronto phone lands on "Coming soon to Toronto", not in India, with or without a fix: SCRUM-1037).
+ * 4. **The catalogue's default city** for a zone and a country we do not serve. Browsable, and never
  *    called near the person (`awayNotice` says where they are instead).
  * 5. Only for an older server, which names no default: its busiest row. Row 0 is busiest-first, so for everyone the
  *    server could not place it was Mysuru, a city nobody there was near (SCRUM-997).
@@ -211,8 +251,10 @@ export function resolveBrowseCity(input: {
   point?: Point | null
   device?: DeviceScope | null
   defaultCitySlug?: string | null
+  countries?: readonly CatalogueCountry[]
+  phone?: PhoneClues
 }): StoredCity | null {
-  const { stored, available, device, defaultCitySlug } = input
+  const { stored, available, device, defaultCitySlug, countries, phone } = input
 
   if (stored) {
     const slug = stored.slug ?? cityNamed(available, stored.city)?.slug
@@ -222,7 +264,7 @@ export function resolveBrowseCity(input: {
   const here = hereCity(input)
   if (here && opens(here)) return inferredAt(here)
 
-  const theirs = device && (device.access === 'full' || device.access === 'comingSoon') ? cityBySlug(available, device.citySlug) : null
+  const theirs = cityBySlug(available, phoneCitySlug({ cities: available, countries, device }, phone ?? NO_CLUES))
   if (theirs) return inferredAt(theirs)
 
   const fallback = cityBySlug(available, defaultCitySlug) ?? available.find((option) => option.isDefault && opens(option))
@@ -230,6 +272,21 @@ export function resolveBrowseCity(input: {
   if (defaultCitySlug !== undefined) return null
 
   return available.length > 0 ? inferredAt(available[0]) : null
+}
+
+const NO_CLUES: PhoneClues = { region: null, timeZone: null }
+
+/**
+ * What a launch does with a selection already on screen (from disk, or made while the list was in flight), given its
+ * own `guess`. A choice stays, and so does a placed guess. A guess with no slug was written by an older build whose
+ * fallback opened the busiest row (Mysuru) for everyone: guessed again (SCRUM-997). So is a guess that was only the
+ * catalogue's default when the phone now points elsewhere: every phone with no fix stored Bengaluru before SCRUM-1037.
+ */
+export function keepOrGuess(current: StoredCity | null, guess: StoredCity | null, defaultCitySlug: string | null | undefined): StoredCity | null {
+  if (current?.source === 'chosen') return current
+  const onlyTheDefault = !!current?.slug && current.slug === defaultCitySlug && !!guess?.slug && guess.slug !== current.slug
+  if (current?.slug && !onlyTheDefault) return current
+  return guess ?? current
 }
 
 /**
