@@ -1115,6 +1115,13 @@ describe('L-A: after doors, and after the end', () => {
     expect(screen.getByText('The Lobby and the room close a day after the event ends. Your friends, chats and crews are where they were.')).toBeTruthy()
     expect(screen.queryByText('Open the room')).toBeNull()
   })
+
+  it('closed: the glyph takes the board’s 26 pt row, so the card is the board’s 176 pt (mockup-diff lA-closed, SCRUM-1033)', async () => {
+    api.getBoard.mockResolvedValue({ success: false, errorCode: 'FORBIDDEN', reasonCode: 'LOBBY_CLOSED', error: 'closed' } as never)
+    await render(<BoardScreen />)
+    const glyph = await screen.findByTestId('lobby-closed-glyph')
+    expect(StyleSheet.flatten(glyph.props.style)).toMatchObject({ height: 26 })
+  })
 })
 
 describe('L-A: new posts wait behind the pill (the list never jumps)', () => {
