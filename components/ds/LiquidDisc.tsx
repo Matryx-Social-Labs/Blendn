@@ -59,7 +59,7 @@ export type LiquidDiscProps = {
   level: number
   /** Stops the wave and the bubbles (a spent pass); Reduce Motion stops them too. */
   still?: boolean
-  /** Over the disc, centred at the foot: the stamp. It lands when it mounts. */
+  /** Over the disc, at its centre: the stamp. It lands when it mounts. */
   stamp?: ReactNode
   testID?: string
 }
@@ -199,5 +199,6 @@ const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
   inkBox: { position: 'absolute', bottom: 0, left: 0 },
   liquidMark: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
-  stamp: { position: 'absolute', left: 0, right: 0, bottom: 8, alignItems: 'center' },
+  /** The board's .stampR: at the disc's centre, over the mark. */
+  stamp: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
 })

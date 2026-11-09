@@ -1,5 +1,5 @@
 import React from 'react'
-import { act, render, screen, fireEvent } from '@testing-library/react-native'
+import { act, render, screen, fireEvent, within } from '@testing-library/react-native'
 import { StyleSheet } from 'react-native'
 
 /*
@@ -42,6 +42,11 @@ jest.mock('../components/ds/LiquidDisc', () => {
       <View testID={testID} style={{ width: size, height: size }}>{stamp}</View>
     ),
   }
+})
+// Each glyph by name, so the tile's can be read (the venue's type, or the gift).
+jest.mock('../components/ui/Icon', () => {
+  const { View } = jest.requireActual('react-native')
+  return { ...jest.requireActual('../components/ui/Icon'), Icon: ({ name }: { name: string }) => <View testID={`icon-${name}`} /> }
 })
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn() } }))
@@ -231,6 +236,26 @@ describe('the other faces of the pass', () => {
     expect(screen.getByText('— — —')).toBeTruthy()
   })
 
+  it('the stamp is the board’s .stampR: a 32 pt capsule, 6 between the check and the words, the time in Geist Mono', async () => {
+    reads = [offer('redeemed', null, { redeemedAt: new Date(2026, 9, 11, 21, 43).toISOString() })]
+    await mount()
+    const capsule = StyleSheet.flatten(screen.getByTestId('door-stamp').props.style)
+    expect(capsule).toMatchObject({ minHeight: 32, gap: 6, paddingHorizontal: 12 })
+    // At the largest text the words are wider than the 184 pt disc: they wrap inside a taller capsule, never clip ("Redeemed 5", drive 2026-11-09).
+    expect(capsule.height).toBeUndefined()
+    expect(StyleSheet.flatten(screen.getByText('Redeemed 9:43 PM').props.style)).toMatchObject({ flexShrink: 1, textAlign: 'center' })
+    expect(StyleSheet.flatten(screen.getByText('9:43 PM').props.style).fontFamily).toBe('GeistMono_500Medium')
+    // Control: the word stays in the brand face.
+    expect(StyleSheet.flatten(screen.getByText('Redeemed 9:43 PM').props.style).fontFamily).not.toBe('GeistMono_500Medium')
+  })
+
+  it('a stamp with no time ("Used tonight", or a server that sent no redeemedAt) is words alone, in the brand face', async () => {
+    reads = [offer('redeemed', null)]
+    await mount()
+    expect(screen.getByText('Redeemed')).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByText('Redeemed').props.style).fontFamily).not.toBe('GeistMono_500Medium')
+  })
+
   it('used tonight: still, stamped, and the server’s own sentence', async () => {
     reads = [offer('used_tonight', null)]
     await mount()
@@ -243,6 +268,46 @@ describe('the other faces of the pass', () => {
     await mount()
     expect(StyleSheet.flatten(screen.getByTestId('door-tile').props.style)).toMatchObject({ width: 48, height: 48 })
     expect(StyleSheet.flatten(screen.getByTestId('door-disc').props.style)).toMatchObject({ width: 184, height: 184 })
+  })
+
+  describe('the tile shows the venue’s type (flow-4 offer board .vp: the brewery plate and its beer)', () => {
+    const at = (venueType: string | null | undefined) =>
+      offer('live', { code: 'K7Q4M2', rotatesAt: '2026-10-11T20:00:30.000Z' }, { venue: { id: 'v1', name: 'The Humming Tree', ...(venueType === undefined ? {} : { venueType }) } })
+    // The plate is decorative (hidden from a screen reader; the venue's name beside it is read), so the query includes hidden elements.
+    const tile = () => within(screen.getByTestId('door-tile'))
+    const hidden = { includeHiddenElements: true }
+
+    it.each([
+      ['brewery', 'beer'],
+      ['pub_bar', 'wine'],
+      ['cafe', 'coffee'],
+      ['coworking', 'coffee'],
+      ['restaurant', 'utensils'],
+      ['nightclub', 'disc-3'],
+      ['live_music_venue', 'music-2'],
+      ['lounge_rooftop', 'tree-palm'],
+    ])('%s: its plate, with the %s glyph the venue’s own page draws, and no gift', async (venueType, glyph) => {
+      reads = [at(venueType)]
+      await mount()
+      expect(tile().getByTestId('door-plate', hidden)).toBeTruthy()
+      expect(tile().getByTestId(`icon-${glyph}`, hidden)).toBeTruthy()
+      expect(tile().queryByTestId('icon-gift', hidden)).toBeNull()
+    })
+
+    // Controls: no type, an older server that sends none, and a type with no plate keep the gift on the plain tile — never the bar's plate.
+    it.each([['null', null], ['absent', undefined], ['stadium', 'stadium'], ['other', 'other']])('%s: the gift on the plain tile', async (_, venueType) => {
+      reads = [at(venueType)]
+      await mount()
+      expect(tile().getByTestId('icon-gift', hidden)).toBeTruthy()
+      expect(tile().queryByTestId('door-plate', hidden)).toBeNull()
+      expect(StyleSheet.flatten(screen.getByTestId('door-tile').props.style)).toMatchObject({ width: 48, height: 48 })
+    })
+
+    it('a redeemed pass keeps its tile', async () => {
+      reads = [offer('redeemed', null, { venue: { id: 'v1', name: 'The Humming Tree', venueType: 'brewery' }, redeemedAt: '2026-10-11T16:13:00.000Z' })]
+      await mount()
+      expect(tile().getByTestId('icon-beer', hidden)).toBeTruthy()
+    })
   })
 
   it('ended: names the day, dashes for the code', async () => {
