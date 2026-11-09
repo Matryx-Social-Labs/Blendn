@@ -78,3 +78,20 @@ describe('rows that are answered away leave, and the list closes the gap (DS #16
     expect(code('components/friends/IncomingRequestRow.tsx')).toContain('layout={reduceMotion ? undefined : rowReflow}')
   })
 })
+
+/*
+ * iOS drive 2026-11-09: the last row's fade ran under the empty state, which arrived at full opacity in the same frame, so
+ * "No requests waiting" was drawn across the fading card for the length of the fade. The empty state now waits out the
+ * row's `quick` exit and fades in over `base`. Reduce Motion: both are instant, so nothing overlaps.
+ */
+describe('the empty state after the last row leaves', () => {
+  it('the shared preset starts once the row is gone', () => {
+    expect(code('components/motion/presence.ts')).toContain(
+      'export const emptyAfterRowOut = FadeIn.duration(DURATION.base).delay(DURATION.quick).easing(GENTLE).reduceMotion(ReduceMotion.Never)'
+    )
+  })
+
+  it.each(['app/friends/requests.tsx', 'app/blocked-users.tsx', 'app/message-requests.tsx'])('%s: the empty state waits for the row, not under Reduce Motion', (path) => {
+    expect(code(path)).toContain('entering={reduceMotion ? undefined : emptyAfterRowOut}')
+  })
+})

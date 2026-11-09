@@ -443,6 +443,8 @@ export function PlacesList({
         renderItem={renderItem}
         // Up to twelve rows reflow on M.settle; more crossfade (#38).
         itemLayoutAnimation={reflowsOnSpring(rows.length, reduceMotion) ? UNFOLD : undefined}
+        // Its rows' exits and this reflow need their views: clipping (Android's default) cuts them in one frame (SCRUM-1001).
+        removeClippedSubviews={false}
         stickyHeaderIndices={PLACES_STICKY}
         ListFooterComponent={
           state.loadingMore ? (

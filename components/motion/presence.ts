@@ -133,3 +133,8 @@ export const resortOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(.
  */
 export const rowOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
 export const rowReflow = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
+/*
+ * The empty state a list shows once its last row has been answered away: it waits out the row's `quick` exit, then fades in
+ * over `base`, so the words are never drawn across the fading card (iOS drive, SCRUM-1001). Reduce Motion: pass neither.
+ */
+export const emptyAfterRowOut = FadeIn.duration(DURATION.base).delay(DURATION.quick).easing(GENTLE).reduceMotion(ReduceMotion.Never)

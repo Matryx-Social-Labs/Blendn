@@ -518,6 +518,8 @@ function ChatInner() {
         testID="banter-list"
         // A thread that moves up when a message lands glides there after a beat; never while the list is under a finger or coasting.
         itemLayoutAnimation={reduceMotion || scrolling || inbox.appending ? undefined : REORDER}
+        // Its rows' exits and this reflow need their views: clipping (Android's default) cuts them in one frame (SCRUM-1001).
+        removeClippedSubviews={false}
         data={inbox.loading && !items.length ? [] : shown}
         keyExtractor={(item) => item.key}
         renderItem={renderItem}

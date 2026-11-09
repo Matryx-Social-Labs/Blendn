@@ -16,7 +16,7 @@ import { fetchBlockedPage } from '../lib/blockedUsersPage'
 import { unblockUser, type BlockedUser } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { useTopBarState } from '../lib/useTopBarState'
-import { rowOut, rowReflow } from '../components/motion/presence'
+import { emptyAfterRowOut, rowOut, rowReflow } from '../components/motion/presence'
 import { useReducedMotion } from '../lib/motion'
 
 /** Empty pages with a cursor after them, followed on in one go before the foot waits for the next end-reach. */
@@ -223,12 +223,15 @@ function BlockedUsersContent() {
         <Animated.FlatList
           testID="blocked-users-list"
           itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
+          // Its rows' exits and this reflow need their views: clipping (Android's default) cuts them in one frame (SCRUM-1001).
+          removeClippedSubviews={false}
           data={blockedUsers}
           keyExtractor={(item) => item.blocked_id}
           renderItem={renderBlockedUser}
           // The foot is the list's own padding: a wrapper that insets the screen cuts the scroll on a line above the home indicator.
           contentContainerStyle={[blockedUsers.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
-          ListEmptyComponent={renderEmptyState()}
+          // After the last unblock it waits for the row's fade (emptyAfterRowOut).
+          ListEmptyComponent={<Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{renderEmptyState()}</Animated.View>}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.5}
           ListFooterComponent={footer}

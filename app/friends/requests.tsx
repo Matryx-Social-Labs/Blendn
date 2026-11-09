@@ -14,7 +14,7 @@ import { groupedCount } from '../../lib/friendsHere'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { HueProvider } from '../../components/ds/shared'
-import { rowReflow } from '../../components/motion/presence'
+import { emptyAfterRowOut, rowReflow } from '../../components/motion/presence'
 import { useReducedMotion } from '../../lib/motion'
 
 /**
@@ -85,12 +85,14 @@ function FriendRequestsScreenContent() {
           onEndReached={() => void loadMore('incoming')}
           initialNumToRender={6}
           windowSize={7}
-          removeClippedSubviews
+          // Rows leave with an exit and the list reflows (DS #16): clipping takes their views out from under it, a one-frame cut (SCRUM-1001).
+          removeClippedSubviews={false}
           ListFooterComponent={
             <PagedFooter loading={incomingPage.loadingMore} failed={incomingPage.moreFailed} onRetry={() => void loadMore('incoming')} testID="requests-more" />
           }
           contentContainerStyle={[incoming.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
-          ListEmptyComponent={empty}
+          // After the last answer it waits for the row's fade (emptyAfterRowOut).
+          ListEmptyComponent={<Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{empty}</Animated.View>}
           // `textSecondary`, the one pull-to-refresh colour (docs/DESIGN_SYSTEM.md).
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLOR.textSecondary} />}
           showsVerticalScrollIndicator={false}
