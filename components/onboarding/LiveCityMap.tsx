@@ -1,5 +1,5 @@
 import { Camera, Map, type CameraRef, type CameraStop, type LightSpecification, type MapRef, type ViewStateChangeEvent } from '@maplibre/maplibre-react-native'
-import { getLocales } from 'expo-localization'
+import { getCalendars, getLocales } from 'expo-localization'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, StyleSheet, View, type LayoutChangeEvent, type NativeSyntheticEvent } from 'react-native'
 
@@ -34,7 +34,7 @@ const LANDED_KM = 0.3
 
 /**
  * The location step's live map (Flow 2, owner 2026-11-01), over the step's still frame: the landing site's sequence played
- * once in the app (`lib/onboardingMap`). It opens on the catalogue's city for the phone's region (unnamed), flat; once it
+ * once in the app (`lib/onboardingMap`). It opens on the catalogue's city for the phone's zone or region (unnamed), flat; once it
  * has drawn, the camera tilts into the app's opening view and the real places near the middle light one by one, nearest
  * first, as on the home map (`useMapLighting`, `lib/mapLit`). Given `you` (Allow, and a fix came), it flies there, lights
  * what is near, and says so through `onShown`.
@@ -60,14 +60,15 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
   const [landed, setLanded] = useState<{ at: string; passes: number } | null>(null)
   const youKey = keyOf(you)
 
-  // The catalogue's city for this phone's region, asked once.
+  // The catalogue's city for this phone's zone or region, asked once.
   useEffect(() => {
     let alive = true
     const region = getLocales()[0]?.regionCode ?? null
+    const timeZone = getCalendars()[0]?.timeZone ?? null
     apiClient
       .getEventCities(region)
       .then((res) => {
-        if (alive && res.success) setCentre(openingCentre(res.data, region))
+        if (alive && res.success) setCentre(openingCentre(res.data, region, timeZone))
       })
       .catch(() => {})
     return () => {
