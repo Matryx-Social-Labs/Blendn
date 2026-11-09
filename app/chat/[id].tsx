@@ -78,6 +78,7 @@ import { withDaySeparators } from '../../lib/unreadDivider'
 import { useAuth } from '../../lib/useAuth'
 import { isReadOnlyLock, lockFor, lockFromDoor, saidWrite, useComposerLock, type ComposerLock } from '../../lib/useComposerLock'
 import { scrollListToEnd, useFollowEnd } from '../../lib/useFollowEnd'
+import { useReducedMotion } from '../../lib/motion'
 import type { PollRefusal } from '../../lib/chatPoll'
 import { useLatest } from '../../lib/useLatest'
 import { useOnBlock } from '../../lib/useOnBlock'
@@ -356,7 +357,10 @@ function GroupChatInner() {
   // Per account: the cached page labels its reader's own messages "You" and carries their reactions.
   const messagesCacheKey = chatRoomId && authUser?.id ? `chat_messages_${authUser.id}_${chatRoomId}` : null
 
-  const scrollToBottom = (animated = true) => scrollListToEnd(flatListRef.current, animated)
+  // Reduce Motion: the jump to the newest still lands, without the smooth scroll (audit M9). Through a ref, because the
+  // socket handlers keep the `scrollToBottom` of the render that subscribed them, and the setting can change mid-chat.
+  const reduceMotion = useLatest(useReducedMotion())
+  const scrollToBottom = (animated = true) => scrollListToEnd(flatListRef.current, animated && !reduceMotion.current)
   /* Follows the end as content lays out, until a real drag: the newest stays pinned as the keyboard moves (#34). */
   const follow = useFollowEnd(() => scrollToBottom(false))
   const setMessage = (id: string, change: (m: Message) => Message) =>

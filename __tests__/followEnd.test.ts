@@ -115,7 +115,7 @@ describe('both chat screens use it', () => {
     ['app', 'chat', '[id].tsx'],
   ])('%s/%s/%s scrolls the native view to its real end', (...p) => {
     const src = read(...p)
-    expect(src).toMatch(/scrollListToEnd\(flatListRef\.current, animated\)/)
+    expect(src).toMatch(/scrollListToEnd\(flatListRef\.current, animated && !reduceMotion\.current\)/)
     expect(src).not.toMatch(/flatListRef\.current\?\.scrollToEnd\(/)
   })
 

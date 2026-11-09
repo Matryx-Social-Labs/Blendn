@@ -1041,7 +1041,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * behaviour ran all four through one non-silent `fetchEvents()`, so typing
    * a query dropped the *entire* screen (including the Featured/Upcoming
    * rails a search hides anyway) into skeleton for at least the 720ms
-   * `useMinimumVisible` floor, every time the debounce settled. Refs rather
+   * minimum-visible floor, every time the debounce settled. Refs rather
    * than state because this only needs to be read inside the effect below,
    * once, the render after each of these actually changes.
    */

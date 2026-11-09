@@ -28,3 +28,24 @@ it('no scroll in the app animates regardless of Reduce Motion', () => {
   )
   expect(found).toEqual([])
 })
+
+/**
+ * Motion audit M9 (2026-11-01): the two chats scrolled to the end through `scrollListToEnd(list, animated)`, a variable,
+ * so the literal check above could not see that neither route read the setting. Every call passes `false` or a value
+ * that names Reduce Motion.
+ */
+it('every scroll to the end of a chat follows Reduce Motion', () => {
+  const files = [...walk(join(ROOT, 'app')), ...walk(join(ROOT, 'components')), ...walk(join(ROOT, 'lib'))]
+  const found = files.flatMap((f) =>
+    readFileSync(f, 'utf8')
+      .split('\n')
+      .map((line, i) => ({ line: line.trim(), at: `${relative(ROOT, f)}:${i + 1}` }))
+      .filter(({ line }) => /\bscrollListToEnd\(/.test(line) && !/^export function/.test(line) && !line.startsWith('import'))
+      .filter(({ line }) => {
+        const arg = line.slice(line.indexOf('scrollListToEnd(')).match(/,\s*([^)]*)\)/)?.[1] ?? ''
+        return arg.trim() !== 'false' && !/reduceMotion/.test(arg)
+      })
+      .map(({ at }) => at)
+  )
+  expect(found).toEqual([])
+})
