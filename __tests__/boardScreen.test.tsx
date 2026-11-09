@@ -1259,6 +1259,25 @@ describe('a link to a post (SCRUM-1026, 6/6)', () => {
     expect(api.getBoardPost).toHaveBeenCalledWith('e1', 'p-seek')
   })
 
+  it('asks again when a second link lands on the Lobby already open (the screen is reused, only the param changes)', async () => {
+    mockParams.post = 'p-seek'
+    api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))
+    api.getBoardPost.mockResolvedValue(one(SEEKING))
+    await render(<BoardScreen />)
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(1))
+    mockParams.post = 'p-gone'
+    api.getBoardPost.mockResolvedValue({ success: false, error: 'That post is no longer in the Lobby', errorCode: 'NOT_FOUND' } as never)
+    await act(async () => screen.rerender(<BoardScreen />))
+    expect(await screen.findByText('That post is no longer in the Lobby')).toBeTruthy()
+    mockParams.post = 'p-offer'
+    api.getBoardPost.mockResolvedValue(one(OFFER))
+    await act(async () => screen.rerender(<BoardScreen />))
+    await waitFor(() => expect(scrolled).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('board-list').props.data[scrolled.mock.calls[1][0].index]?.id).toBe(OFFER.id)
+    // The gone line was about the earlier link.
+    expect(screen.queryByText('That post is no longer in the Lobby')).toBeNull()
+  })
+
   it('lays a post older than the page on top, and scrolls to it', async () => {
     mockParams.post = 'p-old'
     api.getBoard.mockResolvedValue(board([OFFER, SEEKING]))

@@ -13,7 +13,7 @@ const RETRY_SCROLL_MS = 120
 
 /**
  * A post link or a match push (SCRUM-1026, 6/6): `/board/<event>?post=<id>` opens the Lobby scrolled to that post.
- * Asked once, after the first page is drawn, through the post's own read (`GET …/board/:postId`, the Lobby's gate). A
+ * Asked after the first page is drawn, and again for each new link, through the post's own read (`GET …/board/:postId`, the Lobby's gate). A
  * post older than the page is laid on top (`linkedRef`, by the screen) until the server lists it. Closed is the Lobby's closed card; gone
  * is a line, and the Lobby stays open. An ended event's 404 is the server's to change (SCRUM-1033), not this.
  */
@@ -33,16 +33,28 @@ export function useLinkedPost(opts: {
   onFound: (post: BoardPostView) => void
 }) {
   const { eventId, posts, listRef, linkedRef, removedRef, epochRef, viewOffset, animated, onClosed, onFound } = opts
-  const asked = useRef(isLinkId(opts.postParam) ? opts.postParam : null)
+  const param = isLinkId(opts.postParam) ? opts.postParam : null
+  const [link, setLink] = useState(param)
+  const askedFor = useRef<string | null>(null)
   const scrolledFor = useRef<string | null>(null)
   const [target, setTarget] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const ready = posts !== null
 
+  /*
+   * A second link, or a match push tapped while this Lobby is open, reuses the screen and only changes `post`: take
+   * it, and drop the line an earlier link left (drive 2026-11-09: the second link did nothing). Set while rendering,
+   * React's way to follow a changed prop.
+   */
+  if (param !== link) {
+    setLink(param)
+    setNote(null)
+  }
+
   useEffect(() => {
-    const postId = asked.current
-    if (!ready || !eventId || !postId) return
-    asked.current = null
+    const postId = link
+    if (!ready || !eventId || !postId || askedFor.current === postId) return
+    askedFor.current = postId
     const epoch = epochRef.current
     void apiClient
       .getBoardPost(eventId, postId)
@@ -65,7 +77,7 @@ export function useLinkedPost(opts: {
           error: String(error),
         })
       )
-  }, [ready, eventId, linkedRef, removedRef, epochRef, onClosed, onFound])
+  }, [ready, eventId, link, linkedRef, removedRef, epochRef, onClosed, onFound])
 
   useEffect(() => {
     if (!target || !posts || scrolledFor.current === target) return
