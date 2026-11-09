@@ -25,7 +25,8 @@ describe('onboarding tells the truth about names in rooms', () => {
     expect(helper).toMatch(/full name is for people you match or talk with/)
     expect(helper).not.toMatch(/see your full name/)
     const prefs = read('app/event-preferences/[eventId].tsx')
-    expect(prefs).toMatch(/shows your first name and photo to people in this room/)
+    // The Named card's own sentence since Flow 4 (SCRUM-1025): the first name, never the full one.
+    expect(prefs).toMatch(/'Your first name and photo\.'/)
     expect(prefs).not.toMatch(/shows your real name and photo/)
   })
 
