@@ -16,6 +16,7 @@ import { useTopBarState } from '../../lib/useTopBarState'
 import { HueProvider } from '../../components/ds/shared'
 import { emptyAfterRowOut, rowReflow } from '../../components/motion/presence'
 import { useReducedMotion } from '../../lib/motion'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
 /**
  * People asking to be your friend — what "Requests" on the Me tab and at the
@@ -33,6 +34,7 @@ function FriendRequestsScreenContent() {
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
+  const arrive = useSkeletonCrossfade(!loaded && !failed)
   const offline = useOffline()
 
   const onRefresh = async () => {
@@ -68,6 +70,7 @@ function FriendRequestsScreenContent() {
       {!loaded && !failed ? (
         <RequestSkeleton />
       ) : (
+        <Animated.View entering={arrive} style={styles.fill}>
         <Animated.FlatList
           data={incoming}
           keyExtractor={(r) => r.id}
@@ -97,6 +100,7 @@ function FriendRequestsScreenContent() {
           showsVerticalScrollIndicator={false}
           {...bar.scrollProps}
         />
+        </Animated.View>
       )}
     </View>
   )
@@ -105,6 +109,7 @@ function FriendRequestsScreenContent() {
 const styles = StyleSheet.create({
   offline: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
   container: { flex: 1, backgroundColor: COLOR.ink },
+  fill: { flex: 1 },
   list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm, gap: SPACE.md },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
 })

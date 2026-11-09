@@ -27,6 +27,7 @@ import { isGone } from '../../lib/loadFailure'
 import { parseBadges } from '../../lib/profileBadges'
 import { blockStep, userReportStep } from '../../lib/safetyUtils'
 import { showSheet, type Sheet } from '../../lib/sheet'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
 /**
  * A friend's profile — opened from the friends list, never from a room.
@@ -48,6 +49,7 @@ function FriendProfileScreenContent() {
   const [friend, setFriend] = useState<FriendProfile | null>(null)
   const [gone, setGone] = useState(false)
   const [failed, setFailed] = useState(false)
+  const arrive = useSkeletonCrossfade(!friend && !failed)
   const [retrying, setRetrying] = useState(false)
   const [opening, setOpening] = useState(false)
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
@@ -220,6 +222,7 @@ function FriendProfileScreenContent() {
         actions={[{ icon: 'ellipsis', label: 'More', onPress: openMore }]}
       />
       <Animated.ScrollView
+        entering={arrive}
         testID="friend-scroll"
         onScroll={onScroll}
         scrollEventThrottle={16}

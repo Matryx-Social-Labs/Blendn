@@ -1,3 +1,4 @@
+import Animated from 'react-native-reanimated'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect } from 'react'
 import { FlatList, StyleSheet, Text, View } from 'react-native'
@@ -17,6 +18,7 @@ import { groupedCount, useMessageFriend } from '../../lib/friendsHere'
 import { SEARCH_MAX, FRIEND_ROW_HEIGHT, layoutOf, useFriendsHereList, withLetters, type FriendsListItem } from '../../lib/friendsHereList'
 import { idParam } from '../../lib/routeParams'
 import { useTopBarState } from '../../lib/useTopBarState'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
 /**
  * See all friends here (plans/friends-in-room.md C2, D15): a pushed screen, not a
@@ -38,6 +40,7 @@ function FriendsHereScreenContent() {
   const offline = useOffline()
   const { showToast } = useToast()
   const list = useFriendsHereList(eventId)
+  const arrive = useSkeletonCrossfade(list.status === 'loading')
   const chat = useMessageFriend(useCallback((text: string) => showToast(text, 'error'), [showToast]))
 
   // Opened by a link with nothing under it, Back is the Pulse.
@@ -100,6 +103,7 @@ function FriendsHereScreenContent() {
         testID="friends-here-error"
       />
     ) : (
+      <Animated.View entering={arrive} style={styles.fill}>
       <FlatList
         testID="friends-here-list"
         data={rows}
@@ -121,6 +125,7 @@ function FriendsHereScreenContent() {
         showsVerticalScrollIndicator={false}
         {...bar.scrollProps}
       />
+      </Animated.View>
     )
 
   return (
@@ -149,6 +154,7 @@ function FriendsHereScreenContent() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
+  fill: { flex: 1 },
   search: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
   list: { paddingHorizontal: SPACE.gutter },
   // The sticky letter sits on the page's own ground, so rows slide under it.

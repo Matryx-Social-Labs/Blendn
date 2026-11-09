@@ -41,6 +41,7 @@ import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
 import { askPushInContext } from '../../lib/pushAsk'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
 
 interface UserProfileView {
@@ -145,6 +146,7 @@ function UserProfileInner() {
   const workFields = useWorkFields()
   const badges = badgesOf?.for === id ? badgesOf.list : []
   const [loading, setLoading] = useState(true)
+  const arrive = useSkeletonCrossfade(loading)
   /*
    * Why there is no profile: `gone` is the server's 404, `failed` is anything
    * else. The screen used to raise a native "Error" alert over "Profile not
@@ -677,7 +679,7 @@ function UserProfileInner() {
         {loading ? (
           <ProfileSkeleton width={windowWidth} />
         ) : (
-          <>
+          <Animated.View entering={arrive}>
             <ProfileHeroStage
               testID="profile-hero"
               width={windowWidth}
@@ -737,7 +739,7 @@ function UserProfileInner() {
                 empty={revealed ? PROFILE_EMPTY : null}
               />
             </View>
-          </>
+          </Animated.View>
         )}
       </Animated.ScrollView>
 
