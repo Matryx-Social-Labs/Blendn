@@ -25,6 +25,8 @@ const GLYPH_DISC = 40
 const ROW_MIN = 60
 /** `.ftl .h`: the card's head is 28 tall. */
 const HEAD_HEIGHT = 28
+/** The rose rim. The board draws it as an inset shadow, outside the layout; a border takes its width from the padding. */
+const RIM = 1
 /** `.ftr .tx .t`: 500 16/22, the button's size on the row title's leading. */
 const ROW_TITLE_LEADING = 22
 /** handover.mp4: the fold is 500 ms in-out (card out over the first half, the line in over the second); Reduce Motion crossfades over `base`. */
@@ -183,7 +185,7 @@ function Row({ row, last }: { row: FromLobbyRow; last: boolean }) {
       <View style={[styles.disc, row.host && styles.hostDisc]} importantForAccessibility="no-hide-descendants">
         <Icon name={row.glyph} size={ICON.control} color={row.host ? EMBER.glyph : ROSE.glyph} />
       </View>
-      <View style={styles.flex}>
+      <View style={[styles.flex, styles.words]}>
         <Text
           numberOfLines={2}
           maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle}
@@ -242,6 +244,8 @@ const styles = StyleSheet.create({
   label: { color: ROSE.glyph },
   title: { color: COLOR.textPrimary },
   titleLine: { lineHeight: ROW_TITLE_LEADING },
+  // `.tx`: the meta sits 2 below the title.
+  words: { gap: SPACE.xxs },
   slot: {
     marginTop: SPACE.md,
     marginHorizontal: SPACE.lg,
@@ -252,10 +256,10 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: RADIUS.sheet,
     backgroundColor: COLOR.surface,
-    paddingTop: SPACE.md,
-    paddingHorizontal: SPACE.md + SPACE.xxs,
-    paddingBottom: SPACE.xs + SPACE.xxs,
-    borderWidth: 1,
+    paddingTop: SPACE.md - RIM,
+    paddingHorizontal: SPACE.md + SPACE.xxs - RIM,
+    paddingBottom: SPACE.xs + SPACE.xxs - RIM,
+    borderWidth: RIM,
     borderColor: tint(ROSE.edge, 0.6),
     boxShadow: GLOW,
     overflow: 'hidden',
@@ -305,10 +309,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.sm + SPACE.xxs,
     height: BAR_HEIGHT,
-    paddingHorizontal: SPACE.md + SPACE.xxs,
+    paddingHorizontal: SPACE.md + SPACE.xxs - RIM,
     borderRadius: RADIUS.capsule,
     backgroundColor: COLOR.surface,
-    borderWidth: 1,
+    borderWidth: RIM,
     borderColor: tint(ROSE.edge, 0.6),
   },
 })
