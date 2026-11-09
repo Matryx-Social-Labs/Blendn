@@ -307,6 +307,13 @@ describe('at AX XXXL (TG-03)', () => {
   beforeEach(() => atScale(AX_XXXL))
   afterEach(resetScale)
 
+  it('the two cards stack, so "Anonymous" is never broken mid-word in a half-width card (drive, SCRUM-1025)', async () => {
+    delete mockParams.askIntent
+    await render(<EventPreferences />)
+    const { StyleSheet } = jest.requireActual('react-native')
+    expect(StyleSheet.flatten(screen.getByTestId('prefs-reveal').props.style).flexDirection).toBe('column')
+  })
+
   it.each([['1'], ['0']])('askIntent=%s: the screen’s own titles and their lines stop at their caps', async (askIntent) => {
     mockParams.askIntent = askIntent
     await render(<EventPreferences />)
@@ -380,6 +387,15 @@ describe('the board’s cards (Flow 4 `prefs`, SCRUM-1025)', () => {
     for (const id of ['anonymous', 'named'] as const) {
       expect(detail(id).props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail' })
     }
+  })
+
+  it('at the default size the two cards sit side by side', async () => {
+    // React Native's jest window reports fontScale 2: the phone's default is 1.
+    await atScale(1)
+    await render(<EventPreferences />)
+    const { StyleSheet } = jest.requireActual('react-native')
+    expect(StyleSheet.flatten(screen.getByTestId('prefs-reveal').props.style).flexDirection).toBe('row')
+    resetScale()
   })
 
   it('heads the reveal with "Just for this room."', async () => {

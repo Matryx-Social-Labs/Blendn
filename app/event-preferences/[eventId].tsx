@@ -2,7 +2,7 @@ import { TopBar } from '../../components/ds/TopBar'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 
 import { Avatar } from '../../components/ds/Avatar'
@@ -89,6 +89,8 @@ const CARDS_GAP = SPACE.lg + SPACE.xxs
 const SECOND_HEAD_GAP = SPACE.xl + SPACE.xs
 const TILES_GAP = SPACE.md + SPACE.xxs
 const TILE_GAP = SPACE.sm + SPACE.xxs
+/** From the accessibility sizes the two cards stack: half a phone's width broke "Anonymous" mid-word at AX XXXL (drive). As Rate. */
+const STACK_FROM_SCALE = 1.5
 
 /** A section's question and its line: the screen's title when it leads, a heading when it follows (Flow 4 `.t24` / `.t20`). */
 function Head({ lead, title, sub, bold, testID }: { lead: boolean; title: string; sub: string; bold: boolean; testID: string }) {
@@ -136,6 +138,7 @@ function EventPreferencesContent() {
   const bar = useTopBarOverlay()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
+  const stacked = useWindowDimensions().fontScale >= STACK_FROM_SCALE
 
   const [intent, setIntent] = useState<Intent[]>([])
   /*
@@ -265,7 +268,7 @@ function EventPreferencesContent() {
   const revealBlock = (
     <Animated.View layout={glide} style={askIntent ? styles.second : undefined}>
       <Head lead={!askIntent} title="Can people see who you are?" sub="Just for this room." bold={bold} testID="prefs-reveal-title" />
-      <View testID="prefs-reveal" style={styles.pair} accessibilityRole="radiogroup">
+      <View testID="prefs-reveal" style={[styles.pair, stacked && styles.stacked]} accessibilityRole="radiogroup">
         <RadioCard
           layout="lead"
           title="Anonymous"
@@ -391,6 +394,7 @@ const styles = StyleSheet.create({
   head: { gap: SUB_GAP },
   second: { marginTop: SECOND_HEAD_GAP },
   pair: { flexDirection: 'row', gap: SPACE.md, marginTop: CARDS_GAP },
+  stacked: { flexDirection: 'column' },
   remember: { marginTop: SPACE.md },
   tiles: { flexDirection: 'row', gap: TILE_GAP, marginTop: TILES_GAP },
   or: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginVertical: SPACE.lg },
