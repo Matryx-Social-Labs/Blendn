@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, LinearTransition, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
+import Animated, { Easing, LinearTransition, useAnimatedStyle, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { DURATION, EASING, RISE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import type { CrewCard } from '../../lib/crews'
@@ -10,19 +10,17 @@ import { connect, type SocketConnectionStatus } from '../../lib/socketClient'
 import type { RoomPerson } from '../../lib/useRoom'
 import { Banner } from '../ds/Banner'
 import { BannerPresence } from '../motion/BannerPresence'
-import type { Face } from '../ds/Facepile'
 import { SegmentedControl } from '../ds/SegmentedControl'
 import { StateScreen } from '../ds/StateScreen'
 import { SOCKET_GRACE_MS } from '../RealtimeStatusBanner'
-import { EveryoneHead, GRID_GAP, MeetNextRow, RoomGridFace, RoomHero, ShowMore, useGridCell } from './RoomSections'
+import { EveryoneHead, GRID_GAP, GRID_ROW_GAP, MeetNextRow, RoomGridFace, ShowMore, useGridCell } from './RoomSections'
 import { useStageScroll } from './RoomStage'
 import { useReducedMotion } from '../../lib/motion'
 
 /*
- * Motion #9, after the pour: the Room's hero rises 12 on M.travel and its
- * sections follow from +60 ms, 28 ms apart, rising 8 on the entrance ease.
+ * Motion #9, after the pour: People's sections rise 8 on the entrance ease from +60 ms, 28 ms apart (R-A has no hero:
+ * the bar holds the room's name and count).
  */
-const HERO_RISE = SPACE.md
 const SECTIONS_AT = 60
 /** The content under a section that appears or goes (Friends here) moves on `M.settle`, never jumps. */
 const SETTLE = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
@@ -36,7 +34,6 @@ const SETTLE = LinearTransition.springify().stiffness(SPRING.settle.stiffness).d
  */
 function useEntrance(enter: boolean, hidden: boolean) {
   const [entering] = useState(enter)
-  const hero = useSharedValue(entering ? HERO_RISE : 0)
   const s0 = useSharedValue(entering ? 0 : 1)
   const s1 = useSharedValue(entering ? 0 : 1)
   const s2 = useSharedValue(entering ? 0 : 1)
@@ -44,12 +41,10 @@ function useEntrance(enter: boolean, hidden: boolean) {
   useEffect(() => {
     if (!entering || hidden || started.current) return
     started.current = true
-    hero.set(withSpring(0, SPRING.travel))
     const ease = Easing.bezier(...EASING.entrance)
     ;[s0, s1, s2].forEach((s, i) => s.set(withDelay(SECTIONS_AT + i * STAGGER.base, withTiming(1, { duration: DURATION.base, easing: ease }))))
-  }, [entering, hidden, hero, s0, s1, s2])
-  const heroStyle = useAnimatedStyle(() => ({ transform: [{ translateY: hero.get() }] }))
-  return { heroStyle, sections: [useSection(s0), useSection(s1), useSection(s2)] as const }
+  }, [entering, hidden, s0, s1, s2])
+  return [useSection(s0), useSection(s1), useSection(s2)] as const
 }
 
 function useSection(p: SharedValue<number>) {
@@ -76,28 +71,23 @@ function RoomStatus({ status }: { status: SocketConnectionStatus }) {
     const timer = setTimeout(() => setDownLong(true), SOCKET_GRACE_MS)
     return () => clearTimeout(timer)
   }, [down])
-  if (network === 'offline') return <BannerPresence><Banner kind="offline" text="Offline. Some actions won’t work until you’re back." testID="room-offline" /></BannerPresence>
+  if (network === 'offline') return <View style={styles.status}><BannerPresence><Banner kind="offline" text="Offline. Some actions won’t work until you’re back." testID="room-offline" /></BannerPresence></View>
   if (!down || !downLong) return null
-  return <BannerPresence><Banner kind="paused" text="Updates paused. Trying to reconnect." action={{ label: 'Try again', onPress: () => void connect() }} testID="room-paused" /></BannerPresence>
+  return <View style={styles.status}><BannerPresence><Banner kind="paused" text="Updates paused. Trying to reconnect." action={{ label: 'Try again', onPress: () => void connect() }} testID="room-paused" /></BannerPresence></View>
 }
 
 export type RoomViewProps = {
-  title: string
-  hereCount: number
-  checkedInAt: string | null
-  me: Face
   people: RoomPerson[]
-  arrivals: RoomPerson[]
   connection: SocketConnectionStatus
-  /** The visibility line, always on (`VisibilityBanner`). */
-  visibility: ReactNode
+  /** You, first in People: your room name and who sees you (`RoomYouCard`). */
+  you: ReactNode
   /** People | Crews: shown when a crew is here or you are in one (R2-D1). */
   segments: boolean
   view: 'people' | 'crews'
   onView: (view: 'people' | 'crews') => void
   /** Your crews here, in the People view (CrewStrip). */
   crewStrip?: ReactNode
-  /** Friends here (the friends at this event who let friends see them): after the crew strip, above Meet next. Null draws nothing, no gap. */
+  /** Friends here (the friends at this event who let friends see them): the row under Meet next. Null draws nothing, no gap. */
   friendsHere?: ReactNode
   /** The section has someone in it: the empty state then says nobody *new* (a friend is here, so the room is not empty). */
   friendsPresent?: boolean
@@ -131,17 +121,16 @@ export type RoomViewProps = {
 }
 
 /**
- * The Room (Flow 4 Room, R3-0, R2-D1): the hero, the visibility line, People |
- * Crews, Meet next, Everyone here as a three-column grid of faces
- * (virtualised: a busy night is a hundred of them), and Show more. The chat
- * is the Room's other tab (`RoomTabs`, Flow 5 R-A). Alive through change, still otherwise: nothing
+ * People, the Room's first tab (Flow 5 R-A, Flow 4 Room, R2-D1): you, People | Crews when crews are here, Meet next,
+ * the friends here, and Everyone here as a three-column grid of faces (virtualised, paged 20: a concert is 12,480 of
+ * them) with Show more. The chat is the Room's other tab (`RoomTabs`). Alive through change, still otherwise: nothing
  * on the grid moves unless something happened.
  */
 export function RoomView(props: RoomViewProps) {
   const { onScroll, native, scrollEventThrottle, scrolled, atTop } = useStageScroll()
   const cell = useGridCell()
   const { view, people, enter, hidden = false } = props
-  const entrance = useEntrance(enter, hidden)
+  const sections = useEntrance(enter, hidden)
   const reduceMotion = useReducedMotion()
   const crewsView = view === 'crews'
   // People and Crews are separate lists (`key={view}`), so a switch lands on a new one at its top.
@@ -153,49 +142,41 @@ export function RoomView(props: RoomViewProps) {
       <View style={styles.gutter}>
         <RoomStatus status={props.connection} />
       </View>
-      <Animated.View style={entrance.heroStyle}>
-        <RoomHero
-          active={!hidden}
-          title={props.title}
-          hereCount={props.hereCount}
-          checkedInAt={props.checkedInAt}
-          me={props.me}
-          arrivals={props.arrivals}
-          people={people}
-        />
-      </Animated.View>
-      <Animated.View style={[styles.gutter, entrance.sections[0]]}>
-        {props.visibility}
-      </Animated.View>
-      {props.segments ? (
-        <Animated.View style={[styles.gutter, entrance.sections[1]]}>
-          <SegmentedControl
-            items={['People', 'Crews']}
-            selected={crewsView ? 1 : 0}
-            onChange={(i) => props.onView(i === 1 ? 'crews' : 'people')}
-            testID="room-segments"
-          />
-        </Animated.View>
-      ) : null}
-      {crewsView ? (
-        props.crewsHead
-      ) : (
-        <Animated.View style={[styles.sections, entrance.sections[2]]} layout={reduceMotion ? undefined : SETTLE}>
-          {props.crewStrip}
-          {/* A friend is not a stranger card: they are here (plans/friends-in-room.md), even when nobody else is. */}
-          {props.friendsHere}
-          {empty ? (
-            <View style={styles.empty}>
-              <StateScreen icon="users" title={props.friendsPresent ? 'No one new here yet' : 'Nobody else is here yet'} body="People show up as they check in." testID="room-empty" />
-            </View>
-          ) : (
-            <>
-              <MeetNextRow picks={props.picks} nextShuffleAt={props.nextShuffleAt} width={cell} onOpen={props.onOpen} />
-              <EveryoneHead title={props.everyoneTitle} count={props.everyoneCount} />
-            </>
-          )}
-        </Animated.View>
-      )}
+      <View style={styles.sections}>
+        <Animated.View style={sections[0]}>{props.you}</Animated.View>
+        {props.segments ? (
+          <Animated.View style={[styles.gutter, sections[1]]}>
+            <SegmentedControl
+              items={['People', 'Crews']}
+              selected={crewsView ? 1 : 0}
+              onChange={(i) => props.onView(i === 1 ? 'crews' : 'people')}
+              testID="room-segments"
+            />
+          </Animated.View>
+        ) : null}
+        {crewsView ? (
+          props.crewsHead
+        ) : (
+          <Animated.View style={[styles.sections, sections[2]]} layout={reduceMotion ? undefined : SETTLE}>
+            {props.crewStrip}
+            {empty ? (
+              <>
+                {/* A friend is not a stranger card: they are here (plans/friends-in-room.md), even when nobody else is. */}
+                {props.friendsHere}
+                <View style={styles.empty}>
+                  <StateScreen icon="users" title={props.friendsPresent ? 'No one new here yet' : 'Nobody else is here yet'} body="People show up as they check in." testID="room-empty" />
+                </View>
+              </>
+            ) : (
+              <>
+                <MeetNextRow picks={props.picks} nextShuffleAt={props.nextShuffleAt} width={cell} onOpen={props.onOpen} onLike={props.onLike} />
+                {props.friendsHere}
+                <EveryoneHead title={props.everyoneTitle} count={props.everyoneCount} />
+              </>
+            )}
+          </Animated.View>
+        )}
+      </View>
     </View>
   )
 
@@ -249,10 +230,11 @@ export function RoomView(props: RoomViewProps) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  header: { gap: SPACE.lg, marginBottom: SPACE.md },
+  header: { marginBottom: SPACE.md },
   gutter: { paddingHorizontal: SPACE.gutter },
+  status: { marginBottom: SPACE.lg },
   sections: { gap: SPACE.xl },
   empty: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl },
-  gridRow: { paddingHorizontal: SPACE.gutter, columnGap: GRID_GAP, marginBottom: GRID_GAP },
+  gridRow: { paddingHorizontal: SPACE.gutter, columnGap: GRID_GAP, marginBottom: GRID_ROW_GAP },
   crewRow: { marginBottom: SPACE.md },
 })

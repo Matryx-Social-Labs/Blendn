@@ -22,11 +22,12 @@ jest.mock('../components/chat/BrokenLink', () => ({ BrokenLink: () => null }))
 // eslint-disable-next-line import/first
 import GroupChat from '../app/chat/[id]'
 // eslint-disable-next-line import/first
-import { blendnClosed, isBlendnOpen, setLiveRoomChat, takePendingTab } from '../lib/blendnOverlay'
+import { blendnClosed, isBlendnOpen, setLiveRoomChat, takePendingTab, takeReturnTo } from '../lib/blendnOverlay'
 
 beforeEach(() => {
   mockDismissTo.mockClear()
   blendnClosed()
+  takeReturnTo()
   setLiveRoomChat('live-room')
 })
 
@@ -59,4 +60,18 @@ it('with no live room every chat is a screen', async () => {
   mockParams = { id: 'live-room' }
   const view = await render(<GroupChat />)
   expect(view.getByText('chat screen live-room')).toBeTruthy()
+})
+
+it('from the event page: closing the room comes back to that page (ROOM-13), so the overlay remembers it', async () => {
+  mockParams = { id: 'live-room', eventId: 'e1', from: 'event' }
+  await render(<GroupChat />)
+  expect(takePendingTab()).toBe('chat')
+  expect(takeReturnTo()).toBe('e1')
+})
+
+it('control: a push or a link carries the event too, and closing stays on the tabs', async () => {
+  mockParams = { id: 'live-room', eventId: 'e1' }
+  await render(<GroupChat />)
+  expect(isBlendnOpen()).toBe(true)
+  expect(takeReturnTo()).toBeNull()
 })

@@ -929,7 +929,8 @@ export default function EventDetail() {
     try {
       const door = await eventRoomDoor(String(id), event.title)
       if (door.kind === 'say') showToast(door.line)
-      else router.push({ pathname: '/chat/[id]', params: door.params } as never)
+      // `from`: closing the Room this opens comes back here (ROOM-13; `app/chat/[id].tsx`).
+      else router.push({ pathname: '/chat/[id]', params: { ...door.params, eventId: String(id), from: 'event' } } as never)
     } finally {
       setRoomOpening(false)
     }

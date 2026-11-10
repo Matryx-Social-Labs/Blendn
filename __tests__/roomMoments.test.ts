@@ -2,7 +2,6 @@ import {
   JUST_ARRIVED_MS,
   REASON_MAX,
   everyoneHead,
-  hereNowStack,
   meetNext,
   pickTonight,
   tonightDeck,
@@ -165,21 +164,6 @@ describe('who is here now', () => {
   const here = (id: string) => ({ id, insideNow: true })
   const left = (id: string) => ({ id, insideNow: false })
   const ids = (xs: { id: string }[]) => xs.map((p) => p.id)
-
-  it('puts only people inside under "here now", arrivals first, without repeats', () => {
-    const stack = hereNowStack([here('x'), here('a'), left('b')], [left('c'), here('a'), here('d')], 5)
-    expect(ids(stack)).toEqual(['x', 'a', 'd'])
-  })
-
-  it('fills the stack from people inside, however many ahead of them left', () => {
-    const people = [left('a'), left('b'), here('c'), left('d'), left('e'), here('f'), here('g')]
-    expect(ids(hereNowStack([], people, 3))).toEqual(['c', 'f', 'g'])
-  })
-
-  it('counts somebody presence says nothing about as inside', () => {
-    expect(ids(hereNowStack([], [{ id: 'a' }], 3))).toEqual(['a'])
-    expect(everyoneHead([{}], { hasMore: false, hereCount: 2 }).title).toBe('Everyone here')
-  })
 
   it('never suggests meeting somebody who has left, and still finds three who are here', () => {
     // Eight who left rank above four who are here: the rotation's pool of nine

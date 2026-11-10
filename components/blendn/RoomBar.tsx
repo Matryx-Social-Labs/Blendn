@@ -1,6 +1,8 @@
+import { useRef } from 'react'
 import { Platform, StyleSheet, Text, View } from 'react-native'
 import Animated, { FadeIn, StretchInX } from 'react-native-reanimated'
 
+import { useFocusWhen } from '../../lib/focusReturn'
 import { compactCount } from '../../lib/format'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
@@ -54,13 +56,16 @@ export function RoomBar({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const badge = chatTabBadge(chatUnread)
+  // The room's name takes a screen reader's focus as the room comes up, as the hero's title did (Flow 4 Room).
+  const titleRef = useRef<View>(null)
+  useFocusWhen(titleRef, event)
   return (
     <View testID="room-bar" style={[styles.bar, { paddingTop: insetTop }]}>
       <Material role="bar" style={StyleSheet.absoluteFill} />
       <View testID={contrast ? 'room-bar-contrast' : undefined} style={[styles.hairline, contrast && styles.hairlineStrong]} />
       <View style={styles.titleRow}>
         <IconButton icon="chevron-down" accessibilityLabel="Close the room" onPress={onClose} testID="room-close" />
-        <View style={styles.titles} accessible accessibilityRole="header" accessibilityLabel={`The room, ${event}`}>
+        <View ref={titleRef} style={styles.titles} accessible accessibilityRole="header" accessibilityLabel={`The room, ${event}`}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.tab} numberOfLines={1} style={[font('group', bold, FONT_FAMILY.brand[700]), styles.ink]}>
             The room
           </Text>

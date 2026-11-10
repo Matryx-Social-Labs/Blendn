@@ -63,9 +63,13 @@ export function openBlendn(personId?: string): void {
   set(true)
 }
 
-/** Open the Room on its Chat tab: "Open the room", a push, a link, the Lobby handover (`chat/[id]`). */
-export function openRoomChat(): void {
+/**
+ * Open the Room on its Chat tab: "Open the room", a push, a link, the Lobby handover (`chat/[id]`). Opened from an
+ * event page, closing it comes back to that page (ROOM-13), as "Blend in" does.
+ */
+export function openRoomChat(returnToEvent: string | null = null): void {
   pendingTab = 'chat'
+  returnTo = returnToEvent
   if (open) notify()
   set(true)
 }

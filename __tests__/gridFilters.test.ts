@@ -134,20 +134,13 @@ describe('the room chat is one component, in one place (Flow 5 R-A)', () => {
   })
 })
 
+// R-A has no face stack under "here now" (the bar has the count), so SCRUM-495's stack tests went with it.
 describe('the room says who is here now (SCRUM-495)', () => {
-  it('builds the face stack under "here now" from people inside only', () => {
-    expect(SECTIONS()).toContain('hereNowStack(arrivals, people, STACK)')
-  })
-
   it('heads the face grid with what is true of everyone in it', () => {
     expect(SCREEN()).toMatch(/const head = everyoneHead\(room\.people, \{ hasMore: room\.hasMore, hereCount: room\.hereCount \}\)/)
     expect(SCREEN()).toContain('everyoneTitle={head.title}')
     expect(ROOM()).toContain('<EveryoneHead title={props.everyoneTitle} count={props.everyoneCount} />')
-    expect(SECTIONS()).toContain('<SectionHeader title={title}')
-  })
-
-  it('rings as new only somebody who arrived this session and is still in the stack', () => {
-    expect(SECTIONS()).toContain('arrivals.some((a) => a.id === stack[0].id)')
+    expect(SECTIONS()).toMatch(/<SectionHeader\s+title=\{title\}\s+testID="everyone-head"/)
   })
 })
 

@@ -47,8 +47,9 @@ const src = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
 it('Tonight, the Room and each person on Rate take focus as they arrive', () => {
   expect(src('components/blendn/TonightView.tsx')).toMatch(/useFocusWhen\(headingRef, active \? 'tonight' : null\)/)
   expect(src('components/blendn/BlendnScreen.tsx')).toMatch(/<TonightView[\s\S]{0,80}active=\{mode === 'tonight'\}/)
-  expect(src('components/blendn/RoomSections.tsx')).toMatch(/useFocusWhen\(titleRef, active \? title : null\)/)
-  expect(src('components/blendn/RoomView.tsx')).toMatch(/<RoomHero[\s\S]{0,60}active=\{!hidden\}/)
+  // The Room's name is in its bar (Flow 5 R-A), which is drawn only while the Room is up.
+  expect(src('components/blendn/RoomBar.tsx')).toMatch(/useFocusWhen\(titleRef, event\)/)
+  expect(src('components/blendn/BlendnScreen.tsx')).toMatch(/const inRoomBar = mode === 'room'/)
   // Rate's card rises over `base`, so its header waits that long (behaviour: rateScreen.test.tsx, M5).
   expect(src('app/rate/[eventId].tsx')).toMatch(/useFocusWhen\(header, ready \? [^\n]+, DURATION\.base\)/)
 })

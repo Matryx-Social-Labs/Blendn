@@ -29,8 +29,7 @@ import { COLOR, DURATION, EASING, MATERIAL, RADIUS, SIZE, SPACE } from '../../li
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
-import { firstNameOf, useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
-import { useOffline } from '../OfflineBanner'
+import { firstNameOf, useFriendsHere } from '../../lib/friendsHere'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
 import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
@@ -50,7 +49,7 @@ import { myRoomFace, roomSettingsRoute } from '../../lib/roomState'
 import { useTonight, type TonightEvent } from '../../lib/useTonight'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
-import { VisibilityBanner, type Visibility } from '../ds/Banner'
+import type { Visibility } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
 import { IconButton } from '../ds/IconButton'
 import { MomentBlend, type BlendCrew, type BlendPerson } from '../ds/MomentBlend'
@@ -66,7 +65,7 @@ import { ConnectSheet } from '../grid/ConnectSheet'
 import { Material } from '../ui/Material'
 import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
-import { faceOf, RoomSkeleton, useNow } from './RoomSections'
+import { faceOf, RoomSkeleton, RoomYouCard, useNow } from './RoomSections'
 import { FriendsHere } from './FriendsHere'
 import { RoomCancelled } from './RoomCancelled'
 import { RoomStage, useStage } from './RoomStage'
@@ -209,20 +208,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string } | null>(null)
   const say = useCallback((text: string, kind: ToastKind = 'info') => setToast({ key: Date.now(), kind, text }), [])
 
-  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them.
-  const offline = useOffline()
+  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them; Message is on their screen.
   const friendsHere = useFriendsHere(room.event?.id ?? null, room.status === 'ready')
-  const refreshFriends = friendsHere.refresh
-  const friendChat = useMessageFriend(
-    useCallback(
-      (text: string) => {
-        say(text, 'error')
-        // They may have gone (an unfriend, a block, a check-out): read again.
-        void refreshFriends()
-      },
-      [say, refreshFriends]
-    )
-  )
 
   /*
    * The end of the night. Kept as a snapshot rather than derived: the sweeper
@@ -823,6 +810,11 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
    * ⋯ in the room bar (R-A "Room info"). Until the Room info sheet (I-A, C6) holds them, it is the way to the room's
    * info, your room settings and Check out, which the old bar carried.
    */
+  /** Room settings (who sees you, your room name), from the you-card's Change and the ⋯ sheet. */
+  const openRoomSettings = () => {
+    const ev = room.event
+    if (ev) router.push(roomSettingsRoute(ev.id, { pseudonym: myPseudonym, revealed: controls.revealed }))
+  }
   const openRoomMenu = () => {
     const ev = room.event
     if (!ev) return
@@ -832,7 +824,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       title: ev.title,
       actions: [
         ...(chatGroupId ? [{ label: 'Room info', then: () => router.push({ pathname: '/chat-info/[id]', params: { id: chatGroupId, roomName: ev.title, eventTitle: ev.title } } as never) }] : []),
-        { label: 'Room settings', then: () => router.push(roomSettingsRoute(ev.id, { pseudonym: myPseudonym, revealed: controls.revealed })) },
+        { label: 'Room settings', then: openRoomSettings },
         { label: 'Check out', variant: 'destructive' as const, then: () => setConfirmingOut(true) },
       ],
     })
@@ -969,31 +961,19 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             tab={tab}
             people={
           <RoomView
-            title={room.event.title}
-            hereCount={room.hereCount}
-            checkedInAt={room.checkedInAt}
-            me={myFace}
             people={room.people}
-            arrivals={room.arrivals}
             connection={room.connection}
-            visibility={
+            you={
               <View ref={roomCoachTarget}>
-                <VisibilityBanner
+                <RoomYouCard
+                  face={myFace}
+                  name={controls.revealed ? myName : (myPseudonym ?? 'Your room name')}
                   state={visibility}
-                  name={controls.revealed ? myName : (myPseudonym ?? undefined)}
-                  missing={controls.readiness.missing || undefined}
-                  busy={controls.revealBusy}
-                  onAction={
-                    visibility === 'hidden'
-                      ? () => router.push('/settings')
-                      : visibility === 'blocked'
-                        ? () => router.push('/edit-profile')
-                        : () => {
-                            markCoachUsed('room_reveal')
-                            void controls.toggleReveal()
-                          }
-                  }
-                  testID="room-visibility"
+                  onChange={() => {
+                    if (visibility === 'hidden') return router.push('/settings')
+                    markCoachUsed('room_reveal')
+                    openRoomSettings()
+                  }}
                 />
               </View>
             }
@@ -1006,9 +986,6 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
               <FriendsHere
                 friends={friendsHere.friends}
                 total={friendsHere.total}
-                opening={friendChat.opening}
-                offline={offline}
-                onMessage={(f) => void friendChat.message(f)}
                 onSeeAll={() => router.push({ pathname: '/room/friends-here', params: { eventId: eventId ?? '' } } as never)}
               />
             }

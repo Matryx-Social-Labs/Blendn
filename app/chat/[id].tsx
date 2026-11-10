@@ -22,12 +22,14 @@ export default function GroupChat() {
   const id = idParam(params.id)
   const kind = typeof params.kind === 'string' ? params.kind : null
   const [inRoom] = useState(() => !!id && chatOpensInRoom({ id, kind }))
+  // The event page says it opened this (`from: 'event'`); a push carries the event too, and closes to the tabs.
+  const [returnTo] = useState(() => (params.from === 'event' && typeof params.eventId === 'string' ? params.eventId : null))
   useEffect(() => {
     if (!inRoom) return
-    openRoomChat()
+    openRoomChat(returnTo)
     // The overlay is hosted by the tabs, under the root stack: back to them, or it opens behind this route.
     router.dismissTo('/(tabs)/events')
-  }, [inRoom])
+  }, [inRoom, returnTo])
   if (!id) return <BrokenLink />
   if (inRoom) return <View style={{ flex: 1, backgroundColor: COLOR.ink }} />
   return <RoomChat id={id} params={params} />

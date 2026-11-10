@@ -359,23 +359,25 @@ describe('Liking as a crew: what the button says is what it sends (R2-D1)', () =
   })
 })
 
-describe('the visibility line and its gate', () => {
-  it('nothing to reveal: the line says so, and its action is the profile, never a reveal', async () => {
+describe('the you-card (Flow 5 R-A): Change goes to Room settings, where the reveal and its gate live', () => {
+  it('nothing to reveal: Change opens Room settings, never a reveal in place', async () => {
     mockControls.readiness = { ok: false, missing: 'a photo' }
     await drawRoom()
-    await fireEvent.press(screen.getByRole('button', { name: 'Add a photo' }))
-    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+    await fireEvent.press(screen.getByRole('button', { name: 'Change your room name and who sees you' }))
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/event-preferences/[eventId]' }))
     expect(mockControls.toggleReveal).not.toHaveBeenCalled()
   })
 
-  it('named: Go anonymous is never gated', async () => {
+  it('named: the card says so, and Change opens Room settings with the reveal as it is', async () => {
     mockControls.revealed = true
-    mockControls.readiness = { ok: false, missing: 'a photo' }
     await drawRoom()
-    await fireEvent.press(screen.getByRole('button', { name: 'Go anonymous' }))
-    expect(mockControls.toggleReveal).toHaveBeenCalled()
+    expect(screen.getByText('Your name and photo. People here can see you.')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Change your room name and who sees you' }))
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ params: expect.objectContaining({ revealed: '1' }) }))
+    expect(mockControls.toggleReveal).not.toHaveBeenCalled()
   })
 })
+
 
 describe('Check out always confirms (Room #16)', () => {
   it('the confirm: Stay, and Check out in destructiveFill; it closes before the check-out runs', async () => {
@@ -428,60 +430,38 @@ const friends = (names: string[], total = names.length) => ({
   data: { friends: names.map((name, i) => ({ userId: `f${i}`, name, photo: null })), total, nextCursor: null },
 })
 const mockFriendsHere = apiClient.getFriendsHere as unknown as jest.Mock
-const mockOpenFriend = apiClient.openFriendConversation as unknown as jest.Mock
 
 describe('Friends here in the Room', () => {
-  it('is a section above Meet next: the count, three rows, "1 more here", and Message opens the friend chat by real id', async () => {
+  it('is one row under Meet next, "4 friends here" with three faces; it opens Friends here for this event (Message is there)', async () => {
     mockFriendsHere.mockResolvedValue(friends(['Asha Menon', 'Rohan Iyer', 'Meera Krishnan', 'Aarav Gupta']))
-    mockOpenFriend.mockResolvedValue({ success: true, data: { conversationId: 'c1' } })
     await drawRoom()
-    expect(await screen.findByText('Asha Menon')).toBeTruthy()
-    expect(screen.getByRole('header', { name: 'Friends here, 4' })).toBeTruthy()
-    expect(screen.getByText('1 more here')).toBeTruthy()
-    // The friend is a row here, never a face in the grid.
+    const row = await screen.findByRole('button', { name: '4 friends here' })
+    // The friend is the row here, never a face in the grid, and the Room has no Message of its own.
     expect(screen.queryByTestId('room-face-friend', HIDDEN)).toBeNull()
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Message Rohan Iyer' }))
-    })
-    expect(mockOpenFriend).toHaveBeenCalledWith('f1')
-    expect(router.push).toHaveBeenCalledWith({
-      pathname: '/private-chat/[conversationId]',
-      params: { conversationId: 'c1', otherUserName: 'Rohan Iyer', otherUserId: 'f1' },
-    })
+    expect(screen.queryByRole('button', { name: /^Message / })).toBeNull()
+    const order = screen.getAllByText(/^(Meet next|4 friends here|Everyone here)$/).map((el) => el.props.children)
+    expect(order).toEqual(['Meet next', '4 friends here', 'Everyone here'])
+    await act(async () => fireEvent.press(row))
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/room/friends-here', params: { eventId: 'e1' } })
   })
 
-  it('See all pushes the pushed screen, for this event', async () => {
+  it('sixty: the count is the truth', async () => {
     mockFriendsHere.mockResolvedValue(friends(['A', 'B', 'C', 'D'], 60))
     await drawRoom()
-    await act(async () => {
-      fireEvent.press((await screen.findAllByRole('button', { name: 'See all 60 friends here' }))[0])
-    })
-    expect(router.push).toHaveBeenCalledWith({ pathname: '/room/friends-here', params: { eventId: 'e1' } })
+    expect(await screen.findByRole('button', { name: '60 friends here' })).toBeTruthy()
   })
 
   it('no friends: no section at all', async () => {
     mockFriendsHere.mockResolvedValue(friends([]))
     await drawRoom()
-    expect(screen.queryByText('Friends here')).toBeNull()
+    expect(screen.queryByTestId('friends-here', HIDDEN)).toBeNull()
   })
 
   it('an older server (no route): no section, and the room is untouched', async () => {
     mockFriendsHere.mockResolvedValue({ success: false, error: 'Not found' })
     await drawRoom()
-    expect(screen.queryByText('Friends here')).toBeNull()
+    expect(screen.queryByTestId('friends-here', HIDDEN)).toBeNull()
     expect(screen.getByTestId('room-face-0')).toBeTruthy()
-  })
-
-  it('a failed chat says so with the first name and reads again', async () => {
-    mockFriendsHere.mockResolvedValue(friends(['Asha Menon']))
-    mockOpenFriend.mockResolvedValue({ success: false })
-    await drawRoom()
-    mockFriendsHere.mockClear()
-    await act(async () => {
-      fireEvent.press(await screen.findByRole('button', { name: 'Message Asha Menon' }))
-    })
-    expect(await screen.findByText("Couldn’t open your chat with Asha. Try again.")).toBeTruthy()
-    expect(mockFriendsHere).toHaveBeenCalled()
   })
 
   it('nobody else but a friend: the empty state says nobody NEW', async () => {
