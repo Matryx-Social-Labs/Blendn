@@ -9,7 +9,6 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Text } from 'react-native'
 
-import { ChatDock } from '../components/blendn/ChatDock'
 import { RoomView, type RoomViewProps } from '../components/blendn/RoomView'
 import type { RoomPerson } from '../lib/useRoom'
 
@@ -108,10 +107,6 @@ const roomElement = (props: Partial<RoomViewProps> = {}) => (
       waveKeys={{}}
       onOpen={jest.fn()}
       onLike={jest.fn()}
-      chatGroupId={null}
-      dockWave={null}
-      onOpenChat={jest.fn()}
-      onOpenPerson={jest.fn()}
       enter={false}
       topInset={124}
       bottomInset={34}
@@ -220,71 +215,6 @@ describe('the status banners (#12, #13)', () => {
   })
 })
 
-describe('the chat dock, one row (R3-0 02′, R3-D4 13′)', () => {
-  const dock = (props: Partial<React.ComponentProps<typeof ChatDock>> = {}) =>
-    render(<ChatDock chatGroupId="g1" myId="me" wave={null} onOpen={jest.fn()} onOpenPerson={jest.fn()} bottomInset={34} {...props} />)
-
-  it('quiet: "Nobody has said anything yet. Be the first."', async () => {
-    await dock()
-    expect(await screen.findByText('Nobody has said anything yet. Be the first.')).toBeTruthy()
-    expect(screen.getByText('Room chat')).toBeTruthy()
-  })
-
-  it('the last message, "who: what"; a new one counts "1 new" until the chat opens', async () => {
-    mockHistory.mockResolvedValue({ success: true, data: [{ id: 'm1', user_id: 'x', user: { name: 'Cosmic Panda' }, content: 'Rumours side two. Fight me.', created_at: new Date().toISOString() }] })
-    const onOpen = jest.fn()
-    await dock({ onOpen })
-    expect(await screen.findByText('Cosmic Panda: Rumours side two. Fight me.')).toBeTruthy()
-    await act(async () => mockMessageListeners.forEach((fn) => fn({ chatGroupId: 'g1', message: { id: 'm2', userId: 'y', userName: 'Night Cat', content: 'Same', createdAt: new Date().toISOString() } })))
-    expect(screen.getByText('1 new', HIDDEN)).toBeTruthy()
-    await fireEvent.press(screen.getByTestId('room-dock'))
-    expect(onOpen).toHaveBeenCalled()
-    expect(screen.queryByText('1 new', HIDDEN)).toBeNull()
-  })
-
-  it('a wave to you is a row, white, with a chevron, that opens their card; the chat is still an action away', async () => {
-    const onOpenPerson = jest.fn()
-    const onOpen = jest.fn()
-    await dock({ wave: { kind: 'wave', id: 'w', fromUserId: 'nc', fromName: 'Night Cat', at: Date.now() }, onOpenPerson, onOpen })
-    expect(await screen.findByText('Night Cat waved at you')).toBeTruthy()
-    const row = screen.getByTestId('room-dock')
-    await fireEvent.press(row)
-    expect(onOpenPerson).toHaveBeenCalledWith('nc')
-    await fireEvent(row, 'accessibilityAction', { nativeEvent: { actionName: 'openChat' } })
-    expect(onOpen).toHaveBeenCalled()
-  })
-
-  it('failed: "Couldn’t load messages." with Try again, which asks again', async () => {
-    mockHistory.mockResolvedValue({ success: false })
-    await dock()
-    expect(await screen.findByText('Couldn’t load messages.')).toBeTruthy()
-    mockHistory.mockResolvedValue({ success: true, data: [] })
-    await fireEvent.press(screen.getByRole('button', { name: 'Try again' }))
-    expect(mockHistory).toHaveBeenCalledTimes(2)
-  })
-
-  it('left: "You left this chat. Open it to rejoin." with Rejoin, and asks the server nothing (#14)', async () => {
-    mockLeft = new Set(['g1'])
-    const onOpen = jest.fn()
-    await dock({ onOpen })
-    expect(screen.getByText('You left this chat. Open it to rejoin.')).toBeTruthy()
-    expect(mockHistory).not.toHaveBeenCalled()
-    await fireEvent.press(screen.getByRole('button', { name: 'Rejoin' }))
-    expect(onOpen).toHaveBeenCalled()
-  })
-})
-
-describe('B8 (Prompt 10): the Room’s glass pills rise; the glass never fades', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'blendn', 'BlendnScreen.tsx'), 'utf8') as string
-
-  it('enters as a 16 pt rise over base with the glass opaque throughout; only the contents fade', () => {
-    expect(src).toContain('const GLASS_RISE = SPACE.lg')
-    expect(src).toMatch(/withInitialValues\(\{ opacity: 1, transform: \[\{ translateY: GLASS_RISE \}\] \}\)/)
-    expect(src).toContain('entering={reduceMotion ? undefined : glassRise} style={styles.topActions}')
-    expect(src).toContain('<Animated.Text entering={glassContentsIn}')
-  })
-})
-
 describe('where the list holds its place (found in SCRUM-502)', () => {
   it('at the top it does not, so a header that grows keeps the title on screen', async () => {
     mockStage.scrolled = false
@@ -308,22 +238,3 @@ describe('switching People and Crews', () => {
   })
 })
 
-describe('the dock glass (found in SCRUM-155: reopening the room lost it)', () => {
-  it('is rebuilt once the entrances are over, and only once', async () => {
-    jest.useFakeTimers()
-    try {
-      await room()
-      const before = mockMaterialMounts.count
-      await act(async () => {
-        jest.advanceTimersByTime(999)
-      })
-      expect(mockMaterialMounts.count).toBe(before)
-      await act(async () => {
-        jest.advanceTimersByTime(5000)
-      })
-      expect(mockMaterialMounts.count).toBe(before + 1)
-    } finally {
-      jest.useRealTimers()
-    }
-  })
-})

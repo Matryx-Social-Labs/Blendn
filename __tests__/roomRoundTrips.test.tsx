@@ -9,7 +9,7 @@
  * Real `apiClient` (fetch faked), real `socketClient` (socket faked), real
  * `useRoom` -- the harness of room-here-count-after-checkout.test.tsx.
  */
-import { act, renderHook, waitFor } from '@testing-library/react-native'
+import { renderHook, waitFor } from '@testing-library/react-native'
 
 type Handler = (...args: unknown[]) => void
 
@@ -88,9 +88,6 @@ const { useRoom } = require('../lib/useRoom') as typeof import('../lib/useRoom')
 // One event per test: the chat group id is remembered for the session, by event.
 let EVENT = 'e-roundtrips'
 const log: string[] = []
-let chatDelayMs = 0
-// How many dock-message reads are refused before one is served (the early read can beat the rejoin).
-let refuseMessages = 0
 
 function answer(path: string): unknown {
   if (path.startsWith('/api/mobile/checkins/active')) {
@@ -99,9 +96,6 @@ function answer(path: string): unknown {
   if (path.startsWith(`/api/mobile/events/${EVENT}/room-preview`)) return { hereCount: 1, tasteMatchCount: null }
   if (path.startsWith(`/api/mobile/events/${EVENT}/matches`)) return { matches: [] }
   if (path.startsWith(`/api/mobile/events/${EVENT}/chat`)) return { chatGroupId: `g-${EVENT}` }
-  if (path.startsWith(`/api/mobile/chat/groups/g-${EVENT}/messages`)) {
-    return [{ id: 'm1', content: 'Hello', user_id: 'u2', created_at: '2026-10-12T14:01:00.000Z' }]
-  }
   return {}
 }
 
@@ -120,20 +114,13 @@ beforeEach(async () => {
   log.length = 0
   mockBlockedCalls.length = 0
   mockBlockedGate = Promise.resolve()
-  chatDelayMs = 0
-  refuseMessages = 0
   mockSecure.clear()
   await TokenStorage.setAccessToken('tok')
   global.fetch = jest.fn(async (input: RequestInfo | URL) => {
     const path = String(input).replace(/^https?:\/\/[^/]+/, '').split('?')[0]
     const name = path.split('/').slice(-1)[0]
     log.push(`${name}:start`)
-    if (path.endsWith(`/${EVENT}/chat`) && chatDelayMs) await new Promise((r) => setTimeout(r, chatDelayMs))
     log.push(`${name}:end`)
-    if (path.endsWith('/messages') && refuseMessages > 0) {
-      refuseMessages -= 1
-      return new Response(JSON.stringify({ success: false, error: 'Not a member' }), { status: 403, headers: { 'content-type': 'application/json' } })
-    }
     return new Response(JSON.stringify({ success: true, data: answer(path) }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -142,13 +129,6 @@ beforeEach(async () => {
 })
 
 afterAll(() => new Promise((r) => setTimeout(r, 300)))
-
-async function openRoom() {
-  await connected()
-  const hook = await renderHook(() => useRoom())
-  await waitFor(() => expect(hook.result.current.settled).toBe(true))
-  return hook
-}
 
 it('asks for the roster while the block list is still loading', async () => {
   EVENT = 'e-blocklist'
@@ -166,34 +146,3 @@ it('asks for the roster while the block list is still loading', async () => {
   hook.unmount()
 })
 
-it('on a re-open, asks for the dock messages without waiting for the chat lookup', async () => {
-  EVENT = 'e-reopen'
-  chatDelayMs = 40
-  const first = await openRoom()
-  expect(log.indexOf('messages:start')).toBeGreaterThan(log.indexOf('chat:end'))
-  first.unmount()
-
-  log.length = 0
-  apiClient.clearResponseCache()
-  apiClient.forgetActiveCheckins()
-  const second = await openRoom()
-
-  expect(log.indexOf('messages:start')).toBeGreaterThan(-1)
-  expect(log.indexOf('messages:start')).toBeLessThan(log.indexOf('chat:end'))
-  expect(second.result.current.chatHistory).toMatchObject({ groupId: `g-${EVENT}`, failed: false })
-  second.unmount()
-})
-
-it('a re-open whose early message read is refused (the rejoin had not landed) reads again and shows the room', async () => {
-  EVENT = 'e-refused'
-  const first = await openRoom()
-  first.unmount()
-
-  apiClient.clearResponseCache()
-  apiClient.forgetActiveCheckins()
-  refuseMessages = 1
-  const second = await openRoom()
-
-  expect(second.result.current.chatHistory).toMatchObject({ groupId: `g-${EVENT}`, failed: false })
-  second.unmount()
-})

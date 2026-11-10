@@ -216,6 +216,11 @@ function subscribe(fn: () => void) {
   }
 }
 
+/** Every change to the overlay's state (an open, a door, a tab asked for while it is open): the Room reads its tab here. */
+export function onBlendnChange(fn: () => void): () => void {
+  return subscribe(fn)
+}
+
 export function useBlendnOpen(): boolean {
   return useSyncExternalStore(subscribe, isBlendnOpen, isBlendnOpen)
 }

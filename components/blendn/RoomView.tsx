@@ -7,7 +7,6 @@ import { DURATION, EASING, RISE, SPACE, SPRING, STAGGER } from '../../lib/design
 import type { CrewCard } from '../../lib/crews'
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { connect, type SocketConnectionStatus } from '../../lib/socketClient'
-import type { ChatHistory } from '../../lib/dockHistory'
 import type { RoomPerson } from '../../lib/useRoom'
 import { Banner } from '../ds/Banner'
 import { BannerPresence } from '../motion/BannerPresence'
@@ -15,7 +14,6 @@ import type { Face } from '../ds/Facepile'
 import { SegmentedControl } from '../ds/SegmentedControl'
 import { StateScreen } from '../ds/StateScreen'
 import { SOCKET_GRACE_MS } from '../RealtimeStatusBanner'
-import { ChatDock, type DockLine } from './ChatDock'
 import { EveryoneHead, GRID_GAP, MeetNextRow, RoomGridFace, RoomHero, ShowMore, useGridCell } from './RoomSections'
 import { useStageScroll } from './RoomStage'
 import { useReducedMotion } from '../../lib/motion'
@@ -124,13 +122,6 @@ export type RoomViewProps = {
   onOpen: (p: RoomPerson) => void
   /** The double tap's like, or null when a like would have to ask first (then a double tap just opens the card). */
   onLike: ((p: RoomPerson) => void) | null
-  chatGroupId: string | null
-  /** The room's first read of its chat, for the dock (`useRoom`). */
-  chatHistory?: ChatHistory | null
-  myId?: string
-  dockWave: Extract<DockLine, { kind: 'wave' }> | null
-  onOpenChat: () => void
-  onOpenPerson: (userId: string) => void
   /** Fresh out of the pour: the hero rises and the sections follow (#9). Read at mount. */
   enter: boolean
   /** Mounted under the pour, not yet shown: the entrance waits for this to turn false. */
@@ -142,8 +133,8 @@ export type RoomViewProps = {
 /**
  * The Room (Flow 4 Room, R3-0, R2-D1): the hero, the visibility line, People |
  * Crews, Meet next, Everyone here as a three-column grid of faces
- * (virtualised: a busy night is a hundred of them), Show more, and the chat
- * dock floating at the bottom. Alive through change, still otherwise: nothing
+ * (virtualised: a busy night is a hundred of them), and Show more. The chat
+ * is the Room's other tab (`RoomTabs`, Flow 5 R-A). Alive through change, still otherwise: nothing
  * on the grid moves unless something happened.
  */
 export function RoomView(props: RoomViewProps) {
@@ -252,15 +243,6 @@ export function RoomView(props: RoomViewProps) {
           }
         />
       </GestureDetector>
-      <ChatDock
-        chatGroupId={props.chatGroupId}
-        history={props.chatHistory}
-        myId={props.myId}
-        wave={props.dockWave}
-        onOpen={props.onOpenChat}
-        onOpenPerson={props.onOpenPerson}
-        bottomInset={props.bottomInset}
-      />
     </View>
   )
 }
