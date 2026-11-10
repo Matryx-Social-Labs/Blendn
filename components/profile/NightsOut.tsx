@@ -104,7 +104,7 @@ export function NightsOut({
   return (
     <ProfileSection title="Nights out" action={view.kind === 'tiles' ? { label: 'See all', onPress: onSeeAll } : undefined} testID="nights-out">
       {view.kind === 'loading' ? (
-        <View testID="nights-loading" accessibilityLabel="Loading your nights" accessibilityState={{ busy: true }} style={styles.grid}>
+        <View accessible testID="nights-loading" accessibilityLabel="Loading your nights" accessibilityState={{ busy: true }} style={styles.grid}>
           {Array.from({ length: COLUMNS }, (_, i) => (
             <View key={i} style={cell}>
               <SkeletonBlock height={MEMORY_HEIGHT} borderRadius={RADIUS.mediaInCard} />

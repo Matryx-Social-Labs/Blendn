@@ -11,7 +11,7 @@ import { OPEN_CARD_ART, OPEN_CARD_WIDTH, TILE_WIDTH } from './PlaceCards'
 const SKELETON = { bar: 26, text: 12, area: 132, headers: [130, 150, 100] } as const
 export function PlacesSkeleton() {
   return (
-    <View accessibilityLabel="Loading places" accessibilityState={{ busy: true }} testID="places-skeleton">
+    <View accessible accessibilityLabel="Loading places" accessibilityState={{ busy: true }} testID="places-skeleton">
       <View style={styles.section}>
         <View style={styles.gutter}>
           <Skeleton width={SKELETON.headers[0]} height={SKELETON.bar} />

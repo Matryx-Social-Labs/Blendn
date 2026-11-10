@@ -866,7 +866,7 @@ export const stillAnonymous = (name: string) => `${name} hasn’t revealed who t
 /** The frame's shape while it loads (Flow 6 `user` 13), so the page does not jump when it lands: the hero, the name, a line. */
 function ProfileSkeleton({ width }: { width: number }) {
   return (
-    <View testID="profile-skeleton" accessibilityLabel="Loading profile" accessibilityState={{ busy: true }}>
+    <View accessible testID="profile-skeleton" accessibilityLabel="Loading profile" accessibilityState={{ busy: true }}>
       <SkeletonBlock width={width} height={heroHeightFor(width)} borderRadius={0} />
       <View style={styles.skeletonLines}>
         <SkeletonBlock width="60%" height={SKELETON_NAME} borderRadius={RADIUS.thumb} />

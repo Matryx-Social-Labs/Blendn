@@ -110,7 +110,7 @@ export function JustMutedLine() {
  */
 export function FeedSkeleton({ faces = true }: { faces?: boolean }) {
   return (
-    <View testID="chat-skeleton" accessibilityLabel="Loading messages" style={styles.skeleton}>
+    <View accessible testID="chat-skeleton" accessibilityLabel="Loading messages" style={styles.skeleton}>
       {[0, 1, 2, 3].map((i) => {
         const mine = i % 2 === 1
         return (

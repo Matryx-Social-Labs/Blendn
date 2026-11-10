@@ -6,7 +6,7 @@ import Animated from 'react-native-reanimated'
 import { passReachLine, type PassReach } from '../../lib/attendanceState'
 import { useFocusWhen } from '../../lib/focusReturn'
 import { SWITCH_LABEL, switchCaption } from '../../lib/switchCopy'
-import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
 import { calendarDaysBetween, eventClock } from '../../lib/time'
@@ -203,7 +203,7 @@ export function TonightView({
               {list.length > 0 ? (
                 <Pressable
                   onPress={onSeeAll}
-                  hitSlop={(minTarget() - SPACE.xl) / 2}
+                  hitSlop={(minTarget() - TYPE.button.lineHeight) / 2}
                   accessibilityRole="button"
                   accessibilityLabel="See all"
                   testID="tonight-see-all"
@@ -292,7 +292,7 @@ export function TonightView({
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.grow]}>No pass without precise location</Text>
             <Pressable
               onPress={() => void Linking.openSettings().catch(() => {})}
-              hitSlop={(minTarget() - SPACE.xl) / 2}
+              hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
               accessibilityRole="button"
               accessibilityLabel="Turn on Precise Location"
               testID="tonight-approximate-turn-on"
@@ -311,7 +311,7 @@ function Skeleton({ room }: { room: number }) {
   const { width: screen } = useWindowDimensions()
   const width = screen - DECK_INSET * 2
   const height = Math.max(MIN_CARD, Math.min(Math.round(width * SKELETON_ASPECT), room ? room - SPACE.xl : Infinity))
-  return <View testID="tonight-skeleton" accessibilityLabel="Loading tonight" style={[styles.skeleton, { width, height }]} />
+  return <View accessible testID="tonight-skeleton" accessibilityLabel="Loading tonight" style={[styles.skeleton, { width, height }]} />
 }
 
 const styles = StyleSheet.create({

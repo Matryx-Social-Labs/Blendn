@@ -280,7 +280,7 @@ function CrewScreenContent() {
           testID="crew-failed"
         />
       ) : (
-        <View style={styles.skeletonPage} accessibilityLabel="Loading the crew">
+        <View accessible style={styles.skeletonPage} accessibilityLabel="Loading the crew">
           {/* The page's own shape (DS #17): the emblem, the name, a line, then two rows. */}
           <View style={styles.skeleton}>
             <SkeletonBlock width={HEAD_SKELETON} height={HEAD_SKELETON} borderRadius={RADIUS.card} />

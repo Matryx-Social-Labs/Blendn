@@ -1,7 +1,8 @@
 import { router } from 'expo-router'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
 import { crewBadge, type Crew, type CrewCard as CrewCardData, type CrewsAtEvent } from '../../lib/crews'
 import { Button } from '../ds/Button'
 import { CrewCard } from '../ds/CrewCard'
@@ -107,7 +108,13 @@ export function CrewsHead({
           </View>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{open.value ? SOLO_ON : SOLO_OFF}</Text>
           {open.readFailed ? (
-            <Pressable onPress={() => void open.read()} accessibilityRole="button">
+            <Pressable
+              onPress={() => void open.read()}
+              accessibilityRole="button"
+              hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+              style={({ pressed }) => pressed && styles.pressed}
+              testID="room-solo-retry"
+            >
               <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>Couldn’t check whether this is on. Tap to try again.</Text>
             </Pressable>
           ) : null}
@@ -135,7 +142,13 @@ export function CrewsHead({
       ) : state.status === 'gone' ? (
         <Line text={NO_LONGER_AVAILABLE.line} />
       ) : state.status === 'error' ? (
-        <Pressable onPress={() => void reload()} accessibilityRole="button">
+        <Pressable
+          onPress={() => void reload()}
+          accessibilityRole="button"
+          hitSlop={(minTarget() - TYPE.body.lineHeight) / 2}
+          style={({ pressed }) => pressed && styles.pressed}
+          testID="room-crews-retry"
+        >
           <Line text="The crews didn’t load. Tap to try again." />
         </Pressable>
       ) : !state.data.crewsEnabled ? (
@@ -234,4 +247,5 @@ const styles = StyleSheet.create({
   soloRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   likingAs: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   foot: { gap: SPACE.sm, paddingTop: SPACE.md },
+  pressed: { opacity: OPACITY.pressed },
 })

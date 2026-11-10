@@ -780,7 +780,7 @@ const CHIP_SKELETON = 96
 
 function FieldsSkeleton({ fields }: { fields: number }) {
   return (
-    <View testID="fields-skeleton" accessibilityLabel="Loading your details" accessibilityState={{ busy: true }} style={styles.fields}>
+    <View accessible testID="fields-skeleton" accessibilityLabel="Loading your details" accessibilityState={{ busy: true }} style={styles.fields}>
       {Array.from({ length: fields }, (_, i) => (
         <View key={i} style={styles.skeletonField}>
           <SkeletonLine width="25%" />

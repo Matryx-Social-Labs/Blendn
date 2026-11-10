@@ -400,7 +400,7 @@ function RatePeersContent() {
       <View style={styles.screen}>
         {topBar}
         {/* Shaped like what is coming: a face and two lines (U-L1), not a lone spinner. */}
-        <View accessibilityLabel="Loading who you met" accessibilityState={{ busy: true }} style={[styles.skeleton, { paddingTop: bar.contentTop + SPACE.xxxl }]} testID="rate-skeleton">
+        <View accessible accessibilityLabel="Loading who you met" accessibilityState={{ busy: true }} style={[styles.skeleton, { paddingTop: bar.contentTop + SPACE.xxxl }]} testID="rate-skeleton">
           <SkeletonCircle width={FACE} />
           <SkeletonBlock width="60%" height={30} borderRadius={RADIUS.thumb} />
           <SkeletonBlock width="80%" height={20} borderRadius={RADIUS.thumb} />

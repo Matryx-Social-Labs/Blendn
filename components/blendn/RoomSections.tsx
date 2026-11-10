@@ -276,7 +276,7 @@ const SKELETON_CARD = 206
 export function RoomSkeleton({ topInset }: { topInset: number }) {
   const cell = useGridCell()
   return (
-    <View testID="room-skeleton" accessibilityLabel="Loading the room" style={[styles.skeleton, { paddingTop: topInset }]}>
+    <View accessible testID="room-skeleton" accessibilityLabel="Loading the room" style={[styles.skeleton, { paddingTop: topInset }]}>
       <View style={[styles.block, { height: SKELETON_YOU }]} />
       <View style={styles.meetRow}>
         {[0, 1, 2].map((i) => (

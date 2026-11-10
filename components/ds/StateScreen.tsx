@@ -95,6 +95,18 @@ export type StateScreenProps = {
 }
 
 /**
+ * A state said on arrival, inline too: a load that fails where "Loading" was read must say so (M4), and a card that replaces
+ * the content must say what replaced it (M29). Inline queues, so it never cuts off what is being read; an inline state on a
+ * screen behind another (a tab, a pushed route) stays quiet. A whole screen interrupts.
+ */
+export function useSaidOnArrival(said: string | null, screen = false) {
+  const inFront = useLatest(useFocused())
+  useEffect(() => {
+    if (said && (screen || inFront.current)) AccessibilityInfo.announceForAccessibilityWithOptions(said, { queue: !screen })
+  }, [screen, said, inFront])
+}
+
+/**
  * Every empty, failed, refused and system state, as one pattern
  * (guidelines/components/StateScreen.html): a glyph well, a title, one
  * paragraph, then actions. Read as title (a heading), body, actions; the glyph
@@ -111,13 +123,7 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
   const { height } = useWindowDimensions()
   const screen = variant === 'screen'
 
-  // Said on arrival, inline too: a load that fails where "Loading" was read must say so. Inline queues, so it never cuts off
-  // what is being read (M4); and an inline state on a screen behind another (a tab, a pushed route) stays quiet.
-  const said = announce === false ? null : (announce ?? (body ? `${title}. ${body}` : title))
-  const inFront = useLatest(useFocused())
-  useEffect(() => {
-    if (said && (screen || inFront.current)) AccessibilityInfo.announceForAccessibilityWithOptions(said, { queue: !screen })
-  }, [screen, said, inFront])
+  useSaidOnArrival(announce === false ? null : (announce ?? (body ? `${title}. ${body}` : title)), screen)
 
   const content = (
     <View style={styles.column}>

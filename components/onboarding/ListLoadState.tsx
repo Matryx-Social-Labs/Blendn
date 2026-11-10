@@ -29,7 +29,7 @@ export function ListLoadState({
   useAnnounced(status === 'loading' ? null : `Couldn’t load the ${what}.`)
   if (status === 'loading') {
     return (
-      <View testID="list-loading" style={styles.row} accessibilityRole="progressbar" accessibilityLabel={`Loading ${what}`} accessibilityState={{ busy: true }}>
+      <View accessible testID="list-loading" style={styles.row} accessibilityRole="progressbar" accessibilityLabel={`Loading ${what}`} accessibilityState={{ busy: true }}>
         <Spinner size={18} />
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{`Loading ${what}`}</Text>
       </View>

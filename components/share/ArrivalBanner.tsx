@@ -6,6 +6,7 @@ import Animated from 'react-native-reanimated'
 import { Icon } from '../ui/Icon'
 import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { OPACITY } from '../../lib/theme'
 import { Button } from '../ds/Button'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
@@ -89,7 +90,7 @@ export function ArrivalBanner({
             accessibilityLabel="Dismiss"
             hitSlop={(minTarget() - ICON.inline) / 2}
             onPress={onDismiss}
-            style={styles.control}
+            style={({ pressed }) => [styles.control, pressed && styles.pressed]}
             testID={testID && `${testID}-dismiss`}
           >
             <Icon name="x" size={ICON.inline} color={COLOR.textTertiary} />
@@ -115,5 +116,6 @@ const styles = StyleSheet.create({
   text: { flexGrow: 1, flexShrink: 1 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   control: { alignSelf: 'center' },
+  pressed: { opacity: OPACITY.pressed },
   ink: { color: COLOR.textPrimary },
 })

@@ -323,6 +323,7 @@ function IndexInner() {
       <View style={styles.root}>
         <Backdrop level={ORB_LEVEL.landing} />
         <View
+          accessible
           testID="auth-resolving"
           accessibilityRole="progressbar"
           accessibilityLabel="Loading"
