@@ -122,7 +122,7 @@ describe('the hero pager advances by itself until the first swipe', () => {
      */
     const src = stripComments(read('components/profile/ProfileHeroPager.tsx'))
     expect(src).toContain('onScrollBeginDrag={() => setManual(true)}')
-    expect(src).toContain('const auto = !manual && !reduceMotion && count > 1')
+    expect(src).toContain('const auto = !manual && !reduceMotion && !screenReader && count > 1')
   })
 
   it('does not repeat the hero’s first photo in the gallery', () => {
