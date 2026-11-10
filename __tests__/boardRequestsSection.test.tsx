@@ -241,7 +241,7 @@ describe('asks you sent', () => {
   it.each([
     ['refused', { success: false, error: 'No internet connection. Check your network and try again.' }],
     ['threw', 'throw'],
-  ])('a withdrawal that %s puts the row back, silently', async (_, outcome) => {
+  ])('a withdrawal that %s puts the row back with a line of its own, never a toast (motion audit M20)', async (_, outcome) => {
     api.getBoardRequests.mockResolvedValue(listing([], [WAITING]))
     if (outcome === 'throw') api.answerBoardRequest.mockRejectedValue(new Error('queue cleared'))
     else api.answerBoardRequest.mockResolvedValue(outcome as never)
@@ -249,6 +249,8 @@ describe('asks you sent', () => {
 
     await fireEvent.press(await screen.findByLabelText('Withdraw your ask to Velvet Heron'))
     expect(await screen.findByLabelText('Withdraw your ask to Velvet Heron')).toBeTruthy()
+    // Said to a screen reader too (the row coming back is all a sighted person needs), and nothing from the server's answer.
+    expect(screen.getByText('Couldn’t withdraw. Try again.').props.accessibilityLiveRegion).toBe('polite')
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 })

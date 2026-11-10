@@ -1,16 +1,17 @@
-import { useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../ds/Button'
 import { MonoRun, PresenceDot } from '../ds/MonoFamily'
-import { font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
 import type { VenueDetail } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { OPACITY } from '../../lib/theme'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { againLabel, spokenLeft, venueDockLine, type DockMode } from '../../lib/venuePage'
 import { DockRow } from '../ds/DockRow'
@@ -19,6 +20,7 @@ import { DockRow } from '../ds/DockRow'
 const PILL_HEIGHT = 36
 const ENDING_CHIP = 22
 const EXTEND_CHIP = 24
+const ENDING_SAID = 'Your live time is ending. Open it to extend.'
 
 /**
  * "● Live · Toit · 32 min": minutes only, stepped once a minute; in the last
@@ -32,9 +34,17 @@ function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDe
   const contrast = useIncreaseContrast()
   const time = useSessionTime(live, onZero)
   const ending = time?.kind === 'ending'
+  // The last five minutes are news: said once as they start (both platforms; the pill's label ticks, so no live region).
+  const wasEnding = useRef(ending)
+  useEffect(() => {
+    if (ending && !wasEnding.current) AccessibilityInfo.announceForAccessibility(ENDING_SAID)
+    wasEnding.current = ending
+  }, [ending])
   return (
     <Pressable
       testID="venue-live-pill"
+      // The way to Extend: 44 pt (48 dp) to the finger though it draws 36.
+      hitSlop={(minTarget() - PILL_HEIGHT) / 2}
       onPress={() => {
         // The Extend chip's cue: the sheet it opens has Extend ready.
         if (ending) H.primary()
@@ -44,7 +54,8 @@ function LivePill({ name, live, onZero, onPress }: { name: string; live: VenueDe
       accessibilityRole="button"
       accessibilityLabel={`Live at ${name}${time ? `, ${spokenLeft(time)}` : ''}`}
       accessibilityHint="Opens your live time"
-      style={[styles.pill, contrast && IC_HAIRLINE]}
+      // iOS has no ripple: the pressed fill dims as Button's text does.
+      style={({ pressed }) => [styles.pill, contrast && IC_HAIRLINE, pressed && Platform.OS === 'ios' && styles.pressed]}
     >
       <PresenceDot kind="live" />
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.pillText]}>
@@ -228,6 +239,7 @@ const styles = StyleSheet.create({
     backgroundColor: MATERIAL.fillOnGlass,
   },
   pillText: { flexShrink: 1 },
+  pressed: { opacity: OPACITY.pressed },
   extendChip: { height: EXTEND_CHIP, justifyContent: 'center', paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary },
   endingChip: { height: ENDING_CHIP, justifyContent: 'center', paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.warning },
   ink: { color: COLOR.textPrimary },
