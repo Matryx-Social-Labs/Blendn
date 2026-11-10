@@ -832,7 +832,15 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const waveKeys = useMemo(() => Object.fromEntries(Object.values(waves.received).map((w) => [w.fromUserId, w.at])), [waves.received])
 
   // --- meet next, held while a card is open (#52: never reshuffle under a card) ---
-  const shuffle = useMemo(() => meetNext(room.people, { now, eventId: room.event?.id ?? '' }), [room.people, now, room.event?.id])
+  // Re-worked out at the window's mark, not on the screen's next 15 s tick: the pill's own 1 s clock read "0:00" until then.
+  const [markPassed, setMarkPassed] = useState(0)
+  const shuffleNow = Math.max(now, markPassed)
+  const shuffle = useMemo(() => meetNext(room.people, { now: shuffleNow, eventId: room.event?.id ?? '' }), [room.people, shuffleNow, room.event?.id])
+  useEffect(() => {
+    const at = shuffle.nextShuffleAt
+    const id = setTimeout(() => setMarkPassed(Math.max(Date.now(), at)), Math.max(0, at - Date.now()))
+    return () => clearTimeout(id)
+  }, [shuffle.nextShuffleAt])
   const [heldPicks, setHeldPicks] = useState(shuffle.picks)
   if (!open && heldPicks !== shuffle.picks) setHeldPicks(shuffle.picks)
   const head = everyoneHead(room.people, { hasMore: room.hasMore, hereCount: room.hereCount })

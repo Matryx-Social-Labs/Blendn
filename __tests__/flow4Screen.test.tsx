@@ -209,6 +209,39 @@ describe('the PersonCard, from every room surface (R3-D4 4.1)', () => {
     expect(screen.getByRole('button', { name: 'View profile' })).toBeTruthy()
   })
 
+  /*
+   * Seen on the iOS drive (2026-11-10): "New picks in 0:00". The pill counts on its own 1 s clock while the picks were
+   * worked out on the screen's 15 s clock, so for up to 15 s past each 15-minute mark it sat at 0:00 over the old three.
+   */
+  it('Meet next moves on at the mark itself: the pill never sits at 0:00', async () => {
+    const WINDOW = 15 * 60_000
+    const mark = (Math.floor(Date.now() / WINDOW) + 2) * WINDOW
+    jest.useFakeTimers({ now: mark - 5_000 })
+    try {
+      await drawRoom()
+      expect(screen.getByText('New picks in 0:05')).toBeTruthy()
+      await act(async () => jest.advanceTimersByTime(6_000))
+      expect(screen.queryByText('New picks in 0:00')).toBeNull()
+      expect(screen.getByText('New picks in 14:59')).toBeTruthy()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('control: between marks the pill counts down on its own clock', async () => {
+    const WINDOW = 15 * 60_000
+    const mark = (Math.floor(Date.now() / WINDOW) + 2) * WINDOW
+    jest.useFakeTimers({ now: mark - 65_000 })
+    try {
+      await drawRoom()
+      expect(screen.getByText('New picks in 1:05')).toBeTruthy()
+      await act(async () => jest.advanceTimersByTime(6_000))
+      expect(screen.getByText('New picks in 0:59')).toBeTruthy()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('a Meet next card opens it', async () => {
     await drawRoom()
     await fireEvent.press(screen.getByTestId('meet-next-0'))
