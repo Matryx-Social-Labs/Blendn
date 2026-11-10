@@ -81,6 +81,13 @@ export function takePendingTab(): RoomTab {
   return tab
 }
 
+/** The tab in front (the tab bar says it), so a route that steps back to the tabs lands on it, not on the Pulse. */
+let currentTab = 'events'
+export function setCurrentTab(name: string): void {
+  currentTab = name
+}
+export const tabsPath = (): string => `/(tabs)/${currentTab}`
+
 /**
  * The live room's chat id, set by the Room once it knows it: `chat/[id]` for this id opens the Chat tab. It outlives the
  * overlay (mounted only while open) and goes when the check-in does (`setLiveHint`).

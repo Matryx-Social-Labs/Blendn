@@ -1,10 +1,10 @@
-import { router, useLocalSearchParams, useNavigation } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { View } from 'react-native'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { RoomChat } from '../../components/chat/RoomChat'
-import { openRoomChat } from '../../lib/blendnOverlay'
+import { openRoomChat, tabsPath } from '../../lib/blendnOverlay'
 import { COLOR } from '../../lib/design/tokens'
 import { idParam } from '../../lib/routeParams'
 import { chatOpensInRoom } from '../../lib/roomTab'
@@ -25,19 +25,15 @@ export default function GroupChat() {
   const [inRoom] = useState(() => !!id && chatOpensInRoom({ id, kind, eventId }))
   // The event page says it opened this (`from: 'event'`); a push carries the event too, and closes to the tabs.
   const [returnTo] = useState(() => (params.from === 'event' ? eventId : null))
-  const navigation = useNavigation()
   useEffect(() => {
     if (!inRoom) return
     openRoomChat(returnTo)
-    // The overlay is hosted by the tabs, under the root stack: step out of its way, or it opens behind this route.
-    // Pushed straight from a tab, back to it as it was (Banter stays Banter): a dismiss-all would reach `index`, whose
-    // redirect is the Pulse. From deeper (an event page), to the tabs as every overlay entry does (`toTheOverlay`). A
+    // The overlay is hosted by the tabs, under the root stack: back to them, on the tab you were on (Banter stays
+    // Banter; a dismiss-all would reach `index`, whose redirect is the Pulse), or it opens behind this route. A
     // cold-start link has nothing under it: the tabs replace it.
-    const routes = navigation.getState()?.routes ?? []
-    if (routes[routes.length - 2]?.name === '(tabs)') router.back()
-    else if (router.canDismiss()) router.dismissTo('/(tabs)/events')
-    else router.replace('/(tabs)/events')
-  }, [inRoom, returnTo, navigation])
+    if (router.canDismiss()) router.dismissTo(tabsPath())
+    else router.replace(tabsPath())
+  }, [inRoom, returnTo])
   if (!id) return <BrokenLink />
   if (inRoom) return <View style={{ flex: 1, backgroundColor: COLOR.ink }} />
   return <RoomChat id={id} params={params} />
