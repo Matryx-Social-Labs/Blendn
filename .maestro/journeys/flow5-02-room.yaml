@@ -69,6 +69,15 @@ tags:
 - hideKeyboard
 - takeScreenshot: flow5-02-sent
 
+# --- Tap the sender (their name over their message; a reply's quote names them too, and is no card) ---
+- tapOn:
+    text: ${SENDER}
+    above: ${THEIRS}
+- extendedWaitUntil:
+    visible: "View profile"
+    timeout: 10000
+- tapOn: "Dismiss"
+
 # --- Long-press theirs: the reaction bar and the menu ---
 - longPressOn: ${THEIRS}
 - extendedWaitUntil:
@@ -93,13 +102,6 @@ tags:
     visible: ".*${MESSAGE} · reply.*"
     timeout: 15000
 - hideKeyboard
-
-# --- Tap the sender: their card ---
-- tapOn: ${SENDER}
-- extendedWaitUntil:
-    visible: "View profile"
-    timeout: 10000
-- tapOn: "Dismiss"
 
 # --- Back: Chat → People → closed (Android's Back; on iOS the People tab) ---
 - runFlow:
