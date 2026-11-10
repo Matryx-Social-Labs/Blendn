@@ -10,16 +10,19 @@ const mockDismissTo = jest.fn()
 const mockDismissAll = jest.fn()
 const mockReplace = jest.fn()
 let mockCanDismiss = true
+const mockBack = jest.fn()
+let mockBelow: string | null = '(tabs)'
 jest.mock('expo-router', () => ({
   router: {
     dismissTo: (...a: unknown[]) => mockDismissTo(...a),
     dismissAll: () => mockDismissAll(),
     canDismiss: () => mockCanDismiss,
     push: jest.fn(),
-    back: jest.fn(),
+    back: () => mockBack(),
     replace: (...a: unknown[]) => mockReplace(...a),
   },
   useLocalSearchParams: () => mockParams,
+  useNavigation: () => ({ getState: () => ({ routes: [...(mockBelow ? [{ name: 'index' }, { name: mockBelow }] : []), { name: 'chat/[id]' }] }) }),
 }))
 jest.mock('../components/chat/RoomChat', () => ({
   RoomChat: ({ id }: { id: string }) => {
@@ -39,6 +42,8 @@ beforeEach(() => {
   mockDismissAll.mockClear()
   mockReplace.mockClear()
   mockCanDismiss = true
+  mockBack.mockClear()
+  mockBelow = '(tabs)'
   blendnClosed()
   takeReturnTo()
   setLiveRoomChat('live-room')
@@ -50,10 +55,19 @@ it('the live room’s chat opens the room on its Chat tab, over the tabs', async
   expect(view.queryByText(/chat screen/)).toBeNull()
   expect(isBlendnOpen()).toBe(true)
   expect(takePendingTab()).toBe('chat')
-  // Back to the tabs as they were (Banter stays Banter): never a switch to another tab (found on the iOS drive).
-  expect(mockDismissAll).toHaveBeenCalled()
-  expect(mockDismissTo).not.toHaveBeenCalled()
+  // Pushed straight from a tab: back to it as it was (Banter stays Banter), never to the Pulse (found on the iOS drive:
+  // the stack's top is `index`, whose redirect is the Pulse, so a dismiss-all switched the tab).
+  expect(mockBack).toHaveBeenCalled()
+  expect(mockDismissAll).not.toHaveBeenCalled()
   expect(mockReplace).not.toHaveBeenCalled()
+})
+
+it('from a pushed screen (an event page, a profile), back to the tabs under them all', async () => {
+  mockBelow = 'event/[id]'
+  mockParams = { id: 'live-room' }
+  await render(<GroupChat />)
+  expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/events')
+  expect(mockBack).not.toHaveBeenCalled()
 })
 
 it('control: another event’s room is still a screen, and the overlay stays shut', async () => {
@@ -66,6 +80,7 @@ it('control: another event’s room is still a screen, and the overlay stays shu
 
 it('a cold-start link has no tabs under it yet: it replaces itself with them', async () => {
   mockCanDismiss = false
+  mockBelow = null
   mockParams = { id: 'live-room' }
   await render(<GroupChat />)
   expect(mockReplace).toHaveBeenCalledWith('/(tabs)/events')
