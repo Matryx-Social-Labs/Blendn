@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from '../ds/Button'
 import { MonoRun } from '../ds/MonoFamily'
@@ -9,8 +9,9 @@ import { TimeRing } from '../ds/TimeRing'
 import { Icon } from '../ui/Icon'
 import ScalePress from '../motion/ScalePress'
 import type { VenueDetail } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
+import { OPACITY } from '../../lib/theme'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { liveNowWord } from '../../lib/home'
 import { DateStamp } from '../ds/DateStamp'
@@ -138,7 +139,7 @@ export function UpcomingList({
           android_ripple={{ color: PRESSED_WASH.android }}
           accessibilityRole="button"
           accessibilityLabel={`${r.title}, ${r.day}, ${r.time}`}
-          style={styles.upcoming}
+          style={({ pressed }) => [styles.upcoming, pressed && Platform.OS === 'ios' && styles.pressed]}
           testID={`venue-upcoming-${r.id}`}
         >
           <DateStamp iso={r.start} timeZone={r.timeZone} size={STAMP} />
@@ -230,8 +231,8 @@ export function About({ text }: { text: string }) {
           onPress={() => setOpen((o) => !o)}
           accessibilityRole="button"
           accessibilityLabel={open ? 'Show less' : 'Read more'}
-          hitSlop={(minTarget() - SPACE.xl) / 2}
-          style={styles.readMore}
+          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+          style={({ pressed }) => [styles.readMore, pressed && styles.dim]}
         >
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{open ? 'Show less' : 'Read more'}</Text>
         </Pressable>
@@ -289,7 +290,7 @@ export function Where({
               accessibilityRole="button"
               accessibilityLabel="Copy address"
               android_ripple={{ color: PRESSED_WASH.android }}
-              style={styles.copy}
+              style={({ pressed }) => [styles.copy, pressed && Platform.OS === 'ios' && styles.dim]}
               testID="venue-copy"
             >
               <Icon name="copy" size={ICON.control} />
@@ -312,8 +313,8 @@ export function ClaimLine({ onPress }: { onPress: () => void }) {
         accessibilityRole="link"
         accessibilityLabel="Own this place? Claim it"
         accessibilityHint="Opens the Blend’n dashboard in your browser"
-        hitSlop={(minTarget() - SPACE.xl) / 2}
-        style={styles.claim}
+        hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+        style={({ pressed }) => [styles.claim, pressed && styles.dim]}
       >
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
           Own this place? <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.underline]}>Claim it</Text>
@@ -340,6 +341,8 @@ const styles = StyleSheet.create({
   cardText: { flex: 1, gap: SPACE.xs },
   eventOn: { borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.sm },
   eventOnHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  pressed: { backgroundColor: PRESSED_WASH.ios },
+  dim: { opacity: OPACITY.pressed },
   // `.gr4.v`: 64 at least, 8 above and below, 12 between the stamp, the words and the chevron.
   upcoming: { minHeight: SIZE.tabBar, paddingVertical: SPACE.sm, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   // `.tn`: the surface, 20 corners, 12 in, a hairline; nothing on is 16 in.
