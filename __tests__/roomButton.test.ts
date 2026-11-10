@@ -150,16 +150,16 @@ describe('the Pulse no longer carries the checked-in strip', () => {
      * The strip held the only one-tap check out, and `handleCheckOut` had gone
      * caller-less once before -- which cost three taps through the event detail
      * screen and is why the strip was added in the first place. Two callers
-     * now: the long-press tray here, and the Blend'n room's top bar (through
+     * now: the long-press tray here, and the Blend'n room's ⋯ menu (through
      * `useRoomControls`, which calls `checkOutOf`). The room's asks first
-     * now — one stray tap closed the room — but it is still one tray away.
+     * now — one stray tap closed the room — but it is still one sheet away.
      */
     expect(pulse).toContain("label: 'Check out'")
     // And asks first, like the room's, before `handleCheckOut` runs.
     expect(pulse).toContain('title: `Check out of ${event.title}?`')
     expect(pulse).toContain('void handleCheckOut(event)')
     const blendn = readFileSync(join(__dirname, '..', 'components/blendn/BlendnScreen.tsx'), 'utf8')
-    expect(blendn).toContain('onPress={() => setConfirmingOut(true)}')
+    expect(blendn).toContain("{ label: 'Check out', variant: 'destructive' as const, then: () => setConfirmingOut(true) }")
     expect(blendn).toMatch(/label: 'Check out', kind: 'destructive'[\s\S]*?void checkOut\(\)/)
     expect(readFileSync(join(__dirname, '..', 'lib/useRoomControls.ts'), 'utf8')).toContain(
       'checkOutOf(eventId)'

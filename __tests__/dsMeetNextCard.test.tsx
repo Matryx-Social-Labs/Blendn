@@ -1,14 +1,13 @@
 /*
- * <MeetNextCard> (guidelines/components/MeetNextCard.html): the 164 pt surface
- * card under "Meet next": the face at the card less 32, the name and one
- * reason; the liked mark; pressed and focused. Tap opens the PersonCard,
- * silently.
+ * <MeetNextCard> (Flow 5 R-A `pick`): the lit rose card under "Meet next": a 64 pt face, the name and one reason in two
+ * lines each, and the 40 pt like; liked lights the heart; pressed and focused. Tap opens the PersonCard, silently.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { MeetNextCard } from '../components/ds/MeetNextCard'
+import { HueProvider } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
@@ -16,10 +15,13 @@ const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { include
 const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true })
 const PRIYA = { face: { kind: 'photo', uri: 'https://example.com/priya.jpg' } as const, name: 'Priya', reason: 'Both open to dating', width: 110 }
 
-it('is a 164 pt surface card at radius 16 with the face at the card less 32', async () => {
+it('is a surface card at radius 20 (RADIUS.tile), 110 wide, with a 64 pt face and a 40 pt heart; name and reason take two lines', async () => {
   await render(<MeetNextCard {...PRIYA} testID="m" />)
-  expect(flat('m')).toMatchObject({ width: 110, minHeight: 164, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface })
-  expect(flat('m-face')).toMatchObject({ width: 78, height: 78 })
+  expect(flat('m-scale')).toMatchObject({ width: 110 })
+  expect(flat('m')).toMatchObject({ borderRadius: RADIUS.tile, backgroundColor: COLOR.surface })
+  expect(flat('m-face')).toMatchObject({ width: 64, height: 64 })
+  expect(flat('m-like')).toMatchObject({ width: 40, height: 40 })
+  expect(screen.getByText('Priya', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
   for (const t of ['Priya', 'Both open to dating']) {
     expect(screen.getByText(t, { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(1.3)
   }
@@ -28,8 +30,8 @@ it('is a 164 pt surface card at radius 16 with the face at the card less 32', as
 it('is a button, “{name}, {reason}”; liked adds the heart mark and “liked”', async () => {
   await render(<MeetNextCard {...PRIYA} />)
   expect(screen.getByRole('button', { name: 'Priya, Both open to dating' })).toBeTruthy()
-  await render(<MeetNextCard {...PRIYA} liked testID="m" />)
-  expect(query('m-mark')).toBeTruthy()
+  await render(<HueProvider value="rose"><MeetNextCard {...PRIYA} liked testID="m" /></HueProvider>)
+  expect(flat('m-like')).toMatchObject({ backgroundColor: COLOR.brandRose })
   expect(screen.getByRole('button', { name: 'Priya, Both open to dating, liked' })).toBeTruthy()
 })
 

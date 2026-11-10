@@ -183,12 +183,13 @@ describe('the event screen hears check-in changes', () => {
     expect(screen).toMatch(/subscribeCheckInChanged\(\(\) => void fetchEventDetails\(\)\)/)
   })
 
-  it('checks in only through the one flow: "Blend in" is the page’s hold (SCRUM-966), "You’re in" leads to the Room', () => {
+  it('checks in only through the one flow: "Blend in" is the page’s hold (SCRUM-966), "You’re in" leads to the Room’s Chat', () => {
     expect(screen).not.toContain('useCheckInFlow(')
     expect(screen).not.toContain('<MomentPour')
     // At the doors the hold is the dock (Hold to Blend’n: the dock row is null); checked in, "You're in" leads to the Room.
     expect(screen).toMatch(/\{dock \? \([\s\S]*\) : \([\s\S]*<EventHold \{\.\.\.hold\} \/>/)
-    expect(screen).toMatch(/room: \(\) => toTheOverlay\(openBlendn\)/)
+    // Flow 5 C1b: "Open the room" opens the Room's Chat tab (the disc opens People), and closing it comes back here (ROOM-13).
+    expect(screen).toMatch(/room: \(\) => toTheOverlay\(\(\) => openRoomChat\(String\(id\)\)\)/)
     // …and the way out is the dock's "Check out" link, opening the sheet with the hold (option A, SCRUM-1035): the dock is one line.
     expect(screen).not.toMatch(/<EventCheckOut \{/)
     expect(screen).toMatch(/onPressState=\{dock\.change \? [^:]+ : dock\.checkOut \? openCheckOut : undefined\}/)

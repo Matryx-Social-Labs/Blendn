@@ -53,7 +53,7 @@ describe('the rebuilt room kept what the old Grid had', () => {
     // Nothing names them: a name at the moment someone walks in ties them to the door.
     expect(USE_ROOM()).toContain('subscribeToEventRoomCheckIn(eventId')
     expect(ROOM()).toContain('arriving={props.arrivingIds.has(item.id)}')
-    for (const src of [SCREEN(), SECTIONS(), ROOM(), code('components', 'blendn', 'ChatDock.tsx')]) expect(src).not.toContain('walked in')
+    for (const src of [SCREEN(), SECTIONS(), ROOM()]) expect(src).not.toContain('walked in')
   })
 
   it('virtualises the roster instead of rendering all of it', () => {
@@ -111,42 +111,36 @@ describe('the rebuilt room kept what the old Grid had', () => {
   })
 })
 
-describe('Join Chat is a door, not a pane', () => {
-  it('navigates to the event room', () => {
+describe('the room chat is one component, in one place (Flow 5 R-A)', () => {
+  it('is the Room’s Chat tab, and the route for the live room opens it there', () => {
     /*
-     * The room once mounted the chat and hid it. That meant the event chat
-     * existed twice — once embedded, once at `app/chat/[id]` — with one socket,
-     * one moderation path and one composer duplicated across both. `ChatDock`
-     * shows the last few lines; tapping it opens the real room.
+     * The chat once existed twice, embedded and at `app/chat/[id]`, with the
+     * socket, moderation and composer duplicated. It is one component now
+     * (`RoomChat`): the Room renders it as its Chat tab, and the route renders
+     * it for every other room and steps aside for this one
+     * (`__tests__/chatRouteRedirect.test.tsx`).
      */
     const src = SCREEN()
-    expect(src).toContain("pathname: '/chat/[id]'")
-    expect(src).toContain('onOpenChat={() => void openChat()}')
+    expect(src).toContain('<RoomChat')
+    expect(src).toContain('<RoomTabs')
     expect(src).not.toContain('<GroupChat')
-    expect(code('components', 'blendn', 'ChatDock.tsx')).not.toContain('<GroupChat')
+    expect(code('app', 'chat', '[id].tsx')).toContain('chatOpensInRoom(')
   })
 
   it('says so when the room has no chat yet', () => {
-    // Otherwise the dock is a control that sometimes does nothing, which reads
+    // Otherwise the Chat tab is a control that sometimes does nothing, which reads
     // as the app being broken rather than the chat not existing yet.
     expect(SCREEN()).toContain('The chat for this event is not open yet.')
   })
 })
 
+// R-A has no face stack under "here now" (the bar has the count), so SCRUM-495's stack tests went with it.
 describe('the room says who is here now (SCRUM-495)', () => {
-  it('builds the face stack under "here now" from people inside only', () => {
-    expect(SECTIONS()).toContain('hereNowStack(arrivals, people, STACK)')
-  })
-
   it('heads the face grid with what is true of everyone in it', () => {
     expect(SCREEN()).toMatch(/const head = everyoneHead\(room\.people, \{ hasMore: room\.hasMore, hereCount: room\.hereCount \}\)/)
     expect(SCREEN()).toContain('everyoneTitle={head.title}')
     expect(ROOM()).toContain('<EveryoneHead title={props.everyoneTitle} count={props.everyoneCount} />')
-    expect(SECTIONS()).toContain('<SectionHeader title={title}')
-  })
-
-  it('rings as new only somebody who arrived this session and is still in the stack', () => {
-    expect(SECTIONS()).toContain('arrivals.some((a) => a.id === stack[0].id)')
+    expect(SECTIONS()).toMatch(/<SectionHeader\s+title=\{title\}\s+testID="everyone-head"/)
   })
 })
 

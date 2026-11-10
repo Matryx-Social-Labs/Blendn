@@ -682,7 +682,7 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
     expect(await within(dock).findByText('The room is open')).toBeTruthy()
     await fireEvent.press(within(dock).getByRole('button', { name: 'Open the room' }))
     await waitFor(() =>
-      expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'g1', roomName: 'Vinyl Night', eventTitle: 'Vinyl Night' } })
+      expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'g1', roomName: 'Vinyl Night', eventTitle: 'Vinyl Night', eventId: 'e1', from: 'event' } })
     )
     expect(api.getEventChat).toHaveBeenCalledWith('e1')
   })
