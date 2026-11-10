@@ -2,7 +2,7 @@ import { barTop } from '../../lib/barGeometry'
 import { useCallback, useEffect, useState } from 'react'
 import { FlatList, Modal, Platform, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
@@ -10,10 +10,11 @@ import type { Rect } from '../ds/chatShared'
 import { IconButton } from '../ds/IconButton'
 import { monoCaption, ScrimPill } from '../ds/MonoFamily'
 import { useBoldText } from '../ds/shared'
+import { useCloseReverses, useKeptWhileOpen } from '../motion/useCloseReverses'
 import { ZoomableImage } from '../motion/ZoomableImage'
-import { COLOR, EASING, SIZE, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, SIZE, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useQueuedModal } from '../../lib/modalTurn'
-import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { useReducedMotion } from '../../lib/motion'
 
 /** A drag past 140 pt, or a fling past 900 pt/s, dismisses: the DS ImageViewer's numbers. */
 export const DISMISS = { distance: 140, velocity: 900 } as const
@@ -41,12 +42,16 @@ export type PhotoViewerProps = {
  * scrim pill at the top, centred; a single photo has no counter. Swipe sideways between photos; pinch or double-tap zooms (a zoomed
  * photo owns every drag); a drag down tracks 1:1 and dismisses past 140 pt or a fling, springing back on `M.fling` short of it.
  *
- * Motion #33: it travels from the thumbnail's frame on `M.travel` while the ink fades in. Reduce Motion: it fades over 200 ms.
+ * Motion #33: it travels from the thumbnail's frame on `M.travel` while the ink fades in, and the close travels back
+ * (`useCloseReverses`), after a drag-dismiss too. Reduce Motion: it fades in and out over 200 ms.
  * No haptic: opening, paging and closing are navigation, and the DS ImageViewer plays none either.
  *
  * Read: the page is modal, Close first, then where you are, then the photo ("Photo 2 of 5").
  */
-export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, testID }: PhotoViewerProps) {
+export function PhotoViewer(props: PhotoViewerProps) {
+  const { initialIndex = 0, visible, onClose, testID } = props
+  // The photos and the thumbnail it travels back to stay as they were while it leaves (its owner clears them on close).
+  const { photos, from } = useKeptWhileOpen(visible, props)
   const window = useWindowDimensions()
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
@@ -71,15 +76,11 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
   const drop = useSharedValue(0)
   const travel = !!from && !reduceMotion
 
+  // The close reverses the open (#33): a dragged photo travels home from where it was let go, and rests there once gone.
+  const { up, leaving } = useCloseReverses(visible, open, { travel, reduceMotion, onGone: () => drop.set(0) })
   useEffect(() => {
-    if (!visible) {
-      open.set(0)
-      drop.set(0)
-      return
-    }
-    const fade = withTiming(1, { duration: motionTokens(reduceMotion).duration.base, easing: Easing.bezier(...EASING.gentle) })
-    open.set(travel ? withSpring(1, SPRING.travel) : fade)
-    // On opening and closing only: the rest is read as it stood then.
+    if (!visible && travel) drop.set(withSpring(0, SPRING.travel))
+    // On closing only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
@@ -113,6 +114,8 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
   const inkStyle = useAnimatedStyle(() => ({
     opacity: open.get() * (1 - Math.min(1, Math.abs(drop.get()) / (DISMISS.distance * 2))),
   }))
+  // The chrome comes and goes with the ink.
+  const chromeStyle = useAnimatedStyle(() => ({ opacity: open.get() }))
 
   const onSettle = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = pageAt(e.nativeEvent.contentOffset.x, window.width, photos.length)
@@ -124,7 +127,7 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
   const counter = counterOf(index, photos.length)
 
   // One Modal on screen at a time on iOS (lib/modalTurn).
-  const turn = useQueuedModal(visible, { closeForLink: onClose })
+  const turn = useQueuedModal(up, { closeForLink: onClose })
   return (
     <Modal
       testID={testID && `${testID}-modal`}
@@ -138,11 +141,22 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
       onDismiss={turn.onDismiss}
     >
       <GestureHandlerRootView style={styles.fill}>
-        <View style={styles.fill} accessibilityViewIsModal onAccessibilityEscape={onClose}>
+        <View
+          testID={testID && `${testID}-page`}
+          style={styles.fill}
+          // Leaving, it takes no touches.
+          pointerEvents={leaving ? 'none' : 'auto'}
+          accessibilityViewIsModal
+          onAccessibilityEscape={onClose}
+        >
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.ink, inkStyle]} />
 
           {/* The chrome is read before the pictures: Close is first, then where you are. */}
-          <View testID={testID && `${testID}-chrome`} pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.chromeLayer]}>
+          <Animated.View
+            testID={testID && `${testID}-chrome`}
+            pointerEvents="box-none"
+            style={[StyleSheet.absoluteFill, styles.chromeLayer, chromeStyle]}
+          >
             <View style={[styles.close, { top, left: SPACE.lg }]}>
               <IconButton icon="x" tier="media" accessibilityLabel="Close" onPress={onClose} testID={testID && `${testID}-close`} />
             </View>
@@ -155,7 +169,7 @@ export function PhotoViewer({ photos, initialIndex = 0, visible, onClose, from, 
                 </View>
               </View>
             ) : null}
-          </View>
+          </Animated.View>
 
           <GestureDetector gesture={drag}>
             <Animated.View style={[styles.fill, pagerStyle]}>

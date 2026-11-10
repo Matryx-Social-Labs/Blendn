@@ -5,6 +5,7 @@ import Animated from 'react-native-reanimated'
 
 import { COLOR, RADIUS } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
+import { useScreenReader } from '../ds/shared'
 import { tint } from '../../lib/theme'
 
 /** A still stays this long before the pager moves on by itself (the Scene's dwell). */
@@ -42,7 +43,8 @@ export function HeroPips({ count, page, top }: { count: number; page: number; to
 
 /**
  * The hero's photos (Flow 6 `friend` and `user`): a horizontal pager of stills, advancing by itself until the first swipe and then
- * never again for the life of the screen (resuming moves the picture you are looking at). Never on its own under Reduce Motion.
+ * never again for the life of the screen (resuming moves the picture you are looking at); a tap that opens the viewer takes it
+ * over too. Never on its own under Reduce Motion or a screen reader.
  * A tap on a page opens the viewer at that photo.
  */
 export function ProfileHeroPager({
@@ -59,11 +61,13 @@ export function ProfileHeroPager({
   onPress?: (index: number) => void
 }) {
   const reduceMotion = useReducedMotion()
+  const screenReader = useScreenReader()
   const scroll = useRef<ScrollView>(null)
   const [page, setPage] = useState(0)
   const [manual, setManual] = useState(false)
   const count = photos.length
-  const auto = !manual && !reduceMotion && count > 1
+  // A screen reader moves through the photos itself: an advance would move what it is reading (M31).
+  const auto = !manual && !reduceMotion && !screenReader && count > 1
 
   useEffect(() => {
     if (!auto) return
@@ -99,7 +103,11 @@ export function ProfileHeroPager({
           <Pressable
             key={`${uri}:${i}`}
             testID={`hero-photo-${i}`}
-            onPress={() => onPress?.(i)}
+            // Opening the viewer takes the hero over: it never moves on behind the viewer, or after it (M31).
+            onPress={() => {
+              setManual(true)
+              onPress?.(i)
+            }}
             accessibilityRole="imagebutton"
             accessibilityLabel={count > 1 ? `Photo ${i + 1} of ${count}` : 'Photo'}
             accessibilityHint="Opens the photo"
