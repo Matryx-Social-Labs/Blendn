@@ -244,6 +244,35 @@ describe('the tab an entry asked for (Flow 5 C1b)', () => {
     expect(chatSelected()).toBe(true)
   })
 
+  /*
+   * Found on the iOS drive (2026-11-10, a link to the room chat, the second time): the chat had answered (the server
+   * log has the lookup and the history read) and the Room showed People. Its first render had taken the tab out of the
+   * overlay, so a render React threw away, or a remount, read People. Drawn twice here: the second must still be Chat.
+   */
+  it('a Room drawn a second time for the same open still opens Chat', async () => {
+    openRoomChat()
+    mockSetRoom(ready({ chatGroupId: 'g1', settled: true }))
+    const first = await render(<BlendnScreen />)
+    await act(async () => {})
+    expect(chatSelected()).toBe(true)
+    await act(async () => first.unmount())
+    await drawRoom()
+    expect(chatSelected()).toBe(true)
+  })
+
+  it('control: a Room drawn again after a close opens People (the disc)', async () => {
+    openRoomChat()
+    mockSetRoom(ready({ chatGroupId: 'g1', settled: true }))
+    const first = await render(<BlendnScreen />)
+    await act(async () => {})
+    await act(async () => first.unmount())
+    blendnClosed()
+    openBlendn()
+    mockSetRoom(ready({ chatGroupId: 'g1', settled: true }))
+    await drawRoom()
+    expect(chatSelected()).toBe(false)
+  })
+
   // Found on the iOS drive (Banter's live row): the lookup failed once, the Room fell back to People and stayed there.
   it('a chat lookup that failed once shows People, then Chat when the retry finds the chat', async () => {
     openRoomChat()

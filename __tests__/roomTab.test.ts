@@ -4,7 +4,8 @@ import {
   openRoomChat,
   setLiveHint,
   setLiveRoomChat,
-  takePendingTab,
+  getRoomTab,
+  setRoomTab,
 } from '../lib/blendnOverlay'
 import { chatOpensInRoom, chatTabBadge, chatTabLabel } from '../lib/roomTab'
 
@@ -22,25 +23,42 @@ describe('the room tab an entry opens', () => {
 
   it('opens People from the disc', () => {
     openBlendn()
-    expect(takePendingTab()).toBe('people')
+    expect(getRoomTab()).toBe('people')
   })
 
-  it('opens Chat for the room chat, once', () => {
+  it('opens Chat for the room chat', () => {
     openRoomChat()
-    expect(takePendingTab()).toBe('chat')
-    // Taken: a later re-render of the room does not snap back to Chat.
-    expect(takePendingTab()).toBe('people')
+    expect(getRoomTab()).toBe('chat')
   })
 
-  it('a person from a wave still opens People', () => {
+  /*
+   * Drive 2026-11-10 (iOS, C1b): a link to the room chat, opened a second time, showed People although the room's chat
+   * had answered (the server log has the lookup and the history read). The tab was taken out of the overlay by the Room's
+   * first render (`useState(takePendingTab)`), and a render React throws away, or a remount, then read People. Reading the
+   * tab must not take it.
+   */
+  it('reading the tab does not take it: a second read (a discarded render, a remount) still says Chat', () => {
+    openRoomChat()
+    expect(getRoomTab()).toBe('chat')
+    expect(getRoomTab()).toBe('chat')
+  })
+
+  it('a tab switch is the overlay’s, so a later render does not snap back to Chat', () => {
+    openRoomChat()
+    setRoomTab('people')
+    expect(getRoomTab()).toBe('people')
+  })
+
+  it('a person from a wave opens People, even over Chat', () => {
+    openRoomChat()
     openBlendn('u1')
-    expect(takePendingTab()).toBe('people')
+    expect(getRoomTab()).toBe('people')
   })
 
   it('closing forgets a tab that was asked for', () => {
     openRoomChat()
     blendnClosed()
-    expect(takePendingTab()).toBe('people')
+    expect(getRoomTab()).toBe('people')
   })
 })
 

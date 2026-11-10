@@ -19,7 +19,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { usePassReach } from '../../lib/usePassReach'
-import { blendnClosed, getLeftNotice, isLiveHint, onBlendnChange, openPass, setDoor, setLeftNotice, setLiveRoomChat, setRoomUp, takePendingPerson, takePendingTab, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNotice, setLiveRoomChat, setRoomUp, setRoomTab, takePendingPerson, takeReturnTo, useRoomTab, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import type { RoomTab } from '../../lib/roomTab'
 import { useChatTabUnread } from '../../lib/useChatTabUnread'
 import { RoomChat } from '../chat/RoomChat'
@@ -221,14 +221,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const [dismissedRecap, setDismissedRecap] = useState<string | null>(null)
   const [peopleOpen, setPeopleOpen] = useState(false)
   // The Room's tab (Flow 5 R-A): People from the disc; Chat when an entry asked for it, as it opens or while it is open.
-  const [askedTab, setTab] = useState<RoomTab>(takePendingTab)
-  useEffect(
-    () =>
-      onBlendnChange(() => {
-        if (takePendingTab() === 'chat') setTab('chat')
-      }),
-    []
-  )
+  const askedTab = useRoomTab()
   // Android back closes People from tonight before it closes the overlay (M5); in the Room, Chat goes back to People first.
   useEffect(() => {
     backGuardRef.current = () => {
@@ -237,7 +230,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         return true
       }
       if (askedTab === 'chat') {
-        setTab('people')
+        setRoomTab('people')
         return true
       }
       return false
@@ -808,7 +801,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       say('The chat for this event is not open yet.')
       return
     }
-    setTab('chat')
+    setRoomTab('chat')
   }, [chatGroupId, eventId, eventTitle, say])
 
   /*
@@ -1034,7 +1027,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 <RoomChat
                   id={chatGroupId}
                   params={{ id: chatGroupId, roomName: eventTitle, eventTitle, eventId: room.event.id, kind: 'event' }}
-                  embedded={{ top: roomBarHeight(insets.top), onBack: () => setTab('people') }}
+                  embedded={{ top: roomBarHeight(insets.top), onBack: () => setRoomTab('people') }}
                 />
               ) : null
             }
@@ -1061,7 +1054,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           hereCount={room.hereCount}
           tab={tab}
           chatUnread={chatUnread}
-          onTab={(next) => (next === 'chat' ? void openChat() : setTab('people'))}
+          onTab={(next) => (next === 'chat' ? void openChat() : setRoomTab('people'))}
           onClose={onClose}
           onInfo={() => openRoomMenu()}
         />

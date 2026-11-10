@@ -50,16 +50,20 @@ function set(next: boolean) {
   notify()
 }
 
-/** The tab the Room opens on, asked for once (Flow 5 C1): People unless the room chat was asked for. */
-let pendingTab: RoomTab = 'people'
+/**
+ * The Room's tab (Flow 5 C1): the overlay's, not the screen's, so every render and every mount for one open reads the
+ * same tab. It used to be handed over once, taken by the Room's first render, and a render React threw away or a remount
+ * then read People: a link to the room chat opened on People with its chat there (iOS drive, 2026-11-10).
+ */
+let roomTab: RoomTab = 'people'
 
 /** Open the overlay; with `personId`, at that person's card in the Room. People, always (the disc). */
 export function openBlendn(personId?: string): void {
-  pendingTab = 'people'
-  if (personId) {
-    pendingPerson = personId
-    if (open) notify()
-  }
+  // Already open (a wave's banner over the Room): it re-reads its card and its tab.
+  const changed = !!personId || roomTab !== 'people'
+  roomTab = 'people'
+  if (personId) pendingPerson = personId
+  if (open && changed) notify()
   set(true)
 }
 
@@ -68,17 +72,26 @@ export function openBlendn(personId?: string): void {
  * event page, closing it comes back to that page (ROOM-13), as "Blend in" does.
  */
 export function openRoomChat(returnToEvent: string | null = null): void {
-  pendingTab = 'chat'
+  roomTab = 'chat'
   returnTo = returnToEvent
   if (open) notify()
   set(true)
 }
 
-/** The tab asked for, once: the Room reads it as it opens, and then it is People again. */
-export function takePendingTab(): RoomTab {
-  const tab = pendingTab
-  pendingTab = 'people'
-  return tab
+/** The tab the Room shows. Reading it never changes it. */
+export function getRoomTab(): RoomTab {
+  return roomTab
+}
+
+/** The Room's own switch (its tabs, Back, a chat it can't show). */
+export function setRoomTab(tab: RoomTab): void {
+  if (roomTab === tab) return
+  roomTab = tab
+  notify()
+}
+
+export function useRoomTab(): RoomTab {
+  return useSyncExternalStore(subscribe, getRoomTab, getRoomTab)
 }
 
 /** The tab in front (the tab bar says it), so a route that steps back to the tabs lands on it, not on the Pulse. */
@@ -215,7 +228,7 @@ export function useRoomUp(eventId: string): boolean {
 /** Called by the overlay once its closing transition has finished. */
 export function blendnClosed(): void {
   pendingPerson = null
-  pendingTab = 'people'
+  roomTab = 'people'
   door = null
   returnTo = null
   set(false)
@@ -230,11 +243,6 @@ function subscribe(fn: () => void) {
   return () => {
     listeners.delete(fn)
   }
-}
-
-/** Every change to the overlay's state (an open, a door, a tab asked for while it is open): the Room reads its tab here. */
-export function onBlendnChange(fn: () => void): () => void {
-  return subscribe(fn)
 }
 
 export function useBlendnOpen(): boolean {
