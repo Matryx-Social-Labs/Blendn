@@ -507,8 +507,9 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     if (liveChat) setLiveRoomChat(liveChat)
   }, [liveChat])
   const chatUnread = useChatTabUnread({ chatGroupId: liveChat, eventId, tab, myId: user?.id })
-  // The Chat tab only exists for a room with a chat: without one, People.
-  if (tab === 'chat' && mode === 'room' && !chatGroupId) setTab('people')
+  // The Chat tab only exists for a room with a chat: without one, People. Only once the chat has answered (`settled`):
+  // a push opens the Room before its chat lookup returns, and must not fall back to People meanwhile.
+  if (tab === 'chat' && mode === 'room' && room.settled && !chatGroupId) setTab('people')
   // Chat's feed scrolls down to read back: the stage's drag-to-close waits for People (the chevron and Back still close).
   const { setDragToClose } = useStage()
   const chatShown = tab === 'chat' && mode === 'room'

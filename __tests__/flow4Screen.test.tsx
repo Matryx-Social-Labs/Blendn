@@ -11,7 +11,7 @@ import React from 'react'
 import { AccessibilityInfo } from 'react-native'
 
 import { BlendnScreen } from '../components/blendn/BlendnScreen'
-import { openBlendn } from '../lib/blendnOverlay'
+import { blendnClosed, openBlendn, openRoomChat } from '../lib/blendnOverlay'
 import { apiClient } from '../lib/apiClient'
 import { crewsApi } from '../lib/crewsApi'
 import { listenForWaves } from '../lib/roomWaves'
@@ -110,6 +110,8 @@ const mockControls = {
   checkOut: jest.fn(async () => true),
   checkOutBusy: false,
 }
+// The Chat tab's body is its own suite's (roomTabsSocket, RoomChat's); here only which tab shows.
+jest.mock('../components/chat/RoomChat', () => ({ RoomChat: () => null }))
 jest.mock('../lib/useRoomControls', () => ({ useRoomControls: () => mockControls }))
 jest.mock('../lib/useTonight', () => ({
   useTonight: () => ({ status: 'ready', events: [], insideEventId: null, location: 'on', offline: false, refresh: async () => {} }),
@@ -226,6 +228,27 @@ describe('the PersonCard, from every room surface (R3-D4 4.1)', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Person p4 waved at you' }))
     expect(screen.getByText('Waved at you · 1 min', HIDDEN)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Wave back at Person p4' })).toBeTruthy()
+  })
+})
+
+describe('the tab an entry asked for (Flow 5 C1b)', () => {
+  const chatSelected = () => screen.getByTestId('room-tab-chat-word').props.accessibilityState?.selected
+  afterEach(() => blendnClosed())
+
+  // Found on the iOS drive: a push opened the Room, and it fell back to People before its chat had answered.
+  it('a push opens Chat, and it waits for the room’s chat to answer rather than falling back to People', async () => {
+    openRoomChat()
+    mockSetRoom(ready({ chatGroupId: null, settled: false }))
+    await drawRoom()
+    await act(async () => mockSetRoom(ready({ chatGroupId: 'g1', settled: true })))
+    expect(chatSelected()).toBe(true)
+  })
+
+  it('control: a room whose chat answered "not open" falls back to People', async () => {
+    openRoomChat()
+    mockSetRoom(ready({ chatGroupId: null, settled: true }))
+    await drawRoom()
+    expect(chatSelected()).toBe(false)
   })
 })
 

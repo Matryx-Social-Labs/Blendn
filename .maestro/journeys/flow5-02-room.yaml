@@ -5,7 +5,7 @@
 # Env: MAESTRO_EMAIL, MAESTRO_PASSWORD (environment variables; delete ~/.maestro/tests/<run> afterwards). With -e:
 #   CHAT_ID     the live room's chat group id, and EVENT_ID its event's: a push carries both
 #   EVENT       a regex for the event's title in the room bar
-#   THEIRS      a regex for another person's message text in the room
+#   THEIRS      a regex for another person's message as the feed labels it (".*<text>.*": the label is "<name>, <text>, <time>")
 #   SENDER      their pseudonym as the room shows it, e.g. "Cosmic Panda"
 #   MESSAGE     unique per run
 #   SEND_POINT  the Send button with the keyboard up: `tapOn: "Send"` by label leaves the text unsent
@@ -20,7 +20,7 @@ tags:
 ---
 - launchApp
 - extendedWaitUntil:
-    visible: ".*(Continue with email|The Pulse).*"
+    visible: "(Continue with email|Pulse)"
     timeout: 60000
 - runFlow:
     when:
@@ -38,8 +38,12 @@ tags:
 - tapOn:
     id: "disc"
 - extendedWaitUntil:
-    visible: "Everyone here.*"
+    visible: "Everyone (here|who came).*"
     timeout: 20000
+# The room's first-run coach mark, once ever.
+- tapOn:
+    text: "Got it"
+    optional: true
 - assertVisible:
     id: "room-bar"
 - assertVisible: "The room, ${EVENT}"
@@ -53,11 +57,15 @@ tags:
     timeout: 20000
 - tapOn: ".*Say something to the room"
 - inputText: ${MESSAGE}
+# The keyboard must be all the way up, or the point is not the button yet.
+- waitForAnimationToEnd
 - tapOn:
     point: ${SEND_POINT}
+# Sent: the field is empty again (the bubble's own text would match the field's too).
 - extendedWaitUntil:
-    visible: ".*${MESSAGE}.*"
+    visible: ".*Say something to the room"
     timeout: 15000
+- assertVisible: ".*${MESSAGE}.*"
 - hideKeyboard
 - takeScreenshot: flow5-02-sent
 
@@ -75,8 +83,12 @@ tags:
     timeout: 5000
 - tapOn: ".*Say something to the room"
 - inputText: "${MESSAGE} · reply"
+- waitForAnimationToEnd
 - tapOn:
     point: ${SEND_POINT}
+- extendedWaitUntil:
+    visible: ".*Say something to the room"
+    timeout: 15000
 - extendedWaitUntil:
     visible: ".*${MESSAGE} · reply.*"
     timeout: 15000
@@ -89,10 +101,20 @@ tags:
     timeout: 10000
 - tapOn: "Dismiss"
 
-# --- Back: Chat → People → closed ---
-- back
+# --- Back: Chat → People → closed (Android's Back; on iOS the People tab) ---
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          id: "room-tab-people-word"
 - extendedWaitUntil:
-    visible: "Everyone here.*"
+    visible: "Everyone (here|who came).*"
     timeout: 10000
 - tapOn:
     id: "room-close"
