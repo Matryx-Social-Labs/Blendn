@@ -96,7 +96,7 @@ describe('scrollListToEnd', () => {
 describe('both chat screens use it', () => {
   it.each([
     ['app', 'private-chat', '[conversationId].tsx'],
-    ['app', 'chat', '[id].tsx'],
+    ['components', 'chat', 'RoomChat.tsx'],
   ])('%s/%s/%s', (...p) => {
     const src = read(...p)
     expect(src).toMatch(/useFollowEnd\(/)
@@ -112,7 +112,7 @@ describe('both chat screens use it', () => {
   // a little way up stayed below the composer (driven 2026-09-28).
   it.each([
     ['app', 'private-chat', '[conversationId].tsx'],
-    ['app', 'chat', '[id].tsx'],
+    ['components', 'chat', 'RoomChat.tsx'],
   ])('%s/%s/%s scrolls the native view to its real end', (...p) => {
     const src = read(...p)
     expect(src).toMatch(/scrollListToEnd\(flatListRef\.current, animated && !reduceMotion\.current\)/)
@@ -122,7 +122,7 @@ describe('both chat screens use it', () => {
   // Touching the conversation to scroll it puts the keyboard away (owner, 2026-09-28).
   it.each([
     ['app', 'private-chat', '[conversationId].tsx'],
-    ['app', 'chat', '[id].tsx'],
+    ['components', 'chat', 'RoomChat.tsx'],
   ])('%s/%s/%s closes the keyboard on a drag', (...p) => {
     // iOS interactively, with the drag; Android on the drag (R3-D5 5.3).
     const src = read(...p)

@@ -24,7 +24,7 @@ describe('which rooms open the room card', () => {
 })
 
 describe('the room screens use it', () => {
-  const screen = read('app/chat/[id].tsx')
+  const screen = read('components/chat/RoomChat.tsx')
   it('a tap on a sender is enabled and routed for a Blend', () => {
     expect(screen).toMatch(/senderTappable=\{eventRoom \|\| opensRoomCard\(roomKind\)\}/)
     expect(screen).toMatch(/opensRoomCard\(roomKind\) \? router\.push\(roomCardRoute\(sender, roomId\)/)

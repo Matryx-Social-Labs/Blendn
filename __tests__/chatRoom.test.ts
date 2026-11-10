@@ -81,7 +81,7 @@ describe('the composer offers only what the server accepts', () => {
      * Attendees post no media in a room (R9; the server refuses it, admin
      * #697). A DM takes a photo once both are named to each other.
      */
-    expect(codeOnly(read('app/chat/[id].tsx'))).not.toMatch(/onAttach|ImagePicker|pickImage/)
+    expect(codeOnly(read('components/chat/RoomChat.tsx'))).not.toMatch(/onAttach|ImagePicker|pickImage/)
     const dm = codeOnly(read('app/private-chat/[conversationId].tsx'))
     expect(dm).toContain('const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))')
     expect(dm).toContain('onAttach={photosAllowed ? () => void attach() : undefined}')
@@ -89,7 +89,7 @@ describe('the composer offers only what the server accepts', () => {
 })
 
 describe('the screen renders through the redesign', () => {
-  const SCREEN = () => codeOnly(read('app/chat/[id].tsx'))
+  const SCREEN = () => codeOnly(read('components/chat/RoomChat.tsx'))
   const ROW = () => codeOnly(read('components/chat/RoomFeed.tsx'))
 
   it('draws every message kind through the DS chat components', () => {
@@ -297,7 +297,7 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
   })
 
   it('keeps receipts out of the room', () => {
-    expect(codeOnly(read('app/chat/[id].tsx')) + codeOnly(read('components/chat/RoomFeed.tsx'))).not.toContain('receipt=')
+    expect(codeOnly(read('components/chat/RoomChat.tsx')) + codeOnly(read('components/chat/RoomFeed.tsx'))).not.toContain('receipt=')
   })
 
   it('does not offer to report your own message, but lets you copy it', () => {
@@ -309,7 +309,7 @@ describe('direct messages use the same bubble, minus what a DM does not need', (
 
 describe('the send button does not pretend the message is still in flight', () => {
   const COMPOSER = () => codeOnly(read('components/ds/Composer.tsx'))
-  const ROOM = () => codeOnly(read('app/chat/[id].tsx'))
+  const ROOM = () => codeOnly(read('components/chat/RoomChat.tsx'))
   const DM = () => codeOnly(read('app/private-chat/[conversationId].tsx'))
   const LOCK = () => codeOnly(read('lib/useComposerLock.ts'))
 

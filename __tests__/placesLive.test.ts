@@ -132,7 +132,7 @@ const read = (path: string) => readFileSync(join(__dirname, '..', path), 'utf8')
 
 describe('the screens read the server', () => {
   const VENUE = read('app/venue/[id].tsx')
-  const CHAT = read('app/chat/[id].tsx')
+  const CHAT = read('components/chat/RoomChat.tsx')
   const LIVE = read('components/LiveAtVenue.tsx')
 
   // The countdown and the foreground re-read are driven in venueScreen.test.tsx, not pinned here.

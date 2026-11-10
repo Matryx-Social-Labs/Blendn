@@ -124,7 +124,7 @@ describe('the screens', () => {
       .replace(/^\s*\/\/.*$/gm, '')
   const INFO = read('app/chat-info/[id].tsx')
   const SHEETS = read('components/chat/RoomSheets.tsx')
-  const CHAT = read('app/chat/[id].tsx')
+  const CHAT = read('components/chat/RoomChat.tsx')
   const HEADER = read('components/chat/ChatHeader.tsx')
   const BANTER = read('app/(tabs)/chat.tsx')
 

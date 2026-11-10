@@ -58,7 +58,7 @@ describe('both chat screens merge a refresh', () => {
   const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
   it.each([
     ['app', 'private-chat', '[conversationId].tsx'],
-    ['app', 'chat', '[id].tsx'],
+    ['components', 'chat', 'RoomChat.tsx'],
   ])('%s/%s/%s', (...p) => {
     expect(read(...p)).toMatch(/mergeNewestPage\(/)
   })

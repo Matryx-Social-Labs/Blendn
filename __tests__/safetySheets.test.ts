@@ -44,7 +44,7 @@ describe('safety sheets', () => {
 
 describe('the chat screens say what failed', () => {
   it('shows a load failure, not the empty state, in both', () => {
-    for (const screen of ['app/chat/[id].tsx', 'app/private-chat/[conversationId].tsx']) {
+    for (const screen of ['components/chat/RoomChat.tsx', 'app/private-chat/[conversationId].tsx']) {
       expect(read(screen)).toMatch(/loadError \? \([\s\S]{0,240}<StateScreen\s+icon="cloud-off"/)
     }
   })
@@ -56,7 +56,7 @@ describe('the chat screens say what failed', () => {
       expect(src).toMatch(/failed(=\{|: )item\.failed \? item\.failedLine \|\| true : false/)
       expect(src).toContain('handlers.retry(item)')
     }
-    for (const screen of ['app/chat/[id].tsx', 'app/private-chat/[conversationId].tsx']) {
+    for (const screen of ['components/chat/RoomChat.tsx', 'app/private-chat/[conversationId].tsx']) {
       expect(read(screen)).not.toMatch(/setNewMessage\(messageText\)/)
     }
     expect(read('components/ds/ChatBubble.tsx')).toContain('Not sent · Tap to retry')
