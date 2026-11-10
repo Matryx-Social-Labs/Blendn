@@ -7,7 +7,7 @@ import { OPACITY } from '../lib/theme'
 import type { ButtonKind } from './ds/Button'
 import { Spinner } from './ds/Loader'
 import { Sheet as DsSheet, type SheetAction as DsAction } from './ds/Sheet'
-import { font, HueProvider, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './ds/shared'
+import { font, HueProvider, PRESSED_WASH, useAnnounced, useBoldText, useIncreaseContrast, useSelection } from './ds/shared'
 import { TextArea } from './ds/TextField'
 import { Icon, type IconName } from './ui/Icon'
 import { useToast } from './Toast'
@@ -259,6 +259,7 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
 /** What failed, in the server's words where it gave some. */
 function ErrorLine({ text }: { text: string }) {
   const bold = useBoldText()
+  useAnnounced(text)
   return (
     <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={[font('meta', bold), styles.error]}>
       {text}

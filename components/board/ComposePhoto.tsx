@@ -5,7 +5,7 @@ import { Platform, Pressable, StyleSheet, Text as RNText, View } from 'react-nat
 import { Button } from '../ds/Button'
 import { UploadRing } from '../ds/ChatBubble'
 import { TextField } from '../ds/TextField'
-import { font, HueProvider, minTarget, SELECTION, useBoldText } from '../ds/shared'
+import { font, HueProvider, minTarget, SELECTION, useAnnounced, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { LOBBY_ALT_MAX, type LobbyAttachment } from '../../lib/lobby'
 import { pickImage, uploadChatPhoto } from '../../lib/photoUtils'
@@ -48,6 +48,7 @@ export function ComposePhoto({ onChange, disabled = false }: { onChange: (next: 
   const [alt, setAlt] = useState('')
   const [altOpen, setAltOpen] = useState(false)
   const [failed, setFailed] = useState<string | null>(null)
+  useAnnounced(failed)
   // Each upload's ticket: one removed or replaced mid-flight lands on nothing.
   const sent = useRef(0)
 

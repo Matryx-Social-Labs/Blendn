@@ -10,7 +10,7 @@ import { CrewStrip, type StripCrew } from '../ds/CrewStrip'
 import { LikingAsChip } from '../ds/LikingAsChip'
 import { Spinner } from '../ds/Loader'
 import { SectionHeader } from '../ds/SectionHeader'
-import { font, minTarget, useBoldText } from '../ds/shared'
+import { font, minTarget, useAnnounced, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Toggle } from '../ds/Toggle'
 import { useOpenToCrews, type CrewActions, type CrewsHereState } from '../crews/CrewsView'
@@ -218,16 +218,19 @@ export function RoomCrewCard({
   )
 }
 
+const MORE_CREWS_FAILED = 'More crews didn’t load.'
+
 /** Under the cards: the next page, or why it did not come. */
 export function CrewsFoot({ crews }: { crews: CrewsHereState }) {
   const bold = useBoldText()
   const { state, loadMore, loadingMore, pageFailed } = crews
+  useAnnounced(pageFailed && MORE_CREWS_FAILED)
   if (state.status !== 'ready' || !state.data.hasMore) return null
   return (
     <View style={[styles.gutter, styles.foot]}>
       {pageFailed ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
-          More crews didn’t load.
+          {MORE_CREWS_FAILED}
         </Text>
       ) : null}
       <Button kind="secondary" label={pageFailed ? 'Try again' : 'More crews'} onPress={() => void loadMore()} loading={loadingMore} />

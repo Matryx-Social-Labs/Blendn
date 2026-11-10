@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react'
-import { Linking, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Linking, Platform, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { COLOR, MAX_FONT_SCALE, TYPE } from '../lib/design/tokens'
 import { scrubReportText, Sentry } from '../lib/sentry'
@@ -61,6 +61,8 @@ const CLEAR: State = {
  */
 const newErrorId = () =>
   `E-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase()
+
+const addressLine = (errorId: string | null | undefined) => `Write to ${SUPPORT_EMAIL} and mention ${errorId ?? 'this error'}.`
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
@@ -131,6 +133,8 @@ export class ErrorBoundary extends Component<Props, State> {
     const url = supportMailto({ subject: "Blend’n crashed", userId: user?.id, errorId: this.state.errorId })
     Linking.openURL(url).catch(() => {
       this.setState({ showAddress: true })
+      // The address appears in place: said on iOS, a live region on Android (not ds/shared: a boundary leans on little).
+      if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(addressLine(this.state.errorId))
     })
   }
 
@@ -166,7 +170,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 ) : null}
                 {showAddress ? (
                   <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={styles.line} selectable accessibilityLiveRegion="polite">
-                    Write to {SUPPORT_EMAIL} and mention {errorId ?? 'this error'}.
+                    {addressLine(errorId)}
                   </Text>
                 ) : null}
                 {errorId ? (
