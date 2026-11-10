@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
+import type { RoomTab } from './roomTab'
 import type { TonightEvent } from './useTonight'
 
 /**
@@ -49,13 +50,40 @@ function set(next: boolean) {
   notify()
 }
 
-/** Open the overlay; with `personId`, at that person's card in the Room. */
+/** The tab the Room opens on, asked for once (Flow 5 C1): People unless the room chat was asked for. */
+let pendingTab: RoomTab = 'people'
+
+/** Open the overlay; with `personId`, at that person's card in the Room. People, always (the disc). */
 export function openBlendn(personId?: string): void {
+  pendingTab = 'people'
   if (personId) {
     pendingPerson = personId
     if (open) notify()
   }
   set(true)
+}
+
+/** Open the Room on its Chat tab: "Open the room", a push, a link, the Lobby handover (`chat/[id]`). */
+export function openRoomChat(): void {
+  pendingTab = 'chat'
+  if (open) notify()
+  set(true)
+}
+
+/** The tab asked for, once: the Room reads it as it opens, and then it is People again. */
+export function takePendingTab(): RoomTab {
+  const tab = pendingTab
+  pendingTab = 'people'
+  return tab
+}
+
+/** The live room's chat id, set by the Room once it knows it: `chat/[id]` for this id opens the Chat tab. */
+let liveRoomChat: string | null = null
+export function setLiveRoomChat(chatGroupId: string | null): void {
+  liveRoomChat = chatGroupId
+}
+export function isLiveRoomChat(chatGroupId: string): boolean {
+  return liveRoomChat !== null && liveRoomChat === chatGroupId
 }
 
 /**
@@ -171,6 +199,7 @@ export function useRoomUp(eventId: string): boolean {
 /** Called by the overlay once its closing transition has finished. */
 export function blendnClosed(): void {
   pendingPerson = null
+  pendingTab = 'people'
   door = null
   returnTo = null
   set(false)
