@@ -148,7 +148,7 @@ describe('a push for what is already on screen', () => {
 
   it('both chat screens say which thread they show', () => {
     expect(read('app', 'private-chat', '[conversationId].tsx')).toMatch(/useActiveThread\(`dm:\$\{/)
-    expect(read('app', 'chat', '[id].tsx')).toMatch(/useActiveThread\(`room:\$\{/)
+    expect(read('components', 'chat', 'RoomChat.tsx')).toMatch(/useActiveThread\(`room:\$\{/)
   })
 })
 

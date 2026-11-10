@@ -32,7 +32,7 @@ import { join } from 'path'
  * facts about the source, and both regressed silently before.
  */
 
-const CHAT_SCREEN = join(__dirname, '..', 'app', 'chat', '[id].tsx')
+const CHAT_SCREEN = join(__dirname, '..', 'components', 'chat', 'RoomChat.tsx')
 
 const chatSource = readFileSync(CHAT_SCREEN, 'utf8')
 

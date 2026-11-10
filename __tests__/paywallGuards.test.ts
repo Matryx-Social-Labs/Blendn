@@ -28,6 +28,7 @@ function walk(dir: string, out: string[] = []): string[] {
 const QUIET = [
   ...walk('app/onboarding'),
   ...walk('app/chat'),
+  'components/chat/RoomChat.tsx',
   ...walk('app/private-chat'),
   'app/room.tsx',
   // The check-in: its request, its flow, and the room's hold-to-check-in.
@@ -41,7 +42,7 @@ const PAYWALL = /from ['"][^'"]*\/(paywall|paywallPolicy|purchases|plus)['"]|fro
 
 describe('MN-CU01: the paywall is not reachable from onboarding, a check-in, a chat or the room', () => {
   it('covers real files', () => {
-    for (const f of ['app/onboarding/basics.tsx', 'app/chat/[id].tsx', 'app/room.tsx', 'lib/useCheckInFlow.ts']) {
+    for (const f of ['app/onboarding/basics.tsx', 'components/chat/RoomChat.tsx', 'app/room.tsx', 'lib/useCheckInFlow.ts']) {
       expect(QUIET).toContain(f)
       expect(existsSync(join(ROOT, f))).toBe(true)
     }

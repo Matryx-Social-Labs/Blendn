@@ -1,5 +1,5 @@
 /**
- * A room's messages as the room screen holds them (`app/chat/[id].tsx`), and
+ * A room's messages as the room screen holds them (`components/chat/RoomChat.tsx`), and
  * how the server's two shapes — the history page and the socket — become one.
  * Pure, so a test can hand it a payload.
  */
