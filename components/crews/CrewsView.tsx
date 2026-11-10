@@ -250,7 +250,8 @@ export type CrewActions = ReturnType<typeof useCrewActions>
  * "Open to joining a crew tonight": read once per check-in, written on a tap.
  * The latest tap wins — an older answer landing late never reverts it — and
  * the switch holds still while a write is in flight. A failed read keeps the
- * switch on screen (off) with a retry, rather than hiding it.
+ * switch on screen (off) with a retry, rather than hiding it; the retry steps
+ * aside while a write is in flight, whose answer settles it either way.
  */
 export function useOpenToCrews(eventId: string, checkInKey: string) {
   const { showToast } = useToast()
@@ -317,5 +318,6 @@ export function useOpenToCrews(eventId: string, checkInKey: string) {
     setReadFailed(false)
   }
 
-  return { value, readFailed, busy, set, read }
+  // While a write is out it is the read: a retry sent beside it answers from before the tap and wins (M19 drive).
+  return { value, readFailed: readFailed && !busy, busy, set, read }
 }
