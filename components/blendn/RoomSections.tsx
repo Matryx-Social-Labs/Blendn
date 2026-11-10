@@ -1,8 +1,9 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, withDelay, withSpring, withTiming } from 'react-native-reanimated'
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { useFocusWhen } from '../../lib/focusReturn'
 import { useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { printable } from '../../lib/pulseSections'
@@ -63,6 +64,7 @@ export const RoomHero = memo(function RoomHero({
   me,
   arrivals,
   people,
+  active = false,
 }: {
   title: string
   hereCount: number
@@ -70,8 +72,12 @@ export const RoomHero = memo(function RoomHero({
   me: Face
   arrivals: RoomPerson[]
   people: RoomPerson[]
+  /** The Room is up (not mounted hidden under the pour): its title takes a screen reader's focus. */
+  active?: boolean
 }) {
   const bold = useBoldText()
+  const titleRef = useRef<Text>(null)
+  useFocusWhen(titleRef, active ? title : null)
   const now = useNow(30_000)
   const stack = hereNowStack(arrivals, people, STACK)
   const fresh = stack[0]?.arrivedAt && now - Date.parse(stack[0].arrivedAt) < 5 * 60_000 && arrivals.some((a) => a.id === stack[0].id)
@@ -85,7 +91,7 @@ export const RoomHero = memo(function RoomHero({
           <PresenceDot kind="live" />
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.secondary]}>Live</Text>
         </View>
-        <Text accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={1.3} style={[font('heading', bold), styles.ink]}>
+        <Text ref={titleRef} accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={1.3} style={[font('heading', bold), styles.ink]}>
           {title}
         </Text>
         <View style={styles.countRow} accessible accessibilityLabel={`${hereCount} ${hereCount === 1 ? 'person' : 'people'} here now`}>
