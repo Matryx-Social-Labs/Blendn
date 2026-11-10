@@ -12,14 +12,23 @@ import { motionTokens, useReducedMotion } from '../../lib/motion'
  * A skeleton only appears after `SPINNER_GRACE_MS`, so the content only fades if the wait outlasted that: a load
  * that fast shows its content at once, with nothing to cross from. Reduce Motion keeps the fade (200 ms): it is
  * opacity, not movement.
+ *
+ * It is the arrival only: once the fade has run its course it is `undefined` again, so a view that mounts later — a
+ * list cell scrolled back into the window, the next page — appears as it is. That is what lets a list whose skeleton
+ * sits in its empty slot (the chats) put `entering` on its cells.
  */
 export function useSkeletonCrossfade(loading: boolean) {
   const reduceMotion = useReducedMotion()
+  const duration = motionTokens(reduceMotion).duration.base
   const [drawn, setDrawn] = useState(false)
   useEffect(() => {
-    if (!loading) return
-    const timer = setTimeout(() => setDrawn(true), SPINNER_GRACE_MS)
+    if (loading) {
+      const timer = setTimeout(() => setDrawn(true), SPINNER_GRACE_MS)
+      return () => clearTimeout(timer)
+    }
+    if (!drawn) return
+    const timer = setTimeout(() => setDrawn(false), duration)
     return () => clearTimeout(timer)
-  }, [loading])
-  return drawn ? FadeIn.duration(motionTokens(reduceMotion).duration.base).easing(Easing.bezier(...EASING.gentle)) : undefined
+  }, [loading, drawn, duration])
+  return drawn ? FadeIn.duration(duration).easing(Easing.bezier(...EASING.gentle)) : undefined
 }

@@ -75,6 +75,20 @@ describe('useSkeletonCrossfade', () => {
     expect(screen.getByTestId('entering').children.join('')).toBe('none')
   })
 
+  it('is the arrival only: a row mounted after the crossfade (a list cell scrolled back in, a later page) does not fade', async () => {
+    await render(<Body loading />)
+    await act(async () => jest.advanceTimersByTime(300))
+    await screen.rerender(<Body loading={false} />)
+    expect(screen.getByTestId('entering').children.join('')).toBe('fade')
+    await act(async () => jest.advanceTimersByTime(220))
+    expect(screen.getByTestId('entering').children.join('')).toBe('none')
+    // A second slow load (Try again, a refresh that drew the skeleton) crosses again.
+    await screen.rerender(<Body loading />)
+    await act(async () => jest.advanceTimersByTime(300))
+    await screen.rerender(<Body loading={false} />)
+    expect(screen.getByTestId('entering').children.join('')).toBe('fade')
+  })
+
   it('uses base, and 200 under Reduce Motion', async () => {
     const { useReducedMotion } = require('react-native-reanimated')
     mockDuration.mockClear()

@@ -3,6 +3,7 @@ import { Image } from 'expo-image'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import Reanimated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
@@ -18,6 +19,7 @@ import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../componen
 import { StateScreen } from '../../components/ds/StateScreen'
 import { CategoryPlate } from '../../components/ds/EventCard'
 import { Icon } from '../../components/ui/Icon'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { PhotoScrim, StatusScrim } from '../../components/ui/GradientFill'
 import { apiClient } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
@@ -223,6 +225,8 @@ function ChatInfoInner() {
   /* One height for every row at every text size: the face, the gap and a name capped at 1.3x on one line. */
   const rowHeight = face + SPACE.sm + Math.ceil(TYPE.caption.lineHeight * NAME_SCALE_CAP)
   const showPeople = !loading && !failed
+  /* The skeleton is the header's grid, so the people that replace it fade in as cells: the first ones only (the hook's window). */
+  const arrive = useSkeletonCrossfade(loading)
   /*
    * Fixed rows, so the list can place any of them without measuring: a row is its height and the gap under it, and the header (the
    * hero, the rows, the heading) is measured once. Until it is, the list measures as it always did.
@@ -234,7 +238,9 @@ function ChatInfoInner() {
   /* A crew's member opens the room card (first name only); an event's opens the sender card over this page. */
   const openMember = (member: Sender) => (opensRoomCard(row?.kind) ? router.push(roomCardRoute(member, chatGroupId) as never) : setCardFor(member))
   const renderMember = ({ item: m }: { item: Member }) => (
-    <MemberCell member={m} photos={roomPhotosAllowed(row?.kind)} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={openMember} />
+    <Reanimated.View entering={arrive}>
+      <MemberCell member={m} photos={roomPhotosAllowed(row?.kind)} you={m.userId === user?.id} chatGroupId={chatGroupId} cell={cell} face={face} height={rowHeight} onOpen={openMember} />
+    </Reanimated.View>
   )
 
   const header = (

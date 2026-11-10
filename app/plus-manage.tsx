@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../components/ds/Button'
@@ -11,6 +12,7 @@ import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { openStoreSubscriptions } from '../components/plus/storeActions'
+import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
@@ -68,6 +70,7 @@ function ManageContent() {
   const card = manageCard(status, STORE)
   // Nothing to manage (it ended unnoticed, or it never began): the page is where Blend'n+ is.
   const nothing = load === 'ok' && !card
+  const arrive = useSkeletonCrossfade(load === 'loading' || nothing)
   useEffect(() => {
     if (nothing) router.replace({ pathname: '/plus', params: { trigger: 'profile' } } as never)
   }, [nothing])
@@ -135,7 +138,7 @@ function ManageContent() {
             testID="plus-manage-failed"
           />
         ) : card ? (
-          <>
+          <Animated.View entering={arrive} style={styles.body}>
             <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} onFix={manage} testID="plus-manage-status" />
             {granted ? (
               <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="plus-manage-grant" style={[font('meta', bold), styles.grant]}>
@@ -169,7 +172,7 @@ function ManageContent() {
               />
             ) : null}
             {granted || outside ? null : <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{FOOT}</Text>}
-          </>
+          </Animated.View>
         ) : null}
       </ScrollView>
       <View style={bar.barPin} pointerEvents="box-none">
@@ -191,6 +194,7 @@ export default function PlusManageScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
+  body: { gap: SPACE.xl },
   loading: { height: SPACE.xxxl + SPACE.xl, alignItems: 'center', justifyContent: 'center' },
   foot: { color: COLOR.textTertiary, paddingHorizontal: SPACE.md },
   grant: { color: COLOR.textSecondary, paddingHorizontal: SPACE.md },

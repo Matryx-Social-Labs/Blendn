@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AccessibilityInfo, FlatList, Platform, StyleSheet, useWindowDimensions, View, type ViewToken } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { FromTheLobby } from '../../components/board/FromTheLobby'
@@ -9,6 +10,7 @@ import { ChatHeader, chatFeedFrame, chatHeaderBottom, OpensLine, SubtitleText } 
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { CountLine, FeedSkeleton, HEADER_FACE, JustMutedLine, LoadOlder, NewestChip, ReactionFlight, RoomCover, type Flight } from '../../components/chat/ChatParts'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import { RoomGuidelinesBanner } from '../../components/chat/RoomGuidelinesBanner'
 import { RoomMessageRow, RoomOutside, senderOf, type Outside, type RowHandlers } from '../../components/chat/RoomFeed'
@@ -841,6 +843,8 @@ function GroupChatInner() {
 
   const visible = useMemo(() => messages.filter((m) => !blocked.has(m.sender_id)), [messages, blocked])
   const chatItems: ChatListItem[] = useMemo(() => withDaySeparators(visible, (m) => m.created_at), [visible])
+  /* The skeleton is the list's empty slot, so the first messages fade in as cells; later ones arrive as they do (the hook's window). */
+  const arrive = useSkeletonCrossfade(loading && !chatItems.length)
 
   const socketStatus = useLiveSync({
     enabled: !!chatRoomId && !!currentUser && !outside,
@@ -945,9 +949,10 @@ function GroupChatInner() {
   )
 
   const renderChatItem = ({ item, index }: { item: ChatListItem; index: number }) => {
-    if (item.kind === 'separator') return <DayPill text={item.label} />
+    if (item.kind === 'separator') return <Animated.View entering={arrive}><DayPill text={item.label} /></Animated.View>
     const place = runPlace(chatItems, index, (i) => (i.kind === 'message' && isSpeech(i) ? i.sender_id : null), (i) => (i.kind === 'message' ? stamp(i) : 0))
     return (
+      <Animated.View entering={arrive}>
       <RoomMessageRow
         item={item}
         roomId={roomId}
@@ -961,6 +966,7 @@ function GroupChatInner() {
         pollViewable={viewablePolls.has(item.message_id)}
         handlers={handlers}
       />
+      </Animated.View>
     )
   }
 
