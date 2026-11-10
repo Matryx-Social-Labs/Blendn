@@ -221,7 +221,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const [dismissedRecap, setDismissedRecap] = useState<string | null>(null)
   const [peopleOpen, setPeopleOpen] = useState(false)
   // The Room's tab (Flow 5 R-A): People from the disc; Chat when an entry asked for it, as it opens or while it is open.
-  const [tab, setTab] = useState<RoomTab>(takePendingTab)
+  const [askedTab, setTab] = useState<RoomTab>(takePendingTab)
   useEffect(
     () =>
       onBlendnChange(() => {
@@ -236,7 +236,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         setPeopleOpen(false)
         return true
       }
-      if (tab === 'chat') {
+      if (askedTab === 'chat') {
         setTab('people')
         return true
       }
@@ -245,7 +245,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     return () => {
       backGuardRef.current = null
     }
-  }, [backGuardRef, peopleOpen, tab])
+  }, [backGuardRef, peopleOpen, askedTab])
   const endedRecap =
     room.status === 'ready' && room.event ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now) : null
   if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) setRecap(endedRecap)
@@ -506,10 +506,10 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   useEffect(() => {
     if (liveChat) setLiveRoomChat(liveChat)
   }, [liveChat])
+  // The Chat tab only exists for a room with a chat: without one, People. Shown, not stored: a push opens the Room before
+  // its chat lookup returns, and a lookup that failed once (it retries) must not leave the Room on People for good.
+  const tab: RoomTab = askedTab === 'chat' && mode === 'room' && room.settled && !chatGroupId ? 'people' : askedTab
   const chatUnread = useChatTabUnread({ chatGroupId: liveChat, eventId, tab, myId: user?.id })
-  // The Chat tab only exists for a room with a chat: without one, People. Only once the chat has answered (`settled`):
-  // a push opens the Room before its chat lookup returns, and must not fall back to People meanwhile.
-  if (tab === 'chat' && mode === 'room' && room.settled && !chatGroupId) setTab('people')
   // Chat's feed scrolls down to read back: the stage's drag-to-close waits for People (the chevron and Back still close).
   const { setDragToClose } = useStage()
   const chatShown = tab === 'chat' && mode === 'room'

@@ -244,6 +244,16 @@ describe('the tab an entry asked for (Flow 5 C1b)', () => {
     expect(chatSelected()).toBe(true)
   })
 
+  // Found on the iOS drive (Banter's live row): the lookup failed once, the Room fell back to People and stayed there.
+  it('a chat lookup that failed once shows People, then Chat when the retry finds the chat', async () => {
+    openRoomChat()
+    mockSetRoom(ready({ chatGroupId: null, settled: true }))
+    await drawRoom()
+    expect(chatSelected()).toBe(false)
+    await act(async () => mockSetRoom(ready({ chatGroupId: 'g1', settled: true })))
+    expect(chatSelected()).toBe(true)
+  })
+
   it('control: a room whose chat answered "not open" falls back to People', async () => {
     openRoomChat()
     mockSetRoom(ready({ chatGroupId: null, settled: true }))
