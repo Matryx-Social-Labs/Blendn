@@ -13,7 +13,7 @@
 import React, { useState } from 'react'
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import { type CityArtInfo } from '../../lib/cityArt'
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, PRESS, RADIUS, SPACE } from '../../lib/design/tokens'
 import { CheckDisc } from '../ds/RadioCard'
 import { CONTROL_FONT_CAP, font, useBoldText, useSelection } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
@@ -64,7 +64,7 @@ export function CityArtCard({ city, art, countLabel, active, here, onPress }: Ca
     <ScalePress
       onPress={onPress}
       haptic={false}
-      pressedScale={0.97}
+      pressedScale={PRESS.scale}
       style={styles.card}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}

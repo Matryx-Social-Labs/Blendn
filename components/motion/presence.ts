@@ -20,13 +20,13 @@ import { DURATION, EASING, REDUCE_MOTION, RISE, SPRING } from '../../lib/design/
  */
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
 
-export const fadeInFast = FadeIn.duration(150).easing(EASE_OUT).reduceMotion(ReduceMotion.Never)
-export const fadeOutFast = FadeOut.duration(120).easing(EASE_OUT).reduceMotion(ReduceMotion.Never)
+export const fadeInFast = FadeIn.duration(DURATION.quick).easing(EASE_OUT).reduceMotion(ReduceMotion.Never)
+export const fadeOutFast = FadeOut.duration(DURATION.quick).easing(EASE_OUT).reduceMotion(ReduceMotion.Never)
 
 /** Opacity plus a 0.9 → 1 scale, for a floating control. Never from scale(0). */
 export const popIn = () => {
   'worklet'
-  const t = { duration: 150, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
+  const t = { duration: DURATION.quick, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
   return {
     initialValues: { opacity: 0, transform: [{ scale: 0.9 }] },
     animations: {
@@ -38,7 +38,7 @@ export const popIn = () => {
 
 export const popOut = () => {
   'worklet'
-  const t = { duration: 120, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
+  const t = { duration: DURATION.quick, easing: EASE_OUT, reduceMotion: ReduceMotion.System }
   return {
     initialValues: { opacity: 1, transform: [{ scale: 1 }] },
     animations: {
