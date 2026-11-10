@@ -2,6 +2,7 @@ import { router, useNavigation } from 'expo-router'
 import { usePreventRemove, type NavigationAction } from 'expo-router/react-navigation'
 import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TextArea, TextField } from '../components/ds/TextField'
@@ -14,6 +15,7 @@ import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
 import { TagsField } from '../components/profile/TagsField'
 import { mayDate, type Gender, type Orientation } from '../lib/dating'
 import { SkeletonBlock, SkeletonLine } from '../components/Skeleton'
+import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 import { InterestPicker, MAX_INTERESTS } from '../components/InterestPicker'
 import { MIN_INTERESTS } from '../lib/meProfile'
 import { apiClient, ProfileCache } from '../lib/apiClient'
@@ -523,6 +525,8 @@ function EditProfileContent() {
   }
 
   const isLoading = loading
+  /* Each card's skeleton gives way to its fields with the one crossfade (DS #17). */
+  const arrive = useSkeletonCrossfade(loading)
 
   return (
     <View style={styles.container}>
@@ -606,7 +610,7 @@ function EditProfileContent() {
             {isLoading ? (
               <FieldsSkeleton fields={BASIC_FIELDS} />
             ) : (
-              <View style={styles.fields}>
+              <Animated.View entering={arrive} style={styles.fields}>
                 <TextField
                   label="Name"
                   inputRef={nameInputRef}
@@ -684,7 +688,7 @@ function EditProfileContent() {
                   textContentType="telephoneNumber"
                   testID="edit-profile-phone"
                 />
-              </View>
+              </Animated.View>
             )}
           </EditCard>
 
@@ -692,6 +696,7 @@ function EditProfileContent() {
             {isLoading ? (
               <SkeletonBlock width="100%" height={ABOUT_SKELETON} borderRadius={RADIUS.mediaInCard} />
             ) : (
+              <Animated.View entering={arrive}>
               <TextArea
                 label="Bio"
                 value={bio}
@@ -702,6 +707,7 @@ function EditProfileContent() {
                 placeholder="Tell people about yourself…"
                 testID="edit-profile-bio"
               />
+              </Animated.View>
             )}
           </EditCard>
 
@@ -713,7 +719,7 @@ function EditProfileContent() {
                 ))}
               </View>
             ) : (
-              <>
+              <Animated.View entering={arrive} style={styles.cardBody}>
                 {/* Under two, matching can't rank you and the board refuses a post (SCRUM-519): said, never refused. */}
                 {interestIds.length < MIN_INTERESTS ? (
                   <Text testID="edit-profile-interests-floor" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.floor]}>
@@ -722,7 +728,7 @@ function EditProfileContent() {
                 ) : null}
                 <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
                 <WhoSees field="interests" />
-              </>
+              </Animated.View>
             )}
           </EditCard>
 
@@ -735,7 +741,9 @@ function EditProfileContent() {
                 ))}
               </View>
             ) : (
-              <TagsField items={goals} onChange={setGoals} addLabel="Add goal" sheetTitle="Add goal" placeholder="What are you looking for?" testID="edit-profile-goals" />
+              <Animated.View entering={arrive}>
+                <TagsField items={goals} onChange={setGoals} addLabel="Add goal" sheetTitle="Add goal" placeholder="What are you looking for?" testID="edit-profile-goals" />
+              </Animated.View>
             )}
           </EditCard>
 
@@ -747,6 +755,7 @@ function EditProfileContent() {
                 ))}
               </View>
             ) : (
+              <Animated.View entering={arrive}>
               <TagsField
                 items={lookingFor}
                 onChange={setLookingFor}
@@ -755,6 +764,7 @@ function EditProfileContent() {
                 placeholder="What type of person are you looking for?"
                 testID="edit-profile-looking-for"
               />
+              </Animated.View>
             )}
           </EditCard>
         </ScrollView>
@@ -815,6 +825,7 @@ const styles = StyleSheet.create({
   floor: { color: COLOR.textSecondary, paddingLeft: SPACE.xs },
   // Form fields: the design system's TextField / TextArea, one gap between them.
   fields: { gap: SPACE.lg },
+  cardBody: { gap: CARD_GAP },
   skeletonField: { gap: SPACE.sm },
   chipsSkeleton: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
 })

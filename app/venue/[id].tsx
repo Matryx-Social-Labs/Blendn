@@ -3,6 +3,7 @@ import * as Clipboard from 'expo-clipboard'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, AppState, Linking, Platform, StyleSheet, Text, View } from 'react-native'
+import Reanimated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -68,6 +69,7 @@ import {
   hoursLine,
   type VenueGate,
 } from '../../lib/venuePage'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
 type SheetKind = 'dial' | 'session' | 'leave' | 'claim' | 'upcoming'
 type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
@@ -161,6 +163,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   const { status: plus } = usePlusStatus()
   const [detail, setDetail] = useState<VenueDetail | null>(null)
   const [gate, setGate] = useState<VenueGate | null>(null)
+  const arrive = useSkeletonCrossfade(!gate && (!detail || !detail.live))
   /** The window to repeat in one tap here, or null (`oneTapChoice`, PL-M05). */
   const [lastChoice, setLastChoice] = useState<GoLiveChoice | null>(null)
   const [sheet, setSheet] = useState<SheetKind | null>(null)
@@ -478,6 +481,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   return (
     <View style={styles.screen}>
       {controls}
+      <Reanimated.View entering={arrive} style={styles.fill}>
       <Animated.ScrollView
         testID="venue-scroll"
         contentContainerStyle={{ paddingBottom: dockHeight + SPACE.xl }}
@@ -528,6 +532,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
           {claimUrl ? <ClaimLine onPress={() => setSheet('claim')} /> : null}
         </View>
       </Animated.ScrollView>
+      </Reanimated.View>
 
       {/*
        * The status bar's and the back button's bar: nothing over the hero (the design draws the cover under the clock, behind its
@@ -642,6 +647,7 @@ const SECTION_GAP = 28
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
+  fill: { flex: 1 },
   // `.col4` from 284: the name sits 16 up into the map's fade.
   head: { paddingHorizontal: SPACE.gutter, marginTop: -SPACE.lg },
   name: { ...TITLE_TYPE, color: COLOR.textPrimary },

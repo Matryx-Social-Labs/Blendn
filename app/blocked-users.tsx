@@ -18,6 +18,7 @@ import { showSheet } from '../lib/sheet'
 import { useTopBarState } from '../lib/useTopBarState'
 import { emptyAfterRowOut, rowOut, rowReflow } from '../components/motion/presence'
 import { useReducedMotion } from '../lib/motion'
+import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 
 /** Empty pages with a cursor after them, followed on in one go before the foot waits for the next end-reach. */
 const MAX_EMPTY_HOPS = 5
@@ -38,6 +39,7 @@ function BlockedUsersContent() {
   const bold = useBoldText()
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
   const [loading, setLoading] = useState(true)
+  const arrive = useSkeletonCrossfade(loading)
   const [refreshing, setRefreshing] = useState(false)
   const [failed, setFailed] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -220,6 +222,7 @@ function BlockedUsersContent() {
           ))}
         </View>
       ) : (
+        <Animated.View entering={arrive} style={styles.fill}>
         <Animated.FlatList
           testID="blocked-users-list"
           itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
@@ -239,6 +242,7 @@ function BlockedUsersContent() {
           showsVerticalScrollIndicator={false}
           {...bar.scrollProps}
         />
+        </Animated.View>
       )}
     </View>
   )
@@ -247,6 +251,7 @@ function BlockedUsersContent() {
 const styles = StyleSheet.create({
   centred: { alignSelf: 'center' },
   container: { flex: 1, backgroundColor: COLOR.ink },
+  fill: { flex: 1 },
   listContent: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
   // Top-aligned, as Muted rooms' (D-L11): one empty state, one placement.
   emptyList: { flexGrow: 1, paddingHorizontal: SPACE.gutter },

@@ -1,6 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { CrewRefusalSheet, type CrewRefusal } from '../../../components/crews/CrewRefusalSheet'
@@ -14,6 +15,7 @@ import { StateScreen } from '../../../components/ds/StateScreen'
 import { Toggle } from '../../../components/ds/Toggle'
 import { TopBar } from '../../../components/ds/TopBar'
 import { Icon } from '../../../components/ui/Icon'
+import { useSkeletonCrossfade } from '../../../components/motion/useSkeletonCrossfade'
 import { useToast } from '../../../components/Toast'
 import { useToastDock } from '../../../components/toastDock'
 import { askCrewPush } from '../../../lib/crewPushAsk'
@@ -60,6 +62,7 @@ function CrewInviteScreenContent() {
   const [refusal, setRefusal] = useState<CrewRefusal | null>(null)
   /** One join or decline at a time: state lags a fast second tap by a render. */
   const inFlight = useRef(false)
+  const arrive = useSkeletonCrossfade(load.kind === 'loading')
 
   const read = useCallback(async () => {
     // Past the first 50 invites too (YOU-11): the push for invite #51 must still open it.
@@ -172,6 +175,7 @@ function CrewInviteScreenContent() {
     <View style={styles.container}>
       <Grain />
       <TopBar title="Crew invite" onBack={() => router.back()} testID="invite-top" />
+      <Animated.View entering={arrive} style={styles.fill}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <CrewEmblem seed={invite.emblemSeed} size={EMBLEM} />
@@ -220,6 +224,7 @@ function CrewInviteScreenContent() {
         />
         <Button label="Not now" kind="tertiary" onPress={confirmDecline} disabled={joining || !!joined} testID="invite-not-now" />
       </View>
+      </Animated.View>
       <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
     </View>
   )

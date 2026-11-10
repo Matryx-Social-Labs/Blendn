@@ -1,3 +1,4 @@
+import Animated from 'react-native-reanimated'
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useMemo, useState } from 'react'
 import { FlatList, StyleSheet, Text, View } from 'react-native'
@@ -21,6 +22,7 @@ import { useFriendsList } from '../../lib/useFriendsList'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
 /** D7: "Recently added" holds this many (the server's newest first). */
 export const RECENTLY_ADDED = 5
@@ -86,6 +88,7 @@ export function itemOffsets(items: readonly FriendItem[]): number[] {
  */
 function FriendsScreenContent() {
   const list = useFriendsList()
+  const arrive = useSkeletonCrossfade(list.status === 'loading')
   const [refreshing, setRefreshing] = useState(false)
   const requests = useFriendRequests()
   const bar = useTopBarState()
@@ -186,7 +189,7 @@ function FriendsScreenContent() {
       {list.status === 'loading' ? (
         <PersonRowSkeleton />
       ) : (
-        <View style={styles.flex}>
+        <Animated.View entering={arrive} style={styles.flex}>
           <FlatList
             testID="friends-list"
             data={items}
@@ -210,7 +213,7 @@ function FriendsScreenContent() {
             {...pull.listProps}
           />
           {pull.indicator}
-        </View>
+        </Animated.View>
       )}
     </View>
   )

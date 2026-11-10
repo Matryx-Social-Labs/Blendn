@@ -9,6 +9,7 @@ import { BrokenLink } from '../../components/chat/BrokenLink'
 import { KeyboardFrame } from '../../components/chat/KeyboardFrame'
 import { ChatHeader, chatFeedFrame, chatHeaderBottom } from '../../components/chat/ChatHeader'
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
+import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { DmMessageRow, MatchOpenerCard, NudgeLine, PhotoPreviewSheet, quoteText, RevealLine, RevealSheets, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
 import { Avatar } from '../../components/ds/Avatar'
 import { ChatBubble } from '../../components/ds/ChatBubble'
@@ -581,6 +582,8 @@ function PrivateChatInner() {
     () => withUnreadDivider(withDaySeparators(messages, (m) => m.createdAt), unread?.firstId, unread?.count ?? 0),
     [messages, unread]
   )
+  /* The skeleton is the list's empty slot, so the first messages fade in as cells; later ones arrive as they do (the hook's window). */
+  const arrive = useSkeletonCrossfade(loading && !chatItems.length)
   /*
    * Your last message carries the receipt, under it (Flow 5 DM #12–#13); never in a room. One moderation withheld was
    * never sent, so it is skipped: "Sent" under the placeholder was untrue, and it kept the thread polling (rc8 #2).
@@ -677,17 +680,18 @@ function PrivateChatInner() {
   )
 
   const renderChatItem = ({ item, index }: { item: ChatListItem; index: number }) => {
-    if (item.kind === 'separator') return <DayPill text={item.label} />
+    if (item.kind === 'separator') return <Animated.View entering={arrive}><DayPill text={item.label} /></Animated.View>
     // The frames' feed gap around the rule, so it never touches the day pill above it (drive 2, Android).
     if (item.kind === 'unread')
       return (
-        <View style={styles.unreadRule}>
+        <Animated.View entering={arrive} style={styles.unreadRule}>
           <UnreadRule count={unread?.count} word="unread" testID="dm-unread" />
-        </View>
+        </Animated.View>
       )
     const place = runPlace(chatItems, index, (i) => (i.kind === 'message' ? i.senderId : null), (i) => (i.kind === 'message' ? Date.parse(i.createdAt) || 0 : 0))
     const mine = item.senderId === myId
     return (
+      <Animated.View entering={arrive}>
       <DmMessageRow
         item={item}
         mine={mine}
@@ -698,6 +702,7 @@ function PrivateChatInner() {
         animate={arrivingRef.current.has(item.id)}
         handlers={handlers}
       />
+      </Animated.View>
     )
   }
 

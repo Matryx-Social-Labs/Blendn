@@ -1,3 +1,4 @@
+import Animated from 'react-native-reanimated'
 import { router } from 'expo-router'
 import { useCallback } from 'react'
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native'
@@ -12,6 +13,7 @@ import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { muteEnds, mutedRoomRoute, useMutedRooms, MUTED_PAGE_SIZE, MUTED_SCAN_PAGES, type MutedRoom } from '../lib/mutedRooms'
 import { Button } from '../components/ds/Button'
 import { useTopBarOverlay } from '../lib/useTopBarState'
+import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 
 const SKELETON_ROWS = [0, 1, 2]
 /** Said when the scan stopped at its cap with more behind it. */
@@ -29,6 +31,7 @@ function MutedRoomsContent() {
   const insets = useSafeAreaInsets()
   const bar = useTopBarOverlay()
   const muted = useMutedRooms()
+  const arrive = useSkeletonCrossfade(muted.loading)
 
   const renderRoom = useCallback(
     ({ item }: { item: MutedRoom }) => (
@@ -102,7 +105,8 @@ function MutedRoomsContent() {
         testID="muted-rooms-list"
         data={muted.rooms}
         keyExtractor={(room) => room.id}
-        renderItem={renderRoom}
+        // The rows cross from the skeleton (DS #17); a load faster than the skeleton's grace shows them at once.
+        renderItem={(info) => <Animated.View entering={arrive}>{renderRoom(info)}</Animated.View>}
         ListEmptyComponent={empty}
         ListFooterComponent={foot}
         contentContainerStyle={[styles.content, { paddingTop: bar.contentTop, paddingBottom: insets.bottom + SPACE.xl }, muted.rooms.length === 0 && styles.emptyContent]}
