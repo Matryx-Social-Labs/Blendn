@@ -1,5 +1,4 @@
 import { Camera, Map, type CameraRef, type CameraStop, type LightSpecification, type MapRef, type ViewStateChangeEvent } from '@maplibre/maplibre-react-native'
-import { getCalendars, getLocales } from 'expo-localization'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, StyleSheet, View, type LayoutChangeEvent, type NativeSyntheticEvent } from 'react-native'
 
@@ -11,6 +10,7 @@ import { locationSharingOn } from '../../lib/shareLocation'
 import type { LngLat } from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, homeMapStyle, mapCreditLine } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
+import { phoneRegion, phoneTimeZone } from '../../lib/time'
 import { SPACE } from '../../lib/design/tokens'
 import { CAMERA_MS, FLAT_VIEW, FLY_MS, LIGHT_STEP_MS, LIT_HOLD_MS, litUpTo, OPENING_VIEW, openingCentre, unnamedStyle } from '../../lib/onboardingMap'
 import { pinApiFor } from '../home/HomeMap'
@@ -63,8 +63,8 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
   // The catalogue's city for this phone's zone or region, asked once.
   useEffect(() => {
     let alive = true
-    const region = getLocales()[0]?.regionCode ?? null
-    const timeZone = getCalendars()[0]?.timeZone ?? null
+    const region = phoneRegion()
+    const timeZone = phoneTimeZone() ?? null
     apiClient
       .getEventCities(region)
       .then((res) => {

@@ -101,9 +101,16 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShow
 jest.mock('../components/pulse/PulseBanners', () => ({ PulseBanners: () => null }))
 jest.mock('../components/motion/FadeInUp', () => ({ children }: { children: React.ReactNode }) => children)
 // The city picker's sheet, with a way to close it (the Sheet needs a modal host).
+// The country the picker ranks second is kept (SCRUM-1037).
+let mockPickerCountry: string | null | undefined
 jest.mock('../components/pulse/CityPicker', () => {
   const { Pressable } = require('react-native')
-  return { CityPicker: (p: { visible: boolean; onClose: () => void }) => (p.visible ? <Pressable testID="close-sheet" onPress={p.onClose} /> : null) }
+  return {
+    CityPicker: (p: { visible: boolean; onClose: () => void; deviceCountry?: string | null }) => {
+      mockPickerCountry = p.deviceCountry
+      return p.visible ? <Pressable testID="close-sheet" onPress={p.onClose} /> : null
+    },
+  }
 })
 // The peek the long-press opens: what it was told, and a way to close it.
 jest.mock('../components/pulse/PulsePeek', () => ({
@@ -169,4 +176,96 @@ it('with sharing off, the fix is never turned into a place: no geocode, no city 
   await settle()
   expect(reverse).not.toHaveBeenCalled()
   expect(apiClient.recordCityDemand).not.toHaveBeenCalled()
+})
+
+/*
+ * Location denied, or no fix (SCRUM-1037): the phone's own time zone, then its region, picks the city and the country, by
+ * the rule the onboarding map opens on (`phoneCitySlug`). Before this every such phone browsed Bengaluru and sent no country.
+ */
+describe('no fix: the phone’s clock and region say where it is (SCRUM-1037)', () => {
+  // eslint-disable-next-line import/first
+  const { refreshPhoneZone } = require('../lib/time') as typeof import('../lib/time')
+  const { readStoredCity, storeCity } = require('../lib/cityStorage') as { readStoredCity: jest.Mock; storeCity: jest.Mock }
+  const cities = jest.mocked(apiClient.getEventCities)
+  const zoned = {
+    cities: [
+      { city: 'Mysuru', slug: 'mysuru', country: 'IN', timezone: 'Asia/Kolkata', eventCount: 9 },
+      { city: 'Bengaluru', slug: 'bengaluru', country: 'IN', timezone: 'Asia/Kolkata', eventCount: 4, isDefault: true },
+      { city: 'Toronto', slug: 'toronto', country: 'CA', timezone: 'America/Toronto', eventCount: 0, access: 'comingSoon' },
+    ],
+    countries: [
+      { code: 'IN', name: 'India', defaultCitySlug: 'bengaluru' },
+      { code: 'CA', name: 'Canada', defaultCitySlug: 'toronto' },
+    ],
+    defaultCitySlug: 'bengaluru',
+    device: null,
+  }
+  const zoneBefore = process.env.TZ
+
+  beforeEach(() => {
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue({ status: 'denied' } as never)
+    jest.mocked(Location.requestForegroundPermissionsAsync).mockResolvedValue({ status: 'denied' } as never)
+    jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValue(null)
+    cities.mockResolvedValue({ success: true, data: zoned } as never)
+  })
+  afterEach(() => {
+    process.env.TZ = zoneBefore
+    refreshPhoneZone()
+    readStoredCity.mockResolvedValue(null)
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue({ status: 'granted' } as never)
+    jest.mocked(Location.requestForegroundPermissionsAsync).mockResolvedValue({ status: 'granted' } as never)
+  })
+  const inZone = (zone: string) => {
+    process.env.TZ = zone
+    refreshPhoneZone()
+  }
+  const stored = () => storeCity.mock.calls.map(([c]) => c.city)
+  const countriesSent = () => cities.mock.calls.map(([country]) => country ?? null)
+
+  it('a Toronto phone set to English (US) browses Toronto, sends CA, and is counted as waiting there', async () => {
+    inZone('America/Toronto')
+    await render(<Events />)
+    await settle()
+    expect(stored()).toContain('Toronto')
+    expect(stored()).not.toContain('Bengaluru')
+    expect(countriesSent()).toContain('CA')
+    expect(apiClient.recordCityDemand).toHaveBeenCalledWith('Toronto', 'CA')
+    expect(mockPickerCountry).toBe('CA')
+  })
+
+  it('a Kolkata phone browses Bengaluru (the default of a zone several cities share, not the busiest row)', async () => {
+    inZone('Asia/Kolkata')
+    await render(<Events />)
+    await settle()
+    expect(stored()).toEqual(expect.arrayContaining(['Bengaluru']))
+    expect(stored()).not.toContain('Mysuru')
+    expect(countriesSent()).toContain('IN')
+  })
+
+  it('an unserved zone keeps today’s behaviour: the default city, no country sent, no demand (the control)', async () => {
+    inZone('Europe/Berlin')
+    await render(<Events />)
+    await settle()
+    expect(stored()).toContain('Bengaluru')
+    expect(countriesSent().filter(Boolean)).toEqual([])
+    expect(apiClient.recordCityDemand).not.toHaveBeenCalled()
+    expect(mockPickerCountry).toBeNull()
+  })
+
+  it('a city the person chose wins over the clock', async () => {
+    readStoredCity.mockResolvedValue({ city: 'Bengaluru', slug: 'bengaluru', source: 'chosen' })
+    inZone('America/Toronto')
+    await render(<Events />)
+    await settle()
+    expect(stored()).not.toContain('Toronto')
+    expect(apiClient.recordCityDemand).not.toHaveBeenCalled()
+  })
+
+  it('a stored guess that was only the default moves to where the phone points', async () => {
+    readStoredCity.mockResolvedValue({ city: 'Bengaluru', slug: 'bengaluru', source: 'inferred' })
+    inZone('America/Toronto')
+    await render(<Events />)
+    await settle()
+    expect(stored()).toContain('Toronto')
+  })
 })

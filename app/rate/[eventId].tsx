@@ -11,6 +11,7 @@ import { Dock } from '../../components/ds/Dock'
 import { TopBar } from '../../components/ds/TopBar'
 import { GoneCard } from '../../components/system/GoneCard'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
+import { useFocusWhen } from '../../lib/focusReturn'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TextArea } from '../../components/ds/TextField'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
@@ -378,14 +379,7 @@ function RatePeersContent() {
   const progress = onStep && steps > 1 ? `${step} of ${steps}` : undefined
 
   // M5: once the new card is in (it rises over `base`), focus its header.
-  const cardKey = ready ? (index >= people.length ? 'done' : String(index)) : load.kind
-  useEffect(() => {
-    if (!ready) return
-    const timer = setTimeout(() => {
-      if (header.current) AccessibilityInfo.sendAccessibilityEvent(header.current, 'focus')
-    }, DURATION.base)
-    return () => clearTimeout(timer)
-  }, [cardKey, ready])
+  useFocusWhen(header, ready ? (index >= people.length ? 'done' : String(index)) : null, DURATION.base)
 
   // First in the tree, so a screen reader starts at Close. The DS bar, pinned over the form: the form scrolls under it and the
   // glass comes in behind (#30). "n of m" is Geist Mono at the right.
