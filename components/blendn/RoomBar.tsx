@@ -57,7 +57,7 @@ export function RoomBar({
   return (
     <View testID="room-bar" style={[styles.bar, { paddingTop: insetTop }]}>
       <Material role="bar" style={StyleSheet.absoluteFill} />
-      <View style={[styles.hairline, contrast && styles.hairlineStrong]} />
+      <View testID={contrast ? 'room-bar-contrast' : undefined} style={[styles.hairline, contrast && styles.hairlineStrong]} />
       <View style={styles.titleRow}>
         <IconButton icon="chevron-down" accessibilityLabel="Close the room" onPress={onClose} testID="room-close" />
         <View style={styles.titles} accessible accessibilityRole="header" accessibilityLabel={`The room, ${event}`}>

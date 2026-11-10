@@ -380,7 +380,14 @@ describe('the visibility line and its gate', () => {
 describe('Check out always confirms (Room #16)', () => {
   it('the confirm: Stay, and Check out in destructiveFill; it closes before the check-out runs', async () => {
     await drawRoom()
-    await fireEvent.press(screen.getByRole('button', { name: 'Check out' }))
+    // Check out is in the room bar's ⋯ until the Room info sheet (Flow 5 C6) holds it.
+    const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
+    showSheet.mockClear()
+    await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
+    const actions = showSheet.mock.calls[0][0].actions as { label: string; then: () => void }[]
+    // No chat yet in this room, so no Room info entry: settings, then Check out.
+    expect(actions.map((a) => a.label)).toEqual(['Room settings', 'Check out'])
+    await act(async () => actions[1].then())
     expect(screen.getByText('Check out of this event?', HIDDEN)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Stay' })).toBeTruthy()
     const buttons = screen.getAllByRole('button', { name: 'Check out' })
@@ -518,23 +525,21 @@ describe('the event cancelled while you are inside (R4)', () => {
   })
 })
 
-describe('the floating bar (TG-01)', () => {
+describe('the room bar (TG-01, Flow 5 R-A)', () => {
   afterEach(() => mockScrollY.set(0))
 
-  it('takes the bar glass once the page scrolls, and drops it back at the top', async () => {
+  it('is glass from the top in the room, so the floating bar’s scrolled glass never draws under it', async () => {
     await drawRoom()
-    expect(screen.queryByTestId('blendn-bar')).toBeNull()
+    expect(screen.getByTestId('room-bar')).toBeTruthy()
     await act(async () => mockScrollY.set(120))
-    expect(screen.getByTestId('blendn-bar')).toBeTruthy()
-    await act(async () => mockScrollY.set(0))
     expect(screen.queryByTestId('blendn-bar')).toBeNull()
   })
 
-  it('Increase Contrast draws the hairline under it', async () => {
+  it('Increase Contrast draws the stronger hairline under it', async () => {
     jest.spyOn(AccessibilityInfo, 'isHighTextContrastEnabled').mockResolvedValue(true)
     jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
     await drawRoom()
-    await act(async () => mockScrollY.set(120))
-    expect(screen.getByTestId('blendn-bar-contrast')).toBeTruthy()
+    await act(async () => {})
+    expect(screen.getByTestId('room-bar-contrast')).toBeTruthy()
   })
 })

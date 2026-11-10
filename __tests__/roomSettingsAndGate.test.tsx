@@ -82,7 +82,7 @@ describe("the banner names your pseudonym (ROOM-02, SV-3)", () => {
     expect(pseudonymFromDoor(null)).toBeNull()
   })
   it("room settings carries the pseudonym and the reveal to the preferences screen (SCRUM-1025): GET /events/:id/chat would join the room", () => {
-    expect(code).toContain("roomSettingsRoute(room.event!.id, { pseudonym: myPseudonym, revealed: controls.revealed })")
+    expect(code).toContain("roomSettingsRoute(ev.id, { pseudonym: myPseudonym, revealed: controls.revealed })")
   })
   it("the screen takes it from the room, ahead of a match's", () => {
     expect(code).toContain("room.match?.you ?? room.pseudonym")
