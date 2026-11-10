@@ -1122,7 +1122,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
             {awayFromEnd && messages.length ? (
               <NewestChip
                 count={newWhileAway}
-                bottom={dockHeight + dockBottom + SPACE.lg}
+                // F-A: 24 above the composer (`.xnew`, bottom 112 over an 88 pt dock).
+                bottom={dockHeight + dockBottom + SPACE.xl}
                 onPress={() => {
                   setNewWhileAway(0)
                   scrollToBottom(true)
@@ -1225,7 +1226,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   fill: { flex: 1 },
-  listContent: { paddingHorizontal: SPACE.gutter, flexGrow: 1, justifyContent: 'flex-end' },
+  // F-A: the feed runs 16 from each edge (`.xfeed`), so a host card and a run are 361 wide on a 393 phone.
+  listContent: { paddingHorizontal: SPACE.lg, flexGrow: 1, justifyContent: 'flex-end' },
   listHead: { gap: SPACE.lg, paddingBottom: SPACE.lg },
   typing: { marginTop: SPACE.lg },
   centre: { flexGrow: 1, justifyContent: 'center' },

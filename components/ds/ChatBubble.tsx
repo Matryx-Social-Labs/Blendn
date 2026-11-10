@@ -5,7 +5,9 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Svg, { Circle } from 'react-native-svg'
 import Animated, {
   Easing,
+  FadeIn,
   FadeInUp,
+  LayoutAnimationConfig,
   interpolate,
   ReduceMotion,
   useAnimatedStyle,
@@ -29,7 +31,7 @@ import { avatarOf, BUBBLE, emojiOnly, linkHost, linkParts, reactionName, REPLY_S
 import { ReactionPill } from './ReactionBar'
 import { RECEIPT_WORD, ReceiptMark, type Receipt } from './ReceiptMark'
 import { ReplyPreview } from './ReplyPreview'
-import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, minTarget, SELECTION, useBoldText, useIncreaseContrast } from './shared'
 
 /** #36: the hold that opens the menu. */
 const HOLD_MS = 400
@@ -48,6 +50,16 @@ const REMOVED_WORDS = { text: 'This message was removed by moderation', photo: '
 /** R3-D5 5.9: a 44 pt ring with a 3 pt stroke; the veil is the photo dimmed to 65%. */
 const RING = { size: SIZE.circleButton, stroke: 3 }
 const VEIL_ALPHA = 0.35
+// design-exception: the board's bubble words are 16/22 (`.xb`, Flow 5 F-A), between `button` 16/20 and `rowTitle` 17/22
+const BUBBLE_TYPE = { fontSize: 16, lineHeight: 22 }
+/** F-A: yours is violet with a half-point violet rim (`.run.me .xb`), drawn inside the padding so it never grows the bubble. */
+const VIOLET_RIM = 0.5
+/** F-A: the reaction chip sits on the bubble's outer corner, 6 pt out and 12 below its edge (`.xb .rx`). */
+const CHIP_OUT = { side: -6, below: -12 }
+/** A run's next bubble clears a chip by the run's own 4 pt. */
+const CHIP_CLEAR = 12
+/** A message the room has just removed: the dashed placeholder comes in over this, where the words were (the dissolve). */
+const DISSOLVE_MS = 300
 /** #12: the new bubble starts at the composer's field and travels to its slot over 300 ms. */
 const SEND = { from: SIZE.input, ms: 300 }
 /** The reply glyph sits off the bubble's leading edge and comes in with the drag. */
@@ -218,6 +230,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
   const emoji = !removed && !photo && !replyTo && emojiOnly(text)
   const indent = room ? { paddingLeft: BUBBLE.avatar + SPACE.sm } : null
   const tail = last && !emoji ? BUBBLE.tail : BUBBLE.radius
+  const chips = !!props.reactions?.length && !lifted
   const bubble = (
     <Message
       {...props}
@@ -232,7 +245,8 @@ function ChatBubbleBase(props: ChatBubbleProps) {
         photo && styles.photoBubble,
         // The dash is DashedFrame's (SVG): a border dash differs per platform, and draws solid on Android with any per-side width.
         removed === 'photo' && styles.removedPhoto,
-        { backgroundColor: removed || emoji ? 'transparent' : mine ? COLOR.surfaceRaised : COLOR.surfaceSunken },
+        { backgroundColor: removed || emoji ? 'transparent' : mine ? COLOR.selectionVioletFill : COLOR.surface },
+        mine && !removed && !emoji && styles.violetRim,
         mine ? { borderBottomRightRadius: tail } : { borderBottomLeftRadius: tail },
         failed && styles.failedBubble,
         contrast && !removed && !emoji && IC_HAIRLINE,
@@ -246,22 +260,10 @@ function ChatBubbleBase(props: ChatBubbleProps) {
     <Animated.View
       testID={testID}
       entering={props.animateIn ? entering(props.animateIn, reduceMotion) : undefined}
-      style={[styles.group, mine && styles.end]}
+      style={[styles.group, mine && styles.end, chips && !last && styles.chipClear]}
     >
       <GestureDetector gesture={swipe}>
         <Animated.View style={[styles.group, mine && styles.end, swipeStyle]}>
-          {room && first ? (
-            <Pressable
-              accessibilityRole={onSenderPress ? 'button' : 'text'}
-              onPress={onSenderPress}
-              hitSlop={{ top: (minTarget() - TYPE.meta.lineHeight) / 2, bottom: (minTarget() - TYPE.meta.lineHeight) / 2 }}
-              style={indent}
-            >
-              <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-                {sender.name}
-              </Text>
-            </Pressable>
-          ) : null}
           <View style={[styles.line, { maxWidth: BUBBLE.maxWidth[surface] }, mine && styles.reverse]}>
             <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.glyph, glyphStyle]}>
               <Icon name="reply" size={ICON.control} color={COLOR.textSecondary} />
@@ -275,6 +277,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
                 style={[styles.shrink, previewState === 'pressed' ? styles.pressed : pressStyle]}
               >
                 {bubble}
+                {chips ? <Chips {...props} /> : null}
                 {focused || previewState === 'focused'
                   ? focusRing(BUBBLE.radius).map((ring, i) => <View key={i} pointerEvents="none" style={ring} />)
                   : null}
@@ -314,6 +317,41 @@ function SenderAvatar({ sender, last, onPress, testID }: { sender: ChatPerson; l
   )
 }
 
+/** F-A: the reactions as count chips on the bubble's outer bottom corner: how many, never who. */
+function Chips({ mine, reactions = [], onReactionPress, landed, testID }: ChatBubbleProps) {
+  return (
+    <View testID={testID && `${testID}-reactions`} style={[styles.chips, mine ? styles.chipsMine : styles.chipsTheirs]}>
+      {reactions.map((r) => (
+        <ReactionPill
+          key={r.emoji}
+          emoji={r.emoji}
+          count={r.count}
+          mine={r.mine}
+          landed={landed === r.emoji}
+          onPress={onReactionPress && (() => onReactionPress(r.emoji))}
+        />
+      ))}
+    </View>
+  )
+}
+
+/** A room's sender, on the first of their run: their pseudonym in rose inside the bubble, a button to their card. */
+function SenderName({ name, onPress, testID }: { name: string; onPress?: () => void; testID?: string }) {
+  const bold = useBoldText()
+  return (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      disabled={!onPress}
+      hitSlop={{ top: (minTarget() - TYPE.caption.lineHeight) / 2, bottom: SPACE.xs }}
+    >
+      <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.rose]}>
+        {name}
+      </Text>
+    </Pressable>
+  )
+}
+
 /** The bubble itself: the one accessible element per message. */
 function Message({
   mine,
@@ -334,6 +372,8 @@ function Message({
   actions = [],
   onMore,
   onSenderPress,
+  surface = 'room',
+  first = true,
   testID,
   emoji,
   size,
@@ -409,6 +449,13 @@ function Message({
       onBlur={onBlur}
       style={style}
     >
+      {/* The board's name sits inside the bubble (F-A); a removed message keeps its place without one. */}
+      {surface === 'room' && !mine && first && !removed && !emoji ? (
+        <SenderName name={sender.name} onPress={onSenderPress} testID={testID && `${testID}-name`} />
+      ) : null}
+      {/* Mounted with the bubble: history never animates; a removal that lands while you watch comes in over DISSOLVE_MS. */}
+      <LayoutAnimationConfig skipEntering>
+        <Animated.View key={removed ? 'removed' : 'words'} entering={FadeIn.duration(DISSOLVE_MS)}>
       {removed ? <DashedFrame radius={BUBBLE.radius} testID={testID && `${testID}-dashed`} /> : null}
       {replyTo && !removed ? <ReplyPreview name={replyTo.name} text={replyTo.text} onPress={replyTo.onPress} /> : null}
       {removedPhoto ? (
@@ -427,7 +474,7 @@ function Message({
         <Text
           // Reading text grows to body's cap; a 32 pt emoji-only message is already large, so it stops at display's.
           maxFontSizeMultiplier={emoji ? MAX_FONT_SCALE.display : MAX_FONT_SCALE.body}
-          style={[emoji ? EMOJI_ONLY_TYPE : font('body', bold), removed ? styles.removedText : styles.primary]}
+          style={[emoji ? EMOJI_ONLY_TYPE : [font('body', bold), BUBBLE_TYPE], removed ? styles.removedText : styles.primary]}
         >
           {removed
             ? `${content}.`
@@ -442,6 +489,8 @@ function Message({
               )}
         </Text>
       )}
+        </Animated.View>
+      </LayoutAnimationConfig>
     </Pressable>
   )
 }
@@ -486,9 +535,6 @@ function Under({
   mine,
   surface = 'room',
   last = true,
-  reactions,
-  onReactionPress,
-  landed,
   failed,
   onRetry,
   time,
@@ -499,20 +545,6 @@ function Under({
   const bold = useBoldText()
   return (
     <>
-      {reactions?.length ? (
-        <View style={[styles.reactions, indent, mine && styles.end]}>
-          {reactions.map((r) => (
-            <ReactionPill
-              key={r.emoji}
-              emoji={r.emoji}
-              count={r.count}
-              mine={r.mine}
-              landed={landed === r.emoji}
-              onPress={onReactionPress && (() => onReactionPress(r.emoji))}
-            />
-          ))}
-        </View>
-      ) : null}
       {failed ? (
         <Pressable
           onPress={() => {
@@ -528,7 +560,8 @@ function Under({
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.destructive]}>{typeof failed === 'string' ? failed : 'Not sent · Tap to retry'}</Text>
         </Pressable>
       ) : null}
-      {last && !failed ? (
+      {/* F-A draws no time under a room's run (it is read with the message); a DM keeps it, and "waiting" shows everywhere. */}
+      {last && !failed && (waiting || surface === 'dm') ? (
         // Read with the message.
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.meta, indent]}>
           {waiting ? (
@@ -577,7 +610,17 @@ const styles = StyleSheet.create({
   failedBubble: { opacity: FAILED_OPACITY },
   photo: { width: PHOTO.width, height: PHOTO.height, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface },
   veil: { borderRadius: RADIUS.rowInCard, backgroundColor: tint(COLOR.ink, VEIL_ALPHA), alignItems: 'center', justifyContent: 'center' },
-  reactions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs },
+  chips: { position: 'absolute', bottom: CHIP_OUT.below, flexDirection: 'row', gap: SPACE.xs },
+  chipsTheirs: { right: CHIP_OUT.side },
+  chipsMine: { left: CHIP_OUT.side },
+  chipClear: { marginBottom: CHIP_CLEAR },
+  violetRim: {
+    borderWidth: VIOLET_RIM,
+    borderColor: tint(COLOR.selectionVioletGlyph, 0.5),
+    paddingVertical: SPACE.sm - VIOLET_RIM,
+    paddingHorizontal: SPACE.md - VIOLET_RIM,
+  },
+  rose: { color: SELECTION.rose.glyph },
   meta: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   link: { color: COLOR.link, textDecorationLine: 'underline' },
   primary: { color: COLOR.textPrimary },

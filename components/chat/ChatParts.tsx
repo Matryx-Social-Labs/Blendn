@@ -1,14 +1,15 @@
 import { Image } from 'expo-image'
-import { useEffect } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { COLOR, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
-import { BUBBLE } from '../ds/chatShared'
+import { compactCount } from '../../lib/format'
+import { BUBBLE, plural } from '../ds/chatShared'
 import { PresenceDot } from '../ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../ds/shared'
 import { glassContentsIn, glassRiseIn, popOut } from '../motion/presence'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
@@ -62,11 +63,39 @@ export function LoadOlder({ busy, onPress }: { busy: boolean; onPress: () => voi
 }
 
 /**
- * Scroll to newest (Flow 5 room #15): a glass capsule above the composer,
- * the count of what arrived while you read back, in Geist Mono. No haptic.
+ * Scroll to newest (Flow 5 room #15): a glass capsule above the composer. Once
+ * something arrives while you read back it is the F-A pill, centred and rose:
+ * "48 new messages", the count in Geist Mono (compact past 999, said whole),
+ * announced once. Nothing moves the list but a tap on it. No haptic.
  */
 export function NewestChip({ count, bottom, onPress }: { count: number; bottom: number; onPress: () => void }) {
   const bold = useBoldText()
+  const said = useRef(false)
+  const words = count === 1 ? 'new message' : 'new messages'
+  useEffect(() => {
+    if (!count || said.current) return
+    said.current = true
+    AccessibilityInfo.announceForAccessibility(plural(count, 'new message'))
+  }, [count])
+  if (count) {
+    return (
+      <Animated.View entering={glassRiseIn} exiting={popOut} pointerEvents="box-none" style={[styles.pillPlace, { bottom }]}>
+        <Pressable
+          testID="chat-newest"
+          onPress={onPress}
+          hitSlop={(minTarget() - PILL) / 2}
+          accessibilityRole="button"
+          accessibilityLabel={`${plural(count, 'new message')}, jump to the newest`}
+          style={styles.pill}
+        >
+          <Icon name="arrow-down" size={ICON.inline} color={ROSE.glyph} />
+          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount(count)}</Text> {words}
+          </Text>
+        </Pressable>
+      </Animated.View>
+    )
+  }
   return (
     <Animated.View entering={glassRiseIn} exiting={popOut} style={[styles.chipPlace, { bottom }]}>
       <Pressable
@@ -74,17 +103,11 @@ export function NewestChip({ count, bottom, onPress }: { count: number; bottom: 
         onPress={onPress}
         hitSlop={(minTarget() - CHIP) / 2}
         accessibilityRole="button"
-        accessibilityLabel={count ? `${count} new, jump to the newest` : 'Jump to the newest message'}
+        accessibilityLabel="Jump to the newest message"
       >
         <Material role="control" style={styles.chip}>
           <Animated.View entering={glassContentsIn} style={styles.chipContents}>
             <Icon name="arrow-down" size={ICON.control} />
-            {count ? (
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={styles.ink}>
-                <Text style={[font('meta', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{count}</Text>
-                <Text style={font('caption', bold)}> new</Text>
-              </Text>
-            ) : null}
           </Animated.View>
         </Material>
       </Pressable>
@@ -92,6 +115,11 @@ export function NewestChip({ count, bottom, onPress }: { count: number; bottom: 
   )
 }
 const CHIP = SIZE.control - SPACE.sm
+/** F-A `.xnew`: a 36 pt rose capsule, 14 at the sides. */
+const PILL = SIZE.tagHeader
+// design-exception: the pill pads 14 at the sides (`.xnew`), between the 12 and 16 steps
+const PILL_PAD = 14
+const ROSE = SELECTION.rose
 
 /** A mute that arrived while you were here (R2-D2 #06): one line over the flipped composer. */
 export function JustMutedLine() {
@@ -186,6 +214,18 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   tabular: { fontVariant: ['tabular-nums'] },
   chipPlace: { position: 'absolute', right: SPACE.xl },
+  pillPlace: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  pill: {
+    height: PILL,
+    paddingHorizontal: PILL_PAD,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: ROSE.fill,
+    borderWidth: 1,
+    borderColor: ROSE.edge,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.xs + SPACE.xxs,
+  },
   chip: {
     height: CHIP,
     borderRadius: RADIUS.capsule,
