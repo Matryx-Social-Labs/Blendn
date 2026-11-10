@@ -18,6 +18,7 @@ import { FieldLabel } from '../ds/TextField'
 import { orientationTier, TIER_SEES } from '../../lib/matchingTiers'
 import { WhoSees } from './WhoSees'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
 
 /**
  * The five fields matching runs on: intent, work field, and — only when dating
@@ -134,7 +135,7 @@ function WorkFieldsFailed({ onRetry, retrying }: { onRetry?: () => void; retryin
         accessibilityState={{ disabled: !onRetry || retrying, busy: retrying }}
         // The target is the line's own box, a full 44 tall; the slop reaches up and down only, so it never covers the field beside it.
         hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
-        style={styles.failed}
+        style={({ pressed }) => [styles.failed, pressed && styles.pressed]}
       >
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
       </Pressable>
@@ -279,4 +280,5 @@ export function MatchingFields({
 const styles = StyleSheet.create({
   set: { marginTop: SPACE.xl },
   failed: { minHeight: minTarget(), justifyContent: 'center' },
+  pressed: { opacity: OPACITY.pressed },
 })

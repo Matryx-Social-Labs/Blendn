@@ -4,6 +4,7 @@ import Svg, { Polygon } from 'react-native-svg'
 
 import { Icon } from '../ui/Icon'
 import { COLOR, CREATURE_PALETTES, RADIUS } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
 import type { Rect } from '../ds/chatShared'
 import { SwipeDeck, type DeckFan } from '../motion/SwipeDeck'
 import { OptimizedImage } from '../OptimizedImage'
@@ -62,7 +63,7 @@ export function PhotoStack({
           accessibilityRole="button"
           accessibilityLabel="Add a photo"
           onPress={() => press(0)}
-          style={[styles.card, styles.emptyTilt]}
+          style={({ pressed }) => [styles.card, styles.emptyTilt, pressed && styles.pressed]}
         >
           <Svg style={StyleSheet.absoluteFill} viewBox="0 0 1 1" preserveAspectRatio="none">
             <Polygon points="0,0 1,0 0,1" fill={a} />
@@ -104,5 +105,6 @@ const styles = StyleSheet.create({
   card: { width: STACK_WIDTH, height: STACK_HEIGHT, borderRadius: RADIUS.rowInCard, overflow: 'hidden', backgroundColor: COLOR.surface, borderWidth: 2, borderColor: COLOR.ink },
   fill: { width: '100%', height: '100%' },
   emptyTilt: { transform: [{ rotate: '-4deg' }] },
+  pressed: { opacity: OPACITY.pressed },
   mark: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
 })

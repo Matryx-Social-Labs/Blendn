@@ -17,7 +17,7 @@ import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, GroundProvider, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, minTarget, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { glassContentsIn, glassRiseIn } from '../motion/presence'
@@ -566,13 +566,15 @@ export function BanterSkeleton() {
 const LINE_SHORT = 140
 const LINE_LONG = 220
 
+const NEW_PILL = SPACE.xxl - SPACE.xs
+
 /** #27: a message landed while your finger was down — "↑ New" instead of moving the rows under it. */
 export function NewAbovePill({ top, onPress }: { top: number; onPress: () => void }) {
   const bold = useBoldText()
   return (
     <Animated.View entering={glassRiseIn} exiting={FadeOut.duration(DURATION.quick)} style={[styles.newPlace, { top }]}>
-      <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="New messages above">
-        <Material role="control" style={styles.newPill}>
+      <Pressable onPress={onPress} hitSlop={(minTarget() - NEW_PILL) / 2} accessibilityRole="button" accessibilityLabel="New messages above">
+        <Material role="control" style={styles.newPill} testID="banter-new-above-pill">
           <Animated.View entering={glassContentsIn} style={styles.newPillContents}>
             <Icon name="arrow-up" size={ICON.inline} />
             <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>New</Text>
@@ -671,5 +673,5 @@ const styles = StyleSheet.create({
   lineLong: { width: LINE_LONG, height: SPACE.md + SPACE.xxs },
   newPlace: { position: 'absolute', alignSelf: 'center', zIndex: 3 },
   newPillContents: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  newPill: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, height: SPACE.xxl - SPACE.xs, paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule },
+  newPill: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, height: NEW_PILL, paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule },
 })

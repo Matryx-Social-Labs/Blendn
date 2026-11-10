@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { FlatList, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { Button } from '../ds/Button'
 import { Spinner } from '../ds/Loader'
@@ -129,7 +129,7 @@ export function UpcomingSheet({
             android_ripple={{ color: PRESSED_WASH.android }}
             accessibilityRole="button"
             accessibilityLabel={`${item.title}, ${item.day}, ${item.time}`}
-            style={styles.row}
+            style={({ pressed }) => [styles.row, pressed && Platform.OS === 'ios' && styles.pressed]}
             testID={`venue-upcoming-all-${item.id}`}
           >
             {/* The day keeps its words ("Sat 24 Oct"); the title gives way. Capped: the row is a fixed-height target. */}
@@ -171,6 +171,7 @@ export function UpcomingSheet({
 }
 
 const styles = StyleSheet.create({
+  pressed: { backgroundColor: PRESSED_WASH.ios },
   row: { height: ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   day: { flexShrink: 0 },
   title: { flex: 1, flexShrink: 1 },
