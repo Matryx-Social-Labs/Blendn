@@ -9,6 +9,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { useToast } from '../Toast'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
+import { OPACITY } from '../../lib/theme'
 import { offersApi, REGULAR_COPY, type RegularPrefs } from '../../lib/offers'
 
 /** Where the page stands on "regular": offered, on, or just turned off (stays for this visit, then the offer returns). */
@@ -140,7 +141,7 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
             accessibilityLabel={`Turn off. ${venueName} stops seeing you as a regular.`}
             accessibilityState={{ busy: saving === 'known' }}
             hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
-            style={styles.turnOff}
+            style={({ pressed }) => [styles.turnOff, pressed && styles.dim]}
             testID="venue-regular-off"
           >
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink, styles.underline]}>Turn off</Text>
@@ -193,4 +194,5 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   underline: { textDecorationLine: 'underline' },
+  dim: { opacity: OPACITY.pressed },
 })

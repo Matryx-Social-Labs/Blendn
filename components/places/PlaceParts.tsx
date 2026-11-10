@@ -73,7 +73,7 @@ export function QuietFold({
         accessibilityLabel={`${line}. ${order}`}
         accessibilityHint={open ? 'Hides these places' : 'Shows these places'}
         accessibilityState={{ expanded: open }}
-        style={styles.fold}
+        style={({ pressed }) => [styles.fold, pressed && Platform.OS === 'ios' && styles.pressed]}
       >
         <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('body', bold), styles.ink, styles.foldLine]}>
           <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{figure}</Text>
