@@ -51,6 +51,14 @@ describe('the bubble (F-A)', () => {
     expect(screen.queryByText('Night Owl', { includeHiddenElements: true })).toBeNull()
   })
 
+  // Driven 2026-11-10: your removed bubble ran 319 wide on a 402 phone; the board tops both sides out at 270 (on 393).
+  it('yours holds back the creature’s width, as theirs does: one maximum for both sides', async () => {
+    await render(bubble({ mine: true }))
+    expect(flat('b-line')).toMatchObject({ maxWidth: '86%', paddingLeft: 40 })
+    await screen.rerender(bubble({ mine: true, surface: 'dm' }))
+    expect(flat('b-line').paddingLeft).toBeUndefined()
+  })
+
   // The board draws no time under a room's run; it is still read with the message.
   it('a room shows no time under the run, and still reads it', async () => {
     await render(bubble())

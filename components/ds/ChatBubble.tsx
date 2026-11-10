@@ -228,6 +228,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
   const onMore = props.onLongPress && !removed ? () => measureAnchor(holdArea.current, openMenu) : undefined
 
   const room = surface === 'room' && !mine
+  const mineInRoom = surface === 'room' && mine
   const emoji = !removed && !photo && !replyTo && emojiOnly(text)
   const indent = room ? { paddingLeft: BUBBLE.avatar + SPACE.sm } : null
   const tail = last && !emoji ? BUBBLE.tail : BUBBLE.radius
@@ -267,8 +268,14 @@ function ChatBubbleBase(props: ChatBubbleProps) {
     >
       <GestureDetector gesture={swipe}>
         <Animated.View style={[styles.group, mine && styles.end, swipeStyle]}>
-          <View style={[styles.line, { maxWidth: BUBBLE.maxWidth[surface] }, mine && styles.reverse]}>
-            <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.glyph, glyphStyle]}>
+          {/* Yours holds back the creature's width too (F-A: both sides top out at the same bubble width, 270 on a 393 phone). */}
+          <View testID={testID && `${testID}-line`} style={[styles.line, { maxWidth: BUBBLE.maxWidth[surface] }, mine && styles.reverse, mineInRoom && styles.mineLine]}>
+            <Animated.View
+              pointerEvents="none"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={[styles.glyph, mineInRoom && styles.mineGlyph, glyphStyle]}
+            >
               <Icon name="reply" size={ICON.control} color={COLOR.textSecondary} />
             </Animated.View>
             {room ? <SenderAvatar sender={sender} last={last} onPress={onSenderPress} testID={testID && `${testID}-avatar`} /> : null}
@@ -605,6 +612,9 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACE.sm },
   reverse: { flexDirection: 'row-reverse' },
   avatarSpace: { width: BUBBLE.avatar },
+  mineLine: { paddingLeft: BUBBLE.avatar + SPACE.sm },
+  // The glyph keeps its place off your bubble's leading edge, inside that held-back width.
+  mineGlyph: { left: BUBBLE.avatar + SPACE.sm - GLYPH_OFFSET },
   shrink: { flexShrink: 1 },
   pressed: { transform: [{ scale: PRESS.scale }] },
   bubble: { borderRadius: BUBBLE.radius, paddingVertical: SPACE.sm, paddingHorizontal: SPACE.md },
