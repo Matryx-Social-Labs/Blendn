@@ -136,16 +136,18 @@ tags:
 
 # --- The event page opens Chat, and closing goes back to the event page ---
 - openLink: exp+blendn://event/${EVENT_ID}
+# Checked in, the page's door reads "Open the room" beside "Check out": wait for it to settle, or the tap lands on Check out.
 - extendedWaitUntil:
-    visible: ".*(Open the room|Blend in).*"
+    visible: "Open the room"
     timeout: 30000
-- tapOn: ".*(Open the room|Blend in).*"
+- waitForAnimationToEnd
+- tapOn: "Open the room"
 - extendedWaitUntil:
     visible: ".*Say something to the room"
     timeout: 30000
 - tapOn:
     id: "room-close"
 - extendedWaitUntil:
-    visible: ".*(Open the room|Blend in).*"
+    visible: "Open the room"
     timeout: 15000
 - takeScreenshot: flow5-02-back-on-event
