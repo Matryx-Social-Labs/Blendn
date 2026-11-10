@@ -2,7 +2,7 @@
  * Motion audit M16 + M27 (2026-11-01): parts that come and go with an answer — the sign-out under an under-age date, the
  * Plus dock's line and button, the sets that open when dating or a work field is ticked, the venue dock's modes — were
  * swapped in one frame. Now they cross on `Swap`: a fade in over `base` once the screen is drawn (never on its first
- * paint, so a list does not fade every card in), and out over `quick` where nothing sits below to move into its place.
+ * paint, so a list does not fade every card in). No exit: what sits below moves up at once, and a fading part would sit on it.
  */
 import { render, screen } from '@testing-library/react-native'
 import { readFileSync } from 'fs'
@@ -10,12 +10,9 @@ import { join } from 'path'
 import React from 'react'
 import { Text } from 'react-native'
 
-/* eslint-disable import/first */
 import { Swap } from '../components/motion/Swap'
-import { swapIn, swapOut } from '../components/motion/presence'
-/* eslint-enable import/first */
+import { swapIn } from '../components/motion/presence'
 
-const enteringOf = (testID: string) => screen.getByTestId(testID).parent?.props.entering ?? screen.getByTestId(testID).props.entering
 
 describe('Swap', () => {
   it('draws nothing while there is nothing to show', async () => {
@@ -23,15 +20,12 @@ describe('Swap', () => {
     expect(screen.toJSON()).toBeNull()
   })
 
-  it('a part that arrives fades in on swapIn, and leaves on swapOut only when asked to', async () => {
+  it('a part that arrives fades in on swapIn, and has no exit to fade over what moves up', async () => {
     const { rerender } = await render(<Swap testID="part">{null}</Swap>)
     await rerender(<Swap testID="part"><Text>Sign out</Text></Swap>)
     const part = screen.getByTestId('part')
     expect(part.props.entering).toBe(swapIn)
     expect(part.props.exiting).toBeUndefined()
-
-    await rerender(<Swap testID="part" exits><Text>Sign out</Text></Swap>)
-    expect(screen.getByTestId('part').props.exiting).toBe(swapOut)
   })
 
   it('a new id is a new part, so the swap plays between two answers too', async () => {
@@ -39,7 +33,7 @@ describe('Swap', () => {
     const first = screen.getByTestId('part')
     await rerender(<Swap id="b" testID="part"><Text>You’re in.</Text></Swap>)
     expect(screen.getByTestId('part')).not.toBe(first)
-    expect(enteringOf('part')).toBe(swapIn)
+    expect(screen.getByTestId('part').props.entering).toBe(swapIn)
   })
 })
 
@@ -49,11 +43,9 @@ const code = (path: string) =>
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '')
 
-describe('the presets are fades on the tokens, kept under Reduce Motion', () => {
-  it('in over base on the gentle curve, out over quick on the exit curve', () => {
-    const presence = code('components/motion/presence.ts')
-    expect(presence).toContain('export const swapIn = FadeIn.duration(DURATION.base).easing(GENTLE).reduceMotion(ReduceMotion.Never)')
-    expect(presence).toContain('export const swapOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)')
+describe('the preset is a fade on the tokens, kept under Reduce Motion', () => {
+  it('in over base on the gentle curve', () => {
+    expect(code('components/motion/presence.ts')).toContain('export const swapIn = FadeIn.duration(DURATION.base).easing(GENTLE).reduceMotion(ReduceMotion.Never)')
   })
 })
 
