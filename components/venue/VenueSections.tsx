@@ -9,7 +9,7 @@ import { TimeRing } from '../ds/TimeRing'
 import { Icon } from '../ui/Icon'
 import ScalePress from '../motion/ScalePress'
 import type { VenueDetail } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { distanceText } from '../../lib/placesPane'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { liveNowWord } from '../../lib/home'
@@ -230,7 +230,7 @@ export function About({ text }: { text: string }) {
           onPress={() => setOpen((o) => !o)}
           accessibilityRole="button"
           accessibilityLabel={open ? 'Show less' : 'Read more'}
-          hitSlop={(minTarget() - SPACE.xl) / 2}
+          hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
           style={styles.readMore}
         >
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>{open ? 'Show less' : 'Read more'}</Text>
@@ -312,7 +312,7 @@ export function ClaimLine({ onPress }: { onPress: () => void }) {
         accessibilityRole="link"
         accessibilityLabel="Own this place? Claim it"
         accessibilityHint="Opens the Blend’n dashboard in your browser"
-        hitSlop={(minTarget() - SPACE.xl) / 2}
+        hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
         style={styles.claim}
       >
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>

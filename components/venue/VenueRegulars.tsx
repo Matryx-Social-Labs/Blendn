@@ -7,7 +7,7 @@ import { SettingsRow } from '../ds/SettingsRow'
 import { font, minTarget, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { useToast } from '../Toast'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { offersApi, REGULAR_COPY, type RegularPrefs } from '../../lib/offers'
 
@@ -139,7 +139,7 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
             accessibilityRole="button"
             accessibilityLabel={`Turn off. ${venueName} stops seeing you as a regular.`}
             accessibilityState={{ busy: saving === 'known' }}
-            hitSlop={(minTarget() - SPACE.xl) / 2}
+            hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
             style={styles.turnOff}
             testID="venue-regular-off"
           >

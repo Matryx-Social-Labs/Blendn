@@ -56,7 +56,7 @@ import {
 import { BOARD_ENABLED, boardOpen } from '../../lib/board'
 import { HAPPENING_NOW, dayAndClock, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useReducedMotion } from '../../lib/motion'
@@ -1003,7 +1003,7 @@ function TextAction({ label, accessibilityLabel, onPress, testID }: { label: str
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      hitSlop={(minTarget() - SPACE.xl) / 2}
+      hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
       style={({ pressed }) => pressed && styles.pressed}
     >
       <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
