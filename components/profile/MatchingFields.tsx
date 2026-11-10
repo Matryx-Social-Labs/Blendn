@@ -17,6 +17,7 @@ import { font, minTarget, useAnnounced, useBoldText, useIncreaseContrast } from 
 import { FieldLabel } from '../ds/TextField'
 import { orientationTier, TIER_SEES } from '../../lib/matchingTiers'
 import { WhoSees } from './WhoSees'
+import { Swap } from '../motion/Swap'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 
@@ -189,59 +190,63 @@ export function MatchingFields({
 
       {afterIntents}
 
-      {wantsDating ? (
-        <>
-          {/*
-            Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
-            is explicit: a networking user is never asked their gender.
-          */}
-          <View style={styles.set}>
-            <ChipSet
-              label="YOU ARE"
-              items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
-              selection="single"
-              selected={gender ? [gender] : []}
-              onToggle={(value) => onChangeGender(value as Gender)}
-              testID="matching-gender"
-            />
-            <WhoSees field="gender" />
-          </View>
-
-          <View style={styles.set}>
-            {/* Dimmed rather than removed at the cap: the chips you cannot reach are what tell you the limit exists. */}
-            <ChipSet
-              label="YOU IDENTIFY AS"
-              hint="Select all that apply — up to three."
-              items={ORIENTATIONS.map((o) => ({ key: o, label: ORIENTATION_LABELS[o], dimmed: orientationDisabled(orientations, o) }))}
-              selection="multi"
-              selected={orientations}
-              capHint="Up to three"
-              onToggle={(value) => onChangeOrientations(toggleOrientation(orientations, value as Orientation))}
-              testID="matching-orientations"
-            />
-            <WhoSees field="orientation" tier={orientationTier(showOrientation)} />
-          </View>
-
-          {askInterestedIn ? (
-            // Shown when the pair does not imply a target set — "straight" plus "non-binary", or "queer", which are identities
-            // rather than tables. Without this the server stores nothing and the dating tag never appears, with no explanation.
+      <Swap>
+        {wantsDating ? (
+          <>
+            {/*
+              Only here, and only while dating is ticked. `blendn-admin/docs/DESIGN_HANDOFF.md`
+              is explicit: a networking user is never asked their gender.
+            */}
             <View style={styles.set}>
               <ChipSet
-                label="INTERESTED IN"
+                label="YOU ARE"
                 items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
-                selection="multi"
-                selected={interestedIn}
-                onToggle={(value) => {
-                  const g = value as Gender
-                  onChangeInterestedIn(interestedIn.includes(g) ? interestedIn.filter((x) => x !== g) : [...interestedIn, g])
-                }}
-                testID="matching-interested-in"
+                selection="single"
+                selected={gender ? [gender] : []}
+                onToggle={(value) => onChangeGender(value as Gender)}
+                testID="matching-gender"
               />
-              <WhoSees field="interestedIn" />
+              <WhoSees field="gender" />
             </View>
-          ) : null}
-        </>
-      ) : null}
+
+            <View style={styles.set}>
+              {/* Dimmed rather than removed at the cap: the chips you cannot reach are what tell you the limit exists. */}
+              <ChipSet
+                label="YOU IDENTIFY AS"
+                hint="Select all that apply — up to three."
+                items={ORIENTATIONS.map((o) => ({ key: o, label: ORIENTATION_LABELS[o], dimmed: orientationDisabled(orientations, o) }))}
+                selection="multi"
+                selected={orientations}
+                capHint="Up to three"
+                onToggle={(value) => onChangeOrientations(toggleOrientation(orientations, value as Orientation))}
+                testID="matching-orientations"
+              />
+              <WhoSees field="orientation" tier={orientationTier(showOrientation)} />
+            </View>
+
+            <Swap>
+              {askInterestedIn ? (
+                // Shown when the pair does not imply a target set — "straight" plus "non-binary", or "queer", which are identities
+                // rather than tables. Without this the server stores nothing and the dating tag never appears, with no explanation.
+                <View style={styles.set}>
+                  <ChipSet
+                    label="INTERESTED IN"
+                    items={GENDERS.map((g) => ({ key: g, label: GENDER_LABELS[g] }))}
+                    selection="multi"
+                    selected={interestedIn}
+                    onToggle={(value) => {
+                      const g = value as Gender
+                      onChangeInterestedIn(interestedIn.includes(g) ? interestedIn.filter((x) => x !== g) : [...interestedIn, g])
+                    }}
+                    testID="matching-interested-in"
+                  />
+                  <WhoSees field="interestedIn" />
+                </View>
+              ) : null}
+            </Swap>
+          </>
+        ) : null}
+      </Swap>
 
       <View style={styles.set}>
         {workFieldsFailed && workFields.length === 0 ? (
@@ -260,21 +265,23 @@ export function MatchingFields({
         )}
       </View>
 
-      {workField && expertiseOptions?.length && onChangeExpertise ? (
-        <View style={styles.set}>
-          {/* The same rule as interests: the rest dim at the cap and say why, rather than a tap that does nothing. */}
-          <ChipSet
-            label="WHAT KIND?"
-            items={expertiseOptions.map((e) => ({ key: e.slug, label: e.label }))}
-            selection="multi"
-            selected={expertise}
-            max={maxExpertise}
-            capHint={`Up to ${maxExpertise}`}
-            onToggle={(slug) => onChangeExpertise(expertise.includes(slug) ? expertise.filter((x) => x !== slug) : [...expertise, slug])}
-            testID="matching-expertise"
-          />
-        </View>
-      ) : null}
+      <Swap>
+        {workField && expertiseOptions?.length && onChangeExpertise ? (
+          <View style={styles.set}>
+            {/* The same rule as interests: the rest dim at the cap and say why, rather than a tap that does nothing. */}
+            <ChipSet
+              label="WHAT KIND?"
+              items={expertiseOptions.map((e) => ({ key: e.slug, label: e.label }))}
+              selection="multi"
+              selected={expertise}
+              max={maxExpertise}
+              capHint={`Up to ${maxExpertise}`}
+              onToggle={(slug) => onChangeExpertise(expertise.includes(slug) ? expertise.filter((x) => x !== slug) : [...expertise, slug])}
+              testID="matching-expertise"
+            />
+          </View>
+        ) : null}
+      </Swap>
     </>
   )
 }

@@ -1,9 +1,11 @@
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 
 import { nightLabel, nightsView, NIGHT_TILES, type NightsStatus } from '../../lib/meProfile'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Banner } from '../ds/Banner'
 import { BannerPresence } from '../motion/BannerPresence'
+import { useSkeletonCrossfade } from '../motion/useSkeletonCrossfade'
 import { Button } from '../ds/Button'
 import { font, useBoldText } from '../ds/shared'
 import { SkeletonBlock } from '../Skeleton'
@@ -86,6 +88,8 @@ export function NightsOut({
   const bold = useBoldText()
   const { width } = useWindowDimensions()
   const view = nightsView(status, events, lockedCount, total, runningCount)
+  // The tiles cross from their skeleton (DS #17, motion audit M27).
+  const arrive = useSkeletonCrossfade(view.kind === 'loading')
   // Three across, two 8 pt gaps between them, inside the screen's gutters.
   const cell = { width: Math.floor((width - SPACE.gutter * 2 - SPACE.sm * (COLUMNS - 1)) / COLUMNS) }
 
@@ -135,13 +139,13 @@ export function NightsOut({
       {view.kind === 'tiles' ? (
         <>
           {view.ended > 0 ? <Text testID="nights-line" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{nightsLine(view.ended)}</Text> : null}
-          <View testID="nights-grid" style={styles.grid}>
+          <Animated.View testID="nights-grid" entering={arrive} style={styles.grid}>
             {events.slice(0, NIGHT_TILES).map((event) => (
               <View key={event.id} style={cell}>
                 <MemoryTile title={event.title} imageUrl={event.cover_image_url} when={nightLabel(event.start_time, event.timezone)} onPress={() => onOpenEvent(event.id)} />
               </View>
             ))}
-          </View>
+          </Animated.View>
           {view.running > 0 ? (
             <Text testID="nights-running" style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
               {NIGHTS_HELD.running(view.running)}
