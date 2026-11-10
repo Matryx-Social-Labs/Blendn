@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useState } from 'react'
 import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import Animated, {
@@ -155,27 +155,27 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
     open.set(withTiming(1, { duration: reduceMotionNow.current ? FADE_MS : OPEN_MS, easing: EASE, reduceMotion: ReduceMotion.Never }))
   }, [open, reduceMotionNow])
 
-  // The close goes from its callback or the backstop, whichever is first, and once.
+  // The close goes from its callback or the backstop, whichever is first, and once: `gone` turns on only once.
+  const [closing, setClosing] = useState(false)
+  const [gone, setGone] = useState(false)
   const onClosedNow = useLatest(onClosed)
-  const closed = useRef(false)
-  const backstop = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  useEffect(() => () => clearTimeout(backstop.current), [])
-  const finish = useCallback(() => {
-    if (closed.current) return
-    closed.current = true
-    clearTimeout(backstop.current)
-    onClosedNow.current()
-  }, [onClosedNow])
+  useEffect(() => {
+    if (!closing) return
+    const backstop = setTimeout(() => setGone(true), ROOM_STAGE_CLOSE_BACKSTOP_MS)
+    return () => clearTimeout(backstop)
+  }, [closing])
+  useEffect(() => {
+    if (gone) onClosedNow.current()
+  }, [gone, onClosedNow])
 
   const close = useCallback(() => {
     open.set(
       withTiming(0, { duration: reduceMotion ? FADE_MS : CLOSE_MS, easing: EASE, reduceMotion: ReduceMotion.Never }, (done) => {
-        if (done) scheduleOnRN(finish)
+        if (done) scheduleOnRN(setGone, true)
       })
     )
-    clearTimeout(backstop.current)
-    backstop.current = setTimeout(finish, ROOM_STAGE_CLOSE_BACKSTOP_MS)
-  }, [finish, open, reduceMotion])
+    setClosing(true)
+  }, [open, reduceMotion])
 
   useImperativeHandle(ref, () => ({ close }), [close])
 
