@@ -10,7 +10,7 @@ const mockChanged = new Set<() => void>()
 const mockBanned: Array<(d: { userId: string; banned: boolean }) => void> = []
 const mockRejoin = jest.fn()
 /** The room's message listeners: a test speaks as the socket. */
-const mockMessage: Array<(d: { message: Record<string, unknown> }) => void> = []
+const mockMessage: ((d: { message: Record<string, unknown> }) => void)[] = []
 let mockParams: Record<string, string> = { id: 'g1' }
 
 jest.mock('@react-native-async-storage/async-storage', () =>

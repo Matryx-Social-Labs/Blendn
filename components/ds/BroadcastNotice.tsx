@@ -7,6 +7,7 @@ import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { RadialWash, type RadialLayer } from '../ui/GradientFill'
 import { tint } from '../../lib/theme'
+import { BUBBLE_TYPE } from './ChatBubble'
 import { IconButton } from './IconButton'
 import { BUBBLE, plural, timeFont } from './chatShared'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, SELECTION, useBoldText, useIncreaseContrast } from './shared'
@@ -19,7 +20,7 @@ const MEDIA_RATIO = 16 / 9
 
 /*
  * The host's card (Flow 5 F-A `.xhost`): ember light from the top-left corner, a 1 pt ember rim at 55%, 10/14 inside it,
- * the organisation's name and a HOST tag, then the words at the bubble's 16/22. The rim is drawn inside that padding.
+ * the organisation's name and a HOST tag, then the words at the bubble's 16/22 (`BUBBLE_TYPE`). The rim is drawn inside that padding.
  */
 const EMBER = SELECTION.ember
 // design-exception: `.xhost`'s light, ember at 22% from the top-left corner, gone by 70% (f5.css)
@@ -28,8 +29,6 @@ const HOST_RIM = 1
 const HOST_RIM_ALPHA = 0.55
 // design-exception: 10/14 inside the card (`.xhost`), off the 4-pt steps
 const HOST_PAD = { v: 10, h: 14 }
-// design-exception: the words are 16/22 (`.xhost p`), the bubble's
-const HOST_WORDS = { fontSize: 16, lineHeight: 22 }
 /** The tag: 20 pt high, 7 at the sides, a 10 pt corner (`.tg`). */
 const TAG = { height: 20, pad: 7, radius: 10 }
 // design-exception: the tag's words are a lighter ember (`.tg` #FFB79A) than the name's glyph ember
@@ -149,7 +148,7 @@ function HostCard({ from, text, time, media, testID }: Omit<BroadcastNoticeProps
             </Text>
           </View>
         </View>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), HOST_WORDS, styles.white]}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), BUBBLE_TYPE, styles.white]}>
           {text}
         </Text>
       </View>

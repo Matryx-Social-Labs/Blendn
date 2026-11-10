@@ -51,15 +51,15 @@ const REMOVED_WORDS = { text: 'This message was removed by moderation', photo: '
 const RING = { size: SIZE.circleButton, stroke: 3 }
 const VEIL_ALPHA = 0.35
 // design-exception: the board's bubble words are 16/22 (`.xb`, Flow 5 F-A), between `button` 16/20 and `rowTitle` 17/22
-const BUBBLE_TYPE = { fontSize: 16, lineHeight: 22 }
+export const BUBBLE_TYPE = { fontSize: 16, lineHeight: 22 }
 /** F-A: yours is violet with a half-point violet rim (`.run.me .xb`), drawn inside the padding so it never grows the bubble. */
 const VIOLET_RIM = 0.5
 /** F-A: the reaction chip sits on the bubble's outer corner, 6 pt out and 12 below its edge (`.xb .rx`). */
 const CHIP_OUT = { side: -6, below: -12 }
 /** A run's next bubble clears a chip by the run's own 4 pt. */
 const CHIP_CLEAR = 12
-/** A message the room has just removed: the dashed placeholder comes in over this, where the words were (the dissolve). */
-const DISSOLVE_MS = 300
+/** A message the room has just removed: the dashed placeholder comes in over 300 ms where the words were (the dissolve); Reduce Motion: at once. */
+const DISSOLVE = FadeIn.duration(300)
 /** #12: the new bubble starts at the composer's field and travels to its slot over 300 ms. */
 const SEND = { from: SIZE.input, ms: 300 }
 /** The reply glyph sits off the bubble's leading edge and comes in with the drag. */
@@ -128,15 +128,17 @@ function entering(kind: 'send' | 'arrive', reduceMotion: boolean) {
 }
 
 /**
- * One message (guidelines/components/ChatBubble.html). Messages group by
- * sender; the screen passes `first` and `last`: the name once on top (rooms
- * only), the creature on the last bubble, the time once under the group, a
- * 6 pt tail on the sender's side of the last. Inbound is `surfaceSunken`,
- * yours `surfaceRaised`; nothing is coloured, the gradient never touches a
- * bubble. Inside: a reply quote, the text at 17 (links tappable, never a
- * preview; one to three emoji alone at 32 pt with no bubble) or a photo; under
- * it, reactions; "Not sent · Tap to retry"; a removed message keeps its place,
- * dashed. Never "edited" (ROUND3 C6).
+ * One message (guidelines/components/ChatBubble.html, Flow 5 F-A). Messages
+ * group by sender; the screen passes `first` and `last`: in a room the name
+ * in rose inside the first bubble, the creature on the last; a 6 pt tail on
+ * the sender's side of the last. A room draws no time (it is read with the
+ * message); a DM draws it once under the group. Inbound is `surface`, yours
+ * violet (`selectionVioletFill`, a half-point violet rim); the gradient never
+ * touches a bubble. Inside: a reply quote, the text at 16/22 (links tappable,
+ * never a preview; one to three emoji alone at 32 pt with no bubble) or a
+ * photo; reactions as count chips on its outer bottom corner; "Not sent · Tap
+ * to retry"; a removed message keeps its place, dashed, and one removed while
+ * you watch dissolves into it. Never "edited" (ROUND3 C6).
  *
  * Gestures, on the UI thread: a 400 ms hold presses it to 0.97 and plays
  * `H.longPress`, handing the menu its frame (#36); a drag right tracks 1:1 to
@@ -215,9 +217,8 @@ function useBubbleGestures({ onLongPress, onReply, removed, failed, testID }: Pi
 }
 
 function ChatBubbleBase(props: ChatBubbleProps) {
-  const { mine, sender, surface = 'room', first = true, last = true, text = '', photo, replyTo, removed = false } = props
+  const { mine, sender, surface = 'room', last = true, text = '', photo, replyTo, removed = false } = props
   const { failed = false, onSenderPress, previewState, lifted, testID } = props
-  const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
   const [focused, setFocused] = useState(false)
@@ -374,6 +375,7 @@ function Message({
   onSenderPress,
   surface = 'room',
   first = true,
+  lifted,
   testID,
   emoji,
   size,
@@ -449,14 +451,21 @@ function Message({
       onBlur={onBlur}
       style={style}
     >
-      {/* The board's name sits inside the bubble (F-A); a removed message keeps its place without one. */}
-      {surface === 'room' && !mine && first && !removed && !emoji ? (
-        <SenderName name={sender.name} onPress={onSenderPress} testID={testID && `${testID}-name`} />
-      ) : null}
-      {/* Mounted with the bubble: history never animates; a removal that lands while you watch comes in over DISSOLVE_MS. */}
+      {/*
+        The dissolve: a removal that lands while you watch brings the dashed frame and its words in over DISSOLVE_MS where
+        the message was. Skipped as the bubble mounts, so history never animates.
+      */}
       <LayoutAnimationConfig skipEntering>
-        <Animated.View key={removed ? 'removed' : 'words'} entering={FadeIn.duration(DISSOLVE_MS)}>
-      {removed ? <DashedFrame radius={BUBBLE.radius} testID={testID && `${testID}-dashed`} /> : null}
+        {removed ? (
+          <Animated.View entering={DISSOLVE} pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <DashedFrame radius={BUBBLE.radius} testID={testID && `${testID}-dashed`} />
+          </Animated.View>
+        ) : null}
+        {/* F-A: the name sits inside the bubble, on the first of the run. */}
+        {surface === 'room' && !mine && first && !lifted ? (
+          <SenderName name={sender.name} onPress={onSenderPress} testID={testID && `${testID}-name`} />
+        ) : null}
+        <Animated.View key={removed ? 'removed' : 'words'} entering={removed ? DISSOLVE : undefined}>
       {replyTo && !removed ? <ReplyPreview name={replyTo.name} text={replyTo.text} onPress={replyTo.onPress} /> : null}
       {removedPhoto ? (
         <>

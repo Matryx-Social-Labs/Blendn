@@ -163,7 +163,7 @@ export function Composer({
               onFocus={onFocus}
               onAttach={onAttach}
               pressed={previewState === 'pressed'}
-              slow={slow ? { line: reason ?? `${LOCKED.ratelimited.title}.`, countdown } : undefined}
+              slow={slow ? { line: reason ?? `${LOCKED.ratelimited.title}. ${LOCKED.ratelimited.body}`, countdown } : undefined}
               testID={testID && `${testID}-field`}
             />
             {state === 'failed' ? <Failed onRetry={onRetry} /> : null}
