@@ -6,6 +6,7 @@ import { IconButton } from '../ds/IconButton'
 import { Badge } from '../ds/MonoFamily'
 import { SearchField } from '../ds/SearchField'
 import { font, useBoldText } from '../ds/shared'
+import { Swap } from '../motion/Swap'
 import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { HOW_FAR, PLACE_TYPES, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
 
