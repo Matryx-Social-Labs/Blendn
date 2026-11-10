@@ -10,7 +10,7 @@ import { AccessibilityInfo } from 'react-native'
 
 import { WaveToast } from '../components/blendn/WaveToast'
 import { H } from '../lib/haptics'
-import { ignoreWavesFrom, listenForWaves, newestWave, useRoomWaves, WAVED_AT_YOU_MS, wavedAtYouLabel, waveShown } from '../lib/roomWaves'
+import { ignoreWavesFrom, listenForWaves, useRoomWaves, WAVED_AT_YOU_MS, wavedAtYouLabel, waveShown } from '../lib/roomWaves'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 const mockWaveListeners = new Set<(d: { eventId: string; fromUserId: string; fromName: string }) => void>()
@@ -63,13 +63,13 @@ describe('the store', () => {
     expect(latest.latest).toBeNull()
   })
 
-  it('shown once: the toast or banner marks it, the row and the chip stay', async () => {
+  it('shown once: the toast or banner marks it, and what was received stays', async () => {
     await render(<Probe />)
     listenForWaves('e1')
     await send({ eventId: 'e1', fromUserId: 'a', fromName: 'Night Cat' })
     await act(async () => waveShown(latest.latest!))
     expect(latest.latest).toBeNull()
-    expect(newestWave(latest.received, Date.now())?.fromName).toBe('Night Cat')
+    expect(Object.values(latest.received).map((w) => w.fromName)).toEqual(['Night Cat'])
   })
 
   it('"Waved at you · N min" for ten minutes, then nothing', () => {
@@ -78,7 +78,6 @@ describe('the store', () => {
     expect(wavedAtYouLabel(now - 2 * 60_000, now)).toBe('2 min')
     expect(wavedAtYouLabel(now - WAVED_AT_YOU_MS, now)).toBeNull()
     expect(wavedAtYouLabel(undefined, now)).toBeNull()
-    expect(newestWave({ a: { eventId: 'e', fromUserId: 'a', fromName: 'x', at: now - WAVED_AT_YOU_MS } }, now)).toBeNull()
   })
 })
 

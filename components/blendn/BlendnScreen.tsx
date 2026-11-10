@@ -19,20 +19,22 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { usePassReach } from '../../lib/usePassReach'
-import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNotice, setRoomUp, takePendingPerson, takeReturnTo, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNotice, setLiveRoomChat, setRoomUp, setRoomTab, takePendingPerson, takeReturnTo, useRoomTab, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
+import type { RoomTab } from '../../lib/roomTab'
+import { useChatTabUnread } from '../../lib/useChatTabUnread'
+import { RoomChat } from '../chat/RoomChat'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
-import { firstNameOf, useFriendsHere, useMessageFriend } from '../../lib/friendsHere'
-import { useOffline } from '../OfflineBanner'
+import { firstNameOf, useFriendsHere } from '../../lib/friendsHere'
 import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
 import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
-import { newestWave, useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
+import { useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
@@ -47,7 +49,7 @@ import { myRoomFace, roomSettingsRoute } from '../../lib/roomState'
 import { useTonight, type TonightEvent } from '../../lib/useTonight'
 import { isNightRated, markNightRated, useRatedNights } from '../../lib/ratedNights'
 import { crewCards, openBlend, useCrewActions, useCrewsHere } from '../crews/CrewsView'
-import { VisibilityBanner, type Visibility } from '../ds/Banner'
+import type { Visibility } from '../ds/Banner'
 import type { Face } from '../ds/Facepile'
 import { IconButton } from '../ds/IconButton'
 import { MomentBlend, type BlendCrew, type BlendPerson } from '../ds/MomentBlend'
@@ -57,17 +59,18 @@ import { MomentRecap } from '../ds/MomentRecap'
 import { PeopleFromTonight } from './PeopleFromTonight'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
 import { Sheet } from '../ds/Sheet'
-import { CONTROL_FONT_CAP, font, HueProvider, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { HueProvider, useIncreaseContrast } from '../ds/shared'
 import { Toast, type ToastKind } from '../ds/Toast'
 import { ConnectSheet } from '../grid/ConnectSheet'
-import ScalePress from '../motion/ScalePress'
 import { Material } from '../ui/Material'
 import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
-import { faceOf, RoomSkeleton, useNow } from './RoomSections'
+import { faceOf, RoomSkeleton, RoomYouCard, useNow } from './RoomSections'
 import { FriendsHere } from './FriendsHere'
 import { RoomCancelled } from './RoomCancelled'
 import { RoomStage, useStage } from './RoomStage'
+import { RoomBar, roomBarHeight } from './RoomBar'
+import { RoomTabs } from './RoomTabs'
 import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
@@ -89,16 +92,6 @@ const MORE_STEP = 20
 
 const gentle = Easing.bezier(...EASING.gentle)
 /** Motion #9, after the pour: the Room crossfades in over D.base (200 ms under Reduce Motion). */
-/**
- * B8 (Prompt 10, approved): a glass pill enters as a 16 pt rise over `base`;
- * the glass stays opaque throughout and only its contents fade. Reduce Motion:
- * it is simply there, and the contents fade.
- */
-const GLASS_RISE = SPACE.lg
-const glassRise = FadeInUp.duration(DURATION.base)
-  .easing(Easing.bezier(...EASING.entrance))
-  .withInitialValues({ opacity: 1, transform: [{ translateY: GLASS_RISE }] })
-const glassContentsIn = FadeIn.duration(DURATION.base).easing(gentle)
 
 /** A first line built from what you share — something to say that isn't "hey". */
 export function openerFor(p: RoomPerson): string {
@@ -203,7 +196,6 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const scrolled = useScrolledPast()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
-  const bold = useBoldText()
   const room = useRoom()
   const tonight = useTonight()
   const waves = useRoomWaves()
@@ -216,20 +208,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string } | null>(null)
   const say = useCallback((text: string, kind: ToastKind = 'info') => setToast({ key: Date.now(), kind, text }), [])
 
-  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them.
-  const offline = useOffline()
+  // Friends here (plans/friends-in-room.md C1): the friends at this event who let friends see them; Message is on their screen.
   const friendsHere = useFriendsHere(room.event?.id ?? null, room.status === 'ready')
-  const refreshFriends = friendsHere.refresh
-  const friendChat = useMessageFriend(
-    useCallback(
-      (text: string) => {
-        say(text, 'error')
-        // They may have gone (an unfriend, a block, a check-out): read again.
-        void refreshFriends()
-      },
-      [say, refreshFriends]
-    )
-  )
 
   /*
    * The end of the night. Kept as a snapshot rather than derived: the sweeper
@@ -240,11 +220,17 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const [recap, setRecap] = useState<Recap | null>(null)
   const [dismissedRecap, setDismissedRecap] = useState<string | null>(null)
   const [peopleOpen, setPeopleOpen] = useState(false)
-  // Android back closes People from tonight before it closes the overlay (M5).
+  // The Room's tab (Flow 5 R-A): People from the disc; Chat when an entry asked for it, as it opens or while it is open.
+  const askedTab = useRoomTab()
+  // Android back closes People from tonight before it closes the overlay (M5); in the Room, Chat goes back to People first.
   useEffect(() => {
     backGuardRef.current = () => {
       if (peopleOpen) {
         setPeopleOpen(false)
+        return true
+      }
+      if (askedTab === 'chat') {
+        setRoomTab('people')
         return true
       }
       return false
@@ -252,7 +238,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     return () => {
       backGuardRef.current = null
     }
-  }, [backGuardRef, peopleOpen])
+  }, [backGuardRef, peopleOpen, askedTab])
   const endedRecap =
     room.status === 'ready' && room.event ? roomRecap({ event: room.event, checkedInAt: room.checkedInAt, people: room.people }, now) : null
   if (endedRecap && endedRecap.eventId !== dismissedRecap && recap?.eventId !== endedRecap.eventId) setRecap(endedRecap)
@@ -507,6 +493,20 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   }, [roomWhole, eventId])
   const eventTitle = room.event?.title ?? ''
   const chatGroupId = room.chatGroupId
+  // `chat/[id]` for this room opens the Chat tab rather than a screen of its own, while the Room is up.
+  const liveChat = mode === 'room' ? chatGroupId : null
+  // Kept after the overlay closes, so a push for this room still opens Chat; the check-in ending clears it (setLiveHint).
+  useEffect(() => {
+    if (liveChat) setLiveRoomChat(liveChat)
+  }, [liveChat])
+  // The Chat tab only exists for a room with a chat: without one, People. Shown, not stored: a push opens the Room before
+  // its chat lookup returns, and a lookup that failed once (it retries) must not leave the Room on People for good.
+  const tab: RoomTab = askedTab === 'chat' && mode === 'room' && room.settled && !chatGroupId ? 'people' : askedTab
+  const chatUnread = useChatTabUnread({ chatGroupId: liveChat, eventId, tab, myId: user?.id })
+  // Chat's feed scrolls down to read back: the stage's drag-to-close waits for People (the chevron and Back still close).
+  const { setDragToClose } = useStage()
+  const chatShown = tab === 'chat' && mode === 'room'
+  useEffect(() => setDragToClose(!chatShown), [chatShown, setDragToClose])
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
   const myPseudonym = room.match?.you ?? room.pseudonym ?? null
   const myPhoto = myMainPhoto(user)
@@ -602,7 +602,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     target: roomCoachTarget,
     text: ROOM_COACH_TEXT,
     place: 'below',
-    radius: RADIUS.rowInCard,
+    radius: RADIUS.tile,
     onDismiss: roomCoach.dismiss,
     onLost: roomCoach.lose,
     testID: 'room-coach-mark',
@@ -801,15 +801,46 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       say('The chat for this event is not open yet.')
       return
     }
-    router.push({ pathname: '/chat/[id]', params: { id: String(chatGroupId), roomName: eventTitle || 'Event chat', eventTitle } as never })
+    setRoomTab('chat')
   }, [chatGroupId, eventId, eventTitle, say])
 
+  /*
+   * ⋯ in the room bar (R-A "Room info"). Until the Room info sheet (I-A, C6) holds them, it is the way to the room's
+   * info, your room settings and Check out, which the old bar carried.
+   */
+  /** Room settings (who sees you, your room name), from the you-card's Change and the ⋯ sheet. */
+  const openRoomSettings = () => {
+    const ev = room.event
+    if (ev) router.push(roomSettingsRoute(ev.id, { pseudonym: myPseudonym, revealed: controls.revealed }))
+  }
+  const openRoomMenu = () => {
+    const ev = room.event
+    if (!ev) return
+    showSheet({
+      kind: 'actions',
+      hue: 'rose',
+      title: ev.title,
+      actions: [
+        ...(chatGroupId ? [{ label: 'Room info', then: () => router.push({ pathname: '/chat-info/[id]', params: { id: chatGroupId, roomName: ev.title, eventTitle: ev.title } } as never) }] : []),
+        { label: 'Room settings', then: openRoomSettings },
+        { label: 'Check out', variant: 'destructive' as const, then: () => setConfirmingOut(true) },
+      ],
+    })
+  }
+
   // --- waves to you (SCRUM-630); a blocked or reported person's are dropped at the source (`ignoreWavesFrom`) ---
-  const dockWave = newestWave(waves.received, now)
   const waveKeys = useMemo(() => Object.fromEntries(Object.values(waves.received).map((w) => [w.fromUserId, w.at])), [waves.received])
 
   // --- meet next, held while a card is open (#52: never reshuffle under a card) ---
-  const shuffle = useMemo(() => meetNext(room.people, { now, eventId: room.event?.id ?? '' }), [room.people, now, room.event?.id])
+  // Re-worked out at the window's mark, not on the screen's next 15 s tick: the pill's own 1 s clock read "0:00" until then.
+  const [markPassed, setMarkPassed] = useState(0)
+  const shuffleNow = Math.max(now, markPassed)
+  const shuffle = useMemo(() => meetNext(room.people, { now: shuffleNow, eventId: room.event?.id ?? '' }), [room.people, shuffleNow, room.event?.id])
+  useEffect(() => {
+    const at = shuffle.nextShuffleAt
+    const id = setTimeout(() => setMarkPassed(Math.max(Date.now(), at)), Math.max(0, at - Date.now()))
+    return () => clearTimeout(id)
+  }, [shuffle.nextShuffleAt])
   const [heldPicks, setHeldPicks] = useState(shuffle.picks)
   if (!open && heldPicks !== shuffle.picks) setHeldPicks(shuffle.picks)
   const head = everyoneHead(room.people, { hasMore: room.hasMore, hereCount: room.hereCount })
@@ -818,6 +849,9 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const arrivingIds = useMemo(() => new Set(room.arrivals.map((a) => a.id)), [room.arrivals])
 
   const topInset = insets.top + TOP_CHROME
+  /** The People list starts under the room bar (R-A: the you-card at 184 under a bar ending at 158). */
+  const roomTop = roomBarHeight(insets.top) + SPACE.xl + SPACE.xxs
+  const inRoomBar = mode === 'room' && !!room.event
   const matchPerson = room.match?.person ?? null
   const visibility: Visibility = bannerState(controls.revealed, controls.listed, controls.readiness.ok)
 
@@ -929,32 +963,23 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           accessibilityElementsHidden={mode !== 'room' || !!cancelled}
           importantForAccessibility={mode === 'room' && !cancelled ? 'auto' : 'no-hide-descendants'}
         >
+          <RoomTabs
+            tab={tab}
+            people={
           <RoomView
-            title={room.event.title}
-            hereCount={room.hereCount}
-            checkedInAt={room.checkedInAt}
-            me={myFace}
             people={room.people}
-            arrivals={room.arrivals}
             connection={room.connection}
-            visibility={
+            you={
               <View ref={roomCoachTarget}>
-                <VisibilityBanner
+                <RoomYouCard
+                  face={myFace}
+                  name={controls.revealed ? myName : (myPseudonym ?? 'Your room name')}
                   state={visibility}
-                  name={controls.revealed ? myName : (myPseudonym ?? undefined)}
-                  missing={controls.readiness.missing || undefined}
-                  busy={controls.revealBusy}
-                  onAction={
-                    visibility === 'hidden'
-                      ? () => router.push('/settings')
-                      : visibility === 'blocked'
-                        ? () => router.push('/edit-profile')
-                        : () => {
-                            markCoachUsed('room_reveal')
-                            void controls.toggleReveal()
-                          }
-                  }
-                  testID="room-visibility"
+                  onChange={() => {
+                    if (visibility === 'hidden') return router.push('/settings')
+                    markCoachUsed('room_reveal')
+                    openRoomSettings()
+                  }}
                 />
               </View>
             }
@@ -967,9 +992,6 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
               <FriendsHere
                 friends={friendsHere.friends}
                 total={friendsHere.total}
-                opening={friendChat.opening}
-                offline={offline}
-                onMessage={(f) => void friendChat.message(f)}
                 onSeeAll={() => router.push({ pathname: '/room/friends-here', params: { eventId: eventId ?? '' } } as never)}
               />
             }
@@ -1002,16 +1024,21 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             waveKeys={waveKeys}
             onOpen={openCard}
             onLike={doubleTapLike}
-            chatGroupId={room.chatGroupId}
-            chatHistory={room.chatHistory}
-            myId={user?.id}
-            dockWave={dockWave ? { kind: 'wave', id: `wave-${dockWave.fromUserId}`, fromUserId: dockWave.fromUserId, fromName: dockWave.fromName, at: dockWave.at } : null}
-            onOpenChat={() => void openChat()}
-            onOpenPerson={(id) => openCard({ id, name: waves.received[id]?.fromName ?? 'Someone' })}
             enter={enter}
             hidden={mode !== 'room'}
-            topInset={topInset}
+            topInset={roomTop}
             bottomInset={insets.bottom}
+          />
+            }
+            chat={
+              chatGroupId ? (
+                <RoomChat
+                  id={chatGroupId}
+                  params={{ id: chatGroupId, roomName: eventTitle, eventTitle, eventId: room.event.id, kind: 'event' }}
+                  embedded={{ top: roomBarHeight(insets.top), onBack: () => setRoomTab('people') }}
+                />
+              ) : null
+            }
           />
         </Animated.View>
       ) : null}
@@ -1022,40 +1049,26 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
        * without it, the faces and the hero ran under the close, Check out and the status bar. Mounted, not faded: glass
        * never fades (§5.2 rule 6), so Reduce Motion has nothing to change. Increase Contrast adds the hairline.
        */}
-      {mode === 'ended' || !scrolled ? null : (
+      {mode === 'ended' || inRoomBar || !scrolled ? null : (
         <View testID="blendn-bar" pointerEvents="none" style={[styles.barGlass, { height: barHeight(insets.top, Platform.OS === 'android') }]}>
           <Material role="bar" style={StyleSheet.absoluteFill} />
           {contrast ? <View testID="blendn-bar-contrast" style={styles.contrast} /> : null}
         </View>
       )}
-      {mode === 'ended' ? null : (
+      {inRoomBar && room.event ? (
+        <RoomBar
+          insetTop={insets.top}
+          event={room.event.title}
+          hereCount={room.hereCount}
+          tab={tab}
+          chatUnread={chatUnread}
+          onTab={(next) => (next === 'chat' ? void openChat() : setRoomTab('people'))}
+          onClose={onClose}
+          onInfo={() => openRoomMenu()}
+        />
+      ) : mode === 'ended' ? null : (
         <View style={[styles.topBar, { top: barTop(insets.top) }]} pointerEvents="box-none">
           <IconButton icon="chevron-down" accessibilityLabel="Close Blend’n" onPress={onClose} testID="blendn-close" />
-          {mode === 'room' && room.event ? (
-            <Animated.View entering={reduceMotion ? undefined : glassRise} style={styles.topActions}>
-              <ScalePress
-                onPress={() => setConfirmingOut(true)}
-                pressedScale={PRESS.scale}
-                hitSlop={(minTarget() - SIZE.tag) / 2}
-                accessibilityRole="button"
-                accessibilityLabel="Check out"
-                accessibilityHint="Asks first. Removes you from the room; checking back in needs your location again."
-                testID="room-check-out"
-                style={styles.checkOut}
-              >
-                <Animated.Text entering={glassContentsIn} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>
-                  Check out
-                </Animated.Text>
-              </ScalePress>
-              <IconButton
-                icon="settings-2"
-                accessibilityLabel="Room settings"
-                accessibilityHint="Why you are here tonight, and whether people can see your name"
-                onPress={() => router.push(roomSettingsRoute(room.event!.id, { pseudonym: myPseudonym, revealed: controls.revealed }))}
-                testID="room-settings"
-              />
-            </Animated.View>
-          ) : null}
         </View>
       )}
 
@@ -1239,14 +1252,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   barGlass: { position: 'absolute', top: 0, left: 0, right: 0 },
   contrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
-  checkOut: {
-    height: SIZE.tag,
-    paddingHorizontal: SPACE.md,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surface,
-    justifyContent: 'center',
-  },
+
 })

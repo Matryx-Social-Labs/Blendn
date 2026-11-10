@@ -88,13 +88,6 @@ export function wavedAtYouLabel(at: number | undefined, now: number): string | n
   return `${Math.max(1, Math.floor((now - at) / 60_000))} min`
 }
 
-/** The newest wave still fresh enough to name: the dock's row (R3-D4 4.2). */
-export function newestWave(received: State['received'], now: number): RoomWave | null {
-  let newest: RoomWave | null = null
-  for (const w of Object.values(received)) if (now - w.at < WAVED_AT_YOU_MS && (!newest || w.at > newest.at)) newest = w
-  return newest
-}
-
 const subscribe = (fn: () => void) => {
   listeners.add(fn)
   return () => {

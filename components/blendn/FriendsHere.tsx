@@ -1,13 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, withTiming } from 'react-native-reanimated'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, RISE, SIZE, SPACE } from '../../lib/design/tokens'
-import { FRIEND_OVERFLOW_FACES, FRIEND_ROWS, groupedCount, type FriendHere } from '../../lib/friendsHere'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, RISE, SPACE } from '../../lib/design/tokens'
+import { groupedCount, type FriendHere } from '../../lib/friendsHere'
 import { useReducedMotion } from '../../lib/motion'
-import { PersonRow } from '../friends/PersonRow'
-import { Button } from '../ds/Button'
-import { Facepile, type Face } from '../ds/Facepile'
-import { SectionHeader } from '../ds/SectionHeader'
+import { Avatar } from '../ds/Avatar'
+import type { Face } from '../ds/Facepile'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
@@ -26,104 +24,72 @@ const enter = () => {
 
 const faceOf = (f: FriendHere): Face => (f.photo ? { kind: 'photo', uri: f.photo } : { kind: 'creature', pseudonym: f.name })
 
+/** The row's stack (R-A `friendsHere`): three 28 pt faces, each over the last by 8. */
+const STACK = 3
+const STACK_FACE = 28
+const ROW = 60
+
+/** "Ananya is here", or "6 friends here" (grouped: "1,204 friends here"). */
+export function friendsHereLine(friends: FriendHere[], total: number): string {
+  return total === 1 && friends[0] ? `${friends[0].name} is here` : `${groupedCount(total)} friends here`
+}
+
 /**
- * Friends here (plans/friends-in-room.md, C1; the Room's rose world): the
- * friends at this event who let friends see them, as one card of rows, each
- * with the one action, Message, which opens your friend chat. Real names and
- * photos: this is the one place a friend is a person in a room.
+ * Friends here (plans/friends-in-room.md; Flow 5 R-A `friendsHere`): one 60 pt row in People, the first three friends'
+ * faces, "6 friends here" and a chevron, to the Friends here screen, where each has Message. Real names and photos:
+ * friends at this event who let friends see them. Nothing at all with no friends, never an empty row.
  *
- * Up to 3 rows; past 3 one overflow row, a Facepile of the next five and "N
- * more here", and See all (a pushed screen: a sheet would not virtualise).
- * Nothing at all with no friends, never an empty card, and never a count of 1.
- * Offline the rows stay and Message dims; a busy Message holds its flare and
- * the other rows stay enabled.
- *
- * Motion: it enters as part of the Room's entrance; a section that arrives
- * later fades in and rises `RISE.list`, and leaves in a quick fade. Reduce
- * Motion: the fades alone. Nothing loops, nothing pulses when a friend arrives.
- * Haptics: none (Message opens a screen; arriving is passive).
+ * Motion: it enters as part of the Room's entrance; a row that arrives later fades in and rises `RISE.list`, and
+ * leaves in a quick fade. Reduce Motion: the fades alone. Nothing loops, nothing pulses when a friend arrives.
+ * Haptics: none (it opens a screen).
  */
 export function FriendsHere({
   friends,
   total,
-  opening,
-  offline,
-  onMessage,
   onSeeAll,
   testID = 'friends-here',
 }: {
   friends: FriendHere[]
   /** Everyone listed for you here, of whom `friends` is the first page. */
   total: number
-  /** The friend whose chat is being opened. */
-  opening: string | null
-  offline: boolean
-  onMessage: (friend: FriendHere) => void
   onSeeAll: () => void
   testID?: string
 }) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
   if (total <= 0 || friends.length === 0) return null
-  const rows = friends.slice(0, FRIEND_ROWS)
-  const more = total - rows.length
-  const seeAll = `See all ${groupedCount(total)} friends here`
-
+  const line = friendsHereLine(friends, total)
   return (
-    <Animated.View testID={testID} entering={reduceMotion ? FadeIn.duration(DURATION.base) : enter} exiting={FadeOut.duration(DURATION.quick)} style={styles.section}>
-      <SectionHeader
-        title="Friends here"
-        count={total > 1 ? total : undefined}
-        action={total > FRIEND_ROWS ? { label: 'See all', onPress: onSeeAll, accessibilityLabel: seeAll } : undefined}
-        testID={`${testID}-head`}
-      />
-      <View style={styles.card}>
-        {rows.map((f, i) => (
-          <Animated.View key={f.userId} entering={FadeIn.duration(DURATION.base)} exiting={FadeOut.duration(DURATION.quick)} style={i ? styles.separator : null}>
-            <PersonRow
-              person={f}
-              trailing={
-                <Button
-                  kind="lit"
-                  size="sm"
-                  icon="message-circle"
-                  label="Message"
-                  accessibilityLabel={`Message ${f.name}`}
-                  loading={opening === f.userId}
-                  disabled={offline}
-                  onPress={() => onMessage(f)}
-                  testID={`${testID}-message-${i}`}
-                />
-              }
-            />
-          </Animated.View>
-        ))}
-        {more > 0 ? (
-          <ScalePress
-            onPress={onSeeAll}
-            haptic={false}
-            pressedScale={0.98}
-            accessibilityRole="button"
-            accessibilityLabel={seeAll}
-            style={[styles.more, styles.separator]}
-            testID={`${testID}-more`}
-          >
-            <Facepile faces={friends.slice(FRIEND_ROWS, FRIEND_ROWS + FRIEND_OVERFLOW_FACES).map(faceOf)} size={24} max={FRIEND_OVERFLOW_FACES} text="" ring={COLOR.surface} />
-            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.moreText]}>
-              {`${groupedCount(more)} more here`}
-            </Text>
-            <Icon name="chevron-right" size={ICON.control} color={COLOR.textTertiary} />
-          </ScalePress>
-        ) : null}
-      </View>
+    <Animated.View testID={testID} entering={reduceMotion ? FadeIn.duration(DURATION.base) : enter} exiting={FadeOut.duration(DURATION.quick)} style={styles.gutter}>
+      <ScalePress onPress={onSeeAll} accessibilityRole="button" accessibilityLabel={line} accessibilityHint="Opens Friends here" testID={`${testID}-row`} style={styles.row}>
+        <View style={styles.stack}>
+          {friends.slice(0, STACK).map((f, i) => (
+            <View key={f.userId} style={i ? styles.over : null}>
+              <Avatar size={STACK_FACE} ring={COLOR.surface} testID={`${testID}-face-${i}`} {...faceOf(f)} />
+            </View>
+          ))}
+        </View>
+        <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('rowTitle', bold, FONT_FAMILY.brand[500]), styles.line]}>
+          {line}
+        </Text>
+        <Icon name="chevron-right" size={ICON.control} color={COLOR.textSecondary} />
+      </ScalePress>
     </Animated.View>
   )
 }
 
 const styles = StyleSheet.create({
-  section: { gap: SPACE.sm, paddingHorizontal: SPACE.gutter },
-  card: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden', paddingHorizontal: SPACE.lg },
-  separator: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
-  more: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SIZE.control },
-  moreText: { flex: 1, color: COLOR.textSecondary },
+  gutter: { paddingHorizontal: SPACE.gutter },
+  row: {
+    height: ROW,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    paddingHorizontal: SPACE.md + SPACE.xxs,
+    borderRadius: RADIUS.tile,
+    backgroundColor: COLOR.surface,
+  },
+  stack: { flexDirection: 'row' },
+  over: { marginLeft: -SPACE.sm },
+  line: { flex: 1, minWidth: 0, color: COLOR.textPrimary },
 })

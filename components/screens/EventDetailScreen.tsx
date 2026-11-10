@@ -35,7 +35,7 @@ import { askPushInContext } from '../../lib/pushAsk'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
 import { attendancePhase, sceneCtaState } from '../../lib/attendanceState'
-import { openBlendn } from '../../lib/blendnOverlay'
+import { openBlendn, openRoomChat } from '../../lib/blendnOverlay'
 import { useToast } from '../Toast'
 import { useToastDock } from '../toastDock'
 import { amenityTiles, type ServerAmenity } from '../../lib/amenityTile'
@@ -929,7 +929,8 @@ export default function EventDetail() {
     try {
       const door = await eventRoomDoor(String(id), event.title)
       if (door.kind === 'say') showToast(door.line)
-      else router.push({ pathname: '/chat/[id]', params: door.params } as never)
+      // `from`: closing the Room this opens comes back here (ROOM-13; `app/chat/[id].tsx`).
+      else router.push({ pathname: '/chat/[id]', params: { ...door.params, eventId: String(id), from: 'event' } } as never)
     } finally {
       setRoomOpening(false)
     }
@@ -946,7 +947,8 @@ export default function EventDetail() {
     rsvp: () => void handleToggleRsvp(),
     invite: () => void (handleInvite && handleInvite()),
     openRoom: () => void openRoom(),
-    room: () => toTheOverlay(openBlendn),
+    // "Open the room" checked in: the Room's Chat tab, and closing it comes back to this page (ROOM-13).
+    room: () => toTheOverlay(() => openRoomChat(String(id))),
     tonight: () => toTheOverlay(openBlendn),
     rate: () => router.push({ pathname: '/rate/[eventId]', params: { eventId: String(id) } as any }),
   }

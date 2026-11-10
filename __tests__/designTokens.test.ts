@@ -32,6 +32,7 @@ describe('design tokens', () => {
     expect(raw).toEqual([
       'app/index.tsx', // the Google mark's label, drawn to Google's spec
       'app/rate/[eventId].tsx', // Flow 4 rate's "How was the night?", 28/33: no role at 28
+      'components/blendn/RoomSections.tsx', // Flow 5 R-A's you-card name, 16/22: no role at 16/22
       'components/chat/ChatParts.tsx', // an emoji in flight
       'components/ds/ChatBubble.tsx', // an emoji-only message
       'components/ds/MomentPour.tsx', // motion #9's "You're in."

@@ -103,7 +103,7 @@ jest.mock('../components/blendn/RoomStage', () => {
   return {
     RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
     useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16 }),
-    useStage: () => ({ scrollY: jest.requireActual('react-native-reanimated').makeMutable(0), pan: {} }),
+    useStage: () => ({ scrollY: jest.requireActual('react-native-reanimated').makeMutable(0), pan: {}, setDragToClose: () => {} }),
   }
 })
 /*

@@ -118,22 +118,6 @@ export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
 }
 
 /**
- * The faces under "N here now": arrivals first, then the rest, only people
- * inside. The pool keeps whoever checked out, and one of them sat under
- * "1 here now" in place of the one person who was (SCRUM-495).
- */
-export function hereNowStack<T extends { id: string; insideNow?: boolean }>(
-  arrivals: readonly T[],
-  people: readonly T[],
-  size: number
-): T[] {
-  const seen = new Set(arrivals.map((a) => a.id))
-  return [...arrivals, ...people.filter((p) => !seen.has(p.id))]
-    .filter((p) => p.insideNow !== false)
-    .slice(0, size)
-}
-
-/**
  * The face grid's heading and its number.
  *
  * A heading over cards counts the cards (Room count ruling, SCRUM-376): the

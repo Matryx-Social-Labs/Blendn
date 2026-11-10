@@ -13,7 +13,7 @@ import { ForegroundBanners } from '../../components/notifications/ForegroundBann
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { apiClient } from '../../lib/apiClient'
 import { banterUnread, useInboxBadge, useInboxBadgeSync } from '../../lib/inboxBadge'
-import { blendnClosed, openBlendn, setLiveHint, useBlendnOpen, useLiveTitle } from '../../lib/blendnOverlay'
+import { blendnClosed, openBlendn, setCurrentTab, setLiveHint, useBlendnOpen, useLiveTitle } from '../../lib/blendnOverlay'
 import { activeRoomName } from '../../lib/leftRooms'
 import { onClosingForLink } from '../../lib/linkClosers'
 import { subscribeCheckInChanged } from '../../lib/checkIn'
@@ -60,6 +60,11 @@ const TAB_OF: Record<string, Tab> = { events: 'pulse', going: 'going', chat: 'ba
  * opens the Blend'n overlay.
  */
 const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
+  // A route that steps back to the tabs (`chat/[id]` handing its room to the overlay) lands on this tab, not the Pulse.
+  const frontTab = state.routes[state.index]?.name
+  useEffect(() => {
+    if (frontTab) setCurrentTab(frontTab)
+  }, [frontTab])
   const [target, setTarget] = useState<RoomButtonTarget>({
     state: 'idle',
     eventId: null,

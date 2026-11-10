@@ -1,25 +1,22 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, withDelay, withSpring, withTiming } from 'react-native-reanimated'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
-import { useFocusWhen } from '../../lib/focusReturn'
+import { COLOR, DURATION, EASING, FONT_FAMILY, RADIUS, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { printable } from '../../lib/pulseSections'
-import { hereNowStack, reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
+import { reasonLine, shuffleCountdownLabel } from '../../lib/roomMoments'
+import type { Visibility } from '../ds/Banner'
+import { tint } from '../../lib/theme'
+import { RadialWash } from '../ui/GradientFill'
 import type { RoomPerson } from '../../lib/useRoom'
 import { Avatar } from '../ds/Avatar'
 import type { Face } from '../ds/Facepile'
-import { Facepile } from '../ds/Facepile'
 import { GridFace } from '../ds/GridFace'
 import { MeetNextCard } from '../ds/MeetNextCard'
-import { PresenceDot } from '../ds/MonoFamily'
-import { RollingNumber } from '../ds/RollingNumber'
 import { SectionHeader } from '../ds/SectionHeader'
 import { font, minTarget, useBoldText } from '../ds/shared'
-import { TimeRing } from '../ds/TimeRing'
-import { Icon } from '../ui/Icon'
 
 /** Re-render once a `period`, for labels that age ("12m", "4:12"). */
 export function useNow(period: number) {
@@ -31,8 +28,9 @@ export function useNow(period: number) {
   return now
 }
 
-/** Three columns between the gutters, 12 apart: 110 at 402, 96 at 360 (Flow 4 Room). */
-export const GRID_GAP = SPACE.md
+/** Three columns between the gutters, 8 apart, rows 16 apart: 109 at 393, 98 at 360 (Flow 5 R-A `grid`, `meetNext`). */
+export const GRID_GAP = SPACE.sm
+export const GRID_ROW_GAP = SPACE.lg
 export function useGridCell() {
   const { width } = useWindowDimensions()
   return Math.floor((width - SPACE.gutter * 2 - GRID_GAP * 2) / 3)
@@ -43,72 +41,63 @@ export function faceOf(p: { name: string; photo: string | null }): Face {
   return p.photo ? { kind: 'photo', uri: p.photo } : { kind: 'creature', pseudonym: p.name }
 }
 
-/** The hero's stack: six faces, then "+N" (Flow 4 Room). */
-const STACK = 6
-const RING = 112
-const RING_FACE = 72
+/** The R-A you-card's light: violet from the top-left corner (`.xme`). */
+const YOU_WASH = [{ color: COLOR.brandViolet, alpha: 0.22, at: [0, 0], size: [90, 120], reach: 0.7 }] as const
+const YOU_FACE = 44
+const YOU_LINE: Record<Visibility, string> = {
+  anon: 'Your room name. Nobody here sees your name or photo.',
+  blocked: 'Your room name. Nobody here sees your name or photo.',
+  named: 'Your name and photo. People here can see you.',
+  hidden: 'You’re not listed here. Show online status is off.',
+}
 
 /**
- * The top of the room (Flow 4 Room, R3-0): the still LIVE dot and "Live", the
- * title, the headcount rolling in Geist Mono with "here now", the stack of
- * faces and "+N" — and your face in the TimeRing, "In the room · 1h 12m".
- *
- * Nothing names an arrival (ROUND3 C1): a name at the moment someone walks in
- * ties them to the door. Arrivals are the count step and the grid (#25); the
- * newest face in the stack wears the white ring for a while.
+ * You, at the top of People (Flow 5 R-A `youCard`): your face, the name this room knows you by and what that means, and
+ * Change, to Room settings (who sees you, your room name). Violet, as everything that is you. Not listed, Change is
+ * "Turn on", which goes where that is fixed.
  */
-export const RoomHero = memo(function RoomHero({
-  title,
-  hereCount,
-  checkedInAt,
-  me,
-  arrivals,
-  people,
-  active = false,
+/** R-A `you` name. */
+// design-exception: 16/22, between `body` and `rowTitle` 17/22 (the board's you-card)
+const YOU_NAME = { fontSize: 16, lineHeight: 22 }
+
+export const RoomYouCard = memo(function RoomYouCard({
+  face,
+  name,
+  state,
+  onChange,
+  testID = 'room-you',
 }: {
-  title: string
-  hereCount: number
-  checkedInAt: string | null
-  me: Face
-  arrivals: RoomPerson[]
-  people: RoomPerson[]
-  /** The Room is up (not mounted hidden under the pour): its title takes a screen reader's focus. */
-  active?: boolean
+  face: Face
+  name: string
+  state: Visibility
+  onChange: () => void
+  testID?: string
 }) {
   const bold = useBoldText()
-  const titleRef = useRef<Text>(null)
-  useFocusWhen(titleRef, active ? title : null)
-  const now = useNow(30_000)
-  const stack = hereNowStack(arrivals, people, STACK)
-  const fresh = stack[0]?.arrivedAt && now - Date.parse(stack[0].arrivedAt) < 5 * 60_000 && arrivals.some((a) => a.id === stack[0].id)
-  const time = checkedInAt ? timeHereLabel(checkedInAt, now) : null
-  const others = Math.max(0, hereCount - 1)
-
+  const hidden = state === 'hidden'
   return (
-    <View style={styles.hero}>
-      <View style={styles.heroText}>
-        <View style={styles.liveRow}>
-          <PresenceDot kind="live" />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.secondary]}>Live</Text>
-        </View>
-        <Text ref={titleRef} accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={1.3} style={[font('heading', bold), styles.ink]}>
-          {title}
+    <View testID={testID} style={styles.you}>
+      <RadialWash layers={YOU_WASH} style={StyleSheet.absoluteFill} />
+      <Avatar size={YOU_FACE} {...face} />
+      <View style={styles.youText} accessible accessibilityLabel={`${name}. ${YOU_LINE[state]}`}>
+        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold, FONT_FAMILY.brand[500]), YOU_NAME, styles.ink]}>
+          {name}
         </Text>
-        <View style={styles.countRow} accessible accessibilityLabel={`${hereCount} ${hereCount === 1 ? 'person' : 'people'} here now`}>
-          <RollingNumber value={hereCount} testID="room-count" />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{hereCount === 1 ? 'here now · just you' : 'here now'}</Text>
-        </View>
-        {stack.length ? (
-          <View style={styles.stack}>
-            <Facepile faces={stack.map(faceOf)} total={others} max={STACK} highlight={fresh ? 0 : undefined} testID="room-stack" />
-          </View>
-        ) : null}
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>
+          {YOU_LINE[state]}
+        </Text>
       </View>
-      <View accessible accessibilityLabel={time ? `You, in the room ${time}` : 'You'}>
-        <TimeRing text={time ? `In the room · ${time}` : 'In the room'} size={RING}>
-          <Avatar size={RING_FACE} ring={COLOR.ink} {...me} />
-        </TimeRing>
-      </View>
+      <Pressable
+        onPress={onChange}
+        hitSlop={SPACE.md}
+        accessibilityRole="button"
+        accessibilityLabel={hidden ? 'Turn on Show online status' : 'Change your room name and who sees you'}
+        testID={`${testID}-change`}
+      >
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold, FONT_FAMILY.brand[700]), styles.youChange]}>
+          {hidden ? 'Turn on' : 'Change'}
+        </Text>
+      </Pressable>
     </View>
   )
 })
@@ -149,11 +138,14 @@ export const MeetNextRow = memo(function MeetNextRow({
   nextShuffleAt,
   width,
   onOpen,
+  onLike,
 }: {
   picks: RoomPerson[]
   nextShuffleAt: number
   width: number
   onOpen: (p: RoomPerson) => void
+  /** The card's like; null when a like must ask first, and then the heart opens their card. */
+  onLike: ((p: RoomPerson) => void) | null
 }) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
@@ -166,10 +158,9 @@ export const MeetNextRow = memo(function MeetNextRow({
         title="Meet next"
         testID="meet-next-head"
         right={
-          <View style={styles.timer} accessible accessibilityLabel={`Shuffles in ${left}`}>
-            <Icon name="shuffle" size={ICON.inline} color={COLOR.textSecondary} />
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink, styles.tabular]}>{left}</Text>
-          </View>
+          <Text accessibilityLabel={`New picks in ${left}`} maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+            {`New picks in ${left}`}
+          </Text>
         }
       />
       <View style={styles.meetRow}>
@@ -185,8 +176,9 @@ export const MeetNextRow = memo(function MeetNextRow({
               reason={p.matched ? 'Matched' : reasonLine(p)}
               overlap={p.matched ? null : overlapOf(p).line}
               width={width}
-              liked={p.liked}
+              liked={p.liked || p.matched}
               onPress={() => onOpen(p)}
+              onLike={p.liked || p.matched || p.pending ? undefined : () => (onLike ? onLike(p) : onOpen(p))}
               testID={`meet-next-${i}`}
             />
           </Animated.View>
@@ -234,11 +226,26 @@ export const RoomGridFace = memo(function RoomGridFace({
   )
 })
 
-/** "Everyone here · 14" (or "Everyone who came"), and the empty room's state under it. Five and up, as every people count (the owner's floor). */
+/**
+ * "Everyone here" and the room's exact count, "12,480" (R-A `everyoneHead`: the bar is where it is compact). Five and up,
+ * as every people count (the owner's floor).
+ */
 export function EveryoneHead({ title, count }: { title: string; count: number }) {
+  const bold = useBoldText()
+  const shown = printable(count)
   return (
     <View style={[styles.section, styles.gridHead]}>
-      <SectionHeader title={title} count={printable(count) ?? undefined} testID="everyone-head" />
+      <SectionHeader
+        title={title}
+        testID="everyone-head"
+        right={
+          shown == null ? undefined : (
+            <Text testID="everyone-head-count" maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
+              {shown.toLocaleString('en-US')}
+            </Text>
+          )
+        }
+      />
     </View>
   )
 }
@@ -262,20 +269,15 @@ export function ShowMore({ count, loading, onMore }: { count: number | null; loa
   )
 }
 
-/** A Meet next card's height (MeetNextCard). */
-const SKELETON_CARD = 164
-
-/** Flow 4 Room #01: the hero, Meet next and the grid as still blocks. Nothing loops. */
+/** R-A's blocks: the you-card (84), a Meet next card (206), a grid face (126). */
+const SKELETON_YOU = 84
+const SKELETON_CARD = 206
+/** People's blocks, still while the room loads (Flow 4 Room #01, in R-A's shapes). Nothing loops. */
 export function RoomSkeleton({ topInset }: { topInset: number }) {
   const cell = useGridCell()
-  const { width } = useWindowDimensions()
   return (
     <View accessible testID="room-skeleton" accessibilityLabel="Loading the room" style={[styles.skeleton, { paddingTop: topInset }]}>
-      <View style={styles.skeletonHero}>
-        <View style={[styles.block, { width: width - SPACE.gutter * 2 - RING - SPACE.lg, height: RING + SPACE.sm }]} />
-        <View style={[styles.block, styles.round, { width: RING, height: RING }]} />
-      </View>
-      <View style={[styles.block, { height: SIZE.primary }]} />
+      <View style={[styles.block, { height: SKELETON_YOU }]} />
       <View style={styles.meetRow}>
         {[0, 1, 2].map((i) => (
           <View key={i} style={[styles.block, { width: cell, height: SKELETON_CARD }]} />
@@ -293,30 +295,29 @@ export function RoomSkeleton({ topInset }: { topInset: number }) {
 }
 
 const styles = StyleSheet.create({
-  hero: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: SPACE.gutter, gap: SPACE.lg },
-  heroText: { flex: 1, minWidth: 0, gap: SPACE.xs, paddingTop: SPACE.xs },
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  countRow: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.sm },
-  stack: { marginTop: SPACE.xs },
+  you: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md,
+    paddingVertical: SPACE.md,
+    paddingHorizontal: SPACE.md + SPACE.xxs,
+    marginHorizontal: SPACE.gutter,
+    borderRadius: RADIUS.tile,
+    borderWidth: 1,
+    borderColor: tint(COLOR.brandViolet, 0.45),
+    backgroundColor: COLOR.surface,
+    overflow: 'hidden',
+  },
+  youText: { flex: 1, minWidth: 0 },
+  youChange: { color: COLOR.selectionVioletGlyph },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   tabular: { fontVariant: ['tabular-nums'] },
-  section: { paddingHorizontal: SPACE.gutter, gap: SPACE.lg },
+  section: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   gridHead: { marginBottom: SPACE.md },
-  timer: {
-    height: SIZE.tag,
-    paddingLeft: SPACE.sm,
-    paddingRight: SPACE.sm + SPACE.xxs,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surface,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.xs,
-  },
   meetRow: { flexDirection: 'row', gap: GRID_GAP },
   more: { alignSelf: 'center', justifyContent: 'center', paddingHorizontal: SPACE.lg },
   skeleton: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
-  skeletonHero: { flexDirection: 'row', justifyContent: 'space-between' },
   skeletonFace: { alignItems: 'center' },
   block: { borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surfaceSunken },
   round: { borderRadius: RADIUS.capsule },
