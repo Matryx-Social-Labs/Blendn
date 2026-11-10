@@ -140,3 +140,13 @@ export const rowBack = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EA
  * over `base`, so the words are never drawn across the fading card (iOS drive, SCRUM-1001). Reduce Motion: pass neither.
  */
 export const emptyAfterRowOut = FadeIn.duration(DURATION.base).delay(DURATION.quick).easing(GENTLE).reduceMotion(ReduceMotion.Never)
+
+/*
+ * One thing swapped for another, or a part that comes and goes with an answer (audit M16, M27: a sign-out under an
+ * under-age date, a dock's line, a set that opens when a choice is ticked): it fades in over `base` on the gentle curve,
+ * and out over `quick` on the exit curve. Fades only, so Reduce Motion keeps them (`Never`: on System, Reanimated skips an
+ * entering outright, a hard cut). No layout transition (tasks/lessons.md): where content sits below the part, pass
+ * `swapIn` alone, because an exit would fade over the content that has already moved up into its place.
+ */
+export const swapIn = FadeIn.duration(DURATION.base).easing(GENTLE).reduceMotion(ReduceMotion.Never)
+export const swapOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit)).reduceMotion(ReduceMotion.Never)

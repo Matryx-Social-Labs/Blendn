@@ -79,14 +79,16 @@ export const PlacesSearch = memo(function PlacesSearch({
           ) : null}
         </View>
       </View>
-      {applied.length ? (
-        // Bled to the screen edges: the chips scroll under the gutter instead of wrapping.
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.applied} contentContainerStyle={styles.appliedRow} testID="places-applied">
-          {applied.map((a) => (
-            <Chip key={a.field} label={a.label} selected onRemove={() => onClear(a.field)} testID={a.testID} />
-          ))}
-        </ScrollView>
-      ) : null}
+      <Swap>
+        {applied.length ? (
+          // Bled to the screen edges: the chips scroll under the gutter instead of wrapping.
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.applied} contentContainerStyle={styles.appliedRow} testID="places-applied">
+            {applied.map((a) => (
+              <Chip key={a.field} label={a.label} selected onRemove={() => onClear(a.field)} testID={a.testID} />
+            ))}
+          </ScrollView>
+        ) : null}
+      </Swap>
     </View>
   )
 })

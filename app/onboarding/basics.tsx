@@ -28,6 +28,7 @@ import { SPACE } from '../../lib/design/tokens'
 import { useOnboarding } from '../../lib/useOnboarding'
 import { signOut, useAuth } from '../../lib/useAuth'
 import { counterLimit, overCapMessage, PROFILE_LIMITS, serverLength } from '../../lib/profileLimits'
+import { Swap } from '../../components/motion/Swap'
 
 /**
  * Step one: a name, a gender, a birth date, as two screens inside the one step (direction A, one question per screen): the name,
@@ -230,9 +231,11 @@ function BasicsScreenInner() {
                 testID="onboarding-dob"
               />
               {/* Under 18 is a dead end on this account, so the exit sits beside the sentence. */}
-              {underAge ? (
-                <Button label="Sign out" kind="tertiary" size="sm" onPress={() => setConfirmSignOut(true)} testID="onboarding-under-age-sign-out" />
-              ) : null}
+              <Swap>
+                {underAge ? (
+                  <Button label="Sign out" kind="tertiary" size="sm" onPress={() => setConfirmSignOut(true)} testID="onboarding-under-age-sign-out" />
+                ) : null}
+              </Swap>
             </View>
 
             <ChipSet
