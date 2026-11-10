@@ -7,8 +7,18 @@ import { render } from '@testing-library/react-native'
  */
 let mockParams: Record<string, string> = {}
 const mockDismissTo = jest.fn()
+const mockDismissAll = jest.fn()
+const mockReplace = jest.fn()
+let mockCanDismiss = true
 jest.mock('expo-router', () => ({
-  router: { dismissTo: (...a: unknown[]) => mockDismissTo(...a), push: jest.fn(), back: jest.fn(), replace: jest.fn() },
+  router: {
+    dismissTo: (...a: unknown[]) => mockDismissTo(...a),
+    dismissAll: () => mockDismissAll(),
+    canDismiss: () => mockCanDismiss,
+    push: jest.fn(),
+    back: jest.fn(),
+    replace: (...a: unknown[]) => mockReplace(...a),
+  },
   useLocalSearchParams: () => mockParams,
 }))
 jest.mock('../components/chat/RoomChat', () => ({
@@ -26,6 +36,9 @@ import { blendnClosed, isBlendnOpen, setLiveHint, setLiveRoomChat, takePendingTa
 
 beforeEach(() => {
   mockDismissTo.mockClear()
+  mockDismissAll.mockClear()
+  mockReplace.mockClear()
+  mockCanDismiss = true
   blendnClosed()
   takeReturnTo()
   setLiveRoomChat('live-room')
@@ -37,7 +50,10 @@ it('the live room’s chat opens the room on its Chat tab, over the tabs', async
   expect(view.queryByText(/chat screen/)).toBeNull()
   expect(isBlendnOpen()).toBe(true)
   expect(takePendingTab()).toBe('chat')
-  expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)/events')
+  // Back to the tabs as they were (Banter stays Banter): never a switch to another tab (found on the iOS drive).
+  expect(mockDismissAll).toHaveBeenCalled()
+  expect(mockDismissTo).not.toHaveBeenCalled()
+  expect(mockReplace).not.toHaveBeenCalled()
 })
 
 it('control: another event’s room is still a screen, and the overlay stays shut', async () => {
@@ -45,7 +61,14 @@ it('control: another event’s room is still a screen, and the overlay stays shu
   const view = await render(<GroupChat />)
   expect(view.getByText('chat screen other-room')).toBeTruthy()
   expect(isBlendnOpen()).toBe(false)
-  expect(mockDismissTo).not.toHaveBeenCalled()
+  expect(mockDismissAll).not.toHaveBeenCalled()
+})
+
+it('a cold-start link has no tabs under it yet: it replaces itself with them', async () => {
+  mockCanDismiss = false
+  mockParams = { id: 'live-room' }
+  await render(<GroupChat />)
+  expect(mockReplace).toHaveBeenCalledWith('/(tabs)/events')
 })
 
 it('a crew’s room is its own screen even with the live room’s id', async () => {

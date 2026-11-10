@@ -28,8 +28,10 @@ export default function GroupChat() {
   useEffect(() => {
     if (!inRoom) return
     openRoomChat(returnTo)
-    // The overlay is hosted by the tabs, under the root stack: back to them, or it opens behind this route.
-    router.dismissTo('/(tabs)/events')
+    // The overlay is hosted by the tabs, under the root stack: back to them as they were (the tab you came from stays),
+    // or it opens behind this route. A cold-start link has nothing under it: the tabs replace it.
+    if (router.canDismiss()) router.dismissAll()
+    else router.replace('/(tabs)/events')
   }, [inRoom, returnTo])
   if (!id) return <BrokenLink />
   if (inRoom) return <View style={{ flex: 1, backgroundColor: COLOR.ink }} />
