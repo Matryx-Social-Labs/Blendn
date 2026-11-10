@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
-import { closeSheet, dismissSheet, showSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
+import { closeSheet, dismissSheet, stepSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
 import { COLOR, ICON, MATERIAL, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { OPACITY } from '../lib/theme'
 import type { ButtonKind } from './ds/Button'
@@ -88,7 +88,7 @@ export function SheetHost() {
 
   const perform = (action: SheetAction, index: number) => {
     if ('cancel' in action) return dismissSheet()
-    if ('next' in action) return showSheet(action.next())
+    if ('next' in action) return stepSheet(action.next())
     if ('then' in action) {
       closeSheet()
       return action.then()

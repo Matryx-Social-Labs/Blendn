@@ -167,16 +167,18 @@ export function useCrewActions(
   const [liking, setLiking] = useState<string | null>(null)
   /** "We're here" per crew (Flow 10 · 10.6, CrewStrip): on its way, told, or already told tonight. */
   const [told, setTold] = useState<Record<string, TellState>>({})
-  const inFlight = useRef(false)
+  // One per action: a like waiting on its choose-a-crew sheet never blocks "We're here" (M33).
+  const likeInFlight = useRef(false)
+  const telling = useRef(false)
   const { markLiked, reload } = crews
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
 
   const here = async (crew: Pick<Crew, 'crewId'>) => {
-    if (!eventId || inFlight.current) return
-    inFlight.current = true
+    if (!eventId || telling.current) return
+    telling.current = true
     setTold((t) => ({ ...t, [crew.crewId]: 'sending' }))
     const result = await crewsApi.here(crew.crewId, eventId)
-    inFlight.current = false
+    telling.current = false
     if (result.success && result.data) {
       setTold((t) => ({ ...t, [crew.crewId]: result.data!.repeated ? 'already' : 'yes' }))
       return
@@ -186,8 +188,8 @@ export function useCrewActions(
   }
 
   const like = async (card: CrewCard) => {
-    if (!eventId || inFlight.current) return
-    inFlight.current = true
+    if (!eventId || likeInFlight.current) return
+    likeInFlight.current = true
     try {
       const as = likeAs(myCrewsHere)
       // The Liking-as chip's choice wins; otherwise the one crew here, or ask.
@@ -217,7 +219,7 @@ export function useCrewActions(
         }
       }
     } finally {
-      inFlight.current = false
+      likeInFlight.current = false
     }
   }
 
@@ -302,8 +304,9 @@ export function useOpenToCrews(eventId: string, checkInKey: string) {
     setValue(next)
     setBusy(true)
     const result = await crewsApi.openToCrews(eventId, next)
-    if (seq !== latest.current) return
+    // Before the latest-wins check: a retry of the read while this was in flight must not leave the switch dead (M19).
     setBusy(false)
+    if (seq !== latest.current) return
     if (!result.success || !result.data) {
       setValue(before)
       showToast(crewMessage(result, 'card', 'Couldn’t save that. Try again.'), 'error', { haptic: 'error' })

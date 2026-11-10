@@ -109,6 +109,24 @@ describe('"Open to joining a crew tonight" (M7, M11)', () => {
     await act(async () => answer({ success: true, data: { openToCrews: true } }))
     expect(toggle().props.accessibilityState).toEqual({ checked: true, disabled: false })
   })
+
+  it('a retry of the failed read during a write never leaves the switch dead (motion audit M19)', async () => {
+    api.crewsAt.mockResolvedValue(page([], false))
+    api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Too many requests', errorCode: 'RATE_LIMITED' })
+    await render(<Harness checkInKey="ci-m19" />)
+    await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
+    const toggle = () => screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL })
+
+    let written: (v: unknown) => void = () => {}
+    let reread: (v: unknown) => void = () => {}
+    api.openToCrews.mockReturnValueOnce(new Promise((r) => (written = r)) as never)
+    await fireEvent.press(toggle())
+    api.openToCrews.mockReturnValueOnce(new Promise((r) => (reread = r)) as never)
+    await fireEvent.press(screen.getByText(/Couldn’t check whether this is on/))
+    await act(async () => written({ success: true, data: { openToCrews: true } }))
+    await act(async () => reread({ success: true, data: { openToCrews: true } }))
+    expect(toggle().props.accessibilityState).toEqual({ checked: true, disabled: false })
+  })
 })
 
 describe('no crew yet (10-7 · 16)', () => {
@@ -167,6 +185,24 @@ describe('the crews here, a page at a time (M9)', () => {
       void result.current.like(card('a'))
     })
     expect(api.likeCrew).toHaveBeenCalledTimes(1)
+    await act(async () => finish({ success: true, data: { liked: true, blend: null } }))
+  })
+
+  it('a like in flight never holds "We’re here" back: one guard per action (motion audit M33)', async () => {
+    api.crewsAt.mockResolvedValue(page([card('a')], false))
+    let finish: (v: unknown) => void = () => {}
+    api.likeCrew.mockReturnValue(new Promise((r) => (finish = r)) as never)
+    api.here.mockResolvedValue({ success: true, data: { repeated: false } } as never)
+    const { result } = await renderHook(() => {
+      const crews = useCrewsHere('e1')
+      return useCrewActions('e1', crews)
+    })
+    await act(async () => {
+      void result.current.like(card('a'))
+      await result.current.here({ crewId: 'mine' })
+    })
+    expect(api.here).toHaveBeenCalledTimes(1)
+    expect(result.current.told.mine).toBe('yes')
     await act(async () => finish({ success: true, data: { liked: true, blend: null } }))
   })
 

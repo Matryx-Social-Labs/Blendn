@@ -125,8 +125,19 @@ const emit = () => listeners.forEach((listener) => listener())
 /** Whether a sheet is on screen: a caller that would replace it (an unprompted ask) must not. */
 export const isSheetOpen = (): boolean => state.sheet !== null
 
-/** Open a sheet, or replace the one that is open. */
+/**
+ * Open a sheet, or replace the one that is open. A replaced sheet went unanswered, so it is told (`onDismiss`), as if
+ * it had been swiped away: a caller awaiting its choice would otherwise wait for ever (motion audit M33, a like held
+ * by a choose-a-crew sheet that something else replaced).
+ */
 export function showSheet(sheet: Sheet): void {
+  const replaced = state.sheet
+  stepSheet(sheet)
+  if (replaced?.kind === 'actions' && replaced !== sheet) replaced.onDismiss?.()
+}
+
+/** The next step of the open sheet's own flow (an action's `next`): the flow goes on, so nothing is dismissed. */
+export function stepSheet(sheet: Sheet): void {
   state = { sheet, key: state.key + 1 }
   emit()
 }
