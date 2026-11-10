@@ -248,6 +248,8 @@ function ChatBubbleBase(props: ChatBubbleProps) {
         removed === 'photo' && styles.removedPhoto,
         { backgroundColor: removed || emoji ? 'transparent' : mine ? COLOR.selectionVioletFill : COLOR.surface },
         mine && !removed && !emoji && styles.violetRim,
+        // The chip covers the bubble's last 12 pt: the words stop above it (driven: "unreal." went under a chip).
+        chips && !emoji && { paddingBottom: SPACE.md - (mine ? VIOLET_RIM : 0) },
         mine ? { borderBottomRightRadius: tail } : { borderBottomLeftRadius: tail },
         failed && styles.failedBubble,
         contrast && !removed && !emoji && IC_HAIRLINE,

@@ -71,6 +71,14 @@ describe('the bubble (F-A)', () => {
     expect(flat('b-reactions')).toMatchObject({ position: 'absolute' })
   })
 
+  // Driven 2026-11-10: a full last line ("…unreal.") went under the chip. With a chip the words stop 12 above the edge.
+  it('a chip never covers the words: the bubble pads 12 under them, 8 without one', async () => {
+    await render(bubble({ reactions: [{ emoji: '😂', count: 1, mine: false }] }))
+    expect(flat('b-bubble').paddingBottom).toBe(12)
+    await screen.rerender(bubble())
+    expect(flat('b-bubble').paddingBottom ?? flat('b-bubble').paddingVertical).toBe(8)
+  })
+
   it('one reaction still shows its count', async () => {
     await render(bubble({ reactions: [{ emoji: '🔥', count: 1, mine: false }] }))
     expect(screen.getByText('1', { includeHiddenElements: true })).toBeTruthy()

@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { AccessibilityInfo, FlatList, Platform, StyleSheet, useWindowDimensions, View, type ViewToken } from 'react-native'
+import { AccessibilityInfo, FlatList, Platform, StyleSheet, useWindowDimensions, View, type NativeScrollEvent, type ViewToken } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -93,6 +93,7 @@ let _tempIdCounter = 0
 const MESSAGES_CACHE_TTL = 60 * 1000
 /** Read as "at the newest": the reader is within this of the end. */
 const AT_END = 80
+const atEndOf = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
 /** iOS dismisses the keyboard interactively with the drag; Android on the drag (R3-D5 5.3). */
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 const REACTION_INDEX = Object.fromEntries(CHAT_REACTIONS.map((e, i) => [e, i])) as Record<string, number>
@@ -1107,9 +1108,12 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
                 follow.onScrollBeginDrag()
                 setLobbyFolded(true)
               }}
+              // A reader's own gesture decides where it came to rest; its first events near the end must not re-arm the follow.
+              onScrollEndDrag={(e) => follow.onGestureEnd(atEndOf(e.nativeEvent))}
+              onMomentumScrollBegin={follow.onScrollBeginDrag}
+              onMomentumScrollEnd={(e) => follow.onGestureEnd(atEndOf(e.nativeEvent))}
               onScroll={(e) => {
-                const { contentSize, contentOffset, layoutMeasurement } = e.nativeEvent
-                const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
+                const atBottom = atEndOf(e.nativeEvent)
                 isAtBottomRef.current = atBottom
                 follow.noteAtEnd(atBottom)
                 setAwayFromEnd(!atBottom)

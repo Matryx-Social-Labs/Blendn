@@ -553,11 +553,21 @@ describe('arrivals while you read back (Flow 5 F-A, "48 new messages")', () => {
       pagination: { hasMore: false, nextCursor: null },
     },
   }
-  const scrollTo = async (y: number) =>
-    fireEvent.scroll(screen.getByTestId('room-feed'), { nativeEvent: { contentSize: { height: 2000 }, contentOffset: { y }, layoutMeasurement: { height: 600 } } })
+  const at = (y: number) => ({ nativeEvent: { contentSize: { height: 2000 }, contentOffset: { y }, layoutMeasurement: { height: 600 } } })
+  /* A reader's drag from the end: its first events are still within reach of the end (driven 2026-11-10). */
+  const scrollTo = async (y: number) => {
+    const list = screen.getByTestId('room-feed')
+    await fireEvent(list, 'scrollBeginDrag', at(1400))
+    await fireEvent.scroll(list, at(1380))
+    await fireEvent.scroll(list, at(y))
+    await fireEvent(list, 'scrollEndDrag', at(y))
+    await fireEvent(list, 'momentumScrollEnd', at(y))
+  }
   const arrive = async (id: string) =>
     act(async () => {
       for (const cb of mockMessage) cb({ message: { id, userId: 'u3', userName: 'Lunar Fox', content: `hello ${id}`, type: 'text', createdAt: new Date().toISOString() } })
+      // The list lays the new row out: its content grows.
+      fireEvent(screen.getByTestId('room-feed'), 'contentSizeChange', 393, 2100)
       await new Promise((r) => setTimeout(r, 120))
     })
 

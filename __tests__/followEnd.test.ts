@@ -31,10 +31,33 @@ describe('followEnd', () => {
     const f = followEnd(toEnd)
     f.onScrollBeginDrag()
     f.noteAtEnd(false)
+    f.onGestureEnd(false)
     f.onContentSizeChange()
     expect(toEnd).not.toHaveBeenCalled()
 
     f.noteAtEnd(true)
+    f.onContentSizeChange()
+    expect(toEnd).toHaveBeenCalledTimes(1)
+  })
+
+  // Driven 2026-11-10 (Flow 5 C2): a drag that starts at the end reports "at the end" for its first scroll events, and
+  // that re-armed the follow, so the next arrival pulled a reader who had scrolled up back down to it.
+  it('a drag that starts at the end does not re-arm the follow on its way up', () => {
+    const toEnd = jest.fn()
+    const f = followEnd(toEnd)
+    f.onScrollBeginDrag()
+    f.noteAtEnd(true)
+    f.onGestureEnd(false)
+    f.onContentSizeChange()
+    expect(toEnd).not.toHaveBeenCalled()
+  })
+
+  // Control: a gesture that comes to rest at the end follows again.
+  it('a gesture that ends at the end follows again', () => {
+    const toEnd = jest.fn()
+    const f = followEnd(toEnd)
+    f.onScrollBeginDrag()
+    f.onGestureEnd(true)
     f.onContentSizeChange()
     expect(toEnd).toHaveBeenCalledTimes(1)
   })
