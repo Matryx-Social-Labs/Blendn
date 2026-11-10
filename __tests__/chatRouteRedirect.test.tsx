@@ -22,7 +22,7 @@ jest.mock('../components/chat/BrokenLink', () => ({ BrokenLink: () => null }))
 // eslint-disable-next-line import/first
 import GroupChat from '../app/chat/[id]'
 // eslint-disable-next-line import/first
-import { blendnClosed, isBlendnOpen, setLiveRoomChat, takePendingTab, takeReturnTo } from '../lib/blendnOverlay'
+import { blendnClosed, isBlendnOpen, setLiveHint, setLiveRoomChat, takePendingTab, takeReturnTo } from '../lib/blendnOverlay'
 
 beforeEach(() => {
   mockDismissTo.mockClear()
@@ -53,6 +53,16 @@ it('a crew’s room is its own screen even with the live room’s id', async () 
   const view = await render(<GroupChat />)
   expect(view.getByText('chat screen live-room')).toBeTruthy()
   expect(isBlendnOpen()).toBe(false)
+})
+
+it('a push for the room you are checked in to, with the overlay never opened, opens its Chat tab', async () => {
+  setLiveRoomChat(null)
+  setLiveHint('e1')
+  mockParams = { id: 'live-room', eventId: 'e1' }
+  await render(<GroupChat />)
+  expect(isBlendnOpen()).toBe(true)
+  expect(takePendingTab()).toBe('chat')
+  setLiveHint(null)
 })
 
 it('with no live room every chat is a screen', async () => {

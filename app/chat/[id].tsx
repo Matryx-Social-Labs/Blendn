@@ -21,9 +21,10 @@ export default function GroupChat() {
   const params = useLocalSearchParams()
   const id = idParam(params.id)
   const kind = typeof params.kind === 'string' ? params.kind : null
-  const [inRoom] = useState(() => !!id && chatOpensInRoom({ id, kind }))
+  const eventId = typeof params.eventId === 'string' ? params.eventId : null
+  const [inRoom] = useState(() => !!id && chatOpensInRoom({ id, kind, eventId }))
   // The event page says it opened this (`from: 'event'`); a push carries the event too, and closes to the tabs.
-  const [returnTo] = useState(() => (params.from === 'event' && typeof params.eventId === 'string' ? params.eventId : null))
+  const [returnTo] = useState(() => (params.from === 'event' ? eventId : null))
   useEffect(() => {
     if (!inRoom) return
     openRoomChat(returnTo)

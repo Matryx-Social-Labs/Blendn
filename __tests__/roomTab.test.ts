@@ -2,6 +2,7 @@ import {
   blendnClosed,
   openBlendn,
   openRoomChat,
+  setLiveHint,
   setLiveRoomChat,
   takePendingTab,
 } from '../lib/blendnOverlay'
@@ -44,7 +45,30 @@ describe('the room tab an entry opens', () => {
 })
 
 describe('which chat opens in the room', () => {
-  beforeEach(() => setLiveRoomChat(null))
+  beforeEach(() => {
+    setLiveHint(null)
+    setLiveRoomChat(null)
+  })
+
+  // The overlay is mounted only while open: a push, the event page or the Banter row arrive with it closed.
+  it('with the room closed, the room of the event you are checked in to opens as the Chat tab', () => {
+    setLiveHint('e1', 'Design festival')
+    expect(chatOpensInRoom({ id: 'g1', eventId: 'e1' })).toBe(true)
+    // Controls: another event's room, and a link that names no event before the Room has ever said its chat.
+    expect(chatOpensInRoom({ id: 'g2', eventId: 'e2' })).toBe(false)
+    expect(chatOpensInRoom({ id: 'g1' })).toBe(false)
+  })
+
+  it('the chat the Room said outlives the overlay, and goes when you are checked in somewhere else or nowhere', () => {
+    setLiveHint('e1')
+    setLiveRoomChat('g1')
+    expect(chatOpensInRoom({ id: 'g1' })).toBe(true)
+    setLiveHint('e2')
+    expect(chatOpensInRoom({ id: 'g1' })).toBe(false)
+    setLiveRoomChat('g1')
+    setLiveHint(null)
+    expect(chatOpensInRoom({ id: 'g1' })).toBe(false)
+  })
 
   it('the live room’s own chat opens as the Chat tab', () => {
     setLiveRoomChat('g1')

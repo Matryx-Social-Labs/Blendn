@@ -3,9 +3,8 @@
 #   a push-shaped link (chat/<id>) → Chat; the event page → Chat → close → the event page.
 # Needs: checked in at a live event whose room has a message from somebody else in it (THEIRS, by SENDER).
 # Env: MAESTRO_EMAIL, MAESTRO_PASSWORD (environment variables; delete ~/.maestro/tests/<run> afterwards). With -e:
-#   CHAT_ID     the live room's chat group id (the link a push carries)
-#   EVENT       a regex for the event's title on its page and in the room bar
-#   EVENT_LINK  the event page's link, e.g. exp+blendn://event/<id>
+#   CHAT_ID     the live room's chat group id, and EVENT_ID its event's: a push carries both
+#   EVENT       a regex for the event's title in the room bar
 #   THEIRS      a regex for another person's message text in the room
 #   SENDER      their pseudonym as the room shows it, e.g. "Cosmic Panda"
 #   MESSAGE     unique per run
@@ -103,7 +102,7 @@ tags:
     timeout: 10000
 
 # --- A push-shaped link lands on Chat ---
-- openLink: exp+blendn://chat/${CHAT_ID}
+- openLink: exp+blendn://chat/${CHAT_ID}?eventId=${EVENT_ID}
 - extendedWaitUntil:
     visible: ".*Say something to the room"
     timeout: 30000
@@ -114,7 +113,7 @@ tags:
     id: "room-close"
 
 # --- The event page opens Chat, and closing goes back to the event page ---
-- openLink: ${EVENT_LINK}
+- openLink: exp+blendn://event/${EVENT_ID}
 - extendedWaitUntil:
     visible: ".*(Open the room|Blend in).*"
     timeout: 30000

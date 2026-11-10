@@ -81,7 +81,10 @@ export function takePendingTab(): RoomTab {
   return tab
 }
 
-/** The live room's chat id, set by the Room once it knows it: `chat/[id]` for this id opens the Chat tab. */
+/**
+ * The live room's chat id, set by the Room once it knows it: `chat/[id]` for this id opens the Chat tab. It outlives the
+ * overlay (mounted only while open) and goes when the check-in does (`setLiveHint`).
+ */
 let liveRoomChat: string | null = null
 export function setLiveRoomChat(chatGroupId: string | null): void {
   liveRoomChat = chatGroupId
@@ -157,6 +160,8 @@ let liveTitle: string | null = null
 export function setLiveHint(eventId: string | null, title: string | null = null): void {
   const nextTitle = eventId ? title : null
   if (liveEventId === eventId && liveTitle === nextTitle) return
+  // Leaving the event (checked out, or in somewhere else) takes its chat; the first poll after launch does not.
+  if (liveEventId !== null && liveEventId !== eventId) liveRoomChat = null
   liveEventId = eventId
   liveTitle = nextTitle
   notify()

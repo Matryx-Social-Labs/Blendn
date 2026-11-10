@@ -406,7 +406,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
     if (!detail || !live?.chatGroupId) return
     router.push({
       pathname: '/chat/[id]',
-      params: { id: live.chatGroupId, roomName: detail.venue.name, eventTitle: detail.venue.name, venueId: detail.venue.id },
+      params: { id: live.chatGroupId, roomName: detail.venue.name, eventTitle: detail.venue.name, venueId: detail.venue.id, ...(venueDayId ? { eventId: venueDayId } : {}) },
     } as never)
   }
 

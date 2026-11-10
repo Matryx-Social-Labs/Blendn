@@ -502,9 +502,9 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const chatGroupId = room.chatGroupId
   // `chat/[id]` for this room opens the Chat tab rather than a screen of its own, while the Room is up.
   const liveChat = mode === 'room' ? chatGroupId : null
+  // Kept after the overlay closes, so a push for this room still opens Chat; the check-in ending clears it (setLiveHint).
   useEffect(() => {
-    setLiveRoomChat(liveChat)
-    return () => setLiveRoomChat(null)
+    if (liveChat) setLiveRoomChat(liveChat)
   }, [liveChat])
   const chatUnread = useChatTabUnread({ chatGroupId: liveChat, eventId, tab, myId: user?.id })
   // The Chat tab only exists for a room with a chat: without one, People.
