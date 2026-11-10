@@ -9,6 +9,7 @@ import { Button } from '../../components/ds/Button'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { font, useAnnounced, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
+import { Swap } from '../../components/motion/Swap'
 import { DoorTicket, OfferHeader, RegularAsk, RegularOff, RegularOn } from '../../components/offer/OfferSections'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
@@ -207,6 +208,7 @@ export default function OfferScreen() {
   // Deferred feature: nothing about being a regular shows unless the server says it is live here.
   const regulars = regularsActive(prefs)
   const ask = regulars && !!offer && !!prefs && !prefs.known && later === false && !turnedOff
+  const regularState = ask ? 'ask' : regulars && prefs?.known ? 'on' : regulars && turnedOff ? 'off' : 'none'
 
   return (
     <View style={styles.screen}>
@@ -215,9 +217,16 @@ export default function OfferScreen() {
         {offer ? (
           <Animated.View entering={PASS_IN} style={styles.body}>
             <PassBody offer={offer} lastReadFailed={lastReadFailed} focused={focused} />
-            {ask && prefs ? <RegularAsk venueName={offer.venue.name} prefs={prefs} saving={saving} onYes={sayYes} onLater={notNow} /> : null}
-            {regulars && prefs?.known ? <RegularOn venueName={offer.venue.name} saving={saving} onOff={() => void turnOff()} /> : null}
-            {regulars && turnedOff && !prefs?.known ? <RegularOff venueName={offer.venue.name} /> : null}
+            {/* The ask, on and off are one part: each answer fades into the next (motion audit M16). */}
+            <Swap id={regularState}>
+              {regularState === 'ask' && prefs ? (
+                <RegularAsk venueName={offer.venue.name} prefs={prefs} saving={saving} onYes={sayYes} onLater={notNow} />
+              ) : regularState === 'on' ? (
+                <RegularOn venueName={offer.venue.name} saving={saving} onOff={() => void turnOff()} />
+              ) : regularState === 'off' ? (
+                <RegularOff venueName={offer.venue.name} />
+              ) : null}
+            </Swap>
             <Button kind="tertiary" label={`See ${offer.venue.name}`} onPress={() => router.push(`/venue/${offer.venue.id}` as never)} />
           </Animated.View>
         ) : failure ? (

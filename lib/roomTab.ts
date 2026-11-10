@@ -1,4 +1,4 @@
-import { isLiveRoomChat } from './blendnOverlay'
+import { getLiveEventId, isLiveRoomChat } from './blendnOverlay'
 import { badgeCount } from './lobby'
 
 /**
@@ -11,11 +11,13 @@ export type RoomTab = 'people' | 'chat'
 /**
  * Whether `chat/[id]` is the live room's own chat, so it opens as the
  * overlay's Chat tab. A crew's, a Blend's and a board post's room are their
- * own screens; so is any event's room but the one you are in now.
+ * own screens; so is any event's room but the one you are in now. A link that names neither the live chat nor
+ * the event (a bare `chat/<id>` before the Room has opened this session) stays the chat screen.
  */
 export function chatOpensInRoom(room: { id: string; kind?: string | null; eventId?: string | null }): boolean {
   if (room.kind && room.kind !== 'event') return false
-  return isLiveRoomChat(room.id)
+  // With the overlay closed the Room has not said its chat: the event you are checked in to says which room is yours.
+  return isLiveRoomChat(room.id) || (!!room.eventId && room.eventId === getLiveEventId())
 }
 
 /** The Chat tab's unread badge: exact to 9, then "9+"; nothing at 0. */

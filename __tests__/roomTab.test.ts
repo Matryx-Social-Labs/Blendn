@@ -2,8 +2,10 @@ import {
   blendnClosed,
   openBlendn,
   openRoomChat,
+  setLiveHint,
   setLiveRoomChat,
-  takePendingTab,
+  getRoomTab,
+  setRoomTab,
 } from '../lib/blendnOverlay'
 import { chatOpensInRoom, chatTabBadge, chatTabLabel } from '../lib/roomTab'
 
@@ -21,30 +23,70 @@ describe('the room tab an entry opens', () => {
 
   it('opens People from the disc', () => {
     openBlendn()
-    expect(takePendingTab()).toBe('people')
+    expect(getRoomTab()).toBe('people')
   })
 
-  it('opens Chat for the room chat, once', () => {
+  it('opens Chat for the room chat', () => {
     openRoomChat()
-    expect(takePendingTab()).toBe('chat')
-    // Taken: a later re-render of the room does not snap back to Chat.
-    expect(takePendingTab()).toBe('people')
+    expect(getRoomTab()).toBe('chat')
   })
 
-  it('a person from a wave still opens People', () => {
+  /*
+   * Drive 2026-11-10 (iOS, C1b): a link to the room chat, opened a second time, showed People although the room's chat
+   * had answered (the server log has the lookup and the history read). The tab was taken out of the overlay by the Room's
+   * first render (`useState(takePendingTab)`), and a render React throws away, or a remount, then read People. Reading the
+   * tab must not take it.
+   */
+  it('reading the tab does not take it: a second read (a discarded render, a remount) still says Chat', () => {
+    openRoomChat()
+    expect(getRoomTab()).toBe('chat')
+    expect(getRoomTab()).toBe('chat')
+  })
+
+  it('a tab switch is the overlay’s, so a later render does not snap back to Chat', () => {
+    openRoomChat()
+    setRoomTab('people')
+    expect(getRoomTab()).toBe('people')
+  })
+
+  it('a person from a wave opens People, even over Chat', () => {
+    openRoomChat()
     openBlendn('u1')
-    expect(takePendingTab()).toBe('people')
+    expect(getRoomTab()).toBe('people')
   })
 
   it('closing forgets a tab that was asked for', () => {
     openRoomChat()
     blendnClosed()
-    expect(takePendingTab()).toBe('people')
+    expect(getRoomTab()).toBe('people')
   })
 })
 
 describe('which chat opens in the room', () => {
-  beforeEach(() => setLiveRoomChat(null))
+  beforeEach(() => {
+    setLiveHint(null)
+    setLiveRoomChat(null)
+  })
+
+  // The overlay is mounted only while open: a push, the event page or the Banter row arrive with it closed.
+  it('with the room closed, the room of the event you are checked in to opens as the Chat tab', () => {
+    setLiveHint('e1', 'Design festival')
+    expect(chatOpensInRoom({ id: 'g1', eventId: 'e1' })).toBe(true)
+    // Controls: another event's room, and a link that names no event before the Room has ever said its chat.
+    expect(chatOpensInRoom({ id: 'g2', eventId: 'e2' })).toBe(false)
+    expect(chatOpensInRoom({ id: 'g1' })).toBe(false)
+  })
+
+  it('the chat the Room said outlives the overlay, and goes when you are checked in somewhere else or nowhere', () => {
+    setLiveHint('e1')
+    setLiveRoomChat('g1')
+    expect(chatOpensInRoom({ id: 'g1' })).toBe(true)
+    setLiveHint('e2')
+    expect(chatOpensInRoom({ id: 'g1' })).toBe(false)
+    setLiveRoomChat('g1')
+    setLiveHint(null)
+    expect(chatOpensInRoom({ id: 'g1' })).toBe(false)
+  })
 
   it('the live room’s own chat opens as the Chat tab', () => {
     setLiveRoomChat('g1')

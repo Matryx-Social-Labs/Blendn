@@ -32,11 +32,10 @@ describe("the reveal switch when there is nothing to reveal", () => {
     expect(controls).not.toMatch(/if \(!next && !readiness/)
   })
 
-  it("draws the blocked state, with what is missing, when there is nothing to reveal", () => {
+  it("the room's you-card takes the state, and its Change never reveals in place (Room settings holds the gate)", () => {
     expect(code).toContain("bannerState(controls.revealed, controls.listed, controls.readiness.ok)")
-    expect(code).toContain("missing={controls.readiness.missing || undefined}")
-    // Blocked's action is the profile, never a reveal.
-    expect(code).toMatch(/visibility === 'blocked'\s*\?\s*\(\) => router\.push\('\/edit-profile'\)/)
+    expect(code).toMatch(/<RoomYouCard[\s\S]{0,200}state=\{visibility\}/)
+    expect(code).not.toMatch(/<RoomYouCard[\s\S]{0,400}toggleReveal/)
   })
 })
 
@@ -46,16 +45,11 @@ describe("the way into the room’s settings", () => {
     expect(code).toContain("router.push(roomSettingsRoute(")
   })
 
-  it("is in the bar, not hung off the visibility banner", () => {
-    /*
-     * The visibility line states a rule: "the action is the opposite state,
-     * not a settings link". A second tap target on that row would break it and
-     * put two controls for one concept in one line.
-     */
-    const banner = code.slice(code.indexOf("<VisibilityBanner"), code.indexOf("testID=\"room-visibility\""))
-    expect(banner.length).toBeGreaterThan(50)
-    expect(banner).not.toContain("event-preferences")
+  it("is one function, from the you-card's Change and the ⋯ sheet", () => {
+    expect(code).toMatch(/onChange=\{\(\) => \{[\s\S]{0,160}openRoomSettings\(\)/)
+    expect(code).toContain("{ label: 'Room settings', then: openRoomSettings }")
   })
+
 })
 
 describe("your photo in the room is myMainPhoto, never User.image (ROOM-01)", () => {
@@ -82,7 +76,7 @@ describe("the banner names your pseudonym (ROOM-02, SV-3)", () => {
     expect(pseudonymFromDoor(null)).toBeNull()
   })
   it("room settings carries the pseudonym and the reveal to the preferences screen (SCRUM-1025): GET /events/:id/chat would join the room", () => {
-    expect(code).toContain("roomSettingsRoute(room.event!.id, { pseudonym: myPseudonym, revealed: controls.revealed })")
+    expect(code).toContain("roomSettingsRoute(ev.id, { pseudonym: myPseudonym, revealed: controls.revealed })")
   })
   it("the screen takes it from the room, ahead of a match's", () => {
     expect(code).toContain("room.match?.you ?? room.pseudonym")

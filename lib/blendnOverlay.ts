@@ -50,34 +50,61 @@ function set(next: boolean) {
   notify()
 }
 
-/** The tab the Room opens on, asked for once (Flow 5 C1): People unless the room chat was asked for. */
-let pendingTab: RoomTab = 'people'
+/**
+ * The Room's tab (Flow 5 C1): the overlay's, not the screen's, so every render and every mount for one open reads the
+ * same tab. It used to be handed over once, taken by the Room's first render, and a render React threw away or a remount
+ * then read People: a link to the room chat opened on People with its chat there (iOS drive, 2026-11-10).
+ */
+let roomTab: RoomTab = 'people'
 
 /** Open the overlay; with `personId`, at that person's card in the Room. People, always (the disc). */
 export function openBlendn(personId?: string): void {
-  pendingTab = 'people'
-  if (personId) {
-    pendingPerson = personId
-    if (open) notify()
-  }
+  // Already open (a wave's banner over the Room): it re-reads its card and its tab.
+  const changed = !!personId || roomTab !== 'people'
+  roomTab = 'people'
+  if (personId) pendingPerson = personId
+  if (open && changed) notify()
   set(true)
 }
 
-/** Open the Room on its Chat tab: "Open the room", a push, a link, the Lobby handover (`chat/[id]`). */
-export function openRoomChat(): void {
-  pendingTab = 'chat'
+/**
+ * Open the Room on its Chat tab: "Open the room", a push, a link, the Lobby handover (`chat/[id]`). Opened from an
+ * event page, closing it comes back to that page (ROOM-13), as "Blend in" does.
+ */
+export function openRoomChat(returnToEvent: string | null = null): void {
+  roomTab = 'chat'
+  returnTo = returnToEvent
   if (open) notify()
   set(true)
 }
 
-/** The tab asked for, once: the Room reads it as it opens, and then it is People again. */
-export function takePendingTab(): RoomTab {
-  const tab = pendingTab
-  pendingTab = 'people'
-  return tab
+/** The tab the Room shows. Reading it never changes it. */
+export function getRoomTab(): RoomTab {
+  return roomTab
 }
 
-/** The live room's chat id, set by the Room once it knows it: `chat/[id]` for this id opens the Chat tab. */
+/** The Room's own switch (its tabs, Back, a chat it can't show). */
+export function setRoomTab(tab: RoomTab): void {
+  if (roomTab === tab) return
+  roomTab = tab
+  notify()
+}
+
+export function useRoomTab(): RoomTab {
+  return useSyncExternalStore(subscribe, getRoomTab, getRoomTab)
+}
+
+/** The tab in front (the tab bar says it), so a route that steps back to the tabs lands on it, not on the Pulse. */
+let currentTab = 'events'
+export function setCurrentTab(name: string): void {
+  currentTab = name
+}
+export const tabsPath = (): string => `/(tabs)/${currentTab}`
+
+/**
+ * The live room's chat id, set by the Room once it knows it: `chat/[id]` for this id opens the Chat tab. It outlives the
+ * overlay (mounted only while open) and goes when the check-in does (`setLiveHint`).
+ */
 let liveRoomChat: string | null = null
 export function setLiveRoomChat(chatGroupId: string | null): void {
   liveRoomChat = chatGroupId
@@ -153,6 +180,8 @@ let liveTitle: string | null = null
 export function setLiveHint(eventId: string | null, title: string | null = null): void {
   const nextTitle = eventId ? title : null
   if (liveEventId === eventId && liveTitle === nextTitle) return
+  // Leaving the event (checked out, or in somewhere else) takes its chat; the first poll after launch does not.
+  if (liveEventId !== null && liveEventId !== eventId) liveRoomChat = null
   liveEventId = eventId
   liveTitle = nextTitle
   notify()
@@ -199,7 +228,7 @@ export function useRoomUp(eventId: string): boolean {
 /** Called by the overlay once its closing transition has finished. */
 export function blendnClosed(): void {
   pendingPerson = null
-  pendingTab = 'people'
+  roomTab = 'people'
   door = null
   returnTo = null
   set(false)

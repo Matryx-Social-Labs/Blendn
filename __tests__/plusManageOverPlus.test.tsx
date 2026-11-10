@@ -60,6 +60,8 @@ jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useR
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mocked = require('react-native-reanimated')
   mocked.makeMutable = jest.requireActual('react-native-reanimated').makeMutable
+  // And Manage's grant line sits in a `Swap`, whose `LayoutAnimationConfig` the stub has none of (motion audit M16).
+  mocked.LayoutAnimationConfig ??= jest.requireActual('react-native-reanimated').LayoutAnimationConfig
 }
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => {}),

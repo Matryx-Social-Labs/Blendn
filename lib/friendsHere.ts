@@ -20,12 +20,8 @@ export interface FriendHere {
   photo: string | null
 }
 
-/** The Room reads 8 and draws 3 rows plus 5 faces (plan 9.1). */
+/** The Room reads 8 (plan 9.1) and its row draws 3 faces (Flow 5 R-A). */
 export const FRIENDS_FIRST_PAGE = 8
-/** Rows in the section before "N more here". */
-export const FRIEND_ROWS = 3
-/** Faces in the overflow row. */
-export const FRIEND_OVERFLOW_FACES = 5
 /** `room:friends` carries no data, so a burst of them is one read. */
 export const FRIENDS_REFETCH_MS = 1000
 

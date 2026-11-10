@@ -27,8 +27,7 @@ const RING_OUT = SPACE.xxs
  * inside the tile (a grid has no room for it outside), the check 12 in.
  */
 const TALL_HEIGHT = 132
-// design-exception: Flow 4's `.icd` tile is radius 20, between rowInCard (16) and sheet (24)
-const TALL_RADIUS = 20
+const TALL_RADIUS = RADIUS.tile
 const TALL_INSET = { left: SPACE.md, bottom: SPACE.sm + SPACE.xxs }
 
 export type LookingForCardProps = {

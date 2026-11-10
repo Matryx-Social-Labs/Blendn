@@ -195,8 +195,5 @@ it('asks for the count and the chat with the check-ins, before the roster, and i
   expect(at('/e401-early/chat')).toBeLessThan(roster)
   // Once each: the effect took the early lookup over rather than asking again.
   expect(order.filter((p) => p.endsWith('/e401-early/chat'))).toHaveLength(1)
-  // Settled includes the dock's first read: it opens on the real last line (drive 2).
-  expect(room.current.chatHistory).toMatchObject({ groupId: 'g-e401-early', failed: false })
-  expect(order.findIndex((p) => p.endsWith('/g-e401-early/messages'))).toBeGreaterThan(-1)
   unmount()
 })

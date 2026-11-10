@@ -320,6 +320,7 @@ export const RADIUS = {
   card: 32,
   mediaInCard: 24,
   rowInCard: 16,
+  tile: 20,
   thumb: 8,
   sheet: 24,
   dialogAndroid: 28,

@@ -6,6 +6,7 @@ import { IconButton } from '../ds/IconButton'
 import { Badge } from '../ds/MonoFamily'
 import { SearchField } from '../ds/SearchField'
 import { font, useBoldText } from '../ds/shared'
+import { Swap } from '../motion/Swap'
 import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { HOW_FAR, PLACE_TYPES, WHATS_ON, type PlaceFilters } from '../../lib/placesPane'
 
@@ -79,14 +80,16 @@ export const PlacesSearch = memo(function PlacesSearch({
           ) : null}
         </View>
       </View>
-      {applied.length ? (
-        // Bled to the screen edges: the chips scroll under the gutter instead of wrapping.
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.applied} contentContainerStyle={styles.appliedRow} testID="places-applied">
-          {applied.map((a) => (
-            <Chip key={a.field} label={a.label} selected onRemove={() => onClear(a.field)} testID={a.testID} />
-          ))}
-        </ScrollView>
-      ) : null}
+      <Swap>
+        {applied.length ? (
+          // Bled to the screen edges: the chips scroll under the gutter instead of wrapping.
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={styles.applied} contentContainerStyle={styles.appliedRow} testID="places-applied">
+            {applied.map((a) => (
+              <Chip key={a.field} label={a.label} selected onRemove={() => onClear(a.field)} testID={a.testID} />
+            ))}
+          </ScrollView>
+        ) : null}
+      </Swap>
     </View>
   )
 })

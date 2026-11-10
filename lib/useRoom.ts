@@ -4,7 +4,6 @@ import type { Badge, Overlap } from './aboutYou'
 import type { AttendeeProfile } from './attendee'
 import { pickActiveRoom, extractEventId, type CheckinLike } from './activeRoom'
 import { apiClient } from './apiClient'
-import { DOCK_HISTORY, type ChatHistory } from './dockHistory'
 import { H } from './haptics'
 import { warmAvatars } from './warmAvatars'
 import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
@@ -110,8 +109,6 @@ export interface RoomState {
    * late after a check-in's pour (PR #401 drive).
    */
   settled: boolean
-  /** The dock's first read of the room chat, fetched with the room so the dock opens on its real last line. */
-  chatHistory: ChatHistory | null
   event: { id: string; title: string; startsAt?: string; endsAt?: string; venueName?: string | null } | null
   checkedInAt: string | null
   /**
@@ -196,31 +193,12 @@ async function countCandidates(eventId: string): Promise<unknown[]> {
   }
 }
 
-/**
- * eventId -> the room's chat group id, for the session.
- *
- * Opening a room asked for the group (`getEventChat`) and only then for its
- * last messages (`getChatMessages`): two round trips in series, ~200-250 ms each
- * from Canada. On a re-open the id is already known, so the messages start with
- * the lookup; the lookup stays the authority (a different id, a left room, or a
- * failure throws the early read away and asks again).
- */
-const chatGroupIdByEvent = new Map<string, string>()
-
-
 type ChatLookup = {
   result: ReturnType<typeof apiClient.getEventChat>
-  history: { groupId: string; messages: Promise<Awaited<ReturnType<typeof apiClient.getChatMessages>> | null> } | null
 }
 
 function startChatLookup(eventId: string): ChatLookup {
-  const groupId = chatGroupIdByEvent.get(eventId)
-  return {
-    result: apiClient.getEventChat(eventId),
-    history: groupId
-      ? { groupId, messages: apiClient.getChatMessages(groupId, { limit: DOCK_HISTORY }).catch(() => null) }
-      : null,
-  }
+  return { result: apiClient.getEventChat(eventId) }
 }
 
 export function useRoom(): RoomState & RoomActions {
@@ -243,7 +221,6 @@ export function useRoom(): RoomState & RoomActions {
   /** The room whose first count, and whose chat lookup, have answered. */
   const [seededFor, setSeededFor] = useState<string | null>(null)
   const [chatFor, setChatFor] = useState<string | null>(null)
-  const [chatHistory, setChatHistory] = useState<ChatHistory | null>(null)
   const [avatarsFor, setAvatarsFor] = useState<string | null>(null)
   /** The chat lookup started with the check-ins read, before the roster: the chat effect takes it over. */
   const chatEarly = useRef<{ eventId: string; lookup: ChatLookup } | null>(null)
@@ -622,18 +599,9 @@ export function useRoom(): RoomState & RoomActions {
           setChatGroupId(String(id))
           setPseudonym(pseudonymFromDoor(result.data))
           setChatClosesAt(closesAtFromDoor(result.data))
-          chatGroupIdByEvent.set(eventId, String(id))
           // Served as a member: back in, and the room's mute as the server has it.
           markRoomJoined(String(id))
           rememberRoomMute(String(id), result.data?.mute)
-          // The dock's last line, with the room: it never opens on "Nobody has said anything yet" and then changes.
-          const early = lookup.history?.groupId === String(id) ? await lookup.history.messages : null
-          // An early read can beat the lookup's rejoin and be refused: ask again, now that the lookup has answered.
-          const history = early?.success
-            ? early
-            : await apiClient.getChatMessages(String(id), { limit: DOCK_HISTORY }).catch(() => null)
-          if (cancelled) return
-          setChatHistory({ groupId: String(id), data: history?.success ? history.data : null, failed: !history?.success })
         } else if (result.errorCode === 'LEFT_ROOM' && result.chatGroupId) {
           /*
            * You left this room, and the server no longer rejoins you by
@@ -894,7 +862,6 @@ export function useRoom(): RoomState & RoomActions {
   return {
     status,
     settled: status === 'ready' && !!event && seededFor === event.id && chatFor === event.id && avatarsFor === event.id,
-    chatHistory,
     event,
     checkedInAt,
     revealed,

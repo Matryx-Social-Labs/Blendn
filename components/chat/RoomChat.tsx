@@ -140,7 +140,7 @@ function CrewRoomFace({ crewId }: { crewId: string | null }) {
 /** A send only this phone holds: refused ("Not sent") or waiting for a connection. */
 const isPendingSend = (m: Message) => !!(m.failed || m.waiting)
 
-function RoomChatInner({ params }: { params: RoomChatParams }) {
+function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?: RoomChatEmbed }) {
   const chatRoomId = params.id
   const roomId = String(chatRoomId)
   const insets = useSafeAreaInsets()
@@ -230,13 +230,13 @@ function RoomChatInner({ params }: { params: RoomChatParams }) {
    */
   const eventKnown = eventRoom && (!!roomInfo.eventId || !!nameParam(params.eventTitle) || told?.kind === 'event')
   /* Back, or — opened from a push with nothing underneath — the Banter. */
-  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat'))
+  const goBack = embedded?.onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/chat')))
   const crewIdParam = idParam(params.crewId) ?? roomInfo.crewId
   const blendIdParam = idParam(params.blendId) ?? roomInfo.blendId
   const [closedLine, setClosedLine] = useState<string | null>(null)
   const [rejoining, setRejoining] = useState(false)
   const left = useRoomMembership().left.has(roomId)
-  const top = chatHeaderBottom(insets.top, window.fontScale)
+  const top = embedded ? embedded.top : chatHeaderBottom(insets.top, window.fontScale)
   /* A Blend's sides sit above the feed in this same room, not on a page of their own (Flow 10 · 10.9). */
   const blendRoom = useBlendRoom(roomKind === 'blend' ? (blendIdParam ?? null) : null, top)
   // A Blend not listed to you any more after being listed is closed for you: its clock, or a block across its sides refused your door.
@@ -1024,7 +1024,7 @@ function RoomChatInner({ params }: { params: RoomChatParams }) {
           />
         ) : (
           <>
-            <View style={[styles.fill, chatFeedFrame(insets.top, blendRoom.barSpace, window.fontScale).style]}>
+            <View style={[styles.fill, embedded ? { marginTop: embedded.top } : chatFeedFrame(insets.top, blendRoom.barSpace, window.fontScale).style]}>
               {/* An event's room once its doors are open (never while it counts down): what you joined in the Lobby, pinned above the stream.
                   The event is the server's own row for this room, never a link's `eventId` (security review, PR 6). */}
               {BOARD_ENABLED && eventRoom && roomInfo.eventId && !countingDown ? (
@@ -1152,25 +1152,28 @@ function RoomChatInner({ params }: { params: RoomChatParams }) {
         )}
       </KeyboardFrame>
 
-      <ChatHeader
-        testID="room-header"
-        title={blendRoom.title ?? name}
-        muted={muted}
-        leading={blendRoom.leading ?? (roomKind === 'crew' ? <CrewRoomFace crewId={crewIdParam ?? null} /> : <RoomCover uri={eventImage} />)}
-        subtitle={outside?.kind === 'notopen' ? (notOpenIn ? <OpensLine label={notOpenIn} spoken={opensInSpoken(notOpenIn)} count={null} /> : null) : outside ? null : (blendRoom.subtitle ?? subtitle)}
-        onBack={goBack}
-        moreLabel={blendRoom.blend ? 'More' : 'Room info'}
-        onMore={() =>
-          blendRoom.blend
-            ? blendRoom.openMenu()
-            : crewIdParam
-              ? router.push({ pathname: '/crews/[crewId]', params: { crewId: crewIdParam, fromChat: '1' } })
-              : router.push({
-                  pathname: '/chat-info/[id]',
-                  params: { id: roomId, roomName: roomName || '', eventTitle: eventTitle || '' },
-                } as never)
-        }
-      />
+      {/* The Chat tab has the room bar above it instead. */}
+      {embedded ? null : (
+        <ChatHeader
+          testID="room-header"
+          title={blendRoom.title ?? name}
+          muted={muted}
+          leading={blendRoom.leading ?? (roomKind === 'crew' ? <CrewRoomFace crewId={crewIdParam ?? null} /> : <RoomCover uri={eventImage} />)}
+          subtitle={outside?.kind === 'notopen' ? (notOpenIn ? <OpensLine label={notOpenIn} spoken={opensInSpoken(notOpenIn)} count={null} /> : null) : outside ? null : (blendRoom.subtitle ?? subtitle)}
+          onBack={goBack}
+          moreLabel={blendRoom.blend ? 'More' : 'Room info'}
+          onMore={() =>
+            blendRoom.blend
+              ? blendRoom.openMenu()
+              : crewIdParam
+                ? router.push({ pathname: '/crews/[crewId]', params: { crewId: crewIdParam, fromChat: '1' } })
+                : router.push({
+                    pathname: '/chat-info/[id]',
+                    params: { id: roomId, roomName: roomName || '', eventTitle: eventTitle || '' },
+                  } as never)
+          }
+        />
+      )}
       {outside ? null : blendRoom.bar}
       {outside ? null : blendRoom.overlays}
       {outside ? null : <RealtimeStatusBanner status={socketStatus} style={{ ...styles.banner, top: top + blendRoom.barSpace }} />}
@@ -1233,18 +1236,24 @@ const styles = StyleSheet.create({
 /** What an opener knows about the room: the route's search params (`chat/[id]`), or the room overlay's. */
 export type RoomChatParams = ReturnType<typeof useLocalSearchParams>
 
+/**
+ * The chat as the Room's Chat tab (Flow 5 R-A): the room bar above it owns the name, close and Room info, so there is no
+ * capsule header. `top` is where the bar ends; `onBack` is the tab's way out of a room it can't show (to People).
+ */
+export type RoomChatEmbed = { top: number; onBack: () => void }
+
 /*
  * Wrapped so `lib/perf.tsx` can report what this screen costs to render.
  * `ScreenProfiler` is the children untouched in production — see its header.
  * The route (`app/chat/[id].tsx`) checks the id before it renders this.
  */
-export function RoomChat({ id, params }: { id: string; params: RoomChatParams }) {
+export function RoomChat({ id, params, embedded }: { id: string; params: RoomChatParams; embedded?: RoomChatEmbed }) {
   // Rose world: a room is people together, as Banter and its DMs are; its sheets inherit it.
   return (
     <HueProvider value="rose">
       <ScreenProfiler id="event-chat">
         {/* Keyed by the room (RC drive 2 D-E): a link from one open room to another never carries this one's draft or state. */}
-        <RoomChatInner key={id} params={params} />
+        <RoomChatInner key={id} params={params} embedded={embedded} />
       </ScreenProfiler>
     </HueProvider>
   )

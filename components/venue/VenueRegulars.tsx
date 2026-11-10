@@ -6,6 +6,7 @@ import { Button } from '../ds/Button'
 import { SettingsRow } from '../ds/SettingsRow'
 import { font, minTarget, useAnnounced, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
+import { Swap } from '../motion/Swap'
 import { useToast } from '../Toast'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
@@ -102,63 +103,66 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
 
   return (
     <View style={styles.wrap} testID="venue-regulars">
-      {state === 'offer' ? (
-        <View style={styles.card}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>{`Let ${venueName} know you’re a regular`}</Text>
-          {ROWS(who).map((r) => (
-            <View key={r.key} style={styles.item}>
-              <View style={styles.itemIcon}>
-                <Icon name={r.icon} size={ICON.control} />
+      {/* The offer, on and done are one part: each answer fades into the next (motion audit M27). */}
+      <Swap id={state}>
+        {state === 'offer' ? (
+          <View style={styles.card}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>{`Let ${venueName} know you’re a regular`}</Text>
+            {ROWS(who).map((r) => (
+              <View key={r.key} style={styles.item}>
+                <View style={styles.itemIcon}>
+                  <Icon name={r.icon} size={ICON.control} />
+                </View>
+                <View style={styles.fill}>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{r.key}</Text>
+                  <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{r.value}</Text>
+                </View>
               </View>
-              <View style={styles.fill}>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{r.key}</Text>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{r.value}</Text>
-              </View>
+            ))}
+            <View style={styles.actions}>
+              <Button
+                kind="lit"
+                size="md"
+                label={`Let ${venueName} know`}
+                accessibilityLabel={`Let ${venueName} know I’m a regular`}
+                loading={saving === 'known'}
+                onPress={() => void save({ known: true }, () => setState('on'))}
+                style={styles.fill}
+                testID="venue-regular-yes"
+              />
+              <Button kind="secondary" size="md" label="Not now" onPress={() => setState('later')} style={styles.fill} testID="venue-regular-later" />
             </View>
-          ))}
-          <View style={styles.actions}>
-            <Button
-              kind="lit"
-              size="md"
-              label={`Let ${venueName} know`}
-              accessibilityLabel={`Let ${venueName} know I’m a regular`}
-              loading={saving === 'known'}
-              onPress={() => void save({ known: true }, () => setState('on'))}
-              style={styles.fill}
-              testID="venue-regular-yes"
-            />
-            <Button kind="secondary" size="md" label="Not now" onPress={() => setState('later')} style={styles.fill} testID="venue-regular-later" />
           </View>
-        </View>
-      ) : null}
+        ) : null}
 
-      {state === 'on' ? (
-        <View style={styles.knows} testID="venue-regular-on">
-          <Icon name="badge-check" size={ICON.control} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={2} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>{`${venueName} knows you’re a regular`}</Text>
-          <Pressable
-            onPress={() => void save({ known: false }, () => setState('off'))}
-            disabled={saving === 'known'}
-            accessibilityRole="button"
-            accessibilityLabel={`Turn off. ${venueName} stops seeing you as a regular.`}
-            accessibilityState={{ busy: saving === 'known' }}
-            hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
-            style={({ pressed }) => [styles.turnOff, pressed && styles.dim]}
-            testID="venue-regular-off"
-          >
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink, styles.underline]}>Turn off</Text>
-          </Pressable>
-        </View>
-      ) : null}
+        {state === 'on' ? (
+          <View style={styles.knows} testID="venue-regular-on">
+            <Icon name="badge-check" size={ICON.control} />
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={2} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>{`${venueName} knows you’re a regular`}</Text>
+            <Pressable
+              onPress={() => void save({ known: false }, () => setState('off'))}
+              disabled={saving === 'known'}
+              accessibilityRole="button"
+              accessibilityLabel={`Turn off. ${venueName} stops seeing you as a regular.`}
+              accessibilityState={{ busy: saving === 'known' }}
+              hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
+              style={({ pressed }) => [styles.turnOff, pressed && styles.dim]}
+              testID="venue-regular-off"
+            >
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink, styles.underline]}>Turn off</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
-      {state === 'off' ? (
-        <View style={styles.done} accessibilityLiveRegion="polite" testID="venue-regular-done">
-          <Icon name="check" size={ICON.control} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>
-            {done}
-          </Text>
-        </View>
-      ) : null}
+        {state === 'off' ? (
+          <View style={styles.done} accessibilityLiveRegion="polite" testID="venue-regular-done">
+            <Icon name="check" size={ICON.control} />
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>
+              {done}
+            </Text>
+          </View>
+        ) : null}
+      </Swap>
 
       <SettingsRow
         icon="bell-off"

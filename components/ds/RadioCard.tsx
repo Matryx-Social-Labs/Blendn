@@ -18,8 +18,7 @@ const BLOCKED_OPACITY = 0.6
 /** The check disc in a selected card's corner: 24 pt, 10 pt in (RadioCard, LookingForCard). */
 const CHECK_DISC = 24
 const CHECK_INSET = SPACE.sm + SPACE.xxs
-// design-exception: Flow 4's `.jr` row is radius 20, between rowInCard (16) and sheet (24)
-const ROW_RADIUS = 20
+const ROW_RADIUS = RADIUS.tile
 /** A row's text stops short of the check disc in its corner. */
 const ROW_CLEAR = SPACE.md + CHECK_DISC + SPACE.sm
 /** The lead card's sentence on the selected fill: white at 80% (Flow 4 `.rc.on span`). */
