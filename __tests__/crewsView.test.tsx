@@ -34,6 +34,9 @@ import { CrewsFoot, CrewsHead, RoomCrewCard } from '../components/blendn/RoomCre
 import { useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
 import { OPEN_TO_CREWS_LABEL, type CrewCard, type CrewsAtEvent } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
+import { minTarget } from '../components/ds/shared'
+import { TYPE } from '../lib/design/tokens'
+import { OPACITY } from '../lib/theme'
 
 const api = crewsApi as jest.Mocked<typeof crewsApi>
 
@@ -137,6 +140,34 @@ describe('"Open to joining a crew tonight" (M7, M11)', () => {
     await fireEvent.press(screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL }))
     await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
     expect(screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL }).props.accessibilityState).toEqual({ checked: false, disabled: false })
+  })
+})
+
+describe('the retry lines are full targets that answer a press (motion audit M12)', () => {
+  const reachesTarget = async (testID: string, line: number) => {
+    const retry = screen.getByTestId(testID)
+    expect(retry.props.accessibilityRole).toBe('button')
+    expect(line + 2 * (retry.props.hitSlop as number)).toBeGreaterThanOrEqual(minTarget())
+    // A line of text with no wash: the press shows as a dim while the finger is down.
+    expect(StyleSheet.flatten(retry.props.style)?.opacity).toBeUndefined()
+    await fireEvent(retry, 'responderGrant', { nativeEvent: { timestamp: 0 }, persist: () => {}, currentTarget: { measure: () => {} } })
+    expect(StyleSheet.flatten(screen.getByTestId(testID).props.style)?.opacity).toBe(OPACITY.pressed)
+  }
+
+  it('"Couldn’t check whether this is on"', async () => {
+    api.crewsAt.mockResolvedValue(page([], false))
+    api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Too many requests', errorCode: 'RATE_LIMITED' })
+    await render(<Harness checkInKey="ci-m12a" />)
+    await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
+    await reachesTarget('room-solo-retry', TYPE.meta.lineHeight)
+  })
+
+  it('"The crews didn’t load"', async () => {
+    api.crewsAt.mockResolvedValueOnce({ success: false, error: 'Offline', errorCode: 'NETWORK_ERROR' } as never)
+    api.openToCrews.mockResolvedValue({ success: true, data: { openToCrews: false } })
+    await render(<Harness checkInKey="ci-m12b" />)
+    await waitFor(() => screen.getByText(/The crews didn’t load/))
+    await reachesTarget('room-crews-retry', TYPE.body.lineHeight)
   })
 })
 

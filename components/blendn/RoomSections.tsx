@@ -270,7 +270,7 @@ export function RoomSkeleton({ topInset }: { topInset: number }) {
   const cell = useGridCell()
   const { width } = useWindowDimensions()
   return (
-    <View testID="room-skeleton" accessibilityLabel="Loading the room" style={[styles.skeleton, { paddingTop: topInset }]}>
+    <View accessible testID="room-skeleton" accessibilityLabel="Loading the room" style={[styles.skeleton, { paddingTop: topInset }]}>
       <View style={styles.skeletonHero}>
         <View style={[styles.block, { width: width - SPACE.gutter * 2 - RING - SPACE.lg, height: RING + SPACE.sm }]} />
         <View style={[styles.block, styles.round, { width: RING, height: RING }]} />

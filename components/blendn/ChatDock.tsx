@@ -7,7 +7,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
 import { DOCK_HISTORY, type ChatHistory } from '../../lib/dockHistory'
-import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useRoomMembership } from '../../lib/roomMembership'
 import { subscribeToChatMessage } from '../../lib/socketClient'
@@ -217,7 +217,7 @@ export function ChatDock({
             ) : state === 'failed' || state === 'left' ? (
               <Pressable
                 onPress={state === 'failed' ? () => setAttempt((n) => n + 1) : open}
-                hitSlop={(minTarget() - SPACE.xl) / 2}
+                hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
                 accessibilityRole="button"
                 accessibilityLabel={state === 'failed' ? 'Try again' : 'Rejoin'}
                 testID="room-dock-action"

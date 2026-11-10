@@ -1,8 +1,8 @@
 import { Image } from 'expo-image'
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
-import { tint } from '../../lib/theme'
+import { OPACITY, tint } from '../../lib/theme'
 import { Spinner } from '../ds/Loader'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, ROOMY_FONT_SCALE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
@@ -23,6 +23,7 @@ const FAIL_EDGE_ALPHA = 0.5
 const BLUR = 14
 
 const tile = StyleSheet.create({
+  pressed: { opacity: OPACITY.pressed },
   base: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.rowInCard, overflow: 'hidden', backgroundColor: COLOR.surfaceSunken },
   centre: { alignItems: 'center', justifyContent: 'center', gap: SPACE.xs, padding: SPACE.sm },
   fail: { borderWidth: 1, borderColor: tint(COLOR.destructive, FAIL_EDGE_ALPHA) },
@@ -107,7 +108,7 @@ export function PhotoFace({
         accessibilityRole="button"
         accessibilityLabel={removeLabel}
         accessibilityState={{ disabled: removeDisabled }}
-        style={[styles.remove, contrast && IC_HAIRLINE]}
+        style={({ pressed }) => [styles.remove, contrast && IC_HAIRLINE, pressed && tile.pressed]}
       >
         <Icon name="x" size={ICON.inline} color={COLOR.textPrimary} active />
       </Pressable>
@@ -145,7 +146,7 @@ export function FailedFace({ onRetry, disabled }: { onRetry: () => void; disable
       accessibilityLabel="Didn’t upload. Retry"
       accessibilityState={{ disabled }}
       android_ripple={{ color: PRESSED_WASH.android }}
-      style={[tile.base, tile.centre, tile.fail]}
+      style={({ pressed }) => [tile.base, tile.centre, tile.fail, pressed && Platform.OS === 'ios' && tile.pressed]}
     >
       <Icon name="refresh-cw" size={ICON.control} color={COLOR.textPrimary} />
       <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), tile.ink]}>
@@ -185,11 +186,11 @@ export function PulledFace({
         accessibilityLabel={onReplace ? `${why}. Add a different photo` : why}
         accessibilityState={{ disabled: !!onReplace && removeDisabled }}
         android_ripple={onReplace ? { color: PRESSED_WASH.android } : undefined}
-        style={[StyleSheet.absoluteFill, tile.centre]}
+        style={({ pressed }) => [StyleSheet.absoluteFill, tile.centre, pressed && Platform.OS === 'ios' && tile.pressed]}
       >
         <Icon name="shield" size={ICON.nav} color={COLOR.textSecondary} />
       </Pressable>
-      <Pressable onPress={onRemove} disabled={removeDisabled} hitSlop={slop} accessibilityRole="button" accessibilityLabel={removeLabel} style={styles.remove}>
+      <Pressable onPress={onRemove} disabled={removeDisabled} hitSlop={slop} accessibilityRole="button" accessibilityLabel={removeLabel} style={({ pressed }) => [styles.remove, pressed && tile.pressed]}>
         <Icon name="x" size={ICON.inline} color={COLOR.textPrimary} active />
       </Pressable>
     </View>
@@ -210,7 +211,7 @@ export function AddFace({ onPress, disabled, busy, label, accessible = true }: {
       accessibilityLabel={accessible ? label : undefined}
       accessibilityState={{ disabled, busy }}
       android_ripple={{ color: PRESSED_WASH.android }}
-      style={[tile.base, tile.centre, tile.dashed]}
+      style={({ pressed }) => [tile.base, tile.centre, tile.dashed, pressed && Platform.OS === 'ios' && tile.pressed]}
     >
       <Icon name="plus" size={ICON.nav} color={COLOR.textSecondary} />
     </Pressable>

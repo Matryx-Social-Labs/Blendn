@@ -256,7 +256,7 @@ function FooterLink({ label, role, onPress, disabled = false, busy = false }: { 
       accessibilityRole={role}
       accessibilityLabel={label}
       accessibilityState={{ disabled, busy }}
-      style={disabled && styles.dimmed}
+      style={({ pressed }) => (disabled ? styles.dimmed : pressed && styles.pressed)}
     >
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>{label}</Text>
     </Pressable>
@@ -344,4 +344,5 @@ const styles = StyleSheet.create({
   tertiary: { color: COLOR.textTertiary },
   centre: { textAlign: 'center' },
   dimmed: { opacity: OPACITY.disabled },
+  pressed: { opacity: OPACITY.pressed },
 })

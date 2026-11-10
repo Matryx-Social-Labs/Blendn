@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { ChipSet } from '../ds/ChipSet'
 import { Sheet } from '../ds/Sheet'
-import { font, useBoldText } from '../ds/shared'
+import { font, useAnnounced, useBoldText } from '../ds/shared'
 import { VENUE_PLATE_GLYPHS } from '../ds/VenuePlate'
 import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { useDraftCount } from '../../lib/filterCount'
@@ -48,6 +48,7 @@ export function PlacesFilterSheet({
   const { n: counted, current } = useDraftCount(visible, countKey(draft), () => countFor(draft))
   const n = draft.whatsOn === 'all' ? counted : null
   const empty = current && n === 0
+  useAnnounced(empty && nothingMatches(hasFix))
   const kindKeys = draft.venueType ? [draft.venueType] : []
 
   return (

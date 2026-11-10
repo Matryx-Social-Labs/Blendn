@@ -12,7 +12,7 @@ const CONTEXT_LINE = 12
 /** Notifications while they load (Flow 9 · 9.2 frame 01): static, announced once as loading. */
 export function NotificationsSkeleton() {
   return (
-    <View accessibilityLabel="Loading notifications" accessibilityState={{ busy: true }} testID="notifications-skeleton" style={styles.list}>
+    <View accessible accessibilityLabel="Loading notifications" accessibilityState={{ busy: true }} testID="notifications-skeleton" style={styles.list}>
       {Array.from({ length: ROWS }, (_, i) => (
         <View key={i} style={styles.row}>
           <SkeletonBlock width={DISC} height={DISC} borderRadius={RADIUS.capsule} />

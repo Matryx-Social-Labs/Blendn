@@ -12,7 +12,7 @@ import { asksWords, isFull, kindGlyph, kindWords, postAction, postAge, spotsWord
 import { Label } from './LobbyParts'
 import { PostPhoto } from './PostPhoto'
 import type { BoardPostView } from '../../lib/chatPaging'
-import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { OPACITY, tint } from '../../lib/theme'
 import { Swap } from '../motion/Swap'
 
@@ -242,7 +242,7 @@ function TakenDownCard({ onWriteNew }: { onWriteNew?: () => void }) {
             onPress={onWriteNew}
             accessibilityRole="button"
             accessibilityLabel="Write a new post"
-            hitSlop={(minTarget() - SPACE.xl) / 2}
+            hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
             style={({ pressed }) => [styles.takenDownAction, pressed && styles.pressed]}
           >
             <RNText maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.ink]}>

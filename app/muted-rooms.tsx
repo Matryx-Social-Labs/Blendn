@@ -49,7 +49,7 @@ function MutedRoomsContent() {
   )
 
   const empty = muted.loading ? (
-    <View accessibilityLabel="Loading" style={styles.skeletons}>
+    <View accessible accessibilityLabel="Loading" style={styles.skeletons}>
       {SKELETON_ROWS.map((i) => (
         <View key={i} style={styles.skeletonRow}>
           <SkeletonCircle width={SPACE.xxl} />

@@ -101,7 +101,7 @@ export function IncomingRequestRow({
 const SKELETON_CARD = 140
 export function RequestSkeleton() {
   return (
-    <View testID="request-skeleton" accessibilityLabel="Loading requests" accessibilityState={{ busy: true }} style={styles.skeleton}>
+    <View accessible testID="request-skeleton" accessibilityLabel="Loading requests" accessibilityState={{ busy: true }} style={styles.skeleton}>
       {[0, 1, 2].map((i) => (
         <SkeletonBlock key={i} height={SKELETON_CARD} borderRadius={RADIUS.mediaInCard} />
       ))}

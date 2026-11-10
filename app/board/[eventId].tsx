@@ -785,7 +785,7 @@ export function BoardScreen() {
 /** Card-shaped (three offer cards), so the list does not jump when it lands. */
 function BoardSkeleton() {
   return (
-    <View style={styles.skeleton} accessibilityLabel="Loading the Lobby">
+    <View accessible style={styles.skeleton} accessibilityLabel="Loading the Lobby">
       {[0, 1, 2].map((i) => (
         <SkeletonBlock key={i} width="100%" height={SKELETON_CARD} borderRadius={RADIUS.card} />
       ))}

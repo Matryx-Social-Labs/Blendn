@@ -179,7 +179,7 @@ function InviteScreen() {
             />
           ) : !person || !cta ? (
             // The page's own shape while it loads (Flow 6 invite 09), so it does not jump when it lands.
-            <View testID="invite-loading" accessibilityLabel="Loading" accessibilityState={{ busy: true }} style={styles.stage}>
+            <View accessible testID="invite-loading" accessibilityLabel="Loading" accessibilityState={{ busy: true }} style={styles.stage}>
               <SkeletonCircle width={FACE} />
               <SkeletonBlock width="70%" height={SKELETON.title} />
               <SkeletonBlock width="80%" height={SKELETON.line} />
