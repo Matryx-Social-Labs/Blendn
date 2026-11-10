@@ -28,7 +28,7 @@ const ROSE = [
   'app/private-chat/[conversationId].tsx',
   'app/rate/[eventId].tsx',
   'components/blendn/BlendnScreen.tsx',
-  'app/chat/[id].tsx',
+  'components/chat/RoomChat.tsx',
   'app/chat-info/[id].tsx',
   'components/PresenceSheets.tsx',
 ]

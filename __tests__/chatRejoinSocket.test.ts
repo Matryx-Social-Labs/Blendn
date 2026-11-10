@@ -67,7 +67,7 @@ it('asks the server for the room again on a live socket', async () => {
 })
 
 it('is what the chat screen does once Rejoin succeeds', () => {
-  const screen = fs.readFileSync(path.join(__dirname, '../app/chat/[id].tsx'), 'utf8')
+  const screen = fs.readFileSync(path.join(__dirname, '../components/chat/RoomChat.tsx'), 'utf8')
   const rejoin = screen.slice(screen.indexOf('const rejoin = async'))
   expect(rejoin.slice(0, rejoin.indexOf('void loadMessages(true)'))).toContain('rejoinChatSocket(roomId)')
 })

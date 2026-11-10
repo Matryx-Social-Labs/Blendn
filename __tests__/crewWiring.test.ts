@@ -8,7 +8,7 @@ import { join } from 'path'
 const src = (rel: string) => readFileSync(join(__dirname, '..', rel), 'utf8')
 
 describe('crew and Blend rooms in the chat screen', () => {
-  const chat = src('app/chat/[id].tsx')
+  const chat = src('components/chat/RoomChat.tsx')
 
   it('reads a closed crew or Blend room before the "not in this room" branch', () => {
     // A Blend answers 403 to somebody it took out; read as FORBIDDEN first (the

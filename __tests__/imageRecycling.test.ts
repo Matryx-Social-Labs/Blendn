@@ -28,7 +28,7 @@ const LIST_SURFACES = [
   ['components', 'blendn', 'TonightView.tsx'],
   ['app', '(tabs)', 'events.tsx'],
   ['app', '(tabs)', 'chat.tsx'],
-  ['app', 'chat', '[id].tsx'],
+  ['components', 'chat', 'RoomChat.tsx'],
   ['app', 'private-chat', '[conversationId].tsx'],
 ]
 

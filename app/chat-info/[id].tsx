@@ -191,7 +191,7 @@ function ChatInfoInner() {
     [chatGroupId]
   )
 
-  // The server's row wins; the route's names are a first paint and never an image (see app/chat/[id].tsx).
+  // The server's row wins; the route's names are a first paint and never an image (see components/chat/RoomChat.tsx).
   /*
    * A place's room (R4-D5 5-2): titled "‹place› · tonight", its size a bucket
    * from the place ("5–9"), never the exact total the event room shows — a

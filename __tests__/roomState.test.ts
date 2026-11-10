@@ -40,7 +40,7 @@ describe('the Banter list', () => {
 
 describe('no organizer lock (SCRUM-893)', () => {
   it('the app never says a room was locked by the organizer', () => {
-    for (const f of [['app', '(tabs)', 'chat.tsx'], ['app', 'chat', '[id].tsx'], ['lib', 'roomState.ts'], ['components', 'ds', 'Composer.tsx']]) {
+    for (const f of [['app', '(tabs)', 'chat.tsx'], ['components', 'chat', 'RoomChat.tsx'], ['lib', 'roomState.ts'], ['components', 'ds', 'Composer.tsx']]) {
       expect(readFileSync(join(__dirname, '..', ...f), 'utf8')).not.toMatch(/locked by the organi[sz]er|organizer locked/i)
     }
   })
