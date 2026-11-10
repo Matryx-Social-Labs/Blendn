@@ -32,7 +32,7 @@ const NOT_A_SKELETON = ['app/plus-manage.tsx', 'app/crews/invite/[crewId].tsx']
 /** The crossfade is computed and put on an `entering`: a hook whose result goes nowhere fades nothing. */
 const crossfades = (s: string) => {
   const name = /const (\w+) = useSkeletonCrossfade\(/.exec(s)?.[1]
-  return !!name && s.includes(`entering={${name}}`)
+  return !!name && new RegExp(`entering=\\{[^}]*\\b${name}\\b`).test(s)
 }
 
 it('every screen that draws a skeleton crosses to its content', () => {
