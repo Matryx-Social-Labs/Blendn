@@ -509,6 +509,10 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const chatUnread = useChatTabUnread({ chatGroupId: liveChat, eventId, tab, myId: user?.id })
   // The Chat tab only exists for a room with a chat: without one, People.
   if (tab === 'chat' && mode === 'room' && !chatGroupId) setTab('people')
+  // Chat's feed scrolls down to read back: the stage's drag-to-close waits for People (the chevron and Back still close).
+  const { setDragToClose } = useStage()
+  const chatShown = tab === 'chat' && mode === 'room'
+  useEffect(() => setDragToClose(!chatShown), [chatShown, setDragToClose])
   /** Your pseudonym tonight, once the server has said it (a match's answer): never guessed. */
   const myPseudonym = room.match?.you ?? room.pseudonym ?? null
   const myPhoto = myMainPhoto(user)

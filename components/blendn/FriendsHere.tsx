@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACE.md,
     paddingHorizontal: SPACE.md + SPACE.xxs,
-    borderRadius: RADIUS.rowInCard,
+    borderRadius: RADIUS.tile,
     backgroundColor: COLOR.surface,
   },
   stack: { flexDirection: 'row' },

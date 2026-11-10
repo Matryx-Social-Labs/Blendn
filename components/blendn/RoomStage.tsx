@@ -59,6 +59,8 @@ interface StageApi {
   scrollY: SharedValue<number>
   /** Pass to the scroll view's `simultaneousHandlers` / a `Gesture.Native()`. */
   pan: GestureType
+  /** Off while the room's Chat tab shows: its feed scrolls down to read back, which must never drag the room away. */
+  setDragToClose: (on: boolean) => void
 }
 
 const StageContext = createContext<StageApi | null>(null)
@@ -144,6 +146,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
   // Where the finger was when the scroll reached its top, so the page picks up
   // from there instead of jumping by everything the list already scrolled.
   const dragFrom = useSharedValue(0)
+  const [dragToClose, setDragToClose] = useState(true)
 
   useEffect(() => {
     // Never: Reduce Motion's own 200 ms fade is chosen here, and the system setting must not skip it (or its callback).
@@ -163,6 +166,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        .enabled(dragToClose)
         .activeOffsetY(12)
         .failOffsetX([-24, 24])
         .onBegin(() => {
@@ -184,7 +188,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
             drag.set(withSpring(0, SPRING.snap))
           }
         }),
-    [close, drag, dragFrom, scrollY]
+    [close, drag, dragFrom, scrollY, dragToClose]
   )
 
   const discStyle = useAnimatedStyle(() => {
@@ -216,7 +220,7 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
     opacity: interpolate(drag.get(), [0, height * 0.5], [1, 0], Extrapolation.CLAMP),
   }))
 
-  const api = useMemo<StageApi>(() => ({ scrollY, pan }), [scrollY, pan])
+  const api = useMemo<StageApi>(() => ({ scrollY, pan, setDragToClose }), [scrollY, pan])
 
   return (
     <StageContext.Provider value={api}>

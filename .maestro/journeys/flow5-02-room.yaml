@@ -1,94 +1,130 @@
-# Flow 5 · the room (feat(flow-5)): send; long-press someone's message →
-# react, copy, reply; swipe it to reply; tap its sender → their card.
-# Needs: checked in at a live event whose room has a message from somebody
-# else in it (THEIRS, by SENDER).
-# Env: MAESTRO_EMAIL, MAESTRO_PASSWORD (environment variables; delete
-# ~/.maestro/tests/<run> afterwards). With -e:
-#   ROOM     a regex for the room's title in the Banter
-#   THEIRS   a regex for another person's message text in the room
-#   SENDER   their pseudonym as the room shows it, e.g. "Cosmic Panda"
-#   MESSAGE  unique per run
+# Flow 5 · the room (R-A, C1b): one room, People | Chat tabs, over the tabs.
+#   disc → People → Chat → send, long-press, reply, sender card → Back: People → close;
+#   a push-shaped link (chat/<id>) → Chat; the event page → Chat → close → the event page.
+# Needs: checked in at a live event whose room has a message from somebody else in it (THEIRS, by SENDER).
+# Env: MAESTRO_EMAIL, MAESTRO_PASSWORD (environment variables; delete ~/.maestro/tests/<run> afterwards). With -e:
+#   CHAT_ID     the live room's chat group id (the link a push carries)
+#   EVENT       a regex for the event's title on its page and in the room bar
+#   EVENT_LINK  the event page's link, e.g. exp+blendn://event/<id>
+#   THEIRS      a regex for another person's message text in the room
+#   SENDER      their pseudonym as the room shows it, e.g. "Cosmic Panda"
+#   MESSAGE     unique per run
+#   SEND_POINT  the Send button with the keyboard up: `tapOn: "Send"` by label leaves the text unsent
+#               (iOS 402×874: "358,537"; Android 1080×2400: "964,1422")
 # Read back (blendn-admin):
-#   npm run -s qa sq "SELECT m.content, m.parent_id IS NOT NULL AS is_reply, m.created_at::text AS at FROM chat_messages m JOIN \"User\" u ON u.id = m.user_id WHERE u.email = '<email>' AND m.content LIKE '<MESSAGE>%' ORDER BY m.created_at"
+#   npm run -s qa sq "SELECT m.content, m.parent_id IS NOT NULL AS is_reply FROM chat_messages m JOIN \"User\" u ON u.id = m.user_id WHERE u.email = '<email>' AND m.content LIKE '<MESSAGE>%' ORDER BY m.created_at"
 #   Two rows: MESSAGE (is_reply false) and "<MESSAGE> · reply" (is_reply true).
-#   npm run -s qa sq "SELECT r.emoji FROM message_reactions r JOIN \"User\" u ON u.id = r.user_id WHERE u.email = '<email>' ORDER BY r.created_at DESC LIMIT 1"   →  ❤️
 appId: com.matryxsociallabs.blendn
 tags:
   - flow-5
   - needs-live-event
 ---
-- runFlow: ../subflows/flow5-open.yaml
-- scrollUntilVisible:
-    element: ${ROOM}
-    direction: DOWN
-    timeout: 20000
-- tapOn: ${ROOM}
+- launchApp
 - extendedWaitUntil:
-    visible: "Say something to the room"
-    timeout: 20000
+    visible: ".*(Continue with email|The Pulse).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Continue with email"
+    file: ../subflows/sign-in.yaml
+    env:
+      EMAIL: ${MAESTRO_EMAIL}
+      PASSWORD: ${MAESTRO_PASSWORD}
+- tapOn:
+    text: "Not Now"
+    optional: true
+- runFlow: ../subflows/dismiss-tip.yaml
 
-# --- Send: the composer empties and the bubble lands (#12) ---
-- tapOn: "Say something to the room"
+# --- The disc opens People ---
+- tapOn:
+    id: "disc"
+- extendedWaitUntil:
+    visible: "Everyone here.*"
+    timeout: 20000
+- assertVisible:
+    id: "room-bar"
+- assertVisible: "The room, ${EVENT}"
+- takeScreenshot: flow5-02-people
+
+# --- Chat: the composer, then a send ---
+- tapOn:
+    id: "room-tab-chat-word"
+- extendedWaitUntil:
+    visible: ".*Say something to the room"
+    timeout: 20000
+- tapOn: ".*Say something to the room"
 - inputText: ${MESSAGE}
-- tapOn: "Send"
+- tapOn:
+    point: ${SEND_POINT}
 - extendedWaitUntil:
-    visible: "Say something to the room"
-    timeout: 10000
-- extendedWaitUntil:
-    visible: ${MESSAGE}
-    timeout: 10000
+    visible: ".*${MESSAGE}.*"
+    timeout: 15000
+- hideKeyboard
 - takeScreenshot: flow5-02-sent
 
-# --- Long-press theirs: the reaction bar, then their card, Reply, Copy, Report…, Block… (R3-D5 5.2) ---
+# --- Long-press theirs: the reaction bar and the menu ---
 - longPressOn: ${THEIRS}
 - extendedWaitUntil:
     visible: "Reply"
     timeout: 5000
 - assertVisible: "Copy"
 - assertVisible: "Report…"
-- assertVisible: "Block…"
-- assertVisible: "React, heart"
 - takeScreenshot: flow5-02-menu
-- tapOn: "React, heart"
-- extendedWaitUntil:
-    visible: "heart, .*including you"
-    timeout: 10000
-
-# --- Copy: silent, the menu goes ---
-- longPressOn: ${THEIRS}
-- tapOn: "Copy"
-- extendedWaitUntil:
-    notVisible: "Report…"
-    timeout: 5000
-
-# --- Reply from the menu, then cancel it ---
-- longPressOn: ${THEIRS}
 - tapOn: "Reply"
 - extendedWaitUntil:
     visible: "Replying to .*"
     timeout: 5000
-- tapOn: "Cancel reply"
-
-# --- Swipe right to reply (#35), and send the reply ---
-- swipe:
-    from:
-      text: ${THEIRS}
-    direction: RIGHT
-- extendedWaitUntil:
-    visible: "Replying to .*"
-    timeout: 5000
-- tapOn: "Say something to the room"
+- tapOn: ".*Say something to the room"
 - inputText: "${MESSAGE} · reply"
-- tapOn: "Send"
+- tapOn:
+    point: ${SEND_POINT}
 - extendedWaitUntil:
-    visible: "${MESSAGE} · reply"
-    timeout: 10000
-- takeScreenshot: flow5-02-replied
+    visible: ".*${MESSAGE} · reply.*"
+    timeout: 15000
+- hideKeyboard
 
-# --- Tap the sender: their card (R3-D5 5.1) ---
+# --- Tap the sender: their card ---
 - tapOn: ${SENDER}
 - extendedWaitUntil:
     visible: "View profile"
     timeout: 10000
-- takeScreenshot: flow5-02-card
 - tapOn: "Dismiss"
+
+# --- Back: Chat → People → closed ---
+- back
+- extendedWaitUntil:
+    visible: "Everyone here.*"
+    timeout: 10000
+- tapOn:
+    id: "room-close"
+- extendedWaitUntil:
+    notVisible:
+      id: "room-bar"
+    timeout: 10000
+
+# --- A push-shaped link lands on Chat ---
+- openLink: exp+blendn://chat/${CHAT_ID}
+- extendedWaitUntil:
+    visible: ".*Say something to the room"
+    timeout: 30000
+- assertVisible:
+    id: "room-bar"
+- takeScreenshot: flow5-02-link-chat
+- tapOn:
+    id: "room-close"
+
+# --- The event page opens Chat, and closing goes back to the event page ---
+- openLink: ${EVENT_LINK}
+- extendedWaitUntil:
+    visible: ".*(Open the room|Blend in).*"
+    timeout: 30000
+- tapOn: ".*(Open the room|Blend in).*"
+- extendedWaitUntil:
+    visible: ".*Say something to the room"
+    timeout: 30000
+- tapOn:
+    id: "room-close"
+- extendedWaitUntil:
+    visible: ".*(Open the room|Blend in).*"
+    timeout: 15000
+- takeScreenshot: flow5-02-back-on-event

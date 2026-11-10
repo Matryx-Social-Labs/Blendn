@@ -106,7 +106,7 @@ export function MeetNextCard({
         </Pressable>
       </ScalePress>
       {focused || previewState === 'focused'
-        ? focusRing(RADIUS.rowInCard).map((ring, i) => (
+        ? focusRing(RADIUS.tile).map((ring, i) => (
             <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={ring} />
           ))
         : null}
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   pressed: { transform: [{ scale: PRESS.scale }] },
   card: {
     flexGrow: 1,
-    borderRadius: RADIUS.rowInCard,
+    borderRadius: RADIUS.tile,
     borderWidth: MATERIAL.glassEdge.width,
     backgroundColor: COLOR.surface,
     paddingTop: SPACE.md + SPACE.xxs,

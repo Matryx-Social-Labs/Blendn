@@ -72,7 +72,7 @@ jest.mock('../components/blendn/RoomStage', () => {
   return {
     RoomStage: forwardRef(({ children }: { children: React.ReactNode }, _ref: unknown) => children),
     useStageScroll: () => ({ onScroll: undefined, native: {}, scrollEventThrottle: 16, scrolled: false, atTop: () => {} }),
-    useStage: () => ({ scrollY: mockScrollY, pan: {} }),
+    useStage: () => ({ scrollY: mockScrollY, pan: {}, setDragToClose: () => {} }),
   }
 })
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))

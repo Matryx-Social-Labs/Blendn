@@ -56,6 +56,10 @@ const YOU_LINE: Record<Visibility, string> = {
  * Change, to Room settings (who sees you, your room name). Violet, as everything that is you. Not listed, Change is
  * "Turn on", which goes where that is fixed.
  */
+/** R-A `you` name. */
+// design-exception: 16/22, between `body` and `rowTitle` 17/22 (the board's you-card)
+const YOU_NAME = { fontSize: 16, lineHeight: 22 }
+
 export const RoomYouCard = memo(function RoomYouCard({
   face,
   name,
@@ -76,7 +80,7 @@ export const RoomYouCard = memo(function RoomYouCard({
       <RadialWash layers={YOU_WASH} style={StyleSheet.absoluteFill} />
       <Avatar size={YOU_FACE} {...face} />
       <View style={styles.youText} accessible accessibilityLabel={`${name}. ${YOU_LINE[state]}`}>
-        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold, FONT_FAMILY.brand[500]), YOU_NAME, styles.ink]}>
           {name}
         </Text>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>
@@ -298,7 +302,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACE.md,
     paddingHorizontal: SPACE.md + SPACE.xxs,
     marginHorizontal: SPACE.gutter,
-    borderRadius: RADIUS.rowInCard,
+    borderRadius: RADIUS.tile,
     borderWidth: 1,
     borderColor: tint(COLOR.brandViolet, 0.45),
     backgroundColor: COLOR.surface,
