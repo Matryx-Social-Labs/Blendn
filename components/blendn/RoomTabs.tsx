@@ -5,7 +5,9 @@ import type { RoomTab } from '../../lib/roomTab'
 
 /**
  * The room's two panes, People and Chat (Flow 5 R-A), both kept mounted for the whole visit: the hidden one is
- * `display: none`, untouchable and out of a screen reader's reach. Mounting only the shown pane would drop the chat's
+ * see-through and laid over the shown one's frame, untouchable and out of a screen reader's reach. Never
+ * `display: none`: Fabric does not mount that subtree, so the gesture handlers a pane draws while hidden (a bubble's
+ * long-press, its swipe to reply) attach to no native view and never fire once it shows. Mounting only the shown pane would drop the chat's
  * subscriptions on People and make them again on Chat, a `leave:chat` and a `join:chat` on every switch
  * (`__tests__/roomTabsSocket.test.tsx`). The chat's draft, scroll and unread count survive a switch for the same reason.
  */
@@ -38,5 +40,5 @@ function Pane({ shown, testID, children }: { shown: boolean; testID: string; chi
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  hidden: { display: 'none' },
+  hidden: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, opacity: 0 },
 })

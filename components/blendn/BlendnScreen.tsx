@@ -609,7 +609,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     target: roomCoachTarget,
     text: ROOM_COACH_TEXT,
     place: 'below',
-    radius: RADIUS.rowInCard,
+    radius: RADIUS.tile,
     onDismiss: roomCoach.dismiss,
     onLost: roomCoach.lose,
     testID: 'room-coach-mark',

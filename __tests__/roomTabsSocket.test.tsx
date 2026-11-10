@@ -9,7 +9,7 @@
  */
 import React, { useEffect, type ReactNode } from 'react'
 import { render } from '@testing-library/react-native'
-import { Text } from 'react-native'
+import { StyleSheet, Text } from 'react-native'
 
 type Handler = (...args: unknown[]) => void
 
@@ -111,4 +111,15 @@ it('keeps the hidden tab out of reach: not touchable, not read by a screen reade
   expect(chatPane.props.importantForAccessibility).toBe('no-hide-descendants')
   expect(chatPane.props.accessibilityElementsHidden).toBe(true)
   expect(view.getByTestId('room-tab-people').props.pointerEvents).toBe('auto')
+})
+
+// Found on the iOS drive: opened on People, the chat's bubbles never took a long-press. Fabric does not mount a
+// `display: none` subtree, so the gesture handlers attached as React drew them found no native view. The hidden pane is
+// drawn and see-through instead, so its views exist from the first frame.
+it('draws the hidden tab (see-through, under the shown one), never display: none', async () => {
+  const view = await render(<RoomTabs tab="people" people={<Text>people</Text>} chat={<Text>chat</Text>} />)
+  const style = StyleSheet.flatten(view.getByTestId('room-tab-chat', { includeHiddenElements: true }).props.style)
+  expect(style.display).not.toBe('none')
+  expect(style).toMatchObject({ opacity: 0, position: 'absolute' })
+  expect(StyleSheet.flatten(view.getByTestId('room-tab-people').props.style).opacity ?? 1).toBe(1)
 })
