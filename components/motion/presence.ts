@@ -129,10 +129,12 @@ export const resortOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(.
 /*
  * A row answered away (DS #16: a friend request, a withdrawn request, an unblocked person): it fades out over `quick` on
  * the exit curve while the rows below close the gap on `M.settle`. Reduce Motion: pass neither; the row goes and the list
- * updates at once. Going's saved rows carry the same values.
+ * updates at once. Going's saved rows use them, and `rowBack` is a row put back (Undo, a failed answer) fading in where
+ * it was while the list opens for it.
  */
 export const rowOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
 export const rowReflow = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
+export const rowBack = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
 /*
  * The empty state a list shows once its last row has been answered away: it waits out the row's `quick` exit, then fades in
  * over `base`, so the words are never drawn across the fading card (iOS drive, SCRUM-1001). Reduce Motion: pass neither.

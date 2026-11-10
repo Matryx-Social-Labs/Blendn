@@ -17,13 +17,15 @@ describe('Going’s row reflow', () => {
     expect(code).not.toMatch(/Easing\.bezier\(\s*[0-9]/)
   })
 
-  it('the reflow is M.settle; the fade out is quick on the exit curve; the fade back is base on the entrance curve', () => {
-    expect(code).toContain('const ROW_REFLOW = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)')
-    expect(code).toContain('const ROW_OUT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))')
-    expect(code).toContain('const ROW_BACK = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))')
+  it('the reflow is M.settle; the fade out is quick on the exit curve; the fade back is base on the entrance curve (the shared row presets)', () => {
+    const presence = readFileSync(join(__dirname, '..', 'components/motion/presence.ts'), 'utf8')
+    expect(presence).toContain('export const rowReflow = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)')
+    expect(presence).toContain('export const rowOut = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))')
+    expect(presence).toContain('export const rowBack = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))')
+    expect(code).toContain("import { rowBack, rowOut, rowReflow } from '../../components/motion/presence'")
   })
 
   it('Reduce Motion keeps the list updating without a layout transition', () => {
-    expect(code).toContain('itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}')
+    expect(code).toContain('itemLayoutAnimation={reduceMotion ? undefined : rowReflow}')
   })
 })
