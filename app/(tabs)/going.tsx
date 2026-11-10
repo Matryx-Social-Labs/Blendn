@@ -2,7 +2,7 @@ import { ScreenProfiler } from '../../lib/perf'
 import { router, useFocusEffect, useScrollToTop } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AppState, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
+import Animated from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { EventCover } from '../../components/EventCover'
 import { OfflineBanner } from '../../components/OfflineBanner'
@@ -12,6 +12,7 @@ import { SkeletonBlock } from '../../components/Skeleton'
 import { Spinner } from '../../components/ds/Loader'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
+import { rowBack, rowOut, rowReflow } from '../../components/motion/presence'
 import { EventCard } from '../../components/ds/EventCard'
 import { MonoRun, PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
@@ -58,7 +59,7 @@ import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
-import { DURATION, EASING, SPRING, useReducedMotion } from '../../lib/motion'
+import { useReducedMotion } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
 import { NewInLobbyRow } from '../../components/board/LobbyPreview'
 import { addToCalendar } from '../../lib/calendar'
@@ -687,13 +688,14 @@ function GoingScreenInner() {
 
     // Saved. The heart is the remove. `exiting` on every row; `entering` only
     // on the one Undo just put back — an entrance on every row would replay as
-    // the list virtualises.
+    // the list virtualises. The rows carry no blur or shadow, which is what
+    // makes the list's layout transition safe here (see tasks/lessons.md).
     const row = item.row
     const cancelled = row.status === 'cancelled'
     return (
       <Animated.View
-        exiting={reduceMotion ? undefined : ROW_OUT}
-        entering={!reduceMotion && row.id === restoredId ? ROW_BACK : undefined}
+        exiting={reduceMotion ? undefined : rowOut}
+        entering={!reduceMotion && row.id === restoredId ? rowBack : undefined}
       >
         <GoingRow
           title={row.title}
@@ -811,7 +813,7 @@ function GoingScreenInner() {
             ref={listRef}
             testID="going-list"
             data={items}
-            itemLayoutAnimation={reduceMotion ? undefined : ROW_REFLOW}
+            itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             // Hundreds of past nights are rows drawn a screen at a time, never the whole list.
@@ -1117,17 +1119,6 @@ const SKELETON_ROW = 72
 /** The saved heart's white disc. */
 const HEART = SIZE.tag
 
-/*
- * Removing a save (DS #16): the row fades out on quick while the ones below close the gap,
- * instead of vanishing and letting the list snap up — the snap hid where the
- * row went. Undo fades it back in at its old place and the list opens for it.
- * The rows carry no blur or shadow, which is what makes a layout transition
- * safe here (see tasks/lessons.md). Reduce Motion: the list simply updates.
- */
-const ROW_OUT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
-const ROW_BACK = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))
-// The reflow is M.settle (DS #16), the system's own spring, not a timed ease.
-const ROW_REFLOW = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
 
 /** The Pulse lead's ember underglow (`glowLead`), on Next up (board `.nu`). */
 const NEXT_UP_GLOW = MATERIAL.glowLead.map(({ offsetY, radius, spread, color }) => ({ offsetX: 0, offsetY, blurRadius: radius, spreadDistance: spread, color }))

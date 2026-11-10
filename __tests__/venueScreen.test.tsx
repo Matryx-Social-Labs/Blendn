@@ -8,7 +8,7 @@
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import React from 'react'
-import { AppState, Linking, StyleSheet } from 'react-native'
+import { AccessibilityInfo, AppState, Linking, StyleSheet } from 'react-native'
 
 const NOW = Date.parse('2026-10-09T20:00:00.000Z')
 const mockOpenURL = jest.fn(() => Promise.resolve())
@@ -672,6 +672,21 @@ describe('live', () => {
     expect(screen.getByText('Ending', { includeHiddenElements: true })).toBeTruthy()
     await act(async () => { jest.advanceTimersByTime(1_000) })
     expect(screen.getByLabelText('Live at The Humming Tree, 4:58 left, ending soon')).toBeTruthy()
+  })
+
+  it('the pill is a 44 pt target though it draws 36 (motion audit M21)', async () => {
+    await mount(venue({ live: liveOver() }))
+    expect(screen.getByTestId('venue-live-pill').props.hitSlop).toBe(4)
+  })
+
+  it('the last five minutes are said once, as they start, not on every tick (motion audit M21)', async () => {
+    const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    await mount(venue({ live: liveOver({ expiresAt: new Date(NOW + 5 * 60_000 + 1_000).toISOString() }) }))
+    expect(say).not.toHaveBeenCalledWith(expect.stringMatching(/ending/i))
+    await act(async () => { jest.advanceTimersByTime(2_000) })
+    await act(async () => { jest.advanceTimersByTime(3_000) })
+    expect(say.mock.calls.filter(([t]) => /ending/i.test(t))).toEqual([['Your live time is ending. Open it to extend.']])
+    say.mockRestore()
   })
 
   it('the pill opens the session sheet; in the last five minutes it offers Extend, named with the new end', async () => {

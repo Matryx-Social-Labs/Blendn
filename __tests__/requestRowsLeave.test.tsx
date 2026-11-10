@@ -74,6 +74,25 @@ describe('rows that are answered away leave, and the list closes the gap (DS #16
     expect(code(path)).toContain('itemLayoutAnimation={reduceMotion ? undefined : rowReflow}')
   })
 
+  it('the Lobby’s rows in the Banter leave, close the gap, and a row put back fades in where it was (motion audit M20)', () => {
+    const board = code('components/board/BoardRequestsSection.tsx')
+    expect(board).toContain('exiting={reduceMotion ? undefined : rowOut}')
+    expect(board).toContain('layout={reduceMotion ? undefined : rowReflow}')
+    expect(board).toContain('entering={!reduceMotion && restoredId === r.id ? rowBack : undefined}')
+  })
+
+  it('the last row takes its heading with it: YOU ASKED and the Lobby itself fade out with it, not before it, and back in with a row put back (iOS drive)', () => {
+    const board = code('components/board/BoardRequestsSection.tsx')
+    expect(board).toMatch(/<Reanimated\.View style=\{styles\.section\} entering=\{reduceMotion \? undefined : rowBack\} exiting=\{reduceMotion \? undefined : rowOut\}/)
+    expect(board).toMatch(/<Reanimated\.View style=\{styles\.outgoing\} exiting=\{reduceMotion \? undefined : rowOut\} layout=\{reduceMotion \? undefined : rowReflow\}/)
+  })
+
+  it('Going’s saved rows use the same presets, not copies of them', () => {
+    const going = code('app/(tabs)/going.tsx')
+    expect(going).not.toMatch(/const ROW_(OUT|BACK|REFLOW) =/)
+    expect(code('components/motion/presence.ts')).toContain('export const rowBack = FadeIn.duration(DURATION.base).easing(Easing.bezier(...EASING.entrance))')
+  })
+
   it('Add friends’ request preview is not a list: the rows close the gap themselves', () => {
     expect(code('components/friends/IncomingRequestRow.tsx')).toContain('layout={reduceMotion ? undefined : rowReflow}')
   })
