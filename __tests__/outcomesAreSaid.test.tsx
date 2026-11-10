@@ -96,7 +96,6 @@ const NOT_AN_OUTCOME: Record<string, string> = {
   'components/crews/MakeSteps.tsx': 'the invited count follows each pick, and the pick already says "selected"',
   'components/ds/Button.tsx': 'a count on a button follows a selection the control already says',
   'components/board/LobbyParts.tsx': 'new posts arrive unsolicited (the Banter dot’s rule): the pill is there to find, not said',
-  'components/blendn/ChatDock.tsx': 'the dock’s last line is every incoming message: saying each would talk over the room',
   'components/venue/VenueStates.tsx': 'the gate is a StateScreen, which says itself on arrival (M29)',
 }
 
