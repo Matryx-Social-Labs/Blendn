@@ -1,6 +1,7 @@
 import { Linking } from 'react-native'
 
 import { SystemScreen } from './SystemScreen'
+import { useToast } from '../Toast'
 import { accountStateCopy } from '../../lib/accountStateCopy'
 import { setAccountState, type AccountState } from '../../lib/accountState'
 import { H } from '../../lib/haptics'
@@ -17,7 +18,10 @@ import { SUPPORT_EMAIL, supportMailto } from '../../lib/support'
  */
 export function AccountStateScreen({ state }: { state: AccountState }) {
   const copy = accountStateCopy(state.kind, state.sentence)
-  const mail = (subject: string) => () => void Linking.openURL(supportMailto({ subject })).catch(() => {})
+  const { showToast } = useToast()
+  // The screen's one way on: when nothing opens (no mail app), say where to go rather than do nothing (M23).
+  const mail = (subject: string) => () =>
+    void Linking.openURL(supportMailto({ subject })).catch(() => showToast(`No email app opened. Write to ${SUPPORT_EMAIL}.`, 'info'))
   const dismiss = () => setAccountState(null)
 
   const actions =
@@ -33,7 +37,8 @@ export function AccountStateScreen({ state }: { state: AccountState }) {
               kind: 'strong' as const,
               icon: 'arrow-up-right' as const,
               pressHaptic: () => H.primary(),
-              onPress: () => void Linking.openURL(DASHBOARD_URL).catch(() => {}),
+              onPress: () =>
+                void Linking.openURL(DASHBOARD_URL).catch(() => showToast(`The dashboard didn’t open. Go to ${DASHBOARD_URL.replace(/^https:\/\//, '')}.`, 'info')),
             },
             { label: 'Use a different account', kind: 'tertiary' as const, onPress: dismiss },
           ]

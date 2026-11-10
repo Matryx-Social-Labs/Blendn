@@ -169,3 +169,33 @@ it('a tertiary action is drawn as Cancel is, not as the secondary (You hand-off 
   expect(look('What’s kept')).toEqual(look('Cancel'))
   expect(look('What’s kept')).not.toEqual(look('Keep it'))
 })
+
+describe('a sheet replaced by another is told it went unanswered (motion audit M33)', () => {
+  it('a caller awaiting a choice hears onDismiss when a different sheet takes its place', async () => {
+    const onDismiss = jest.fn()
+    await render(<SheetHost />)
+    await act(async () => showSheet({ kind: 'actions', title: 'Like as…', onDismiss, actions: [{ label: 'Cancel', cancel: true }] }))
+    await act(async () => showSheet({ kind: 'actions', title: 'Something else', actions: [{ label: 'Cancel', cancel: true }] }))
+    expect(onDismiss).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Something else')).toBeTruthy()
+  })
+
+  it('a step of the same flow (`next`) is not a dismissal: the flow goes on', async () => {
+    const onDismiss = jest.fn()
+    await render(<SheetHost />)
+    await act(async () =>
+      showSheet({
+        kind: 'actions',
+        title: 'Step one',
+        onDismiss,
+        actions: [
+          { label: 'On', next: () => ({ kind: 'actions', title: 'Step two', actions: [{ label: 'Cancel', cancel: true }] }) },
+          { label: 'Cancel', cancel: true },
+        ],
+      })
+    )
+    await act(async () => fireEvent.press(screen.getByLabelText('On')))
+    expect(screen.getByText('Step two')).toBeTruthy()
+    expect(onDismiss).not.toHaveBeenCalled()
+  })
+})
