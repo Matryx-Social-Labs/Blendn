@@ -191,7 +191,7 @@ function BlockedUsersContent() {
 
   /** The foot of a long list: the next page on its way, or the one that did not come. */
   const footer = loadingMore ? (
-    <View style={styles.skeletonRow} accessibilityLabel="Loading more">
+    <View accessible style={styles.skeletonRow} accessibilityLabel="Loading more">
       <SkeletonCircle width={SIZE.control} />
       <View style={styles.skeletonText}>
         <SkeletonLine width="45%" />
@@ -210,7 +210,7 @@ function BlockedUsersContent() {
       <TopBar title="Blocked users" state={bar.state} onBack={() => router.back()} />
 
       {loading ? (
-        <View style={styles.listContent} accessibilityLabel="Loading">
+        <View accessible style={styles.listContent} accessibilityLabel="Loading">
           {[0, 1, 2].map((i) => (
             <View key={i} style={styles.skeletonRow}>
               <SkeletonCircle width={SIZE.control} />

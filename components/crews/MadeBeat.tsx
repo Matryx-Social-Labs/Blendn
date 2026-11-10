@@ -6,7 +6,7 @@ import { COLOR, DURATION, EASING, RADIUS, SPACE, SPRING, MAX_FONT_SCALE } from '
 import { madeLine } from '../../lib/crewsScreens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { CrewEmblem } from '../ds/CrewEmblem'
-import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, useAnnounced, useBoldText, useIncreaseContrast } from '../ds/shared'
 
 const EMBLEM = 160
 /** flow10.js `make` success: the emblem scales 0.8 → 1 on `base`. */
@@ -27,6 +27,8 @@ export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: stri
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
+  // The crew is made: the screen changes under you, so it is said once (M24). On Android the beat is a live region.
+  useAnnounced(`${name}. ${madeLine(invited)}`)
   const scale = useSharedValue(reduceMotion ? 1 : FROM_SCALE)
   const opacity = useSharedValue(0)
   useEffect(() => {
@@ -39,6 +41,7 @@ export function MadeBeat({ name, emblemSeed, invited, onContinue }: { name: stri
   return (
     <Pressable
       testID="make-done"
+      accessibilityLiveRegion="polite"
       onPress={onContinue}
       accessibilityRole="button"
       accessibilityLabel={`${name}. ${madeLine(invited)} The crew chat opens next.`}

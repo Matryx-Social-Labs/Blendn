@@ -138,7 +138,7 @@ export function PersonAvatar({ person }: { person: FriendPerson }) {
 /** Rows at `PersonRow`'s geometry while a list loads (Flow 6 friends 02), so it does not jump when it lands. Still: nothing loops. */
 export function PersonRowSkeleton() {
   return (
-    <View testID="person-skeleton" style={styles.skeleton} accessibilityLabel="Loading" accessibilityState={{ busy: true }}>
+    <View accessible testID="person-skeleton" style={styles.skeleton} accessibilityLabel="Loading" accessibilityState={{ busy: true }}>
       {[50, 60, 70, 80].map((width) => (
         <View key={width} style={styles.skeletonRow}>
           <SkeletonCircle width={AVATAR} />

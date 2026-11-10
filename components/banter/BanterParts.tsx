@@ -17,7 +17,7 @@ import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, GroundProvider, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, useAnnounced, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { glassContentsIn, glassRiseIn } from '../motion/presence'
@@ -253,6 +253,8 @@ export function RequestCard({
   onMore = useBanterPress(onMore)
   onOpen = useBanterPress(onOpen)
   const bold = useBoldText()
+  // A failed answer appears in place (M24): said on iOS, a live region on Android.
+  useAnnounced(foot)
   const largeText = useLargeText()
   const twoLines = useTwoLineNames()
   return (
@@ -312,7 +314,7 @@ export function RequestCard({
           />
         </View>
         {foot ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
             {foot}
           </Text>
         ) : null}
@@ -550,7 +552,7 @@ function PairEmblem({ seeds, ring }: { seeds: [string | null, string | null]; ri
 /** Loading (Flow 5 #01): four rows at the real geometry — round, square, round, round. Still. */
 export function BanterSkeleton() {
   return (
-    <View testID="banter-skeleton" accessibilityLabel="Loading your chats">
+    <View accessible testID="banter-skeleton" accessibilityLabel="Loading your chats">
       {[true, false, true, true].map((round, i) => (
         <View key={i} style={styles.row}>
           <View style={[styles.block, { width: ROW_AVATAR, height: ROW_AVATAR, borderRadius: round ? RADIUS.capsule : SQUARE_RADIUS }]} />

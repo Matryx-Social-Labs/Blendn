@@ -9,7 +9,7 @@ import { IconButton } from '../ds/IconButton'
 import { LiquidDisc } from '../ds/LiquidDisc'
 import { MonoRun } from '../ds/MonoFamily'
 import { VenuePlate } from '../ds/VenuePlate'
-import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
+import { font, IC_HAIRLINE, useAnnounced, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { endedLabel, knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
@@ -216,7 +216,7 @@ export function RegularOn({ venueName, saving, onOff }: { venueName: string; sav
         <Text testID="regular-on-text" maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.besideText, measure]}>
           {`${venueName} knows you’re a regular`}
         </Text>
-        <Button kind="tertiary" size="sm" label="Turn off" disabled={saving} accessibilityLabel={`Turn off: ${venueName} knows you’re a regular`} onPress={onOff} />
+        <Button kind="tertiary" size="sm" label="Turn off" loading={saving} accessibilityLabel={`Turn off: ${venueName} knows you’re a regular`} onPress={onOff} />
       </View>
     </View>
   )
@@ -225,11 +225,13 @@ export function RegularOn({ venueName, saving, onOff }: { venueName: string; sav
 /** After Turn off, for this visit: the card does not come straight back. */
 export function RegularOff({ venueName }: { venueName: string }) {
   const bold = useBoldText()
+  const done = `Done — ${venueName} no longer sees you as a regular. Offers to regulars still reach you without your name.`
+  useAnnounced(done)
   return (
     <View testID="regular-off" accessibilityLiveRegion="polite" style={styles.rowCard}>
       <Icon name="check" size={ICON.control} color={COLOR.textPrimary} />
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>
-        {`Done — ${venueName} no longer sees you as a regular. Offers to regulars still reach you without your name.`}
+        {done}
       </Text>
     </View>
   )

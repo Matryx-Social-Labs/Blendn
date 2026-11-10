@@ -243,7 +243,7 @@ function CrewsScreenContent() {
 
 function CrewsSkeleton() {
   return (
-    <View style={styles.sections} accessibilityLabel="Loading your crews">
+    <View accessible style={styles.sections} accessibilityLabel="Loading your crews">
       <SkeletonBlock width="100%" height={(SIZE.primary + SPACE.sm) * SKELETON_ROWS} borderRadius={RADIUS.sheet} />
     </View>
   )

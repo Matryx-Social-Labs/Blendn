@@ -195,7 +195,7 @@ function FriendProfileScreenContent() {
           </View>
         ) : (
           // The hero's own shape, so the page does not jump when it lands (Flow 6 `friend` 05).
-          <View testID="friend-skeleton" accessibilityLabel="Loading profile" accessibilityState={{ busy: true }}>
+          <View accessible testID="friend-skeleton" accessibilityLabel="Loading profile" accessibilityState={{ busy: true }}>
             <SkeletonBlock width={width} height={heroHeightFor(width)} borderRadius={0} />
           </View>
         )}

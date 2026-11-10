@@ -2,7 +2,7 @@
  * Flow 15 system states: the reason classifier, the account screens, not found, update required, and the outage lines.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { Linking } from 'react-native'
+import { AccessibilityInfo, Linking } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -256,6 +256,15 @@ describe('"This isn’t here any more" (#11)', () => {
     expect(back).toHaveBeenCalledTimes(1)
     expect(H.primary).not.toHaveBeenCalled()
     expect(H.error).not.toHaveBeenCalled()
+  })
+
+  it('is said on arrival, queued behind what is being read (motion audit M29: it replaces the content and said nothing)', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+    const r = await render(<GoneCard kind="crew" onBack={jest.fn()} />)
+    expect(announce).toHaveBeenCalledWith(`${GONE.crew.title}. ${GONE.crew.body}`, { queue: true })
+    await r.rerender(<GoneCard kind="crew" onBack={jest.fn()} />)
+    expect(announce).toHaveBeenCalledTimes(1)
+    announce.mockRestore()
   })
 
   it('names no raw error in any of them', () => {

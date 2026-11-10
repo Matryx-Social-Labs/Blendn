@@ -311,7 +311,7 @@ function Skeleton({ room }: { room: number }) {
   const { width: screen } = useWindowDimensions()
   const width = screen - DECK_INSET * 2
   const height = Math.max(MIN_CARD, Math.min(Math.round(width * SKELETON_ASPECT), room ? room - SPACE.xl : Infinity))
-  return <View testID="tonight-skeleton" accessibilityLabel="Loading tonight" style={[styles.skeleton, { width, height }]} />
+  return <View accessible testID="tonight-skeleton" accessibilityLabel="Loading tonight" style={[styles.skeleton, { width, height }]} />
 }
 
 const styles = StyleSheet.create({

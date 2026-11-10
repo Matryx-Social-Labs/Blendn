@@ -157,7 +157,7 @@ export function StatsCard({
 /** Me while it loads, at the final geometry (Flow 6 `me` 07): the name and lines, the button, the pile, the stats and one section. */
 export function MeSkeleton() {
   return (
-    <View testID="me-skeleton" accessibilityLabel="Loading your profile" accessibilityState={{ busy: true }} style={styles.skeleton}>
+    <View accessible testID="me-skeleton" accessibilityLabel="Loading your profile" accessibilityState={{ busy: true }} style={styles.skeleton}>
       <View style={styles.identity}>
         <View style={styles.skeletonText}>
           <SkeletonBlock width="60%" height={SKELETON.name} borderRadius={RADIUS.thumb} />

@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from '../ds/Button'
 import { SettingsRow } from '../ds/SettingsRow'
-import { font, minTarget, useBoldText } from '../ds/shared'
+import { font, minTarget, useAnnounced, useBoldText } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { useToast } from '../Toast'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -60,6 +60,8 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
   const { showToast } = useToast()
   const [prefs, setPrefs] = useState<RegularPrefs | null>(null)
   const [state, setState] = useState<RegularState | null>(null)
+  const done = `Done — ${venueName} no longer sees you as a regular. Offers to regulars still reach you without your name.`
+  useAnnounced(state === 'off' && done)
   const [saving, setSaving] = useState<'known' | 'offersMuted' | null>(null)
 
   const read = useCallback(() => {
@@ -152,7 +154,7 @@ export function VenueRegulars({ venueId, venueName }: { venueId: string; venueNa
         <View style={styles.done} accessibilityLiveRegion="polite" testID="venue-regular-done">
           <Icon name="check" size={ICON.control} />
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>
-            {`Done — ${venueName} no longer sees you as a regular. Offers to regulars still reach you without your name.`}
+            {done}
           </Text>
         </View>
       ) : null}

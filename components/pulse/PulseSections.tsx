@@ -315,7 +315,7 @@ export const SectionStack = memo(function SectionStack({
 const SKELETON = { bar: 26, headerNow: 160 } as const
 export function PulseSkeleton({ lead }: { lead: number }) {
   return (
-    <View accessibilityLabel="Loading events" accessibilityState={{ busy: true }} testID="pulse-skeleton">
+    <View accessible accessibilityLabel="Loading events" accessibilityState={{ busy: true }} testID="pulse-skeleton">
       <View style={[styles.gutter, styles.skeletonLead]}>
         <Skeleton width="100%" height={lead} borderRadius={RADIUS.card} />
       </View>

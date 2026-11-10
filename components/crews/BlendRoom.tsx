@@ -34,7 +34,7 @@ import { Button } from '../ds/Button'
 import { Creature, creatureFor } from '../ds/Creature'
 import { CrewEmblem, EMBLEM_SQUIRCLE } from '../ds/CrewEmblem'
 import { RevealSheet, RevealSide } from '../ds/RevealSheet'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { announceOutcome, CONTROL_FONT_CAP, font, useAnnounced, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { useToast } from '../Toast'
 import { OverflowMenu } from './OverflowMenu'
@@ -186,6 +186,7 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
   const theirShape = theirs ? sideShape(theirs, myId) : null
   const crewName = mineShape?.side.kind === 'crew' ? mineShape.side.name : null
   const closing = closingSoon(blend.closesAt, now) ? closesAtLine(blend.closesAt) : null
+  useAnnounced(closing)
 
   const reveal = async () => {
     if (inFlight.current) return
@@ -197,6 +198,8 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
     setAsking(false)
     if (!result.success) return showToast(crewMessage(result, 'blend', 'Couldn’t reveal. Try again.'), 'error', { haptic: 'error' })
     H.success()
+    // The faces change in place (M24); on Android the side's status line is read where it is.
+    announceOutcome('You revealed your name.')
     if (myId) rememberReveal(myId, blend.blendId)
     // No toast: its "N revealed · M keep it private" needs the server's counts, which do not exist yet.
     void reload()
