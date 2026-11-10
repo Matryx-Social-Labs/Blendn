@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import Animated, { FadeIn } from 'react-native-reanimated'
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated'
 
 import { LegalLine } from '../components/LegalLine'
 import { Logger } from '../lib/logger'
@@ -9,6 +9,7 @@ import { currentDeviceInfo } from '../components/onboarding/authForm'
 import { EmailSheet, SheetItem } from '../components/onboarding/EmailSheet'
 import { useRefusedPulse } from '../components/onboarding/useRefusedPulse'
 import { Banner } from '../components/ds/Banner'
+import { BannerPresence } from '../components/motion/BannerPresence'
 import { Button } from '../components/ds/Button'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { TextField } from '../components/ds/TextField'
@@ -359,7 +360,7 @@ export default function SignIn() {
       </SheetItem>
 
       {isSignup ? (
-        <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(DURATION.base)} style={styles.more}>
+        <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(DURATION.base)} exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)} style={styles.more}>
           <SheetItem name="name">
             <TextField
               inputRef={nameRef}
@@ -398,7 +399,7 @@ export default function SignIn() {
         </Animated.View>
       ) : null}
 
-      {error ? <Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="sign-in-error" /> : null}
+      {error ? <BannerPresence><Banner kind="error" text={error} icon={waiting ? 'clock' : undefined} testID="sign-in-error" /></BannerPresence> : null}
     </EmailSheet>
   )
 }

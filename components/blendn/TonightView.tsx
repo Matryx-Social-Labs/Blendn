@@ -12,6 +12,7 @@ import { startsLabel } from '../../lib/roomMoments'
 import { calendarDaysBetween, eventClock } from '../../lib/time'
 import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
 import { Banner } from '../ds/Banner'
+import { BannerPresence } from '../motion/BannerPresence'
 import type { PourFrame as PassFrame } from '../ds/MomentPour'
 import { font, minTarget, useBoldText } from '../ds/shared'
 import { StateScreen } from '../ds/StateScreen'
@@ -215,16 +216,16 @@ export function TonightView({
             </View>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{sub}</Text>
             {onRoomRetry ? (
-              <Banner kind="info" text="Couldn’t check your room. You can still browse tonight." action={{ label: 'Try again', onPress: onRoomRetry }} testID="tonight-room-error" />
+              <BannerPresence><Banner kind="info" text="Couldn’t check your room. You can still browse tonight." action={{ label: 'Try again', onPress: onRoomRetry }} testID="tonight-room-error" /></BannerPresence>
             ) : null}
-            {offline ? <Banner kind="offline" text="Offline. Showing what loaded earlier." testID="tonight-offline" /> : null}
+            {offline ? <BannerPresence><Banner kind="offline" text="Offline. Showing what loaded earlier." testID="tonight-offline" /></BannerPresence> : null}
             {location === 'off' ? (
-              <Banner
+              <BannerPresence><Banner
                 kind="info"
                 text="Location is off. Events are listed by city, without distances."
                 action={{ label: 'Turn on', onPress: () => void Linking.openSettings().catch(() => {}) }}
                 testID="tonight-location-off"
-              />
+              /></BannerPresence>
             ) : null}
           </View>
 

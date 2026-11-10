@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { OverflowMenu } from '../crews/OverflowMenu'
 import { AmenityGrid } from '../ds/AmenityTile'
 import { Banner } from '../ds/Banner'
+import { BannerPresence } from '../motion/BannerPresence'
 import { Button } from '../ds/Button'
 import { Dock } from '../ds/Dock'
 import { IconButton } from '../ds/IconButton'
@@ -1032,9 +1033,9 @@ export default function EventDetail() {
               {/* The state's own slot under the title (never glued to a value): offline, called off, waitlisted, the room's hour, what moved. */}
               <View style={styles.state}>
                 <OfflineBanner text="Offline. Showing what you had." testID="scene-offline" />
-                {cancelled ? <Banner kind="offline" text="Cancelled. The organizer called this one off. Your RSVP is released." testID="scene-cancelled" /> : null}
-                {waitlisted && !cancelled ? <Banner kind="paused" text="On the waitlist. You’ll be first in line in the order you joined." testID="scene-waitlisted" /> : null}
-                {roomLine && !roomLine.open ? <Banner key="room-opens" kind="info" icon="clock" text="Room opens" mono={roomLine.when} testID="scene-room-opens" /> : null}
+                {cancelled ? <BannerPresence><Banner kind="offline" text="Cancelled. The organizer called this one off. Your RSVP is released." testID="scene-cancelled" /></BannerPresence> : null}
+                {waitlisted && !cancelled ? <BannerPresence><Banner kind="paused" text="On the waitlist. You’ll be first in line in the order you joined." testID="scene-waitlisted" /></BannerPresence> : null}
+                {roomLine && !roomLine.open ? <BannerPresence key="room-opens"><Banner kind="info" icon="clock" text="Room opens" mono={roomLine.when} testID="scene-room-opens" /></BannerPresence> : null}
                 {changeRows.length > 0 ? <SceneChangedLines lines={changeRows} changedAt={event?.change?.changedAt} testID="scene-changed" /> : null}
               </View>
 

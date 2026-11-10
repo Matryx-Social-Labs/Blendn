@@ -5,6 +5,7 @@ import Animated, { Easing, FadeIn, FadeOut, withTiming } from 'react-native-rean
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Banner } from '../components/ds/Banner'
+import { BannerPresence } from '../components/motion/BannerPresence'
 import { Spinner } from '../components/ds/Loader'
 import { NotificationRow, type NotificationAction } from '../components/ds/NotificationRow'
 import { SectionHeader } from '../components/ds/SectionHeader'
@@ -263,7 +264,7 @@ function NotificationsScreenContent() {
     <View style={styles.banners}>
       <OfflineBanner text="Offline. Showing what you had." testID="notifications-offline" />
       {push.off && feed.load !== 'loading' ? (
-        <Banner kind="info" icon="bell-off" text={PUSH_OFF_TEXT} action={{ label: 'Turn on', icon: 'bell', onPress: () => void push.turnOn() }} busy={push.saving} testID="notifications-push-off" />
+        <BannerPresence><Banner kind="info" icon="bell-off" text={PUSH_OFF_TEXT} action={{ label: 'Turn on', icon: 'bell', onPress: () => void push.turnOn() }} busy={push.saving} testID="notifications-push-off" /></BannerPresence>
       ) : null}
     </View>
   )

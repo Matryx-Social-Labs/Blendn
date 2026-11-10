@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
-import Animated from 'react-native-reanimated'
 
 import { Banner } from '../ds/Banner'
-import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
+import { BannerPresence } from '../motion/BannerPresence'
 import { formatCountdown, RATE_LIMITED_TEXT } from '../../lib/rateLimited'
-import { useReducedMotion } from '../../lib/motion'
 
 /**
  * A read the server refused for asking too fast (guidelines/flow-15 `rateLimit`): a solid banner where the list would
@@ -13,7 +11,6 @@ import { useReducedMotion } from '../../lib/motion'
  * slide and fade over `base`; Reduce Motion: the fade). No haptic: it is unsolicited.
  */
 export function RateLimitedBanner({ seconds, onDone, testID }: { seconds: number; onDone?: () => void; testID?: string }) {
-  const reduceMotion = useReducedMotion()
   const [left, setLeft] = useState(seconds)
   // A new refusal restarts the count (during render, so it never paints stale).
   const [from, setFrom] = useState(seconds)
@@ -31,8 +28,8 @@ export function RateLimitedBanner({ seconds, onDone, testID }: { seconds: number
 
   if (left === 0) return null
   return (
-    <Animated.View entering={reduceMotion ? bannerFadeIn : bannerIn} exiting={bannerOut}>
+    <BannerPresence>
       <Banner kind="info" icon="timer" text={RATE_LIMITED_TEXT} mono={formatCountdown(left)} testID={testID} />
-    </Animated.View>
+    </BannerPresence>
   )
 }
