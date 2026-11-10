@@ -164,6 +164,8 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
    */
   const typing = useKeyboardShown()
 
+  // Said once as the closing line appears (M24); a hook, so above the early return.
+  useAnnounced(blend && closingSoon(blend.closesAt, now) ? closesAtLine(blend.closesAt) : null)
   if (!blendId || !blend) {
     /*
      * The read failed and nothing is known of this Blend (10-11): said, with a way back, never read as "closed". A Blend seen
@@ -186,7 +188,6 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
   const theirShape = theirs ? sideShape(theirs, myId) : null
   const crewName = mineShape?.side.kind === 'crew' ? mineShape.side.name : null
   const closing = closingSoon(blend.closesAt, now) ? closesAtLine(blend.closesAt) : null
-  useAnnounced(closing)
 
   const reveal = async () => {
     if (inFlight.current) return
