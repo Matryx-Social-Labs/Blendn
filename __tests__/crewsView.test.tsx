@@ -110,7 +110,7 @@ describe('"Open to joining a crew tonight" (M7, M11)', () => {
     expect(toggle().props.accessibilityState).toEqual({ checked: true, disabled: false })
   })
 
-  it('a retry of the failed read during a write never leaves the switch dead (motion audit M19)', async () => {
+  it('a write answers the failed read: no retry races it, and the tap is what shows (motion audit M19)', async () => {
     api.crewsAt.mockResolvedValue(page([], false))
     api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Too many requests', errorCode: 'RATE_LIMITED' })
     await render(<Harness checkInKey="ci-m19" />)
@@ -118,14 +118,25 @@ describe('"Open to joining a crew tonight" (M7, M11)', () => {
     const toggle = () => screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL })
 
     let written: (v: unknown) => void = () => {}
-    let reread: (v: unknown) => void = () => {}
     api.openToCrews.mockReturnValueOnce(new Promise((r) => (written = r)) as never)
     await fireEvent.press(toggle())
-    api.openToCrews.mockReturnValueOnce(new Promise((r) => (reread = r)) as never)
-    await fireEvent.press(screen.getByText(/Couldn’t check whether this is on/))
+    // The write is the read now. A retry sent beside it answered from before the tap and won (iOS drive, 2026-11-10):
+    // the switch showed off while the server held on.
+    expect(screen.queryByText(/Couldn’t check whether this is on/)).toBeNull()
     await act(async () => written({ success: true, data: { openToCrews: true } }))
-    await act(async () => reread({ success: true, data: { openToCrews: true } }))
     expect(toggle().props.accessibilityState).toEqual({ checked: true, disabled: false })
+    expect(api.openToCrews).toHaveBeenCalledTimes(2)
+  })
+
+  it('a write that fails hands the retry back', async () => {
+    api.crewsAt.mockResolvedValue(page([], false))
+    api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Too many requests', errorCode: 'RATE_LIMITED' })
+    await render(<Harness checkInKey="ci-m19b" />)
+    await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
+    api.openToCrews.mockResolvedValueOnce({ success: false, error: 'Offline', errorCode: 'NETWORK_ERROR' })
+    await fireEvent.press(screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL }))
+    await waitFor(() => screen.getByText(/Couldn’t check whether this is on/))
+    expect(screen.getByRole('switch', { name: OPEN_TO_CREWS_LABEL }).props.accessibilityState).toEqual({ checked: false, disabled: false })
   })
 })
 
