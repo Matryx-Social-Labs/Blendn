@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Platform, ScrollView, StyleSheet, View } from 'react-native'
 
 import { Banner } from '../components/ds/Banner'
+import { BannerPresence } from '../components/motion/BannerPresence'
 import { Spinner } from '../components/ds/Loader'
 import { ManageStatusRow } from '../components/ds/ManageStatusRow'
 import { NeverForSalePanel } from '../components/ds/NeverForSalePanel'
@@ -349,7 +350,7 @@ function PlusScreenContent() {
         ) : (
           <>
             {card ? <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} testID="plus-status" /> : null}
-            {launch ? <Banner kind="info" text={LAUNCH_LINE} testID="plus-launch" /> : null}
+            {launch ? <BannerPresence><Banner kind="info" text={LAUNCH_LINE} testID="plus-launch" /></BannerPresence> : null}
             <WhatYouGet features={PLUS_FEATURES} />
             <NeverForSalePanel />
             {plansSection()}

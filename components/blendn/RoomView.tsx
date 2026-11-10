@@ -10,6 +10,7 @@ import { connect, type SocketConnectionStatus } from '../../lib/socketClient'
 import type { ChatHistory } from '../../lib/dockHistory'
 import type { RoomPerson } from '../../lib/useRoom'
 import { Banner } from '../ds/Banner'
+import { BannerPresence } from '../motion/BannerPresence'
 import type { Face } from '../ds/Facepile'
 import { SegmentedControl } from '../ds/SegmentedControl'
 import { StateScreen } from '../ds/StateScreen'
@@ -77,9 +78,9 @@ function RoomStatus({ status }: { status: SocketConnectionStatus }) {
     const timer = setTimeout(() => setDownLong(true), SOCKET_GRACE_MS)
     return () => clearTimeout(timer)
   }, [down])
-  if (network === 'offline') return <Banner kind="offline" text="Offline. Some actions won’t work until you’re back." testID="room-offline" />
+  if (network === 'offline') return <BannerPresence><Banner kind="offline" text="Offline. Some actions won’t work until you’re back." testID="room-offline" /></BannerPresence>
   if (!down || !downLong) return null
-  return <Banner kind="paused" text="Updates paused. Trying to reconnect." action={{ label: 'Try again', onPress: () => void connect() }} testID="room-paused" />
+  return <BannerPresence><Banner kind="paused" text="Updates paused. Trying to reconnect." action={{ label: 'Try again', onPress: () => void connect() }} testID="room-paused" /></BannerPresence>
 }
 
 export type RoomViewProps = {
@@ -163,6 +164,7 @@ export function RoomView(props: RoomViewProps) {
       </View>
       <Animated.View style={entrance.heroStyle}>
         <RoomHero
+          active={!hidden}
           title={props.title}
           hereCount={props.hereCount}
           checkedInAt={props.checkedInAt}

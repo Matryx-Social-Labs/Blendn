@@ -1,10 +1,8 @@
 import { useSyncExternalStore } from 'react'
-import Animated from 'react-native-reanimated'
 
 import { Banner } from './ds/Banner'
-import { bannerFadeIn, bannerIn, bannerOut } from './motion/presence'
+import { BannerPresence } from './motion/BannerPresence'
 import { getNetworkState, subscribeNetworkState } from '../lib/networkStatus'
-import { useReducedMotion } from '../lib/motion'
 
 /** Whether the last request said the network is gone (`lib/networkStatus`), followed live. */
 export function useOffline(): boolean {
@@ -19,11 +17,10 @@ export function useOffline(): boolean {
  */
 export function OfflineBanner({ text, testID }: { text: string; testID?: string }) {
   const offline = useOffline()
-  const reduceMotion = useReducedMotion()
   if (!offline) return null
   return (
-    <Animated.View entering={reduceMotion ? bannerFadeIn : bannerIn} exiting={bannerOut}>
+    <BannerPresence>
       <Banner kind="offline" text={text} testID={testID} />
-    </Animated.View>
+    </BannerPresence>
   )
 }

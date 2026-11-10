@@ -19,6 +19,7 @@ import { Lockup, LOCKUP_HEIGHT } from '../components/onboarding/Lockup'
 import { emailSheet, handover, lockupShown, setLandingUnder } from '../lib/emailSheet'
 import { useSettleIn } from '../components/onboarding/useSettleIn'
 import FadeInUp from '../components/motion/FadeInUp'
+import { bannerFadeIn, bannerOut } from '../components/motion/presence'
 import ScalePress from '../components/motion/ScalePress'
 import { DiscMark } from '../components/ds/DiscMark'
 import { Spinner } from '../components/ds/Loader'
@@ -380,17 +381,17 @@ function IndexInner() {
           * told rather than left waiting. A toast would auto-dismiss and be missed entirely.
           */}
         {error && (
-          <View style={styles.message}>
+          <Animated.View entering={bannerFadeIn} exiting={bannerOut} style={styles.message}>
             <Icon name="circle-alert" size={ICON.inline} color={COLOR.destructive} />
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.errorText]} accessibilityRole="alert" accessibilityLiveRegion="assertive">
               {error}
             </Text>
-          </View>
+          </Animated.View>
         )}
         {!error && notice && (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert" accessibilityLiveRegion="polite">
+          <Animated.Text entering={bannerFadeIn} exiting={bannerOut} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.notice]} accessibilityRole="alert" accessibilityLiveRegion="polite">
             {notice}
-          </Text>
+          </Animated.Text>
         )}
 
         {/*

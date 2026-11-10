@@ -4,6 +4,7 @@ import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Banner } from '../components/ds/Banner'
+import { BannerPresence } from '../components/motion/BannerPresence'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
@@ -56,7 +57,7 @@ function NotificationSettingsContent() {
         {...bar.scrollProps}
       >
         {phoneBlocks ? (
-          <Banner kind="info" icon="bell-off" text={OS_BLOCKING_TEXT} action={{ label: 'Turn on', icon: 'bell', onPress: () => void push.turnOn() }} testID="notification-settings-os" />
+          <BannerPresence><Banner kind="info" icon="bell-off" text={OS_BLOCKING_TEXT} action={{ label: 'Turn on', icon: 'bell', onPress: () => void push.turnOn() }} testID="notification-settings-os" /></BannerPresence>
         ) : null}
 
         <SettingsGroup testID="notification-settings-master">

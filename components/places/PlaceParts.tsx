@@ -2,6 +2,7 @@ import { memo } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Banner } from '../ds/Banner'
+import { BannerPresence } from '../motion/BannerPresence'
 import { Badge, MonoRun } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import { VenuePlate } from '../ds/VenuePlate'
@@ -123,7 +124,9 @@ export const QuietRow = memo(function QuietRow({ venue, n, label, testID }: { ve
 export function RefreshFailed({ onRetry }: { onRetry: () => void }) {
   return (
     <View style={styles.failed} testID="places-refresh-failed">
-      <Banner kind="offline" icon="cloud-off" text="Places didn’t refresh." action={{ label: 'Try again', onPress: onRetry }} />
+      <BannerPresence>
+        <Banner kind="offline" icon="cloud-off" text="Places didn’t refresh." action={{ label: 'Try again', onPress: onRetry }} />
+      </BannerPresence>
     </View>
   )
 }
