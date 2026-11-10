@@ -1018,7 +1018,7 @@ export default function EventDetail() {
 
         <Animated.View layout={glide} style={styles.content}>
           {onFirstLoad ? (
-            <View testID="scene-skeleton" accessibilityLabel="Loading the event" accessibilityState={{ busy: true }} style={styles.skeleton}>
+            <View accessible testID="scene-skeleton" accessibilityLabel="Loading the event" accessibilityState={{ busy: true }} style={styles.skeleton}>
               <SkeletonBlock width="80%" height={TITLE_LINE} borderRadius={RADIUS.thumb} />
               {[0, 1, 2].map((i) => (
                 <SkeletonBlock key={i} width="100%" height={SPACE.xxxl} borderRadius={RADIUS.thumb} />

@@ -13,7 +13,7 @@ import {
   type Orientation,
 } from '../../lib/dating'
 import { ChipSet } from '../ds/ChipSet'
-import { font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, minTarget, useAnnounced, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { FieldLabel } from '../ds/TextField'
 import { orientationTier, TIER_SEES } from '../../lib/matchingTiers'
 import { WhoSees } from './WhoSees'
@@ -124,6 +124,8 @@ export const WORK_FIELDS_FAILED = 'Couldn’t load fields of work. Try again.'
 function WorkFieldsFailed({ onRetry, retrying }: { onRetry?: () => void; retrying: boolean }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  // Said when the fields fail, and again when a retry fails (M24).
+  useAnnounced(!retrying && WORK_FIELDS_FAILED)
   return (
     <View testID="matching-work-field-failed">
       <FieldLabel text="WHAT DO YOU DO?" bold={bold} contrast={contrast} />
@@ -137,7 +139,7 @@ function WorkFieldsFailed({ onRetry, retrying }: { onRetry?: () => void; retryin
         hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
         style={({ pressed }) => [styles.failed, pressed && styles.pressed]}
       >
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>{retrying ? 'Trying again…' : WORK_FIELDS_FAILED}</Text>
       </Pressable>
     </View>
   )

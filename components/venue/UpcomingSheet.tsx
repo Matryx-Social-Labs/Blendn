@@ -5,7 +5,7 @@ import { Button } from '../ds/Button'
 import { Spinner } from '../ds/Loader'
 import { Sheet } from '../ds/Sheet'
 import { MonoRun } from '../ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, PRESSED_WASH, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, PRESSED_WASH, useAnnounced, useBoldText } from '../ds/shared'
 import { apiClient } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
@@ -15,6 +15,7 @@ import { appendUpcoming, upcomingRows, UPCOMING_PAGE, type UpcomingRow } from '.
 const ROW = SIZE.primary
 /** The list's own height, as a share of the screen: it scrolls inside the tall sheet and windows its rows, so thousands cost a screenful. */
 const LIST_SHARE = 0.6
+const MORE_FAILED = 'Couldn’t load more.'
 
 /**
  * Every coming event at a place, a page at a time (Flow 11 · the venue page, "See all"). It opens on what the page
@@ -52,6 +53,7 @@ export function UpcomingSheet({
   const [cursor, setCursor] = useState<string | null>(firstCursor)
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
+  useAnnounced(failed && MORE_FAILED)
   const alive = useRef(true)
   useEffect(() => {
     alive.current = true
@@ -157,8 +159,8 @@ export function UpcomingSheet({
               </View>
             ) : failed ? (
               <View style={styles.center}>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-                  Couldn’t load more.
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.secondary]}>
+                  {MORE_FAILED}
                 </Text>
                 <Button kind="secondary" size="sm" label="Try again" onPress={() => cursor && more(cursor)} testID="venue-upcoming-retry" />
               </View>

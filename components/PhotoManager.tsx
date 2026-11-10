@@ -387,7 +387,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
     return (
       <View style={styles.container}>
         {header}
-        <View testID="photos-loading" accessibilityLabel="Loading photos" accessibilityState={{ busy: true }} style={styles.skeleton} onLayout={onLayout}>
+        <View accessible testID="photos-loading" accessibilityLabel="Loading photos" accessibilityState={{ busy: true }} style={styles.skeleton} onLayout={onLayout}>
           {Array.from({ length: SKELETON_TILES }, (_, i) => (
             <SkeletonBlock key={i} width={itemSize} height={itemSize} borderRadius={RADIUS.rowInCard} />
           ))}
