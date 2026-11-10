@@ -15,10 +15,10 @@ const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { include
 const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true })
 const PRIYA = { face: { kind: 'photo', uri: 'https://example.com/priya.jpg' } as const, name: 'Priya', reason: 'Both open to dating', width: 110 }
 
-it('is a surface card at radius 16, 110 wide, with a 64 pt face and a 40 pt heart; name and reason take two lines', async () => {
+it('is a surface card at radius 20 (RADIUS.tile), 110 wide, with a 64 pt face and a 40 pt heart; name and reason take two lines', async () => {
   await render(<MeetNextCard {...PRIYA} testID="m" />)
   expect(flat('m-scale')).toMatchObject({ width: 110 })
-  expect(flat('m')).toMatchObject({ borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface })
+  expect(flat('m')).toMatchObject({ borderRadius: RADIUS.tile, backgroundColor: COLOR.surface })
   expect(flat('m-face')).toMatchObject({ width: 64, height: 64 })
   expect(flat('m-like')).toMatchObject({ width: 40, height: 40 })
   expect(screen.getByText('Priya', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
