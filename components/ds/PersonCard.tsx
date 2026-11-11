@@ -8,11 +8,9 @@ import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING,
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import type { LeadPill } from '../../lib/roomLens'
-import { tint } from '../../lib/theme'
-import { RadialWash } from '../ui/GradientFill'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
-import { Chip } from './Chip'
+import { LensBlocks } from './LensBlocks'
 import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
 import { Sheet } from './Sheet'
@@ -85,11 +83,6 @@ export type PersonCardContentProps = {
 
 /** P-A `personSheet`: the 72 pt face beside the name. */
 const FACE = 72
-/** Tonight's card (`.xq`): rose from the top-left corner, its rim at 55%. */
-const TONIGHT_WASH = [{ color: COLOR.brandRose, alpha: 0.3, at: [0, 0], size: [100, 120], reach: 0.7 }] as const
-const TONIGHT_EDGE = 0.55
-// design-exception: 20/27, the board's Tonight answer (`.xq p`); `heading` is 20/26, 3 pt short over three lines
-const ANSWER_LINE = { lineHeight: 27 }
 /** #15: a Like button pops 0.85 → 1 on `M.pop` as it turns to Liked. */
 const LIKE_POP_FROM = 0.85
 
@@ -269,36 +262,7 @@ export function PersonCardContent({
         {circle('ellipsis', `Block or report ${name}`, onMore)}
       </View>
 
-      {lead.length ? (
-        <View testID={id('lead')} style={styles.chips}>
-          {lead.map((l, i) => (
-            <Chip key={l.label} label={l.label} icon={l.icon} selected={l.lit} testID={id(`lead-${i}`)} />
-          ))}
-        </View>
-      ) : null}
-
-      {tonight ? (
-        <View testID={id('tonight')} accessible accessibilityLabel={`${tonight.question} ${tonight.answer}`} style={styles.tonight}>
-          <RadialWash layers={TONIGHT_WASH} style={StyleSheet.absoluteFill} />
-          {/* The rim is drawn over the card, as the board's inset shadow is: it takes no room from the answer. */}
-          <View pointerEvents="none" style={[styles.tonightRim, { borderColor: tint(sel.edge, TONIGHT_EDGE) }]} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), { color: sel.glyph }]}>{tonight.question}</Text>
-          <Text testID={id('tonight-answer')} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('heading', bold), ANSWER_LINE, styles.ink, styles.answer]}>
-            {tonight.answer}
-          </Text>
-        </View>
-      ) : null}
-
-      {common?.items.length ? (
-        <View testID={id('common')} style={styles.common}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), { color: quiet }]}>{common.label}</Text>
-          <View style={styles.chips}>
-            {common.items.map((c) => (
-              <Chip key={c} label={c} icon="check" selected accessibilityLabel={`${c}, shared`} />
-            ))}
-          </View>
-        </View>
-      ) : null}
+      <LensBlocks lead={lead} tonight={tonight} common={common} testID={testID} />
 
       <View testID={id('actions')} style={row}>
         {variant === 'matched' ? (
@@ -530,18 +494,6 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   shrink: { flexShrink: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  /** `.xq`: 20 radius, 14 · 16 · 16, the answer 6 under the question. */
-  tonight: {
-    borderRadius: RADIUS.tile,
-    overflow: 'hidden',
-    backgroundColor: COLOR.surface,
-    paddingTop: SPACE.md + SPACE.xxs,
-    paddingHorizontal: SPACE.lg,
-    paddingBottom: SPACE.lg,
-  },
-  tonightRim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: RADIUS.tile, borderWidth: 1 },
-  answer: { marginTop: SPACE.xs + SPACE.xxs },
-  common: { gap: SPACE.sm },
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   actionsStacked: { flexDirection: 'column', alignItems: 'stretch' },
   /** Each action takes an equal share. ponytail: the board's CSS lets Message keep its min-content (115 vs 110 at 393); add a measured min width if that 2 pt matters. */

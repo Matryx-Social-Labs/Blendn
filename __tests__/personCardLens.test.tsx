@@ -25,6 +25,7 @@ const deck = {
   badges: [],
   age: 31,
   tonightAnswer: 'A map of every quiet café in Toronto with outlets and good light.' as string | null,
+  workIntent: 'hire' as string | null,
 }
 const work = { key: 'work', question: 'What are you working on?' }
 const bison = (lens: { key: string; question: string | null } | null = work, extra: Partial<typeof deck> = {}): PersonCardPerson => ({
@@ -57,7 +58,7 @@ describe('the sheet, through the work lens', () => {
     await draw(bison())
     const t = tree()
     const at = (x: string) => t.indexOf(x)
-    const seq = ['In the room at Junction', 'Gentle Bison', 'Anonymous · 31', 'Product design', 'Here for work', 'What are you working on?', 'A map of every quiet café', 'In common', 'Cycling', 'Wave', 'Message', 'Like']
+    const seq = ['In the room at Junction', 'Gentle Bison', 'Anonymous · 31', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café', 'In common', 'Cycling', 'Wave', 'Message', 'Like']
     const idx = seq.map(at)
     expect(idx.every((i) => i >= 0)).toBe(true)
     expect([...idx].sort((a, b) => a - b)).toEqual(idx)

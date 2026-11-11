@@ -42,6 +42,10 @@ import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
 import { askPushInContext } from '../../lib/pushAsk'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
+import { LensBlocks } from '../../components/ds/LensBlocks'
+import { ProfileLensHero } from '../../components/profile/ProfileLensHero'
+import { lensView, parseLens, parseWorkIntent, type RoomLens, type WorkIntent } from '../../lib/roomLens'
+import { roomPersonFor } from '../../lib/roomPersonHandoff'
 
 
 interface UserProfileView {
@@ -79,6 +83,20 @@ interface UserProfileView {
   about?: string | null
   /** The server's `identityVisible`, or your own profile. Nothing else sets it. */
   identityVisible: boolean
+  /**
+   * Flow 5 P-A: the room's question, their answer and their "Here to" pick, from `GET /users/:handle`'s `tonight`. Only
+   * through a room handle, only to somebody in that room now, never to a host; absent otherwise. Not identity.
+   */
+  tonight?: { lens: RoomLens | null; answer: string | null; workIntent: WorkIntent | null } | null
+}
+
+/** The lens fields of a person nobody handed a card for: the page then shows the server's tonight block alone. */
+const NO_CARD = { workField: null, sharedIntents: [], interests: [], overlaps: [], badges: [] } as const
+
+function parseTonight(raw: unknown): UserProfileView['tonight'] {
+  if (!raw || typeof raw !== 'object') return null
+  const t = raw as { lens?: unknown; answer?: unknown; workIntent?: unknown }
+  return { lens: parseLens(t.lens), answer: typeof t.answer === 'string' ? t.answer : null, workIntent: parseWorkIntent(t.workIntent) }
 }
 
 /**
@@ -162,6 +180,7 @@ function UserProfileInner() {
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [liked, setLiked] = useState(likedInRoom === '1')
+  const [waved, setWaved] = useState<'none' | 'busy' | 'waved'>('none')
   const [likeBusy, setLikeBusy] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
@@ -344,6 +363,7 @@ function UserProfileInner() {
               : [],
             about: aboutLine(data as { languages?: string[]; homeState?: string | null; sign?: string | null }),
             identityVisible: data.identityVisible === true || data.isOwnProfile === true,
+            tonight: parseTonight((data as { tonight?: unknown }).tonight),
           }
         } else {
           const fallbackResult = await apiClient.getProfile(id)
@@ -472,6 +492,17 @@ function UserProfileInner() {
       setLikeBusy(false)
     }
   }, [eventId, profile, liked, likeBusy, showToast])
+
+  /* P-A page: a wave in this room, as the sheet waves. Once per ten minutes: one already sent reads as waved. */
+  const handleWave = useCallback(async () => {
+    if (!eventId || !profile || waved !== 'none') return
+    setWaved('busy')
+    const result = await apiClient.sendWave(String(eventId), profile.user_id).catch(() => null)
+    if (result?.success || result?.errorCode === 'WAVE_TOO_SOON') return setWaved('waved')
+    setWaved('none')
+    const refusal = likeRefusal(result?.errorCode, result?.error)
+    showToast(refusal.message, refusal.variant === 'error' ? 'error' : refusal.variant)
+  }, [eventId, profile, waved, showToast])
 
   /*
    * The other half of a mutual like arrives while this page is open (SCRUM-960): the room draws the moment, and the page
@@ -637,6 +668,28 @@ function UserProfileInner() {
   const heroTitle = identity.title
 
   /*
+   * Flow 5 P-A (`pA-page`, `pA-page-named`): opened from a room, the person through that room's lens. The lead pills and
+   * In common are the room's own card for exactly this handle (`roomPersonFor`); the question, their answer and their
+   * pick are the server's (fresher, and they are what it allows). Nothing of yours, and nothing for somebody else.
+   */
+  const handed = eventId ? roomPersonFor(id) : null
+  const tonight = profile?.tonight ?? null
+  const lensPage = !!eventId && !!profile && ctaMode !== 'self' && !!(handed || tonight)
+  const lensBlocks = lensPage
+    ? lensView(
+        {
+          ...(handed?.person ?? NO_CARD),
+          age: profile?.age,
+          tonightAnswer: tonight ? tonight.answer : handed?.person.tonightAnswer,
+          workIntent: tonight ? tonight.workIntent : handed?.person.workIntent,
+        },
+        tonight?.lens ?? handed?.lens ?? null,
+        null,
+        revealed
+      )
+    : null
+
+  /*
    * The frame's line under the name is "PRO MEMBER • @blendn_julia". Neither exists --
    * there is no membership tier and no username column -- so it carries what is
    * real and, in an unrevealed profile, is the whole point of `work_field`
@@ -680,6 +733,23 @@ function UserProfileInner() {
           <ProfileSkeleton width={windowWidth} />
         ) : (
           <Animated.View entering={arrive}>
+            {lensBlocks ? (
+              <View style={styles.lensPage}>
+                <ProfileLensHero testID="profile-lens-hero" photo={revealed ? (photos[0] ?? null) : null} seed={identity.seed} name={identity.name} meta={lensBlocks.meta} />
+                <LensBlocks lead={lensBlocks.lead} tonight={lensBlocks.tonight} common={lensBlocks.common} testID="profile-lens" />
+                {revealed ? (
+                  <ProfileBody
+                    facts={{ bio: profile?.bio, interests: profile?.interests, sharedInterests: profile?.sharedInterests, about: profile?.about, occupation: profile?.occupation, education: profile?.education, photos }}
+                    badges={badges.length > 0 ? <BadgeRow badges={badges} /> : null}
+                    columnWidth={columnWidth}
+                    onPressPhoto={(i, from) => setViewer({ index: i, from })}
+                    onBlockTop={onBlockTop}
+                    empty={null}
+                  />
+                ) : null}
+              </View>
+            ) : (
+            <>
             <ProfileHeroStage
               testID="profile-hero"
               width={windowWidth}
@@ -739,6 +809,8 @@ function UserProfileInner() {
                 empty={revealed ? PROFILE_EMPTY : null}
               />
             </View>
+            </>
+            )}
           </Animated.View>
         )}
       </Animated.ScrollView>
@@ -775,6 +847,33 @@ function UserProfileInner() {
               onDecline={() => void answerRequest('decline')}
             />
           ) : (
+            lensBlocks ? (
+              <>
+                <Button
+                  kind="secondary"
+                  size="md"
+                  icon={waved === 'waved' ? 'check' : 'hand'}
+                  label={waved === 'waved' ? 'Waved' : 'Wave'}
+                  accessibilityLabel={waved === 'waved' ? `Waved at ${heroTitle}` : `Wave at ${heroTitle}`}
+                  disabled={waved === 'waved'}
+                  loading={waved === 'busy'}
+                  onPress={() => void handleWave()}
+                  style={styles.flex}
+                  testID="profile-wave"
+                />
+                <Button
+                  kind={ctaLit ? 'lit' : 'secondary'}
+                  size="md"
+                  icon={ctaDisabled ? undefined : 'message-circle'}
+                  label={ctaMode === 'connect' ? 'Message' : CTA_LABEL[ctaMode]}
+                  accessibilityLabel={ctaMode === 'connect' ? `Message ${heroTitle}. Sends a request and shows them your name and photo` : undefined}
+                  disabled={ctaDisabled}
+                  onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
+                  style={styles.wide}
+                  testID="profile-cta"
+                />
+              </>
+            ) : (
             <>
             {eventId ? (
               <Button
@@ -803,6 +902,7 @@ function UserProfileInner() {
               testID="profile-cta"
             />
             </>
+            )
           )}
         </ProfileDock>
       ) : null}
@@ -890,6 +990,10 @@ const styles = StyleSheet.create({
   self: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
   selfText: { flexShrink: 1, color: COLOR.textSecondary },
   flex: { flex: 1 },
+  /** `.dock4`: Message is the wide one. */
+  wide: { flex: 2 },
+  /** `pA-page`: the column starts 116 down (under the bar), 20 between the hero and each block. */
+  lensPage: { paddingHorizontal: SPACE.gutter, gap: SPACE.lg + SPACE.xs },
 })
 
 

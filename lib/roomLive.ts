@@ -62,6 +62,7 @@ export function attendeeFromMatch(m: RoomAttendee): AttendeeProfile {
     sign: m.sign ?? null,
     badges: m.badges ?? [],
     tonightAnswer: m.tonightAnswer ?? null,
+    workIntent: m.workIntent ?? null,
   }
 }
 

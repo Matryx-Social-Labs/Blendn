@@ -1,4 +1,5 @@
 import { router } from 'expo-router'
+import { handRoomPerson } from '../../lib/roomPersonHandoff'
 import { useEffect, useState } from 'react'
 
 import { apiClient } from '../../lib/apiClient'
@@ -117,8 +118,13 @@ export function SenderCard({
     setRefusal(likeRefusal(result.errorCode, result.error).message)
   }
 
+  // Their deck card, as the lens reads it: only what the deck sent (never a name, photo or bio).
+  const lensPerson = card ? { workField: card.workField ?? null, sharedIntents: card.sharedIntents ?? [], interests: card.sharedInterests, overlaps: card.overlaps ?? [], badges: card.badges ?? [], age: card.age, tonightAnswer: card.tonightAnswer, workIntent: card.workIntent } : null
+
   const viewProfile = () => {
     onClose()
+    // P-A page: their deck card goes with them (lead pills, In common), in memory, never in the link.
+    if (lensPerson) handRoomPerson(who.id, { person: lensPerson, lens })
     router.push({
       pathname: '/user/[id]',
       params: { id: who.id, ...(eventId ? { eventId } : {}), ...(state === 'liked' ? { liked: '1' } : {}), pseudonym: who.name, roomSeed: `${chatGroupId}:${who.id}` },
@@ -136,9 +142,9 @@ export function SenderCard({
           name: who.name,
           age: attendee?.age,
           // P-A: their deck card through the room's lens (the sheet draws only what the deck sent for them).
-          ...(card
+          ...(card && lensPerson
             ? lensView(
-                { workField: card.workField ?? null, sharedIntents: card.sharedIntents ?? [], interests: card.sharedInterests, overlaps: card.overlaps ?? [], badges: card.badges ?? [], age: card.age, tonightAnswer: card.tonightAnswer },
+                lensPerson,
                 lens,
                 eventTitle ? { title: eventTitle } : null,
                 !!card.photo

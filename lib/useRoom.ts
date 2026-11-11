@@ -98,6 +98,8 @@ export interface RoomPerson {
   reason: string
   /** Flow 5 P-A: their answer to tonight's question, as the deck sent it; null when none. */
   tonightAnswer: string | null
+  /** Flow 5 P-A: why they are here at a work-lens event, as the deck sent it; null when none. */
+  workIntent: string | null
   /** For the existing sheets (profile, safety, connect). */
   raw: AttendeeProfile
 }
@@ -669,6 +671,7 @@ export function useRoom(): RoomState & RoomActions {
         sign: a.sign ?? null,
         badges: a.badges ?? [],
         tonightAnswer: a.tonightAnswer ?? null,
+        workIntent: a.workIntent ?? null,
         insideNow: a.insideNow !== false,
         arrivedAt,
         liked: status !== 'none',

@@ -179,12 +179,12 @@ describe('the sections', () => {
       lens: work,
       picks: [
         person('p0', { tonightAnswer: 'A map of every quiet café in Toronto' }),
-        person('p1', { workField: 'Product design', sharedIntents: ['networking'] }),
+        person('p1', { workField: 'Product design', sharedIntents: ['networking'], workIntent: 'build' }),
         person('p2', { reason: 'Just walked in' }),
       ],
     })
     expect(screen.getByLabelText('Person p0, “A map of every quiet café in Toronto”')).toBeTruthy()
-    expect(screen.getByLabelText('Person p1, Product design · Here for work')).toBeTruthy()
+    expect(screen.getByLabelText('Person p1, Product design · Here to build')).toBeTruthy()
     // Nothing through the lens: the room's own reason line, as before.
     expect(screen.getByTestId('meet-next-2').props.accessibilityLabel).not.toContain('·')
   })

@@ -27,6 +27,8 @@ export interface LensPerson {
   interests: readonly string[]
   overlaps: readonly Overlap[]
   badges: readonly Badge[]
+  /** Why they are here, their own pick (`MatchCard.workIntent`): the work lens's "Here to …" only. */
+  workIntent?: string | null
 }
 
 export interface LeadPill {
@@ -34,6 +36,20 @@ export interface LeadPill {
   label: string
   /** The reason to meet (why they are here) is lit; facts about them are not. */
   lit: boolean
+}
+
+/** The work lens's picks, in the order Room settings offers them, as the pill says them. The server's enum `work_intent`. */
+export const WORK_INTENTS = [
+  { key: 'hire', label: 'Here to hire', short: 'Hire' },
+  { key: 'find_work', label: 'Here to find work', short: 'Find work' },
+  { key: 'build', label: 'Here to build', short: 'Build' },
+  { key: 'learn', label: 'Here to learn', short: 'Learn' },
+] as const
+export type WorkIntent = (typeof WORK_INTENTS)[number]['key']
+
+/** A value this build knows, or null (a newer server's pick says nothing rather than something wrong). */
+export function parseWorkIntent(raw: unknown): WorkIntent | null {
+  return WORK_INTENTS.find((w) => w.key === raw)?.key ?? null
 }
 
 /** The server's limit (`TONIGHT_ANSWER_MAX` in the preferences route). */
@@ -66,6 +82,11 @@ function pill(kind: Lead, p: LensPerson, lensKey: string): LeadPill | null {
     case 'field':
       return p.workField ? { icon: lensKey === 'arts' ? 'palette' : 'briefcase', label: p.workField, lit: false } : null
     case 'intent': {
+      // The work lens says their own pick ("Here to hire"), never a guess from the intents you share.
+      if (lensKey === 'work') {
+        const pick = WORK_INTENTS.find((w) => w.key === p.workIntent)
+        return pick ? { icon: 'user-plus', label: pick.label, lit: true } : null
+      }
       const words = [...new Set(p.sharedIntents.map((i) => INTENT_WORD[i]).filter((w): w is string => !!w))]
       return words.length ? { icon: lensKey === 'work' ? 'user-plus' : 'users', label: `Here for ${joinAnd(words)}`, lit: true } : null
     }

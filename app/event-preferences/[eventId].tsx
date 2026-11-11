@@ -7,6 +7,7 @@ import Animated, { LinearTransition } from 'react-native-reanimated'
 
 import { Avatar } from '../../components/ds/Avatar'
 import { Button } from '../../components/ds/Button'
+import { Chip } from '../../components/ds/Chip'
 import { Dock } from '../../components/ds/Dock'
 import { Orbs } from '../../components/ds/Orbs'
 import { LookingForCard } from '../../components/ds/LookingForCard'
@@ -24,7 +25,7 @@ import { Logger } from '../../lib/logger'
 import { firstNameOf } from '../../lib/profileIdentity'
 import { requestTextRefusal } from '../../lib/requestRefusal'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
-import { answerLength, normalizeAnswer, parseLens, TONIGHT_ANSWER_MAX, type RoomLens } from '../../lib/roomLens'
+import { answerLength, normalizeAnswer, parseLens, parseWorkIntent, TONIGHT_ANSWER_MAX, WORK_INTENTS, type RoomLens, type WorkIntent } from '../../lib/roomLens'
 import { myRoomFace, pseudonymFromParam } from '../../lib/roomState'
 import { useAuth } from '../../lib/useAuth'
 import { RouteModal } from '../../components/system/RouteModal'
@@ -180,6 +181,9 @@ function EventPreferencesContent() {
   const [savedAnswer, setSavedAnswer] = useState('')
   const [answer, setAnswer] = useState('')
   const [answerRefused, setAnswerRefused] = useState<string | undefined>()
+  // Here to (the work lens's "Here to hire"): one pick, sent only when it changed.
+  const [savedWorkIntent, setSavedWorkIntent] = useState<WorkIntent | null>(null)
+  const [workIntent, setWorkIntent] = useState<WorkIntent | null>(null)
   useEffect(() => {
     if (!eventId) return
     let cancelled = false
@@ -191,6 +195,9 @@ function EventPreferencesContent() {
         setLens(parseLens(res.data.lens))
         setSavedAnswer(said)
         setAnswer(said)
+        const picked = parseWorkIntent(res.data.workIntent)
+        setSavedWorkIntent(picked)
+        setWorkIntent(picked)
       })
       // No question is the safe reading of a failed read: the field simply is not offered.
       .catch((error) => Logger.warn('match', 'Failed to read match preferences', { error }))
@@ -201,6 +208,8 @@ function EventPreferencesContent() {
   const asks = !!lens?.question
   const answerChanged = asks && normalizeAnswer(answer) !== normalizeAnswer(savedAnswer)
   const answerTooLong = asks && answerLength(answer) > TONIGHT_ANSWER_MAX
+  const asksWork = lens?.key === 'work'
+  const workIntentChanged = asksWork && workIntent !== savedWorkIntent
 
   useEffect(() => {
     let cancelled = false
@@ -258,6 +267,7 @@ function EventPreferencesContent() {
         rememberReveal,
         // null clears it; omitted, the server leaves it as it was.
         ...(answerChanged ? { tonightAnswer: normalizeAnswer(answer) || null } : {}),
+        ...(workIntentChanged ? { workIntent } : {}),
       })
       // Moderation refused the answer: said in the field, in the server's words, and the screen stays.
       const refused = res.success ? undefined : requestTextRefusal(res)
@@ -280,7 +290,7 @@ function EventPreferencesContent() {
     } finally {
       setSaving(false)
     }
-  }, [answer, answerChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast])
+  }, [answer, answerChanged, workIntent, workIntentChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast])
 
   const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
   const lookingIntents = intents.filter((i) => i.value !== 'just_here')
@@ -413,6 +423,22 @@ function EventPreferencesContent() {
           />
         ) : null}
       </View>
+      {asksWork ? (
+        <View style={styles.answer}>
+          <Head lead={false} testID="prefs-work-intent-title" title="Here to" sub="On your card in this room. Tap your pick again to clear it." bold={bold} />
+          <View testID="prefs-work-intent" accessibilityRole="radiogroup" style={styles.picks}>
+            {WORK_INTENTS.map((w) => (
+              <Chip
+                key={w.key}
+                label={w.short}
+                selected={workIntent === w.key}
+                onPress={() => setWorkIntent((now) => (now === w.key ? null : w.key))}
+                testID={`prefs-work-intent-${w.key}`}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
     </Animated.View>
   ) : null
   return (
@@ -471,6 +497,7 @@ const styles = StyleSheet.create({
   stacked: { flexDirection: 'column' },
   remember: { marginTop: SPACE.md },
   answer: { marginTop: CARDS_GAP, gap: SPACE.sm },
+  picks: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
   clear: { alignSelf: 'flex-end' },
   tiles: { flexDirection: 'row', gap: TILE_GAP, marginTop: TILES_GAP },
   or: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginVertical: SPACE.lg },

@@ -165,7 +165,8 @@ describe('the profile carries the Grid\'s two actions', () => {
     // gradient primary, before Connect, which publishes your identity (and is lit, not the gradient).
     const src = SCREEN()
     expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeGreaterThan(-1)
-    expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeLessThan(src.indexOf("kind={ctaLit ? 'lit' : 'secondary'}"))
+    // The plain page's pair (the last); the P-A room page's dock is Wave and Message, the like lives on the person sheet.
+    expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeLessThan(src.lastIndexOf("kind={ctaLit ? 'lit' : 'secondary'}"))
   })
 
   it('rolls a failed like back, and never a failed request', () => {

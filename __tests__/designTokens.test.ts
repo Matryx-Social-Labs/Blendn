@@ -37,6 +37,7 @@ describe('design tokens', () => {
       'components/ds/ChatBubble.tsx', // an emoji-only message, and Flow 5 F-A's 16/22 words (`BUBBLE_TYPE`, the host card's too)
       'components/ds/MomentPour.tsx', // motion #9's "You're in."
       'components/ds/shared.ts', // monoValue, the one mono size between 12 and 40
+      'components/profile/ProfileLensHero.tsx', // Flow 5 P-A's profile name 28/34 and its line 15/22: no role at either
       'components/scene/SceneHero.tsx', // Flow 4 E-B's stamp poster: its date is the art (20/24 words, a 120 day)
     ])
   })

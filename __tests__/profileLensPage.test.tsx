@@ -1,0 +1,168 @@
+/**
+ * Flow 5 C3b (P-A, `pA-page` / `pA-page-named`): a profile opened from a room is the person through the room’s lens.
+ * The lead pills and In common are the room’s own card (handed in memory); the Tonight card is the server’s.
+ */
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
+
+
+let mockParams: Record<string, string> = { id: 'u_ben' }
+const mockUser = { id: 'u_me' }
+
+jest.mock('expo-router', () => ({
+  router: { back: jest.fn(), push: jest.fn() },
+  useLocalSearchParams: () => mockParams,
+}))
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}))
+jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: mockUser }) }))
+jest.mock('../lib/apiClient', () => ({
+  apiClient: {
+    getPublicProfile: jest.fn(),
+    getProfile: jest.fn(),
+    getConversations: jest.fn(),
+    getMessageRequests: jest.fn(),
+    createMessageRequest: jest.fn(),
+    likeAtEvent: jest.fn(),
+    respondToMessageRequest: jest.fn(),
+    sendFriendRequest: jest.fn(),
+    sendWave: jest.fn(),
+  },
+}))
+let mockMatchHandler: ((d: { eventId: string; otherUserId: string; conversationId: string; name: string }) => void) | null = null
+jest.mock('../lib/socketClient', () => ({
+  ...jest.requireActual('../lib/socketClient'),
+  subscribeToRoomMatch: (cb: typeof mockMatchHandler) => {
+    mockMatchHandler = cb
+    return () => { mockMatchHandler = null }
+  },
+}))
+jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), journey: jest.fn() } }))
+jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
+const mockShowToast = jest.fn()
+jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
+jest.mock('../components/profile/PhotoViewer', () => ({ PhotoViewer: () => null }))
+jest.mock('../components/Skeleton', () => ({ SkeletonBlock: () => null, SkeletonLine: () => null }))
+// Open, it is one button that sends "hi" — enough to drive what the screen does with the answer.
+jest.mock('../components/grid/ConnectSheet', () => ({
+  ConnectSheet: (p: { visible: boolean; onSend: (m: string) => void }) => {
+    const React = require('react')
+    const { Pressable, Text } = require('react-native')
+    return p.visible
+      ? React.createElement(Pressable, { onPress: () => p.onSend('hi') }, React.createElement(Text, null, 'Send request'))
+      : null
+  },
+}))
+jest.mock('../components/ds/MomentMatch', () => ({
+  MomentMatch: (p: { name: string; onSayHi: () => void }) => {
+    const React = require('react')
+    const { Pressable, Text } = require('react-native')
+    return React.createElement(Pressable, { onPress: p.onSayHi }, React.createElement(Text, null, `You and ${p.name} matched`))
+  },
+}))
+jest.mock('../components/profile/ProfileHeroStage', () => {
+  const React = require('react')
+  const { Text } = require('react-native')
+  return {
+    heroHeightFor: (w: number) => Math.round(w * 1.3),
+    ProfileHeroStage: function HeroStub(p: { name: string; age?: number | null }) {
+      return React.createElement(Text, null, p.age ? `${p.name}, ${p.age}` : p.name)
+    },
+  }
+})
+jest.mock('../components/profile/ProfileSections', () => {
+  const React = require('react')
+  const { Text, View } = require('react-native')
+  // eslint-disable-next-line react/display-name
+  const stub = (label: string) => (p: { title?: string }) => React.createElement(Text, null, p.title ?? label)
+  // The real `ProfileBody` (the one body both profile pages draw, D26) over the stubbed pieces is not possible across a module
+  // boundary, so the real module is kept and only its leaf pieces below stand in where a test reads them.
+  return {
+    ...jest.requireActual('../components/profile/ProfileSections'),
+    SECTION_GAP: 28,
+    ProfileSection: (p: { title: string; children: unknown }) => React.createElement(View, null, React.createElement(Text, null, p.title), p.children),
+    ProfileBio: stub('bio'),
+    ProfileDetail: stub('detail'),
+    ProfileGallery: stub('gallery'),
+    ProfileInterests: stub('interests'),
+  }
+})
+
+import { apiClient } from '../lib/apiClient'
+import { handRoomPerson } from '../lib/roomPersonHandoff'
+import UserProfile from '../app/user/[id]'
+
+const api = apiClient as jest.Mocked<typeof apiClient>
+const WORK = { key: 'work', question: 'What are you working on?' }
+const ANON = { id: 'rh_bison', name: 'Gentle Bison', age: 31, location: 'Toronto', identityVisible: false, tonight: { lens: WORK, answer: 'A map of every quiet café in Toronto', workIntent: 'hire' } }
+const card = (over: object = {}) => ({
+  person: { workField: 'Product design', sharedIntents: ['networking'], interests: ['Cycling', 'Board games'], overlaps: [], badges: [], age: 31, tonightAnswer: 'stale answer', workIntent: null, ...over },
+  lens: WORK,
+})
+
+const open = async (data: object, params: Record<string, string> = {}, ready = 'Gentle Bison') => {
+  mockParams = { id: 'rh_bison', eventId: 'e1', pseudonym: 'Gentle Bison', roomSeed: 'e1:rh_bison', ...params }
+  api.getPublicProfile.mockResolvedValue({ success: true, data } as never)
+  api.getConversations.mockResolvedValue({ success: true, data: [] } as never)
+  api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [] } } as never)
+  api.sendWave.mockResolvedValue({ success: true, data: { sent: true } } as never)
+  await render(<UserProfile />)
+  await screen.findAllByText(ready)
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+}
+const tree = () => JSON.stringify(screen.toJSON())
+
+beforeEach(() => {
+  jest.clearAllMocks()
+  handRoomPerson('nobody', card())
+})
+
+it('anonymous: the centred hero says Anonymous · 31, then the lens blocks in order, and the dock is Wave and Message', async () => {
+  handRoomPerson('rh_bison', card())
+  await open(ANON)
+  expect(screen.getByTestId('profile-lens-hero')).toBeTruthy()
+  expect(screen.getByText('Anonymous · 31')).toBeTruthy()
+  const t = tree()
+  const seq = ['Gentle Bison', 'Anonymous · 31', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café in Toronto', 'In common', 'Cycling', 'Wave', 'Message']
+  const idx = seq.map((x) => t.indexOf(x))
+  expect(idx.every((i) => i >= 0)).toBe(true)
+  expect([...idx].sort((a, b) => a - b)).toEqual(idx)
+  // The server's answer and pick, fresher than the card's.
+  expect(t).not.toContain('stale answer')
+  expect(screen.queryByTestId('avatar-photo')).toBeNull()
+  expect(screen.queryByText('Like')).toBeNull()
+})
+
+it('named: their face and name, “Shown to you · 31”, and the same lens blocks', async () => {
+  handRoomPerson('rh_bison', card())
+  await open({ ...ANON, name: 'Marc-André', identityVisible: true, photos: ['https://cdn/marc.jpg'] }, { pseudonym: 'Gentle Bison' }, 'Marc-André')
+  expect(await screen.findByText('Shown to you · 31')).toBeTruthy()
+  expect(screen.getAllByText('Marc-André').length).toBeGreaterThan(0)
+  expect(screen.getByText('Here to hire')).toBeTruthy()
+})
+
+it('a card handed for somebody else is never drawn on this page: the Tonight card alone (the control is the first test)', async () => {
+  handRoomPerson('rh_someone_else', card({ workField: 'Someone else’s field' }))
+  await open(ANON)
+  expect(screen.getByTestId('profile-lens-hero')).toBeTruthy()
+  expect(tree()).not.toContain('Someone else’s field')
+  expect(screen.queryByText('In common')).toBeNull()
+  expect(screen.getByText('A map of every quiet café in Toronto')).toBeTruthy()
+  // The pick is the server's, so it still leads.
+  expect(screen.getByText('Here to hire')).toBeTruthy()
+})
+
+it('Wave waves at them in this room, and then reads Waved', async () => {
+  handRoomPerson('rh_bison', card())
+  await open(ANON)
+  await fireEvent.press(screen.getByTestId('profile-wave'))
+  await act(async () => {})
+  expect(api.sendWave).toHaveBeenCalledWith('e1', 'rh_bison')
+  expect(await screen.findByText('Waved')).toBeTruthy()
+})
+
+it('outside a room, or with no lens anywhere, it is the profile page it always was', async () => {
+  await open({ ...ANON, tonight: undefined }, {}, 'Gentle Bison, 31')
+  expect(screen.queryByTestId('profile-lens-hero')).toBeNull()
+  expect(screen.getByText('Gentle Bison, 31')).toBeTruthy()
+})
