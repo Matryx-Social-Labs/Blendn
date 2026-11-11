@@ -57,7 +57,7 @@ import { queryCache } from '../../lib/queryCache'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { opensRoomCard, roomCardRoute } from '../../lib/roomCard'
-import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
+import { hangsChips, isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
 import { blockStep, messageReportStep } from '../../lib/safetyUtils'
 import { REMOVED_AFTER_DELIVERY, sendOutcome } from '../../lib/sendOutcome'
@@ -88,6 +88,7 @@ import { isOffline, useWaitingSends } from '../../lib/useWaitingSends'
 import { userMessage } from '../../lib/userMessage'
 
 type ChatListItem = ({ kind: 'message' } & Message) | { kind: 'separator'; id: string; label: string }
+const prevMessage = (i: ChatListItem | undefined) => (i?.kind === 'message' ? i : undefined)
 
 let _tempIdCounter = 0
 const MESSAGES_CACHE_TTL = 60 * 1000
@@ -947,6 +948,19 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     [handlersRef]
   )
 
+  /*
+   * Where the list is, from every reading: onScroll, and where a drag or a jump came to rest. The rest is the one to
+   * trust: onScroll is throttled with no trailing event, so the pill's jump could land at the end unreported and leave
+   * the arrow up and the next arrival counted (driven 2026-11-11, Android).
+   */
+  const noteOffset = (n: NativeScrollEvent) => {
+    const atBottom = atEndOf(n)
+    isAtBottomRef.current = atBottom
+    follow.noteAtEnd(atBottom)
+    setAwayFromEnd(!atBottom)
+    if (atBottom) setNewWhileAway(0)
+  }
+
   const renderChatItem = ({ item, index }: { item: ChatListItem; index: number }) => {
     if (item.kind === 'separator') return <Animated.View entering={arrive}><DayPill text={item.label} /></Animated.View>
     const place = runPlace(chatItems, index, (i) => (i.kind === 'message' && isSpeech(i) ? i.sender_id : null), (i) => (i.kind === 'message' ? stamp(i) : 0))
@@ -963,6 +977,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
         senderTappable={eventRoom || opensRoomCard(roomKind)}
         eventId={eventRoom ? roomInfo.eventId : null}
         pollViewable={viewablePolls.has(item.message_id)}
+        afterChips={hangsChips(prevMessage(chatItems[index - 1]))}
         handlers={handlers}
       />
       </Animated.View>
@@ -1109,16 +1124,16 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
                 setLobbyFolded(true)
               }}
               // A reader's own gesture decides where it came to rest; its first events near the end must not re-arm the follow.
-              onScrollEndDrag={(e) => follow.onGestureEnd(atEndOf(e.nativeEvent))}
-              onMomentumScrollBegin={follow.onScrollBeginDrag}
-              onMomentumScrollEnd={(e) => follow.onGestureEnd(atEndOf(e.nativeEvent))}
-              onScroll={(e) => {
-                const atBottom = atEndOf(e.nativeEvent)
-                isAtBottomRef.current = atBottom
-                follow.noteAtEnd(atBottom)
-                setAwayFromEnd(!atBottom)
-                if (atBottom) setNewWhileAway(0)
+              onScrollEndDrag={(e) => {
+                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                noteOffset(e.nativeEvent)
               }}
+              onMomentumScrollBegin={follow.onScrollBeginDrag}
+              onMomentumScrollEnd={(e) => {
+                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                noteOffset(e.nativeEvent)
+              }}
+              onScroll={(e) => noteOffset(e.nativeEvent)}
               scrollEventThrottle={80}
             />
             </View>

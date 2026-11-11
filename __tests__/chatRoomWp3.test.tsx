@@ -599,6 +599,40 @@ describe('arrivals while you read back (Flow 5 F-A, "48 new messages")', () => {
     expect(screen.getByRole('button', { name: '1 new message, jump to the newest' })).toBeTruthy()
   })
 
+  // Driven 2026-11-11, Android: after the pill's jump the reader was at the newest, yet the arrow stayed and the next
+  // arrival raised "1 new message". The jump is an animated scroll with momentum events, and its last onScroll (the
+  // one at the end) can be throttled away: where it came to rest is in its momentum end.
+  it('after the pill, where the jump came to rest is the end: the arrow goes and an arrival follows', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    await arrive('m1')
+    await fireEvent.press(screen.getByTestId('chat-newest'))
+    const list = screen.getByTestId('room-feed')
+    await fireEvent(list, 'momentumScrollBegin', at(0))
+    await fireEvent.scroll(list, at(900))
+    await fireEvent(list, 'momentumScrollEnd', at(1400))
+    expect(screen.queryByTestId('chat-newest')).toBeNull()
+    mockToEnd.mockClear()
+    await arrive('m2')
+    expect(mockToEnd).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /new message/ })).toBeNull()
+  })
+
+  // Control: a reader who drags up again during the jump is reading back again.
+  it('a drag during the jump ends it: the next arrival raises the pill', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    await arrive('m1')
+    await fireEvent.press(screen.getByTestId('chat-newest'))
+    await scrollTo(300)
+    mockToEnd.mockClear()
+    await arrive('m2')
+    expect(mockToEnd).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '1 new message, jump to the newest' })).toBeTruthy()
+  })
+
   // Control: at the bottom the same arrival follows the end and raises no count.
   it('at the bottom: the feed follows the arrival, and no count is raised', async () => {
     await render(<GroupChat />)

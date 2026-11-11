@@ -13,7 +13,7 @@ import { Composer } from '../components/ds/Composer'
 import { SELECTION } from '../components/ds/shared'
 import { runPlace } from '../lib/chatFeed'
 import { COLOR } from '../lib/design/tokens'
-import type { RoomMessage } from '../lib/roomMessages'
+import { hangsChips, type RoomMessage } from '../lib/roomMessages'
 import { lockFor } from '../lib/useComposerLock'
 
 jest.mock('expo-image', () => {
@@ -87,6 +87,31 @@ describe('the bubble (F-A)', () => {
     expect(flat('b-bubble').paddingBottom ?? flat('b-bubble').paddingVertical).toBe(8)
   })
 
+  // Driven 2026-11-11, Android: a tap 3 pt below the bubble's edge, on the chip's lower half, did nothing; 3 pt above
+  // it toggled the reaction. Android never hands a touch to a child outside its parents' bounds (a box that reached and
+  // gave the space back by margin was still dead), so the chip's lower 12 pt is real layout under the bubble.
+  it.each([
+    ['theirs', false, 'right'],
+    ['yours', true, 'left'],
+  ] as const)('%s: the chip hangs into real space under the bubble, so its lower half takes a tap', async (_, mine, side) => {
+    await render(bubble({ mine, first: true, last: true, surface: 'room', reactions: [{ emoji: '❤️', count: 2, mine: false }], onReactionPress: jest.fn() }))
+    expect(flat('b-chip-box').paddingBottom).toBe(12)
+    expect(flat('b-chip-box').marginBottom).toBeUndefined()
+    expect(flat('b-reactions')).toMatchObject({ position: 'absolute', bottom: 0, [side]: -6 })
+    // The run's next bubble is 4 below the chip, as before (it was the group's margin; now it is the space itself).
+    expect(flat('b').marginBottom).toBeUndefined()
+    // Control: with no chip there is no space under the bubble.
+    await screen.rerender(bubble({ mine, first: true, last: true, surface: 'room' }))
+    expect(flat('b-chip-box')?.paddingBottom).toBeUndefined()
+  })
+
+  it('their creature stays level with the bubble, not with the space under the chip', async () => {
+    await render(bubble({ first: true, last: true, surface: 'room', reactions: [{ emoji: '🔥', count: 1, mine: false }], onSenderPress: jest.fn() }))
+    expect(flat('b-avatar').marginBottom).toBe(12)
+    await screen.rerender(bubble({ first: true, last: true, surface: 'room', onSenderPress: jest.fn() }))
+    expect(flat('b-avatar')?.marginBottom).toBeUndefined()
+  })
+
   it('one reaction still shows its count', async () => {
     await render(bubble({ reactions: [{ emoji: '🔥', count: 1, mine: false }] }))
     expect(screen.getByText('1', { includeHiddenElements: true })).toBeTruthy()
@@ -136,6 +161,30 @@ describe('the host (F-A): the organisation and HOST, never a person', () => {
   it('a person’s text is a bubble', async () => {
     await row(msg({ message_type: 'text', sender_name: 'Lunar Fox', message_text: 'Parked.' }))
     expect(screen.getByTestId('bubble-m1')).toBeTruthy()
+  })
+})
+
+describe('the row after a chip: 16 from the bubble, as drawn, now that the chip’s lower half is real space', () => {
+  const speech = msg({ message_id: 'm2', sender_id: 'u-b', sender_name: 'Night Owl', message_type: 'text', message_text: 'Hi' })
+  const at = (item: RoomMessage, afterChips?: boolean) =>
+    render(<RoomMessageRow item={item} roomId="g1" mine={false} first last senderTappable afterChips={afterChips} handlers={handlers} />)
+
+  it.each([
+    ['a run', speech],
+    ['the host', msg({})],
+  ])('%s after a bubble with a chip starts 4 below the chip (16 below the bubble)', async (_, item) => {
+    await at(item, true)
+    expect(flat(`row-${item.message_id}`).marginTop).toBe(4)
+    // Control: after a bubble with no chip it is the run's 16.
+    await screen.rerender(<RoomMessageRow item={item} roomId="g1" mine={false} first last senderTappable handlers={handlers} />)
+    expect(flat(`row-${item.message_id}`).marginTop).toBe(16)
+  })
+
+  it('only a bubble that draws a chip leaves the space (hangsChips)', () => {
+    expect(hangsChips({ ...speech, reactions: [{ emoji: '❤️', count: 1 }] } as RoomMessage)).toBe(true)
+    expect(hangsChips(speech)).toBe(false)
+    expect(hangsChips({ ...msg({}), reactions: [{ emoji: '❤️', count: 1 }] } as RoomMessage)).toBe(false)
+    expect(hangsChips(undefined)).toBe(false)
   })
 })
 

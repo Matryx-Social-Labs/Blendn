@@ -54,10 +54,14 @@ const VEIL_ALPHA = 0.35
 export const BUBBLE_TYPE = { fontSize: 16, lineHeight: 22 }
 /** F-A: yours is violet with a half-point violet rim (`.run.me .xb`), drawn inside the padding so it never grows the bubble. */
 const VIOLET_RIM = 0.5
-/** F-A: the reaction chip sits on the bubble's outer corner, 6 pt out and 12 below its edge (`.xb .rx`). */
-const CHIP_OUT = { side: -6, below: -12 }
-/** A run's next bubble clears a chip by the run's own 4 pt. */
-const CHIP_CLEAR = 12
+/**
+ * F-A: the reaction chip sits on the bubble's outer corner, 6 pt out and 12 below its edge (`.xb .rx`). The 12 below is
+ * real space under the bubble, not overflow: Android never hands a touch to a child outside its parents' bounds (driven
+ * 2026-11-11, the chip's lower half was dead). A run's next bubble then sits the run's own 4 below the chip, and the
+ * next run starts `CHIP_REACH` less far down (RoomFeed), so nothing moves from the board.
+ */
+const CHIP_OUT = { side: 6, below: 12 }
+export const CHIP_REACH = CHIP_OUT.below
 /** A message the room has just removed: the dashed placeholder comes in over 300 ms where the words were (the dissolve); Reduce Motion: at once. */
 const DISSOLVE = FadeIn.duration(300)
 /** #12: the new bubble starts at the composer's field and travels to its slot over 300 ms. */
@@ -264,7 +268,7 @@ function ChatBubbleBase(props: ChatBubbleProps) {
     <Animated.View
       testID={testID}
       entering={props.animateIn ? entering(props.animateIn, reduceMotion) : undefined}
-      style={[styles.group, mine && styles.end, chips && !last && styles.chipClear]}
+      style={[styles.group, mine && styles.end]}
     >
       <GestureDetector gesture={swipe}>
         <Animated.View style={[styles.group, mine && styles.end, swipeStyle]}>
@@ -278,21 +282,23 @@ function ChatBubbleBase(props: ChatBubbleProps) {
             >
               <Icon name="reply" size={ICON.control} color={COLOR.textSecondary} />
             </Animated.View>
-            {room ? <SenderAvatar sender={sender} last={last} onPress={onSenderPress} testID={testID && `${testID}-avatar`} /> : null}
-            <GestureDetector gesture={hold}>
-              <Animated.View
-                ref={holdArea}
-                testID={testID && `${testID}-hold-area`}
-                onLayout={(e) => size.set({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
-                style={[styles.shrink, previewState === 'pressed' ? styles.pressed : pressStyle]}
-              >
-                {bubble}
-                {chips ? <Chips {...props} /> : null}
-                {focused || previewState === 'focused'
-                  ? focusRing(BUBBLE.radius).map((ring, i) => <View key={i} pointerEvents="none" style={ring} />)
-                  : null}
-              </Animated.View>
-            </GestureDetector>
+            {room ? <SenderAvatar sender={sender} last={last} aboveChips={chips} onPress={onSenderPress} testID={testID && `${testID}-avatar`} /> : null}
+            <View testID={testID && `${testID}-chip-box`} style={[styles.shrink, chips && styles.chipRoom]}>
+              <GestureDetector gesture={hold}>
+                <Animated.View
+                  ref={holdArea}
+                  testID={testID && `${testID}-hold-area`}
+                  onLayout={(e) => size.set({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+                  style={[styles.shrink, previewState === 'pressed' ? styles.pressed : pressStyle]}
+                >
+                  {bubble}
+                  {focused || previewState === 'focused'
+                    ? focusRing(BUBBLE.radius).map((ring, i) => <View key={i} pointerEvents="none" style={ring} />)
+                    : null}
+                </Animated.View>
+              </GestureDetector>
+              {chips ? <Chips {...props} /> : null}
+            </View>
           </View>
           <Under {...props} indent={indent} />
         </Animated.View>
@@ -309,11 +315,13 @@ function ChatBubbleBase(props: ChatBubbleProps) {
 export const ChatBubble = memo(ChatBubbleBase)
 
 /** The 32 pt creature beside an inbound room group, on its last bubble: a touch target to their card (48 dp); screen readers use the bubble's "View profile" action. */
-function SenderAvatar({ sender, last, onPress, testID }: { sender: ChatPerson; last: boolean; onPress?: () => void; testID?: string }) {
+function SenderAvatar({ sender, last, aboveChips, onPress, testID }: { sender: ChatPerson; last: boolean; aboveChips: boolean; onPress?: () => void; testID?: string }) {
   if (!last) return <View style={styles.avatarSpace} />
   return (
     <Pressable
       testID={testID}
+      // Level with the bubble's last line, not with the chip's space under it.
+      style={aboveChips && styles.chipRoomAvatar}
       onPress={onPress}
       disabled={!onPress}
       hitSlop={(minTarget() - BUBBLE.avatar) / 2}
@@ -631,10 +639,11 @@ const styles = StyleSheet.create({
   failedBubble: { opacity: FAILED_OPACITY },
   photo: { width: PHOTO.width, height: PHOTO.height, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface },
   veil: { borderRadius: RADIUS.rowInCard, backgroundColor: tint(COLOR.ink, VEIL_ALPHA), alignItems: 'center', justifyContent: 'center' },
-  chips: { position: 'absolute', bottom: CHIP_OUT.below, flexDirection: 'row', gap: SPACE.xs },
-  chipsTheirs: { right: CHIP_OUT.side },
-  chipsMine: { left: CHIP_OUT.side },
-  chipClear: { marginBottom: CHIP_CLEAR },
+  chips: { position: 'absolute', bottom: 0, flexDirection: 'row', gap: SPACE.xs },
+  chipsTheirs: { right: -CHIP_OUT.side },
+  chipsMine: { left: -CHIP_OUT.side },
+  chipRoom: { paddingBottom: CHIP_OUT.below },
+  chipRoomAvatar: { marginBottom: CHIP_OUT.below },
   violetRim: {
     borderWidth: VIOLET_RIM,
     borderColor: tint(COLOR.selectionVioletGlyph, 0.5),

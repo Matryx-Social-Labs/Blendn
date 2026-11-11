@@ -12,7 +12,7 @@ import { DURATION, SPACE } from '../../lib/design/tokens'
 import { isTemp, QUOTE_UNAVAILABLE, type RoomMessage } from '../../lib/roomMessages'
 import { clockTime } from '../../lib/time'
 import { BroadcastNotice } from '../ds/BroadcastNotice'
-import { ChatBubble, type BubbleReaction } from '../ds/ChatBubble'
+import { ChatBubble, CHIP_REACH, type BubbleReaction } from '../ds/ChatBubble'
 import type { Rect } from '../ds/chatShared'
 import { StateScreen } from '../ds/StateScreen'
 import type { ButtonKind } from '../ds/Button'
@@ -70,6 +70,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   senderTappable,
   eventId,
   pollViewable = false,
+  afterChips = false,
   handlers,
 }: {
   item: RoomMessage
@@ -88,8 +89,11 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   eventId?: string | null
   /** This poll's row is on screen: it is read only then. */
   pollViewable?: boolean
+  /** The row above is a bubble with chips, whose lower half is real space: start that much less far down (`hangsChips`). */
+  afterChips?: boolean
   handlers: RowHandlers
 }) {
+  const runStart = afterChips ? styles.runStartAfterChips : styles.runStart
   if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
   // A crew like is the room saying who did what, never somebody's bubble (your own drew as yours, TG-10).
   const like = item.message_type === 'system' ? crewLikeLine(item.message_text, mine ? 'You' : item.sender_name) : null
@@ -100,7 +104,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
    */
   if (item.message_type === 'poll') {
     return (
-      <View style={styles.runStart}>
+      <View testID={`row-${item.message_id}`} style={runStart}>
         {item.poll_id && eventId ? (
           <RoomPoll
             eventId={eventId}
@@ -120,14 +124,14 @@ export const RoomMessageRow = memo(function RoomMessageRow({
     const { from, text } = broadcastParts(item.message_type, item.message_text, item.sender_name)
     // Full width, no tail, no menu: not somebody talking to you.
     return (
-      <View style={styles.runStart}>
+      <View testID={`row-${item.message_id}`} style={runStart}>
         <BroadcastNotice kind={item.message_type} from={from} text={text} time={clockTime(item.created_at)} media={item.media} testID={`broadcast-${item.message_id}`} />
       </View>
     )
   }
   const sending = isTemp(item) && !item.failed
   return (
-    <Animated.View exiting={FadeOut.duration(DURATION.quick)} style={first ? styles.runStart : styles.inRun}>
+    <Animated.View testID={`row-${item.message_id}`} exiting={FadeOut.duration(DURATION.quick)} style={first ? runStart : styles.inRun}>
       <ChatBubble
         testID={`bubble-${item.message_id}`}
         mine={mine}
@@ -304,6 +308,7 @@ const CREW_WORDS = {
 
 const styles = StyleSheet.create({
   runStart: { marginTop: SPACE.lg },
+  runStartAfterChips: { marginTop: SPACE.lg - CHIP_REACH },
   inRun: { marginTop: SPACE.xs },
   gone: { flex: 1, paddingHorizontal: SPACE.gutter },
 })
