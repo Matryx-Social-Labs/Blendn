@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
-import { font, useBoldText } from '../../components/ds/shared'
+import { font, useAnnounced, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Swap } from '../../components/motion/Swap'
 import { DoorTicket, OfferHeader, RegularAsk, RegularOff, RegularOn } from '../../components/offer/OfferSections'
@@ -22,6 +22,8 @@ import {
   maybeLaterKey,
   regularsActive,
   nextRefreshMs,
+  FRESH_CODE_FOOT,
+  LIVE_FOOT,
   OFFER_REPORT_REASONS,
   offersApi,
   passView,
@@ -263,6 +265,8 @@ function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; last
     return () => clearInterval(timer)
   }, [])
   const view = passView(offer, now, lastReadFailed)
+  // A change is said (redeemed, offline); the code's own rotation is not, or the screen would talk every turn.
+  useAnnounced(view.foot === LIVE_FOOT || view.foot === FRESH_CODE_FOOT ? null : view.foot, { changesOnly: true })
   // A code held up to a counter reads at full brightness (Google Pay, UNIQLO): only while it shows and this screen is in front.
   useBrightScreen(view.door === 'live' && focused)
 

@@ -9,7 +9,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { compactCount } from '../../lib/format'
 import { BUBBLE, plural } from '../ds/chatShared'
 import { PresenceDot } from '../ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useAnnounced, useBoldText } from '../ds/shared'
 import { glassContentsIn, glassRiseIn, popOut } from '../motion/presence'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
@@ -121,13 +121,16 @@ const PILL = SIZE.tagHeader
 const PILL_PAD = 14
 const ROSE = SELECTION.rose
 
+const JUST_MUTED = 'Just now · the organizer muted you'
+
 /** A mute that arrived while you were here (R2-D2 #06): one line over the flipped composer. */
 export function JustMutedLine() {
   const bold = useBoldText()
+  useAnnounced(JUST_MUTED)
   return (
     <View style={styles.justMuted} accessible accessibilityLiveRegion="polite">
       <Icon name="mic-off" size={ICON.inline} color={COLOR.textTertiary} />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>Just now · the organizer muted you</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.tertiary]}>{JUST_MUTED}</Text>
     </View>
   )
 }

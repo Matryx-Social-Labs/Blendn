@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, RADIUS } from '../../lib/design/tokens'
+import { COLOR, DURATION, RADIUS } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { useScreenReader } from '../ds/shared'
 import { tint } from '../../lib/theme'
@@ -15,7 +15,7 @@ const PIP = 6
 const PIP_LONG = 16
 const PIP_DIM = 0.35
 /** The pip's growth to the current page. */
-const PIP_MS = 160
+const PIP_MS = DURATION.quick
 
 /** The next page, wrapping: the hero is a loop until the person takes it over. */
 export const nextPage = (page: number, count: number) => (count ? (page + 1) % count : 0)

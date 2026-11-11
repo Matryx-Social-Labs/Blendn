@@ -26,6 +26,6 @@ describe('Going’s row reflow', () => {
   })
 
   it('Reduce Motion keeps the list updating without a layout transition', () => {
-    expect(code).toContain('itemLayoutAnimation={reduceMotion ? undefined : rowReflow}')
+    expect(code).toContain('itemLayoutAnimation={reflowsOnSpring(items.length, reduceMotion) ? rowReflow : undefined}')
   })
 })

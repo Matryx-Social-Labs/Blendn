@@ -15,6 +15,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
+import { DURATION, PRESS, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 
@@ -33,8 +34,8 @@ export interface DeckFan {
 const DEPTHS = [0, 1, 2, 3]
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
-/** Settles a little slower than the default 400ms, so the fan is seen re-forming. */
-const SETTLE = { duration: 550, dampingRatio: 0.8 } as const
+/** The fan re-forms on `M.settle`. */
+const SETTLE = SPRING.settle
 /** Soft ease-out for the one-off deal. */
 const EASE_GENTLE = Easing.bezier(0.33, 1, 0.68, 1)
 /** Past this, or past `FLICK_VELOCITY`, a drag sends the card to the back. */
@@ -250,13 +251,13 @@ export function SwipeDeck<T>({
 
   const tap = Gesture.Tap()
     .onBegin(() => {
-      if (!reduceMotion) pressed.set(withTiming(0.97, { duration: 120, easing: EASE_OUT }))
+      if (!reduceMotion) pressed.set(withTiming(PRESS.scale, { duration: DURATION.press, easing: EASE_OUT }))
     })
     .onEnd(() => {
       scheduleOnRN(onPress, front.get())
     })
     .onFinalize(() => {
-      pressed.set(withTiming(1, { duration: 120, easing: EASE_OUT }))
+      pressed.set(withTiming(1, { duration: DURATION.press, easing: EASE_OUT }))
     })
 
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: pressed.get() }] }))

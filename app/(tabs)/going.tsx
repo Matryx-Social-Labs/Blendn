@@ -13,6 +13,7 @@ import { Spinner } from '../../components/ds/Loader'
 import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import { rowBack, rowOut, rowReflow } from '../../components/motion/presence'
+import { reflowsOnSpring } from '../../lib/resort'
 import { EventCard } from '../../components/ds/EventCard'
 import { MonoRun, PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
@@ -813,7 +814,8 @@ function GoingScreenInner() {
             ref={listRef}
             testID="going-list"
             data={items}
-            itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
+            // Up to DS #38's twelve rows: past that a refresh (every tab focus) would reflow a page at once (M14).
+            itemLayoutAnimation={reflowsOnSpring(items.length, reduceMotion) ? rowReflow : undefined}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             // Hundreds of past nights are rows drawn a screen at a time, never the whole list.

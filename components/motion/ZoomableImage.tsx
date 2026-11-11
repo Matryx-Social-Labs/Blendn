@@ -9,6 +9,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
+import { SPRING } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 
 const MAX_SCALE = 4
@@ -18,8 +19,8 @@ const MIN_PINCH_SCALE = 0.7
 /** Past the edge a pan moves the photo at this fraction of the finger. */
 const RUBBER_BAND = 0.35
 
-const SNAP = { duration: 400, dampingRatio: 0.8 } as const
-const SETTLE = { duration: 400, dampingRatio: 1 } as const
+/** Both the double-tap snap and the release settle on `M.settle`. */
+const SETTLE = SPRING.settle
 
 /**
  * A photo you can pinch and double-tap into, inside a lightbox page.
@@ -131,9 +132,9 @@ export function ZoomableImage({
         tx.set(x)
         ty.set(y)
       } else {
-        scale.set(withSpring(target, SNAP))
-        tx.set(withSpring(x, SNAP))
-        ty.set(withSpring(y, SNAP))
+        scale.set(withSpring(target, SETTLE))
+        tx.set(withSpring(x, SETTLE))
+        ty.set(withSpring(y, SETTLE))
       }
       scheduleOnRN(report, target > 1)
     })

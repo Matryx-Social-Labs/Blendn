@@ -25,7 +25,7 @@ import { useChatTabUnread } from '../../lib/useChatTabUnread'
 import { RoomChat } from '../chat/RoomChat'
 import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
-import { COLOR, DURATION, EASING, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
@@ -955,7 +955,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           style={[styles.layer, roomFadeStyle]}
           onLayout={() => setRoomLaidOut(true)}
           // Out of a pour the crossfade is `roomFade`'s; otherwise the Room's own entrance.
-          entering={pourEntrance ? undefined : reduceMotion ? FadeIn : FadeInUp.duration(DURATION.medium)}
+          entering={pourEntrance ? undefined : reduceMotion ? FadeIn.duration(REDUCE_MOTION.duration.base) : FadeInUp.duration(DURATION.medium)}
           // Gone at once when the night is over: the Recap beneath is opaque from its first frame and must not have the Room's faces through it (SCRUM-962).
           exiting={mode === 'ended' ? undefined : FadeOut.duration(DURATION.quick)}
           pointerEvents={mode === 'room' ? 'auto' : 'none'}
