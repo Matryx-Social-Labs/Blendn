@@ -2,12 +2,13 @@ import { H } from '../../lib/haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { Platform, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { MomentMatch } from '../../components/ds/MomentMatch'
 import { Button } from '../../components/ds/Button'
+import { Dock } from '../../components/ds/Dock'
 import type { Rect } from '../../components/ds/chatShared'
 import { font, HueProvider, useBoldText, useSelection, type Hue } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -46,6 +47,7 @@ import { LensBlocks } from '../../components/ds/LensBlocks'
 import { ProfileLensHero } from '../../components/profile/ProfileLensHero'
 import { lensView, parseLens, parseWorkIntent, type RoomLens, type WorkIntent } from '../../lib/roomLens'
 import { roomPersonFor } from '../../lib/roomPersonHandoff'
+import { barCircleBottom } from '../../lib/barGeometry'
 
 
 interface UserProfileView {
@@ -89,6 +91,9 @@ interface UserProfileView {
    */
   tonight?: { lens: RoomLens | null; answer: string | null; workIntent: WorkIntent | null } | null
 }
+
+/** `pA-page`: the hero starts 14 under the bar's buttons (`.xcol` top 116, the buttons end at 102). */
+const LENS_PAGE_TOP = SPACE.md + SPACE.xxs
 
 /** The lens fields of a person nobody handed a card for: the page then shows the server's tonight block alone. */
 const NO_CARD = { workField: null, sharedIntents: [], interests: [], overlaps: [], badges: [] } as const
@@ -700,6 +705,8 @@ function UserProfileInner() {
 
   const columnWidth = Math.floor((windowWidth - SPACE.gutter * 2 - SPACE.sm) / 2)
   const showDock = !loading && !!profile && ctaMode !== 'self'
+  // A request to answer, or a friend to add, keeps the profile's own dock: those are the action, not a wave.
+  const lensDock = !!lensBlocks && !incoming && !friendLead
   const heroHeight = heroFoldHeight({
     width: windowWidth,
     design: heroHeightFor(windowWidth),
@@ -735,7 +742,7 @@ function UserProfileInner() {
         ) : (
           <Animated.View entering={arrive}>
             {lensBlocks ? (
-              <View style={styles.lensPage}>
+              <View testID="profile-lens-page" style={[styles.lensPage, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + LENS_PAGE_TOP }]}>
                 <ProfileLensHero testID="profile-lens-hero" photo={revealed ? (photos[0] ?? null) : null} seed={identity.seed} name={identity.name} meta={lensBlocks.meta} />
                 <LensBlocks lead={lensBlocks.lead} tonight={lensBlocks.tonight} common={lensBlocks.common} testID="profile-lens" />
                 {revealed ? (
@@ -817,7 +824,36 @@ function UserProfileInner() {
       </Animated.ScrollView>
 
       {/* The tray stays put while the bio, interests and gallery scroll beneath it: Like and Connect are in the thumb's reach on any phone. */}
-      {showDock ? (
+      {showDock && lensDock ? (
+        // `pA-page`'s dock (`.dock4`): Wave, and Message the wide one, on the glass line. The request line stays in Message's label.
+        <Dock line floating round={false} onHeight={setDockHeight} testID="profile-dock">
+          <View testID="profile-lens-dock-row" style={styles.dockRow}>
+            <Button
+              kind="secondary"
+              size="dock"
+              onGlass
+              icon={waved === 'waved' ? 'check' : 'hand'}
+              label={waved === 'waved' ? 'Waved' : 'Wave'}
+              accessibilityLabel={waved === 'waved' ? `Waved at ${heroTitle}` : `Wave at ${heroTitle}`}
+              disabled={waved === 'waved'}
+              loading={waved === 'busy'}
+              onPress={() => void handleWave()}
+              testID="profile-wave"
+            />
+            <Button
+              kind={ctaLit ? 'lit' : 'secondary'}
+              size="dock"
+              icon={ctaDisabled ? undefined : 'message-circle'}
+              label={ctaMode === 'connect' ? 'Message' : CTA_LABEL[ctaMode]}
+              accessibilityLabel={ctaMode === 'connect' ? `Message ${heroTitle}. Sends a request and shows them your name and photo` : undefined}
+              disabled={ctaDisabled}
+              onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
+              style={styles.flex}
+              testID="profile-cta"
+            />
+          </View>
+        </Dock>
+      ) : showDock ? (
         <ProfileDock
           testID="profile-dock"
           note={incoming ? null : friendRequested ? FRIEND_COPY.requestSentNote : ctaMessage || null}
@@ -848,33 +884,6 @@ function UserProfileInner() {
               onDecline={() => void answerRequest('decline')}
             />
           ) : (
-            lensBlocks ? (
-              <>
-                <Button
-                  kind="secondary"
-                  size="md"
-                  icon={waved === 'waved' ? 'check' : 'hand'}
-                  label={waved === 'waved' ? 'Waved' : 'Wave'}
-                  accessibilityLabel={waved === 'waved' ? `Waved at ${heroTitle}` : `Wave at ${heroTitle}`}
-                  disabled={waved === 'waved'}
-                  loading={waved === 'busy'}
-                  onPress={() => void handleWave()}
-                  style={styles.flex}
-                  testID="profile-wave"
-                />
-                <Button
-                  kind={ctaLit ? 'lit' : 'secondary'}
-                  size="md"
-                  icon={ctaDisabled ? undefined : 'message-circle'}
-                  label={ctaMode === 'connect' ? 'Message' : CTA_LABEL[ctaMode]}
-                  accessibilityLabel={ctaMode === 'connect' ? `Message ${heroTitle}. Sends a request and shows them your name and photo` : undefined}
-                  disabled={ctaDisabled}
-                  onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
-                  style={styles.wide}
-                  testID="profile-cta"
-                />
-              </>
-            ) : (
             <>
             {eventId ? (
               <Button
@@ -903,7 +912,6 @@ function UserProfileInner() {
               testID="profile-cta"
             />
             </>
-            )
           )}
         </ProfileDock>
       ) : null}
@@ -991,9 +999,9 @@ const styles = StyleSheet.create({
   self: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
   selfText: { flexShrink: 1, color: COLOR.textSecondary },
   flex: { flex: 1 },
-  /** `.dock4`: Message is the wide one. */
-  wide: { flex: 2 },
-  /** `pA-page`: the column starts 116 down (under the bar), 20 between the hero and each block. */
+  /** `.dock4`: Wave hugs its label, Message takes the rest, 12 apart. */
+  dockRow: { flexDirection: 'row', gap: SPACE.md },
+  /** `pA-page`: 20 between the hero and each block; the top is the bar's (`LENS_PAGE_TOP`). */
   lensPage: { paddingHorizontal: SPACE.gutter, gap: SPACE.lg + SPACE.xs },
 })
 

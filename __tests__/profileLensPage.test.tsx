@@ -2,6 +2,7 @@
  * Flow 5 C3b (P-A, `pA-page` / `pA-page-named`): a profile opened from a room is the person through the room’s lens.
  * The lead pills and In common are the room’s own card (handed in memory); the Tonight card is the server’s.
  */
+import { StyleSheet } from 'react-native'
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 
 
@@ -131,6 +132,16 @@ it('anonymous: the centred hero says Anonymous · 31, then the lens blocks in or
   expect(t).not.toContain('stale answer')
   expect(screen.queryByTestId('avatar-photo')).toBeNull()
   expect(screen.queryByText('Like')).toBeNull()
+})
+
+it('the page starts under the bar, not beneath it, and its dock is the glass line with no Connect note (drive, iOS)', async () => {
+  handRoomPerson('rh_bison', card())
+  await open(ANON)
+  // insets 0: the bar's buttons end at 2 + 44, and the hero starts 14 under them (`pA-page` 116 against 102).
+  expect(StyleSheet.flatten(screen.getByTestId('profile-lens-page').props.style).paddingTop).toBe(60)
+  expect(screen.queryByText(/Connect sends a request/)).toBeNull()
+  expect(StyleSheet.flatten(screen.getByTestId('profile-lens-dock-row').props.style).flexDirection).toBe('row')
+  expect(tree()).toContain('Sends a request and shows them your name and photo')
 })
 
 it('named: their face and name, “Shown to you · 31”, and the same lens blocks', async () => {
