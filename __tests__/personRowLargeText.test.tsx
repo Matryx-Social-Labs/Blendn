@@ -118,18 +118,19 @@ describe('RevealBar (C26, C27)', () => {
   const face = { kind: 'creature', pseudonym: 'Tumbling Moose' } as never
   const bar = () => render(<RevealBar state="none" you={{ name: 'Aarav Venkataraman', face }} them={{ name: 'Tumbling Moose of the North', face }} />)
 
-  it('at 360 dp and 1.3 each name may take two lines, and "You" stacks over yours', async () => {
+  it('at 360 dp and 1.3 each name may take two lines; your side says "You · Anonymous" under it, never glued to the name', async () => {
     await at(360, 1.3)
     await bar()
     for (const name of ['Aarav Venkataraman', 'Tumbling Moose of the North']) expect(screen.getByText(name, hidden).props.numberOfLines).toBe(2)
-    expect(screen.getByText('You', hidden).props.numberOfLines).toBe(1)
+    expect(screen.getByText('You · Anonymous', hidden).props.numberOfLines).toBe(1)
     expect(screen.queryByText('You · Aarav Venkataraman', hidden)).toBeNull()
   })
 
-  it('on a roomy phone at the default size it reads as before: "You · name" on one run', async () => {
+  it('on a roomy phone at the default size the name is still its own line (D-A: the name, then "You · …")', async () => {
     await at(402, 1)
     await bar()
-    expect(screen.getByText('You · Aarav Venkataraman', hidden).props.numberOfLines).toBe(2)
+    expect(screen.getByText('Aarav Venkataraman', hidden).props.numberOfLines).toBe(2)
+    expect(screen.getByText('You · Anonymous', hidden)).toBeTruthy()
   })
 })
 

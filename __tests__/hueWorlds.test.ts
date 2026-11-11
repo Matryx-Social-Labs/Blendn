@@ -45,6 +45,8 @@ const CARRIED: Record<string, string> = {
   'components/board/ComposePhoto.tsx': '<HueProvider value="violet">',
   // The Lobby is rose wherever it shows (P-A on the ember event page: Post something lit rose, `pA-rest`).
   'components/board/LobbyPreview.tsx': '<HueProvider value="rose">',
+  // Show who you are is yours: lit violet in the rose DM (Flow 5 D-A `dA-none`), around that one button only.
+  'components/ds/RevealBar.tsx': '<HueProvider value="violet">',
 }
 /** Going out: ember is the default, so none of these sets a hue. */
 const EMBER = [

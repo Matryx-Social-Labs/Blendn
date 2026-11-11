@@ -1,3 +1,5 @@
+import type { RoomLens } from './roomLens'
+
 /**
  * What a conversation shows, and what you can do about it.
  *
@@ -31,6 +33,12 @@ export interface ConversationRevealState {
    * thread header keys off this, so it survives the reveal.
    */
   fromMatch?: boolean
+  /** Your own room pseudonym in this conversation (the strip's side for you); null for a message request. */
+  yourPseudonym?: string | null
+  /** The lens of the room you matched in: its question opens the thread (Flow 5 D-A). */
+  lens?: RoomLens | null
+  /** When the conversation opened, which for a match is when you matched. */
+  matchedAt?: string | null
 }
 
 /**
@@ -97,7 +105,11 @@ export function revealConfirmation(displayName: string): {
 } {
   return {
     title: `Show ${displayName} who you are?`,
-    body: 'They’ll see your name and photos. This can’t be undone — you can block them, but you can’t take it back.',
+    /*
+     * Flow 5 D-A's sentence, less what the server does not keep: it said "your first name and photos, in this chat
+     * only", but the thread shows the whole stored name and a reveal opens your profile to them (`lib/identity.ts`).
+     */
+    body: 'They’ll see your name and photos. You can’t undo this.',
     confirm: 'Show them',
   }
 }

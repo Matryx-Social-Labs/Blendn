@@ -4,14 +4,17 @@ import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, ty
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, DURATION, ICON, MAX_FONT_SCALE, RADIUS, RISE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, ICON, MAX_FONT_SCALE, RADIUS, RISE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { fade, MomentStage, spring, useBeats, type MomentFace } from './MomentStage'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
+import { QuestionCard } from './QuestionCard'
 
+/** M-A's label over the room's question (Flow 5 board `xMatch`). */
+const START_WITH = 'Start with tonight’s question'
 /** The faces, on the Avatar scale (the page draws 104; the scale's nearest is 112). They overlap by 16. */
 const FACE = 112
 const MEET = SPACE.lg
@@ -35,6 +38,17 @@ const ACTIONS_AT = 1100
 /** journey/screens.js `matchStage`: the scrim at 78% over the orbs; the orbs lift once, then settle at 75%. */
 const SCRIM = 0.78
 const ORBS_REST = 0.75
+/** M-A (`.xmatch`): one centred column, 32 in; the faces in a 120 band, the title 18 under it, then 8, 22, 22. */
+const FACES_BAND = (120 - FACE) / 2
+// design-exception: the board's title sits 18 under the faces' band (`.xmatch h3` margin-top), off the SPACE scale
+const TITLE_GAP = 18
+// design-exception: 22 between the line, the question and Say hi (`.xmatch .xq`, `.db` margin-top)
+const BLOCK_GAP = 22
+/**
+ * Keep looking is a text link on the board, 12 under Say hi; here it is a 48 pt button, so its box is centred on that
+ * text and its overhang is taken back, above and below, so the column centres as the board's does.
+ */
+const LINK_TRIM = (SIZE.control - TYPE.button.lineHeight) / 2
 
 export type MomentMatchProps = {
   /** Your face as they know you here: a photo only if you are named to them, else your creature. */
@@ -45,8 +59,10 @@ export type MomentMatchProps = {
   name: string
   /** Why you two: "Both into live music". */
   reason?: string | null
-  /** A first line to try, from what you share. */
+  /** A first line to try, from what you share. Not shown when the room asks a question (`question` is the opener then). */
   opener?: string | null
+  /** M-A: the room's question (`lens.question`), offered as the opener; null or absent falls back to today's moment. */
+  question?: string | null
   onSayHi: () => void
   /** Keep looking, and system back. */
   onClose: () => void
@@ -66,7 +82,7 @@ export type MomentMatchProps = {
  *
  * Reduce Motion: the faces placed, no hearts, `H.match` at once, a 200 ms fade.
  */
-export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose, testID }: MomentMatchProps) {
+export function MomentMatch({ you, them, name, reason, opener, question, onSayHi, onClose, testID }: MomentMatchProps) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -134,8 +150,11 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
   const textStyle = useAnimatedStyle(() => ({ opacity: text.get(), transform: [{ translateY: rise.get() }] }))
   const actionsStyle = useAnimatedStyle(() => ({ opacity: actions.get() }))
 
-  const why = `You and ${name} matched${reason ? ` · ${reason}` : ''}`
-  const label = `It’s mutual. You and ${name} matched${reason ? `, ${reason}` : ''}.${opener ? ` Try: ${opener}` : ''}`
+  // M-A: with the room's question, the board's line and the question as the opener; without, today's (M-B).
+  const why = question ? `You and ${name} liked each other.` : `You and ${name} matched${reason ? ` · ${reason}` : ''}`
+  const label = question
+    ? `It’s mutual. ${why} ${START_WITH}: ${question}`
+    : `It’s mutual. You and ${name} matched${reason ? `, ${reason}` : ''}.${opener ? ` Try: ${opener}` : ''}`
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   return (
@@ -143,7 +162,8 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
         skip()
         onClose()
       }}>
-      <View pointerEvents="box-none" style={[styles.page, { paddingTop: insets.top }]}>
+      {/* Even insets above and below, so the column centres on the screen as the board's does. */}
+      <View pointerEvents="box-none" style={[styles.page, { paddingVertical: Math.max(insets.top, insets.bottom) }]}>
         <View pointerEvents="box-none" style={styles.body}>
           {/* Nothing here is a button: a tap on the faces or the words falls through to skip. */}
           <View testID={testID && `${testID}-faces`} pointerEvents="none" style={styles.faces}>
@@ -156,13 +176,17 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
             {reduceMotion ? null : HEARTS.map((h, i) => <Heart key={i} progress={hearts[i]} lift={h.lift} size={h.size} testID={testID && `${testID}-heart-${i}`} />)}
           </View>
           <Animated.View testID={testID && `${testID}-copy`} pointerEvents="none" style={[styles.copy, textStyle]}>
-            <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[font('moment', bold), styles.centre]}>
+            <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={[font('display', bold), styles.centre]}>
               It’s mutual
             </Text>
             <Text testID={testID && `${testID}-why`} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: secondary }]}>
               {why}
             </Text>
-            {opener ? (
+            {question ? (
+              <View style={styles.question}>
+                <QuestionCard label={START_WITH} text={question} testID={testID && `${testID}-question`} />
+              </View>
+            ) : opener ? (
               <View testID={testID && `${testID}-opener`} style={[styles.opener, contrast && IC_HAIRLINE]}>
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: secondary }]}>
                   TRY
@@ -173,15 +197,15 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
               </View>
             ) : null}
           </Animated.View>
+          <Animated.View
+            testID={testID && `${testID}-actions`}
+            pointerEvents={live || screenReader ? 'box-none' : 'none'}
+            style={[styles.actions, actionsStyle]}
+          >
+            <Button label="Say hi" icon="message-circle" onPress={onSayHi} testID={testID && `${testID}-say-hi`} />
+            <Button label="Keep looking" kind="tertiary" size="md" muted onPress={onClose} style={styles.link} testID={testID && `${testID}-keep-looking`} />
+          </Animated.View>
         </View>
-        <Animated.View
-          testID={testID && `${testID}-actions`}
-          pointerEvents={live || screenReader ? 'box-none' : 'none'}
-          style={[styles.actions, { paddingBottom: insets.bottom + SPACE.xl }, actionsStyle]}
-        >
-          <Button label="Say hi" onPress={onSayHi} testID={testID && `${testID}-say-hi`} />
-          <Button label="Keep looking" kind="tertiary" onPress={onClose} testID={testID && `${testID}-keep-looking`} />
-        </Animated.View>
       </View>
     </MomentStage>
   )
@@ -206,14 +230,15 @@ function Heart({ progress, lift, size, testID }: { progress: SharedValue<number>
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
-  faces: { width: ROW, height: FACE },
+  body: { flex: 1, justifyContent: 'center', paddingHorizontal: SPACE.xxl },
+  faces: { width: ROW, height: FACE, marginVertical: FACES_BAND, alignSelf: 'center' },
   you: { position: 'absolute', left: 0, top: 0 },
   them: { position: 'absolute', left: FACE - MEET, top: 0 },
   heart: { position: 'absolute', left: 0, top: 0 },
-  copy: { alignSelf: 'stretch', alignItems: 'center', gap: SPACE.sm },
+  copy: { alignSelf: 'stretch', alignItems: 'center', marginTop: TITLE_GAP, gap: SPACE.sm },
   centre: { textAlign: 'center', color: COLOR.textPrimary },
   ink: { color: COLOR.textPrimary },
+  question: { alignSelf: 'stretch', marginTop: BLOCK_GAP - SPACE.sm },
   opener: {
     alignSelf: 'stretch',
     marginTop: SPACE.lg,
@@ -223,5 +248,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.lg,
     gap: SPACE.xs,
   },
-  actions: { paddingHorizontal: SPACE.gutter, gap: SPACE.sm },
+  actions: { marginTop: BLOCK_GAP },
+  link: { marginTop: SPACE.md - LINK_TRIM, marginBottom: -LINK_TRIM },
 })

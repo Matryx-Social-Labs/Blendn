@@ -139,7 +139,6 @@ describe('at AX XXXL (fontScale 3.571)', () => {
   })
 
   it('the DM (RC drive 2 D-3): the header’s reveal line stops at the control cap in its fixed capsule; the opener, Say hi and the nudge wrap at their caps', async () => {
-    const face = { kind: 'creature', pseudonym: 'Tumbling Moose' } as never
     await render(
       <View>
         <ChatHeader
@@ -150,13 +149,14 @@ describe('at AX XXXL (fontScale 3.571)', () => {
           onMore={jest.fn()}
           moreLabel="More"
         />
-        <MatchOpenerCard you={face} them={face} title="You both said yes." body="Say something about the night." />
+        <MatchOpenerCard line="You matched in the room · Tonight · 7:42 PM" question="Who are you hoping they play?" />
         <SayHi line="Say hi to Tumbling Moose." onPress={jest.fn()} />
         <NudgeLine text="Tumbling Moose asked to know who you are" />
       </View>
     )
     expect(screen.getByText('Both anonymous').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
-    expect(screen.getByText('You both said yes.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.heading)
+    expect(screen.getByText('Who are you hoping they play?').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.body)
+    expect(screen.getByText('Who are you hoping they play?').props.numberOfLines).toBeUndefined()
     expect(screen.getByText('Say hi to Tumbling Moose.').props.numberOfLines).toBeUndefined()
     expect(clipped(screen.toJSON())).toEqual([])
     expect(uncapped(screen.toJSON())).toEqual([])

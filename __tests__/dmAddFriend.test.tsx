@@ -303,10 +303,10 @@ describe('the card in the thread, once you can both see each other', () => {
     expect(StyleSheet.flatten(within(screen.getByTestId('dm-reveal')).getByRole('button', { name: 'Add friend' }).props.style).backgroundColor).toBe(COLOR.selectionRoseFill)
   })
 
-  it('reads both sides as seen', async () => {
+  it('reads both sides as shown', async () => {
     await open(withFriend({ state: 'none', canAdd: true }))
     // Your first name when the account has one, else "You" alone (rc7 D8: never "You, You").
-    expect(screen.getByLabelText(/^You(, [^,]+)?, seen\. Mika, seen\.$/)).toBeTruthy()
+    expect(screen.getByLabelText(/^You(, [^,]+)?, shown\. Mika, shown\.$/)).toBeTruthy()
   })
 
   it('an incoming request reads "Accept friend request"', async () => {
@@ -465,7 +465,7 @@ it('revealing yourself re-reads the conversation, so Add friend appears once the
     </>
   )
   await flush()
-  await act(async () => fireEvent.press(screen.getByLabelText('Show them who you are')))
+  await act(async () => fireEvent.press(screen.getByLabelText('Show who you are')))
   await act(async () => fireEvent.press(screen.getByText('Show them')))
   await flush()
   expect(api.getConversation).toHaveBeenCalledTimes(2)

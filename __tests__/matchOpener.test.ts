@@ -16,10 +16,27 @@ const SCREEN = () => stripComments(read('components/blendn/BlendnScreen.tsx'))
 const ROOM = () => stripComments(read('lib/useRoom.ts'))
 const DM = () => stripComments(read('app/private-chat/[conversationId].tsx'))
 
-describe('the opener only greets an actual match', () => {
-  it('names them when there is a name', () => {
-    const o = matchOpener({ fromMatch: true, otherName: 'Cosmic Panda' })
-    expect(o?.body).toContain('Cosmic Panda')
+describe('the opener only greets an actual match (Flow 5 D-A)', () => {
+  // 2026-11-11 19:42 in Bengaluru, a Wednesday.
+  const NOW = new Date('2026-11-11T14:30:00Z')
+  const at = (iso: string) => matchOpener({ fromMatch: true, matchedAt: iso, question: null, now: NOW, timeZone: 'Asia/Kolkata' })
+
+  it('says where and when you matched, in the one date grammar', () => {
+    expect(at('2026-11-11T14:12:00Z')?.line).toBe('You matched in the room · Tonight · 7:42 PM')
+    expect(at('2026-11-11T05:00:00Z')?.line).toBe('You matched in the room · Today · 10:30 AM')
+    expect(at('2026-11-10T14:12:00Z')?.line).toBe('You matched in the room · Yesterday · 7:42 PM')
+    expect(at('2026-11-06T16:28:00Z')?.line).toBe('You matched in the room · Fri · 9:58 PM')
+  })
+
+  it('a time it cannot read is left out, never "Invalid Date"', () => {
+    expect(matchOpener({ fromMatch: true, matchedAt: 'nope', now: NOW })?.line).toBe('You matched in the room')
+    expect(matchOpener({ fromMatch: true, now: NOW })?.line).toBe('You matched in the room')
+  })
+
+  it('carries the room’s question, and none when the room asks nothing', () => {
+    expect(matchOpener({ fromMatch: true, question: 'Who are you hoping they play?' })?.question).toBe('Who are you hoping they play?')
+    expect(matchOpener({ fromMatch: true, question: null })?.question).toBeNull()
+    expect(matchOpener({ fromMatch: true, question: '   ' })?.question).toBeNull()
   })
 
   it('is null for an accepted message request', () => {
@@ -29,23 +46,9 @@ describe('the opener only greets an actual match', () => {
      * `fromMatch` had to become a server field: `theyRevealed` is true for both
      * a never-pseudonymous conversation and a revealed match.
      */
-    expect(matchOpener({ fromMatch: false, otherName: 'Aria Vance' })).toBeNull()
-    expect(matchOpener({ otherName: 'Aria Vance' })).toBeNull()
+    expect(matchOpener({ fromMatch: false, question: 'Who are you hoping they play?' })).toBeNull()
+    expect(matchOpener({})).toBeNull()
     expect(matchRowPreview({ fromMatch: false })).toBeNull()
-  })
-
-  it('survives a name it does not have', () => {
-    // An unrevealed match legitimately has no better answer, and the copy must
-    // not read as a data error the way "Unknown" would.
-    const o = matchOpener({ fromMatch: true, otherName: null })
-    expect(o).not.toBeNull()
-    expect(o?.body).not.toContain('Unknown')
-    expect(o?.body).not.toContain('null')
-    expect(o?.body).not.toContain('undefined')
-  })
-
-  it('treats whitespace as no name', () => {
-    expect(matchOpener({ fromMatch: true, otherName: '   ' })?.body).not.toContain('  ')
   })
 
   it('gives the inbox row a reason rather than the generic fallback', () => {
@@ -176,7 +179,10 @@ describe("the match moment’s opener becomes a draft, never a message", () => {
     expect(sayHi).toMatch(/\.\.\.\(draft \? \{ draft \} : \{\}\)/)
     // The moment shows `openerFor(matchPerson)`, and Say hi sends that same line.
     expect(screen).toContain('opener={matchPerson ? openerFor(matchPerson) : null}')
-    expect(screen).toMatch(/sayHi\(m\.conversationId, [^)]*\}, matchPerson \? openerFor\(matchPerson\) : null\)/)
+    // M-A: with a room question, Say hi drafts that question; without, the TRY line (today).
+    expect(screen).toContain('question={room.lens?.question ?? null}')
+    expect(screen).toContain('const draft = room.lens?.question || (matchPerson ? openerFor(matchPerson) : null)')
+    expect(screen).toMatch(/sayHi\(m\.conversationId, [^)]*\}, draft\)/)
   })
 
   it('the DM fills its composer once, on mount, and does not send it', () => {

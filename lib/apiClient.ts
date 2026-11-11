@@ -3611,6 +3611,10 @@ class ApiClientClass {
     theyRevealed?: boolean
     /** Whether they asked you to. There is no "declined". */
     revealRequested?: boolean
+    /** Your own room pseudonym in this conversation; null for a message request (admin #943). */
+    yourPseudonym?: string | null
+    /** The lens of the room you matched in, `{ key, question }`; read it through `parseLens` (admin #943). */
+    lens?: unknown
     /**
      * Whether to offer "Add friend" (SCRUM-750). Read it through `parseFriendOffer`; absent from a server that does not
      * send it. `otherUser.id` is a handle until they reveal: only an offer with `canAdd` makes it a real id.

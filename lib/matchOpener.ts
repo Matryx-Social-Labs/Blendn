@@ -1,3 +1,5 @@
+import { TONIGHT_FROM } from './pulse'
+import { calendarDate, calendarDaysBetween, clockTime, hourIn, WEEKDAYS, weekdayIn } from './time'
 import { plainText } from './routeParams'
 /**
  * The line a match conversation opens with.
@@ -40,39 +42,50 @@ export interface MatchOpenerInput {
    * `theyRevealed` would have greeted every accepted message request as a match.
    */
   fromMatch?: boolean
-  /** Theirs — the pseudonym until they reveal, the real name after. */
-  otherName?: string | null
+  /** When the conversation opened, which for a match is when you matched (`createdAt`). */
+  matchedAt?: string | null
+  /** The question of the room you matched in (`lens.question`); null when it asks nothing. */
+  question?: string | null
+  now?: Date
+  /** Tests only; the phone's zone otherwise (the moment is in your day, not the event's). */
+  timeZone?: string
 }
 
 export interface MatchOpener {
-  title: string
-  body: string
+  /** "You matched in the room · Tonight · 7:42 PM". */
+  line: string
+  /** Tonight's question, offered as the opener; null when the room asks nothing. */
+  question: string | null
 }
 
 /**
- * The header for this thread, or `null` if it has none.
+ * A moment you lived, in the one date grammar looking back: "Tonight · 7:42 PM" (today from 5 PM, "Today" before),
+ * "Yesterday · …", the weekday within the week ("Fri · 9:58 PM"), then the date. Empty for a time it can't read.
+ */
+export function matchedWhen(at: string, now: Date = new Date(), timeZone?: string): string {
+  const when = new Date(at)
+  if (Number.isNaN(when.getTime())) return ''
+  const clock = clockTime(when, timeZone)
+  const days = calendarDaysBetween(when, now, timeZone)
+  if (days <= 0) return `${hourIn(when, timeZone) >= TONIGHT_FROM ? 'Tonight' : 'Today'} · ${clock}`
+  if (days === 1) return `Yesterday · ${clock}`
+  if (days < 7) return `${WEEKDAYS[weekdayIn(when, timeZone)]} · ${clock}`
+  return `${calendarDate(when, { year: false, timeZone })} · ${clock}`
+}
+
+/**
+ * The opener for this thread (Flow 5 D-A), or `null` if it has none: where and when you matched, then tonight's
+ * question when the room asks one.
  *
  * `null` for an accepted message request: those have shown real names since they
  * existed and were never a match, so a match greeting on one is simply false.
  */
 export function matchOpener(input: MatchOpenerInput): MatchOpener | null {
   if (!input.fromMatch) return null
-
-  const name = input.otherName?.trim()
-
+  const when = input.matchedAt ? matchedWhen(input.matchedAt, input.now, input.timeZone) : ''
   return {
-    title: 'You both said yes.',
-    /*
-     * Names them when there is a name, because "you and Cosmic Panda" reads as
-     * a person and "you both liked each other" reads as a system notice.
-     *
-     * The fallback is not a placeholder for a missing name — the server's own
-     * last resort is "Someone", and an unrevealed match legitimately has no
-     * better answer. It must never say "Unknown", which reads as a data error.
-     */
-    body: name
-      ? `You and ${name} liked each other. Say something — they’re on the same screen.`
-      : 'You liked each other. Say something first.',
+    line: when ? `You matched in the room · ${when}` : 'You matched in the room',
+    question: input.question?.trim() || null,
   }
 }
 

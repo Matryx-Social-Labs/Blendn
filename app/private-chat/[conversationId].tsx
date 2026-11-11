@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, Platform, StyleSheet, useWindowDimensions, View, type NativeScrollEvent } from 'react-native'
-import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeOut, FadeOutUp } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
@@ -20,7 +20,7 @@ import { LongPressMenu, type MenuItem } from '../../components/ds/ContextMenu'
 import type { Face } from '../../components/ds/Facepile'
 import { Grain } from '../../components/ds/Grain'
 import { ImageViewer } from '../../components/ds/ImageViewer'
-import { RevealBar, YOU } from '../../components/ds/RevealBar'
+import { REVEAL_CROSSFADE_REDUCED_MS, RevealBar } from '../../components/ds/RevealBar'
 import { HueProvider } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TypingIndicator } from '../../components/ds/TypingIndicator'
@@ -37,7 +37,7 @@ import { copyText, linkSheet, notSentSheet } from '../../lib/chatSheets'
 import { idParam, nameParam } from '../../lib/routeParams'
 import { newClientId } from '../../lib/clientId'
 import { revealPanelKey, revealView, type ConversationRevealState } from '../../lib/conversationReveal'
-import { COLOR, DURATION, EASING, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, EASING, SIZE, SPACE } from '../../lib/design/tokens'
 import {
   directHeaderAvatar,
   directMessageFrom,
@@ -54,6 +54,7 @@ import { useKeyboardShown } from '../../lib/keyboard'
 import { markDomainsDirty } from '../../lib/liveSyncState'
 import { Logger } from '../../lib/logger'
 import { draftParam, matchOpener } from '../../lib/matchOpener'
+import { parseLens } from '../../lib/roomLens'
 import { mergeNewestPage } from '../../lib/mergeNewestPage'
 import { messageMenu } from '../../lib/messageMenu'
 import { useActiveThread } from '../../lib/notifications'
@@ -94,7 +95,10 @@ const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 /** #23: the reveal resolves in with one M.settle-length crossfade. */
 const REVEAL_MS = 700
 const revealIn = FadeIn.duration(REVEAL_MS).easing(Easing.bezier(...EASING.gentle))
-const revealOut = FadeOut.duration(DURATION.base)
+/** D-A: once you both have shown, the strip folds away (500 ms); under Reduce Motion it crossfades out (200 ms). */
+const STRIP_FOLD_MS = 500
+const stripFold = FadeOutUp.duration(STRIP_FOLD_MS).easing(Easing.bezier(...EASING.standard))
+const stripFade = FadeOut.duration(REVEAL_CROSSFADE_REDUCED_MS)
 
 /**
  * A direct message (Flow 5 DM frames, R3-0, R3-D5): the glass capsule header
@@ -194,6 +198,9 @@ function PrivateChatInner() {
         theyRevealed: r.data.theyRevealed ?? false,
         revealRequested: r.data.revealRequested ?? false,
         fromMatch: r.data.fromMatch === true,
+        yourPseudonym: r.data.yourPseudonym ?? null,
+        lens: parseLens(r.data.lens),
+        matchedAt: r.data.createdAt ?? null,
         // Server-supplied; an older server without it falls back to the reveal fields' presence.
         pseudonymous: r.data.pseudonymous ?? r.data.youRevealed !== undefined,
       })
@@ -779,16 +786,22 @@ function PrivateChatInner() {
     }, 2000)
   }
 
-  const opener = matchOpener({ fromMatch: reveal?.fromMatch, otherName: reveal?.displayName })
+  // The room's question is the server's (`lens`, from the room you matched in), never anything the route carried.
+  const opener = matchOpener({ fromMatch: reveal?.fromMatch, matchedAt: reveal?.matchedAt, question: reveal?.lens?.question })
   /* Faces only where they have been earned: theirs a photo once they revealed, yours once you did. */
   // Their mark until they reveal; then the server's photo — never one from the route.
   const head = ended ? null : directHeaderAvatar(reveal, otherImage)
   const themFace: Face =
     head?.kind === 'photo' ? { kind: 'photo', uri: head.url } : { kind: 'creature', pseudonym: head?.kind === 'mark' ? head.seed : ended ? 'Conversation' : name }
-  const youFace: Face = reveal?.youRevealed && authUser?.image ? { kind: 'photo', uri: authUser.image } : { kind: 'creature', pseudonym: 'You' }
+  // Your side as they see you: your room creature and pseudonym until you show them, then your photo and first name.
+  const yourCreature: Face = { kind: 'creature', pseudonym: reveal?.yourPseudonym || 'You' }
+  const yourPhoto: Face = authUser?.image ? { kind: 'photo', uri: authUser.image } : yourCreature
+  const youFace: Face = reveal?.youRevealed ? yourPhoto : yourCreature
+  const yourName = reveal?.youRevealed ? firstNameOf(authUser?.name || '') || 'You' : reveal?.yourPseudonym || 'You'
   // Photos once you can both see each other, or the conversation never hid anyone (R9, admin #697).
   const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))
   const { fontScale } = useWindowDimensions()
+  const reduceMotionNow = useReducedMotion()
   const top = chatHeaderBottom(insets.top, fontScale)
   // The feed starts under the reveal bar while there is one.
   const barSpace = panelOpen ? barHeight : 0
@@ -845,7 +858,7 @@ function PrivateChatInner() {
               ListHeaderComponent={
                 <View>
                   {/* Permanent, not an empty state: seen by both, whoever types first. */}
-                  {opener ? <MatchOpenerCard you={youFace} them={themFace} title={opener.title} body={opener.body} /> : null}
+                  {opener ? <MatchOpenerCard line={opener.line} question={opener.question} /> : null}
                   {hasMore ? <LoadOlder busy={loadingOlder} onPress={() => void loadOlderMessages()} /> : null}
                 </View>
               }
@@ -955,16 +968,16 @@ function PrivateChatInner() {
       {/* The reveal stays in view under the header while either of you is a pseudonym; the feed starts below it. */}
       {panelOpen && view?.bar ? (
         <Animated.View
-          key={view.bar}
           entering={revealIn}
-          exiting={revealOut}
+          // Not keyed by state: inside it each side crossfades in place (RevealBar); it leaves by folding away.
+          exiting={reduceMotionNow ? stripFade : stripFold}
           testID="dm-reveal-strip"
           onLayout={(e) => setBarHeight(e.nativeEvent.layout.height)}
           style={[styles.reveal, { top }]}
         >
           <RevealBar
             state={view.bar}
-            you={{ face: youFace, name: reveal?.youRevealed ? authUser?.name?.split(' ')[0] || YOU : YOU }}
+            you={{ face: youFace, name: yourName }}
             them={{ face: themFace, name }}
             onShow={() => setRevealSheet('confirm')}
             onAsk={askThem}
@@ -1036,6 +1049,8 @@ function PrivateChatInner() {
         name={name}
         sheet={revealSheet}
         busy={revealBusy}
+        you={yourCreature}
+        yourPhoto={yourPhoto}
         onShow={showThem}
         onClose={() => setRevealSheet(null)}
         onAddPhoto={() => {

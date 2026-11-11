@@ -13,6 +13,7 @@ import { ChatBubble } from '../ds/ChatBubble'
 import type { Rect } from '../ds/chatShared'
 import type { Face } from '../ds/Facepile'
 import type { Receipt } from '../ds/ReceiptMark'
+import { monoCaption } from '../ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { Sheet } from '../ds/Sheet'
 import { TextField } from '../ds/TextField'
@@ -20,29 +21,41 @@ import { Icon } from '../ui/Icon'
 
 /** The photo preview's height (R3-D5 5.9 #32). */
 const PREVIEW_HEIGHT = 280
-/** The opener's two faces, 44 pt, overlapping by 10. */
-const OPENER_FACE = 44
-const OPENER_OVERLAP = SPACE.sm + SPACE.xxs
+/** `.xopen .k`: the mono label tracks out 0.4. */
+const QUESTION_LABEL_TRACKING = 0.4
+/** `.xsys`: the matched line stops at 300 and wraps, centred. */
+const SYS_LINE_MAX = 300
+/** The confirm's faces: your creature, then your face, 56 each. */
+const CONFIRM_FACE = 56
+// design-exception: the opener card's radius is 18 (`.xopen`), between rowInCard (16) and tile (20)
+const OPENER_RADIUS = 18
+// design-exception: the opener card is 10 in vertically (`.xopen` padding 10 14), off the SPACE scale
+const OPENER_PAD_V = 10
+// design-exception: and 14 at the sides
+const OPENER_PAD_H = 14
 
 /**
- * The match opener (Flow 5 DM #09): a permanent header above the oldest
- * message — you and them, "You both said yes." — seen by both, whoever types
- * first, scrolling away as the conversation grows.
+ * The thread's opener (Flow 5 D-A, dm.html `xThread`): a permanent header above the oldest message, seen by both,
+ * whoever types first — "You matched in the room · Tonight · 7:42 PM", then tonight's question when the room asks one,
+ * so neither of you starts from nothing. It scrolls away as the conversation grows.
  */
-export function MatchOpenerCard({ you, them, title, body }: { you: Face; them: Face; title: string; body: string }) {
+export function MatchOpenerCard({ line, question }: { line: string; question: string | null }) {
   const bold = useBoldText()
   return (
     <View testID="dm-opener" style={styles.opener}>
-      <View style={styles.faces}>
-        <Avatar size={OPENER_FACE} ring={COLOR.surface} {...you} />
-        <View style={styles.overlap}>
-          <Avatar size={OPENER_FACE} ring={COLOR.surface} {...them} />
-        </View>
-      </View>
-      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink, styles.centre]}>
-        {title}
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[monoCaption(bold), styles.secondary, styles.sysLine]}>
+        {line}
       </Text>
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.centre]}>{body}</Text>
+      {question ? (
+        <View testID="dm-opener-question" accessible accessibilityLabel={`Tonight’s question: ${question}`} style={styles.question}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[monoCaption(bold), styles.secondary, styles.questionLabel]}>
+            TONIGHT’S QUESTION
+          </Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('rowTitle', bold), styles.ink]}>
+            {question}
+          </Text>
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -122,15 +135,17 @@ export function NudgeLine({ text }: { text: string }) {
 }
 
 /**
- * Showing them who you are (Flow 5 DM #06–#07): the confirm says it can't be
- * undone before the tap — Show them is lit in the screen's rose, never the gradient
- * (Send is this screen's primary), and its haptic is the server's H.success.
- * Refused for want of a photo, Not yet says the server's sentence.
+ * Showing them who you are (Flow 5 D-A, dm.html `xConfirm`): the one confirm, and it says it can't be undone before
+ * the tap. Who sees what, then the change itself (your creature, then your face), then Show them (the screen's one
+ * gradient) and Not now. The press is silent: the haptic is the server's H.success. Refused for want of a photo, Not
+ * yet says the server's sentence.
  */
 export function RevealSheets({
   name,
   sheet,
   busy,
+  you,
+  yourPhoto,
   onShow,
   onClose,
   onAddPhoto,
@@ -138,6 +153,10 @@ export function RevealSheets({
   name: string
   sheet: 'confirm' | { notYet: string } | null
   busy: boolean
+  /** Your side as they see it now: your creature. */
+  you: Face
+  /** What they will see: your photo, or your creature when there is none yet (the server then says Not yet). */
+  yourPhoto: Face
   onShow: () => void
   onClose: () => void
   onAddPhoto: () => void
@@ -148,15 +167,20 @@ export function RevealSheets({
       <Sheet
         visible={sheet === 'confirm'}
         onClose={onClose}
-        icon="eye"
         title={copy.title}
         body={copy.body}
         actions={[
-          { label: copy.confirm, kind: 'lit', onPress: onShow, loading: busy, pressHaptic: false },
-          { label: 'Not now', kind: 'tertiary', onPress: onClose },
+          { label: copy.confirm, kind: 'primary', onPress: onShow, loading: busy, pressHaptic: false },
+          { label: 'Not now', kind: 'secondary', onPress: onClose },
         ]}
         testID="dm-reveal-sheet"
-      />
+      >
+        <View style={styles.change} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Avatar size={CONFIRM_FACE} {...you} testID="dm-reveal-sheet-from" />
+          <Icon name="chevron-right" size={ICON.control} color={COLOR.textSecondary} />
+          <Avatar size={CONFIRM_FACE} {...yourPhoto} testID="dm-reveal-sheet-to" />
+        </View>
+      </Sheet>
       <Sheet
         visible={!!sheet && sheet !== 'confirm'}
         onClose={onClose}
@@ -270,16 +294,24 @@ export function quoteText(q: NonNullable<PrivateMessage['replyTo']>): string {
 }
 
 const styles = StyleSheet.create({
-  opener: {
-    marginBottom: SPACE.lg,
-    padding: SPACE.lg,
-    gap: SPACE.sm,
-    borderRadius: RADIUS.sheet,
+  opener: { alignItems: 'center', marginBottom: SPACE.xs },
+  /** `.xsys`: 14 above, 2 under, centred, 300 at most. */
+  sysLine: { marginTop: SPACE.md + SPACE.xxs, marginBottom: SPACE.xxs, textAlign: 'center', maxWidth: SYS_LINE_MAX },
+  /** `.xopen`: 12 under the line, 8 in from the 16 gutter. */
+  question: {
+    alignSelf: 'stretch',
+    marginTop: SPACE.md,
+    marginHorizontal: SPACE.sm,
+    borderRadius: OPENER_RADIUS,
+    paddingVertical: OPENER_PAD_V,
+    paddingHorizontal: OPENER_PAD_H,
     backgroundColor: COLOR.surface,
-    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: COLOR.hairlineStrong,
+    gap: SPACE.xs,
   },
-  faces: { flexDirection: 'row' },
-  overlap: { marginLeft: -OPENER_OVERLAP },
+  questionLabel: { letterSpacing: QUESTION_LABEL_TRACKING },
+  change: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.md, paddingVertical: SPACE.xs + SPACE.xxs },
   sayHi: { alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.xl },
   preview: { height: PREVIEW_HEIGHT, borderRadius: RADIUS.rowInCard, backgroundColor: COLOR.surface },
   runStart: { marginTop: SPACE.lg },

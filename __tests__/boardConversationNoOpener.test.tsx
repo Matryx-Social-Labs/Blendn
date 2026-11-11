@@ -4,7 +4,7 @@
  *
  * The failure this pins shows nothing: the conversation opens, the pseudonyms
  * are right, and the screen greets two people who agreed to share a car with
- * "You both said yes." A board conversation is pseudonymous like a match, so
+ * the match opener. A board conversation is pseudonymous like a match, so
  * any opener keyed on pseudonymity, or on "new conversation", draws it here.
  * The server marks it with `origin_board_request_id` and answers
  * `fromMatch: false`; the thread must believe that and nothing else.
@@ -101,7 +101,7 @@ it('draws no match opener on a conversation opened from the board', async () => 
 
   // The pseudonym arrived, so the conversation record has been read and drawn.
   expect(await screen.findAllByText('Arctic Falcon')).not.toHaveLength(0)
-  expect(screen.queryByText('You both said yes.')).toBeNull()
+  expect(screen.queryByTestId('dm-opener')).toBeNull()
   expect(screen.queryByText(/liked each other/)).toBeNull()
 })
 
@@ -112,5 +112,5 @@ it('still draws it on a match — the control', async () => {
   } as never)
   await render(<PrivateChat />)
 
-  await waitFor(() => expect(screen.getByText('You both said yes.')).toBeTruthy())
+  await waitFor(() => expect(screen.getByTestId('dm-opener')).toBeTruthy())
 })

@@ -96,6 +96,27 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     expect(p.onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('M-A: with tonight’s question, that is the opener (“Start with tonight’s question”), never TRY, and it is said', async () => {
+    const { p, el } = match({ question: 'Who are you hoping they play?' })
+    await render(el)
+    expect(screen.getByText('You and Velvet Heron liked each other.')).toBeTruthy()
+    expect(screen.getByText('Start with tonight’s question')).toBeTruthy()
+    expect(screen.getByText('Who are you hoping they play?')).toBeTruthy()
+    expect(screen.queryByText('TRY')).toBeNull()
+    expect(screen.queryByText('“Which set are you here for?”')).toBeNull()
+    expect(announce).toHaveBeenCalledWith('It’s mutual. You and Velvet Heron liked each other. Start with tonight’s question: Who are you hoping they play?', { queue: true })
+    await advance(1260)
+    await fireEvent.press(screen.getByRole('button', { name: 'Say hi' }))
+    expect(p.onSayHi).toHaveBeenCalledTimes(1)
+  })
+
+  it('M-A falls back to today when the room asks nothing: why you matched, and the TRY line', async () => {
+    await render(match({ question: null }).el)
+    expect(screen.getByText('You and Velvet Heron matched · Both into live music')).toBeTruthy()
+    expect(screen.getByText('TRY')).toBeTruthy()
+    expect(screen.queryByText('Start with tonight’s question')).toBeNull()
+  })
+
   it('is announced once, everything in it from t0', async () => {
     await render(match().el)
     expect(announce).toHaveBeenCalledTimes(1)

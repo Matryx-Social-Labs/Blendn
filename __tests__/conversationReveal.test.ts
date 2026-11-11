@@ -81,25 +81,30 @@ describe('revealView (Flow 5 DM #01–#05)', () => {
   })
 })
 
-describe('revealConfirmation', () => {
-  it('states plainly that it cannot be undone, before the tap', () => {
+describe('revealConfirmation (Flow 5 D-A)', () => {
+  it('names them, then says plainly that it cannot be undone, before the tap', () => {
     /*
      * The load-bearing sentence. A control that reads like a toggle implies it
      * can be toggled back, and nothing can unsee a name and a face. The server
      * has no path back to false, so the copy has to carry the whole warning.
      */
-    const c = revealConfirmation('Wandering Kestrel')
-    expect(c.body.toLowerCase()).toContain('can’t be undone')
-    expect(c.title).toContain('Wandering Kestrel')
+    const c = revealConfirmation('Lunar Fox')
+    expect(c.title).toBe('Show Lunar Fox who you are?')
+    expect(c.body).toContain('You can’t undo this.')
+    expect(c.confirm).toBe('Show them')
   })
 
-  it('names what is actually shown', () => {
+  it('names what is actually shown, and promises nothing the server does not keep', () => {
     // "Reveal" is abstract. Name and photos is what happens.
-    expect(revealConfirmation('X').body).toMatch(/name and photos/)
-  })
-
-  it('offers blocking as the real remedy rather than pretending to undo', () => {
-    expect(revealConfirmation('X').body.toLowerCase()).toContain('block')
+    const body = revealConfirmation('X').body
+    expect(body).toMatch(/name and photos/)
+    /*
+     * The board said "your first name and photos, in this chat only". Both are false today: the thread shows the whole
+     * stored name, and a reveal opens your profile to them by id (`lib/identity.ts`, "in a conversation, and it names
+     * them"). Negative control: the board's sentence fails both.
+     */
+    expect(body).not.toMatch(/first name/)
+    expect(body).not.toMatch(/this chat only/)
   })
 })
 

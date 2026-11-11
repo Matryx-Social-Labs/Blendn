@@ -1183,11 +1183,15 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           name={room.match.name}
           reason={matchPerson ? reasonLine(matchPerson) : null}
           opener={matchPerson ? openerFor(matchPerson) : null}
+          // M-A: the room's question is the opener when it asks one (the lens is the server's, from the deck).
+          question={room.lens?.question ?? null}
           onClose={room.clearMatch}
           onSayHi={() => {
             const m = room.match
             room.clearMatch()
-            if (m) sayHi(m.conversationId, { id: matchPerson?.id ?? '', name: m.name }, matchPerson ? openerFor(matchPerson) : null)
+            // Say hi drafts what the moment offered: tonight's question, else the TRY line. Never sent on its own.
+            const draft = room.lens?.question || (matchPerson ? openerFor(matchPerson) : null)
+            if (m) sayHi(m.conversationId, { id: matchPerson?.id ?? '', name: m.name }, draft)
           }}
           testID="match-moment"
         />
