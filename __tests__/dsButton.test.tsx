@@ -298,6 +298,26 @@ describe('states', () => {
     expect(onPress).not.toHaveBeenCalled()
   })
 
+  it('the label keeps one parent while the spinner comes and goes, so a save that leaves cannot move it (SCRUM-1048)', async () => {
+    jest.useFakeTimers()
+    await draw({ loading: true })
+    /** The host View the label sits in: the one Android would flatten away when it has no opacity. */
+    const holder = () => {
+      let node = screen.getByText('I’m going').parent
+      while (node && node.type !== 'View') node = node.parent
+      if (!node) throw new Error('the label has no View above it')
+      return node
+    }
+    expect(holder().props.collapsable).toBe(false)
+    await act(async () => jest.advanceTimersByTime(300))
+    // Control: this is the view the spinner hides, by opacity, which is what toggles Android's flattening.
+    expect(StyleSheet.flatten(holder().props.style).opacity).toBe(0)
+    expect(holder().props.collapsable).toBe(false)
+    await screen.rerender(<Button label="I’m going" onPress={jest.fn()} testID="b" />)
+    expect(StyleSheet.flatten(holder().props.style).opacity).toBeUndefined()
+    expect(holder().props.collapsable).toBe(false)
+  })
+
   it('refused: the destructive border, H.error once at t0, and the shake', async () => {
     await draw({ refused: false })
     expect(screen.queryByTestId('b-refused')).toBeNull()
