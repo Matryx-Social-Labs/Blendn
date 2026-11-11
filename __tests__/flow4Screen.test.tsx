@@ -466,7 +466,7 @@ describe('the you-card (Flow 5 R-A): Change goes to Room settings, where the rev
   it('named: the card says so, and Change opens Room settings with the reveal as it is', async () => {
     mockControls.revealed = true
     await drawRoom()
-    expect(screen.getByText('Your name and photo. People here can see you.')).toBeTruthy()
+    expect(screen.getByText('Others here see your name and photo.')).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'Change your room name and who sees you' }))
     expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ params: expect.objectContaining({ revealed: '1' }) }))
     expect(mockControls.toggleReveal).not.toHaveBeenCalled()
@@ -481,9 +481,15 @@ describe('Check out always confirms (Room #16)', () => {
     const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
     showSheet.mockClear()
     await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
-    const actions = showSheet.mock.calls[0][0].actions as { label: string; then: () => void }[]
-    // No chat yet in this room, so no Room info entry: settings, then Check out.
+    const sheet = showSheet.mock.calls[0][0] as { layout?: string; actions: { label: string; icon?: string; variant?: string; apart?: boolean; then: () => void }[] }
+    const actions = sheet.actions
+    // No chat yet in this room, so no Room info and no Mute: settings, then Check out.
     expect(actions.map((a) => a.label)).toEqual(['Room settings', 'Check out'])
+    // Audit B-1: icon rows, and Check out in red on its own, apart from the rest.
+    expect(sheet.layout).toBe('rows')
+    expect(actions[0]).toMatchObject({ icon: 'settings' })
+    expect(actions[1]).toMatchObject({ icon: 'log-out', variant: 'destructive', apart: true })
+    expect(actions[0].apart).toBeFalsy()
     await act(async () => actions[1].then())
     expect(screen.getByText('Check out of this event?', HIDDEN)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Stay' })).toBeTruthy()
@@ -616,5 +622,36 @@ describe('the room bar (TG-01, Flow 5 R-A)', () => {
     await drawRoom()
     await act(async () => {})
     expect(screen.getByTestId('room-bar-contrast')).toBeTruthy()
+  })
+})
+
+describe('the ⋯ sheet as grouped rows (audit B-1)', () => {
+  it('names the room and how you are in it; Room info, Room settings, Mute as rows; Mute opens the mute sheet', async () => {
+    mockSetRoom(ready({ chatGroupId: 'g1', settled: true }))
+    await drawRoom()
+    const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
+    showSheet.mockClear()
+    await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
+    const sheet = showSheet.mock.calls[0][0] as { title: string; message?: string; layout?: string; actions: { label: string; icon?: string; apart?: boolean; then: () => void }[] }
+    expect(sheet.title).toBe('Vinyl Night')
+    expect(sheet.message).toMatch(/^7 here · you’re in as /)
+    expect(sheet.actions.map((a) => [a.label, a.icon])).toEqual([
+      ['Room info', 'info'],
+      ['Room settings', 'settings'],
+      ['Mute the room', 'bell-off'],
+      ['Check out', 'log-out'],
+    ])
+    await act(async () => sheet.actions[2].then())
+    expect(screen.getByText('Mute notifications', HIDDEN)).toBeTruthy()
+  })
+})
+
+describe('the you-block on People (audit H-1)', () => {
+  it('your own name, your time in on the ring, and how many others are here', async () => {
+    mockSetRoom(ready())
+    await drawRoom()
+    expect(screen.getByText('Sam Rao')).toBeTruthy()
+    expect(screen.getByLabelText('You, in the room 30m')).toBeTruthy()
+    expect(screen.getByLabelText('You and 6 others here')).toBeTruthy()
   })
 })

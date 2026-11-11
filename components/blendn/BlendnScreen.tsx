@@ -36,6 +36,9 @@ import { bannerState } from '../../lib/roomVisibility'
 import { useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
+import { compactCount } from '../../lib/format'
+import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
+import { MuteSheet } from '../chat/RoomSheets'
 import { useAuth } from '../../lib/useAuth'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { useLatest } from '../../lib/useLatest'
@@ -492,6 +495,10 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   }, [roomWhole, eventId])
   const eventTitle = room.event?.title ?? ''
   const chatGroupId = room.chatGroupId
+  // ⋯'s Mute row (audit B-1): the room's mute as Room info reads it, and the same sheet to change it.
+  const roomMute = useRoomMute(chatGroupId)
+  const roomMuted = isMuted(roomMute)
+  const [muting, setMuting] = useState<string | null>(null)
   // `chat/[id]` for this room opens the Chat tab rather than a screen of its own, while the Room is up.
   const liveChat = mode === 'room' ? chatGroupId : null
   // Kept after the overlay closes, so a push for this room still opens Chat; the check-in ending clears it (setLiveHint).
@@ -815,14 +822,20 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const openRoomMenu = () => {
     const ev = room.event
     if (!ev) return
+    // Audit B-1 (owner-picked 2026-11-11): the room and how you are in it at the top, icon rows, Check out apart in red.
     showSheet({
       kind: 'actions',
       hue: 'rose',
+      layout: 'rows',
       title: ev.title,
+      message: `${compactCount(room.hereCount)} here · you’re in as ${controls.revealed ? myName : (myPseudonym ?? 'your room name')}`,
       actions: [
-        ...(chatGroupId ? [{ label: 'Room info', then: () => router.push({ pathname: '/chat-info/[id]', params: { id: chatGroupId, roomName: ev.title, eventTitle: ev.title } } as never) }] : []),
-        { label: 'Room settings', then: openRoomSettings },
-        { label: 'Check out', variant: 'destructive' as const, then: () => setConfirmingOut(true) },
+        ...(chatGroupId
+          ? [{ label: 'Room info', icon: 'info' as const, then: () => router.push({ pathname: '/chat-info/[id]', params: { id: chatGroupId, roomName: ev.title, eventTitle: ev.title } } as never) }]
+          : []),
+        { label: 'Room settings', icon: 'settings' as const, then: openRoomSettings },
+        ...(chatGroupId ? [{ label: roomMuted ? (muteLabel(roomMute) ?? 'Muted') : 'Mute the room', icon: 'bell-off' as const, then: () => setMuting(chatGroupId) }] : []),
+        { label: 'Check out', icon: 'log-out' as const, variant: 'destructive' as const, apart: true, then: () => setConfirmingOut(true) },
       ],
     })
   }
@@ -843,6 +856,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const [heldPicks, setHeldPicks] = useState(shuffle.picks)
   if (!open && heldPicks !== shuffle.picks) setHeldPicks(shuffle.picks)
   const head = everyoneHead(room.people, { hasMore: room.hasMore, hereCount: room.hereCount })
+  /** H-1's pile: the first faces of whoever else is inside now (never someone who has left). */
+  const youPile = useMemo(() => room.people.filter((p) => p.insideNow !== false).slice(0, 4).map(faceOf), [room.people])
   const moreLeft = room.hereCount - 1 - room.people.length
   /** This session's arrivals, for #25's entrance. */
   const arrivingIds = useMemo(() => new Set(room.arrivals.map((a) => a.id)), [room.arrivals])
@@ -973,6 +988,10 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 <RoomYouCard
                   face={myFace}
                   name={controls.revealed ? myName : (myPseudonym ?? 'Your room name')}
+                  self={{ name: user?.name?.trim() || myName, face: myPhoto ? { kind: 'photo', uri: myPhoto } : myFace }}
+                  checkedInAt={room.checkedInAt}
+                  hereCount={room.hereCount}
+                  others={youPile}
                   state={visibility}
                   onChange={() => {
                     if (visibility === 'hidden') return router.push('/settings')
@@ -982,7 +1001,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 />
               </View>
             }
-            segments={showSegments}
+            crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.crews.length : null}
             view={gridView}
             onView={setGridView}
             crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} actions={crewActions} />}
@@ -1125,6 +1144,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         testID="person-card"
       />
 
+      <MuteSheet chatGroupId={muting} onClose={() => setMuting(null)} />
       <ConnectSheet
         // A new person is a new draft: the sheet keeps none from the last (SCREENS Flow 4, ConnectSheet).
         key={connectTo?.id ?? 'none'}

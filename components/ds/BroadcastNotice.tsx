@@ -142,17 +142,25 @@ function HostCard({ from, text, time, media, testID }: Omit<BroadcastNoticeProps
           >
             {from}
           </Text>
-          <View style={styles.tag}>
-            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold, FONT_FAMILY.mono[700]), styles.tagText]}>
-              HOST
-            </Text>
-          </View>
+          <HostTag />
         </View>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), BUBBLE_TYPE, styles.white]}>
           {text}
         </Text>
       </View>
       {media ? <Media media={media} testID={testID && `${testID}-media`} /> : null}
+    </View>
+  )
+}
+
+/** The HOST tag beside the organisation's name: on the host's card and on the host's polls (audit C-1), never alone. */
+export function HostTag() {
+  const bold = useBoldText()
+  return (
+    <View style={styles.tag}>
+      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold, FONT_FAMILY.mono[700]), styles.tagText]}>
+        HOST
+      </Text>
     </View>
   )
 }

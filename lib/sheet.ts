@@ -50,6 +50,8 @@ export type SheetAction = {
   variant?: 'primary' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
   /** A row's glyph, in a `rows` sheet (the DM's options). */
   icon?: IconName
+  /** In a `rows` sheet, this row stands on its own after a gap, with no hairline: leaving the room (audit B-1). */
+  apart?: boolean
   /** A state, not an action ("Requested"): the row is drawn quiet and does nothing. */
   disabled?: boolean
   /** What a screen reader says of a row whose visible words are shorter ("Requested" is "Friend request sent"). */

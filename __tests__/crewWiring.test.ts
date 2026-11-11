@@ -57,13 +57,14 @@ describe('the surfaces are wired', () => {
     expect(banter).toContain("r.kind === 'crew'")
   })
 
-  it('the Room has a Crews view (R2-D1: People | Crews)', () => {
+  it('the Room has a Crews view, reached by its row (R2-D1; audit A-1: no second tab row)', () => {
     const screen = src('components/blendn/BlendnScreen.tsx')
     expect(screen).toContain('<CrewsHead')
     expect(screen).toContain('crewCards={crewCards(crews)}')
     const room = src('components/blendn/RoomView.tsx')
-    // The segmented control is the ds one: 48 pt, reached at its own height.
-    expect(room).toContain("items={['People', 'Crews']}")
+    // One row in and out of the crews, in the friends row's shape; never a second People | Crews switch.
+    expect(room).toContain('<RoomCrewsRow')
+    expect(room).not.toContain('SegmentedControl')
     // M12: the cards are rows of the Room's own list, not a mapped column.
     expect(room).toContain('data={crewsView ? props.crewCards : people}')
   })

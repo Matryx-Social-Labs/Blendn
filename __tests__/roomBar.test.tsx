@@ -6,7 +6,7 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
 
 // eslint-disable-next-line import/first
-import { RoomBar } from '../components/blendn/RoomBar'
+import { RoomBar, UNDERLINE_SLIDE_MS, underlineStyle } from '../components/blendn/RoomBar'
 
 const bar = (over: Partial<React.ComponentProps<typeof RoomBar>> = {}) => (
   <RoomBar insetTop={54} event="Rooftop Sundowner: House and Disco on the Terrace" hereCount={12480} tab="people" chatUnread={0} onTab={jest.fn()} onClose={jest.fn()} onInfo={jest.fn()} {...over} />
@@ -37,4 +37,22 @@ it('is a tablist with the chosen tab selected, and a tap on the other switches',
   expect(onTab).not.toHaveBeenCalled()
   await fireEvent.press(view.getByTestId('room-tab-chat-word'))
   expect(onTab).toHaveBeenCalledWith('chat')
+})
+
+describe('the underline (audit D-1: it slides to the picked tab in 180 ms; Reduce Motion: it is just there)', () => {
+  it('one underline for the bar, never one per tab', async () => {
+    const view = await render(bar({ tab: 'chat', chatUnread: 3 }))
+    expect(view.getAllByTestId('room-tab-underline')).toHaveLength(1)
+    expect(view.queryByTestId('room-tab-chat-word-underline')).toBeNull()
+  })
+
+  it('slides on a 180 ms timing to the tab word; control: not sliding (first placement, Reduce Motion) sets it with no timing', () => {
+    const sliding = underlineStyle({ x: 98, width: 40 }, true) as unknown as { width: { type: string; toValue: number }; transform: { translateX: { type: string; toValue: number } }[] }
+    expect(sliding.width).toMatchObject({ type: 'timing', toValue: 40 })
+    expect(sliding.transform[0].translateX).toMatchObject({ type: 'timing', toValue: 98 })
+    expect(UNDERLINE_SLIDE_MS).toBe(180)
+    expect(underlineStyle({ x: 8, width: 62 }, false)).toEqual({ opacity: 1, width: 62, transform: [{ translateX: 8 }] })
+    // Not measured yet: nothing drawn, rather than a bar at x 0.
+    expect(underlineStyle(undefined, true)).toEqual({ opacity: 0 })
+  })
 })
