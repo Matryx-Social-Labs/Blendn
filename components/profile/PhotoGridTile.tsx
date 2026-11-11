@@ -1,7 +1,7 @@
 import { Image } from 'expo-image'
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
-import { COLOR, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { OPACITY, tint } from '../../lib/theme'
 import { Spinner } from '../ds/Loader'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, ROOMY_FONT_SCALE, useBoldText, useIncreaseContrast } from '../ds/shared'
@@ -72,7 +72,7 @@ export function PhotoFace({
         style={tile.fill}
         accessible={false}
         contentFit="cover"
-        transition={200}
+        transition={DURATION.base}
         cachePolicy="memory-disk"
         recyclingKey={uri}
         blurRadius={blurred ? BLUR : 0}

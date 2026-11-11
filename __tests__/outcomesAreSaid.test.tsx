@@ -14,6 +14,10 @@ jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 
 import { RequestCard } from '../components/banter/BanterParts'
 import { RegularOff, RegularOn } from '../components/offer/OfferSections'
+import { JustMutedLine } from '../components/chat/ChatParts'
+import { useAnnounced } from '../components/ds/shared'
+import { DockLine } from '../components/plus/PlusSections'
+import { SentLine } from '../components/rate/RateParts'
 
 let announce: jest.SpyInstance
 beforeEach(() => {
@@ -81,4 +85,68 @@ it('every "Loading …" View is an accessibility element (M30)', () => {
         .map(() => f.slice(root.length + 1))
     )
   expect(unread).toEqual([])
+})
+
+/**
+ * The #521 follow-up (SCRUM-1001 M24): every Android live region is said on iOS too, unless it is not an outcome. Each
+ * exception says why; a new live region either announces or joins this list with its reason.
+ */
+const NOT_AN_OUTCOME: Record<string, string> = {
+  'app/settings.tsx': 'the store-subscription warning is the delete sheet’s own content, read with the sheet',
+  'components/crews/MakeSteps.tsx': 'the invited count follows each pick, and the pick already says "selected"',
+  'components/ds/Button.tsx': 'a count on a button follows a selection the control already says',
+  'components/board/LobbyParts.tsx': 'new posts arrive unsolicited (the Banter dot’s rule): the pill is there to find, not said',
+  'components/venue/VenueStates.tsx': 'the gate is a StateScreen, which says itself on arrival (M29)',
+}
+
+it('every live region is said on iOS, or says why it is not an outcome', () => {
+  const root = join(__dirname, '..')
+  const files: string[] = []
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name)
+      if (statSync(full).isDirectory()) walk(full)
+      else if (/\.tsx$/.test(name)) files.push(full)
+    }
+  }
+  walk(join(root, 'app'))
+  walk(join(root, 'components'))
+  const silent = files
+    .map((f) => f.slice(root.length + 1))
+    .filter((f) => !f.startsWith('app/preview'))
+    .filter((f) => {
+      const src = readFileSync(join(root, f), 'utf8')
+      return /accessibilityLiveRegion/.test(src) && !/\b(useAnnounced|announceOutcome|announceForAccessibility\w*|useSaidOnArrival)\(/.test(src)
+    })
+    .filter((f) => !(f in NOT_AN_OUTCOME))
+  expect(silent).toEqual([])
+})
+
+describe('the follow-up’s outcomes, said', () => {
+  it('the Plus dock’s line: each step of a purchase is said as it changes', async () => {
+    const r = await render(<DockLine text="Confirming with the store…" spinning />)
+    await r.rerender(<DockLine text="You’re in." strong />)
+    expect(said()).toEqual(['Confirming with the store…', 'You’re in.'])
+  })
+
+  it('Rate’s "Sent" line, once it lands', async () => {
+    await render(<SentLine />)
+    expect(said()).toEqual(['Sent. Only we see this.'])
+  })
+
+  it('a mute that arrives while you are in the chat', async () => {
+    await render(<JustMutedLine />)
+    expect(said()).toEqual(['Just now · the organizer muted you'])
+  })
+
+  it('changesOnly: what is there on arrival is not said, a change is', async () => {
+    const Foot = ({ text }: { text: string }) => {
+      useAnnounced(text, { changesOnly: true })
+      return null
+    }
+    const r = await render(<Foot text="Show this at the door" />)
+    expect(said()).toEqual([])
+    await r.rerender(<Foot text="Redeemed at Toit" />)
+    expect(said()).toEqual(['Redeemed at Toit'])
+  })
 })

@@ -4,7 +4,7 @@ import Animated, { Easing, FadeIn } from 'react-native-reanimated'
 
 import { Avatar } from '../ds/Avatar'
 import { RadioRing } from '../ds/PlanCard'
-import { font, quickTransition, useBoldText, useSelection } from '../ds/shared'
+import { font, quickTransition, useAnnounced, useBoldText, useSelection } from '../ds/shared'
 import { EventCover } from '../EventCover'
 import { Icon } from '../ui/Icon'
 import { COLOR, DURATION, EASING, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -138,15 +138,18 @@ export function IssueList({
   )
 }
 
+const SENT_LINE = 'Sent. Only we see this.'
+
 /** "Sent. Only we see this.", in place under the scale once the night's tap has landed (IKEA): faded in, never celebrated. */
 export function SentLine() {
   const bold = useBoldText()
+  useAnnounced(SENT_LINE)
   const sel = useSelection()
   return (
     <Animated.View testID="rate-sent" entering={SENT_IN} accessibilityLiveRegion="polite" style={styles.sent}>
       <Icon name="check" size={SENT_ICON} color={sel.glyph} active />
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('control', bold), styles.ink, styles.fill]}>
-        Sent. Only we see this.
+        {SENT_LINE}
       </Text>
     </Animated.View>
   )

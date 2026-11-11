@@ -5,7 +5,7 @@ import { CHECKING_OUT_LABEL, CHECK_OUT_LABEL, SWITCH_LABEL, checkOutCaption, swi
 import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { HoldToConfirm } from '../ds/HoldToConfirm'
 import { Sheet } from '../ds/Sheet'
-import { font, useBoldText } from '../ds/shared'
+import { font, useAnnounced, useBoldText } from '../ds/shared'
 
 export type EventHoldProps = {
   reach: PassReach
@@ -76,6 +76,7 @@ export type EventCheckOutSheetProps = {
  */
 export function EventCheckOutSheet({ visible, onClose, onDismissed, name, onConfirm, busy, error }: EventCheckOutSheetProps) {
   const bold = useBoldText()
+  useAnnounced(error)
   return (
     <Sheet
       visible={visible}

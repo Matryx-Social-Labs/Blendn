@@ -7,9 +7,9 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, SPRING
 import { useReducedMotion } from '../../lib/motion'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 
-/** Motion #13: the pill pops in from 0.6 on `M.snap` (opacity over the first 120 ms). */
+/** Motion #13: the pill pops in from 0.6 on `M.snap` (opacity over the first `quick`). */
 const POP_FROM = 0.6
-const FADE_IN_MS = 120
+const FADE_IN_MS = DURATION.quick
 
 const popIn = () => {
   'worklet'

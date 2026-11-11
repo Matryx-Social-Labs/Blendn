@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { ChipSet } from '../ds/ChipSet'
 import { Sheet } from '../ds/Sheet'
-import { font, useBoldText } from '../ds/shared'
+import { font, useAnnounced, useBoldText } from '../ds/shared'
 import {
   activeFilterCount,
   DISTANCE_ANY_LABEL,
@@ -75,6 +75,7 @@ export function FilterSheet({
   const chosen = activeFilterCount(draft)
   const { n: counted, current } = useDraftCount(visible && !!countFor, countKey(draft), () => countFor?.(draft) ?? Promise.resolve(null))
   const empty = current && counted === 0
+  useAnnounced(empty && nothingMatches(hasLocation))
 
   return (
     <Sheet

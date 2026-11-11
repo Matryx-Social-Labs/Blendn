@@ -2,7 +2,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { withSpring, withTiming } from 'react-native-reanimated'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './AchievementBadge'
@@ -171,7 +171,7 @@ export const popIn = (reduceMotion: boolean) => () => {
   return {
     initialValues: { opacity: reduceMotion ? 0 : 1, transform: [{ scale: reduceMotion ? 1 : 0.85 }] },
     animations: {
-      opacity: withTiming(1, { duration: 180 }),
+      opacity: withTiming(1, { duration: DURATION.quick }),
       transform: [{ scale: withSpring(1, SPRING.pop) }],
     },
   }

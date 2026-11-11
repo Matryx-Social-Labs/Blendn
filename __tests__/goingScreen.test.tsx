@@ -482,3 +482,30 @@ describe('Next up while it is on: the label follows the state, and the tap docks
     expect(screen.queryByText('Happening now')).toBeNull()
   })
 })
+
+describe('the rows reflow on a spring only while the list is short (SCRUM-1001 M14)', () => {
+  type Host = { props?: Record<string, unknown>; parent: Host | null }
+  /** The `layout` the list's cell around a row carries (itemLayoutAnimation lands there). */
+  const layoutAround = (text: string) => {
+    let node = screen.getByText(text) as unknown as Host | null
+    while (node && !node.props?.layout) node = node.parent
+    return node?.props?.layout
+  }
+  const past = (n: number) => {
+    api.getMyAttendance.mockResolvedValue({ success: true, data: { events: nights(0, n), pagination: page(1, n, false), lockedCount: 0 } } as never)
+  }
+
+  it('a few nights glide when one leaves or moves', async () => {
+    past(3)
+    await open()
+    expect(await screen.findByText('Night 1')).toBeTruthy()
+    expect(layoutAround('Night 1')).toBeDefined()
+  })
+
+  it('a long list just moves: a refresh on every tab focus never reflows a whole page', async () => {
+    past(30)
+    await open()
+    expect(await screen.findByText('Night 1')).toBeTruthy()
+    expect(layoutAround('Night 1')).toBeUndefined()
+  })
+})
