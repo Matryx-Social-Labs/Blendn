@@ -1,6 +1,6 @@
 import { Easing, withDelay, withTiming } from 'react-native-reanimated'
 
-import { DURATION, EASING, SPACE } from '../../lib/design/tokens'
+import { DURATION, EASING, REDUCE_MOTION, SPACE } from '../../lib/design/tokens'
 
 /** How far a step travels: the sheet's own 24 pt gutter, never the screen's width. */
 export const STEP_SHIFT = SPACE.xl
@@ -20,7 +20,7 @@ export const stepIn = (source: StepDirSource, reduceMotion: boolean) => () => {
   return {
     initialValues: { opacity: 0, transform: [{ translateX: reduceMotion ? 0 : dir * STEP_SHIFT }] },
     animations: {
-      opacity: withDelay(DURATION.press, withTiming(1, { duration: reduceMotion ? 200 : DURATION.base, easing: Easing.bezier(...EASING.gentle) })),
+      opacity: withDelay(DURATION.press, withTiming(1, { duration: reduceMotion ? REDUCE_MOTION.duration.base : DURATION.base, easing: Easing.bezier(...EASING.gentle) })),
       transform: [{ translateX: withDelay(DURATION.press, withTiming(0, { duration: DURATION.base, easing: Easing.bezier(...EASING.entrance) })) }],
     },
   }

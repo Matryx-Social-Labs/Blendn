@@ -8,7 +8,7 @@ import { Button } from '../ds/Button'
 import { IconButton } from '../ds/IconButton'
 import { Spinner } from '../ds/Loader'
 import { PlusMark } from '../ds/ManageStatusRow'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useAnnounced, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
@@ -110,6 +110,7 @@ export function PlusDock({ onHeight, children }: { onHeight: (height: number) =>
 /** The dock's line: a spinner (while something is being asked) or just words, centred, announced politely. */
 export function DockLine({ text, spinning = false, strong = false }: { text: string; spinning?: boolean; strong?: boolean }) {
   const bold = useBoldText()
+  useAnnounced(text)
   return (
     <View accessibilityLiveRegion="polite" style={styles.dockLine}>
       {spinning ? <Spinner size={16} /> : null}

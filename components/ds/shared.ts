@@ -4,7 +4,7 @@
  * draw that `design/tokens.json` does not carry yet (each named here once, with
  * the page it comes from, rather than as a literal in a component).
  */
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, I18nManager, Platform, useWindowDimensions, type AccessibilityChangeEventName, type ViewStyle } from 'react-native'
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, REDUCE_MOTION, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
@@ -182,12 +182,20 @@ export function announceOutcome(text: string) {
 /**
  * An alert that appears in place (a failed sign-in, an upload that didn't go), said when its text arrives or changes:
  * announced on iOS; on Android the element that shows it carries `accessibilityLiveRegion`, so it is not read twice.
- * `accessibilityRole="alert"` alone says nothing (motion audit M3).
+ * `accessibilityRole="alert"` alone says nothing (motion audit M3). `changesOnly`: a line that is always there (an offer's
+ * foot) is read with its screen, so only a change is said, as Android's live region does.
  */
-export function useAnnounced(text: string | null | undefined | false, { queue = false }: { queue?: boolean } = {}) {
+export function useAnnounced(
+  text: string | null | undefined | false,
+  { queue = false, changesOnly = false }: { queue?: boolean; changesOnly?: boolean } = {},
+) {
+  const arrived = useRef(false)
   useEffect(() => {
+    const first = !arrived.current
+    arrived.current = true
+    if (changesOnly && first) return
     if (text && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibilityWithOptions(text, { queue })
-  }, [text, queue])
+  }, [text, queue, changesOnly])
 }
 
 /**

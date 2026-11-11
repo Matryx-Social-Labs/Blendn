@@ -50,7 +50,7 @@ import { TonightHost, LAUNCH_TOAST, SLOW_GRANT_TOAST } from '../components/plus/
 import { apiClient } from '../lib/apiClient'
 import { openInApp } from '../lib/links'
 import { notePathname, openTonight, resetPaywallSession, subscribePaywallClosed } from '../lib/paywall'
-import { waitForPlus } from '../lib/plus'
+import { clearKnownPlus, waitForPlus } from '../lib/plus'
 import { buyPackage, canBuyAs, loadPlusOffers, restore, NIGHT_PASS_ID } from '../lib/purchases'
 import { showSheet } from '../lib/sheet'
 /* eslint-enable import/first */
@@ -81,6 +81,7 @@ beforeEach(async () => {
   jest.clearAllMocks()
   closed.length = 0
   resetPaywallSession()
+  clearKnownPlus()
   notePathname('/venue/v1')
   await require('@react-native-async-storage/async-storage').clear()
   ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(gatedNoPlus)
@@ -142,6 +143,29 @@ describe('opening it', () => {
     expect(screen.queryByRole('header', { name: 'Stay live while you’re here' })).toBeNull()
     expect(mockShowToast).toHaveBeenCalledWith(LAUNCH_TOAST, 'info')
     expect(events()).toEqual([])
+  })
+
+  it('in a launch season the ask still closes: what waited for the sheet (the expiry prompt) hears it went (SCRUM-1001 M32)', async () => {
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })
+    await openSheet()
+    expect(mockShowToast).toHaveBeenCalledWith(LAUNCH_TOAST, 'info')
+    expect(closed).toEqual(['dismissed'])
+  })
+
+  it('in a launch season it says so at once from what the app already knows, without waiting on the store (SCRUM-1001 M32)', async () => {
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })
+    await render(<TonightHost />)
+    await flush()
+    // The store never answers, and the network is not asked again.
+    ;(loadPlusOffers as jest.Mock).mockReturnValue(new Promise(() => {}))
+    ;(canBuyAs as jest.Mock).mockReturnValue(new Promise(() => {}))
+    const asked = (apiClient.getMyPlus as jest.Mock).mock.calls.length
+    await act(async () => {
+      await openTonight(request, { userInitiated: true })
+    })
+    await flush()
+    expect(mockShowToast).toHaveBeenCalledWith(LAUNCH_TOAST, 'info')
+    expect((apiClient.getMyPlus as jest.Mock).mock.calls.length).toBe(asked)
   })
 
   it('offline or unpriced: the page opens, which has the words for it', async () => {

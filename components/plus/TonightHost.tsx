@@ -9,7 +9,7 @@ import { apiClient } from '../../lib/apiClient'
 import { BLENDN_LINKS, openInApp } from '../../lib/links'
 import { notePaywallClosed, notePaywallEvent, registerTonightHost, type TonightRequest } from '../../lib/paywall'
 import { goesLiveWhenUnlocked, isGenericFailure, paywallTriggerFor, purchasedToast, tonightOffers } from '../../lib/tonight'
-import { taxLine, waitForPlus } from '../../lib/plus'
+import { taxLine, usePlusStatus, waitForPlus } from '../../lib/plus'
 import { buyPackage, canBuyAs, loadPlusOffers, restore, type PlusOffer, type RestoreOutcome } from '../../lib/purchases'
 import { afterSheetDismissed } from '../../lib/sheetDismissed'
 import { useAuth } from '../../lib/useAuth'
@@ -56,6 +56,8 @@ export function TonightHost() {
   const acted = useRef(false)
   const mounted = useRef(true)
   const saleRef = useLatest(sale)
+  /** Where the person stands, read at launch and on every return to the app: a lock tap need not wait on the network for it. */
+  const plusNow = useLatest(usePlusStatus().status)
   /** Asked for, or on screen: a second ask while one is being prepared or shown is the same ask. */
   const engaged = useRef(false)
   useEffect(() => {
@@ -70,16 +72,21 @@ export function TonightHost() {
       if (engaged.current) return
       engaged.current = true
       const trigger = paywallTriggerFor(request.trigger)
+      // Nothing to sell in a launch season: say so, and close the ask so what waited for the sheet hears it went (M32).
+      const launchSeason = () => {
+        engaged.current = false
+        notePaywallClosed('dismissed')
+        showToast(LAUNCH_TOAST, 'info')
+      }
+      const known = plusNow.current
+      if (known && !known.gated) return launchSeason()
       const [plus, loaded, buyable] = await Promise.all([
-        apiClient.getMyPlus().catch(() => null),
+        known ?? apiClient.getMyPlus().then((res) => (res.success ? (res.data ?? null) : null), () => null),
         loadPlusOffers(),
         canBuyAs(userId),
       ])
       if (!mounted.current) return
-      if (plus?.success && plus.data && !plus.data.gated) {
-        engaged.current = false
-        return showToast(LAUNCH_TOAST, 'info')
-      }
+      if (plus && !plus.gated) return launchSeason()
       const prices = tonightOffers(loaded)
       if (!prices || !buyable) {
         // No prices to show: the page has the words for that.
@@ -95,7 +102,7 @@ export function TonightHost() {
       setVisible(true)
       notePaywallEvent('shown', trigger)
     },
-    [userId, showToast]
+    [userId, showToast, plusNow]
   )
   useEffect(() => registerTonightHost((request) => void open(request)), [open])
 

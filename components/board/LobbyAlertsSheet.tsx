@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Toggle } from '../ds/Toggle'
 import { Sheet } from '../ds/Sheet'
-import { font, useBoldText } from '../ds/shared'
+import { font, useAnnounced, useBoldText } from '../ds/shared'
 import { apiClient } from '../../lib/apiClient'
 import { ALERT_ROWS, type LobbyAlerts } from '../../lib/lobby'
 import { H } from '../../lib/haptics'
@@ -27,6 +27,8 @@ export function LobbyAlertsSheet({ eventId, visible, onClose }: { eventId: strin
   const [alerts, setAlerts] = useState<LobbyAlerts | null>(null)
   const [busy, setBusy] = useState<keyof LobbyAlerts | null>(null)
   const [failed, setFailed] = useState(false)
+  const failedLine = failed ? (alerts ? 'Couldn’t save that. Try again.' : 'Couldn’t load your alerts. Try again.') : null
+  useAnnounced(failedLine)
 
   useEffect(() => {
     if (!visible) return
@@ -98,7 +100,7 @@ export function LobbyAlertsSheet({ eventId, visible, onClose }: { eventId: strin
         ))}
         {failed ? (
           <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.failed]}>
-            {alerts ? 'Couldn’t save that. Try again.' : 'Couldn’t load your alerts. Try again.'}
+            {failedLine}
           </Text>
         ) : null}
       </View>

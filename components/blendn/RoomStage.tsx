@@ -23,6 +23,7 @@ import { Orbs } from '../ds/Orbs'
 import { useSelection } from '../ds/shared'
 import { GradientFill } from '../ui/GradientFill'
 import { useReducedMotion } from '../../lib/motion'
+import { useLatest } from '../../lib/useLatest'
 
 /** Past this, a slow drag closes. */
 const CLOSE_DISTANCE = 140
@@ -34,6 +35,8 @@ const SCROLLED_PAST = 24
 const OPEN_MS = 420
 const CLOSE_MS = 300
 const FADE_MS = 200
+/** Past this the stage goes whether or not the close's own callback came (SCRUM-1001 M11: never callback-only). */
+export const ROOM_STAGE_CLOSE_BACKSTOP_MS = Math.max(CLOSE_MS, FADE_MS) + 50
 const EASE = Easing.bezier(...EASING.standard)
 /** #7: the page fades in from 45% of the open and rises 24 pt. */
 const PAGE_FROM = 0.45
@@ -148,18 +151,34 @@ export const RoomStage = React.forwardRef<{ close(): void }, {
   const dragFrom = useSharedValue(0)
   const [dragToClose, setDragToClose] = useState(true)
 
+  // Read, not a dependency: the setting changing mid-close must not re-run the open, which interrupts the close.
+  const reduceMotionNow = useLatest(reduceMotion)
   useEffect(() => {
     // Never: Reduce Motion's own 200 ms fade is chosen here, and the system setting must not skip it (or its callback).
-    open.set(withTiming(1, { duration: reduceMotion ? FADE_MS : OPEN_MS, easing: EASE, reduceMotion: ReduceMotion.Never }))
-  }, [open, reduceMotion])
+    open.set(withTiming(1, { duration: reduceMotionNow.current ? FADE_MS : OPEN_MS, easing: EASE, reduceMotion: ReduceMotion.Never }))
+  }, [open, reduceMotionNow])
+
+  // The close goes from its callback or the backstop, whichever is first, and once: `gone` turns on only once.
+  const [closing, setClosing] = useState(false)
+  const [gone, setGone] = useState(false)
+  const onClosedNow = useLatest(onClosed)
+  useEffect(() => {
+    if (!closing) return
+    const backstop = setTimeout(() => setGone(true), ROOM_STAGE_CLOSE_BACKSTOP_MS)
+    return () => clearTimeout(backstop)
+  }, [closing])
+  useEffect(() => {
+    if (gone) onClosedNow.current()
+  }, [gone, onClosedNow])
 
   const close = useCallback(() => {
     open.set(
       withTiming(0, { duration: reduceMotion ? FADE_MS : CLOSE_MS, easing: EASE, reduceMotion: ReduceMotion.Never }, (done) => {
-        if (done) scheduleOnRN(onClosed)
+        if (done) scheduleOnRN(setGone, true)
       })
     )
-  }, [onClosed, open, reduceMotion])
+    setClosing(true)
+  }, [open, reduceMotion])
 
   useImperativeHandle(ref, () => ({ close }), [close])
 
