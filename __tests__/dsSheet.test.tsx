@@ -1017,6 +1017,35 @@ describe('the swipe-to-dismiss hands its velocity on (DS #5: release on M.fling)
     expect(withSpring).toHaveBeenCalledWith(0, expect.objectContaining({ stiffness: SPRING.fling.stiffness, damping: SPRING.fling.damping }))
   })
 
+  // SCRUM-1043 found the spring back's timer outliving the sheet: (b) above is the control, the same flick left mounted.
+  const springBacks = () => withSpring.mock.calls.filter(([to, cfg]) => to === 0 && cfg?.stiffness === SPRING.fling.stiffness)
+
+  it('a sheet unmounted inside that beat springs nothing back, and leaves no timer behind', async () => {
+    const set = jest.spyOn(global, 'setTimeout')
+    const clear = jest.spyOn(global, 'clearTimeout')
+    const r = await render(signOut({ visible: true, onClose: jest.fn(), detents: ['medium'], testID: 'make' }))
+    await flick('make-drag', 1200)
+    // The ask's beat (DRAG_CLOSE_ASK_MS); other timers (the Modal's, the springs') are not this test's.
+    const ask = set.mock.results[set.mock.calls.findIndex(([, ms]) => ms === 32)]?.value
+    expect(ask).toBeDefined()
+    withSpring.mockClear()
+    await r.unmount()
+    expect(clear).toHaveBeenCalledWith(ask)
+    await act(async () => jest.advanceTimersByTime(40))
+    expect(springBacks()).toHaveLength(0)
+    set.mockRestore()
+    clear.mockRestore()
+  })
+
+  it('a second flick inside the beat replaces the first ask: one spring back, not two', async () => {
+    await render(signOut({ visible: true, onClose: jest.fn(), detents: ['medium'], testID: 'make' }))
+    await flick('make-drag', 1200)
+    await flick('make-drag', 1200)
+    withSpring.mockClear()
+    await act(async () => jest.advanceTimersByTime(40))
+    expect(springBacks()).toHaveLength(1)
+  })
+
   it('a re-open while it is still leaving rises from where it is, not from the bottom', async () => {
     const r = await render(signOut({ visible: true, testID: 'make' }))
     await r.rerender(signOut({ visible: false, testID: 'make' }))

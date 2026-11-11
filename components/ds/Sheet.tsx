@@ -429,6 +429,9 @@ function useSheetMotion({
 
   const playDetent = useCallback(() => H.detent(), [])
   const levels = heights.length ? heights : null
+  /** The spring back's beat, pending while the owner answers a drag's close: one at a time, cleared on unmount. */
+  const askTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(askTimer.current), [])
   /*
    * A drag past the dismiss line asks to close, and does NOT spring back first: a spring toward 0 and then a slide
    * away from it was the wall a flick hit. If the owner refuses (a "discard changes?" ask leaves `visible` true), the
@@ -436,7 +439,9 @@ function useSheetMotion({
    */
   const dragClose = useCallback(() => {
     requestClose()
-    setTimeout(() => {
+    // One ask at a time, and none outliving the sheet (SCRUM-1043 found this timer still pending after unmount).
+    clearTimeout(askTimer.current)
+    askTimer.current = setTimeout(() => {
       if (!visibleRef.current) return
       flingV.set(0)
       offset.set(withSpring(0, SPRING.fling))
