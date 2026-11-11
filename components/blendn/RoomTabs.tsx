@@ -28,6 +28,8 @@ function Pane({ shown, testID, children }: { shown: boolean; testID: string; chi
   return (
     <View
       testID={testID}
+      // Never flattened: its opacity comes and goes, and a flattened pane moves its children between parents (SCRUM-1048).
+      collapsable={false}
       style={[styles.fill, !shown && styles.hidden]}
       pointerEvents={shown ? 'auto' : 'none'}
       accessibilityElementsHidden={!shown}
