@@ -8,6 +8,7 @@ import { AchievementBadge } from '../ds/AchievementBadge'
 import { SettingsRow } from '../ds/SettingsRow'
 import { announceOutcome, font, useBoldText } from '../ds/shared'
 import { ProfileSection } from './ProfileSections'
+import { Swap } from '../motion/Swap'
 
 /** The badges as pills, 8 pt apart (Flow 14 · 14.5). `onPress` makes each one say what it means. */
 export function BadgeRow({ badges, onPress, testID }: { badges: readonly Badge[]; onPress?: (badge: Badge) => void; testID?: string }) {
@@ -80,9 +81,11 @@ export function MeBadges({
               />
             ) : null}
             {/* With every badge hidden the "Shows up" opt-in has nothing to opt into. */}
-            {showsUp && !hidden ? (
-              <SwitchRow testID="me-shows-up" icon="calendar-check" title={SHOWS_UP_TITLE} hintOn={SHOWS_UP_ON} hintOff={SHOWS_UP_OFF} value={showsUp.value} onChange={showsUp.onChange} />
-            ) : null}
+            <Swap>
+              {showsUp && !hidden ? (
+                <SwitchRow testID="me-shows-up" icon="calendar-check" title={SHOWS_UP_TITLE} hintOn={SHOWS_UP_ON} hintOff={SHOWS_UP_OFF} value={showsUp.value} onChange={showsUp.onChange} />
+              ) : null}
+            </Swap>
           </View>
         ) : null}
       </View>

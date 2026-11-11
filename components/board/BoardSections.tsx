@@ -14,6 +14,7 @@ import { PostPhoto } from './PostPhoto'
 import type { BoardPostView } from '../../lib/chatPaging'
 import { COLOR, FONT_FAMILY, ICON as DS_ICON, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { OPACITY, tint } from '../../lib/theme'
+import { Swap } from '../motion/Swap'
 
 /**
  * The board's pieces (Flow 4 Board, flow4.js `post` and `board`). The rules
@@ -129,6 +130,8 @@ export const BoardPostCard = memo(function BoardPostCard({
     const action = postAction(post.kind)
     footer = action ? <AskFooter ask={ask} label={action.label} icon={action.icon} author={post.author} onAsk={() => void onAsk(post)} /> : null
   }
+  // The ask settling into its answer is one part fading into the next (motion audit M27).
+  const footerId = post.mine ? 'mine' : ask.kind === 'settled' ? 'settled' : full ? 'full' : 'ask'
 
   return (
     <View testID="lobby-post" style={[styles.card, post.mine && styles.mineCard]}>
@@ -160,7 +163,7 @@ export const BoardPostCard = memo(function BoardPostCard({
       </View>
       <RNText testID="lobby-post-body" maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{post.body}</RNText>
       <PostPhoto post={post} />
-      {footer}
+      <Swap id={footerId}>{footer}</Swap>
     </View>
   )
 })
@@ -194,11 +197,13 @@ function AskFooter({ ask, label, icon, author, onAsk }: { ask: AskState; label: 
   const bold = useBoldText()
   return (
     <View style={styles.footer}>
-      {ask.kind === 'refused' ? (
-        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.refused, styles.footerLine]}>
-          {ask.line}
-        </RNText>
-      ) : null}
+      <Swap style={styles.footerLine}>
+        {ask.kind === 'refused' ? (
+          <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.refused]}>
+            {ask.line}
+          </RNText>
+        ) : null}
+      </Swap>
       <Button
         label={label}
         kind="lit"

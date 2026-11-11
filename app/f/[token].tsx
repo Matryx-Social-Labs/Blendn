@@ -200,8 +200,9 @@ function InviteScreen() {
           )}
         </View>
 
+        {/* The buttons arrive with the stage they belong to, not at rest under it (motion audit M16). */}
         {cta && !dead && !refusal ? (
-          <View style={styles.footer}>
+          <FadeInUp style={styles.footer}>
             <Button
               kind={cta.action === null ? 'secondary' : 'primary'}
               label={cta.label}
@@ -211,7 +212,7 @@ function InviteScreen() {
               testID="invite-cta"
             />
             <Button kind="tertiary" label="Not now" onPress={close} />
-          </View>
+          </FadeInUp>
         ) : null}
       </SafeAreaView>
     </HueProvider>

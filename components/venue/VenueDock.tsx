@@ -15,6 +15,7 @@ import { OPACITY } from '../../lib/theme'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { againLabel, spokenLeft, venueDockLine, type DockMode } from '../../lib/venuePage'
 import { DockRow } from '../ds/DockRow'
+import { Swap } from '../motion/Swap'
 
 /** The live pill is 36 tall (Flow 11 `livePill`); its chips 22 and 24. */
 const PILL_HEIGHT = 36
@@ -152,44 +153,47 @@ export function VenueDock({
         contrast && IC_HAIRLINE,
       ]}
     >
-      {mode.kind === 'goLive' && !mode.again ? (
-        <DockRow
-          testID="venue-dock-row"
-          {...venueDockLine('goLive')}
-          action={{ ...venueDockLine('goLive').action, onPress: onGoLive, loading: busy, pressHaptic: () => H.primary(), testID: 'venue-go-live' }}
-        />
-      ) : null}
-      {mode.kind === 'goLive' && mode.again ? (
-        <>
-          <Button
-            label={mode.again ? againLabel(mode.again) : 'Go live'}
-            kind="primary"
-            loading={busy}
-            onPress={onGoLive}
-            testID="venue-go-live"
+      {/* A mode is one part: going live, the live row, the hand-off and a closed place fade into each other (motion audit M27). */}
+      <Swap id={mode.kind === 'goLive' && mode.again ? 'again' : mode.kind} style={styles.modes}>
+        {mode.kind === 'goLive' && !mode.again ? (
+          <DockRow
+            testID="venue-dock-row"
+            {...venueDockLine('goLive')}
+            action={{ ...venueDockLine('goLive').action, onPress: onGoLive, loading: busy, pressHaptic: () => H.primary(), testID: 'venue-go-live' }}
           />
-          {mode.again ? <Button label="Pick another time" kind="tertiary" size="md" onPress={onPickAnother} disabled={busy} testID="venue-pick-another" /> : null}
-        </>
-      ) : null}
-      {mode.kind === 'live' ? (
-        <View style={styles.liveRow}>
-          <LivePill name={name} live={live} onZero={onZero} onPress={onPill} />
-          {live.chatGroupId ? (
-            <Button label="Open the room" kind="lit" size="md" icon="radio" onPress={onOpenRoom} style={styles.grow} testID="venue-open-room" />
-          ) : (
-            <View style={styles.grow} />
-          )}
-          <Button label="Leave" kind="secondary" size="md" onGlass onPress={onLeave} testID="venue-leave" />
-        </View>
-      ) : null}
-      {mode.kind === 'handoff' ? (
-        <DockRow
-          testID="venue-dock-row"
-          {...venueDockLine('handoff')}
-          action={{ ...venueDockLine('handoff').action, onPress: onEvent, accessibilityHint: eventTitle ? `Opens ${eventTitle}` : undefined, testID: 'venue-handoff' }}
-        />
-      ) : null}
-      {mode.kind === 'closed' ? <ClosedLine message={mode.message} reason={mode.reason} /> : null}
+        ) : null}
+        {mode.kind === 'goLive' && mode.again ? (
+          <>
+            <Button
+              label={mode.again ? againLabel(mode.again) : 'Go live'}
+              kind="primary"
+              loading={busy}
+              onPress={onGoLive}
+              testID="venue-go-live"
+            />
+            {mode.again ? <Button label="Pick another time" kind="tertiary" size="md" onPress={onPickAnother} disabled={busy} testID="venue-pick-another" /> : null}
+          </>
+        ) : null}
+        {mode.kind === 'live' ? (
+          <View style={styles.liveRow}>
+            <LivePill name={name} live={live} onZero={onZero} onPress={onPill} />
+            {live.chatGroupId ? (
+              <Button label="Open the room" kind="lit" size="md" icon="radio" onPress={onOpenRoom} style={styles.grow} testID="venue-open-room" />
+            ) : (
+              <View style={styles.grow} />
+            )}
+            <Button label="Leave" kind="secondary" size="md" onGlass onPress={onLeave} testID="venue-leave" />
+          </View>
+        ) : null}
+        {mode.kind === 'handoff' ? (
+          <DockRow
+            testID="venue-dock-row"
+            {...venueDockLine('handoff')}
+            action={{ ...venueDockLine('handoff').action, onPress: onEvent, accessibilityHint: eventTitle ? `Opens ${eventTitle}` : undefined, testID: 'venue-handoff' }}
+          />
+        ) : null}
+        {mode.kind === 'closed' ? <ClosedLine message={mode.message} reason={mode.reason} /> : null}
+      </Swap>
     </Material>
   )
 }
@@ -226,6 +230,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS.sheet,
     borderTopRightRadius: RADIUS.sheet,
   },
+  modes: { gap: SPACE.xs },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: SIZE.primary },
   grow: { flex: 1 },
   pill: {

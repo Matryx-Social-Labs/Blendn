@@ -14,6 +14,7 @@ import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
 import { COLOR, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
+import { Swap } from '../motion/Swap'
 import type { ctaParts, PlusFeature } from '../../lib/plus'
 
 /** The hero's mark (Flow 12 `plusMark(hero, 64)`). */
@@ -167,16 +168,20 @@ export function PlusActions({
   ) : notice ? (
     <DockLine text={notice} strong />
   ) : null
+  // Each line is its own part, so one answer fades into the next (motion audit M27).
+  const lineId = restoring ? 'restoring' : phase !== 'idle' ? phase : 'notice'
   return (
     <PlusDock onHeight={onHeight}>
-      {line}
-      {phase !== 'idle' ? null : action === 'launch' ? (
-        <Button kind="secondary" label="Unlocked during launch · nothing to buy" disabled onGlass={onGlass} />
-      ) : action === 'manage' ? (
-        <Button kind="lit" size="md" label="Manage Blend’n+" onPress={onManage} />
-      ) : action === 'buy' ? (
-        <Button label={cta.lead} price={cta.price} accessibilityLabel={cta.spoken} disabled={disabled} loading={buying} onPress={onBuy} />
-      ) : null}
+      <Swap id={lineId}>{line}</Swap>
+      <Swap id={action}>
+        {phase !== 'idle' ? null : action === 'launch' ? (
+          <Button kind="secondary" label="Unlocked during launch · nothing to buy" disabled onGlass={onGlass} />
+        ) : action === 'manage' ? (
+          <Button kind="lit" size="md" label="Manage Blend’n+" onPress={onManage} />
+        ) : action === 'buy' ? (
+          <Button label={cta.lead} price={cta.price} accessibilityLabel={cta.spoken} disabled={disabled} loading={buying} onPress={onBuy} />
+        ) : null}
+      </Swap>
     </PlusDock>
   )
 }

@@ -35,6 +35,7 @@ import { Creature, creatureFor } from '../ds/Creature'
 import { CrewEmblem, EMBLEM_SQUIRCLE } from '../ds/CrewEmblem'
 import { RevealSheet, RevealSide } from '../ds/RevealSheet'
 import { announceOutcome, CONTROL_FONT_CAP, font, useAnnounced, useBoldText } from '../ds/shared'
+import { swapIn } from '../motion/presence'
 import { Icon } from '../ui/Icon'
 import { useToast } from '../Toast'
 import { OverflowMenu } from './OverflowMenu'
@@ -296,8 +297,9 @@ export function useBlendRoom(blendId: string | null, top: number): BlendRoomChro
         </Text>
       ) : null}
       {coach.visible && !typing ? (
-        // "Got it" and Leave take it away with a fade (200 under Reduce Motion); the feed's top inset follows its height a frame later.
-        <Animated.View style={styles.card} testID="blend-first-open" exiting={cardOut}>
+        // "Got it" and Leave take it away with a fade (200 under Reduce Motion), and it fades back when typing stops (motion audit
+        // M27); the feed's top inset follows its height a frame later.
+        <Animated.View style={styles.card} testID="blend-first-open" entering={swapIn} exiting={cardOut}>
           <View style={styles.well}>
             <Icon name="users" size={ICON.nav} />
           </View>

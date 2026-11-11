@@ -21,6 +21,7 @@ import { manageCard, startsAgain } from '../lib/plusManage'
 import { canBuyAs, loadPlusOffers, restore, type PlusOffer, type RestoreOutcome } from '../lib/purchases'
 import { useAuth } from '../lib/useAuth'
 import { useTopBarOverlay } from '../lib/useTopBarState'
+import { Swap } from '../components/motion/Swap'
 
 const STORE: 'ios' | 'android' = Platform.OS === 'android' ? 'android' : 'ios'
 const FOOT = 'Cancelling is one tap into the store. Nothing here asks you to stay.'
@@ -140,11 +141,13 @@ function ManageContent() {
         ) : card ? (
           <Animated.View entering={arrive} style={styles.body}>
             <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} onFix={manage} testID="plus-manage-status" />
-            {granted ? (
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="plus-manage-grant" style={[font('meta', bold), styles.grant]}>
-                {grantManageLine(status?.expiresAt)}
-              </Text>
-            ) : null}
+            <Swap>
+              {granted ? (
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="plus-manage-grant" style={[font('meta', bold), styles.grant]}>
+                  {grantManageLine(status?.expiresAt)}
+                </Text>
+              ) : null}
+            </Swap>
             <SettingsGroup>
               {granted || outside ? null : (
                 <SettingsRow
