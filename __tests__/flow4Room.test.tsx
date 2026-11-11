@@ -173,6 +173,22 @@ describe('the sections', () => {
     expect(onLike).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }))
   })
 
+  it('Flow 5 P-A: a pick says their answer to tonight’s question, quoted; without one, what the lens leads with', async () => {
+    const work = { key: 'work', question: 'What are you working on?' }
+    await room({
+      lens: work,
+      picks: [
+        person('p0', { tonightAnswer: 'A map of every quiet café in Toronto' }),
+        person('p1', { workField: 'Product design', sharedIntents: ['networking'] }),
+        person('p2', { reason: 'Just walked in' }),
+      ],
+    })
+    expect(screen.getByLabelText('Person p0, “A map of every quiet café in Toronto”')).toBeTruthy()
+    expect(screen.getByLabelText('Person p1, Product design · Here for work')).toBeTruthy()
+    // Nothing through the lens: the room's own reason line, as before.
+    expect(screen.getByTestId('meet-next-2').props.accessibilityLabel).not.toContain('·')
+  })
+
   it('a screen reader likes through the card’s Like action', async () => {
     const onLike = jest.fn()
     await room({ onLike })

@@ -48,7 +48,7 @@ jest.mock('../lib/linkClosers', () => ({
   },
 }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), setMatchPreferences: jest.fn(), forgetActiveCheckins: jest.fn(), forgetVenues: jest.fn(), forgetEvent: jest.fn() },
+  apiClient: { getProfile: jest.fn(), getMatchPreferences: jest.fn(() => Promise.resolve({ success: false })), setMatchPreferences: jest.fn(), forgetActiveCheckins: jest.fn(), forgetVenues: jest.fn(), forgetEvent: jest.fn() },
 }))
 // The faces as host nodes carrying what they were given: which creature a card draws is the pseudonym it was handed.
 jest.mock('../components/ds/Avatar', () => {
@@ -324,7 +324,7 @@ describe('at AX XXXL (TG-03)', () => {
     expect(owned.length).toBeGreaterThan(0)
     for (const h of owned) expect(h.props.maxFontSizeMultiplier).toBeLessThanOrEqual(MAX_FONT_SCALE.title)
     const src = readFileSync(join(__dirname, '..', 'app', 'event-preferences', '[eventId].tsx'), 'utf8')
-    expect(src.match(/<Text(?![^>]*maxFontSizeMultiplier)[^>]*>/g) ?? []).toEqual([])
+    expect(src.match(/<Text(?!\w)(?![^>]*maxFontSizeMultiplier)[^>]*>/g) ?? []).toEqual([])
   })
 })
 

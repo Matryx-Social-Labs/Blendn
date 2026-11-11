@@ -36,7 +36,7 @@ const INTENT_ORDER = ['dating', 'friends', 'networking'] as const
  * strongest shared intent says so ("Both here to make friends": never empty
  * when something is shared), and with nothing shared it is null and the card
  * draws no line at all. `labels` are every shared thing, in the order the
- * design draws them; `OverlapLine` caps them at 2 before a reveal, 4 after.
+ * design draws them.
  */
 export function overlapOf(p: OverlapSource): { line: string | null; labels: OverlapLabelOut[] } {
   const intents = INTENT_ORDER.filter((i) => p.sharedIntents?.includes(i))

@@ -8,6 +8,7 @@ import type { CrewCard } from '../../lib/crews'
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { connect, type SocketConnectionStatus } from '../../lib/socketClient'
 import type { RoomPerson } from '../../lib/useRoom'
+import type { RoomLens } from '../../lib/roomLens'
 import { Banner } from '../ds/Banner'
 import { BannerPresence } from '../motion/BannerPresence'
 import { SegmentedControl } from '../ds/SegmentedControl'
@@ -110,6 +111,8 @@ export type RoomViewProps = {
   /** Bumps per person when they wave at you (#51). */
   waveKeys: Readonly<Record<string, number>>
   onOpen: (p: RoomPerson) => void
+  /** Flow 5 P-A: the room's lens, for what a Meet next pick says. */
+  lens?: RoomLens | null
   /** The double tap's like, or null when a like would have to ask first (then a double tap just opens the card). */
   onLike: ((p: RoomPerson) => void) | null
   /** Fresh out of the pour: the hero rises and the sections follow (#9). Read at mount. */
@@ -169,7 +172,7 @@ export function RoomView(props: RoomViewProps) {
               </>
             ) : (
               <>
-                <MeetNextRow picks={props.picks} nextShuffleAt={props.nextShuffleAt} width={cell} onOpen={props.onOpen} onLike={props.onLike} />
+                <MeetNextRow picks={props.picks} lens={props.lens} nextShuffleAt={props.nextShuffleAt} width={cell} onOpen={props.onOpen} onLike={props.onLike} />
                 {props.friendsHere}
                 <EveryoneHead title={props.everyoneTitle} count={props.everyoneCount} />
               </>

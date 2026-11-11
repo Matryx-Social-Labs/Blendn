@@ -965,6 +965,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             tab={tab}
             people={
           <RoomView
+            lens={room.lens}
             people={room.people}
             connection={room.connection}
             you={

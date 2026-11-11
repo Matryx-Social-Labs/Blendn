@@ -134,6 +134,7 @@ export function PersonCardContent({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
+  const large = useLargeText()
   const isLiked = liked || state === 'liked'
   const isRequested = requested || state === 'requested'
   const waveBusy = waving || state === 'waveBusy'
@@ -182,7 +183,6 @@ export function PersonCardContent({
         : crewLike && !isLiked && (variant === 'here' || variant === 'was')
           ? `A crew like is shown to ${name} as ${crewLike.name}, never as you.`
           : null
-  const large = useLargeText()
   const lead = thin ? [] : (person.lead ?? [])
   const common = thin ? undefined : person.common
   const tonight = thin ? null : person.tonight
