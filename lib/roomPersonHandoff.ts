@@ -14,7 +14,7 @@ export interface RoomPersonCard {
   lens: RoomLens | null
 }
 
-// ponytail: one slot, the last card opened; a page stack of two room profiles re-reads the server's tonight block only.
+// ponytail: one slot, the last card opened; the page reads it once on mount, so a later open cannot change a page already up.
 let handed: { ref: string; card: RoomPersonCard } | null = null
 
 export function handRoomPerson(ref: string, card: RoomPersonCard): void {

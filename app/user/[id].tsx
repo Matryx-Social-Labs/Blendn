@@ -181,6 +181,8 @@ function UserProfileInner() {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [liked, setLiked] = useState(likedInRoom === '1')
   const [waved, setWaved] = useState<'none' | 'busy' | 'waved'>('none')
+  // P-A: the room's card for this handle, read once as the page opens (a later open elsewhere replaces the one slot).
+  const [handed] = useState(() => (eventId ? roomPersonFor(id) : null))
   const [likeBusy, setLikeBusy] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
@@ -672,7 +674,6 @@ function UserProfileInner() {
    * In common are the room's own card for exactly this handle (`roomPersonFor`); the question, their answer and their
    * pick are the server's (fresher, and they are what it allows). Nothing of yours, and nothing for somebody else.
    */
-  const handed = eventId ? roomPersonFor(id) : null
   const tonight = profile?.tonight ?? null
   const lensPage = !!eventId && !!profile && ctaMode !== 'self' && !!(handed || tonight)
   const lensBlocks = lensPage
