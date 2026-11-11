@@ -297,11 +297,11 @@ describe('Crews as a row, like friends here (audit A-1: one tab row in the room,
     expect(screen.queryByTestId('room-crews-row')).toBeNull()
   })
 
-  it('one crew is "1 crew here"; only yours (none other here) is "Your crews"', async () => {
+  it('one crew is "1 crew here"; none here but yours elsewhere is just "Crews" (it opens "Crews here · 0")', async () => {
     await room({ crewsHere: 1 })
     expect(screen.getByRole('button', { name: '1 crew here' })).toBeTruthy()
     await room({ crewsHere: 0 })
-    expect(screen.getByRole('button', { name: 'Your crews' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Crews' })).toBeTruthy()
   })
 
   it('the Crews view: its head and cards in place of Meet next, and a way back to everyone', async () => {

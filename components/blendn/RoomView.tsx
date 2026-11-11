@@ -82,7 +82,7 @@ export type RoomViewProps = {
   /** You, first in People: your room name and who sees you (`RoomYouCard`). */
   you: ReactNode
   /**
-   * How many crews are here, for the "3 crews here" row that opens them (audit A-1); 0 when only yours are. Null when no
+   * How many crews are here, for the "3 crews here" row that opens them (audit A-1); 0 when none is here but you are in one (the row says Crews). Null when no
    * crew is here and you are in none: no row (R2-D1's rule, without the second tab row it used to draw).
    */
   crewsHere: number | null

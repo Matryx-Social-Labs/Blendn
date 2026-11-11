@@ -366,7 +366,7 @@ export function RoomSkeleton({ topInset }: { topInset: number }) {
 
 /** "3 crews here" (audit A-1): crews open from a row in the list, as friends do, so the room has one tab row. */
 export function crewsRowLine(count: number): string {
-  return count > 0 ? `${groupedCount(count)} ${count === 1 ? 'crew' : 'crews'} here` : 'Your crews'
+  return count > 0 ? `${groupedCount(count)} ${count === 1 ? 'crew' : 'crews'} here` : 'Crews'
 }
 
 /**
