@@ -2,7 +2,7 @@
  * Flow 5 C3b (P-A, `pA-page` / `pA-page-named`): a profile opened from a room is the person through the room’s lens.
  * The lead pills and In common are the room’s own card (handed in memory); the Tonight card is the server’s.
  */
-import { StyleSheet } from 'react-native'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 
 
@@ -170,6 +170,18 @@ it('Wave waves at them in this room, and then reads Waved', async () => {
   await act(async () => {})
   expect(api.sendWave).toHaveBeenCalledWith('e1', 'rh_bison')
   expect(await screen.findByText('Waved')).toBeTruthy()
+})
+
+it('Waved is said when it lands: announced on iOS, the dock a polite live region on Android (drive, TalkBack)', async () => {
+  const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility')
+  handRoomPerson('rh_bison', card())
+  await open(ANON)
+  expect(screen.getByTestId('profile-lens-dock-row').props.accessibilityLiveRegion).toBe('polite')
+  expect(say).not.toHaveBeenCalled()
+  await fireEvent.press(screen.getByTestId('profile-wave'))
+  await act(async () => {})
+  expect(say).toHaveBeenCalledWith('Waved at Gentle Bison')
+  say.mockRestore()
 })
 
 it('outside a room, or with no lens anywhere, it is the profile page it always was', async () => {

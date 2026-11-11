@@ -10,7 +10,7 @@ import { MomentMatch } from '../../components/ds/MomentMatch'
 import { Button } from '../../components/ds/Button'
 import { Dock } from '../../components/ds/Dock'
 import type { Rect } from '../../components/ds/chatShared'
-import { font, HueProvider, useBoldText, useSelection, type Hue } from '../../components/ds/shared'
+import { announceOutcome, font, HueProvider, useBoldText, useSelection, type Hue } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
@@ -505,11 +505,15 @@ function UserProfileInner() {
     if (!eventId || !profile || waved !== 'none') return
     setWaved('busy')
     const result = await apiClient.sendWave(String(eventId), profile.user_id).catch(() => null)
-    if (result?.success || result?.errorCode === 'WAVE_TOO_SOON') return setWaved('waved')
+    if (result?.success || result?.errorCode === 'WAVE_TOO_SOON') {
+      // Said as it lands (iOS); on Android the dock row is a live region.
+      announceOutcome(`Waved at ${identity.title}`)
+      return setWaved('waved')
+    }
     setWaved('none')
     const refusal = likeRefusal(result?.errorCode, result?.error)
     showToast(refusal.message, refusal.variant === 'error' ? 'error' : refusal.variant)
-  }, [eventId, profile, waved, showToast])
+  }, [eventId, profile, waved, showToast, identity.title])
 
   /*
    * The other half of a mutual like arrives while this page is open (SCRUM-960): the room draws the moment, and the page
@@ -827,7 +831,7 @@ function UserProfileInner() {
       {showDock && lensDock ? (
         // `pA-page`'s dock (`.dock4`): Wave, and Message the wide one, on the glass line. The request line stays in Message's label.
         <Dock line floating round={false} onHeight={setDockHeight} testID="profile-dock">
-          <View testID="profile-lens-dock-row" style={styles.dockRow}>
+          <View testID="profile-lens-dock-row" accessibilityLiveRegion="polite" style={styles.dockRow}>
             <Button
               kind="secondary"
               size="dock"

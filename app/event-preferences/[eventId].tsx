@@ -431,6 +431,8 @@ function EventPreferencesContent() {
               <Chip
                 key={w.key}
                 label={w.short}
+                // Said with its group (TalkBack): "Here to hire", not a bare "Hire".
+                accessibilityLabel={w.label}
                 selected={workIntent === w.key}
                 onPress={() => setWorkIntent((now) => (now === w.key ? null : w.key))}
                 testID={`prefs-work-intent-${w.key}`}

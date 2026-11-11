@@ -148,7 +148,8 @@ describe('Here to (the work lens): why you are here, one pick', () => {
     prefs(WORK)
     await render(<EventPreferences />)
     expect(await screen.findByTestId('prefs-work-intent')).toBeTruthy()
-    for (const name of ['Hire', 'Find work', 'Build', 'Learn']) expect(await pick(name)).toBeTruthy()
+    // Each pick is said with its group (TalkBack, Android drive): “Here to hire”, not a bare “Hire”.
+    for (const name of ['Here to hire', 'Here to find work', 'Here to build', 'Here to learn']) expect(await pick(name)).toBeTruthy()
 
     for (const lens of [{ key: 'music', question: 'Who are you hoping they play?' }, { key: 'venue_night', question: null }, null]) {
       prefs(lens)
@@ -161,7 +162,7 @@ describe('Here to (the work lens): why you are here, one pick', () => {
   it('shows your saved pick, and a pick left as it was is not sent', async () => {
     prefs(WORK, null, 'build')
     await render(<EventPreferences />)
-    expect((await pick('Build')).props.accessibilityState).toMatchObject({ selected: true })
+    expect((await pick('Here to build')).props.accessibilityState).toMatchObject({ selected: true })
     await save()
     expect(sent()).not.toHaveProperty('workIntent')
   })
@@ -169,8 +170,8 @@ describe('Here to (the work lens): why you are here, one pick', () => {
   it('sends the pick you chose, one at a time', async () => {
     prefs(WORK, null, 'build')
     await render(<EventPreferences />)
-    await fireEvent.press(await pick('Find work'))
-    expect((await pick('Build')).props.accessibilityState).toMatchObject({ selected: false })
+    await fireEvent.press(await pick('Here to find work'))
+    expect((await pick('Here to build')).props.accessibilityState).toMatchObject({ selected: false })
     await save()
     expect(sent().workIntent).toBe('find_work')
   })
@@ -178,7 +179,7 @@ describe('Here to (the work lens): why you are here, one pick', () => {
   it('tapping your pick again clears it, and saving sends null', async () => {
     prefs(WORK, null, 'hire')
     await render(<EventPreferences />)
-    await fireEvent.press(await pick('Hire'))
+    await fireEvent.press(await pick('Here to hire'))
     await save()
     expect(sent().workIntent).toBeNull()
   })

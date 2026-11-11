@@ -14,7 +14,7 @@ import { LensBlocks } from './LensBlocks'
 import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
 import { Sheet } from './Sheet'
-import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
+import { announceOutcome, CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
 import { StateScreen } from './StateScreen'
 
 /** ROUND3 D · 4.1: here now · was here · pre-event room · matched · friend · unavailable · thin. */
@@ -147,6 +147,12 @@ export function PersonCardContent({
   const lit = { backgroundColor: sel.fill, borderColor: sel.edge }
   const quiet = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const { name, age } = person
+  // Waved is said as it lands, once (a card opened already waved says nothing): iOS announces it, Android's row is a live region.
+  const wasWaved = useRef(isWaved)
+  useEffect(() => {
+    if (isWaved && !wasWaved.current) announceOutcome(`Waved at ${name}`)
+    wasWaved.current = isWaved
+  }, [isWaved, name])
   const id = (part: string) => testID && `${testID}-${part}`
 
   if (variant === 'gone') {
@@ -264,7 +270,7 @@ export function PersonCardContent({
 
       <LensBlocks lead={lead} tonight={tonight} common={common} testID={testID} />
 
-      <View testID={id('actions')} style={row}>
+      <View testID={id('actions')} accessibilityLiveRegion="polite" style={row}>
         {variant === 'matched' ? (
           <Button label="Say hi" size="dock" onPress={onSayHi} style={slot} testID={id('say-hi')} />
         ) : null}

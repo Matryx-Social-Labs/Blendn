@@ -88,7 +88,7 @@ function pill(kind: Lead, p: LensPerson, lensKey: string): LeadPill | null {
         return pick ? { icon: 'user-plus', label: pick.label, lit: true } : null
       }
       const words = [...new Set(p.sharedIntents.map((i) => INTENT_WORD[i]).filter((w): w is string => !!w))]
-      return words.length ? { icon: lensKey === 'work' ? 'user-plus' : 'users', label: `Here for ${joinAnd(words)}`, lit: true } : null
+      return words.length ? { icon: 'users', label: `Here for ${joinAnd(words)}`, lit: true } : null
     }
     case 'common':
       return p.interests.length ? { icon: 'sparkles', label: `${p.interests.length} in common`, lit: false } : null
