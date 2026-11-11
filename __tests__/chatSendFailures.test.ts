@@ -66,7 +66,8 @@ describe('a removed message is a placeholder, not a blank', () => {
     expect(bubble).toContain('.enabled(!!onLongPress && !removed)')
     expect(bubble).toContain('.enabled(!!onReply && !removed && !failed)')
     // Dashed by the DS frame (SVG), never a border dash, which draws solid on Android with any per-side width.
-    expect(bubble).toContain('{removed ? <DashedFrame radius={BUBBLE.radius}')
+    // Flow 5 F-A: the frame comes in with the dissolve, inside its own fading view.
+    expect(bubble).toMatch(/\{removed \? \(\s*<Animated.View entering=\{DISSOLVE\}[^>]*>\s*<DashedFrame radius=\{BUBBLE.radius\}/)
     expect(bubble).not.toContain("borderStyle: 'dashed'")
   })
 })
