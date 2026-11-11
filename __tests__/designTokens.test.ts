@@ -34,6 +34,7 @@ describe('design tokens', () => {
       'app/rate/[eventId].tsx', // Flow 4 rate's "How was the night?", 28/33: no role at 28
       'components/blendn/RoomSections.tsx', // Flow 5 R-A's you-card name, 16/22: no role at 16/22
       'components/chat/ChatParts.tsx', // an emoji in flight
+      'components/ds/LensBlocks.tsx', // Flow 5 P-A's bio and empty line, 16/22 (owner picks r1 C, r2 A): no role at 16/22
       'components/ds/ChatBubble.tsx', // an emoji-only message, and Flow 5 F-A's 16/22 words (`BUBBLE_TYPE`, the host card's too)
       'components/ds/MomentPour.tsx', // motion #9's "You're in."
       'components/ds/shared.ts', // monoValue, the one mono size between 12 and 40
