@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode, type RefObject } from 'react'
-import { AccessibilityInfo, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Platform, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
@@ -88,6 +88,8 @@ const FACE = 72
 /** Tonight's card (`.xq`): rose from the top-left corner, its rim at 55%. */
 const TONIGHT_WASH = [{ color: COLOR.brandRose, alpha: 0.3, at: [0, 0], size: [100, 120], reach: 0.7 }] as const
 const TONIGHT_EDGE = 0.55
+// design-exception: 20/27, the board's Tonight answer (`.xq p`); `heading` is 20/26, 3 pt short over three lines
+const ANSWER_LINE = { lineHeight: 27 }
 /** #15: a Like button pops 0.85 → 1 on `M.pop` as it turns to Liked. */
 const LIKE_POP_FROM = 0.85
 
@@ -200,14 +202,14 @@ export function PersonCardContent({
     </Control>
   )
   /** A still state in an action's place (Liked, Waved, Requested): lit or quiet, the action row's height. */
-  const still = (part: string, icon: IconName, label: string, spoken: string, on: boolean, style?: object) => (
+  const still = (part: string, icon: IconName, label: string, spoken: string, on: boolean, style?: StyleProp<ViewStyle>) => (
     <Animated.View
       testID={id(part)}
       accessible
       accessibilityRole={part === 'liked' ? 'button' : undefined}
       accessibilityLabel={spoken}
       accessibilityState={on ? { selected: true } : undefined}
-      style={[styles.pill, styles.slot, on ? [styles.lit, lit] : { backgroundColor: panel }, style]}
+      style={[styles.pill, on ? [styles.lit, lit] : { backgroundColor: panel }, style]}
     >
       <Icon name={icon} size={ICON.control} color={on ? sel.glyph : COLOR.textSecondary} active={on} />
       <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('button', bold), on ? styles.ink : styles.secondary]}>
@@ -216,6 +218,8 @@ export function PersonCardContent({
     </Animated.View>
   )
   const row = [styles.actions, large && styles.actionsStacked]
+  // Stacked, an action is its own height: a zero flex-basis in a column collapses the pill behind its label (Android, 2.0).
+  const slot = large ? styles.stackedSlot : styles.slot
 
   return (
     <View testID={testID} style={styles.card}>
@@ -274,10 +278,12 @@ export function PersonCardContent({
       ) : null}
 
       {tonight ? (
-        <View testID={id('tonight')} accessible accessibilityLabel={`${tonight.question} ${tonight.answer}`} style={[styles.tonight, { borderColor: tint(sel.edge, TONIGHT_EDGE) }]}>
+        <View testID={id('tonight')} accessible accessibilityLabel={`${tonight.question} ${tonight.answer}`} style={styles.tonight}>
           <RadialWash layers={TONIGHT_WASH} style={StyleSheet.absoluteFill} />
+          {/* The rim is drawn over the card, as the board's inset shadow is: it takes no room from the answer. */}
+          <View pointerEvents="none" style={[styles.tonightRim, { borderColor: tint(sel.edge, TONIGHT_EDGE) }]} />
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), { color: sel.glyph }]}>{tonight.question}</Text>
-          <Text testID={id('tonight-answer')} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('heading', bold), styles.ink, styles.answer]}>
+          <Text testID={id('tonight-answer')} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('heading', bold), ANSWER_LINE, styles.ink, styles.answer]}>
             {tonight.answer}
           </Text>
         </View>
@@ -296,47 +302,49 @@ export function PersonCardContent({
 
       <View testID={id('actions')} style={row}>
         {variant === 'matched' ? (
-          <Button label="Say hi" size="dock" onPress={onSayHi} style={styles.slot} testID={id('say-hi')} />
+          <Button label="Say hi" size="dock" onPress={onSayHi} style={slot} testID={id('say-hi')} />
         ) : null}
 
         {variant === 'here' ? (
           isWaved ? (
-            still('waved', 'check', 'Waved', 'Waved', true)
+            still('waved', 'check', 'Waved', 'Waved', true, slot)
           ) : (
             <Button
               label={wavedAtYou && !waveBusy ? 'Wave back' : 'Wave'}
               kind="secondary"
+              onGlass
               size="dock"
               leading={waveBusy ? <WavingHand testID={id('hand-waving')} /> : <Icon name="hand" size={ICON.control} />}
               disabled={waveBusy}
               pressHaptic={false}
               accessibilityLabel={wavedAtYou && !waveBusy ? `Wave back at ${name}` : `Wave at ${name}`}
               onPress={onWave}
-              style={styles.slot}
+              style={slot}
               testID={id(wavedAtYou && !waveBusy ? 'wave-back' : 'wave')}
             />
           )
         ) : null}
 
         {variant === 'pre' || variant === 'matched' ? null : isRequested ? (
-          still('requested', 'check', 'Requested', `Request sent to ${name}`, false, styles.wide)
+          still('requested', 'check', 'Requested', `Request sent to ${name}`, false, slot)
         ) : (
           <Button
             label="Message"
             kind="secondary"
+            onGlass
             size="dock"
             icon="message-circle"
             pressHaptic={false}
             accessibilityHint={variant === 'friend' ? undefined : 'Sends a request, which shows them your name and photo.'}
             onPress={onMessage}
-            style={[styles.slot, styles.wide]}
+            style={slot}
             testID={id('message')}
           />
         )}
 
         {variant === 'here' || variant === 'was' ? (
           isLiked ? (
-            <Animated.View style={[styles.slot, likedStyle]}>{still('liked', 'heart', 'Liked', 'Liked', true)}</Animated.View>
+            <Animated.View style={[slot, likedStyle]}>{still('liked', 'heart', 'Liked', 'Liked', true)}</Animated.View>
           ) : crewLike ? (
             <Button
               label={`Like for ${crewLike.name}`}
@@ -365,7 +373,7 @@ export function PersonCardContent({
                 H.like()
                 onLike?.()
               }}
-              style={styles.slot}
+              style={slot}
               testID={id('like')}
             />
           )
@@ -492,7 +500,8 @@ export function PersonCard({
 }: PersonCardContentProps & { visible: boolean; onClose: () => void; onDismissed?: () => void }) {
   const head = useRef<ComponentRef<typeof View>>(null)
   return (
-    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} focusRef={head} testID={testID}>
+    // P-A's actions sit on the home-indicator inset alone (34 on the board), not the sheet's usual inset + 8.
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} flush focusRef={head} testID={testID}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
         <PersonCardContent {...card} onClose={onClose} headRef={head} testID={testID && `${testID}-card`} />
       </ScrollView>
@@ -524,20 +533,20 @@ const styles = StyleSheet.create({
   /** `.xq`: 20 radius, 14 · 16 · 16, the answer 6 under the question. */
   tonight: {
     borderRadius: RADIUS.tile,
-    borderWidth: 1,
     overflow: 'hidden',
     backgroundColor: COLOR.surface,
     paddingTop: SPACE.md + SPACE.xxs,
     paddingHorizontal: SPACE.lg,
     paddingBottom: SPACE.lg,
   },
+  tonightRim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: RADIUS.tile, borderWidth: 1 },
   answer: { marginTop: SPACE.xs + SPACE.xxs },
   common: { gap: SPACE.sm },
   actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   actionsStacked: { flexDirection: 'column', alignItems: 'stretch' },
-  /** Each action takes an equal share; Message never shrinks below its label (the board's flex: 1 with min-content). */
+  /** Each action takes an equal share. ponytail: the board's CSS lets Message keep its min-content (115 vs 110 at 393); add a measured min width if that 2 pt matters. */
   slot: { flexGrow: 1, flexBasis: 0 },
-  wide: { flexShrink: 0 },
+  stackedSlot: { alignSelf: 'stretch' },
   crewLike: { flexGrow: 1, flexBasis: '100%' },
   /** The ⋯ in the head: 44 on iOS, 48 on Android. */
   circle: { width: minTarget(), height: minTarget(), borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },

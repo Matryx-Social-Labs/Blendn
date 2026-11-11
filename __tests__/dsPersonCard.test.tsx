@@ -276,6 +276,11 @@ it('the action row stacks at the largest text rather than truncating a label (P-
   await act(async () => Dimensions.set({ window: { ...window, fontScale: 3 }, screen: { ...window, fontScale: 3 } }))
   await draw()
   expect(flat('p-actions')).toMatchObject({ flexDirection: 'column' })
+  // Drive, Android 2.0: a zero flex-basis in the column collapsed each pill behind its label.
+  // The Button's style sits on the view around its pressable.
+  const outer = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).parent?.props.style)
+  for (const id of ['p-wave', 'p-message', 'p-like']) expect(outer(id)).toMatchObject({ alignSelf: 'stretch' })
+  for (const id of ['p-wave', 'p-message', 'p-like']) expect(outer(id).flexBasis).toBeUndefined()
   await act(async () => Dimensions.set({ window, screen: window }))
 })
 
@@ -374,6 +379,13 @@ describe('Flow 4: the room’s card (R2-D1, R3-D4, #51)', () => {
 })
 
 describe('the action row is one height (M4)', () => {
+  it('Wave and Message are the board’s quiet .db.q (fill-on-glass), visible on Android’s solid sheet too', async () => {
+    on('android')
+    await draw()
+    // Drive, Android: a plain secondary is COLOR.surface, the solid sheet's own colour, and the pill vanished.
+    for (const id of ['p-wave', 'p-message']) expect(JSON.stringify(screen.getByTestId(id, { includeHiddenElements: true }).props.style)).toContain(MATERIAL.fillOnGlass)
+  })
+
   it('Wave, Message and Like are 52 (the board’s .db); ⋯ is a 44 target', async () => {
     await draw({ onLike: jest.fn(), onWave: jest.fn(), onMore: jest.fn() })
     for (const id of ['p-like', 'p-message', 'p-wave']) expect(flat(id).height).toBe(SIZE.tabBarCompact)
