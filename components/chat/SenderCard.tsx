@@ -5,8 +5,7 @@ import { apiClient } from '../../lib/apiClient'
 import type { RoomAttendee } from '../../lib/activeRoom'
 import { Logger } from '../../lib/logger'
 import { likeRefusal } from '../../lib/likeRefusal'
-import { overlapOf } from '../../lib/overlapLine'
-import { reasonLine } from '../../lib/roomMoments'
+import { lensView, parseLens, type RoomLens } from '../../lib/roomLens'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { attendeeFromMatch } from '../../lib/roomLive'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
@@ -38,16 +37,20 @@ export function SenderCard({
   chatGroupId,
   onClose,
   onBlocked,
+  eventTitle,
 }: {
   sender: Sender | null
   eventId: string | null
   chatGroupId: string
+  /** The sheet's context line ("In the room at …"); none when the caller does not know it. */
+  eventTitle?: string | null
   onClose: () => void
   onBlocked: (senderId: string) => void
 }) {
   const [shown, setShown] = useState<Sender | null>(sender)
   if (sender && sender !== shown) setShown(sender)
   const [card, setCard] = useState<RoomAttendee | null>(null)
+  const [lens, setLens] = useState<RoomLens | null>(null)
   const [state, setState] = useState<PersonState>('none')
   const [refusal, setRefusal] = useState<string | null>(null)
   const [connectOpen, setConnectOpen] = useState(false)
@@ -72,6 +75,7 @@ export function SenderCard({
         if (!live || !r.success) return
         const found = (r.data?.matches as RoomAttendee[] | undefined)?.find((m) => m.userId === senderId) ?? null
         setCard(found)
+        setLens(parseLens(r.data?.lens))
         if (found?.youLiked) setState('liked')
       })
       .catch((error) => Logger.warn('chat', 'Roster lookup failed', { error }))
@@ -131,9 +135,15 @@ export function SenderCard({
           face: { kind: 'creature', pseudonym: markSeed(who.name, `${chatGroupId}:${who.id}`) },
           name: who.name,
           age: attendee?.age,
-          reason: attendee ? reasonLine(attendee) : undefined,
-          chips: card?.sharedInterests,
-          overlap: card ? overlapOf({ overlaps: card.overlaps, sharedIntents: card.sharedIntents, interests: card.sharedInterests, sign: card.sign }) : undefined,
+          // P-A: their deck card through the room's lens (the sheet draws only what the deck sent for them).
+          ...(card
+            ? lensView(
+                { workField: card.workField ?? null, sharedIntents: card.sharedIntents ?? [], interests: card.sharedInterests, overlaps: card.overlaps ?? [], badges: card.badges ?? [], age: card.age, tonightAnswer: card.tonightAnswer },
+                lens,
+                eventTitle ? { title: eventTitle } : null,
+                !!card.photo
+              )
+            : {}),
         }}
         variant={card ? (card.insideNow === false ? 'was' : 'here') : 'thin'}
         state={state}

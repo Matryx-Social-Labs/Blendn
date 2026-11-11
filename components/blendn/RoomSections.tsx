@@ -11,6 +11,7 @@ import type { Visibility } from '../ds/Banner'
 import { tint } from '../../lib/theme'
 import { RadialWash } from '../ui/GradientFill'
 import type { RoomPerson } from '../../lib/useRoom'
+import { pickReason, type RoomLens } from '../../lib/roomLens'
 import { Avatar } from '../ds/Avatar'
 import type { Face } from '../ds/Facepile'
 import { GridFace } from '../ds/GridFace'
@@ -139,8 +140,11 @@ export const MeetNextRow = memo(function MeetNextRow({
   width,
   onOpen,
   onLike,
+  lens = null,
 }: {
   picks: RoomPerson[]
+  /** Flow 5 P-A: the room's lens; a pick says their answer, or what the lens leads with. */
+  lens?: RoomLens | null
   nextShuffleAt: number
   width: number
   onOpen: (p: RoomPerson) => void
@@ -164,7 +168,10 @@ export const MeetNextRow = memo(function MeetNextRow({
         }
       />
       <View style={styles.meetRow}>
-        {picks.map((p, i) => (
+        {picks.map((p, i) => {
+          // P-A: their answer to tonight's question first, else the lens lead; nothing through the lens, the room's line.
+          const said = p.matched ? null : pickReason(p, lens, p.tonightAnswer)
+          return (
           <Animated.View
             key={p.id}
             entering={reduceMotion ? FadeIn.duration(DURATION.base) : cardIn(i)}
@@ -173,8 +180,8 @@ export const MeetNextRow = memo(function MeetNextRow({
             <MeetNextCard
               face={faceOf(p)}
               name={p.name}
-              reason={p.matched ? 'Matched' : reasonLine(p)}
-              overlap={p.matched ? null : overlapOf(p).line}
+              reason={p.matched ? 'Matched' : (said ?? reasonLine(p))}
+              overlap={p.matched || said ? null : overlapOf(p).line}
               width={width}
               liked={p.liked || p.matched}
               onPress={() => onOpen(p)}
@@ -182,7 +189,8 @@ export const MeetNextRow = memo(function MeetNextRow({
               testID={`meet-next-${i}`}
             />
           </Animated.View>
-        ))}
+          )
+        })}
       </View>
     </View>
   )

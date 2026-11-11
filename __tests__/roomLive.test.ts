@@ -184,6 +184,7 @@ describe('attendeeFromMatch', () => {
         overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
         sign: 'Leo ♌',
         badges: [{ kind: 'regular_here', label: 'Regular here' }],
+        tonightAnswer: 'A map of quiet cafés',
       })
     ).toEqual({
       user_id: 'u',
@@ -201,6 +202,7 @@ describe('attendeeFromMatch', () => {
       overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
       sign: 'Leo ♌',
       badges: [{ kind: 'regular_here', label: 'Regular here' }],
+      tonightAnswer: 'A map of quiet cafés',
     })
   })
 

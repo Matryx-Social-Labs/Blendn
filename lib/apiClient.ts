@@ -650,6 +650,26 @@ export interface MatchCard {
   sign?: string | null
   /** "Regular here", "Shows up", "5+ nights this month" — earned by check-ins. */
   badges?: Badge[]
+  /**
+   * Flow 5 P-A: their answer to tonight's question, for this page of the deck only. Null when they have not answered,
+   * the room asks nothing, or you operate the event (hosts never read answers). Optional: a client outlives a deploy.
+   */
+  tonightAnswer?: string | null
+}
+
+/** `GET /events/:id/matches`: the page, and the room's lens (what leads on these cards; read through `parseLens`). */
+export interface MatchDeck {
+  matches: MatchCard[]
+  lens?: unknown
+}
+
+/** `GET`/`PUT /events/:id/matches/preferences`. `lens` is read through `parseLens`. */
+export interface MatchPreferences {
+  intent: string[]
+  revealed: boolean
+  openToCrews?: boolean
+  tonightAnswer?: string | null
+  lens?: unknown
 }
 
 export interface LikeOutcome {
@@ -1323,6 +1343,11 @@ export interface PublicProfile {
   friend?: unknown
   /** Their badges (`{ kind, label }[]`), top-level beside `friend` for whoever may see who they are; read through `parseBadges`. */
   badges?: unknown
+  /**
+   * Flow 5 P-A: tonight's question and their answer (null: not answered). Only for an event-room handle, only to a viewer
+   * in that room as an attendee, and only when the room asks a question; absent otherwise. Read through `parseLens`.
+   */
+  tonight?: { lens?: unknown; answer?: string | null }
 }
 
 export interface ChatMessageData {
@@ -3109,12 +3134,12 @@ class ApiClientClass {
   async getEventMatches(
     eventId: string,
     options?: { limit?: number; force?: boolean }
-  ): Promise<ApiResponse<{ matches: MatchCard[] }>> {
+  ): Promise<ApiResponse<MatchDeck>> {
     const query = options?.limit ? `?limit=${options.limit}` : ''
     const endpoint = `/api/mobile/events/${eventId}/matches${query}`
     // force bypasses the cache rather than being passed into it.
-    if (options?.force) return this.queuedRequest<{ matches: MatchCard[] }>(endpoint)
-    return this.cachedRequest<{ matches: MatchCard[] }>(endpoint, 30_000)
+    if (options?.force) return this.queuedRequest<MatchDeck>(endpoint)
+    return this.cachedRequest<MatchDeck>(endpoint, 30_000)
   }
 
   /**
@@ -3314,14 +3339,21 @@ class ApiClientClass {
        */
       rememberIntent?: boolean
       rememberReveal?: boolean
+      /** Flow 5 P-A: your answer to tonight's question (≤ 140 after the server's trim); null or "" clears it. Omit to leave it. */
+      tonightAnswer?: string | null
     }
-  ): Promise<ApiResponse<{ intent: string[]; revealed: boolean }>> {
-    return this.queuedRequest<{ intent: string[]; revealed: boolean }>(
+  ): Promise<ApiResponse<MatchPreferences>> {
+    return this.queuedRequest<MatchPreferences>(
       `/api/mobile/events/${eventId}/matches/preferences`,
       { method: 'PUT', body: JSON.stringify(prefs) },
       true,
       3
     )
+  }
+
+  /** Yours for this room, and the room's lens (Flow 5 P-A). In-room only: the server answers 403 to anyone not checked in. */
+  async getMatchPreferences(eventId: string): Promise<ApiResponse<MatchPreferences>> {
+    return this.queuedRequest<MatchPreferences>(`/api/mobile/events/${eventId}/matches/preferences`)
   }
 
   // === PEER RATINGS ===

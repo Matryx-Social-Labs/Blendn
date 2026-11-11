@@ -12,6 +12,7 @@ import { Orbs } from '../../components/ds/Orbs'
 import { LookingForCard } from '../../components/ds/LookingForCard'
 import { RadioCard } from '../../components/ds/RadioCard'
 import { SettingsRow } from '../../components/ds/SettingsRow'
+import { TextArea } from '../../components/ds/TextField'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { bannerFadeIn, bannerOut } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
@@ -21,7 +22,9 @@ import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
 import { firstNameOf } from '../../lib/profileIdentity'
+import { requestTextRefusal } from '../../lib/requestRefusal'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
+import { answerLength, normalizeAnswer, parseLens, TONIGHT_ANSWER_MAX, type RoomLens } from '../../lib/roomLens'
 import { myRoomFace, pseudonymFromParam } from '../../lib/roomState'
 import { useAuth } from '../../lib/useAuth'
 import { RouteModal } from '../../components/system/RouteModal'
@@ -169,6 +172,35 @@ function EventPreferencesContent() {
   // else; hiding the card for a minor turns that refusal into a card they
   // never see rather than an error on the way into their first room.
   const [under18, setUnder18] = useState(false)
+  /*
+   * Tonight's question (Flow 5 P-A): asked only when the room has one (`GET /matches/preferences` says the lens). The
+   * answer is sent only when it changed, so opening this to change the reveal never rewrites it.
+   */
+  const [lens, setLens] = useState<RoomLens | null>(null)
+  const [savedAnswer, setSavedAnswer] = useState('')
+  const [answer, setAnswer] = useState('')
+  const [answerRefused, setAnswerRefused] = useState<string | undefined>()
+  useEffect(() => {
+    if (!eventId) return
+    let cancelled = false
+    apiClient
+      .getMatchPreferences(String(eventId))
+      .then((res) => {
+        if (cancelled || !res.success || !res.data) return
+        const said = res.data.tonightAnswer ?? ''
+        setLens(parseLens(res.data.lens))
+        setSavedAnswer(said)
+        setAnswer(said)
+      })
+      // No question is the safe reading of a failed read: the field simply is not offered.
+      .catch((error) => Logger.warn('match', 'Failed to read match preferences', { error }))
+    return () => {
+      cancelled = true
+    }
+  }, [eventId])
+  const asks = !!lens?.question
+  const answerChanged = asks && normalizeAnswer(answer) !== normalizeAnswer(savedAnswer)
+  const answerTooLong = asks && answerLength(answer) > TONIGHT_ANSWER_MAX
 
   useEffect(() => {
     let cancelled = false
@@ -224,7 +256,15 @@ function EventPreferencesContent() {
          * person-level intent set on a different screen.
          */
         rememberReveal,
+        // null clears it; omitted, the server leaves it as it was.
+        ...(answerChanged ? { tonightAnswer: normalizeAnswer(answer) || null } : {}),
       })
+      // Moderation refused the answer: said in the field, in the server's words, and the screen stays.
+      const refused = res.success ? undefined : requestTextRefusal(res)
+      if (refused) {
+        setAnswerRefused(refused)
+        return
+      }
       if (!res.success) {
         // The server's sentence when it has one — "Dating is for 18+" is
         // actionable; "could not save" is not.
@@ -240,7 +280,7 @@ function EventPreferencesContent() {
     } finally {
       setSaving(false)
     }
-  }, [askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, showToast])
+  }, [answer, answerChanged, askIntent, eventId, intent, intentTouched, leave, rememberReveal, revealed, saving, setAnswerRefused, showToast])
 
   const intents = under18 ? INTENTS.filter((i) => i.value !== 'dating') : INTENTS
   const lookingIntents = intents.filter((i) => i.value !== 'just_here')
@@ -342,6 +382,39 @@ function EventPreferencesContent() {
   )
 
   const needsAnswer = askIntent && intent.length === 0
+  const tonightBlock = asks ? (
+    <Animated.View layout={glide} style={styles.second}>
+      <Head lead={false} testID="prefs-tonight-title" title={lens?.question ?? ''} sub="Tonight’s question. Only people in this room see your answer." bold={bold} />
+      <View style={styles.answer}>
+        <TextArea
+          value={answer}
+          onChangeText={(text) => {
+            setAnswer(text)
+            setAnswerRefused(undefined)
+          }}
+          placeholder="Your answer"
+          limit={TONIGHT_ANSWER_MAX}
+          measure={answerLength}
+          error={answerRefused}
+          testID="prefs-tonight"
+        />
+        {answer ? (
+          <Button
+            label="Clear"
+            kind="tertiary"
+            size="sm"
+            accessibilityLabel="Clear your answer"
+            onPress={() => {
+              setAnswer('')
+              setAnswerRefused(undefined)
+            }}
+            style={styles.clear}
+            testID="prefs-tonight-clear"
+          />
+        ) : null}
+      </View>
+    </Animated.View>
+  ) : null
   return (
     <View style={styles.screen}>
       <Orbs set="feed" />
@@ -363,6 +436,7 @@ function EventPreferencesContent() {
           */}
         {askIntent ? intentBlock : revealBlock}
         {askIntent ? revealBlock : intentBlock}
+        {tonightBlock}
       </ScrollView>
       {/*
         The bar over the scroll (Flow 3 `prefs`: a ✕ and nothing else), so the copy passes under glass when it scrolls and never
@@ -378,9 +452,9 @@ function EventPreferencesContent() {
           label="Save"
           kind="primary"
           onPress={() => void save()}
-          disabled={needsAnswer}
+          disabled={needsAnswer || answerTooLong}
           loading={saving}
-          accessibilityHint={needsAnswer ? 'Choose an answer first' : undefined}
+          accessibilityHint={needsAnswer ? 'Choose an answer first' : answerTooLong ? `Keep your answer to ${TONIGHT_ANSWER_MAX} characters` : undefined}
           testID="prefs-save"
         />
       </Dock>
@@ -396,6 +470,8 @@ const styles = StyleSheet.create({
   pair: { flexDirection: 'row', gap: SPACE.md, marginTop: CARDS_GAP },
   stacked: { flexDirection: 'column' },
   remember: { marginTop: SPACE.md },
+  answer: { marginTop: CARDS_GAP, gap: SPACE.sm },
+  clear: { alignSelf: 'flex-end' },
   tiles: { flexDirection: 'row', gap: TILE_GAP, marginTop: TILES_GAP },
   or: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginVertical: SPACE.lg },
   orLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairlineStrong },

@@ -1237,7 +1237,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
         }}
       />
 
-      <SenderCard sender={cardFor} eventId={roomInfo.eventId ?? null} chatGroupId={roomId} onClose={() => setCardFor(null)} onBlocked={blockFromFeed} />
+      <SenderCard sender={cardFor} eventId={roomInfo.eventId ?? null} eventTitle={eventTitle} chatGroupId={roomId} onClose={() => setCardFor(null)} onBlocked={blockFromFeed} />
     </View>
   )
 }

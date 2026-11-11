@@ -55,4 +55,6 @@ export interface AttendeeProfile {
   overlaps?: Overlap[]
   sign?: string | null
   badges?: Badge[]
+  /** Flow 5 P-A: their answer to tonight's question, as the deck sent it. Never typed by this phone. */
+  tonightAnswer?: string | null
 }

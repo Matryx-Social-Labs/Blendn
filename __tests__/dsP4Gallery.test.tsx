@@ -47,7 +47,6 @@ const CELLS = [
   'ds-open-session-ending',
   'ds-open-expiry-plus',
   'ds-expiry-notlive',
-  'ds-overlap-post',
   'ds-badge-all',
   'ds-open-tonight-pending',
   'ds-plan-list',

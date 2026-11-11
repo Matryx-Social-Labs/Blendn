@@ -16,7 +16,6 @@ import { ManageStatusRow, type PlusStatus } from '../../components/ds/ManageStat
 import { NeverForSalePanel } from '../../components/ds/NeverForSalePanel'
 import { NotificationRow, type NotificationRowProps } from '../../components/ds/NotificationRow'
 import { OfferCard } from '../../components/ds/OfferCard'
-import { OverlapLine } from '../../components/ds/OverlapLine'
 import { NightPassRow, PlanCard, PlanList } from '../../components/ds/PlanCard'
 import { RevealSheet, RevealSide, type RevealPerson } from '../../components/ds/RevealSheet'
 import { SessionSheet, type SessionTime } from '../../components/ds/SessionSheet'
@@ -61,7 +60,6 @@ export default function DsP4Preview() {
         <GoLive />
         <Session />
         <Expiry />
-        <Overlap />
         <Badges />
         <Tonight />
         <Plans />
@@ -519,47 +517,6 @@ function Expiry() {
 }
 
 // ── Matching v2 (Flow 14) ───────────────────────────────────────────────────
-
-function Overlap() {
-  return (
-    <Section title="OverlapLine" note="The server’s sentence, never a score · 2 labels before a reveal, 4 after · nothing when there’s nothing">
-      <Cell label="before a reveal · 2 labels" testID="ds-overlap-pre">
-        <OverlapLine
-          line="You both picked Filter coffee over Chai"
-          labels={[
-            { text: 'Filter coffee', shared: true },
-            { text: 'Friendship', shared: true },
-            { text: 'Kannada', shared: true },
-          ]}
-        />
-      </Cell>
-      <Cell label="after a reveal · 4 labels" testID="ds-overlap-post">
-        <OverlapLine
-          revealed
-          line="Both from Tamil Nadu"
-          labels={[
-            { text: 'Tamil Nadu', shared: true },
-            { text: 'Filter coffee', shared: true },
-            { text: 'CSK', shared: true },
-            { text: 'Friendship', shared: true },
-          ]}
-        />
-      </Cell>
-      <Cell label="weak · one shared, one not" testID="ds-overlap-weak">
-        <OverlapLine line="You both picked Cubbon Park over Lalbagh" labels={[{ text: 'Cubbon Park', shared: true }, { text: 'Leo' }]} />
-      </Cell>
-      <Cell label="intent only" testID="ds-overlap-intent">
-        <OverlapLine line="Both here to make friends" labels={[{ text: 'Friendship', shared: true }]} />
-      </Cell>
-      <Cell label="crew · crew-held" testID="ds-overlap-crew">
-        <OverlapLine line="Both crews: Techno heads · out for friendship" labels={[{ text: 'Techno heads', shared: true }, { text: 'Friendship', shared: true }]} />
-      </Cell>
-      <Cell label="none · the card has no line" testID="ds-overlap-none">
-        <OverlapLine line={null} />
-      </Cell>
-    </Section>
-  )
-}
 
 function Badges() {
   const [meaning, setMeaning] = useState<string | null>(null)

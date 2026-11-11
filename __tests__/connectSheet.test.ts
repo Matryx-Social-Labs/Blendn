@@ -110,18 +110,16 @@ describe('the card keeps the two actions apart', () => {
     /*
      * The safe, symmetric, reversible action is the easy one. Making the button
      * with a cost the more attractive one is how people reveal themselves by
-     * reflex. Like is the gradient primary; Message a lit action after it, a size smaller.
+     * reflex. P-A (Flow 5 `personActions`): Wave · Message · Like level at 52, Like lit in the room's hue, Message quiet.
      */
     const src = CARD()
     const actions = src.slice(src.indexOf("testID={id('actions')}"))
     const like = actions.indexOf('label="Like"')
     const message = actions.indexOf('label="Message"')
     expect(like).toBeGreaterThan(-1)
-    expect(like).toBeLessThan(message)
-    // The Button's default kind is primary (the gradient, at 56); Message is lit, at 48.
-    expect(actions.slice(like, actions.indexOf('/>', like))).not.toContain('kind=')
-    expect(actions.slice(message, actions.indexOf('/>', message))).toContain('kind="lit"')
-    expect(actions.slice(message, actions.indexOf('/>', message))).toContain('size="md"')
+    expect(message).toBeLessThan(like)
+    expect(actions.slice(like, actions.indexOf('/>', like))).toContain('kind="lit"')
+    expect(actions.slice(message, actions.indexOf('/>', message))).toContain('kind="secondary"')
   })
 
   it('tells a screen reader what each one costs', () => {

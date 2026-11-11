@@ -257,6 +257,8 @@ export type SheetProps = {
   actions?: SheetAction[]
   /** The detents a drag may settle on, opening at the first. Omit for a tray as tall as its content. */
   detents?: readonly Detent[]
+  /** The content sits on the home-indicator inset alone, without the usual 8 above it (the P-A person sheet's actions). */
+  flush?: boolean
   /** Between the body and the actions: a reason list, a form. It scrolls with the title and body when the sheet is at its cap. */
   children?: ReactNode
   /**
@@ -554,7 +556,7 @@ function useSheetMotion({
  *
  * ponytail: the material does not grow more opaque near full height.
  */
-export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, header, body, icon, art, actions = [], detents, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
+export function Sheet({ visible: wanted, onClose, title, headerAction, headerNote, header, body, icon, art, actions = [], detents, flush = false, children, dismissible = true, focusRef, onDismissed, onShown, testID }: SheetProps) {
   const android = Platform.OS === 'android'
   /*
    * One Modal on screen at a time on iOS (`lib/modalTurn.ts`, RC drive 4 D-9): asked for, `visible` waits for the
@@ -884,7 +886,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
               style={[
                 styles.sheet,
                 fixedHeight && styles.fill,
-                { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp), ...(fixedHeight ? null : { maxHeight: frame.maxHeight }) },
+                { paddingBottom: sheetBottomPadding(insets.bottom, keyboardUp) - (flush ? SPACE.sm : 0), ...(fixedHeight ? null : { maxHeight: frame.maxHeight }) },
                 contrast && IC_HAIRLINE,
               ]}
             >

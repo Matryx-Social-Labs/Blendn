@@ -198,7 +198,7 @@ const openFromGrid = async (i: number) => {
 }
 
 describe('the PersonCard, from every room surface (R3-D4 4.1)', () => {
-  it('a grid face opens it: their name, their reasons, Like · Wave · Message · ⋯ · View profile', async () => {
+  it('a grid face opens it: their name, Wave · Message · Like, ⋯, and the head opens their profile', async () => {
     await drawRoom()
     await openFromGrid(3)
     expect(card()).toBeTruthy()
@@ -206,7 +206,7 @@ describe('the PersonCard, from every room surface (R3-D4 4.1)', () => {
     expect(screen.getByRole('button', { name: 'Wave at Person p3' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Message' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Block or report Person p3' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'View profile' })).toBeTruthy()
+    expect(screen.getByTestId('person-card-card-head').props.accessibilityHint).toBe('Opens their profile')
   })
 
   /*
