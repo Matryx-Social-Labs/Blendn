@@ -152,6 +152,33 @@ it('named: their face and name, “Shown to you · 31”, and the same lens bloc
   expect(screen.getByText('Here to hire')).toBeTruthy()
 })
 
+it('named: their bio follows as one card in the In-common voice, About, Interests, Work (owner pick r1 C), not the old profile body', async () => {
+  handRoomPerson('rh_bison', card())
+  await open({ ...ANON, name: 'Marc-André', identityVisible: true, photos: ['https://cdn/marc.jpg'], bio: 'Architect by day, zine-maker by night.', interests: ['Printmaking', 'Sketching'], occupation: 'Studio lead' }, { pseudonym: 'Gentle Bison' }, 'Marc-André')
+  const bio = await screen.findByTestId('profile-lens-bio')
+  const t = JSON.stringify(bio)
+  const seq = ['About', 'Architect by day, zine-maker by night.', 'Interests', 'Printmaking', 'Sketching', 'Work', 'Studio lead']
+  const idx = seq.map((x) => t.indexOf(x))
+  expect(idx.every((i) => i >= 0)).toBe(true)
+  expect([...idx].sort((a, b) => a - b)).toEqual(idx)
+  expect(tree()).not.toContain('OCCUPATION')
+  expect(screen.queryByTestId('profile-lens-empty')).toBeNull()
+})
+
+it('anonymous: no bio card, whatever arrives', async () => {
+  handRoomPerson('rh_bison', card())
+  await open({ ...ANON, bio: 'leaked bio' })
+  expect(screen.queryByTestId('profile-lens-bio')).toBeNull()
+  expect(tree()).not.toContain('leaked bio')
+})
+
+it('a venue night with nothing in common says so quietly (owner pick r2 A); a page with blocks does not (control: the first test)', async () => {
+  handRoomPerson('rh_bison', card({ workField: null, sharedIntents: [], interests: [] }))
+  await open({ ...ANON, tonight: { lens: { key: 'venue_night', question: null }, answer: null, workIntent: null } })
+  expect(screen.getByTestId('profile-lens-empty')).toBeTruthy()
+  expect(screen.getByText('Nothing on your profiles in common yet.')).toBeTruthy()
+})
+
 it('a card handed for somebody else is never drawn on this page: the Tonight card alone (the control is the first test)', async () => {
   handRoomPerson('rh_someone_else', card({ workField: 'Someone else’s field' }))
   await open(ANON)
@@ -161,6 +188,19 @@ it('a card handed for somebody else is never drawn on this page: the Tonight car
   expect(screen.getByText('A map of every quiet café in Toronto')).toBeTruthy()
   // The pick is the server's, so it still leads.
   expect(screen.getByText('Here to hire')).toBeTruthy()
+})
+
+it('while the wave sends, the hand waves as the sheet’s does (owner pick r3 A), not a spinner', async () => {
+  handRoomPerson('rh_bison', card())
+  await open(ANON)
+  let land: (v: unknown) => void = () => {}
+  api.sendWave.mockReturnValue(new Promise((r) => { land = r }) as never)
+  await fireEvent.press(screen.getByTestId('profile-wave'))
+  expect(screen.getByTestId('profile-wave-hand')).toBeTruthy()
+  expect(screen.getByTestId('profile-wave').props.accessibilityState).toMatchObject({ disabled: true })
+  await act(async () => { land({ success: true, data: { sent: true } }) })
+  expect(screen.queryByTestId('profile-wave-hand')).toBeNull()
+  expect(await screen.findByText('Waved')).toBeTruthy()
 })
 
 it('Wave waves at them in this room, and then reads Waved', async () => {

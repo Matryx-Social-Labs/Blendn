@@ -380,7 +380,7 @@ const WAVE_DEGREES = 14
 const WAVE_MS = 600
 const WAVE_TURNS = 2
 
-function WavingHand({ testID }: { testID?: string }) {
+export function WavingHand({ testID }: { testID?: string }) {
   const reduceMotion = useReducedMotion()
   const t = useSharedValue(0)
   useEffect(() => {

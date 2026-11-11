@@ -101,6 +101,20 @@ describe('the other lenses', () => {
     expect(screen.getByText('Things in common')).toBeTruthy()
     expect(q('p-lead-0')?.props.accessibilityLabel ?? '').not.toContain('Product design')
   })
+  it('venue night with nothing in common: one quiet line, not an empty sheet (owner pick r2 A; the control is the venue test above)', async () => {
+    await draw(bison({ key: 'venue_night', question: null }, { sharedIntents: [], interests: [], workField: '' }))
+    expect(q('p-empty')).toBeTruthy()
+    expect(screen.getByText('Nothing on your profiles in common yet.')).toBeTruthy()
+    expect(screen.getByText('A wave is the lightest hello.')).toBeTruthy()
+  })
+  it('anything to show keeps the quiet line away', async () => {
+    await draw(bison({ key: 'venue_night', question: null }))
+    expect(q('p-empty')).toBeNull()
+    await draw(bison(work, { sharedIntents: [], interests: [], workField: '', workIntent: null }))
+    expect(q('p-tonight')).toBeTruthy()
+    expect(q('p-empty')).toBeNull()
+  })
+
   it('no lens: the plain profile, no lead pills and no question', async () => {
     await draw(bison(null))
     expect(q('p-lead')).toBeNull()

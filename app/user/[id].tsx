@@ -44,6 +44,7 @@ import { useFriendAsk } from '../../lib/useFriendAsk'
 import { askPushInContext } from '../../lib/pushAsk'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { LensBlocks } from '../../components/ds/LensBlocks'
+import { WavingHand } from '../../components/ds/PersonCard'
 import { ProfileLensHero } from '../../components/profile/ProfileLensHero'
 import { lensView, parseLens, parseWorkIntent, type RoomLens, type WorkIntent } from '../../lib/roomLens'
 import { roomPersonFor } from '../../lib/roomPersonHandoff'
@@ -748,17 +749,14 @@ function UserProfileInner() {
             {lensBlocks ? (
               <View testID="profile-lens-page" style={[styles.lensPage, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + LENS_PAGE_TOP }]}>
                 <ProfileLensHero testID="profile-lens-hero" photo={revealed ? (photos[0] ?? null) : null} seed={identity.seed} name={identity.name} meta={lensBlocks.meta} />
-                <LensBlocks lead={lensBlocks.lead} tonight={lensBlocks.tonight} common={lensBlocks.common} testID="profile-lens" />
-                {revealed ? (
-                  <ProfileBody
-                    facts={{ bio: profile?.bio, interests: profile?.interests, sharedInterests: profile?.sharedInterests, about: profile?.about, occupation: profile?.occupation, education: profile?.education, photos }}
-                    badges={badges.length > 0 ? <BadgeRow badges={badges} /> : null}
-                    columnWidth={columnWidth}
-                    onPressPhoto={(i, from) => setViewer({ index: i, from })}
-                    onBlockTop={onBlockTop}
-                    empty={null}
-                  />
-                ) : null}
+                <LensBlocks
+                  lead={lensBlocks.lead}
+                  tonight={lensBlocks.tonight}
+                  common={lensBlocks.common}
+                  // Owner pick r1 C: once they have shown you who they are, their bio as one card in the lens's voice.
+                  bio={revealed ? { about: profile?.bio, interests: profile?.interests, work: profile?.occupation } : null}
+                  testID="profile-lens"
+                />
               </View>
             ) : (
             <>
@@ -836,11 +834,11 @@ function UserProfileInner() {
               kind="secondary"
               size="dock"
               onGlass
-              icon={waved === 'waved' ? 'check' : 'hand'}
+              // Owner pick r3 A: while it sends, the hand waves as the sheet's does (#51), not a spinner.
+              leading={waved === 'busy' ? <WavingHand testID="profile-wave-hand" /> : <Icon name={waved === 'waved' ? 'check' : 'hand'} size={ICON.control} />}
               label={waved === 'waved' ? 'Waved' : 'Wave'}
               accessibilityLabel={waved === 'waved' ? `Waved at ${heroTitle}` : `Wave at ${heroTitle}`}
-              disabled={waved === 'waved'}
-              loading={waved === 'busy'}
+              disabled={waved !== 'none'}
               onPress={() => void handleWave()}
               testID="profile-wave"
             />
