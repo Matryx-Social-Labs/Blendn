@@ -38,8 +38,11 @@ export function lockFor(errorCode: string | null | undefined, serverText?: strin
       const state: ComposerState = /opens 24 hours|opens when the doors open/i.test(text) ? 'notopen' : /no longer available/i.test(text) ? 'hidden' : 'closed'
       return { state, reason: serverText }
     }
-    case 'RATE_LIMITED':
+    // A burst's refusal is a sentence for a person (`ModerationResult.message`): shown as the server wrote it, inside the field
+    // (Flow 5 F-A). The bare 429 says "Too many requests", the API's words, so the composer keeps its own.
     case 'SPAM_BLOCKED':
+      return serverText ? { state: 'ratelimited', reason: serverText } : { state: 'ratelimited' }
+    case 'RATE_LIMITED':
       return { state: 'ratelimited' }
     default:
       return null

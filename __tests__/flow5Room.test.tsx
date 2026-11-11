@@ -332,7 +332,7 @@ describe('the newest chip counts a message once', () => {
     })
     await flush()
     // Assert
-    expect(screen.getByLabelText('1 new, jump to the newest')).toBeTruthy()
+    expect(screen.getByLabelText('1 new message, jump to the newest')).toBeTruthy()
   })
 })
 

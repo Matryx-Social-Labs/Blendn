@@ -349,7 +349,9 @@ describe('the send button does not pretend the message is still in flight', () =
   })
 
   it('locks a DM for the server’s cooldown when it rate-limits or spam-blocks', () => {
-    expect(LOCK()).toMatch(/case 'RATE_LIMITED':\s*case 'SPAM_BLOCKED':\s*return \{ state: 'ratelimited' \}/)
+    // Both lock as `ratelimited`; a burst carries its sentence (Flow 5 F-A, flow5ChatBubbles.test.tsx).
+    expect(LOCK()).toMatch(/case 'SPAM_BLOCKED':\s*return serverText \? \{ state: 'ratelimited', reason: serverText \} : \{ state: 'ratelimited' \}/)
+    expect(LOCK()).toMatch(/case 'RATE_LIMITED':\s*return \{ state: 'ratelimited' \}/)
     expect(DM()).toContain('composer.apply(result.errorCode, result.retryAfter, result.error)')
   })
 

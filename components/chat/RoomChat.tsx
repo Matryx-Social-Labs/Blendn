@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { AccessibilityInfo, FlatList, Platform, StyleSheet, useWindowDimensions, View, type ViewToken } from 'react-native'
+import { AccessibilityInfo, FlatList, Platform, StyleSheet, useWindowDimensions, View, type NativeScrollEvent, type ViewToken } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -57,7 +57,7 @@ import { queryCache } from '../../lib/queryCache'
 import { toggleReaction, withMine } from '../../lib/reactions'
 import { isMuted, markRoomJoined, markRoomLeft, roomSubtitle, useRoomMembership, useRoomMute } from '../../lib/roomMembership'
 import { opensRoomCard, roomCardRoute } from '../../lib/roomCard'
-import { isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
+import { hangsChips, isSpeech, isTemp, roomMessageFromSocket, roomMessagesFrom, type RoomMessage as Message } from '../../lib/roomMessages'
 import { useHereCount, useRoomRow, type RoomRow } from '../../lib/roomRow'
 import { blockStep, messageReportStep } from '../../lib/safetyUtils'
 import { REMOVED_AFTER_DELIVERY, sendOutcome } from '../../lib/sendOutcome'
@@ -88,11 +88,13 @@ import { isOffline, useWaitingSends } from '../../lib/useWaitingSends'
 import { userMessage } from '../../lib/userMessage'
 
 type ChatListItem = ({ kind: 'message' } & Message) | { kind: 'separator'; id: string; label: string }
+const prevMessage = (i: ChatListItem | undefined) => (i?.kind === 'message' ? i : undefined)
 
 let _tempIdCounter = 0
 const MESSAGES_CACHE_TTL = 60 * 1000
 /** Read as "at the newest": the reader is within this of the end. */
 const AT_END = 80
+const atEndOf = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
 /** iOS dismisses the keyboard interactively with the drag; Android on the drag (R3-D5 5.3). */
 const KEYBOARD_DISMISS = Platform.OS === 'ios' ? 'interactive' : 'on-drag'
 const REACTION_INDEX = Object.fromEntries(CHAT_REACTIONS.map((e, i) => [e, i])) as Record<string, number>
@@ -946,6 +948,19 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
     [handlersRef]
   )
 
+  /*
+   * Where the list is, from every reading: onScroll, and where a drag or a jump came to rest. The rest is the one to
+   * trust: onScroll is throttled with no trailing event, so the pill's jump could land at the end unreported and leave
+   * the arrow up and the next arrival counted (driven 2026-11-11, Android).
+   */
+  const noteOffset = (n: NativeScrollEvent) => {
+    const atBottom = atEndOf(n)
+    isAtBottomRef.current = atBottom
+    follow.noteAtEnd(atBottom)
+    setAwayFromEnd(!atBottom)
+    if (atBottom) setNewWhileAway(0)
+  }
+
   const renderChatItem = ({ item, index }: { item: ChatListItem; index: number }) => {
     if (item.kind === 'separator') return <Animated.View entering={arrive}><DayPill text={item.label} /></Animated.View>
     const place = runPlace(chatItems, index, (i) => (i.kind === 'message' && isSpeech(i) ? i.sender_id : null), (i) => (i.kind === 'message' ? stamp(i) : 0))
@@ -962,6 +977,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
         senderTappable={eventRoom || opensRoomCard(roomKind)}
         eventId={eventRoom ? roomInfo.eventId : null}
         pollViewable={viewablePolls.has(item.message_id)}
+        afterChips={hangsChips(prevMessage(chatItems[index - 1]))}
         handlers={handlers}
       />
       </Animated.View>
@@ -1107,14 +1123,17 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
                 follow.onScrollBeginDrag()
                 setLobbyFolded(true)
               }}
-              onScroll={(e) => {
-                const { contentSize, contentOffset, layoutMeasurement } = e.nativeEvent
-                const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
-                isAtBottomRef.current = atBottom
-                follow.noteAtEnd(atBottom)
-                setAwayFromEnd(!atBottom)
-                if (atBottom) setNewWhileAway(0)
+              // A reader's own gesture decides where it came to rest; its first events near the end must not re-arm the follow.
+              onScrollEndDrag={(e) => {
+                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                noteOffset(e.nativeEvent)
               }}
+              onMomentumScrollBegin={follow.onScrollBeginDrag}
+              onMomentumScrollEnd={(e) => {
+                follow.onGestureEnd(atEndOf(e.nativeEvent))
+                noteOffset(e.nativeEvent)
+              }}
+              onScroll={(e) => noteOffset(e.nativeEvent)}
               scrollEventThrottle={80}
             />
             </View>
@@ -1122,7 +1141,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
             {awayFromEnd && messages.length ? (
               <NewestChip
                 count={newWhileAway}
-                bottom={dockHeight + dockBottom + SPACE.lg}
+                // F-A: 24 above the composer (`.xnew`, bottom 112 over an 88 pt dock).
+                bottom={dockHeight + dockBottom + SPACE.xl}
                 onPress={() => {
                   setNewWhileAway(0)
                   scrollToBottom(true)
@@ -1225,7 +1245,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
   fill: { flex: 1 },
-  listContent: { paddingHorizontal: SPACE.gutter, flexGrow: 1, justifyContent: 'flex-end' },
+  // F-A: the feed runs 16 from each edge (`.xfeed`), so a host card and a run are 361 wide on a 393 phone.
+  listContent: { paddingHorizontal: SPACE.lg, flexGrow: 1, justifyContent: 'flex-end' },
   listHead: { gap: SPACE.lg, paddingBottom: SPACE.lg },
   typing: { marginTop: SPACE.lg },
   centre: { flexGrow: 1, justifyContent: 'center' },

@@ -1,8 +1,8 @@
 /*
  * <ChatBubble> (guidelines/components/ChatBubble.html; ROUND3 C6, D 5.1, 5.2,
  * 5.8, 5.11; motion #35, #36) and the rules it applies (chatShared): grouping
- * (the name on the first, the creature, the time and the tail on the last);
- * inbound on surfaceSunken, yours on surfaceRaised; a DM has no names or
+ * (the name on the first, the creature and the tail on the last; Flow 5 F-A:
+ * no time in a room); inbound on surface, yours violet; a DM has no names or
  * creatures and carries the receipt; removed, failed, waiting, emoji-only,
  * links; the hold (H.longPress, the menu at the bubble's frame) and the swipe
  * to reply (H.threshold once per crossing); a screen reader's actions.
@@ -153,21 +153,21 @@ describe('the rules', () => {
 })
 
 describe('<ChatBubble>', () => {
-  it('inbound, the first of a group: the name (a button to their card) and no creature, time or tail yet', async () => {
+  // Flow 5 F-A: the name is inside the bubble (a touch target to their card; a screen reader's "View profile").
+  it('inbound, the first of a group: the name (a touch to their card) and no creature or tail yet', async () => {
     const onSenderPress = jest.fn()
     await render(bubble({ first: true, last: false, onSenderPress }))
-    await fireEvent.press(screen.getByRole('button', { name: 'Cosmic Panda' }))
+    await fireEvent.press(screen.getByTestId('b-name', { includeHiddenElements: true }))
     expect(onSenderPress).toHaveBeenCalledTimes(1)
     expect(screen.queryByTestId('b-avatar', { includeHiddenElements: true })).toBeNull()
-    expect(screen.queryByText('9:38 PM', { includeHiddenElements: true })).toBeNull()
-    expect(flat('b-bubble')).toMatchObject({ backgroundColor: COLOR.surfaceSunken, borderBottomLeftRadius: 20 })
+    expect(flat('b-bubble')).toMatchObject({ backgroundColor: COLOR.surface, borderBottomLeftRadius: 20 })
   })
 
-  it('inbound, the last: the creature, the time once, the 6 pt tail on the left', async () => {
+  it('inbound, the last: the creature and the 6 pt tail on the left; a room draws no time (F-A)', async () => {
     await render(bubble({ first: false, last: true }))
     expect(screen.queryByText('Cosmic Panda')).toBeNull()
     expect(screen.getByTestId('b-avatar', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByText('9:38 PM', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('9:38 PM', { includeHiddenElements: true })).toBeNull()
     expect(flat('b-bubble').borderBottomLeftRadius).toBe(6)
   })
 
@@ -185,9 +185,9 @@ describe('<ChatBubble>', () => {
     expect(onSenderPress).toHaveBeenCalledTimes(1)
   })
 
-  it('yours: surfaceRaised, the tail on the right, no name or creature', async () => {
+  it('yours: violet (F-A), the tail on the right, no name or creature', async () => {
     await render(bubble({ mine: true }))
-    expect(flat('b-bubble')).toMatchObject({ backgroundColor: COLOR.surfaceRaised, borderBottomRightRadius: 6 })
+    expect(flat('b-bubble')).toMatchObject({ backgroundColor: COLOR.selectionVioletFill, borderBottomRightRadius: 6 })
     expect(screen.queryByTestId('b-avatar', { includeHiddenElements: true })).toBeNull()
     expect(message().props.accessibilityLabel).toBe('You, Rumours side two. Fight me., 9:38 PM')
   })
@@ -452,7 +452,7 @@ describe('the press squash waits for a touch that stays (audit L2: bubbles flick
 
 describe('the bubble’s time (DS-09 C16, DS-18 C31)', () => {
   it('sets "1:12 PM" with its space in the brand face', async () => {
-    await render(bubble({ time: '1:12 PM' }))
+    await render(bubble({ surface: 'dm', time: '1:12 PM' }))
     const time = screen.getByText('1:12 PM', { includeHiddenElements: true })
     const space = time.children.find((c) => typeof c !== 'string' && c.props.children === ' ') as unknown as { props: { style: { fontFamily?: string } } }
     expect(StyleSheet.flatten(space.props.style).fontFamily).toBe(FONT_FAMILY.brand[500])
@@ -462,7 +462,7 @@ describe('the bubble’s time (DS-09 C16, DS-18 C31)', () => {
     const window = Dimensions.get('window')
     try {
       await act(async () => Dimensions.set({ window: { ...window, fontScale: AX_XXXL }, screen: { ...window, fontScale: AX_XXXL } }))
-      await render(bubble({ time: '1:12 PM' }))
+      await render(bubble({ surface: 'dm', time: '1:12 PM' }))
       expect(screen.getByText('1:12 PM', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
       expect(uncapped(screen.toJSON())).toEqual([])
     } finally {

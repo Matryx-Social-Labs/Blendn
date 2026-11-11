@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FlatList, Platform, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { FlatList, Platform, StyleSheet, useWindowDimensions, View, type NativeScrollEvent } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -364,6 +364,15 @@ function PrivateChatInner() {
         if (!cursor) setLoadError(true)
       })
       .finally(() => setLoading(false))
+
+  /* Where the list is, from onScroll and from where a drag or the pill's jump came to rest. */
+  const noteOffset = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => {
+    const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
+    isAtBottomRef.current = atBottom
+    follow.noteScroll(atBottom)
+    setAwayFromEnd(!atBottom)
+    if (atBottom) setNewWhileAway(0)
+  }
 
   /** Older pages until the first unread is on screen — at most three more. */
   const loadBackTo = async (messageId: string, cursor: string) => {
@@ -884,13 +893,10 @@ function PrivateChatInner() {
                 ruleHeldRef.current = false
                 follow.onScrollBeginDrag()
               }}
-              onScroll={(e) => {
-                const { contentSize, contentOffset, layoutMeasurement } = e.nativeEvent
-                const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
-                isAtBottomRef.current = atBottom
-                follow.noteScroll(atBottom)
-                setAwayFromEnd(!atBottom)
-                if (atBottom) setNewWhileAway(0)
+              onScroll={(e) => noteOffset(e.nativeEvent)}
+              // Where a drag or the pill's jump came to rest: onScroll's last reading can be throttled away (driven 2026-11-11).
+              onMomentumScrollEnd={(e) => {
+                noteOffset(e.nativeEvent)
               }}
               scrollEventThrottle={80}
             />

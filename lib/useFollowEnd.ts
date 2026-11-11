@@ -15,7 +15,12 @@ import type { FlatList, ScrollView } from 'react-native'
 export interface FollowEnd {
   onContentSizeChange: () => void
   onScrollBeginDrag: () => void
-  /** Back at the end: follow again. */
+  /**
+   * The reader's drag or its momentum has come to rest (`onScrollEndDrag`, `onMomentumScrollEnd`): where it stopped
+   * decides. Mid-gesture, "at the end" is ignored: a drag that starts at the end reports it for its first events.
+   */
+  onGestureEnd: (atEnd: boolean) => void
+  /** Back at the end: follow again (never mid-gesture). */
   noteAtEnd: (atEnd: boolean) => void
   /**
    * From `onScroll`. Once `stop`ped, only a reader's own drag lets it follow again: a jump that lands short of a list
@@ -29,6 +34,7 @@ export interface FollowEnd {
 export function followEnd(scrollToEnd: () => void): FollowEnd {
   let following = true
   let held = false
+  let gesture = false
   return {
     onContentSizeChange: () => {
       if (following) scrollToEnd()
@@ -36,9 +42,15 @@ export function followEnd(scrollToEnd: () => void): FollowEnd {
     onScrollBeginDrag: () => {
       following = false
       held = false
+      gesture = true
+    },
+    onGestureEnd: (atEnd) => {
+      gesture = false
+      following = atEnd
+      held = false
     },
     noteAtEnd: (atEnd) => {
-      if (!atEnd) return
+      if (!atEnd || gesture) return
       following = true
       held = false
     },

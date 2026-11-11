@@ -100,7 +100,6 @@ describe('<Composer>', () => {
     ['muted', 'Muted. The organizer has muted you in this room.'],
     ['automuted', 'Muted. You are muted in this room. Your messages have been flagged for policy violations.'],
     ['closed', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
-    ['ratelimited', 'Slow down a moment. Too many messages.'],
     // R2-D2: the two CHAT_CLOSED reasons the server words apart.
     ['notopen', 'Not open yet. The room opens when the doors open.'],
     ['hidden', 'This room is hidden. This event is no longer available.'],
@@ -133,7 +132,9 @@ describe('<Composer>', () => {
     expect(screen.queryByText('43:00')).toBeNull()
     await screen.rerender(composer({ state: 'ratelimited', countdown: '0:12' }))
     expect(screen.getByText('0:12')).toBeTruthy()
-    expect(screen.getByLabelText('Slow down a moment. Too many messages.').props.accessibilityHint).toBe('You can post again in 0:12')
+    // F-A: the field stays (typeable), the line inside it; Send waits.
+    expect(screen.getByLabelText('Message')).toBeTruthy()
+    expect(screen.getByText(/^Slow down a moment\. Too many messages\. 0:12$/).props.accessibilityHint).toBe('You can post again in 0:12')
   })
 
   it('the server’s own sentence replaces the default', async () => {

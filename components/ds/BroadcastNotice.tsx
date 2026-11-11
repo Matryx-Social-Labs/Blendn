@@ -5,15 +5,35 @@ import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from '
 
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { RadialWash, type RadialLayer } from '../ui/GradientFill'
+import { tint } from '../../lib/theme'
+import { BUBBLE_TYPE } from './ChatBubble'
 import { IconButton } from './IconButton'
 import { BUBBLE, plural, timeFont } from './chatShared'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, SELECTION, useBoldText, useIncreaseContrast } from './shared'
 
 /** The page's media corner (12) and the announcement's mark (a 28 pt white square, 8 pt corners). */
 const MEDIA_RADIUS = 12
 const MARK = 28
 /** Media keeps a 16:9 slot (ROUND3 D 5.5's first-frame poster). */
 const MEDIA_RATIO = 16 / 9
+
+/*
+ * The host's card (Flow 5 F-A `.xhost`): ember light from the top-left corner, a 1 pt ember rim at 55%, 10/14 inside it,
+ * the organisation's name and a HOST tag, then the words at the bubble's 16/22 (`BUBBLE_TYPE`). The rim is drawn inside that padding.
+ */
+const EMBER = SELECTION.ember
+// design-exception: `.xhost`'s light, ember at 22% from the top-left corner, gone by 70% (f5.css)
+const HOST_WASH: readonly RadialLayer[] = [{ color: EMBER.edge, alpha: 0.22, at: [0, 0], size: [90, 120], reach: 0.7 }]
+const HOST_RIM = 1
+const HOST_RIM_ALPHA = 0.55
+// design-exception: 10/14 inside the card (`.xhost`), off the 4-pt steps
+const HOST_PAD = { v: 10, h: 14 }
+/** The tag: 20 pt high, 7 at the sides, a 10 pt corner (`.tg`). */
+const TAG = { height: 20, pad: 7, radius: 10 }
+// design-exception: the tag's words are a lighter ember (`.tg` #FFB79A) than the name's glyph ember
+const TAG_INK = '#FFB79A'
+const TAG_TRACKING = 0.4
 
 export type BroadcastMedia =
   | { kind: 'image'; uri: string }
@@ -58,6 +78,7 @@ export function BroadcastNotice({ kind, from, text, time, media, testID }: Broad
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const announcement = kind === 'announcement'
+  if (announcement) return <HostCard from={from} text={text} time={time} media={media} testID={testID} />
   const label = `${announcement ? 'Announcement' : 'Sponsored'} · ${from}`.toUpperCase()
 
   return (
@@ -91,6 +112,47 @@ export function BroadcastNotice({ kind, from, text, time, media, testID }: Broad
       <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} accessibilityElementsHidden importantForAccessibility="no" style={timeFont(bold)}>
         {time}
       </Text>
+    </View>
+  )
+}
+
+/**
+ * The host speaking to the room: the organisation's public name and HOST, never a person or a creature (hosts see and are
+ * seen only as the organisation). Read as one element, "Host, Nightshift Collective: {text}, {time}". No time is drawn
+ * (F-A); a photo keeps its slot under the words.
+ */
+function HostCard({ from, text, time, media, testID }: Omit<BroadcastNoticeProps, 'kind'>) {
+  const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  return (
+    <View testID={testID} style={[styles.host, contrast && IC_HAIRLINE]}>
+      <RadialWash layers={HOST_WASH} style={StyleSheet.absoluteFill} />
+      <View
+        accessible
+        accessibilityLabel={`Host, ${from}: ${text}${media ? `, with a ${media.kind === 'image' ? 'photo' : 'video'}` : ''}, ${time}`}
+        style={styles.hostWords}
+      >
+        <View style={styles.hostHead}>
+          <Icon name="megaphone" size={ICON.inline} color={EMBER.glyph} />
+          <Text
+            testID={testID && `${testID}-host`}
+            numberOfLines={1}
+            maxFontSizeMultiplier={MAX_FONT_SCALE.note}
+            style={[font('note', bold, FONT_FAMILY.brand[500]), styles.hostName]}
+          >
+            {from}
+          </Text>
+          <View style={styles.tag}>
+            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold, FONT_FAMILY.mono[700]), styles.tagText]}>
+              HOST
+            </Text>
+          </View>
+        </View>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), BUBBLE_TYPE, styles.white]}>
+          {text}
+        </Text>
+      </View>
+      {media ? <Media media={media} testID={testID && `${testID}-media`} /> : null}
     </View>
   )
 }
@@ -208,6 +270,21 @@ function Playing({ uri, onEnd, onError }: { uri: string; onEnd: () => void; onEr
 
 const styles = StyleSheet.create({
   card: { borderRadius: BUBBLE.radius, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg, gap: SPACE.sm },
+  host: {
+    borderRadius: BUBBLE.radius,
+    overflow: 'hidden',
+    backgroundColor: COLOR.surface,
+    borderWidth: HOST_RIM,
+    borderColor: tint(EMBER.edge, HOST_RIM_ALPHA),
+    paddingVertical: HOST_PAD.v - HOST_RIM,
+    paddingHorizontal: HOST_PAD.h - HOST_RIM,
+    gap: SPACE.sm,
+  },
+  hostWords: { gap: SPACE.xs },
+  hostHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minWidth: 0 },
+  hostName: { flexShrink: 1, color: EMBER.glyph },
+  tag: { height: TAG.height, paddingHorizontal: TAG.pad, borderRadius: TAG.radius, backgroundColor: EMBER.fill, justifyContent: 'center', flexShrink: 0 },
+  tagText: { color: TAG_INK, letterSpacing: TAG_TRACKING },
   announcement: { backgroundColor: COLOR.surface },
   sponsored: { backgroundColor: COLOR.surfaceSunken, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
   words: { gap: SPACE.sm },

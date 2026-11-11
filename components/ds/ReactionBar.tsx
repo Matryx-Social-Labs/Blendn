@@ -15,11 +15,12 @@ import { scheduleOnRN } from 'react-native-worklets'
 import ScalePress from '../motion/ScalePress'
 import { Material } from '../ui/Material'
 import { CHAT_REACTIONS, type ChatReaction } from '../../lib/chatReactions'
-import { COLOR, DURATION, FONT_FAMILY, RADIUS, SIZE, SPACE, SPRING, STAGGER, TYPE } from '../../lib/design/tokens'
+import { COLOR, DURATION, FONT_FAMILY, RADIUS, SIZE, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { reactionName } from './chatShared'
-import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { compactCount } from '../../lib/format'
+import { font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useSelection } from './shared'
 
 /** Each emoji's target: 44 pt on iOS, 48 dp on Android (the page's 40 pt disc sits inside it). */
 export const REACTION_CELL = minTarget
@@ -31,9 +32,13 @@ const HOT_SCALE = 1.2
 /** #36: the bar springs 0.9 → 1 from its anchor; each emoji 0.6 → 1, 18 ms apart. */
 const BAR_FROM = 0.9
 const EMOJI_FROM = 0.6
-/** The page's 22 pt emoji in the bar, 28 pt pills under a bubble, popping from 85% when yours lands (#37). */
+/** The page's 22 pt emoji in the bar; a 24 pt chip on the bubble's corner (Flow 5 F-A `.rx`), popping from 85% when yours lands (#37). */
 const BAR_EMOJI = 22
-const PILL_HEIGHT = 28
+const PILL_HEIGHT = 24
+// design-exception: the chip pads 7 at the sides (`.rx`), between the 4 and 8 steps
+const PILL_PAD = 7
+/** The ink ring that lifts the chip off the bubble it sits on: outside its box, as the board's spread shadow is. */
+const PILL_RING = 2
 const LAND_FROM = 0.85
 
 export type ReactionBarProps = {
@@ -205,9 +210,10 @@ export type ReactionPillProps = {
 }
 
 /**
- * A reaction under a bubble (the same page): a 28 pt `surfaceSunken` pill
- * with the emoji and, past one, a Geist Mono count; yours has a 1 pt white
- * outline. Read "fire, 3, including you"; the count, never who. A tap gives it
+ * A reaction on a bubble's corner (Flow 5 F-A): a 24 pt `surfaceRaised` chip
+ * in a 2 pt ink ring, the emoji and its Geist Mono count (compact past 999,
+ * "1.2k"); yours is in the screen's hue. Read "fire, 1234, including you":
+ * the count, never who. A tap gives it
  * (`H.reaction('land')`) or takes yours back (silent, as an unlike is). Yours
  * lands with a pop from 0.85 on `M.pop` (#37); under Reduce Motion it simply
  * appears. Its target reaches 44/48 through a hit slop.
@@ -216,6 +222,7 @@ export type ReactionPillProps = {
 export function ReactionPill({ emoji, count, mine, onPress, landed = false, testID }: ReactionPillProps) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
+  const hue = useSelection()
   const pop = useSharedValue(1)
 
   useEffect(() => {
@@ -226,15 +233,14 @@ export function ReactionPill({ emoji, count, mine, onPress, landed = false, test
 
   const label = `${reactionName(emoji)}, ${count}${mine ? ', including you' : ''}`
   const body = (
-    <Animated.View testID={testID} style={[styles.pill, mine && styles.mine, popStyle]}>
-      <Text maxFontSizeMultiplier={1} style={styles.pillEmoji}>
+    <Animated.View testID={testID} style={[styles.pill, mine && { backgroundColor: hue.fill }, popStyle]}>
+      <View pointerEvents="none" style={styles.ring} />
+      <Text maxFontSizeMultiplier={1} style={[font('label', bold), styles.pillText]}>
         {emoji}
       </Text>
-      {count > 1 ? (
-        <Text maxFontSizeMultiplier={1.3} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.count]}>
-          {count}
-        </Text>
-      ) : null}
+      <Text maxFontSizeMultiplier={1.3} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.pillText, styles.count]}>
+        {compactCount(count)}
+      </Text>
     </Animated.View>
   )
   if (!onPress) {
@@ -273,17 +279,23 @@ const styles = StyleSheet.create({
   selected: { backgroundColor: COLOR.selectionFill },
   pill: {
     height: PILL_HEIGHT,
-    paddingHorizontal: SPACE.sm,
+    paddingHorizontal: PILL_PAD,
     borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.surfaceSunken,
+    backgroundColor: COLOR.surfaceRaised,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.xs,
-    // The outline's width always, transparent, so marking yours never shifts the row.
-    borderWidth: 1,
-    borderColor: 'transparent',
   },
-  mine: { borderColor: COLOR.textPrimary },
-  pillEmoji: { ...TYPE.meta },
+  ring: {
+    position: 'absolute',
+    top: -PILL_RING,
+    left: -PILL_RING,
+    right: -PILL_RING,
+    bottom: -PILL_RING,
+    borderRadius: RADIUS.capsule,
+    borderWidth: PILL_RING,
+    borderColor: COLOR.ink,
+  },
+  pillText: { lineHeight: PILL_HEIGHT },
   count: { color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
 })

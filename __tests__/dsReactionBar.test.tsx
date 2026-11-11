@@ -118,16 +118,24 @@ describe('<ReactionBar>', () => {
 })
 
 describe('<ReactionPill>', () => {
-  it('the emoji and a Geist Mono count past one; yours outlined; read with “including you”', async () => {
+  // Flow 5 F-A `.rx`: a 24 pt surfaceRaised chip, yours in the screen's hue (ember outside a HueProvider).
+  it('the emoji and a Geist Mono count; yours in the hue; read with “including you”', async () => {
     await render(<ReactionPill emoji="🔥" count={3} mine onPress={jest.fn()} testID="p" />)
     expect(StyleSheet.flatten(screen.getByText('3').props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
-    expect(StyleSheet.flatten(screen.getByTestId('p').props.style).borderColor).toBe(COLOR.textPrimary)
+    expect(StyleSheet.flatten(screen.getByTestId('p').props.style)).toMatchObject({ height: 24, backgroundColor: COLOR.selectionEmberFill })
     expect(screen.getByRole('button', { name: 'fire, 3, including you' })).toBeTruthy()
   })
 
-  it('one: no count', async () => {
-    await render(<ReactionPill emoji="😂" count={1} mine={false} />)
-    expect(screen.queryByText('1')).toBeNull()
+  it('theirs: surfaceRaised; one still shows its count (a count chip, F-A)', async () => {
+    await render(<ReactionPill emoji="😂" count={1} mine={false} testID="p" />)
+    expect(screen.getByText('1')).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByTestId('p').props.style).backgroundColor).toBe(COLOR.surfaceRaised)
+  })
+
+  it('compact past 999 for the eye, whole for a screen reader', async () => {
+    await render(<ReactionPill emoji="🔥" count={12480} mine={false} />)
+    expect(screen.getByText('12k')).toBeTruthy()
+    expect(screen.getByLabelText('fire, 12480')).toBeTruthy()
   })
 
   it('a tap gives it with H.reaction(land); taking yours back is silent', async () => {

@@ -9,6 +9,8 @@ const mockEnded: Array<(d: { eventId: string; reason: string }) => void> = []
 const mockChanged = new Set<() => void>()
 const mockBanned: Array<(d: { userId: string; banned: boolean }) => void> = []
 const mockRejoin = jest.fn()
+/** The room's message listeners: a test speaks as the socket. */
+const mockMessage: ((d: { message: Record<string, unknown> }) => void)[] = []
 let mockParams: Record<string, string> = { id: 'g1' }
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -60,7 +62,10 @@ jest.mock('../lib/socketClient', () => {
       mockEnded.push(cb)
       return () => {}
     },
-    subscribeToChatMessage: noop,
+    subscribeToChatMessage: (_room: string, cb: never) => {
+      mockMessage.push(cb)
+      return () => {}
+    },
     subscribeToChatTyping: noop,
     subscribeToChatReaction: noop,
     subscribeToChatMessageDeleted: noop,
@@ -87,6 +92,9 @@ jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, defau
 jest.mock('../components/chat/RoomGuidelinesBanner', () => ({ RoomGuidelinesBanner: () => null }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
 jest.mock('../lib/notifications', () => ({ useActiveThread: jest.fn() }))
+/* Every jump to the newest goes through here: a reader's offset moves only if this is called. */
+const mockToEnd = jest.fn()
+jest.mock('../lib/useFollowEnd', () => ({ ...jest.requireActual('../lib/useFollowEnd'), scrollListToEnd: (...a: unknown[]) => mockToEnd(...a) }))
 
 /* eslint-disable import/first */
 import { router } from 'expo-router'
@@ -114,6 +122,7 @@ const flush = async () => {
 
 beforeEach(() => {
   mockEnded.length = 0
+  mockMessage.length = 0
   mockBanned.length = 0
   mockChanged.clear()
   mockParams = { id: 'g1' }
@@ -532,5 +541,106 @@ describe('From the Lobby in the room (SCRUM-1026, H-A)', () => {
     await flush()
     expect(screen.queryByTestId('from-lobby')).toBeNull()
     expect(apiClient.getBoardSummary).not.toHaveBeenCalled()
+  })
+})
+
+describe('arrivals while you read back (Flow 5 F-A, "48 new messages")', () => {
+  const open = () => eventRow({}, { startTime: new Date(Date.now() - HOUR).toISOString() })
+  const history = {
+    success: true,
+    data: {
+      messages: [{ id: 'm0', content: 'Doors are open.', user_id: 'u2', user: { name: 'Night Owl' }, type: 'text', created_at: new Date().toISOString() }],
+      pagination: { hasMore: false, nextCursor: null },
+    },
+  }
+  const at = (y: number) => ({ nativeEvent: { contentSize: { height: 2000 }, contentOffset: { y }, layoutMeasurement: { height: 600 } } })
+  /* A reader's drag from the end: its first events are still within reach of the end (driven 2026-11-10). */
+  const scrollTo = async (y: number) => {
+    const list = screen.getByTestId('room-feed')
+    await fireEvent(list, 'scrollBeginDrag', at(1400))
+    await fireEvent.scroll(list, at(1380))
+    await fireEvent.scroll(list, at(y))
+    await fireEvent(list, 'scrollEndDrag', at(y))
+    await fireEvent(list, 'momentumScrollEnd', at(y))
+  }
+  const arrive = async (id: string) =>
+    act(async () => {
+      for (const cb of mockMessage) cb({ message: { id, userId: 'u3', userName: 'Lunar Fox', content: `hello ${id}`, type: 'text', createdAt: new Date().toISOString() } })
+      // The list lays the new row out: its content grows.
+      fireEvent(screen.getByTestId('room-feed'), 'contentSizeChange', 393, 2100)
+      await new Promise((r) => setTimeout(r, 120))
+    })
+
+  beforeEach(() => {
+    ;(apiClient.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [open()] } })
+    ;(apiClient.getChatMessages as jest.Mock).mockResolvedValue(history)
+  })
+
+  it('read back: the pill counts them, says "new messages", and the list never moves', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    mockToEnd.mockClear()
+    await arrive('m1')
+    await arrive('m2')
+    expect(screen.getByRole('button', { name: '2 new messages, jump to the newest' })).toBeTruthy()
+    expect(screen.getByText(/^2 new messages$/)).toBeTruthy()
+    expect(mockToEnd).not.toHaveBeenCalled()
+    // The pill is the one way down: a tap goes to the newest and clears the count.
+    await fireEvent.press(screen.getByTestId('chat-newest'))
+    expect(mockToEnd).toHaveBeenCalled()
+  })
+
+  it('one is "1 new message"', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    await arrive('m1')
+    expect(screen.getByRole('button', { name: '1 new message, jump to the newest' })).toBeTruthy()
+  })
+
+  // Driven 2026-11-11, Android: after the pill's jump the reader was at the newest, yet the arrow stayed and the next
+  // arrival raised "1 new message". The jump is an animated scroll with momentum events, and its last onScroll (the
+  // one at the end) can be throttled away: where it came to rest is in its momentum end.
+  it('after the pill, where the jump came to rest is the end: the arrow goes and an arrival follows', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    await arrive('m1')
+    await fireEvent.press(screen.getByTestId('chat-newest'))
+    const list = screen.getByTestId('room-feed')
+    await fireEvent(list, 'momentumScrollBegin', at(0))
+    await fireEvent.scroll(list, at(900))
+    await fireEvent(list, 'momentumScrollEnd', at(1400))
+    expect(screen.queryByTestId('chat-newest')).toBeNull()
+    mockToEnd.mockClear()
+    await arrive('m2')
+    expect(mockToEnd).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /new message/ })).toBeNull()
+  })
+
+  // Control: a reader who drags up again during the jump is reading back again.
+  it('a drag during the jump ends it: the next arrival raises the pill', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(0)
+    await arrive('m1')
+    await fireEvent.press(screen.getByTestId('chat-newest'))
+    await scrollTo(300)
+    mockToEnd.mockClear()
+    await arrive('m2')
+    expect(mockToEnd).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '1 new message, jump to the newest' })).toBeTruthy()
+  })
+
+  // Control: at the bottom the same arrival follows the end and raises no count.
+  it('at the bottom: the feed follows the arrival, and no count is raised', async () => {
+    await render(<GroupChat />)
+    await flush()
+    await scrollTo(1400)
+    mockToEnd.mockClear()
+    await arrive('m1')
+    expect(mockToEnd).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /new message/ })).toBeNull()
   })
 })

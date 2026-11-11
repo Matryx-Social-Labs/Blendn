@@ -39,6 +39,9 @@ export const isTemp = (m: Pick<RoomMessage, 'message_id'>) => m.message_id.start
 export const isSpeech = (m: Pick<RoomMessage, 'sender_id' | 'message_type'>) =>
   m.sender_id !== 'system' && m.message_type !== 'announcement' && m.message_type !== 'sponsored' && m.message_type !== 'poll'
 
+/** A bubble that draws reaction chips: their lower half is real space under it, which the next run makes up (RoomFeed). */
+export const hangsChips = (m: RoomMessage | undefined) => !!m && isSpeech(m) && !!m.reactions?.length
+
 /**
  * A sponsored message's media, from the scheduler's metadata: an image, or a
  * video. Only `media_url`, which the server stores after its upload-grant

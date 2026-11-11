@@ -31,10 +31,33 @@ describe('followEnd', () => {
     const f = followEnd(toEnd)
     f.onScrollBeginDrag()
     f.noteAtEnd(false)
+    f.onGestureEnd(false)
     f.onContentSizeChange()
     expect(toEnd).not.toHaveBeenCalled()
 
     f.noteAtEnd(true)
+    f.onContentSizeChange()
+    expect(toEnd).toHaveBeenCalledTimes(1)
+  })
+
+  // Driven 2026-11-10 (Flow 5 C2): a drag that starts at the end reports "at the end" for its first scroll events, and
+  // that re-armed the follow, so the next arrival pulled a reader who had scrolled up back down to it.
+  it('a drag that starts at the end does not re-arm the follow on its way up', () => {
+    const toEnd = jest.fn()
+    const f = followEnd(toEnd)
+    f.onScrollBeginDrag()
+    f.noteAtEnd(true)
+    f.onGestureEnd(false)
+    f.onContentSizeChange()
+    expect(toEnd).not.toHaveBeenCalled()
+  })
+
+  // Control: a gesture that comes to rest at the end follows again.
+  it('a gesture that ends at the end follows again', () => {
+    const toEnd = jest.fn()
+    const f = followEnd(toEnd)
+    f.onScrollBeginDrag()
+    f.onGestureEnd(true)
     f.onContentSizeChange()
     expect(toEnd).toHaveBeenCalledTimes(1)
   })
@@ -45,6 +68,17 @@ describe('followEnd', () => {
     f.stop()
     f.onContentSizeChange()
     expect(toEnd).not.toHaveBeenCalled()
+  })
+})
+
+// Driven 2026-11-11, Android: after the pill's jump the reader was at the newest, yet the arrow stayed and the next
+// arrival raised "1 new message". The jump's last scroll event can be throttled away; where a scroll came to rest
+// is in its end event, so both screens with the pill read "at the end" from that too (the room's harness drives it).
+describe.each([['the room', 'components/chat/RoomChat.tsx'], ['a DM', 'app/private-chat/[conversationId].tsx']])('%s: where a scroll came to rest', (_, file) => {
+  it('is noted from its end event as well as from onScroll', () => {
+    const src = read(file)
+    expect(src).toMatch(/onMomentumScrollEnd=\{\(e\) => \{[^}]*noteOffset\(e\.nativeEvent\)/)
+    expect(src).toMatch(/onScroll=\{\(e\) => noteOffset\(e\.nativeEvent\)\}/)
   })
 })
 
