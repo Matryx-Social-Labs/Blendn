@@ -365,6 +365,15 @@ function PrivateChatInner() {
       })
       .finally(() => setLoading(false))
 
+  /* Where the list is, from onScroll and from where a drag or the pill's jump came to rest. */
+  const noteOffset = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => {
+    const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
+    isAtBottomRef.current = atBottom
+    follow.noteScroll(atBottom)
+    setAwayFromEnd(!atBottom)
+    if (atBottom) setNewWhileAway(0)
+  }
+
   /** Older pages until the first unread is on screen — at most three more. */
   const loadBackTo = async (messageId: string, cursor: string) => {
     let next: string | null = cursor
@@ -791,13 +800,6 @@ function PrivateChatInner() {
    * Say hi outgrow the frame, so pinning the end hid the opener's faces and "You both said" under the reveal bar on open
    * (RC drive 3 D-A). It opens at its start; the first message (Say hi included) follows the end as before.
    */
-  const noteOffset = ({ contentSize, contentOffset, layoutMeasurement }: NativeScrollEvent) => {
-    const atBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < AT_END
-    isAtBottomRef.current = atBottom
-    follow.noteScroll(atBottom)
-    setAwayFromEnd(!atBottom)
-    if (atBottom) setNewWhileAway(0)
-  }
   const followFeed = feed.length
     ? () => {
         follow.onContentSizeChange()
