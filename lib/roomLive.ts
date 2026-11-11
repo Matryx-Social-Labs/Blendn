@@ -61,6 +61,7 @@ export function attendeeFromMatch(m: RoomAttendee): AttendeeProfile {
     overlaps: m.overlaps ?? [],
     sign: m.sign ?? null,
     badges: m.badges ?? [],
+    tonightAnswer: m.tonightAnswer ?? null,
   }
 }
 

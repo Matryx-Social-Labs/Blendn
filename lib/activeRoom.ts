@@ -41,6 +41,8 @@ import { roomDisplayTitle } from './placeRoom'
 
 export interface RoomAttendee {
   userId: string
+  /** Flow 5 P-A: their answer to tonight's question, for this page only (`MatchCard.tonightAnswer`). */
+  tonightAnswer?: string | null
   displayName: string
   photo: string | null
   sharedInterests: string[]

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentProps, type ComponentRef, type ReactNode, type RefObject } from 'react'
-import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
@@ -7,16 +7,16 @@ import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
-import { AchievementBadge, type AchievementKind } from './AchievementBadge'
+import type { LeadPill } from '../../lib/roomLens'
+import { tint } from '../../lib/theme'
+import { RadialWash } from '../ui/GradientFill'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
-import { InterestChip } from './Chip'
+import { Chip } from './Chip'
 import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
-import { PresenceDot } from './MonoFamily'
-import { OverlapLine, type OverlapLabel } from './OverlapLine'
 import { Sheet } from './Sheet'
-import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
 import { StateScreen } from './StateScreen'
 
 /** ROUND3 D · 4.1: here now · was here · pre-event room · matched · friend · unavailable · thin. */
@@ -28,21 +28,18 @@ export type PersonCardPerson = {
   /** The name the room shows you: the pseudonym unless they're named to you. */
   name: string
   age?: number
-  /** Why they're here, the top reason ("Both into vinyl"). */
-  reason?: string
+  /** Flow 5 P-A, from `lensView`: "Anonymous · 31" under the name. Absent: the age alone. */
+  meta?: string
+  /** "In the room at …" or, on a venue night, "At {place}, {city}": the sheet's first line. */
+  context?: string | null
   /** The thin card's city. */
   city?: string
-  /** Every reason, in the server's order: the panel. */
-  reasons?: string[]
-  chips?: string[]
-  /**
-   * Matching v2 (Flow 14 · 14.1): the server's strongest overlap as one line,
-   * and the shared labels under it (2 before a reveal, 4 after). Absent or
-   * `line: null` draws no line, and the plain `chips` stay.
-   */
-  overlap?: { line: string | null; labels: OverlapLabel[] }
-  /** What their check-ins earned, as the server budgeted it for this card (none in a small room). Read-only pills after the chips. */
-  badges?: AchievementKind[]
+  /** What this room's lens leads with (`leadFor`); the reason to meet is lit. */
+  lead?: LeadPill[]
+  /** Tonight's question and their answer (`tonightCardFor`); null when the room asks nothing or they have not answered. */
+  tonight?: { question: string; answer: string } | null
+  /** "In common" or "Things in common", and what you share (`commonFor`). */
+  common?: { label: string; items: readonly string[] }
 }
 
 export type PersonCardContentProps = {
@@ -86,34 +83,31 @@ export type PersonCardContentProps = {
   testID?: string
 }
 
-const FACE = 112
+/** P-A `personSheet`: the 72 pt face beside the name. */
+const FACE = 72
+/** Tonight's card (`.xq`): rose from the top-left corner, its rim at 55%. */
+const TONIGHT_WASH = [{ color: COLOR.brandRose, alpha: 0.3, at: [0, 0], size: [100, 120], reach: 0.7 }] as const
+const TONIGHT_EDGE = 0.55
 /** #15: a Like button pops 0.85 → 1 on `M.pop` as it turns to Liked. */
 const LIKE_POP_FROM = 0.85
 
 const PRE_EVENT = 'You can only message people from an event you have both attended.'
 
 /**
- * Everything worth knowing before you walk over (guidelines/components/PersonCard.html,
- * ROUND3 D · 4.1–4.3, the R3-D4 delta): the 112 pt face, name and age, why
- * they're here and the presence line, the reasons panel, their chips, then
- * the actions in one row and the consequence under them. The same card from
- * every entry point (a grid face, Meet next, a chat name, a long-press, a room
- * member, the wave row and banner). What the row offers depends on who they
- * are to you, never on why the roster didn't list them (the thin card).
+ * The person sheet (Flow 5 P-A, `pA-*` in element-boxes.json): one sheet from every entry point (a grid face, Meet
+ * next, a chat name, a long-press, a room member, the wave row and banner), the same person through the room's lens.
+ * In reading order: the context line, the 72 pt face with the name and "Anonymous · 31" (the head, which opens their
+ * profile) and ⋯ (Block / Report), the lead pills, Tonight's question with their answer, In common, then the actions.
+ * What the row offers depends on who they are to you, never on why the roster didn't list them (the thin card).
  *
- * - Like: the gradient primary (there is always an event here: here and was),
- *   `H.like` once; Liked is a still white pill. Say hi (matched): `H.primary`.
- * - Wave (here now only): none on the press (#51, R3-D4; the server can't
- *   promise delivery). Busy while it goes; then the label settles to a still
- *   white "Waved" with a check (R3-D4, which Flow 15 #18 defers to). Waved at
- *   you: a still chip and Wave back.
- * - Message (secondary; the ConnectSheet reveals you) or a still Requested.
- *   ⋯ is Block / Report. View profile on every variant but unavailable.
+ * - Wave · Message · Like, level at 52 (the board's `.db`); Like is lit, `H.like` once; Liked is a still lit pill.
+ *   Say hi (matched): `H.primary`. Wave (here now only) is silent (#51); busy, the hand waves; then a still "Waved".
+ *   Waved at you: a still chip and Wave back. Message (the ConnectSheet reveals you) or a still Requested.
+ * - At the largest text the actions stack (NOTES § Person sheet).
  *
- * Read: "{name}, {age}, {reason}, here now", then the actions as buttons.
- * The row wraps rather than truncating a label at 2× text or on a narrow
- * phone. iOS draws its panels in 8% white on the glass sheet, Android in
- * surfaceSunken on the solid one.
+ * The sheet renders only what the caller sent for THIS person (`lensView` over their deck card): it never reaches for
+ * the viewer's own profile, so an anonymous person shows no name, photo, bio or employer. iOS draws its panels in 8%
+ * white on the glass sheet, Android in surfaceSunken on the solid one.
  */
 export function PersonCardContent({
   person,
@@ -172,41 +166,56 @@ export function PersonCardContent({
   }
 
   const thin = variant === 'thin'
-  const line = thin ? person.city : variant === 'friend' ? 'Friend' : person.reason
-  const presence =
-    variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : variant === 'here' || (here && variant !== 'thin') ? 'Here now' : null
-  const heading = [name, age, line, presence?.toLowerCase()].filter((p) => p != null && p !== '').join(', ')
-  // The panel never opens on the reason already under the name (B-R13): the server's top reason is both.
-  const panelReasons = person.reasons?.[0] === person.reason ? (person.reasons?.slice(1) ?? []) : (person.reasons ?? [])
-  const showReasons = !thin && variant !== 'pre' && panelReasons.length > 0
+  const presence = variant === 'was' ? 'Was here' : variant === 'pre' ? 'Going' : null
+  // P-A's meta line ("Anonymous · 31") when the caller put the person through the lens; else the plain age.
+  const meta = thin ? [person.meta ?? age, person.city].filter((x) => x != null && x !== '').join(' · ') : (person.meta ?? (age ? String(age) : ''))
+  const heading = [name, meta.replace(/ · /g, ', '), variant === 'friend' ? 'friend' : null, presence?.toLowerCase()]
+    .filter((p) => p != null && p !== '')
+    .join(', ')
   const note =
     variant === 'pre'
       ? PRE_EVENT
-      : variant === 'matched'
-        ? null
-        : variant === 'friend'
-          ? `Message opens your chat with ${name}.`
-          : isRequested
-            ? `Request sent to ${name}. They’ll see your name and photo.`
-            : crewLike && !isLiked && (variant === 'here' || variant === 'was')
-              ? `A crew like is shown to ${name} as ${crewLike.name}, never as you.`
-              : `${isWaved && variant === 'here' ? 'Waved. ' : ''}Message sends a request and reveals you to ${name}.`
+      : variant === 'friend'
+        ? `Message opens your chat with ${name}.`
+        : isRequested && variant !== 'matched'
+        ? `Request sent to ${name}. They’ll see your name and photo.`
+        : crewLike && !isLiked && (variant === 'here' || variant === 'was')
+          ? `A crew like is shown to ${name} as ${crewLike.name}, never as you.`
+          : null
+  const large = useLargeText()
+  const lead = thin ? [] : (person.lead ?? [])
+  const common = thin ? undefined : person.common
+  const tonight = thin ? null : person.tonight
 
-  const circle = (icon: IconName, label: string, onPress?: () => void, busy = false) => (
+  const circle = (icon: IconName, label: string, onPress?: () => void) => (
     <Control
       testID={id(icon)}
       radius={RADIUS.capsule}
       onPress={onPress}
-      disabled={busy}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ busy, disabled: busy }}
       style={[styles.circle, { backgroundColor: panel }]}
     >
-      {/* Sending a wave: the hand waves (#51, owner-approved for the busy state), never a spinner. */}
-      {busy ? <WavingHand testID={id('hand-waving')} /> : <Icon name={icon} size={ICON.control} />}
+      <Icon name={icon} size={ICON.control} />
     </Control>
   )
+  /** A still state in an action's place (Liked, Waved, Requested): lit or quiet, the action row's height. */
+  const still = (part: string, icon: IconName, label: string, spoken: string, on: boolean, style?: object) => (
+    <Animated.View
+      testID={id(part)}
+      accessible
+      accessibilityRole={part === 'liked' ? 'button' : undefined}
+      accessibilityLabel={spoken}
+      accessibilityState={on ? { selected: true } : undefined}
+      style={[styles.pill, styles.slot, on ? [styles.lit, lit] : { backgroundColor: panel }, style]}
+    >
+      <Icon name={icon} size={ICON.control} color={on ? sel.glyph : COLOR.textSecondary} active={on} />
+      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1} style={[font('button', bold), on ? styles.ink : styles.secondary]}>
+        {label}
+      </Text>
+    </Animated.View>
+  )
+  const row = [styles.actions, large && styles.actionsStacked]
 
   return (
     <View testID={testID} style={styles.card}>
@@ -217,95 +226,122 @@ export function PersonCardContent({
         </View>
       ) : null}
 
-      <View ref={headRef} accessible accessibilityRole="header" accessibilityLabel={heading} style={styles.head}>
-        <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} {...person.face} />
-        <View style={styles.headText}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
-            {name}
-            {age ? (
-              <>
-                {', '}
-                <Text style={[font('title', bold, FONT_FAMILY.mono[700]), styles.tabular]}>{age}</Text>
-              </>
+      {person.context && !thin ? (
+        <Text testID={id('context')} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), { color: quiet }]}>
+          {person.context}
+        </Text>
+      ) : null}
+
+      <View style={styles.headRow}>
+        {/* The head is the sheet's focus target, read first; it opens their profile (the board draws no separate link). */}
+        <Pressable
+          ref={headRef}
+          testID={id('head')}
+          onPress={onViewProfile}
+          disabled={!onViewProfile}
+          accessibilityRole="header"
+          accessibilityLabel={heading}
+          accessibilityHint={onViewProfile ? 'Opens their profile' : undefined}
+          style={styles.head}
+        >
+          <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} {...person.face} />
+          <View style={styles.headText}>
+            <Text testID={id('name')} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
+              {name}
+            </Text>
+            {meta ? (
+              <Text testID={id('meta')} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.metaLine, { color: quiet }]}>
+                {meta}
+              </Text>
             ) : null}
-          </Text>
-          {line ? (
-            <View style={styles.inline}>
-              {variant === 'friend' ? <Icon name="user-check" size={ICON.inline} color={COLOR.textSecondary} /> : null}
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: quiet }]}>{line}</Text>
-            </View>
-          ) : null}
-          {presence ? (
-            <View style={styles.inline}>
-              {variant === 'was' ? (
-                <Icon name="clock" size={ICON.inline} color={COLOR.textSecondary} />
-              ) : variant === 'pre' ? (
-                <Icon name="calendar" size={ICON.inline} color={COLOR.textSecondary} />
-              ) : (
-                <PresenceDot kind="live" testID={id('presence-dot')} />
-              )}
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), { color: quiet }]}>{presence}</Text>
-            </View>
-          ) : null}
-        </View>
+            {presence || variant === 'friend' ? (
+              <View style={styles.inline}>
+                <Icon name={variant === 'was' ? 'clock' : variant === 'pre' ? 'calendar' : 'user-check'} size={ICON.inline} color={COLOR.textSecondary} />
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), { color: quiet }]}>{presence ?? 'Friend'}</Text>
+              </View>
+            ) : null}
+          </View>
+        </Pressable>
+        {circle('ellipsis', `Block or report ${name}`, onMore)}
       </View>
 
-      {showReasons ? (
-        <View testID={id('reasons')} style={[styles.reasons, { backgroundColor: panel }]}>
-          {panelReasons.map((r) => (
-            <View key={r} style={styles.reason}>
-              <Icon name="check" size={ICON.inline} color={COLOR.textSecondary} />
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.shrink]}>{r}</Text>
-            </View>
+      {lead.length ? (
+        <View testID={id('lead')} style={styles.chips}>
+          {lead.map((l, i) => (
+            <Chip key={l.label} label={l.label} icon={l.icon} selected={l.lit} testID={id(`lead-${i}`)} />
           ))}
         </View>
       ) : null}
 
-      {!thin && person.overlap?.line ? (
-        <OverlapLine
-          line={person.overlap.line}
-          labels={person.overlap.labels}
-          revealed={variant === 'matched' || variant === 'friend'}
-          testID={id('overlap')}
-        />
-      ) : !thin && person.chips?.length ? (
-        <View style={styles.chips}>
-          {person.chips.map((c) => (
-            <InterestChip key={c} label={c} />
-          ))}
+      {tonight ? (
+        <View testID={id('tonight')} accessible accessibilityLabel={`${tonight.question} ${tonight.answer}`} style={[styles.tonight, { borderColor: tint(sel.edge, TONIGHT_EDGE) }]}>
+          <RadialWash layers={TONIGHT_WASH} style={StyleSheet.absoluteFill} />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), { color: sel.glyph }]}>{tonight.question}</Text>
+          <Text testID={id('tonight-answer')} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('heading', bold), styles.ink, styles.answer]}>
+            {tonight.answer}
+          </Text>
         </View>
       ) : null}
 
-      {!thin && person.badges?.length ? (
-        <View testID={id('badges')} style={styles.chips}>
-          {person.badges.map((kind) => (
-            <AchievementBadge key={kind} kind={kind} />
-          ))}
+      {common?.items.length ? (
+        <View testID={id('common')} style={styles.common}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), { color: quiet }]}>{common.label}</Text>
+          <View style={styles.chips}>
+            {common.items.map((c) => (
+              <Chip key={c} label={c} icon="check" selected accessibilityLabel={`${c}, shared`} />
+            ))}
+          </View>
         </View>
       ) : null}
 
-      <View testID={id('actions')} style={styles.actions}>
+      <View testID={id('actions')} style={row}>
         {variant === 'matched' ? (
-          <Button label="Say hi" size="md" onPress={onSayHi} style={styles.grow} testID={id('say-hi')} />
-        ) : variant === 'here' || variant === 'was' ? (
+          <Button label="Say hi" size="dock" onPress={onSayHi} style={styles.slot} testID={id('say-hi')} />
+        ) : null}
+
+        {variant === 'here' ? (
+          isWaved ? (
+            still('waved', 'check', 'Waved', 'Waved', true)
+          ) : (
+            <Button
+              label={wavedAtYou && !waveBusy ? 'Wave back' : 'Wave'}
+              kind="secondary"
+              size="dock"
+              leading={waveBusy ? <WavingHand testID={id('hand-waving')} /> : <Icon name="hand" size={ICON.control} />}
+              disabled={waveBusy}
+              pressHaptic={false}
+              accessibilityLabel={wavedAtYou && !waveBusy ? `Wave back at ${name}` : `Wave at ${name}`}
+              onPress={onWave}
+              style={styles.slot}
+              testID={id(wavedAtYou && !waveBusy ? 'wave-back' : 'wave')}
+            />
+          )
+        ) : null}
+
+        {variant === 'pre' || variant === 'matched' ? null : isRequested ? (
+          still('requested', 'check', 'Requested', `Request sent to ${name}`, false, styles.wide)
+        ) : (
+          <Button
+            label="Message"
+            kind="secondary"
+            size="dock"
+            icon="message-circle"
+            pressHaptic={false}
+            accessibilityHint={variant === 'friend' ? undefined : 'Sends a request, which shows them your name and photo.'}
+            onPress={onMessage}
+            style={[styles.slot, styles.wide]}
+            testID={id('message')}
+          />
+        )}
+
+        {variant === 'here' || variant === 'was' ? (
           isLiked ? (
-            <Animated.View
-              testID={id('liked')}
-              accessible
-              accessibilityRole="button"
-              accessibilityLabel="Liked"
-              accessibilityState={{ selected: true }}
-              style={[styles.pill, styles.grow, styles.lit, lit, likedStyle]}
-            >
-              <Icon name="heart" size={ICON.control} color={sel.glyph} active />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
-                Liked
-              </Text>
-            </Animated.View>
+            <Animated.View style={[styles.slot, likedStyle]}>{still('liked', 'heart', 'Liked', 'Liked', true)}</Animated.View>
           ) : crewLike ? (
             <Button
               label={`Like for ${crewLike.name}`}
-              size="md"
+              kind="lit"
+              size="dock"
               leading={crewLike.emblemSeed ? <CrewEmblem seed={crewLike.emblemSeed} size={ICON.nav} /> : undefined}
               icon={crewLike.emblemSeed ? undefined : 'heart'}
               pressHaptic={false}
@@ -314,74 +350,26 @@ export function PersonCardContent({
                 H.like()
                 crewLike.onPress()
               }}
-              style={styles.grow}
+              style={styles.crewLike}
               testID={id('like-crew')}
             />
           ) : (
             <Button
               label="Like"
-              size="md"
-              icon="heart"
+              kind="lit"
+              size="dock"
+              leading={<Icon name="heart" size={ICON.control} color={sel.glyph} />}
               pressHaptic={false}
               accessibilityHint="They’re only told if they like you back."
               onPress={() => {
                 H.like()
                 onLike?.()
               }}
-              style={styles.grow}
+              style={styles.slot}
               testID={id('like')}
             />
           )
         ) : null}
-
-        {variant === 'here' ? (
-          isWaved ? (
-            <View testID={id('waved')} accessible accessibilityLabel="Waved" accessibilityState={{ selected: true }} style={[styles.pill, styles.lit, lit]}>
-              <Icon name="check" size={ICON.control} color={sel.glyph} active />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
-                Waved
-              </Text>
-            </View>
-          ) : wavedAtYou && !waveBusy ? (
-            <Control
-              testID={id('wave-back')}
-              radius={RADIUS.capsule}
-              onPress={onWave}
-              accessibilityRole="button"
-              accessibilityLabel={`Wave back at ${name}`}
-              style={[styles.pill, { backgroundColor: panel }]}
-            >
-              <Icon name="hand" size={ICON.control} />
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink]}>
-                Wave back
-              </Text>
-            </Control>
-          ) : (
-            circle('hand', `Wave at ${name}`, onWave, waveBusy)
-          )
-        ) : null}
-
-        {variant === 'pre' || variant === 'matched' ? null : isRequested ? (
-          <View accessible accessibilityLabel={`Request sent to ${name}`} style={[styles.pill, styles.grow, { backgroundColor: panel }]}>
-            <Icon name="check" size={ICON.control} color={COLOR.textSecondary} />
-            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.secondary]}>
-              Requested
-            </Text>
-          </View>
-        ) : (
-          <Button
-            label="Message"
-            kind="lit"
-            size="md"
-            icon="message-circle"
-            accessibilityHint={variant === 'friend' ? undefined : 'Sends a request, which shows them your name and photo.'}
-            onPress={onMessage}
-            style={styles.grow}
-            testID={id('message')}
-          />
-        )}
-
-        <View style={styles.end}>{circle('ellipsis', `Block or report ${name}`, onMore)}</View>
       </View>
 
       {crewLike && !isLiked && (variant === 'here' || variant === 'was') ? (
@@ -405,10 +393,6 @@ export function PersonCardContent({
       ) : null}
 
       {note ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.note, { color: quiet }]}>{note}</Text> : null}
-
-      <View style={styles.center}>
-        <TextAction label="View profile" onPress={onViewProfile} testID={id('view-profile')} />
-      </View>
     </View>
   )
 }
@@ -508,7 +492,7 @@ export function PersonCard({
 }: PersonCardContentProps & { visible: boolean; onClose: () => void; onDismissed?: () => void }) {
   const head = useRef<ComponentRef<typeof View>>(null)
   return (
-    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} detents={['medium', 'tall']} focusRef={head} testID={testID}>
+    <Sheet visible={visible} onClose={onClose} onDismissed={onDismissed} focusRef={head} testID={testID}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollBody}>
         <PersonCardContent {...card} onClose={onClose} headRef={head} testID={testID && `${testID}-card`} />
       </ScrollView>
@@ -527,29 +511,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACE.md,
     borderRadius: RADIUS.capsule,
   },
-  head: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
-  headText: { flex: 1, minWidth: 0, gap: SPACE.xs },
-  inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  /** `personName` sits 14 right of the 72 face. */
+  head: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: SPACE.md + SPACE.xxs },
+  headText: { flex: 1, minWidth: 0 },
+  metaLine: { marginTop: SPACE.xxs },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.xxs },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
-  tabular: { fontVariant: ['tabular-nums'] },
   shrink: { flexShrink: 1 },
-  reasons: { borderRadius: RADIUS.rowInCard, paddingVertical: SPACE.xs },
-  reason: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: SIZE.targetIos, paddingHorizontal: SPACE.lg },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.sm },
-  grow: { flexGrow: 1 },
-  end: { marginLeft: 'auto' },
-  /** The action row is one height, 48 (`SIZE.control`): the Like and Message buttons at `md`, these pills and circles. */
-  circle: { width: SIZE.control, height: SIZE.control, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
+  /** `.xq`: 20 radius, 14 · 16 · 16, the answer 6 under the question. */
+  tonight: {
+    borderRadius: RADIUS.tile,
+    borderWidth: 1,
+    overflow: 'hidden',
+    backgroundColor: COLOR.surface,
+    paddingTop: SPACE.md + SPACE.xxs,
+    paddingHorizontal: SPACE.lg,
+    paddingBottom: SPACE.lg,
+  },
+  answer: { marginTop: SPACE.xs + SPACE.xxs },
+  common: { gap: SPACE.sm },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  actionsStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  /** Each action takes an equal share; Message never shrinks below its label (the board's flex: 1 with min-content). */
+  slot: { flexGrow: 1, flexBasis: 0 },
+  wide: { flexShrink: 0 },
+  crewLike: { flexGrow: 1, flexBasis: '100%' },
+  /** The ⋯ in the head: 44 on iOS, 48 on Android. */
+  circle: { width: minTarget(), height: minTarget(), borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
   pill: {
-    height: SIZE.control,
+    height: SIZE.tabBarCompact,
     borderRadius: RADIUS.capsule,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACE.sm,
-    paddingHorizontal: SPACE.lg,
+    paddingHorizontal: SPACE.md,
   },
   lit: { borderWidth: 1 },
   refusal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
@@ -557,6 +556,6 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center' },
   textAction: { justifyContent: 'center', paddingHorizontal: SPACE.lg },
   /** The focus rings sit 4 pt outside the controls: the scroll gives them the room. */
-  scroll: { flex: 1, marginHorizontal: -SPACE.xs },
-  scrollBody: { paddingHorizontal: SPACE.xs, paddingTop: SPACE.xs, paddingBottom: SPACE.xl },
+  scroll: { flexGrow: 0, marginHorizontal: -SPACE.xs },
+  scrollBody: { paddingHorizontal: SPACE.xs, paddingTop: SPACE.xs },
 })

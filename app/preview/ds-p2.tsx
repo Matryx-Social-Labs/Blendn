@@ -479,9 +479,14 @@ const PRIYA: PersonCardPerson = {
   face: photo(PHOTO_2),
   name: 'Priya',
   age: 27,
-  reason: 'Both open to dating',
-  reasons: ['Both open to dating', 'Both at 3 nights before', 'You both picked Filter coffee over Chai'],
-  chips: ['Vinyl', 'Techno', 'Filter coffee'],
+  meta: 'Anonymous · 27',
+  context: 'In the room at Rooftop Sundowner: House & Disco',
+  lead: [
+    { icon: 'users', label: 'Here for friends', lit: true },
+    { icon: 'sparkles', label: '3 in common', lit: false },
+  ],
+  tonight: { question: 'Who are you hoping they play?', answer: 'Anything from the new record. And one old disco edit, please.' },
+  common: { label: 'In common', items: ['Vinyl', 'Techno', 'Filter coffee'] },
 }
 const HANDLERS = { onLike: noop, onWave: noop, onMessage: noop, onSayHi: noop, onMore: noop, onViewProfile: noop, onClose: noop }
 

@@ -37,6 +37,7 @@ import { useAuth } from './useAuth'
 import { useLatest } from './useLatest'
 import { useLiveSync } from './useLiveSync'
 import { askPushInContext } from './pushAsk'
+import { parseLens, type RoomLens } from './roomLens'
 
 /**
  * The Room's data: who is here, who just walked in, and what you can do about
@@ -95,6 +96,8 @@ export interface RoomPerson {
    * `reasonLine(person, now)` instead.
    */
   reason: string
+  /** Flow 5 P-A: their answer to tonight's question, as the deck sent it; null when none. */
+  tonightAnswer: string | null
   /** For the existing sheets (profile, safety, connect). */
   raw: AttendeeProfile
 }
@@ -130,6 +133,8 @@ export interface RoomState {
   pseudonym?: string | null
   /** When the room's chat closes, as the door says (`write.closesAt`); null until it does. */
   chatClosesAt?: string | null
+  /** Flow 5 P-A: the room's lens from the deck (`lib/roomLens.ts`); null for none, or until the deck answers. */
+  lens: RoomLens | null
   /** The mutual just made — from your like, or from theirs over the socket. */
   /**
    * The mutual just made — from your like, or from theirs over the socket.
@@ -208,6 +213,9 @@ export function useRoom(): RoomState & RoomActions {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [event, setEvent] = useState<RoomEvent | null>(null)
+  /** The lens each deck answered with, by event; `lens` is the shown room's. */
+  const lensByEvent = useRef(new Map<string, RoomLens | null>())
+  const [lens, setLens] = useState<RoomLens | null>(null)
   const [checkedInAt, setCheckedInAt] = useState<string | null>(null)
   // Absent reads as anonymous: the server default, and the safe claim.
   const [revealed, setRevealed] = useState(false)
@@ -379,6 +387,7 @@ export function useRoom(): RoomState & RoomActions {
           async (eventId) => {
             // The set is read once a roster has come back, so it waits for the same set it always had.
             const [r] = await Promise.all([apiClient.getEventMatches(eventId, { force, limit: PAGE }), blockedLoad])
+            if (r.success) lensByEvent.current.set(eventId, parseLens(r.data?.lens))
             return { success: r.success, error: r.error, matches: r.data?.matches }
           },
           { excludeUserId: selfId, isBlocked: (id) => blocked.has(id) }
@@ -445,6 +454,7 @@ export function useRoom(): RoomState & RoomActions {
         )
         setCheckedInAt(checkin?.checkInTime ? String(checkin.checkInTime) : null)
         setRevealed(outcome.revealed)
+        setLens(lensByEvent.current.get(outcome.eventId) ?? null)
         setLive((prev) => withRoster(changedRoom ? EMPTY_LIVE : prev, attendees, attendees.length >= PAGE))
         setPage(1)
         // Memory only — `lib/rosterMemory.ts` says why this never reaches disk.
@@ -658,6 +668,7 @@ export function useRoom(): RoomState & RoomActions {
         overlaps: a.overlaps ?? [],
         sign: a.sign ?? null,
         badges: a.badges ?? [],
+        tonightAnswer: a.tonightAnswer ?? null,
         insideNow: a.insideNow !== false,
         arrivedAt,
         liked: status !== 'none',
@@ -863,6 +874,7 @@ export function useRoom(): RoomState & RoomActions {
     status,
     settled: status === 'ready' && !!event && seededFor === event.id && chatFor === event.id && avatarsFor === event.id,
     event,
+    lens,
     checkedInAt,
     revealed,
     hereCount: live.hereCount,

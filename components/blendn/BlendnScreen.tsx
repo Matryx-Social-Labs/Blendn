@@ -27,10 +27,9 @@ import { crewsThatMayLikePeople, crewMessage, type BlendRef, type CrewsAtEvent }
 import { crewsApi } from '../../lib/crewsApi'
 import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SIZE, SPACE } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
-import { overlapOf } from '../../lib/overlapLine'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
 import { firstNameOf, useFriendsHere } from '../../lib/friendsHere'
-import { everyoneHead, meetNext, reasonLine, reasonLines } from '../../lib/roomMoments'
+import { everyoneHead, meetNext, reasonLine } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
 import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
@@ -66,6 +65,7 @@ import { Material } from '../ui/Material'
 import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { faceOf, RoomSkeleton, RoomYouCard, useNow } from './RoomSections'
+import { lensView } from '../../lib/roomLens'
 import { FriendsHere } from './FriendsHere'
 import { RoomCancelled } from './RoomCancelled'
 import { RoomStage, useStage } from './RoomStage'
@@ -75,7 +75,6 @@ import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
-import { parseBadges } from '../../lib/profileBadges'
 import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
 /** Under the top bar's 44 pt circles: Flow 4 sets the title 70 below the safe area (124 on a 54 pt status bar). */
@@ -856,7 +855,6 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const visibility: Visibility = bannerState(controls.revealed, controls.listed, controls.readiness.ok)
 
   // --- the card's variant and state ------------------------------------------------
-  const cardOverlap = cardPerson ? overlapOf(cardPerson) : null
   const cardVariant: PersonVariant = !cardPerson ? 'thin' : cardPerson.matched ? 'matched' : cardPerson.insideNow ? 'here' : 'was'
   const refusal = card ? refusals[card.id] : undefined
   /** The chip shows a definite answer only: hidden while there is nothing to choose between (solo), or a like would still ask. */
@@ -1097,12 +1095,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           face: cardPerson ? faceOf(cardPerson) : { kind: 'creature', pseudonym: card?.name ?? '' },
           name: cardPerson?.name ?? card?.name ?? '',
           age: cardPerson?.age,
-          reason: cardPerson ? (cardPerson.matched ? 'You matched' : reasonLine(cardPerson)) : undefined,
-          // The line says overlaps[0]; the panel keeps the rest, never the same sentence twice.
-          reasons: cardPerson ? reasonLines(cardPerson).filter((r) => r !== cardOverlap?.line) : undefined,
-          overlap: cardOverlap ?? undefined,
-          chips: cardPerson ? [...cardPerson.interests.slice(0, 8), ...(cardPerson.sign ? [cardPerson.sign] : [])] : undefined,
-          badges: parseBadges(cardPerson?.badges)?.map((b) => b.kind),
+          // P-A: their deck card through the room's lens; a photo arrives only once they have shown you who they are.
+          ...(cardPerson ? lensView(cardPerson, room.lens, room.event, !!cardPerson.photo) : {}),
         }}
         liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
         requested={!!cardPerson?.requested}
