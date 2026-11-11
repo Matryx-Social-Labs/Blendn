@@ -203,6 +203,19 @@ it('while the wave sends, the hand waves as the sheet’s does (owner pick r3 A)
   expect(await screen.findByText('Waved')).toBeTruthy()
 })
 
+it('at rest the page’s Wave hand is the board’s 18 (`ic(\'hand\',18)`, the dock glyph), not the sheet’s 20 (drive, C3b)', async () => {
+  handRoomPerson('rh_bison', card())
+  await open(ANON)
+  type J = { props?: Record<string, unknown>; children?: unknown[] | null }
+  const find = (n: J, id: string): J | null => n?.props?.testID === id ? n : (n?.children ?? []).reduce<J | null>((f, c) => f ?? (typeof c === 'object' ? find(c as J, id) : null), null)
+  const widths = (n: J): number[] => [...(n?.props?.width != null ? [Number(n.props.width)] : []), ...(n?.children ?? []).flatMap((c) => (typeof c === 'object' ? widths(c as J) : []))]
+  const root = screen.toJSON() as J | J[]
+  const wave = (Array.isArray(root) ? root : [root]).reduce<J | null>((f, r) => f ?? find(r, 'profile-wave'), null)
+  const sizes = widths(wave as J)
+  expect(sizes).toContain(18)
+  expect(sizes).not.toContain(20)
+})
+
 it('Wave waves at them in this room, and then reads Waved', async () => {
   handRoomPerson('rh_bison', card())
   await open(ANON)

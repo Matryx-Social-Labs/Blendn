@@ -835,7 +835,9 @@ function UserProfileInner() {
               size="dock"
               onGlass
               // Owner pick r3 A: while it sends, the hand waves as the sheet's does (#51), not a spinner.
-              leading={waved === 'busy' ? <WavingHand testID="profile-wave-hand" /> : <Icon name={waved === 'waved' ? 'check' : 'hand'} size={ICON.control} />}
+              // At rest it is the dock's own 18 pt glyph, as the board draws it (`ic('hand',18)`).
+              icon={waved === 'waved' ? 'check' : 'hand'}
+              leading={waved === 'busy' ? <WavingHand testID="profile-wave-hand" /> : undefined}
               label={waved === 'waved' ? 'Waved' : 'Wave'}
               accessibilityLabel={waved === 'waved' ? `Waved at ${heroTitle}` : `Wave at ${heroTitle}`}
               disabled={waved !== 'none'}
