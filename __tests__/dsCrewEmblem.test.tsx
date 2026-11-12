@@ -155,6 +155,20 @@ describe('<CrewEmblem>', () => {
     expect(idOf('a')).not.toBe(idOf('b'))
   })
 
+  // On device the scene's first frame drew every character at identity, one full-size head filling the plate, until the
+  // UI thread's first matrix landed: Reanimated hands over its initial `matrix` as a prop that G's JS side drops.
+  it.each([24, 40, 120].flatMap((size) => CREW_SCENES.map((scene) => [size, scene] as const)))(
+    'the first frame already stands everyone in their place: %i, %s',
+    async (size, scene) => {
+      await render(<CrewEmblem seed={SEEDS[3]} size={size} scene={scene} />)
+      const scales = screen.root!.queryAll((n) => n.type === 'RNSVGGroup' && Array.isArray(n.props.matrix)).map((n) => {
+        const m = n.props.matrix as number[]
+        return Math.round(Math.hypot(m[0], m[1]) * 100) / 100
+      })
+      for (const [, , , s] of spotsOf(tierOf(size))) expect(scales).toContain(s)
+    }
+  )
+
   it('a scene plays once, then rests and says so', async () => {
     jest.useFakeTimers()
     const onDone = jest.fn()

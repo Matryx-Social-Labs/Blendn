@@ -87,6 +87,14 @@ const rotateAbout = (deg: number, px: number, py: number) => {
 
 const AnimatedG = Animated.createAnimatedComponent(G)
 
+type Frame = { matrix: number[]; opacity: number }
+/**
+ * A scene's first frame, as props G's JS side reads. Reanimated hands `matrix` over as an initial prop, which
+ * react-native-svg's G drops (it reads `transform`), so on device the first frame drew every part at identity, one
+ * full-size head filling the plate, until the UI thread's first update landed. Every animated group gets both.
+ */
+const firstFrame = ({ matrix, opacity }: Frame) => ({ transform: matrix as [number, number, number, number, number, number], opacity })
+
 type PoseFn = (t: number, i: number) => Pose
 
 /** One arm, hung straight down from its shoulder and turned to its angle; the design draws none at 0°. */
@@ -94,20 +102,26 @@ function Arm({ t, pose, slot, side, c }: { t: SharedValue<number>; pose: PoseFn;
   const x = ARM_X[side]
   const dir = side === 0 ? -1 : 1
   const handY = ARM_Y + ARM_LENGTH
-  const arm = useAnimatedProps(() => {
-    const deg = (pose(t.get(), slot).arm || [0, 0])[side]
+  const armAt = (v: number): Frame => {
+    'worklet'
+    const deg = (pose(v, slot).arm || [0, 0])[side]
     return { matrix: rotateAbout(-deg * dir, x, ARM_Y), opacity: deg ? 1 : 0 }
-  })
+  }
   // The cup stays upright in the mitt.
-  const cup = useAnimatedProps(() => {
-    const p = pose(t.get(), slot)
+  const cupAt = (v: number): Frame => {
+    'worklet'
+    const p = pose(v, slot)
     const deg = (p.arm || [0, 0])[side]
     return { matrix: rotateAbout(deg * dir, x, handY), opacity: p.cup ? 1 : 0 }
-  })
+  }
+  const arm = useAnimatedProps(() => armAt(t.get()))
+  const cup = useAnimatedProps(() => cupAt(t.get()))
   return (
-    <AnimatedG animatedProps={arm}>
+    <AnimatedG animatedProps={arm} {...firstFrame(armAt(0))}>
       <Path d={`M${x} ${ARM_Y}L${x} ${handY}`} stroke={c.e} strokeWidth={2.6} strokeLinecap="round" />
-      <AnimatedG animatedProps={cup}>{elementsOf(mugMarkup(x, handY, c))}</AnimatedG>
+      <AnimatedG animatedProps={cup} {...firstFrame(cupAt(0))}>
+        {elementsOf(mugMarkup(x, handY, c))}
+      </AnimatedG>
       {elementsOf(mittMarkup(x, handY))}
     </AnimatedG>
   )
@@ -134,14 +148,15 @@ type CharacterProps = {
 
 function Character({ t, pose, spot, species, rest, moods, c, hue, behind }: CharacterProps) {
   const [slot, cx, cy, s] = spot
-  const placed = useAnimatedProps(() => {
-    const v = t.get()
+  const placedAt = (v: number): Frame => {
+    'worklet'
     const visible = behind === undefined || frontGoesFirst(v) === behind
     return { matrix: placeMatrix(cx, cy, s, pose(v, slot)), opacity: visible ? 1 : 0 }
-  })
+  }
+  const placed = useAnimatedProps(() => placedAt(t.get()))
   const faces = [...new Set([rest, ...moods])]
   return (
-    <AnimatedG animatedProps={placed}>
+    <AnimatedG animatedProps={placed} {...firstFrame(placedAt(0))}>
       {elementsOf(kitMarkup(c))}
       {faces.map((m) => (
         <Mood key={m} t={t} pose={pose} slot={slot} mood={m} rest={rest} markup={faceMarkup(species, m, hue)} />
@@ -153,22 +168,28 @@ function Character({ t, pose, spot, species, rest, moods, c, hue, behind }: Char
 }
 
 function Spark({ t, at: [x, y], fx }: { t: SharedValue<number>; at: readonly [number, number]; fx: (t: number) => string }) {
-  const lit = useAnimatedProps(() => {
-    const v = t.get()
+  const litAt = (v: number): Frame => {
+    'worklet'
     const s = sparkScale(v)
     return { matrix: [s, 0, 0, s, x - s * x, y - s * y], opacity: fx(v) === 'spark' ? 1 : 0 }
-  })
-  return <AnimatedG animatedProps={lit}>{elementsOf(sparkMarkup(x, y, 1))}</AnimatedG>
+  }
+  const lit = useAnimatedProps(() => litAt(t.get()))
+  return (
+    <AnimatedG animatedProps={lit} {...firstFrame(litAt(0))}>
+      {elementsOf(sparkMarkup(x, y, 1))}
+    </AnimatedG>
+  )
 }
 
 function Zee({ t, x, y, rise, size, fade, c }: { t: SharedValue<number>; x: number; y: number; rise: number; size: number; fade: number; c: HuddleHue }) {
-  const up = useAnimatedProps(() => {
-    const v = t.get()
+  const upAt = (v: number): Frame => {
+    'worklet'
     const u = v > 0.45 ? zRise(v) : 0
     return { matrix: [1, 0, 0, 1, u, -rise * u], opacity: u * fade }
-  })
+  }
+  const up = useAnimatedProps(() => upAt(t.get()))
   return (
-    <AnimatedG animatedProps={up}>
+    <AnimatedG animatedProps={up} {...firstFrame(upAt(0))}>
       <SvgText x={x} y={y} fontFamily={Z_FAMILY} fontSize={size} fill={c.g}>
         z
       </SvgText>
