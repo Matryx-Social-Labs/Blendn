@@ -1008,7 +1008,8 @@ function UserProfileInner() {
       */}
       <ConnectSheet
         visible={connectOpen}
-        displayName={heroTitle}
+        // Their name as the sheet says it, never the hero's "name, age" (drive: "Connect with Venkatalakshmi, 30").
+        displayName={identity.name}
         theyAreRevealed={revealed}
         draft={connectDraft}
         sending={connectSending}

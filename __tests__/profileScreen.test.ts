@@ -185,8 +185,8 @@ describe('the profile carries the Grid\'s two actions', () => {
 
   it('names them the way the server does in the sheet', () => {
     // Same rule as the Grid: the disclosure uses the resolved display name, so
-    // an unrevealed person is named by their pseudonym.
-    expect(SCREEN()).toContain('displayName={heroTitle}')
+    // an unrevealed person is named by their pseudonym. The name alone, never the hero's "name, age" (SCRUM-1042 drive).
+    expect(SCREEN()).toContain('displayName={identity.name}')
   })
 })
 

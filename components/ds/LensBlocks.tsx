@@ -130,7 +130,7 @@ export function LensBlocks({ lead, tonight, common, bio, openers, onOpener, ask,
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.brand[500]), { color: sel.glyph }]}>Tonight’s question</Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('heading', bold), compact ? SHEET_QUESTION : ANSWER_LINE, styles.ink, styles.answer]}>{ask}</Text>
           <View style={styles.askRow}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: quiet }, styles.shrink]}>Not answered yet</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: quiet }]}>Not answered yet</Text>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', true), { color: sel.glyph }]}>Ask in a message</Text>
           </View>
         </ScalePress>
@@ -222,9 +222,8 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   /** The sheet's `.xq`: 12 · 14 · 14. */
   tonightCompact: { paddingTop: SPACE.md, paddingHorizontal: SPACE.md + SPACE.xxs, paddingBottom: SPACE.md + SPACE.xxs },
-  /** `.xq .ask`: 12 under the question, the two ends apart. */
-  askRow: { marginTop: SPACE.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm },
-  shrink: { flexShrink: 1 },
+  /** `.xq .ask`: 12 under the question, the two ends apart; at the largest text they wrap to two lines, never squeeze. */
+  askRow: { marginTop: SPACE.md, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: SPACE.sm, rowGap: SPACE.xxs },
   lineUnder: { marginTop: SPACE.xs },
   /** `.opn .cs`: 12 under the lines, 8 between rows. */
   openerList: { marginTop: SPACE.md, gap: SPACE.sm },
