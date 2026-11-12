@@ -155,7 +155,7 @@ export function SentLine() {
   )
 }
 
-const PROMISE_LINE = 'Only we see this. They will never know you rated them.'
+const PROMISE_LINE = 'Only we see this. They’ll never know you rated them.'
 
 /**
  * The promise on a person, one line under the scale (Flow 4 audit C-1, the board's `.opt-line`): a 16 pt lock in the

@@ -43,7 +43,7 @@ const api = apiClient as jest.Mocked<typeof apiClient>
 const NIGHT = { title: 'Vinyl Night', startTime: '2026-11-07T20:00:00.000Z', timezone: 'Asia/Kolkata', venueName: 'High Ultra Lounge' }
 /** The night's "Sent" line holds for a beat before the people: long enough for findBy's default to miss it. */
 const AFTER_THE_BEAT = { timeout: 3000 }
-const PROMISE = 'Only we see this. They will never know you rated them.'
+const PROMISE = 'Only we see this. They’ll never know you rated them.'
 
 function loads({ peers = ['u1', 'u2'], rated = false }: { peers?: string[]; rated?: boolean } = {}) {
   api.getRatablePeers.mockResolvedValue({ success: true, data: { userIds: peers } } as never)
@@ -145,7 +145,7 @@ it('a person: their face and name in a row, "You matched at this event", and "Ho
  * Audit C-1 (SCRUM-1045): before the redesign the person step promised, under their face, that they would never know.
  * The board dropped it; the owner put it back as one line under the scale, where someone decides how honest to be.
  */
-it('a person: "Only we see this. They will never know you rated them." is one line under the scale, before the issues', async () => {
+it('a person: "Only we see this. They’ll never know you rated them." (the board’s words, one line) sits under the scale, before the issues', async () => {
   loads()
   await view()
   // Control: the night has its own line ("Sent. Only we see this."), not this one.

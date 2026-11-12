@@ -166,7 +166,7 @@ export function RadioCard({ title, layout = 'center', detail, hint, icon, avatar
               {body}
             </View>
             <Pressable testID={testID && `${testID}-action`} onPress={action.onPress} hitSlop={LINK_SLOP} accessibilityRole="link" style={styles.action}>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold), { color: sel.glyph }]}>{action.label}</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('control', bold), { color: sel.glyph }]}>{action.label}</Text>
             </Pressable>
           </>
         ) : (

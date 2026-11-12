@@ -12,7 +12,7 @@ import * as Reanimated from 'react-native-reanimated'
 import { LookingForCard } from '../components/ds/LookingForCard'
 import { RadioCard } from '../components/ds/RadioCard'
 import { HueProvider, SELECTION } from '../components/ds/shared'
-import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
+import { COLOR, MATERIAL, MAX_FONT_SCALE, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY, tint } from '../lib/theme'
 
@@ -249,6 +249,8 @@ describe('<RadioCard layout="lead"> (Flow 4 `.rc`, SCRUM-1025)', () => {
     // The board's `.addp`: 15/20, in the hue's glyph colour, 8 under the sentence (the card's 4 and 4 more).
     expect(StyleSheet.flatten(screen.getByText('Add a photo').props.style)).toMatchObject({ fontSize: 15, lineHeight: 20, color: SELECTION.ember.glyph })
     expect(flat('r-action')).toMatchObject({ marginTop: 4 })
+    // An action grows with the text as far as a button does (driven at AX5: capped like the value slot, it stayed small).
+    expect(screen.getByText('Add a photo').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.button)
   })
 
   it('no action: no link, and the card is the one element it was (control)', async () => {

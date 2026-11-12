@@ -109,6 +109,23 @@ describe('PhotoManager', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 
+  /*
+   * Flow 4 audit D-1 drive (SCRUM-1045): event preferences' "Add a photo" goes here and comes back; the profile read on
+   * the way back was the 60 s cache from before the photo, so Named stayed blocked on Android. A photo write ends the cache.
+   */
+  it('a photo write ends the cached profile, so the next read (event preferences, coming back) sees the photo', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { ProfileCache } = require('../lib/apiClient')
+    photoUtils.reorderPhotos.mockResolvedValue({ ok: true })
+    await mount(2)
+    ProfileCache.set('u1', { id: 'u1', profile: { photos: [] } })
+    expect(ProfileCache.get('u1')).not.toBeNull()
+    await fireEvent.press(screen.getByLabelText('Remove photo 2'))
+    const remove = (mockShowSheet.mock.calls.at(-1)![0] as ActionSheet).actions[0] as unknown as { then: () => Promise<void> }
+    await act(() => remove.then())
+    expect(ProfileCache.get('u1')).toBeNull()
+  })
+
   it('a failed removal keeps the file and says so', async () => {
     photoUtils.reorderPhotos.mockResolvedValue({ ok: false, error: "Couldn’t save your photos. Try again." })
     await mount(2)
