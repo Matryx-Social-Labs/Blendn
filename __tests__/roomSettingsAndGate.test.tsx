@@ -34,8 +34,8 @@ describe("the reveal switch when there is nothing to reveal", () => {
 
   it("the room's you-card takes the state, and its Change never reveals in place (Room settings holds the gate)", () => {
     expect(code).toContain("bannerState(controls.revealed, controls.listed, controls.readiness.ok)")
-    expect(code).toMatch(/<RoomYouCard[\s\S]{0,200}state=\{visibility\}/)
-    expect(code).not.toMatch(/<RoomYouCard[\s\S]{0,400}toggleReveal/)
+    expect(code).toMatch(/<RoomYouCard[\s\S]{0,500}state=\{visibility\}/)
+    expect(code).not.toMatch(/<RoomYouCard[\s\S]{0,700}toggleReveal/)
   })
 })
 
@@ -47,7 +47,7 @@ describe("the way into the room’s settings", () => {
 
   it("is one function, from the you-card's Change and the ⋯ sheet", () => {
     expect(code).toMatch(/onChange=\{\(\) => \{[\s\S]{0,160}openRoomSettings\(\)/)
-    expect(code).toContain("{ label: 'Room settings', then: openRoomSettings }")
+    expect(code).toContain("{ label: 'Room settings', icon: 'settings' as const, then: openRoomSettings }")
   })
 
 })

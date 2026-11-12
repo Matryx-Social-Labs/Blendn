@@ -11,10 +11,9 @@ import type { RoomPerson } from '../../lib/useRoom'
 import type { RoomLens } from '../../lib/roomLens'
 import { Banner } from '../ds/Banner'
 import { BannerPresence } from '../motion/BannerPresence'
-import { SegmentedControl } from '../ds/SegmentedControl'
 import { StateScreen } from '../ds/StateScreen'
 import { SOCKET_GRACE_MS } from '../RealtimeStatusBanner'
-import { EveryoneHead, GRID_GAP, GRID_ROW_GAP, MeetNextRow, RoomGridFace, ShowMore, useGridCell } from './RoomSections'
+import { EveryoneHead, GRID_GAP, GRID_ROW_GAP, MeetNextRow, RoomCrewsRow, RoomGridFace, ShowMore, useGridCell } from './RoomSections'
 import { useStageScroll } from './RoomStage'
 import { useReducedMotion } from '../../lib/motion'
 
@@ -82,8 +81,11 @@ export type RoomViewProps = {
   connection: SocketConnectionStatus
   /** You, first in People: your room name and who sees you (`RoomYouCard`). */
   you: ReactNode
-  /** People | Crews: shown when a crew is here or you are in one (R2-D1). */
-  segments: boolean
+  /**
+   * How many crews are here, for the "3 crews here" row that opens them (audit A-1); 0 when none is here but you are in one (the row says Crews). Null when no
+   * crew is here and you are in none: no row (R2-D1's rule, without the second tab row it used to draw).
+   */
+  crewsHere: number | null
   view: 'people' | 'crews'
   onView: (view: 'people' | 'crews') => void
   /** Your crews here, in the People view (CrewStrip). */
@@ -147,14 +149,9 @@ export function RoomView(props: RoomViewProps) {
       </View>
       <View style={styles.sections}>
         <Animated.View style={sections[0]}>{props.you}</Animated.View>
-        {props.segments ? (
-          <Animated.View style={[styles.gutter, sections[1]]}>
-            <SegmentedControl
-              items={['People', 'Crews']}
-              selected={crewsView ? 1 : 0}
-              onChange={(i) => props.onView(i === 1 ? 'crews' : 'people')}
-              testID="room-segments"
-            />
+        {props.crewsHere !== null ? (
+          <Animated.View style={sections[1]}>
+            <RoomCrewsRow count={props.crewsHere} back={crewsView} onPress={() => props.onView(crewsView ? 'people' : 'crews')} />
           </Animated.View>
         ) : null}
         {crewsView ? (

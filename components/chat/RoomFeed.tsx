@@ -23,6 +23,9 @@ import { RoomPoll } from './RoomPoll'
 import { chatHeaderBottom } from './ChatHeader'
 import { opensInSpoken } from '../../lib/preEventRoom'
 
+/** The poll's host as the server names them; the client's own stand-ins for no name are not a name. */
+const pollHost = (name: string) => (name && name !== 'Attendee' && name !== 'You' && name !== 'System' ? name : undefined)
+
 export type RowHandlers = {
   menu: (m: RoomMessage, anchor: Rect) => void
   retry: (m: RoomMessage) => void
@@ -110,6 +113,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
             eventId={eventId}
             pollId={item.poll_id}
             question={item.message_text}
+            host={pollHost(item.sender_name)}
             viewable={pollViewable}
             onRoomRefusal={handlers.pollRefusal}
             testID={`poll-${item.message_id}`}

@@ -159,7 +159,7 @@ describe('the Pulse no longer carries the checked-in strip', () => {
     expect(pulse).toContain('title: `Check out of ${event.title}?`')
     expect(pulse).toContain('void handleCheckOut(event)')
     const blendn = readFileSync(join(__dirname, '..', 'components/blendn/BlendnScreen.tsx'), 'utf8')
-    expect(blendn).toContain("{ label: 'Check out', variant: 'destructive' as const, then: () => setConfirmingOut(true) }")
+    expect(blendn).toContain("{ label: 'Check out', icon: 'log-out' as const, variant: 'destructive' as const, apart: true, then: () => setConfirmingOut(true) }")
     expect(blendn).toMatch(/label: 'Check out', kind: 'destructive'[\s\S]*?void checkOut\(\)/)
     expect(readFileSync(join(__dirname, '..', 'lib/useRoomControls.ts'), 'utf8')).toContain(
       'checkOutOf(eventId)'

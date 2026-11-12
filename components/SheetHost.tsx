@@ -132,6 +132,7 @@ export function SheetHost() {
                       accessibilityLabel: a.accessibilityLabel,
                       icon: a.icon,
                       destructive: a.variant === 'destructive',
+                      apart: !!a.apart,
                       lit: a.variant === 'primary',
                       chevron: 'next' in a,
                       busy: busy === i,
@@ -212,6 +213,8 @@ type OptionRow = {
   accessibilityLabel?: string
   icon?: IconName
   destructive?: boolean
+  /** Its own group after a gap, no hairline (the room's Check out). */
+  apart?: boolean
   /** The row's glyph and label light in the sheet's world (a positive action, `Button kind="lit"`'s colour). */
   lit?: boolean
   /** It opens another step. */
@@ -241,7 +244,7 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
             android_ripple={{ color: PRESSED_WASH.android }}
             style={({ pressed }) => [
               styles.row,
-              i > 0 && (contrast ? styles.hairlineContrast : styles.hairline),
+              row.apart ? styles.apart : i > 0 && (contrast ? styles.hairlineContrast : styles.hairline),
               pressed && Platform.OS === 'ios' && styles.pressed,
               row.disabled && styles.dim,
             ]}
@@ -270,6 +273,7 @@ function ErrorLine({ text }: { text: string }) {
 const styles = StyleSheet.create({
   row: { minHeight: SIZE.control, flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   hairline: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline },
+  apart: { marginTop: SPACE.lg },
   hairlineContrast: { borderTopWidth: 1, borderTopColor: MATERIAL.hairlineIncreaseContrast },
   pressed: { backgroundColor: PRESSED_WASH.ios },
   dim: { opacity: OPACITY.disabled },

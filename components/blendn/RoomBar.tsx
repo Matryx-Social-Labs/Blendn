@@ -1,10 +1,10 @@
-import { useRef } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
-import Animated, { FadeIn, StretchInX } from 'react-native-reanimated'
+import { useRef, useState } from 'react'
+import { Platform, StyleSheet, Text, View, type LayoutRectangle } from 'react-native'
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
 
 import { useFocusWhen } from '../../lib/focusReturn'
 import { compactCount } from '../../lib/format'
-import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, EASING, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { chatTabBadge, chatTabLabel, type RoomTab } from '../../lib/roomTab'
@@ -20,8 +20,9 @@ const TABS_ROW = 48
 /** Between the tab words (R-A `tabs`: People at 24, Chat at 108.7). */
 const TAB_GAP = 28
 const UNDERLINE = 3
-const STRETCH_MS = 300
-const FADE_MS = 200
+/** The underline's slide to the picked tab (audit D-1, owner 2026-11-11): a frequent switch settles under 200 ms. */
+export const UNDERLINE_SLIDE_MS = 180
+const SLIDE = { duration: UNDERLINE_SLIDE_MS, easing: Easing.bezier(...EASING.snapOut) }
 const BADGE = 22
 
 /** Where the bar ends, for what sits under it (the People list's top, the chat's feed). */
@@ -31,7 +32,8 @@ export const roomBarHeight = (insetTop: number) => insetTop + TITLE_ROW + TABS_R
  * The room's bar (Flow 5 R-A): close · "The room" over the event · the live count in its own slot · Room info, and under
  * them the People | Chat tabs, a tablist. The count is compact in the bar ("12k here") and exact to a screen reader
  * ("12,480 here"). The Chat tab carries the unread badge, 9+ past nine, and says so ("Chat, 9 or more new"). The chosen
- * tab is white over a 3 pt rose underline that stretches in (300 ms; a 200 ms fade under Reduce Motion). The board's glow
+ * tab is white over one 3 pt rose underline that slides to it and takes its width (180 ms ease-out; under Reduce Motion it
+ * is just there, audit D-1). It never grows from nothing: a tab switch is not an entrance. The board's glow
  * under it is not drawn: content is flat (`lint:design`), as TitleTabs' underline.
  */
 export function RoomBar({
@@ -59,6 +61,10 @@ export function RoomBar({
   // The room's name takes a screen reader's focus as the room comes up, as the hero's title did (Flow 4 Room).
   const titleRef = useRef<View>(null)
   useFocusWhen(titleRef, event)
+  // Where each tab word sits in the row, for the underline (onLayout: it moves with the text size).
+  const [tabs, setTabs] = useState<Partial<Record<RoomTab, { x: number; width: number }>>>({})
+  const measured = (key: RoomTab, { x, width }: LayoutRectangle) =>
+    setTabs((was) => (was[key]?.x === x && was[key]?.width === width ? was : { ...was, [key]: { x, width } }))
   return (
     <View testID="room-bar" style={[styles.bar, { paddingTop: insetTop }]}>
       <Material role="bar" style={StyleSheet.absoluteFill} />
@@ -82,20 +88,21 @@ export function RoomBar({
         <IconButton icon="ellipsis" accessibilityLabel="Room info" onPress={onInfo} testID="room-info" />
       </View>
       <View testID="room-tabs" accessibilityRole="tablist" style={styles.tabs}>
-        <TabWord label="People" spoken="People" on={tab === 'people'} onPress={() => onTab('people')} testID="room-tab-people-word" />
-        <TabWord label="Chat" spoken={chatTabLabel(chatUnread)} badge={badge} on={tab === 'chat'} onPress={() => onTab('chat')} testID="room-tab-chat-word" />
+        <TabWord label="People" spoken="People" on={tab === 'people'} onPress={() => onTab('people')} onLayout={(l) => measured('people', l)} testID="room-tab-people-word" />
+        <TabWord label="Chat" spoken={chatTabLabel(chatUnread)} badge={badge} on={tab === 'chat'} onPress={() => onTab('chat')} onLayout={(l) => measured('chat', l)} testID="room-tab-chat-word" />
+        <Underline at={tabs[tab]} />
       </View>
     </View>
   )
 }
 
-function TabWord({ label, spoken, badge, on, onPress, testID }: { label: string; spoken: string; badge?: string | null; on: boolean; onPress: () => void; testID: string }) {
+function TabWord({ label, spoken, badge, on, onPress, onLayout, testID }: { label: string; spoken: string; badge?: string | null; on: boolean; onPress: () => void; onLayout: (layout: LayoutRectangle) => void; testID: string }) {
   const bold = useBoldText()
   const sel = useSelection()
-  const reduceMotion = useReducedMotion()
   return (
     <ScalePress
       testID={testID}
+      onLayout={(e: { nativeEvent: { layout: LayoutRectangle } }) => onLayout(e.nativeEvent.layout)}
       haptic={false}
       onPress={() => {
         if (on) return
@@ -117,15 +124,33 @@ function TabWord({ label, spoken, badge, on, onPress, testID }: { label: string;
           </Text>
         </View>
       ) : null}
-      {on ? (
-        <Animated.View
-          testID={`${testID}-underline`}
-          entering={reduceMotion ? FadeIn.duration(FADE_MS) : StretchInX.duration(STRETCH_MS)}
-          style={[styles.underline, { backgroundColor: sel.edge }]}
-        />
-      ) : null}
     </ScalePress>
   )
+}
+
+/** Where the underline goes: under `at`, sliding there when `slides`, hidden until the tab is measured. */
+export function underlineStyle(at: { x: number; width: number } | undefined, slides: boolean) {
+  'worklet'
+  if (!at) return { opacity: 0 }
+  return {
+    opacity: 1,
+    width: slides ? withTiming(at.width, SLIDE) : at.width,
+    transform: [{ translateX: slides ? withTiming(at.x, SLIDE) : at.x }],
+  }
+}
+
+/** The one underline under the picked tab: placed at once the first time it is measured, then it slides between tabs. */
+function Underline({ at }: { at?: { x: number; width: number } }) {
+  const sel = useSelection()
+  const reduceMotion = useReducedMotion()
+  // Set on the UI runtime the first time there is somewhere to stand, so only later moves slide.
+  const placed = useSharedValue(false)
+  const style = useAnimatedStyle(() => {
+    const slides = placed.get() && !reduceMotion
+    if (at) placed.set(true)
+    return underlineStyle(at, slides)
+  }, [at?.x, at?.width, reduceMotion])
+  return <Animated.View testID="room-tab-underline" pointerEvents="none" style={[styles.underline, { backgroundColor: sel.edge }, style]} />
 }
 
 const styles = StyleSheet.create({
@@ -141,7 +166,6 @@ const styles = StyleSheet.create({
   underline: {
     position: 'absolute',
     left: 0,
-    right: 0,
     bottom: 0,
     height: UNDERLINE,
     borderRadius: SPACE.xxs,
