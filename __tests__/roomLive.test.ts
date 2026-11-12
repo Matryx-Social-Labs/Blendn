@@ -203,6 +203,7 @@ describe('attendeeFromMatch', () => {
       sign: 'Leo ♌',
       badges: [{ kind: 'regular_here', label: 'Regular here' }],
       tonightAnswer: 'A map of quiet cafés',
+      workIntent: null,
     })
   })
 

@@ -1,4 +1,5 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
+import { handRoomPerson } from '../../lib/roomPersonHandoff'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
@@ -695,8 +696,13 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     [room, sent]
   )
   const openProfile = useCallback(
-    (p: OpenCard, seen?: Pick<RoomPerson, 'liked' | 'conversationId'>) => {
+    (p: OpenCard, seen?: RoomPerson) => {
       setOpen(null)
+      // P-A page: the room's card goes with them (lead pills, In common), in memory, never in the link.
+      if (seen) {
+        const { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent } = seen
+        handRoomPerson(p.id, { person: { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent }, lens: room.lens })
+      }
       // The event travels with the id (the profile's Like needs the room), and the pseudonym titles it until the server says who they are.
       // What the room knows of them goes too: the profile cannot ask a handle whether you liked or matched (SCRUM-953).
       router.push({
@@ -710,7 +716,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         } as never,
       })
     },
-    [eventId]
+    [eventId, room.lens]
   )
   /** Into the DM. `draft` is the opener the match moment suggested: it waits in the composer, never sent for you. */
   const sayHi = useCallback((conversationId: string, p: { id: string; name: string }, draft?: string | null) => {

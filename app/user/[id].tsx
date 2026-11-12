@@ -2,14 +2,15 @@ import { H } from '../../lib/haptics'
 import { ScreenProfiler } from '../../lib/perf'
 import { router, useLocalSearchParams } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
+import { Platform, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native'
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { MomentMatch } from '../../components/ds/MomentMatch'
-import { Button } from '../../components/ds/Button'
+import { Button, DOCK_GLYPH } from '../../components/ds/Button'
+import { Dock } from '../../components/ds/Dock'
 import type { Rect } from '../../components/ds/chatShared'
-import { font, HueProvider, useBoldText, useSelection, type Hue } from '../../components/ds/shared'
+import { announceOutcome, font, HueProvider, useBoldText, useSelection, type Hue } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
@@ -42,6 +43,13 @@ import { useAuth } from '../../lib/useAuth'
 import { useFriendAsk } from '../../lib/useFriendAsk'
 import { askPushInContext } from '../../lib/pushAsk'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
+import { LensBlocks } from '../../components/ds/LensBlocks'
+import { RadialWash } from '../../components/ui/GradientFill'
+import { WavingHand } from '../../components/ds/PersonCard'
+import { ProfileLensHero } from '../../components/profile/ProfileLensHero'
+import { lensView, parseLens, parseWorkIntent, type RoomLens, type WorkIntent } from '../../lib/roomLens'
+import { roomPersonFor } from '../../lib/roomPersonHandoff'
+import { barCircleBottom } from '../../lib/barGeometry'
 
 
 interface UserProfileView {
@@ -79,6 +87,27 @@ interface UserProfileView {
   about?: string | null
   /** The server's `identityVisible`, or your own profile. Nothing else sets it. */
   identityVisible: boolean
+  /**
+   * Flow 5 P-A: the room's question, their answer and their "Here to" pick, from `GET /users/:handle`'s `tonight`. Only
+   * through a room handle, only to somebody in that room now, never to a host; absent otherwise. Not identity.
+   */
+  tonight?: { lens: RoomLens | null; answer: string | null; workIntent: WorkIntent | null } | null
+}
+
+/** `pA-page`: the hero starts 14 under the bar's buttons (`.xcol` top 116, the buttons end at 102). */
+const LENS_PAGE_TOP = SPACE.md + SPACE.xxs
+/** The board's `.xwash`: `radial-gradient(80% 46% at 50% 0%, rgba(190,92,113,.26), transparent 72%)` over the page's top 520. */
+const LENS_PAGE_WASH = [{ color: COLOR.brandRose, alpha: 0.26, at: [50, 0], size: [80, 46], reach: 0.72 }] as const
+// design-exception: 520, the height of the board's wash box (`.xwash`); no spacing token is a light's reach
+const LENS_PAGE_WASH_HEIGHT = 520
+
+/** The lens fields of a person nobody handed a card for: the page then shows the server's tonight block alone. */
+const NO_CARD = { workField: null, sharedIntents: [], interests: [], overlaps: [], badges: [] } as const
+
+function parseTonight(raw: unknown): UserProfileView['tonight'] {
+  if (!raw || typeof raw !== 'object') return null
+  const t = raw as { lens?: unknown; answer?: unknown; workIntent?: unknown }
+  return { lens: parseLens(t.lens), answer: typeof t.answer === 'string' ? t.answer : null, workIntent: parseWorkIntent(t.workIntent) }
 }
 
 /**
@@ -162,6 +191,9 @@ function UserProfileInner() {
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [liked, setLiked] = useState(likedInRoom === '1')
+  const [waved, setWaved] = useState<'none' | 'busy' | 'waved'>('none')
+  // P-A: the room's card for this handle, read once as the page opens (a later open elsewhere replaces the one slot).
+  const [handed] = useState(() => (eventId ? roomPersonFor(id) : null))
   const [likeBusy, setLikeBusy] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
@@ -344,6 +376,7 @@ function UserProfileInner() {
               : [],
             about: aboutLine(data as { languages?: string[]; homeState?: string | null; sign?: string | null }),
             identityVisible: data.identityVisible === true || data.isOwnProfile === true,
+            tonight: parseTonight((data as { tonight?: unknown }).tonight),
           }
         } else {
           const fallbackResult = await apiClient.getProfile(id)
@@ -472,6 +505,21 @@ function UserProfileInner() {
       setLikeBusy(false)
     }
   }, [eventId, profile, liked, likeBusy, showToast])
+
+  /* P-A page: a wave in this room, as the sheet waves. Once per ten minutes: one already sent reads as waved. */
+  const handleWave = useCallback(async () => {
+    if (!eventId || !profile || waved !== 'none') return
+    setWaved('busy')
+    const result = await apiClient.sendWave(String(eventId), profile.user_id).catch(() => null)
+    if (result?.success || result?.errorCode === 'WAVE_TOO_SOON') {
+      // Said as it lands (iOS); on Android the dock row is a live region.
+      announceOutcome(`Waved at ${identity.title}`)
+      return setWaved('waved')
+    }
+    setWaved('none')
+    const refusal = likeRefusal(result?.errorCode, result?.error)
+    showToast(refusal.message, refusal.variant === 'error' ? 'error' : refusal.variant)
+  }, [eventId, profile, waved, showToast, identity.title])
 
   /*
    * The other half of a mutual like arrives while this page is open (SCRUM-960): the room draws the moment, and the page
@@ -637,6 +685,27 @@ function UserProfileInner() {
   const heroTitle = identity.title
 
   /*
+   * Flow 5 P-A (`pA-page`, `pA-page-named`): opened from a room, the person through that room's lens. The lead pills and
+   * In common are the room's own card for exactly this handle (`roomPersonFor`); the question, their answer and their
+   * pick are the server's (fresher, and they are what it allows). Nothing of yours, and nothing for somebody else.
+   */
+  const tonight = profile?.tonight ?? null
+  const lensPage = !!eventId && !!profile && ctaMode !== 'self' && !!(handed || tonight)
+  const lensBlocks = lensPage
+    ? lensView(
+        {
+          ...(handed?.person ?? NO_CARD),
+          age: profile?.age,
+          tonightAnswer: tonight ? tonight.answer : handed?.person.tonightAnswer,
+          workIntent: tonight ? tonight.workIntent : handed?.person.workIntent,
+        },
+        tonight?.lens ?? handed?.lens ?? null,
+        null,
+        revealed
+      )
+    : null
+
+  /*
    * The frame's line under the name is "PRO MEMBER • @blendn_julia". Neither exists --
    * there is no membership tier and no username column -- so it carries what is
    * real and, in an unrevealed profile, is the whole point of `work_field`
@@ -646,6 +715,8 @@ function UserProfileInner() {
 
   const columnWidth = Math.floor((windowWidth - SPACE.gutter * 2 - SPACE.sm) / 2)
   const showDock = !loading && !!profile && ctaMode !== 'self'
+  // A request to answer, or a friend to add, keeps the profile's own dock: those are the action, not a wave.
+  const lensDock = !!lensBlocks && !incoming && !friendLead
   const heroHeight = heroFoldHeight({
     width: windowWidth,
     design: heroHeightFor(windowWidth),
@@ -680,6 +751,21 @@ function UserProfileInner() {
           <ProfileSkeleton width={windowWidth} />
         ) : (
           <Animated.View entering={arrive}>
+            {lensBlocks ? (
+              <View testID="profile-lens-page" style={[styles.lensPage, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + LENS_PAGE_TOP }]}>
+                <RadialWash testID="profile-lens-wash" layers={LENS_PAGE_WASH} style={styles.lensWash} />
+                <ProfileLensHero testID="profile-lens-hero" photo={revealed ? (photos[0] ?? null) : null} seed={identity.seed} name={identity.name} meta={lensBlocks.meta} />
+                <LensBlocks
+                  lead={lensBlocks.lead}
+                  tonight={lensBlocks.tonight}
+                  common={lensBlocks.common}
+                  // Owner pick r1 C: once they have shown you who they are, their bio as one card in the lens's voice.
+                  bio={revealed ? { about: profile?.bio, interests: profile?.interests, work: profile?.occupation } : null}
+                  testID="profile-lens"
+                />
+              </View>
+            ) : (
+            <>
             <ProfileHeroStage
               testID="profile-hero"
               width={windowWidth}
@@ -739,12 +825,45 @@ function UserProfileInner() {
                 empty={revealed ? PROFILE_EMPTY : null}
               />
             </View>
+            </>
+            )}
           </Animated.View>
         )}
       </Animated.ScrollView>
 
       {/* The tray stays put while the bio, interests and gallery scroll beneath it: Like and Connect are in the thumb's reach on any phone. */}
-      {showDock ? (
+      {showDock && lensDock ? (
+        // `pA-page`'s dock (`.dock4`): Wave, and Message the wide one, on the glass line. The request line stays in Message's label.
+        <Dock line floating round={false} onHeight={setDockHeight} testID="profile-dock">
+          <View testID="profile-lens-dock-row" accessibilityLiveRegion="polite" style={styles.dockRow}>
+            <Button
+              kind="secondary"
+              size="dock"
+              onGlass
+              // Owner pick r3 A: while it sends, the hand waves as the sheet's does (#51), not a spinner.
+              // At rest it is the dock's own 18 pt glyph, as the board draws it (`ic('hand',18)`).
+              icon={waved === 'waved' ? 'check' : 'hand'}
+              leading={waved === 'busy' ? <WavingHand testID="profile-wave-hand" size={DOCK_GLYPH} /> : undefined}
+              label={waved === 'waved' ? 'Waved' : 'Wave'}
+              accessibilityLabel={waved === 'waved' ? `Waved at ${heroTitle}` : `Wave at ${heroTitle}`}
+              disabled={waved !== 'none'}
+              onPress={() => void handleWave()}
+              testID="profile-wave"
+            />
+            <Button
+              kind={ctaLit ? 'lit' : 'secondary'}
+              size="dock"
+              icon={ctaDisabled ? undefined : 'message-circle'}
+              label={ctaMode === 'connect' ? 'Message' : CTA_LABEL[ctaMode]}
+              accessibilityLabel={ctaMode === 'connect' ? `Message ${heroTitle}. Sends a request and shows them your name and photo` : undefined}
+              disabled={ctaDisabled}
+              onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
+              style={styles.flex}
+              testID="profile-cta"
+            />
+          </View>
+        </Dock>
+      ) : showDock ? (
         <ProfileDock
           testID="profile-dock"
           note={incoming ? null : friendRequested ? FRIEND_COPY.requestSentNote : ctaMessage || null}
@@ -890,6 +1009,11 @@ const styles = StyleSheet.create({
   self: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.md },
   selfText: { flexShrink: 1, color: COLOR.textSecondary },
   flex: { flex: 1 },
+  /** `.dock4`: Wave hugs its label, Message takes the rest, 12 apart. */
+  dockRow: { flexDirection: 'row', gap: SPACE.md },
+  /** `pA-page`: 20 between the hero and each block; the top is the bar's (`LENS_PAGE_TOP`). */
+  lensPage: { paddingHorizontal: SPACE.gutter, gap: SPACE.lg + SPACE.xs },
+  lensWash: { position: 'absolute', top: 0, left: 0, right: 0, height: LENS_PAGE_WASH_HEIGHT },
 })
 
 

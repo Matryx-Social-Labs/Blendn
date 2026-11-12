@@ -43,6 +43,8 @@ export interface RoomAttendee {
   userId: string
   /** Flow 5 P-A: their answer to tonight's question, for this page only (`MatchCard.tonightAnswer`). */
   tonightAnswer?: string | null
+  /** Flow 5 P-A: why they are here (work lens), for this page only (`MatchCard.workIntent`). */
+  workIntent?: string | null
   displayName: string
   photo: string | null
   sharedInterests: string[]
