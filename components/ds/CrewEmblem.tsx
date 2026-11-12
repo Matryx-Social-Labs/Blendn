@@ -85,15 +85,28 @@ const rotateAbout = (deg: number, px: number, py: number) => {
   return [cos, sin, -sin, cos, px - px * cos + py * sin, py - px * sin - py * cos]
 }
 
-const AnimatedG = Animated.createAnimatedComponent(G)
+// `display` and `matrix` are native props of every react-native-svg node; its types leave them off G.
+const AnimatedG = Animated.createAnimatedComponent(G<{ display?: string; matrix?: number[] }>)
 
-type Frame = { matrix: number[]; opacity: number }
+const AnimatedText = Animated.createAnimatedComponent(SvgText)
+
+/**
+ * A part comes and goes by `display`, never by a group's opacity: on Android (react-native-svg 15.15) a group whose
+ * opacity is not 1 draws into a canvas-sized bitmap of its own every frame, and a toggle landing mid-draw restored a
+ * canvas it had never saved; the Release app died in the clink ("Underflow in restore - more restores than saves").
+ */
+const shown = (on: boolean) => {
+  'worklet'
+  return on ? 'inline' : 'none'
+}
+type Matrix = [number, number, number, number, number, number]
+type Frame = { matrix: number[]; display: 'inline' | 'none' }
 /**
  * A scene's first frame, as props G's JS side reads. Reanimated hands `matrix` over as an initial prop, which
  * react-native-svg's G drops (it reads `transform`), so on device the first frame drew every part at identity, one
  * full-size head filling the plate, until the UI thread's first update landed. Every animated group gets both.
  */
-const firstFrame = ({ matrix, opacity }: Frame) => ({ transform: matrix as [number, number, number, number, number, number], opacity })
+const firstFrame = ({ matrix, display }: Frame) => ({ transform: matrix as Matrix, display })
 
 type PoseFn = (t: number, i: number) => Pose
 
@@ -105,14 +118,14 @@ function Arm({ t, pose, slot, side, c }: { t: SharedValue<number>; pose: PoseFn;
   const armAt = (v: number): Frame => {
     'worklet'
     const deg = (pose(v, slot).arm || [0, 0])[side]
-    return { matrix: rotateAbout(-deg * dir, x, ARM_Y), opacity: deg ? 1 : 0 }
+    return { matrix: rotateAbout(-deg * dir, x, ARM_Y), display: shown(deg !== 0) }
   }
   // The cup stays upright in the mitt.
   const cupAt = (v: number): Frame => {
     'worklet'
     const p = pose(v, slot)
     const deg = (p.arm || [0, 0])[side]
-    return { matrix: rotateAbout(deg * dir, x, handY), opacity: p.cup ? 1 : 0 }
+    return { matrix: rotateAbout(deg * dir, x, handY), display: shown(!!p.cup) }
   }
   const arm = useAnimatedProps(() => armAt(t.get()))
   const cup = useAnimatedProps(() => cupAt(t.get()))
@@ -129,8 +142,8 @@ function Arm({ t, pose, slot, side, c }: { t: SharedValue<number>; pose: PoseFn;
 
 /** One face of a character's, shown while its pose wears that mood. */
 function Mood({ t, pose, slot, mood, rest, markup }: { t: SharedValue<number>; pose: PoseFn; slot: number; mood: CreatureMood; rest: CreatureMood; markup: string }) {
-  const shown = useAnimatedProps(() => ({ opacity: (pose(t.get(), slot).mood || rest) === mood ? 1 : 0 }))
-  return <AnimatedG animatedProps={shown}>{elementsOf(markup)}</AnimatedG>
+  const on = useAnimatedProps(() => ({ display: shown((pose(t.get(), slot).mood || rest) === mood) }))
+  return <AnimatedG animatedProps={on} display={mood === rest ? undefined : 'none'}>{elementsOf(markup)}</AnimatedG>
 }
 
 type CharacterProps = {
@@ -151,7 +164,7 @@ function Character({ t, pose, spot, species, rest, moods, c, hue, behind }: Char
   const placedAt = (v: number): Frame => {
     'worklet'
     const visible = behind === undefined || frontGoesFirst(v) === behind
-    return { matrix: placeMatrix(cx, cy, s, pose(v, slot)), opacity: visible ? 1 : 0 }
+    return { matrix: placeMatrix(cx, cy, s, pose(v, slot)), display: shown(visible) }
   }
   const placed = useAnimatedProps(() => placedAt(t.get()))
   const faces = [...new Set([rest, ...moods])]
@@ -171,7 +184,7 @@ function Spark({ t, at: [x, y], fx }: { t: SharedValue<number>; at: readonly [nu
   const litAt = (v: number): Frame => {
     'worklet'
     const s = sparkScale(v)
-    return { matrix: [s, 0, 0, s, x - s * x, y - s * y], opacity: fx(v) === 'spark' ? 1 : 0 }
+    return { matrix: [s, 0, 0, s, x - s * x, y - s * y], display: shown(fx(v) === 'spark') }
   }
   const lit = useAnimatedProps(() => litAt(t.get()))
   return (
@@ -182,24 +195,28 @@ function Spark({ t, at: [x, y], fx }: { t: SharedValue<number>; at: readonly [nu
 }
 
 function Zee({ t, x, y, rise, size, fade, c }: { t: SharedValue<number>; x: number; y: number; rise: number; size: number; fade: number; c: HuddleHue }) {
-  const upAt = (v: number): Frame => {
+  const riseAt = (v: number) => {
     'worklet'
-    const u = v > 0.45 ? zRise(v) : 0
-    return { matrix: [1, 0, 0, 1, u, -rise * u], opacity: u * fade }
+    return v > 0.45 ? zRise(v) : 0
   }
-  const up = useAnimatedProps(() => upAt(t.get()))
+  const up = useAnimatedProps(() => {
+    const u = riseAt(t.get())
+    return { matrix: [1, 0, 0, 1, u, -rise * u] }
+  })
+  // The fade is the glyph's paint, not the group's (see `shown`).
+  const fadeIn = useAnimatedProps(() => ({ fillOpacity: riseAt(t.get()) * fade }))
   return (
-    <AnimatedG animatedProps={up} {...firstFrame(upAt(0))}>
-      <SvgText x={x} y={y} fontFamily={Z_FAMILY} fontSize={size} fill={c.g}>
+    <AnimatedG animatedProps={up}>
+      <AnimatedText animatedProps={fadeIn} fillOpacity={0} x={x} y={y} fontFamily={Z_FAMILY} fontSize={size} fill={c.g}>
         z
-      </SvgText>
+      </AnimatedText>
     </AnimatedG>
   )
 }
 
 function Effects({ t, scene, c }: { t: SharedValue<number>; scene: CrewScene; c: HuddleHue }) {
   const fx = SCENES[scene].fx
-  const clink = useAnimatedProps(() => ({ opacity: fx && fx(t.get()) === 'clink' ? 1 : 0 }))
+  const clink = useAnimatedProps(() => ({ display: shown(!!fx && fx(t.get()) === 'clink') }))
   if (!fx) return null
   if (scene === 'sleepy') {
     return (
@@ -209,7 +226,7 @@ function Effects({ t, scene, c }: { t: SharedValue<number>; scene: CrewScene; c:
       </>
     )
   }
-  if (scene === 'clink') return <AnimatedG animatedProps={clink}>{elementsOf(CLINK_MARKUP)}</AnimatedG>
+  if (scene === 'clink') return <AnimatedG animatedProps={clink} display="none">{elementsOf(CLINK_MARKUP)}</AnimatedG>
   return (
     <>
       {SPARKS.map((at) => (

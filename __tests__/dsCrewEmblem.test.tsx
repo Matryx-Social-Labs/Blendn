@@ -169,6 +169,16 @@ describe('<CrewEmblem>', () => {
     }
   )
 
+  // Android (react-native-svg 15.15) draws a group whose opacity is not 1 into a canvas-sized bitmap of its own, every
+  // frame, and a toggle landing mid-draw restores a canvas it never saved: the Release app died in the clink with
+  // "Underflow in restore". A part comes and goes by `display`, a fade is the paint's (`fillOpacity`), never a group's.
+  it.each(CREW_SCENES.map((scene) => [scene] as const))('no group in the %s scene carries an opacity; hidden parts are display none', async (scene) => {
+    await render(<CrewEmblem seed={SEEDS[4]} size={120} scene={scene} />)
+    const groups = screen.root!.queryAll((n) => n.type === 'RNSVGGroup')
+    expect(groups.filter((n) => n.props.opacity !== undefined && n.props.opacity !== 1)).toHaveLength(0)
+    expect(groups.some((n) => n.props.display === 'none')).toBe(true)
+  })
+
   it('a scene plays once, then rests and says so', async () => {
     jest.useFakeTimers()
     const onDone = jest.fn()
