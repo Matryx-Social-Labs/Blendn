@@ -882,6 +882,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         <Animated.View key="ended" style={styles.layer} exiting={FadeOut.duration(DURATION.quick)}>
           {/* Under People from tonight the Recap is not there for a screen reader: a swipe never walks past the deck. */}
           <View
+            // Never flattened: its opacity comes and goes, and a flattened layer moves the Recap between parents (SCRUM-1048).
+            collapsable={false}
             style={[styles.layer, peopleOpen && styles.underPeople]}
             pointerEvents={peopleOpen ? 'none' : 'auto'}
             accessibilityElementsHidden={peopleOpen}
