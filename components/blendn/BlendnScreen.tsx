@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
+import { interestNames } from '../../lib/meProfile'
 import { usePassReach } from '../../lib/usePassReach'
 import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNotice, setLiveRoomChat, setRoomUp, setRoomTab, takePendingPerson, takeReturnTo, useRoomTab, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import type { RoomTab } from '../../lib/roomTab'
@@ -69,7 +70,7 @@ import { Material } from '../ui/Material'
 import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { faceOf, RoomSkeleton, RoomYouCard, useNow } from './RoomSections'
-import { lensView } from '../../lib/roomLens'
+import { contextLine, lensView } from '../../lib/roomLens'
 import { FriendsHere } from './FriendsHere'
 import { RoomCancelled } from './RoomCancelled'
 import { RoomStage, useStage } from './RoomStage'
@@ -132,6 +133,10 @@ const ROOM_COACH_TEXT = 'People here can’t see your name or photo until you ch
 
 /** A card to open: someone on the roster, or (a wave from someone it doesn't list) only their name: the thin card. */
 type OpenCard = { id: string; name: string }
+/** The person sheet shows this many of their interests (state 2 B's chips, the combined board). */
+const SHEET_INTERESTS = 3
+/** Who the Connect sheet is for, and the opener they tapped to get there (SCRUM-1042), if any. */
+type ConnectTarget = OpenCard & { draft?: string }
 
 /**
  * The Blend'n screen — what the disc in the middle of the bar opens, always
@@ -584,7 +589,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   const [shownCard, setShownCard] = useState<OpenCard | null>(null)
   if (open && open !== shownCard) setShownCard(open)
   const card = open ?? shownCard
-  const [connectTo, setConnectTo] = useState<OpenCard | null>(null)
+  const [connectTo, setConnectTo] = useState<ConnectTarget | null>(null)
   const [connecting, setConnecting] = useState(false)
   const [connectError, setConnectError] = useState<string | undefined>()
   // The Room's coach mark: once the pour has handed off, with nothing over the Room; never to someone already shown.
@@ -626,6 +631,28 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       return next
     })
   const cardPerson = card ? (room.people.find((p) => p.id === card.id) ?? null) : null
+  /*
+   * State 2 C on the sheet: one line, the latest event you have both been to. Asked only for somebody the room shows
+   * you (a photo arrives only then); the server applies the same rule again and answers [] otherwise.
+   */
+  const [sharedLine, setSharedLine] = useState<{ id: string; line: { latest: string; more: number } | null; interests: string[] } | null>(null)
+  const sharedFor = cardPerson?.photo ? cardPerson.id : null
+  useEffect(() => {
+    if (!sharedFor) return
+    let live = true
+    // Their interests too (state 2 B's chips): the deck sends only the ones you share, the profile the rest once shown.
+    Promise.all([apiClient.getSharedEvents(sharedFor, 1), apiClient.getPublicProfile(sharedFor)])
+      .then(([r, p]) => {
+        const first = r.success ? r.data?.events[0] : undefined
+        const shown = p.success && p.data?.identityVisible
+        const interests = shown ? interestNames(p.data?.interests).slice(0, SHEET_INTERESTS) : []
+        if (live) setSharedLine({ id: sharedFor, line: first ? { latest: first.title, more: Math.max(0, (r.data?.pagination.totalCount ?? 1) - 1) } : null, interests })
+      })
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [sharedFor])
   /*
    * What waits for the card to have left: Block / Report, the ConnectSheet, a
    * crew chooser. iOS drops a Modal presented while another is still leaving,
@@ -700,8 +727,12 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       setOpen(null)
       // P-A page: the room's card goes with them (lead pills, In common), in memory, never in the link.
       if (seen) {
-        const { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent } = seen
-        handRoomPerson(p.id, { person: { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent }, lens: room.lens })
+        const { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent, arrivedAt } = seen
+        handRoomPerson(p.id, {
+          person: { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent, arrivedAt },
+          lens: room.lens,
+          context: room.event ? contextLine(room.lens, room.event) : null,
+        })
       }
       // The event travels with the id (the profile's Like needs the room), and the pseudonym titles it until the server says who they are.
       // What the room knows of them goes too: the profile cannot ask a handle whether you liked or matched (SCRUM-953).
@@ -716,7 +747,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         } as never,
       })
     },
-    [eventId, room.lens]
+    [eventId, room.lens, room.event]
   )
   /** Into the DM. `draft` is the opener the match moment suggested: it waits in the composer, never sent for you. */
   const sayHi = useCallback((conversationId: string, p: { id: string; name: string }, draft?: string | null) => {
@@ -1124,7 +1155,9 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           name: cardPerson?.name ?? card?.name ?? '',
           age: cardPerson?.age,
           // P-A: their deck card through the room's lens; a photo arrives only once they have shown you who they are.
-          ...(cardPerson ? lensView(cardPerson, room.lens, room.event, !!cardPerson.photo) : {}),
+          ...(cardPerson ? lensView(cardPerson, room.lens, room.event, !!cardPerson.photo, now) : {}),
+          shared: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.line : null,
+          interests: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.interests : undefined,
         }}
         liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
         requested={!!cardPerson?.requested}
@@ -1147,6 +1180,12 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           closeCardThen(() => setConnectTo(to))
         }}
         onSayHi={() => cardPerson?.conversationId && sayHi(cardPerson.conversationId, cardPerson)}
+        onOpener={(text) => {
+          if (!card) return
+          if (cardPerson?.matched && cardPerson.conversationId) return sayHi(cardPerson.conversationId, cardPerson, text)
+          const to = card
+          closeCardThen(() => setConnectTo({ ...to, draft: text }))
+        }}
         onMore={() => card && safety(card)}
         onViewProfile={() => card && openProfile(card, cardPerson ?? undefined)}
         testID="person-card"
@@ -1155,12 +1194,13 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       <MuteSheet chatGroupId={muting} onClose={() => setMuting(null)} />
       <ConnectSheet
         // A new person is a new draft: the sheet keeps none from the last (SCREENS Flow 4, ConnectSheet).
-        key={connectTo?.id ?? 'none'}
+        key={connectTo ? `${connectTo.id}:${connectTo.draft ?? ''}` : 'none'}
         visible={connectTo !== null}
         displayName={connectTo?.name ?? ''}
         theyAreRevealed={Boolean(room.people.find((p) => p.id === connectTo?.id)?.photo)}
         sending={connecting}
         error={connectError}
+        draft={connectTo?.draft}
         onDismiss={() => {
           setConnectTo(null)
           setConnectError(undefined)

@@ -721,6 +721,8 @@ function RootLayout() {
         }} 
       />
       <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
+      {/* A person's "You've both been to", all of it (SCRUM-1042): its own TopBar, like the page it opens from. */}
+      <Stack.Screen name="shared-events/[id]" options={{ headerShown: false }} />
       {/*
         `/room` only opens the Blend'n overlay (hosted by the tab layout) and
         steps back. No animation, so the hop is invisible.

@@ -63,6 +63,7 @@ export function attendeeFromMatch(m: RoomAttendee): AttendeeProfile {
     badges: m.badges ?? [],
     tonightAnswer: m.tonightAnswer ?? null,
     workIntent: m.workIntent ?? null,
+    checkInTime: m.checkInTime ?? null,
   }
 }
 

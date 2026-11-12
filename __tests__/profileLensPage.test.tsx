@@ -28,6 +28,7 @@ jest.mock('../lib/apiClient', () => ({
     respondToMessageRequest: jest.fn(),
     sendFriendRequest: jest.fn(),
     sendWave: jest.fn(),
+    getSharedEvents: jest.fn(),
   },
 }))
 let mockMatchHandler: ((d: { eventId: string; otherUserId: string; conversationId: string; name: string }) => void) | null = null
@@ -46,11 +47,11 @@ jest.mock('../components/profile/PhotoViewer', () => ({ PhotoViewer: () => null 
 jest.mock('../components/Skeleton', () => ({ SkeletonBlock: () => null, SkeletonLine: () => null }))
 // Open, it is one button that sends "hi" — enough to drive what the screen does with the answer.
 jest.mock('../components/grid/ConnectSheet', () => ({
-  ConnectSheet: (p: { visible: boolean; onSend: (m: string) => void }) => {
+  ConnectSheet: (p: { visible: boolean; draft?: string; onSend: (m: string) => void }) => {
     const React = require('react')
     const { Pressable, Text } = require('react-native')
     return p.visible
-      ? React.createElement(Pressable, { onPress: () => p.onSend('hi') }, React.createElement(Text, null, 'Send request'))
+      ? React.createElement(Pressable, { onPress: () => p.onSend('hi') }, React.createElement(Text, null, 'Send request'), p.draft ? React.createElement(Text, null, `draft: ${p.draft}`) : null)
       : null
   },
 }))
@@ -107,6 +108,7 @@ const open = async (data: object, params: Record<string, string> = {}, ready = '
   api.getConversations.mockResolvedValue({ success: true, data: [] } as never)
   api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [] } } as never)
   api.sendWave.mockResolvedValue({ success: true, data: { sent: true } } as never)
+  api.getSharedEvents.mockResolvedValue({ success: true, data: { events: [], pagination: { limit: 5, hasMore: false, nextCursor: null, totalCount: 0 } } } as never)
   await render(<UserProfile />)
   await screen.findAllByText(ready)
   await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
@@ -172,11 +174,12 @@ it('anonymous: no bio card, whatever arrives', async () => {
   expect(tree()).not.toContain('leaked bio')
 })
 
-it('a venue night with nothing in common says so quietly (owner pick r2 A); a page with blocks does not (control: the first test)', async () => {
+it('a venue night with nothing in common: the openers now stand in for r2 A’s quiet line (owner pick state 1 A, SCRUM-1042)', async () => {
   handRoomPerson('rh_bison', card({ workField: null, sharedIntents: [], interests: [] }))
   await open({ ...ANON, tonight: { lens: { key: 'venue_night', question: null }, answer: null, workIntent: null } })
-  expect(screen.getByTestId('profile-lens-empty')).toBeTruthy()
+  expect(screen.getByTestId('profile-lens-openers')).toBeTruthy()
   expect(screen.getByText('Nothing on your profiles in common yet.')).toBeTruthy()
+  expect(screen.queryByTestId('profile-lens-empty')).toBeNull()
 })
 
 it('a card handed for somebody else is never drawn on this page: the Tonight card alone (the control is the first test)', async () => {
@@ -251,4 +254,125 @@ it('outside a room, or with no lens anywhere, it is the profile page it always w
   await open({ ...ANON, tonight: undefined }, {}, 'Gentle Bison, 31')
   expect(screen.queryByTestId('profile-lens-hero')).toBeNull()
   expect(screen.getByText('Gentle Bison, 31')).toBeTruthy()
+})
+
+describe('state 1 A (SCRUM-1042): a venue night, anonymous, nothing in common', () => {
+  const VENUE = { ...ANON, name: 'Fierce Owl', tonight: { lens: { key: 'venue_night', question: null }, answer: null, workIntent: null } }
+  const venueCard = (person: object = {}) => ({
+    ...card({ workField: null, sharedIntents: [], interests: [], arrivedAt: new Date(Date.now() - 40 * 60_000).toISOString(), ...person }),
+    lens: { key: 'venue_night', question: null },
+    context: 'At Counter Kitchen',
+  })
+
+  it('under the name, where and how long; then the openers card in place of the quiet line', async () => {
+    handRoomPerson('rh_bison', venueCard())
+    await open(VENUE, { pseudonym: 'Fierce Owl', roomSeed: 'e1:rh_bison' }, 'Fierce Owl')
+    const t = tree()
+    const seq = ['Fierce Owl', 'Anonymous · 31', 'At Counter Kitchen', 'Here 40 min', 'Nothing on your profiles in common yet.', 'Start with tonight instead.', 'First time here?', 'What’s good here?', 'Who are you here with?', 'An opener goes into Message.', 'profile-wave']
+    const idx = seq.map((x) => t.indexOf(x))
+    expect(seq.filter((_, i) => idx[i] < 0)).toEqual([])
+    expect([...idx].sort((a, b) => a - b)).toEqual(idx)
+    expect(screen.queryByText('A wave is the lightest hello.')).toBeNull()
+  })
+
+  it('an opener types itself into the Connect sheet, which still asks before your name is shown', async () => {
+    handRoomPerson('rh_bison', venueCard())
+    await open(VENUE, { pseudonym: 'Fierce Owl', roomSeed: 'e1:rh_bison' }, 'Fierce Owl')
+    await fireEvent.press(screen.getByTestId('profile-lens-opener-2'))
+    expect(await screen.findByText('draft: Who are you here with?')).toBeTruthy()
+    expect(api.createMessageRequest).not.toHaveBeenCalled()
+  })
+
+  it('no time pill for a card with no arrival, and no pills at all without a card (controls)', async () => {
+    handRoomPerson('rh_bison', venueCard({ arrivedAt: null }))
+    await open(VENUE, { pseudonym: 'Fierce Owl', roomSeed: 'e1:rh_bison' }, 'Fierce Owl')
+    expect(screen.getByText('At Counter Kitchen')).toBeTruthy()
+    expect(screen.queryByText(/^Here /)).toBeNull()
+  })
+
+  it('once they have shown you who they are, state 1 is not drawn: no openers (state 2 is its own)', async () => {
+    handRoomPerson('rh_bison', venueCard())
+    await open({ ...VENUE, name: 'Divya', identityVisible: true, photos: ['https://cdn/d.jpg'] }, {}, 'Divya')
+    expect(screen.queryByTestId('profile-lens-openers')).toBeNull()
+  })
+})
+
+describe('state 2 (SCRUM-1042, the owner-approved combined board): somebody shown to you, with little on their profile', () => {
+  const NAMED = {
+    ...ANON,
+    name: 'Venkatalakshmi',
+    identityVisible: true,
+    photos: ['https://cdn/v0.jpg', 'https://cdn/v1.jpg', 'https://cdn/v2.jpg'],
+    bio: 'Conservation architect. Ask me about the stepwells.',
+    interests: ['Heritage walks in Thiruvananthapuram', 'PBKS'],
+    occupation: 'Senior Conservation Architect, Kerala State Heritage Board',
+    tonight: { lens: WORK, answer: null, workIntent: null },
+  }
+  const ev = (i: number) => ({ id: `ev${i}`, title: i === 0 ? 'Kerala Design Festival 2026: Late Night Print Fair, Riso Workshop & Closing Party' : `Night ${i}`, startTime: '2026-10-12T14:00:00Z', timezone: 'Asia/Kolkata', venueName: 'Champaca Bookstore', coverImageUrl: null })
+  const sharedPage = (n: number, total = n) => ({ success: true, data: { events: Array.from({ length: n }, (_, i) => ev(i)), pagination: { limit: 5, hasMore: total > n, nextCursor: null, totalCount: total } } })
+  const named = async (data: object = {}, shared = sharedPage(2)) => {
+    handRoomPerson('rh_bison', { ...card({ workField: null, sharedIntents: [], interests: [], arrivedAt: new Date(Date.now() - 40 * 60_000).toISOString() }), context: 'At Counter Kitchen' })
+    api.getSharedEvents.mockResolvedValue(shared as never)
+    mockParams = { id: 'rh_bison', eventId: 'e1', pseudonym: 'Gentle Bison', roomSeed: 'e1:rh_bison' }
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...NAMED, ...data } } as never)
+    api.getConversations.mockResolvedValue({ success: true, data: [] } as never)
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [] } } as never)
+    await render(<UserProfile />)
+    await screen.findAllByText('Venkatalakshmi')
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+  }
+
+  it('reads B first (where, how long, the question to ask), the bio, then A (other photos, say hi), then C', async () => {
+    await named()
+    const t = tree()
+    const seq = ['Shown to you · 31', 'At Counter Kitchen', 'Here 40 min', 'Tonight’s question', 'What are you working on?', 'Not answered yet', 'Ask in a message', 'About', 'Conservation architect.', 'Work', 'profile-lens-photos', 'Say hi · ask Venkatalakshmi about', 'You’ve both been to', 'Kerala Design Festival 2026', 'Night 1']
+    const idx = seq.map((x) => t.indexOf(x))
+    expect(seq.filter((_, i) => idx[i] < 0)).toEqual([])
+    expect([...idx].sort((a, b) => a - b)).toEqual(idx)
+    // Asked for this room's handle, five at a time.
+    expect(api.getSharedEvents).toHaveBeenCalledWith('rh_bison', 5)
+    // Two shared: no See all.
+    expect(screen.queryByTestId('profile-lens-shared-all')).toBeNull()
+  })
+
+  it('their OTHER photos only: the hero is the first, so three photos make a row of two', async () => {
+    await named()
+    expect(screen.getByTestId('profile-lens-photos-0')).toBeTruthy()
+    expect(screen.getByTestId('profile-lens-photos-1')).toBeTruthy()
+    expect(screen.queryByTestId('profile-lens-photos-2')).toBeNull()
+  })
+
+  it('the question and a say-hi go into the Connect sheet as typed; nothing sends', async () => {
+    await named()
+    await fireEvent.press(screen.getByTestId('profile-lens-ask'))
+    expect(await screen.findByText('draft: What are you working on?')).toBeTruthy()
+    expect(api.createMessageRequest).not.toHaveBeenCalled()
+  })
+
+  it('say hi is built from their first interest and their work, in the owner’s words', async () => {
+    await named()
+    await fireEvent.press(screen.getByTestId('profile-lens-say-hi-1'))
+    expect(await screen.findByText('draft: Saw Senior Conservation Architect, Kerala State Heritage Board on your profile. How did you get into it?')).toBeTruthy()
+  })
+
+  it('twelve shared: five, then See all 12, which opens the list for this handle', async () => {
+    await named({}, sharedPage(5, 12))
+    expect(screen.getByTestId('profile-lens-shared-4')).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('profile-lens-shared-all'))
+    const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } }
+    expect(router.push).toHaveBeenCalledWith({ pathname: '/shared-events/[id]', params: { id: 'rh_bison', name: 'Venkatalakshmi' } })
+  })
+
+  it('none shared and one photo: no card and no row at all (controls for the two above)', async () => {
+    await named({ photos: ['https://cdn/v0.jpg'] }, sharedPage(0))
+    expect(screen.queryByTestId('profile-lens-shared')).toBeNull()
+    expect(screen.queryByTestId('profile-lens-photos')).toBeNull()
+    expect(screen.queryByText('You’ve both been to')).toBeNull()
+  })
+
+  it('anonymous: shared events are never asked for (state 1’s control)', async () => {
+    handRoomPerson('rh_bison', card())
+    await open(ANON)
+    expect(api.getSharedEvents).not.toHaveBeenCalled()
+  })
 })

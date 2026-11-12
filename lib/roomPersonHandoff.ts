@@ -10,8 +10,10 @@
 import type { LensPerson, RoomLens } from './roomLens'
 
 export interface RoomPersonCard {
-  person: LensPerson & { age?: number | null; tonightAnswer?: string | null }
+  person: LensPerson & { age?: number | null; tonightAnswer?: string | null; arrivedAt?: string | null }
   lens: RoomLens | null
+  /** Where you both are, as the sheet's first line says it ("At Counter Kitchen"): the page's first pill (state 1 A, 2 B). */
+  context?: string | null
 }
 
 // ponytail: one slot, the last card opened; the page reads it once on mount, so a later open cannot change a page already up.

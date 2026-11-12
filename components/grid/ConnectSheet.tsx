@@ -56,6 +56,7 @@ export function ConnectSheet({
   theyAreRevealed = false,
   sending,
   error,
+  draft,
   onSend,
   onDismiss,
 }: {
@@ -70,10 +71,12 @@ export function ConnectSheet({
    * and gone in seconds (drive 2026-10-27). Shown until the text is edited.
    */
   error?: string
+  /** An opener the person tapped (SCRUM-1042): the note starts as it, for this opening only. Nothing sends until Send. */
+  draft?: string
   onSend: (message: string) => void
   onDismiss: () => void
 }) {
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(draft ?? '')
   // The text the shown error is about: editing it clears the error (DS: in error until the value changes).
   const [sentAs, setSentAs] = useState<string | null>(null)
 
@@ -88,7 +91,7 @@ export function ConnectSheet({
   if (openFor !== shownFor) {
     setShownFor(openFor)
     if (openFor !== null) {
-      setMessage('')
+      setMessage(draft ?? '')
       setSentAs(null)
     }
   }

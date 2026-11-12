@@ -185,6 +185,7 @@ describe('attendeeFromMatch', () => {
         sign: 'Leo ♌',
         badges: [{ kind: 'regular_here', label: 'Regular here' }],
         tonightAnswer: 'A map of quiet cafés',
+        checkInTime: '2026-11-12T11:08:04.967Z',
       })
     ).toEqual({
       user_id: 'u',
@@ -204,11 +205,12 @@ describe('attendeeFromMatch', () => {
       badges: [{ kind: 'regular_here', label: 'Regular here' }],
       tonightAnswer: 'A map of quiet cafés',
       workIntent: null,
+      checkInTime: '2026-11-12T11:08:04.967Z',
     })
   })
 
   it('reads an older server with no matching v2 fields as none of them', () => {
     const a = attendeeFromMatch({ userId: 'u', displayName: 'Blue Heron', photo: null, sharedInterests: [] })
-    expect([a.overlaps, a.sign, a.badges]).toEqual([[], null, []])
+    expect([a.overlaps, a.sign, a.badges, a.checkInTime]).toEqual([[], null, [], null])
   })
 })

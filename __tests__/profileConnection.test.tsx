@@ -27,6 +27,7 @@ jest.mock('../lib/apiClient', () => ({
     getProfile: jest.fn(),
     getWorkFields: jest.fn(),
     getConversations: jest.fn(),
+    getSharedEvents: jest.fn(() => Promise.resolve({ success: true, data: { events: [], pagination: { limit: 5, hasMore: false, nextCursor: null, totalCount: 0 } } })),
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
     likeAtEvent: jest.fn(),

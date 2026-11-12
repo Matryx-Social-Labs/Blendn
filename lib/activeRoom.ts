@@ -45,6 +45,8 @@ export interface RoomAttendee {
   tonightAnswer?: string | null
   /** Flow 5 P-A: why they are here (work lens), for this page only (`MatchCard.workIntent`). */
   workIntent?: string | null
+  /** When they checked in here (`MatchCard.checkInTime`, SCRUM-1042): the sheet's "Here 40 min". Null to a host. */
+  checkInTime?: string | null
   displayName: string
   photo: string | null
   sharedInterests: string[]

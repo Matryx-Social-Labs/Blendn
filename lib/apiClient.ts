@@ -657,6 +657,8 @@ export interface MatchCard {
   tonightAnswer?: string | null
   /** Flow 5 P-A: why they are here at a work-lens event (`hire` …), read through `parseWorkIntent`. Same readers as the answer. */
   workIntent?: string | null
+  /** When they checked in here (ISO), the sheet's "Here 40 min" (SCRUM-1042); null to a host. Optional: a client outlives a deploy. */
+  checkInTime?: string | null
 }
 
 /** `GET /events/:id/matches`: the page, and the room's lens (what leads on these cards; read through `parseLens`). */
@@ -1295,6 +1297,20 @@ export interface OwnProfileEnvelope {
   profile?: ProfileFields | null
   /** The interests as structured rows (the editor's chips); `profile.interests` is the labels. */
   interests?: { id: string; name: string; slug: string; icon: string | null }[]
+}
+
+/** `GET /users/:ref/shared-events`: one page, and the whole count. */
+export interface SharedEvent {
+  id: string
+  title: string
+  startTime: string
+  timezone: string
+  venueName: string | null
+  coverImageUrl: string | null
+}
+export interface SharedEventsPayload {
+  events: SharedEvent[]
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
 }
 
 /**
@@ -3005,6 +3021,15 @@ class ApiClientClass {
 
   async getPublicProfile(userId: string): Promise<ApiResponse<PublicProfile>> {
     return this.queuedRequest<PublicProfile>(`/api/mobile/users/${userId}`)
+  }
+
+  /**
+   * "You've both been to" (SCRUM-1042 state 2 C): past events you were both at, where they were not a pseudonym to you,
+   * newest first. The server decides all of it; a ref that does not name them answers an empty list.
+   */
+  async getSharedEvents(ref: string, limit: number, cursor?: string | null): Promise<ApiResponse<SharedEventsPayload>> {
+    const after = cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+    return this.queuedRequest<SharedEventsPayload>(`/api/mobile/users/${encodeURIComponent(ref)}/shared-events?limit=${limit}${after}`)
   }
 
   /**

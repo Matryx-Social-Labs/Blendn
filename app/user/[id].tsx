@@ -23,7 +23,7 @@ import { BadgeRow } from '../../components/profile/MeBadges'
 import { FoldBlock, PROFILE_EMPTY, ProfileBody, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { Glyph } from '../../components/ui/Glyph'
 import { Icon } from '../../components/ui/Icon'
-import { apiClient, type PublicProfile } from '../../lib/apiClient'
+import { apiClient, type PublicProfile, type SharedEvent } from '../../lib/apiClient'
 import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { likeRefusal } from '../../lib/likeRefusal'
 import { subscribeToRoomMatch } from '../../lib/socketClient'
@@ -47,7 +47,9 @@ import { LensBlocks } from '../../components/ds/LensBlocks'
 import { RadialWash } from '../../components/ui/GradientFill'
 import { WavingHand } from '../../components/ds/PersonCard'
 import { ProfileLensHero } from '../../components/profile/ProfileLensHero'
-import { lensView, parseLens, parseWorkIntent, type RoomLens, type WorkIntent } from '../../lib/roomLens'
+import { hereFor, lensView, parseLens, parseWorkIntent, type RoomLens, type WorkIntent } from '../../lib/roomLens'
+import { Chip } from '../../components/ds/Chip'
+import { OtherPhotos, SayHi, SHARED_SHOWN, SharedEvents } from '../../components/profile/ProfileSparseBlocks'
 import { roomPersonFor } from '../../lib/roomPersonHandoff'
 import { barCircleBottom } from '../../lib/barGeometry'
 
@@ -196,6 +198,27 @@ function UserProfileInner() {
   const [handed] = useState(() => (eventId ? roomPersonFor(id) : null))
   const [likeBusy, setLikeBusy] = useState(false)
   const [connectOpen, setConnectOpen] = useState(false)
+  /** The opener that opened the Connect sheet, if one did (SCRUM-1042): the note starts as it. */
+  const [connectDraft, setConnectDraft] = useState<string | undefined>()
+  /** State 2 C: "You've both been to", the server's first page, for somebody shown to you on a room's page. */
+  const [shared, setShared] = useState<{ events: SharedEvent[]; total: number } | null>(null)
+  // The clock for "Here 40 min": when the page opened (it is a page you glance at, not a live counter).
+  const [openedAt] = useState(() => Date.now())
+  // State 2 C, asked only for a room's page of somebody the server shows you; it applies the same rule again.
+  const sharedRef = eventId && profile?.identityVisible ? profile.user_id : null
+  useEffect(() => {
+    if (!sharedRef) return
+    let live = true
+    apiClient
+      .getSharedEvents(sharedRef, SHARED_SHOWN)
+      .then((r) => {
+        if (live && r.success && r.data) setShared({ events: r.data.events, total: r.data.pagination.totalCount })
+      })
+      .catch((e) => Logger.warn('profile', 'shared events failed', { error: String(e) }))
+    return () => {
+      live = false
+    }
+  }, [sharedRef])
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
   const { width: windowWidth } = useWindowDimensions()
   const bold = useBoldText()
@@ -447,7 +470,7 @@ function UserProfileInner() {
    * Message only. Connect opens `ConnectSheet` (`sendConnect` below), and
    * Requested is disabled — so this never sends a request itself.
    */
-  const handleConnect = () => {
+  const handleConnect = (draft?: string) => {
     if (!profile || ctaMode !== 'message' || !conversationId) return
     router.push({
       pathname: '/private-chat/[conversationId]',
@@ -461,6 +484,8 @@ function UserProfileInner() {
         // May be a room handle. The thread compares nothing with it, and
         // its only use — block or report — takes a handle as readily as an id.
         otherUserId: profile.user_id,
+        // An opener tapped on the page fills the composer once; nothing sends until you do.
+        ...(draft ? { draft } : {}),
       } as any,
     })
   }
@@ -717,6 +742,22 @@ function UserProfileInner() {
   const showDock = !loading && !!profile && ctaMode !== 'self'
   // A request to answer, or a friend to add, keeps the profile's own dock: those are the action, not a wave.
   const lensDock = !!lensBlocks && !incoming && !friendLead
+  /*
+   * An opener, tonight's question or a say-hi goes into Message, which is the Connect sheet (it still asks before your
+   * name is shown) or the chat once you can message each other. Nowhere to put it (requested, declined): none is drawn.
+   */
+  const sendOpener =
+    lensDock && ctaMode === 'connect'
+      ? (text: string) => {
+          setConnectDraft(text)
+          setConnectOpen(true)
+        }
+      : lensDock && ctaMode === 'message' && conversationId
+        ? (text: string) => handleConnect(text)
+        : undefined
+  // State 1 A and 2 B: where you both are and how long they have been here, from the room's own card.
+  const here = handed ? hereFor(handed.person.arrivedAt, openedAt) : null
+  const contextPills = lensBlocks && (revealed || !!lensBlocks.openers) ? [handed?.context, here].filter((x): x is string => !!x) : []
   const heroHeight = heroFoldHeight({
     width: windowWidth,
     design: heroHeightFor(windowWidth),
@@ -755,14 +796,47 @@ function UserProfileInner() {
               <View testID="profile-lens-page" style={[styles.lensPage, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + LENS_PAGE_TOP }]}>
                 <RadialWash testID="profile-lens-wash" layers={LENS_PAGE_WASH} style={styles.lensWash} />
                 <ProfileLensHero testID="profile-lens-hero" photo={revealed ? (photos[0] ?? null) : null} seed={identity.seed} name={identity.name} meta={lensBlocks.meta} />
+                {contextPills.length ? (
+                  // `.ctx`: centred, 8 apart, pulled 6 toward the name; a long place ellipsizes in its own pill.
+                  <View testID="profile-lens-context" style={styles.contextPills}>
+                    <Chip label={contextPills[0]} icon={handed?.context ? 'map-pin' : 'clock'} testID="profile-lens-context-0" />
+                    {contextPills[1] ? <Chip label={contextPills[1]} icon="clock" testID="profile-lens-context-1" /> : null}
+                  </View>
+                ) : null}
                 <LensBlocks
                   lead={lensBlocks.lead}
                   tonight={lensBlocks.tonight}
                   common={lensBlocks.common}
                   // Owner pick r1 C: once they have shown you who they are, their bio as one card in the lens's voice.
                   bio={revealed ? { about: profile?.bio, interests: profile?.interests, work: profile?.occupation } : null}
+                  // State 1 A: a venue night's openers, for somebody still anonymous to you; state 2 has its say-hi below.
+                  openers={revealed ? null : lensBlocks.openers}
+                  onOpener={sendOpener}
+                  ask={lensBlocks.ask}
+                  onAsk={sendOpener}
                   testID="profile-lens"
                 />
+                {revealed ? (
+                  <>
+                    <OtherPhotos photos={photos} onOpen={(index) => setViewer({ index, from: null })} testID="profile-lens-photos" />
+                    {sendOpener ? (
+                      <SayHi
+                        name={identity.name}
+                        topics={[profile?.interests?.[0], profile?.occupation].filter((t): t is string => !!t && !!t.trim())}
+                        onPick={sendOpener}
+                        testID="profile-lens-say-hi"
+                      />
+                    ) : null}
+                    {shared ? (
+                      <SharedEvents
+                        events={shared.events}
+                        total={shared.total}
+                        onSeeAll={() => router.push({ pathname: '/shared-events/[id]', params: { id: profile!.user_id, name: identity.name } })}
+                        testID="profile-lens-shared"
+                      />
+                    ) : null}
+                  </>
+                ) : null}
               </View>
             ) : (
             <>
@@ -857,7 +931,7 @@ function UserProfileInner() {
               label={ctaMode === 'connect' ? 'Message' : CTA_LABEL[ctaMode]}
               accessibilityLabel={ctaMode === 'connect' ? `Message ${heroTitle}. Sends a request and shows them your name and photo` : undefined}
               disabled={ctaDisabled}
-              onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
+              onPress={ctaMode === 'connect' ? () => { setConnectDraft(undefined); setConnectOpen(true) } : () => handleConnect()}
               style={styles.flex}
               testID="profile-cta"
             />
@@ -917,7 +991,7 @@ function UserProfileInner() {
               label={CTA_LABEL[ctaMode]}
               accessibilityLabel={ctaMode === 'connect' ? `Connect with ${heroTitle}. Sends a message and shows them your name and photo` : undefined}
               disabled={ctaDisabled}
-              onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : handleConnect}
+              onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : () => handleConnect()}
               style={styles.flex}
               testID="profile-cta"
             />
@@ -934,8 +1008,10 @@ function UserProfileInner() {
       */}
       <ConnectSheet
         visible={connectOpen}
-        displayName={heroTitle}
+        // Their name as the sheet says it, never the hero's "name, age" (drive: "Connect with Venkatalakshmi, 30").
+        displayName={identity.name}
         theyAreRevealed={revealed}
+        draft={connectDraft}
         sending={connectSending}
         error={connectError}
         onSend={sendConnect}
@@ -1013,6 +1089,7 @@ const styles = StyleSheet.create({
   dockRow: { flexDirection: 'row', gap: SPACE.md },
   /** `pA-page`: 20 between the hero and each block; the top is the bar's (`LENS_PAGE_TOP`). */
   lensPage: { paddingHorizontal: SPACE.gutter, gap: SPACE.lg + SPACE.xs },
+  contextPills: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SPACE.sm, marginTop: -(SPACE.xs + SPACE.xxs) },
   lensWash: { position: 'absolute', top: 0, left: 0, right: 0, height: LENS_PAGE_WASH_HEIGHT },
 })
 
