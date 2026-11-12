@@ -297,7 +297,13 @@ export function Button({
           </Animated.View>
         ) : null}
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
-        <View style={[styles.content, spinner && styles.hidden]}>
+        {/*
+          * Never flattened (SCRUM-1048): `hidden` is an opacity, and a View with an opacity is a real Android view while one
+          * without is flattened away, so the spinner turning on and off moved the label between two parents. A save that
+          * leaves turns it off while the screen is on its way out, where every view is held for the exit transition, and
+          * the label could not be added to its new parent: Android died in addViewAt ("already has a parent").
+          */}
+        <View collapsable={false} style={[styles.content, spinner && styles.hidden]}>
           {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : size === 'dock' ? DOCK_GLYPH : ICON.control} color={glyphInk} /> : null)}
           {count !== undefined ? (
             // A rolling number is a row of columns, not a run of text: the sentence is a row, a word space apart.
