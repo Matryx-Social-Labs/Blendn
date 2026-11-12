@@ -224,9 +224,11 @@ describe('<DoorCode>', () => {
     expect(screen.getByLabelText('Offer code used tonight')).toBeTruthy()
   })
 
-  it('ended keeps its day and its sentence', async () => {
-    await render(<DoorCode state="ended" endedLabel="ENDED SUNDAY" />)
-    expect(screen.getByText('ENDED SUNDAY', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByText('This offer ended', { includeHiddenElements: true })).toBeTruthy()
+  it('ended says ENDED over the dashes, and nothing more: the day is the validity line’s, the sentence the screen’s (audit B-1)', async () => {
+    await render(<DoorCode state="ended" />)
+    expect(screen.getByText('ENDED', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('— — —', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('This offer ended', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByLabelText('Offer code ended')).toBeTruthy()
   })
 })

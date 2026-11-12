@@ -17,7 +17,7 @@ import { TextArea } from '../../components/ds/TextField'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { fadeInFast } from '../../components/motion/presence'
 import { OfflineBanner, useOffline } from '../../components/OfflineBanner'
-import { EventRow, IssueList, PersonRow, SentLine } from '../../components/rate/RateParts'
+import { EventRow, IssueList, PersonRow, PromiseLine, SentLine } from '../../components/rate/RateParts'
 import { SkeletonBlock, SkeletonCircle } from '../../components/Skeleton'
 import { useToast } from '../../components/Toast'
 import { apiClient, type PeerRatingIssue } from '../../lib/apiClient'
@@ -126,10 +126,11 @@ const NOTE_HEIGHT = 112
 const NOTE_LIMIT = 500
 /*
  * The board's column (Flow 4 `rate`): a row, then the question 28 under it, its line 6 under that, the scale 22 under the
- * line, and "Sent" 20 under the scale; on a person, "Did anything go wrong?" 28 under the scale and the issues 12 under it.
+ * line, and "Sent" 20 under the scale; on a person, the promise 12 under the scale (audit C-1), "Did anything go wrong?"
+ * 20 under that, and the issues 12 under it.
  * design-exception: 28, 22, 20 and 6 are the board's own margins (`.t28`, `.sc5`, `.sent`, `.sub`), off the 4 pt steps' pairs.
  */
-const GAP = { question: 28, line: 6, scale: 22, sent: 20, issues: 12 } as const
+const GAP = { question: 28, line: 6, scale: 22, sent: 20, promise: 12, afterPromise: 20, issues: 12 } as const
 /** The night's question (`.t28`). */
 // design-exception: 28/33, between `title` 24/30 and `display` 34/40
 const NIGHT_TITLE = { fontSize: 28, lineHeight: 33 }
@@ -539,8 +540,11 @@ function RatePeersContent() {
                 <View style={{ marginTop: GAP.scale }}>
                   <Scale value={rating} onChoose={chooseRating} low="Not for me" high="Would meet again" subject={`Meeting ${person.name}`} />
                 </View>
+                <View style={{ marginTop: GAP.promise }}>
+                  <PromiseLine />
+                </View>
 
-                <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink, { marginTop: GAP.question }]}>
+                <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink, { marginTop: GAP.afterPromise }]}>
                   Did anything go wrong?
                 </Text>
                 <Animated.View layout={glide} style={[styles.issues, { marginTop: GAP.issues }]}>

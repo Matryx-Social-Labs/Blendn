@@ -43,6 +43,7 @@ const api = apiClient as jest.Mocked<typeof apiClient>
 const NIGHT = { title: 'Vinyl Night', startTime: '2026-11-07T20:00:00.000Z', timezone: 'Asia/Kolkata', venueName: 'High Ultra Lounge' }
 /** The night's "Sent" line holds for a beat before the people: long enough for findBy's default to miss it. */
 const AFTER_THE_BEAT = { timeout: 3000 }
+const PROMISE = 'Only we see this. They will never know you rated them.'
 
 function loads({ peers = ['u1', 'u2'], rated = false }: { peers?: string[]; rated?: boolean } = {}) {
   api.getRatablePeers.mockResolvedValue({ success: true, data: { userIds: peers } } as never)
@@ -138,6 +139,27 @@ it('a person: their face and name in a row, "You matched at this event", and "Ho
   expect(screen.getByRole('radio', { name: 'Nothing went wrong' }).props.accessibilityState).toMatchObject({ checked: true })
   expect(screen.getByRole('radio', { name: 'They harassed me' }).props.accessibilityState).toMatchObject({ checked: false })
   await act(async () => Dimensions.set({ window, screen: window }))
+})
+
+/*
+ * Audit C-1 (SCRUM-1045): before the redesign the person step promised, under their face, that they would never know.
+ * The board dropped it; the owner put it back as one line under the scale, where someone decides how honest to be.
+ */
+it('a person: "Only we see this. They will never know you rated them." is one line under the scale, before the issues', async () => {
+  loads()
+  await view()
+  // Control: the night has its own line ("Sent. Only we see this."), not this one.
+  await screen.findByRole('header', { name: 'How was the night?' })
+  expect(screen.queryByText(PROMISE)).toBeNull()
+  await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
+  await screen.findByTestId('rate-person')
+  type Tree = string | { children?: Tree[] | null } | Tree[] | null
+  const strings = (n: Tree): string[] => (!n ? [] : typeof n === 'string' ? [n] : Array.isArray(n) ? n.flatMap(strings) : strings(n.children ?? null))
+  const texts = strings(screen.toJSON() as Tree)
+  const at = (t: string) => texts.indexOf(t)
+  expect(at(PROMISE)).toBeGreaterThan(at('Would meet again'))
+  expect(at(PROMISE)).toBeLessThan(at('Did anything go wrong?'))
+  expect(within(screen.getByTestId('rate-promise')).getByText(PROMISE)).toBeTruthy()
 })
 
 it('at the larger text sizes the name and its line wrap to two rather than lose who it is (driven at AX XXXL)', async () => {

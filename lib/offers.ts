@@ -1,5 +1,6 @@
 import { apiClient, type ApiResponse } from './apiClient'
-import { calendarDate, calendarDaysBetween, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
+import { dayWord } from './pulse'
+import { calendarDate, calendarDaysBetween, clockTime, eventClock, unbroken } from './time'
 
 /*
  * Offers from the places you keep going back to, and the door pass (step 12;
@@ -18,8 +19,11 @@ export type OfferState = 'live' | 'redeemed' | 'used_tonight' | 'ended'
 
 export type Offer = {
   id: string
-  /** `venueType`: the venue_type key ("pub_bar"), for the pass's tile; null when the venue has none, absent from an older server. */
-  venue: { id: string; name: string; venueType?: string | null }
+  /**
+   * `venueType`: the venue_type key ("pub_bar"), for the pass's tile; null when the venue has none, absent from an older server.
+   * `timezone`: the venue's IANA zone, for the pass's day and clock; absent from an older server (the phone's then).
+   */
+  venue: { id: string; name: string; venueType?: string | null; timezone?: string | null }
   text: string
   sentAt: string
   endsAt: string
@@ -234,13 +238,27 @@ export function passView(
   }
 }
 
-/** "ENDED SUNDAY": the day the offer ran out, for an ended pass. */
-export const endedLabel = (endsAt: string) => `ENDED ${WEEKDAYS_LONG[weekdayIn(new Date(endsAt))]?.toUpperCase() ?? ''}`.trim()
-
 /** "until Wed 15 Oct": how long the offer runs (the pass itself is for today). */
-export const validUntil = (endsAt: string) => `until ${calendarDate(endsAt, { weekday: true })}`
+export const validUntil = (endsAt: string, timeZone?: string | null) => `until ${calendarDate(endsAt, { weekday: true, timeZone: timeZone ?? undefined })}`
 
-/** The pass's validity in its own slot (Flow 4 polish): "Valid today, till 11 PM" when it ends today, else its day. */
-export function validityLine(endsAt: string, now: number = Date.now()): string {
-  return calendarDaysBetween(new Date(now), new Date(endsAt)) === 0 ? `Valid today, till ${clockTime(endsAt)}` : `Valid ${validUntil(endsAt)}`
+/** The pass's validity in its own slot (Flow 4 polish): "Valid today, till 11 PM" when it ends today, else its day. The venue's day and clock. */
+export function validityLine(endsAt: string, now: number = Date.now(), timeZone?: string | null): string {
+  const zone = timeZone ?? undefined
+  return calendarDaysBetween(new Date(now), new Date(endsAt), zone) === 0 ? `Valid today, till ${eventClock(endsAt, zone)}` : `Valid ${validUntil(endsAt, zone)}`
+}
+
+/**
+ * The same slot once the offer has ended (Flow 4 audit B-1): "Ended today at 9:52 AM" ("tonight" from 5 PM, the one
+ * grammar's `dayWord`), "Ended yesterday at 9:52 AM", else "Ended Sun 8 Nov". The venue's day and clock, no zone named.
+ * Null for an offer that ended before its end (its venue retired or changed hands): no time is known, so none is said.
+ */
+export function endedLine(endsAt: string, now: number = Date.now(), timeZone?: string | null): string | null {
+  const end = new Date(endsAt)
+  if (Number.isNaN(end.getTime()) || end.getTime() > now) return null
+  const zone = timeZone ?? undefined
+  const at = unbroken(eventClock(end, zone))
+  const word = dayWord(end, new Date(now), zone)
+  if (word) return `Ended ${word.toLowerCase()} at ${at}`
+  if (calendarDaysBetween(new Date(now), end, zone) === -1) return `Ended yesterday at ${at}`
+  return `Ended ${calendarDate(end, { weekday: true, now, timeZone: zone })}`
 }

@@ -231,6 +231,31 @@ describe('<RadioCard layout="lead"> (Flow 4 `.rc`, SCRUM-1025)', () => {
     await render(lead({ detail: undefined }))
     expect(screen.queryByTestId('r-detail')).toBeNull()
   })
+
+  /*
+   * Flow 4 audit D-1 (SCRUM-1045): a blocked card said what was missing ("Add a photo to your profile first") with
+   * nothing to tap. Its way out is a link inside it, the card's one live part: a link a screen reader reaches on its
+   * own, while the card is still read as the blocked radio it is.
+   */
+  it('a blocked card with an action: a link in the card under the sentence, its own element, the card still blocked', async () => {
+    const onPress = jest.fn()
+    const go = jest.fn()
+    await render(lead({ disabled: true, hint: 'Add a photo to your profile first.', onPress, action: { label: 'Add a photo', onPress: go } }))
+    const radio = screen.getByRole('radio', { name: 'Anonymous, Quiet Lynx, Add a photo to your profile first.' })
+    expect(radio.props.accessibilityState).toMatchObject({ disabled: true })
+    await fireEvent.press(screen.getByRole('link', { name: 'Add a photo' }))
+    expect(go).toHaveBeenCalledTimes(1)
+    expect(onPress).not.toHaveBeenCalled()
+    // The board's `.addp`: 15/20, in the hue's glyph colour, 8 under the sentence (the card's 4 and 4 more).
+    expect(StyleSheet.flatten(screen.getByText('Add a photo').props.style)).toMatchObject({ fontSize: 15, lineHeight: 20, color: SELECTION.ember.glyph })
+    expect(flat('r-action')).toMatchObject({ marginTop: 4 })
+  })
+
+  it('no action: no link, and the card is the one element it was (control)', async () => {
+    await render(lead({ disabled: true, hint: 'Add a photo to your profile first.' }))
+    expect(screen.queryByRole('link')).toBeNull()
+    expect(screen.getByTestId('r').props.accessibilityRole).toBe('radio')
+  })
 })
 
 describe('<RadioCard layout="row"> (Flow 4 `.jr`, SCRUM-1025)', () => {

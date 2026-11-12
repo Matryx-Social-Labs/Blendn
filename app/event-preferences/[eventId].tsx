@@ -1,6 +1,6 @@
 import { TopBar } from '../../components/ds/TopBar'
 import { useTopBarOverlay } from '../../lib/useTopBarState'
-import { router, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
@@ -211,31 +211,34 @@ function EventPreferencesContent() {
   const asksWork = lens?.key === 'work'
   const workIntentChanged = asksWork && workIntent !== savedWorkIntent
 
-  useEffect(() => {
-    let cancelled = false
-    if (!user) return
-    apiClient
-      .getProfile(user.id)
-      .then((res) => {
-        if (cancelled || !res.success || !res.data) return
-        const age = res.data.profile?.age
-        const photos: string[] = Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : []
-        setUnder18(typeof age === 'number' && age < 18)
-        const name: unknown = res.data.profile?.name || res.data.name
-        setPhoto(typeof photos[0] === 'string' ? photos[0] : null)
-        setFirstName(typeof name === 'string' && name.trim() ? firstNameOf(name) : null)
-        setCanReveal(revealReadiness({ name: typeof name === 'string' ? name : undefined, photos }))
-      })
-      .catch(() => {
-        // Fail open on the *gate*, not on the reveal: an unreachable profile
-        // endpoint should not permanently disable a control, and the server
-        // still decides what a card actually shows.
-        if (!cancelled) setCanReveal({ ok: true, missing: '' })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [user])
+  // On each focus: back from Edit profile with a photo added there (audit D-1), Named can be picked.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false
+      if (!user) return
+      apiClient
+        .getProfile(user.id)
+        .then((res) => {
+          if (cancelled || !res.success || !res.data) return
+          const age = res.data.profile?.age
+          const photos: string[] = Array.isArray(res.data.profile?.photos) ? res.data.profile.photos : []
+          setUnder18(typeof age === 'number' && age < 18)
+          const name: unknown = res.data.profile?.name || res.data.name
+          setPhoto(typeof photos[0] === 'string' ? photos[0] : null)
+          setFirstName(typeof name === 'string' && name.trim() ? firstNameOf(name) : null)
+          setCanReveal(revealReadiness({ name: typeof name === 'string' ? name : undefined, photos }))
+        })
+        .catch(() => {
+          // Fail open on the *gate*, not on the reveal: an unreachable profile
+          // endpoint should not permanently disable a control, and the server
+          // still decides what a card actually shows.
+          if (!cancelled) setCanReveal({ ok: true, missing: '' })
+        })
+      return () => {
+        cancelled = true
+      }
+    }, [user])
+  )
 
   const onToggleIntent = useCallback((value: Intent) => {
     setIntentTouched(true)
@@ -339,6 +342,8 @@ function EventPreferencesContent() {
           icon={photo ? undefined : 'user'}
           selected={revealed}
           disabled={blocked}
+          // The way to what is missing: Edit profile opens on the photos, and coming back reads the profile again.
+          action={blocked && canReveal ? { label: `Add ${canReveal.missing}`, onPress: () => router.push('/edit-profile') } : undefined}
           onPress={() => setRevealed(true)}
           testID="prefs-named"
         />
