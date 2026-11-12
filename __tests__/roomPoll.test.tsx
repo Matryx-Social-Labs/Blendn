@@ -41,7 +41,7 @@ const poll = (over: Partial<PollResults> = {}): PollResults => ({
 const message = (over: Partial<RoomMessage> = {}): RoomMessage => ({
   message_id: 'm1',
   sender_id: 'u-org',
-  sender_name: 'Organizer',
+  sender_name: 'Nightshift Collective',
   message_text: 'Which set first?',
   message_type: 'poll',
   reply_to_message_id: null,
@@ -92,7 +92,9 @@ describe('the poll bubble, from the server’s disclosed state', () => {
     await row(message())
     await flush()
     expect(queued).toHaveBeenCalledWith('/api/mobile/events/e1/polls/p1')
-    expect(screen.getByLabelText('Poll from the organizer: Which set first?')).toBeTruthy()
+    // The room names the host as its host card does (audit C-1): the org's name from the message, then HOST.
+    expect(screen.getByLabelText('Poll from the host, Nightshift Collective: Which set first?')).toBeTruthy()
+    expect(screen.getByText('HOST')).toBeTruthy()
     expect(screen.getAllByRole('radio')).toHaveLength(2)
     expect(screen.getByText(/Tap to vote/)).toBeTruthy()
   })

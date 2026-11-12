@@ -87,7 +87,7 @@ const roomElement = (props: Partial<RoomViewProps> = {}) => (
       people={Array.from({ length: 13 }, (_, i) => person(`p${i}`))}
       connection={{ state: 'connected' } as never}
       you={<Text>you card</Text>}
-      segments={false}
+      crewsHere={null}
       view="people"
       onView={jest.fn()}
       crewCards={[]}
@@ -140,24 +140,65 @@ describe('People, top down (Flow 5 R-A: no hero; the bar has the name and the co
   })
 })
 
-describe('the you-card (R-A youCard: violet, Change goes to Room settings)', () => {
-  const you = (state: Visibility, onChange = jest.fn()) =>
-    render(<RoomYouCard face={{ kind: 'creature', pseudonym: 'Quiet Lynx' }} name="Quiet Lynx" state={state} onChange={onChange} />)
+describe('the you-card (R-A youCard merged with the old hero: you, your time in, who is here; Change goes to Room settings)', () => {
+  const T0 = Date.parse('2026-11-11T18:00:00Z')
+  const others = [
+    { kind: 'creature', pseudonym: 'Lunar Fox' },
+    { kind: 'photo', uri: 'https://x/p2.jpg' },
+  ] as const
+  const you = (state: Visibility, extra: Partial<React.ComponentProps<typeof RoomYouCard>> = {}, onChange = jest.fn()) =>
+    render(
+      <RoomYouCard
+        face={{ kind: 'creature', pseudonym: 'Quiet Lynx' }}
+        name="Quiet Lynx"
+        self={{ name: 'Venkatalakshmi Subramaniam', face: { kind: 'photo', uri: 'https://x/me.jpg' } }}
+        checkedInAt={new Date(T0 - 80 * 60_000).toISOString()}
+        hereCount={12_480}
+        others={[...others]}
+        now={T0}
+        state={state}
+        onChange={onChange}
+        {...extra}
+      />
+    )
 
-  it('anonymous: your room name, what it means, and Change', async () => {
+  it('your own name and photo lead it, with your time in on the ring and who else is here', async () => {
+    await you('anon')
+    expect(screen.getByText('Venkatalakshmi Subramaniam')).toBeTruthy()
+    // The ring is decoration to a screen reader (its label says the time), so the face is under hidden elements.
+    expect(screen.getByTestId('room-you-face', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('You, in the room 1h 20m')).toBeTruthy()
+    // Compact in the line, exact to a screen reader.
+    expect(screen.getByText('You and 12k others here')).toBeTruthy()
+    expect(screen.getByLabelText('You and 12,479 others here')).toBeTruthy()
+  })
+
+  it('anonymous: says what the others see, your room name, and Change', async () => {
     const onChange = jest.fn()
-    await you('anon', onChange)
-    expect(screen.getByLabelText('Quiet Lynx. Your room name. Nobody here sees your name or photo.')).toBeTruthy()
+    await you('anon', {}, onChange)
+    expect(screen.getByLabelText('Others here see you as Quiet Lynx. Nobody here sees your name or photo.')).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'Change your room name and who sees you' }))
     expect(onChange).toHaveBeenCalledTimes(1)
   })
 
   it('named, and not listed: each says so; not listed offers Turn on', async () => {
-    await you('named')
-    expect(screen.getByText('Your name and photo. People here can see you.')).toBeTruthy()
+    await you('named', { name: 'Venkatalakshmi' })
+    expect(screen.getByText('Others here see your name and photo.')).toBeTruthy()
     await you('hidden')
     expect(screen.getByText('Turn on')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Turn on Show online status' })).toBeTruthy()
+  })
+
+  it('just you: no pile, and the line says so; no check-in time yet: the ring says In the room', async () => {
+    await you('anon', { hereCount: 1, others: [], checkedInAt: null })
+    expect(screen.getByText('Just you so far')).toBeTruthy()
+    expect(screen.queryByTestId('room-you-pile')).toBeNull()
+    expect(screen.getByLabelText('You, in the room')).toBeTruthy()
+  })
+
+  it('control: one other is "1 other", not "1 others"', async () => {
+    await you('anon', { hereCount: 2, others: [others[0]] })
+    expect(screen.getByText('You and 1 other here')).toBeTruthy()
   })
 })
 
@@ -240,20 +281,38 @@ describe('the sections', () => {
   })
 })
 
-describe('People | Crews (R2-D1)', () => {
-  it('only when a crew is here or you are in one', async () => {
-    await room()
+describe('Crews as a row, like friends here (audit A-1: one tab row in the room, never a second switch)', () => {
+  it('no second People | Crews switch, ever', async () => {
+    await room({ crewsHere: 3 })
     expect(screen.queryByTestId('room-segments')).toBeNull()
-    await room({ segments: true })
-    expect(screen.getByRole('tab', { name: 'People' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Crews' })).toBeNull()
   })
 
-  it('the Crews view replaces Meet next and Everyone here with the crews', async () => {
+  it('"3 crews here" opens the crews; control: no crew here and none of yours draws no row', async () => {
+    const onView = jest.fn()
+    await room({ crewsHere: 3, onView })
+    await fireEvent.press(screen.getByRole('button', { name: '3 crews here' }))
+    expect(onView).toHaveBeenCalledWith('crews')
+    await room({ crewsHere: null })
+    expect(screen.queryByTestId('room-crews-row')).toBeNull()
+  })
+
+  it('one crew is "1 crew here"; none here but yours elsewhere is just "Crews" (it opens "Crews here · 0")', async () => {
+    await room({ crewsHere: 1 })
+    expect(screen.getByRole('button', { name: '1 crew here' })).toBeTruthy()
+    await room({ crewsHere: 0 })
+    expect(screen.getByRole('button', { name: 'Crews' })).toBeTruthy()
+  })
+
+  it('the Crews view: its head and cards in place of Meet next, and a way back to everyone', async () => {
+    const onView = jest.fn()
     const card = { crewId: 'c1', name: 'Orbit' } as never
-    await room({ segments: true, view: 'crews', crewsHead: <Text>crews head</Text>, crewCards: [card], renderCrew: () => <Text>crew Orbit</Text> })
+    await room({ crewsHere: 1, view: 'crews', onView, crewsHead: <Text>crews head</Text>, crewCards: [card], renderCrew: () => <Text>crew Orbit</Text> })
     expect(screen.getByText('crews head')).toBeTruthy()
     expect(screen.getByText('crew Orbit')).toBeTruthy()
     expect(screen.queryByText('Meet next')).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Back to everyone here' }))
+    expect(onView).toHaveBeenCalledWith('people')
   })
 })
 

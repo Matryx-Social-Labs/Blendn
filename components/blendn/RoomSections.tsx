@@ -2,22 +2,27 @@ import { memo, useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, withDelay, withSpring, withTiming } from 'react-native-reanimated'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, RADIUS, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, RADIUS, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { printable } from '../../lib/pulseSections'
-import { reasonLine, shuffleCountdownLabel } from '../../lib/roomMoments'
+import { reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
+import { compactCount } from '../../lib/format'
+import { groupedCount } from '../../lib/friendsHere'
 import type { Visibility } from '../ds/Banner'
 import { tint } from '../../lib/theme'
 import { RadialWash } from '../ui/GradientFill'
 import type { RoomPerson } from '../../lib/useRoom'
 import { pickReason, type RoomLens } from '../../lib/roomLens'
 import { Avatar } from '../ds/Avatar'
-import type { Face } from '../ds/Facepile'
+import { Facepile, type Face } from '../ds/Facepile'
+import { TimeRing } from '../ds/TimeRing'
+import ScalePress from '../motion/ScalePress'
+import { Icon } from '../ui/Icon'
 import { GridFace } from '../ds/GridFace'
 import { MeetNextCard } from '../ds/MeetNextCard'
 import { SectionHeader } from '../ds/SectionHeader'
-import { font, minTarget, useBoldText } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../ds/shared'
 
 /** Re-render once a `period`, for labels that age ("12m", "4:12"). */
 export function useNow(period: number) {
@@ -44,61 +49,118 @@ export function faceOf(p: { name: string; photo: string | null }): Face {
 
 /** The R-A you-card's light: violet from the top-left corner (`.xme`). */
 const YOU_WASH = [{ color: COLOR.brandViolet, alpha: 0.22, at: [0, 0], size: [90, 120], reach: 0.7 }] as const
-const YOU_FACE = 44
-const YOU_LINE: Record<Visibility, string> = {
-  anon: 'Your room name. Nobody here sees your name or photo.',
-  blocked: 'Your room name. Nobody here sees your name or photo.',
-  named: 'Your name and photo. People here can see you.',
+/** The friends row's height (FriendsHere ROW), so the two rows read as one kind. */
+const CREWS_ROW = 60
+/** What the others in the room see of you, under the hairline (H-1). The room name itself is drawn bold in the line. */
+const SEEN_AS: Record<Visibility, string | null> = {
+  anon: null,
+  blocked: null,
+  named: 'Others here see your name and photo.',
   hidden: 'You’re not listed here. Show online status is off.',
+}
+const NOBODY_SEES = 'Nobody here sees your name or photo.'
+/** H-1: your face in the TimeRing, as the room's hero drew it before C1 (owner, 2026-11-11). */
+const YOU_RING = 96
+const YOU_RING_FACE = 64
+const YOU_PILE = 4
+const YOU_PILE_FACE = 24
+const YOU_ROOM_FACE = 24
+
+/** "You and 213 others here": compact in the line, exact to a screen reader. */
+export function othersHereLine(hereCount: number): { text: string; spoken: string } {
+  const others = Math.max(0, hereCount - 1)
+  if (others === 0) return { text: 'Just you so far', spoken: 'Just you so far' }
+  const word = others === 1 ? 'other' : 'others'
+  return { text: `You and ${compactCount(others)} ${word} here`, spoken: `You and ${others.toLocaleString('en-US')} ${word} here` }
 }
 
 /**
- * You, at the top of People (Flow 5 R-A `youCard`): your face, the name this room knows you by and what that means, and
- * Change, to Room settings (who sees you, your room name). Violet, as everything that is you. Not listed, Change is
- * "Turn on", which goes where that is fixed.
+ * You, at the top of People (audit H-1, owner-picked 2026-11-11): the old hero's best parts and the R-A you-card in one
+ * block. Your own photo in the TimeRing ("In the room · 1h 20m") and your name, because the room is yours to see; who else
+ * is here as a pile of their faces and "You and 213 others here"; then, under a hairline, what the others see of you and
+ * Change (Room settings), or "Turn on" when you are not listed. Nothing here changes what the room shows of you: that line
+ * says so. Violet, as everything that is you.
  */
-/** R-A `you` name. */
-// design-exception: 16/22, between `body` and `rowTitle` 17/22 (the board's you-card)
-const YOU_NAME = { fontSize: 16, lineHeight: 22 }
-
 export const RoomYouCard = memo(function RoomYouCard({
   face,
   name,
+  self,
+  checkedInAt,
+  hereCount,
+  others,
+  now,
   state,
   onChange,
   testID = 'room-you',
 }: {
+  /** Your face as the room shows it (your creature until you show yourself). */
   face: Face
+  /** The name the room knows you by. */
   name: string
+  /** You, as only you see yourself here: your name and photo (or your creature when you have no photo). */
+  self: { name: string; face: Face }
+  checkedInAt: string | null
+  hereCount: number
+  /** The first few faces of the others here, for the pile. */
+  others: Face[]
+  /** For tests; the ring ages on its own clock. */
+  now?: number
   state: Visibility
   onChange: () => void
   testID?: string
 }) {
   const bold = useBoldText()
+  const clock = useNow(30_000)
+  const time = checkedInAt ? timeHereLabel(checkedInAt, now ?? clock) : ''
+  const here = othersHereLine(hereCount)
   const hidden = state === 'hidden'
+  const seen = SEEN_AS[state]
   return (
     <View testID={testID} style={styles.you}>
       <RadialWash layers={YOU_WASH} style={StyleSheet.absoluteFill} />
-      <Avatar size={YOU_FACE} {...face} />
-      <View style={styles.youText} accessible accessibilityLabel={`${name}. ${YOU_LINE[state]}`}>
-        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold, FONT_FAMILY.brand[500]), YOU_NAME, styles.ink]}>
-          {name}
-        </Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>
-          {YOU_LINE[state]}
-        </Text>
+      <View style={styles.youTop}>
+        <View accessible accessibilityLabel={time ? `You, in the room ${time}` : 'You, in the room'}>
+          <TimeRing text={time ? `In the room · ${time}` : 'In the room'} size={YOU_RING}>
+            <Avatar size={YOU_RING_FACE} ring={COLOR.surface} testID={`${testID}-face`} {...self.face} />
+          </TimeRing>
+        </View>
+        <View style={styles.youText}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('heading', bold), styles.ink]}>
+            {self.name}
+          </Text>
+          <View style={styles.youHere} accessible accessibilityLabel={here.spoken}>
+            {others.length && hereCount > 1 ? (
+              <Facepile faces={others.slice(0, YOU_PILE)} total={others.length} max={YOU_PILE} size={YOU_PILE_FACE} ring={COLOR.surface} text="" testID={`${testID}-pile`} />
+            ) : null}
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary, styles.youHereText]}>
+              {here.text}
+            </Text>
+          </View>
+        </View>
       </View>
-      <Pressable
-        onPress={onChange}
-        hitSlop={SPACE.md}
-        accessibilityRole="button"
-        accessibilityLabel={hidden ? 'Turn on Show online status' : 'Change your room name and who sees you'}
-        testID={`${testID}-change`}
-      >
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold, FONT_FAMILY.brand[700]), styles.youChange]}>
-          {hidden ? 'Turn on' : 'Change'}
-        </Text>
-      </Pressable>
+      <View style={styles.youSeen}>
+        {hidden ? null : <Avatar size={YOU_ROOM_FACE} {...face} />}
+        <View style={styles.youText} accessible accessibilityLabel={seen ?? `Others here see you as ${name}. ${NOBODY_SEES}`}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>
+            {seen ?? (
+              <>
+                Others here see you as <Text style={[font('note', bold, FONT_FAMILY.brand[500]), styles.ink]}>{name}</Text>
+              </>
+            )}
+          </Text>
+        </View>
+        <Pressable
+          onPress={onChange}
+          hitSlop={SPACE.md}
+          accessibilityRole="button"
+          accessibilityLabel={hidden ? 'Turn on Show online status' : 'Change your room name and who sees you'}
+          testID={`${testID}-change`}
+        >
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold, FONT_FAMILY.brand[700]), styles.youChange]}>
+            {hidden ? 'Turn on' : 'Change'}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   )
 })
@@ -302,13 +364,43 @@ export function RoomSkeleton({ topInset }: { topInset: number }) {
   )
 }
 
+/** "3 crews here" (audit A-1): crews open from a row in the list, as friends do, so the room has one tab row. */
+export function crewsRowLine(count: number): string {
+  return count > 0 ? `${groupedCount(count)} ${count === 1 ? 'crew' : 'crews'} here` : 'Crews'
+}
+
+/**
+ * The way into the room's crews and back (audit A-1, owner 2026-11-11), in the friends row's shape: People's row says how
+ * many crews are here and opens them; the Crews view's row goes back to everyone. Replaces the People | Crews switch that
+ * stacked a second tab row under the bar's.
+ */
+export function RoomCrewsRow({ count, back = false, onPress }: { count: number; back?: boolean; onPress: () => void }) {
+  const bold = useBoldText()
+  const line = back ? 'Everyone here' : crewsRowLine(count)
+  return (
+    <View style={styles.crewsGutter}>
+      <ScalePress
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={back ? 'Back to everyone here' : line}
+        testID={back ? 'room-crews-back' : 'room-crews-row'}
+        style={styles.crewsRow}
+      >
+        <Icon name={back ? 'chevron-left' : 'users'} size={ICON.control} color={back ? COLOR.textSecondary : COLOR.textPrimary} />
+        <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('rowTitle', bold, FONT_FAMILY.brand[500]), styles.crewsLine]}>
+          {line}
+        </Text>
+        {back ? null : <Icon name="chevron-right" size={ICON.control} color={COLOR.textSecondary} />}
+      </ScalePress>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  crewsGutter: { paddingHorizontal: SPACE.gutter },
+  crewsRow: { height: CREWS_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingHorizontal: SPACE.md + SPACE.xxs, borderRadius: RADIUS.tile, backgroundColor: COLOR.surface },
+  crewsLine: { flex: 1, minWidth: 0, color: COLOR.textPrimary },
   you: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    paddingVertical: SPACE.md,
-    paddingHorizontal: SPACE.md + SPACE.xxs,
     marginHorizontal: SPACE.gutter,
     borderRadius: RADIUS.tile,
     borderWidth: 1,
@@ -316,7 +408,20 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.surface,
     overflow: 'hidden',
   },
-  youText: { flex: 1, minWidth: 0 },
+  youTop: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md + SPACE.xxs, paddingTop: SPACE.md + SPACE.xxs, paddingBottom: SPACE.md, paddingHorizontal: SPACE.md + SPACE.xxs },
+  youText: { flex: 1, minWidth: 0, gap: SPACE.xs },
+  youHere: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, flexWrap: 'wrap' },
+  youHereText: { flexShrink: 1 },
+  youSeen: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.md - SPACE.xxs,
+    paddingTop: SPACE.md - SPACE.xxs,
+    paddingBottom: SPACE.md,
+    paddingHorizontal: SPACE.md + SPACE.xxs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLOR.hairline,
+  },
   youChange: { color: COLOR.selectionVioletGlyph },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },

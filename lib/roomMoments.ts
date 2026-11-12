@@ -45,6 +45,12 @@ export interface ReasonSource {
  * the variable part is always a single label ("Jazz", "Design"), and a word
  * boundary would drop it entirely.
  */
+/**
+ * You were both at N earlier events: plain words, the count first. The owner's pick read "At 3 events with you"; "At" is
+ * dropped because the line must fit REASON_MAX under a face at 360 dp and "At 3 events with you" is 20.
+ */
+const eventsWithYou = (n: number) => `${n} ${n === 1 ? 'event' : 'events'} with you`
+
 function fit(text: string, max = REASON_MAX): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`
 }
@@ -64,7 +70,7 @@ export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: stri
   const plans = p.sharedPlans ?? 0
   if (plans > 0) out.push(`Going to ${plans} more ${plans === 1 ? 'event' : 'events'} together`)
   const nights = p.sharedEvents ?? 0
-  if (nights > 0) out.push(`Both at ${nights} ${nights === 1 ? 'night' : 'nights'} before`)
+  if (nights > 0) out.push(eventsWithYou(nights))
   if (p.sharedWorkField && p.workField) out.push(`You both work in ${p.workField}`)
   for (const o of p.overlaps ?? []) out.push(o.text)
   return out
@@ -78,7 +84,7 @@ export function reasonLines(p: ReasonSource & { overlaps?: readonly { text: stri
  * appears when the server has already checked that it is mutual and it is the
  * one thing somebody would most want to know before crossing a room.
  *
- * History reads "Both at N nights before", never "Met at": the product exists
+ * History reads "N events with you" (audit C-2, owner 2026-11-11: "Both at 1 night" read as nothing), never "Met at": the product exists
  * because people in the same room do not meet, and claiming they did would be
  * the one sentence here that isn't true.
  */
@@ -91,7 +97,7 @@ export function reasonLine(p: ReasonSource, now: number = Date.now()): string {
   if (plans > 0) return fit(`${plans} ${plans === 1 ? 'plan' : 'plans'} in common`)
 
   const history = p.sharedEvents ?? 0
-  if (history > 0) return fit(`Both at ${history} ${history === 1 ? 'night' : 'nights'}`)
+  if (history > 0) return fit(eventsWithYou(history))
 
   const interests = (p.interests ?? []).filter((s) => s.trim().length > 0)
   if (interests.length > 0) {

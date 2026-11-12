@@ -199,3 +199,26 @@ describe('a sheet replaced by another is told it went unanswered (motion audit M
     expect(onDismiss).not.toHaveBeenCalled()
   })
 })
+
+it('rows: an action marked apart (the room’s Check out) stands on its own after a gap, with no hairline; control: the rest keep theirs', async () => {
+  await render(<SheetHost />)
+  await act(async () =>
+    showSheet({
+      kind: 'actions',
+      title: 'Rooftop Sundowner',
+      layout: 'rows',
+      actions: [
+        { label: 'Room info', icon: 'info', then: jest.fn() },
+        { label: 'Room settings', icon: 'settings', then: jest.fn() },
+        { label: 'Check out', icon: 'log-out', variant: 'destructive', apart: true, then: jest.fn() },
+        { label: 'Cancel', cancel: true },
+      ],
+    })
+  )
+  const row = (label: string) => StyleSheet.flatten(screen.getByLabelText(label).props.style)
+  expect(row('Room settings').borderTopWidth).toBe(StyleSheet.hairlineWidth)
+  expect(row('Check out').borderTopWidth ?? 0).toBe(0)
+  expect(row('Check out').marginTop).toBeGreaterThan(0)
+  expect(row('Room settings').marginTop ?? 0).toBe(0)
+  expect(StyleSheet.flatten(screen.getByText('Check out').props.style).color).toBe(COLOR.destructive)
+})
