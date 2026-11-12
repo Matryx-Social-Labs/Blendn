@@ -35,11 +35,11 @@ const ASK_HUE: Record<AskMoment, Hue> = { like: 'rose', rsvp: 'ember' }
 export const ASK_COPY: Record<AskMoment, { title: string; body: string }> = {
   rsvp: {
     title: 'Want a heads-up if the time or venue changes?',
-    body: 'Only what you’d want: a new time or venue, a match, your crew heading out. Change it any time in Settings.',
+    body: 'Only what you’d want: a new time or venue, a wave back, your crew heading out. Change it any time in Settings.',
   },
   like: {
-    title: 'Want to know when it’s mutual?',
-    body: 'One notification if they like you back. Nothing for likes you haven’t returned. Change it in Settings.',
+    title: 'Want to know when you both wave?',
+    body: 'One notification when someone waves back. Nothing for a wave on its own. Change it in Settings.',
   },
 }
 
@@ -50,8 +50,8 @@ const NO_EVENT = 'Your event'
 export function askSamples(moment: AskMoment, eventTitle?: string): SampleNotification[] {
   const title = eventTitle?.trim()
   const update = { title: title || NO_EVENT, body: 'New time: 7 PM. Same place.' }
-  // The words first, the title last: a body is two lines, and a long title cut there must not take "liked you back" with it.
-  const match = { title: 'It’s mutual', body: title ? `Someone liked you back at ${title}.` : 'Someone liked you back.' }
+  // The words first, the title last: a body is two lines, and a long title cut there must not take "waved back" with it.
+  const match = { title: 'You both waved', body: title ? `Someone waved back at ${title}.` : 'Someone waved back.' }
   const crew = { title: 'Your crew is heading out', body: '3 going tonight.' }
   return moment === 'like' ? [match, update, crew] : [update, match, crew]
 }

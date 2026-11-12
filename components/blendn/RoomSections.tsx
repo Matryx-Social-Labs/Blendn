@@ -7,6 +7,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { overlapOf } from '../../lib/overlapLine'
 import { printable } from '../../lib/pulseSections'
 import { reasonLine, shuffleCountdownLabel, timeHereLabel } from '../../lib/roomMoments'
+import { wavedAgo } from '../../lib/waves'
 import { compactCount } from '../../lib/format'
 import { groupedCount } from '../../lib/friendsHere'
 import type { Visibility } from '../ds/Banner'
@@ -201,7 +202,8 @@ export const MeetNextRow = memo(function MeetNextRow({
   nextShuffleAt,
   width,
   onOpen,
-  onLike,
+  onWave,
+  onSayHi,
   lens = null,
 }: {
   picks: RoomPerson[]
@@ -210,8 +212,10 @@ export const MeetNextRow = memo(function MeetNextRow({
   nextShuffleAt: number
   width: number
   onOpen: (p: RoomPerson) => void
-  /** The card's like; null when a like must ask first, and then the heart opens their card. */
-  onLike: ((p: RoomPerson) => void) | null
+  /** The card's Wave pill: Wave or Wave back (`lib/waves.ts`). */
+  onWave: (p: RoomPerson) => void
+  /** You both waved: into the conversation. */
+  onSayHi: (p: RoomPerson) => void
 }) {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
@@ -232,7 +236,7 @@ export const MeetNextRow = memo(function MeetNextRow({
       <View style={styles.meetRow}>
         {picks.map((p, i) => {
           // P-A: their answer to tonight's question first, else the lens lead; nothing through the lens, the room's line.
-          const said = p.matched ? null : pickReason(p, lens, p.tonightAnswer)
+          const said = pickReason(p, lens, p.tonightAnswer)
           return (
           <Animated.View
             key={p.id}
@@ -242,12 +246,14 @@ export const MeetNextRow = memo(function MeetNextRow({
             <MeetNextCard
               face={faceOf(p)}
               name={p.name}
-              reason={p.matched ? 'Matched' : (said ?? reasonLine(p))}
-              overlap={p.matched || said ? null : overlapOf(p).line}
+              reason={said ?? reasonLine(p)}
+              overlap={said ? null : overlapOf(p).line}
               width={width}
-              liked={p.liked || p.matched}
+              wave={p.wave}
+              wavedAgo={p.wavedAt ? wavedAgo(p.wavedAt, now) : null}
               onPress={() => onOpen(p)}
-              onLike={p.liked || p.matched || p.pending ? undefined : () => (onLike ? onLike(p) : onOpen(p))}
+              onWave={() => onWave(p)}
+              onSayHi={() => onSayHi(p)}
               testID={`meet-next-${i}`}
             />
           </Animated.View>
@@ -258,7 +264,7 @@ export const MeetNextRow = memo(function MeetNextRow({
   )
 })
 
-/** One face in "Everyone here": the GridFace, with the double tap's like while a like can do something. */
+/** One face in "Everyone here": the GridFace, with the double tap's crew like while one can do something. */
 export const RoomGridFace = memo(function RoomGridFace({
   person,
   width,
@@ -274,18 +280,20 @@ export const RoomGridFace = memo(function RoomGridFace({
   arriving: boolean
   waveKey?: number
   onOpen: (p: RoomPerson) => void
+  /** A crew's like (the double tap); null for none. People are waved at from their card. */
   onLike: ((p: RoomPerson) => void) | null
 }) {
-  const likeable = !!onLike && !person.liked && !person.matched && !person.pending
+  const likeable = !!onLike && !person.matched && person.wave !== 'sending'
+  const atYou = person.wave === 'wavedAtYou'
   return (
     <GridFace
       face={faceOf(person)}
       name={person.name}
-      reason={person.matched ? 'Matched' : reasonLine(person)}
-      overlap={person.matched ? null : overlapOf(person).line}
+      reason={person.matched ? 'You both waved' : atYou ? 'Waved at you' : reasonLine(person)}
+      overlap={person.matched || atYou ? null : overlapOf(person).line}
       width={width}
       here={person.insideNow}
-      liked={person.liked}
+      wavedAtYou={atYou}
       matched={person.matched}
       onPress={() => onOpen(person)}
       onLike={likeable ? () => onLike?.(person) : undefined}

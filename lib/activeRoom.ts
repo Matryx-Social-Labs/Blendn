@@ -79,6 +79,9 @@ export interface RoomAttendee {
   age?: number | null
   insideNow?: boolean
   youLiked?: boolean
+  /** SCRUM-1042: you waved at them here; they waved at you here (waves only, never a like). */
+  youWaved?: boolean
+  wavedAtYou?: boolean
   /** Matching v2: display-only shared lines, the sign chip and badges (see `MatchCard`). */
   overlaps?: Overlap[]
   sign?: string | null

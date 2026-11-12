@@ -71,7 +71,7 @@ function match(props: Partial<MomentMatchProps> = {}) {
     you: { kind: 'photo', uri: PHOTO },
     them: { kind: 'creature', pseudonym: 'Velvet Heron' },
     name: 'Velvet Heron',
-    reason: 'Both into live music',
+    tonight: { question: 'What are you hoping to find tonight?', answer: 'Someone to split a cab back to Koramangala' },
     opener: 'Which set are you here for?',
     onSayHi: jest.fn(),
     onClose: jest.fn(),
@@ -81,14 +81,16 @@ function match(props: Partial<MomentMatchProps> = {}) {
   return { p, el: <MomentMatch {...p} /> }
 }
 
-describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
-  it('says it, with why and the opener, then Say hi and Keep looking', async () => {
+describe('<MomentMatch> · You both waved (Wave M-A, SCRUM-1042)', () => {
+  it('says it, with tonight’s question and their answer as the opener, then Say hi and Keep looking', async () => {
     const { p, el } = match()
     await render(el)
-    expect(screen.getByText('It’s mutual')).toBeTruthy()
-    expect(screen.getByText('You and Velvet Heron matched · Both into live music')).toBeTruthy()
-    expect(screen.getByText('TRY')).toBeTruthy()
-    expect(screen.getByText('“Which set are you here for?”')).toBeTruthy()
+    expect(screen.getByText('You both waved')).toBeTruthy()
+    expect(screen.queryByText(/mutual|matched/)).toBeNull()
+    expect(screen.getByText('You and Velvet Heron · anonymous chat open')).toBeTruthy()
+    expect(screen.getByText('START WITH TONIGHT’S QUESTION')).toBeTruthy()
+    expect(screen.getByText('What are you hoping to find tonight?')).toBeTruthy()
+    expect(screen.getByText('Velvet Heron: “Someone to split a cab back to Koramangala”').props.numberOfLines).toBe(3)
     await advance(1260)
     await fireEvent.press(screen.getByRole('button', { name: 'Say hi' }))
     expect(p.onSayHi).toHaveBeenCalledTimes(1)
@@ -99,7 +101,20 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
   it('is announced once, everything in it from t0', async () => {
     await render(match().el)
     expect(announce).toHaveBeenCalledTimes(1)
-    expect(announce).toHaveBeenCalledWith('It’s mutual. You and Velvet Heron matched, Both into live music. Try: Which set are you here for?', { queue: true })
+    expect(announce).toHaveBeenCalledWith(
+      'You both waved. You and Velvet Heron, anonymous chat open. Start with tonight’s question: What are you hoping to find tonight? Velvet Heron said: Someone to split a cab back to Koramangala',
+      { queue: true }
+    )
+  })
+
+  it('with no question tonight (or no answer), the opener to try, never an empty card', async () => {
+    await render(match({ tonight: null }).el)
+    expect(screen.getByText('TRY')).toBeTruthy()
+    expect(screen.getByText('“Which set are you here for?”')).toBeTruthy()
+    await screen.unmount()
+    await render(match({ tonight: { question: 'What are you hoping to find tonight?', answer: null } }).el)
+    expect(screen.getByText('What are you hoping to find tonight?')).toBeTruthy()
+    expect(screen.queryByText(/Velvet Heron: /)).toBeNull()
   })
 
   it.each([
@@ -111,10 +126,12 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     expect(!!screen.queryByTestId('m-them-body', HIDDEN)).toBe(theirPhoto)
   })
 
-  it('the faces meet on M.pop, three hearts arc, and H.match lands on the frame the bump does', async () => {
+  it('the faces meet on M.pop, two hands rise and meet (no hearts), and H.match lands on the frame the bump does', async () => {
     await render(match().el)
     expect(sprungWith('pop')).toBe(true)
-    expect(screen.getAllByTestId(/^m-heart-/, HIDDEN)).toHaveLength(3)
+    expect(screen.queryAllByTestId(/^m-heart-/, HIDDEN)).toHaveLength(0)
+    expect(screen.getByTestId('m-hand-you', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('m-hand-them', HIDDEN)).toBeTruthy()
     await advance(999)
     expect(haptic.match).not.toHaveBeenCalled()
     await advance(1)
@@ -146,11 +163,12 @@ describe('<MomentMatch> · It’s mutual (#11, ROUND3 D · 4.4)', () => {
     expect(screen.getByTestId('m-actions', HIDDEN).props.pointerEvents).toBe('box-none')
   })
 
-  it('Reduce Motion: the faces placed, no hearts, H.match at once', async () => {
+  it('Reduce Motion: the faces and hands placed, crossfades only, H.match at once', async () => {
     reduceMotion.mockReturnValue(true)
     await render(match().el)
     expect(sprungWith('pop')).toBe(false)
-    expect(screen.queryAllByTestId(/^m-heart-/, HIDDEN)).toHaveLength(0)
+    expect(screen.getByTestId('m-hand-you', HIDDEN)).toBeTruthy()
+    expect(screen.queryByTestId('m-spark', HIDDEN)).toBeNull()
     await advance(0)
     expect(haptic.match).toHaveBeenCalledTimes(1)
   })

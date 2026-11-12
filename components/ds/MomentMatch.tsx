@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, type SharedValue } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Icon } from '../ui/Icon'
-import { COLOR, DURATION, ICON, MAX_FONT_SCALE, RADIUS, RISE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, RISE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { Avatar } from './Avatar'
@@ -18,13 +18,15 @@ const MEET = SPACE.lg
 const ROW = 2 * FACE - MEET
 /** #11: faces slide from ±120 pt on `M.pop` and meet at ~450 ms. */
 const FACE_FROM = 120
-/** #11: three outlined hearts arc from your face to theirs, 560 ms each, three heights so they read as thrown. */
-const HEARTS = [
-  { lift: 72, size: ICON.control, at: 260 },
-  { lift: 104, size: ICON.nav, at: 350 },
-  { lift: 56, size: ICON.inline, at: 440 },
-] as const
-const HEART_MS = 560
+/** Wave M-A (07-motion): two hands rise from the faces as they meet (450 ms) and touch over them at 850 ms, a high five. */
+const HAND = 40
+const HAND_RISE = 24
+const HAND_FROM = 16
+const HANDS_AT = 450
+const HANDS_MS = 400
+/** The touch: three short strokes flash over the hands (07-motion's "\ | /"). */
+const TOUCH_AT = HANDS_AT + HANDS_MS
+const SPARK = { width: 2, height: 10, turn: 28 } as const
 /** #11: at ~1000 ms their face bumps to 1.08 and `H.match` lands on that frame. */
 const LAND_MS = 1000
 const BUMP = 1.08
@@ -43,9 +45,9 @@ export type MomentMatchProps = {
   them: MomentFace
   /** The name the room shows you for them: their pseudonym unless they are named to you. */
   name: string
-  /** Why you two: "Both into live music". */
-  reason?: string | null
-  /** A first line to try, from what you share. */
+  /** Tonight's question and their answer (M-A's opener); the answer only shows because you are both in the room now. */
+  tonight?: { question: string; answer?: string | null } | null
+  /** A first line to try, when the room asks no question tonight. */
   opener?: string | null
   onSayHi: () => void
   /** Keep looking, and system back. */
@@ -54,19 +56,18 @@ export type MomentMatchProps = {
 }
 
 /**
- * It's mutual (guidelines/components/MomentMatch.html, DESIGN-BRIEF §9.3 #11,
- * ROUND3 D · 4.4): the moment the product is built toward. L4, ≤ 1.2 s, then
- * still until you choose.
+ * You both waved (Wave M-A, SCRUM-1042; was MomentMatch #11, ROUND3 D · 4.4): the moment the product is built toward,
+ * now opened by a mutual wave. L4, ≤ 1.2 s, then still until you choose.
  *
- * Scrim and orbs lift; your face and theirs slide in on `M.pop` and meet;
- * three hearts arc from you into them; their face bumps as the last lands and
- * `H.match` (the app's one signature) plays on that frame. A tap anywhere
- * skips to the end, the haptic with it. Everything is in the accessibility
- * tree from t0; Say hi goes live once it shows (at once with a screen reader).
+ * Scrim and orbs lift; your face and theirs slide in on `M.pop` and meet; two hands (yours rose, theirs violet) rise
+ * from the faces and touch over them at 850 ms; their face bumps and `H.match` (the app's one signature) plays on that
+ * frame. The opener is tonight's question with their answer, else a line to try. A tap anywhere skips to the end, the
+ * haptic with it. Everything is in the accessibility tree from t0; Say hi goes live once it shows (at once with a
+ * screen reader).
  *
- * Reduce Motion: the faces placed, no hearts, `H.match` at once, a 200 ms fade.
+ * Reduce Motion: faces and hands placed, no strokes, `H.match` at once, a 200 ms crossfade.
  */
-export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose, testID }: MomentMatchProps) {
+export function MomentMatch({ you, them, name, tonight, opener, onSayHi, onClose, testID }: MomentMatchProps) {
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -79,10 +80,8 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
   const youX = useSharedValue(reduceMotion ? 0 : -FACE_FROM)
   const themX = useSharedValue(reduceMotion ? 0 : FACE_FROM)
   const bump = useSharedValue(1)
-  const heart0 = useSharedValue(0)
-  const heart1 = useSharedValue(0)
-  const heart2 = useSharedValue(0)
-  const hearts = [heart0, heart1, heart2]
+  const hands = useSharedValue(reduceMotion ? 1 : 0)
+  const spark = useSharedValue(0)
   const text = useSharedValue(0)
   const rise = useSharedValue(reduceMotion ? 0 : RISE.list)
   const actions = useSharedValue(0)
@@ -102,7 +101,8 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
     orbs.set(withSequence(fade(1, DURATION.medium), fade(ORBS_REST, DURATION.long)))
     youX.set(spring(0, 'pop'))
     themX.set(spring(0, 'pop'))
-    HEARTS.forEach(({ at }, i) => hearts[i].set(fade(1, HEART_MS, at, 'standard')))
+    hands.set(fade(1, HANDS_MS, HANDS_AT, 'standard'))
+    spark.set(fade(1, DURATION.quick, TOUCH_AT))
     bump.set(withDelay(LAND_MS, withSequence(fade(BUMP, BUMP_MS, 0, 'standard'), spring(1, 'snap'))))
     text.set(fade(1, DURATION.base, TEXT_AT))
     rise.set(spring(0, 'celebrate', TEXT_AT))
@@ -122,7 +122,8 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
     youX.set(0)
     themX.set(0)
     bump.set(1)
-    hearts.forEach((h) => h.set(1))
+    hands.set(1)
+    spark.set(1)
     text.set(1)
     rise.set(0)
     actions.set(1)
@@ -133,9 +134,25 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
   const themStyle = useAnimatedStyle(() => ({ transform: [{ translateX: themX.get() }, { scale: bump.get() }] }))
   const textStyle = useAnimatedStyle(() => ({ opacity: text.get(), transform: [{ translateY: rise.get() }] }))
   const actionsStyle = useAnimatedStyle(() => ({ opacity: actions.get() }))
+  // Rise from below the faces and slide in from the sides until they touch. A worklet: only shared values and numbers.
+  const youHand = useAnimatedStyle(() => {
+    const t = hands.get()
+    return { opacity: t, transform: [{ translateX: -HAND_FROM * (1 - t) }, { translateY: HAND_RISE * (1 - t) }] }
+  })
+  const themHand = useAnimatedStyle(() => {
+    const t = hands.get()
+    return { opacity: t, transform: [{ translateX: HAND_FROM * (1 - t) }, { translateY: HAND_RISE * (1 - t) }, { scaleX: -1 }] }
+  })
+  const sparkStyle = useAnimatedStyle(() => ({ opacity: spark.get() }))
 
-  const why = `You and ${name} matched${reason ? ` · ${reason}` : ''}`
-  const label = `It’s mutual. You and ${name} matched${reason ? `, ${reason}` : ''}.${opener ? ` Try: ${opener}` : ''}`
+  const why = `You and ${name} · anonymous chat open`
+  const answer = tonight?.answer?.trim() || null
+  const said = tonight
+    ? ` Start with tonight’s question: ${tonight.question}${answer ? ` ${name} said: ${answer}` : ''}`
+    : opener
+      ? ` Try: ${opener}`
+      : ''
+  const label = `You both waved. You and ${name}, anonymous chat open.${said}`
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   return (
@@ -146,23 +163,54 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
       <View pointerEvents="box-none" style={[styles.page, { paddingTop: insets.top }]}>
         <View pointerEvents="box-none" style={styles.body}>
           {/* Nothing here is a button: a tap on the faces or the words falls through to skip. */}
-          <View testID={testID && `${testID}-faces`} pointerEvents="none" style={styles.faces}>
-            <Animated.View style={[styles.you, youStyle]}>
-              <Avatar {...you} size={FACE} ring={COLOR.ink} testID={testID && `${testID}-you`} />
-            </Animated.View>
-            <Animated.View style={[styles.them, themStyle]}>
-              <Avatar {...them} size={FACE} ring={COLOR.ink} testID={testID && `${testID}-them`} />
-            </Animated.View>
-            {reduceMotion ? null : HEARTS.map((h, i) => <Heart key={i} progress={hearts[i]} lift={h.lift} size={h.size} testID={testID && `${testID}-heart-${i}`} />)}
+          <View testID={testID && `${testID}-faces`} pointerEvents="none" style={styles.stage}>
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.hands}>
+              {reduceMotion ? null : (
+                <Animated.View testID={testID && `${testID}-spark`} style={[styles.spark, sparkStyle]}>
+                  {[-SPARK.turn, 0, SPARK.turn].map((turn) => (
+                    <View key={turn} style={[styles.stroke, { transform: [{ rotate: `${turn}deg` }] }]} />
+                  ))}
+                </Animated.View>
+              )}
+              <Animated.View testID={testID && `${testID}-hand-you`} style={youHand}>
+                <Icon name="hand" size={HAND} color={COLOR.brandRose} />
+              </Animated.View>
+              <Animated.View testID={testID && `${testID}-hand-them`} style={themHand}>
+                <Icon name="hand" size={HAND} color={COLOR.selectionVioletGlyph} />
+              </Animated.View>
+            </View>
+            <View style={styles.faces}>
+              <Animated.View style={[styles.you, youStyle]}>
+                <Avatar {...you} size={FACE} ring={COLOR.ink} testID={testID && `${testID}-you`} />
+              </Animated.View>
+              <Animated.View style={[styles.them, themStyle]}>
+                <Avatar {...them} size={FACE} ring={COLOR.ink} testID={testID && `${testID}-them`} />
+              </Animated.View>
+            </View>
           </View>
           <Animated.View testID={testID && `${testID}-copy`} pointerEvents="none" style={[styles.copy, textStyle]}>
             <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.moment} style={[font('moment', bold), styles.centre]}>
-              It’s mutual
+              You both waved
             </Text>
             <Text testID={testID && `${testID}-why`} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: secondary }]}>
               {why}
             </Text>
-            {opener ? (
+            {tonight ? (
+              <View testID={testID && `${testID}-opener`} style={[styles.opener, contrast && IC_HAIRLINE]}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: COLOR.selectionRoseGlyph }]}>
+                  START WITH TONIGHT’S QUESTION
+                </Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+                  {tonight.question}
+                </Text>
+                {answer ? (
+                  // A long answer clamps at three lines; the buttons never move (M-A worst case).
+                  <Text numberOfLines={3} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('meta', bold), { color: secondary }]}>
+                    {`${name}: “${answer}”`}
+                  </Text>
+                ) : null}
+              </View>
+            ) : opener ? (
               <View testID={testID && `${testID}-opener`} style={[styles.opener, contrast && IC_HAIRLINE]}>
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: secondary }]}>
                   TRY
@@ -187,30 +235,16 @@ export function MomentMatch({ you, them, name, reason, opener, onSayHi, onClose,
   )
 }
 
-/** One heart on a parabola from your face's centre to theirs; it grows in its first 30% and shrinks into their face in its last 20%. */
-function Heart({ progress, lift, size, testID }: { progress: SharedValue<number>; lift: number; size: number; testID?: string }) {
-  const style = useAnimatedStyle(() => {
-    const t = progress.get()
-    const x = FACE / 2 + (ROW - FACE) * t
-    const y = FACE / 2 - 4 * lift * t * (1 - t)
-    const scale = t < 0.3 ? 0.5 + 0.5 * (t / 0.3) : t > 0.8 ? Math.max(0, 1 - (t - 0.8) / 0.2) : 1
-    return { opacity: t > 0 && t < 1 ? 1 : 0, transform: [{ translateX: x - size / 2 }, { translateY: y - size / 2 }, { scale }] }
-  })
-  return (
-    <Animated.View testID={testID} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.heart, style]}>
-      {/* White, outlined: Say hi is the one gradient here. */}
-      <Icon name="heart" size={size} />
-    </Animated.View>
-  )
-}
-
 const styles = StyleSheet.create({
   page: { flex: 1 },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
+  stage: { alignItems: 'center', gap: SPACE.sm },
+  hands: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', height: HAND + SPARK.height + SPACE.xs },
+  spark: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: SPACE.xs },
+  stroke: { width: SPARK.width, height: SPARK.height, borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary },
   faces: { width: ROW, height: FACE },
   you: { position: 'absolute', left: 0, top: 0 },
   them: { position: 'absolute', left: FACE - MEET, top: 0 },
-  heart: { position: 'absolute', left: 0, top: 0 },
   copy: { alignSelf: 'stretch', alignItems: 'center', gap: SPACE.sm },
   centre: { textAlign: 'center', color: COLOR.textPrimary },
   ink: { color: COLOR.textPrimary },

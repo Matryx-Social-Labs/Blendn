@@ -150,13 +150,13 @@ describe('at AX XXXL (fontScale 3.571)', () => {
           onMore={jest.fn()}
           moreLabel="More"
         />
-        <MatchOpenerCard you={face} them={face} title="You both said yes." body="Say something about the night." />
+        <MatchOpenerCard you={face} them={face} title="You both waved" body="Say something about the night." />
         <SayHi line="Say hi to Tumbling Moose." onPress={jest.fn()} />
         <NudgeLine text="Tumbling Moose asked to know who you are" />
       </View>
     )
     expect(screen.getByText('Both anonymous').props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
-    expect(screen.getByText('You both said yes.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.heading)
+    expect(screen.getByText('You both waved').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.heading)
     expect(screen.getByText('Say hi to Tumbling Moose.').props.numberOfLines).toBeUndefined()
     expect(clipped(screen.toJSON())).toEqual([])
     expect(uncapped(screen.toJSON())).toEqual([])

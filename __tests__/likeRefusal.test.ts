@@ -68,11 +68,11 @@ describe("a refused like", () => {
   })
 })
 
-describe("the room tells you when a like was refused", () => {
+describe("the room tells you when a wave was refused", () => {
   const { readFileSync } = require("fs")
   const { join } = require("path")
   const code = readFileSync(
-    // The room's like lives in `useRoom` now, beside the refusal rule.
+    // The room's wave lives in `useRoom`, beside the refusal rule (`lib/waves.ts` waveRefusal).
     join(__dirname, "..", "lib", "useRoom.ts"),
     "utf8"
   )
@@ -81,21 +81,16 @@ describe("the room tells you when a like was refused", () => {
 
   it("surfaces the refusal instead of reverting in silence", () => {
     // useRoom returns the sentence; the Room says it on the open card (R3-D4 4.3) or, off the card, as a toast.
-    expect(code).toContain("likeRefusal(result.errorCode, result.error)")
-    expect(code).toContain("return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }")
+    expect(code).toContain("if (!result.success) return { kind: 'refused', refusal: waveRefusal(result.errorCode, result.error) }")
     const screen = readFileSync(join(__dirname, "..", "components", "blendn", "BlendnScreen.tsx"), "utf8")
     expect(screen).toContain("setRefusals((r) => ({ ...r, [p.id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))")
     expect(screen).toContain("else say(answer.refusal.message)")
   })
 
   it("keeps it a toast, not a tray", () => {
-    expect(code).toContain("const like = useCallback")
-    /*
-     * The mechanic only works if liking feels free. A modal after every failed
-     * tap is what makes it expensive — the same argument the match moment
-     * makes for being a beat rather than a form.
-     */
-    const like = code.slice(code.indexOf("const like = useCallback"), code.indexOf("const sendWave"))
-    expect(like).not.toMatch(/showTray|ActionTray|Alert\.alert/)
+    // A wave only works if it feels light; a modal after every refused tap makes it expensive.
+    const wave = code.slice(code.indexOf("const wave = useCallback"), code.indexOf("const connect = useCallback"))
+    expect(wave.length).toBeGreaterThan(100)
+    expect(wave).not.toMatch(/showTray|ActionTray|Alert\.alert/)
   })
 })

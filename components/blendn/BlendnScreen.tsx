@@ -31,11 +31,12 @@ import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SIZE, SPACE }
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { useRoomCancelled } from '../../lib/useRoomCancelled'
 import { firstNameOf, useFriendsHere } from '../../lib/friendsHere'
-import { everyoneHead, meetNext, reasonLine } from '../../lib/roomMoments'
+import { everyoneHead, meetNext } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
 import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
-import { useRoomWaves, wavedAtYouLabel, waveShown } from '../../lib/roomWaves'
+import { useRoomWaves, waveShown } from '../../lib/roomWaves'
+import { wavedAgo, WAVE_SETTLE_MS, WAVE_SETTLE_REDUCED_MS } from '../../lib/waves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
 import { compactCount } from '../../lib/format'
@@ -110,8 +111,8 @@ export function openerFor(p: RoomPerson): string {
 type Sides = { ours: BlendCrew; theirs: BlendCrew | BlendPerson } | { ours: BlendPerson; theirs: BlendCrew }
 type MadeBlend = { sides: Sides; ref: BlendRef; title: string }
 
-/** Ask who a like goes out as: a crew id, null for "Just me", undefined when they cancel. */
-function chooseAs(crews: CrewsAtEvent['myCrews'], title: string): Promise<string | null | undefined> {
+/** Ask who a like goes out as: a crew id, null for "Just me" (offered only for a crew card), undefined when they cancel. */
+function chooseAs(crews: CrewsAtEvent['myCrews'], title: string, justMe = true): Promise<string | null | undefined> {
   return new Promise((resolve) =>
     showSheet({
       kind: 'actions',
@@ -121,7 +122,7 @@ function chooseAs(crews: CrewsAtEvent['myCrews'], title: string): Promise<string
       onDismiss: () => resolve(undefined),
       actions: [
         ...crews.map((c) => ({ label: c.name, then: () => resolve(c.crewId) })),
-        { label: 'Just me', then: () => resolve(null) },
+        ...(justMe ? [{ label: 'Just me', then: () => resolve(null) }] : []),
         { label: 'Cancel', cancel: true as const },
       ],
     })
@@ -574,8 +575,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     },
   })
   /** The chip's menu: your crews here and "Just me". Cancel changes nothing. */
-  const chooseLikingAs = async (among = myCrewsHere, title = 'Sending as…') => {
-    const answer = await chooseAs(among, title)
+  const chooseLikingAs = async (among = myCrewsHere, title = 'Sending as…', justMe = true) => {
+    const answer = await chooseAs(among, title, justMe)
     if (answer !== undefined) setLikingAs(answer)
     return answer
   }
@@ -619,9 +620,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     onLost: roomCoach.lose,
     testID: 'room-coach-mark',
   })
-  /** Waves you sent: on their way, or settled to "Waved" (a repeat inside ten minutes is "Waved" too). */
-  const [sent, setSent] = useState<Record<string, 'busy' | 'waved'>>({})
-  /** A like or wave the server refused, said on that person's card (R3-D4 4.3), until the next try or the card closes. */
+  /** A wave the server refused, said on that person's card (R3-D4 4.3), until the next try or the card closes. */
   const [refusals, setRefusals] = useState<Record<string, { text: string; checkIn?: boolean }>>({})
   const forget = (id: string) =>
     setRefusals((r) => {
@@ -692,57 +691,41 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   }, [pending, takenPending])
 
   const openCard = useCallback((p: OpenCard) => setOpen({ id: p.id, name: p.name }), [])
-  const like = useCallback(
+  /**
+   * Wave, or wave back (SCRUM-1042). The hand swings until ✓ Waved (07-motion: 800 ms; Reduce Motion, the crossfade).
+   * A refusal is the card's one neutral line when it is open on them, else a toast (R3-D4 4.3). No haptic: the press
+   * played `H.select`, and a mutual's `H.match` belongs to the moment.
+   */
+  const wave = useCallback(
     async (p: RoomPerson) => {
       forget(p.id)
-      const answer = await room.like(p.id)
+      const answer = await room.wave(p.id, reduceMotion ? WAVE_SETTLE_REDUCED_MS : WAVE_SETTLE_MS)
       if (answer.kind !== 'refused') return
-      // The card's one neutral line when it is open on them; a toast when the like was a double tap (R3-D4 4.3). No haptic.
       if (open?.id === p.id) setRefusals((r) => ({ ...r, [p.id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))
       else say(answer.refusal.message)
     },
-    [room, open?.id, say]
-  )
-  const wave = useCallback(
-    async (id: string) => {
-      if (sent[id]) return
-      forget(id)
-      setSent((w) => ({ ...w, [id]: 'busy' }))
-      const answer = await room.sendWave(id)
-      if (answer.kind === 'refused') {
-        setSent((w) => {
-          const next = { ...w }
-          delete next[id]
-          return next
-        })
-        setRefusals((r) => ({ ...r, [id]: { text: answer.refusal.message, checkIn: answer.refusal.checkIn } }))
-        return
-      }
-      setSent((w) => ({ ...w, [id]: 'waved' }))
-    },
-    [room, sent]
+    [room, open?.id, say, reduceMotion]
   )
   const openProfile = useCallback(
     (p: OpenCard, seen?: RoomPerson) => {
       setOpen(null)
       // P-A page: the room's card goes with them (lead pills, In common), in memory, never in the link.
       if (seen) {
-        const { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent, arrivedAt } = seen
+        const { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent, arrivedAt, wave: waved, wavedAt } = seen
         handRoomPerson(p.id, {
-          person: { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent, arrivedAt },
+          person: { workField, sharedIntents, interests, overlaps, badges, age, tonightAnswer, workIntent, arrivedAt, wave: waved, wavedAt },
           lens: room.lens,
           context: room.event ? contextLine(room.lens, room.event) : null,
         })
       }
-      // The event travels with the id (the profile's Like needs the room), and the pseudonym titles it until the server says who they are.
-      // What the room knows of them goes too: the profile cannot ask a handle whether you liked or matched (SCRUM-953).
+      // The event travels with the id (the profile's Wave needs the room), and the pseudonym titles it until the server says who they are.
+      // What the room knows of them goes too: the profile cannot ask a handle whether you waved or both waved (SCRUM-953).
       router.push({
         pathname: '/user/[id]',
         params: {
           id: p.id,
           ...(eventId ? { eventId, roomSeed: `${eventId}:${p.id}` } : {}),
           ...(p.name ? { pseudonym: p.name } : {}),
-          ...(seen?.liked ? { liked: '1' } : {}),
           ...(seen?.conversationId ? { conversationId: seen.conversationId } : {}),
         } as never,
       })
@@ -757,6 +740,15 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       params: { conversationId, otherUserName: p.name, otherUserId: p.id, ...(draft ? { draft } : {}) } as never,
     })
   }, [])
+  /** Meet next's Say hi: the conversation a mutual opened, or the chats list when the deck says you both waved but not where. */
+  const sayHiTo = useCallback(
+    (p: RoomPerson) => {
+      if (p.conversationId) return sayHi(p.conversationId, p)
+      setOpen(null)
+      router.navigate('/(tabs)/chat' as never)
+    },
+    [sayHi]
+  )
   /** Block and Report, once the card has left (`closeCardThen`). Either removes them, and their waves, from this room. */
   const safety = (p: OpenCard) => closeCardThen(() => showUserSafetyActions(p.name, p.id, () => room.remove(p.id), () => room.remove(p.id)))
   /*
@@ -787,23 +779,22 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   }
   /*
    * The card's crew like. A definite crew likes as it; 'ask' closes the card,
-   * asks (your crews that may like people, and "Just me"), and the answer is
-   * both this like and the choice from now on.
+   * asks which of your crews that may like people, and the answer is both this
+   * like and the choice from now on. A person's own gesture is Wave, on the card.
    */
   const cardCrewLike = (p: RoomPerson) => {
     if (personAs === 'ask') {
       closeCardThen(() => {
-        void chooseLikingAs(soloCrews, `Like ${p.name} as…`).then((answer) => {
-          if (answer === null) void like(p)
-          else if (answer) void likeForCrew(p, answer)
+        void chooseLikingAs(soloCrews, 'Like for which crew?', false).then((answer) => {
+          if (answer) void likeForCrew(p, answer)
         })
       })
       return
     }
     if (personAs) closeCardThen(() => void likeForCrew(p, personAs.crewId))
   }
-  /** The grid's double tap likes as the card would; when the card would ask, a double tap just opens it. */
-  const doubleTapLike = personAs === 'ask' ? null : personAs ? (p: RoomPerson) => void likeForCrew(p, personAs.crewId) : (p: RoomPerson) => void like(p)
+  /** The grid's double tap is your crew's like, when one crew is the answer; a person is waved at from their card. */
+  const doubleTapLike = personAs && personAs !== 'ask' ? (p: RoomPerson) => void likeForCrew(p, personAs.crewId) : null
   /*
    * "Check in" beside a lapsed check-in (R3-D4 4.3): back to the pass. This
    * room's event is docked as the door and the room re-read; once the server
@@ -1081,6 +1072,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             waveKeys={waveKeys}
             onOpen={openCard}
             onLike={doubleTapLike}
+            onWave={(p) => void wave(p)}
+            onSayHi={sayHiTo}
             enter={enter}
             hidden={mode !== 'room'}
             topInset={roomTop}
@@ -1159,11 +1152,9 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           shared: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.line : null,
           interests: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.interests : undefined,
         }}
-        liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
         requested={!!cardPerson?.requested}
-        waving={!!card && sent[card.id] === 'busy'}
-        waved={!!card && sent[card.id] === 'waved'}
-        wavedAtYou={card ? (wavedAtYouLabel(waves.received[card.id]?.at, now) ?? undefined) : undefined}
+        wave={cardPerson?.wave ?? 'none'}
+        wavedAtYou={cardPerson?.wavedAt ? (wavedAgo(cardPerson.wavedAt, now) ?? undefined) : undefined}
         refusal={refusal ? { text: refusal.text, action: refusal.checkIn ? { label: 'Check in', onPress: checkInAgain } : undefined } : undefined}
         crewLike={
           cardPerson && personAs && !cardPerson.matched
@@ -1172,14 +1163,13 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
               : { name: personAs.name, emblemSeed: emblemOf(personAs.crewId), onPress: () => cardCrewLike(cardPerson) }
             : undefined
         }
-        onLike={() => cardPerson && void like(cardPerson)}
-        onWave={() => card && void wave(card.id)}
+        onWave={() => cardPerson && void wave(cardPerson)}
         onMessage={() => {
           if (!card) return
           const to = card
           closeCardThen(() => setConnectTo(to))
         }}
-        onSayHi={() => cardPerson?.conversationId && sayHi(cardPerson.conversationId, cardPerson)}
+        onSayHi={() => cardPerson && sayHiTo(cardPerson)}
         onOpener={(text) => {
           if (!card) return
           if (cardPerson?.matched && cardPerson.conversationId) return sayHi(cardPerson.conversationId, cardPerson, text)
@@ -1249,7 +1239,8 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           you={myRoomFace({ revealed: controls.revealed, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}
           them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}
           name={room.match.name}
-          reason={matchPerson ? reasonLine(matchPerson) : null}
+          // M-A: tonight's question and their answer, else a line to try.
+          tonight={room.lens?.question ? { question: room.lens.question, answer: matchPerson?.tonightAnswer ?? null } : null}
           opener={matchPerson ? openerFor(matchPerson) : null}
           onClose={room.clearMatch}
           onSayHi={() => {

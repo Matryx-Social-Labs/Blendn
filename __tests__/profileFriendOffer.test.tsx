@@ -24,7 +24,6 @@ jest.mock('../lib/apiClient', () => ({
     getConversations: jest.fn(),
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
-    likeAtEvent: jest.fn(),
     respondToMessageRequest: jest.fn(),
     sendFriendRequest: jest.fn(),
   },

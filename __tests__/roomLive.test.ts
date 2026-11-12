@@ -180,7 +180,9 @@ describe('attendeeFromMatch', () => {
         sharedPlans: 1,
         age: null,
         insideNow: true,
-        youLiked: false,
+        youLiked: true,
+        youWaved: true,
+        wavedAtYou: false,
         overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
         sign: 'Leo ♌',
         badges: [{ kind: 'regular_here', label: 'Regular here' }],
@@ -199,7 +201,9 @@ describe('attendeeFromMatch', () => {
       sharedPlans: 1,
       age: undefined,
       insideNow: true,
-      youLiked: false,
+      // Waves only: an installed build's hidden like is never carried (SCRUM-1042).
+      youWaved: true,
+      wavedAtYou: false,
       overlaps: [{ kind: 'ipl', text: 'Both CSK — in RCB country 💛' }],
       sign: 'Leo ♌',
       badges: [{ kind: 'regular_here', label: 'Regular here' }],
@@ -211,6 +215,6 @@ describe('attendeeFromMatch', () => {
 
   it('reads an older server with no matching v2 fields as none of them', () => {
     const a = attendeeFromMatch({ userId: 'u', displayName: 'Blue Heron', photo: null, sharedInterests: [] })
-    expect([a.overlaps, a.sign, a.badges, a.checkInTime]).toEqual([[], null, [], null])
+    expect([a.overlaps, a.sign, a.badges, a.checkInTime, a.youWaved, a.wavedAtYou]).toEqual([[], null, [], null, false, false])
   })
 })

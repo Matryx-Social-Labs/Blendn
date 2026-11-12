@@ -80,8 +80,7 @@ jest.mock('@react-native-async-storage/async-storage', () => require('@react-nat
 
 /* The room, as a store the test sets. */
 const mockRoom = {
-  like: jest.fn(),
-  sendWave: jest.fn(),
+  wave: jest.fn(),
   remove: jest.fn(),
   refresh: jest.fn(async () => {}),
   retry: jest.fn(),
@@ -137,11 +136,11 @@ const person = (id: string, o: Record<string, unknown> = {}) => ({
   badges: [],
   insideNow: true,
   arrivedAt: null,
-  liked: false,
+  wave: 'none',
+  wavedAt: null,
   matched: false,
   conversationId: null,
   requested: false,
-  pending: false,
   reason: '',
   raw: {},
   ...o,
@@ -176,8 +175,7 @@ beforeEach(() => {
   mockControls.readiness = { ok: true, missing: '' }
   api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [], total: 0, hasMore: false } })
   api.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [] } })
-  mockRoom.like.mockResolvedValue({ kind: 'liked' })
-  mockRoom.sendWave.mockResolvedValue({ kind: 'sent' })
+  mockRoom.wave.mockResolvedValue({ kind: 'waved' })
   jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
   jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(false)
   jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
@@ -198,11 +196,11 @@ const openFromGrid = async (i: number) => {
 }
 
 describe('the PersonCard, from every room surface (R3-D4 4.1)', () => {
-  it('a grid face opens it: their name, Wave · Message · Like, ⋯, and the head opens their profile', async () => {
+  it('a grid face opens it: their name, Wave · Message (no Like), ⋯, and the head opens their profile', async () => {
     await drawRoom()
     await openFromGrid(3)
     expect(card()).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Like' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Like/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Wave at Person p3' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Message' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Block or report Person p3' })).toBeTruthy()
@@ -256,6 +254,8 @@ describe('the PersonCard, from every room surface (R3-D4 4.1)', () => {
 
   it('a wave while you are here: the ✓ capsule, then their card with "Waved at you" and Wave back (4.2)', async () => {
     listenForWaves('e1')
+    // useRoom folds a heard wave into the person (`lib/waves.ts`); mocked here, the room says so itself.
+    mockSetRoom(ready({ people: PEOPLE.map((p) => (p.id === 'p4' ? { ...p, wave: 'wavedAtYou', wavedAt: Date.now() } : p)) }))
     await drawRoom()
     await act(async () => mockWaveListeners.forEach((fn) => fn({ eventId: 'e1', fromUserId: 'p4', fromName: 'Person p4' })))
     await fireEvent.press(screen.getByRole('button', { name: 'Person p4 waved at you' }))
@@ -325,17 +325,17 @@ describe('the tab an entry asked for (Flow 5 C1b)', () => {
 })
 
 describe('like and wave refusals (R3-D4 4.3)', () => {
-  it('a refused like is one neutral line on the card, and does not show it as liked', async () => {
-    mockRoom.like.mockResolvedValue({ kind: 'refused', refusal: { message: 'That didn’t go through.', variant: 'info' } })
+  it('a refused wave is one neutral line on the card, and Wave is offered again', async () => {
+    mockRoom.wave.mockResolvedValue({ kind: 'refused', refusal: { message: 'You’ve waved a lot in this room. Try again in a bit.', variant: 'info' } })
     await drawRoom()
     await openFromGrid(1)
-    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Like' })))
-    expect(screen.getByText('That didn’t go through.', HIDDEN)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Like' })).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Wave at Person p1' })))
+    expect(screen.getByText('You’ve waved a lot in this room. Try again in a bit.', HIDDEN)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Wave at Person p1' })).toBeTruthy()
   })
 
   it('a lapsed check-in offers Check in, which docks this room’s pass and re-reads the room', async () => {
-    mockRoom.sendWave.mockResolvedValue({ kind: 'refused', refusal: { message: 'Check in to wave at people here', variant: 'info', checkIn: true } })
+    mockRoom.wave.mockResolvedValue({ kind: 'refused', refusal: { message: 'Check in to wave at people here', variant: 'info', checkIn: true } })
     await drawRoom()
     await openFromGrid(2)
     await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Wave at Person p2' })))
@@ -345,15 +345,27 @@ describe('like and wave refusals (R3-D4 4.3)', () => {
     expect(jest.requireActual('../lib/blendnOverlay').getDoor()).toMatchObject({ id: 'e1', title: 'Vinyl Night' })
   })
 
-  it('a wave goes: the hand waves while it is on its way, then "Waved"', async () => {
-    let answer: (v: unknown) => void = () => {}
-    mockRoom.sendWave.mockReturnValue(new Promise((r) => (answer = r)))
+  it('a wave goes to the room with 07-motion’s settle (Reduce Motion: 230 ms)', async () => {
     await drawRoom()
     await openFromGrid(2)
     await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Wave at Person p2' })))
-    expect(screen.getByTestId('person-card-card-hand-waving', HIDDEN)).toBeTruthy()
-    await act(async () => answer({ kind: 'sent' }))
-    expect(screen.getByLabelText('Waved')).toBeTruthy()
+    // This harness runs under Reduce Motion: the crossfade's 230, not the swing's 800.
+    expect(mockRoom.wave).toHaveBeenCalledWith('p2', 230)
+  })
+
+  it('a person the room says you waved at: a still ✓ Waved and no Wave again', async () => {
+    mockSetRoom(ready({ people: PEOPLE.map((p) => (p.id === 'p2' ? { ...p, wave: 'waved' } : p)) }))
+    await drawRoom()
+    await openFromGrid(2)
+    expect(screen.getByLabelText('Waved at Person p2')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Wave at Person p2/ })).toBeNull()
+  })
+
+  it('Meet next’s pill waves; once you both waved its Say hi opens the conversation', async () => {
+    mockSetRoom(ready({ people: PEOPLE.map((p, i) => (i === 0 ? { ...p, wave: 'mutual', matched: true, conversationId: 'c0' } : p)) }))
+    await drawRoom()
+    const pills = screen.getAllByTestId(/^meet-next-\d-wave$/, HIDDEN)
+    expect(pills.length).toBeGreaterThan(0)
   })
 })
 
@@ -417,26 +429,17 @@ describe('Liking as a crew: what the button says is what it sends (R2-D1)', () =
     await fireEvent.press(screen.getByRole('button', { name: 'Like for Nebula' }))
     await cardGone()
     expect(api.likePersonAsCrew).toHaveBeenCalledWith('e1', 'p1', 'nebula')
-    expect(mockRoom.like).not.toHaveBeenCalled()
+    expect(mockRoom.wave).not.toHaveBeenCalled()
   })
 
-  it('"Like as yourself" never sends as a crew', async () => {
-    api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula], total: 0, hasMore: false } })
-    api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula' })], invites: [] } } as never)
-    await drawRoom()
-    await openFromGrid(1)
-    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Like as yourself' })))
-    expect(mockRoom.like).toHaveBeenCalledWith('p1')
-    expect(api.likePersonAsCrew).not.toHaveBeenCalled()
-  })
-
-  it('a crew that may not like people (closed to solo) leaves the plain Like, which is you', async () => {
+  it('a crew that may not like people (closed to solo) offers no crew row; Wave is yours', async () => {
     api.crewsAt.mockResolvedValue({ success: true, data: { crewsEnabled: true, crews: [], myCrews: [nebula], total: 0, hasMore: false } })
     api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew('nebula', { name: 'Nebula', openToSolo: false })], invites: [] } } as never)
     await drawRoom()
     await openFromGrid(1)
     expect(screen.queryByRole('button', { name: 'Like for Nebula' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Like' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Like/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Wave at Person p1' })).toBeTruthy()
   })
 
   it('several that may: "Like for your crew", and the app picks none for you', async () => {
@@ -450,7 +453,8 @@ describe('Liking as a crew: what the button says is what it sends (R2-D1)', () =
     expect(api.likePersonAsCrew).not.toHaveBeenCalled()
     const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
     const actions = showSheet.mock.calls[0][0].actions.map((a: { label: string }) => a.label)
-    expect(actions).toEqual(['Nebula', 'Orbit', 'Just me', 'Cancel'])
+    // Which crew, never "Just me": a person's own gesture is Wave, on the card.
+    expect(actions).toEqual(['Nebula', 'Orbit', 'Cancel'])
   })
 })
 
@@ -500,11 +504,11 @@ describe('Check out always confirms (Room #16)', () => {
 })
 
 describe('the Match, the Recap, the room’s error', () => {
-  it('a mutual like plays the Match with the faces the room has earned (D · 4.4)', async () => {
+  it('a mutual wave plays the moment with the faces the room has earned (M-A)', async () => {
     mockSetRoom(ready({ match: { person: person('p1'), name: 'Night Cat', you: 'Quiet Otter', conversationId: 'c1', at: Date.now() } }))
     await drawRoom()
-    expect(screen.getByText('It’s mutual', HIDDEN)).toBeTruthy()
-    expect(screen.getByText(/You and Night Cat matched/, HIDDEN)).toBeTruthy()
+    expect(screen.getByText('You both waved', HIDDEN)).toBeTruthy()
+    expect(screen.getByText('You and Night Cat · anonymous chat open', HIDDEN)).toBeTruthy()
   })
 
   it('the night is over: That’s a wrap, never a check-out', async () => {

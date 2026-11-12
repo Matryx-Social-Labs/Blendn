@@ -637,7 +637,12 @@ export interface MatchCard {
    */
   age?: number | null
   insideNow: boolean
+  /** An installed build's secret like (kept by the server for old clients). This client never reads it: waves only. */
   youLiked: boolean
+  /** You waved at them in this room (SCRUM-1042): the card's still "✓ Waved". Optional: a client outlives a deploy. */
+  youWaved?: boolean
+  /** They waved at you in this room and it is yours to answer: "Wave back". Waves only, never a like. */
+  wavedAtYou?: boolean
   /**
    * Matching v2: display-only lines you share, as sentences the server wrote
    * ("Both CSK — in RCB country 💛", "You both speak Malayalam"). Never a
@@ -678,18 +683,14 @@ export interface MatchPreferences {
   lens?: unknown
 }
 
-export interface LikeOutcome {
+/**
+ * A wave's answer (`POST /events/:id/waves`, SCRUM-1042). A second wave at the same person is `{ sent: true, mutual:
+ * false }` and stores nothing. A mutual carries the conversation it opened and both pseudonyms, as a mutual like did.
+ */
+export interface WaveOutcome {
+  sent: true
   mutual: boolean
-  /** Present only on a mutual like -- the conversation it just opened. */
   conversationId?: string
-  /**
-   * Both pseudonyms, on a mutual like only.
-   *
-   * Connection Success draws a generated mark per person and `pseudonymAvatar`
-   * is seeded on the pseudonym, so without these the sheet could not paint
-   * without first fetching the conversation -- a round trip in the middle of
-   * the one moment that should feel instant.
-   */
   pseudonyms?: { you: string; them: string }
 }
 
@@ -3189,20 +3190,6 @@ class ApiClientClass {
     return this.queuedRequest(`/api/mobile/events/${encodeURIComponent(eventId)}/friends-here${query ? `?${query}` : ''}`)
   }
 
-  /**
-   * Like someone you were in a room with. Mutual opens a conversation.
-   *
-   * Nothing in the response reveals who liked you first -- that asymmetry is
-   * the whole point of the mutual gate.
-   */
-  async likeAtEvent(eventId: string, userId: string): Promise<ApiResponse<LikeOutcome>> {
-    return this.queuedRequest<LikeOutcome>(
-      `/api/mobile/events/${eventId}/matches/likes`,
-      { method: 'POST', body: JSON.stringify({ userId }) },
-      true,
-      3
-    )
-  }
 
   /**
    * How many are here, and how many share your taste — for the room you are
@@ -3222,15 +3209,12 @@ class ApiClientClass {
   }
 
   /**
-   * Wave at somebody in the same room.
-   *
-   * Lighter than a like and deliberately not private: they are told who waved.
-   * One per pair every ten minutes — the server answers `WAVE_TOO_SOON` (429)
-   * inside that window, which the caller shows as "already waved" rather than
-   * as a failure.
+   * Wave at somebody in the same room, or wave back (SCRUM-1042). Recorded and shown to them; a wave back makes it
+   * mutual and opens the anonymous conversation. Idempotent on the server (one wave per pair per room), so the
+   * queue's retries can never send two. Refusals: `lib/waves.ts` `waveRefusal`.
    */
-  async sendWave(eventId: string, toUserId: string): Promise<ApiResponse<{ sent: true }>> {
-    return this.queuedRequest<{ sent: true }>(
+  async sendWave(eventId: string, toUserId: string): Promise<ApiResponse<WaveOutcome>> {
+    return this.queuedRequest<WaveOutcome>(
       `/api/mobile/events/${eventId}/waves`,
       { method: 'POST', body: JSON.stringify({ toUserId }) },
       true,

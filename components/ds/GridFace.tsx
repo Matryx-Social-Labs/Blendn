@@ -36,12 +36,14 @@ export type GridFaceProps = {
   /** The column's width; the face is 16 less. */
   width: number
   here?: boolean
-  liked?: boolean
+  /** They waved at you here (Wave B): the rose hand mark. */
+  wavedAtYou?: boolean
+  /** You both waved: the message mark. */
   matched?: boolean
   onPress?: () => void
   /**
-   * The double tap's like (Flow 4 Room: HeartPop #15, `H.like`). Given only
-   * while a like can do something; a single tap then opens after
+   * The double tap's like, for your crew only (Flow 4 Room: HeartPop #15, `H.like`): a person is waved at from their
+   * card, never by a double tap. Given only while a crew like can do something; a single tap then opens after
    * `DOUBLE_TAP_MS`. A screen reader likes from the actions menu.
    */
   onLike?: () => void
@@ -57,15 +59,15 @@ export type GridFaceProps = {
 /**
  * One face in "Everyone here" (guidelines/components/GridFace.html): a face at
  * the column width less 16, the name and one reason under it. Three marks and
- * nothing else: the live dot at the rim (here now), a white heart disc (you
- * liked them), a white message disc (you matched; the dot gives way). Someone
- * who checked out stays at 60% with "Was here".
+ * nothing else: the live dot at the rim (here now), a rose hand disc (they
+ * waved at you, Wave B), a white message disc (you both waved; the dot gives
+ * way). Someone who checked out stays at 60% with "Was here".
  *
- * Tap opens the PersonCard, silently; a double tap likes, with the HeartPop
- * and `H.like` (Flow 4 Room). An arrival enters on `M.snap` (#25), a wave from
+ * Tap opens the PersonCard, silently; a double tap is a crew's like, with the
+ * HeartPop and `H.like`. An arrival enters on `M.snap` (#25), a wave from
  * them rings the face (#51).
- * Read "{name}, {reason}, here now", then "liked" or "matched"; "{name}, was
- * here". Name and reason cap at 1.3×, the name one line and the reason two (B-R7); the face scales with the
+ * Read "{name}, {reason}, here now" (the reason says "Waved at you" or "You
+ * both waved"); "{name}, was here". Name and reason cap at 1.3×, the name one line and the reason two (B-R7); the face scales with the
  * column, not the text. Increase Contrast: the reason in white.
  */
 export function GridFace({
@@ -75,7 +77,7 @@ export function GridFace({
   overlap,
   width,
   here = true,
-  liked = false,
+  wavedAtYou = false,
   matched = false,
   onPress,
   onLike,
@@ -89,10 +91,10 @@ export function GridFace({
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const size = width - SPACE.lg
-  const mark = matched ? 'matched' : liked ? 'liked' : null
+  const mark = matched ? 'matched' : wavedAtYou ? 'wavedAtYou' : null
   // Matching v2's sentence is the reason when the server sent one (R7): two lines, in the text, as Meet next says it.
   const said = overlap || reason
-  const label = [name, here ? said : null, here ? 'here now' : 'was here', mark].filter(Boolean).join(', ')
+  const label = [name, here ? said : null, here ? 'here now' : 'was here'].filter(Boolean).join(', ')
   const { press, like, hold, pop } = useDoubleTap(onPress, onLike)
   const enter = useArrival(arriving)
 
@@ -105,7 +107,8 @@ export function GridFace({
           // A hold opens the card at once, without the double tap's wait, and says so: `H.longPress` (the peek).
           onLongPress={hold}
           // The like is its own named action: `longpress` is the platform's name for a hold (TalkBack's), and means "open" here.
-          accessibilityActions={onLike ? [{ name: 'activate' }, { name: 'like', label: 'Like' }] : undefined}
+          // Only a crew's like now (people wave from the card): the double tap likes for your crew.
+          accessibilityActions={onLike ? [{ name: 'activate' }, { name: 'like', label: 'Like for your crew' }] : undefined}
           onAccessibilityAction={(e) => {
             if (e.nativeEvent.actionName === 'activate') onPress?.()
             else if (e.nativeEvent.actionName === 'like') like()

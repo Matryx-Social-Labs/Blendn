@@ -8,9 +8,9 @@ import { H } from './haptics'
 import { warmAvatars } from './warmAvatars'
 import { markRoomJoined, markRoomLeft, rememberRoomMute } from './roomMembership'
 import { subscribeCheckInChanged } from './checkIn'
-import { likeRefusal, type LikeRefusal } from './likeRefusal'
+import type { LikeRefusal } from './likeRefusal'
 import { requestTextRefusal } from './requestRefusal'
-import { likeStateAfter, likeStatusFor, shouldSendLike, type LikeStatus } from './likes'
+import { shouldSendWave, waveRefusal, waveStateAfter, waveStatusFor, WAVE_SETTLE_MS, type WaveStatus } from './waves'
 import { Logger } from './logger'
 import { reasonLine } from './roomMoments'
 import { closesAtFromDoor, pseudonymFromDoor } from './roomState'
@@ -24,7 +24,7 @@ import {
   withRoster,
   type LiveRoster,
 } from './roomLive'
-import { ignoreWavesFrom } from './roomWaves'
+import { ignoreWavesFrom, useRoomWaves } from './roomWaves'
 import { recallRoster, rememberRoster } from './rosterMemory'
 import { getBlockedUsers } from './safetyUtils'
 import {
@@ -57,12 +57,12 @@ import { parseLens, type RoomLens } from './roomLens'
  *   is nothing good on screen to keep (`lib/activeRoom.ts`).
  * - **Leaving a room you are visibly in gets a grace period**; arriving at "no
  *   room" from nothing does not.
- * - **Local like state wins over the roster's `youLiked`** (`lib/likes.ts`),
- *   and a refused like says why without ever mentioning the other person
- *   (`lib/likeRefusal.ts`).
+ * - **Local wave state wins over the deck's `youWaved` / `wavedAtYou`**
+ *   (`lib/waves.ts`), and a refused wave says why without ever mentioning the
+ *   other person (`waveRefusal`).
  *
  * Presentation is the caller's: this navigates nowhere and renders nothing. A
- * refused like or wave comes back as its sentence (`lib/likeRefusal.ts`), for
+ * refused wave comes back as its sentence (`lib/waves.ts`), for
  * the card's one neutral line (R3-D4 4.3) or a toast when no card is open.
  * Waves *to* you are `lib/roomWaves.ts`'s, heard at the tab layout.
  */
@@ -84,12 +84,14 @@ export interface RoomPerson {
   badges: Badge[]
   insideNow: boolean
   arrivedAt: string | null
-  liked: boolean
+  /** Wave → Wave back → ✓ Waved → Say hi (`lib/waves.ts`): the deck's flags, a wave heard live, and this session. */
+  wave: WaveStatus
+  /** When they waved at you, if this phone heard it live (ms); the deck carries no time. */
+  wavedAt: number | null
+  /** You both waved: `wave === 'mutual'`. */
   matched: boolean
   conversationId: string | null
   requested: boolean
-  /** A like is in flight — draw the heart as pressed, but don't allow a second. */
-  pending: boolean
   /**
    * `reasonLine` at the time the list was built. "Just walked in" expires
    * after ten minutes, so a screen with its own clock tick should call
@@ -137,11 +139,10 @@ export interface RoomState {
   chatClosesAt?: string | null
   /** Flow 5 P-A: the room's lens from the deck (`lib/roomLens.ts`); null for none, or until the deck answers. */
   lens: RoomLens | null
-  /** The mutual just made — from your like, or from theirs over the socket. */
   /**
-   * The mutual just made — from your like, or from theirs over the socket.
+   * The mutual just made — from your wave back, or from theirs over the socket.
    * `you` is how *they* see you (your pseudonym unless you revealed), when the
-   * like response said; the socket event does not carry it.
+   * wave response said; the socket event does not carry it.
    */
   match: { person: RoomPerson | null; name: string; you: string | null; conversationId: string; at: number } | null
   /**
@@ -153,16 +154,18 @@ export interface RoomState {
   connection: SocketConnectionStatus
 }
 
-/** A like's or a wave's answer: what happened, or the sentence that says it didn't. */
+/** A wave's answer: what happened, or the sentence that says it didn't. */
 export type RoomAnswer<T extends string> = { kind: T } | { kind: 'refused'; refusal: LikeRefusal }
 
 export interface RoomActions {
   refresh(): Promise<void>
   loadMore(): Promise<void>
   retry(): void
-  like(id: string): Promise<RoomAnswer<'liked' | 'matched' | 'already'>>
-  /** Wave at somebody. "Too soon" is the server's once-per-ten-minutes rule: said as "Waved", never as an error. */
-  sendWave(id: string): Promise<RoomAnswer<'sent' | 'too-soon'>>
+  /**
+   * Wave, or wave back. `settleMs` is how long the hand swings before ✓ Waved shows (07-motion: 800 ms, Reduce
+   * Motion's crossfade less). `'already'` is Waved, mutual or in flight: nothing is sent.
+   */
+  wave(id: string, settleMs?: number): Promise<RoomAnswer<'waved' | 'mutual' | 'already'>>
   /** `stands`: a request now exists between you. `refusal`: the server's sentence when it refused the note's text (lib/requestRefusal.ts); absent for a failure it cannot name. */
   connect(id: string, note?: string): Promise<{ stands: boolean; refusal?: string }>
   /** After a block or report: gone from every list for the rest of the session. */
@@ -237,10 +240,12 @@ export function useRoom(): RoomState & RoomActions {
 
   /*
    * Session knowledge about people in this room. All of it belongs to an
-   * event — a like is keyed on one — so all of it is dropped when the room
-   * changes, or one room's hearts would land on the next room's faces.
+   * event — a wave is keyed on one — so all of it is dropped when the room
+   * changes, or one room's waves would land on the next room's faces.
    */
-  const [likeState, setLikeState] = useState<Record<string, LikeStatus>>({})
+  const [waveState, setWaveState] = useState<Record<string, WaveStatus>>({})
+  /** Waves heard live over the socket (`lib/roomWaves.ts`): Wave back before the deck refetches. */
+  const heard = useRoomWaves().received
   const [conversations, setConversations] = useState<Record<string, string>>({})
   /**
    * Set on a sent request, or on the `CONFLICT` that says one exists:
@@ -282,7 +287,7 @@ export function useRoom(): RoomState & RoomActions {
   )
 
   const resetRoomKnowledge = useCallback(() => {
-    setLikeState({})
+    setWaveState({})
     setConversations({})
     setRequested({})
     setChatGroupId(null)
@@ -654,7 +659,11 @@ export function useRoom(): RoomState & RoomActions {
 
   const toPerson = useCallback(
     (a: AttendeeProfile): RoomPerson => {
-      const status = likeStatusFor(a.youLiked, likeState[a.user_id])
+      const conversationId = conversations[a.user_id] ?? null
+      const wave = waveStatusFor(
+        { youWaved: a.youWaved, wavedAtYou: a.wavedAtYou, conversationId, heard: !!heard[a.user_id] },
+        waveState[a.user_id]
+      )
       // The socket's arrival first (it is the freshest), then the deck's own check-in time (SCRUM-1042).
       const arrivedAt = live.arrivedAt[a.user_id] ?? a.last_seen ?? a.checkInTime ?? null
       const person: Omit<RoomPerson, 'reason'> = {
@@ -675,16 +684,16 @@ export function useRoom(): RoomState & RoomActions {
         workIntent: a.workIntent ?? null,
         insideNow: a.insideNow !== false,
         arrivedAt,
-        liked: status !== 'none',
-        matched: status === 'matched',
-        conversationId: conversations[a.user_id] ?? null,
+        wave,
+        wavedAt: heard[a.user_id]?.at ?? null,
+        matched: wave === 'mutual',
+        conversationId,
         requested: !!requested[a.user_id],
-        pending: status === 'sending',
         raw: a,
       }
       return { ...person, reason: reasonLine(person) }
     },
-    [likeState, conversations, requested, live.arrivedAt]
+    [waveState, conversations, requested, live.arrivedAt, heard]
   )
 
   const people = useMemo(
@@ -721,87 +730,65 @@ export function useRoom(): RoomState & RoomActions {
   }, [])
 
   /**
-   * Like somebody. Optimistic, because liking only works if it feels free.
+   * Wave, or wave back (SCRUM-1042). The hand swings while it goes and ✓ Waved shows once both the server has answered
+   * and `settleMs` has passed (07-motion), so the state never lands mid-swing. Not optimistic past the swing: nothing
+   * claims a wave was stored until the server says so, because they are told who waved.
    *
-   * `'already'` covers liked, matched and in-flight alike: a matched person's
-   * conversation is on `RoomPerson.conversationId`, and opening it is the
-   * caller's navigation to make. A failure clears this session's opinion
-   * rather than asserting "not liked" — the write may have landed before the
-   * response was lost.
+   * `'already'` covers Waved, mutual and in flight: one wave per person per room, no "Wave again". A failure clears this
+   * session's opinion rather than asserting "not waved": the write may have landed before the response was lost.
    */
-  const like = useCallback(
-    async (id: string): Promise<RoomAnswer<'liked' | 'matched' | 'already'>> => {
+  const wave = useCallback(
+    async (id: string, settleMs: number = WAVE_SETTLE_MS): Promise<RoomAnswer<'waved' | 'mutual' | 'already'>> => {
       const roomId = eventRef.current?.id
+      // Only someone on the roster: never a removed person, never an id from elsewhere.
       const attendee = findAttendee(id)
-      if (!roomId || !attendee) return { kind: 'refused', refusal: likeRefusal('NOT_FOUND', undefined) }
+      if (!roomId) return { kind: 'refused', refusal: waveRefusal('NOT_CHECKED_IN', undefined) }
+      if (!attendee) return { kind: 'refused', refusal: waveRefusal('NOT_FOUND', undefined) }
 
-      const status = likeStatusFor(attendee.youLiked, likeState[id])
-      if (!shouldSendLike(status)) return { kind: 'already' }
+      const conversationId = conversations[id] ?? null
+      const status = waveStatusFor(
+        { youWaved: attendee.youWaved, wavedAtYou: attendee.wavedAtYou, conversationId, heard: !!heard[id] },
+        waveState[id]
+      )
+      if (!shouldSendWave(status)) return { kind: 'already' }
 
-      setLikeState((prev) => ({ ...prev, [id]: 'sending' }))
+      setWaveState((prev) => ({ ...prev, [id]: 'sending' }))
       const forget = () =>
-        setLikeState((prev) => {
+        setWaveState((prev) => {
           const copy = { ...prev }
           delete copy[id]
           return copy
         })
 
       try {
-        const result = await apiClient.likeAtEvent(roomId, id)
-        const next = likeStateAfter({ ok: !!result.success, mutual: result.data?.mutual })
+        const [result] = await Promise.all([apiClient.sendWave(roomId, id), new Promise((r) => setTimeout(r, settleMs))])
+        const next = waveStateAfter({ ok: !!result.success, mutual: result.data?.mutual })
         if (next === undefined) forget()
-        else setLikeState((prev) => ({ ...prev, [id]: next }))
+        else setWaveState((prev) => ({ ...prev, [id]: next }))
+        // Never silent, and never about them (anti-spam W8).
+        if (!result.success) return { kind: 'refused', refusal: waveRefusal(result.errorCode, result.error) }
 
-        if (!result.success) {
-          // Never silent, and never about them — see lib/likeRefusal.ts.
-          return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }
+        const opened = result.data?.mutual ? result.data.conversationId : undefined
+        if (!opened) {
+          void askPushInContext('like')
+          return { kind: 'waved' }
         }
-
-        const conversationId = result.data?.mutual ? result.data.conversationId : undefined
-        if (!conversationId) void askPushInContext('like')
-        if (conversationId) {
-          setConversations((prev) => ({ ...prev, [id]: conversationId }))
-          celebrate({
-            person: toPerson(attendee),
-            name: result.data?.pseudonyms?.them || displayName(attendee.name),
-            you: result.data?.pseudonyms?.you ?? null,
-            conversationId,
-          })
-          return { kind: 'matched' }
-        }
-        return { kind: 'liked' }
+        setConversations((prev) => ({ ...prev, [id]: opened }))
+        celebrate({
+          person: toPerson(attendee),
+          name: result.data?.pseudonyms?.them || displayName(attendee.name),
+          you: result.data?.pseudonyms?.you ?? null,
+          conversationId: opened,
+        })
+        return { kind: 'mutual' }
       } catch (e) {
-        Logger.error('match', 'like failed', { error: e })
+        Logger.error('match', 'wave failed', { error: e })
         forget()
-        // A throw (timeout, no network) un-fills the heart like a refusal
-        // does, so it is said like one — see lib/likeRefusal.ts.
-        return { kind: 'refused', refusal: likeRefusal(undefined, undefined) }
+        return { kind: 'refused', refusal: waveRefusal(undefined, undefined) }
       }
     },
-    [findAttendee, likeState, celebrate, toPerson]
+    [findAttendee, conversations, heard, waveState, celebrate, toPerson]
   )
-
-  /**
-   * Wave at somebody. Unlike a like it isn't private — they're told who — so
-   * it is never optimistic: nothing claims a wave was sent until it was.
-   */
-  const sendWave = useCallback(async (id: string): Promise<RoomAnswer<'sent' | 'too-soon'>> => {
-    const roomId = eventRef.current?.id
-    if (!roomId) return { kind: 'refused', refusal: likeRefusal('NOT_CHECKED_IN', undefined) }
-    // Only someone on the roster, as `like`: never a removed person, never an id from elsewhere.
-    if (!findAttendee(id)) return { kind: 'refused', refusal: likeRefusal('NOT_FOUND', undefined) }
-    try {
-      const result = await apiClient.sendWave(roomId, id)
-      // No haptic on sending a wave: the hand's wiggle is the answer (ROUND3 #51).
-      if (result.success) return { kind: 'sent' }
-      if (result.errorCode === 'WAVE_TOO_SOON') return { kind: 'too-soon' }
-      return { kind: 'refused', refusal: likeRefusal(result.errorCode, result.error) }
-    } catch (e) {
-      Logger.error('match', 'wave failed', { error: e })
-      return { kind: 'refused', refusal: likeRefusal(undefined, undefined) }
-    }
-  }, [findAttendee])
-
   /**
    * A message request — the action that reveals you.
    *
@@ -836,15 +823,15 @@ export function useRoom(): RoomState & RoomActions {
   }, [])
 
   /*
-   * The other side of a mutual. The liker learns it from the like response;
-   * the person who liked first learns it here, while they're looking.
+   * The other side of a mutual. The one who waved back learns it from the wave
+   * response; the person who waved first learns it here, while they're looking.
    */
   const toPersonRef = useLatest(toPerson)
   useEffect(() => {
     if (!userId) return
     return subscribeToRoomMatch((data) => {
       if (data.eventId === eventRef.current?.id) {
-        setLikeState((prev) => ({ ...prev, [data.otherUserId]: 'matched' }))
+        setWaveState((prev) => ({ ...prev, [data.otherUserId]: 'mutual' }))
         setConversations((prev) => ({ ...prev, [data.otherUserId]: data.conversationId }))
       }
       const attendee = findAttendee(data.otherUserId)
@@ -896,8 +883,7 @@ export function useRoom(): RoomState & RoomActions {
     refresh,
     loadMore,
     retry,
-    like,
-    sendWave,
+    wave,
     connect,
     remove,
     clearMatch,

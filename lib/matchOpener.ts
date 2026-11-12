@@ -31,7 +31,7 @@ import { plainText } from './routeParams'
 /** What the thread needs to know. A subset of the conversation payload. */
 export interface MatchOpenerInput {
   /**
-   * Opened from a mutual like rather than an accepted message request.
+   * Opened from a mutual wave (or an older mutual like) rather than an accepted message request.
    *
    * Server-supplied (`GET /conversations`, `GET /conversations/:id`) and not
    * derivable here: the payload carries the resolved name and `theyRevealed`,
@@ -61,18 +61,19 @@ export function matchOpener(input: MatchOpenerInput): MatchOpener | null {
   const name = input.otherName?.trim()
 
   return {
-    title: 'You both said yes.',
+    // Wave M-A (SCRUM-1042): the mutual is a wave now; an older like-made thread reads the same, as "matched" is retired.
+    title: 'You both waved',
     /*
      * Names them when there is a name, because "you and Cosmic Panda" reads as
-     * a person and "you both liked each other" reads as a system notice.
+     * a person and "you both waved at each other" reads as a system notice.
      *
      * The fallback is not a placeholder for a missing name — the server's own
      * last resort is "Someone", and an unrevealed match legitimately has no
      * better answer. It must never say "Unknown", which reads as a data error.
      */
     body: name
-      ? `You and ${name} liked each other. Say something — they’re on the same screen.`
-      : 'You liked each other. Say something first.',
+      ? `You and ${name} both waved. Say something — they’re on the same screen.`
+      : 'You both waved. Say something first.',
   }
 }
 
@@ -85,7 +86,7 @@ export function matchOpener(input: MatchOpenerInput): MatchOpener | null {
  */
 export function matchRowPreview(input: MatchOpenerInput): string | null {
   if (!input.fromMatch) return null
-  return 'You matched — start the conversation'
+  return 'You both waved — start the conversation'
 }
 
 /**

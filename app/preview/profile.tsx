@@ -95,7 +95,7 @@ export default function ProfilePreview() {
         </View>
       </ScrollView>
       <ProfileDock note="Connect sends a request and reveals your name and photo.">
-        <Button kind="primary" icon="heart" label="Like" onPress={() => {}} style={styles.flex} />
+        <Button kind="lit" icon="hand" label="Wave" onPress={() => {}} style={styles.flex} />
         <Button kind="secondary" label="Connect" onPress={() => {}} style={styles.flex} />
       </ProfileDock>
 

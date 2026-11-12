@@ -181,7 +181,7 @@ export default function DsP5Preview() {
 function Moment({ play, onEnd }: { play: (typeof PLAYS)[number]; onEnd: () => void }) {
   if (play.startsWith('match-')) {
     const m = MATCHES[play.slice('match-'.length)]
-    return <MomentMatch testID="ds-moment-match" {...m} reason="Both into live music" opener="Which set are you here for?" onSayHi={onEnd} onClose={onEnd} />
+    return <MomentMatch testID="ds-moment-match" {...m} tonight={{ question: 'What are you hoping to find tonight?', answer: 'Someone to split a cab back to Koramangala' }} opener="Which set are you here for?" onSayHi={onEnd} onClose={onEnd} />
   }
   if (play.startsWith('blend-')) {
     return <MomentBlend testID="ds-moment-blend" {...BLENDS[play.slice('blend-'.length)]} onOpen={onEnd} onLater={onEnd} />

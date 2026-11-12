@@ -30,7 +30,6 @@ jest.mock('../lib/apiClient', () => ({
     getSharedEvents: jest.fn(() => Promise.resolve({ success: true, data: { events: [], pagination: { limit: 5, hasMore: false, nextCursor: null, totalCount: 0 } } })),
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
-    likeAtEvent: jest.fn(),
     respondToMessageRequest: jest.fn(),
   },
 }))
@@ -271,33 +270,12 @@ describe('Connect', () => {
   })
 })
 
-describe('Like', () => {
-  const NOTHING = { ...BEN, connection: { conversationId: null, request: null } }
-
-  it('says why a like did not land', async () => {
-    api.getPublicProfile.mockResolvedValue({ success: true, data: NOTHING })
-    api.likeAtEvent.mockResolvedValue({ success: false, error: 'Check in before liking anyone here', errorCode: 'FORBIDDEN' })
+describe('no Like (Wave replaced it, SCRUM-1042)', () => {
+  it('a profile with an event but no room card offers Connect and no Like; Wave lives on the room page (profileLensPage)', async () => {
+    api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
     await render(<UserProfile />)
-
-    fireEvent.press(await screen.findByText('Like'))
-
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Check in before liking anyone here', 'info'))
-  })
-
-  it('gives a mutual like its match moment, and Say hi opens the chat', async () => {
-    api.getPublicProfile.mockResolvedValue({ success: true, data: NOTHING })
-    api.likeAtEvent.mockResolvedValue({
-      success: true,
-      data: { mutual: true, conversationId: 'conv-7', pseudonyms: { you: 'Quiet Fox', them: 'Ben' } },
-    })
-    await render(<UserProfile />)
-
-    fireEvent.press(await screen.findByText('Like'))
-    fireEvent.press(await screen.findByText('You and Ben matched'))
-
-    expect(router.push).toHaveBeenCalledWith(
-      expect.objectContaining({ params: expect.objectContaining({ conversationId: 'conv-7' }) })
-    )
+    expect(await screen.findByText('Connect')).toBeTruthy()
+    expect(screen.queryByText('Like')).toBeNull()
   })
 })
 

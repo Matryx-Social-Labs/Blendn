@@ -40,7 +40,6 @@ const draw = (person: PersonCardPerson, props: Partial<React.ComponentProps<type
     <PersonCardContent
       person={person}
       variant="here"
-      onLike={jest.fn()}
       onWave={jest.fn()}
       onMessage={jest.fn()}
       onMore={jest.fn()}
@@ -58,7 +57,7 @@ describe('the sheet, through the work lens', () => {
     await draw(bison())
     const t = tree()
     const at = (x: string) => t.indexOf(x)
-    const seq = ['In the room at Junction', 'Gentle Bison', 'Anonymous · 31', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café', 'In common', 'Cycling', 'Wave', 'Message', 'Like']
+    const seq = ['In the room at Junction', 'Gentle Bison', 'Anonymous · 31', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café', 'In common', 'Cycling', 'Wave', 'Message']
     const idx = seq.map(at)
     expect(idx.every((i) => i >= 0)).toBe(true)
     expect([...idx].sort((a, b) => a - b)).toEqual(idx)
@@ -72,9 +71,10 @@ describe('the sheet, through the work lens', () => {
     expect(answer.props.numberOfLines).toBeUndefined()
   })
 
-  it('Wave, Message and Like stand level at 52 (the board’s .db), Like lit', async () => {
+  it('Wave and Message stand level at 52 (the board’s .db); there is no Like (Wave dock A)', async () => {
     await draw(bison())
-    for (const id of ['p-wave', 'p-message', 'p-like']) expect(StyleSheet.flatten(screen.getByTestId(id).props.style).height ?? SIZE.tabBarCompact).toBe(SIZE.tabBarCompact)
+    expect(screen.queryByTestId('p-like')).toBeNull()
+    for (const id of ['p-wave', 'p-message']) expect(StyleSheet.flatten(screen.getByTestId(id).props.style).height ?? SIZE.tabBarCompact).toBe(SIZE.tabBarCompact)
   })
 
   it('⋯ is in the head and opens Block or Report; the head opens their profile; there is no separate View profile line', async () => {
