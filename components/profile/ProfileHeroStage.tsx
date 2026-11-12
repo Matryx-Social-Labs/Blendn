@@ -117,7 +117,7 @@ export function ProfileHeroStage({ width, height: fitted, scrollY, photos, blurr
           {/* The profile's hue (rose), not the brand set's ember and violet (D31): one hue per screen. */}
           <Orbs set="brand" tint={sel.edge} />
           <View style={[styles.creature, { top: height / 2 - CREATURE_ABOVE_MIDDLE }]}>
-            <Avatar kind="creature" pseudonym={seed} size={CREATURE} ring={tint(COLOR.textPrimary, RING_ALPHA)} />
+            <Avatar kind="creature" pseudonym={seed} size={CREATURE} ring={tint(COLOR.textPrimary, RING_ALPHA)} blink />
             {anonymous ? (
               <View style={styles.pill}>
                 <ScrimPill testID="hero-anonymous">

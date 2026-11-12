@@ -169,6 +169,10 @@ function build(json) {
     CREATURE_PALETTES: palettes.creature,
     VENUE_PLATES: camelKeys(palettes.plate),
     PALETTE_GLYPH: { creature: palettes.creatureGlyph, plate: palettes.plateGlyph },
+    /** The faces' 8 hues (fill = the disc, edge = markings and glow, glyph = the head), picked by the pseudonym's hash % 8. */
+    CREATURE_HUES: palettes.creatureHues,
+    /** The faces' fixed colours: eyes, beaks, the panda's black and white. */
+    CREATURE_ART: palettes.creatureArt,
   }
   for (const [name, value] of Object.entries(tokens)) assertNoCss(name, value)
   return tokens

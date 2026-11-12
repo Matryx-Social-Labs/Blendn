@@ -247,7 +247,7 @@ export function PersonCardContent({
           accessibilityHint={onViewProfile ? 'Opens their profile' : undefined}
           style={styles.head}
         >
-          <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} {...person.face} />
+          <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} blink {...person.face} />
           <View style={styles.headText}>
             <Text testID={id('name')} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
               {name}
