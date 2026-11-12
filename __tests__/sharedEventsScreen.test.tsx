@@ -57,3 +57,8 @@ it('says so when there are none, and when the first page fails (with a retry)', 
   await settle()
   expect(screen.getByText('Night 0')).toBeTruthy()
 })
+
+it('is registered with no native header: its own TopBar is the bar (drive, iOS showed "user/[id] | shared-events/[id]")', () => {
+  const layout = jest.requireActual<typeof import('fs')>('fs').readFileSync(require.resolve('../app/_layout.tsx'), 'utf8')
+  expect(layout).toContain('<Stack.Screen name="shared-events/[id]" options={{ headerShown: false }} />')
+})
