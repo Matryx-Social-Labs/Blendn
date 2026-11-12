@@ -170,7 +170,8 @@ const spoken = (code: string) => `Offer code ${[...code.slice(0, 3)].join(' ')},
 const STILL = {
   redeemed: { label: 'USED TONIGHT', line: null, spoken: (at?: string) => (at ? `Offer code redeemed ${at}` : 'Offer code redeemed') },
   used: { label: 'USED TONIGHT', line: null, spoken: () => 'Offer code used tonight' },
-  ended: { label: 'ENDED', line: 'This offer ended', spoken: () => 'This offer ended' },
+  // The day it ended is the ticket's validity line, the sentence the screen's (Flow 4 audit B-1): ENDED alone here.
+  ended: { label: 'ENDED', line: null, spoken: () => 'Offer code ended' },
 } as const
 const DASHES = '— — —'
 /** "0:20": the seconds to the code's turn, the board's "New code in 0:42". */
@@ -185,8 +186,6 @@ export type DoorCodeProps = {
   rotatesAt?: number
   /** "9:43 PM", on the phone's clock (`clockTime`). */
   redeemedAt?: string
-  /** The label of an ended pass ("ENDED SUNDAY"). */
-  endedLabel?: string
   /** False while another screen covers it: no ticking, no announcing to someone elsewhere. */
   active?: boolean
   testID?: string
@@ -198,7 +197,7 @@ export type DoorCodeProps = {
  * on the phone. The board's code row (flow-4 .cd): SHOW THIS CODE, the code
  * large in Geist Mono, then a small ring draining to its turn beside "New code
  * in 0:42"; offline there is no code ("Needs a connection"). Redeemed and used
- * tonight say USED TONIGHT over dim dashes; ended keeps its day.
+ * tonight say USED TONIGHT over dim dashes; ended says ENDED.
  *
  * The ring and the code change stay under Reduce Motion (they are the pass's
  * security function, WCAG 2.2.2's essential motion); the code swaps with no
@@ -206,7 +205,7 @@ export type DoorCodeProps = {
  * the ring is not read. No haptic (`H.success` on the server's redeem is the
  * screen's).
  */
-export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLabel, active = true, testID }: DoorCodeProps) {
+export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, active = true, testID }: DoorCodeProps) {
   const bold = useBoldText()
   const live = state === 'live' && code.length > 0
   const [now, setNow] = useState(() => Date.now())
@@ -242,7 +241,7 @@ export function DoorCode({ state, code = '', rotatesAt = 0, redeemedAt, endedLab
 
   const left = Math.min(CODE_PERIOD_S, Math.max(0, Math.ceil((rotatesAt - now) / 1000)))
   const still = state === 'redeemed' || state === 'used' || state === 'ended' ? STILL[state] : null
-  const label = state === 'ended' && endedLabel ? endedLabel : (still?.label ?? 'SHOW THIS CODE')
+  const label = still?.label ?? 'SHOW THIS CODE'
   const line = font('meta', bold)
 
   return (

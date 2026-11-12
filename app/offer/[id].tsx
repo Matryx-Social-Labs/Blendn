@@ -28,6 +28,7 @@ import {
   offersApi,
   passView,
   validityLine,
+  endedLine,
   type OfferReportReason,
   type OpenedOffer,
   type RegularPrefs,
@@ -302,8 +303,7 @@ function PassBody({ offer, lastReadFailed, focused }: { offer: OpenedOffer; last
         venueName={offer.venue.name}
         venueType={offer.venue.venueType}
         offerText={offer.text}
-        until={validityLine(offer.endsAt)}
-        endsAt={offer.endsAt}
+        until={offer.state === 'ended' ? endedLine(offer.endsAt, now, offer.venue.timezone) : validityLine(offer.endsAt, now, offer.venue.timezone)}
         view={view}
         code={view.door === 'live' ? offer.pass?.code : undefined}
         rotatesAt={turn}

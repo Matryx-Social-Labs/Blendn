@@ -12,6 +12,7 @@ import { SkeletonBlock } from './Skeleton'
 import { useToast } from './Toast'
 import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
 import { inSlotOrder, moveItem, reordered, type GridSpec } from '../lib/photoOrder'
 import { cachePhoto, deletePhoto, loadPulledPhotos, loadUserPhotos, ProfilePhoto, reorderPhotos, selectAndUploadPhoto, uploadPhoto } from '../lib/photoUtils'
@@ -70,6 +71,8 @@ const photoWriteOpen = (userId: string) => photoWrites.has(userId)
 const beginPhotoWrite = (userId: string) => void photoWrites.add(userId)
 function endPhotoWrite(userId: string): void {
   photoWrites.delete(userId)
+  // The photos changed (or may have): a profile read after this is the server's, not the 60 s copy from before (audit D-1).
+  ProfileCache.clear()
   photoWriteEnded.forEach((fn) => fn(userId))
 }
 

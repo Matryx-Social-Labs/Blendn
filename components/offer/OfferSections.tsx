@@ -12,7 +12,7 @@ import { VenuePlate } from '../ds/VenuePlate'
 import { font, IC_HAIRLINE, useAnnounced, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
-import { endedLabel, knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
+import { knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
 import { plateOf } from '../../lib/placesPane'
 
 /** The disc at the ticket's middle (flow-4 offer board .disc4: 184). */
@@ -79,7 +79,6 @@ export function DoorTicket({
   venueType,
   offerText,
   until,
-  endsAt,
   view,
   code,
   rotatesAt,
@@ -90,9 +89,8 @@ export function DoorTicket({
   /** The venue_type key: its plate on the tile, as on the venue's page. None, or a type with no plate: the gift. */
   venueType?: string | null
   offerText: string
-  /** "until Wed, 15 Oct". */
-  until: string
-  endsAt: string
+  /** "Valid today, till 11 PM", "Ended today at 9:52 AM"; null when there is no time to say (an offer ended early). */
+  until: string | null
   view: PassView
   /** The server's six characters, while there is a fresh one. */
   code?: string
@@ -108,7 +106,7 @@ export function DoorTicket({
   const plate = plateOf(venueType)
   return (
     <View testID="door-ticket" style={[styles.ticket, contrast ? IC_HAIRLINE : styles.edge]}>
-      <View accessible accessibilityLabel={`Offer code for ${venueName}. ${offerText}. ${until}.`} style={styles.top}>
+      <View accessible accessibilityLabel={[`Offer from ${venueName}.`, `${offerText}.`, until && `${until}.`].filter(Boolean).join(' ')} style={styles.top}>
         <View style={styles.headRow}>
           <View testID="door-tile" style={styles.tile}>
             {plate ? (
@@ -118,16 +116,18 @@ export function DoorTicket({
             )}
           </View>
           <View style={styles.fill}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary, styles.headLabel]}>OFFER CODE</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary, styles.headLabel]}>OFFER</Text>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink, styles.venue]}>
               {venueName}
             </Text>
           </View>
         </View>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.offerText]}>{offerText}</Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.until]}>
-          {until}
-        </Text>
+        {until ? (
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.until]}>
+            {until}
+          </Text>
+        ) : null}
       </View>
       <View style={[styles.middle, view.door === 'used' && { opacity: USED_DISC_OPACITY }]}>
         <LiquidDisc size={DISC} level={view.level} still={view.spent} stamp={view.stamp ? <Stamp text={view.stamp} clock={view.redeemedClock} /> : undefined} testID="door-disc" />
@@ -142,7 +142,6 @@ export function DoorTicket({
           code={code}
           rotatesAt={rotatesAt}
           redeemedAt={view.redeemedClock}
-          endedLabel={view.door === 'ended' ? endedLabel(endsAt) : undefined}
           active={active}
           testID="door-code"
         />
