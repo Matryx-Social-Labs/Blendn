@@ -178,7 +178,8 @@ function CrewInviteScreenContent() {
       <Animated.View entering={arrive} style={styles.fill}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <CrewEmblem seed={invite.emblemSeed} size={EMBLEM} />
+          {/* "Priya asked you in": the crew waves hello, once. */}
+          <CrewEmblem seed={invite.emblemSeed} size={EMBLEM} scene="wave" />
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.centre, styles.ink, styles.name]}>
             {invite.name}
           </Text>

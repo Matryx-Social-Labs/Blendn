@@ -8,7 +8,7 @@ import { stepIn, stepOut, type StepDir } from '../../components/crews/stepMotion
 import { MadeBeat } from '../../components/crews/MadeBeat'
 import { ConsentStep, FriendsStep, NameStep } from '../../components/crews/MakeSteps'
 import { Sheet, type SheetAction } from '../../components/ds/Sheet'
-import { CREW_MAX_MEMBERS, CREW_TAGS, createCrewBody, crewMessage, toggleTag } from '../../lib/crews'
+import { CREW_MAX_MEMBERS, CREW_TAGS, createCrewBody, crewMessage, newEmblemSeed, toggleTag } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import {
   bioFits,
@@ -97,8 +97,12 @@ function NewCrewScreenContent() {
   const [stuck, setStuck] = useState(false)
   const [sending, setSending] = useState(false)
   const [made, setMade] = useState<Made | null>(null)
-  /** The stand-in emblem for the preview: the server draws the real one, from its own seed, when the crew is made. */
-  const [previewSeed] = useState(() => `preview-${Math.random().toString(36).slice(2)}`)
+  /** The emblem's look: random, Shuffle for another, sent with the crew and fixed from then on (SCRUM-1053). */
+  const [emblemSeed, setEmblemSeed] = useState(() => newEmblemSeed())
+  const shuffle = () => {
+    H.select()
+    setEmblemSeed(newEmblemSeed())
+  }
   // A link closing this sheet before the crew was made: what was typed is kept for next time, told before anything
   // unmounts (`onClosingForLink`). Closed by the person: let go.
   const form = useLatest({ draft: { name, bio, choice, tags, openToSolo, keepAnonymous, picked } as CrewDraft, made: made !== null })
@@ -170,7 +174,7 @@ function NewCrewScreenContent() {
   const make = async () => {
     if (inFlight.current) return
     // Tapping Make the crew is the agreement to the sentence above it.
-    const body = createCrewBody({ name, bio, intent, tags, openToSolo, inviteUserIds: picked }, { consented: true, keepMeAnonymous: keepAnonymous })
+    const body = createCrewBody({ name, bio, intent, tags, openToSolo, inviteUserIds: picked, emblemSeed }, { consented: true, keepMeAnonymous: keepAnonymous })
     // Step 1 and 2 hold every limit, so this is only the type's other half.
     if ('problem' in body) return setRefusal({ text: body.problem })
     inFlight.current = true
@@ -197,7 +201,7 @@ function NewCrewScreenContent() {
     inFlight.current = false
     setSending(false)
     // The moment plays now, and stays until Continue: it is the crew's first beat, not a loading screen to skip.
-    setMade({ crewId, chatGroupId, invited, emblemSeed: null })
+    setMade({ crewId, chatGroupId, invited, emblemSeed: body.emblemSeed ?? null })
   }
 
   const close = () => {
@@ -265,7 +269,8 @@ function NewCrewScreenContent() {
                   onTag={(slug) => setTags((t) => toggleTag(t, slug))}
                   openToSolo={openToSolo}
                   onOpenToSolo={setOpenToSolo}
-                  previewSeed={previewSeed}
+                  emblemSeed={emblemSeed}
+                  onShuffle={shuffle}
                   intentText={intentLine(intent) ?? ''}
                 />
               ) : step === 2 ? (
@@ -281,7 +286,7 @@ function NewCrewScreenContent() {
                 <ConsentStep
                   name={cleanName(name)}
                   summary={makeSummary({ invited: picked.length, intent, tags: labels })}
-                  previewSeed={previewSeed}
+                  emblemSeed={emblemSeed}
                   keepAnonymous={keepAnonymous}
                   onKeepAnonymous={setKeepAnonymous}
                 />

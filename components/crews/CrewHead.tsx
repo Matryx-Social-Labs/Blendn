@@ -23,7 +23,8 @@ export function CrewHead({ crew }: { crew: Pick<Crew, 'name' | 'bio' | 'tags' | 
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   return (
     <View style={styles.head}>
-      <CrewEmblem seed={crew.emblemSeed} size={EMBLEM} />
+      {/* The crew page's entry: the crew dances once (SCRUM-1053). */}
+      <CrewEmblem seed={crew.emblemSeed} size={EMBLEM} scene="dance" />
       {/* At its roles' caps (YOU-06, D-L15): at AX XXXL an uncapped name and bio pushed the members off the screen. */}
       <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, styles.centre]}>
         {crew.name}

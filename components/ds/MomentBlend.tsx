@@ -83,6 +83,8 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
   const rise = useSharedValue(reduceMotion ? 0 : RISE.list)
   const actions = useSharedValue(0)
   const [live, setLive] = useState(false)
+  /** The two have landed together: both crews clink, once (SCRUM-1053). */
+  const [clink, setClink] = useState(false)
 
   const [onStage, setOnStage] = useState(false)
   useEffect(() => {
@@ -104,7 +106,13 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
   }, [onStage])
 
   const skipBeats = useBeats([
-    { at: reduceMotion ? 0 : LAND_MS, run: () => yourLike && H.match() },
+    {
+      at: reduceMotion ? 0 : LAND_MS,
+      run: () => {
+        if (yourLike) H.match()
+        setClink(true)
+      },
+    },
     // Live once fully shown, so a skip tap at the foot of the screen never lands on a half-faded button.
     { at: reduceMotion ? 2 * duration.base : ACTIONS_AT + DURATION.base, run: () => setLive(true) },
   ], onStage)
@@ -135,10 +143,10 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
           {/* Nothing here is a button: a tap on the emblems or the words falls through to skip. */}
           <View testID={testID && `${testID}-art`} pointerEvents="none" style={styles.art} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <Animated.View style={[styles.left, leftStyle]}>
-              <Piece side={ours} />
+              <Piece side={ours} clink={clink} />
             </Animated.View>
             <Animated.View style={[styles.right, rightStyle]}>
-              <Piece side={theirs} cut={ours.kind === 'crew' && theirs.kind === 'crew'} />
+              <Piece side={theirs} cut={ours.kind === 'crew' && theirs.kind === 'crew'} clink={clink} />
             </Animated.View>
           </View>
           <Animated.View testID={testID && `${testID}-copy`} pointerEvents="none" style={[styles.copy, textStyle]}>
@@ -173,7 +181,7 @@ export function MomentBlend({ ours, theirs, facets, yourLike, onOpen, onLater, t
 }
 
 /** A crew's emblem, or a person's creature (anonymous here: nobody is named until someone reveals). */
-function Piece({ side, cut = false }: { side: BlendCrew | BlendPerson; cut?: boolean }) {
+function Piece({ side, cut = false, clink = false }: { side: BlendCrew | BlendPerson; cut?: boolean; clink?: boolean }) {
   if (side.kind === 'person') return <Creature {...creatureFor(side.pseudonym)} size={EMBLEM} ring={COLOR.ink} />
   return (
     <View>
@@ -182,7 +190,7 @@ function Piece({ side, cut = false }: { side: BlendCrew | BlendPerson; cut?: boo
           <Path d={EMBLEM_SQUIRCLE} fill={COLOR.ink} />
         </Svg>
       ) : null}
-      <CrewEmblem seed={side.emblemSeed} size={EMBLEM} />
+      <CrewEmblem seed={side.emblemSeed} size={EMBLEM} scene={clink ? 'clink' : undefined} />
     </View>
   )
 }
