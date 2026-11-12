@@ -57,4 +57,6 @@ export interface AttendeeProfile {
   badges?: Badge[]
   /** Flow 5 P-A: their answer to tonight's question, as the deck sent it. Never typed by this phone. */
   tonightAnswer?: string | null
+  /** Flow 5 P-A: why they are here at a work-lens event, as the deck sent it. */
+  workIntent?: string | null
 }

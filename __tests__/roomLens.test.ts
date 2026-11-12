@@ -28,8 +28,26 @@ const lens = (key: string, question: string | null = 'Q?') => ({ key, question }
 const labels = (key: string, p: LensPerson = person) => leadFor(p, lens(key)).map((l) => l.label)
 
 describe('what leads, by lens', () => {
-  it('work: the field, then why they are here', () => {
-    expect(labels('work')).toEqual(['Product design', 'Here for work'])
+  it('work: the field, then why they are here, in their own pick', () => {
+    expect(labels('work', { ...person, workIntent: 'hire' })).toEqual(['Product design', 'Here to hire'])
+  })
+  it('work: each pick, as the pill says it, lit with the person-plus glyph', () => {
+    const say = (workIntent: string) => leadFor({ ...person, workIntent }, lens('work'))[1]
+    expect(['hire', 'find_work', 'build', 'learn'].map((w) => say(w)?.label)).toEqual([
+      'Here to hire',
+      'Here to find work',
+      'Here to build',
+      'Here to learn',
+    ])
+    expect(say('learn')).toMatchObject({ icon: 'user-plus', lit: true })
+  })
+  it('work: no pick, or one this build does not know, says nothing about why (never the shared intents)', () => {
+    expect(labels('work')).toEqual(['Product design'])
+    expect(labels('work', { ...person, workIntent: 'mentor' })).toEqual(['Product design'])
+  })
+  it('a pick is the work lens’s only: other rooms keep why they are here from the shared intents', () => {
+    expect(labels('arts', { ...person, workIntent: 'hire' })).toEqual(['Product design', 'Here for work'])
+    expect(labels('music', { ...person, workIntent: 'hire' })).not.toContain('Here to hire')
   })
   it('music: why they are here, then how much you share', () => {
     expect(labels('music')).toEqual(['Here for work', '3 in common'])
@@ -48,7 +66,7 @@ describe('what leads, by lens', () => {
     expect(labels('venue_night')).not.toContain('Product design')
   })
   it('the reason to meet is lit, the facts are not', () => {
-    expect(leadFor(person, lens('work')).map((l) => l.lit)).toEqual([false, true])
+    expect(leadFor({ ...person, workIntent: 'hire' }, lens('work')).map((l) => l.lit)).toEqual([false, true])
   })
   it('names every shared intent once, in one pill', () => {
     const p = { ...person, sharedIntents: ['friendship', 'networking', 'just_here'] }
@@ -113,7 +131,7 @@ describe('the lines around them', () => {
   })
   it('a Meet next pick says their answer first, else the lens lead', () => {
     expect(pickReason(person, lens('work'), 'A map of cafés')).toBe('“A map of cafés”')
-    expect(pickReason(person, lens('work'), null)).toBe('Product design · Here for work')
+    expect(pickReason({ ...person, workIntent: 'learn' }, lens('work'), null)).toBe('Product design · Here to learn')
     expect(pickReason(person, null, null)).toBeNull()
   })
 })

@@ -46,7 +46,8 @@ const ROW_ACTION_MIN_WIDTH = 72
 const DOCK_HEIGHT = SIZE.tabBarCompact
 // design-exception: the board's dock button is 22 pt in (`.db` padding 0 22px) and its glyph 18 (`ic(icon,18)`); both off-scale.
 const DOCK_PAD = 22
-const DOCK_GLYPH = 18
+/** The dock button's glyph, 18 pt (`.dock4`): anything drawn in its place keeps this size. */
+export const DOCK_GLYPH = 18
 const HEIGHT: Record<ButtonSize, number> = { lg: SIZE.primary, md: SIZE.control, sm: ROW_ACTION_HEIGHT, raised: RAISED_HEIGHT, dock: DOCK_HEIGHT, pill: PILL_HEIGHT }
 
 /** #20: translateX 0, −8, 8, −6, 6, −3, 0, as fractions of `SHAKE.distance`. */

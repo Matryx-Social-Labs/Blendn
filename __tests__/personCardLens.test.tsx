@@ -25,6 +25,7 @@ const deck = {
   badges: [],
   age: 31,
   tonightAnswer: 'A map of every quiet café in Toronto with outlets and good light.' as string | null,
+  workIntent: 'hire' as string | null,
 }
 const work = { key: 'work', question: 'What are you working on?' }
 const bison = (lens: { key: string; question: string | null } | null = work, extra: Partial<typeof deck> = {}): PersonCardPerson => ({
@@ -57,7 +58,7 @@ describe('the sheet, through the work lens', () => {
     await draw(bison())
     const t = tree()
     const at = (x: string) => t.indexOf(x)
-    const seq = ['In the room at Junction', 'Gentle Bison', 'Anonymous · 31', 'Product design', 'Here for work', 'What are you working on?', 'A map of every quiet café', 'In common', 'Cycling', 'Wave', 'Message', 'Like']
+    const seq = ['In the room at Junction', 'Gentle Bison', 'Anonymous · 31', 'Product design', 'Here to hire', 'What are you working on?', 'A map of every quiet café', 'In common', 'Cycling', 'Wave', 'Message', 'Like']
     const idx = seq.map(at)
     expect(idx.every((i) => i >= 0)).toBe(true)
     expect([...idx].sort((a, b) => a - b)).toEqual(idx)
@@ -100,6 +101,20 @@ describe('the other lenses', () => {
     expect(screen.getByText('Things in common')).toBeTruthy()
     expect(q('p-lead-0')?.props.accessibilityLabel ?? '').not.toContain('Product design')
   })
+  it('venue night with nothing in common: one quiet line, not an empty sheet (owner pick r2 A; the control is the venue test above)', async () => {
+    await draw(bison({ key: 'venue_night', question: null }, { sharedIntents: [], interests: [], workField: '' }))
+    expect(q('p-empty')).toBeTruthy()
+    expect(screen.getByText('Nothing on your profiles in common yet.')).toBeTruthy()
+    expect(screen.getByText('A wave is the lightest hello.')).toBeTruthy()
+  })
+  it('anything to show keeps the quiet line away', async () => {
+    await draw(bison({ key: 'venue_night', question: null }))
+    expect(q('p-empty')).toBeNull()
+    await draw(bison(work, { sharedIntents: [], interests: [], workField: '', workIntent: null }))
+    expect(q('p-tonight')).toBeTruthy()
+    expect(q('p-empty')).toBeNull()
+  })
+
   it('no lens: the plain profile, no lead pills and no question', async () => {
     await draw(bison(null))
     expect(q('p-lead')).toBeNull()

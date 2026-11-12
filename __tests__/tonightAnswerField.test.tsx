@@ -57,8 +57,8 @@ import { apiClient } from '../lib/apiClient'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const WORK = { key: 'work', question: 'What are you working on?' }
-const prefs = (lens: unknown, tonightAnswer: string | null = null) =>
-  api.getMatchPreferences.mockResolvedValue({ success: true, data: { intent: [], revealed: false, tonightAnswer, lens } } as never)
+const prefs = (lens: unknown, tonightAnswer: string | null = null, workIntent: string | null = null) =>
+  api.getMatchPreferences.mockResolvedValue({ success: true, data: { intent: [], revealed: false, tonightAnswer, workIntent, lens } } as never)
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -139,4 +139,48 @@ it('over 140 (counted as the server counts: code points) Save refuses', async ()
   expect(screen.getByRole('button', { name: 'Save' }).props.accessibilityState).toMatchObject({ disabled: true })
   await fireEvent.changeText(await field(), '😀'.repeat(140))
   expect(screen.getByRole('button', { name: 'Save' }).props.accessibilityState).toMatchObject({ disabled: false })
+})
+
+describe('Here to (the work lens): why you are here, one pick', () => {
+  const pick = (name: string) => screen.findByRole('button', { name })
+
+  it('is offered in a work-lens room only, beside the question', async () => {
+    prefs(WORK)
+    await render(<EventPreferences />)
+    expect(await screen.findByTestId('prefs-work-intent')).toBeTruthy()
+    // Each pick is said with its group (TalkBack, Android drive): “Here to hire”, not a bare “Hire”.
+    for (const name of ['Here to hire', 'Here to find work', 'Here to build', 'Here to learn']) expect(await pick(name)).toBeTruthy()
+
+    for (const lens of [{ key: 'music', question: 'Who are you hoping they play?' }, { key: 'venue_night', question: null }, null]) {
+      prefs(lens)
+      await render(<EventPreferences />)
+      await act(async () => {})
+      expect(screen.queryByTestId('prefs-work-intent')).toBeNull()
+    }
+  })
+
+  it('shows your saved pick, and a pick left as it was is not sent', async () => {
+    prefs(WORK, null, 'build')
+    await render(<EventPreferences />)
+    expect((await pick('Here to build')).props.accessibilityState).toMatchObject({ selected: true })
+    await save()
+    expect(sent()).not.toHaveProperty('workIntent')
+  })
+
+  it('sends the pick you chose, one at a time', async () => {
+    prefs(WORK, null, 'build')
+    await render(<EventPreferences />)
+    await fireEvent.press(await pick('Here to find work'))
+    expect((await pick('Here to build')).props.accessibilityState).toMatchObject({ selected: false })
+    await save()
+    expect(sent().workIntent).toBe('find_work')
+  })
+
+  it('tapping your pick again clears it, and saving sends null', async () => {
+    prefs(WORK, null, 'hire')
+    await render(<EventPreferences />)
+    await fireEvent.press(await pick('Here to hire'))
+    await save()
+    expect(sent().workIntent).toBeNull()
+  })
 })

@@ -655,6 +655,8 @@ export interface MatchCard {
    * the room asks nothing, or you operate the event (hosts never read answers). Optional: a client outlives a deploy.
    */
   tonightAnswer?: string | null
+  /** Flow 5 P-A: why they are here at a work-lens event (`hire` …), read through `parseWorkIntent`. Same readers as the answer. */
+  workIntent?: string | null
 }
 
 /** `GET /events/:id/matches`: the page, and the room's lens (what leads on these cards; read through `parseLens`). */
@@ -669,6 +671,8 @@ export interface MatchPreferences {
   revealed: boolean
   openToCrews?: boolean
   tonightAnswer?: string | null
+  /** Flow 5 P-A: why you are here (work lens only); read through `parseWorkIntent`. */
+  workIntent?: string | null
   lens?: unknown
 }
 
@@ -3341,6 +3345,8 @@ class ApiClientClass {
       rememberReveal?: boolean
       /** Flow 5 P-A: your answer to tonight's question (≤ 140 after the server's trim); null or "" clears it. Omit to leave it. */
       tonightAnswer?: string | null
+      /** Flow 5 P-A: why you are here, in a work-lens room only (the server refuses it elsewhere); null clears it. Omit to leave it. */
+      workIntent?: 'hire' | 'find_work' | 'build' | 'learn' | null
     }
   ): Promise<ApiResponse<MatchPreferences>> {
     return this.queuedRequest<MatchPreferences>(

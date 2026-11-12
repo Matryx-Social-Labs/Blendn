@@ -186,6 +186,18 @@ describe('the states', () => {
     expect(announce).toHaveBeenCalledWith('That didn’t go through.')
   })
 
+  it('Waved is said as it lands, once; a card opened already waved says nothing (drive, TalkBack)', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
+    await draw({ state: 'waved' })
+    expect(announce).not.toHaveBeenCalled()
+    await draw({ state: 'waveBusy' })
+    await screen.rerender(<PersonCardContent person={PRIYA} variant="here" state="waved" onLike={jest.fn()} testID="p" />)
+    expect(announce).toHaveBeenCalledTimes(1)
+    expect(announce).toHaveBeenCalledWith('Waved at Priya')
+    expect(screen.getByTestId('p-actions').props.accessibilityLiveRegion).toBe('polite')
+    announce.mockRestore()
+  })
+
   it('a refusal is one neutral line under the actions, with its action, and no haptic', async () => {
     const onPress = jest.fn()
     await draw({ refusal: { text: 'Check in to wave at people here.', action: { label: 'Check in', onPress } } })
