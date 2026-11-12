@@ -467,7 +467,7 @@ function DoorCodes() {
         <DoorCode state="used" />
       </Cell>
       <Cell label="ended" testID="ds-doorcode-ended" style={styles.surface}>
-        <DoorCode state="ended" endedLabel="ENDED SUNDAY" />
+        <DoorCode state="ended" />
       </Cell>
     </Section>
   )

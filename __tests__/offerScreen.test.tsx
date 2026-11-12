@@ -132,11 +132,13 @@ describe('the live pass', () => {
     await mount()
     expect(screen.getByText('K7Q 4M2')).toBeTruthy()
     expect(screen.getByLabelText('Offer code K 7 Q, 4 M 2')).toBeTruthy()
-    // The naming pass's "Offer code" (2026-11-05) heads the ticket, never "Door code"; the code row says SHOW THIS CODE (the board).
-    expect(screen.getAllByText('OFFER CODE')).toHaveLength(1)
+    // "Code" once (audit A-1, SCRUM-1045): OFFER heads the ticket, where no code is shown; the code row says SHOW THIS CODE (the board).
+    expect(screen.getAllByText('OFFER')).toHaveLength(1)
+    expect(screen.queryByText('OFFER CODE')).toBeNull()
     expect(screen.getByText('SHOW THIS CODE')).toBeTruthy()
     expect(screen.queryByText('DOOR CODE')).toBeNull()
-    expect(screen.getByLabelText(/^Offer code for The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
+    // Read as it is seen: the offer, then whose.
+    expect(screen.getByLabelText(/^Offer from The Humming Tree\. First drink on the house\. Valid until /)).toBeTruthy()
     expect(screen.getByText('Works once, today. Staff type the code and tap Redeemed.')).toBeTruthy()
     reads = [offer('redeemed', null)]
     // The code turns at :30; the screen asks a second before.
@@ -310,12 +312,42 @@ describe('the other faces of the pass', () => {
     })
   })
 
-  it('ended: names the day, dashes for the code', async () => {
-    reads = [offer('ended', null)]
-    await mount()
-    expect(screen.getByText(/^ENDED [A-Z]+$/)).toBeTruthy()
-    expect(screen.getByText('This offer has ended.')).toBeTruthy()
-    expect(screen.getByText('— — —')).toBeTruthy()
+  /*
+   * Audit B-1 (SCRUM-1045): an ended pass read "Valid today, till 9:52 AM" + "ENDED THURSDAY" (on that Thursday) +
+   * "This offer ended" + "This offer has ended.". Now: the validity slot says when it ended, on the venue's own day
+   * and clock; the code row ENDED over its dashes; one sentence under the pass.
+   */
+  describe('ended (audit B-1)', () => {
+    const ended = (endsAt: string) => offer('ended', null, { endsAt, venue: { id: 'v1', name: 'The Humming Tree', timezone: 'Asia/Kolkata' } })
+    // NOW is 1:30 AM on 12 Oct in Bengaluru.
+
+    it('ended earlier the same day: "Ended today at …" in the slot, ENDED over the dashes, one sentence under it', async () => {
+      reads = [ended('2026-10-11T19:52:00.000Z')]
+      await mount()
+      expect(screen.getByText('Ended today at 1:22\u00A0AM')).toBeTruthy()
+      expect(screen.queryByText(/^Valid/)).toBeNull()
+      expect(screen.getByText('ENDED')).toBeTruthy()
+      expect(screen.queryByText(/^ENDED [A-Z]+$/)).toBeNull()
+      expect(screen.getByText('— — —')).toBeTruthy()
+      expect(screen.queryByText('This offer ended')).toBeNull()
+      expect(screen.getAllByText(/^This offer/).map((n) => n.props.children)).toEqual(['This offer has ended.'])
+      expect(screen.getByLabelText(/^Offer from The Humming Tree\. First drink on the house\. Ended today at /)).toBeTruthy()
+    })
+
+    it('another day: the grammar’s relative day ("yesterday"), on the venue’s day, not the phone’s', async () => {
+      reads = [ended('2026-10-11T04:22:00.000Z')]
+      await mount()
+      expect(screen.getByText('Ended yesterday at 9:52\u00A0AM')).toBeTruthy()
+    })
+
+    it('ended before its end (the venue changed hands): no time is claimed, the code row and the sentence say it', async () => {
+      reads = [offer('ended', null)]
+      await mount()
+      expect(screen.queryByText(/^Valid|^Ended /)).toBeNull()
+      expect(screen.getByText('ENDED')).toBeTruthy()
+      expect(screen.getByText('This offer has ended.')).toBeTruthy()
+      expect(screen.getByLabelText('Offer from The Humming Tree. First drink on the house.')).toBeTruthy()
+    })
   })
 })
 

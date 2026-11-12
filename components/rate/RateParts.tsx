@@ -7,7 +7,7 @@ import { RadioRing } from '../ds/PlanCard'
 import { font, quickTransition, useAnnounced, useBoldText, useSelection } from '../ds/shared'
 import { EventCover } from '../EventCover'
 import { Icon } from '../ui/Icon'
-import { COLOR, DURATION, EASING, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import type { PeerRatingIssue } from '../../lib/apiClient'
 
@@ -155,6 +155,25 @@ export function SentLine() {
   )
 }
 
+const PROMISE_LINE = 'Only we see this. They’ll never know you rated them.'
+
+/**
+ * The promise on a person, one line under the scale (Flow 4 audit C-1, the board's `.opt-line`): a 16 pt lock in the
+ * hue and the sentence, secondary, 8 between. Said where someone decides how honest to be about a person they met.
+ */
+export function PromiseLine() {
+  const bold = useBoldText()
+  const sel = useSelection()
+  return (
+    <View testID="rate-promise" accessible accessibilityLabel={PROMISE_LINE} style={styles.promise}>
+      <Icon name="lock" size={ICON.inline} color={sel.glyph} />
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.lede} style={[font('lede', bold), styles.promiseText]}>
+        {PROMISE_LINE}
+      </Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -181,6 +200,9 @@ const styles = StyleSheet.create({
   },
   issueRest: { backgroundColor: COLOR.surface, borderColor: 'transparent' },
   sent: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  // `.opt-line`: the lock on the first line's top, 15/20 (the lede's face on the control's line).
+  promise: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.sm },
+  promiseText: { flex: 1, color: COLOR.textSecondary, lineHeight: TYPE.control.lineHeight },
   fill: { flex: 1 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },

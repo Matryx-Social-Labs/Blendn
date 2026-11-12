@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import Animated from 'react-native-reanimated'
 
 import ScalePress from '../motion/ScalePress'
 import { Glyph } from '../ui/Glyph'
 import { type IconName } from '../ui/Icon'
-import { COLOR, ICON, MATERIAL, PRESS, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, ICON, MATERIAL, PRESS, RADIUS, SIZE, SPACE, TYPE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { tint } from '../../lib/theme'
 import { GlyphWell } from './StateScreen'
@@ -24,6 +24,8 @@ const ROW_CLEAR = SPACE.md + CHECK_DISC + SPACE.sm
 /** The lead card's sentence on the selected fill: white at 80% (Flow 4 `.rc.on span`). */
 const ON_FILL_HINT = 0.8
 
+/** The action link's line grown to the 48 pt target, as the DS's other text links (TonightSheet). */
+const LINK_SLOP = (SIZE.targetAndroid - TYPE.control.lineHeight) / 2
 const FILL = quickTransition('background-color', 'opacity')
 const RING_FADE = quickTransition('opacity')
 
@@ -67,6 +69,11 @@ export type RadioCardProps = {
   /** Blocked, with the reason as `hint`. */
   disabled?: boolean
   /**
+   * The way out of a blocked `lead` card (Flow 4 audit D-1: "Add a photo"): a link under the sentence, in the hue's
+   * glyph colour. Its own element to a screen reader; the card is still read as the blocked radio it is.
+   */
+  action?: { label: string; onPress: () => void }
+  /**
    * A tap on the selected card is a change too (it clears the choice): the caller holds a set, not exactly
    * one. It then reads as a checkbox, since "exactly one" no longer holds, and plays `H.select` both ways.
    */
@@ -89,7 +96,7 @@ export type RadioCardProps = {
  * feedback, §13). The card grows with its text. Increase Contrast: the
  * unselected card takes the 50% hairline and the consequence goes white.
  */
-export function RadioCard({ title, layout = 'center', detail, hint, icon, avatar, selected = false, onPress, disabled = false, deselectable = false, previewState, testID }: RadioCardProps) {
+export function RadioCard({ title, layout = 'center', detail, hint, icon, avatar, selected = false, onPress, disabled = false, deselectable = false, action, previewState, testID }: RadioCardProps) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -101,6 +108,37 @@ export function RadioCard({ title, layout = 'center', detail, hint, icon, avatar
   // One ring layer, always drawn: the hue's 2 pt ring fades in with the fill; Increase Contrast keeps the 50% hairline when off.
   const ring = selected ? { borderWidth: SPACE.xxs, borderColor: sel.edge, opacity: 1 } : contrast ? { ...styles.contrast, opacity: 1 } : { borderWidth: SPACE.xxs, borderColor: sel.edge, opacity: 0 }
 
+  const choice = {
+    accessibilityRole: deselectable ? ('checkbox' as const) : ('radio' as const),
+    accessibilityLabel: [title, detail, hint].filter(Boolean).join(', '),
+    accessibilityState: { checked: selected, disabled },
+  }
+  const body = (
+    <>
+      {icon ? <GlyphWell icon={icon} /> : avatar}
+      {row ? (
+        <>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold), styles.ink]}>{title}</Text>
+          {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: hintColor }]}>{hint}</Text> : null}
+        </>
+      ) : lead ? (
+        <>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.ink, styles.leadTitle]}>{title}</Text>
+          {detail ? (
+            <Text testID={testID && `${testID}-detail`} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold), styles.ink, styles.detail]}>
+              {detail}
+            </Text>
+          ) : null}
+          {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: hintColor }]}>{hint}</Text> : null}
+        </>
+      ) : (
+        <>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.title]}>{title}</Text>
+          {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.center, { color: hintColor }]}>{hint}</Text> : null}
+        </>
+      )}
+    </>
+  )
   return (
     <View style={[styles.slot, previewState === 'pressed' && !android ? styles.pressedIos : null]}>
       <ScalePress
@@ -117,32 +155,22 @@ export function RadioCard({ title, layout = 'center', detail, hint, icon, avatar
         pressedScale={android ? 1 : PRESS.scale}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        accessibilityRole={deselectable ? 'checkbox' : 'radio'}
-        accessibilityLabel={[title, detail, hint].filter(Boolean).join(', ')}
-        accessibilityState={{ checked: selected, disabled }}
+        // With an action the card holds two elements, the choice and its link; without, it is the one element.
+        accessible={!action}
+        {...(action ? null : choice)}
         style={[styles.card, lead && styles.lead, row && styles.row, { backgroundColor: selected ? sel.fill : COLOR.surface, opacity: disabled ? BLOCKED_OPACITY : 1 }, FILL]}
       >
-        {icon ? <GlyphWell icon={icon} /> : avatar}
-        {row ? (
+        {action ? (
           <>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold), styles.ink]}>{title}</Text>
-            {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: hintColor }]}>{hint}</Text> : null}
-          </>
-        ) : lead ? (
-          <>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.ink, styles.leadTitle]}>{title}</Text>
-            {detail ? (
-              <Text testID={testID && `${testID}-detail`} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.control} style={[font('control', bold), styles.ink, styles.detail]}>
-                {detail}
-              </Text>
-            ) : null}
-            {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: hintColor }]}>{hint}</Text> : null}
+            <View accessible {...choice} style={styles.choice}>
+              {body}
+            </View>
+            <Pressable testID={testID && `${testID}-action`} onPress={action.onPress} hitSlop={LINK_SLOP} accessibilityRole="link" style={styles.action}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.button} style={[font('control', bold), { color: sel.glyph }]}>{action.label}</Text>
+            </Pressable>
           </>
         ) : (
-          <>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.title]}>{title}</Text>
-            {hint ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.center, { color: hintColor }]}>{hint}</Text> : null}
-          </>
+          body
         )}
         <CheckDisc selected={selected} inset={lead || row ? SPACE.md : CHECK_INSET} testID={testID && `${testID}-check`} />
         <Animated.View testID={testID && `${testID}-ring`} pointerEvents="none" style={[StyleSheet.absoluteFill, row ? styles.rowEdge : styles.edge, ring, RING_FADE]} />
@@ -168,6 +196,10 @@ const styles = StyleSheet.create({
   },
   // Flow 4 `.rc`: 4 between the lines, 12 under the face (the gap and 8 more).
   lead: { alignItems: 'flex-start', gap: SPACE.xs },
+  // The choice's part of a card with an action: the lead card's own column, the card's width.
+  choice: { alignSelf: 'stretch', alignItems: 'flex-start', gap: SPACE.xs },
+  // `.addp`: 8 under the sentence (the card's gap and 4 more).
+  action: { marginTop: SPACE.xs },
   leadTitle: { marginTop: SPACE.sm },
   // The slot is the card's width (Flow 4 `.rc .ps`), so a long value ellipsizes at the card's edge, not at its own.
   detail: { alignSelf: 'stretch' },

@@ -18,11 +18,22 @@ jest.mock('../lib/logger', () => ({
   Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
 const mockParams: Record<string, string> = {}
+const mockFocusEffects = new Set<() => void | (() => void)>()
+const mockRefocus = () => [...mockFocusEffects].forEach((effect) => effect())
 jest.mock('expo-router', () => ({
   // A router modal holds the screen while focused (components/system/RouteModal): here it is focused while mounted.
   // A router modal releases the screen on its transitionEnd (components/system/RouteModal): no navigator here.
   useNavigation: () => undefined,
-  useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
+  // Focused while mounted; `mockRefocus()` is coming back to the screen (from Edit profile, say).
+  useFocusEffect: (effect: () => void | (() => void)) =>
+    require('react').useEffect(() => {
+      mockFocusEffects.add(effect)
+      const off = effect()
+      return () => {
+        mockFocusEffects.delete(effect)
+        if (typeof off === 'function') off()
+      }
+    }, [effect]),
   router: { back: jest.fn(), push: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) },
   useLocalSearchParams: () => mockParams,
 }))
@@ -250,6 +261,27 @@ describe('the redesigned cards', () => {
     expect(named.props.accessibilityState).toMatchObject({ disabled: true })
     await fireEvent.press(named)
     expect(screen.getByRole('radio', { name: /^Anonymous/ }).props.accessibilityState).toMatchObject({ checked: true })
+  })
+
+  // Flow 4 audit D-1 (SCRUM-1045): the blocked card was a dead end; now it leads to the photos and back.
+  it('no photo: "Add a photo" in the Named card opens Edit profile, and back here with one, Named can be picked', async () => {
+    Object.assign(mockParams, { askIntent: undefined })
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Kid', profile: { age: 30, name: 'Kid', photos: [] } } } as never)
+    await render(<EventPreferences />)
+    await fireEvent.press(await screen.findByRole('link', { name: 'Add a photo' }))
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+    // The photo was added there; coming back reads the profile again.
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Kid', profile: { age: 30, name: 'Kid', photos: ['p.jpg'] } } } as never)
+    await act(async () => mockRefocus())
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^Named/ }).props.accessibilityState).toMatchObject({ disabled: false }))
+    expect(screen.queryByRole('link', { name: 'Add a photo' })).toBeNull()
+  })
+
+  it('a photo already there: no link (control)', async () => {
+    Object.assign(mockParams, { askIntent: undefined })
+    await render(<EventPreferences />)
+    await screen.findByRole('radio', { name: /^Named, Sagar/ })
+    expect(screen.queryByRole('link')).toBeNull()
   })
 })
 
