@@ -1,10 +1,10 @@
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Creature, CREATURE_GLYPHS, creatureFor, type CreatureGlyph } from '../../components/ds/Creature'
+import { Creature, CREATURE_MOODS, CREATURE_SPECIES, creatureFor } from '../../components/ds/Creature'
 import { VenuePlate } from '../../components/ds/VenuePlate'
 import { Text } from '../../components/ui/Text'
-import { COLOR, CREATURE_PALETTES, RADIUS, SPACE, VENUE_PLATES } from '../../lib/design/tokens'
+import { COLOR, CREATURE_HUES, RADIUS, SPACE, VENUE_PLATES } from '../../lib/design/tokens'
 
 /**
  * The creature set and the venue plates, every one of them.
@@ -13,11 +13,10 @@ import { COLOR, CREATURE_PALETTES, RADIUS, SPACE, VENUE_PLATES } from '../../lib
  * guidelines/creatures/Set.html and guidelines/components/VenuePlates.html,
  * drawn by the components, so the two can be laid side by side.
  */
-const GLYPHS = Object.keys(CREATURE_GLYPHS) as CreatureGlyph[]
-const PALETTES = CREATURE_PALETTES.map((_, i) => i)
+const HUES = CREATURE_HUES.map((_, i) => i)
 const PLATE_TYPES = Object.keys(VENUE_PLATES)
 const SIZES = [24, 32, 48, 64, 112]
-const SEEDS = ['Cosmic Panda', 'Velvet Heron', 'Neon Dragon', 'Quiet Fox', 'Cosmic Comet', 'Stellar Nebula', 'Blazing Phoenix', 'Cosmic Panda 2']
+const SEEDS = ['Cosmic Panda', 'Velvet Heron', 'Neon Dragon', 'Laughing Dolphin', 'Cosmic Comet', 'Midnight Hummingbird', 'Blazing Phoenix', 'Wild Wren 2']
 const TILE = { width: 168, height: 196 }
 const HERO_HEIGHT = 220
 
@@ -25,25 +24,25 @@ export default function DsCreaturesPreview() {
   const insets = useSafeAreaInsets()
   return (
     <ScrollView style={styles.page} contentContainerStyle={[styles.content, { paddingTop: insets.top + SPACE.xl, paddingBottom: insets.bottom + SPACE.xl }]}>
-      <Text variant="title">The creature set · {GLYPHS.length}</Text>
+      <Text variant="title">The faces · {CREATURE_SPECIES.length}</Text>
       <View style={styles.wrap}>
-        {GLYPHS.map((glyph, i) => (
-          <View key={glyph} testID={`creature-${glyph}`} style={styles.cell}>
+        {CREATURE_SPECIES.map((species, i) => (
+          <View key={species} testID={`creature-${species}`} style={styles.cell}>
             <View style={styles.row}>
-              <Creature glyph={glyph} palette={i % PALETTES.length} size={56} />
-              <Creature glyph={glyph} palette={(i + 3) % PALETTES.length} size={24} />
+              <Creature species={species} mood={CREATURE_MOODS[i % CREATURE_MOODS.length]} hue={i % HUES.length} size={56} />
+              <Creature species={species} mood="curious" hue={(i + 3) % HUES.length} size={24} />
             </View>
-            <Text variant="caption">{glyph}</Text>
+            <Text variant="caption">{species}</Text>
           </View>
         ))}
       </View>
 
-      <Text variant="heading">Every creature × the eight palettes</Text>
-      {GLYPHS.map((glyph) => (
-        <View key={glyph} style={styles.row}>
-          {PALETTES.map((palette) => (
-            <View key={palette} testID={`creature-${glyph}-${palette}`}>
-              <Creature glyph={glyph} palette={palette} size={32} />
+      <Text variant="heading">Every face × the eight hues</Text>
+      {CREATURE_SPECIES.map((species) => (
+        <View key={species} style={styles.row}>
+          {HUES.map((hue) => (
+            <View key={hue} testID={`creature-${species}-${hue}`}>
+              <Creature species={species} mood={CREATURE_MOODS[hue % CREATURE_MOODS.length]} hue={hue} size={32} />
             </View>
           ))}
         </View>

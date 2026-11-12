@@ -442,6 +442,13 @@ export const GLYPH = {
   tilt: 14,
   flickerDips: [0.35, 0.6],
   flickerSteps: [0.25, 0.1875, 0.25, 0.3125],
+  blink: {
+    close: 100,
+    hold: 40,
+    open: 120,
+    closedScale: 0.1,
+    lidBelow: 0.15,
+  },
 } as const
 
 export const PRESS = {
@@ -512,4 +519,68 @@ export const VENUE_PLATES = {
 export const PALETTE_GLYPH = {
   creature: '#FFFFFF',
   plate: 'rgba(255,255,255,0.70)',
+} as const
+
+export const CREATURE_HUES = [
+  {
+    name: 'amber',
+    fill: '#4F3A1E',
+    edge: '#D98A2B',
+    glyph: '#F5BE7E',
+  },
+  {
+    name: 'ember',
+    fill: '#552D21',
+    edge: '#F05423',
+    glyph: '#FF8A5C',
+  },
+  {
+    name: 'coral',
+    fill: '#523029',
+    edge: '#D9604F',
+    glyph: '#F69C8C',
+  },
+  {
+    name: 'rose',
+    fill: '#4C3036',
+    edge: '#BE5C71',
+    glyph: '#EB8EA1',
+  },
+  {
+    name: 'orchid',
+    fill: '#4A2F43',
+    edge: '#B45C9A',
+    glyph: '#E39ACB',
+  },
+  {
+    name: 'violet',
+    fill: '#433247',
+    edge: '#925DA9',
+    glyph: '#B58FD0',
+  },
+  {
+    name: 'indigo',
+    fill: '#33304F',
+    edge: '#6F64BC',
+    glyph: '#ABA3EE',
+  },
+  {
+    name: 'stone',
+    fill: '#3A3533',
+    edge: '#8E8580',
+    glyph: '#D8CEC8',
+  },
+] as const
+
+export const CREATURE_ART = {
+  ink: '#0D0C0C',
+  cream: '#FFF6EF',
+  white: '#FFFFFF',
+  red: '#E5484D',
+  gold: '#FFC864',
+  char: '#2A2626',
+  pink: '#EB8EA1',
+  beak: '#FF8A5C',
+  ravenBeak: '#B3AEAD',
+  puffinBand: '#5A5655',
 } as const
