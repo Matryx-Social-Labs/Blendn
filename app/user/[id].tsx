@@ -44,6 +44,7 @@ import { useFriendAsk } from '../../lib/useFriendAsk'
 import { askPushInContext } from '../../lib/pushAsk'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { LensBlocks } from '../../components/ds/LensBlocks'
+import { RadialWash } from '../../components/ui/GradientFill'
 import { WavingHand } from '../../components/ds/PersonCard'
 import { ProfileLensHero } from '../../components/profile/ProfileLensHero'
 import { lensView, parseLens, parseWorkIntent, type RoomLens, type WorkIntent } from '../../lib/roomLens'
@@ -95,6 +96,10 @@ interface UserProfileView {
 
 /** `pA-page`: the hero starts 14 under the bar's buttons (`.xcol` top 116, the buttons end at 102). */
 const LENS_PAGE_TOP = SPACE.md + SPACE.xxs
+/** The board's `.xwash`: `radial-gradient(80% 46% at 50% 0%, rgba(190,92,113,.26), transparent 72%)` over the page's top 520. */
+const LENS_PAGE_WASH = [{ color: COLOR.brandRose, alpha: 0.26, at: [50, 0], size: [80, 46], reach: 0.72 }] as const
+// design-exception: 520, the height of the board's wash box (`.xwash`); no spacing token is a light's reach
+const LENS_PAGE_WASH_HEIGHT = 520
 
 /** The lens fields of a person nobody handed a card for: the page then shows the server's tonight block alone. */
 const NO_CARD = { workField: null, sharedIntents: [], interests: [], overlaps: [], badges: [] } as const
@@ -748,6 +753,7 @@ function UserProfileInner() {
           <Animated.View entering={arrive}>
             {lensBlocks ? (
               <View testID="profile-lens-page" style={[styles.lensPage, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + LENS_PAGE_TOP }]}>
+                <RadialWash testID="profile-lens-wash" layers={LENS_PAGE_WASH} style={styles.lensWash} />
                 <ProfileLensHero testID="profile-lens-hero" photo={revealed ? (photos[0] ?? null) : null} seed={identity.seed} name={identity.name} meta={lensBlocks.meta} />
                 <LensBlocks
                   lead={lensBlocks.lead}
@@ -1007,6 +1013,7 @@ const styles = StyleSheet.create({
   dockRow: { flexDirection: 'row', gap: SPACE.md },
   /** `pA-page`: 20 between the hero and each block; the top is the bar's (`LENS_PAGE_TOP`). */
   lensPage: { paddingHorizontal: SPACE.gutter, gap: SPACE.lg + SPACE.xs },
+  lensWash: { position: 'absolute', top: 0, left: 0, right: 0, height: LENS_PAGE_WASH_HEIGHT },
 })
 
 

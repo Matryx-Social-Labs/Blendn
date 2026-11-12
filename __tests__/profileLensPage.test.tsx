@@ -205,6 +205,14 @@ it('while the wave sends, the hand waves as the sheet’s does (owner pick r3 A)
   expect(await screen.findByText('Waved')).toBeTruthy()
 })
 
+it('the lens page is lit from the top in the room’s rose, as the board’s `.xwash` (drive, C3b)', async () => {
+  handRoomPerson('rh_bison', card())
+  await open(ANON)
+  const wash = screen.getByTestId('profile-lens-wash', { includeHiddenElements: true })
+  expect(wash.props.pointerEvents).toBe('none')
+  expect(JSON.stringify(screen.toJSON())).toMatch(/#BE5C71|rgba\(190, ?92, ?113/i)
+})
+
 it('at rest the page’s Wave hand is the board’s 18 (`ic(\'hand\',18)`, the dock glyph), not the sheet’s 20 (drive, C3b)', async () => {
   handRoomPerson('rh_bison', card())
   await open(ANON)
