@@ -47,7 +47,7 @@ export function OtherPhotos({ photos, onOpen, testID }: { photos: readonly strin
     <View testID={testID} style={styles.photos}>
       {shown.map((uri, i) => (
         <Pressable
-          key={uri}
+          key={`${i}:${uri}`}
           testID={testID && `${testID}-${i}`}
           onPress={() => onOpen(i + 1)}
           accessibilityRole="imagebutton"

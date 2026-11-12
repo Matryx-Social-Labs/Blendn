@@ -121,7 +121,7 @@ export function LensBlocks({ lead, tonight, common, bio, openers, onOpener, ask,
           testID={id('ask')}
           onPress={() => onAsk!(ask!)}
           accessibilityRole="button"
-          accessibilityLabel={`Tonight’s question: ${ask}. Not answered yet.`}
+          accessibilityLabel={`Tonight’s question: ${ask}${/[?!.]$/.test(ask!) ? '' : '.'} Not answered yet.`}
           accessibilityHint="Ask it in a message. Nothing is sent yet."
           style={[styles.tonight, compact && styles.tonightCompact]}
         >

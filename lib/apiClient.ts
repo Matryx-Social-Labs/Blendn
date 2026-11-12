@@ -1299,10 +1299,6 @@ export interface OwnProfileEnvelope {
   interests?: { id: string; name: string; slug: string; icon: string | null }[]
 }
 
-/**
- * `GET /users/:id`: the FLAT shape, what a profile page draws for anyone. Photos, bio and occupation are sent only when
- * `identityVisible` (the server's one answer to "revealed?").
- */
 /** `GET /users/:ref/shared-events`: one page, and the whole count. */
 export interface SharedEvent {
   id: string
@@ -1317,6 +1313,10 @@ export interface SharedEventsPayload {
   pagination: { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
 }
 
+/**
+ * `GET /users/:id`: the FLAT shape, what a profile page draws for anyone. Photos, bio and occupation are sent only when
+ * `identityVisible` (the server's one answer to "revealed?").
+ */
 export interface PublicProfile {
   id?: string
   user_id?: string

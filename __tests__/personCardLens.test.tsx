@@ -201,6 +201,8 @@ describe('state 2 on the sheet (SCRUM-1042, combined board): shown to you', () =
     const idx = seq.map((x) => t.indexOf(x))
     expect(seq.filter((_, i) => idx[i] < 0)).toEqual([])
     expect([...idx].sort((a, b) => a - b)).toEqual(idx)
+    // A question keeps its own mark: TalkBack read "working on?." on Android (SCRUM-1042 drive).
+    expect(screen.getByTestId('p-ask').props.accessibilityLabel).toBe('Tonight’s question: What are you working on? Not answered yet.')
     await fireEvent.press(screen.getByTestId('p-ask'))
     expect(onOpener).toHaveBeenCalledWith('What are you working on?')
   })
