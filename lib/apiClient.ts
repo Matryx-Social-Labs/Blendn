@@ -1301,6 +1301,20 @@ export interface OwnProfileEnvelope {
  * `GET /users/:id`: the FLAT shape, what a profile page draws for anyone. Photos, bio and occupation are sent only when
  * `identityVisible` (the server's one answer to "revealed?").
  */
+/** `GET /users/:ref/shared-events`: one page, and the whole count. */
+export interface SharedEvent {
+  id: string
+  title: string
+  startTime: string
+  timezone: string
+  venueName: string | null
+  coverImageUrl: string | null
+}
+export interface SharedEventsPayload {
+  events: SharedEvent[]
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null; totalCount: number }
+}
+
 export interface PublicProfile {
   id?: string
   user_id?: string
@@ -3005,6 +3019,15 @@ class ApiClientClass {
 
   async getPublicProfile(userId: string): Promise<ApiResponse<PublicProfile>> {
     return this.queuedRequest<PublicProfile>(`/api/mobile/users/${userId}`)
+  }
+
+  /**
+   * "You've both been to" (SCRUM-1042 state 2 C): past events you were both at, where they were not a pseudonym to you,
+   * newest first. The server decides all of it; a ref that does not name them answers an empty list.
+   */
+  async getSharedEvents(ref: string, limit: number, cursor?: string | null): Promise<ApiResponse<SharedEventsPayload>> {
+    const after = cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+    return this.queuedRequest<SharedEventsPayload>(`/api/mobile/users/${encodeURIComponent(ref)}/shared-events?limit=${limit}${after}`)
   }
 
   /**

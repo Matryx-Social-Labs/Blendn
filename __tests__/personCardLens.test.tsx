@@ -130,3 +130,90 @@ describe('anonymity on the sheet', () => {
     expect(screen.getByText('Anonymous · 31')).toBeTruthy()
   })
 })
+
+describe('state 1 A (SCRUM-1042): a venue night, anonymous, nothing in common', () => {
+  const venue = { key: 'venue_night', question: null }
+  const empty = { sharedIntents: [], interests: [], workField: '' }
+  const at = Date.parse('2026-11-12T20:00:00Z')
+  const owl = (extra: object = {}): PersonCardPerson => ({
+    face: { kind: 'creature', pseudonym: 'Fierce Owl' },
+    name: 'Fierce Owl',
+    age: 31,
+    ...lensView({ ...deck, ...empty, arrivedAt: new Date(at - 40 * 60_000).toISOString(), ...extra }, venue, { title: 'Live at Counter Kitchen', venueName: 'Counter Kitchen' }, false, at),
+  })
+
+  it('the time here joins the meta line, and the openers are chips over the actions', async () => {
+    const onOpener = jest.fn()
+    await draw(owl(), { onOpener })
+    expect(screen.getByText('Anonymous · 31 · Here 40 min')).toBeTruthy()
+    expect(screen.getByText('Nothing in common yet. Start with tonight:')).toBeTruthy()
+    const t = tree()
+    const seq = ['At Counter Kitchen', 'Fierce Owl', 'Anonymous · 31 · Here 40 min', 'First time here?', 'What’s good here?', 'Who are you here with?', 'Wave', 'Message']
+    const idx = seq.map((x) => t.indexOf(x))
+    expect(idx.every((i) => i >= 0)).toBe(true)
+    expect([...idx].sort((a, b) => a - b)).toEqual(idx)
+    // The openers stand in for the quiet line, never beside it.
+    expect(q('p-empty')).toBeNull()
+    await fireEvent.press(screen.getByTestId('p-opener-1'))
+    expect(onOpener).toHaveBeenCalledWith('What’s good here?')
+  })
+
+  it('no openers where Message would not open the Connect sheet: requested, or nobody to hand them to (controls)', async () => {
+    await draw(owl(), { onOpener: jest.fn(), requested: true })
+    expect(q('p-openers')).toBeNull()
+    expect(q('p-empty')).toBeTruthy()
+    await draw(owl())
+    expect(q('p-openers')).toBeNull()
+    expect(q('p-empty')).toBeTruthy()
+  })
+
+  it('no openers once there is something in common, or on another lens (controls)', async () => {
+    await draw(owl({ interests: ['Filter coffee'] }), { onOpener: jest.fn() })
+    expect(q('p-openers')).toBeNull()
+    await draw(bison(work, { ...empty, tonightAnswer: null, workIntent: null }), { onOpener: jest.fn() })
+    expect(q('p-openers')).toBeNull()
+  })
+
+  it('a long pseudonym and a long place: the opener chips wrap to two lines rather than cut', async () => {
+    await draw(owl(), { onOpener: jest.fn(), person: { ...owl(), name: 'Midnight Hummingbird', context: 'At The Courtyard at Jayamahal Palace Hotel, Bengaluru' } })
+    expect(screen.getByText('Midnight Hummingbird')).toBeTruthy()
+    expect(screen.getByTestId('p-context').props.numberOfLines).toBe(1)
+  })
+})
+
+describe('state 2 on the sheet (SCRUM-1042, combined board): shown to you', () => {
+  const work = { key: 'work', question: 'What are you working on?' }
+  const divya = (shared: PersonCardPerson['shared'] = { latest: 'Riso Night at Champaca', more: 1 }): PersonCardPerson => ({
+    face: { kind: 'creature', pseudonym: 'Gentle Bison' },
+    name: 'Divya',
+    age: 30,
+    shared,
+    ...lensView({ ...deck, tonightAnswer: null, arrivedAt: new Date(Date.parse('2026-11-12T20:00:00Z') - 40 * 60_000).toISOString() }, work, { title: 'Junction Tech Mixer' }, true, Date.parse('2026-11-12T20:00:00Z')),
+  })
+
+  it('the time on the meta line, the question to ask, then one line for the events you have both been to', async () => {
+    const onOpener = jest.fn()
+    await draw(divya(), { onOpener })
+    expect(screen.getByText('Shown to you · 31 · Here 40 min')).toBeTruthy()
+    const t = tree()
+    const seq = ['Divya', 'Shown to you · 31 · Here 40 min', 'Tonight’s question', 'What are you working on?', 'Ask in a message', 'Riso Night at Champaca', '+1', 'p-wave']
+    const idx = seq.map((x) => t.indexOf(x))
+    expect(seq.filter((_, i) => idx[i] < 0)).toEqual([])
+    expect([...idx].sort((a, b) => a - b)).toEqual(idx)
+    await fireEvent.press(screen.getByTestId('p-ask'))
+    expect(onOpener).toHaveBeenCalledWith('What are you working on?')
+  })
+
+  it('no event line when there are none; no "+0" for exactly one', async () => {
+    await draw(divya(null), { onOpener: jest.fn() })
+    expect(q('p-shared')).toBeNull()
+    await draw(divya({ latest: 'Riso Night at Champaca', more: 0 }), { onOpener: jest.fn() })
+    expect(q('p-shared')).toBeTruthy()
+    expect(screen.queryByText('+0')).toBeNull()
+  })
+
+  it('anonymous: no question to ask, however it is unanswered (control)', async () => {
+    await draw({ ...divya(), ...lensView({ ...deck, tonightAnswer: null }, work, { title: 'Junction Tech Mixer' }, false) }, { onOpener: jest.fn() })
+    expect(q('p-ask')).toBeNull()
+  })
+})

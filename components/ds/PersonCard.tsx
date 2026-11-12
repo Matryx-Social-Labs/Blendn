@@ -38,6 +38,12 @@ export type PersonCardPerson = {
   tonight?: { question: string; answer: string } | null
   /** "In common" or "Things in common", and what you share (`commonFor`). */
   common?: { label: string; items: readonly string[] }
+  /** State 1 A: a venue night's openers (`lensView`), drawn as chips when there is nothing in common and Message is open. */
+  openers?: readonly string[] | null
+  /** State 2 B: tonight's question they have not answered, for you to ask once they are shown to you (`lensView`). */
+  ask?: string | null
+  /** State 2 C, one line: the latest event you have both been to and how many more (`GET /users/:ref/shared-events`). */
+  shared?: { latest: string; more: number } | null
 }
 
 export type PersonCardContentProps = {
@@ -71,6 +77,8 @@ export type PersonCardContentProps = {
   /** The ConnectSheet: a request that reveals you; a friend's DM for a friend. */
   onMessage?: () => void
   onSayHi?: () => void
+  /** An opener or tonight's question tapped: it goes into Message (the Connect sheet, or the chat once matched); nothing sends. */
+  onOpener?: (text: string) => void
   /** ⋯: Block and Report. */
   onMore?: () => void
   onViewProfile?: () => void
@@ -120,6 +128,7 @@ export function PersonCardContent({
   onWave,
   onMessage,
   onSayHi,
+  onOpener,
   onMore,
   onViewProfile,
   onClose,
@@ -268,7 +277,31 @@ export function PersonCardContent({
         {circle('ellipsis', `Block or report ${name}`, onMore)}
       </View>
 
-      <LensBlocks lead={lead} tonight={tonight} common={common} testID={testID} />
+      <LensBlocks
+        lead={lead}
+        tonight={tonight}
+        common={common}
+        // An opener needs somewhere to go: Message (the Connect sheet) or Say hi; never a request already sent.
+        openers={thin ? null : person.openers}
+        onOpener={variant === 'pre' || (isRequested && variant !== 'matched') ? undefined : onOpener}
+        ask={thin ? null : person.ask}
+        onAsk={variant === 'pre' || (isRequested && variant !== 'matched') ? undefined : onOpener}
+        compact
+        testID={testID}
+      />
+
+      {person.shared && !thin ? (
+        <View testID={id('shared')} accessible accessibilityLabel={`You’ve both been to ${person.shared.latest}${person.shared.more ? ` and ${person.shared.more} more` : ''}`} style={styles.sharedLine}>
+          <Icon name="calendar" size={ICON.inline} color={COLOR.textSecondary} />
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: quiet }, styles.sharedText]}>
+            {'You’ve both been to '}
+            <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>{person.shared.latest}</Text>
+          </Text>
+          {person.shared.more ? (
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: quiet }]}>{`+${person.shared.more}`}</Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <View testID={id('actions')} accessibilityLiveRegion="polite" style={row}>
         {variant === 'matched' ? (
@@ -495,6 +528,9 @@ const styles = StyleSheet.create({
   head: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: SPACE.md + SPACE.xxs },
   headText: { flex: 1, minWidth: 0 },
   metaLine: { marginTop: SPACE.xxs },
+  /** State 2 C's one line (combined board): a 16 glyph, 10 to the words, the count at the end. */
+  sharedLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm + SPACE.xxs },
+  sharedText: { flex: 1, minWidth: 0 },
   inline: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, marginTop: SPACE.xxs },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },

@@ -143,10 +143,39 @@ export function contextLine(
   return event.title ? `In the room at ${event.title}` : null
 }
 
-/** Under the name: "Anonymous · 31" until they have shown you who they are. */
-export function metaLine(shown: boolean, age: number | null | undefined): string {
-  return [shown ? 'Shown to you' : 'Anonymous', age].filter((x) => x != null && x !== '').join(' · ')
+/** Under the name: "Anonymous · 31" until they have shown you who they are; the sheet adds how long they have been here. */
+export function metaLine(shown: boolean, age: number | null | undefined, here?: string | null): string {
+  return [shown ? 'Shown to you' : 'Anonymous', age, here].filter((x) => x != null && x !== '').join(' · ')
 }
+
+/** Past three hours the minute is not information, and a climbing counter reads as a meter (`timeHereLabel`'s cap). */
+const HERE_CAP_MIN = 180
+
+/**
+ * How long they have been here (SCRUM-1042 state 1 A), from the roster's check-in time: "Here 40 min", "Here 2h 05m",
+ * "Here 3h+". Null when the roster sent no time.
+ */
+export function hereFor(arrivedAt: string | null | undefined, now: number): string | null {
+  const at = arrivedAt ? new Date(arrivedAt).getTime() : NaN
+  if (!Number.isFinite(at)) return null
+  const minutes = Math.floor(Math.max(0, now - at) / 60_000)
+  if (minutes < 1) return 'Just got here'
+  if (minutes < 60) return `Here ${minutes} min`
+  if (minutes >= HERE_CAP_MIN) return 'Here 3h+'
+  const m = minutes % 60
+  return m === 0 ? `Here ${Math.floor(minutes / 60)}h` : `Here ${Math.floor(minutes / 60)}h ${String(m).padStart(2, '0')}m`
+}
+
+/** A venue night's openers (owner pick, state 1 A): static, for when you share nothing yet. Tapping one fills Message. */
+export const VENUE_OPENERS = ['First time here?', 'What’s good here?', 'Who are you here with?'] as const
+
+/** The openers this room offers, or null: a venue night only (an event's room has its own question). */
+export function openersFor(lens: RoomLens | null): readonly string[] | null {
+  return lens?.key === 'venue_night' ? VENUE_OPENERS : null
+}
+
+/** State 2 A's say-hi (owner OK, combined board): what is typed into Message for one of their topics. */
+export const sayHiAbout = (topic: string) => `Saw ${topic} on your profile. How did you get into it?`
 
 /** A Meet next pick's two lines: their answer, quoted, when they gave one; else what the lens leads with. */
 export function pickReason(p: LensPerson, lens: RoomLens | null, answer: string | null | undefined): string | null {
@@ -166,14 +195,19 @@ export function parseLens(raw: unknown): RoomLens | null {
 
 /** Everything the person sheet draws through the lens, from what the deck sent. `shown`: they have shown you who they are. */
 export function lensView(
-  p: LensPerson & { age?: number | null; tonightAnswer?: string | null },
+  p: LensPerson & { age?: number | null; tonightAnswer?: string | null; arrivedAt?: string | null },
   lens: RoomLens | null,
   event: { title: string; venueName?: string | null; city?: string | null } | null,
-  shown: boolean
+  shown: boolean,
+  /** The sheet's clock: with it, how long they have been here joins the meta line (state 1 A, state 2 B). */
+  now?: number
 ) {
   return {
     context: event ? contextLine(lens, event) : null,
-    meta: metaLine(shown, p.age),
+    meta: metaLine(shown, p.age, now === undefined ? null : hereFor(p.arrivedAt, now)),
+    openers: openersFor(lens),
+    /** Tonight's question while they have not answered it: for you to ask (state 2 B), once they are shown to you. */
+    ask: shown && lens?.question && !tonightCardFor(lens, p.tonightAnswer) ? lens.question : null,
     lead: leadFor(p, lens),
     tonight: tonightCardFor(lens, p.tonightAnswer),
     common: commonFor(p, lens),

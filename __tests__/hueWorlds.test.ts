@@ -27,6 +27,8 @@ const ROSE = [
   'app/board/[eventId].tsx',
   'app/private-chat/[conversationId].tsx',
   'app/rate/[eventId].tsx',
+  // A person's "You've both been to" (SCRUM-1042): rose, as the person's page it opens from.
+  'app/shared-events/[id].tsx',
   'components/blendn/BlendnScreen.tsx',
   'components/chat/RoomChat.tsx',
   'app/chat-info/[id].tsx',

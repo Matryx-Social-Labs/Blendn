@@ -1,5 +1,8 @@
 import {
   answerLength,
+  hereFor,
+  openersFor,
+  VENUE_OPENERS,
   commonFor,
   contextLine,
   leadFor,
@@ -164,6 +167,42 @@ describe('lensView (what the sheet draws)', () => {
       lead: leadFor(person, lens('work')),
       tonight: { question: 'What are you working on?', answer: 'A map of quiet cafés' },
       common: { label: 'In common', items: person.interests },
+      openers: null,
+      ask: null,
     })
+  })
+  it('state 2 B: an unanswered question is yours to ask, once they are shown to you; never while anonymous, never once answered', () => {
+    const work = lens('work', 'What are you working on?')
+    expect(lensView({ ...person, age: 31, tonightAnswer: null }, work, null, true).ask).toBe('What are you working on?')
+    expect(lensView({ ...person, age: 31, tonightAnswer: null }, work, null, false).ask).toBeNull()
+    expect(lensView({ ...person, age: 31, tonightAnswer: 'Maps' }, work, null, true).ask).toBeNull()
+    expect(lensView({ ...person, age: 31, tonightAnswer: null }, lens('venue_night', null), null, true).ask).toBeNull()
+  })
+})
+
+describe('state 1 A (SCRUM-1042): how long they have been here, and the venue night openers', () => {
+  const at = Date.parse('2026-11-12T20:00:00Z')
+  const ago = (min: number) => new Date(at - min * 60_000).toISOString()
+  it('says the time here as the board does: minutes, then hours with two-digit minutes, capped at 3h+', () => {
+    expect(hereFor(ago(0.5), at)).toBe('Just got here')
+    expect(hereFor(ago(40), at)).toBe('Here 40 min')
+    expect(hereFor(ago(125), at)).toBe('Here 2h 05m')
+    expect(hereFor(ago(120), at)).toBe('Here 2h')
+    expect(hereFor(ago(181), at)).toBe('Here 3h+')
+  })
+  it('says nothing for no time, a bad one, or one in the future', () => {
+    expect(hereFor(null, at)).toBeNull()
+    expect(hereFor('not a date', at)).toBeNull()
+    expect(hereFor(new Date(at + 5 * 60_000).toISOString(), at)).toBe('Just got here')
+  })
+  it('joins the meta line after the age', () => {
+    expect(metaLine(false, 31, 'Here 40 min')).toBe('Anonymous · 31 · Here 40 min')
+    expect(metaLine(false, 31, null)).toBe('Anonymous · 31')
+  })
+  it('offers the three openers on a venue night only (control: any other lens, or none)', () => {
+    expect(VENUE_OPENERS).toEqual(['First time here?', 'What’s good here?', 'Who are you here with?'])
+    expect(openersFor({ key: 'venue_night', question: null })).toBe(VENUE_OPENERS)
+    expect(openersFor({ key: 'work', question: 'What are you working on?' })).toBeNull()
+    expect(openersFor(null)).toBeNull()
   })
 })

@@ -72,3 +72,26 @@ describe('the Connect note starts empty for every opening', () => {
     expect(note()).toBe('')
   })
 })
+
+describe('an opener (SCRUM-1042 state 1 A) arrives typed, and nothing more', () => {
+  const withDraft = (visible: boolean, displayName: string, draft?: string, onSend: (m: string) => void = noop) => (
+    <ConnectSheet visible={visible} displayName={displayName} draft={draft} onSend={onSend} onDismiss={noop} />
+  )
+  it('opens with the opener in the note, and sends nothing until Send', async () => {
+    const onSend = jest.fn()
+    await render(withDraft(true, 'Fierce Owl', 'First time here?', onSend))
+    expect(note()).toBe('First time here?')
+    expect(onSend).not.toHaveBeenCalled()
+    // The disclosure (your name and photo) is the sheet's as ever: the opener only fills the field.
+    expect(screen.getByText('Connect with Fierce Owl')).toBeTruthy()
+  })
+  it('a later opening for somebody else takes that opening’s opener, never the last one (control: no draft is empty)', async () => {
+    const view = await render(withDraft(true, 'Fierce Owl', 'First time here?'))
+    await view.rerender(withDraft(false, 'Fierce Owl', 'First time here?'))
+    await view.rerender(withDraft(true, 'Quiet Birch', 'Who are you here with?'))
+    expect(note()).toBe('Who are you here with?')
+    await view.rerender(withDraft(false, 'Quiet Birch'))
+    await view.rerender(withDraft(true, 'Quiet Birch'))
+    expect(note()).toBe('')
+  })
+})
