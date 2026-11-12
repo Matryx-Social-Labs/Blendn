@@ -389,7 +389,9 @@ export function lobbyLayout(meta: Partial<LobbyMeta>, filter: LobbyFilter, liste
   const top = slot.kind === 'gate' ? slot.gate : slot.kind
   // An older server sends no counts, so no chip could say one.
   const chips = !!meta.counts && (all > 0 || filter !== 'all')
-  return { top, chips, pinned, starts: top === 'composer' && all === 0 && filter === 'all', liveEmpty }
+  // A gate over an empty Lobby keeps the starts and the line (audit A-1, owner 2026-11-12): a start takes the gate's step first.
+  const canStart = top === 'composer' || top === 'going' || top === 'profile'
+  return { top, chips, pinned, starts: canStart && all === 0 && filter === 'all', liveEmpty }
 }
 
 export function lobbyChips(counts: LobbyCounts) {

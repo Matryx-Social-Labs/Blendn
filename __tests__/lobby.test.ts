@@ -330,6 +330,12 @@ describe('the Lobby screen (L-A): what each part shows', () => {
     expect(lobbyLayout(none, 'mine')).toMatchObject({ chips: true, starts: false })
   })
 
+  it('a gate over an empty Lobby keeps the starts (audit A-1); control: read-only never has them', () => {
+    const none = meta({ counts: { all: 0, offer: 0, seeking: 0, chat: 0, offerRides: 0, mine: 0, replies: 0 } })
+    expect(lobbyLayout({ ...none, compose: { allowed: false, message: 'x', reasonCode: 'BOARD_NOT_GOING' } } as never, 'all')).toMatchObject({ top: 'going', starts: true })
+    expect(lobbyLayout({ ...none, compose: { allowed: false, message: 'x', reasonCode: 'BOARD_PROFILE_INCOMPLETE' } } as never, 'all')).toMatchObject({ top: 'profile', starts: true })
+  })
+
   it('after doors: read-only, no starts; empty, it says the room is open instead (4b), and keeps a pinned note', () => {
     expect(lobbyLayout(meta({ state: 'read_only', phase: 'live' }), 'all')).toMatchObject({ top: 'readOnly', chips: true, liveEmpty: false })
     const empty = meta({ state: 'read_only', phase: 'live', pinned: PIN, counts: { all: 0, offer: 0, seeking: 0, chat: 0, offerRides: 0, mine: 0, replies: 0 } })
