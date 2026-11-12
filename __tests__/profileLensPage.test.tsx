@@ -197,6 +197,8 @@ it('while the wave sends, the hand waves as the sheet’s does (owner pick r3 A)
   api.sendWave.mockReturnValue(new Promise((r) => { land = r }) as never)
   await fireEvent.press(screen.getByTestId('profile-wave'))
   expect(screen.getByTestId('profile-wave-hand')).toBeTruthy()
+  // The waving hand is the resting glyph's 18, so nothing jumps in size as it starts (drive, C3b).
+  expect(JSON.stringify(screen.getByTestId('profile-wave-hand'), (k, v) => (k === 'parent' ? undefined : v))).toMatch(/"width":18\b/)
   expect(screen.getByTestId('profile-wave').props.accessibilityState).toMatchObject({ disabled: true })
   await act(async () => { land({ success: true, data: { sent: true } }) })
   expect(screen.queryByTestId('profile-wave-hand')).toBeNull()

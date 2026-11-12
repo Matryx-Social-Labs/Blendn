@@ -380,7 +380,7 @@ const WAVE_DEGREES = 14
 const WAVE_MS = 600
 const WAVE_TURNS = 2
 
-export function WavingHand({ testID }: { testID?: string }) {
+export function WavingHand({ testID, size = ICON.control }: { testID?: string; size?: number }) {
   const reduceMotion = useReducedMotion()
   const t = useSharedValue(0)
   useEffect(() => {
@@ -389,7 +389,7 @@ export function WavingHand({ testID }: { testID?: string }) {
   const turn = useAnimatedStyle(() => ({ transform: [{ rotate: `${WAVE_DEGREES * Math.sin(t.get() * Math.PI * 2 * WAVE_TURNS)}deg` }] }))
   return (
     <Animated.View testID={testID} style={turn}>
-      <Icon name="hand" size={ICON.control} />
+      <Icon name="hand" size={size} />
     </Animated.View>
   )
 }

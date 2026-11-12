@@ -7,7 +7,7 @@ import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SkeletonBlock, SkeletonLine } from '../../components/Skeleton'
 import { MomentMatch } from '../../components/ds/MomentMatch'
-import { Button } from '../../components/ds/Button'
+import { Button, DOCK_GLYPH } from '../../components/ds/Button'
 import { Dock } from '../../components/ds/Dock'
 import type { Rect } from '../../components/ds/chatShared'
 import { announceOutcome, font, HueProvider, useBoldText, useSelection, type Hue } from '../../components/ds/shared'
@@ -837,7 +837,7 @@ function UserProfileInner() {
               // Owner pick r3 A: while it sends, the hand waves as the sheet's does (#51), not a spinner.
               // At rest it is the dock's own 18 pt glyph, as the board draws it (`ic('hand',18)`).
               icon={waved === 'waved' ? 'check' : 'hand'}
-              leading={waved === 'busy' ? <WavingHand testID="profile-wave-hand" /> : undefined}
+              leading={waved === 'busy' ? <WavingHand testID="profile-wave-hand" size={DOCK_GLYPH} /> : undefined}
               label={waved === 'waved' ? 'Waved' : 'Wave'}
               accessibilityLabel={waved === 'waved' ? `Waved at ${heroTitle}` : `Wave at ${heroTitle}`}
               disabled={waved !== 'none'}
