@@ -15,11 +15,13 @@ const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { include
 
 describe('<Avatar>', () => {
   it.each([24, 32, 40, 56, 72, 112] as const)('a creature at %i pt is the pseudonym’s <Creature> at that size', async (size) => {
+    // Each face names its own glow and clip, so the two renders differ only in those ids.
+    const drawn = (json: unknown) => JSON.stringify(json).replace(/cr[A-Za-z0-9]+(?=[gck]")/g, 'id')
     await render(<Creature {...creatureFor('Night Cat')} size={size} />)
-    const disc = screen.toJSON()
+    const disc = drawn(screen.toJSON())
     await render(<Avatar kind="creature" pseudonym="Night Cat" size={size} testID="a" />)
     expect(flat('a')).toMatchObject({ width: size, height: size })
-    expect((screen.toJSON() as { children: unknown[] }).children).toEqual([disc])
+    expect(drawn((screen.toJSON() as { children: unknown[] }).children)).toBe(`[${disc}]`)
   })
 
   it('a crew is a square with 30% corners on its two-colour plate', async () => {

@@ -37,7 +37,7 @@ export function ProfileLensHero({ photo, seed, name, meta, testID }: ProfileLens
   return (
     <View testID={testID} accessible accessibilityRole="header" accessibilityLabel={`${name}, ${meta.replace(/ · /g, ', ')}`} style={styles.hero}>
       <View>
-        {photo ? <Avatar kind="photo" uri={photo} size={FACE} /> : <Avatar kind="creature" pseudonym={seed} size={FACE} />}
+        {photo ? <Avatar kind="photo" uri={photo} size={FACE} /> : <Avatar kind="creature" pseudonym={seed} size={FACE} blink />}
         {/* Outside the face, as the board's box-shadow is: it takes no room, so the face stays 120. */}
         <View pointerEvents="none" style={[styles.rim, { borderColor: tint(sel.edge, RIM) }]} />
       </View>

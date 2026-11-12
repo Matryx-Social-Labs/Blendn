@@ -25,6 +25,8 @@ export type AvatarProps = {
   halo?: string
   /** Only when no name is beside it: the name (or pseudonym, or crew name) read instead of the picture. */
   label?: string
+  /** A creature blinks once as it appears: the person sheet and the profile only, never a list (`<Creature blink>`). */
+  blink?: boolean
   testID?: string
 } & (
   | { kind: 'photo'; uri: string; /** The picture failed to load (a dead URL): the caller draws its own fallback. */ onError?: () => void }
@@ -48,9 +50,9 @@ function Plate({ colors, testID }: { colors: readonly [string, string]; testID?:
  * Who someone is, as a picture (DESIGN-BRIEF §12, guidelines/components/Avatar.html).
  *
  * - `photo`: earned; only where the room names someone to you.
- * - `creature`: everyone else, as `<Creature>` draws them: an outline animal
- *   at half the disc on a two-colour plate; the same pseudonym draws the same
- *   one everywhere in one event.
+ * - `creature`: everyone else, as `<Creature>` draws them: an animal face
+ *   on a disc in one of eight hues, its expression the pseudonym's adjective;
+ *   the same pseudonym draws the same one everywhere in one event.
  * - `crew`: a square with 30% corners on the crew's emblem plate.
  *
  * Decorative when the name is beside it; given `label`, it reads the name (a
@@ -59,7 +61,7 @@ function Plate({ colors, testID }: { colors: readonly [string, string]; testID?:
  * No haptic.
  */
 export function Avatar(props: AvatarProps) {
-  const { size, ring, halo, label, testID } = props
+  const { size, ring, halo, label, testID, blink } = props
   const contrast = useIncreaseContrast()
   const ringColor = contrast ? MATERIAL.hairlineIncreaseContrast : ring
 
@@ -87,7 +89,7 @@ export function Avatar(props: AvatarProps) {
     return (
       <View testID={testID} style={{ width: size, height: size }} {...a11y}>
         {haloRing}
-        <Creature {...creatureFor(props.pseudonym)} size={size} ring={ringColor} />
+        <Creature {...creatureFor(props.pseudonym)} size={size} ring={ringColor} blink={blink} />
       </View>
     )
   }
