@@ -224,10 +224,15 @@ function RatePeersContent() {
   const entering = reduceMotion ? fadeInStage : riseIn
   const glide = reduceMotion ? undefined : GLIDE
   // The note is the last field on a long form: when the keyboard comes up for
-  // it, the form scrolls to its end so the note sits above the keys.
+  // it, the form scrolls to its end so the note sits above the keys. Only for
+  // the note: iOS also sends keyboardDidShow with no field focused, and a form
+  // opened straight onto a person then sat at its end, the face out of sight.
   const peerScroll = useRef<ScrollView>(null)
+  const noteFocused = useRef(false)
   useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', () => peerScroll.current?.scrollToEnd({ animated: !reduceMotion }))
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      if (noteFocused.current) peerScroll.current?.scrollToEnd({ animated: !reduceMotion })
+    })
     return () => sub.remove()
   }, [reduceMotion])
 
@@ -562,6 +567,12 @@ function RatePeersContent() {
                     measure={noteLength}
                     error={noteTooLong ? `Keep it to ${NOTE_LIMIT} characters.` : undefined}
                     minHeight={NOTE_HEIGHT}
+                    onFocus={() => {
+                      noteFocused.current = true
+                    }}
+                    onBlur={() => {
+                      noteFocused.current = false
+                    }}
                     testID="rate-note"
                   />
                 </Animated.View>
