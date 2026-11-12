@@ -643,6 +643,8 @@ export interface MatchCard {
   youWaved?: boolean
   /** They waved at you in this room and it is yours to answer: "Wave back". Waves only, never a like. */
   wavedAtYou?: boolean
+  /** The conversation your mutual here opened: Say hi reaches it after a restart. Null otherwise; absent from an older server. */
+  conversationId?: string | null
   /**
    * Matching v2: display-only lines you share, as sentences the server wrote
    * ("Both CSK — in RCB country 💛", "You both speak Malayalam"). Never a
@@ -1369,6 +1371,8 @@ export interface PublicProfile {
    * in that room as an attendee, and only when the room asks a question; absent otherwise. Read through `parseLens`.
    */
   tonight?: { lens?: unknown; answer?: string | null }
+  /** SCRUM-1042: the conversation a mutual wave in that room opened, by an event room handle only; absent otherwise. */
+  wave?: { conversationId?: string }
 }
 
 export interface ChatMessageData {

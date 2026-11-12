@@ -59,6 +59,7 @@ export function attendeeFromMatch(m: RoomAttendee): AttendeeProfile {
     insideNow: m.insideNow,
     youWaved: m.youWaved ?? false,
     wavedAtYou: m.wavedAtYou ?? false,
+    conversationId: m.conversationId ?? null,
     overlaps: m.overlaps ?? [],
     sign: m.sign ?? null,
     badges: m.badges ?? [],

@@ -195,7 +195,10 @@ function UserProfileInner() {
   /** SCRUM-1042: Wave → Wave back → ✓ Waved → Say hi. The room's card says where it stood; this page's own taps win. */
   const [waveLocal, setWaveLocal] = useState<WaveStatus | undefined>(undefined)
   const reduceMotion = useReducedMotion()
-  const wave: WaveStatus = waveLocal ?? (roomConversationId ? 'mutual' : (handed?.person.wave ?? 'none'))
+  // The conversation a mutual wave here opened: the room's, else the server's (`wave.conversationId`, after a restart).
+  const [serverWaveConversation, setServerWaveConversation] = useState<string | null>(null)
+  const mutualConversation = roomConversationId || serverWaveConversation
+  const wave: WaveStatus = waveLocal ?? (mutualConversation ? 'mutual' : (handed?.person.wave ?? 'none'))
   const [connectOpen, setConnectOpen] = useState(false)
   /** The opener that opened the Connect sheet, if one did (SCRUM-1042): the note starts as it. */
   const [connectDraft, setConnectDraft] = useState<string | undefined>()
@@ -251,7 +254,7 @@ function UserProfileInner() {
   const [friend, setFriend] = useState<FriendOffer | null>(null)
   const friendAsk = useFriendAsk(identity.title)
 
-  const hydrateCtaState = useCallback(async (targetUserId: string, connection?: ProfileConnection) => {
+  const hydrateCtaState = useCallback(async (targetUserId: string, connection?: ProfileConnection, waveConversation?: string | null) => {
     if (!authUser) {
       setCtaMode('connect')
       setCtaMessage('Sign in to connect.')
@@ -298,9 +301,10 @@ function UserProfileInner() {
       return
     }
 
-    // Still anonymous to you, and the room knows the conversation a mutual like opened: the lists could not match a handle.
-    if (roomConversationId) {
-      setConversationId(roomConversationId)
+    // Still anonymous to you, and the room or the server knows the conversation a mutual opened: the lists could not match a handle.
+    const mutualId = roomConversationId || waveConversation
+    if (mutualId) {
+      setConversationId(mutualId)
       setCtaMode('message')
       setCtaMessage(CTA_HINT.message)
       return
@@ -366,11 +370,13 @@ function UserProfileInner() {
         let badges: Badge[] | null = null
         let nextProfile: UserProfileView | null = null
         let connection: ProfileConnection | undefined
+        let waveConversation: string | null = null
         let gone = isGone(result)
 
         if (result.success && result.data) {
           const data = result.data
           connection = data.connection
+          waveConversation = data.wave?.conversationId ?? null
           offer = parseFriendOffer(data.friend)
           badges = parseBadges(data.badges)
           const photos = data.photos || data.profile_photos || []
@@ -432,7 +438,8 @@ function UserProfileInner() {
         // Badges are an identity field: only for somebody you may see, and none (not drawn) when the server sent none.
         setBadgesOf({ for: id, list: nextProfile?.identityVisible ? (badges ?? []) : [] })
         if (nextProfile?.user_id) {
-          await hydrateCtaState(nextProfile.user_id, connection)
+          if (isCurrent()) setServerWaveConversation(waveConversation)
+          await hydrateCtaState(nextProfile.user_id, connection, waveConversation)
         }
 
       })

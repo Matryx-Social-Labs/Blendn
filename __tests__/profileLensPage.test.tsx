@@ -269,6 +269,24 @@ describe('Wave dock A on the page, from the room (SCRUM-1042)', () => {
     expect(screen.queryByTestId('profile-wave')).toBeNull()
   })
 
+  it('after a restart the room has no conversation for them, but the server’s wave.conversationId makes the dock Say hi into it', async () => {
+    handRoomPerson('rh_bison', card({ wave: 'waved' }))
+    await open({ ...ANON, wave: { conversationId: 'c-restart' } })
+    const sayHi = await screen.findByText('Say hi')
+    expect(screen.queryByTestId('profile-wave')).toBeNull()
+    await fireEvent.press(sayHi)
+    const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } }
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/private-chat/[conversationId]', params: expect.objectContaining({ conversationId: 'c-restart' }) }))
+    expect(api.sendWave).not.toHaveBeenCalled()
+  })
+
+  it('control: with no wave from the server the same card stays ✓ Waved, and there is no Say hi', async () => {
+    handRoomPerson('rh_bison', card({ wave: 'waved' }))
+    await open(ANON)
+    expect(screen.getByTestId('profile-wave')).toBeTruthy()
+    expect(screen.queryByText('Say hi')).toBeNull()
+  })
+
   it('already waved: a still ✓ Waved, never Wave again, and nothing is sent', async () => {
     handRoomPerson('rh_bison', card({ wave: 'waved' }))
     await open(ANON)

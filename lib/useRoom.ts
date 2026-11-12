@@ -659,7 +659,8 @@ export function useRoom(): RoomState & RoomActions {
 
   const toPerson = useCallback(
     (a: AttendeeProfile): RoomPerson => {
-      const conversationId = conversations[a.user_id] ?? null
+      // This session's mutual first, then the deck's (a mutual from before a restart).
+      const conversationId = conversations[a.user_id] ?? a.conversationId ?? null
       const wave = waveStatusFor(
         { youWaved: a.youWaved, wavedAtYou: a.wavedAtYou, conversationId, heard: !!heard[a.user_id] },
         waveState[a.user_id]
@@ -745,7 +746,7 @@ export function useRoom(): RoomState & RoomActions {
       if (!roomId) return { kind: 'refused', refusal: waveRefusal('NOT_CHECKED_IN', undefined) }
       if (!attendee) return { kind: 'refused', refusal: waveRefusal('NOT_FOUND', undefined) }
 
-      const conversationId = conversations[id] ?? null
+      const conversationId = conversations[id] ?? attendee.conversationId ?? null
       const status = waveStatusFor(
         { youWaved: attendee.youWaved, wavedAtYou: attendee.wavedAtYou, conversationId, heard: !!heard[id] },
         waveState[id]

@@ -94,11 +94,13 @@ export function SenderCard({
   if (!who) return null
   const attendee = card ? attendeeFromMatch(card) : null
 
-  const waveStatus = waveStatusFor({ youWaved: card?.youWaved, wavedAtYou: card?.wavedAtYou, conversationId: opened }, waveLocal)
+  // This card's own mutual first, then the deck's (one from before a restart).
+  const mutualConversation = opened ?? card?.conversationId ?? null
+  const waveStatus = waveStatusFor({ youWaved: card?.youWaved, wavedAtYou: card?.wavedAtYou, conversationId: mutualConversation }, waveLocal)
 
   const openChat = (conversationId: string | null) => {
     onClose()
-    // A mutual from an earlier session: the deck says you both waved but not where, so the chats list has it.
+    // No conversation known (an older server, or a friend the mutual opened nothing with): the chats list has it.
     if (conversationId) router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId } } as never)
     else router.navigate('/(tabs)/chat' as never)
   }
@@ -160,7 +162,7 @@ export function SenderCard({
         wave={waveStatus}
         refusal={refusal ? { text: refusal } : undefined}
         onWave={() => void wave()}
-        onSayHi={() => openChat(opened)}
+        onSayHi={() => openChat(mutualConversation)}
         onMessage={() => setConnectOpen(true)}
         onMore={() => {
           onClose()
