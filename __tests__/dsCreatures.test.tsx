@@ -24,6 +24,7 @@ import {
   type CreatureSpecies,
 } from '../components/ds/Creature'
 import DsCreaturesPreview from '../app/preview/ds-creatures'
+import { ProfileLensHero } from '../components/profile/ProfileLensHero'
 import { VENUE_PLATE_GLYPHS, VenuePlate } from '../components/ds/VenuePlate'
 import { Icon } from '../components/ui/Icon'
 import { CREATURE_ART, CREATURE_HUES, PALETTE_GLYPH, VENUE_PLATES } from '../lib/design/tokens'
@@ -526,6 +527,12 @@ describe('the blink: once, on the person sheet and the profile', () => {
     reduceMotion.mockReturnValue(false)
     await render(<Creature species="fox" mood="curious" hue={0} />)
     expect(still).toBe(drawn())
+  })
+
+  it('the profile opened from a room (the lens hero, #529) blinks too, as the profile it replaced does', async () => {
+    // "Crashing Heron": heron, fierce (open eyes).
+    await render(<ProfileLensHero photo={null} seed="Crashing Heron" name="Crashing Heron" meta="Anonymous · 29" />)
+    expect(eyes()).not.toBeNull()
   })
 
   it('blinking, the face is drawn in layers: the eyes alone move, the brows and mouth stay over them', async () => {
