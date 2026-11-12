@@ -5,7 +5,7 @@
  * a person.
  */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
-import { AccessibilityInfo, Dimensions, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Keyboard, ScrollView, StyleSheet } from 'react-native'
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 jest.mock('expo-router', () => ({
@@ -376,5 +376,42 @@ describe('the night has its art, and a held Submit says why (TG-08)', () => {
     await fireEvent(screen.getByTestId('rate-dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 190 } } })
     const pad = StyleSheet.flatten(screen.getByTestId('rate-form').props.contentContainerStyle).paddingBottom
     expect(pad).toBeLessThan(190)
+  })
+})
+
+/*
+ * SCRUM-1045 group 3 (driven, iOS 27): opened straight onto a person (the night already rated), the form sat at its
+ * end, the face, the name and the scale scrolled out of sight under the bar. The note's keyboard listener scrolled to
+ * the end on any keyboardDidShow, and iOS sends one with no field focused. It is the note's own scroll, so it waits
+ * for the note.
+ */
+describe('the note pulls the form to its end, nothing else does', () => {
+  it('a keyboard event with the note not focused leaves the person at the top; focused, it scrolls to the note', async () => {
+    const shown: (() => void)[] = []
+    const addListener = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, fn: () => void) => {
+      if (event === 'keyboardDidShow') shown.push(fn)
+      return { remove: () => {} }
+    }) as never)
+    const scrollToEnd = jest.spyOn(ScrollView.prototype, 'scrollToEnd').mockImplementation(() => {})
+    try {
+      loads({ rated: true })
+      await view()
+      await screen.findByTestId('rate-person')
+      await act(async () => shown.forEach((fn) => fn()))
+      expect(scrollToEnd).not.toHaveBeenCalled()
+
+      await fireEvent(screen.getByTestId('rate-note-input'), 'focus')
+      await act(async () => shown.forEach((fn) => fn()))
+      expect(scrollToEnd).toHaveBeenCalledTimes(1)
+
+      // Out of the note again: the next keyboard event (another app's, a hardware keyboard's) moves nothing.
+      await fireEvent(screen.getByTestId('rate-note-input'), 'blur')
+      scrollToEnd.mockClear()
+      await act(async () => shown.forEach((fn) => fn()))
+      expect(scrollToEnd).not.toHaveBeenCalled()
+    } finally {
+      addListener.mockRestore()
+      scrollToEnd.mockRestore()
+    }
   })
 })
