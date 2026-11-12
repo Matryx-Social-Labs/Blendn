@@ -405,6 +405,11 @@ export function BoardScreen() {
   }, [reduceMotion])
 
   /** The going gate: say so here, and the Lobby re-reads with the composer in its slot. */
+  /**
+   * A start tapped under a gate (audit A-1): the gate's step first (I'm going, or Finish your profile), and the composer
+   * for that start opens once the server lets you post, here or on the way back from the profile.
+   */
+  const pendingStart = useRef<'offer' | 'seeking' | null>(null)
   const sayGoing = useCallback(async () => {
     if (!eventId || gate.busy) return
     setGate({ busy: true, refusal: null })
@@ -414,12 +419,15 @@ export function BoardScreen() {
         const line = boardMessage(result, "Couldn’t say you’re going. Try again.")
         setGate({ busy: false, refusal: line })
         announce(line)
+        // A start that asked for this does not open its composer later, out of nowhere.
+        pendingStart.current = null
         return
       }
       H.success()
       setGate({ busy: false, refusal: null })
       void fetchBoard()
     } catch {
+      pendingStart.current = null
       setGate({ busy: false, refusal: "Couldn’t say you’re going. Try again." })
     }
   }, [eventId, gate.busy, fetchBoard])
@@ -428,6 +436,19 @@ export function BoardScreen() {
     setStartKind(kind)
     setComposing(true)
   }, [])
+  const startFromGate = (kind: 'offer' | 'seeking') => {
+    if (layout.top === 'composer') return compose(kind)
+    pendingStart.current = kind
+    if (layout.top === 'going') return void sayGoing()
+    router.push('/edit-profile')
+  }
+  // The gate lifted with a start waiting: open its composer once.
+  useEffect(() => {
+    if (layout.top !== 'composer' || !pendingStart.current) return
+    const kind = pendingStart.current
+    pendingStart.current = null
+    compose(kind)
+  }, [layout.top, compose])
   const seeAsks = useCallback(() => router.push('/(tabs)/chat'), [])
 
   /* The next page as the end comes near: one at a time, appended once, and never after a refusal until it is asked again. */
@@ -661,7 +682,7 @@ export function BoardScreen() {
       {/* #47: the first post is why the starts leave: they fade over `quick` with an 8 pt drop as the card rises in. */}
       {layout.starts && !posts.length ? (
         <Animated.View exiting={emptyOut(reduceMotion)}>
-          <LobbyStarts ticketsHidden={meta.ticketsHidden} onStart={compose} />
+          <LobbyStarts ticketsHidden={meta.ticketsHidden} onStart={startFromGate} />
         </Animated.View>
       ) : null}
     </View>

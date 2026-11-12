@@ -10,10 +10,14 @@ import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 const mockParams: Record<string, string> = {}
 const mockRedirect = jest.fn()
+/** Every focus effect drawn, run again to come back to the screen (from the profile, say). */
+const mockFocusEffects = new Set<() => void>()
+const mockFocus = () => mockFocusEffects.forEach((effect) => effect())
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn(), canDismiss: jest.fn(() => true), dismissAll: jest.fn() },
   useLocalSearchParams: () => mockParams,
   useFocusEffect: (effect: () => void) => {
+    mockFocusEffects.add(effect)
     const { useEffect } = require('react')
     useEffect(effect, [effect])
   },
@@ -1079,6 +1083,54 @@ describe('L-A: the composer’s slot', () => {
     await fireEvent.press(await screen.findByText('I have spots'))
     expect(screen.getByTestId('board-composer')).toBeTruthy()
     expect(screen.getByText(/Nobody’s posted yet/)).toBeTruthy()
+  })
+})
+
+describe('audit A-1 (owner-picked 2026-11-12): a gate over an empty Lobby still shows the starts and the line', () => {
+  const EMPTY = { counts: { ...COUNTS, all: 0, offer: 0, seeking: 0, chat: 0, mine: 0, replies: 0 } }
+
+  it('not going: the gate, then the two starts and "Nobody’s posted yet"; a start says I’m going, then opens its composer', async () => {
+    let going = false
+    api.getBoard.mockImplementation(async () =>
+      (going ? lobby([], EMPTY) : lobby([], { ...EMPTY, compose: { allowed: false, message: 'x', reasonCode: 'BOARD_NOT_GOING' } })) as never
+    )
+    api.rsvpToEvent.mockImplementation(async () => {
+      going = true
+      return { success: true, data: { rsvpStatus: 'going', rsvpCount: 1 } } as never
+    })
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Say you’re going to post')).toBeTruthy()
+    expect(screen.getByText(/Nobody’s posted yet/)).toBeTruthy()
+    expect(screen.queryByTestId('board-composer')).toBeNull()
+    await fireEvent.press(screen.getByText('I’m looking'))
+    expect(api.rsvpToEvent).toHaveBeenCalledWith('e1', 'going')
+    // Once the server says you can post, the composer opens on the type the start named.
+    await waitFor(() => expect(screen.getByTestId('board-composer')).toBeTruthy())
+    expect(screen.getByRole('radio', { name: 'Looking for', checked: true })).toBeTruthy()
+  })
+
+  it('profile unfinished: a start goes to the profile first, and its composer opens on the way back', async () => {
+    let complete = false
+    api.getBoard.mockImplementation(async () =>
+      (complete ? lobby([], EMPTY) : lobby([], { ...EMPTY, compose: { allowed: false, message: 'x', reasonCode: 'BOARD_PROFILE_INCOMPLETE' } })) as never
+    )
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Finish your profile to post')).toBeTruthy()
+    await fireEvent.press(screen.getByText('I have spots'))
+    expect(router.push).toHaveBeenCalledWith('/edit-profile')
+    expect(screen.queryByTestId('board-composer')).toBeNull()
+    complete = true
+    const reads = api.getBoard.mock.calls.length
+    await act(async () => mockFocus())
+    await waitFor(() => expect(api.getBoard.mock.calls.length).toBeGreaterThan(reads))
+    await waitFor(() => expect(screen.getByTestId('board-composer')).toBeTruthy())
+  })
+
+  it('control: a gate over a Lobby with posts draws no starts', async () => {
+    api.getBoard.mockResolvedValue(lobby([OFFER], { compose: { allowed: false, message: 'x', reasonCode: 'BOARD_NOT_GOING' } }) as never)
+    await render(<BoardScreen />)
+    expect(await screen.findByText('Say you’re going to post')).toBeTruthy()
+    expect(screen.queryByText('I have spots')).toBeNull()
   })
 })
 
