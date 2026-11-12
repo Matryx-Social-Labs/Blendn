@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { apiClient } from '../../lib/apiClient'
+import { interestNames } from '../../lib/meProfile'
 import { usePassReach } from '../../lib/usePassReach'
 import { blendnClosed, getLeftNotice, isLiveHint, openPass, setDoor, setLeftNotice, setLiveRoomChat, setRoomUp, setRoomTab, takePendingPerson, takeReturnTo, useRoomTab, useDoor, usePendingPerson } from '../../lib/blendnOverlay'
 import type { RoomTab } from '../../lib/roomTab'
@@ -132,6 +133,8 @@ const ROOM_COACH_TEXT = 'People here can’t see your name or photo until you ch
 
 /** A card to open: someone on the roster, or (a wave from someone it doesn't list) only their name: the thin card. */
 type OpenCard = { id: string; name: string }
+/** The person sheet shows this many of their interests (state 2 B's chips, the combined board). */
+const SHEET_INTERESTS = 3
 /** Who the Connect sheet is for, and the opener they tapped to get there (SCRUM-1042), if any. */
 type ConnectTarget = OpenCard & { draft?: string }
 
@@ -632,16 +635,18 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
    * State 2 C on the sheet: one line, the latest event you have both been to. Asked only for somebody the room shows
    * you (a photo arrives only then); the server applies the same rule again and answers [] otherwise.
    */
-  const [sharedLine, setSharedLine] = useState<{ id: string; line: { latest: string; more: number } | null } | null>(null)
+  const [sharedLine, setSharedLine] = useState<{ id: string; line: { latest: string; more: number } | null; interests: string[] } | null>(null)
   const sharedFor = cardPerson?.photo ? cardPerson.id : null
   useEffect(() => {
     if (!sharedFor) return
     let live = true
-    apiClient
-      .getSharedEvents(sharedFor, 1)
-      .then((r) => {
+    // Their interests too (state 2 B's chips): the deck sends only the ones you share, the profile the rest once shown.
+    Promise.all([apiClient.getSharedEvents(sharedFor, 1), apiClient.getPublicProfile(sharedFor)])
+      .then(([r, p]) => {
         const first = r.success ? r.data?.events[0] : undefined
-        if (live) setSharedLine({ id: sharedFor, line: first ? { latest: first.title, more: Math.max(0, (r.data?.pagination.totalCount ?? 1) - 1) } : null })
+        const shown = p.success && p.data?.identityVisible
+        const interests = shown ? interestNames(p.data?.interests).slice(0, SHEET_INTERESTS) : []
+        if (live) setSharedLine({ id: sharedFor, line: first ? { latest: first.title, more: Math.max(0, (r.data?.pagination.totalCount ?? 1) - 1) } : null, interests })
       })
       .catch(() => undefined)
     return () => {
@@ -1152,6 +1157,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           // P-A: their deck card through the room's lens; a photo arrives only once they have shown you who they are.
           ...(cardPerson ? lensView(cardPerson, room.lens, room.event, !!cardPerson.photo, now) : {}),
           shared: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.line : null,
+          interests: cardPerson?.photo && sharedLine?.id === cardPerson.id ? sharedLine.interests : undefined,
         }}
         liked={!!cardPerson && (cardPerson.liked || cardPerson.pending) && !cardPerson.matched}
         requested={!!cardPerson?.requested}

@@ -655,7 +655,8 @@ export function useRoom(): RoomState & RoomActions {
   const toPerson = useCallback(
     (a: AttendeeProfile): RoomPerson => {
       const status = likeStatusFor(a.youLiked, likeState[a.user_id])
-      const arrivedAt = live.arrivedAt[a.user_id] ?? a.last_seen ?? null
+      // The socket's arrival first (it is the freshest), then the deck's own check-in time (SCRUM-1042).
+      const arrivedAt = live.arrivedAt[a.user_id] ?? a.last_seen ?? a.checkInTime ?? null
       const person: Omit<RoomPerson, 'reason'> = {
         id: a.user_id,
         name: displayName(a.name),

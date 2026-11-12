@@ -188,6 +188,7 @@ describe('state 2 on the sheet (SCRUM-1042, combined board): shown to you', () =
     name: 'Divya',
     age: 30,
     shared,
+    interests: ['Bakeries', 'PBKS'],
     ...lensView({ ...deck, tonightAnswer: null, arrivedAt: new Date(Date.parse('2026-11-12T20:00:00Z') - 40 * 60_000).toISOString() }, work, { title: 'Junction Tech Mixer' }, true, Date.parse('2026-11-12T20:00:00Z')),
   })
 
@@ -196,7 +197,7 @@ describe('state 2 on the sheet (SCRUM-1042, combined board): shown to you', () =
     await draw(divya(), { onOpener })
     expect(screen.getByText('Shown to you · 31 · Here 40 min')).toBeTruthy()
     const t = tree()
-    const seq = ['Divya', 'Shown to you · 31 · Here 40 min', 'Tonight’s question', 'What are you working on?', 'Ask in a message', 'Riso Night at Champaca', '+1', 'p-wave']
+    const seq = ['Divya', 'Shown to you · 31 · Here 40 min', 'Tonight’s question', 'What are you working on?', 'Ask in a message', 'Bakeries', 'PBKS', 'Riso Night at Champaca', '+1', 'p-wave']
     const idx = seq.map((x) => t.indexOf(x))
     expect(seq.filter((_, i) => idx[i] < 0)).toEqual([])
     expect([...idx].sort((a, b) => a - b)).toEqual(idx)

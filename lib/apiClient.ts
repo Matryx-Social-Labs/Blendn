@@ -657,6 +657,8 @@ export interface MatchCard {
   tonightAnswer?: string | null
   /** Flow 5 P-A: why they are here at a work-lens event (`hire` …), read through `parseWorkIntent`. Same readers as the answer. */
   workIntent?: string | null
+  /** When they checked in here (ISO), the sheet's "Here 40 min" (SCRUM-1042); null to a host. Optional: a client outlives a deploy. */
+  checkInTime?: string | null
 }
 
 /** `GET /events/:id/matches`: the page, and the room's lens (what leads on these cards; read through `parseLens`). */

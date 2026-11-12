@@ -47,6 +47,8 @@ export interface AttendeeProfile {
    * looking. The REST roster does not carry it — `MatchCard` has no such field.
    */
   last_seen?: string
+  /** When they checked in here, from the deck (`MatchCard.checkInTime`, SCRUM-1042); null to a host. */
+  checkInTime?: string | null
   /** Still physically in the room, per presence. */
   insideNow?: boolean
   /** You already liked them. The reverse is never disclosed. */

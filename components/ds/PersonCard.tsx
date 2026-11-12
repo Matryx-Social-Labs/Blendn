@@ -10,6 +10,7 @@ import { useReducedMotion } from '../../lib/motion'
 import type { LeadPill } from '../../lib/roomLens'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
+import { Chip } from './Chip'
 import { LensBlocks } from './LensBlocks'
 import { CrewEmblem } from './CrewEmblem'
 import type { Face } from './Facepile'
@@ -44,6 +45,8 @@ export type PersonCardPerson = {
   ask?: string | null
   /** State 2 C, one line: the latest event you have both been to and how many more (`GET /users/:ref/shared-events`). */
   shared?: { latest: string; more: number } | null
+  /** State 2 B: a few of their interests, once they are shown to you (their profile's, not only the shared ones). */
+  interests?: readonly string[]
 }
 
 export type PersonCardContentProps = {
@@ -289,6 +292,12 @@ export function PersonCardContent({
         compact
         testID={testID}
       />
+
+      {person.interests?.length && !thin ? (
+        <View testID={id('interests')} style={styles.chips}>
+          {person.interests.map((t) => <Chip key={t} label={t} lines={2} />)}
+        </View>
+      ) : null}
 
       {person.shared && !thin ? (
         <View testID={id('shared')} accessible accessibilityLabel={`You’ve both been to ${person.shared.latest}${person.shared.more ? ` and ${person.shared.more} more` : ''}`} style={styles.sharedLine}>
