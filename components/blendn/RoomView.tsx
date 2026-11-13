@@ -115,8 +115,12 @@ export type RoomViewProps = {
   onOpen: (p: RoomPerson) => void
   /** Flow 5 P-A: the room's lens, for what a Meet next pick says. */
   lens?: RoomLens | null
-  /** The double tap's like, or null when a like would have to ask first (then a double tap just opens the card). */
+  /** The double tap's crew like, or null (people are waved at from their card). */
   onLike: ((p: RoomPerson) => void) | null
+  /** Meet next's Wave pill: Wave or Wave back. */
+  onWave: (p: RoomPerson) => void
+  /** Meet next's Say hi, once you both waved. */
+  onSayHi: (p: RoomPerson) => void
   /** Fresh out of the pour: the hero rises and the sections follow (#9). Read at mount. */
   enter: boolean
   /** Mounted under the pour, not yet shown: the entrance waits for this to turn false. */
@@ -169,7 +173,7 @@ export function RoomView(props: RoomViewProps) {
               </>
             ) : (
               <>
-                <MeetNextRow picks={props.picks} lens={props.lens} nextShuffleAt={props.nextShuffleAt} width={cell} onOpen={props.onOpen} onLike={props.onLike} />
+                <MeetNextRow picks={props.picks} lens={props.lens} nextShuffleAt={props.nextShuffleAt} width={cell} onOpen={props.onOpen} onWave={props.onWave} onSayHi={props.onSayHi} />
                 {props.friendsHere}
                 <EveryoneHead title={props.everyoneTitle} count={props.everyoneCount} />
               </>

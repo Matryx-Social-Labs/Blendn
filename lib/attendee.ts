@@ -51,8 +51,12 @@ export interface AttendeeProfile {
   checkInTime?: string | null
   /** Still physically in the room, per presence. */
   insideNow?: boolean
-  /** You already liked them. The reverse is never disclosed. */
-  youLiked?: boolean
+  /** You waved at them in this room (the deck's `youWaved`). */
+  youWaved?: boolean
+  /** They waved at you in this room, yours to answer (the deck's `wavedAtYou`). */
+  wavedAtYou?: boolean
+  /** The conversation your mutual here opened (the deck's `conversationId`): Say hi after a restart. */
+  conversationId?: string | null
   /** Matching v2's shared lines, sign chip and badges — as the server budgeted them. */
   overlaps?: Overlap[]
   sign?: string | null

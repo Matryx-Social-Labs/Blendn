@@ -3,7 +3,7 @@
  * The lead pills and In common are the room’s own card (handed in memory); the Tonight card is the server’s.
  */
 import { AccessibilityInfo, StyleSheet } from 'react-native'
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
 
 let mockParams: Record<string, string> = { id: 'u_ben' }
@@ -24,7 +24,6 @@ jest.mock('../lib/apiClient', () => ({
     getConversations: jest.fn(),
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
-    likeAtEvent: jest.fn(),
     respondToMessageRequest: jest.fn(),
     sendFriendRequest: jest.fn(),
     sendWave: jest.fn(),
@@ -56,10 +55,10 @@ jest.mock('../components/grid/ConnectSheet', () => ({
   },
 }))
 jest.mock('../components/ds/MomentMatch', () => ({
-  MomentMatch: (p: { name: string; onSayHi: () => void }) => {
+  MomentMatch: (p: { name: string; onSayHi: () => void; testID?: string }) => {
     const React = require('react')
     const { Pressable, Text } = require('react-native')
-    return React.createElement(Pressable, { onPress: p.onSayHi }, React.createElement(Text, null, `You and ${p.name} matched`))
+    return React.createElement(Pressable, { onPress: p.onSayHi, testID: p.testID }, React.createElement(Text, null, `You and ${p.name} both waved`))
   },
 }))
 jest.mock('../components/profile/ProfileHeroStage', () => {
@@ -204,8 +203,9 @@ it('while the wave sends, the hand waves as the sheet’s does (owner pick r3 A)
   expect(JSON.stringify(screen.getByTestId('profile-wave-hand'), (k, v) => (k === 'parent' ? undefined : v))).toMatch(/"width":18\b/)
   expect(screen.getByTestId('profile-wave').props.accessibilityState).toMatchObject({ disabled: true })
   await act(async () => { land({ success: true, data: { sent: true } }) })
+  // 07-motion: the hand keeps swinging until ✓ Waved settles at 800 ms, then it is still.
+  expect(await screen.findByText('Waved', {}, { timeout: 3000 })).toBeTruthy()
   expect(screen.queryByTestId('profile-wave-hand')).toBeNull()
-  expect(await screen.findByText('Waved')).toBeTruthy()
 })
 
 it('the lens page is lit from the top in the room’s rose, as the board’s `.xwash` (drive, C3b)', async () => {
@@ -235,7 +235,7 @@ it('Wave waves at them in this room, and then reads Waved', async () => {
   await fireEvent.press(screen.getByTestId('profile-wave'))
   await act(async () => {})
   expect(api.sendWave).toHaveBeenCalledWith('e1', 'rh_bison')
-  expect(await screen.findByText('Waved')).toBeTruthy()
+  expect(await screen.findByText('Waved', {}, { timeout: 3000 })).toBeTruthy()
 })
 
 it('Waved is said when it lands: announced on iOS, the dock a polite live region on Android (drive, TalkBack)', async () => {
@@ -245,9 +245,73 @@ it('Waved is said when it lands: announced on iOS, the dock a polite live region
   expect(screen.getByTestId('profile-lens-dock-row').props.accessibilityLiveRegion).toBe('polite')
   expect(say).not.toHaveBeenCalled()
   await fireEvent.press(screen.getByTestId('profile-wave'))
-  await act(async () => {})
-  expect(say).toHaveBeenCalledWith('Waved at Gentle Bison')
+  await waitFor(() => expect(say).toHaveBeenCalledWith('Waved at Gentle Bison'), { timeout: 3000 })
   say.mockRestore()
+})
+
+describe('Wave dock A on the page, from the room (SCRUM-1042)', () => {
+  it('they waved at you: the chip “Waved at you”, and Wave back is the filled one', async () => {
+    handRoomPerson('rh_bison', card({ wave: 'wavedAtYou' }))
+    await open(ANON)
+    expect(screen.getByText('Waved at you')).toBeTruthy()
+    expect(screen.getByText('Wave back')).toBeTruthy()
+    expect(screen.getByLabelText('Wave back at Gentle Bison')).toBeTruthy()
+  })
+
+  it('a wave back that makes it mutual plays the moment, and the dock is Say hi only', async () => {
+    handRoomPerson('rh_bison', card({ wave: 'wavedAtYou' }))
+    await open(ANON)
+    api.sendWave.mockResolvedValue({ success: true, data: { sent: true, mutual: true, conversationId: 'c7', pseudonyms: { you: 'Swift Gecko', them: 'Gentle Bison' } } } as never)
+    await fireEvent.press(screen.getByTestId('profile-wave'))
+    expect(await screen.findByTestId('profile-match', {}, { timeout: 3000 })).toBeTruthy()
+    // The label swaps on the dock's own transition (#45).
+    expect(await screen.findByText('Say hi', {}, { timeout: 2000 })).toBeTruthy()
+    expect(screen.queryByTestId('profile-wave')).toBeNull()
+  })
+
+  it('after a restart the room has no conversation for them, but the server’s wave.conversationId makes the dock Say hi into it', async () => {
+    handRoomPerson('rh_bison', card({ wave: 'waved' }))
+    await open({ ...ANON, wave: { conversationId: 'c-restart' } })
+    const sayHi = await screen.findByText('Say hi')
+    expect(screen.queryByTestId('profile-wave')).toBeNull()
+    await fireEvent.press(sayHi)
+    const { router } = jest.requireMock('expo-router') as { router: { push: jest.Mock } }
+    expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/private-chat/[conversationId]', params: expect.objectContaining({ conversationId: 'c-restart' }) }))
+    expect(api.sendWave).not.toHaveBeenCalled()
+  })
+
+  it('control: with no wave from the server the same card stays ✓ Waved, and there is no Say hi', async () => {
+    handRoomPerson('rh_bison', card({ wave: 'waved' }))
+    await open(ANON)
+    expect(screen.getByTestId('profile-wave')).toBeTruthy()
+    expect(screen.queryByText('Say hi')).toBeNull()
+  })
+
+  it('already waved: a still ✓ Waved, never Wave again, and nothing is sent', async () => {
+    handRoomPerson('rh_bison', card({ wave: 'waved' }))
+    await open(ANON)
+    expect(screen.getByText('Waved')).toBeTruthy()
+    expect(screen.queryByText('Wave again')).toBeNull()
+    await fireEvent.press(screen.getByTestId('profile-wave'))
+    expect(api.sendWave).not.toHaveBeenCalled()
+  })
+
+  it('a rate-limit refusal shows the server’s sender-only sentence, and Wave is offered again', async () => {
+    handRoomPerson('rh_bison', card())
+    await open(ANON)
+    api.sendWave.mockResolvedValue({ success: false, errorCode: 'RATE_LIMITED', error: 'You’ve waved a lot in this room. Try again in a bit.' } as never)
+    await fireEvent.press(screen.getByTestId('profile-wave'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('You’ve waved a lot in this room. Try again in a bit.', 'info'), { timeout: 3000 })
+    expect(screen.getByText('Wave')).toBeTruthy()
+  })
+
+  it('a recipient refusal never names them', async () => {
+    handRoomPerson('rh_bison', card())
+    await open(ANON)
+    api.sendWave.mockResolvedValue({ success: false, errorCode: 'RECIPIENT_NOT_HERE', error: 'They’re not in the room right now' } as never)
+    await fireEvent.press(screen.getByTestId('profile-wave'))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('That didn’t go through.', 'info'), { timeout: 3000 })
+  })
 })
 
 it('outside a room, or with no lens anywhere, it is the profile page it always was', async () => {

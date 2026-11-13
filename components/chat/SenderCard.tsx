@@ -6,6 +6,7 @@ import { apiClient } from '../../lib/apiClient'
 import type { RoomAttendee } from '../../lib/activeRoom'
 import { Logger } from '../../lib/logger'
 import { likeRefusal } from '../../lib/likeRefusal'
+import { shouldSendWave, waveRefusal, waveStateAfter, waveStatusFor, WAVE_SETTLE_MS, type WaveStatus } from '../../lib/waves'
 import { lensView, parseLens, type RoomLens } from '../../lib/roomLens'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { attendeeFromMatch } from '../../lib/roomLive'
@@ -53,6 +54,9 @@ export function SenderCard({
   const [card, setCard] = useState<RoomAttendee | null>(null)
   const [lens, setLens] = useState<RoomLens | null>(null)
   const [state, setState] = useState<PersonState>('none')
+  /** This session's wave at them (`lib/waves.ts`), over the deck's flags; and the conversation a mutual opened. */
+  const [waveLocal, setWaveLocal] = useState<WaveStatus | undefined>(undefined)
+  const [opened, setOpened] = useState<string | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [connectOpen, setConnectOpen] = useState(false)
   const [sending, setSending] = useState(false)
@@ -63,6 +67,8 @@ export function SenderCard({
     setCardFor(sender.id)
     setCard(null)
     setState('none')
+    setWaveLocal(undefined)
+    setOpened(null)
     setRefusal(null)
   }
 
@@ -77,7 +83,6 @@ export function SenderCard({
         const found = (r.data?.matches as RoomAttendee[] | undefined)?.find((m) => m.userId === senderId) ?? null
         setCard(found)
         setLens(parseLens(r.data?.lens))
-        if (found?.youLiked) setState('liked')
       })
       .catch((error) => Logger.warn('chat', 'Roster lookup failed', { error }))
     return () => {
@@ -89,33 +94,34 @@ export function SenderCard({
   if (!who) return null
   const attendee = card ? attendeeFromMatch(card) : null
 
-  const like = async () => {
-    if (!eventId || state === 'liked') return
-    setState('liked')
-    setRefusal(null)
-    const result = await apiClient.likeAtEvent(eventId, who.id)
-    if (!result.success) {
-      setState('none')
-      setRefusal(likeRefusal(result.errorCode, result.error).message)
-      return
-    }
-    const conversationId = result.data?.mutual ? result.data.conversationId : undefined
-    if (!conversationId) void askPushInContext('like')
-    if (conversationId) {
-      onClose()
-      router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId } } as never)
-    }
+  // This card's own mutual first, then the deck's (one from before a restart).
+  const mutualConversation = opened ?? card?.conversationId ?? null
+  const waveStatus = waveStatusFor({ youWaved: card?.youWaved, wavedAtYou: card?.wavedAtYou, conversationId: mutualConversation }, waveLocal)
+
+  const openChat = (conversationId: string | null) => {
+    onClose()
+    // No conversation known (an older server, or a friend the mutual opened nothing with): the chats list has it.
+    if (conversationId) router.push({ pathname: '/private-chat/[conversationId]', params: { conversationId } } as never)
+    else router.navigate('/(tabs)/chat' as never)
   }
 
+  /** Wave, or wave back (SCRUM-1042): the hand swings until both the server and 07-motion's 800 ms are done. */
   const wave = async () => {
-    if (!eventId) return
-    setState('waveBusy')
+    if (!eventId || !shouldSendWave(waveStatus)) return
+    setWaveLocal('sending')
     setRefusal(null)
-    const result = await apiClient.sendWave(eventId, who.id)
-    // Once per ten minutes: a wave already sent reads as waved, not as a failure.
-    if (result.success || result.errorCode === 'WAVE_TOO_SOON') return setState('waved')
-    setState(card?.youLiked ? 'liked' : 'none')
-    setRefusal(likeRefusal(result.errorCode, result.error).message)
+    try {
+      const [result] = await Promise.all([apiClient.sendWave(eventId, who.id), new Promise((r) => setTimeout(r, WAVE_SETTLE_MS))])
+      setWaveLocal(waveStateAfter({ ok: !!result.success, mutual: result.data?.mutual }))
+      if (!result.success) return setRefusal(waveRefusal(result.errorCode, result.error).message)
+      if (!result.data?.mutual) return void askPushInContext('like')
+      setOpened(result.data.conversationId ?? null)
+      openChat(result.data.conversationId ?? null)
+    } catch (error) {
+      Logger.warn('chat', 'Wave failed', { error })
+      setWaveLocal(undefined)
+      setRefusal(waveRefusal(undefined, undefined).message)
+    }
   }
 
   // Their deck card, as the lens reads it: only what the deck sent (never a name, photo or bio).
@@ -127,7 +133,7 @@ export function SenderCard({
     if (lensPerson) handRoomPerson(who.id, { person: lensPerson, lens })
     router.push({
       pathname: '/user/[id]',
-      params: { id: who.id, ...(eventId ? { eventId } : {}), ...(state === 'liked' ? { liked: '1' } : {}), pseudonym: who.name, roomSeed: `${chatGroupId}:${who.id}` },
+      params: { id: who.id, ...(eventId ? { eventId } : {}), pseudonym: who.name, roomSeed: `${chatGroupId}:${who.id}` },
     } as never)
   }
 
@@ -151,11 +157,12 @@ export function SenderCard({
               )
             : {}),
         }}
-        variant={card ? (card.insideNow === false ? 'was' : 'here') : 'thin'}
+        variant={!card ? 'thin' : waveStatus === 'mutual' ? 'matched' : card.insideNow === false ? 'was' : 'here'}
         state={state}
+        wave={waveStatus}
         refusal={refusal ? { text: refusal } : undefined}
-        onLike={() => void like()}
         onWave={() => void wave()}
+        onSayHi={() => openChat(mutualConversation)}
         onMessage={() => setConnectOpen(true)}
         onMore={() => {
           onClose()

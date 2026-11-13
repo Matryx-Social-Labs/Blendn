@@ -54,7 +54,7 @@ describe('the opener only greets an actual match', () => {
      * this one exists. A row that arrived because two people chose each other
      * should say so before it is opened.
      */
-    expect(matchRowPreview({ fromMatch: true })).toBe('You matched — start the conversation')
+    expect(matchRowPreview({ fromMatch: true })).toBe('You both waved — start the conversation')
   })
 })
 

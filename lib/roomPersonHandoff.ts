@@ -1,3 +1,4 @@
+import type { WaveStatus } from './waves'
 /**
  * The room's card for a person, handed to their full profile page (Flow 5 P-A, `pA-page`).
  *
@@ -10,7 +11,15 @@
 import type { LensPerson, RoomLens } from './roomLens'
 
 export interface RoomPersonCard {
-  person: LensPerson & { age?: number | null; tonightAnswer?: string | null; arrivedAt?: string | null }
+  person: LensPerson & {
+    age?: number | null
+    tonightAnswer?: string | null
+    arrivedAt?: string | null
+    /** SCRUM-1042: where the wave stands in the room, so the page's dock starts where the card was. */
+    wave?: WaveStatus
+    /** When they waved at you, if the room heard it live (ms). */
+    wavedAt?: number | null
+  }
   lens: RoomLens | null
   /** Where you both are, as the sheet's first line says it ("At Counter Kitchen"): the page's first pill (state 1 A, 2 B). */
   context?: string | null

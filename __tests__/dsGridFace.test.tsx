@@ -32,13 +32,14 @@ it('here now: the live dot at the rim, ringed in ink; read “here now”', asyn
   expect(screen.getByRole('button', { name: 'Cosmic Panda, Both into vinyl, here now' })).toBeTruthy()
 })
 
-it('liked: the heart mark, and the dot gives way; matched: the message mark wins', async () => {
-  await render(<GridFace {...PRIYA} liked testID="g" />)
-  expect(query('g-mark-disc')).toBeTruthy()
+it('waved at you: the rose hand mark, and the dot gives way; you both waved: the message mark wins (Wave B)', async () => {
+  await render(<GridFace {...PRIYA} reason="Waved at you" wavedAtYou testID="g" />)
+  expect(flat('g-mark-disc')).toMatchObject({ backgroundColor: COLOR.brandRose })
   expect(query('g-here')).toBeNull()
-  expect(screen.getByRole('button', { name: 'Cosmic Panda, Both into vinyl, here now, liked' })).toBeTruthy()
-  await render(<GridFace {...PRIYA} liked matched testID="g" />)
-  expect(screen.getByRole('button', { name: 'Cosmic Panda, Both into vinyl, here now, matched' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Cosmic Panda, Waved at you, here now' })).toBeTruthy()
+  await render(<GridFace {...PRIYA} reason="You both waved" wavedAtYou matched testID="g" />)
+  expect(flat('g-mark-disc')).toMatchObject({ backgroundColor: COLOR.textPrimary })
+  expect(screen.getByRole('button', { name: 'Cosmic Panda, You both waved, here now' })).toBeTruthy()
 })
 
 it('away: the face at 60% and “Was here” instead of the reason', async () => {
@@ -97,19 +98,19 @@ describe('Flow 4 Room: the double tap likes; arrivals and waves show on the face
     expect(onPress).toHaveBeenCalledTimes(1)
   })
 
-  it('with no like on offer (liked, matched, or the card would ask) a tap opens at once', async () => {
+  it('with no crew like on offer a tap opens at once', async () => {
     const onPress = jest.fn()
-    await render(<GridFace {...PRIYA} liked onPress={onPress} />)
+    await render(<GridFace {...PRIYA} onPress={onPress} />)
     await fireEvent.press(screen.getByRole('button'))
     expect(onPress).toHaveBeenCalledTimes(1)
   })
 
-  it('a screen reader likes from the actions menu, and activate opens at once', async () => {
+  it('a screen reader likes for your crew from the actions menu, and activate opens at once', async () => {
     const onPress = jest.fn()
     const onLike = jest.fn()
     await render(<GridFace {...PRIYA} onPress={onPress} onLike={onLike} />)
     const face = screen.getByRole('button')
-    expect(face.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'like', label: 'Like' }])
+    expect(face.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'like', label: 'Like for your crew' }])
     await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'like' } })
     expect(onLike).toHaveBeenCalledTimes(1)
     await fireEvent(face, 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })

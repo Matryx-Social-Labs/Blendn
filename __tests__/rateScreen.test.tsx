@@ -122,7 +122,7 @@ it('the night: one tap sends it, says "Sent. Only we see this." in place, and af
   expect(screen.getByLabelText('Step 2 of 3')).toBeTruthy()
 })
 
-it('a person: their face and name in a row, "You matched at this event", and "How was meeting them?"', async () => {
+it('a person: their face and name in a row, "You both waved at this event", and "How was meeting them?"', async () => {
   // At the default text size (jest's own default is 2×): the board's one line.
   const window = Dimensions.get('window')
   await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
@@ -131,7 +131,7 @@ it('a person: their face and name in a row, "You matched at this event", and "Ho
   await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
   const row = await screen.findByTestId('rate-person')
   expect(within(row).getByText('Night Cat')).toBeTruthy()
-  expect(within(row).getByText('You matched at this event')).toBeTruthy()
+  expect(within(row).getByText('You both waved at this event')).toBeTruthy()
   expect(within(row).getByText('Night Cat').props.numberOfLines).toBe(1)
   expect(screen.getByRole('header', { name: 'How was meeting them?' })).toBeTruthy()
   expect(screen.getByRole('header', { name: 'Did anything go wrong?' })).toBeTruthy()
@@ -171,7 +171,7 @@ it('at the larger text sizes the name and its line wrap to two rather than lose 
     await fireEvent.press(await screen.findByRole('button', { name: 'Skip to the people' }))
     const row = await screen.findByTestId('rate-person')
     expect(within(row).getByText('Night Cat').props.numberOfLines).toBe(2)
-    expect(within(row).getByText('You matched at this event').props.numberOfLines).toBe(2)
+    expect(within(row).getByText('You both waved at this event').props.numberOfLines).toBe(2)
   } finally {
     await act(async () => Dimensions.set({ window, screen: window }))
   }
@@ -188,7 +188,7 @@ it('focus moves to each new card’s header (M5): the night’s question, then t
   await screen.findByTestId('rate-person')
   await waitFor(() => expect(focus.mock.calls.length).toBeGreaterThan(first))
   const target = focus.mock.calls.at(-1)![0] as unknown as { props: { accessibilityLabel?: string } }
-  expect(target.props.accessibilityLabel).toBe('Night Cat. You matched at this event')
+  expect(target.props.accessibilityLabel).toBe('Night Cat. You both waved at this event')
 })
 
 it('one step only (no night to ask, one person): no pager, for "1 of 1" says nothing', async () => {

@@ -99,36 +99,30 @@ describe('the cost is stated before the effort', () => {
 describe('the card keeps the two actions apart', () => {
   it('takes both handlers, and they are not the same one', () => {
     const src = CARD()
-    expect(src).toContain('onLike?: () => void')
+    expect(src).toContain('onWave?: () => void')
     expect(src).toContain('onMessage?: () => void')
     const screen = stripComments(read('components/blendn/BlendnScreen.tsx'))
-    expect(screen).toContain('onLike={() => cardPerson && void like(cardPerson)}')
+    expect(screen).toContain('onWave={() => cardPerson && void wave(cardPerson)}')
     expect(screen).toMatch(/onMessage=\{\(\) => \{\s*if \(!card\) return\s*const to = card\s*closeCardThen\(\(\) => setConnectTo\(to\)\)/)
   })
 
-  it('makes the like the prominent button', () => {
+  it('makes Wave, the anonymous action, the prominent one, first (Wave dock A)', () => {
     /*
-     * The safe, symmetric, reversible action is the easy one. Making the button
-     * with a cost the more attractive one is how people reveal themselves by
-     * reflex. P-A (Flow 5 `personActions`): Wave · Message · Like level at 52, Like lit in the room's hue, Message quiet.
+     * The light, anonymous move is the easy one. Making the button with a cost the more attractive one is how people
+     * reveal themselves by reflex. Wave is lit (Wave back the filled one); Message is quiet.
      */
     const src = CARD()
     const actions = src.slice(src.indexOf("testID={id('actions')}"))
-    const like = actions.indexOf('label="Like"')
+    const wave = actions.indexOf("label={atYou ? 'Wave back' : 'Wave'}")
     const message = actions.indexOf('label="Message"')
-    expect(like).toBeGreaterThan(-1)
-    expect(message).toBeLessThan(like)
-    expect(actions.slice(like, actions.indexOf('/>', like))).toContain('kind="lit"')
+    expect(wave).toBeGreaterThan(-1)
+    expect(wave).toBeLessThan(message)
+    expect(actions.slice(wave, actions.indexOf('/>', wave))).toContain("kind={atYou ? 'primary' : 'lit'}")
     expect(actions.slice(message, actions.indexOf('/>', message))).toContain('kind="secondary"')
   })
 
-  it('tells a screen reader what each one costs', () => {
-    /*
-     * The difference between them is invisible otherwise: two buttons, both
-     * meaning "I want to talk", one of which publishes your identity.
-     */
-    const src = CARD()
-    expect(src).toContain('They’re only told if they like you back.')
-    expect(src).toContain('shows them your name and photo')
+  it('tells a screen reader what Message costs', () => {
+    // The difference is invisible otherwise: two buttons, one of which publishes your identity.
+    expect(CARD()).toContain('shows them your name and photo')
   })
 })

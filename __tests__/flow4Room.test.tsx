@@ -72,11 +72,11 @@ const person = (id: string, o: Partial<RoomPerson> = {}): RoomPerson =>
     badges: [],
     insideNow: true,
     arrivedAt: null,
-    liked: false,
+    wave: 'none',
+    wavedAt: null,
     matched: false,
     conversationId: null,
     requested: false,
-    pending: false,
     reason: '',
     raw: {} as never,
     ...o,
@@ -104,6 +104,8 @@ const roomElement = (props: Partial<RoomViewProps> = {}) => (
       waveKeys={{}}
       onOpen={jest.fn()}
       onLike={jest.fn()}
+      onWave={jest.fn()}
+      onSayHi={jest.fn()}
       enter={false}
       topInset={124}
       bottomInset={34}
@@ -203,15 +205,15 @@ describe('the you-card (R-A youCard merged with the old hero: you, your time in,
 })
 
 describe('the sections', () => {
-  it('Meet next: three cards, "New picks in 4:12", the card opens them and the heart likes them', async () => {
+  it('Meet next: three cards, "New picks in 4:12", the card opens them and the pill waves', async () => {
     const onOpen = jest.fn()
-    const onLike = jest.fn()
-    await room({ onOpen, onLike })
+    const onWave = jest.fn()
+    await room({ onOpen, onWave })
     expect(screen.getByText('New picks in 4:12')).toBeTruthy()
     await fireEvent.press(screen.getByTestId('meet-next-1'))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }))
-    await fireEvent.press(screen.getByTestId('meet-next-2-like', HIDDEN))
-    expect(onLike).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }))
+    await fireEvent.press(screen.getByTestId('meet-next-2-wave', HIDDEN))
+    expect(onWave).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }))
   })
 
   it('Flow 5 P-A: a pick says their answer to tonight’s question, quoted; without one, what the lens leads with', async () => {
@@ -230,27 +232,29 @@ describe('the sections', () => {
     expect(screen.getByTestId('meet-next-2').props.accessibilityLabel).not.toContain('·')
   })
 
-  it('a screen reader likes through the card’s Like action', async () => {
-    const onLike = jest.fn()
-    await room({ onLike })
-    await fireEvent(screen.getByTestId('meet-next-0'), 'accessibilityAction', { nativeEvent: { actionName: 'like' } })
-    expect(onLike).toHaveBeenCalledWith(expect.objectContaining({ id: 'p0' }))
+  it('a screen reader waves through the card’s Wave action', async () => {
+    const onWave = jest.fn()
+    await room({ onWave })
+    await fireEvent(screen.getByTestId('meet-next-0'), 'accessibilityAction', { nativeEvent: { actionName: 'wave' } })
+    expect(onWave).toHaveBeenCalledWith(expect.objectContaining({ id: 'p0' }))
   })
 
-  it('a like that must ask first: the heart opens their card instead', async () => {
-    const onOpen = jest.fn()
-    await room({ onOpen, onLike: null })
-    await fireEvent.press(screen.getByTestId('meet-next-0-like', HIDDEN))
-    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'p0' }))
-  })
-
-  it('liked already: the heart is lit and never likes again (a tap there is the card’s)', async () => {
-    const onLike = jest.fn()
-    await room({ onLike, picks: [person('p0'), person('p1', { liked: true }), person('p2')] })
-    expect(screen.getByTestId('meet-next-1-like', HIDDEN).props.accessibilityState?.disabled ?? true).toBe(true)
-    await fireEvent.press(screen.getByTestId('meet-next-1-like', HIDDEN))
-    expect(onLike).not.toHaveBeenCalled()
-    expect(screen.getByLabelText(/Person p1, .*liked/)).toBeTruthy()
+  it('Wave → Wave back → ✓ Waved → Say hi on the cards; ✓ Waved never waves again', async () => {
+    const onWave = jest.fn()
+    const onSayHi = jest.fn()
+    await room({
+      onWave,
+      onSayHi,
+      picks: [person('p0', { wave: 'wavedAtYou' }), person('p1', { wave: 'waved' }), person('p2', { wave: 'mutual', matched: true, conversationId: 'c2' })],
+    })
+    expect(screen.getByText('Wave back', HIDDEN)).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('meet-next-1-wave', HIDDEN))
+    expect(onWave).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/Person p1, .*waved$/)).toBeTruthy()
+    await fireEvent.press(screen.getByTestId('meet-next-2-wave', HIDDEN))
+    expect(onSayHi).toHaveBeenCalledWith(expect.objectContaining({ id: 'p2' }))
+    await fireEvent.press(screen.getByTestId('meet-next-0-wave', HIDDEN))
+    expect(onWave).toHaveBeenCalledWith(expect.objectContaining({ id: 'p0' }))
   })
 
   it('Everyone here says the exact count: 12,480, never 12k (the bar is where it is compact)', async () => {
