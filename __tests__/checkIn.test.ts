@@ -199,7 +199,7 @@ describe('the event screen hears check-in changes', () => {
   it('apiClient drops only the detail, not the attendee list', () => {
     const src = readFileSync(join(__dirname, '..', 'lib', 'apiClient.ts'), 'utf8')
     const body = src.slice(src.indexOf('forgetEvent(eventId: string): void {'), src.indexOf('private setCache<T>'))
-    expect(body).toContain('const detail = `:/api/mobile/events/${eventId}`')
+    expect(body).toContain('const detail = `:/api/mobile/events/${pathSegment(eventId)}`')
     expect(body).toContain('key.includes(`${detail}:`) || key.includes(`${detail}?`)')
   })
 })

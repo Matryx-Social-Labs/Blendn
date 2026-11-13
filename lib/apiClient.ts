@@ -55,6 +55,13 @@ const PARTICIPANTS_SWR_TTL = 30 * 1000
  * Room info listed only the organiser of a room of 426, on an app left running through the drive). Past this, a read
  * waits for the server.
  */
+/**
+ * An id as one API path segment: encoded, so an id that came from a link or a route param can never add a segment, a
+ * query or a fragment to an authenticated request (security review, Wave PR (b)). A real id (uuid, cuid, room handle)
+ * is unchanged.
+ */
+export const pathSegment = (id: string): string => encodeURIComponent(id)
+
 export const SWR_STALE_LIMIT_MS = 5 * 60 * 1000
 
 if (!API_BASE_URL) {
@@ -1666,7 +1673,7 @@ class ApiClientClass {
    * `/events/:id?include=…`, not `/events/:id/checkins`.
    */
   forgetEvent(eventId: string): void {
-    const detail = `:/api/mobile/events/${eventId}`
+    const detail = `:/api/mobile/events/${pathSegment(eventId)}`
     // forgetMatching also bumps the epoch and drops reads on the wire: a getEvent sent before this write (the page just
     // opened, "I'm going" tapped at once) must neither be joined by the next read nor refill the entry with the old status.
     this.forgetMatching((key) => key.includes(`${detail}:`) || key.includes(`${detail}?`))
@@ -1700,7 +1707,7 @@ class ApiClientClass {
    * 7 while the database said 4 (SCRUM-617).
    */
   forgetEventMatches(eventId: string): void {
-    const room = `:/api/mobile/events/${eventId}`
+    const room = `:/api/mobile/events/${pathSegment(eventId)}`
     // A read already on the wire was answered before the event: the next one
     // must not join it.
     this.forgetMatching((key) =>
@@ -2686,7 +2693,7 @@ class ApiClientClass {
     }
     const query = searchParams.toString()
     return this.cachedRequest<EventApiItem>(
-      `/api/mobile/events/${eventId}${query ? `?${query}` : ''}`,
+      `/api/mobile/events/${pathSegment(eventId)}${query ? `?${query}` : ''}`,
       30 * 1000
     )
   }
@@ -2696,7 +2703,7 @@ class ApiClientClass {
     data: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown> }
   ): Promise<ApiResponse<CheckInResult>> {
     return this.queuedRequest<CheckInResult>(
-      `/api/mobile/events/${eventId}/checkin`,
+      `/api/mobile/events/${pathSegment(eventId)}/checkin`,
       {
         method: 'POST',
         body: JSON.stringify(data),
@@ -2708,7 +2715,7 @@ class ApiClientClass {
 
   async checkOut(eventId: string): Promise<ApiResponse<Record<string, unknown>>> {
     return this.queuedRequest<Record<string, unknown>>(
-      `/api/mobile/events/${eventId}/checkout`,
+      `/api/mobile/events/${pathSegment(eventId)}/checkout`,
       {
         method: 'POST',
       },
@@ -2726,7 +2733,7 @@ class ApiClientClass {
    */
   async addFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
     const result = await this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
-      `/api/mobile/events/${eventId}/favorite`,
+      `/api/mobile/events/${pathSegment(eventId)}/favorite`,
       {
         method: 'POST',
       },
@@ -2740,7 +2747,7 @@ class ApiClientClass {
   /** Never refused — not on age, not on status (API: SCRUM-176). */
   async removeFavorite(eventId: string): Promise<ApiResponse<{ isFavorited: boolean; favoriteCount: number }>> {
     const result = await this.queuedRequest<{ isFavorited: boolean; favoriteCount: number }>(
-      `/api/mobile/events/${eventId}/favorite`,
+      `/api/mobile/events/${pathSegment(eventId)}/favorite`,
       {
         method: 'DELETE',
       },
@@ -2755,7 +2762,7 @@ class ApiClientClass {
     eventId: string
   ): Promise<ApiResponse<{ interested: boolean; interestCount: number }>> {
     const result = await this.queuedRequest<{ interested: boolean; interestCount: number }>(
-      `/api/mobile/events/${eventId}/interest`,
+      `/api/mobile/events/${pathSegment(eventId)}/interest`,
       {
         method: 'POST',
       },
@@ -2783,7 +2790,7 @@ class ApiClientClass {
     status: 'going' | 'maybe' | 'not_going'
   ): Promise<ApiResponse<{ rsvpStatus: RsvpStatus; rsvpCount: number }>> {
     const result = await this.queuedRequest<{ rsvpStatus: RsvpStatus; rsvpCount: number }>(
-      `/api/mobile/events/${eventId}/rsvp`,
+      `/api/mobile/events/${pathSegment(eventId)}/rsvp`,
       {
         method: 'POST',
         body: JSON.stringify({ status }),
@@ -2800,7 +2807,7 @@ class ApiClientClass {
     eventId: string
   ): Promise<ApiResponse<{ rsvpStatus: null; rsvpCount: number }>> {
     const result = await this.queuedRequest<{ rsvpStatus: null; rsvpCount: number }>(
-      `/api/mobile/events/${eventId}/rsvp`,
+      `/api/mobile/events/${pathSegment(eventId)}/rsvp`,
       {
         method: 'DELETE',
       },
@@ -2817,7 +2824,7 @@ class ApiClientClass {
     review?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
     return this.queuedRequest<Record<string, unknown>>(
-      `/api/mobile/events/${eventId}/rating`,
+      `/api/mobile/events/${pathSegment(eventId)}/rating`,
       {
         method: 'POST',
         body: JSON.stringify({ rating, review }),
@@ -2850,7 +2857,7 @@ class ApiClientClass {
       return { success: true, data: cached }
     }
 
-    const result = await this.queuedRequest<OwnProfileEnvelope>(`/api/mobile/profiles/${userId}`)
+    const result = await this.queuedRequest<OwnProfileEnvelope>(`/api/mobile/profiles/${pathSegment(userId)}`)
 
     // Cache successful responses
     if (useCache && result.success && result.data) {
@@ -2961,7 +2968,7 @@ class ApiClientClass {
     }
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const result = await this.queuedRequest<Record<string, unknown>>(
-      `/api/mobile/profiles/${userId}`,
+      `/api/mobile/profiles/${pathSegment(userId)}`,
       {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -3001,7 +3008,7 @@ class ApiClientClass {
     userId: string
   ): Promise<ApiResponse<{ interests: { id: string; name: string; slug: string }[] }>> {
     return this.queuedRequest<{ interests: { id: string; name: string; slug: string }[] }>(
-      `/api/mobile/profiles/${userId}/interests`
+      `/api/mobile/profiles/${pathSegment(userId)}/interests`
     )
   }
 
@@ -3024,7 +3031,7 @@ class ApiClientClass {
     categoryIds: string[]
   ): Promise<ApiResponse<Record<string, unknown>>> {
     return this.queuedRequest<Record<string, unknown>>(
-      `/api/mobile/profiles/${userId}/interests`,
+      `/api/mobile/profiles/${pathSegment(userId)}/interests`,
       {
         method: 'POST',
         body: JSON.stringify({ categoryIds }),
@@ -3036,7 +3043,7 @@ class ApiClientClass {
 
   async removeProfileInterests(userId: string, categoryIds: string[]): Promise<ApiResponse<void>> {
     return this.queuedRequest<void>(
-      `/api/mobile/profiles/${userId}/interests`,
+      `/api/mobile/profiles/${pathSegment(userId)}/interests`,
       {
         method: 'DELETE',
         body: JSON.stringify({ categoryIds }),
@@ -3049,7 +3056,7 @@ class ApiClientClass {
   // === USER ENDPOINTS ===
 
   async getPublicProfile(userId: string): Promise<ApiResponse<PublicProfile>> {
-    return this.queuedRequest<PublicProfile>(`/api/mobile/users/${userId}`)
+    return this.queuedRequest<PublicProfile>(`/api/mobile/users/${pathSegment(userId)}`)
   }
 
   /**
@@ -3067,7 +3074,7 @@ class ApiClientClass {
    * Going tab mapped over the envelope (SCRUM-175).
    */
   async getUserFavorites(userId: string, page = 1, limit = 20, cursor?: string | null): Promise<ApiResponse<SavedEventsPayload>> {
-    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${userId}/favorites?${pageQuery(page, cursor)}&limit=${limit}`)
+    return this.queuedRequest<SavedEventsPayload>(`/api/mobile/users/${pathSegment(userId)}/favorites?${pageQuery(page, cursor)}&limit=${limit}`)
   }
 
   /**
@@ -3113,7 +3120,7 @@ class ApiClientClass {
   /** `limit: 1` when only `write` / `status` is wanted (the composer's lock): the room's history is not. */
   async getEventChat(eventId: string, options?: { limit?: number }): Promise<ApiResponse<EventChatData>> {
     const query = options?.limit ? `?limit=${options.limit}` : ''
-    return this.queuedRequest<EventChatData>(`/api/mobile/events/${eventId}/chat${query}`)
+    return this.queuedRequest<EventChatData>(`/api/mobile/events/${pathSegment(eventId)}/chat${query}`)
   }
 
   async sendChatMessage(
@@ -3131,7 +3138,7 @@ class ApiClientClass {
     clientId?: string
   ): Promise<ApiResponse<ChatMessageData>> {
     return this.queuedRequest<ChatMessageData>(
-      `/api/mobile/chat/groups/${chatGroupId}/messages`,
+      `/api/mobile/chat/groups/${pathSegment(chatGroupId)}/messages`,
       {
         method: 'POST',
         body: JSON.stringify({ content, type, metadata, ...(parentId && { parentId }), ...(clientId && { clientId }) }),
@@ -3150,7 +3157,7 @@ class ApiClientClass {
     if (params?.before) searchParams.append('before', params.before)
     const query = searchParams.toString()
     return this.queuedRequest<ChatHistoryData>(
-      `/api/mobile/chat/groups/${chatGroupId}/messages${query ? `?${query}` : ''}`
+      `/api/mobile/chat/groups/${pathSegment(chatGroupId)}/messages${query ? `?${query}` : ''}`
     )
   }
 
@@ -3194,7 +3201,7 @@ class ApiClientClass {
     options?: { limit?: number; force?: boolean }
   ): Promise<ApiResponse<MatchDeck>> {
     const query = options?.limit ? `?limit=${options.limit}` : ''
-    const endpoint = `/api/mobile/events/${eventId}/matches${query}`
+    const endpoint = `/api/mobile/events/${pathSegment(eventId)}/matches${query}`
     // force bypasses the cache rather than being passed into it.
     if (options?.force) return this.queuedRequest<MatchDeck>(endpoint)
     return this.cachedRequest<MatchDeck>(endpoint, 30_000)
@@ -3231,7 +3238,7 @@ class ApiClientClass {
     eventId: string,
     options?: { force?: boolean }
   ): Promise<ApiResponse<RoomPreview>> {
-    const endpoint = `/api/mobile/events/${eventId}/room-preview`
+    const endpoint = `/api/mobile/events/${pathSegment(eventId)}/room-preview`
     if (options?.force) return this.queuedRequest<RoomPreview>(endpoint)
     return this.cachedRequest<RoomPreview>(endpoint, 15_000)
   }
@@ -3244,7 +3251,7 @@ class ApiClientClass {
   /** Waves to you in a room, paged 20, newest first (S-A strip, See all). Never cached: a wave back changes it. */
   async getReceivedWaves(eventId: string, cursor?: string | null): Promise<ApiResponse<ReceivedWavesPage>> {
     const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
-    return this.queuedRequest<ReceivedWavesPage>(`/api/mobile/events/${eventId}/waves${query}`)
+    return this.queuedRequest<ReceivedWavesPage>(`/api/mobile/events/${pathSegment(eventId)}/waves${query}`)
   }
 
   /** B-A: the open rooms with waves you have not answered, one entry per room. */
@@ -3254,7 +3261,7 @@ class ApiClientClass {
 
   async sendWave(eventId: string, toUserId: string): Promise<ApiResponse<WaveOutcome>> {
     return this.queuedRequest<WaveOutcome>(
-      `/api/mobile/events/${eventId}/waves`,
+      `/api/mobile/events/${pathSegment(eventId)}/waves`,
       { method: 'POST', body: JSON.stringify({ toUserId }) },
       true,
       3
@@ -3272,7 +3279,7 @@ class ApiClientClass {
     emoji: ChatReaction
   ): Promise<ApiResponse<{ messageId: string; added: boolean; reactions: ReactionTally[] }>> {
     return this.queuedRequest(
-      `/api/mobile/chat/groups/${chatGroupId}/messages/${messageId}/reactions`,
+      `/api/mobile/chat/groups/${pathSegment(chatGroupId)}/messages/${pathSegment(messageId)}/reactions`,
       { method: 'POST', body: JSON.stringify({ emoji }) },
       true,
       2
@@ -3398,7 +3405,7 @@ class ApiClientClass {
     }
   ): Promise<ApiResponse<MatchPreferences>> {
     return this.queuedRequest<MatchPreferences>(
-      `/api/mobile/events/${eventId}/matches/preferences`,
+      `/api/mobile/events/${pathSegment(eventId)}/matches/preferences`,
       { method: 'PUT', body: JSON.stringify(prefs) },
       true,
       3
@@ -3407,7 +3414,7 @@ class ApiClientClass {
 
   /** Yours for this room, and the room's lens (Flow 5 P-A). In-room only: the server answers 403 to anyone not checked in. */
   async getMatchPreferences(eventId: string): Promise<ApiResponse<MatchPreferences>> {
-    return this.queuedRequest<MatchPreferences>(`/api/mobile/events/${eventId}/matches/preferences`)
+    return this.queuedRequest<MatchPreferences>(`/api/mobile/events/${pathSegment(eventId)}/matches/preferences`)
   }
 
   // === PEER RATINGS ===
@@ -3424,7 +3431,7 @@ class ApiClientClass {
    */
   async getRatablePeers(eventId: string): Promise<ApiResponse<{ userIds: string[] }>> {
     return this.queuedRequest<{ userIds: string[] }>(
-      `/api/mobile/events/${eventId}/peer-ratings`
+      `/api/mobile/events/${pathSegment(eventId)}/peer-ratings`
     )
   }
 
@@ -3447,7 +3454,7 @@ class ApiClientClass {
     input: { userId: string; rating: number; issue?: PeerRatingIssue; note?: string }
   ): Promise<ApiResponse<{ recorded: boolean }>> {
     return this.queuedRequest<{ recorded: boolean }>(
-      `/api/mobile/events/${eventId}/peer-ratings`,
+      `/api/mobile/events/${pathSegment(eventId)}/peer-ratings`,
       { method: 'POST', body: JSON.stringify(input) },
       true,
       3
@@ -3478,7 +3485,7 @@ class ApiClientClass {
     coords: { latitude: number; longitude: number; accuracy?: number | null }
   ): Promise<ApiResponse<PresencePing>> {
     return this.request<PresencePing>(
-      `/api/mobile/events/${eventId}/presence`,
+      `/api/mobile/events/${pathSegment(eventId)}/presence`,
       { method: 'POST', body: JSON.stringify(coords) },
       true
     )
@@ -3673,7 +3680,7 @@ class ApiClientClass {
     createdAt: string
     lastMessageAt: string | null
   }>> {
-    return this.queuedRequest(`/api/mobile/conversations/${conversationId}`)
+    return this.queuedRequest(`/api/mobile/conversations/${pathSegment(conversationId)}`)
   }
 
   /**
@@ -3688,7 +3695,7 @@ class ApiClientClass {
     mutual: boolean
   }>> {
     return this.queuedRequest(
-      `/api/mobile/conversations/${conversationId}/reveal`,
+      `/api/mobile/conversations/${pathSegment(conversationId)}/reveal`,
       { method: 'POST', body: JSON.stringify({}) },
       true,
       3
@@ -3704,7 +3711,7 @@ class ApiClientClass {
    */
   async requestReveal(conversationId: string): Promise<ApiResponse<{ requested: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/conversations/${conversationId}/reveal`,
+      `/api/mobile/conversations/${pathSegment(conversationId)}/reveal`,
       { method: 'POST', body: JSON.stringify({ ask: true }) },
       true,
       3
@@ -3726,7 +3733,7 @@ class ApiClientClass {
     } = {}
   ): Promise<ApiResponse<{ closed: boolean; blocked: boolean; reported: boolean }>> {
     const result = await this.queuedRequest<{ closed: boolean; blocked: boolean; reported: boolean }>(
-      `/api/mobile/conversations/${conversationId}/leave`,
+      `/api/mobile/conversations/${pathSegment(conversationId)}/leave`,
       { method: 'POST', body: JSON.stringify({ action: options.action ?? 'unmatch', ...options }) },
       true,
       3
@@ -3765,7 +3772,7 @@ class ApiClientClass {
     if (options?.limit) params.set('limit', String(options.limit))
     if (options?.before) params.set('before', options.before)
     const query = params.toString() ? `?${params.toString()}` : ''
-    return this.queuedRequest(`/api/mobile/conversations/${conversationId}/messages${query}`)
+    return this.queuedRequest(`/api/mobile/conversations/${pathSegment(conversationId)}/messages${query}`)
   }
 
   async sendPrivateMessage(
@@ -3793,7 +3800,7 @@ class ApiClientClass {
     createdAt: string
   }>> {
     return this.queuedRequest(
-      `/api/mobile/conversations/${conversationId}/messages`,
+      `/api/mobile/conversations/${pathSegment(conversationId)}/messages`,
       {
         method: 'POST',
         body: JSON.stringify(data),
@@ -3877,7 +3884,7 @@ class ApiClientClass {
     if (params?.offset) searchParams.append('offset', String(params.offset))
     const query = searchParams.toString()
     return this.cachedRequest(
-      `/api/mobile/chat/groups/${chatGroupId}/participants${query ? `?${query}` : ''}`,
+      `/api/mobile/chat/groups/${pathSegment(chatGroupId)}/participants${query ? `?${query}` : ''}`,
       PARTICIPANTS_SWR_TTL
     )
   }
@@ -3958,7 +3965,7 @@ class ApiClientClass {
       conversationId: string | null
       sender: { id: string; name: string | null; avatar: string | null }
     }>(
-      `/api/mobile/message-requests/${requestId}/respond`,
+      `/api/mobile/message-requests/${pathSegment(requestId)}/respond`,
       {
         method: 'POST',
         body: JSON.stringify({ action }),
@@ -4214,7 +4221,7 @@ class ApiClientClass {
   async blockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
     const result = noteBlockedOn(
       await this.queuedRequest<{ blocked: boolean }>(
-        `/api/mobile/users/${userId}/block`,
+        `/api/mobile/users/${pathSegment(userId)}/block`,
         { method: 'POST' },
         true,
         2
@@ -4227,7 +4234,7 @@ class ApiClientClass {
 
   async unblockUser(userId: string): Promise<ApiResponse<{ blocked: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/users/${userId}/block`,
+      `/api/mobile/users/${pathSegment(userId)}/block`,
       { method: 'DELETE' },
       true,
       2
@@ -4252,7 +4259,7 @@ class ApiClientClass {
     description?: string
   ): Promise<ApiResponse<{ reported: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/users/${userId}/report`,
+      `/api/mobile/users/${pathSegment(userId)}/report`,
       {
         method: 'POST',
         body: JSON.stringify({ reason, description }),
@@ -4279,7 +4286,7 @@ class ApiClientClass {
     description?: string
   ): Promise<ApiResponse<{ reported: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/events/${eventId}/report`,
+      `/api/mobile/events/${pathSegment(eventId)}/report`,
       {
         method: 'POST',
         body: JSON.stringify({ reason, description }),
@@ -4296,7 +4303,7 @@ class ApiClientClass {
     description?: string
   ): Promise<ApiResponse<{ reported: boolean }>> {
     return this.queuedRequest(
-      `/api/mobile/messages/${messageId}/report`,
+      `/api/mobile/messages/${pathSegment(messageId)}/report`,
       {
         method: 'POST',
         body: JSON.stringify({ messageType, reason, description }),

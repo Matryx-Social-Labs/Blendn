@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 
 import { WavedAtYouList } from '../../components/blendn/WavedAtYouList'
+import { StateScreen } from '../../components/ds/StateScreen'
 import { MomentMatch } from '../../components/ds/MomentMatch'
 import { Sheet } from '../../components/ds/Sheet'
 import { HueProvider } from '../../components/ds/shared'
@@ -13,6 +14,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { useNow } from '../../lib/useNow'
 import { ignoreWavesFrom, wavesChanged, wavesListOpened } from '../../lib/roomWaves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
+import { isLinkId } from '../../lib/shareLinks'
 import { WAVE_SETTLE_MS, WAVE_SETTLE_REDUCED_MS, waveRefusal } from '../../lib/waves'
 
 type Moment = { conversationId: string; you: string | null; them: string; themId: string }
@@ -24,7 +26,9 @@ type Moment = { conversationId: string; you: string | null; them: string; themId
  * (`wavesListOpened`).
  */
 export default function WavedAtYouScreen() {
-  const { eventId } = useLocalSearchParams<{ eventId: string; title?: string }>()
+  const params = useLocalSearchParams<{ eventId: string; title?: string }>()
+  // From a link or a param: checked before it builds an API path (security review). Not an id, the gone state.
+  const eventId = isLinkId(params.eventId) ? params.eventId : null
   const { showToast } = useToast()
   const reduceMotion = useReducedMotion()
   const now = useNow(15_000)
@@ -35,6 +39,7 @@ export default function WavedAtYouScreen() {
   const waveBack = useCallback(
     async (w: ReceivedWave): Promise<boolean> => {
       try {
+        if (!eventId) return false
         const [result] = await Promise.all([apiClient.sendWave(eventId, w.userId), new Promise((r) => setTimeout(r, reduceMotion ? WAVE_SETTLE_REDUCED_MS : WAVE_SETTLE_MS))])
         wavesChanged()
         if (!result.success) {
@@ -67,7 +72,11 @@ export default function WavedAtYouScreen() {
     <HueProvider value="rose">
       <RouteModal>
         <Sheet visible={open} onClose={() => setOpen(false)} onDismissed={() => (moment ? undefined : router.back())} detents={['tall']} testID="waved-sheet">
-          {eventId ? <WavedAtYouList eventId={eventId} now={now} onWaveBack={waveBack} onSafety={safety} /> : null}
+          {eventId ? (
+            <WavedAtYouList eventId={eventId} now={now} onWaveBack={waveBack} onSafety={safety} />
+          ) : (
+            <StateScreen icon="hand" title="This room isn’t available." body="It may have closed, or the link is wrong." testID="waved-gone" />
+          )}
         </Sheet>
         {moment ? (
           <MomentMatch
