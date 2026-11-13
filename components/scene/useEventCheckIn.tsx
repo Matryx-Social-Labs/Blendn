@@ -14,6 +14,8 @@ import { CHECKOUT_FAILED } from '../../lib/useRoomControls'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { CheckInTray, useCheckInTray } from '../blendn/CheckInTray'
 import { MomentPour } from '../ds/MomentPour'
+import { useWithCrew, WithCrewChip } from '../crews/WithCrewChip'
+import type { CrewPlan } from '../../lib/crews'
 import type { EventCheckOutSheetProps, EventHoldProps } from './EventHold'
 
 /** How long the pour waits for the Room behind it before giving up on it (the Blend'n overlay's own ceiling). */
@@ -33,7 +35,7 @@ export function useEventCheckIn({
   onCheckedOut,
 }: {
   id: string
-  event: (Parameters<typeof doorOf>[0] & { title?: string | null }) | null
+  event: (Parameters<typeof doorOf>[0] & { title?: string | null; crew_plans?: CrewPlan[] }) | null
   openMaps: () => void
   /** The page's toast: a check-out that lands says so there (audit B-2). */
   showToast: (message: string, variant: 'success', options: { haptic: ToastHaptic }) => void
@@ -67,13 +69,18 @@ export function useEventCheckIn({
   }, [hintKnown])
   const door = useMemo(() => (event ? doorOf({ ...event, id }, { going: false }) : null), [event, id])
   const reach = usePassReach(door, null, 'on')
+  // "With {crew}" at the hold (crews 4-A2): the crew the hold tells, and whether it was told (`crewTold`).
+  const withCrew = useWithCrew(id, event?.crew_plans)
+  const [crewTold, setCrewTold] = useState(false)
   const flow = useCheckInFlow({
     eventId: id,
     showTray,
     closeTray,
     onOpenMaps: openMaps,
+    withCrewId: withCrew.withCrewId,
     // Under the page, before the pour: the overlay draws the Room's skeleton, never Tonight, and loads this room.
     onCheckedIn: (outcome) => {
+      setCrewTold(outcome.kind === 'checkedIn' && outcome.crewTold === true)
       // The server names the room it took you out of (`left`); the poll's title is the fallback for an older one.
       const title = (outcome.kind === 'checkedIn' ? outcome.left[0] : undefined) ?? (liveId && liveId !== id ? liveTitle : null)
       setLeftNotice(title ? { title, toId: id } : null)
@@ -129,7 +136,17 @@ export function useEventCheckIn({
       error: checkOutError,
     },
     openCheckOut,
-    hold: { reach, onConfirm: () => void flow.start(), busy: flow.checkingIn && !flow.youreIn, confirmed: flow.youreIn, switching: liveId !== null && liveId !== id, leaving: liveTitle },
+    hold: {
+      reach,
+      onConfirm: () => void flow.start(),
+      busy: flow.checkingIn && !flow.youreIn,
+      confirmed: flow.youreIn,
+      switching: liveId !== null && liveId !== id,
+      leaving: liveTitle,
+      chip: withCrew.crew ? (
+        <WithCrewChip crew={withCrew.crew} on={flow.youreIn ? crewTold : withCrew.on} landed={flow.youreIn} onToggle={withCrew.toggle} />
+      ) : null,
+    },
     overlays: (
       <>
         {flow.pours > 0 ? (

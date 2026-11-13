@@ -17,11 +17,16 @@ import {
 import { crewsApi } from '../../lib/crewsApi'
 import { isOrganiserSuspended } from '../../lib/noLongerAvailable'
 import { showSheet } from '../../lib/sheet'
-import type { TellState } from '../ds/CrewStrip'
 import { useToast } from '../Toast'
 
 /** A page of cards: the server's default, well under its 50. */
 const PAGE = 30
+/**
+ * A crewmate who holds after you is named on your strip without leaving the room (4-A3): a rise in the room's count re-reads,
+ * once a window and trailing, so the last of a burst is read too. Only for someone with a crew -- a room of thousands
+ * filling up costs everyone else nothing.
+ */
+export const CREW_ARRIVALS_RELOAD_MS = 20_000
 
 export type CrewsHere =
   | { status: 'loading' }
@@ -47,7 +52,7 @@ const openToCrewsByCheckIn = new Map<string, boolean>()
  * starts a new generation, so a page from an older one never lands on top of
  * it; a new event starts over.
  */
-export function useCrewsHere(eventId: string | null) {
+export function useCrewsHere(eventId: string | null, hereCount?: number) {
   const [state, setState] = useState<CrewsHere>({ status: 'loading' })
   const [mine, setMine] = useState<Crew[] | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -86,6 +91,27 @@ export function useCrewsHere(eventId: string | null) {
     }, [reload])
   )
   useEffect(() => subscribeCheckInChanged(() => void reload()), [reload])
+
+  const hasCrew = !!mine?.length
+  const lastCount = useRef(hereCount)
+  const arrivalTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const rose = hereCount !== undefined && lastCount.current !== undefined && hereCount > lastCount.current
+    lastCount.current = hereCount
+    if (!rose || !hasCrew || arrivalTimer.current) return
+    arrivalTimer.current = setTimeout(() => {
+      arrivalTimer.current = null
+      void reload()
+    }, CREW_ARRIVALS_RELOAD_MS)
+  }, [hereCount, hasCrew, reload])
+  // A different room (or leaving) drops a read still waiting for the last one.
+  useEffect(
+    () => () => {
+      if (arrivalTimer.current) clearTimeout(arrivalTimer.current)
+      arrivalTimer.current = null
+    },
+    [reload]
+  )
 
   const loadMore = useCallback(async () => {
     if (!eventId || state.status !== 'ready' || !state.data.hasMore || loadingMore) return
@@ -153,7 +179,7 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
 }
 
 /**
- * Liking and reporting a card, and "We're here" — the Crews view's writes.
+ * Liking and reporting a card — the Crews view's writes.
  * Each guarded by a ref, so a fast second tap sends nothing. `onBlend` plays
  * the Blend moment when a like makes one (Flow 10 · 10.8); without it the
  * Blend opens directly.
@@ -165,27 +191,10 @@ export function useCrewActions(
 ) {
   const { showToast } = useToast()
   const [liking, setLiking] = useState<string | null>(null)
-  /** "We're here" per crew (Flow 10 · 10.6, CrewStrip): on its way, told, or already told tonight. */
-  const [told, setTold] = useState<Record<string, TellState>>({})
-  // One per action: a like waiting on its choose-a-crew sheet never blocks "We're here" (M33).
+  // A like waiting on its choose-a-crew sheet sends nothing more on a fast second tap.
   const likeInFlight = useRef(false)
-  const telling = useRef(false)
   const { markLiked, reload } = crews
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
-
-  const here = async (crew: Pick<Crew, 'crewId'>) => {
-    if (!eventId || telling.current) return
-    telling.current = true
-    setTold((t) => ({ ...t, [crew.crewId]: 'sending' }))
-    const result = await crewsApi.here(crew.crewId, eventId)
-    telling.current = false
-    if (result.success && result.data) {
-      setTold((t) => ({ ...t, [crew.crewId]: result.data!.repeated ? 'already' : 'yes' }))
-      return
-    }
-    setTold((t) => ({ ...t, [crew.crewId]: 'no' }))
-    showToast(crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'), 'error', { haptic: 'error' })
-  }
 
   const like = async (card: CrewCard) => {
     if (!eventId || likeInFlight.current) return
@@ -241,7 +250,7 @@ export function useCrewActions(
       },
     })
 
-  return { liking, like, report, here, told }
+  return { liking, like, report }
 }
 
 export type CrewActions = ReturnType<typeof useCrewActions>

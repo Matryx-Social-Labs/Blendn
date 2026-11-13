@@ -10,6 +10,7 @@ import { H } from './haptics'
 import { getCurrentLocation as getLocationFix, warmLocationFix, type CheckInLocation, type ShowTray, type TrayButton } from './locationFix'
 import { Logger } from './logger'
 import { useAuth } from './useAuth'
+import { useLatest } from './useLatest'
 
 /**
  * The check-in, as a hook, so every door runs it unchanged: the event
@@ -54,6 +55,8 @@ export type UseCheckInFlowOptions = {
   onEnterRoom?: () => void | Promise<void>
   /** The fix the check-in was sent from, before it is sent. */
   onLocated?: (location: CheckInLocation) => void
+  /** "With {crew}" on at the hold (crews 4-A2): the crew the server tells you're in. Read as the hold lands, not as it starts. */
+  withCrewId?: string | null
 }
 
 export function useCheckInFlow({
@@ -64,8 +67,10 @@ export function useCheckInFlow({
   onOpenMaps,
   onEnterRoom,
   onLocated,
+  withCrewId,
 }: UseCheckInFlowOptions) {
   const { user } = useAuth()
+  const withCrew = useLatest(withCrewId)
   // The pass is up for this door: start the fix now, so the hold finds one waiting.
   useEffect(() => {
     if (eventId) void warmLocationFix()
@@ -206,7 +211,7 @@ export function useCheckInFlow({
       onLocated?.(location)
 
       markCheckIn('request')
-      const outcome = await submitCheckIn(eventId, location)
+      const outcome = await submitCheckIn(eventId, location, withCrew.current ?? undefined)
       markCheckIn('response', { ok: outcome.kind === 'checkedIn' ? 1 : 0 })
 
       if (outcome.kind === 'timeout') {

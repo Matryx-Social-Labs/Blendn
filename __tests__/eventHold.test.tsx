@@ -293,7 +293,7 @@ describe('the server says yes', () => {
     submit.mockResolvedValue(fresh)
     await render(<Page />)
     await activate()
-    expect(submit).toHaveBeenCalledWith('e1', expect.objectContaining({ latitude: 12.97 }))
+    expect(submit).toHaveBeenCalledWith('e1', expect.objectContaining({ latitude: 12.97 }), undefined)
     expect(openRoomOf).toHaveBeenCalledWith('e1')
     expect(screen.getByTestId('scene-pour', HIDDEN)).toBeTruthy()
     expect(screen.getByText('You’re in.', HIDDEN)).toBeTruthy()

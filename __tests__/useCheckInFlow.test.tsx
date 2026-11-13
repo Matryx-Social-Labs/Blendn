@@ -93,7 +93,8 @@ async function checkIn(outcome: CheckInOutcome) {
 describe('a check-in', () => {
   it('goes straight to the request: no rules tray, nothing to agree to', async () => {
     await checkIn(fresh())
-    expect(submit).toHaveBeenCalledWith('e1', { latitude: 12.97, longitude: 77.59, accuracy: 8 })
+    // No crew chip on: no `withCrewId` (crews 4-A2).
+    expect(submit).toHaveBeenCalledWith('e1', { latitude: 12.97, longitude: 77.59, accuracy: 8 }, undefined)
     // Nothing asked before the request, and nothing after it but the pour.
     expect(props.showTray).not.toHaveBeenCalled()
   })

@@ -29,6 +29,10 @@ const BANNED: readonly { name: string; pattern: RegExp; allowIn?: readonly strin
   // Wave replaced Like for people (owner ruling 2026-11-12, SCRUM-1042). A crew's "Like for {crew}" stays until crew waves.
   { name: 'It’s mutual (now You both waved)', pattern: /\bit[’']s mutual\b/i },
   { name: 'matched, between people (now You both waved)', pattern: /\bmatched\b/i },
+  // Crews names 7 (owner 2026-11-12, SCRUM-1052): the hold's "With {crew}" is how you tell your crew, so the button is gone;
+  // its words stay only as the crew-chat line, which the server writes. The list footer's promise had no surface behind it.
+  { name: 'Tell your crew — We’re here, the button (now With {crew} at the hold)', pattern: /\btell your crew\b/i },
+  { name: 'see where your crew is (no such surface)', pattern: /\bwhere your crew is\b/i },
   {
     name: 'Like, a person gesture (now Wave)',
     pattern: /^Liked?$|\bLiked?\s+(?!for\b)[A-Z]|\b[Yy]ou liked\b|\blikes? (you|them) back\b/,

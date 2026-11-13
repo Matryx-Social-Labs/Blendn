@@ -40,9 +40,9 @@ const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 
 import { router } from 'expo-router'
-import CrewsScreen, { FOOTNOTE } from '../app/crews/index'
+import CrewsScreen from '../app/crews/index'
 import { StyleSheet } from 'react-native'
-import { MAX_FONT_SCALE, SPACE } from '../lib/design/tokens'
+import { SPACE } from '../lib/design/tokens'
 import InviteScreen from '../app/crews/invite/[crewId]'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, type Crew, type CrewInvite } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
@@ -111,20 +111,18 @@ describe('Crews', () => {
     await waitFor(() => screen.getByLabelText('Nebula, Crew of 4'))
     expect(screen.getByLabelText('Orbit, Crew of 6')).toBeTruthy()
     expect(screen.getByLabelText('Your crews, 2')).toBeTruthy()
-    expect(screen.getByText(FOOTNOTE)).toBeTruthy()
-    // rc7 first pass: it read "Where your crew is shows once you’ve checked in somewhere."
-    expect(FOOTNOTE).toBe('Once you’ve checked in somewhere, you’ll see where your crew is.')
+    // Retired (crews names 7): it promised a "where your crew is" surface that never existed.
+    expect(screen.queryByTestId('crews-footnote')).toBeNull()
     expect(screen.getByTestId('crews-make')).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Nebula, Crew of 4'))
     expect(router.push).toHaveBeenCalledWith({ pathname: '/crews/[crewId]', params: { crewId: 'c-nebula' } })
   })
 
-  // D-M11: the footnote is capped, and the list clears the dock it measured. Negative control: the fixed `SIZE.primary` padding fails it.
-  it('the footnote is capped and never runs under the docked button, however tall it draws', async () => {
+  // D-M11: the list clears the dock it measured. Negative control: the fixed `SIZE.primary` padding fails it.
+  it('the list never runs under the docked button, however tall it draws', async () => {
     api.myCrews.mockResolvedValue(list([crew()], []))
     await render(<CrewsScreen />)
-    await waitFor(() => screen.getByTestId('crews-footnote'))
-    expect(screen.getByTestId('crews-footnote').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
+    await waitFor(() => screen.getByLabelText('Nebula, Crew of 4'))
     await act(async () => {
       fireEvent(screen.getByTestId('crews-dock'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 342, height: 120 } } })
     })

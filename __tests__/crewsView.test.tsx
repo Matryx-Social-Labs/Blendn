@@ -16,7 +16,7 @@ jest.mock('expo-router', () => ({
   },
 }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), here: jest.fn(), likeCrew: jest.fn(), report: jest.fn() },
+  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), likeCrew: jest.fn(), report: jest.fn() },
 }))
 const mockCheckInListeners = new Set<() => void>()
 jest.mock('../lib/checkIn', () => ({
@@ -31,7 +31,7 @@ jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(),
 
 import { router } from 'expo-router'
 import { CrewsFoot, CrewsHead, RoomCrewCard } from '../components/blendn/RoomCrews'
-import { useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
+import { CREW_ARRIVALS_RELOAD_MS, useCrewActions, useCrewsHere } from '../components/crews/CrewsView'
 import { OPEN_TO_CREWS_LABEL, type CrewCard, type CrewsAtEvent } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
 import { minTarget } from '../components/ds/shared'
@@ -204,6 +204,56 @@ describe('the crews here, a page at a time (M9)', () => {
     await waitFor(() => expect(api.crewsAt).toHaveBeenCalledTimes(2))
   })
 
+  describe('a crewmate who comes in after you (4-A3: the strip names them without leaving the room)', () => {
+    const crew = { crewId: 'c1', name: 'Nebula' } as never
+    const arrivals = async (mine: unknown[]) => {
+      jest.useFakeTimers()
+      api.myCrews.mockResolvedValue({ success: true, data: { crews: mine as never, invites: [] } })
+      api.crewsAt.mockResolvedValue(page([], false))
+      const hook = await renderHook(({ n }: { n: number }) => useCrewsHere('e1', n), { initialProps: { n: 2 } })
+      await waitFor(() => expect(api.crewsAt).toHaveBeenCalledTimes(1))
+      return hook
+    }
+    afterEach(() => jest.useRealTimers())
+
+    it('re-reads when the room count rises, at most once a window, and the last arrival in a burst is still read', async () => {
+      const { rerender } = await arrivals([crew])
+      await rerender({ n: 3 })
+      await rerender({ n: 4 })
+      await rerender({ n: 5 })
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS))
+      expect(api.crewsAt).toHaveBeenCalledTimes(2)
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS * 3))
+      expect(api.crewsAt).toHaveBeenCalledTimes(2)
+    })
+
+    it('a read still waiting when the room changes is dropped, never read for the last room', async () => {
+      api.myCrews.mockResolvedValue({ success: true, data: { crews: [crew], invites: [] } })
+      api.crewsAt.mockResolvedValue(page([], false))
+      const { rerender } = await renderHook(({ id, n }: { id: string; n: number }) => useCrewsHere(id, n), { initialProps: { id: 'e1', n: 2 } })
+      await waitFor(() => expect(api.crewsAt).toHaveBeenCalledTimes(1))
+      jest.useFakeTimers()
+      await rerender({ id: 'e1', n: 3 })
+      await rerender({ id: 'e2', n: 3 })
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS * 2))
+      expect(api.crewsAt.mock.calls.map((c) => c[0])).toEqual(['e1', 'e2'])
+    })
+
+    it('control: someone leaving reads nothing', async () => {
+      const { rerender } = await arrivals([crew])
+      await rerender({ n: 1 })
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS * 2))
+      expect(api.crewsAt).toHaveBeenCalledTimes(1)
+    })
+
+    it('control: with no crew, a room of thousands filling up reads nothing', async () => {
+      const { rerender } = await arrivals([])
+      for (let n = 3; n < 40; n++) await rerender({ n })
+      await act(async () => jest.advanceTimersByTime(CREW_ARRIVALS_RELOAD_MS * 2))
+      expect(api.crewsAt).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('a new event starts over: nothing of the last one shows', async () => {
     let second: (v: unknown) => void = () => {}
     api.crewsAt.mockResolvedValueOnce(page([card('old-event')], false)).mockReturnValueOnce(new Promise((r) => (second = r)) as never)
@@ -227,24 +277,6 @@ describe('the crews here, a page at a time (M9)', () => {
       void result.current.like(card('a'))
     })
     expect(api.likeCrew).toHaveBeenCalledTimes(1)
-    await act(async () => finish({ success: true, data: { liked: true, blend: null } }))
-  })
-
-  it('a like in flight never holds "We’re here" back: one guard per action (motion audit M33)', async () => {
-    api.crewsAt.mockResolvedValue(page([card('a')], false))
-    let finish: (v: unknown) => void = () => {}
-    api.likeCrew.mockReturnValue(new Promise((r) => (finish = r)) as never)
-    api.here.mockResolvedValue({ success: true, data: { repeated: false } } as never)
-    const { result } = await renderHook(() => {
-      const crews = useCrewsHere('e1')
-      return useCrewActions('e1', crews)
-    })
-    await act(async () => {
-      void result.current.like(card('a'))
-      await result.current.here({ crewId: 'mine' })
-    })
-    expect(api.here).toHaveBeenCalledTimes(1)
-    expect(result.current.told.mine).toBe('yes')
     await act(async () => finish({ success: true, data: { liked: true, blend: null } }))
   })
 

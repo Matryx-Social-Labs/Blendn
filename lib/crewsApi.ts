@@ -83,9 +83,18 @@ export const crewsApi = {
     return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/members/${enc(myId)}`, { method: 'DELETE' }, true, 2)
   },
 
-  /** "We're here": checks nobody in. `repeated: true` after the first tap of the night. */
-  here(crewId: string, eventId: string): Promise<ApiResponse<{ notified: number; repeated: boolean }>> {
-    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/here`, post({ eventId }), true, 2)
+  /**
+   * "Going together" (crews 4-A1): marks the event's next night for the crew — a line in the crew chat and one push per crew
+   * per night, by the server. 404 not a member / an event you can't take part in, 403 crews off, 400 no night left, 429 three
+   * nights told today. `repeated`: it was already planned (no second line or push).
+   */
+  plan(crewId: string, eventId: string): Promise<ApiResponse<{ planned: boolean; repeated: boolean; occurrenceId: string }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/plans`, post({ eventId }), true, 2)
+  },
+
+  /** Takes the plan back (its planner or the owner). Refunds nothing against the day's three. */
+  unplan(crewId: string, eventId: string): Promise<ApiResponse<{ planned: false }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/plans`, { method: 'DELETE', body: JSON.stringify({ eventId }) }, true, 2)
   },
 
   report(crewId: string, report: { reason: CrewReportReason; description?: string }): Promise<ApiResponse<{ reported: true }>> {

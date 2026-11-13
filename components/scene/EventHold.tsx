@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { passReachLine, type PassReach } from '../../lib/attendanceState'
@@ -17,13 +18,15 @@ export type EventHoldProps = {
   /** Another room is the one you are in: checking in here takes you out of it (ROUND4 8.3 #06); `leaving` is its title when the poll has it. */
   switching?: boolean
   leaving?: string | null
+  /** "With {crew}" under the hold (crews 4-A2), drawn by the caller. */
+  chip?: ReactNode
 }
 
 /**
  * The event page's "Blend in" (SCRUM-966): the hold itself, the VenuePass's own, in the dock. Dimmed with one short line when the
  * phone is plainly not at the door (`passReach`, the same rule as the docked pass); the server is the judge otherwise.
  */
-export function EventHold({ reach, onConfirm, busy, confirmed, switching = false, leaving = null }: EventHoldProps) {
+export function EventHold({ reach, onConfirm, busy, confirmed, switching = false, leaving = null, chip = null }: EventHoldProps) {
   const bold = useBoldText()
   const line = passReachLine(reach) ?? (switching ? switchCaption(leaving) : null)
   return (
@@ -38,6 +41,7 @@ export function EventHold({ reach, onConfirm, busy, confirmed, switching = false
         confirmedLabel={confirmed ? 'You’re in' : undefined}
         testID="scene-hold-pill"
       />
+      {reach === 'open' || confirmed ? chip : null}
       {line ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} accessibilityElementsHidden importantForAccessibility="no" style={[font('caption', bold), styles.line]}>
           {line}

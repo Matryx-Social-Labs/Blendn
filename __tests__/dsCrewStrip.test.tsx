@@ -1,12 +1,12 @@
 /*
- * <CrewStrip> (guidelines/components/CrewStrip.html, Flow 10 · 10.6): after
- * your own check-in, your crew as a count, and "Tell your crew — We're here"
- * that settles to "Your crew knows". H.primary on press-in, H.success on the
- * server's OK; a count rising plays nothing. Off is one quiet line.
+ * <CrewStrip> (crews 4-A3, owner-approved 2026-11-12, board 04-checkin A3): after your own check-in, each of your crews
+ * here as "Nebula · 3 of 5 in", its ticks, and who is in by first name ("Priya, Arjun, You"). Only who is in is named;
+ * nobody is listed as not here yet. There is no action: "Tell your crew — We're here" is retired (the hold's
+ * "With {crew}" is the act). A count rising plays nothing. Off is one quiet line.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import { StyleSheet } from 'react-native'
 
 import { CrewStrip, type StripCrew } from '../components/ds/CrewStrip'
 import { FONT_FAMILY } from '../lib/design/tokens'
@@ -17,105 +17,82 @@ jest.mock('expo-linear-gradient', () => {
   return { LinearGradient: (props: object) => <View {...props} /> }
 })
 
+const person = (name: string, you = false, photo: string | null = null) => ({ userId: `h-${name}`, name, photo, you })
+
 const nebula = (o: Partial<StripCrew> = {}): StripCrew => ({
   id: 'n',
   name: 'Nebula',
   emblemSeed: 'nebula',
-  size: 4,
-  here: 2,
+  size: 5,
+  in: 3,
+  people: [person('Priya'), person('Arjun'), person('Sagar', true)],
   context: 'Vinyl Night · Toit',
-  told: 'no',
   ...o,
 })
 
-let primary: jest.SpyInstance
-let success: jest.SpyInstance
-beforeEach(() => {
-  primary = jest.spyOn(H, 'primary').mockImplementation(() => {})
-  success = jest.spyOn(H, 'success').mockImplementation(() => {})
-})
-
 describe('<CrewStrip>', () => {
-  it('names the crew and its count, then the action', async () => {
-    const onTell = jest.fn()
-    await render(<CrewStrip crews={[nebula()]} onTell={onTell} />)
-    expect(screen.getByLabelText('Crew Nebula, 2 of 4 here, Vinyl Night · Toit')).toBeTruthy()
-    const tell = screen.getByRole('button', { name: 'Tell your crew — We’re here' })
-    await fireEvent(tell, 'pressIn')
-    expect(primary).toHaveBeenCalledTimes(1)
-    await fireEvent.press(tell)
-    expect(onTell).toHaveBeenCalledWith('n')
+  it('names the crew, "3 of 5 in" and who is in, you last as "You"', async () => {
+    await render(<CrewStrip crews={[nebula({ people: [person('Sagar', true), person('Priya'), person('Arjun')] })]} />)
+    expect(screen.getByText('Priya, Arjun, You')).toBeTruthy()
+    expect(screen.getByLabelText('Nebula, 3 of 5 in, Vinyl Night · Toit. In: Priya, Arjun, You')).toBeTruthy()
   })
 
-  it('alone: you are the first, and it says when the crew shows', async () => {
-    await render(<CrewStrip crews={[nebula({ here: 1 })]} onTell={jest.fn()} />)
-    expect(screen.getByText('You’re the first from Nebula. Your crew shows up here once two of you are in.')).toBeTruthy()
+  it('never names the crew with a "Crew" prefix glued on, and the figures are mono (rc7 D12)', async () => {
+    await render(<CrewStrip crews={[nebula()]} />)
+    expect(screen.queryByText(/^Crew Nebula/)).toBeNull()
+    expect(StyleSheet.flatten(screen.getByText('3 of 5').props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
   })
 
-  it('everyone in, in the body face: mono is for the figures ("3 of 4"), not a word (rc7 D12)', async () => {
-    await render(<CrewStrip crews={[nebula({ here: 4 })]} onTell={jest.fn()} />)
-    const title = screen.getByText(/everyone in$/)
-    expect(StyleSheet.flatten(title.props.style).fontFamily).not.toBe(FONT_FAMILY.mono[500])
-    expect(screen.queryByText('everyone')).toBeNull()
-    await render(<CrewStrip crews={[nebula({ here: 3 })]} onTell={jest.fn()} />)
-    expect(StyleSheet.flatten(screen.getByText('3 of 4').props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
+  it('everyone in: the word in the body face, never mono', async () => {
+    await render(<CrewStrip crews={[nebula({ in: 5 })]} />)
+    const word = screen.getByText('Everyone')
+    expect(StyleSheet.flatten(word.props.style).fontFamily).not.toBe(FONT_FAMILY.mono[500])
   })
 
-  it('the action is the raised 44 Button (A31): 44 pt on iOS, slop to 48 dp on Android', async () => {
-    await render(<CrewStrip crews={[nebula()]} onTell={jest.fn()} testID="s" />)
-    expect(StyleSheet.flatten(screen.getByTestId('s-n-tell').props.style).height).toBe(44)
-    expect(screen.getByTestId('s-n-tell').props.hitSlop).toBeUndefined()
-    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
-    await render(<CrewStrip crews={[nebula()]} onTell={jest.fn()} testID="s" />)
-    expect(screen.getByTestId('s-n-tell').props.hitSlop).toMatchObject({ top: 2, bottom: 2 })
-    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
+  it('no names (an older server sends a count only): the count, and no names line', async () => {
+    await render(<CrewStrip crews={[nebula({ in: 2, people: [] })]} testID="s" />)
+    expect(screen.getByText('2 of 5')).toBeTruthy()
+    expect(screen.queryByTestId('s-n-who')).toBeNull()
   })
 
-  it('sending: busy at once, the spinner only after 300 ms', async () => {
-    jest.useFakeTimers()
-    await render(<CrewStrip crews={[nebula({ told: 'sending' })]} onTell={jest.fn()} testID="s" />)
-    expect(screen.getByRole('button', { name: 'Tell your crew — We’re here' }).props.accessibilityState).toMatchObject({ busy: true })
-    expect(screen.queryByTestId('s-n-tell-spinner', { includeHiddenElements: true })).toBeNull()
-    await act(async () => jest.advanceTimersByTime(350))
-    expect(screen.getByTestId('s-n-tell-spinner', { includeHiddenElements: true })).toBeTruthy()
-    jest.useRealTimers()
-  })
-
-  it('settles to “Your crew knows” with H.success on the server’s OK, once, and says so', async () => {
-    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true })
-    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
-    const { rerender } = await render(<CrewStrip crews={[nebula({ told: 'sending' })]} onTell={jest.fn()} />)
-    expect(screen.getByRole('button', { name: 'Tell your crew — We’re here' }).props.accessibilityState).toMatchObject({ busy: true })
-    expect(success).not.toHaveBeenCalled()
-    await rerender(<CrewStrip crews={[nebula({ told: 'yes' })]} onTell={jest.fn()} />)
-    expect(screen.getByText('Your crew knows')).toBeTruthy()
+  it('has no "We’re here" button any more, and no button at all', async () => {
+    await render(<CrewStrip crews={[nebula()]} />)
+    expect(screen.queryByText(/We’re here/)).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
-    expect(success).toHaveBeenCalledTimes(1)
-    expect(announce).toHaveBeenCalledWith('Your crew knows')
   })
 
-  it('already told: says so, without a haptic', async () => {
-    await render(<CrewStrip crews={[nebula({ told: 'already' })]} onTell={jest.fn()} />)
-    expect(screen.getByText('Your crew already knows')).toBeTruthy()
-    expect(success).not.toHaveBeenCalled()
+  it('a name line that runs long is one line, ending in an ellipsis', async () => {
+    const many = ['Thiruvananthapuram', 'प्रियंका', 'Zoë', 'Priya', 'Arjun', 'Meera', 'Kabir', 'Ravi', 'Isha'].map((n) => person(n))
+    await render(<CrewStrip crews={[nebula({ size: 12, in: 9, people: many })]} testID="s" />)
+    expect(screen.getByTestId('s-n-names').props.numberOfLines).toBe(1)
+  })
+
+  it('your crew check-in moment plays the huddle’s cheer once per crew per event; a row without you rests', async () => {
+    await render(<CrewStrip crews={[nebula({ cheerKey: 'e1|n', people: [person('Priya')] })]} />)
+    expect(screen.queryByTestId('crew-emblem-scene', { includeHiddenElements: true })).toBeNull()
+    await render(<CrewStrip crews={[nebula({ cheerKey: 'e2|n' })]} />)
+    expect(screen.getByTestId('crew-emblem-scene', { includeHiddenElements: true })).toBeTruthy()
+    // Drawn again (the pass, then the Room): it has played.
+    await render(<CrewStrip crews={[nebula({ cheerKey: 'e2|n' })]} />)
+    expect(screen.queryByTestId('crew-emblem-scene', { includeHiddenElements: true })).toBeNull()
   })
 
   it('a count rising plays nothing', async () => {
     const spies = Object.keys(H).map((k) => jest.spyOn(H, k as keyof typeof H).mockImplementation(() => {}))
-    const { rerender } = await render(<CrewStrip crews={[nebula()]} onTell={jest.fn()} />)
-    await rerender(<CrewStrip crews={[nebula({ here: 3 })]} onTell={jest.fn()} />)
+    const { rerender } = await render(<CrewStrip crews={[nebula()]} />)
+    await rerender(<CrewStrip crews={[nebula({ in: 4, people: [...nebula().people, person('Kabir')] })]} />)
     for (const s of spies) expect(s).not.toHaveBeenCalled()
   })
 
-  it('two crews stack, each with its own action', async () => {
-    await render(<CrewStrip crews={[nebula(), nebula({ id: 'q', name: 'Quiz Night Irregulars', size: 5, here: 1 })]} onTell={jest.fn()} />)
-    expect(screen.getAllByRole('button', { name: 'Tell your crew — We’re here' })).toHaveLength(2)
+  it('two crews stack', async () => {
+    await render(<CrewStrip crews={[nebula(), nebula({ id: 'q', name: 'Quiz Night Irregulars', size: 4, in: 2, people: [person('Zoë'), person('Sagar', true)] })]} />)
+    expect(screen.getByText('Priya, Arjun, You')).toBeTruthy()
+    expect(screen.getByText('Zoë, You')).toBeTruthy()
   })
 
   it('off: one quiet line and no action', async () => {
-    await render(<CrewStrip crews={[nebula()]} off onTell={jest.fn()} />)
+    await render(<CrewStrip crews={[nebula()]} off />)
     expect(screen.getByText('Crews are off at this event.')).toBeTruthy()
-    // The frame's second sentence is a designer's note, never shown.
     expect(screen.queryByText(/The strip hides/)).toBeNull()
     expect(screen.queryByRole('button')).toBeNull()
   })
