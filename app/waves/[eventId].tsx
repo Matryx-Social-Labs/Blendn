@@ -62,18 +62,28 @@ export default function WavedAtYouScreen() {
     [eventId, reduceMotion, showToast]
   )
 
-  const safety = useCallback((w: ReceivedWave, removed: () => void) => {
-    const done = () => {
-      removed()
-      ignoreWavesFrom(w.userId)
-    }
-    showUserSafetyActions(w.displayName, w.userId, done, done)
+  /*
+   * Block or Report from a row (anti-spam W7). The sheet is the app's one SheetHost, which cannot present over this
+   * route's Modal (it waits for the screen turn the route holds): the list leaves first, then it asks over the Room or
+   * Banter. A block or report hides their waves there at once (`ignoreWavesFrom` re-reads the strip and the row).
+   */
+  const [safetyFor, setSafetyFor] = useState<ReceivedWave | null>(null)
+  const safety = useCallback((w: ReceivedWave) => {
+    setSafetyFor(w)
+    setOpen(false)
   }, [])
+  const sheetDismissed = () => {
+    if (moment) return setSheetGone(true)
+    router.back()
+    if (!safetyFor) return
+    const done = () => ignoreWavesFrom(safetyFor.userId)
+    showUserSafetyActions(safetyFor.displayName, safetyFor.userId, done, done)
+  }
 
   return (
     <HueProvider value="rose">
       <RouteModal>
-        <Sheet visible={open} onClose={() => setOpen(false)} onDismissed={() => (moment ? setSheetGone(true) : router.back())} detents={['tall']} testID="waved-sheet">
+        <Sheet visible={open} onClose={() => setOpen(false)} onDismissed={sheetDismissed} detents={['tall']} testID="waved-sheet">
           {eventId ? (
             <WavedAtYouList eventId={eventId} now={now} onWaveBack={waveBack} onSafety={safety} />
           ) : (

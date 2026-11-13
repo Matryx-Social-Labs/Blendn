@@ -89,6 +89,8 @@ describe('the screen', () => {
       return visible ? children : null
     },
   }))
+  const mockSafety = jest.fn()
+  jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: (...a: unknown[]) => mockSafety(...a) }))
   jest.mock('../components/ds/MomentMatch', () => ({ MomentMatch: ({ name }: { name: string }) => require('react').createElement(require('react-native').Text, null, `moment ${name}`) }))
 
   it.each(CRAFTED)('a crafted id %p shows the gone state and asks the server nothing', async (id) => {
@@ -144,5 +146,28 @@ describe('the screen', () => {
     get.mockRestore()
     send.mockRestore()
     jest.useRealTimers()
+  })
+
+  it('Block or Report from a row: the list leaves first, then the sheet asks (a sheet cannot present over the route)', async () => {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const { apiClient } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+    const { act, fireEvent, waitFor } = require('@testing-library/react-native') as typeof import('@testing-library/react-native')
+    const { router } = require('expo-router') as { router: { back: jest.Mock } }
+    const Screen = require('../app/waves/[eventId]').default as React.ComponentType
+    /* eslint-enable @typescript-eslint/no-require-imports */
+    router.back.mockClear()
+    mockSafety.mockClear()
+    const w = { userId: 'rh_l', displayName: 'Gentle Lynx', wavedAt: new Date().toISOString(), wavedBack: false }
+    const get = jest.spyOn(apiClient, 'getReceivedWaves').mockResolvedValue({ success: true, data: { open: true, total: 1, waves: [w], nextCursor: null } } as never)
+    mockParams.eventId = '291f7364-6ad6-40a6-9728-8e841b3b94a3'
+    await render(<Screen />)
+    await waitFor(() => expect(screen.getByText('Gentle Lynx')).toBeTruthy())
+    await fireEvent(screen.getByTestId('waved-row-rh_l'), 'longPress')
+    expect(mockSheet.visible).toBe(false)
+    expect(mockSafety).not.toHaveBeenCalled()
+    await act(async () => mockSheet.dismiss?.())
+    expect(router.back).toHaveBeenCalledTimes(1)
+    expect(mockSafety).toHaveBeenCalledWith('Gentle Lynx', 'rh_l', expect.any(Function), expect.any(Function))
+    get.mockRestore()
   })
 })
