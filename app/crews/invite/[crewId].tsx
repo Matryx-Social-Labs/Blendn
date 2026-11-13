@@ -202,19 +202,20 @@ function CrewInviteScreenContent() {
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{inviteMeta(invite)}</Text>
             {invite.bio ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{`“${invite.bio}”`}</Text> : null}
           </View>
+          {/* Under the crew, as the board draws it: read on the way down to Join, never pinned under it. */}
+          <View style={[styles.consent, contrast && IC_HAIRLINE]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{CONSENT_LINE}</Text>
+            <View style={styles.anon}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+              <Toggle value={keepAnonymous} onValueChange={setKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
+            </View>
+          </View>
         </View>
       <View
         testID="invite-dock"
         onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
         style={[styles.dock, { paddingBottom: insets.bottom + SPACE.xl }]}
       >
-        <View style={[styles.consent, contrast && IC_HAIRLINE]}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{CONSENT_LINE}</Text>
-          <View style={styles.anon}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
-            <Toggle value={keepAnonymous} onValueChange={setKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
-          </View>
-        </View>
         <Button
           label={joined ? 'Joined' : crewVerb('Join', invite.name)}
           kind={joined ? 'secondary' : 'primary'}
@@ -257,7 +258,7 @@ const styles = StyleSheet.create({
   },
   shrink: { flexShrink: 1 },
   about: { alignItems: 'center', gap: SPACE.xs },
-  consent: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
+  consent: { alignSelf: 'stretch', marginTop: SPACE.sm, borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   anon: {
     flexDirection: 'row',
     alignItems: 'center',

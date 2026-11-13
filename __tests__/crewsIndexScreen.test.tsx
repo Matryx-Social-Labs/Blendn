@@ -218,13 +218,18 @@ describe('an invite', () => {
     expect(screen.getByLabelText('Join Nebula')).toBeTruthy()
   })
 
-  it('the consent sits in the dock with Join, so a long bio can not scroll it away', async () => {
+  it('the consent sits under the crew, as board 03 A draws it, and Join, Not now and the days left are the foot', async () => {
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
     const dock = screen.getByTestId('invite-dock')
-    expect(within(dock).getByText(CONSENT_LINE)).toBeTruthy()
-    expect(within(dock).getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
     expect(within(dock).getByLabelText('Join the crew')).toBeTruthy()
+    expect(within(dock).getByLabelText('Not now')).toBeTruthy()
+    expect(within(dock).getByTestId('invite-note')).toBeTruthy()
+    // Nothing is pinned: the consent is read on the way down to Join, in the same scroll, never under it.
+    expect(within(dock).queryByText(CONSENT_LINE)).toBeNull()
+    const scroll = screen.getByTestId('invite-scroll')
+    expect(within(scroll).getByText(CONSENT_LINE)).toBeTruthy()
+    expect(within(scroll).getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
   })
 
   it('at the largest text the card scrolls as one, the dock with it, so the dock never covers the crew’s name (AX XXXL drive)', async () => {
