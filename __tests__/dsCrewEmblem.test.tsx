@@ -1,102 +1,236 @@
 /*
- * <CrewEmblem>, ported from the design export (2026-10-15):
- * guidelines/round2/emblem.js (`window.BNE`), DESIGN-BRIEF §21.3. A squircle,
- * 12 palettes × 12 night motifs, seeded from the server's `emblemSeed` only.
+ * <CrewEmblem>: B · Huddle (refined), owner-approved 2026-11-12 (SCRUM-1053). The markup is the design's renderer's,
+ * ~/blendn-design-export/mockups/redesign-2026-11/crew-emblems/B-refined/huddle.js, byte for byte.
  */
-import { render, screen } from '@testing-library/react-native'
+import { act, render, screen } from '@testing-library/react-native'
 import { createHash } from 'crypto'
 import React from 'react'
 
-import { CrewEmblem, EMBLEM_MOTIFS, EMBLEM_PALETTES, emblemFor, motifMarkup, oklchToHex } from '../components/ds/CrewEmblem'
-import { fnv1a } from '../lib/pseudonymAvatar'
+import { CrewEmblem, movingEmblems } from '../components/ds/CrewEmblem'
+import { CREATURE_SPECIES } from '../components/ds/Creature'
+import { CREW_SCENES, HUDDLE_CAST, HUDDLE_EXCLUDED, SCENES, huddleKey, huddleMarkup, spotsOf, tierOf } from '../components/ds/crewHuddle'
+
+jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: jest.fn(() => false) }))
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const reduceMotion = require('../lib/motion').useReducedMotion as jest.Mock
 
 const HIDDEN = { includeHiddenElements: true }
+const seedOf = (i: number) => createHash('md5').update(`crew${i}`).digest('hex').slice(0, 16)
+const SEEDS = Array.from({ length: 200 }, (_, i) => seedOf(i))
 
-describe('the motifs are the design’s, byte for byte', () => {
-  it('in the design’s order', () => {
-    expect(EMBLEM_MOTIFS).toEqual(['crescent', 'sunburst', 'tiles', 'rings', 'tide', 'stars', 'bolt', 'arch', 'chevrons', 'orbit', 'sparks', 'waves'])
+describe('the artwork is the approved renderer’s, byte for byte', () => {
+  /*
+   * sha256 over `${key}\n${svg}\n` for: 200 seeds (md5('crew' + i), 16 hex) at 24 / 40 / 120, rest pose; then the first
+   * 20 seeds × the six scenes × t 0.1 / 0.25 / 0.5 / 0.75 / 0.9 × sizes 40 and 120. Produced by running huddle.js (on
+   * creatures.js and emblems.js) in Node with every `h<n>` id written `h0`. Control: a one-character change to the
+   * scarf path in `kitMarkup` fails this.
+   */
+  it('1,800 stills and scene frames', () => {
+    const h = createHash('sha256')
+    let count = 0
+    const add = (key: string, svg: string) => {
+      h.update(`${key}\n${svg}\n`)
+      count++
+    }
+    for (const s of SEEDS) for (const size of [24, 40, 120]) add(`${s}@${size}`, huddleMarkup(s, size, 'h0'))
+    for (const s of SEEDS.slice(0, 20))
+      for (const scene of CREW_SCENES)
+        for (const t of [0.1, 0.25, 0.5, 0.75, 0.9]) for (const size of [40, 120]) add(`${s}@${size}:${scene}:${t}`, huddleMarkup(s, size, 'h0', { scene, t }))
+    expect({ count, sha: h.digest('hex') }).toEqual({ count: 1800, sha: 'b164525822d145518dfab4a4c12c0c7d7a021426280df065246f90f8a0d3b3fe' })
   })
 
-  it('every motif, glyph and field, drawn with the same two paints', () => {
-    /*
-     * sha256 of JSON.stringify({ '<motif>/<variant>': markup }) from
-     * emblem.js's own `BNE.svg(motif * 12, 100, variant)`, run in Node with
-     * palette 0's two colours replaced by 'M' (mid) and 'B' (base).
-     */
-    const markup = Object.fromEntries(
-      EMBLEM_MOTIFS.flatMap((m) => (['glyph', 'field'] as const).map((v) => [`${m}/${v}`, motifMarkup(m, v, 'M', 'B')]))
-    )
-    expect(createHash('sha256').update(JSON.stringify(markup)).digest('hex')).toBe('3b258ee34a041bd056fe4f45f039f007a542ac96f0ee6af5dbdac1e0a6782857')
-  })
-})
-
-describe('the palettes', () => {
-  it('convert OKLCH as CSS does', () => {
-    expect(oklchToHex(1, 0, 0)).toBe('#ffffff')
-    expect(oklchToHex(0, 0, 0)).toBe('#000000')
-    // CSS Color 4's sRGB red.
-    expect(oklchToHex(0.627955, 0.257683, 29.2339)).toBe('#ff0000')
+  it('the scenes in the design’s order, with its lengths', () => {
+    expect(CREW_SCENES).toEqual(['cheer', 'dance', 'clink', 'highfive', 'wave', 'sleepy'])
+    expect(CREW_SCENES.map((s) => SCENES[s].ms)).toEqual([1100, 1400, 1300, 1100, 1300, 1600])
   })
 
-  it('are emblem.js’s twelve, oklch(0.34 0.07 h) and oklch(0.66 0.11 h) for h = 20, 50 … 350', () => {
-    /*
-     * Expected values from CSS Color 4's own path (OKLab → LMS → XYZ D65 →
-     * linear sRGB, clipped), computed independently of the converter above.
-     */
-    expect(EMBLEM_PALETTES.map((p) => [p.base, p.mid])).toEqual([
-      ['#572729', '#cd7576'],
-      ['#542c13', '#c87d52'],
-      ['#4b3301', '#b58a3a'],
-      ['#3a3b05', '#969841'],
-      ['#23411c', '#6da361'],
-      ['#004332', '#3ba888'],
-      ['#004246', '#10a6ad'],
-      ['#003e55', '#3a9ec8'],
-      ['#22385c', '#6a93d5'],
-      ['#383159', '#9186d1'],
-      ['#482b4e', '#b07bbc'],
-      ['#52273d', '#c4759c'],
-    ])
+  it('the key, from the seed alone and the same every time', () => {
+    expect(huddleKey('915144f67a81cebb')).toEqual({ hue: 3, front: 'dove', left: 'horse', right: 'phoenix', moods: ['happy', 'curious', 'sleepy'] })
+    expect(huddleKey('915144f67a81cebb')).toEqual(huddleKey('915144f67a81cebb'))
   })
 })
 
-describe('emblemFor', () => {
-  it('reads the server’s string seed through FNV-1a: palette = n mod 12, motif = ⌊n / 12⌋ mod 12', () => {
-    const n = Math.abs(fnv1a('crew-7f3a'))
-    expect(emblemFor('crew-7f3a')).toEqual({ palette: n % 12, motif: EMBLEM_MOTIFS[Math.floor(n / 12) % 12] })
+describe('every seed draws a crew', () => {
+  const many = Array.from({ length: 3000 }, (_, i) => createHash('sha1').update(`any${i}`).digest('hex').slice(0, 16))
+
+  it('three different characters, a hue, at every tier, with nothing missing', () => {
+    for (const s of many) {
+      const k = huddleKey(s)
+      expect(new Set([k.front, k.left, k.right]).size).toBe(3)
+      expect(k.hue).toBeGreaterThanOrEqual(0)
+      expect(k.hue).toBeLessThan(8)
+      for (const size of [24, 40, 120]) expect(huddleMarkup(s, size, 'x')).not.toMatch(/undefined|NaN/)
+    }
+    // Not only server seeds: anything a crew row could hold still draws.
+    for (const odd of ['', 'x', 'preview-abc', '🔥'.repeat(9)]) expect(huddleMarkup(odd, 40, 'x')).toMatch(/^<svg/)
   })
 
-  it('is stable for a seed and spreads across seeds', () => {
-    expect(emblemFor('nebula')).toEqual(emblemFor('nebula'))
-    const seen = new Set(Array.from({ length: 300 }, (_, i) => JSON.stringify(emblemFor(`seed-${i}`))))
-    expect(seen.size).toBeGreaterThan(100)
+  it('never panda, eagle, swan, crane, heron or griffin, and never angry', () => {
+    expect(HUDDLE_EXCLUDED).toEqual(['panda', 'eagle', 'swan', 'crane', 'heron', 'griffin'])
+    expect(HUDDLE_CAST).toHaveLength(CREATURE_SPECIES.length - 6)
+    for (const s of many) {
+      const k = huddleKey(s)
+      for (const sp of [k.front, k.left, k.right]) expect(HUDDLE_EXCLUDED).not.toContain(sp)
+      expect(k.moods).not.toContain('fierce')
+    }
+    for (const scene of CREW_SCENES) {
+      expect(SCENES[scene].moods).not.toContain('fierce')
+      for (let t = 0; t <= 1; t += 0.05) for (const i of [0, 1, 2]) expect(SCENES[scene].pose(t, i).mood).not.toBe('fierce')
+    }
+  })
+
+  it('a 214-crew room at 40: on average no crew looks like another (the murmur mix)', () => {
+    let repeats = 0
+    const ROOMS = 40
+    for (let r = 0; r < ROOMS; r++) {
+      const looks = Array.from({ length: 214 }, (_, i) => JSON.stringify(huddleKey(createHash('sha1').update(`room${r}:${i}`).digest('hex').slice(0, 16))))
+      const seen = new Map<string, number>()
+      for (const l of looks) seen.set(l, (seen.get(l) ?? 0) + 1)
+      repeats += [...seen.values()].filter((n) => n > 1).reduce((a, n) => a + n, 0)
+    }
+    expect(repeats / ROOMS).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('the size ladder', () => {
+  it('two faces to 28, three to 80, the full scene from 81', () => {
+    expect([12, 24, 28].map(tierOf)).toEqual(['lead', 'lead', 'lead'])
+    expect([29, 40, 56, 80].map(tierOf)).toEqual(['trio', 'trio', 'trio', 'trio'])
+    expect([81, 96, 120, 160].map(tierOf)).toEqual(['scene', 'scene', 'scene', 'scene'])
+    const faces = (size: number) => (huddleMarkup(SEEDS[0], size, 'x').match(/M3\.4 30C3\.4 23\.6/g) ?? []).length
+    expect([faces(24), faces(40), faces(120)]).toEqual([2, 3, 3])
+    // Bunting and a floor only on the scene tier.
+    expect(huddleMarkup(SEEDS[0], 80, 'x')).not.toContain('<ellipse cx="12" cy="24.6"')
+    expect(huddleMarkup(SEEDS[0], 81, 'x')).toContain('<ellipse cx="12" cy="24.6"')
+  })
+})
+
+describe('centred and clipped', () => {
+  it('everyone stands inside the plate; the trio is symmetric about its centre', () => {
+    for (const tier of ['lead', 'trio', 'scene'] as const) {
+      for (const [, cx, cy] of spotsOf(tier)) {
+        expect(cx).toBeGreaterThan(4)
+        expect(cx).toBeLessThan(20)
+        expect(cy).toBeGreaterThan(4)
+        expect(cy).toBeLessThan(20)
+      }
+    }
+    for (const tier of ['trio', 'scene'] as const) {
+      const [l, r, f] = spotsOf(tier)
+      expect(l[1] + r[1]).toBe(24)
+      expect(l[2]).toBe(r[2])
+      expect(f[1]).toBe(12)
+    }
+  })
+
+  it('every character is inside the squircle’s clip; the edge is drawn over, unclipped', () => {
+    const svg = huddleMarkup(SEEDS[1], 120, 'q')
+    const clip = svg.indexOf('<g clip-path="url(#qc)">')
+    expect(clip).toBeGreaterThan(0)
+    expect(svg.indexOf('M3.4 30C')).toBeGreaterThan(clip)
+    expect(svg).toMatch(/<\/g><path d="M12 0C[^"]+" fill="none" stroke="#[0-9A-F]{6}" stroke-width="1.1" opacity=".9"\/><\/svg>$/)
   })
 })
 
 describe('<CrewEmblem>', () => {
-  it('draws the squircle in the palette’s base, clipped, at its size, and is decorative', async () => {
-    await render(<CrewEmblem seed="nebula" size={56} testID="e" />)
+  beforeEach(() => reduceMotion.mockReturnValue(false))
+
+  it('draws the still at its size, decorative', async () => {
+    await render(<CrewEmblem seed={SEEDS[0]} size={56} testID="e" />)
     const root = screen.getByTestId('e', HIDDEN)
     expect(root.props.style).toEqual(expect.objectContaining({ width: 56, height: 56 }))
     expect(root.props.accessibilityElementsHidden).toBe(true)
     expect(root.props.importantForAccessibility).toBe('no-hide-descendants')
+    expect(screen.queryByTestId('crew-emblem-scene', HIDDEN)).toBeNull()
   })
 
-  it('field by default; glyph on request (one centred shape)', async () => {
-    await render(<CrewEmblem seed="nebula" size={40} testID="e" />)
-    const field = screen.getByTestId('e-xml', HIDDEN).props.xml as string
-    await render(<CrewEmblem seed="nebula" size={40} variant="glyph" testID="e" />)
-    const glyph = screen.getByTestId('e-xml', HIDDEN).props.xml as string
-    const { palette, motif } = emblemFor('nebula')
-    const { base, mid } = EMBLEM_PALETTES[palette]
-    expect(field).toContain(motifMarkup(motif, 'field', mid, base))
-    expect(glyph).toContain(motifMarkup(motif, 'glyph', mid, base))
-    expect(field).toContain(`fill="${base}"`)
+  it('each instance has its own clip and glow ids', async () => {
+    await render(
+      <>
+        <CrewEmblem seed={SEEDS[0]} size={40} testID="a" />
+        <CrewEmblem seed={SEEDS[0]} size={40} testID="b" />
+      </>
+    )
+    const idOf = (t: string) => (screen.getByTestId(`${t}-xml`, HIDDEN).props.xml as string).match(/clipPath id="([^"]+)"/)![1]
+    expect(idOf('a')).not.toBe(idOf('b'))
   })
 
-  it('never carries text, a creature or the brand gradient', async () => {
-    await render(<CrewEmblem seed="orbit" size={160} testID="e" />)
+  // On device the scene's first frame drew every character at identity, one full-size head filling the plate, until the
+  // UI thread's first matrix landed: Reanimated hands over its initial `matrix` as a prop that G's JS side drops.
+  it.each([24, 40, 120].flatMap((size) => CREW_SCENES.map((scene) => [size, scene] as const)))(
+    'the first frame already stands everyone in their place: %i, %s',
+    async (size, scene) => {
+      await render(<CrewEmblem seed={SEEDS[3]} size={size} scene={scene} />)
+      const scales = screen.root!.queryAll((n) => n.type === 'RNSVGGroup' && Array.isArray(n.props.matrix)).map((n) => {
+        const m = n.props.matrix as number[]
+        return Math.round(Math.hypot(m[0], m[1]) * 100) / 100
+      })
+      for (const [, , , s] of spotsOf(tierOf(size))) expect(scales).toContain(s)
+    }
+  )
+
+  // Android (react-native-svg 15.15) draws a group whose opacity is not 1 into a canvas-sized bitmap of its own, every
+  // frame, and a toggle landing mid-draw restores a canvas it never saved: the Release app died in the clink with
+  // "Underflow in restore". A part comes and goes by `display`, a fade is the paint's (`fillOpacity`), never a group's.
+  it.each(CREW_SCENES.map((scene) => [scene] as const))('no group in the %s scene carries an opacity; hidden parts are display none', async (scene) => {
+    await render(<CrewEmblem seed={SEEDS[4]} size={120} scene={scene} />)
+    const groups = screen.root!.queryAll((n) => n.type === 'RNSVGGroup')
+    expect(groups.filter((n) => n.props.opacity !== undefined && n.props.opacity !== 1)).toHaveLength(0)
+    expect(groups.some((n) => n.props.display === 'none')).toBe(true)
+  })
+
+  it('a scene plays once, then rests and says so', async () => {
+    jest.useFakeTimers()
+    const onDone = jest.fn()
+    await render(<CrewEmblem seed={SEEDS[0]} size={120} scene="dance" onDone={onDone} testID="e" />)
+    expect(screen.getByTestId('crew-emblem-scene', HIDDEN)).toBeTruthy()
+    expect(movingEmblems()).toEqual(['dance'])
+    await act(async () => {
+      jest.advanceTimersByTime(SCENES.dance.ms + 100)
+    })
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('crew-emblem-scene', HIDDEN)).toBeNull()
+    expect(movingEmblems()).toEqual([])
+    jest.useRealTimers()
+  })
+
+  it('Reduce Motion: the still, and done at once', async () => {
+    reduceMotion.mockReturnValue(true)
+    const onDone = jest.fn()
+    await render(<CrewEmblem seed={SEEDS[0]} size={120} scene="wave" onDone={onDone} testID="e" />)
+    expect(screen.queryByTestId('crew-emblem-scene', HIDDEN)).toBeNull()
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('e-xml', HIDDEN).props.xml).toBe(huddleMarkup(SEEDS[0], 120, (screen.getByTestId('e-xml', HIDDEN).props.xml as string).match(/clipPath id="([^"]+)c"/)![1]))
+  })
+
+  it('the sleepy lean rests on its held frame, also under Reduce Motion', async () => {
+    reduceMotion.mockReturnValue(true)
+    await render(<CrewEmblem seed={SEEDS[2]} size={120} scene="sleepy" testID="e" />)
     const xml = screen.getByTestId('e-xml', HIDDEN).props.xml as string
-    expect(xml).not.toMatch(/<text|Gradient/i)
+    const id = xml.match(/clipPath id="([^"]+)c"/)![1]
+    expect(xml).toBe(huddleMarkup(SEEDS[2], 120, id, { scene: 'sleepy', t: 1 }).replaceAll('Satoshi,system-ui', 'Satoshi_900Black'))
+  })
+
+  it('one emblem moves at a time: a second asked to move shows its still; the Mix’s two clink together', async () => {
+    const second = jest.fn()
+    await render(
+      <>
+        <CrewEmblem seed={SEEDS[0]} size={120} scene="dance" />
+        <CrewEmblem seed={SEEDS[1]} size={120} scene="wave" onDone={second} />
+      </>
+    )
+    expect(screen.getAllByTestId('crew-emblem-scene', HIDDEN)).toHaveLength(1)
+    expect(second).toHaveBeenCalledTimes(1)
+    await screen.unmount()
+    expect(movingEmblems()).toEqual([])
+
+    await render(
+      <>
+        <CrewEmblem seed={SEEDS[0]} size={120} scene="clink" />
+        <CrewEmblem seed={SEEDS[1]} size={120} scene="clink" />
+      </>
+    )
+    expect(screen.getAllByTestId('crew-emblem-scene', HIDDEN)).toHaveLength(2)
+    await screen.unmount()
   })
 })

@@ -627,7 +627,7 @@ describe('/preview/ds-p5', () => {
     }
     expect(screen.getByTestId('ds-recap-rated', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('ds-orbs-feed-late', HIDDEN)).toBeTruthy()
-    expect(screen.getByTestId('ds-emblem-orbit-field', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('ds-scene-stage', HIDDEN)).toBeTruthy()
   })
 })
 

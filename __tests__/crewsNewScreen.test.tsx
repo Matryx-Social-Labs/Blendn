@@ -263,7 +263,28 @@ describe('step 3 · consent', () => {
       inviteUserIds: ['u-priya'],
       revealConsent: true,
       keepMeAnonymous: true,
+      // The look Make showed: random, Shuffle for another, fixed once sent (SCRUM-1053).
+      emblemSeed: expect.stringMatching(/^[0-9a-f]{16}$/),
     })
+  })
+
+  it('Shuffle draws another look on step 1, and the one showing is the one sent', async () => {
+    crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 1 } })
+    crews.crew.mockResolvedValue({ success: true, data: { crewId: 'c1', emblemSeed: 'real-seed' } as never })
+    const random = jest.spyOn(Math, 'random')
+    await render(<NewCrewScreen />)
+    await name('Nebula')
+    random.mockReturnValue(0.999999)
+    await fireEvent.press(screen.getByLabelText('Shuffle the crew’s look'))
+    random.mockRestore()
+    await press('Next')
+    await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Priya' }))
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Priya' }))
+    await press('Next')
+    await waitFor(() => screen.getByText(CONSENT_LINE))
+    await press('Make the crew')
+    await waitFor(() => expect(crews.create).toHaveBeenCalledTimes(1))
+    expect(crews.create.mock.calls[0][0]).toEqual(expect.objectContaining({ emblemSeed: 'ffffffffffffffff' }))
   })
 
   it('then the crew is made: its name, the count asked, and Continue opens the chat — not before', async () => {

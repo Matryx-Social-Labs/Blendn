@@ -9,7 +9,7 @@ import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './Achieveme
 import { Button } from './Button'
 import { Chip } from './Chip'
 import { CountTicks } from './CountTicks'
-import { CrewEmblem } from './CrewEmblem'
+import { CrewEmblem, type CrewScene } from './CrewEmblem'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
 
 /** The emblem: 96 on a card, 56 compact (the page); 40 in a row. */
@@ -59,6 +59,7 @@ export function CrewCard({
   onSheet = false,
   onPress,
   onMore,
+  emblemScene,
   testID,
 }: {
   crew: CrewCardCrew
@@ -75,6 +76,8 @@ export function CrewCard({
   onPress?: () => void
   /** The ⋯: report or hide. */
   onMore?: () => void
+  /** Make a crew's preview only (Shuffle dances): never on a card in a list. */
+  emblemScene?: CrewScene
   testID?: string
 }) {
   const bold = useBoldText()
@@ -104,7 +107,7 @@ export function CrewCard({
       >
         <View style={styles.top}>
           <View style={styles.emblem}>
-            <CrewEmblem seed={crew.emblemSeed} size={compact ? EMBLEM.compact : EMBLEM.full} />
+            <CrewEmblem seed={crew.emblemSeed} size={compact ? EMBLEM.compact : EMBLEM.full} scene={emblemScene} />
             <CountTicks size={crew.size} here={here} />
           </View>
           <View style={styles.text}>

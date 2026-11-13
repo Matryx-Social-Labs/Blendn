@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
-import { CrewEmblem, EMBLEM_MOTIFS, EMBLEM_PALETTES, emblemFor, type EmblemMotif } from '../../components/ds/CrewEmblem'
+import { CREW_SCENES, CrewEmblem, huddleKey, type CrewScene } from '../../components/ds/CrewEmblem'
 import { Grain } from '../../components/ds/Grain'
 import { MomentBlend, type MomentBlendProps } from '../../components/ds/MomentBlend'
 import { MomentMatch } from '../../components/ds/MomentMatch'
@@ -75,22 +75,23 @@ const ORB_CELLS: [OrbSet, OrbTime][] = [
 ]
 
 /** A seed for every palette × motif, found by trying `seed-0`, `seed-1`, … (the emblem takes only a seed). */
-const SEEDS = (() => {
-  const found = new Map<string, string>()
-  for (let i = 0; found.size < EMBLEM_PALETTES.length * EMBLEM_MOTIFS.length; i++) {
-    const { palette, motif } = emblemFor(`seed-${i}`)
-    const key = `${palette}/${motif}`
-    if (!found.has(key)) found.set(key, `seed-${i}`)
+/** Crews with each of the eight hues (the server's seeds are 16 hex; these are fixed so a screenshot is comparable). */
+const HUE_SEEDS = (() => {
+  const found = new Map<number, string>()
+  for (let i = 0; found.size < 8; i++) {
+    const seed = (i * 2654435761 >>> 0).toString(16).padStart(16, '0')
+    const { hue } = huddleKey(seed)
+    if (!found.has(hue)) found.set(hue, seed)
   }
-  return found
+  return [...found.entries()].sort(([a], [b]) => a - b).map(([, s]) => s)
 })()
-const seedFor = (palette: number, motif: EmblemMotif) => SEEDS.get(`${palette}/${motif}`) as string
 const EMBLEM_SIZES = [24, 40, 56, 96, 160]
 
 export default function DsP5Preview() {
   const insets = useSafeAreaInsets()
   const [moment, setMoment] = useState<{ play: (typeof PLAYS)[number]; key: number } | null>(null)
   const [recapRound, setRecapRound] = useState(0)
+  const [scene, setScene] = useState<{ scene: CrewScene; key: number } | null>(null)
   const close = () => setMoment(null)
 
   return (
@@ -141,32 +142,33 @@ export default function DsP5Preview() {
           </Cell>
         </Section>
 
-        <Section title="Crew emblems · 12 motifs, field and glyph">
-          {EMBLEM_MOTIFS.map((motif, i) => (
-            <View key={motif} style={styles.row}>
-              {(['field', 'glyph'] as const).map((variant) => (
-                <View key={variant} testID={`ds-emblem-${motif}-${variant}`}>
-                  <CrewEmblem seed={seedFor(i % EMBLEM_PALETTES.length, motif)} size={56} variant={variant} />
-                </View>
-              ))}
-              <Text style={styles.caption}>{motif}</Text>
-            </View>
-          ))}
-        </Section>
-        <Section title="Crew emblems · 12 palettes">
+        <Section
+          title="Crew emblems · scenes"
+          note="Dev harness for the moments not built yet (crew check-in, Wave for {crew}, Wave back, the Mix room closing): one plays at a time"
+        >
           <View style={styles.wrap}>
-            {EMBLEM_PALETTES.map((_, palette) => (
-              <View key={palette} testID={`ds-emblem-palette-${palette}`}>
-                <CrewEmblem seed={seedFor(palette, 'crescent')} size={40} />
+            {CREW_SCENES.map((scene) => (
+              <Button key={scene} testID={`ds-scene-${scene}`} label={`Play: ${scene}`} kind="secondary" size="sm" onPress={() => setScene({ scene, key: Date.now() })} />
+            ))}
+          </View>
+          <View testID="ds-scene-stage" style={styles.bottom}>
+            <CrewEmblem key={scene?.key} seed={HUE_SEEDS[5]} size={160} scene={scene?.scene} />
+          </View>
+        </Section>
+        <Section title="Crew emblems · eight hues">
+          <View style={styles.wrap}>
+            {HUE_SEEDS.map((seed, hue) => (
+              <View key={seed} testID={`ds-emblem-hue-${hue}`}>
+                <CrewEmblem seed={seed} size={40} />
               </View>
             ))}
           </View>
         </Section>
-        <Section title="Crew emblems · sizes" note="24 chip · 40 row · 56 Banter · 96 card · 160 detail and the Mix">
+        <Section title="Crew emblems · the ladder" note="24 chip (two faces) · 40 row · 56 Banter (three) · 96 card · 160 detail and the Mix (scene)">
           <View style={[styles.wrap, styles.bottom]}>
             {EMBLEM_SIZES.map((size) => (
               <View key={size} testID={`ds-emblem-size-${size}`}>
-                <CrewEmblem seed="nebula" size={size} />
+                <CrewEmblem seed={HUE_SEEDS[0]} size={size} />
               </View>
             ))}
           </View>

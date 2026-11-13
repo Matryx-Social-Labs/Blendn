@@ -115,7 +115,7 @@ export function EditCrewSheet({
         onTag={(slug) => edited((e) => ({ ...e, tags: toggleTag(e.tags, slug) }))}
         openToSolo={edit.openToSolo}
         onOpenToSolo={(openToSolo) => edited((e) => ({ ...e, openToSolo }))}
-        previewSeed={crew.emblemSeed}
+        emblemSeed={crew.emblemSeed}
         intentText={intentLine(edit.choice ? intentOf(edit.choice) : crew.intent) ?? ''}
       />
     </Sheet>

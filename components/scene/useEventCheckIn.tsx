@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native'
 
 import { doorOf } from '../../lib/attendanceState'
 import { checkOutOf } from '../../lib/checkIn'
+import { checkedOutLine } from '../../lib/switchCopy'
 import { apiClient } from '../../lib/apiClient'
 import { openRoomOf, setLeftNotice, setLiveHint, useLiveEventId, useLiveTitle, useRoomUp } from '../../lib/blendnOverlay'
 import { activeRoomName } from '../../lib/leftRooms'
@@ -12,6 +13,7 @@ import { CHECKOUT_FAILED } from '../../lib/useRoomControls'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { CheckInTray, useCheckInTray } from '../blendn/CheckInTray'
 import { MomentPour } from '../ds/MomentPour'
+import { announceOutcome } from '../ds/shared'
 import type { EventCheckOutSheetProps, EventHoldProps } from './EventHold'
 
 /** How long the pour waits for the Room behind it before giving up on it (the Blend'n overlay's own ceiling). */
@@ -85,7 +87,11 @@ export function useEventCheckIn({
     setCheckingOut(true)
     try {
       const result = await checkOutOf(id)
-      if (result.success) setCheckOutOpen(false)
+      if (result.success) {
+        setCheckOutOpen(false)
+        // The dock turns back into the check-in hold where the link was: said, or a screen reader hears nothing happened.
+        announceOutcome(checkedOutLine(event?.title))
+      }
       else setCheckOutError(result.error || CHECKOUT_FAILED)
     } catch {
       setCheckOutError(CHECKOUT_FAILED)
