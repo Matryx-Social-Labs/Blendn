@@ -2,7 +2,7 @@ import { router } from 'expo-router'
 import { StyleSheet, Text, View } from 'react-native'
 
 import type { ReceivedWave, WavesWaitingRoom } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { compactCount } from '../../lib/format'
 import { H } from '../../lib/haptics'
 import { Avatar } from '../ds/Avatar'
@@ -40,7 +40,7 @@ export function BanterWavesRow({ room, title, onSafety }: { room: WavesWaitingRo
       accessibilityLabel={`${room.waiting} waved at you. ${where}`}
       accessibilityActions={[{ name: 'activate' }, { name: 'block', label: `Block or report ${room.latest.displayName}` }]}
       onAccessibilityAction={(e) => (e.nativeEvent.actionName === 'block' ? safety() : open())}
-      style={[styles.row, { borderColor: sel.edge }, contrast && IC_HAIRLINE]}
+      style={[styles.row, { backgroundColor: sel.fill, borderColor: sel.edge }, contrast && IC_HAIRLINE]}
     >
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Avatar size={FACE} kind="creature" pseudonym={room.latest.displayName} />
@@ -66,9 +66,8 @@ const styles = StyleSheet.create({
     minHeight: SIZE.primary,
     paddingVertical: SPACE.sm,
     paddingHorizontal: SPACE.md,
-    borderRadius: RADIUS.tile,
-    borderWidth: MATERIAL.glassEdge.width,
-    backgroundColor: COLOR.surface,
+    borderRadius: RADIUS.rowInCard,
+    borderWidth: 1,
   },
   text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
   ink: { color: COLOR.textPrimary },

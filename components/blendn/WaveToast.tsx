@@ -20,6 +20,8 @@ import { WaveBackPill } from './WaveBackPill'
 const ENTER_FROM = -SPACE.lg
 
 /** L-B: the fold shows the newest three faces. */
+/** Board 03 `.toast`: a 34 face in a 48 capsule. */
+const TOAST_FACE = 34
 const FOLD_FACES = 3
 
 /**
@@ -122,9 +124,9 @@ export function WaveToast({
         <Material role="toast" style={[styles.capsule, contrast && IC_HAIRLINE]}>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             {one ? (
-              <Avatar size={24} kind="creature" pseudonym={one.fromName} />
+              <Avatar size={TOAST_FACE} kind="creature" pseudonym={one.fromName} />
             ) : (
-              <Facepile faces={toast.waves.slice(0, FOLD_FACES).map((w) => ({ kind: 'creature', pseudonym: w.fromName }))} total={Math.min(toast.waves.length, FOLD_FACES)} size={24} />
+              <Facepile faces={toast.waves.slice(0, FOLD_FACES).map((w) => ({ kind: 'creature', pseudonym: w.fromName }))} total={Math.min(toast.waves.length, FOLD_FACES)} size={32} />
             )}
           </View>
           <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.text]}>
@@ -134,6 +136,7 @@ export function WaveToast({
             name={one?.fromName ?? ''}
             state="ready"
             label={one ? 'Wave back' : 'See'}
+            hand={false}
             accessibilityLabel={one ? undefined : 'See who waved'}
             onPress={() => {
               if (one) onWaveBack(one)
@@ -152,10 +155,12 @@ const styles = StyleSheet.create({
   // Board 03 L-A: across the bar, over the chevron and the settings circle (the capsule carries its own action).
   place: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2 },
   capsule: {
-    height: SIZE.circleButton,
+    // Board 03 `.toast`: 48 tall, 8 before the face, 6 after the pill.
+    minHeight: SIZE.control,
     borderRadius: RADIUS.capsule,
-    paddingLeft: SPACE.xs + SPACE.xxs,
+    paddingLeft: SPACE.sm,
     paddingRight: SPACE.xs + SPACE.xxs,
+    paddingVertical: SPACE.xs + SPACE.xxs,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.sm,

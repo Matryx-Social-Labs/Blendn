@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import type { ReceivedWave, ReceivedWavesPage } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { othersLine, waitingStrip, wavedAtYouLine } from '../../lib/receivedWaves'
 import { Avatar } from '../ds/Avatar'
@@ -11,7 +11,8 @@ import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
 import { WaveBackPill } from './WaveBackPill'
 
-const FACE = 32
+/** Board 03 `.strip`: a 36 face for one wave, a 30 pile (the DS's 32) for several. */
+const FACE = 36
 
 /**
  * S-A (board 03, "Missed, shown in the room"): under your room name, above Meet next, the waves you have not answered.
@@ -64,11 +65,11 @@ export function WavedAtYouStrip({
           onWaveBack(lead)
         }
       }}
-      style={[styles.row, { borderColor: sel.edge }, contrast && IC_HAIRLINE]}
+      style={[styles.row, { backgroundColor: sel.fill, borderColor: sel.edge }, contrast && IC_HAIRLINE]}
     >
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {several ? (
-          <Facepile faces={strip.faces.map((w) => ({ kind: 'creature', pseudonym: w.displayName }))} total={strip.faces.length} size={24} ring={COLOR.surface} />
+          <Facepile faces={strip.faces.map((w) => ({ kind: 'creature', pseudonym: w.displayName }))} total={strip.faces.length} size={32} ring={sel.fill} />
         ) : (
           <Avatar size={FACE} kind="creature" pseudonym={lead.displayName} />
         )}
@@ -99,13 +100,13 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACE.md,
+    gap: SPACE.sm + SPACE.xxs,
     minHeight: SIZE.primary,
     paddingVertical: SPACE.sm,
-    paddingHorizontal: SPACE.md,
-    borderRadius: RADIUS.tile,
-    borderWidth: MATERIAL.glassEdge.width,
-    backgroundColor: COLOR.surface,
+    paddingLeft: SPACE.md,
+    paddingRight: SPACE.sm + SPACE.xxs,
+    borderRadius: RADIUS.rowInCard,
+    borderWidth: 1,
   },
   text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
   ink: { color: COLOR.textPrimary },
