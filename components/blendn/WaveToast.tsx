@@ -149,7 +149,8 @@ export function WaveToast({
 }
 
 const styles = StyleSheet.create({
-  place: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, alignItems: 'center', zIndex: 2 },
+  // Board 03 L-A: across the bar, over the chevron and the settings circle (the capsule carries its own action).
+  place: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2 },
   capsule: {
     height: SIZE.circleButton,
     borderRadius: RADIUS.capsule,
@@ -160,5 +161,5 @@ const styles = StyleSheet.create({
     gap: SPACE.sm,
     overflow: 'hidden',
   },
-  text: { color: COLOR.textPrimary, flexShrink: 1 },
+  text: { color: COLOR.textPrimary, flex: 1 },
 })

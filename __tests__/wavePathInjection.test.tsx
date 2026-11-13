@@ -80,7 +80,16 @@ describe('the screen', () => {
   jest.mock('expo-router', () => ({ router: { back: jest.fn(), replace: jest.fn() }, useLocalSearchParams: () => mockParams, useNavigation: () => null, useFocusEffect: () => {} }))
   jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
   jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
-  jest.mock('../components/ds/Sheet', () => ({ Sheet: ({ children }: { children: React.ReactNode }) => children }))
+  // The sheet's Modal, with its dismissal held until the test lets it go (iOS refuses a Modal while another is leaving).
+  const mockSheet: { dismiss?: () => void; visible?: boolean } = {}
+  jest.mock('../components/ds/Sheet', () => ({
+    Sheet: ({ children, visible, onDismissed }: { children: React.ReactNode; visible: boolean; onDismissed?: () => void }) => {
+      mockSheet.visible = visible
+      mockSheet.dismiss = onDismissed
+      return visible ? children : null
+    },
+  }))
+  jest.mock('../components/ds/MomentMatch', () => ({ MomentMatch: ({ name }: { name: string }) => require('react').createElement(require('react-native').Text, null, `moment ${name}`) }))
 
   it.each(CRAFTED)('a crafted id %p shows the gone state and asks the server nothing', async (id) => {
     /* eslint-disable @typescript-eslint/no-require-imports */
@@ -106,5 +115,34 @@ describe('the screen', () => {
     expect(spy).toHaveBeenCalledWith('291f7364-6ad6-40a6-9728-8e841b3b94a3', null)
     expect(screen.queryByText('This room isn’t available.')).toBeNull()
     spy.mockRestore()
+  })
+
+  it('a wave back from the list plays the moment once the sheet has gone, not over it', async () => {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const { apiClient } = require('../lib/apiClient') as typeof import('../lib/apiClient')
+    const { act, fireEvent, waitFor } = require('@testing-library/react-native') as typeof import('@testing-library/react-native')
+    const Screen = require('../app/waves/[eventId]').default as React.ComponentType
+    /* eslint-enable @typescript-eslint/no-require-imports */
+    jest.useFakeTimers()
+    const w = { userId: 'rh_a', displayName: 'Rustic Lark', wavedAt: new Date().toISOString(), wavedBack: false }
+    const get = jest.spyOn(apiClient, 'getReceivedWaves').mockResolvedValue({ success: true, data: { open: true, total: 1, waves: [w], nextCursor: null } } as never)
+    const send = jest.spyOn(apiClient, 'sendWave').mockResolvedValue({ success: true, data: { sent: true, mutual: true, conversationId: 'c1', pseudonyms: { you: 'Misty Sphinx', them: 'Rustic Lark' } } } as never)
+    mockParams.eventId = '291f7364-6ad6-40a6-9728-8e841b3b94a3'
+    await render(<Screen />)
+    await waitFor(() => expect(screen.getByText('Rustic Lark')).toBeTruthy())
+    await fireEvent.press(screen.getByRole('button', { name: 'Wave back at Rustic Lark' }))
+    await act(async () => jest.advanceTimersByTime(1000))
+    await act(async () => {})
+    await waitFor(() => expect(mockSheet.visible).toBe(false))
+    // The sheet is still leaving: no moment yet.
+    expect(screen.queryByText('moment Rustic Lark')).toBeNull()
+    await act(async () => {
+      mockSheet.dismiss?.()
+      jest.advanceTimersByTime(50)
+    })
+    await waitFor(() => expect(screen.getByText('moment Rustic Lark')).toBeTruthy())
+    get.mockRestore()
+    send.mockRestore()
+    jest.useRealTimers()
   })
 })

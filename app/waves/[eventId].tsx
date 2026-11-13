@@ -34,6 +34,8 @@ export default function WavedAtYouScreen() {
   const now = useNow(15_000)
   const [open, setOpen] = useState(true)
   const [moment, setMoment] = useState<Moment | null>(null)
+  /** The moment is its own Modal: iOS refuses it while the sheet's is still leaving, so it waits for the sheet to go. */
+  const [sheetGone, setSheetGone] = useState(false)
   useEffect(() => wavesListOpened(), [])
 
   const waveBack = useCallback(
@@ -71,14 +73,14 @@ export default function WavedAtYouScreen() {
   return (
     <HueProvider value="rose">
       <RouteModal>
-        <Sheet visible={open} onClose={() => setOpen(false)} onDismissed={() => (moment ? undefined : router.back())} detents={['tall']} testID="waved-sheet">
+        <Sheet visible={open} onClose={() => setOpen(false)} onDismissed={() => (moment ? setSheetGone(true) : router.back())} detents={['tall']} testID="waved-sheet">
           {eventId ? (
             <WavedAtYouList eventId={eventId} now={now} onWaveBack={waveBack} onSafety={safety} />
           ) : (
             <StateScreen icon="hand" title="This room isn’t available." body="It may have closed, or the link is wrong." testID="waved-gone" />
           )}
         </Sheet>
-        {moment ? (
+        {moment && sheetGone ? (
           <MomentMatch
             key={moment.conversationId}
             you={{ kind: 'creature', pseudonym: moment.you ?? 'You' }}
