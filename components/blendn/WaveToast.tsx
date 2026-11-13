@@ -5,34 +5,58 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
-import type { RoomWave } from '../../lib/roomWaves'
-import { COLOR, EASING, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { toastTitle } from '../../lib/receivedWaves'
+import type { RoomWave, WaveToastItem } from '../../lib/roomWaves'
+import { COLOR, EASING, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toastDwell } from '../ds/Toast'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
-import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
+import { Avatar } from '../ds/Avatar'
+import { Facepile } from '../ds/Facepile'
+import { WaveBackPill } from './WaveBackPill'
 
 /** #19: in from 16 pt above. */
 const ENTER_FROM = -SPACE.lg
 
+/** L-B: the fold shows the newest three faces. */
+/** Board 03 `.toast`: a 34 face in a 48 capsule. */
+const TOAST_FACE = 34
+const FOLD_FACES = 3
+
 /**
- * "{name} waved at you" (Flow 4 Room #07, R3-D4 4.2): the ✓ capsule at the top
- * of the Room, between the close chevron and the settings circle, on the toast
- * glass. It names the wave once, then leaves; it is never the only way to
- * answer (the dock row stays). A tap opens their PersonCard, where Wave back is.
+ * A wave while you are in the room (board 03 L-A / L-B, Flow 4 Room #07): a capsule at the top of the Room, between the
+ * close chevron and the settings circle, on the toast glass.
+ * - **L-A, one wave:** their face, "{name} waved at you" and Wave back inline. The body opens their card.
+ * - **L-B, a fold:** three faces, "{n} people waved at you" and See, which opens the list.
+ * Holding a one-wave toast offers Block and Report for them (anti-spam W7); a screen reader has both as actions.
  *
- * `H.arrive` once, as it lands (SCRUM-630: it used to be two). The ring on
- * their face is the grid's (#51). In from 16 pt on `M.snap`, out over `quick`
- * (#19). Glass never fades (§5.2 rule 6): on iOS it slides out; Android's
- * solid tier fades too. Reduce Motion: no movement. Read once, politely.
+ * `H.arrive` once, as it lands. In from 16 pt on `M.snap`, out over `quick` (#19). Glass never fades (§5.2 rule 6): on
+ * iOS it slides out; Android's solid tier fades too. Reduce Motion: no movement. Read once, politely.
  */
-export function WaveToast({ wave, onOpen, onDone, testID = 'wave-toast' }: { wave: RoomWave; onOpen: () => void; onDone: () => void; testID?: string }) {
+export function WaveToast({
+  toast,
+  onOpen,
+  onWaveBack,
+  onSeeAll,
+  onSafety,
+  onDone,
+  testID = 'wave-toast',
+}: {
+  toast: WaveToastItem
+  onOpen: (wave: RoomWave) => void
+  onWaveBack: (wave: RoomWave) => void
+  onSeeAll: () => void
+  onSafety: (wave: RoomWave) => void
+  onDone: () => void
+  testID?: string
+}) {
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  const text = `${wave.fromName} waved at you`
+  const text = toastTitle(toast)
+  const one = toast.waves.length === 1 ? toast.waves[0] : null
   const android = Platform.OS === 'android'
   const y = useSharedValue(reduceMotion ? 0 : ENTER_FROM)
   const opacity = useSharedValue(android ? 0 : 1)
@@ -41,7 +65,7 @@ export function WaveToast({ wave, onOpen, onDone, testID = 'wave-toast' }: { wav
 
   useEffect(() => {
     H.arrive()
-    AccessibilityInfo.announceForAccessibility(`${text}. Their card is one tap away.`)
+    AccessibilityInfo.announceForAccessibility(one ? `${text}. Wave back is one tap away.` : `${text}.`)
     if (!reduceMotion) y.set(withSpring(0, SPRING.snap))
     if (android) opacity.set(withTiming(1, { duration: duration.base, easing: Easing.bezier(...EASING.entrance) }))
     const dwell = setTimeout(() => setLeaving(true), toastDwell(text, {}))
@@ -69,23 +93,58 @@ export function WaveToast({ wave, onOpen, onDone, testID = 'wave-toast' }: { wav
     >
       <ScalePress
         onPress={() => {
-          onOpen()
+          if (one) onOpen(one)
+          else onSeeAll()
           setLeaving(true)
         }}
+        onLongPress={
+          one
+            ? () => {
+                H.longPress()
+                onSafety(one)
+              }
+            : undefined
+        }
         pressedScale={PRESS.scale}
         accessibilityRole="button"
         accessibilityLabel={text}
-        accessibilityHint="Opens their card"
+        accessibilityHint={one ? 'Opens their card' : 'Opens who waved'}
+        // One element to a screen reader (iOS hides the pill inside it): Wave back and Block or report are actions.
+        accessibilityActions={one ? [{ name: 'waveBack', label: 'Wave back' }, { name: 'block', label: `Block or report ${one.fromName}` }] : undefined}
+        onAccessibilityAction={(e) => {
+          if (!one) return
+          if (e.nativeEvent.actionName === 'block') return onSafety(one)
+          if (e.nativeEvent.actionName !== 'waveBack') return
+          H.select()
+          onWaveBack(one)
+          setLeaving(true)
+        }}
         testID={`${testID}-press`}
       >
         <Material role="toast" style={[styles.capsule, contrast && IC_HAIRLINE]}>
-          <Icon name="check" size={ICON.control} />
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            {one ? (
+              <Avatar size={TOAST_FACE} kind="creature" pseudonym={one.fromName} />
+            ) : (
+              <Facepile faces={toast.waves.slice(0, FOLD_FACES).map((w) => ({ kind: 'creature', pseudonym: w.fromName }))} total={Math.min(toast.waves.length, FOLD_FACES)} size={32} />
+            )}
+          </View>
           <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.text]}>
             {text}
           </Text>
-          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} />
-          </View>
+          <WaveBackPill
+            name={one?.fromName ?? ''}
+            state="ready"
+            label={one ? 'Wave back' : 'See'}
+            hand={false}
+            accessibilityLabel={one ? undefined : 'See who waved'}
+            onPress={() => {
+              if (one) onWaveBack(one)
+              else onSeeAll()
+              setLeaving(true)
+            }}
+            testID={`${testID}-action`}
+          />
         </Material>
       </ScalePress>
     </Animated.View>
@@ -93,16 +152,19 @@ export function WaveToast({ wave, onOpen, onDone, testID = 'wave-toast' }: { wav
 }
 
 const styles = StyleSheet.create({
-  place: { position: 'absolute', left: SPACE.xl, right: SPACE.xl, alignItems: 'center', zIndex: 2 },
+  // Board 03 L-A: across the bar, over the chevron and the settings circle (the capsule carries its own action).
+  place: { position: 'absolute', left: SPACE.lg, right: SPACE.lg, zIndex: 2 },
   capsule: {
-    height: SIZE.circleButton,
+    // Board 03 `.toast`: 48 tall, 8 before the face, 6 after the pill.
+    minHeight: SIZE.control,
     borderRadius: RADIUS.capsule,
-    paddingLeft: SPACE.md,
-    paddingRight: SPACE.lg,
+    paddingLeft: SPACE.sm,
+    paddingRight: SPACE.xs + SPACE.xxs,
+    paddingVertical: SPACE.xs + SPACE.xxs,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.sm,
     overflow: 'hidden',
   },
-  text: { color: COLOR.textPrimary, flexShrink: 1 },
+  text: { color: COLOR.textPrimary, flex: 1 },
 })

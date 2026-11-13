@@ -36,7 +36,8 @@ import { everyoneHead, meetNext } from '../../lib/roomMoments'
 import { eventRoomDoor } from '../../lib/eventRoomDoor'
 import { recapPeopleOpen, roomRecap, type RoomRecap as Recap } from '../../lib/roomRecap'
 import { bannerState } from '../../lib/roomVisibility'
-import { useRoomWaves, waveShown } from '../../lib/roomWaves'
+import { useReceivedWaves } from '../../lib/receivedWaves'
+import { useRoomWaves, waveShown, type RoomWave } from '../../lib/roomWaves'
 import { wavedAgo, WAVE_SETTLE_MS, WAVE_SETTLE_REDUCED_MS } from '../../lib/waves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
@@ -81,6 +82,7 @@ import { RoomTabs } from './RoomTabs'
 import { RoomView } from './RoomView'
 import { TonightView } from './TonightView'
 import { WaveToast } from './WaveToast'
+import { WavedAtYouStrip } from './WavedAtYouStrip'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../ds/CoachMarkHost'
 
@@ -707,6 +709,29 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     },
     [room, open?.id, say, reduceMotion]
   )
+  /*
+   * Waves to you (Wave PR (b), board 03): the strip under your room name (S-A), the toast's Wave back (L-A) and the list
+   * (See all). A wave back answers someone the received list returned even after they left (until the room closes).
+   */
+  const { page: receivedPage, reload: reloadReceived } = useReceivedWaves(mode === 'room' ? eventId : null)
+  const [answering, setAnswering] = useState<string | null>(null)
+  const waveBack = useCallback(
+    async (id: string, name: string) => {
+      setAnswering(id)
+      const answer = await room.wave(id, reduceMotion ? WAVE_SETTLE_REDUCED_MS : WAVE_SETTLE_MS, { name })
+      setAnswering(null)
+      reloadReceived()
+      if (answer.kind === 'refused') say(answer.refusal.message)
+    },
+    [room, reduceMotion, reloadReceived, say]
+  )
+  const seeAllWaves = useCallback(() => {
+    if (eventId) router.push({ pathname: '/waves/[eventId]', params: { eventId, title: room.event?.title ?? '' } } as never)
+  }, [eventId, room.event?.title])
+  /** Block or Report from a wave (anti-spam W7): either removes them, and every wave of theirs, from this room. */
+  const waveSafety = useCallback((id: string, name: string) => showUserSafetyActions(name, id, () => room.remove(id), () => room.remove(id)), [room])
+  const toastWave = useCallback((w: RoomWave) => void waveBack(w.fromUserId, w.fromName), [waveBack])
+
   const openProfile = useCallback(
     (p: OpenCard, seen?: RoomPerson) => {
       setOpen(null)
@@ -1032,6 +1057,16 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 />
               </View>
             }
+            waves={
+              <WavedAtYouStrip
+                page={receivedPage}
+                now={now}
+                sending={answering}
+                onWaveBack={(w) => void waveBack(w.userId, w.displayName)}
+                onSeeAll={seeAllWaves}
+                onSafety={(w) => waveSafety(w.userId, w.displayName)}
+              />
+            }
             crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.crews.length : null}
             view={gridView}
             onView={setGridView}
@@ -1123,16 +1158,16 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         </View>
       )}
 
-      {/* A wave while you're here: the ✓ capsule, which opens their card (R3-D4 4.2). */}
-      {waves.latest ? (
+      {/* A wave while you're here: L-A, Wave back inline; L-B, a fold opens the list (board 03). */}
+      {waves.toast ? (
         <WaveToast
-          key={`${waves.latest.fromUserId}:${waves.latest.at}`}
-          wave={waves.latest}
-          onOpen={() => {
-            const w = waves.latest
-            if (w) openCard({ id: w.fromUserId, name: w.fromName })
-          }}
-          onDone={() => waves.latest && waveShown(waves.latest)}
+          key={`${waves.toast.waves[0].fromUserId}:${waves.toast.waves[0].at}`}
+          toast={waves.toast}
+          onOpen={(w) => openCard({ id: w.fromUserId, name: w.fromName })}
+          onWaveBack={toastWave}
+          onSeeAll={seeAllWaves}
+          onSafety={(w) => waveSafety(w.fromUserId, w.fromName)}
+          onDone={() => waves.toast && waveShown(waves.toast)}
         />
       ) : null}
 

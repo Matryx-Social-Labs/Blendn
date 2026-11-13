@@ -418,7 +418,7 @@ describe('the Banter counts board requests as something to show', () => {
   const chat = () => readFileSync(join(__dirname, '..', 'app/(tabs)/chat.tsx'), 'utf8')
 
   it('does not claim an empty inbox under them', () => {
-    expect(chat()).toContain('const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0')
+    expect(chat()).toContain('const hasHeaderContent = waiting.rooms.length + liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0')
     expect(chat()).toContain('onCount={setBoardCount}')
   })
 

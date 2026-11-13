@@ -123,7 +123,7 @@ export function nativeIntentPath(path: string): string {
   if (n.segments.length === 1 && n.segments[0].toLowerCase() === 'nearby-events') return nearbyRedirect(path)
   const target = targetOf(n)
   if (target) return routeFor(target)
-  return lobbyPostPath(n.segments) ?? `/${n.segments.join('/')}${chatQuery(n.segments, path)}`
+  return lobbyPostPath(n.segments) ?? wavesPath(n.segments) ?? `/${n.segments.join('/')}${chatQuery(n.segments, path)}`
 }
 
 /** An id as a link carries it: the shape the server mints, checked before it rides into a route. */
@@ -133,6 +133,21 @@ export const isLinkId = (value: unknown): value is string => typeof value === 's
  * A Lobby post's link (SCRUM-1026, 6/6): `/board/<event>/<post>` is the Lobby scrolled to that post, `?post=` its one
  * param, each id checked. A post id that is not one leaves the Lobby alone, and nothing else in the link rides along.
  */
+/**
+ * "Waved at you" (`/waves/<event>`, Wave PR (b)): the event id is checked before it rides into the route, whose screen
+ * builds an authenticated API path from it (security review). Anything else under `/waves` goes to the root.
+ */
+function wavesPath(segments: string[]): string | null {
+  if (segments[0]?.toLowerCase() !== 'waves') return null
+  let id = ''
+  try {
+    id = segments.length === 2 ? decodeURIComponent(segments[1]) : ''
+  } catch {
+    id = ''
+  }
+  return isLinkId(id) ? `/waves/${id}` : '/'
+}
+
 function lobbyPostPath(segments: string[]): string | null {
   if (segments[0]?.toLowerCase() !== 'board' || (segments.length !== 2 && segments.length !== 3)) return null
   const [eventId, postId] = segments.slice(1).map((s) => {

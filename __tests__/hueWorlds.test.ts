@@ -16,6 +16,8 @@ const ROSE = [
   'app/crews/invite/[crewId].tsx',
   'app/friends/index.tsx',
   'app/room/friends-here.tsx',
+  // Waved at you (Wave PR (b)): rose, as the Room and the Banter it opens over.
+  'app/waves/[eventId].tsx',
   'app/friends/add.tsx',
   'app/friends/requests.tsx',
   'app/friends/[userId].tsx',

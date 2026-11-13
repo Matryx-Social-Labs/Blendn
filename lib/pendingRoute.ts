@@ -107,7 +107,7 @@ export function resetPendingRoute(): void {
  * The root stack's modal routes: those with a modal `presentation` in `app/_layout.tsx` (`__tests__/linkOverModal.test.tsx`
  * reads it back).
  */
-export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'plus', 'f/[token]', 'sign-in', 'forgot-password']
+export const ROOT_MODAL_ROUTES: readonly string[] = ['event-preferences/[eventId]', 'crews/new', 'waves/[eventId]', 'plus', 'f/[token]', 'sign-in', 'forgot-password']
 
 type LinkNavigator = Pick<ReturnType<typeof useNavigationContainerRef>, 'isReady' | 'getRootState' | 'dispatch' | 'addListener'>
 type NavigationState = ReturnType<LinkNavigator['getRootState']>
