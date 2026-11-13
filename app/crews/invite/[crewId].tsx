@@ -29,7 +29,7 @@ import { useAuth } from '../../../lib/useAuth'
 
 type Load = { kind: 'loading' } | { kind: 'ready'; invite: CrewInvite } | { kind: 'notOpen' } | { kind: 'failed' }
 
-const EMBLEM = 160
+const EMBLEM = 120
 /** How long "Joined" shows before the chat opens. */
 const JOINED_MS = 700
 const NOT_OPEN = 'This invite isn’t open any more'

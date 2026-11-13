@@ -7,12 +7,12 @@ import { Chip } from '../ds/Chip'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
 
-const EMBLEM = 160
+const EMBLEM = 120
 // design-exception: flow10.js `detail` head sits 10 apart, off the SPACE scale
 const HEAD_GAP = 10
 
 /**
- * A crew's head (flow10.js `detail`): the emblem at 160, the name, the line
+ * A crew's head (flow10.js `detail`): the emblem at 120 (the approved Huddle board), the name, the line
  * about it, and the tags with the intent beside them. Nothing about who is in
  * it — that is the Members list under it, and only members see that.
  */
