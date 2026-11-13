@@ -156,7 +156,7 @@ describe('the Pulse no longer carries the checked-in strip', () => {
      */
     expect(pulse).toContain("label: 'Check out'")
     // And asks first, like the room's, before `handleCheckOut` runs.
-    expect(pulse).toContain('title: `Check out of ${event.title}?`')
+    expect(pulse).toContain('title: checkOutQuestion(event.title),')
     expect(pulse).toContain('void handleCheckOut(event)')
     const blendn = readFileSync(join(__dirname, '..', 'components/blendn/BlendnScreen.tsx'), 'utf8')
     expect(blendn).toContain("{ label: 'Check out', icon: 'log-out' as const, variant: 'destructive' as const, apart: true, then: () => setConfirmingOut(true) }")

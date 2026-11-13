@@ -34,7 +34,7 @@ import { subscribeCheckInChanged } from '../../lib/checkIn'
 import { askPushInContext } from '../../lib/pushAsk'
 import { openInMaps as openPlaceInMaps } from '../../lib/openInMaps'
 import { addToCalendar } from '../../lib/calendar'
-import { attendancePhase, sceneCtaState } from '../../lib/attendanceState'
+import { attendancePhase, checkedOutNow, sceneCtaState } from '../../lib/attendanceState'
 import { openBlendn, openRoomChat } from '../../lib/blendnOverlay'
 import { useToast } from '../Toast'
 import { useToastDock } from '../toastDock'
@@ -726,7 +726,13 @@ export default function EventDetail() {
   const openInMaps = () => {
     if (event) void openPlaceInMaps(event)
   }
-  const { hold, checkOut, openCheckOut, overlays } = useEventCheckIn({ id: String(id), event, openMaps: openInMaps })
+  const { hold, checkOut, openCheckOut, overlays } = useEventCheckIn({
+    id: String(id),
+    event,
+    openMaps: openInMaps,
+    showToast,
+    onCheckedOut: () => setCheckInStatus(checkedOutNow),
+  })
   // The dock's "You're in · Check out": a screen reader's focus comes back to it when the sheet closes without checking out.
   const checkOutLink = useRef<View>(null)
   const refocusCheckOut = () => {

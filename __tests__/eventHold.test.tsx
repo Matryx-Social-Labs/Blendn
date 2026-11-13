@@ -14,6 +14,7 @@ import { checkOutOf, submitCheckIn, type CheckInOutcome } from '../lib/checkIn'
 import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
+import { CHECK_OUT_CONSEQUENCE } from '../lib/switchCopy'
 import { getLeftNotice, openRoomOf, setLeftNotice, setLiveHint, setRoomUp } from '../lib/blendnOverlay'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -50,8 +51,10 @@ const refused = (errorCode: string, message: string): CheckInOutcome => ({ kind:
 const soon = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString()
 const event = { id: 'e1', title: 'Vinyl Night', venue_name: 'Toit', latitude: 12.9791, longitude: 77.6408, start_time: soon(-1), end_time: soon(2), status: 'published' }
 
+const mockToast = jest.fn()
+const mockCheckedOut = jest.fn()
 function Page({ openMaps = jest.fn(), going = false }: { openMaps?: () => void; going?: boolean }) {
-  const { hold, checkOut: out, openCheckOut, overlays } = useEventCheckIn({ id: 'e1', event: event as never, openMaps })
+  const { hold, checkOut: out, openCheckOut, overlays } = useEventCheckIn({ id: 'e1', event: event as never, openMaps, showToast: mockToast, onCheckedOut: mockCheckedOut })
   return (
     <>
       {going ? (
@@ -172,14 +175,16 @@ describe('checked into this event already: "Check out" opens the sheet with the 
     expect(Hold()).toBeNull()
   })
 
-  it('the sheet: the event’s name as its title, the hold naming it in its hint, and the line', async () => {
+  it('asks in the room’s words (audit A-2): “Check out of {event}?”, the room’s sentence over the hold, and Stay', async () => {
     await render(<Page going />)
     await open()
-    expect(screen.getByRole('header', { name: 'Vinyl Night' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Check out of Vinyl Night?' })).toBeTruthy()
+    expect(screen.getByText(CHECK_OUT_CONSEQUENCE)).toBeTruthy()
     expect(Hold()?.props.accessibilityHint).toBe('Checks you out of Vinyl Night.')
-    // The title names it; the line does not say it twice.
-    expect(screen.getByText('Checks you out of this event.', HIDDEN)).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Stay' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    // The old line under the hold is gone at rest; a refusal still has its place there.
+    expect(screen.queryByText('Checks you out of this event.', HIDDEN)).toBeNull()
   })
 
   it('is the quiet hold, the lit kind with its hue pouring in, not the gradient', async () => {
@@ -196,10 +201,10 @@ describe('checked into this event already: "Check out" opens the sheet with the 
     expect(screen.queryByTestId('scene-hold-pill-fill-ground', HIDDEN)).toBeNull()
   })
 
-  it('Cancel closes it and checks nobody out', async () => {
+  it('Stay closes it and checks nobody out', async () => {
     await render(<Page going />)
     await open()
-    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Cancel' })))
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Stay' })))
     await settle()
     expect(Hold()).toBeNull()
     expect(checkOut).not.toHaveBeenCalled()
@@ -214,29 +219,35 @@ describe('checked into this event already: "Check out" opens the sheet with the 
     expect(checkOut).toHaveBeenCalledWith('e1')
     // Busy: the fill stays full under its busy words; Cancel is off.
     expect(screen.getByRole('button', { name: 'Checking you out…' }).props.accessibilityState).toMatchObject({ busy: true })
-    expect(screen.getByRole('button', { name: 'Cancel' }).props.accessibilityState).toMatchObject({ disabled: true })
+    expect(screen.getByRole('button', { name: 'Stay' }).props.accessibilityState).toMatchObject({ disabled: true })
     await act(async () => answer({ success: true }))
     await settle()
     expect(screen.queryByRole('button', { name: /Hold to check out|Checking you out/ })).toBeNull()
   })
 
-  it('a check-out that lands is said to a screen reader, naming the event: the sheet closes and its link is gone, so focus has nowhere to come back to', async () => {
+  it('a check-out that lands (audit B-2, C-2): the page is told at once, then the success toast, with its haptic, names the event', async () => {
     checkOut.mockResolvedValue({ success: true })
     await render(<Page going />)
     await open()
     await holdOut()
     await settle()
-    expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Checked out of Vinyl Night.')
+    expect(mockCheckedOut).toHaveBeenCalledTimes(1)
+    expect(mockToast).toHaveBeenCalledWith('Checked out of Vinyl Night.', 'success', { haptic: 'success' })
+    expect(mockCheckedOut.mock.invocationCallOrder[0]).toBeLessThan(mockToast.mock.invocationCallOrder[0])
+    // The DS Toast says itself (announced on iOS, a live region on Android): never a second announcement here.
+    expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled()
   })
 
-  it('a refusal is not said as a check-out', async () => {
+  it('a refusal is not a check-out: no toast, and the page is not told', async () => {
     checkOut.mockResolvedValue({ success: false, error: 'Nope.' })
     await render(<Page going />)
     await open()
     await holdOut()
     await settle()
-    expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled()
+    expect(mockToast).not.toHaveBeenCalled()
+    expect(mockCheckedOut).not.toHaveBeenCalled()
   })
+
 
   it('refused: stays open, says why in its line, plays the error once, and the hold is ready again', async () => {
     checkOut.mockResolvedValue({ success: false, error: 'Nope.' })
@@ -245,7 +256,6 @@ describe('checked into this event already: "Check out" opens the sheet with the 
     await holdOut()
     await settle()
     expect(screen.getByText('Nope.', HIDDEN)).toBeTruthy()
-    expect(screen.queryByText('Checks you out of this event.', HIDDEN)).toBeNull()
     expect(H.error).toHaveBeenCalledTimes(1)
     expect(Hold()?.props.accessibilityState).toMatchObject({ disabled: false })
     // A second try clears the reason.
@@ -270,11 +280,11 @@ describe('checked into this event already: "Check out" opens the sheet with the 
     await render(<Page going />)
     await open()
     await holdOut()
-    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Cancel' })))
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Stay' })))
     await settle()
     await open()
     expect(screen.queryByText('Nope.', HIDDEN)).toBeNull()
-    expect(screen.getByText('Checks you out of this event.', HIDDEN)).toBeTruthy()
+    expect(screen.getByText(CHECK_OUT_CONSEQUENCE)).toBeTruthy()
   })
 })
 

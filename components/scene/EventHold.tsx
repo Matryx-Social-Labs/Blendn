@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { passReachLine, type PassReach } from '../../lib/attendanceState'
-import { CHECKING_OUT_LABEL, CHECK_OUT_LABEL, SWITCH_LABEL, checkOutCaption, switchCaption } from '../../lib/switchCopy'
+import { CHECKING_OUT_LABEL, CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, STAY_LABEL, SWITCH_LABEL, checkOutCaption, checkOutQuestion, switchCaption } from '../../lib/switchCopy'
 import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { HoldToConfirm } from '../ds/HoldToConfirm'
 import { Sheet } from '../ds/Sheet'
@@ -82,8 +82,9 @@ export function EventCheckOutSheet({ visible, onClose, onDismissed, name, onConf
       visible={visible}
       onClose={busy ? noop : onClose}
       onDismissed={onDismissed}
-      title={name?.trim() || 'Check out'}
-      actions={[{ label: 'Cancel', kind: 'tertiary', onPress: onClose, disabled: busy, testID: 'scene-checkout-cancel' }]}
+      title={checkOutQuestion(name)}
+      body={CHECK_OUT_CONSEQUENCE}
+      actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: onClose, disabled: busy, testID: 'scene-checkout-cancel' }]}
       testID="scene-checkout"
     >
       <HoldToConfirm
@@ -97,15 +98,11 @@ export function EventCheckOutSheet({ visible, onClose, onDismissed, name, onConf
         refused={!!error}
         testID="scene-checkout-pill"
       />
-      <Text
-        maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
-        accessibilityLiveRegion={error ? 'polite' : 'none'}
-        accessibilityElementsHidden={!error}
-        importantForAccessibility={error ? 'yes' : 'no'}
-        style={[font('meta', bold), styles.line, error ? styles.error : null]}
-      >
-        {error ?? checkOutCaption(null)}
-      </Text>
+      {error ? (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.line, styles.error]}>
+          {error}
+        </Text>
+      ) : null}
     </Sheet>
   )
 }
