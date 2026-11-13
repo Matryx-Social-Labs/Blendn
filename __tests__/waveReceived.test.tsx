@@ -281,3 +281,23 @@ describe('B-A: one Banter row per room', () => {
     expect(onSafety).toHaveBeenCalledWith(room.latest)
   })
 })
+
+describe('long text (owner 2026-11-05: worst-case strings)', () => {
+  const LONG = 'Thiruvananthapuram Wandering Peacock'
+  it('the strip: a long name ellipsizes on one line, "and N others" is never cut', async () => {
+    const waves = [wave(1, { displayName: LONG }), wave(2), wave(3)]
+    await render(<WavedAtYouStrip page={page(waves, { total: 12_480 })} now={NOW} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} />)
+    expect(screen.getByText(LONG, { includeHiddenElements: true }).props.numberOfLines).toBe(1)
+    expect(screen.getByText('and 12k others waved at you', { includeHiddenElements: true }).props.numberOfLines).toBe(2)
+  })
+
+  it('one wave, a list row and the Banter row: the name is one line and the action stays', async () => {
+    await render(<WavedAtYouStrip page={page([wave(1, { displayName: LONG })])} now={NOW} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} />)
+    expect(screen.getByText(LONG).props.numberOfLines).toBe(1)
+    expect(screen.getByRole('button', { name: `Wave back at ${LONG}` })).toBeTruthy()
+    screen.unmount()
+    await render(<BanterWavesRow room={{ eventId: 'e1', waiting: 12_480, latest: wave(1, { displayName: LONG }) }} title="Bengaluru Design Festival 2026 · Bangalore Palace Grounds" onSafety={jest.fn()} />)
+    expect(screen.getByText('In the room · Bengaluru Design Festival 2026 · Bangalore Palace Grounds').props.numberOfLines).toBe(1)
+  })
+})
+
