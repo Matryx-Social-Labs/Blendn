@@ -11,7 +11,6 @@ import { Sheet, type SheetAction } from '../../components/ds/Sheet'
 import { CREW_MAX_MEMBERS, createCrewBody, crewMessage, newEmblemSeed, toggleTag } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import {
-  bioFits,
   cleanName,
   intentOf,
   makeLabel,
@@ -33,12 +32,9 @@ import { onClosingForLink } from '../../lib/linkClosers'
 import { useAuth } from '../../lib/useAuth'
 import { useLatest } from '../../lib/useLatest'
 
-const BIO_TOO_LONG = 'A crew bio is at most 140 characters'
-
 /** What Make a crew keeps when a link closes it: the form, not the step or what the server said. */
 type CrewDraft = {
   name: string
-  bio: string
   choice: IntentChoice
   tags: string[]
   openToSolo: boolean
@@ -82,13 +78,12 @@ function NewCrewScreenContent() {
   // Taken once it is on screen: a sheet the person closes themselves does not bring it back again.
   useEffect(() => setDraft(draftThread, ''), [draftThread])
   const [name, setName] = useState(kept.name ?? '')
-  const [bio, setBio] = useState(kept.bio ?? '')
   const [choice, setChoice] = useState<IntentChoice>(kept.choice ?? 'friendship')
   const [tags, setTags] = useState<string[]>(kept.tags ?? [])
   const [openToSolo, setOpenToSolo] = useState(kept.openToSolo ?? false)
   const [keepAnonymous, setKeepAnonymous] = useState(kept.keepAnonymous ?? false)
   const [picked, setPicked] = useState<string[]>(kept.picked ?? [])
-  const [errors, setErrors] = useState<{ name?: string; bio?: string }>({})
+  const [errors, setErrors] = useState<{ name?: string }>({})
   const [refusal, setRefusal] = useState<CrewRefusal | null>(null)
   const [stuck, setStuck] = useState(false)
   const [sending, setSending] = useState(false)
@@ -101,12 +96,12 @@ function NewCrewScreenContent() {
   }
   // A link closing this sheet before the crew was made: what was typed is kept for next time, told before anything
   // unmounts (`onClosingForLink`). Closed by the person: let go.
-  const form = useLatest({ draft: { name, bio, choice, tags, openToSolo, keepAnonymous, picked } as CrewDraft, made: made !== null })
+  const form = useLatest({ draft: { name, choice, tags, openToSolo, keepAnonymous, picked } as CrewDraft, made: made !== null })
   useEffect(
     () =>
       onClosingForLink(() => {
         const { draft, made: wasMade } = form.current
-        const typed = draft.name.trim() || draft.bio.trim() || draft.tags.length || draft.picked.length
+        const typed = draft.name.trim() || draft.tags.length || draft.picked.length
         if (!wasMade && typed) setDraft(draftThread, JSON.stringify(draft))
       }),
     [draftThread, form],
@@ -163,13 +158,8 @@ function NewCrewScreenContent() {
 
   const make = async () => {
     if (inFlight.current) return
-    if (!bioFits(bio)) {
-      setErrors((e) => ({ ...e, bio: BIO_TOO_LONG }))
-      setStuck(true)
-      return
-    }
     // Tapping Make the crew is the agreement to the sentence above it.
-    const body = createCrewBody({ name, bio, intent, tags, openToSolo, inviteUserIds: picked, emblemSeed }, { consented: true, keepMeAnonymous: keepAnonymous })
+    const body = createCrewBody({ name, bio: '', intent, tags, openToSolo, inviteUserIds: picked, emblemSeed }, { consented: true, keepMeAnonymous: keepAnonymous })
     // The steps hold every limit, so this is only the type's other half.
     if ('problem' in body) return setRefusal({ text: body.problem })
     inFlight.current = true
@@ -181,13 +171,11 @@ function NewCrewScreenContent() {
       // The server's sentence names what it found (a phone number in the bio, the daily cap).
       const text = crewMessage(result, 'create', 'Couldn’t make the crew. Try again.')
       const field = textFieldOf(text, result.field)
-      if (field) {
-        setErrors({ [field]: text })
-        // The name is on step 1; the line is on this one.
-        if (field === 'name') {
-          dir.set(-1)
-          setStep(1)
-        }
+      // The name is on step 1 and goes back to stand under it; anything else (a draft's line, a cap, the gate) is a sheet.
+      if (field === 'name') {
+        setErrors({ name: text })
+        dir.set(-1)
+        setStep(1)
       } else {
         setRefusal({ text, errorCode: result.errorCode })
       }
@@ -268,12 +256,6 @@ function NewCrewScreenContent() {
                 />
               ) : (
                 <VibeStep
-                  bio={bio}
-                  onBio={(v) => {
-                    setBio(v)
-                    setErrors((e) => ({ ...e, bio: undefined }))
-                  }}
-                  bioError={errors.bio}
                   choice={choice}
                   onChoice={setChoice}
                   tags={tags}

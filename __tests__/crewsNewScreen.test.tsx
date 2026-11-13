@@ -170,12 +170,13 @@ describe('step 1 · name and friends (board 02 A)', () => {
 })
 
 describe('step 2 · the vibe, optional, and the consent on the button (board 02 A)', () => {
-  it('shows here-for, tags, the line, Room for one more and the consent, with nothing sent yet', async () => {
+  it('shows here-for, tags, Room for one more and the consent — board 02 A’s four, no more — with nothing sent yet', async () => {
     await toVibe()
     expect(screen.getByText('Here for · optional')).toBeTruthy()
     expect(screen.getByText('Tags · optional')).toBeTruthy()
     expect(screen.getByLabelText('0 of 3')).toBeTruthy()
-    expect(screen.getByText('0/140', { includeHiddenElements: true })).toBeTruthy()
+    // The line about the crew is not on the board's Make: it is written on the crew page (Edit crew), as before.
+    expect(screen.queryByTestId('make-bio-input')).toBeNull()
     expect(screen.getByText('Room for one more')).toBeTruthy()
     expect(screen.getByText('Solo people who opt in can find you. Crews of 6 or fewer.')).toBeTruthy()
     expect(screen.getByText(CONSENT_LINE)).toBeTruthy()
@@ -235,14 +236,6 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     expect(left).toBe(4)
   })
 
-  it('a bio over 140 characters cannot be sent', async () => {
-    await toVibe()
-    await fireEvent.changeText(screen.getByTestId('make-bio-input'), 'x'.repeat(141))
-    await pressMake()
-    expect(screen.getByText('A crew bio is at most 140 characters')).toBeTruthy()
-    expect(crews.create).not.toHaveBeenCalled()
-  })
-
   it('the button is the agreement: it sends the consent, the choices and the friends asked', async () => {
     crews.create.mockResolvedValue({ success: true, data: { crewId: 'c1', chatGroupId: 'g1', invited: 1 } })
     crews.crew.mockResolvedValue({ success: true, data: { crewId: 'c1', emblemSeed: 'real-seed' } as never })
@@ -250,7 +243,6 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     await pick('Priya')
     await press('Next')
     await waitFor(() => screen.getByLabelText(S2))
-    await fireEvent.changeText(screen.getByTestId('make-bio-input'), 'Late sets.')
     await fireEvent.press(screen.getByLabelText('Dating'))
     await fireEvent.press(screen.getByLabelText('6 more tags'))
     await fireEvent.press(screen.getByLabelText('Dance floor'))
@@ -261,7 +253,6 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     await waitFor(() => expect(crews.create).toHaveBeenCalledTimes(1))
     expect(crews.create.mock.calls[0][0]).toEqual({
       name: 'Nebula',
-      bio: 'Late sets.',
       intent: ['dating'],
       tags: ['dance-floor'],
       openToSolo: true,
@@ -404,15 +395,13 @@ describe('what the server refuses', () => {
     expect(screen.getByLabelText(S2)).toBeTruthy()
   })
 
-  it('the server naming the line puts its sentence under the line', async () => {
+  it('the server naming the line (not on Make any more) is a sheet in its words, on step 2', async () => {
     const said = 'A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.'
     crews.create.mockResolvedValue({ success: false, error: said, errorCode: 'BAD_REQUEST', field: 'bio' })
     await toVibe()
     await pressMake()
-    // The line is on step 2 now: the sentence stands under it there, and the sheet does not go back to the name.
     await waitFor(() => screen.getByText(said))
     expect(screen.getByLabelText(S2)).toBeTruthy()
-    expect(screen.getByTestId('make-bio-input')).toBeTruthy()
   })
 
   it.each([

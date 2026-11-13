@@ -362,9 +362,6 @@ export function NameAndFriendsStep(p: NameAndFriendsStepProps) {
 }
 
 export type VibeStepProps = {
-  bio: string
-  onBio: (next: string) => void
-  bioError?: string
   choice: IntentChoice
   onChoice: (next: IntentChoice) => void
   tags: readonly string[]
@@ -376,8 +373,9 @@ export type VibeStepProps = {
 }
 
 /**
- * Make, step 2 · Your crew's vibe (board 02 A): all of it optional — here for, tags, the line, Room for one more — and the
- * consent, which the step's button ("Make Nebula · ask 3 friends") agrees to. The line is the board's "Keep": it stays here.
+ * Make, step 2 · Your crew's vibe (board 02 A): all of it optional — here for, tags, Room for one more — and the consent,
+ * which the step's button ("Make Nebula · ask 3 friends") agrees to. The line about the crew is not on the board's Make: it is
+ * written on the crew page (Edit crew), which keeps its 140 and its moderation.
  */
 export function VibeStep(p: VibeStepProps) {
   const bold = useBoldText()
@@ -409,15 +407,6 @@ export function VibeStep(p: VibeStepProps) {
         foldAfter={TAGS_SHOWN}
         foldNoun="tags"
         testID="make-tags"
-      />
-      <TextArea
-        label="A line about the crew · optional"
-        value={p.bio}
-        onChangeText={p.onBio}
-        limit={CREW_BIO_MAX}
-        minHeight={BIO_MIN_HEIGHT}
-        error={p.bioError}
-        testID="make-bio"
       />
       <View style={[styles.block, styles.blockRow]}>
         <View style={styles.fill}>
