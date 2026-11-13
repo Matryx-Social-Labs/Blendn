@@ -725,6 +725,8 @@ export interface WavesWaitingRoom {
   eventId: string
   waiting: number
   latest: ReceivedWave
+  /** The newest three waiting, newest first (handle and name only); absent from a server that predates it. */
+  latestFaces?: Pick<ReceivedWave, 'userId' | 'displayName'>[]
 }
 
 /**

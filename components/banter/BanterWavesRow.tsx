@@ -6,6 +6,7 @@ import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE } from '../../lib/design/
 import { compactCount } from '../../lib/format'
 import { H } from '../../lib/haptics'
 import { Avatar } from '../ds/Avatar'
+import { Facepile } from '../ds/Facepile'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
@@ -15,7 +16,7 @@ const FACE = 32
 
 /**
  * B-A (board 03, "Missed, shown in Banter"): ONE lit row per room with waves you have not answered, pinned above the
- * chats: the latest face, "{n} waved at you" and "In the room · {room}". A 12k room is still one row. It opens the room's
+ * chats: the newest three faces (`latestFaces`), "{n} waved at you" and "In the room · {room}". A 12k room is still one row. It opens the room's
  * "Waved at you" list, where each wave answers in place, until the room closes.
  *
  * Holding the row offers Block and Report for the face it shows (anti-spam W7); a screen reader has it as an action.
@@ -25,6 +26,8 @@ export function BanterWavesRow({ room, title, onSafety }: { room: WavesWaitingRo
   const contrast = useIncreaseContrast()
   const sel = useSelection()
   const open = useBanterPress(() => router.push({ pathname: '/waves/[eventId]', params: { eventId: room.eventId, ...(title ? { title } : {}) } } as never))
+  // The board's pile: the newest three; a server from before `latestFaces` sends the newest only.
+  const faces = room.latestFaces ?? [room.latest]
   const heading = `${compactCount(room.waiting)} waved at you`
   const where = title ? `In the room · ${title}` : 'In the room'
   const safety = () => {
@@ -43,7 +46,11 @@ export function BanterWavesRow({ room, title, onSafety }: { room: WavesWaitingRo
       style={[styles.row, { backgroundColor: sel.fill, borderColor: sel.edge }, contrast && IC_HAIRLINE]}
     >
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Avatar size={FACE} kind="creature" pseudonym={room.latest.displayName} />
+        {faces.length > 1 ? (
+          <Facepile testID={`banter-waves-${room.eventId}-pile`} faces={faces.map((f) => ({ kind: 'creature', pseudonym: f.displayName }))} size={FACE} ring={sel.fill} />
+        ) : (
+          <Avatar testID={`banter-waves-${room.eventId}-face`} size={FACE} kind="creature" pseudonym={room.latest.displayName} />
+        )}
       </View>
       <View style={styles.text}>
         <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>

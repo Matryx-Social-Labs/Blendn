@@ -7,7 +7,7 @@
  * moves to these as its screen is redesigned.
  */
 
-/** Colour, DESIGN-BRIEF §4. Dark only. `textOnGradient` is white on `GRADIENT.fill`; `textOnOrangeFlat` is ink on `brandOrange` (white on it is 3.50:1). */
+/** Colour, DESIGN-BRIEF §4. Dark only. `textOnGradient` is white on `GRADIENT.fill`; `textOnOrangeFlat` is ink on `brandOrange` (white on it is 3.50:1); `brandRoseFill` is brand rose deepened at the same hue for a filled rose pill, white on it 5.31:1 (on `brandRose` 4.23:1). */
 export const COLOR = {
   ink: '#0D0C0C',
   surfaceSunken: '#1A1818',
@@ -25,6 +25,7 @@ export const COLOR = {
   backdrop: 'rgba(0,0,0,0.60)',
   brandOrange: '#F05423',
   brandRose: '#BE5C71',
+  brandRoseFill: '#B2475E',
   brandViolet: '#925DA9',
   brandVioletText: '#A47BBF',
   gradientFillStart: '#D83F0F',

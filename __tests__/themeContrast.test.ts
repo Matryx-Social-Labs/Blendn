@@ -92,6 +92,11 @@ describe('text on colour', () => {
     expect(contrast(COLOR.textPrimary, GRADIENT.brand.colors[0])).toBeLessThan(4.5)
   })
 
+  it('puts white on brandRoseFill, the filled rose pill (owner 2026-11-13): AA, where white on brandRose is not', () => {
+    expect(contrast(COLOR.textPrimary, COLOR.brandRoseFill)).toBeGreaterThanOrEqual(5.3)
+    expect(contrast(COLOR.textPrimary, COLOR.brandRose)).toBeLessThan(4.5)
+  })
+
   it('puts white on the filled destructive button, and ink on a selection', () => {
     expect(contrast(COLOR.textPrimary, COLOR.destructiveFill)).toBeGreaterThanOrEqual(4.5)
     expect(contrast(COLOR.textOnSelection, COLOR.selectionFill)).toBeGreaterThanOrEqual(4.5)

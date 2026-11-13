@@ -8,13 +8,15 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo } from 'react-native'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { BanterWavesRow } from '../components/banter/BanterWavesRow'
+import { WaveBackPill } from '../components/blendn/WaveBackPill'
 import { WaveToast } from '../components/blendn/WaveToast'
 import { WavedAtYouList } from '../components/blendn/WavedAtYouList'
 import { WavedAtYouStrip } from '../components/blendn/WavedAtYouStrip'
 import type { ReceivedWave, ReceivedWavesPage } from '../lib/apiClient'
+import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { othersLine, toastTitle, waitingStrip, wavedAtYouLine } from '../lib/receivedWaves'
 import { FOLD_MS, ignoreWavesFrom, listenForWaves, useRoomWaves, waveShown } from '../lib/roomWaves'
@@ -279,6 +281,47 @@ describe('B-A: one Banter row per room', () => {
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/waves/[eventId]', params: { eventId: 'e1', title: 'Toit' } })
     await fireEvent(screen.getByTestId('banter-waves-e1'), 'longPress')
     expect(onSafety).toHaveBeenCalledWith(room.latest)
+  })
+})
+
+describe('B-A: the pile (owner 2026-11-13: the board’s three faces)', () => {
+  const face = (n: number) => ({ userId: `rh_${n}`, displayName: `Person ${n}` })
+  it('draws the latest three faces, newest first, with no "+N"', async () => {
+    const room = { eventId: 'e1', waiting: 12_480, latest: wave(1), latestFaces: [face(1), face(2), face(3)] }
+    await render(<BanterWavesRow room={room} title="Toit" onSafety={jest.fn()} />)
+    const pile = screen.getByTestId('banter-waves-e1-pile', { includeHiddenElements: true })
+    expect(pile).toBeTruthy()
+    for (const i of [0, 1, 2]) expect(screen.getByTestId(`banter-waves-e1-pile-face-${i}`, { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByTestId('banter-waves-e1-pile-face-3', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByText(/^\+/, { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('control: one face is the single latest face', async () => {
+    await render(<BanterWavesRow room={{ eventId: 'e1', waiting: 1, latest: wave(1), latestFaces: [face(1)] }} title="Toit" onSafety={jest.fn()} />)
+    expect(screen.queryByTestId('banter-waves-e1-pile', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByTestId('banter-waves-e1-face', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('control: a server from before latestFaces draws the latest face', async () => {
+    await render(<BanterWavesRow room={{ eventId: 'e1', waiting: 4, latest: wave(1) }} title="Toit" onSafety={jest.fn()} />)
+    expect(screen.queryByTestId('banter-waves-e1-pile', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByTestId('banter-waves-e1-face', { includeHiddenElements: true })).toBeTruthy()
+  })
+})
+
+describe('the filled rose pill (owner 2026-11-13: white on a deeper rose, AA)', () => {
+  it('Wave back is filled with brandRoseFill, white ink', async () => {
+    await render(<WaveBackPill name="Harbour Heron" state="ready" onPress={jest.fn()} testID="pill" />)
+    const ready = StyleSheet.flatten(screen.getByTestId('pill').props.style)
+    expect(ready).toMatchObject({ backgroundColor: COLOR.brandRoseFill, borderColor: COLOR.brandRoseFill })
+    expect(StyleSheet.flatten(screen.getByText('Wave back').props.style).color).toBe(COLOR.textPrimary)
+  })
+
+  it('control: ✓ Waved stays the rose outline, never the fill', async () => {
+    await render(<WaveBackPill name="Harbour Heron" state="waved" testID="pill" />)
+    const waved = StyleSheet.flatten(screen.getByTestId('pill').props.style)
+    expect(waved.backgroundColor).toBeUndefined()
+    expect(waved.borderColor).not.toBe(COLOR.brandRoseFill)
   })
 })
 

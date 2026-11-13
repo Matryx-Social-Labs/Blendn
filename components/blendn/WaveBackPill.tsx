@@ -8,9 +8,10 @@ import { Icon } from '../ui/Icon'
 
 /** Board 03 `.btn-s`: 36 tall, 14 a side, hugging its label. */
 const PILL = 36
+const FILLED = { backgroundColor: COLOR.brandRoseFill, borderColor: COLOR.brandRoseFill }
 
 /**
- * Wave back (the lit rose pill, as on Meet next), the hand swinging while it goes, then a still ✓ Waved (rose outline,
+ * Wave back (the filled rose pill, `brandRoseFill`), the hand swinging while it goes, then a still ✓ Waved (rose outline,
  * does nothing: no Wave again). `label` is the toast's "See" for a fold. The press plays `H.select` (07-motion).
  */
 export function WaveBackPill({
@@ -34,7 +35,7 @@ export function WaveBackPill({
   const bold = useBoldText()
   const sel = useSelection()
   const waved = state === 'waved'
-  // `.btn-s`: the rose edge colour, solid, white ink; ✓ Waved is the still outline (`.still`).
+  // `.btn-s`, white ink on `brandRoseFill` (the board's #BE5C71 is 4.23:1 under it; owner 2026-11-13); ✓ Waved is the still outline (`.still`).
   const ink = waved ? sel.glyph : COLOR.textPrimary
   return (
     <Pressable
@@ -49,7 +50,7 @@ export function WaveBackPill({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? (waved ? `Waved at ${name}` : `Wave back at ${name}`)}
       accessibilityState={{ disabled: state !== 'ready', busy: state === 'sending' }}
-      style={[styles.pill, waved ? { borderColor: sel.edge } : { backgroundColor: sel.edge, borderColor: sel.edge }]}
+      style={[styles.pill, waved ? { borderColor: sel.edge } : FILLED]}
     >
       {state === 'sending' ? <WavingHand size={ICON.inline} /> : waved || hand ? <Icon name={waved ? 'check' : 'hand'} size={ICON.inline} color={ink} /> : null}
       <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), { color: ink }]}>
