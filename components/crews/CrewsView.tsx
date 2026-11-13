@@ -21,6 +21,12 @@ import { useToast } from '../Toast'
 
 /** A page of cards: the server's default, well under its 50. */
 const PAGE = 30
+/**
+ * A crewmate who holds after you is named on your strip without leaving the room (4-A3): a rise in the room's count re-reads,
+ * once a window and trailing, so the last of a burst is read too. Only for someone with a crew -- a room of thousands
+ * filling up costs everyone else nothing.
+ */
+export const CREW_ARRIVALS_RELOAD_MS = 20_000
 
 export type CrewsHere =
   | { status: 'loading' }
@@ -46,7 +52,7 @@ const openToCrewsByCheckIn = new Map<string, boolean>()
  * starts a new generation, so a page from an older one never lands on top of
  * it; a new event starts over.
  */
-export function useCrewsHere(eventId: string | null) {
+export function useCrewsHere(eventId: string | null, hereCount?: number) {
   const [state, setState] = useState<CrewsHere>({ status: 'loading' })
   const [mine, setMine] = useState<Crew[] | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -85,6 +91,27 @@ export function useCrewsHere(eventId: string | null) {
     }, [reload])
   )
   useEffect(() => subscribeCheckInChanged(() => void reload()), [reload])
+
+  const hasCrew = !!mine?.length
+  const lastCount = useRef(hereCount)
+  const arrivalTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const rose = hereCount !== undefined && lastCount.current !== undefined && hereCount > lastCount.current
+    lastCount.current = hereCount
+    if (!rose || !hasCrew || arrivalTimer.current) return
+    arrivalTimer.current = setTimeout(() => {
+      arrivalTimer.current = null
+      void reload()
+    }, CREW_ARRIVALS_RELOAD_MS)
+  }, [hereCount, hasCrew, reload])
+  // A different room (or leaving) drops a read still waiting for the last one.
+  useEffect(
+    () => () => {
+      if (arrivalTimer.current) clearTimeout(arrivalTimer.current)
+      arrivalTimer.current = null
+    },
+    [reload]
+  )
 
   const loadMore = useCallback(async () => {
     if (!eventId || state.status !== 'ready' || !state.data.hasMore || loadingMore) return

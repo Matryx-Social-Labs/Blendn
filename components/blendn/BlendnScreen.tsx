@@ -543,7 +543,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   // --- crews (R2-D1: People | Crews, the strip, crew cards, Liking as) ---------
   const [gridView, setGridView] = useState<'people' | 'crews'>('people')
   // Read in the Room, and on the pass once the server has said yes (its "Tell your crew" strip).
-  const crews = useCrewsHere(mode === 'room' ? eventId : checkIn.youreIn ? (insideEvent?.id ?? null) : null)
+  const crews = useCrewsHere(mode === 'room' ? eventId : checkIn.youreIn ? (insideEvent?.id ?? null) : null, mode === 'room' ? room.hereCount : undefined)
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
   const soloCrews = crewsThatMayLikePeople(myCrewsHere, crews.mine ?? [])
   /*
