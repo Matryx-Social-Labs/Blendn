@@ -67,11 +67,11 @@ it('at the largest text “Wave back” wraps inside the pill rather than cuttin
   expect(StyleSheet.flatten(label.props.style)).toMatchObject({ flexShrink: 1, textAlign: 'center' })
 })
 
-it('at the default size “Wave back” keeps one line in a 110 card: the pill gives the label its width (drive, Android)', async () => {
+it('at the default size “Wave back” keeps one line in a 110 card: the pill gives the label its width (drive, iOS + Android)', async () => {
   // Android draws Satoshi a few dp wider than iOS: with 8 a side and a 4 gap the label had 62 dp and wrapped at 1.0.
   // The pill stretches and centres its content, so the padding shows only when a label overflows.
   await render(<MeetNextCard {...PRIYA} wave="wavedAtYou" onWave={() => {}} testID="m" />)
-  expect(StyleSheet.flatten(screen.getByTestId('m-wave', { includeHiddenElements: true }).props.style)).toMatchObject({ paddingHorizontal: SPACE.xs })
+  expect(StyleSheet.flatten(screen.getByTestId('m-wave', { includeHiddenElements: true }).props.style)).toMatchObject({ paddingHorizontal: SPACE.xxs })
 })
 
 it('you waved: a still ✓ Waved that does nothing, and no Wave again', async () => {

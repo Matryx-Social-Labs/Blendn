@@ -194,8 +194,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.capsule,
     borderWidth: 1,
     marginTop: SPACE.xxs,
-    // 4 a side: Android draws Satoshi wider, and at 8 a side "Wave back" wrapped at the default size.
-    paddingHorizontal: SPACE.xs,
+    // 2 a side: in a 110 card "Wave back" needs ~67 of the label's room; at 8 a side it wrapped at the default size on
+    // both platforms. The pill centres its content, so the padding shows only when a label overflows.
+    paddingHorizontal: SPACE.xxs,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
