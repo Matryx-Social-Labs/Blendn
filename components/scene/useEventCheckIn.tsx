@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native'
 import { doorOf } from '../../lib/attendanceState'
 import { checkOutOf } from '../../lib/checkIn'
 import { checkedOutLine } from '../../lib/switchCopy'
+import type { ToastHaptic } from '../toastDock'
 import { apiClient } from '../../lib/apiClient'
 import { openRoomOf, setLeftNotice, setLiveHint, useLiveEventId, useLiveTitle, useRoomUp } from '../../lib/blendnOverlay'
 import { activeRoomName } from '../../lib/leftRooms'
@@ -13,7 +14,6 @@ import { CHECKOUT_FAILED } from '../../lib/useRoomControls'
 import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { CheckInTray, useCheckInTray } from '../blendn/CheckInTray'
 import { MomentPour } from '../ds/MomentPour'
-import { announceOutcome } from '../ds/shared'
 import type { EventCheckOutSheetProps, EventHoldProps } from './EventHold'
 
 /** How long the pour waits for the Room behind it before giving up on it (the Blend'n overlay's own ceiling). */
@@ -29,10 +29,16 @@ export function useEventCheckIn({
   id,
   event,
   openMaps,
+  showToast,
+  onCheckedOut,
 }: {
   id: string
   event: (Parameters<typeof doorOf>[0] & { title?: string | null }) | null
   openMaps: () => void
+  /** The page's toast: a check-out that lands says so there (audit B-2). */
+  showToast: (message: string, variant: 'success', options: { haptic: ToastHaptic }) => void
+  /** The server said yes: the page counts you out now, before it re-reads (audit C-2). */
+  onCheckedOut: () => void
 }): {
   hold: EventHoldProps
   checkOut: EventCheckOutSheetProps
@@ -88,9 +94,11 @@ export function useEventCheckIn({
     try {
       const result = await checkOutOf(id)
       if (result.success) {
+        // In one render: the page counts you out (the dock flips) and the sheet leaves over it, never over "You're in".
+        onCheckedOut()
         setCheckOutOpen(false)
-        // The dock turns back into the check-in hold where the link was: said, or a screen reader hears nothing happened.
-        announceOutcome(checkedOutLine(event?.title))
+        // The DS Toast says itself: announced on iOS, a live region on Android; H.success as it appears.
+        showToast(checkedOutLine(event?.title), 'success', { haptic: 'success' })
       }
       else setCheckOutError(result.error || CHECKOUT_FAILED)
     } catch {

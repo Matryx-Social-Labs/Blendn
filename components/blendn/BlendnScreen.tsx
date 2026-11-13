@@ -1,5 +1,6 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
 import { handRoomPerson } from '../../lib/roomPersonHandoff'
+import { CHECK_OUT_CONSEQUENCE, STAY_LABEL, checkOutQuestion } from '../../lib/switchCopy'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
@@ -1276,10 +1277,10 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
       <Sheet
         visible={confirmingOut}
         onClose={() => setConfirmingOut(false)}
-        title="Check out of this event?"
-        body="You’ll leave the room and its people. To come back in you’ll need to check in again, with your location."
+        title={checkOutQuestion(null)}
+        body={CHECK_OUT_CONSEQUENCE}
         actions={[
-          { label: 'Stay', kind: 'secondary', onPress: () => setConfirmingOut(false) },
+          { label: STAY_LABEL, kind: 'secondary', onPress: () => setConfirmingOut(false) },
           { label: 'Check out', kind: 'destructive', loading: controls.checkOutBusy, onPress: () => void checkOut() },
         ]}
         testID="check-out-confirm"

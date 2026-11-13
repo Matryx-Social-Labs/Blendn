@@ -69,6 +69,14 @@ export const TOO_FAR_M = 500
 
 export type PassReach = 'open' | 'far' | 'locationOff'
 
+/**
+ * The page's own check-in status the moment a check-out is answered yes (audit C-2): as the server will say on the next
+ * read, so the dock flips with the closing sheet instead of showing "You're in" under it for a frame or two.
+ */
+export function checkedOutNow<T extends { checked_in: boolean; status?: string | null }>(s: T | null): T | null {
+  return s ? { ...s, checked_in: false, status: 'checked_out' } : s
+}
+
 /** Whether the docked pass's hold is offered: disabled only on evidence (owner ruling 2026-10-28). */
 export function passReach(s: { inside: boolean; location: 'on' | 'off' | 'approximate'; distanceM: number | null }): PassReach {
   if (s.inside) return 'open'

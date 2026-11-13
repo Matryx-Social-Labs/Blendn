@@ -1,5 +1,6 @@
 import { ScreenProfiler } from '../../lib/perf'
 import * as Location from 'expo-location'
+import { CHECK_OUT_CONSEQUENCE, STAY_LABEL, checkOutQuestion } from '../../lib/switchCopy'
 import { router, useLocalSearchParams, useScrollToTop } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
@@ -781,10 +782,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
        */
       showSheet({
         kind: 'actions',
-        title: `Check out of ${event.title}?`,
-        message: 'You’ll leave the room and its people. To come back in you’ll need to check in again, with your location.',
+        title: checkOutQuestion(event.title),
+        message: CHECK_OUT_CONSEQUENCE,
         actions: [
-          { label: 'Stay', variant: 'secondary', then: () => {} },
+          { label: STAY_LABEL, variant: 'secondary', then: () => {} },
           { label: 'Check out', variant: 'destructive', then: () => void handleCheckOut(event) },
         ],
       })
