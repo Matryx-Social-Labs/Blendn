@@ -306,7 +306,7 @@ export function PersonCardContent({
 
       <View testID={id('actions')} accessibilityLiveRegion="polite" style={row}>
         {variant === 'matched' ? (
-          <Button label="Say hi" size="dock" onPress={onSayHi} style={slot} testID={id('say-hi')} />
+          <Button label="Say hi" size="dock" icon="message-circle" onPress={onSayHi} style={slot} testID={id('say-hi')} />
         ) : null}
 
         {variant === 'here' || (variant === 'was' && atYou) ? (

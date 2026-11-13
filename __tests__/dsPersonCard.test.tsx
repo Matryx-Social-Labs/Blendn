@@ -7,16 +7,23 @@
  * Say hi only. No person Like anywhere; a crew's "Like for {crew}" is a row.
  * Requested; a refusal line. Message and ⋯ are silent; View profile on all but gone.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
 import { PersonCard, PersonCardContent, type PersonCardPerson } from '../components/ds/PersonCard'
 import { HueProvider } from '../components/ds/shared'
+
 import * as Reanimated from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPRING, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+
+// The chat glyph as something a query can find (lucide draws bare paths).
+jest.mock('lucide-react-native/icons/message-circle', () => {
+  const { View } = jest.requireActual('react-native')
+  return { __esModule: true, default: () => <View testID="glyph-message-circle" /> }
+})
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -163,6 +170,13 @@ describe('the states', () => {
     expect(screen.queryByRole('button', { name: /Wave/ })).toBeNull()
     await fireEvent.press(screen.getByRole('button', { name: 'Say hi' }))
     expect(onSayHi).toHaveBeenCalledTimes(1)
+  })
+
+  it('you both waved: Say hi carries the board’s chat glyph, on the DS primary (owner ruling 2026-11-13, Wave item 1)', async () => {
+    await draw({ variant: 'matched', wave: 'mutual', testID: 'c' })
+    expect(within(screen.getByTestId('c-say-hi')).queryByTestId('glyph-message-circle')).toBeTruthy()
+    // Still the DS primary, the gradient every primary uses: not the board kit's cream pill.
+    expect(within(screen.getByTestId('c-say-hi')).queryByTestId('gradient')).toBeTruthy()
   })
 
   it('a refusal is announced as it arrives, so a screen reader hears why nothing happened', async () => {

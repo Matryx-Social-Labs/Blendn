@@ -234,7 +234,8 @@ export function MomentMatch({ you, them, name, tonight, opener, onSayHi, onClose
           pointerEvents={live || screenReader ? 'box-none' : 'none'}
           style={[styles.actions, { paddingBottom: insets.bottom + SPACE.xl }, actionsStyle]}
         >
-          <Button label="Say hi" onPress={onSayHi} testID={testID && `${testID}-say-hi`} />
+          {/* The DS primary with the board's chat glyph (owner ruling 2026-11-13). */}
+          <Button label="Say hi" icon="message-circle" onPress={onSayHi} testID={testID && `${testID}-say-hi`} />
           <Button label="Keep looking" kind="tertiary" onPress={onClose} testID={testID && `${testID}-keep-looking`} />
         </Animated.View>
       </ScrollView>

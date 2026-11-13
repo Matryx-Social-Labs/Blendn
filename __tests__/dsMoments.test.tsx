@@ -16,10 +16,17 @@ import { MomentMatch, type MomentMatchProps } from '../components/ds/MomentMatch
 import { ASK_AT, MomentPour, PANEL_TOP, ROOM_AT } from '../components/ds/MomentPour'
 import { MomentReady } from '../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../components/ds/MomentRecap'
+
 import { COLOR, DURATION, MATERIAL, RADIUS, SPACE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { markOffline, markOnline } from '../lib/networkStatus'
 import { dismissModals } from '../lib/pendingRoute'
+
+// The chat glyph as something a query can find (lucide draws bare paths).
+jest.mock('lucide-react-native/icons/message-circle', () => {
+  const { View } = jest.requireActual('react-native')
+  return { __esModule: true, default: () => <View testID="glyph-message-circle" /> }
+})
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -96,6 +103,12 @@ describe('<MomentMatch> · You both waved (Wave M-A, SCRUM-1042)', () => {
     expect(p.onSayHi).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByRole('button', { name: 'Keep looking' }))
     expect(p.onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('Say hi carries the board’s chat glyph (owner ruling 2026-11-13, Wave item 1)', async () => {
+    const { el } = match({ testID: 'mm' })
+    await render(el)
+    expect(within(screen.getByTestId('mm-say-hi')).queryByTestId('glyph-message-circle')).toBeTruthy()
   })
 
   it('at the largest text the words and Say hi share one scroll, so the opener never runs under the buttons (drive, iOS AX XXXL)', async () => {
