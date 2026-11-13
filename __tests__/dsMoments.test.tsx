@@ -98,6 +98,15 @@ describe('<MomentMatch> · You both waved (Wave M-A, SCRUM-1042)', () => {
     expect(p.onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('at the largest text the words and Say hi share one scroll, so the opener never runs under the buttons (drive, iOS AX XXXL)', async () => {
+    const { el } = match({ testID: 'mm' })
+    await render(el)
+    const scroll = screen.getByTestId('mm-scroll')
+    expect(within(scroll).getByText('You both waved')).toBeTruthy()
+    expect(within(scroll).getByTestId('mm-actions')).toBeTruthy()
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle)).toMatchObject({ flexGrow: 1 })
+  })
+
   it('is announced once, everything in it from t0', async () => {
     await render(match().el)
     expect(announce).toHaveBeenCalledTimes(1)

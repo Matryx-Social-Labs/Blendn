@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -160,7 +160,14 @@ export function MomentMatch({ you, them, name, tonight, opener, onSayHi, onClose
         skip()
         onClose()
       }}>
-      <View pointerEvents="box-none" style={[styles.page, { paddingTop: insets.top }]}>
+      {/* One scroll for the words and the buttons: at the largest text they cannot overlap; at any other size it never moves. */}
+      <ScrollView
+        testID={testID && `${testID}-scroll`}
+        style={styles.page}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top }]}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
         <View pointerEvents="box-none" style={styles.body}>
           {/* Nothing here is a button: a tap on the faces or the words falls through to skip. */}
           <View testID={testID && `${testID}-faces`} pointerEvents="none" style={styles.stage}>
@@ -230,13 +237,14 @@ export function MomentMatch({ you, them, name, tonight, opener, onSayHi, onClose
           <Button label="Say hi" onPress={onSayHi} testID={testID && `${testID}-say-hi`} />
           <Button label="Keep looking" kind="tertiary" onPress={onClose} testID={testID && `${testID}-keep-looking`} />
         </Animated.View>
-      </View>
+      </ScrollView>
     </MomentStage>
   )
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
+  scroll: { flexGrow: 1 },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
   stage: { alignItems: 'center', gap: SPACE.sm },
   hands: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', height: HAND + SPARK.height + SPACE.xs },

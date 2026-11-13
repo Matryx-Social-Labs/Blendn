@@ -60,6 +60,13 @@ it('they waved at you: the rim lights, the reason is “Waved at you” and how 
   expect(screen.getByRole('button', { name: 'Priya, Waved at you 4 min ago' }).props.accessibilityActions).toContainEqual({ name: 'wave', label: 'Wave back' })
 })
 
+it('at the largest text “Wave back” wraps inside the pill rather than cutting to “Wave b…” (drive, iOS AX XXXL)', async () => {
+  await render(<MeetNextCard {...PRIYA} wave="wavedAtYou" onWave={() => {}} testID="m" />)
+  const label = screen.getByText('Wave back', { includeHiddenElements: true })
+  expect(label.props.numberOfLines).toBe(2)
+  expect(StyleSheet.flatten(label.props.style)).toMatchObject({ flexShrink: 1, textAlign: 'center' })
+})
+
 it('you waved: a still ✓ Waved that does nothing, and no Wave again', async () => {
   const onWave = jest.fn()
   await render(<HueProvider value="rose"><MeetNextCard {...PRIYA} wave="waved" onWave={onWave} testID="m" /></HueProvider>)

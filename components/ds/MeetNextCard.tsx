@@ -149,7 +149,8 @@ export function MeetNextCard({
           ) : (
             <Icon name={wave === 'waved' ? 'check' : 'hand'} size={ICON.inline} color={ink} />
           )}
-          <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold, FONT_FAMILY.brand[500]), { color: ink }]}>
+          {/* Two lines at the largest text: "Wave back" wraps in a 110 card rather than cutting to "Wave b…". */}
+          <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold, FONT_FAMILY.brand[500]), styles.pillLabel, { color: ink }]}>
             {wave === 'waved' ? 'Waved' : actionLabel}
           </Text>
         </Pressable>
@@ -186,6 +187,7 @@ const styles = StyleSheet.create({
   name: { color: COLOR.textPrimary, textAlign: 'center', alignSelf: 'stretch' },
   center: { textAlign: 'center', alignSelf: 'stretch' },
   spacer: { flexGrow: 1 },
+  pillLabel: { flexShrink: 1, textAlign: 'center' },
   pill: {
     alignSelf: 'stretch',
     minHeight: PILL,
