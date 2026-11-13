@@ -10,7 +10,7 @@ import { MomentMatch } from '../../components/ds/MomentMatch'
 import { Button, DOCK_GLYPH } from '../../components/ds/Button'
 import { Dock } from '../../components/ds/Dock'
 import type { Rect } from '../../components/ds/chatShared'
-import { announceOutcome, font, HueProvider, useBoldText, useSelection, type Hue } from '../../components/ds/shared'
+import { announceOutcome, font, HueProvider, useBoldText, type Hue } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { useToast } from '../../components/Toast'
 import { ConnectSheet } from '../../components/grid/ConnectSheet'
@@ -21,11 +21,11 @@ import { DOCK_FADE, dockClearance, ProfileDock } from '../../components/profile/
 import { heroHeightFor, ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
 import { BadgeRow } from '../../components/profile/MeBadges'
 import { FoldBlock, PROFILE_EMPTY, ProfileBody, SECTION_GAP } from '../../components/profile/ProfileSections'
-import { Glyph } from '../../components/ui/Glyph'
 import { Icon } from '../../components/ui/Icon'
 import { apiClient, type PublicProfile, type SharedEvent } from '../../lib/apiClient'
 import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
-import { likeRefusal } from '../../lib/likeRefusal'
+import { useReducedMotion } from '../../lib/motion'
+import { shouldSendWave, waveAccessibilityLabel, waveRefusal, waveStateAfter, wavedAgo, WAVE_SETTLE_MS, WAVE_SETTLE_REDUCED_MS, type WaveStatus } from '../../lib/waves'
 import { subscribeToRoomMatch } from '../../lib/socketClient'
 import { heroFoldHeight } from '../../lib/profileFold'
 import { interestNames } from '../../lib/meProfile'
@@ -137,7 +137,6 @@ const CTA_HINT = {
 type ProfileConnection = NonNullable<PublicProfile['connection']>
 
 function UserProfileInner() {
-  const sel = useSelection()
   /*
    * `eventId` arrives from the Grid, and only from there.
    *
@@ -158,13 +157,12 @@ function UserProfileInner() {
    * Asked by a real id with no room, the server still says "Attendee", which
    * this page never shows (`lib/profileIdentity.ts`).
    */
-  const { id, eventId, pseudonym, roomSeed, liked: likedInRoom, conversationId: roomConversationId } = useLocalSearchParams<{
+  const { id, eventId, pseudonym, roomSeed, conversationId: roomConversationId } = useLocalSearchParams<{
     id: string
     eventId?: string
     pseudonym?: string
     roomSeed?: string
-    /** What the room already knows of this person (SCRUM-953): `'1'` once you liked them, and the conversation a mutual like opened. */
-    liked?: string
+    /** What the room already knows of this person (SCRUM-953): the conversation a mutual opened. Their wave rides the handed card. */
     conversationId?: string
   }>()
   const insets = useSafeAreaInsets()
@@ -185,18 +183,22 @@ function UserProfileInner() {
    * a deleted person and the only way out was the edge swipe.
    */
   const [loadError, setLoadError] = useState<'gone' | 'failed' | null>(null)
-  /* A mutual like made here, for the match moment. */
+  /* A mutual made here (your wave back), for the moment. */
   const [match, setMatch] = useState<{ conversationId: string; you: string | null } | null>(null)
   const [ctaMode, setCtaMode] = useState<ProfileCtaMode>('connect')
   const markSelf = useContext(MarkSelf)
   useEffect(() => markSelf(ctaMode === 'self'), [ctaMode, markSelf])
   const [ctaMessage, setCtaMessage] = useState<string>('')
   const [conversationId, setConversationId] = useState<string | null>(null)
-  const [liked, setLiked] = useState(likedInRoom === '1')
-  const [waved, setWaved] = useState<'none' | 'busy' | 'waved'>('none')
   // P-A: the room's card for this handle, read once as the page opens (a later open elsewhere replaces the one slot).
   const [handed] = useState(() => (eventId ? roomPersonFor(id) : null))
-  const [likeBusy, setLikeBusy] = useState(false)
+  /** SCRUM-1042: Wave → Wave back → ✓ Waved → Say hi. The room's card says where it stood; this page's own taps win. */
+  const [waveLocal, setWaveLocal] = useState<WaveStatus | undefined>(undefined)
+  const reduceMotion = useReducedMotion()
+  // The conversation a mutual wave here opened: the room's, else the server's (`wave.conversationId`, after a restart).
+  const [serverWaveConversation, setServerWaveConversation] = useState<string | null>(null)
+  const mutualConversation = roomConversationId || serverWaveConversation
+  const wave: WaveStatus = waveLocal ?? (mutualConversation ? 'mutual' : (handed?.person.wave ?? 'none'))
   const [connectOpen, setConnectOpen] = useState(false)
   /** The opener that opened the Connect sheet, if one did (SCRUM-1042): the note starts as it. */
   const [connectDraft, setConnectDraft] = useState<string | undefined>()
@@ -252,7 +254,7 @@ function UserProfileInner() {
   const [friend, setFriend] = useState<FriendOffer | null>(null)
   const friendAsk = useFriendAsk(identity.title)
 
-  const hydrateCtaState = useCallback(async (targetUserId: string, connection?: ProfileConnection) => {
+  const hydrateCtaState = useCallback(async (targetUserId: string, connection?: ProfileConnection, waveConversation?: string | null) => {
     if (!authUser) {
       setCtaMode('connect')
       setCtaMessage('Sign in to connect.')
@@ -299,9 +301,10 @@ function UserProfileInner() {
       return
     }
 
-    // Still anonymous to you, and the room knows the conversation a mutual like opened: the lists could not match a handle.
-    if (roomConversationId) {
-      setConversationId(roomConversationId)
+    // Still anonymous to you, and the room or the server knows the conversation a mutual opened: the lists could not match a handle.
+    const mutualId = roomConversationId || waveConversation
+    if (mutualId) {
+      setConversationId(mutualId)
       setCtaMode('message')
       setCtaMessage(CTA_HINT.message)
       return
@@ -367,11 +370,13 @@ function UserProfileInner() {
         let badges: Badge[] | null = null
         let nextProfile: UserProfileView | null = null
         let connection: ProfileConnection | undefined
+        let waveConversation: string | null = null
         let gone = isGone(result)
 
         if (result.success && result.data) {
           const data = result.data
           connection = data.connection
+          waveConversation = data.wave?.conversationId ?? null
           offer = parseFriendOffer(data.friend)
           badges = parseBadges(data.badges)
           const photos = data.photos || data.profile_photos || []
@@ -433,7 +438,8 @@ function UserProfileInner() {
         // Badges are an identity field: only for somebody you may see, and none (not drawn) when the server sent none.
         setBadgesOf({ for: id, list: nextProfile?.identityVisible ? (badges ?? []) : [] })
         if (nextProfile?.user_id) {
-          await hydrateCtaState(nextProfile.user_id, connection)
+          if (isCurrent()) setServerWaveConversation(waveConversation)
+          await hydrateCtaState(nextProfile.user_id, connection, waveConversation)
         }
 
       })
@@ -471,7 +477,8 @@ function UserProfileInner() {
    * Requested is disabled — so this never sends a request itself.
    */
   const handleConnect = (draft?: string) => {
-    if (!profile || ctaMode !== 'message' || !conversationId) return
+    // You both waved: the conversation the mutual opened is open to you whatever the page's own lookup said.
+    if (!profile || (ctaMode !== 'message' && wave !== 'mutual') || !conversationId) return
     router.push({
       pathname: '/private-chat/[conversationId]',
       params: {
@@ -491,70 +498,49 @@ function UserProfileInner() {
   }
 
   /*
-   * The like, with the same meaning it has on the Grid: private until it is
-   * mutual, and the conversation it opens stays pseudonymous.
-   *
-   * Optimistic, and rolled back on failure — unlike Connect, a like that did not
-   * land can simply be sent again, so re-offering the button is the right
-   * answer rather than a trap.
+   * P-A page: a wave in this room, as the sheet waves (SCRUM-1042). The hand swings until ✓ Waved (07-motion); a wave
+   * back that makes it mutual plays the moment and leaves Say hi. A refusal is said about you, never about them.
    */
-  const handleLike = useCallback(async () => {
-    if (!eventId || !profile || liked || likeBusy) return
-    setLikeBusy(true)
-    setLiked(true)
+  const handleWave = useCallback(async () => {
+    if (!eventId || !profile || !shouldSendWave(wave)) return
+    setWaveLocal('sending')
     try {
-      const result = await apiClient.likeAtEvent(String(eventId), profile.user_id)
+      const [result] = await Promise.all([
+        apiClient.sendWave(String(eventId), profile.user_id),
+        new Promise((r) => setTimeout(r, reduceMotion ? WAVE_SETTLE_REDUCED_MS : WAVE_SETTLE_MS)),
+      ])
+      setWaveLocal(waveStateAfter({ ok: !!result.success, mutual: result.data?.mutual }))
       if (!result.success) {
-        setLiked(false)
-        // Said, the way the room says it: about the room or the network, never about them.
-        const refusal = likeRefusal(result.errorCode, result.error)
-        if (refusal.variant === 'error') showToast(refusal.message, 'error', { haptic: 'error' })
-        else showToast(refusal.message, refusal.variant)
-        return
+        const refusal = waveRefusal(result.errorCode, result.error)
+        return showToast(refusal.message, refusal.variant === 'error' ? 'error' : refusal.variant)
       }
       if (result.data?.mutual && result.data.conversationId) {
         setConversationId(result.data.conversationId)
         setCtaMode('message')
         setCtaMessage(CTA_HINT.message)
-        // The moment the room gives a mutual like, rather than a button quietly changing.
-        setMatch({ conversationId: result.data.conversationId, you: result.data.pseudonyms?.you ?? null })
-      } else {
-        // Not mutual yet: the moment a push about it pays off (Flow 9 · 9.7), the first time only.
-        void askPushInContext('like')
+        // The moment the room gives a mutual, rather than a button quietly changing.
+        return setMatch({ conversationId: result.data.conversationId, you: result.data.pseudonyms?.you ?? null })
       }
-    } catch (e) {
-      setLiked(false)
-      Logger.error('profile', 'like failed', { error: e })
-      showToast("That didn’t go through. Try again.", 'error', { haptic: 'error' })
-    } finally {
-      setLikeBusy(false)
-    }
-  }, [eventId, profile, liked, likeBusy, showToast])
-
-  /* P-A page: a wave in this room, as the sheet waves. Once per ten minutes: one already sent reads as waved. */
-  const handleWave = useCallback(async () => {
-    if (!eventId || !profile || waved !== 'none') return
-    setWaved('busy')
-    const result = await apiClient.sendWave(String(eventId), profile.user_id).catch(() => null)
-    if (result?.success || result?.errorCode === 'WAVE_TOO_SOON') {
       // Said as it lands (iOS); on Android the dock row is a live region.
       announceOutcome(`Waved at ${identity.title}`)
-      return setWaved('waved')
+      // Not mutual yet: the moment a push about it pays off (Flow 9 · 9.7), the first time only.
+      void askPushInContext('like')
+    } catch (e) {
+      setWaveLocal(undefined)
+      Logger.error('profile', 'wave failed', { error: e })
+      showToast(waveRefusal(undefined, undefined).message, 'error', { haptic: 'error' })
     }
-    setWaved('none')
-    const refusal = likeRefusal(result?.errorCode, result?.error)
-    showToast(refusal.message, refusal.variant === 'error' ? 'error' : refusal.variant)
-  }, [eventId, profile, waved, showToast, identity.title])
+  }, [eventId, profile, wave, showToast, identity.title, reduceMotion])
 
   /*
-   * The other half of a mutual like arrives while this page is open (SCRUM-960): the room draws the moment, and the page
+   * The other half of a mutual arrives while this page is open (SCRUM-960): the room draws the moment, and the page
    * says what it now is. `otherUserId` is the room's handle for them, the same `id` a room opens this page with.
    */
   useEffect(() => {
     if (!eventId) return
     return subscribeToRoomMatch((data) => {
       if (data.eventId !== String(eventId) || data.otherUserId !== id) return
-      setLiked(true)
+      setWaveLocal('mutual')
       setConversationId(data.conversationId)
       setCtaMode('message')
       setCtaMessage(CTA_HINT.message)
@@ -796,6 +782,17 @@ function UserProfileInner() {
               <View testID="profile-lens-page" style={[styles.lensPage, { paddingTop: barCircleBottom(insets.top, Platform.OS === 'android') + LENS_PAGE_TOP }]}>
                 <RadialWash testID="profile-lens-wash" layers={LENS_PAGE_WASH} style={styles.lensWash} />
                 <ProfileLensHero testID="profile-lens-hero" photo={revealed ? (photos[0] ?? null) : null} seed={identity.seed} name={identity.name} meta={lensBlocks.meta} />
+                {wave === 'wavedAtYou' || wave === 'mutual' ? (
+                  // Wave dock A: the sheet's rose chip, under the name.
+                  <View style={styles.contextPills}>
+                    <Chip
+                      label={wave === 'mutual' ? 'You both waved' : handed?.person.wavedAt ? `Waved at you · ${wavedAgo(handed.person.wavedAt, openedAt)}` : 'Waved at you'}
+                      icon="hand"
+                      selected
+                      testID="profile-wave-chip"
+                    />
+                  </View>
+                ) : null}
                 {contextPills.length ? (
                   // `.ctx`: centred, 8 apart, pulled 6 toward the name; a long place ellipsizes in its own pill.
                   <View testID="profile-lens-context" style={styles.contextPills}>
@@ -905,33 +902,38 @@ function UserProfileInner() {
         )}
       </Animated.ScrollView>
 
-      {/* The tray stays put while the bio, interests and gallery scroll beneath it: Like and Connect are in the thumb's reach on any phone. */}
+      {/* The tray stays put while the bio, interests and gallery scroll beneath it: Wave and Message are in the thumb's reach on any phone. */}
       {showDock && lensDock ? (
         // `pA-page`'s dock (`.dock4`): Wave, and Message the wide one, on the glass line. The request line stays in Message's label.
         <Dock line floating round={false} onHeight={setDockHeight} testID="profile-dock">
           <View testID="profile-lens-dock-row" accessibilityLiveRegion="polite" style={styles.dockRow}>
-            <Button
-              kind="secondary"
-              size="dock"
-              onGlass
-              // Owner pick r3 A: while it sends, the hand waves as the sheet's does (#51), not a spinner.
-              // At rest it is the dock's own 18 pt glyph, as the board draws it (`ic('hand',18)`).
-              icon={waved === 'waved' ? 'check' : 'hand'}
-              leading={waved === 'busy' ? <WavingHand testID="profile-wave-hand" size={DOCK_GLYPH} /> : undefined}
-              label={waved === 'waved' ? 'Waved' : 'Wave'}
-              accessibilityLabel={waved === 'waved' ? `Waved at ${heroTitle}` : `Wave at ${heroTitle}`}
-              disabled={waved !== 'none'}
-              onPress={() => void handleWave()}
-              testID="profile-wave"
-            />
+            {wave === 'mutual' ? null : (
+              <Button
+                // Wave dock A: Wave is lit, Wave back the filled one; ✓ Waved is still (no Wave again).
+                kind={wave === 'wavedAtYou' ? 'primary' : wave === 'waved' ? 'secondary' : 'lit'}
+                size="dock"
+                onGlass
+                // Owner pick r3 A: while it sends, the hand waves as the sheet's does, not a spinner.
+                // At rest it is the dock's own 18 pt glyph, as the board draws it (`ic('hand',18)`).
+                icon={wave === 'waved' ? 'check' : 'hand'}
+                leading={wave === 'sending' ? <WavingHand testID="profile-wave-hand" size={DOCK_GLYPH} /> : undefined}
+                label={wave === 'waved' ? 'Waved' : wave === 'wavedAtYou' ? 'Wave back' : 'Wave'}
+                accessibilityLabel={waveAccessibilityLabel(heroTitle, wave)}
+                disabled={!shouldSendWave(wave)}
+                pressHaptic={shouldSendWave(wave) ? H.select : false}
+                onPress={() => void handleWave()}
+                testID="profile-wave"
+              />
+            )}
             <Button
               kind={ctaLit ? 'lit' : 'secondary'}
               size="dock"
               icon={ctaDisabled ? undefined : 'message-circle'}
-              label={ctaMode === 'connect' ? 'Message' : CTA_LABEL[ctaMode]}
+              // You both waved: Say hi only (Wave dock A), into the conversation the mutual opened.
+              label={wave === 'mutual' && conversationId ? 'Say hi' : ctaMode === 'connect' ? 'Message' : CTA_LABEL[ctaMode]}
               accessibilityLabel={ctaMode === 'connect' ? `Message ${heroTitle}. Sends a request and shows them your name and photo` : undefined}
-              disabled={ctaDisabled}
-              onPress={ctaMode === 'connect' ? () => { setConnectDraft(undefined); setConnectOpen(true) } : () => handleConnect()}
+              disabled={ctaDisabled && !(wave === 'mutual' && conversationId)}
+              onPress={wave === 'mutual' && conversationId ? () => handleConnect() : ctaMode === 'connect' ? () => { setConnectDraft(undefined); setConnectOpen(true) } : () => handleConnect()}
               style={styles.flex}
               testID="profile-cta"
             />
@@ -969,21 +971,6 @@ function UserProfileInner() {
             />
           ) : (
             <>
-            {eventId ? (
-              <Button
-                kind={liked ? 'lit' : 'primary'}
-                // Both dock buttons are 48: a lit action is never 56, and the pair stands level.
-                size="md"
-                label={liked ? 'Liked' : 'Like'}
-                accessibilityLabel={liked ? `Liked ${heroTitle}. You liked them` : `Like ${heroTitle}. They are only told if they like you back`}
-                leading={<Glyph name="heart" size={ICON.control} color={liked ? sel.glyph : COLOR.textOnGradient} active={liked} play={liked} />}
-                pressHaptic={liked ? false : H.like}
-                loading={likeBusy && !liked}
-                onPress={handleLike}
-                style={styles.flex}
-                testID="profile-like"
-              />
-            ) : null}
             <Button
               kind={ctaLit ? 'lit' : 'secondary'}
               size="md"
@@ -1040,6 +1027,8 @@ function UserProfileInner() {
           you={{ kind: 'creature', pseudonym: match.you ?? 'You' }}
           them={revealed && photos[0] ? { kind: 'photo', uri: photos[0] } : { kind: 'creature', pseudonym: heroTitle }}
           name={heroTitle}
+          // M-A: tonight's question and their answer, as the room's moment says it.
+          tonight={tonight?.lens?.question ? { question: tonight.lens.question, answer: tonight.answer ?? null } : null}
           onClose={() => setMatch(null)}
           onSayHi={() => {
             setMatch(null)

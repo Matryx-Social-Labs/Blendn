@@ -76,21 +76,21 @@ export function EventRow({
 
 /**
  * The person being rated: their face (or their creature) at 56 pt, the name they are known by in one line, and why they
- * are here. A header, and the card's focus target (M5): read as "<name>. You matched at this event".
+ * are here. A header, and the card's focus target (M5): read as "<name>. You both waved at this event".
  */
 export const PersonRow = forwardRef<View, { name: string; photo: string | null }>(function PersonRow({ name, photo }, ref) {
   const bold = useBoldText()
   // One line as the board draws it; at the accessibility sizes, two, so the largest text still says who this is.
   const lines = useWindowDimensions().fontScale >= WRAP_FROM_SCALE ? 2 : 1
   return (
-    <View ref={ref} testID="rate-person" accessible accessibilityRole="header" accessibilityLabel={`${name}. You matched at this event`} style={styles.row}>
+    <View ref={ref} testID="rate-person" accessible accessibilityRole="header" accessibilityLabel={`${name}. You both waved at this event`} style={styles.row}>
       {photo ? <Avatar kind="photo" uri={photo} size={SIZE.primary} label={name} /> : <Avatar kind="creature" pseudonym={name} size={SIZE.primary} label={name} />}
       <View style={styles.text}>
         <Text testID="rate-person-name" numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
           {name}
         </Text>
         <Text numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-          You matched at this event
+          You both waved at this event
         </Text>
       </View>
     </View>

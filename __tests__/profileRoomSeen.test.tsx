@@ -1,6 +1,7 @@
 /**
- * A profile opened from a room knows what the room knows (SCRUM-953): a person you already liked reads "Liked", not "Like",
- * and one you matched with reads "Message", not "Connect" — the roster and the card said so, the profile asked nobody.
+ * A profile opened from a room knows what the room knows (SCRUM-953): one you both waved with reads "Message", not
+ * "Connect" — the card said so, the profile asked nobody. There is no person Like anywhere (Wave replaced it, SCRUM-1042);
+ * the page's Wave is the lens dock's, tested in profileLensPage.
  */
 import { act, render, screen } from '@testing-library/react-native'
 import { Dimensions, StyleSheet } from 'react-native'
@@ -23,7 +24,6 @@ jest.mock('../lib/apiClient', () => ({
     getConversations: jest.fn(),
     getMessageRequests: jest.fn(),
     createMessageRequest: jest.fn(),
-    likeAtEvent: jest.fn(),
     respondToMessageRequest: jest.fn(),
     sendFriendRequest: jest.fn(),
   },
@@ -53,10 +53,10 @@ jest.mock('../components/grid/ConnectSheet', () => ({
   },
 }))
 jest.mock('../components/ds/MomentMatch', () => ({
-  MomentMatch: (p: { name: string; onSayHi: () => void }) => {
+  MomentMatch: (p: { name: string; onSayHi: () => void; testID?: string }) => {
     const React = require('react')
     const { Pressable, Text } = require('react-native')
-    return React.createElement(Pressable, { onPress: p.onSayHi }, React.createElement(Text, null, `You and ${p.name} matched`))
+    return React.createElement(Pressable, { onPress: p.onSayHi, testID: p.testID }, React.createElement(Text, null, `You and ${p.name} both waved`))
   },
 }))
 jest.mock('../components/profile/ProfileHeroStage', () => {
@@ -104,19 +104,14 @@ const open = async (params: Record<string, string>) => {
   await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
 }
 
-it('offers Like to somebody you have not liked', async () => {
+it('offers no Like, even opened from a room', async () => {
   await open({})
-  expect(screen.getByText('Like')).toBeTruthy()
-})
-
-it('reads Liked when the room says you liked them', async () => {
-  await open({ liked: '1' })
-  expect(screen.getByText('Liked')).toBeTruthy()
   expect(screen.queryByText('Like')).toBeNull()
+  expect(screen.queryByText('Liked')).toBeNull()
 })
 
-it('offers Message, not Connect, when the room says you matched', async () => {
-  await open({ liked: '1', conversationId: 'c1' })
+it('offers Message, not Connect, when the room says you both waved', async () => {
+  await open({ conversationId: 'c1' })
   expect(screen.getByText('Message')).toBeTruthy()
   expect(screen.queryByText('Connect')).toBeNull()
 })
@@ -125,25 +120,19 @@ describe('a match that arrives while the profile is open (SCRUM-960)', () => {
   const match = (over: Partial<{ eventId: string; otherUserId: string }> = {}) =>
     act(async () => mockMatchHandler?.({ eventId: 'e1', otherUserId: 'rh_ben', conversationId: 'c9', name: 'Dancing Gecko', ...over }))
 
-  it('flips an open, liked profile from Connect to Message', async () => {
-    await open({ liked: '1' })
+  it('flips an open profile from Connect to Message', async () => {
+    await open({})
     expect(screen.getByText('Connect')).toBeTruthy()
     await match()
     expect(await screen.findByText('Message')).toBeTruthy()
     expect(screen.queryByText('Connect')).toBeNull()
   })
 
-  it('also marks a profile that was not yet liked here as Liked', async () => {
-    await open({})
-    await match()
-    expect(await screen.findByText('Liked')).toBeTruthy()
-  })
-
   it.each([
     ['another person', { otherUserId: 'rh_other' }],
     ['another room', { eventId: 'e2' }],
   ])('ignores a match with %s', async (_n, over) => {
-    await open({ liked: '1' })
+    await open({})
     await match(over)
     expect(screen.getByText('Connect')).toBeTruthy()
   })
@@ -153,7 +142,8 @@ it('the Room card hands what it knows to the profile it opens', () => {
   const fs = require('fs')
   const screenSrc: string = fs.readFileSync(require('path').join(__dirname, '../components/blendn/BlendnScreen.tsx'), 'utf8')
   const openProfile = screenSrc.slice(screenSrc.indexOf('const openProfile'), screenSrc.indexOf('const sayHi'))
-  expect(openProfile).toContain("{ liked: '1' }")
+  expect(openProfile).not.toContain('liked')
+  expect(openProfile).toContain('wave: waved')
   expect(openProfile).toContain('conversationId: seen.conversationId')
   expect(screenSrc).toContain('openProfile(card, cardPerson ?? undefined)')
 })

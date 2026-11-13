@@ -102,23 +102,25 @@ function ArrivalRing({ size, testID }: { size: number; testID?: string }) {
   )
 }
 
-const MARK_GLYPH: Record<'liked' | 'matched' | 'requested', IconName> = {
+const MARK_GLYPH: Record<'liked' | 'matched' | 'requested' | 'wavedAtYou', IconName> = {
   liked: 'heart',
   matched: 'message-circle',
   requested: 'check',
+  wavedAtYou: 'hand',
 }
 const MARK = 24
 
 /**
  * A face's mark (Flow 4 `mark`): a 24 pt white disc with an ink glyph, cut out
- * by a 2 pt ink ring. Heart = liked, message = matched, check = requested.
+ * by a 2 pt ink ring. Heart = liked, message = you both waved, check = requested;
+ * a rose disc with a hand = they waved at you (Wave B, "Everyone here").
  * Placed by its card (top right); hidden, as the card's label says it.
  */
 export function FaceMark({ kind, testID }: { kind: keyof typeof MARK_GLYPH; testID?: string }) {
   return (
     <View testID={testID} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.markRing}>
-      <View testID={testID && `${testID}-disc`} style={styles.mark}>
-        <Icon name={MARK_GLYPH[kind]} size={ICON.inline} color={COLOR.ink} active />
+      <View testID={testID && `${testID}-disc`} style={[styles.mark, kind === 'wavedAtYou' && styles.markRose]}>
+        <Icon name={MARK_GLYPH[kind]} size={ICON.inline} color={kind === 'wavedAtYou' ? COLOR.textPrimary : COLOR.ink} active={kind !== 'wavedAtYou'} />
       </View>
     </View>
   )
@@ -138,4 +140,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  markRose: { backgroundColor: COLOR.brandRose },
 })

@@ -476,7 +476,7 @@ function RatePeersContent() {
                   {sent > 0 || ratedBefore
                     ? 'This is only ever seen by us. Nobody you rated will know.'
                     : nothingToRate
-                      ? 'You can rate people you matched with, once the event has finished.'
+                      ? 'You can rate people you both waved with, once the event has finished.'
                       : 'Nothing was sent. You can come back to this from Going.'}
                 </Text>
               </View>

@@ -63,9 +63,9 @@ describe('push ask (#481): the event title in the sample notifications', () => {
   })
 
   it('the match sample says "liked you back" before the title, so a two-line cut only ever falls on the title', async () => {
-    const match = samples.find((s) => s.title === 'It’s mutual')!
+    const match = samples.find((s) => s.title === 'You both waved')!
     // The static words lead and the variable title ends the line: the ellipsis can only take the title's tail.
-    expect(match.body).toBe(`Someone liked you back at ${WORST.eventTitle}.`)
+    expect(match.body).toBe(`Someone waved back at ${WORST.eventTitle}.`)
     await render(<LockScreenPreview samples={samples} testID="lock" />)
     const body = text(match.body)
     expect(slotOf(body)).toEqual({ lines: 2, ellipsize: 'tail' })
@@ -73,7 +73,7 @@ describe('push ask (#481): the event title in the sample notifications', () => {
   })
 
   it('without an event the match names none', () => {
-    expect(askSamples('like').find((s) => s.title === 'It’s mutual')!.body).toBe('Someone liked you back.')
+    expect(askSamples('like').find((s) => s.title === 'You both waved')!.body).toBe('Someone waved back.')
   })
 })
 

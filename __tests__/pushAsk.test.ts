@@ -39,13 +39,13 @@ type Sample = { title: string; body: string }
 const samplesOf = (s: ActionSheet) => (s.art as ReactElement<{ samples: Sample[] }>).props.samples
 
 describe('askPushInContext', () => {
-  it('asks after a going RSVP in the frame’s words, and after a first like in its own', async () => {
+  it('asks after a going RSVP in the frame’s words, and after a first wave in its own', async () => {
     expect(await askPushInContext('rsvp')).toBe(true)
     expect(sheet().title).toBe('Want a heads-up if the time or venue changes?')
     jest.clearAllMocks()
     expect(await askPushInContext('like')).toBe(true)
-    expect(sheet().title).toBe('Want to know when it’s mutual?')
-    expect(ASK_COPY.like.body).toMatch(/Nothing for likes you haven’t returned/)
+    expect(sheet().title).toBe('Want to know when you both wave?')
+    expect(ASK_COPY.like.body).toMatch(/Nothing for a wave on its own/)
   })
 
   it('asks once per moment, whatever the answer', async () => {
@@ -106,20 +106,20 @@ describe('askPushInContext', () => {
  * event just RSVP'd to; the like moment leads with the match. A white "Turn on notifications", and "Not now" as text.
  */
 describe('the lock-screen ask (SCRUM-1006)', () => {
-  it('RSVP: the lock screen leads with the event just said yes to, then a match there, then the crew', async () => {
+  it('RSVP: the lock screen leads with the event just said yes to, then a wave back there, then the crew', async () => {
     expect(await askPushInContext('rsvp', 'Rooftop Sundowner')).toBe(true)
     expect(samplesOf(sheet())).toEqual([
       { title: 'Rooftop Sundowner', body: 'New time: 7 PM. Same place.' },
-      { title: 'It’s mutual', body: 'Someone liked you back at Rooftop Sundowner.' },
+      { title: 'You both waved', body: 'Someone waved back at Rooftop Sundowner.' },
       { title: 'Your crew is heading out', body: '3 going tonight.' },
     ])
     // The picture replaces the bell well.
     expect(sheet().icon).toBeUndefined()
   })
 
-  it('a like leads with the match; without an event it names none', () => {
-    expect(askSamples('like').map((s) => s.title)).toEqual(['It’s mutual', 'Your event', 'Your crew is heading out'])
-    expect(askSamples('like')[0].body).toBe('Someone liked you back.')
+  it('a wave leads with the mutual; without an event it names none', () => {
+    expect(askSamples('like').map((s) => s.title)).toEqual(['You both waved', 'Your event', 'Your crew is heading out'])
+    expect(askSamples('like')[0].body).toBe('Someone waved back.')
     expect(askSamples('rsvp', '   ')[0].title).toBe('Your event')
   })
 

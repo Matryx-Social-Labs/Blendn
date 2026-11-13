@@ -133,24 +133,18 @@ describe('the hero pager advances by itself until the first swipe', () => {
 })
 
 describe('the profile carries the Grid\'s two actions', () => {
-  it('offers Like and Connect, with the same meanings', () => {
-    /*
-     * They are the same two things and arriving here should not change what
-     * they mean: Like is private until mutual and stays pseudonymous; Connect
-     * is a message request and reveals your name and photo.
-     *
-     * This also settles the collision that "Connect" had two meanings on
-     * adjacent screens -- the Grid's like and the profile's request.
-     */
-    expect(SCREEN()).toContain('{eventId ? (')
-    expect(SCREEN()).toContain('onPress={handleLike}')
+  it('offers Wave and Message from the room, and no Like anywhere (Wave replaced it, SCRUM-1042)', () => {
+    // Wave is anonymous and recorded; Message is a request that reveals your name and photo.
+    expect(SCREEN()).toContain('onPress={() => void handleWave()}')
+    expect(SCREEN()).not.toContain('handleLike')
+    expect(SCREEN()).not.toContain('likeAtEvent')
   })
 
-  it('hides Like when there is no event to like within', () => {
+  it('hides Wave when there is no event to wave within', () => {
     /*
-     * `event_likes` is keyed on an event. Opened from a notification, the
-     * Banter or a deep link there is no context, and a Like there would be
-     * broken rather than merely useless. Connect still works: the server gates
+     * A wave is keyed on an event. Opened from a notification, the Banter or a
+     * deep link there is no context, and a Wave there would be broken rather
+     * than merely useless. Connect still works: the server gates
      * a request on `haveSharedAnEvent` and resolves it itself.
      */
     expect(SCREEN()).toMatch(/useLocalSearchParams<\{\s*id: string\s*eventId\?: string/)
@@ -160,25 +154,25 @@ describe('the profile carries the Grid\'s two actions', () => {
     )
   })
 
-  it('keeps the like prominent here too', () => {
-    // The safe, reversible action is the easy one on every surface: the one
-    // gradient primary, before Connect, which publishes your identity (and is lit, not the gradient).
+  it('keeps Wave, the anonymous action, prominent here too: lit, Wave back the filled one, before Message', () => {
     const src = SCREEN()
-    expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeGreaterThan(-1)
-    // The plain page's pair (the last); the P-A room page's dock is Wave and Message, the like lives on the person sheet.
-    expect(src.indexOf("kind={liked ? 'lit' : 'primary'}")).toBeLessThan(src.lastIndexOf("kind={ctaLit ? 'lit' : 'secondary'}"))
+    const wave = src.indexOf("kind={wave === 'wavedAtYou' ? 'primary' : wave === 'waved' ? 'secondary' : 'lit'}")
+    expect(wave).toBeGreaterThan(-1)
+    expect(wave).toBeLessThan(src.indexOf("kind={ctaLit ? 'lit' : 'secondary'}"))
   })
 
-  it('rolls a failed like back, and never a failed request', () => {
+  it('rolls a failed wave back, and never a failed request', () => {
     /*
-     * A like that did not land can simply be sent again. A request cannot --
+     * A wave that did not land can simply be sent again. A request cannot --
      * `@@unique([sender_id, recipient_id])` means the failure may be *because*
      * one exists, and re-offering would invite an attempt that can never
      * succeed.
      */
     const src = SCREEN()
-    const like = src.slice(src.indexOf('const handleLike'), src.indexOf('const sendConnect'))
-    expect(like).toContain('setLiked(false)')
+    const wave = src.slice(src.indexOf('const handleWave'), src.indexOf('useEffect', src.indexOf('const handleWave')))
+    // A failed answer clears this page's opinion (`waveStateAfter` → undefined), and a throw does too.
+    expect(wave).toContain('setWaveLocal(waveStateAfter(')
+    expect(wave).toContain('setWaveLocal(undefined)')
     const connect = src.slice(src.indexOf('const sendConnect'), src.indexOf('const openSafety'))
     expect(connect).not.toContain('setCtaMode(\'connect\')')
   })

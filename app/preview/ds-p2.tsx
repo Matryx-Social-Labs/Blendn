@@ -1,3 +1,4 @@
+import type { WaveStatus } from '../../lib/waves'
 import { useEffect, useState, type ReactNode } from 'react'
 import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -291,8 +292,8 @@ function Facepiles() {
       <Cell label="on a card · the ring takes its colour" testID="ds-facepile-surface" style={styles.surface}>
         <Facepile faces={FACES} total={14} ring={COLOR.surface} />
       </Cell>
-      <Cell label="FaceMark · liked · matched · requested" testID="ds-facemark-all" style={styles.row}>
-        <FaceMark kind="liked" />
+      <Cell label="FaceMark · waved at you · both waved · requested" testID="ds-facemark-all" style={styles.row}>
+        <FaceMark kind="wavedAtYou" />
         <FaceMark kind="matched" />
         <FaceMark kind="requested" />
       </Cell>
@@ -307,14 +308,14 @@ const NOVA = { face: photo(PHOTO_2), name: 'Priya', reason: 'Both into vinyl' }
 function GridFaces() {
   const marks = [
     ['here', {}],
-    ['liked', { liked: true }],
-    ['matched', { matched: true }],
+    ['wavedatyou', { wavedAtYou: true, reason: 'Waved at you' }],
+    ['bothwaved', { matched: true, reason: 'You both waved' }],
     ['away', { here: false }],
     ['pressed', { previewState: 'pressed' }],
     ['focused', { previewState: 'focused' }],
   ] as const
   return (
-    <Section title="GridFace" note="the column less 16 · here (live dot), liked (heart), matched (message) · away at 60% · silent tap">
+    <Section title="GridFace" note="the column less 16 · here (live dot), waved at you (rose hand), both waved (message) · away at 60% · silent tap">
       {marks.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-gridface-${state}`}>
           <GridFace {...NOVA} width={COLUMN} onPress={noop} {...props} />
@@ -324,7 +325,7 @@ function GridFaces() {
         <SectionHeader title="Everyone here" count={14} />
         <View style={styles.grid}>
           {FACES.map((face, i) => (
-            <GridFace key={i} face={face} name={['Priya', 'Cosmic Panda', 'Quiet Heron', 'Sam', 'Night Cat', 'Velvet Otter'][i]} reason="Both into vinyl" width={COLUMN_360} liked={i === 1} here={i !== 5} onPress={noop} />
+            <GridFace key={i} face={face} name={['Priya', 'Cosmic Panda', 'Quiet Heron', 'Sam', 'Night Cat', 'Velvet Otter'][i]} reason="Both into vinyl" width={COLUMN_360} wavedAtYou={i === 1} here={i !== 5} onPress={noop} />
           ))}
         </View>
       </Cell>
@@ -335,12 +336,15 @@ function GridFaces() {
 function MeetNext() {
   const states = [
     ['default', {}],
-    ['liked', { liked: true }],
+    ['sending', { wave: 'sending' }],
+    ['waved', { wave: 'waved' }],
+    ['wavedatyou', { wave: 'wavedAtYou', wavedAgo: '4 min' }],
+    ['bothwaved', { wave: 'mutual' }],
     ['pressed', { previewState: 'pressed' }],
     ['focused', { previewState: 'focused' }],
   ] as const
   return (
-    <Section title="MeetNextCard" note="164 pt surface card · the face at the card less 32 · the liked mark · silent tap">
+    <Section title="MeetNextCard" note="the lit card · a labelled Wave pill: Wave → Wave back → ✓ Waved → Say hi · silent tap">
       {states.map(([state, props]) => (
         <Cell key={state} label={state} testID={`ds-meetnext-${state}`}>
           <MeetNextCard {...NOVA} width={COLUMN} onPress={noop} {...props} />
@@ -352,7 +356,7 @@ function MeetNext() {
       <Cell label="the row at 360 · 96 each" testID="ds-meetnext-row-360">
         <View style={styles.pair}>
           <MeetNextCard {...NOVA} width={COLUMN_360} onPress={noop} />
-          <MeetNextCard face={creature('Cosmic Panda')} name="Cosmic Panda" reason="Both open to dating" width={COLUMN_360} liked onPress={noop} />
+          <MeetNextCard face={creature('Cosmic Panda')} name="Cosmic Panda" reason="Both open to dating" width={COLUMN_360} wave="waved" onPress={noop} />
           <MeetNextCard face={photo(PHOTO)} name="Sam" reason="Both at 3 nights before" width={COLUMN_360} onPress={noop} />
         </View>
       </Cell>
@@ -488,7 +492,7 @@ const PRIYA: PersonCardPerson = {
   tonight: { question: 'Who are you hoping they play?', answer: 'Anything from the new record. And one old disco edit, please.' },
   common: { label: 'In common', items: ['Vinyl', 'Techno', 'Filter coffee'] },
 }
-const HANDLERS = { onLike: noop, onWave: noop, onMessage: noop, onSayHi: noop, onMore: noop, onViewProfile: noop, onClose: noop }
+const HANDLERS = { onWave: noop, onMessage: noop, onSayHi: noop, onMore: noop, onViewProfile: noop, onClose: noop }
 
 /** The L3 sheet, drawn in place (the live cell opens the real one). */
 function SheetFrame({ children }: { children: ReactNode }) {
@@ -504,30 +508,31 @@ function SheetFrame({ children }: { children: ReactNode }) {
 function PersonCards() {
   const [open, setOpen] = useState(false)
   const [state, setState] = useState<PersonState>('none')
+  const [wave, setWave] = useState<WaveStatus>('none')
   useEffect(() => {
-    if (state !== 'waveBusy') return
-    const timer = setTimeout(() => setState('waved'), ANSWER_MS)
+    if (wave !== 'sending') return
+    const timer = setTimeout(() => setWave('waved'), ANSWER_MS)
     return () => clearTimeout(timer)
-  }, [state])
+  }, [wave])
   const cards: [string, Partial<PersonCardContentProps>][] = [
     ['here', { variant: 'here' }],
     ['was', { variant: 'was' }],
     ['pre', { variant: 'pre' }],
-    ['matched', { variant: 'matched', here: true }],
+    ['bothwaved', { variant: 'matched', here: true, wave: 'mutual' }],
     ['friend', { variant: 'friend', here: true }],
     ['gone', { variant: 'gone' }],
     ['thin', { variant: 'thin', person: { face: creature('Cosmic Panda'), name: 'Cosmic Panda', age: 27, city: 'Bengaluru' } }],
-    ['liked', { variant: 'here', state: 'liked' }],
     ['requested', { variant: 'here', state: 'requested' }],
-    ['wavebusy', { variant: 'here', state: 'waveBusy' }],
-    ['waved', { variant: 'here', state: 'waved' }],
-    ['wavedatyou', { variant: 'here', wavedAtYou: '2 min' }],
-    ['wavedback', { variant: 'here', wavedAtYou: '2 min', state: 'waved' }],
+    ['sending', { variant: 'here', wave: 'sending' }],
+    ['waved', { variant: 'here', wave: 'waved' }],
+    ['wavedatyou', { variant: 'here', wave: 'wavedAtYou', wavedAtYou: '2 min' }],
+    ['wavedatyou-was', { variant: 'was', wave: 'wavedAtYou' }],
+    ['crew', { variant: 'here', crewLike: { name: 'Night Owls', onPress: noop } }],
     ['refused', { variant: 'was', refusal: { text: 'That didn’t go through.' } }],
     ['refused-checkin', { variant: 'here', refusal: { text: 'Check in to wave at people here.', action: { label: 'Check in', onPress: noop } } }],
   ]
   return (
-    <Section title="PersonCard" note="R3-D4 · variants a b d e f g h · Like is the gradient primary (H.like, #15 pop) · Say hi H.primary · Wave, Message, ⋯ silent · Waved settles to a still white pill">
+    <Section title="PersonCard" note="Wave dock A · Wave (lit, H.select) + Message · Wave back the filled one · ✓ Waved still · You both waved: Say hi only · crew like a row">
       {cards.map(([name, props]) => (
         <Cell key={name} label={name} testID={`ds-person-${name}`} style={styles.backdrop}>
           <SheetFrame>
@@ -535,18 +540,18 @@ function PersonCards() {
           </SheetFrame>
         </Cell>
       ))}
-      <Cell label="live · open the sheet: Like, Wave, Message" testID="ds-person-live">
+      <Cell label="live · open the sheet: Wave, Message" testID="ds-person-live">
         <Button label="Open the PersonCard" kind="secondary" size="md" onPress={() => setOpen(true)} testID="ds-person-open" />
-        <Button label="Reset its state" kind="tertiary" size="md" onPress={() => setState('none')} />
+        <Button label="Reset its state" kind="tertiary" size="md" onPress={() => { setState('none'); setWave('none') }} />
         <PersonCard
           visible={open}
           person={PRIYA}
           variant="here"
           state={state}
+          wave={wave}
           {...HANDLERS}
           onClose={() => setOpen(false)}
-          onLike={() => setState('liked')}
-          onWave={() => setState('waveBusy')}
+          onWave={() => setWave('sending')}
           onMessage={() => setState('requested')}
           testID="ds-person-sheet"
         />
