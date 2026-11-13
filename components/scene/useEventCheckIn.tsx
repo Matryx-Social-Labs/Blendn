@@ -15,6 +15,7 @@ import { useCheckInFlow } from '../../lib/useCheckInFlow'
 import { CheckInTray, useCheckInTray } from '../blendn/CheckInTray'
 import { MomentPour } from '../ds/MomentPour'
 import { useWithCrew, WithCrewChip } from '../crews/WithCrewChip'
+import type { CrewPlan } from '../../lib/crews'
 import type { EventCheckOutSheetProps, EventHoldProps } from './EventHold'
 
 /** How long the pour waits for the Room behind it before giving up on it (the Blend'n overlay's own ceiling). */
@@ -34,7 +35,7 @@ export function useEventCheckIn({
   onCheckedOut,
 }: {
   id: string
-  event: (Parameters<typeof doorOf>[0] & { title?: string | null }) | null
+  event: (Parameters<typeof doorOf>[0] & { title?: string | null; crew_plans?: CrewPlan[] }) | null
   openMaps: () => void
   /** The page's toast: a check-out that lands says so there (audit B-2). */
   showToast: (message: string, variant: 'success', options: { haptic: ToastHaptic }) => void
@@ -69,7 +70,7 @@ export function useEventCheckIn({
   const door = useMemo(() => (event ? doorOf({ ...event, id }, { going: false }) : null), [event, id])
   const reach = usePassReach(door, null, 'on')
   // "With {crew}" at the hold (crews 4-A2): the crew the hold tells, and whether it was told (`crewTold`).
-  const withCrew = useWithCrew(id)
+  const withCrew = useWithCrew(id, event?.crew_plans)
   const [crewTold, setCrewTold] = useState(false)
   const flow = useCheckInFlow({
     eventId: id,

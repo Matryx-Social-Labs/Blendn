@@ -22,12 +22,15 @@ const ALONE_LINE = 'You came in on your own.'
 /**
  * Which crew the hold's "With {crew}" chip is for, and whether it is on (crews 4-A2, owner 1b): on by default only when that
  * crew planned tonight (`userStatus.myCrewPlans`), else your first crew, off. The person's own tap wins over the default.
- * `withCrewId` is what the hold sends: only while on. `eventId` null (no door): reads nothing.
+ * `withCrewId` is what the hold sends: only while on. `eventId` null (no door): reads nothing. `pagePlans`: the event page's
+ * own `myCrewPlans`, so a night planned there turns the chip on at once (the Tonight pass reads the event itself).
  */
-export function useWithCrew(eventId: string | null) {
+export function useWithCrew(eventId: string | null, pagePlans?: readonly CrewPlan[]) {
   const [mine, setMine] = useState<ChipCrew[]>([])
   const [plans, setPlans] = useState<CrewPlan[]>([])
   const [tapped, setTapped] = useState<{ eventId: string; on: boolean } | null>(null)
+  // The page that has the plans already hands them in; only the Tonight pass reads the event for them.
+  const readsPlans = !pagePlans
   useEffect(() => {
     if (!eventId) return
     let live = true
@@ -37,6 +40,7 @@ export function useWithCrew(eventId: string | null) {
       .then(() => crewsApi.myCrews())
       .then((r) => live && r.success && setMine(r.data?.crews ?? []))
       .catch(() => {})
+    if (!readsPlans) return () => void (live = false)
     Promise.resolve()
       .then(() => apiClient.getEvent(eventId))
       .then((r) => live && r.success && setPlans(r.data?.userStatus?.myCrewPlans ?? []))
@@ -44,8 +48,8 @@ export function useWithCrew(eventId: string | null) {
     return () => {
       live = false
     }
-  }, [eventId])
-  const choice = eventId ? withCrewChoice(mine, plans) : null
+  }, [eventId, readsPlans])
+  const choice = eventId ? withCrewChoice(mine, pagePlans ?? plans) : null
   const on = choice ? (tapped?.eventId === eventId ? tapped.on : choice.on) : false
   return {
     crew: choice ? { crewId: choice.crewId, name: choice.name, emblemSeed: choice.emblemSeed } : null,
@@ -68,15 +72,18 @@ export function WithCrewChip({ crew, on, landed = false, onToggle }: { crew: Chi
   useAnnounced(line, { changesOnly: true })
   return (
     <View testID="with-crew" style={styles.wrap}>
-      <Chip
-        label={`With ${crew.name}`}
-        selected={on}
-        selection="multi"
-        size="lg"
-        lead={<CrewEmblem seed={crew.emblemSeed} size={EMBLEM} scene={landed && on ? 'cheer' : undefined} />}
-        onPress={landed ? undefined : onToggle}
-        testID="with-crew-chip"
-      />
+      {/* Centred under the hold (board A2): the Chip sits flex-start, so a box that hugs it is what centres. */}
+      <View style={styles.hug}>
+        <Chip
+          label={`With ${crew.name}`}
+          selected={on}
+          selection="multi"
+          size="lg"
+          lead={<CrewEmblem seed={crew.emblemSeed} size={EMBLEM} scene={landed && on ? 'cheer' : undefined} />}
+          onPress={landed ? undefined : onToggle}
+          testID="with-crew-chip"
+        />
+      </View>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} accessibilityLiveRegion="polite" style={[font('caption', bold), styles.line]}>
         {line}
       </Text>
@@ -86,5 +93,6 @@ export function WithCrewChip({ crew, on, landed = false, onToggle }: { crew: Chi
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: SPACE.sm },
+  hug: { maxWidth: '100%' },
   line: { color: COLOR.textSecondary, textAlign: 'center' },
 })

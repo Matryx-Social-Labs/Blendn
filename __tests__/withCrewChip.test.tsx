@@ -42,6 +42,16 @@ describe('useWithCrew', () => {
     expect(result.current.withCrewId).toBe('c1')
   })
 
+  it('the page’s own plans win over its read: a night planned on the event page turns the chip on at once', async () => {
+    const { result, rerender } = await renderHook(({ plans }: { plans?: (typeof tonight)[] }) => useWithCrew('e1', plans), { initialProps: { plans: [] as (typeof tonight)[] } })
+    await waitFor(() => expect(result.current.crew?.name).toBe('Nebula'))
+    expect(result.current.on).toBe(false)
+    await rerender({ plans: [tonight] })
+    expect(result.current.crew?.name).toBe('Orbit')
+    expect(result.current.on).toBe(true)
+    expect(client.getEvent).not.toHaveBeenCalled()
+  })
+
   it('no crews: no chip', async () => {
     api.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [] } })
     const { result } = await renderHook(() => useWithCrew('e1'))
