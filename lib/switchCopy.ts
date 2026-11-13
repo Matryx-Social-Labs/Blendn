@@ -15,3 +15,5 @@ export const switchCaption = (current: string | null | undefined): string => `Le
 
 /** Under "Hold to check out", and its hint. */
 export const checkOutCaption = (event: string | null | undefined): string => `Checks you out of ${named(event, 'this event')}.`
+/** Said to a screen reader once a check-out lands: the sheet has closed and its link is gone, so nothing else says it. */
+export const checkedOutLine = (event: string | null | undefined): string => `Checked out of ${named(event, 'this event')}.`
