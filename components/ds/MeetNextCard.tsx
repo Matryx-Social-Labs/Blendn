@@ -194,7 +194,8 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.capsule,
     borderWidth: 1,
     marginTop: SPACE.xxs,
-    paddingHorizontal: SPACE.sm,
+    // 4 a side: Android draws Satoshi wider, and at 8 a side "Wave back" wrapped at the default size.
+    paddingHorizontal: SPACE.xs,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
