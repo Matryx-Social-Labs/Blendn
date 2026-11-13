@@ -98,6 +98,8 @@ export function WavedAtYouStrip({
 
 const styles = StyleSheet.create({
   row: {
+    // On the room's gutter, as the you card above it.
+    marginHorizontal: SPACE.gutter,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACE.sm + SPACE.xxs,
