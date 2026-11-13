@@ -24,7 +24,7 @@ import {
   withRoster,
   type LiveRoster,
 } from './roomLive'
-import { ignoreWavesFrom, useRoomWaves } from './roomWaves'
+import { ignoreWavesFrom, listHostsMoments, useRoomWaves } from './roomWaves'
 import { recallRoster, rememberRoster } from './rosterMemory'
 import { getBlockedUsers } from './safetyUtils'
 import {
@@ -165,7 +165,8 @@ export interface RoomActions {
    * Wave, or wave back. `settleMs` is how long the hand swings before ✓ Waved shows (07-motion: 800 ms, Reduce
    * Motion's crossfade less). `'already'` is Waved, mutual or in flight: nothing is sent.
    */
-  wave(id: string, settleMs?: number): Promise<RoomAnswer<'waved' | 'mutual' | 'already'>>
+  /** `answering`: a wave to you from the received list, answerable though they are off the roster (they left). */
+  wave(id: string, settleMs?: number, answering?: { name: string }): Promise<RoomAnswer<'waved' | 'mutual' | 'already'>>
   /** `stands`: a request now exists between you. `refusal`: the server's sentence when it refused the note's text (lib/requestRefusal.ts); absent for a failure it cannot name. */
   connect(id: string, note?: string): Promise<{ stands: boolean; refusal?: string }>
   /** After a block or report: gone from every list for the rest of the session. */
@@ -245,7 +246,7 @@ export function useRoom(): RoomState & RoomActions {
    */
   const [waveState, setWaveState] = useState<Record<string, WaveStatus>>({})
   /** Waves heard live over the socket (`lib/roomWaves.ts`): Wave back before the deck refetches. */
-  const heard = useRoomWaves().received
+  const { received: heard, listedAt } = useRoomWaves()
   const [conversations, setConversations] = useState<Record<string, string>>({})
   /**
    * Set on a sent request, or on the `CONFLICT` that says one exists:
@@ -686,7 +687,8 @@ export function useRoom(): RoomState & RoomActions {
         insideNow: a.insideNow !== false,
         arrivedAt,
         wave,
-        wavedAt: heard[a.user_id]?.at ?? null,
+        // Heard live, else the received list's time (the deck carries none, so a restart lost "· 4 min").
+        wavedAt: heard[a.user_id]?.at ?? listedAt[a.user_id] ?? null,
         matched: wave === 'mutual',
         conversationId,
         requested: !!requested[a.user_id],
@@ -694,7 +696,7 @@ export function useRoom(): RoomState & RoomActions {
       }
       return { ...person, reason: reasonLine(person) }
     },
-    [waveState, conversations, requested, live.arrivedAt, heard]
+    [waveState, conversations, requested, live.arrivedAt, heard, listedAt]
   )
 
   const people = useMemo(
@@ -721,6 +723,8 @@ export function useRoom(): RoomState & RoomActions {
   const celebrate = useCallback((next: Omit<NonNullable<RoomState['match']>, 'at'>) => {
     if (celebratedRef.current.has(next.conversationId)) return
     celebratedRef.current.add(next.conversationId)
+    // The "Waved at you" list is open over the Room and plays its own wave back's moment.
+    if (listHostsMoments()) return
     /*
      * No haptic here. The match moment (`components/ds/MomentMatch.tsx`)
      * fires the success notification on the frame the last heart lands in
@@ -739,16 +743,17 @@ export function useRoom(): RoomState & RoomActions {
    * session's opinion rather than asserting "not waved": the write may have landed before the response was lost.
    */
   const wave = useCallback(
-    async (id: string, settleMs: number = WAVE_SETTLE_MS): Promise<RoomAnswer<'waved' | 'mutual' | 'already'>> => {
+    async (id: string, settleMs: number = WAVE_SETTLE_MS, answering?: { name: string }): Promise<RoomAnswer<'waved' | 'mutual' | 'already'>> => {
       const roomId = eventRef.current?.id
-      // Only someone on the roster: never a removed person, never an id from elsewhere.
+      // Someone on the roster, or a wave to you the received list returned (`answering`): they may have left, and a wave
+      // to you can be answered until the room closes. Never a removed person.
       const attendee = findAttendee(id)
       if (!roomId) return { kind: 'refused', refusal: waveRefusal('NOT_CHECKED_IN', undefined) }
-      if (!attendee) return { kind: 'refused', refusal: waveRefusal('NOT_FOUND', undefined) }
+      if (!attendee && (!answering || removed[id])) return { kind: 'refused', refusal: waveRefusal('NOT_FOUND', undefined) }
 
-      const conversationId = conversations[id] ?? attendee.conversationId ?? null
+      const conversationId = conversations[id] ?? attendee?.conversationId ?? null
       const status = waveStatusFor(
-        { youWaved: attendee.youWaved, wavedAtYou: attendee.wavedAtYou, conversationId, heard: !!heard[id] },
+        { youWaved: attendee?.youWaved, wavedAtYou: attendee ? attendee.wavedAtYou : true, conversationId, heard: !!heard[id] },
         waveState[id]
       )
       if (!shouldSendWave(status)) return { kind: 'already' }
@@ -776,8 +781,8 @@ export function useRoom(): RoomState & RoomActions {
         }
         setConversations((prev) => ({ ...prev, [id]: opened }))
         celebrate({
-          person: toPerson(attendee),
-          name: result.data?.pseudonyms?.them || displayName(attendee.name),
+          person: attendee ? toPerson(attendee) : null,
+          name: result.data?.pseudonyms?.them || (attendee ? displayName(attendee.name) : answering?.name) || 'Someone',
           you: result.data?.pseudonyms?.you ?? null,
           conversationId: opened,
         })
@@ -788,7 +793,7 @@ export function useRoom(): RoomState & RoomActions {
         return { kind: 'refused', refusal: waveRefusal(undefined, undefined) }
       }
     },
-    [findAttendee, conversations, heard, waveState, celebrate, toPerson]
+    [findAttendee, conversations, heard, waveState, celebrate, toPerson, removed]
   )
   /**
    * A message request — the action that reveals you.

@@ -696,6 +696,30 @@ export interface WaveOutcome {
   pseudonyms?: { you: string; them: string }
 }
 
+/** One wave to you (`GET /events/:id/waves`): a room handle and the room's name for them, never an id or a photo. */
+export interface ReceivedWave {
+  userId: string
+  displayName: string
+  wavedAt: string
+  /** You answered it (a wave or a like back): "✓ Waved". Only a row the list returned may offer Wave back. */
+  wavedBack: boolean
+}
+
+/** Waves to you in one room, newest first, 20 a page. `open: false` once the room has closed: nothing is answerable. */
+export interface ReceivedWavesPage {
+  open: boolean
+  total: number
+  waves: ReceivedWave[]
+  nextCursor: string | null
+}
+
+/** B-A: one Banter row per open room with waves you have not answered (`GET /waves`). */
+export interface WavesWaitingRoom {
+  eventId: string
+  waiting: number
+  latest: ReceivedWave
+}
+
 /**
  * The room from outside it: a number, and how many of them share your taste.
  *
@@ -3217,6 +3241,17 @@ class ApiClientClass {
    * mutual and opens the anonymous conversation. Idempotent on the server (one wave per pair per room), so the
    * queue's retries can never send two. Refusals: `lib/waves.ts` `waveRefusal`.
    */
+  /** Waves to you in a room, paged 20, newest first (S-A strip, See all). Never cached: a wave back changes it. */
+  async getReceivedWaves(eventId: string, cursor?: string | null): Promise<ApiResponse<ReceivedWavesPage>> {
+    const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+    return this.queuedRequest<ReceivedWavesPage>(`/api/mobile/events/${eventId}/waves${query}`)
+  }
+
+  /** B-A: the open rooms with waves you have not answered, one entry per room. */
+  async getWavesWaiting(): Promise<ApiResponse<{ rooms: WavesWaitingRoom[] }>> {
+    return this.queuedRequest<{ rooms: WavesWaitingRoom[] }>('/api/mobile/waves')
+  }
+
   async sendWave(eventId: string, toUserId: string): Promise<ApiResponse<WaveOutcome>> {
     return this.queuedRequest<WaveOutcome>(
       `/api/mobile/events/${eventId}/waves`,

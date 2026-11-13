@@ -81,6 +81,8 @@ export type RoomViewProps = {
   connection: SocketConnectionStatus
   /** You, first in People: your room name and who sees you (`RoomYouCard`). */
   you: ReactNode
+  /** S-A: the "waved at you" strip under your room name, above Meet next; it draws nothing when none wait. */
+  waves?: ReactNode
   /**
    * How many crews are here, for the "3 crews here" row that opens them (audit A-1); 0 when none is here but you are in one (the row says Crews). Null when no
    * crew is here and you are in none: no row (R2-D1's rule, without the second tab row it used to draw).
@@ -152,7 +154,10 @@ export function RoomView(props: RoomViewProps) {
         <RoomStatus status={props.connection} />
       </View>
       <View style={styles.sections}>
-        <Animated.View style={sections[0]}>{props.you}</Animated.View>
+        <Animated.View style={[styles.you, sections[0]]}>
+          {props.you}
+          {props.waves}
+        </Animated.View>
         {props.crewsHere !== null ? (
           <Animated.View style={sections[1]}>
             <RoomCrewsRow count={props.crewsHere} back={crewsView} onPress={() => props.onView(crewsView ? 'people' : 'crews')} />
@@ -238,6 +243,8 @@ const styles = StyleSheet.create({
   gutter: { paddingHorizontal: SPACE.gutter },
   status: { marginBottom: SPACE.lg },
   sections: { gap: SPACE.xl },
+  /** Board 03 S-A: the strip sits close under your room name. */
+  you: { gap: SPACE.md },
   empty: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xl },
   gridRow: { paddingHorizontal: SPACE.gutter, columnGap: GRID_GAP, marginBottom: GRID_ROW_GAP },
   crewRow: { marginBottom: SPACE.md },

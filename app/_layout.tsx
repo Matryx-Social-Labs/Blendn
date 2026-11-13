@@ -760,6 +760,8 @@ function RootLayout() {
       <Stack.Screen name="crews/index" options={{ headerShown: false }} />
       {/* Make a crew is a sheet over Crews (Flow 10 · 10.2): the route is transparent and draws the sheet itself. */}
       <Stack.Screen name="crews/new" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }} />
+      {/* Waved at you (Wave PR (b), board 03 See all): a sheet over the Room or Banter; the route draws the sheet itself. */}
+      <Stack.Screen name="waves/[eventId]" options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }} />
       <Stack.Screen name="crews/invite/[crewId]" options={{ headerShown: false }} />
       <Stack.Screen name="crews/[crewId]" options={{ headerShown: false }} />
       {/* A place from the Places list. Placeholder until step 5 (docs/PLACEHOLDER_SCREENS.md §10). */}

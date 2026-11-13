@@ -31,6 +31,10 @@ import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Button } from '../../components/ds/Button'
 import { BanterRequestsRow } from '../../components/banter/BanterRequestsRow'
+import { BanterWavesRow } from '../../components/banter/BanterWavesRow'
+import { useWavesWaiting } from '../../lib/receivedWaves'
+import { ignoreWavesFrom, useRoomWaves } from '../../lib/roomWaves'
+import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { PageFooter } from '../../components/chat/PageFooter'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
@@ -443,7 +447,11 @@ function ChatInner() {
   const requestsWaiting = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length) + Math.max(crews.invitesTotal, invites.length)
   // The list's own "Couldn’t load your chats" is up (the empty list's failed state): its Try again is the one.
   const failedState = inbox.listFailed && !inbox.loading && !trimmed && shown.length === 0
-  const hasHeaderContent = liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
+  // B-A: one row per open room with waves you have not answered, read again on a pull and on every wave heard.
+  const { version: wavesVersion } = useRoomWaves()
+  const waiting = useWavesWaiting(`${inbox.boardRefreshKey}:${wavesVersion}`)
+  const waveRoomTitle = (eventId: string) => rooms.find((c) => c.event_id === eventId)?.event_title ?? null
+  const hasHeaderContent = waiting.rooms.length + liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
 
   const header = (
     <View style={styles.sections}>
@@ -481,6 +489,23 @@ function ChatInner() {
           })}
         </View>
       ) : null}
+
+      {!trimmed
+        ? waiting.rooms.map((r) => (
+            <BanterWavesRow
+              key={r.eventId}
+              room={r}
+              title={waveRoomTitle(r.eventId)}
+              onSafety={(w) => {
+                const done = () => {
+                  ignoreWavesFrom(w.userId)
+                  waiting.reload()
+                }
+                showUserSafetyActions(w.displayName, w.userId, done, done)
+              }}
+            />
+          ))
+        : null}
 
       {!trimmed && requestsWaiting > 0 ? (
         <Reanimated.View exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}>

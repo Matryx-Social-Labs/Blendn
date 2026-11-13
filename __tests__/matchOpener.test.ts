@@ -158,7 +158,7 @@ describe('the moment paints without a second request', () => {
   it('falls back to the card’s name, which is also the pseudonym', () => {
     // Pre-reveal `attendee.name` IS the pseudonym — `rankMatches` enforces it —
     // so the fallback cannot leak a real name.
-    expect(ROOM()).toContain('result.data?.pseudonyms?.them || displayName(attendee.name)')
+    expect(ROOM()).toContain('result.data?.pseudonyms?.them || (attendee ? displayName(attendee.name) : answering?.name)')
   })
 })
 
