@@ -40,9 +40,11 @@ type State = {
   listedAt: Readonly<Record<string, number>>
   /** Bumped by every wave heard, answered or blocked: the strip and the Banter row read the server again. */
   version: number
+  /** Blocked or reported in this room from any surface (the list route has no `useRoom`): the deck drops them too. */
+  blocked: Readonly<Record<string, true>>
 }
 
-const EMPTY: State = { toast: null, received: {}, listedAt: {}, version: 0 }
+const EMPTY: State = { toast: null, received: {}, listedAt: {}, version: 0, blocked: {} }
 let state: State = EMPTY
 let listeningFor: string | null = null
 /** People blocked or reported in this room: their waves are never shown, and the ones already here go. */
@@ -125,7 +127,7 @@ export function ignoreWavesFrom(userId: string): void {
   const received = { ...state.received }
   delete received[userId]
   const waves = state.toast?.waves.filter((w) => w.fromUserId !== userId) ?? []
-  set({ ...state, toast: waves.length ? { waves } : null, received, version: state.version + 1 })
+  set({ ...state, toast: waves.length ? { waves } : null, received, version: state.version + 1, blocked: { ...state.blocked, [userId]: true } })
 }
 
 /** The toast or banner has shown it. A fold waiting behind it comes once the window allows. */

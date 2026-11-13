@@ -246,7 +246,7 @@ export function useRoom(): RoomState & RoomActions {
    */
   const [waveState, setWaveState] = useState<Record<string, WaveStatus>>({})
   /** Waves heard live over the socket (`lib/roomWaves.ts`): Wave back before the deck refetches. */
-  const { received: heard, listedAt } = useRoomWaves()
+  const { received: heard, listedAt, blocked } = useRoomWaves()
   const [conversations, setConversations] = useState<Record<string, string>>({})
   /**
    * Set on a sent request, or on the `CONFLICT` that says one exists:
@@ -700,12 +700,12 @@ export function useRoom(): RoomState & RoomActions {
   )
 
   const people = useMemo(
-    () => live.attendees.filter((a) => !removed[a.user_id]).map(toPerson),
-    [live.attendees, removed, toPerson]
+    () => live.attendees.filter((a) => !removed[a.user_id] && !blocked[a.user_id]).map(toPerson),
+    [live.attendees, removed, blocked, toPerson]
   )
   const arrivals = useMemo(
-    () => live.arrivals.filter((a) => !removed[a.user_id]).map(toPerson),
-    [live.arrivals, removed, toPerson]
+    () => live.arrivals.filter((a) => !removed[a.user_id] && !blocked[a.user_id]).map(toPerson),
+    [live.arrivals, removed, blocked, toPerson]
   )
 
   const findAttendee = useCallback((id: string): AttendeeProfile | null => {

@@ -122,6 +122,17 @@ describe('L-B: waves inside 30 s fold into one toast', () => {
     expect(seen.store!.toast).toBeNull()
   })
 
+  it('a block or report anywhere (the strip, the list, the toast) takes them out of this room, recorded for the deck', async () => {
+    await render(<Probe />)
+    listenForWaves('e1')
+    expect(seen.store!.blocked).toEqual({})
+    await act(async () => ignoreWavesFrom('rh_l'))
+    expect(seen.store!.blocked).toEqual({ rh_l: true })
+    // A new room starts clean.
+    await act(async () => listenForWaves('e2'))
+    expect(seen.store!.blocked).toEqual({})
+  })
+
   it('the toast says one name, or how many', () => {
     const w = (n: string) => ({ eventId: 'e1', fromUserId: n, fromName: n, at: NOW })
     expect(toastTitle({ waves: [w('Night Cat')] })).toBe('Night Cat waved at you')
