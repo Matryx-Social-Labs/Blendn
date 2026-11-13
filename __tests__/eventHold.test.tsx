@@ -82,6 +82,7 @@ beforeEach(() => {
   jest.spyOn(H, 'success').mockImplementation(() => {})
   jest.spyOn(H, 'error').mockImplementation(() => {})
   jest.spyOn(AccessibilityInfo, 'announceForAccessibilityWithOptions').mockImplementation(() => {})
+  jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
   jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
   jest.spyOn(AccessibilityInfo, 'isReduceTransparencyEnabled').mockResolvedValue(false)
   jest.spyOn(AccessibilityInfo, 'isBoldTextEnabled').mockResolvedValue(false)
@@ -217,6 +218,24 @@ describe('checked into this event already: "Check out" opens the sheet with the 
     await act(async () => answer({ success: true }))
     await settle()
     expect(screen.queryByRole('button', { name: /Hold to check out|Checking you out/ })).toBeNull()
+  })
+
+  it('a check-out that lands is said to a screen reader, naming the event: the sheet closes and its link is gone, so focus has nowhere to come back to', async () => {
+    checkOut.mockResolvedValue({ success: true })
+    await render(<Page going />)
+    await open()
+    await holdOut()
+    await settle()
+    expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Checked out of Vinyl Night.')
+  })
+
+  it('a refusal is not said as a check-out', async () => {
+    checkOut.mockResolvedValue({ success: false, error: 'Nope.' })
+    await render(<Page going />)
+    await open()
+    await holdOut()
+    await settle()
+    expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled()
   })
 
   it('refused: stays open, says why in its line, plays the error once, and the hold is ready again', async () => {
