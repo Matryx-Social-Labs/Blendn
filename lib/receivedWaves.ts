@@ -57,6 +57,12 @@ export function wavedAtYouLine(at: string | undefined, now: number): string {
   return ago ? `Waved at you · ${ago}` : 'Waved at you'
 }
 
+/** A See all row under its "Waved at you" header: "4 min ago", as board 03 draws it (the spoken label keeps `wavedAtYouLine`). */
+export function wavedAgoLine(at: string | undefined, now: number): string {
+  const ago = wavedAgo(at, now)
+  return ago ? `${ago} ago` : 'Waved at you'
+}
+
 /** The toast's line: one name (L-A), or how many (L-B). */
 export function toastTitle(toast: WaveToastItem): string {
   return toast.waves.length === 1 ? `${toast.waves[0].fromName} waved at you` : `${toast.waves.length} people waved at you`

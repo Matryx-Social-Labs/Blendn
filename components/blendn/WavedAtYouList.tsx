@@ -5,7 +5,7 @@ import { apiClient, type ReceivedWave } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
-import { isWavesPage, wavedAtYouLine } from '../../lib/receivedWaves'
+import { isWavesPage, wavedAgoLine, wavedAtYouLine } from '../../lib/receivedWaves'
 import { Avatar } from '../ds/Avatar'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { PagedFooter } from '../friends/PagedFooter'
@@ -154,7 +154,7 @@ export function WavedAtYouList({
                     {w.displayName}
                   </Text>
                   <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('note', bold), { color: secondary }]}>
-                    {wavedAtYouLine(w.wavedAt, now)}
+                    {wavedAgoLine(w.wavedAt, now)}
                   </Text>
                 </View>
                 {answerable || sending === w.userId ? (

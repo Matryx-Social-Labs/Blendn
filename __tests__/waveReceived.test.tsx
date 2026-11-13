@@ -245,6 +245,15 @@ describe('See all: paged 20 from the server', () => {
     expect(screen.queryByRole('button', { name: 'Wave back at Person 1' })).toBeNull()
   })
 
+  it('a row says "4 min ago" under the name, as board 03 draws it (the header says Waved at you), and is heard in full', async () => {
+    mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([wave(4)]) })
+    await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn()} onSafety={jest.fn()} />)
+    await waitFor(() => expect(screen.getByText('Person 4', { includeHiddenElements: true })).toBeTruthy())
+    expect(screen.getByText('4 min ago', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('Waved at you · 4 min', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByLabelText('Person 4, Waved at you · 4 min')).toBeTruthy()
+  })
+
   it('Block from a row takes it off the list; control: a cancelled sheet keeps it', async () => {
     mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([wave(1), wave(2)]) })
     let done: (() => void) | undefined
