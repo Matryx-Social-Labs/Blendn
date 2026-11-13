@@ -713,17 +713,17 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
    * Waves to you (Wave PR (b), board 03): the strip under your room name (S-A), the toast's Wave back (L-A) and the list
    * (See all). A wave back answers someone the received list returned even after they left (until the room closes).
    */
-  const received = useReceivedWaves(mode === 'room' ? eventId : null)
+  const { page: receivedPage, reload: reloadReceived } = useReceivedWaves(mode === 'room' ? eventId : null)
   const [answering, setAnswering] = useState<string | null>(null)
   const waveBack = useCallback(
     async (id: string, name: string) => {
       setAnswering(id)
       const answer = await room.wave(id, reduceMotion ? WAVE_SETTLE_REDUCED_MS : WAVE_SETTLE_MS, { name })
       setAnswering(null)
-      received.reload()
+      reloadReceived()
       if (answer.kind === 'refused') say(answer.refusal.message)
     },
-    [room, reduceMotion, received, say]
+    [room, reduceMotion, reloadReceived, say]
   )
   const seeAllWaves = useCallback(() => {
     if (eventId) router.push({ pathname: '/waves/[eventId]', params: { eventId, title: room.event?.title ?? '' } } as never)
@@ -1059,7 +1059,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             }
             waves={
               <WavedAtYouStrip
-                page={received.page}
+                page={receivedPage}
                 now={now}
                 sending={answering}
                 onWaveBack={(w) => void waveBack(w.userId, w.displayName)}

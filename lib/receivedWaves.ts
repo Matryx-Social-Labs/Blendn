@@ -18,6 +18,8 @@ export function isWavesPage(d: unknown): d is ReceivedWavesPage {
   return !!p && Array.isArray(p.waves) && typeof p.total === 'number' && typeof p.open === 'boolean'
 }
 
+/** A burst of waves (a big room) reads the list once it settles, not once per wave. */
+const RELOAD_SETTLE_MS = 1_000
 /** S-A: the newest three faces, whatever the room's size. */
 export const STRIP_FACES = 3
 
@@ -76,16 +78,20 @@ export function useReceivedWaves(eventId: string | null): { page: ReceivedWavesP
   useEffect(() => {
     if (!eventId) return
     let live = true
-    apiClient
-      .getReceivedWaves(eventId, null)
-      .then((r) => {
-        if (!live || !r.success || !isWavesPage(r.data)) return
-        setPage(r.data)
-        setListedAt(eventId, r.data.waves)
-      })
-      .catch((e) => Logger.warn('match', 'received waves failed', { error: e }))
+    const read = () =>
+      apiClient
+        .getReceivedWaves(eventId, null)
+        .then((r) => {
+          if (!live || !r.success || !isWavesPage(r.data)) return
+          setPage(r.data)
+          setListedAt(eventId, r.data.waves)
+        })
+        .catch((e) => Logger.warn('match', 'received waves failed', { error: e }))
+    // The first read at once; a re-read after a wave waits for the burst to settle.
+    const timer = setTimeout(read, version || nudge ? RELOAD_SETTLE_MS : 0)
     return () => {
       live = false
+      clearTimeout(timer)
     }
   }, [eventId, version, nudge])
   const reload = useCallback(() => setNudge((n) => n + 1), [])
