@@ -53,6 +53,25 @@ describe('submitCheckIn', () => {
     expect(mockApi.checkIn.mock.calls[0][1].deviceInfo.gpsAccuracy).toBeUndefined()
   })
 
+  it('"With {crew}" on: sends withCrewId, and reads crewTold back (crews 4-A2)', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { checkIn: { id: 'c1' }, crewTold: true } })
+    const outcome = await submitCheckIn('e1', at, 'crew-1')
+    expect(mockApi.checkIn.mock.calls[0][1].withCrewId).toBe('crew-1')
+    expect(outcome).toMatchObject({ kind: 'checkedIn', crewTold: true })
+  })
+
+  it('"With {crew}" off: no withCrewId at all, and no crewTold (you are not on the crew’s strip)', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { checkIn: { id: 'c1' } } })
+    const outcome = await submitCheckIn('e1', at)
+    expect('withCrewId' in mockApi.checkIn.mock.calls[0][1]).toBe(false)
+    expect(outcome).not.toHaveProperty('crewTold')
+  })
+
+  it('a crew the server would not tell (not yours, crews off, a ban) is still a check-in: crewTold false', async () => {
+    mockApi.checkIn.mockResolvedValue({ success: true, data: { checkIn: { id: 'c1' }, crewTold: false } })
+    expect(await submitCheckIn('e1', at, 'crew-x')).toMatchObject({ kind: 'checkedIn', crewTold: false })
+  })
+
   it('reads intentNeeded and revealSuggestion off a success', async () => {
     mockApi.checkIn.mockResolvedValue({
       success: true,

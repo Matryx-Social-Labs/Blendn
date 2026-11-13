@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Platform, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated'
 
@@ -89,6 +89,11 @@ export type ChipProps = {
   onRemove?: () => void
   /** A 16 pt glyph before the label (in a `multi` chip it is the slot's off glyph, instead of the plus). */
   icon?: IconName
+  /**
+   * A picture before the label in place of the glyph ("With {crew}": the crew's emblem). A `multi` chip with one draws its
+   * check after the label, as board crews/04 A2 does ("[emblem] With Nebula ✓").
+   */
+  lead?: ReactNode
   /** `multi`: a 16 pt slot that is + off and ✓ on, so the chip never changes width (Chip.html, the sweep). */
   selection?: ChipSelection
   /** After the label: a count in Geist Mono. */
@@ -141,6 +146,7 @@ export function Chip({
   onPress,
   onRemove,
   icon,
+  lead,
   selection = 'single',
   count,
   kind,
@@ -185,6 +191,21 @@ export function Chip({
         ? OUTLINE_EDGE
         : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
 
+  // The + → ✓ slot of a multi chip: before the label, or after it when a `lead` picture leads.
+  const slot = multi ? (
+    <View testID={testID && `${testID}-slot`} style={styles.slot16}>
+      <Animated.View style={[styles.stack, { opacity: selected ? 0 : 1 }, SLOT_FADE]}>
+        <Icon name={icon ?? 'plus'} size={ICON.inline} color={icon ? COLOR.textPrimary : COLOR.textSecondary} />
+      </Animated.View>
+      <Animated.View
+        testID={testID && `${testID}-check`}
+        style={[styles.stack, { opacity: selected ? 1 : 0 }, SLOT_FADE]}
+      >
+        <Glyph name="check" size={ICON.inline} color={sel.glyph} play={selected} testID={testID && `${testID}-check-glyph`} />
+      </Animated.View>
+    </View>
+  ) : null
+
   const body = (
     <>
       {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
@@ -200,21 +221,9 @@ export function Chip({
         />
       ) : null}
       {previewState === 'pressed' && android ? <View style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
-      {multi ? (
-        <View testID={testID && `${testID}-slot`} style={styles.slot16}>
-          <Animated.View style={[styles.stack, { opacity: selected ? 0 : 1 }, SLOT_FADE]}>
-            <Icon name={icon ?? 'plus'} size={ICON.inline} color={icon ? COLOR.textPrimary : COLOR.textSecondary} />
-          </Animated.View>
-          <Animated.View
-            testID={testID && `${testID}-check`}
-            style={[styles.stack, { opacity: selected ? 1 : 0 }, SLOT_FADE]}
-          >
-            <Glyph name="check" size={ICON.inline} color={sel.glyph} play={selected} testID={testID && `${testID}-check-glyph`} />
-          </Animated.View>
-        </View>
-      ) : icon ? (
-        <Glyph name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} play={selected} />
-      ) : null}
+      {lead ?? null}
+      {multi && !lead ? slot : null}
+      {!multi && !lead && icon ? <Glyph name={icon} size={ICON.inline} color={selected ? sel.glyph : ink} active={selected} play={selected} /> : null}
       <Text
         style={[font(size === 'lg' ? 'body' : size === 'header' ? 'control' : 'meta', bold, FONT_FAMILY.brand[500]), styles.label, { color: ink }]}
         maxFontSizeMultiplier={CONTROL_FONT_CAP}
@@ -223,6 +232,7 @@ export function Chip({
       >
         {label}
       </Text>
+      {multi && lead ? slot : null}
       {count !== undefined ? (
         <Text
           testID={testID && `${testID}-count`}

@@ -111,7 +111,6 @@ export const MERGE_WINDOW_MS = 4000
 const MERGED_TITLE: Record<string, (n: number) => string> = {
   match: (n) => `${n} new matches`,
   friend_request: (n) => `${n} friend requests`,
-  crew_here: (n) => `${n} crewmates are here`,
 }
 
 const NOW = 'Just now'
@@ -132,14 +131,14 @@ export function bannerFor(content: PushContent, now: number): BannerSpec | null 
       context: `${content.title} · ${NOW.toLowerCase()}`,
     }
   }
-  const messages = type === 'private_message' || type === 'group_message'
+  // A DM's body is the message, and a crew push's says who is in or who wants to go together (crews S3): the line.
+  const bodyIsTheLine = type === 'private_message' || type === 'group_message' || type === 'crew_here'
   return {
     ...base,
     visual: { type: 'glyph', icon: GLYPH[type] ?? 'bell' },
-    // The crew's push is titled with its name; in the app it can say so.
-    title: type === 'crew_here' && content.title ? `Someone from ${content.title} is here` : content.title,
-    // A DM's body is the message; everywhere else the body is a sentence for the lock screen, and "now" is the line.
-    context: messages ? content.body : NOW,
+    title: content.title,
+    // Everywhere else the body is a sentence for the lock screen, and "now" is the line.
+    context: bodyIsTheLine ? content.body : NOW,
   }
 }
 

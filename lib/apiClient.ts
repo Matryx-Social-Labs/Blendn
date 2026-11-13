@@ -4,6 +4,7 @@
  */
 
 import { roundCoordinate } from './coordinates'
+import type { CrewPlan } from './crews'
 import { locationSharingOn, setLocationSharing } from './shareLocation'
 import { patchEventDetailStatus } from './eventDetailCache'
 import { emitEventStatusChanged } from './eventStatusSignal'
@@ -1102,6 +1103,8 @@ export interface EventApiItem {
     userRating?: number | null
     userReview?: string | null
     rsvpStatus?: 'going' | 'maybe' | 'not_going' | 'waitlisted' | null
+    /** "Going together" (crews 4-A1): your own crews with a night of this event planned. Absent from an older server. */
+    myCrewPlans?: CrewPlan[]
   }
 }
 
@@ -1421,6 +1424,8 @@ export interface ChatMessageData {
 export interface CheckInResult {
   /** The route's shape: the check-in row. `checkInId` below was never on it (ROOM-11). */
   checkIn?: { id?: string }
+  /** Sent only when `withCrewId` was: whether that crew was told you're in (crews 4-A2). False never undoes the check-in. */
+  crewTold?: boolean
   left?: LeftRoom[]
   checkInId?: string
   check_in_id?: string
@@ -2702,7 +2707,8 @@ class ApiClientClass {
 
   async checkIn(
     eventId: string,
-    data: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown> }
+    /** `withCrewId`: "With {crew}" at the hold (crews 4-A2) — the server tells that crew you're in. Absent: on your own. */
+    data: { latitude: number; longitude: number; deviceInfo?: Record<string, unknown>; withCrewId?: string }
   ): Promise<ApiResponse<CheckInResult>> {
     return this.queuedRequest<CheckInResult>(
       `/api/mobile/events/${pathSegment(eventId)}/checkin`,

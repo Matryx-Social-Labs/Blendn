@@ -39,6 +39,8 @@ const CELLS = [
   'ds-crewrow',
   'ds-crewstrip-off',
   'ds-crewstrip-twoCrews',
+  'ds-crewstrip-named',
+  'ds-crewstrip-twelve',
   'ds-likingas-me',
   'ds-reveal-after',
   'ds-open-reveal-crew',
@@ -65,16 +67,13 @@ describe('the gallery, app/preview/ds-p4', () => {
     for (const id of CELLS) expect(screen.getByTestId(id, { includeHiddenElements: true })).toBeTruthy()
   })
 
-  it('the live cells: Join settles to done, We’re here to “Your crew knows”', async () => {
+  it('the live cells: Join settles to done; the crew strip has no button (crews 4-A3)', async () => {
     jest.useFakeTimers()
     await render(<DsP4Preview />)
     await fireEvent.press(screen.getByRole('button', { name: 'Join' }))
     await act(async () => jest.advanceTimersByTime(700))
     expect(screen.getByText('You’re in the car')).toBeTruthy()
-    const tells = screen.getAllByRole('button', { name: 'Tell your crew — We’re here' })
-    await fireEvent.press(tells[tells.length - 1])
-    await act(async () => jest.advanceTimersByTime(700))
-    expect(screen.getAllByText('Your crew knows').length).toBeGreaterThan(3)
+    expect(screen.queryByRole('button', { name: /We’re here/ })).toBeNull()
     jest.useRealTimers()
   })
 

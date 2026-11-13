@@ -17,7 +17,6 @@ import {
 import { crewsApi } from '../../lib/crewsApi'
 import { isOrganiserSuspended } from '../../lib/noLongerAvailable'
 import { showSheet } from '../../lib/sheet'
-import type { TellState } from '../ds/CrewStrip'
 import { useToast } from '../Toast'
 
 /** A page of cards: the server's default, well under its 50. */
@@ -153,7 +152,7 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
 }
 
 /**
- * Liking and reporting a card, and "We're here" — the Crews view's writes.
+ * Liking and reporting a card — the Crews view's writes.
  * Each guarded by a ref, so a fast second tap sends nothing. `onBlend` plays
  * the Blend moment when a like makes one (Flow 10 · 10.8); without it the
  * Blend opens directly.
@@ -165,27 +164,10 @@ export function useCrewActions(
 ) {
   const { showToast } = useToast()
   const [liking, setLiking] = useState<string | null>(null)
-  /** "We're here" per crew (Flow 10 · 10.6, CrewStrip): on its way, told, or already told tonight. */
-  const [told, setTold] = useState<Record<string, TellState>>({})
-  // One per action: a like waiting on its choose-a-crew sheet never blocks "We're here" (M33).
+  // A like waiting on its choose-a-crew sheet sends nothing more on a fast second tap.
   const likeInFlight = useRef(false)
-  const telling = useRef(false)
   const { markLiked, reload } = crews
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
-
-  const here = async (crew: Pick<Crew, 'crewId'>) => {
-    if (!eventId || telling.current) return
-    telling.current = true
-    setTold((t) => ({ ...t, [crew.crewId]: 'sending' }))
-    const result = await crewsApi.here(crew.crewId, eventId)
-    telling.current = false
-    if (result.success && result.data) {
-      setTold((t) => ({ ...t, [crew.crewId]: result.data!.repeated ? 'already' : 'yes' }))
-      return
-    }
-    setTold((t) => ({ ...t, [crew.crewId]: 'no' }))
-    showToast(crewMessage(result, 'crew', 'Couldn’t tell your crew. Try again.'), 'error', { haptic: 'error' })
-  }
 
   const like = async (card: CrewCard) => {
     if (!eventId || likeInFlight.current) return
@@ -241,7 +223,7 @@ export function useCrewActions(
       },
     })
 
-  return { liking, like, report, here, told }
+  return { liking, like, report }
 }
 
 export type CrewActions = ReturnType<typeof useCrewActions>

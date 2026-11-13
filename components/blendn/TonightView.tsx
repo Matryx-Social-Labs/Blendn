@@ -114,8 +114,10 @@ export type TonightViewProps = {
   onCheckIn: () => void
   /** The Room failed to load for someone checked in: Tonight stays, with a quiet line (Flow 4 Room #15). */
   onRoomRetry?: () => void
-  /** After the server's yes: "Tell your crew" in the pass, which grows upward to hold it (Flow 4 delta R2-D1 "success"). */
+  /** After the server's yes: your crews' strip in the pass, which grows upward to hold it (Flow 4 delta R2-D1 "success"). */
   crewStrip?: ReactNode
+  /** "With {crew}" under the hold (crews 4-A2): drawn while the hold is live, and after it (read-only, same height). */
+  crewChip?: ReactNode
   topInset: number
   bottomInset: number
 }
@@ -153,6 +155,7 @@ export function TonightView({
   onCheckIn,
   onRoomRetry,
   crewStrip,
+  crewChip,
   topInset,
   bottomInset,
 }: TonightViewProps) {
@@ -280,6 +283,7 @@ export function TonightView({
               confirmed={youreIn}
               testID="tonight-pass"
             >
+              {reach === 'open' || youreIn ? crewChip : null}
               {youreIn ? crewStrip : null}
             </VenuePass>
           </View>

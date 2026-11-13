@@ -169,13 +169,107 @@ export interface CrewCard {
   badges?: Badge[]
 }
 
+/**
+ * A crewmate by the crew room's identity (admin #971/#973): the crew-room handle (yours is your own id), the first name, and a
+ * photo only for a member who did not choose "keep me anonymous". Members only: a stranger's crew card never carries one.
+ */
+export interface CrewmateIn {
+  userId: string
+  name: string
+  photo: string | null
+  you: boolean
+}
+
 export interface CrewsAtEvent {
   crewsEnabled: boolean
   crews: CrewCard[]
-  /** Your crews here now (two of you checked in): what a like is sent "as". */
-  myCrews: { crewId: string; name: string; presentCount: number }[]
+  /**
+   * Your crews here now (two of you checked in): what a like is sent "as". `here` (4-A3) is who is in WITH the crew — checked
+   * in and told it ("With {crew}" at the hold), first in first; optional, as an older server sends only the count.
+   */
+  myCrews: { crewId: string; name: string; presentCount: number; here?: CrewmateIn[] }[]
   total: number
   hasMore: boolean
+}
+
+/** "Going together" (4-A1): one of your crews with a night of this event planned (`GET /events/:id` → `userStatus.myCrewPlans`). */
+export interface CrewPlan {
+  crewId: string
+  name: string
+  emblemSeed: string
+  occurrenceId: string
+  startsAt: string
+  /** Crewmates who said they're going (RSVP), by the crew room's identity. */
+  going: CrewmateIn[]
+}
+
+/** Others first, in the server's order (first in first), you last: "Priya, Arjun, You" (board 04 A3). */
+export function inYouLast(people: readonly CrewmateIn[]): CrewmateIn[] {
+  return [...people.filter((x) => !x.you), ...people.filter((x) => x.you)]
+}
+
+export const namesLine = (people: readonly CrewmateIn[]): string =>
+  inYouLast(people)
+    .map((x) => (x.you ? 'You' : x.name))
+    .join(', ')
+
+/** The most names "… are going" spells out before "and N others" (the server's crew push does the same). */
+const GOING_NAMES_MAX = 3
+
+/** "Priya and Arjun are going" (board 04 A1): crewmates only, never you; nothing when nobody else is. */
+export function goingLine(going: readonly CrewmateIn[]): string | null {
+  const names = going.filter((x) => !x.you).map((x) => x.name)
+  if (names.length === 0) return null
+  const shown = names.length <= GOING_NAMES_MAX ? names : [...names.slice(0, GOING_NAMES_MAX - 1), `${names.length - (GOING_NAMES_MAX - 1)} others`]
+  const list = shown.length === 1 ? shown[0] : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`
+  return `${list} ${names.length === 1 ? 'is' : 'are'} going`
+}
+
+/** One strip row (`CrewStrip`): how many are in with the crew and who, by first name. */
+export type StripCrewRow = {
+  id: string
+  name: string
+  emblemSeed: string
+  size: number
+  in: number
+  people: CrewmateIn[]
+  context: string
+}
+
+/**
+ * Your crews' strip rows from `myCrews` (4-A3): drawn from who told the crew (`here`), so a crew whose members all came in on
+ * their own draws nothing — nobody is listed, and nobody as "not here yet". An older server's count stands in, unnamed.
+ */
+export function stripCrewsFrom(
+  myCrews: CrewsAtEvent['myCrews'],
+  mine: readonly Pick<Crew, 'crewId' | 'emblemSeed' | 'size'>[],
+  context: string
+): StripCrewRow[] {
+  return myCrews.flatMap((c) => {
+    const crew = mine.find((m) => m.crewId === c.crewId)
+    const people = c.here ?? []
+    const count = c.here ? people.length : c.presentCount
+    if (count === 0) return []
+    return [{ id: c.crewId, name: c.name, emblemSeed: crew?.emblemSeed ?? c.crewId, size: Math.max(crew?.size ?? 0, count), in: count, people, context }]
+  })
+}
+
+/** A plan this close or already started is tonight's (doors open before the start; a plan's night has not ended yet). */
+export const TONIGHT_AHEAD_MS = 12 * 3_600_000
+
+/**
+ * The "With {crew}" chip at the hold (4-A2, owner 1b): a crew that planned tonight, on; otherwise your first crew, off (tap it
+ * on to tell them). No crew, no chip. `withCrewId` is sent only while it is on.
+ */
+export function withCrewChoice(
+  mine: readonly Pick<Crew, 'crewId' | 'name' | 'emblemSeed'>[],
+  plans: readonly CrewPlan[],
+  now: number = Date.now()
+): { crewId: string; name: string; emblemSeed: string; on: boolean } | null {
+  const tonight = plans.find((p) => Date.parse(p.startsAt) - now <= TONIGHT_AHEAD_MS)
+  if (tonight) return { crewId: tonight.crewId, name: tonight.name, emblemSeed: tonight.emblemSeed, on: true }
+  const first = mine[0]
+  return first ? { crewId: first.crewId, name: first.name, emblemSeed: first.emblemSeed, on: false } : null
 }
 
 export interface BlendPerson {

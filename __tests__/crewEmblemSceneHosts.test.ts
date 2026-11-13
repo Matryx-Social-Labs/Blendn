@@ -24,6 +24,8 @@ const HOSTS: Record<string, string> = {
   'components/ds/MomentBlend.tsx': 'clink · the Mix, both emblems once they land',
   'components/ds/CrewCard.tsx': "forwards `emblemScene`, which only Make a crew's preview passes",
   'components/crews/MakeSteps.tsx': "dance · Make a crew's preview, on every Shuffle",
+  'components/ds/CrewStrip.tsx': 'cheer · your crew check-in moment, once per crew per night (RoomCrews decides which row)',
+  'components/crews/WithCrewChip.tsx': 'cheer · "With {crew}" landing on your own hold',
   'app/preview/ds-p5.tsx': 'every scene · the dev-only harness for moments not built yet',
 }
 

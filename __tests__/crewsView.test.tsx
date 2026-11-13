@@ -16,7 +16,7 @@ jest.mock('expo-router', () => ({
   },
 }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), here: jest.fn(), likeCrew: jest.fn(), report: jest.fn() },
+  crewsApi: { crewsAt: jest.fn(), myCrews: jest.fn(), openToCrews: jest.fn(), likeCrew: jest.fn(), report: jest.fn() },
 }))
 const mockCheckInListeners = new Set<() => void>()
 jest.mock('../lib/checkIn', () => ({
@@ -227,24 +227,6 @@ describe('the crews here, a page at a time (M9)', () => {
       void result.current.like(card('a'))
     })
     expect(api.likeCrew).toHaveBeenCalledTimes(1)
-    await act(async () => finish({ success: true, data: { liked: true, blend: null } }))
-  })
-
-  it('a like in flight never holds "We’re here" back: one guard per action (motion audit M33)', async () => {
-    api.crewsAt.mockResolvedValue(page([card('a')], false))
-    let finish: (v: unknown) => void = () => {}
-    api.likeCrew.mockReturnValue(new Promise((r) => (finish = r)) as never)
-    api.here.mockResolvedValue({ success: true, data: { repeated: false } } as never)
-    const { result } = await renderHook(() => {
-      const crews = useCrewsHere('e1')
-      return useCrewActions('e1', crews)
-    })
-    await act(async () => {
-      void result.current.like(card('a'))
-      await result.current.here({ crewId: 'mine' })
-    })
-    expect(api.here).toHaveBeenCalledTimes(1)
-    expect(result.current.told.mine).toBe('yes')
     await act(async () => finish({ success: true, data: { liked: true, blend: null } }))
   })
 

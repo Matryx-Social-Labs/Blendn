@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -9,7 +9,7 @@ import { RowsCard } from '../../components/crews/RowsCard'
 import { Button } from '../../components/ds/Button'
 import { CrewRow } from '../../components/ds/CrewCard'
 import { SectionHeader } from '../../components/ds/SectionHeader'
-import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { HueProvider } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { emptyOut, fadeIn, riseIn } from '../../components/board/boardMotion'
@@ -19,7 +19,7 @@ import { useToastDock } from '../../components/toastDock'
 import { crewBadge, type Crew, type CrewInvite } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import { crewRowSub, inviteRows } from '../../lib/crewsScreens'
-import { COLOR, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { ONBOARDING_ROUTES } from '../../lib/onboarding'
 import { useTopBarState } from '../../lib/useTopBarState'
@@ -39,8 +39,6 @@ const DOCK_GAP = SPACE.xl
 const FIRST_ITEM_MS = 600
 /** Three rows of the card, so the list does not jump when it lands. */
 const SKELETON_ROWS = 3
-/** D-L18: what the footnote means, in one plain sentence. */
-export const FOOTNOTE = 'Once you’ve checked in somewhere, you’ll see where your crew is.'
 
 /**
  * Your crews, and the invites waiting for you (Flow 10 · 10.1).
@@ -51,7 +49,6 @@ export const FOOTNOTE = 'Once you’ve checked in somewhere, you’ll see where 
  * primary. A lapsed invite dims and says Expired.
  */
 function CrewsScreenContent() {
-  const bold = useBoldText()
   const insets = useSafeAreaInsets()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
   const [refreshing, setRefreshing] = useState(false)
@@ -202,9 +199,6 @@ function CrewsScreenContent() {
                 />
               ))}
             </RowsCard>
-            <Text style={[font('meta', bold), styles.footnote]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="crews-footnote">
-              {FOOTNOTE}
-            </Text>
           </View>
         ) : null}
       </Animated.View>
@@ -255,7 +249,6 @@ const styles = StyleSheet.create({
   centred: { justifyContent: 'center' },
   sections: { gap: SECTION_GAP },
   section: { gap: SPACE.md },
-  footnote: { color: COLOR.textTertiary, paddingHorizontal: SPACE.xs },
   dock: { position: 'absolute', left: SPACE.gutter, right: SPACE.gutter },
 })
 

@@ -1,63 +1,48 @@
-import { Fragment, useEffect, useRef } from 'react'
+import { Fragment, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import Animated, { FadeIn } from 'react-native-reanimated'
 
-import { Icon, type IconName } from '../ui/Icon'
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
-import { H } from '../../lib/haptics'
-import { motionTokens, useReducedMotion } from '../../lib/motion'
+import { Icon } from '../ui/Icon'
+import { inYouLast, namesLine, type StripCrewRow } from '../../lib/crews'
+import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
-import { Button } from './Button'
 import { CountTicks } from './CountTicks'
 import { CrewEmblem } from './CrewEmblem'
-import { announceOutcome, CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast } from './shared'
+import { Facepile, type Face } from './Facepile'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
 
-/** "We're here": not yet · on its way · the server said OK · someone already told them. */
-export type TellState = 'no' | 'sending' | 'yes' | 'already'
+/** One crew's row: `StripCrewRow` (lib/crews.ts), and `cheer` for your own crew check-in moment. */
+export type StripCrew = StripCrewRow & {
+  /** Which crew check-in this row is (`{eventId}|{crewId}`): drawn naming you for the first time, the huddle cheers. */
+  cheerKey?: string
+}
 
-export type StripCrew = {
-  id: string
-  name: string
-  emblemSeed: string
-  size: number
-  /** Checked in now, you included: a count, never who. */
-  here: number
-  /** "Vinyl Night · Toit". */
-  context: string
-  told: TellState
+/** The crew check-ins that have cheered this run: once per crew per event, not on every mount of the strip. */
+const cheered = new Set<string>()
+/** True the first time `key` asks. ponytail: in memory, so a relaunch may cheer again, which is harmless. */
+function firstCheer(key: string): boolean {
+  if (cheered.has(key)) return false
+  cheered.add(key)
+  return true
 }
 
 const EMBLEM = 40
+const FACE = 24
 /** Off (crews hidden at this event): one quiet line. The frame's second sentence ("The strip hides and “We’re here” is refused") is a note on behaviour, not copy (owner's ruling, PR #393). */
 const OFF_LINE = 'Crews are off at this event.'
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
-/** The action and what it settles to: 44 pt capsules (Flow 10 · 10.6), 48 dp on Android; settled, a 1 pt edge at 14%. */
-const SETTLED_EDGE = 0.14
-
-/** `H.success` and the announcement once, when "We're here" lands (the server's OK); never for a row already told. */
-function useToldOutcome(told: TellState) {
-  const was = useRef(told)
-  useEffect(() => {
-    if (told === 'yes' && was.current !== 'yes' && was.current !== 'already') {
-      H.success()
-      announceOutcome('Your crew knows')
-    }
-    was.current = told
-  }, [told])
-}
+/** The off line's edge: 1 pt at 14%. */
+const OFF_EDGE = 0.14
 
 /**
- * Your crew, after your own check-in (guidelines/components/CrewStrip.html,
- * Flow 10 · 10.6): on the pass's success and in the Room. "Crew Nebula · 2 of 4
- * in" with the ticks, and "Tell your crew — We're here" as a secondary that
- * settles to "Your crew knows". No group check-in, ever. Two crews stack. Off
- * (crews hidden at this event) is one quiet line and no action.
+ * Your crews, after your own check-in (crews 4-A3, board 04-checkin A3; was Flow 10 · 10.6): on the pass's success and in the
+ * Room. "Nebula · 3 of 5 in", the ticks, and who is in by first name with their faces ("Priya, Arjun, You"). Only who came in
+ * with the crew is named; nobody is ever listed as not here yet. No action: the hold's "With {crew}" is how you tell the crew
+ * ("Tell your crew — We're here" is retired, owner 7). Two crews stack. Off (crews hidden at this event) is one quiet line.
  *
- * "Crew Nebula, 2 of 4 here, Vinyl Night · Toit", then "Tell your crew, button".
- * `H.primary` on the press-in of We're here, `H.success` when the server says
- * OK; a count rising plays nothing.
+ * Read: "Nebula, 3 of 5 in, Vinyl Night · Toit. In: Priya, Arjun, You". A count rising plays nothing; your own crew check-in
+ * plays the huddle's cheer once (`cheerKey`; Reduce Motion: the still).
  */
-export function CrewStrip({ crews, off = false, onTell, testID }: { crews: StripCrew[]; off?: boolean; onTell: (id: string) => void; testID?: string }) {
+export function CrewStrip({ crews, off = false, testID }: { crews: StripCrew[]; off?: boolean; testID?: string }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   if (off) {
@@ -73,88 +58,54 @@ export function CrewStrip({ crews, off = false, onTell, testID }: { crews: Strip
       {crews.map((crew, i) => (
         <Fragment key={crew.id}>
           {i ? <View style={styles.hairline} /> : null}
-          <CrewStripRow crew={crew} onTell={onTell} testID={testID && `${testID}-${crew.id}`} />
+          <CrewStripRow crew={crew} testID={testID && `${testID}-${crew.id}`} />
         </Fragment>
       ))}
     </View>
   )
 }
 
-function CrewStripRow({ crew, onTell, testID }: { crew: StripCrew; onTell: (id: string) => void; testID?: string }) {
+function CrewStripRow({ crew, testID }: { crew: StripCrew; testID?: string }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  useToldOutcome(crew.told)
-  const here = Math.max(0, Math.min(crew.here, crew.size))
-  const sub = here <= 1 ? `You’re the first from ${crew.name}. Your crew shows up here once two of you are in.` : crew.context
+  // Decided once, as the row is first drawn: a row that names you then is your arrival with the crew.
+  const [cheer] = useState(() => !!crew.cheerKey && crew.people.some((p) => p.you) && firstCheer(crew.cheerKey))
+  const count = Math.max(0, Math.min(crew.in, crew.size))
+  const everyone = count >= crew.size
+  const names = crew.people.length ? namesLine(crew.people) : null
+  const faces: Face[] = inYouLast(crew.people).map((x) => (x.photo ? { kind: 'photo', uri: x.photo } : { kind: 'creature', pseudonym: x.name }))
+  const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
+  const label = [`${crew.name}, ${everyone ? 'everyone' : `${count} of ${crew.size}`} in, ${crew.context}`, names && `In: ${names}`].filter(Boolean).join('. ')
   return (
-    <View>
-      <View accessible accessibilityLabel={`Crew ${crew.name}, ${here} of ${crew.size} here, ${sub}`} style={styles.row}>
-        <CrewEmblem seed={crew.emblemSeed} size={EMBLEM} />
+    <View accessible accessibilityLabel={label} style={styles.row}>
+      <View style={styles.top}>
+        <CrewEmblem seed={crew.emblemSeed} size={EMBLEM} scene={cheer ? 'cheer' : undefined} />
         <View style={styles.fill}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
-            {`Crew ${crew.name} `}
-            <Text style={{ color: COLOR.textSecondary }}>·</Text>{' '}
-            {/* Mono is for figures: "3 of 5" is, "everyone" is a word in the body face (rc7 D12: the wide mono word orphaned "in"). */}
-            {here >= crew.size ? (
-              'everyone'
-            ) : (
-              <Text style={[font('bodyStrong', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{`${here} of ${crew.size}`}</Text>
-            )}
-            {' in'}
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
+            {crew.name}
           </Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), { color: secondary }]}>
+            {/* Mono is for figures: "3 of 5" is, "Everyone" is a word in the body face (rc7 D12). */}
+            {everyone ? <Text style={styles.ink}>Everyone</Text> : <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{`${count} of ${crew.size}`}</Text>}
+            {` in · ${crew.context}`}
+          </Text>
         </View>
-        <CountTicks size={crew.size} here={here} />
       </View>
-      <View style={styles.action}>
-        {crew.told === 'yes' ? (
-          <Settled icon="check" text="Your crew knows" testID={testID && `${testID}-settled`} />
-        ) : crew.told === 'already' ? (
-          <Settled icon="info" text="Your crew already knows" raised testID={testID && `${testID}-settled`} />
-        ) : (
-          <TellButton sending={crew.told === 'sending'} onPress={() => onTell(crew.id)} testID={testID && `${testID}-tell`} />
-        )}
-      </View>
+      <CountTicks size={crew.size} here={count} />
+      {names ? (
+        <View testID={testID && `${testID}-who`} style={styles.who}>
+          <Facepile faces={faces} size={FACE} max={FACES_SHOWN} ring={COLOR.surface} accessibilityLabel="" />
+          <Text testID={testID && `${testID}-names`} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.ink, styles.fill]}>
+            {names}
+          </Text>
+        </View>
+      ) : null}
     </View>
   )
 }
 
-/** "Tell your crew — We're here": the raised 44 Button (A31), `H.primary` on press-in; busy, a spinner in its place. */
-function TellButton({ sending, onPress, testID }: { sending: boolean; onPress: () => void; testID?: string }) {
-  return (
-    <Button
-      kind="lit"
-      size="raised"
-      icon="hand"
-      label="Tell your crew — We’re here"
-      loading={sending}
-      pressHaptic={H.primary}
-      onPress={onPress}
-      testID={testID}
-    />
-  )
-}
-
-/** What the action settles to, over `quick` (Flow 10 · 10.6): words, not a button. */
-function Settled({ icon, text, raised = false, testID }: { icon: IconName; text: string; raised?: boolean; testID?: string }) {
-  const bold = useBoldText()
-  const contrast = useIncreaseContrast()
-  const reduceMotion = useReducedMotion()
-  const ink = raised || contrast ? COLOR.textPrimary : COLOR.textSecondary
-  return (
-    <Animated.View
-      testID={testID}
-      accessibilityLiveRegion="polite"
-      entering={reduceMotion ? undefined : FadeIn.duration(motionTokens(reduceMotion).duration.quick)}
-      style={[styles.settled, { minHeight: minTarget() }, raised ? styles.raised : styles.edge, contrast && styles.contrastEdge]}
-    >
-      <Icon name={icon} size={ICON.inline} color={ink} />
-      <Text style={[font('button', bold), { color: ink }]} maxFontSizeMultiplier={CONTROL_FONT_CAP}>
-        {text}
-      </Text>
-    </Animated.View>
-  )
-}
+/** Faces before "+N" in the names row (the Facepile's own default). */
+const FACES_SHOWN = 5
 
 const styles = StyleSheet.create({
   strip: { borderRadius: RADIUS.sheet, overflow: 'hidden' },
@@ -166,23 +117,13 @@ const styles = StyleSheet.create({
     gap: SPACE.md,
     paddingHorizontal: SPACE.lg,
     borderWidth: 1,
-    borderColor: tint(COLOR.textPrimary, SETTLED_EDGE),
+    borderColor: tint(COLOR.textPrimary, OFF_EDGE),
   },
-  row: { minHeight: ROW_MIN_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
-  fill: { flex: 1 },
+  row: { minHeight: ROW_MIN_HEIGHT, gap: SPACE.sm, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
+  top: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  who: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  fill: { flex: 1, minWidth: 0 },
   ink: { color: COLOR.textPrimary },
   tabular: { color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
-  action: { paddingHorizontal: SPACE.lg, paddingBottom: SPACE.md },
   hairline: { height: StyleSheet.hairlineWidth, marginHorizontal: SPACE.lg, backgroundColor: COLOR.hairline },
-  settled: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACE.sm,
-    borderRadius: RADIUS.capsule,
-    paddingHorizontal: SPACE.lg,
-  },
-  raised: { backgroundColor: COLOR.surfaceRaised },
-  edge: { borderWidth: 1, borderColor: tint(COLOR.textPrimary, SETTLED_EDGE) },
-  contrastEdge: { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast },
 })

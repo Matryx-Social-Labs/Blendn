@@ -22,6 +22,8 @@ import { eventLoadFailure, type EventLoadFailure } from '../../lib/eventLinkRefu
 import type { MenuItem } from '../ds/ContextMenu'
 import { OfflineBanner } from '../OfflineBanner'
 import { EventCheckOutSheet, EventHold } from '../scene/EventHold'
+import { GoingTogether } from '../crews/GoingTogether'
+import type { CrewPlan } from '../../lib/crews'
 import { useEventCheckIn } from '../scene/useEventCheckIn'
 import { SceneBar } from '../scene/SceneBar'
 import { SceneChangedLines, SceneDayStrip } from '../scene/SceneChange'
@@ -134,6 +136,8 @@ function useDistanceAway(latitude?: number, longitude?: number): number | null {
 }
 
 interface EventDetailData {
+  /** "Going together" (crews 4-A1): `userStatus.myCrewPlans`, your own crews with a night planned. */
+  crew_plans?: CrewPlan[]
   /** Curated facilities, already in the vocabulary's `sort_order`. */
   amenities?: EventAmenity[]
   /** What the organiser wrote: house rules, FAQ, accessibility, and the rest. */
@@ -359,6 +363,7 @@ export default function EventDetail() {
       visibility: d.visibility,
       min_age: d.minAge ?? null,
       door_policy: d.doorPolicy ?? null,
+      crew_plans: d.userStatus?.myCrewPlans ?? [],
     })
     // Interest, check-in and RSVP from userStatus - no separate API call needed
     if (d.userStatus) {
@@ -1065,6 +1070,21 @@ export default function EventDetail() {
               </FadeInUp>
 
               <View style={styles.sections}>
+                {/* Going together (crews 4-A1): your crew only, before the night; draws nothing without a crew. */}
+                {event && !cancelled && !isEnded ? (
+                  <FadeInUp delay={SECTION_DELAY[1]}>
+                    <GoingTogether
+                      eventId={event.id}
+                      plans={event.crew_plans ?? []}
+                      onChanged={() => {
+                        apiClient.forgetEvent(event.id)
+                        forgetEventDetailCache(event.id)
+                        void fetchEventDetails()
+                      }}
+                    />
+                  </FadeInUp>
+                ) : null}
+
                 {/*
                   P-A, the Lobby (SCRUM-1026), after the facts: its card until the close, and "The room is open" once the doors
                   open on a Lobby nobody posted in. The server decides whether there is one to show; a refusal draws nothing.

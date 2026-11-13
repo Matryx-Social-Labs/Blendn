@@ -6,7 +6,7 @@ import { AchievementBadge } from '../../components/ds/AchievementBadge'
 import { Button } from '../../components/ds/Button'
 import { CountTicks } from '../../components/ds/CountTicks'
 import { CrewCard, CrewRow, type CrewCardCrew } from '../../components/ds/CrewCard'
-import { CrewStrip, type StripCrew, type TellState } from '../../components/ds/CrewStrip'
+import { CrewStrip, type StripCrew } from '../../components/ds/CrewStrip'
 import { ExpiryPrompt, NotLiveNotice } from '../../components/ds/ExpiryPrompt'
 import { GoLiveSheet, type GoLiveChoice, type GoLiveRefusal } from '../../components/ds/GoLiveSheet'
 import { InAppBanner, type InAppBannerProps } from '../../components/ds/InAppBanner'
@@ -275,45 +275,35 @@ function Crews() {
   )
 }
 
+const mate = (name: string, you = false) => ({ userId: `h-${name}`, name, photo: null, you })
 const strip = (o: Partial<StripCrew> = {}): StripCrew => ({
   id: 'n',
   name: 'Nebula',
   emblemSeed: 'nebula',
-  size: 4,
-  here: 2,
+  size: 5,
+  in: 3,
+  people: [mate('Priya'), mate('Arjun'), mate('Sagar', true)],
   context: 'Vinyl Night · Toit',
-  told: 'no',
   ...o,
 })
 
 function Strips() {
-  const [told, setTold] = useState<TellState>('no')
-  useEffect(() => {
-    if (told !== 'sending') return
-    const timer = setTimeout(() => setTold('yes'), SERVER_MS)
-    return () => clearTimeout(timer)
-  }, [told])
+  const twelve = ['Thiruvananthapuram', 'प्रियंका', 'Zoë', 'Priya', 'Arjun', 'Meera', 'Kabir', 'Ravi'].map((n) => mate(n))
   const kinds: [string, StripCrew[], boolean?][] = [
-    ['alone', [strip({ here: 1 })]],
-    ['two', [strip()]],
-    ['all', [strip({ here: 4, context: 'Crew Nebula is here', told: 'yes' })]],
-    ['here', [strip({ context: 'Crew Nebula is here', told: 'yes' })]],
-    ['sent', [strip({ told: 'yes' })]],
-    ['repeated', [strip({ told: 'already' })]],
+    ['named', [strip()]],
+    ['all', [strip({ in: 5, people: [...strip().people, mate('Kabir'), mate('Meera')] })]],
+    ['count only', [strip({ in: 2, people: [] })]],
+    ['twelve', [strip({ name: 'Indiranagar Sunrise Run Club Cre', size: 12, in: 9, people: [...twelve, mate('Sagar', true)] })]],
     ['off', [strip()], true],
-    ['twoCrews', [strip(), strip({ id: 'q', name: 'Quiz Night Irregulars', emblemSeed: 'quiz', size: 5, here: 1 })]],
+    ['twoCrews', [strip(), strip({ id: 'q', name: 'Quiz Night Irregulars', emblemSeed: 'quiz', size: 4, in: 2, people: [mate('Zoë'), mate('Sagar', true)] })]],
   ]
   return (
-    <Section title="CrewStrip" note="After your own check-in · We’re here: H.primary, H.success on OK · a count rising: none">
+    <Section title="CrewStrip" note="After your own check-in · who is in with the crew, by first name · a count rising: none">
       {kinds.map(([label, crews, off]) => (
-        <Cell key={label} label={label} testID={`ds-crewstrip-${label}`}>
-          <CrewStrip crews={crews} off={off} onTell={noop} />
+        <Cell key={label} label={label} testID={`ds-crewstrip-${label.replace(' ', '-')}`}>
+          <CrewStrip crews={crews} off={off} />
         </Cell>
       ))}
-      <Cell label="live · tap We’re here" testID="ds-crewstrip-live">
-        <CrewStrip crews={[strip({ told })]} onTell={() => setTold('sending')} />
-        <Button kind="tertiary" size="sm" label="Reset" onPress={() => setTold('no')} />
-      </Cell>
     </Section>
   )
 }

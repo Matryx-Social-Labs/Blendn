@@ -85,6 +85,8 @@ export type CheckInOutcome =
       askIntent: boolean
       /** `reveal_by_default` is set: offer to show their name, never apply it. */
       revealSuggestion: boolean
+      /** Only when "With {crew}" was on: whether the crew was told (crews 4-A2). */
+      crewTold?: boolean
     }
   | {
       kind: 'refused'
@@ -98,7 +100,9 @@ export type CheckInOutcome =
 
 export async function submitCheckIn(
   eventId: string,
-  at: { latitude: number; longitude: number; accuracy?: number | null }
+  at: { latitude: number; longitude: number; accuracy?: number | null },
+  /** "With {crew}" on at the hold: that crew is told you're in, by the server, with no second call (crews 4-A2). */
+  withCrewId?: string
 ): Promise<CheckInOutcome> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<'timeout'>((resolve) => {
@@ -112,6 +116,7 @@ export async function submitCheckIn(
       // not a top-level field. Unknown is sent as absent, which the server
       // reads as "assume the usual", never as a number we made up.
       deviceInfo: { platform: Platform.OS, gpsAccuracy: validAccuracy(at.accuracy) ?? undefined },
+      ...(withCrewId ? { withCrewId } : {}),
     }),
     timeout,
   ]).finally(() => clearTimeout(timer))
@@ -138,6 +143,7 @@ export async function submitCheckIn(
     left: leftNames(result.data),
     askIntent: result.data?.intentNeeded === true,
     revealSuggestion: result.data?.revealSuggestion === true,
+    ...(withCrewId ? { crewTold: result.data?.crewTold === true } : {}),
   }
 }
 

@@ -72,6 +72,7 @@ import { ConnectSheet } from '../grid/ConnectSheet'
 import { Material } from '../ui/Material'
 import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
+import { useWithCrew, WithCrewChip } from '../crews/WithCrewChip'
 import { faceOf, RoomSkeleton, RoomYouCard, useNow } from './RoomSections'
 import { contextLine, lensView } from '../../lib/roomLens'
 import { FriendsHere } from './FriendsHere'
@@ -370,12 +371,19 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     roomShown.current?.()
     roomShown.current = null
   }, [roomReady])
+  // "With {crew}" at the hold (crews 4-A2): the crew the hold tells, and whether that hold has landed for this door.
+  const withCrew = useWithCrew(insideEvent?.id ?? null)
+  /** The door whose hold told its crew (`crewTold`). */
+  const [crewLandedAt, setCrewLandedAt] = useState<string | null>(null)
   const checkIn = useCheckInFlow({
     eventId: insideEvent?.id ?? '',
     showTray,
     closeTray,
+    withCrewId: withCrew.withCrewId,
     onCheckedIn: (outcome) => {
       if (outcome.kind !== 'checkedIn') return
+      // Told only when the server says so (`crewTold`): crews off or a ban leave the check-in and say you came in on your own.
+      setCrewLandedAt(outcome.crewTold ? (insideEventNow.current?.id ?? null) : null)
       const from = switchFromNow.current
       // The server names the room it took you out of (`left`); the screen's own switch is the fallback for an older one.
       const leftTitle = outcome.left[0] ?? from?.title
@@ -1010,7 +1018,12 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             }}
             onRoomRetry={room.status === 'error' ? room.retry : undefined}
             // Not while the pour plays: the pass growing under it moved the flood (R2-D1's row comes after).
-            crewStrip={pourPlaying || mode === 'room' || !checkIn.youreIn ? null : <PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} actions={crewActions} inset={false} />}
+            crewChip={
+              withCrew.crew ? (
+                <WithCrewChip crew={withCrew.crew} on={checkIn.youreIn ? crewLandedAt === insideEvent?.id : withCrew.on} landed={checkIn.youreIn} onToggle={withCrew.toggle} />
+              ) : null
+            }
+            crewStrip={pourPlaying || mode === 'room' || !checkIn.youreIn ? null : <PeopleCrewStrip eventId={insideEvent?.id ?? ''} myCrews={myCrewsHere} mine={crews.mine} eventTitle={insideEvent?.title ?? ''} inset={false} />}
             topInset={topInset}
             bottomInset={insets.bottom}
           />
@@ -1070,7 +1083,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
             crewsHere={showSegments && crews.state.status === 'ready' ? crews.state.data.crews.length : null}
             view={gridView}
             onView={setGridView}
-            crewStrip={<PeopleCrewStrip myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} actions={crewActions} />}
+            crewStrip={<PeopleCrewStrip eventId={eventId ?? ''} myCrews={myCrewsHere} mine={crews.mine} eventTitle={eventTitle} />}
             friendsPresent={friendsHere.total > 0 && friendsHere.friends.length > 0}
             friendsHere={
               <FriendsHere

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
-import { crewBadge, type Crew, type CrewCard as CrewCardData, type CrewsAtEvent } from '../../lib/crews'
+import { crewBadge, stripCrewsFrom, type Crew, type CrewCard as CrewCardData, type CrewsAtEvent } from '../../lib/crews'
 import { Button } from '../ds/Button'
 import { CrewCard } from '../ds/CrewCard'
 import { CrewStrip, type StripCrew } from '../ds/CrewStrip'
@@ -23,41 +23,29 @@ const SOLO_ON = 'Crews with room for one more can see you until the night ends. 
 const SOLO_OFF = 'Crews with room for one more can see you; nobody else learns you turned this on.'
 
 /**
- * Your crews here, under the visibility line in the People view and in the
- * pass after your check-in (Flow 4 delta R2-D1, Flow 10 · 10.6): "Crew Nebula
- * · 2 of 4 in" and "Tell your crew — We're here". Nothing when none of your
- * crews is here.
+ * Your crews here, under the visibility line in the People view and in the pass after your check-in (crews 4-A3): "Nebula ·
+ * 3 of 5 in" and who came in with it, by first name. Nothing when nobody told any of your crews here. A row that names you
+ * the first time it is drawn cheers once (your crew check-in moment; `cheerKey`, per crew per event).
  */
 export function PeopleCrewStrip({
+  eventId,
   myCrews,
   mine,
   eventTitle,
-  actions,
   inset = true,
 }: {
+  eventId: string
   myCrews: MyCrewHere[]
   mine: Crew[] | null
   eventTitle: string
-  actions: CrewActions
   /** In the Room, between the gutters; in the pass, its own padding. */
   inset?: boolean
 }) {
-  if (myCrews.length === 0) return null
-  const crews: StripCrew[] = myCrews.map((c) => {
-    const crew = mine?.find((m) => m.crewId === c.crewId)
-    return {
-      id: c.crewId,
-      name: c.name,
-      emblemSeed: crew?.emblemSeed ?? c.crewId,
-      size: crew?.size ?? c.presentCount,
-      here: c.presentCount,
-      context: eventTitle,
-      told: actions.told[c.crewId] ?? 'no',
-    }
-  })
+  const crews: StripCrew[] = stripCrewsFrom(myCrews, mine ?? [], eventTitle).map((row) => ({ ...row, cheerKey: `${eventId}|${row.id}` }))
+  if (crews.length === 0) return null
   return (
     <View style={inset && styles.gutter}>
-      <CrewStrip crews={crews} onTell={(id) => void actions.here({ crewId: id })} testID="room-crew-strip" />
+      <CrewStrip crews={crews} testID="room-crew-strip" />
     </View>
   )
 }
