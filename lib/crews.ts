@@ -145,6 +145,8 @@ export interface CrewInvite {
   /** Their photo; optional (a client outlives a deploy) and drawn only when sent. */
   invitedByPhoto?: string | null
   invitedAt: string
+  /** When it lapses (admin #972, +14 days); optional, as a client outlives a deploy. */
+  expiresAt?: string
 }
 
 /** A crew here now, as a card. Counts only — never a person. */

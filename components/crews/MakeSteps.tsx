@@ -19,7 +19,6 @@ import { CONTROL_FONT_CAP, font, minTarget, quickTransition, useBoldText, useInc
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
 import { Glyph } from '../ui/Glyph'
-import { Icon } from '../ui/Icon'
 
 /** flow10.js `make`: the line about the crew is a one-liner's height. */
 const BIO_MIN_HEIGHT = 72
@@ -206,6 +205,11 @@ export type FriendsStepProps = {
    * Whoever is picked stays picked through a search: the picks are ids, not rows.
    */
   search?: { query: string; onChange: (text: string) => void; searching: boolean; active: boolean; offered: boolean }
+  /**
+   * Make a crew (board 02 A): a field label over the list ("Friends to ask · 3 picked") in place of the note, and a foot only at the
+   * cap. Absent: Invite's note and its "n invited" foot, as before.
+   */
+  label?: string
 }
 
 /**
@@ -215,7 +219,7 @@ export type FriendsStepProps = {
  * here" is), asking for the next page of friends as the end comes into view: a person with a thousand friends scrolls a
  * windowed list, not a thousand views. A failed page keeps the rows and says so with Try again.
  */
-export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1, paging, search }: FriendsStepProps) {
+export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIENDS, limit = CREW_MAX_MEMBERS - 1, paging, search, label }: FriendsStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
@@ -226,10 +230,16 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
   const listHeight = Array.isArray(friends) ? Math.min(friends.length * FRIEND_ROW + (paging && (paging.loadingMore || paging.moreFailed) ? FRIEND_ROW : 0), Math.round(windowHeight * LIST_SHARE)) : 0
   return (
     <>
-      {/* The meta role and its cap: uncapped body text filled 55% of the screen at AX XXXL and left one row (RC drive 5 D-3). */}
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]} testID="make-friends-note">
-        Friends only. The count says how many, never who was skipped.
-      </Text>
+      {label ? (
+        <View style={styles.labelRow}>
+          <FieldLabel text={label} bold={bold} contrast={contrast} />
+        </View>
+      ) : (
+        // The meta role and its cap: uncapped body text filled 55% of the screen at AX XXXL and left one row (RC drive 5 D-3).
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]} testID="make-friends-note">
+          Friends only. The count says how many, never who was skipped.
+        </Text>
+      )}
       {search && (search.offered || search.query) ? (
         <SearchField
           value={search.query}
@@ -285,52 +295,137 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
           />
         )}
       </View>
-      <View style={styles.footer} accessibilityLiveRegion="polite">
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
-          <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.ink]}>{picked.length}</Text>
-          {' invited'}
-        </Text>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), full ? styles.ink : { color: secondary }, styles.note]}>
-          {full ? 'A crew has at most 12 people.' : 'Invites last 14 days'}
-        </Text>
-      </View>
+      {label ? (
+        // The label counts the picks; the foot speaks only at the cap, saying why the rest dim.
+        full ? <View accessibilityLiveRegion="polite">{line('A crew has at most 12 people.')}</View> : null
+      ) : (
+        <View style={styles.footer} accessibilityLiveRegion="polite">
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
+            <Text style={[font('body', bold, FONT_FAMILY.mono[500]), styles.ink]}>{picked.length}</Text>
+            {' invited'}
+          </Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), full ? styles.ink : { color: secondary }, styles.note]}>
+            {full ? 'A crew has at most 12 people.' : 'Invites last 14 days'}
+          </Text>
+        </View>
+      )}
     </>
   )
 }
 
-export type ConsentStepProps = {
+/** The emblem beside the name on Make's first step (board 02 A). */
+const MAKE_EMBLEM = 56
+
+export type NameAndFriendsStepProps = {
   name: string
-  summary: string
+  onName: (next: string) => void
+  onNameBlur?: () => void
+  nameError?: string
   emblemSeed: string
+  onShuffle: () => void
+  /** The friends list, as `FriendsStep` takes it, less the label (this step writes it from the picks). */
+  friends: Omit<FriendsStepProps, 'label'>
+}
+
+/**
+ * Make, step 1 · Name and friends (board 02 A): the emblem draws live beside the name, and the friends come on the same
+ * screen, because they are the point of a crew. The windowed picker is `FriendsStep`, under "Friends to ask · n picked".
+ */
+export function NameAndFriendsStep(p: NameAndFriendsStepProps) {
+  return (
+    <>
+      <View style={styles.nameRow}>
+        <View style={styles.emblemColumn}>
+          {/* Each Shuffle is a new seed, and a new seed dances once (SCRUM-1053). */}
+          <CrewEmblem seed={p.emblemSeed} size={MAKE_EMBLEM} scene="dance" testID="make-emblem-live" />
+          <Button label="Shuffle" icon="shuffle" kind="tertiary" size="sm" onPress={p.onShuffle} accessibilityLabel="Shuffle the crew’s look" />
+        </View>
+        <View style={styles.fill}>
+          <TextField
+            value={p.name}
+            onChangeText={p.onName}
+            onBlur={p.onNameBlur}
+            placeholder="Crew name"
+            limit={CREW_NAME_MAX}
+            error={p.nameError}
+            autoCapitalize="words"
+            returnKeyType="done"
+            testID="make-name"
+          />
+        </View>
+      </View>
+      <FriendsStep {...p.friends} label={`Friends to ask · ${p.friends.picked.length} picked`} />
+    </>
+  )
+}
+
+export type VibeStepProps = {
+  bio: string
+  onBio: (next: string) => void
+  bioError?: string
+  choice: IntentChoice
+  onChoice: (next: IntentChoice) => void
+  tags: readonly string[]
+  onTag: (slug: string) => void
+  openToSolo: boolean
+  onOpenToSolo: (next: boolean) => void
   keepAnonymous: boolean
   onKeepAnonymous: (next: boolean) => void
 }
 
-/** Step 3 · Consent: the sentence, always on screen; Make the crew is the agreement. */
-export function ConsentStep({ name, summary, emblemSeed, keepAnonymous, onKeepAnonymous }: ConsentStepProps) {
+/**
+ * Make, step 2 · Your crew's vibe (board 02 A): all of it optional — here for, tags, the line, Room for one more — and the
+ * consent, which the step's button ("Make Nebula · ask 3 friends") agrees to. The line is the board's "Keep": it stays here.
+ */
+export function VibeStep(p: VibeStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   return (
     <>
-      <View style={styles.consent}>
-        <View style={styles.consentLine}>
-          <Icon name="eye" size={ICON.control} />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
+      <View style={styles.group}>
+        <View style={styles.labelRow}>
+          <FieldLabel text="Here for · optional" bold={bold} contrast={contrast} />
         </View>
-        <View style={styles.anon}>
-          <View style={styles.fill}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{KEEP_ANONYMOUS_LABEL}</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>You can change this later. It applies from then on.</Text>
-          </View>
-          <Toggle value={keepAnonymous} onValueChange={onKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} />
-        </View>
+        <ChipSet
+          items={INTENT_CHOICES.map((c) => ({ key: c.value, label: c.label }))}
+          selection="single"
+          selected={[p.choice]}
+          onToggle={(key) => p.onChoice(key as IntentChoice)}
+          testID="make-intent"
+        />
       </View>
-      <View style={styles.summary} accessible accessibilityLabel={`${name}, ${summary}`}>
-        <CrewEmblem seed={emblemSeed} size={56} />
+      <ChipSet
+        label="Tags · optional"
+        items={CREW_TAGS.map((t) => ({ key: t.slug, label: t.label }))}
+        selection="multi"
+        selected={p.tags}
+        max={CREW_MAX_TAGS}
+        capHint={`Up to ${CREW_MAX_TAGS}`}
+        onToggle={p.onTag}
+        testID="make-tags"
+      />
+      <TextArea
+        label="A line about the crew · optional"
+        value={p.bio}
+        onChangeText={p.onBio}
+        limit={CREW_BIO_MAX}
+        minHeight={BIO_MIN_HEIGHT}
+        error={p.bioError}
+        testID="make-bio"
+      />
+      <View style={[styles.block, styles.blockRow]}>
         <View style={styles.fill}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{summary}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can find you. Crews of 6 or fewer.</Text>
+        </View>
+        <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
+      </View>
+      <View style={styles.block}>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: secondary }]}>{CONSENT_LINE}</Text>
+        <View style={styles.blockRow}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+          <Toggle value={p.keepAnonymous} onValueChange={p.onKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} />
         </View>
       </View>
     </>
@@ -391,24 +486,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  consent: {
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
+  emblemColumn: { alignItems: 'center', gap: SPACE.xs },
+  // A filled block in the sheet (Room for one more, the consent), as board 02 A draws them.
+  block: {
     borderRadius: RADIUS.sheet,
     backgroundColor: SHEET_FILL,
     padding: SPACE.lg,
     gap: SPACE.md,
   },
-  consentLine: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: SPACE.md,
-  },
-  anon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    paddingTop: SPACE.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLOR.hairline,
-  },
-  summary: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  blockRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
 })

@@ -6,16 +6,15 @@ import Animated, { useSharedValue } from 'react-native-reanimated'
 import { CrewRefusalSheet, type CrewRefusal } from '../../components/crews/CrewRefusalSheet'
 import { stepIn, stepOut, type StepDir } from '../../components/crews/stepMotion'
 import { MadeBeat } from '../../components/crews/MadeBeat'
-import { ConsentStep, FriendsStep, NameStep } from '../../components/crews/MakeSteps'
+import { NameAndFriendsStep, VibeStep } from '../../components/crews/MakeSteps'
 import { Sheet, type SheetAction } from '../../components/ds/Sheet'
-import { CREW_MAX_MEMBERS, CREW_TAGS, createCrewBody, crewMessage, newEmblemSeed, toggleTag } from '../../lib/crews'
+import { CREW_MAX_MEMBERS, createCrewBody, crewMessage, newEmblemSeed, toggleTag } from '../../lib/crews'
 import { crewsApi } from '../../lib/crewsApi'
 import {
   bioFits,
   cleanName,
-  intentLine,
   intentOf,
-  makeSummary,
+  makeLabel,
   nameError,
   textFieldOf,
   type IntentChoice,
@@ -61,17 +60,14 @@ function readCrewDraft(thread: ReturnType<typeof crewDraftThread>): Partial<Crew
 type Made = { crewId: string; chatGroupId: string; invited: number; /** Null until the server's own seed is read. */ emblemSeed: string | null }
 
 /**
- * Make a crew (Flow 10 · 10.2): a sheet over Crews in three steps — name and
- * vibe, friends, consent — and then the crew made.
+ * Make a crew (board 02 A): a sheet over Crews in two steps, and then the crew made.
  *
- * Step 1 holds the server's limits (a name of 2–32 characters, a line of at
- * most 140, up to 3 of the curated tags) and shows the card as strangers will
- * see it. Step 2 is friends only, no search, and its count says how many,
- * never who was skipped. Step 3 shows the consent sentence beside Make the
- * crew; tapping it is the agreement (the server refuses a crew without it),
- * and nothing is sent before. The server's own sentences come back where they
- * belong: a name or bio it refuses under that field, a cap or the 18+ gate in
- * a sheet. System back, the scrim and a drag go back a step before they close.
+ * Step 1 · Name and friends: the emblem live beside the name (Shuffle for another look), and the friends to ask, windowed,
+ * because they are the point of a crew. Step 2 · Your crew's vibe, all optional: here for, up to 3 tags, the line of at most
+ * 140, Room for one more, and the consent sentence. Its button, "Make Nebula · ask 3 friends", is the agreement (the server
+ * refuses a crew without it), and nothing is sent before. The server's own sentences come back where they belong: a name it
+ * refuses under the name on step 1, a line under the line on step 2, a cap or the 18+ gate in a sheet. System back, the scrim
+ * and a drag go back a step before they close.
  */
 function NewCrewScreenContent() {
   const reduceMotion = useReducedMotion()
@@ -125,7 +121,6 @@ function NewCrewScreenContent() {
     void readFriends('reset')
   }, [readFriends])
 
-  const labels = CREW_TAGS.filter((t) => tags.includes(t.slug)).map((t) => t.label)
   const intent = intentOf(choice)
 
   // A refused Next shakes once (#20); the flag drops so the next refusal can shake again.
@@ -156,26 +151,26 @@ function NewCrewScreenContent() {
   }, [madeId])
 
   const next = () => {
-    if (step === 1) {
-      const problem = { name: nameError(name), bio: bioFits(bio) ? undefined : BIO_TOO_LONG }
-      if (problem.name || problem.bio) {
-        setErrors((e) => ({ ...e, ...problem }))
-        setStuck(true)
-        return
-      }
-      dir.set(1)
-      setStep(2)
-    } else if (step === 2) {
-      dir.set(1)
-      setStep(3)
+    const problem = nameError(name)
+    if (problem) {
+      setErrors((e) => ({ ...e, name: problem }))
+      setStuck(true)
+      return
     }
+    dir.set(1)
+    setStep(2)
   }
 
   const make = async () => {
     if (inFlight.current) return
+    if (!bioFits(bio)) {
+      setErrors((e) => ({ ...e, bio: BIO_TOO_LONG }))
+      setStuck(true)
+      return
+    }
     // Tapping Make the crew is the agreement to the sentence above it.
     const body = createCrewBody({ name, bio, intent, tags, openToSolo, inviteUserIds: picked, emblemSeed }, { consented: true, keepMeAnonymous: keepAnonymous })
-    // Step 1 and 2 hold every limit, so this is only the type's other half.
+    // The steps hold every limit, so this is only the type's other half.
     if ('problem' in body) return setRefusal({ text: body.problem })
     inFlight.current = true
     setSending(true)
@@ -188,8 +183,11 @@ function NewCrewScreenContent() {
       const field = textFieldOf(text, result.field)
       if (field) {
         setErrors({ [field]: text })
-        dir.set(-1)
-        setStep(1)
+        // The name is on step 1; the line is on this one.
+        if (field === 'name') {
+          dir.set(-1)
+          setStep(1)
+        }
       } else {
         setRefusal({ text, errorCode: result.errorCode })
       }
@@ -210,9 +208,8 @@ function NewCrewScreenContent() {
     // Back a step before out: what was typed is kept.
     if (step > 1) {
       dir.set(-1)
-      setStep((s) => (s - 1) as MakeStep)
-    }
-    else setOpen(false)
+      setStep(1)
+    } else setOpen(false)
   }
 
   const togglePick = (userId: string) =>
@@ -220,9 +217,10 @@ function NewCrewScreenContent() {
 
   const actions: SheetAction[] = made
     ? [{ label: 'Continue', kind: 'primary', onPress: go, testID: 'make-continue' }]
-    : step === 3
-      ? [{ label: 'Make the crew', kind: 'primary', onPress: () => void make(), loading: sending, refused: stuck }]
-      : [{ label: 'Next', kind: 'primary', onPress: next, disabled: step === 2 && picked.length === 0, refused: stuck }]
+    : step === 2
+      ? [{ label: makeLabel(cleanName(name), picked.length), kind: 'primary', onPress: () => void make(), loading: sending, refused: stuck, testID: 'make-send' }]
+      : // Board 02 A draws Next white; inside a world that pill is never used (foundations C, litSweep), so it keeps today's primary.
+        [{ label: 'Next', kind: 'primary', onPress: next, disabled: picked.length === 0, refused: stuck }]
 
   return (
     <>
@@ -249,7 +247,7 @@ function NewCrewScreenContent() {
               style={styles.step}
             >
               {step === 1 ? (
-                <NameStep
+                <NameAndFriendsStep
                   name={name}
                   onName={(v) => {
                     setName(v)
@@ -257,6 +255,19 @@ function NewCrewScreenContent() {
                   }}
                   onNameBlur={() => name.trim() && setErrors((e) => ({ ...e, name: nameError(name) }))}
                   nameError={errors.name}
+                  emblemSeed={emblemSeed}
+                  onShuffle={shuffle}
+                  friends={{
+                    friends: pickerView(friendList.status, friendList.friends),
+                    picked,
+                    onToggle: togglePick,
+                    onRetry: () => void readFriends('reset'),
+                    search: { query: friendList.query, onChange: friendList.search, searching: friendList.searching, active: friendList.searched !== null, offered: friendList.allTotal > FRIEND_SEARCH_OFFER },
+                    paging: { hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() },
+                  }}
+                />
+              ) : (
+                <VibeStep
                   bio={bio}
                   onBio={(v) => {
                     setBio(v)
@@ -269,24 +280,6 @@ function NewCrewScreenContent() {
                   onTag={(slug) => setTags((t) => toggleTag(t, slug))}
                   openToSolo={openToSolo}
                   onOpenToSolo={setOpenToSolo}
-                  emblemSeed={emblemSeed}
-                  onShuffle={shuffle}
-                  intentText={intentLine(intent) ?? ''}
-                />
-              ) : step === 2 ? (
-                <FriendsStep
-                  friends={pickerView(friendList.status, friendList.friends)}
-                  picked={picked}
-                  onToggle={togglePick}
-                  onRetry={() => void readFriends('reset')}
-                  search={{ query: friendList.query, onChange: friendList.search, searching: friendList.searching, active: friendList.searched !== null, offered: friendList.allTotal > FRIEND_SEARCH_OFFER }}
-                  paging={{ hasMore: friendList.hasMore, loadingMore: friendList.loadingMore, moreFailed: friendList.moreFailed, onMore: () => void friendList.loadMore() }}
-                />
-              ) : (
-                <ConsentStep
-                  name={cleanName(name)}
-                  summary={makeSummary({ invited: picked.length, intent, tags: labels })}
-                  emblemSeed={emblemSeed}
                   keepAnonymous={keepAnonymous}
                   onKeepAnonymous={setKeepAnonymous}
                 />

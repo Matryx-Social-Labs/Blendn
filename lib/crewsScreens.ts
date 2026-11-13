@@ -69,10 +69,35 @@ export function inviteSub(row: InviteRow, now: number = Date.now()): string {
   return ago ? `Crew of ${row.invite.size} · ${ago}` : `Crew of ${row.invite.size}`
 }
 
-/** "Aisha invited you · Crew of 6", the line under an invite's tags. */
-export function inviteWho(invite: Pick<CrewInvite, 'invitedBy' | 'size'>): string {
-  return `${invite.invitedBy} invited you · Crew of ${invite.size}`
+/** "Priya asked you in": the pill over the invite card (board 03 A). */
+export const askedYouIn = (invitedBy: string): string => `${invitedBy} asked you in`
+
+/** "Crew of 4 · Gig goers · Foodies": the crew in one line under its name. */
+export const inviteMeta = (invite: Pick<CrewInvite, 'size' | 'tags'>): string =>
+  [`Crew of ${invite.size}`, ...invite.tags.map((t) => t.label)].join(' · ')
+
+/**
+ * "Open for 13 more days · Priya isn't told if you say not now", under Not now. The days come from the server's `expiresAt`
+ * (an older server's invite: 14 days from `invitedAt`); part of a day is a day, and past it or unreadable no days are claimed.
+ */
+export function inviteNote(invite: Pick<CrewInvite, 'invitedBy' | 'invitedAt' | 'expiresAt'>, now: number = Date.now()): string {
+  const ends = invite.expiresAt ? Date.parse(invite.expiresAt) : Date.parse(invite.invitedAt) + INVITE_TTL_DAYS * DAY_MS
+  const days = Math.ceil((ends - now) / DAY_MS)
+  const silent = `${invite.invitedBy} isn’t told if you say not now`
+  if (!Number.isFinite(days) || days <= 0) return silent
+  return `Open for ${days} more ${days === 1 ? 'day' : 'days'} · ${silent}`
 }
+
+/** The longest crew name a button names; past it the button says "the crew", so a 32-character name never cuts its words off. */
+const BUTTON_NAME_MAX = 12
+
+/** "Join Nebula", or "Join the crew" for a name too long for the button. Counted as the server counts (`characters`). */
+export const crewVerb = (verb: string, name: string): string =>
+  characters(name) <= BUTTON_NAME_MAX ? `${verb} ${name}` : `${verb} the crew`
+
+/** "Make Nebula · ask 3 friends": step 2's button, which is also the consent (board 02 A). */
+export const makeLabel = (name: string, invited: number): string =>
+  `${crewVerb('Make', name)} · ask ${invited} ${invited === 1 ? 'friend' : 'friends'}`
 
 /* -------------------------------------------------------------------------- */
 /* Rows                                                                       */
@@ -141,24 +166,17 @@ export function intentLine(intent: readonly CrewIntent[]): string | undefined {
   return intent.length ? intent.map((i) => INTENT_LABEL[i]).join(' · ') : undefined
 }
 
-/** The step line: "1 of 3 · Name and vibe". */
-export const MAKE_STEPS = ['Name and vibe', 'Invite friends', 'Consent'] as const
-export type MakeStep = 1 | 2 | 3
+/** The step line: "1 of 2 · Name and friends" (board 02 A: friends first, the vibe optional after). */
+export const MAKE_STEPS = ['Name and friends', 'Your crew’s vibe'] as const
+export type MakeStep = 1 | 2
 export const stepLine = (step: MakeStep): string => `${step} of ${MAKE_STEPS.length} · ${MAKE_STEPS[step - 1]}`
 
-/** The sheet's note beside "Make a crew": "1" in mono, then " of 3 · Name and vibe"; read as "Step 1 of 3, Name and vibe". */
+/** The sheet's note beside "Make a crew": "1" in mono, then " of 2 · Name and friends"; read as "Step 1 of 2, Name and friends". */
 export const stepNote = (step: MakeStep) => ({
   lead: String(step),
   text: ` of ${MAKE_STEPS.length} · ${MAKE_STEPS[step - 1]}`,
   label: `Step ${step} of ${MAKE_STEPS.length}, ${MAKE_STEPS[step - 1]}`,
 })
-
-/** "3 invited · Friendship · Dance floor, Techno heads": the summary under the consent. */
-export function makeSummary(args: { invited: number; intent: readonly CrewIntent[]; tags: readonly string[] }): string {
-  return [`${args.invited} invited`, intentLine(args.intent), args.tags.length ? args.tags.join(', ') : undefined]
-    .filter(Boolean)
-    .join(' · ')
-}
 
 /** The success line: "Your crew. 3 invited; it starts when someone joins." */
 export const madeLine = (invited: number): string =>

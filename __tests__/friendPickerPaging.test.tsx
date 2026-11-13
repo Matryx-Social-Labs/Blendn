@@ -28,11 +28,10 @@ const page = (items: ReturnType<typeof friend>[], total: number, next: string | 
   data: { friends: items, count: total, pagination: { limit: 100, hasMore: next !== null, nextCursor: next, totalCount: total } },
 })
 
+/** The friends are on Make's first step (board 02 A): open it and wait for the first read. */
 async function toFriends() {
   await render(<NewCrewScreen />)
-  await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Nebula')
-  await fireEvent.press(screen.getByLabelText('Next'))
-  await waitFor(() => screen.getByText('Friends only. The count says how many, never who was skipped.'))
+  await waitFor(() => expect(api.getFriends).toHaveBeenCalled())
 }
 const list = () => screen.getByTestId('friend-pick-list')
 const reachEnd = async () => {
@@ -140,7 +139,7 @@ describe('search in the picker', () => {
     api.getFriends.mockResolvedValueOnce(page([friend(7)], 1))
     await type('Friend 7')
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Ask Friend 7' }))
-    expect(screen.getAllByText('2').length).toBeGreaterThan(0)
+    expect(screen.getByText('Friends to ask · 2 picked')).toBeTruthy()
     api.getFriends.mockResolvedValueOnce(page(friends(20), 20))
     await type('')
     expect(screen.getByRole('checkbox', { name: 'Ask Friend 3' }).props.accessibilityState).toMatchObject({ checked: true })
