@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_MAX_TAGS, CREW_NAME_MAX, CREW_TAGS, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
 import { INTENT_CHOICES, type IntentChoice } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
@@ -315,6 +315,8 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
 
 /** The emblem beside the name on Make's first step (board 02 A). */
 const MAKE_EMBLEM = 56
+/** Tags drawn before "+6 more" on the vibe step. */
+const TAGS_SHOWN = 4
 
 export type NameAndFriendsStepProps = {
   name: string
@@ -403,6 +405,9 @@ export function VibeStep(p: VibeStepProps) {
         max={CREW_MAX_TAGS}
         capHint={`Up to ${CREW_MAX_TAGS}`}
         onToggle={p.onTag}
+        // The board folds the ten behind "More": four, any pick beyond them, then "+6 more".
+        foldAfter={TAGS_SHOWN}
+        foldNoun="tags"
         testID="make-tags"
       />
       <TextArea
@@ -422,9 +427,9 @@ export function VibeStep(p: VibeStepProps) {
         <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
       </View>
       <View style={styles.block}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: secondary }]}>{CONSENT_LINE}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{CONSENT_LINE}</Text>
         <View style={styles.blockRow}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
           <Toggle value={p.keepAnonymous} onValueChange={p.onKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} />
         </View>
       </View>

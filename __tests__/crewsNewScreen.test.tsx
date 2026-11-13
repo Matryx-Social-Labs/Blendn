@@ -201,6 +201,21 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     expect(screen.getByTestId('make-intent-friendship').props.accessibilityState).toMatchObject({ selected: false })
   })
 
+  it('the tags fold after four behind "+6 more", as the board draws them, and a pick beyond the four stays drawn', async () => {
+    await toVibe()
+    expect(screen.queryByLabelText('Dance floor')).toBeNull()
+    await fireEvent.press(screen.getByLabelText('6 more tags'))
+    await fireEvent.press(screen.getByLabelText('Dance floor'))
+    await fireEvent.press(screen.getByLabelText('Show fewer'))
+    expect(screen.getByLabelText('Dance floor')).toBeTruthy()
+    expect(screen.queryByLabelText('Book club')).toBeNull()
+  })
+
+  it('the consent is the meta line the board draws, so it stands above the button without a scroll', async () => {
+    await toVibe()
+    expect(StyleSheet.flatten(screen.getByText(CONSENT_LINE).props.style).fontSize).toBeLessThan(15)
+  })
+
   it('holds the tags to three: a fourth does nothing, and a picked one can be put back', async () => {
     await toVibe()
     for (const t of ['Quiz team', 'Run club', 'Techno heads']) await fireEvent.press(screen.getByLabelText(t))
@@ -237,6 +252,7 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     await waitFor(() => screen.getByLabelText(S2))
     await fireEvent.changeText(screen.getByTestId('make-bio-input'), 'Late sets.')
     await fireEvent.press(screen.getByLabelText('Dating'))
+    await fireEvent.press(screen.getByLabelText('6 more tags'))
     await fireEvent.press(screen.getByLabelText('Dance floor'))
     await fireEvent.press(screen.getByRole('switch', { name: 'Room for one more' }))
     await fireEvent.press(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL }))

@@ -179,8 +179,9 @@ function CrewInviteScreenContent() {
       <Grain />
       <TopBar onBack={() => router.back()} testID="invite-top" />
       <Animated.View entering={arrive} style={styles.fill}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
+      {/* One scroll, the dock at its foot: at the largest text the card scrolls whole, so the dock never covers the crew's name. */}
+      <ScrollView testID="invite-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={[styles.hero, styles.heroPad]}>
           <View accessible accessibilityLabel={askedYouIn(invite.invitedBy)} style={[styles.asked, contrast && IC_HAIRLINE]}>
             {invite.invitedByPhoto ? (
               <Avatar kind="photo" uri={invite.invitedByPhoto} size={INVITER_FACE} testID="invite-inviter-photo" />
@@ -202,7 +203,6 @@ function CrewInviteScreenContent() {
             {invite.bio ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{`“${invite.bio}”`}</Text> : null}
           </View>
         </View>
-      </ScrollView>
       <View
         testID="invite-dock"
         onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
@@ -230,6 +230,7 @@ function CrewInviteScreenContent() {
           {inviteNote(invite)}
         </Text>
       </View>
+      </ScrollView>
       </Animated.View>
       <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
     </View>
@@ -239,7 +240,8 @@ function CrewInviteScreenContent() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
   state: { flex: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
-  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.lg, gap: SPACE.xl },
+  content: { flexGrow: 1, justifyContent: 'space-between', paddingTop: SPACE.sm, gap: SPACE.xl },
+  heroPad: { paddingHorizontal: SPACE.gutter },
   hero: { alignItems: 'center', gap: SPACE.md },
   name: { marginTop: SPACE.xs },
   asked: {

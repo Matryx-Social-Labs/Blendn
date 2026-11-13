@@ -227,6 +227,16 @@ describe('an invite', () => {
     expect(within(dock).getByLabelText('Join the crew')).toBeTruthy()
   })
 
+  it('at the largest text the card scrolls as one, the dock with it, so the dock never covers the crew’s name (AX XXXL drive)', async () => {
+    await render(<InviteScreen />)
+    await waitFor(() => screen.getByText('The Usual Suspects'))
+    const scroll = screen.getByTestId('invite-scroll')
+    expect(within(scroll).getByTestId('invite-dock')).toBeTruthy()
+    expect(within(scroll).getByText('The Usual Suspects')).toBeTruthy()
+    // When it fits, the dock still sits at the foot: the content grows to the screen and pushes it down.
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle)).toMatchObject({ flexGrow: 1, justifyContent: 'space-between' })
+  })
+
   it('Join is the agreement: it sends revealConsent true and the anonymity choice, says Joined, then opens the crew chat and asks about pushes', async () => {
     api.join.mockResolvedValue({ success: true, data: { chatGroupId: 'g-usual' } })
     await render(<InviteScreen />)
