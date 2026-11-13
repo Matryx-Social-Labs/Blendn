@@ -11,9 +11,10 @@ import { PagedFooter } from '../friends/PagedFooter'
 import { SearchField } from '../ds/SearchField'
 import { FRIEND_SEARCH_MAX } from '../../lib/friendsPaging'
 import { Avatar } from '../ds/Avatar'
+import { Button } from '../ds/Button'
 import { ChipSet } from '../ds/ChipSet'
 import { CrewCard } from '../ds/CrewCard'
-import { CrewEmblem, EMBLEM_PALETTES, emblemFor } from '../ds/CrewEmblem'
+import { CrewEmblem } from '../ds/CrewEmblem'
 import { CONTROL_FONT_CAP, font, minTarget, quickTransition, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
@@ -53,28 +54,11 @@ export type NameStepProps = {
   onTag: (slug: string) => void
   openToSolo: boolean
   onOpenToSolo: (next: boolean) => void
-  /** The stand-in emblem: the server draws the real one, from its own seed, when the crew is made. */
-  previewSeed: string
+  /** The emblem's seed: Make's own until the crew is made (Shuffle), then the crew's, fixed. */
+  emblemSeed: string
+  /** Make a crew only: a new look. Absent once the crew exists (Edit crew), as the look is fixed. */
+  onShuffle?: () => void
   intentText: string
-}
-
-/** The rose palette (hue 350), the people world's: a new crew's stand-in emblem is drawn in it (D-L17). */
-const ROSE_PALETTE = EMBLEM_PALETTES.length - 1
-/** How far `previewEmblemSeed` looks: one in twelve lands on a palette, so this is never reached in practice. */
-const SEED_TRIES = 240
-
-/**
- * The emblem the preview draws. A new crew's seed (`preview-…`, from Make a crew) is a stand-in until the server draws the
- * real one, and was any of twelve palettes, an off-hue blue on a rose screen; it is walked to the first variant on the rose
- * palette, so it is stable for the seed and in the screen's hue. A made crew's own seed (Edit crew) is drawn as it is.
- */
-export function previewEmblemSeed(seed: string): string {
-  if (!seed.startsWith('preview-')) return seed
-  for (let i = 0; i < SEED_TRIES; i++) {
-    const next = `${seed}:${i}`
-    if (emblemFor(next).palette === ROSE_PALETTE) return next
-  }
-  return seed
 }
 
 /** Step 1 · Name and vibe, with the live preview of the card as strangers see it. */
@@ -145,15 +129,18 @@ export function NameStep(p: NameStepProps) {
         <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
       </View>
       <View style={styles.group}>
-        <View style={styles.labelRow}>
+        <View style={[styles.labelRow, styles.previewLabelRow]}>
           <FieldLabel text="As strangers will see it" bold={bold} contrast={contrast} />
+          {p.onShuffle ? <Button label="Shuffle" icon="shuffle" kind="tertiary" size="sm" onPress={p.onShuffle} accessibilityLabel="Shuffle the crew’s look" /> : null}
         </View>
         <CrewCard
           compact
           onSheet
+          // Make's preview dances on every Shuffle (each new seed plays it once); Edit crew's stays still.
+          emblemScene={p.onShuffle ? 'dance' : undefined}
           crew={{
             name: p.name.trim() || 'Crew name',
-            emblemSeed: previewEmblemSeed(p.previewSeed),
+            emblemSeed: p.emblemSeed,
             size: 1,
             here: 0,
             bio: p.bio.trim() || 'A line about the crew',
@@ -314,13 +301,13 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
 export type ConsentStepProps = {
   name: string
   summary: string
-  previewSeed: string
+  emblemSeed: string
   keepAnonymous: boolean
   onKeepAnonymous: (next: boolean) => void
 }
 
 /** Step 3 · Consent: the sentence, always on screen; Make the crew is the agreement. */
-export function ConsentStep({ name, summary, previewSeed, keepAnonymous, onKeepAnonymous }: ConsentStepProps) {
+export function ConsentStep({ name, summary, emblemSeed, keepAnonymous, onKeepAnonymous }: ConsentStepProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
@@ -340,7 +327,7 @@ export function ConsentStep({ name, summary, previewSeed, keepAnonymous, onKeepA
         </View>
       </View>
       <View style={styles.summary} accessible accessibilityLabel={`${name}, ${summary}`}>
-        <CrewEmblem seed={previewEmblemSeed(previewSeed)} size={56} />
+        <CrewEmblem seed={emblemSeed} size={56} />
         <View style={styles.fill}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{summary}</Text>
@@ -363,6 +350,7 @@ const styles = StyleSheet.create({
   group: { gap: SPACE.sm },
   // FieldLabel carries the 4 pt left inset itself; the row adds only the right one (a counter beside it), not a second left.
   labelRow: { paddingRight: SPACE.xs },
+  previewLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',

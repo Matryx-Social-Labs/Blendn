@@ -506,7 +506,8 @@ export function faceMarkup(species: CreatureSpecies, mood: CreatureMood, hue: nu
 // Parsed once per distinct markup: 2,000 looks at most, a few parts each.
 // ponytail: an unbounded Map, bounded in practice by the 2,000 looks (a few parts each); no eviction needed.
 const parsed = new Map<string, ReactElement | null>()
-function elementsOf(markup: string): ReactElement | null {
+/** Markup as react-native-svg elements, parsed once per distinct string (the crew huddle reuses it). */
+export function elementsOf(markup: string): ReactElement | null {
   if (!markup) return null
   let el = parsed.get(markup)
   if (el === undefined) {

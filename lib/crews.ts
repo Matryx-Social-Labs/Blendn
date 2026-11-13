@@ -369,6 +369,18 @@ export interface CrewForm {
   tags: string[]
   openToSolo: boolean
   inviteUserIds: string[]
+  /** The emblem's look as Shuffle left it; fixed once the crew is made. */
+  emblemSeed?: string
+}
+
+/** The emblem seed `POST /crews` takes (SCRUM-1053); anything else is a 400. */
+export const EMBLEM_SEED = /^[0-9a-f]{16}$/
+const HEX = 16
+const SEED_LENGTH = 16
+
+/** A fresh look for Shuffle: 16 lowercase hex. A look, not a secret, so `Math.random` is enough. */
+export function newEmblemSeed(random: () => number = Math.random): string {
+  return Array.from({ length: SEED_LENGTH }, () => Math.floor(random() * HEX).toString(HEX)).join('')
 }
 
 export type CreateCrewBody = {
@@ -380,6 +392,7 @@ export type CreateCrewBody = {
   inviteUserIds: string[]
   revealConsent: true
   keepMeAnonymous: boolean
+  emblemSeed?: string
 }
 
 /**
@@ -410,6 +423,7 @@ export function createCrewBody(form: CrewForm, consent: ConsentState): CreateCre
     tags: form.tags,
     openToSolo: form.openToSolo,
     inviteUserIds: form.inviteUserIds,
+    ...(form.emblemSeed && EMBLEM_SEED.test(form.emblemSeed) ? { emblemSeed: form.emblemSeed } : {}),
     ...agreed,
   }
 }

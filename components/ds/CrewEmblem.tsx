@@ -1,202 +1,350 @@
-import { memo } from 'react'
+import { memo, useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { SvgXml } from 'react-native-svg'
+import Animated, { Easing, useAnimatedProps, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
+import Svg, { ClipPath, Defs, G, Path, RadialGradient, Stop, SvgXml, Text as SvgText } from 'react-native-svg'
+import { scheduleOnRN } from 'react-native-worklets'
 
-import { fnv1a } from '../../lib/pseudonymAvatar'
+import { FONT_FAMILY } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
+import { useLatest } from '../../lib/useLatest'
+import { elementsOf, faceMarkup, type CreatureMood } from './Creature'
+import {
+  ARM_LENGTH,
+  ARM_X,
+  ARM_Y,
+  CLINK_MARKUP,
+  SCENES,
+  SPARKS,
+  SQ24,
+  Z_FONT,
+  buntingMarkup,
+  edgeMarkup,
+  floorMarkup,
+  frontGoesFirst,
+  huddleKey,
+  huddleMarkup,
+  HUDDLE_HUES,
+  kitMarkup,
+  mittMarkup,
+  mugMarkup,
+  sparkMarkup,
+  sparkScale,
+  spotsOf,
+  tierOf,
+  zRise,
+  type CrewScene,
+  type HuddleHue,
+  type Pose,
+  type Spot,
+} from './crewHuddle'
+
+export { CREW_SCENES, huddleKey, tierOf, type CrewScene } from './crewHuddle'
 
 /*
- * The crew emblem (DESIGN-BRIEF §21.3, SCREENS-ADDITIONS "Emblems and
- * identity"): a crew's face that is not a face. Ported from the design
- * export's guidelines/round2/emblem.js (`window.BNE`) string for string, so
- * the markup below is the design's own; `__tests__/dsCrewEmblem.test.tsx`
- * holds every motif to the design's bytes. An edit here is a design change,
- * made there first.
+ * The crew emblem: B · Huddle (refined), owner-approved 2026-11-12 (SCRUM-1053). The look and its markup are
+ * `crewHuddle.ts`, a string-for-string port of the design's huddle.js; this is how it is put on screen.
+ *
+ * Still: one memoised `SvgXml` of the design's markup, so a list of 214 crews costs what it did. Scene: the same parts as
+ * react-native-svg elements, posed per frame on the UI thread (the design's pose functions, as worklets).
  */
 
-export const EMBLEM_MOTIFS = ['crescent', 'sunburst', 'tiles', 'rings', 'tide', 'stars', 'bolt', 'arch', 'chevrons', 'orbit', 'sparks', 'waves'] as const
-export type EmblemMotif = (typeof EMBLEM_MOTIFS)[number]
-export type EmblemVariant = 'glyph' | 'field'
-
-/**
- * OKLCH → sRGB hex (Björn Ottosson's OKLab matrices, the ones CSS Color 4
- * uses), clipped to the sRGB gamut. The design writes its palettes as
- * `oklch()`, which React Native cannot parse.
- */
-export function oklchToHex(l: number, c: number, hue: number): string {
-  const h = (hue * Math.PI) / 180
-  const a = c * Math.cos(h)
-  const b = c * Math.sin(h)
-  const l3 = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3
-  const m3 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3
-  const s3 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3
-  const linear = [
-    4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
-    -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
-    -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3,
-  ]
-  const channel = (x: number) => {
-    const v = Math.min(1, Math.max(0, x))
-    const encoded = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055
-    return Math.round(encoded * 255)
-      .toString(16)
-      .padStart(2, '0')
-  }
-  return `#${linear.map(channel).join('')}`
-}
-
-/** emblem.js `PALETTES`: twelve hues 30° apart, a deep base and a mid tone at one luminance each, so no crew looks louder. */
-const HUES = [20, 50, 80, 110, 140, 170, 200, 230, 260, 290, 320, 350]
-export const EMBLEM_PALETTES = HUES.map((hue) => ({ base: oklchToHex(0.34, 0.07, hue), mid: oklchToHex(0.66, 0.11, hue) }))
-
-/** The squircle (continuous corners) every emblem is cut to, in its 100 × 100 box. */
+/** The squircle (continuous corners) every emblem is cut to, in a 100 × 100 box: a cut-out behind an overlapping pair. */
 export const EMBLEM_SQUIRCLE = 'M50 0C86 0 100 14 100 50C100 86 86 100 50 100C14 100 0 86 0 50C0 14 14 0 50 0Z'
 
-const wave = (y: number, x0: number, x1: number, amp: number, len: number) => {
-  let d = `M${x0} ${y}`
-  for (let x = x0; x < x1; x += len) d += ` q${len / 4} ${-amp} ${len / 2} 0 t${len / 2} 0`
-  return d
-}
-const scallops = (y: number, x0: number, n: number, r: number) => {
-  let d = `M${x0} ${y}`
-  for (let i = 0; i < n; i++) d += ` a${r} ${r} 0 0 1 ${2 * r} 0`
-  return d
-}
-const plus = (x: number, y: number, s: number) =>
-  `<rect x="${x - s / 6}" y="${y - s / 2}" width="${s / 3}" height="${s}"/><rect x="${x - s / 2}" y="${y - s / 6}" width="${s}" height="${s / 3}"/>`
-const rays = (cx: number, cy: number, n: number, r0: number, r1: number, half: number, phase: number) => {
-  let o = ''
-  for (let i = 0; i < n; i++) {
-    const a = phase + (i * Math.PI * 2) / n
-    const a1 = a - half
-    const a2 = a + half
-    o += `<polygon points="${cx + r0 * Math.cos(a)},${cy + r0 * Math.sin(a)} ${cx + r1 * Math.cos(a1)},${cy + r1 * Math.sin(a1)} ${cx + r1 * Math.cos(a2)},${cy + r1 * Math.sin(a2)}"/>`
-  }
-  return o
-}
-const STARS = [[34, 36, 7], [60, 30, 4], [66, 56, 9], [40, 64, 5], [52, 50, 3]]
-const STARFIELD = [
-  [12, 18, 3], [30, 10, 5], [52, 22, 2], [74, 12, 6], [90, 30, 3], [22, 40, 7], [46, 46, 3], [68, 38, 4],
-  [88, 56, 5], [14, 66, 4], [36, 74, 6], [60, 66, 2], [80, 78, 7], [26, 92, 3], [52, 90, 4], [92, 92, 2],
-]
+const Z_FAMILY = FONT_FAMILY.brand[900]
 
-type Draw = (mid: string, base: string) => string
+// ── at most one moving emblem on screen; the Mix's two clink together ─────────────────────────────────────────────
+const moving = new Map<string, CrewScene>()
+function claimMotion(id: string, scene: CrewScene): boolean {
+  const others = [...moving.entries()].filter(([k]) => k !== id).map(([, s]) => s)
+  const allowed = others.length === 0 || (scene === 'clink' && others.length === 1 && others[0] === 'clink')
+  if (allowed) moving.set(id, scene)
+  return allowed
+}
+const releaseMotion = (id: string) => moving.delete(id)
+/** Tests only: what is moving now. */
+export const movingEmblems = () => [...moving.values()]
 
-/** `glyph`: one centred shape. */
-const GLYPH: Record<EmblemMotif, Draw> = {
-  crescent: (m, b) => `<circle cx="50" cy="52" r="30" fill="${m}"/><circle cx="60" cy="45" r="26" fill="${b}"/>`,
-  sunburst: (m) => `<g fill="${m}">${rays(50, 50, 12, 14, 40, 0.07, 0)}<circle cx="50" cy="50" r="10"/></g>`,
-  tiles: (m) => {
-    let o = ''
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) if ((r + c) % 2 === 0) o += `<rect x="${23 + c * 18}" y="${23 + r * 18}" width="14" height="14" rx="1"/>`
-    return `<g fill="${m}">${o}</g>`
-  },
-  rings: (m) => `<g fill="none" stroke="${m}" stroke-width="5"><circle cx="50" cy="50" r="12"/><circle cx="50" cy="50" r="24"/><circle cx="50" cy="50" r="36"/></g>`,
-  tide: (m) => `<g fill="none" stroke="${m}" stroke-width="5" stroke-linecap="round">${[32, 44, 56, 68].map((y) => `<path d="${wave(y, 16, 84, 5, 17)}"/>`).join('')}</g>`,
-  stars: (m) => `<g fill="${m}">${STARS.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}"/>`).join('')}</g>`,
-  bolt: (m) => `<polygon fill="${m}" points="56,14 32,54 50,54 44,86 68,44 52,44"/>`,
-  arch: (m) => `<path fill="${m}" d="M26 82V50a24 24 0 0 1 48 0v32H60V52a10 10 0 0 0-20 0v30Z"/>`,
-  chevrons: (m) =>
-    `<g fill="none" stroke="${m}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">${[28, 46, 64].map((y) => `<path d="M28 ${y}l22 13 22-13"/>`).join('')}</g>`,
-  orbit: (m) =>
-    `<g fill="none" stroke="${m}" stroke-width="4"><ellipse cx="50" cy="50" rx="38" ry="13" transform="rotate(-30 50 50)"/></g><circle cx="50" cy="50" r="11" fill="${m}"/><circle cx="${50 + 38 * Math.cos(0.6) * Math.cos(-0.52) - 13 * Math.sin(0.6) * Math.sin(-0.52)}" cy="${50 + 38 * Math.cos(0.6) * Math.sin(-0.52) + 13 * Math.sin(0.6) * Math.cos(-0.52)}" r="4.5" fill="${m}"/>`,
-  sparks: (m) => {
-    let o = ''
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) o += plus(26 + c * 24, 26 + r * 24, 10)
-    return `<g fill="${m}">${o}</g>`
-  },
-  waves: (m) =>
-    `<g fill="none" stroke="${m}" stroke-width="5" stroke-linecap="round">${[38, 58, 78].map((y, i) => `<path d="${scallops(y, 14 + (i % 2) * 9, i % 2 ? 3 : 4, 9)}"/>`).join('')}</g>`,
+// ── matrices (a, b, c, d, e, f), on the UI thread ─────────────────────────────────────────────────────────────────
+/** `translate(cx - 12s + dx, cy - 12s + dy) scale(s) rotate(rot 12 26)`: the design's `place`. */
+const placeMatrix = (cx: number, cy: number, s: number, p: Pose) => {
+  'worklet'
+  const r = ((p.rot || 0) * Math.PI) / 180
+  const cos = Math.cos(r)
+  const sin = Math.sin(r)
+  const tx = cx - 12 * s + (p.dx || 0)
+  const ty = cy - 12 * s + (p.dy || 0)
+  return [s * cos, s * sin, -s * sin, s * cos, tx + s * (12 - 12 * cos + 26 * sin), ty + s * (26 - 12 * sin - 26 * cos)]
+}
+/** `rotate(deg px py)`. */
+const rotateAbout = (deg: number, px: number, py: number) => {
+  'worklet'
+  const r = (deg * Math.PI) / 180
+  const cos = Math.cos(r)
+  const sin = Math.sin(r)
+  return [cos, sin, -sin, cos, px - px * cos + py * sin, py - px * sin - py * cos]
 }
 
-/** `field`: the motif runs edge to edge. */
-const FIELD: Record<EmblemMotif, Draw> = {
-  crescent: (m, b) => `<circle cx="54" cy="58" r="50" fill="${m}"/><circle cx="72" cy="40" r="46" fill="${b}"/>`,
-  sunburst: (m) => {
-    let o = ''
-    for (let i = 0; i < 6; i++) {
-      const a = -Math.PI / 2 + ((i + 0.5) * (Math.PI / 2)) / 6
-      const h = 0.055
-      o += `<polygon points="0,100 ${160 * Math.cos(a - h)},${100 + 160 * Math.sin(a - h)} ${160 * Math.cos(a + h)},${100 + 160 * Math.sin(a + h)}"/>`
-    }
-    return `<g fill="${m}">${o}</g>`
-  },
-  tiles: (m) => {
-    let o = ''
-    for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) if ((r + c) % 2 === 0) o += `<rect x="${c * 20}" y="${r * 20}" width="20" height="20"/>`
-    return `<g fill="${m}">${o}</g>`
-  },
-  rings: (m) => `<g fill="none" stroke="${m}" stroke-width="6">${[8, 22, 36, 50, 64].map((r) => `<circle cx="50" cy="50" r="${r}"/>`).join('')}</g>`,
-  tide: (m) => `<g fill="none" stroke="${m}" stroke-width="5">${[6, 20, 34, 48, 62, 76, 90].map((y) => `<path d="${wave(y, -10, 120, 5, 20)}"/>`).join('')}</g>`,
-  stars: (m) => `<g fill="${m}">${STARFIELD.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}"/>`).join('')}</g>`,
-  bolt: (m) => `<polygon fill="${m}" points="70,-10 24,56 50,56 36,112 86,36 60,36"/>`,
-  arch: (m) => `<g fill="${m}">${[-16, 24, 64].map((x) => `<path d="M${x} 112V56a20 20 0 0 1 40 0v56H${x + 30}V58a10 10 0 0 0-20 0v54Z"/>`).join('')}</g>`,
-  chevrons: (m) =>
-    `<g fill="none" stroke="${m}" stroke-width="7" stroke-linejoin="round">${[-4, 16, 36, 56, 76, 96].map((y) => `<path d="M-6 ${y}l56 18 56-18"/>`).join('')}</g>`,
-  orbit: (m) =>
-    `<g fill="none" stroke="${m}" stroke-width="3.5">${[0, 60, 120].map((a) => `<ellipse cx="50" cy="50" rx="56" ry="16" transform="rotate(${a} 50 50)"/>`).join('')}</g><circle cx="50" cy="50" r="7" fill="${m}"/>`,
-  sparks: (m) => {
-    let o = ''
-    for (let r = 0; r < 5; r++) for (let c = 0; c < 5; c++) o += plus(10 + c * 20, 10 + r * 20, 9)
-    return `<g fill="${m}">${o}</g>`
-  },
-  waves: (m) =>
-    `<g fill="none" stroke="${m}" stroke-width="5">${[12, 32, 52, 72, 92].map((y, i) => `<path d="${scallops(y, i % 2 ? -10 : 0, 7, 10)}"/>`).join('')}</g>`,
-}
+// `display` and `matrix` are native props of every react-native-svg node; its types leave them off G.
+const AnimatedG = Animated.createAnimatedComponent(G<{ display?: string; matrix?: number[] }>)
 
-/** One motif's markup in a 100 × 100 box, painted `mid` (and `base` where the motif cuts back into the plate). */
-export function motifMarkup(motif: EmblemMotif, variant: EmblemVariant, mid: string, base: string): string {
-  return (variant === 'field' ? FIELD : GLYPH)[motif](mid, base)
-}
+const AnimatedText = Animated.createAnimatedComponent(SvgText)
 
 /**
- * A crew's palette and motif, from the server's random `emblemSeed` and
- * nothing else, so the emblem never changes on a rename or as people come and
- * go (a stranger watching could tell). emblem.js takes a number; the server's
- * seed is a string, so it goes through FNV-1a first (the hash a pseudonym's
- * creature uses): palette `n mod 12`, motif `⌊n / 12⌋ mod 12`.
+ * A part comes and goes by `display`, never by a group's opacity: on Android (react-native-svg 15.15) a group whose
+ * opacity is not 1 draws into a canvas-sized bitmap of its own every frame, and a toggle landing mid-draw restored a
+ * canvas it had never saved; the Release app died in the clink ("Underflow in restore - more restores than saves").
  */
-export function emblemFor(seed: string): { palette: number; motif: EmblemMotif } {
-  const n = Math.abs(fnv1a(seed))
-  return { palette: n % EMBLEM_PALETTES.length, motif: EMBLEM_MOTIFS[Math.floor(n / EMBLEM_PALETTES.length) % EMBLEM_MOTIFS.length] }
+const shown = (on: boolean) => {
+  'worklet'
+  return on ? 'inline' : 'none'
+}
+type Matrix = [number, number, number, number, number, number]
+type Frame = { matrix: number[]; display: 'inline' | 'none' }
+/**
+ * A scene's first frame, as props G's JS side reads. Reanimated hands `matrix` over as an initial prop, which
+ * react-native-svg's G drops (it reads `transform`), so on device the first frame drew every part at identity, one
+ * full-size head filling the plate, until the UI thread's first update landed. Every animated group gets both.
+ */
+const firstFrame = ({ matrix, display }: Frame) => ({ transform: matrix as Matrix, display })
+
+type PoseFn = (t: number, i: number) => Pose
+
+/** One arm, hung straight down from its shoulder and turned to its angle; the design draws none at 0°. */
+function Arm({ t, pose, slot, side, c }: { t: SharedValue<number>; pose: PoseFn; slot: number; side: 0 | 1; c: HuddleHue }) {
+  const x = ARM_X[side]
+  const dir = side === 0 ? -1 : 1
+  const handY = ARM_Y + ARM_LENGTH
+  const armAt = (v: number): Frame => {
+    'worklet'
+    const deg = (pose(v, slot).arm || [0, 0])[side]
+    return { matrix: rotateAbout(-deg * dir, x, ARM_Y), display: shown(deg !== 0) }
+  }
+  // The cup stays upright in the mitt.
+  const cupAt = (v: number): Frame => {
+    'worklet'
+    const p = pose(v, slot)
+    const deg = (p.arm || [0, 0])[side]
+    return { matrix: rotateAbout(deg * dir, x, handY), display: shown(!!p.cup) }
+  }
+  const arm = useAnimatedProps(() => armAt(t.get()))
+  const cup = useAnimatedProps(() => cupAt(t.get()))
+  return (
+    <AnimatedG animatedProps={arm} {...firstFrame(armAt(0))}>
+      <Path d={`M${x} ${ARM_Y}L${x} ${handY}`} stroke={c.e} strokeWidth={2.6} strokeLinecap="round" />
+      <AnimatedG animatedProps={cup} {...firstFrame(cupAt(0))}>
+        {elementsOf(mugMarkup(x, handY, c))}
+      </AnimatedG>
+      {elementsOf(mittMarkup(x, handY))}
+    </AnimatedG>
+  )
 }
 
-function emblemXml(seed: string, variant: EmblemVariant) {
-  const { palette, motif } = emblemFor(seed)
-  const { base, mid } = EMBLEM_PALETTES[palette]
-  return `<svg viewBox="0 0 100 100"><defs><clipPath id="sq"><path d="${EMBLEM_SQUIRCLE}"/></clipPath></defs><g clip-path="url(#sq)"><path d="${EMBLEM_SQUIRCLE}" fill="${base}"/>${motifMarkup(motif, variant, mid, base)}</g></svg>`
+/** One face of a character's, shown while its pose wears that mood. */
+function Mood({ t, pose, slot, mood, rest, markup }: { t: SharedValue<number>; pose: PoseFn; slot: number; mood: CreatureMood; rest: CreatureMood; markup: string }) {
+  const on = useAnimatedProps(() => ({ display: shown((pose(t.get(), slot).mood || rest) === mood) }))
+  return <AnimatedG animatedProps={on} display={mood === rest ? undefined : 'none'}>{elementsOf(markup)}</AnimatedG>
+}
+
+type CharacterProps = {
+  t: SharedValue<number>
+  pose: PoseFn
+  spot: Spot
+  species: string
+  rest: CreatureMood
+  moods: readonly CreatureMood[]
+  c: HuddleHue
+  hue: number
+  /** The high five's two copies of the front character: drawn behind the back pair (`true`) or in front. */
+  behind?: boolean
+}
+
+function Character({ t, pose, spot, species, rest, moods, c, hue, behind }: CharacterProps) {
+  const [slot, cx, cy, s] = spot
+  const placedAt = (v: number): Frame => {
+    'worklet'
+    const visible = behind === undefined || frontGoesFirst(v) === behind
+    return { matrix: placeMatrix(cx, cy, s, pose(v, slot)), display: shown(visible) }
+  }
+  const placed = useAnimatedProps(() => placedAt(t.get()))
+  const faces = [...new Set([rest, ...moods])]
+  return (
+    <AnimatedG animatedProps={placed} {...firstFrame(placedAt(0))}>
+      {elementsOf(kitMarkup(c))}
+      {faces.map((m) => (
+        <Mood key={m} t={t} pose={pose} slot={slot} mood={m} rest={rest} markup={faceMarkup(species, m, hue)} />
+      ))}
+      <Arm t={t} pose={pose} slot={slot} side={0} c={c} />
+      <Arm t={t} pose={pose} slot={slot} side={1} c={c} />
+    </AnimatedG>
+  )
+}
+
+function Spark({ t, at: [x, y], fx }: { t: SharedValue<number>; at: readonly [number, number]; fx: (t: number) => string }) {
+  const litAt = (v: number): Frame => {
+    'worklet'
+    const s = sparkScale(v)
+    return { matrix: [s, 0, 0, s, x - s * x, y - s * y], display: shown(fx(v) === 'spark') }
+  }
+  const lit = useAnimatedProps(() => litAt(t.get()))
+  return (
+    <AnimatedG animatedProps={lit} {...firstFrame(litAt(0))}>
+      {elementsOf(sparkMarkup(x, y, 1))}
+    </AnimatedG>
+  )
+}
+
+function Zee({ t, x, y, rise, size, fade, c }: { t: SharedValue<number>; x: number; y: number; rise: number; size: number; fade: number; c: HuddleHue }) {
+  const riseAt = (v: number) => {
+    'worklet'
+    return v > 0.45 ? zRise(v) : 0
+  }
+  const up = useAnimatedProps(() => {
+    const u = riseAt(t.get())
+    return { matrix: [1, 0, 0, 1, u, -rise * u] }
+  })
+  // The fade is the glyph's paint, not the group's (see `shown`).
+  const fadeIn = useAnimatedProps(() => ({ fillOpacity: riseAt(t.get()) * fade }))
+  return (
+    <AnimatedG animatedProps={up}>
+      <AnimatedText animatedProps={fadeIn} fillOpacity={0} x={x} y={y} fontFamily={Z_FAMILY} fontSize={size} fill={c.g}>
+        z
+      </AnimatedText>
+    </AnimatedG>
+  )
+}
+
+function Effects({ t, scene, c }: { t: SharedValue<number>; scene: CrewScene; c: HuddleHue }) {
+  const fx = SCENES[scene].fx
+  const clink = useAnimatedProps(() => ({ display: shown(!!fx && fx(t.get()) === 'clink') }))
+  if (!fx) return null
+  if (scene === 'sleepy') {
+    return (
+      <>
+        <Zee t={t} x={17} y={6} rise={2} size={3.4} fade={1} c={c} />
+        <Zee t={t} x={19.6} y={3.6} rise={1.6} size={2.4} fade={0.8} c={c} />
+      </>
+    )
+  }
+  if (scene === 'clink') return <AnimatedG animatedProps={clink} display="none">{elementsOf(CLINK_MARKUP)}</AnimatedG>
+  return (
+    <>
+      {SPARKS.map((at) => (
+        <Spark key={at.join()} t={t} at={at} fx={fx} />
+      ))}
+    </>
+  )
+}
+
+/** The scene, played once from t = 0 to 1; `onFinish` on its last frame. */
+function Playing({ id, seed, size, scene, onFinish }: { id: string; seed: string; size: number; scene: CrewScene; onFinish: () => void }) {
+  const t = useSharedValue(0)
+  const def = SCENES[scene]
+  const pose = def.pose
+  useEffect(() => {
+    // Claimed here, held until unmount: another emblem already moving means this one rests.
+    if (!claimMotion(id, scene)) {
+      onFinish()
+      return
+    }
+    t.set(
+      withTiming(1, { duration: def.ms, easing: Easing.linear }, (finished) => {
+        if (finished) scheduleOnRN(onFinish)
+      })
+    )
+    return () => {
+      releaseMotion(id)
+    }
+  }, [t, id, scene, def.ms, onFinish])
+  const k = huddleKey(seed)
+  const c = HUDDLE_HUES[k.hue]
+  const tier = tierOf(size)
+  const spots = spotsOf(tier)
+  const species = [k.front, k.left, k.right]
+  const one = (spot: Spot, behind?: boolean) => (
+    <Character key={`${spot[0]}${behind ?? ''}`} t={t} pose={pose} spot={spot} species={species[spot[0]]} rest={k.moods[spot[0]]} moods={def.moods} c={c} hue={k.hue} behind={behind} />
+  )
+  return (
+    <Svg testID="crew-emblem-scene" width={size} height={size} viewBox="0 0 24 24">
+      <Defs>
+        <ClipPath id={`${id}c`}>
+          <Path d={SQ24} />
+        </ClipPath>
+        <RadialGradient id={`${id}g`} cx={12} cy={9} r={16} gradientUnits="userSpaceOnUse">
+          <Stop offset={0} stopColor={c.e} stopOpacity={0.55} />
+          <Stop offset={1} stopColor={c.f} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Path d={SQ24} fill={c.f} />
+      <Path d={SQ24} fill={`url(#${id}g)`} />
+      <G clipPath={`url(#${id}c)`}>
+        {tier === 'lead' ? (
+          spots.map((s) => one(s))
+        ) : (
+          <>
+            {tier === 'scene' ? elementsOf(floorMarkup(c) + buntingMarkup(c)) : null}
+            {def.frontFirst ? one(spots[2], true) : null}
+            {one(spots[0])}
+            {one(spots[1])}
+            {one(spots[2], def.frontFirst ? false : undefined)}
+            <Effects t={t} scene={scene} c={c} />
+          </>
+        )}
+      </G>
+      {elementsOf(edgeMarkup(c))}
+    </Svg>
+  )
 }
 
 /**
- * A crew's emblem (§21.3): a squircle on one of the 12 palettes, carrying one
- * of the 12 night motifs. A crew is a square; a person is round. No text,
- * creature, face, initials or brand gradient, ever.
+ * A crew's emblem: three of its own characters in the crew's kit on a squircle, drawn from the server's `emblemSeed` and
+ * nothing else. The size picks the tier (≤ 28 two faces, ≤ 80 three, larger the full scene with bunting).
  *
- * `field` (the default, as the flows draw it) runs the motif edge to edge;
- * `glyph` is one centred shape. Sizes 24 (chips), 40 (rows), 56 (Banter), 96
- * (cards), 160 (crew detail, the Blend moment).
+ * `scene` plays one of the six scenes once, on its moment (crew page: dance; invite: wave; the Mix: clink; Wave for /
+ * Wave back: highfive; check-in and "With {crew}": cheer; end of night: sleepy), then rests; it replays when the scene or
+ * the seed changes (Shuffle). Never in a list: `__tests__/crewEmblemSceneHosts.test.ts` holds the hosts to that. At most
+ * one emblem moves on screen (the Mix's two clink together); another asked to move shows its still. Reduce Motion draws
+ * the still. `onDone` fires when it has played, or at once when it will not.
  *
- * Decorative: the crew's name beside it is what is read. Memoised, so a list
- * of crews re-parses only the emblems that changed.
- *
- * ponytail: drawn through `SvgXml` so the design's markup stays verbatim; if a
- * long list of emblems ever shows up in a profile, render the motifs as
- * react-native-svg elements instead of parsing.
+ * Decorative: the crew's name beside it is what is read. Memoised, so a list re-parses only the emblems that changed.
  */
 export const CrewEmblem = memo(function CrewEmblem({
   seed,
   size,
-  variant = 'field',
+  scene,
+  onDone,
   testID,
 }: {
-  /** The server's `emblemSeed`. Never a crew id or name. */
+  /** The server's `emblemSeed`. Never a crew id, a name or a member's pseudonym. */
   seed: string
   size: number
-  variant?: EmblemVariant
+  scene?: CrewScene
+  onDone?: () => void
   testID?: string
 }) {
+  // SVG ids: letters only (useId's colons are not safe inside url(#…)).
+  const id = `ce${useId().replace(/[^A-Za-z0-9]/g, '')}`
+  const reduce = useReducedMotion()
+  const done = useLatest(onDone)
+  // Each scene on each seed plays once (a new seed is a Shuffle: it plays again). Reduce Motion: the still, done at once.
+  const run = scene && !reduce ? `${scene}|${seed}` : null
+  const [finished, setFinished] = useState<string | null>(null)
+  const playing = run !== null && finished !== run ? scene : undefined
+  useEffect(() => {
+    if (scene && reduce) done.current?.()
+  }, [scene, seed, reduce, done])
+  const finish = useCallback(() => {
+    setFinished(run)
+    done.current?.()
+  }, [run, done])
+
+  // The sleepy lean ends held: its still is its last frame.
+  const held = scene && SCENES[scene].hold ? scene : undefined
+  const still = useMemo(() => huddleMarkup(seed, size, id, held ? { scene: held, t: 1 } : {}).replaceAll(Z_FONT, Z_FAMILY), [seed, size, id, held])
+
   return (
     <View testID={testID} style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <SvgXml testID={testID && `${testID}-xml`} xml={emblemXml(seed, variant)} width={size} height={size} />
+      {playing ? <Playing key={run} id={id} seed={seed} size={size} scene={playing} onFinish={finish} /> : <SvgXml testID={testID && `${testID}-xml`} xml={still} width={size} height={size} />}
     </View>
   )
 })
