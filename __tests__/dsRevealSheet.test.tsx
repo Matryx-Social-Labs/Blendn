@@ -164,6 +164,13 @@ describe('<RevealSide> at scale (Together hand-off 1: the strip was half the scr
     }
   })
 
+  it('a Mix side of 25 (owner 2026-11-14: crews up to 25, a Mix of both, ≤50) is still four faces and "+21"', async () => {
+    const crewOf25 = Array.from({ length: 25 }, (_, i) => ({ pseudonym: `Person ${i}`, photo: null }))
+    await render(<RevealSide side={orbit} people={crewOf25} count={25} testID="r" />)
+    expect(screen.getAllByTestId(/^r-tile-/, hidden)).toHaveLength(4)
+    expect(screen.getByText('+21', hidden)).toBeTruthy()
+  })
+
   it('the faces never wrap: past four, the rest fold into the "+N" tile in the same row', async () => {
     await render(<RevealSide side={orbit} people={many} testID="r" />)
     expect(screen.getAllByTestId(/^r-tile-/, hidden)).toHaveLength(4)
