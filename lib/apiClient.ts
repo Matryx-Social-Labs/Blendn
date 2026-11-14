@@ -848,7 +848,8 @@ export interface ApiResponse<T = unknown> {
    */
   roomKind?: string
   roomName?: string
-  errors?: Array<{ path: string; message: string }>
+  /** Field errors: `field` is the path the server names (`tags.2`), `message` its sentence. */
+  errors?: Array<{ field?: string; message: string }>
 }
 
 /**
@@ -1850,7 +1851,7 @@ class ApiClientClass {
         ...(typeof parsed.roomKind === 'string' ? { roomKind: parsed.roomKind } : {}),
         ...(typeof parsed.roomName === 'string' ? { roomName: parsed.roomName } : {}),
         error: this.buildErrorMessage(response, parsed, endpoint),
-        errors: parsed?.errors as Array<{ path: string; message: string }> | undefined,
+        errors: parsed?.errors as Array<{ field?: string; message: string }> | undefined,
       }
     }
 

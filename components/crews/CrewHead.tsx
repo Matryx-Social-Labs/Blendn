@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
-import type { Crew } from '../../lib/crews'
+import { tagText, type Crew } from '../../lib/crews'
 import { intentLine } from '../../lib/crewsScreens'
 import { Chip } from '../ds/Chip'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -36,8 +36,9 @@ export function CrewHead({ crew }: { crew: Pick<Crew, 'name' | 'bio' | 'tags' | 
       ) : null}
       {crew.tags.length || intent ? (
         <View style={styles.meta}>
+          {/* Every tag, lit and wrapping (board crews/tags/01 · Crew page): a 24-character tag still fits a 360 dp row. */}
           {crew.tags.map((t) => (
-            <Chip key={t.slug} label={t.label} variant="outline" />
+            <Chip key={t.slug} label={`#${tagText(t)}`} selected lines={2} />
           ))}
           {intent ? (
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>

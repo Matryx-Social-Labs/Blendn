@@ -20,3 +20,19 @@ it('caps the name at title and the bio and intent at meta, so nothing in the hea
   expect(screen.getByText('Sunday football, then dosa.').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.meta)
   expect(uncapped(screen.toJSON())).toEqual([])
 })
+
+it('draws every tag as a hashtag chip that wraps, an old slug with its spaces closed up (board crews/tags/01 · Crew page)', async () => {
+  const tags = [
+    { slug: 'sundayrunclub', label: 'sundayrunclub' },
+    { slug: 'averyveryverylongtag24ch', label: 'averyveryverylongtag24ch' },
+    { slug: 'कैफ़ेहॉपिंग', label: 'कैफ़ेहॉपिंग' },
+    { slug: 'chai🍵', label: 'chai🍵' },
+    { slug: 'quiz-team', label: 'Quiz team' },
+  ]
+  await render(<CrewHead crew={{ name: 'Nebula', bio: null, tags, intent: [], emblemSeed: 's' } as never} />)
+  for (const t of ['#sundayrunclub', '#averyveryverylongtag24ch', '#कैफ़ेहॉपिंग', '#chai🍵', '#Quizteam']) {
+    expect(screen.getByLabelText(t)).toBeTruthy()
+  }
+  // Read-only: nothing to tap on a crew's page.
+  expect(screen.queryAllByRole('button')).toHaveLength(0)
+})

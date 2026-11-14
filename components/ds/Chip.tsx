@@ -9,6 +9,7 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MATERIAL, PRESS, RADIUS, SI
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY, tint } from '../../lib/theme'
+import { DashedFrame } from './DashedFrame'
 import { monoCaption } from './MonoFamily'
 import { chipRest, CONTROL_FONT_CAP, focusRing, font, LIGHT, minTarget, PRESSED_WASH, useBoldText, useGround, useIncreaseContrast, useSelection } from './shared'
 
@@ -70,7 +71,7 @@ function MoreChevron({ expanded, testID }: { expanded: boolean; testID?: string 
   )
 }
 
-export type ChipVariant = 'default' | 'outline'
+export type ChipVariant = 'default' | 'outline' | 'dashed'
 /**
  * `lg`: the 44 pt capsule in body, for a set that is the screen's one question (onboarding's interests, direction A).
  * `header`: the 36 pt capsule of a header row (the Pulse's chips and city chip, board `.qc` / `.cc`).
@@ -109,7 +110,10 @@ export type ChipProps = {
   disabled?: boolean
   /** A read-only interest you share: a 1 pt white outline, no colour, never counted. */
   shared?: boolean
-  /** `outline`: no fill, a 1 pt edge at 22% white; read-only labels on a card (A31). */
+  /**
+   * `outline`: no fill, a 1 pt edge at 22% white; read-only labels on a card (A31). `dashed`: no fill, the DashedFrame
+   * edge; something offered, not yet yours (a crew's hashtag ideas, board crews/tags/01 A).
+   */
   variant?: ChipVariant
   size?: ChipSize
   /** Read-only only: what it is read as, when that is more than the label ("Jazz, shared"). */
@@ -168,7 +172,7 @@ export function Chip({
   const multi = selection === 'multi' && !more
   const ground = useGround()
   const reduceMotion = useReducedMotion()
-  const outline = variant === 'outline' && !selected
+  const outline = (variant === 'outline' || variant === 'dashed') && !selected
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -187,9 +191,11 @@ export function Chip({
     ? { borderWidth: 1, borderColor: COLOR.textPrimary }
     : contrast
       ? { borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast }
-      : variant === 'outline'
-        ? OUTLINE_EDGE
-        : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
+      : variant === 'dashed'
+        ? null
+        : variant === 'outline'
+          ? OUTLINE_EDGE
+          : { borderWidth: HAIRLINE, borderColor: COLOR.hairline }
 
   // The + → ✓ slot of a multi chip: before the label, or after it when a `lead` picture leads.
   const slot = multi ? (
@@ -248,6 +254,7 @@ export function Chip({
       ) : null}
       {more || chevron ? <MoreChevron expanded={expanded} testID={testID && `${testID}-chevron`} /> : null}
       {onRemove ? <Icon name="x" size={ICON.inline} color={ink} /> : null}
+      {variant === 'dashed' && !selected && !contrast ? <DashedFrame radius={radius} testID={testID && `${testID}-dashed`} /> : null}
       <Animated.View
         testID={testID && `${testID}-edge`}
         pointerEvents="none"
@@ -302,7 +309,7 @@ export function Chip({
         onBlur={() => setFocused(false)}
         android_ripple={{ color: PRESSED_WASH.android, foreground: true }}
         accessibilityRole="button"
-        accessibilityLabel={onRemove ? `${label}, remove filter` : (accessibilityLabel ?? (count !== undefined ? `${label}, ${count}` : label))}
+        accessibilityLabel={onRemove ? (accessibilityLabel ?? `${label}, remove filter`) : (accessibilityLabel ?? (count !== undefined ? `${label}, ${count}` : label))}
         accessibilityHint={dimmed ? capHint : undefined}
         accessibilityState={{
           selected: onRemove || more ? undefined : selected,

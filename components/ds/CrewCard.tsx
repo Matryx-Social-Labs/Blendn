@@ -7,7 +7,6 @@ import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
 import { ACHIEVEMENT, AchievementBadge, type AchievementKind } from './AchievementBadge'
 import { Button } from './Button'
-import { Chip } from './Chip'
 import { CountTicks } from './CountTicks'
 import { CrewEmblem, type CrewScene } from './CrewEmblem'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
@@ -26,6 +25,7 @@ export type CrewCardCrew = {
   /** Here now: a count, never who. */
   here: number
   bio?: string | null
+  /** The crew's hashtags as drawn, without the # (`tagText`): the card adds it. */
   tags: string[]
   intent?: string
   /** The crew's tier badge ("Out together often"): one pill, never a count (14.5, E15). */
@@ -83,7 +83,8 @@ export function CrewCard({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const here = Math.max(0, Math.min(crew.here, crew.size))
-  const label = [crew.name, `crew of ${crew.size}`, here ? `${here} here` : null, crew.bio, ...crew.tags, crew.intent, crew.badge ? `Badge: ${ACHIEVEMENT[crew.badge].label}` : null].filter(Boolean).join(', ')
+  const hashtags = crew.tags.map((t) => `#${t}`)
+  const label = [crew.name, `crew of ${crew.size}`, here ? `${here} here` : null, crew.bio, ...hashtags, crew.intent, crew.badge ? `Badge: ${ACHIEVEMENT[crew.badge].label}` : null].filter(Boolean).join(', ')
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const slop = (minTarget() - MORE) / 2
 
@@ -117,8 +118,9 @@ export function CrewCard({
             >
               {crew.name}
             </Text>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
-              {here ? `Crew of ${crew.size} · ${here} here now` : `Crew of ${crew.size}`}
+            {/* The hashtags ride the count's line: one line, cut at the end (board crews/tags/01 · Crew card), so five never wrap the card. */}
+            <Text numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
+              {[`Crew of ${crew.size}`, here ? `${here} here now` : null, ...hashtags].filter(Boolean).join(' · ')}
             </Text>
             {crew.badge ? (
               <View style={styles.badge}>
@@ -132,12 +134,8 @@ export function CrewCard({
             ) : null}
           </View>
         </View>
-        {crew.tags.length || crew.intent ? (
+        {crew.intent ? (
           <View style={styles.meta}>
-            {/* Flow 10 `tagChips`: the outline chip (A31). */}
-            {crew.tags.map((t) => (
-              <Chip key={t} label={t} variant="outline" />
-            ))}
             {crew.intent ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>{crew.intent}</Text> : null}
           </View>
         ) : null}

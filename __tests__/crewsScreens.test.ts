@@ -39,6 +39,8 @@ import {
   sideShape,
   stepLine,
   textFieldOf,
+  editOf,
+  crewPatch,
 } from '../lib/crewsScreens'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -131,8 +133,14 @@ describe('making a crew', () => {
       ...over,
     })
     expect(askedYouIn('प्रियंका')).toBe('प्रियंका asked you in')
-    expect(inviteMeta(inv())).toBe('Crew of 4 · Gig goers · Foodies')
+    // Hashtags (board crews/tags/01 · Invite card): an old slug's label with its spaces closed up.
+    expect(inviteMeta(inv())).toBe('Crew of 4 · #Giggoers · #Foodies')
     expect(inviteMeta(inv({ tags: [] }))).toBe('Crew of 4')
+    // The first three, then "+N": one centred line.
+    const five = ['sundayrunclub', 'कैफ़ेहॉपिंग', 'chai🍵', 'dosaafter', 'latenight'].map((t) => ({ slug: t, label: t }))
+    expect(inviteMeta(inv({ size: 25, tags: five }))).toBe('Crew of 25 · #sundayrunclub · #कैफ़ेहॉपिंग · #chai🍵 · +2')
+    // Control: three exactly is all three, no "+0".
+    expect(inviteMeta(inv({ tags: five.slice(0, 3) }))).toBe('Crew of 4 · #sundayrunclub · #कैफ़ेहॉपिंग · #chai🍵')
     expect(inviteNote(inv(), now)).toBe('Open for 13 more days · Priya isn’t told if you say not now')
     // Part of a day left is a day: never "0 more days".
     expect(inviteNote(inv({ expiresAt: new Date(now + 2 * 60 * 60 * 1000).toISOString() }), now)).toBe('Open for 1 more day · Priya isn’t told if you say not now')
@@ -175,6 +183,12 @@ describe('making a crew', () => {
     // Contact details are about whichever field held them: without a field it is the form's, not the bio's.
     expect(textFieldOf('A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.')).toBeNull()
     expect(textFieldOf('You can own up to 3 crews at a time.')).toBeNull()
+    // Tags (admin #981): moderation names `tags`, a validation error `tags.0`; the sentence alone says "a crew’s tag".
+    expect(textFieldOf('This can’t be a crew’s tag.')).toBe('tags')
+    expect(textFieldOf('Anything', 'tags')).toBe('tags')
+    expect(textFieldOf('A tag is 1–24 letters, numbers, _ or emoji — no links, @ or contact details', 'tags.2')).toBe('tags')
+    // Control: a field the form has no place for is not filed under one.
+    expect(textFieldOf('Anything', 'tagsx')).toBeNull()
   })
 })
 
@@ -364,5 +378,32 @@ describe('the crew page’s bar', () => {
     expect(crewBarState(CREW_HEAD_HEIGHT)).toBe('scrolled')
     expect(crewBarState(CREW_HEAD_HEIGHT + 1)).toBe('condensed')
     expect(crewBarState(-40)).toBe('rest')
+  })
+})
+
+describe('Edit crew’s tags (free hashtags)', () => {
+  const crew = {
+    name: 'Nebula',
+    bio: null,
+    intent: ['friendship'],
+    tags: [{ slug: 'quiz-team', label: 'Quiz team' }, { slug: 'sundayrunclub', label: 'SundayRunClub' }],
+    openToSolo: false,
+  } as never
+
+  it('starts from the tags as drawn, and an untouched set is not sent', () => {
+    const edit = editOf(crew)
+    expect(edit.tags).toEqual(['Quizteam', 'SundayRunClub'])
+    expect(crewPatch(crew, edit)).toBeNull()
+  })
+
+  it('a removed or added tag sends the whole set, as typed', () => {
+    const edit = editOf(crew)
+    expect(crewPatch(crew, { ...edit, tags: ['SundayRunClub'] })).toEqual({ tags: ['SundayRunClub'] })
+    expect(crewPatch(crew, { ...edit, tags: [...edit.tags, 'chai🍵'] })).toEqual({ tags: ['Quizteam', 'SundayRunClub', 'chai🍵'] })
+  })
+
+  it('a reorder alone is not a change', () => {
+    const edit = editOf(crew)
+    expect(crewPatch(crew, { ...edit, tags: [...edit.tags].reverse() })).toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { toggleTag, type Crew } from '../../lib/crews'
+import type { Crew } from '../../lib/crews'
 import {
   bioFits,
   crewPatch,
@@ -9,8 +9,10 @@ import {
   intentOf,
   nameError,
   type CrewEdit,
+  type CrewTextField,
 } from '../../lib/crewsScreens'
 import type { CrewPatch } from '../../lib/crewsApi'
+import { useTagIdeas } from '../../lib/useTagIdeas'
 import { Sheet } from '../ds/Sheet'
 import { NameStep } from './MakeSteps'
 
@@ -36,12 +38,13 @@ export function EditCrewSheet({
   crew: Crew
   saving: boolean
   /** The server's refusal of the last Save, filed under a field. */
-  serverError: { field: 'name' | 'bio'; text: string } | null
+  serverError: { field: CrewTextField; text: string } | null
   onSave: (patch: CrewPatch) => void
   onClose: () => void
 }) {
   // The form starts as the crew is each time the sheet opens (the owner keeps this sheet mounted).
   const [edit, setEdit] = useState<CrewEdit>(() => editOf(crew))
+  const tagIdeas = useTagIdeas(visible)
   const [errors, setErrors] = useState<{ name?: string; bio?: string }>({})
   const [stuck, setStuck] = useState(false)
   /** The server's refusal this form has since been edited past: it said what was wrong with what was there. */
@@ -112,7 +115,9 @@ export function EditCrewSheet({
         choice={edit.choice}
         onChoice={(choice) => edited((e) => ({ ...e, choice }))}
         tags={edit.tags}
-        onTag={(slug) => edited((e) => ({ ...e, tags: toggleTag(e.tags, slug) }))}
+        onTags={(tags) => edited((e) => ({ ...e, tags }))}
+        tagIdeas={tagIdeas}
+        tagsError={server?.field === 'tags' ? server.text : undefined}
         openToSolo={edit.openToSolo}
         onOpenToSolo={(openToSolo) => edited((e) => ({ ...e, openToSolo }))}
         emblemSeed={crew.emblemSeed}

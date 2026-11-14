@@ -32,7 +32,7 @@ import {
   type CrewReportReason,
 } from '../../lib/crews'
 import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
-import { crewBarState, leaveSheet, removeSheet, textFieldOf } from '../../lib/crewsScreens'
+import { crewBarState, leaveSheet, removeSheet, textFieldOf, type CrewTextField } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
@@ -91,7 +91,7 @@ function CrewScreenContent() {
   const friendList = useFriendsList()
   const [inviting, setInviting] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [editError, setEditError] = useState<{ field: 'name' | 'bio'; text: string } | null>(null)
+  const [editError, setEditError] = useState<{ field: CrewTextField; text: string } | null>(null)
 
   const crew = load.kind === 'ready' ? load.crew : null
   // The page fades in over the skeleton only if a skeleton was drawn (a load under 300 ms just shows the page).
@@ -185,7 +185,7 @@ function CrewScreenContent() {
     setBusy(null)
     if (!result.success || !result.data) {
       const text = crewMessage(result, 'crew', 'Couldn’t save that. Try again.')
-      const field = textFieldOf(text, result.field)
+      const field = textFieldOf(text, result.field ?? result.errors?.find((e) => e.field)?.field)
       if (field) setEditError({ field, text })
       else showToast(text, 'error', { haptic: 'error' })
       return
