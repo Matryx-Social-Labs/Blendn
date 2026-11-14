@@ -230,3 +230,32 @@ describe('a link to a Lobby post (SCRUM-1026, 6/6)', () => {
     expect(nativeIntentPath(`https://evil.example/board/${ID}/${POST_ID}`)).toBe('/')
   })
 })
+
+/*
+ * SCRUM-1034: a link to the event preferences lost its `pseudonym` and `askIntent`, so the anonymous card read "A made-up
+ * name" and the first-door intent question could not be asked by link. The same allow-list the room link uses keeps them,
+ * each checked: a pseudonym only in the server's "Adjective Noun" shape, `askIntent` only as `1`, nothing else.
+ */
+describe('a link to the event preferences keeps its pseudonym and intent question (SCRUM-1034)', () => {
+  it('keeps a pseudonym in the server’s shape and askIntent=1, from the scheme, the dev client and a bare path', () => {
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?pseudonym=Lunar%20Fox&askIntent=1`)).toBe(
+      `/event-preferences/${ID}?pseudonym=Lunar%20Fox&askIntent=1`
+    )
+    expect(nativeIntentPath(`exp+blendn://event-preferences/${ID}?pseudonym=Lunar+Fox+12`)).toBe(`/event-preferences/${ID}?pseudonym=Lunar%20Fox%2012`)
+    expect(nativeIntentPath(`/event-preferences/${ID}?askIntent=1`)).toBe(`/event-preferences/${ID}?askIntent=1`)
+  })
+
+  it('drops a pseudonym that is any other words, askIntent other than 1, revealed, and every other param', () => {
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?pseudonym=Pay%20me%20at%20evil.example&askIntent=yes`)).toBe(`/event-preferences/${ID}`)
+    // `revealed` is not a link's to set: it would open the cards on Named.
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?revealed=1&draft=x&pseudonym=Lunar%20Fox`)).toBe(`/event-preferences/${ID}?pseudonym=Lunar%20Fox`)
+    expect(nativeIntentPath(`blendn://event-preferences/a%2Fb?askIntent=1`)).toBe('/event-preferences/a%2Fb')
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}/more?askIntent=1`)).toBe(`/event-preferences/${ID}/more`)
+    // Control: a chat's params are the chat's only.
+    expect(nativeIntentPath(`blendn://chat/abc?askIntent=1&pseudonym=Lunar%20Fox`)).toBe('/chat/abc')
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?eventId=${ID}&kind=crew`)).toBe(`/event-preferences/${ID}`)
+    // A key on every object's prototype is not on the list (`constructor` passed the old lookup).
+    expect(nativeIntentPath('blendn://chat/abc?constructor=x&toString=y')).toBe('/chat/abc')
+    expect(nativeIntentPath(`blendn://event-preferences/${ID}?constructor=x`)).toBe(`/event-preferences/${ID}`)
+  })
+})
