@@ -178,7 +178,7 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     // The line about the crew is not on the board's Make: it is written on the crew page (Edit crew), as before.
     expect(screen.queryByTestId('make-bio-input')).toBeNull()
     expect(screen.getByText('Room for one more')).toBeTruthy()
-    expect(screen.getByText('Solo people who opt in can find you.')).toBeTruthy()
+    expect(screen.getByText('Solo people who opt in can find you. Crews of 6 or fewer.')).toBeTruthy()
     expect(screen.getByText(CONSENT_LINE)).toBeTruthy()
     expect(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
     // The button names the crew and the count asked: tapping it is the agreement.

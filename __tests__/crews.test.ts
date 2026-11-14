@@ -287,7 +287,7 @@ describe('the Crews view: paging and liking', () => {
     expect(nextCrewOffset(0, [])).toBe(0)
   })
 
-  it('only a crew with "Room for one more" is offered a like of a person, at any size up to the cap (no 6)', () => {
+  it('only a crew with "Room for one more" and 6 or fewer is offered a like of a person (a kept safety rule, owner 2026-11-14)', () => {
     const here = [
       { crewId: 'open6', name: 'Open six', presentCount: 2 },
       { crewId: 'closed', name: 'Closed', presentCount: 2 },
@@ -297,9 +297,9 @@ describe('the Crews view: paging and liking', () => {
     const mine = [
       { crewId: 'open6', openToSolo: true, size: 6 },
       { crewId: 'closed', openToSolo: false, size: 2 },
-      { crewId: 'big', openToSolo: true, size: 25 },
+      { crewId: 'big', openToSolo: true, size: 7 },
     ]
-    expect(crewsThatMayLikePeople(here, mine).map((c) => c.crewId)).toEqual(['open6', 'big'])
+    expect(crewsThatMayLikePeople(here, mine).map((c) => c.crewId)).toEqual(['open6'])
     expect(crewsThatMayLikePeople(here, [])).toEqual([])
   })
 
