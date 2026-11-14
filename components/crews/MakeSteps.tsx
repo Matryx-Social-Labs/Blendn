@@ -315,8 +315,6 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
 
 /** The emblem beside the name on Make's first step (board 02 A). */
 const MAKE_EMBLEM = 56
-/** Tags drawn before "+6 more" on the vibe step. */
-const TAGS_SHOWN = 4
 
 export type NameAndFriendsStepProps = {
   name: string
@@ -403,9 +401,6 @@ export function VibeStep(p: VibeStepProps) {
         max={CREW_MAX_TAGS}
         capHint={`Up to ${CREW_MAX_TAGS}`}
         onToggle={p.onTag}
-        // The board folds the ten behind "More": four, any pick beyond them, then "+6 more".
-        foldAfter={TAGS_SHOWN}
-        foldNoun="tags"
         testID="make-tags"
       />
       <View style={[styles.block, styles.blockRow]}>
