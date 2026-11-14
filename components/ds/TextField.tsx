@@ -208,7 +208,7 @@ export function TextField({
       {/* The whole capsule is the target: a tap on its padding focuses the text. */}
       <Pressable
         testID={testID && `${testID}-box`}
-        accessible={false}
+        accessible={false} importantForAccessibility="no"
         onPress={() => input.current?.focus()}
         disabled={disabled}
         style={[styles.box, secure && { paddingRight: eye + SPACE.sm }]}
@@ -327,7 +327,7 @@ export function TextArea({
   return (
     <View testID={testID} style={[styles.field, disabled && { opacity: OPACITY.disabled }]}>
       {label || counter ? <FieldHeader label={label} counter={counter} testID={testID && `${testID}-label-row`} /> : null}
-      <Pressable testID={testID && `${testID}-box`} accessible={false} onPress={() => input.current?.focus()} disabled={disabled} style={[styles.area, { minHeight }]}>
+      <Pressable testID={testID && `${testID}-box`} accessible={false} importantForAccessibility="no" onPress={() => input.current?.focus()} disabled={disabled} style={[styles.area, { minHeight }]}>
         <TextInput
           {...rest}
           ref={joinRefs(input, inputRef)}
