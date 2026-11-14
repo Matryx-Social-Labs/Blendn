@@ -544,7 +544,7 @@ describe('ending the crew', () => {
     crews.leave.mockResolvedValue({ success: true, data: { dissolved: true } })
     const doors = await ownerDoors({ size: 2, members: [member('me', 'Sam', 'owner'), member('rh_priya', 'Priya')] })
     expect(doors.actions.map((a) => a.label)).toEqual(['Leave and close the crew', 'End the crew for everyone', 'Cancel'])
-    expect(endConfirm(doors).message).toContain('for all 2 of you')
+    expect(endConfirm(doors).message).toContain('for both of you')
     expect(await run(doors, 'Leave and close the crew')).toEqual({ ok: true, toast: 'Nebula has closed' })
   })
 

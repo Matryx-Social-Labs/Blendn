@@ -262,6 +262,9 @@ describe('leaving and removing', () => {
         'The crew and its chat close for all 4 of you, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.',
       action: 'End Nebula',
     })
+    // Driven on 62d563a0: "for all 2 of you" read badly.
+    expect(endSheet({ ...owned, size: 2 }).message).toMatch(/^The crew and its chat close for both of you, /)
+    expect(endSheet({ ...owned, size: 1 }).message).toMatch(/^The crew and its chat close for you, /)
   })
 
   it('a member’s words are unchanged', () => {

@@ -270,9 +270,10 @@ export function ownerSheet(crew: Pick<Crew, 'name' | 'size' | 'members'>): { tit
 
 /** Crews 5A's confirm: exactly what `DELETE /crews/:crewId` ends (docs/api/API.md → End the crew), and that nobody is pushed. */
 export function endSheet(crew: Pick<Crew, 'name' | 'size'>): { title: string; message: string; action: string } {
+  const everyone = crew.size <= 1 ? 'you' : crew.size === 2 ? 'both of you' : `all ${crew.size} of you`
   return {
     title: `End ${crew.name}?`,
-    message: `The crew and its chat close for all ${crew.size} of you, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.`,
+    message: `The crew and its chat close for ${everyone}, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.`,
     action: `End ${crew.name}`,
   }
 }
