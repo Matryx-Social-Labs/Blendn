@@ -124,7 +124,7 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
             testID="room-info-people"
             leading={<Facepile testID="room-info-pile" faces={faces} max={3} total={3} text="" ring={COLOR.surface} accessibilityLabel="" />}
             title="In the room"
-            hint={count ? <Text style={styles.mono}>{count}</Text> : null}
+            hint={count ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={styles.mono}>{count}</Text> : null}
             hintTail={count ? ' here now' : undefined}
             label={count ? `In the room, ${count} here now, See all` : 'In the room, See all'}
             trail={
