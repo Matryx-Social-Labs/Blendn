@@ -142,8 +142,12 @@ describe('the page', () => {
     expect(screen.queryByText(/Someone you’ve blocked/)).toBeNull()
   })
 
-  it('a full crew cannot ask anyone else in', async () => {
-    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 12 }) })
+  it('a full crew cannot ask anyone else in: 25 with no seatsLeft (an older server), or the server’s seatsLeft 0 at its own 12', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 25 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.queryByLabelText('Invite friends')).toBeNull()
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 12, seatsLeft: 0 }) })
     await render(<CrewScreen />)
     await waitFor(() => screen.getByText('Nebula'))
     expect(screen.queryByLabelText('Invite friends')).toBeNull()
