@@ -19,27 +19,56 @@
 
 /** The server's `CREW` constants (blendn-admin lib/constants.ts): crews of up to 25 since admin #980 (owner 2026-11-14). */
 import { parseBadges } from './profileBadges'
-import { toggleLanguage, type Badge, type Overlap } from './aboutYou'
+import type { Badge, Overlap } from './aboutYou'
 
 export const CREW_MAX_MEMBERS = 25
 export const CREW_NAME_MIN = 2
 export const CREW_NAME_MAX = 32
 export const CREW_BIO_MAX = 140
-export const CREW_MAX_TAGS = 3
+/** A crew's own hashtags (owner pick A, admin #981): up to 5, each 1–24 characters after the #, an emoji one. */
+export const CREW_MAX_TAGS = 5
+export const CREW_TAG_MAX = 24
 
-/** The curated tags, as `CREW_TAGS` on the server. Never free text. */
-export const CREW_TAGS: readonly { slug: string; label: string }[] = [
-  { slug: 'quiz-team', label: 'Quiz team' },
-  { slug: 'run-club', label: 'Run club' },
-  { slug: 'techno-heads', label: 'Techno heads' },
-  { slug: 'office-gang', label: 'Office gang' },
-  { slug: 'birthday-crew', label: 'Birthday crew' },
-  { slug: 'foodies', label: 'Foodies' },
-  { slug: 'board-gamers', label: 'Board gamers' },
-  { slug: 'gig-goers', label: 'Gig goers' },
-  { slug: 'book-club', label: 'Book club' },
-  { slug: 'dance-floor', label: 'Dance floor' },
-]
+/**
+ * What a tag may be made of, as the server's `TAG_CHARS` (blendn-admin lib/crews/crews.ts): letters and digits in any
+ * script with their marks (Devanagari needs them), `_`, and emoji with their modifiers, joiners and flag pairs. No `.`
+ * `/` `:` `@` `+` `-`, so no link, handle or phone number; the server's moderation reads the rest.
+ */
+const TAG_CHARS = /^[\p{L}\p{M}\p{N}_\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\uFE0F\u200D\u20E3]+$/u
+/** The server's own sentence for a tag outside the rule, so the local refusal and its 400 read the same. */
+export const TAG_RULE = `A tag is 1–${CREW_TAG_MAX} letters, numbers, _ or emoji — no links, @ or contact details`
+export const TAG_CAP = `Up to ${CREW_MAX_TAGS} tags`
+
+/** A tag as the server will keep it: trimmed, the leading #s stripped, spaces closed up ("# late night" → latenight). */
+export const normaliseTag = (typed: string): string => typed.trim().replace(/^#+/, '').replace(/\s+/g, '')
+
+/** A tag as drawn, without its #: the label with spaces closed up, so an old slug ("Quiz team") reads as a hashtag. */
+export const tagText = (tag: CrewTag): string => tag.label.replace(/\s+/g, '')
+
+/** What typing into the tags field left: the tags, what stays in the field, and why it stayed. */
+export type TagEntry = { tags: string[]; draft: string; problem?: string }
+
+/**
+ * Adds what was typed: a comma splits it, each part is normalised, a second spelling of a tag you have is dropped (the
+ * server dedupes ignoring case and keeps the first), and the cap holds. A part the rule refuses, or one past the cap,
+ * stays in the field with the reason, so nothing typed is lost.
+ */
+export function addTags(tags: readonly string[], typed: string): TagEntry {
+  const next = [...tags]
+  const kept: string[] = []
+  let problem: string | undefined
+  for (const part of typed.split(',')) {
+    const tag = normaliseTag(part)
+    if (!tag) continue
+    if (next.some((t) => t.toLowerCase() === tag.toLowerCase())) continue
+    const refused = characters(tag) > CREW_TAG_MAX || !TAG_CHARS.test(tag) ? TAG_RULE : next.length >= CREW_MAX_TAGS ? TAG_CAP : undefined
+    if (refused) {
+      problem ??= refused
+      kept.push(part.trim())
+    } else next.push(tag)
+  }
+  return { tags: next, draft: kept.join(', '), ...(problem ? { problem } : {}) }
+}
 
 /** `POST /crews/:crewId/report` takes exactly these. */
 export const CREW_REPORT_REASONS: readonly { value: CrewReportReason; label: string }[] = [
@@ -521,7 +550,7 @@ export function createCrewBody(form: CrewForm, consent: ConsentState): CreateCre
     return { problem: `A crew name is ${CREW_NAME_MIN}–${CREW_NAME_MAX} characters.` }
   }
   if (characters(bio) > CREW_BIO_MAX) return { problem: `A crew bio is at most ${CREW_BIO_MAX} characters.` }
-  if (form.tags.length > CREW_MAX_TAGS) return { problem: `Pick up to ${CREW_MAX_TAGS} tags.` }
+  if (form.tags.length > CREW_MAX_TAGS) return { problem: `${TAG_CAP}.` }
   // A crew is friends who go out together: one person with nobody asked is not one.
   if (form.inviteUserIds.length === 0) return { problem: 'Pick at least one friend to ask.' }
   if (form.inviteUserIds.length > CREW_MAX_MEMBERS - 1) {
@@ -539,11 +568,6 @@ export function createCrewBody(form: CrewForm, consent: ConsentState): CreateCre
     ...(form.emblemSeed && EMBLEM_SEED.test(form.emblemSeed) ? { emblemSeed: form.emblemSeed } : {}),
     ...agreed,
   }
-}
-
-/** Toggle a tag, holding the cap: a fourth tap does nothing rather than drop the first. */
-export function toggleTag(tags: readonly string[], slug: string): string[] {
-  return toggleLanguage(tags, slug, CREW_MAX_TAGS)
 }
 
 /* -------------------------------------------------------------------------- */

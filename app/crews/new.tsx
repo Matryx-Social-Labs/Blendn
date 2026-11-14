@@ -8,7 +8,8 @@ import { stepIn, stepOut, type StepDir } from '../../components/crews/stepMotion
 import { MadeBeat } from '../../components/crews/MadeBeat'
 import { NameAndFriendsStep, VibeStep } from '../../components/crews/MakeSteps'
 import { Sheet, type SheetAction } from '../../components/ds/Sheet'
-import { CREW_MAX_MEMBERS, createCrewBody, crewMessage, newEmblemSeed, toggleTag } from '../../lib/crews'
+import { CREW_MAX_MEMBERS, createCrewBody, crewMessage, newEmblemSeed } from '../../lib/crews'
+import { useTagIdeas } from '../../lib/useTagIdeas'
 import { crewsApi } from '../../lib/crewsApi'
 import {
   cleanName,
@@ -59,7 +60,7 @@ type Made = { crewId: string; chatGroupId: string; invited: number; /** Null unt
  * Make a crew (board 02 A): a sheet over Crews in two steps, and then the crew made.
  *
  * Step 1 · Name and friends: the emblem live beside the name (Shuffle for another look), and the friends to ask, windowed,
- * because they are the point of a crew. Step 2 · Your crew's vibe, all optional: here for, up to 3 tags, the line of at most
+ * because they are the point of a crew. Step 2 · Your crew's vibe, all optional: here for, up to 5 of its own hashtags (ideas to tap), the line of at most
  * 140, Room for one more, and the consent sentence. Its button, "Make Nebula · ask 3 friends", is the agreement (the server
  * refuses a crew without it), and nothing is sent before. The server's own sentences come back where they belong: a name it
  * refuses under the name on step 1, a line under the line on step 2, a cap or the 18+ gate in a sheet. System back, the scrim
@@ -83,7 +84,9 @@ function NewCrewScreenContent() {
   const [openToSolo, setOpenToSolo] = useState(kept.openToSolo ?? false)
   const [keepAnonymous, setKeepAnonymous] = useState(kept.keepAnonymous ?? false)
   const [picked, setPicked] = useState<string[]>(kept.picked ?? [])
-  const [errors, setErrors] = useState<{ name?: string }>({})
+  const [errors, setErrors] = useState<{ name?: string; tags?: string }>({})
+  // Read now, so the ideas are there when step 2 opens rather than arriving under the field.
+  const tagIdeas = useTagIdeas()
   const [refusal, setRefusal] = useState<CrewRefusal | null>(null)
   const [stuck, setStuck] = useState(false)
   const [sending, setSending] = useState(false)
@@ -170,12 +173,15 @@ function NewCrewScreenContent() {
       setSending(false)
       // The server's sentence names what it found (a phone number in the bio, the daily cap).
       const text = crewMessage(result, 'create', 'Couldn’t make the crew. Try again.')
-      const field = textFieldOf(text, result.field)
-      // The name is on step 1 and goes back to stand under it; anything else (a draft's line, a cap, the gate) is a sheet.
+      const field = textFieldOf(text, result.field ?? result.errors?.find((e) => e.field)?.field)
+      // The name is on step 1 and goes back to stand under it; a tag stands under the tags here; anything else (a cap,
+      // the gate) is a sheet.
       if (field === 'name') {
         setErrors({ name: text })
         dir.set(-1)
         setStep(1)
+      } else if (field === 'tags') {
+        setErrors({ tags: text })
       } else {
         setRefusal({ text, errorCode: result.errorCode })
       }
@@ -259,7 +265,12 @@ function NewCrewScreenContent() {
                   choice={choice}
                   onChoice={setChoice}
                   tags={tags}
-                  onTag={(slug) => setTags((t) => toggleTag(t, slug))}
+                  onTags={(next) => {
+                    setTags(next)
+                    setErrors((e) => ({ ...e, tags: undefined }))
+                  }}
+                  tagIdeas={tagIdeas}
+                  tagsError={errors.tags}
                   openToSolo={openToSolo}
                   onOpenToSolo={setOpenToSolo}
                   keepAnonymous={keepAnonymous}

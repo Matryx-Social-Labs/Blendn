@@ -23,7 +23,7 @@ const NEBULA = {
   size: 4,
   here: 2,
   bio: 'Late sets, early trains. Dance floor first, questions later.',
-  tags: ['Dance floor', 'Techno heads'],
+  tags: ['Dancefloor', 'Technoheads'],
   intent: 'Friendship',
 }
 
@@ -37,9 +37,18 @@ beforeEach(() => {
 describe('<CrewCard>', () => {
   it('reads as one element, counts never people, then Like', async () => {
     await render(<CrewCard crew={NEBULA} like={{ onPress: jest.fn() }} onPress={jest.fn()} testID="k" />)
-    expect(screen.getByLabelText('Nebula, crew of 4, 2 here, Late sets, early trains. Dance floor first, questions later., Dance floor, Techno heads, Friendship')).toBeTruthy()
-    expect(screen.getByText('Crew of 4 · 2 here now')).toBeTruthy()
+    expect(screen.getByLabelText('Nebula, crew of 4, 2 here, Late sets, early trains. Dance floor first, questions later., #Dancefloor, #Technoheads, Friendship')).toBeTruthy()
+    expect(screen.getByText('Crew of 4 · 2 here now · #Dancefloor · #Technoheads')).toBeTruthy()
     expect(screen.getByLabelText('2 of 4 here')).toBeTruthy()
+  })
+
+  it('the hashtags ride the count’s line: one line, cut at the end, never a wrap of chips (board crews/tags/01 · Crew card)', async () => {
+    const five = ['sundayrunclub', 'कैफ़ेहॉपिंग', 'chai🍵', 'averyveryverylongtag24ch', 'dosaafter']
+    await render(<CrewCard crew={{ ...NEBULA, size: 25, here: 0, tags: five }} testID="k" />)
+    const line = screen.getByText('Crew of 25 · #sundayrunclub · #कैफ़ेहॉपिंग · #chai🍵 · #averyveryverylongtag24ch · #dosaafter')
+    expect(line.props).toMatchObject({ numberOfLines: 1, ellipsizeMode: 'tail' })
+    // Control: no tag is drawn a second time as a chip.
+    expect(screen.queryAllByText('#sundayrunclub')).toHaveLength(0)
   })
 
   it('Like plays H.like, never H.primary; “Like for Orbit” when liking as your crew', async () => {
@@ -70,7 +79,7 @@ describe('<CrewCard>', () => {
 
   it('no one here: no count of who is here', async () => {
     await render(<CrewCard crew={{ ...NEBULA, here: 0 }} testID="k" />)
-    expect(screen.getByText('Crew of 4')).toBeTruthy()
+    expect(screen.getByText('Crew of 4 · #Dancefloor · #Technoheads')).toBeTruthy()
   })
 
   it('full is radius 32; compact (the row form in a list) is 24', async () => {

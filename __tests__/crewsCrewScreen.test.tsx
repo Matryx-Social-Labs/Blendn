@@ -21,7 +21,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: { getFriends: jest.fn(), muteChatGroup: jest.fn(), unmuteChatGroup: jest.fn() },
 }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { crew: jest.fn(), update: jest.fn(), invite: jest.fn(), leave: jest.fn(), report: jest.fn(), setKeepMeAnonymous: jest.fn() },
+  crewsApi: { crew: jest.fn(), myCrews: jest.fn(), update: jest.fn(), invite: jest.fn(), leave: jest.fn(), report: jest.fn(), setKeepMeAnonymous: jest.fn() },
 }))
 jest.mock('../lib/roomRow', () => ({ useRoomRow: () => null }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
@@ -79,7 +79,7 @@ describe('the page', () => {
     await render(<CrewScreen />)
     await waitFor(() => screen.getByText('Nebula'))
     expect(screen.getByText('Late sets, early trains.')).toBeTruthy()
-    expect(screen.getByText('Dance floor')).toBeTruthy()
+    expect(screen.getByText('#Dancefloor')).toBeTruthy()
     expect(screen.getByText('Friendship')).toBeTruthy()
     expect(screen.getByLabelText('Members, 3')).toBeTruthy()
     expect(screen.getByLabelText('You')).toBeTruthy()
@@ -527,6 +527,40 @@ describe('editing', () => {
     await waitFor(() => screen.getByText('This can’t be a crew’s name.'))
     await fireEvent.changeText(screen.getByTestId('make-name-input'), 'Better name')
     expect(screen.queryByText('This can’t be a crew’s name.')).toBeNull()
+  })
+
+  it('tags use Make’s input: yours removable, your own added, the whole set sent as typed', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
+    crews.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [], tagIdeas: ['runclub'] } } as never)
+    crews.update.mockResolvedValue({ success: true, data: crew('owner') })
+    await openEdit()
+    // An old slug reads as a hashtag with its spaces closed up.
+    expect(screen.getByLabelText('#Dancefloor, remove tag')).toBeTruthy()
+    await waitFor(() => screen.getByLabelText('#runclub'))
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'late night')
+    await fireEvent(screen.getByTestId('make-tag-input'), 'submitEditing')
+    await fireEvent.press(screen.getByLabelText('Save'))
+    await waitFor(() => expect(crews.update).toHaveBeenCalledWith('c2', { tags: ['Dancefloor', 'latenight'] }))
+  })
+
+  it('a tag the server will not take comes back under the tags, not as a toast, and goes once the tags change', async () => {
+    const said = 'This can’t be a crew’s tag.'
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
+    crews.update.mockResolvedValue({ success: false, error: said, errorCode: 'VALIDATION_FAILED', field: 'tags', errors: [{ field: 'tags', message: said }] } as never)
+    await openEdit()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'rude,')
+    await fireEvent.press(screen.getByLabelText('Save'))
+    await waitFor(() => screen.getByText(said))
+    expect(mockToast).not.toHaveBeenCalled()
+    await fireEvent.press(screen.getByLabelText('#rude, remove tag'))
+    expect(screen.queryByText(said)).toBeNull()
+  })
+
+  it('the stranger’s-card preview counts the crew as it is, not one (drive 2026-11-14: "Crew of 1" on a crew of 13)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 13 }) })
+    await openEdit()
+    expect(screen.getByText('Crew of 13 · #Dancefloor')).toBeTruthy()
+    expect(screen.queryByText(/^Crew of 1 ·/)).toBeNull()
   })
 
   it('a refusal with no field is the form’s: a toast, nothing under the bio', async () => {

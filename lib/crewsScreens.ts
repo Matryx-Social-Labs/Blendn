@@ -13,6 +13,7 @@ import {
   CREW_BIO_MAX,
   CREW_NAME_MAX,
   CREW_NAME_MIN,
+  tagText,
   type Blend,
   type BlendPerson,
   type BlendSide,
@@ -72,9 +73,15 @@ export function inviteSub(row: InviteRow, now: number = Date.now()): string {
 /** "Priya asked you in": the pill over the invite card (board 03 A). */
 export const askedYouIn = (invitedBy: string): string => `${invitedBy} asked you in`
 
-/** "Crew of 4 · Gig goers · Foodies": the crew in one line under its name. */
-export const inviteMeta = (invite: Pick<CrewInvite, 'size' | 'tags'>): string =>
-  [`Crew of ${invite.size}`, ...invite.tags.map((t) => t.label)].join(' · ')
+/** The invite's one centred line holds the first three tags, then "+N" (board crews/tags/01 · Invite card). */
+const INVITE_TAGS = 3
+
+/** "Crew of 25 · #sundayrunclub · #कैफ़ेहॉपिंग · #chai🍵 · +2": the crew in one line under its name. */
+export const inviteMeta = (invite: Pick<CrewInvite, 'size' | 'tags'>): string => {
+  const shown = invite.tags.slice(0, INVITE_TAGS).map((t) => `#${tagText(t)}`)
+  const more = invite.tags.length - shown.length
+  return [`Crew of ${invite.size}`, ...shown, ...(more > 0 ? [`+${more}`] : [])].join(' · ')
+}
 
 /**
  * "Open for 13 more days · Priya isn't told if you say not now", under Not now. The days come from the server's `expiresAt`
@@ -182,15 +189,21 @@ export const stepNote = (step: MakeStep) => ({
 export const madeLine = (invited: number): string =>
   invited > 0 ? `Your crew. ${invited} invited; it starts when someone joins.` : 'Your crew.'
 
+/** The form fields a refused text can stand under. */
+export type CrewTextField = 'name' | 'bio' | 'tags'
+
 /**
  * Which field a refused text is about. The server names it (`field`) when it can; failing that, only a
  * sentence that says "a crew's name" or "a crew's bio" is read. Anything else (the contact-details
  * sentence is about whichever field held the number) is the form's, not a guess at a field.
  */
-export function textFieldOf(message: string, field?: unknown): 'name' | 'bio' | null {
-  if (field === 'name' || field === 'bio') return field
+export function textFieldOf(message: string, field?: unknown): CrewTextField | null {
+  if (field === 'name' || field === 'bio' || field === 'tags') return field
+  // A validation error names the tag by its place (`tags.2`).
+  if (typeof field === 'string' && field.startsWith('tags.')) return 'tags'
   if (/crew(?:.s)? name/i.test(message)) return 'name'
   if (/crew(?:.s)? bio/i.test(message)) return 'bio'
+  if (/crew(?:.s)? tag/i.test(message)) return 'tags'
   return null
 }
 
@@ -318,7 +331,7 @@ export function editOf(crew: Pick<Crew, 'name' | 'bio' | 'intent' | 'tags' | 'op
     name: crew.name,
     bio: crew.bio ?? '',
     choice: intentChoice(crew.intent),
-    tags: crew.tags.map((t) => t.slug),
+    tags: crew.tags.map(tagText),
     openToSolo: crew.openToSolo,
   }
 }
@@ -340,7 +353,7 @@ export function crewPatch(
   const bio = edit.bio.trim()
   if (bio !== (crew.bio ?? '')) patch.bio = bio || null
   if (edit.choice && edit.choice !== intentChoice(crew.intent)) patch.intent = intentOf(edit.choice)
-  if (!sameSet(edit.tags, crew.tags.map((t) => t.slug))) patch.tags = [...edit.tags]
+  if (!sameSet(edit.tags, crew.tags.map(tagText))) patch.tags = [...edit.tags]
   if (edit.openToSolo !== crew.openToSolo) patch.openToSolo = edit.openToSolo
   return Object.keys(patch).length ? patch : null
 }

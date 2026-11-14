@@ -33,7 +33,7 @@ export const crewsApi = {
    * My crews, and a page of the invites waiting (`invitesPagination`: `{ limit, hasMore, nextCursor, totalCount }`, newest 200 at
    * most). With no `cursor` the first page of 50; `crews` is not paged. A server before the paging sends none: all the invites, no more.
    */
-  myCrews(cursor?: string | null): Promise<ApiResponse<{ crews: Crew[]; invites: CrewInvite[]; invitesPagination?: InvitesPagination }>> {
+  myCrews(cursor?: string | null): Promise<ApiResponse<{ crews: Crew[]; invites: CrewInvite[]; invitesPagination?: InvitesPagination; tagIdeas?: string[] }>> {
     return apiClient.queuedRequest(`/api/mobile/crews?limit=${INVITES_PAGE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
   },
 

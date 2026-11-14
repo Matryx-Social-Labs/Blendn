@@ -3,7 +3,7 @@ import { FlatList, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDi
 import Animated from 'react-native-reanimated'
 
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
-import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_MAX_TAGS, CREW_NAME_MAX, CREW_TAGS, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
+import { CONSENT_LINE, CREW_BIO_MAX, CREW_MAX_MEMBERS, CREW_NAME_MAX, KEEP_ANONYMOUS_LABEL } from '../../lib/crews'
 import { INTENT_CHOICES, type IntentChoice } from '../../lib/crewsScreens'
 import type { Friend } from '../../lib/friends'
 import { OPACITY, tint } from '../../lib/theme'
@@ -19,6 +19,7 @@ import { CONTROL_FONT_CAP, font, minTarget, quickTransition, useBoldText, useInc
 import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
 import { Glyph } from '../ui/Glyph'
+import { TagsInput } from './TagsInput'
 
 /** flow10.js `make`: the line about the crew is a one-liner's height. */
 const BIO_MIN_HEIGHT = 72
@@ -49,14 +50,21 @@ export type NameStepProps = {
   /** null: an intent the picker has no chip for, left as it is (Edit crew). */
   choice: IntentChoice | null
   onChoice: (next: IntentChoice) => void
+  /** The crew's own hashtags, as typed, without the #. */
   tags: readonly string[]
-  onTag: (slug: string) => void
+  onTags: (next: string[]) => void
+  /** `GET /crews` → `tagIdeas`. */
+  tagIdeas: readonly string[]
+  /** The server's refusal of the tags, under the field. */
+  tagsError?: string
   openToSolo: boolean
   onOpenToSolo: (next: boolean) => void
   /** The emblem's seed: Make's own until the crew is made (Shuffle), then the crew's, fixed. */
   emblemSeed: string
   /** Make a crew only: a new look. Absent once the crew exists (Edit crew), as the look is fixed. */
   onShuffle?: () => void
+  /** The crew's size for the preview (Edit crew); a crew being made is you alone. */
+  size?: number
   intentText: string
 }
 
@@ -66,7 +74,6 @@ export function NameStep(p: NameStepProps) {
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const bioInput = useRef<TextInput>(null)
-  const labels = CREW_TAGS.filter((t) => p.tags.includes(t.slug)).map((t) => t.label)
   return (
     <>
       <TextField
@@ -110,16 +117,7 @@ export function NameStep(p: NameStepProps) {
           testID="make-intent"
         />
       </View>
-      <ChipSet
-        label="Tags"
-        items={CREW_TAGS.map((t) => ({ key: t.slug, label: t.label }))}
-        selection="multi"
-        selected={p.tags}
-        max={CREW_MAX_TAGS}
-        capHint={`Up to ${CREW_MAX_TAGS}`}
-        onToggle={p.onTag}
-        testID="make-tags"
-      />
+      <TagsInput tags={p.tags} onTags={p.onTags} ideas={p.tagIdeas} error={p.tagsError} testID="make-tag" />
       <View style={styles.toggleRow}>
         <View style={styles.fill}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
@@ -140,11 +138,11 @@ export function NameStep(p: NameStepProps) {
           crew={{
             name: p.name.trim() || 'Crew name',
             emblemSeed: p.emblemSeed,
-            size: 1,
+            size: p.size ?? 1,
             here: 0,
             bio: p.bio.trim() || 'A line about the crew',
             // No placeholder chip: an outlined "Tags" read as something to tap (D-L17).
-            tags: labels,
+            tags: [...p.tags],
             intent: p.intentText,
           }}
         />
@@ -362,8 +360,13 @@ export function NameAndFriendsStep(p: NameAndFriendsStepProps) {
 export type VibeStepProps = {
   choice: IntentChoice
   onChoice: (next: IntentChoice) => void
+  /** The crew's own hashtags, as typed, without the #. */
   tags: readonly string[]
-  onTag: (slug: string) => void
+  onTags: (next: string[]) => void
+  /** `GET /crews` → `tagIdeas`. */
+  tagIdeas: readonly string[]
+  /** The server's refusal of the tags, under the field. */
+  tagsError?: string
   openToSolo: boolean
   onOpenToSolo: (next: boolean) => void
   keepAnonymous: boolean
@@ -393,16 +396,7 @@ export function VibeStep(p: VibeStepProps) {
           testID="make-intent"
         />
       </View>
-      <ChipSet
-        label="Tags · optional"
-        items={CREW_TAGS.map((t) => ({ key: t.slug, label: t.label }))}
-        selection="multi"
-        selected={p.tags}
-        max={CREW_MAX_TAGS}
-        capHint={`Up to ${CREW_MAX_TAGS}`}
-        onToggle={p.onTag}
-        testID="make-tags"
-      />
+      <TagsInput tags={p.tags} onTags={p.onTags} ideas={p.tagIdeas} error={p.tagsError} testID="make-tag" />
       <View style={[styles.block, styles.blockRow]}>
         <View style={styles.fill}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
