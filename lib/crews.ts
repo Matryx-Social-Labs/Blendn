@@ -215,6 +215,23 @@ export const namesLine = (people: readonly CrewmateIn[]): string =>
     .map((x) => (x.you ? 'You' : x.name))
     .join(', ')
 
+/** A big crew's strip (past `COUNT_TICKS_MAX`) names this many, then "+N" (board crews/tags/02-size-25). */
+const STRIP_NAMES_MAX = 3
+
+/** A big crew's strip names: three, you among them when you're in, then how many more ("प्रियंका, Arjun, You" +9). */
+export function stripNames(people: readonly CrewmateIn[]): { shown: CrewmateIn[]; more: number } {
+  const ordered = inYouLast(people)
+  const you = ordered.filter((x) => x.you)
+  const shown = ordered.length <= STRIP_NAMES_MAX ? ordered : [...ordered.filter((x) => !x.you).slice(0, STRIP_NAMES_MAX - you.length), ...you]
+  return { shown, more: ordered.length - shown.length }
+}
+
+/** The crew page's order (board 02-size-25): you, then the owner, then by who joined first. */
+export function membersInOrder(members: readonly CrewMember[], myId: string): CrewMember[] {
+  const rank = (m: CrewMember) => (m.userId === myId ? 0 : m.role === 'owner' ? 1 : 2)
+  return [...members].sort((a, b) => rank(a) - rank(b) || a.joinedAt.localeCompare(b.joinedAt))
+}
+
 /** The most names "… are going" spells out before "and N others" (the server's crew push does the same). */
 const GOING_NAMES_MAX = 3
 

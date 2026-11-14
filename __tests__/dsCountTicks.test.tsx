@@ -42,6 +42,15 @@ describe('<CountTicks>', () => {
     expect(screen.queryByTestId('t-4', { includeHiddenElements: true })).toBeNull()
   })
 
+  // Crews of 25 (board crews/tags/02-size-25): past 12 a tick would be ~1 pt, so none are drawn; the strip and the crew
+  // card both say the count in words ("12 of 25", "Crew of 25 · 12 here now").
+  it('past 12 draws nothing; at 12 it still draws (the cut)', async () => {
+    await render(<CountTicks size={13} here={4} testID="t" />)
+    expect(screen.queryByTestId('t', { includeHiddenElements: true })).toBeNull()
+    await render(<CountTicks size={12} here={4} testID="t" />)
+    expect(screen.getByTestId('t', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('is one element: “{here} of {size} here”', async () => {
     await render(<CountTicks size={6} here={3} testID="t" />)
     expect(screen.getByLabelText('3 of 6 here')).toBeTruthy()

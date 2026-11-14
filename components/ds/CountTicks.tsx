@@ -10,6 +10,8 @@ import { useIncreaseContrast } from './shared'
 const TICK = { width: SPACE.md, height: SPACE.xs } as const
 /** Six is the usual width; past eight the row keeps eight ticks' width and the ticks narrow. */
 const MOST_AT_FULL_WIDTH = 8
+/** Past this a tick would be ~1 pt wide (a crew can be 25): none are drawn, and the caller's words carry the count (board crews/tags/02-size-25). */
+export const COUNT_TICKS_MAX = 12
 const ROW_WIDTH = MOST_AT_FULL_WIDTH * TICK.width + (MOST_AT_FULL_WIDTH - 1) * SPACE.xs
 /** An empty tick: 22% white, 45% under Increase Contrast (the page). */
 const EMPTY = 0.22
@@ -31,7 +33,7 @@ const FILL = { transition: `background-color ${DURATION.base}ms cubic-bezier(${E
  *
  * One element for a screen reader: "2 of 4 here". No haptic (the arrival's
  * own `H.arrive` belongs to the Room). A tick fills over `base` when someone
- * arrives; under Reduce Motion it swaps.
+ * arrives; under Reduce Motion it swaps. Past `COUNT_TICKS_MAX`, nothing.
  */
 export function CountTicks({ size, here, testID }: { size: number; here: number; testID?: string }) {
   const reduceMotion = useReducedMotion()
@@ -39,6 +41,7 @@ export function CountTicks({ size, here, testID }: { size: number; here: number;
   const filled = Math.max(0, Math.min(here, size))
   const width = tickWidth(size)
   const empty = tint(COLOR.textPrimary, contrast ? EMPTY_CONTRAST : EMPTY)
+  if (size > COUNT_TICKS_MAX) return null
   return (
     <View testID={testID} accessible accessibilityRole="text" accessibilityLabel={`${filled} of ${size} here`} style={styles.row}>
       {Array.from({ length: size }, (_, i) => (
