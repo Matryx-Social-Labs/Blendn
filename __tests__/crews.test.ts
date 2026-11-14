@@ -179,11 +179,11 @@ describe('the create body', () => {
     expect(createCrewBody({ ...form, name: '🔥🔥' }, agreed)).not.toHaveProperty('problem')
   })
 
-  it('holds the bio to 140, the tags to 3 and the invites to 11', () => {
+  it('holds the bio to 140, the tags to 3 and the invites to 24 (a crew of 25)', () => {
     expect(createCrewBody({ ...form, bio: 'b'.repeat(141) }, agreed)).toHaveProperty('problem')
     expect(createCrewBody({ ...form, tags: ['a', 'b', 'c', 'd'] }, agreed)).toHaveProperty('problem')
-    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 12 }, (_, i) => `u${i}`) }, agreed)).toHaveProperty('problem')
-    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 11 }, (_, i) => `u${i}`) }, agreed)).not.toHaveProperty('problem')
+    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 25 }, (_, i) => `u${i}`) }, agreed)).toHaveProperty('problem')
+    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 24 }, (_, i) => `u${i}`) }, agreed)).not.toHaveProperty('problem')
   })
 
   it('a fourth tag does nothing rather than drop the first', () => {
@@ -287,7 +287,7 @@ describe('the Crews view: paging and liking', () => {
     expect(nextCrewOffset(0, [])).toBe(0)
   })
 
-  it('only a crew with "Room for one more" and 6 or fewer is offered a like of a person', () => {
+  it('only a crew with "Room for one more" and 6 or fewer is offered a like of a person (a kept safety rule, owner 2026-11-14)', () => {
     const here = [
       { crewId: 'open6', name: 'Open six', presentCount: 2 },
       { crewId: 'closed', name: 'Closed', presentCount: 2 },

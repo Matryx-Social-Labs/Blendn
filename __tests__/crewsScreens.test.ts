@@ -27,7 +27,11 @@ import {
   leaveSheet,
   leavingClosesCrew,
   madeLine,
-  makeSummary,
+  askedYouIn,
+  crewVerb,
+  inviteMeta,
+  inviteNote,
+  makeLabel,
   nameError,
   refusalTitle,
   removeSheet,
@@ -112,18 +116,52 @@ describe('making a crew', () => {
     expect(intentChoice([])).toBeNull()
   })
 
+  it('writes the invite card the way board 03 A does: who asked, the crew in one line, the days left', () => {
+    const now = Date.parse('2026-11-13T12:00:00Z')
+    const inv = (over: Partial<CrewInvite> = {}): CrewInvite => ({
+      crewId: 'c',
+      name: 'Nebula',
+      bio: null,
+      emblemSeed: 's',
+      tags: [{ slug: 'gig-goers', label: 'Gig goers' }, { slug: 'foodies', label: 'Foodies' }],
+      size: 4,
+      invitedBy: 'Priya',
+      invitedAt: new Date(now - DAY).toISOString(),
+      expiresAt: new Date(now + 13 * DAY).toISOString(),
+      ...over,
+    })
+    expect(askedYouIn('प्रियंका')).toBe('प्रियंका asked you in')
+    expect(inviteMeta(inv())).toBe('Crew of 4 · Gig goers · Foodies')
+    expect(inviteMeta(inv({ tags: [] }))).toBe('Crew of 4')
+    expect(inviteNote(inv(), now)).toBe('Open for 13 more days · Priya isn’t told if you say not now')
+    // Part of a day left is a day: never "0 more days".
+    expect(inviteNote(inv({ expiresAt: new Date(now + 2 * 60 * 60 * 1000).toISOString() }), now)).toBe('Open for 1 more day · Priya isn’t told if you say not now')
+    expect(inviteNote(inv({ expiresAt: new Date(now + 12.5 * DAY).toISOString() }), now)).toMatch(/^Open for 13 more days/)
+    // The server's expiresAt is the clock, not invitedAt + 14 (a shorter TTL is told as it is).
+    expect(inviteNote(inv({ invitedAt: new Date(now - 10 * DAY).toISOString(), expiresAt: new Date(now + 2 * DAY).toISOString() }), now)).toMatch(/^Open for 2 more days/)
+    // An older server sends no expiresAt: 14 days from the invite.
+    expect(inviteNote(inv({ expiresAt: undefined, invitedAt: new Date(now - 4 * DAY).toISOString() }), now)).toMatch(/^Open for 10 more days/)
+    // Past it, or unreadable: no days are claimed.
+    expect(inviteNote(inv({ expiresAt: new Date(now - 1000).toISOString() }), now)).toBe('Priya isn’t told if you say not now')
+    expect(inviteNote(inv({ expiresAt: 'soon', invitedAt: 'never' }), now)).toBe('Priya isn’t told if you say not now')
+  })
+
   it('writes the intent as a line, or nothing', () => {
     expect(intentLine(['friendship', 'dating'])).toBe('Friendship · Dating')
     expect(intentLine([])).toBeUndefined()
   })
 
-  it('writes the step and the summary the way the frames do', () => {
-    expect(stepLine(1)).toBe('1 of 3 · Name and vibe')
-    expect(stepLine(3)).toBe('3 of 3 · Consent')
-    expect(makeSummary({ invited: 3, intent: ['friendship'], tags: ['Dance floor', 'Techno heads'] })).toBe(
-      '3 invited · Friendship · Dance floor, Techno heads'
-    )
-    expect(makeSummary({ invited: 1, intent: [], tags: [] })).toBe('1 invited')
+  it('writes the step and the Make button the way board 02 A does', () => {
+    expect(stepLine(1)).toBe('1 of 2 · Name and friends')
+    expect(stepLine(2)).toBe('2 of 2 · Your crew’s vibe')
+    expect(makeLabel('Nebula', 3)).toBe('Make Nebula · ask 3 friends')
+    expect(makeLabel('Nebula', 1)).toBe('Make Nebula · ask 1 friend')
+    // A long name never pushes "ask 3 friends" off the button: the crew is named "the crew" there.
+    expect(makeLabel('Indiranagar Sunrise Run Club Cre', 3)).toBe('Make the crew · ask 3 friends')
+    // Twelve characters is the last that is named; an emoji is one (the server's char_length).
+    expect(crewVerb('Join', 'Twelve chars')).toBe('Join Twelve chars')
+    expect(crewVerb('Join', 'Thirteen char')).toBe('Join the crew')
+    expect(crewVerb('Join', 'यार टोली')).toBe('Join यार टोली')
     expect(madeLine(3)).toBe('Your crew. 3 invited; it starts when someone joins.')
     expect(madeLine(0)).toBe('Your crew.')
   })

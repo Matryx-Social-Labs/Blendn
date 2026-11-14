@@ -90,6 +90,36 @@ describe('the page', () => {
     expect(screen.getByLabelText('Leave crew')).toBeTruthy()
   })
 
+  // Crews of 25 (owner 2026-11-14, board crews/tags/02-size-25 · Crew page, recommended): the first 8 — you, then the owner,
+  // then by join — and "See all 25" for the rest.
+  it('a crew of 25: the first 8 (you, the owner, then by join) and See all 25 shows everyone', async () => {
+    const rest = Array.from({ length: 23 }, (_, i) => ({ ...member(`rh_${i}`, `Friend${i}`), joinedAt: `2026-10-${String(30 - i).padStart(2, '0')}T10:00:00Z` }))
+    const members = [...rest, member('rh_priya', 'Priya', 'owner'), member('me', 'Sam')]
+    crews.crew.mockResolvedValue({ success: true, data: crew('member', { size: 25, members }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.getByLabelText('Members, 25')).toBeTruthy()
+    const shown = within(screen.getByTestId('crew-members')).getAllByRole('button').map((b) => b.props.accessibilityLabel)
+    // You (not a button), the owner, then the six who joined first: Friend22 (Oct 8) … Friend17 (Oct 13).
+    expect(screen.getByLabelText('You')).toBeTruthy()
+    expect(shown.slice(0, 7)).toEqual(['Priya, owner', 'Friend22', 'Friend21', 'Friend20', 'Friend19', 'Friend18', 'Friend17'])
+    expect(screen.queryByLabelText('Friend16')).toBeNull()
+
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'See all 25' })))
+    expect(screen.getByLabelText('Friend16')).toBeTruthy()
+    expect(screen.getByLabelText('Friend0')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'See all 25' })).toBeNull()
+  })
+
+  it('a crew of 8 or fewer has no See all (control for the cut at 8)', async () => {
+    const members = [member('me', 'Sam', 'owner'), ...Array.from({ length: 7 }, (_, i) => member(`rh_${i}`, `Friend${i}`))]
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 8, members }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.getByLabelText('Friend6')).toBeTruthy()
+    expect(screen.queryByText(/^See all/)).toBeNull()
+  })
+
   it('a member row opens their room card (handle, first name); your own row does nothing', async () => {
     crews.crew.mockResolvedValue({ success: true, data: crew('member') })
     await render(<CrewScreen />)
@@ -142,8 +172,12 @@ describe('the page', () => {
     expect(screen.queryByText(/Someone you’ve blocked/)).toBeNull()
   })
 
-  it('a full crew cannot ask anyone else in', async () => {
-    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 12 }) })
+  it('a full crew cannot ask anyone else in: 25 with no seatsLeft (an older server), or the server’s seatsLeft 0 at its own 12', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 25 }) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.queryByLabelText('Invite friends')).toBeNull()
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 12, seatsLeft: 0 }) })
     await render(<CrewScreen />)
     await waitFor(() => screen.getByText('Nebula'))
     expect(screen.queryByLabelText('Invite friends')).toBeNull()

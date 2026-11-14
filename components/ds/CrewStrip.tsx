@@ -2,10 +2,10 @@ import { Fragment, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Icon } from '../ui/Icon'
-import { inYouLast, namesLine, type StripCrewRow } from '../../lib/crews'
+import { inYouLast, namesLine, stripNames, type CrewmateIn, type StripCrewRow } from '../../lib/crews'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
-import { CountTicks } from './CountTicks'
+import { COUNT_TICKS_MAX, CountTicks } from './CountTicks'
 import { CrewEmblem } from './CrewEmblem'
 import { Facepile, type Face } from './Facepile'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
@@ -72,10 +72,14 @@ function CrewStripRow({ crew, testID }: { crew: StripCrew; testID?: string }) {
   const [cheer] = useState(() => !!crew.cheerKey && crew.people.some((p) => p.you) && firstCheer(crew.cheerKey))
   const count = Math.max(0, Math.min(crew.in, crew.size))
   const everyone = count >= crew.size
-  const names = crew.people.length ? namesLine(crew.people) : null
-  const faces: Face[] = inYouLast(crew.people).map((x) => (x.photo ? { kind: 'photo', uri: x.photo } : { kind: 'creature', pseudonym: x.name }))
+  // Past 12 (crews of 25, board crews/tags/02-size-25): no ticks, and three names, you among them, then "+N".
+  const big = crew.size > COUNT_TICKS_MAX
+  const { shown, more } = big ? stripNames(crew.people) : { shown: inYouLast(crew.people), more: 0 }
+  const names = shown.length ? namesLine(shown) : null
+  const faces: Face[] = shown.map(faceOf)
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
-  const label = [`${crew.name}, ${everyone ? 'everyone' : `${count} of ${crew.size}`} in, ${crew.context}`, names && `In: ${names}`].filter(Boolean).join('. ')
+  const spoken = names && `In: ${names}${more ? ` and ${more} others` : ''}`
+  const label = [`${crew.name}, ${everyone ? 'everyone' : `${count} of ${crew.size}`} in, ${crew.context}`, spoken].filter(Boolean).join('. ')
   return (
     <View accessible accessibilityLabel={label} style={styles.row}>
       <View style={styles.top}>
@@ -91,18 +95,22 @@ function CrewStripRow({ crew, testID }: { crew: StripCrew; testID?: string }) {
           </Text>
         </View>
       </View>
-      <CountTicks size={crew.size} here={count} />
+      <CountTicks size={crew.size} here={count} testID={testID && `${testID}-ticks`} />
       {names ? (
         <View testID={testID && `${testID}-who`} style={styles.who}>
           <Facepile faces={faces} size={FACE} max={FACES_SHOWN} ring={COLOR.surface} accessibilityLabel="" />
-          <Text testID={testID && `${testID}-names`} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.ink, styles.fill]}>
+          <Text testID={testID && `${testID}-names`} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.ink, more ? styles.shrink : styles.fill]}>
             {names}
           </Text>
+          {/* Its own text, so a long name truncates before the "+N" does. */}
+          {more ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.more, { color: secondary }]}>{`+${more}`}</Text> : null}
         </View>
       ) : null}
     </View>
   )
 }
+
+const faceOf = (x: CrewmateIn): Face => (x.photo ? { kind: 'photo', uri: x.photo } : { kind: 'creature', pseudonym: x.name })
 
 /** Faces before "+N" in the names row (the Facepile's own default). */
 const FACES_SHOWN = 5
@@ -123,6 +131,9 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   who: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   fill: { flex: 1, minWidth: 0 },
+  shrink: { flexShrink: 1, minWidth: 0 },
+  /** A word space after the names (board: "You +9"), not the row's 8. */
+  more: { marginLeft: -SPACE.xs },
   ink: { color: COLOR.textPrimary },
   tabular: { color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
   hairline: { height: StyleSheet.hairlineWidth, marginHorizontal: SPACE.lg, backgroundColor: COLOR.hairline },

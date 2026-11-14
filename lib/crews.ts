@@ -17,11 +17,11 @@
  *   exist, who blocked whom, or who left.
  */
 
-/** The server's `CREW` constants (blendn-admin lib/constants.ts). */
+/** The server's `CREW` constants (blendn-admin lib/constants.ts): crews of up to 25 since admin #980 (owner 2026-11-14). */
 import { parseBadges } from './profileBadges'
 import { toggleLanguage, type Badge, type Overlap } from './aboutYou'
 
-export const CREW_MAX_MEMBERS = 12
+export const CREW_MAX_MEMBERS = 25
 export const CREW_NAME_MIN = 2
 export const CREW_NAME_MAX = 32
 export const CREW_BIO_MAX = 140
@@ -145,6 +145,8 @@ export interface CrewInvite {
   /** Their photo; optional (a client outlives a deploy) and drawn only when sent. */
   invitedByPhoto?: string | null
   invitedAt: string
+  /** When it lapses (admin #972, +14 days); optional, as a client outlives a deploy. */
+  expiresAt?: string
 }
 
 /** A crew here now, as a card. Counts only — never a person. */
@@ -212,6 +214,23 @@ export const namesLine = (people: readonly CrewmateIn[]): string =>
   inYouLast(people)
     .map((x) => (x.you ? 'You' : x.name))
     .join(', ')
+
+/** A big crew's strip (past `COUNT_TICKS_MAX`) names this many, then "+N" (board crews/tags/02-size-25). */
+const STRIP_NAMES_MAX = 3
+
+/** A big crew's strip names: three, you among them when you're in, then how many more ("प्रियंका, Arjun, You" +9). */
+export function stripNames(people: readonly CrewmateIn[]): { shown: CrewmateIn[]; more: number } {
+  const ordered = inYouLast(people)
+  const you = ordered.filter((x) => x.you)
+  const shown = ordered.length <= STRIP_NAMES_MAX ? ordered : [...ordered.filter((x) => !x.you).slice(0, STRIP_NAMES_MAX - you.length), ...you]
+  return { shown, more: ordered.length - shown.length }
+}
+
+/** The crew page's order (board 02-size-25): you, then the owner, then by who joined first. */
+export function membersInOrder(members: readonly CrewMember[], myId: string): CrewMember[] {
+  const rank = (m: CrewMember) => (m.userId === myId ? 0 : m.role === 'owner' ? 1 : 2)
+  return [...members].sort((a, b) => rank(a) - rank(b) || a.joinedAt.localeCompare(b.joinedAt))
+}
 
 /** The most names "… are going" spells out before "and N others" (the server's crew push does the same). */
 const GOING_NAMES_MAX = 3
@@ -692,7 +711,7 @@ export function nextCrewOffset(offset: number, page: readonly CrewCard[]): numbe
   return offset + page.length
 }
 
-/** Crews larger than this match crews only, never one person (the server's `CREW.MAX_SOLO_MATCH`). */
+/** Crews larger than this match crews only, never one person (the server's `CREW.MAX_SOLO_MATCH`): a kept safety rule, one stranger facing a big group (owner 2026-11-14). */
 export const CREW_MAX_SOLO_MATCH = 6
 
 /**

@@ -90,6 +90,35 @@ describe('<CrewStrip>', () => {
     expect(screen.getByText('Zoë, You')).toBeTruthy()
   })
 
+  // Crews of 25 (owner 2026-11-14, board crews/tags/02-size-25 · Room, recommended): past 12 the ticks go (a tick would be
+  // ~1 pt wide), the figure carries the count, and the names stop at three, you among them, then "+N" for the rest.
+  it('a crew past 12: no ticks, "12 of 25", three faces and names with you last, then "+9"', async () => {
+    const others = ['प्रियंका', 'Arjun', 'Kabir', 'Zoë', 'Meera', 'Rohan', 'Isha', 'Ravi', 'Dev', 'Asha', 'Thiruvananthapuram'].map((n) => person(n))
+    await render(<CrewStrip crews={[nebula({ size: 25, in: 12, people: [...others, person('Sagar', true)] })]} testID="s" />)
+    expect(screen.queryByTestId('s-n-ticks', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('12 of 25')).toBeTruthy()
+    expect(screen.getByTestId('s-n-names')).toHaveTextContent('प्रियंका, Arjun, You')
+    expect(screen.getByTestId('s-n-who')).toHaveTextContent('प्रियंका, Arjun, You+9')
+    expect(screen.getByLabelText('Nebula, 12 of 25 in, Vinyl Night · Toit. In: प्रियंका, Arjun, You and 9 others')).toBeTruthy()
+  })
+
+  it('a crew past 12 with you not in yet: the first three names, then "+N"', async () => {
+    const others = ['Priya', 'Arjun', 'Kabir', 'Zoë', 'Meera'].map((n) => person(n))
+    await render(<CrewStrip crews={[nebula({ size: 13, in: 5, people: others })]} testID="s" />)
+    expect(screen.getByTestId('s-n-who')).toHaveTextContent('Priya, Arjun, Kabir+2')
+  })
+
+  it('a crew past 12 with three or fewer in: just the names, no "+"', async () => {
+    await render(<CrewStrip crews={[nebula({ size: 25, in: 2, people: [person('Priya'), person('Sagar', true)] })]} testID="s" />)
+    expect(screen.getByTestId('s-n-who')).toHaveTextContent('Priya, You')
+    expect(screen.queryByText(/^\+/)).toBeNull()
+  })
+
+  it('a crew of 12 keeps its ticks (control for the cut at 12)', async () => {
+    await render(<CrewStrip crews={[nebula({ size: 12, in: 4 })]} testID="s" />)
+    expect(screen.getByTestId('s-n-ticks', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('off: one quiet line and no action', async () => {
     await render(<CrewStrip crews={[nebula()]} off />)
     expect(screen.getByText('Crews are off at this event.')).toBeTruthy()

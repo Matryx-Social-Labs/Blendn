@@ -60,6 +60,7 @@ const invite = (over: Partial<CrewInvite> = {}): CrewInvite => ({
   size: 6,
   invitedBy: 'Aisha',
   invitedAt: new Date(Date.now() - 3 * DAY).toISOString(),
+  expiresAt: new Date(Date.now() + 11 * DAY - 60_000).toISOString(),
   ...over,
 })
 const crew = (over: Partial<Crew> = {}): Crew => ({
@@ -190,25 +191,55 @@ describe('an invite', () => {
     api.myCrews.mockResolvedValue(list([], [invite()]))
   })
 
-  it('shows what an invitee is given, and the consent on screen with nothing sent', async () => {
+  it('shows what an invitee is given as board 03 A draws it, and the consent on screen with nothing sent', async () => {
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
-    expect(screen.getByText('Thursday quiz, Friday regret.')).toBeTruthy()
-    expect(screen.getByText('Quiz team')).toBeTruthy()
-    expect(screen.getByText('Aisha invited you · Crew of 6')).toBeTruthy()
-    expect(screen.getByText('You’ll see who’s in it once you join.')).toBeTruthy()
+    // The friend who asked leads, by face: no photo sent is their creature, never a blank.
+    expect(screen.getByText('Aisha asked you in')).toBeTruthy()
+    expect(screen.getByTestId('invite-inviter-creature', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('Crew of 6 · Quiz team')).toBeTruthy()
+    expect(screen.getByText('“Thursday quiz, Friday regret.”')).toBeTruthy()
+    expect(screen.getByText('Open for 11 more days · Aisha isn’t told if you say not now')).toBeTruthy()
     expect(screen.getByText(CONSENT_LINE)).toBeTruthy()
     expect(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
+    // Members stay unlisted before you join; the old sentence about it and the old "invited you" line are gone.
+    expect(screen.queryByText('You’ll see who’s in it once you join.')).toBeNull()
+    expect(screen.queryByText('Aisha invited you · Crew of 6')).toBeNull()
     expect(api.join).not.toHaveBeenCalled()
   })
 
-  it('the consent sits in the dock with Join, so a long bio can not scroll it away', async () => {
+  it('the inviter’s photo leads when it is sent, and a short crew name is on the Join button', async () => {
+    api.myCrews.mockResolvedValue(list([], [invite({ name: 'Nebula', invitedBy: 'प्रियंका', invitedByPhoto: 'https://img.example/p.jpg', bio: null, tags: [] })]))
+    await render(<InviteScreen />)
+    await waitFor(() => screen.getByText('Nebula'))
+    expect(screen.getByText('प्रियंका asked you in')).toBeTruthy()
+    expect(screen.getByTestId('invite-inviter-photo', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('Crew of 6')).toBeTruthy()
+    expect(screen.getByLabelText('Join Nebula')).toBeTruthy()
+  })
+
+  it('the consent sits under the crew, as board 03 A draws it, and Join, Not now and the days left are the foot', async () => {
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
     const dock = screen.getByTestId('invite-dock')
-    expect(within(dock).getByText(CONSENT_LINE)).toBeTruthy()
-    expect(within(dock).getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
-    expect(within(dock).getByLabelText('Join')).toBeTruthy()
+    expect(within(dock).getByLabelText('Join the crew')).toBeTruthy()
+    expect(within(dock).getByLabelText('Not now')).toBeTruthy()
+    expect(within(dock).getByTestId('invite-note')).toBeTruthy()
+    // Nothing is pinned: the consent is read on the way down to Join, in the same scroll, never under it.
+    expect(within(dock).queryByText(CONSENT_LINE)).toBeNull()
+    const scroll = screen.getByTestId('invite-scroll')
+    expect(within(scroll).getByText(CONSENT_LINE)).toBeTruthy()
+    expect(within(scroll).getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
+  })
+
+  it('at the largest text the card scrolls as one, the dock with it, so the dock never covers the crew’s name (AX XXXL drive)', async () => {
+    await render(<InviteScreen />)
+    await waitFor(() => screen.getByText('The Usual Suspects'))
+    const scroll = screen.getByTestId('invite-scroll')
+    expect(within(scroll).getByTestId('invite-dock')).toBeTruthy()
+    expect(within(scroll).getByText('The Usual Suspects')).toBeTruthy()
+    // When it fits, the dock still sits at the foot: the content grows to the screen and pushes it down.
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle)).toMatchObject({ flexGrow: 1, justifyContent: 'space-between' })
   })
 
   it('Join is the agreement: it sends revealConsent true and the anonymity choice, says Joined, then opens the crew chat and asks about pushes', async () => {
@@ -216,7 +247,7 @@ describe('an invite', () => {
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
     await fireEvent.press(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL }))
-    await fireEvent.press(screen.getByLabelText('Join'))
+    await fireEvent.press(screen.getByLabelText('Join the crew'))
     await waitFor(() => expect(api.join).toHaveBeenCalledWith('c-usual', { revealConsent: true, keepMeAnonymous: true }))
     await waitFor(() => screen.getByLabelText('Joined'))
     expect(router.replace).not.toHaveBeenCalled()
@@ -235,7 +266,7 @@ describe('an invite', () => {
     api.join.mockReturnValue(new Promise((r) => (finish = r)) as never)
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
-    const join = screen.getByLabelText('Join')
+    const join = screen.getByLabelText('Join the crew')
     await act(async () => {
       void fireEvent.press(join)
       void fireEvent.press(join)
@@ -248,7 +279,7 @@ describe('an invite', () => {
     api.join.mockResolvedValue({ success: false, error: 'Crew not found', errorCode: 'NOT_FOUND' })
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
-    await fireEvent.press(screen.getByLabelText('Join'))
+    await fireEvent.press(screen.getByLabelText('Join the crew'))
     await waitFor(() => screen.getByText('This invite isn’t open any more'))
     expect(screen.getByText('Invites last 14 days. Ask your friend to invite you again.')).toBeTruthy()
     await fireEvent.press(screen.getByLabelText('Back to Crews'))
@@ -265,7 +296,7 @@ describe('an invite', () => {
     api.join.mockResolvedValue({ success: false, error: 'A crew has at most 12 people.', errorCode: 'CONFLICT' })
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
-    await fireEvent.press(screen.getByLabelText('Join'))
+    await fireEvent.press(screen.getByLabelText('Join the crew'))
     await waitFor(() => screen.getByText('This crew is full'))
     expect(screen.getByText('A crew has at most 12 people.')).toBeTruthy()
     expect(router.replace).not.toHaveBeenCalled()

@@ -7,22 +7,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CrewRefusalSheet, type CrewRefusal } from '../../../components/crews/CrewRefusalSheet'
 import { Avatar } from '../../../components/ds/Avatar'
 import { Button } from '../../../components/ds/Button'
-import { Chip } from '../../../components/ds/Chip'
 import { CrewEmblem } from '../../../components/ds/CrewEmblem'
 import { Grain } from '../../../components/ds/Grain'
-import { font, HueProvider, IC_HAIRLINE, useBoldText, useIncreaseContrast } from '../../../components/ds/shared'
+import { Orbs } from '../../../components/ds/Orbs'
+import { font, HueProvider, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from '../../../components/ds/shared'
 import { StateScreen } from '../../../components/ds/StateScreen'
 import { Toggle } from '../../../components/ds/Toggle'
 import { TopBar } from '../../../components/ds/TopBar'
-import { Icon } from '../../../components/ui/Icon'
 import { useSkeletonCrossfade } from '../../../components/motion/useSkeletonCrossfade'
 import { useToast } from '../../../components/Toast'
 import { useToastDock } from '../../../components/toastDock'
 import { askCrewPush } from '../../../lib/crewPushAsk'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, findInvite, type CrewInvite } from '../../../lib/crews'
 import { crewsApi } from '../../../lib/crewsApi'
-import { inviteWho } from '../../../lib/crewsScreens'
-import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../../lib/design/tokens'
+import { askedYouIn, crewVerb, inviteMeta, inviteNote } from '../../../lib/crewsScreens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../../lib/design/tokens'
 import { H } from '../../../lib/haptics'
 import { showSheet } from '../../../lib/sheet'
 import { useAuth } from '../../../lib/useAuth'
@@ -30,24 +29,26 @@ import { useAuth } from '../../../lib/useAuth'
 type Load = { kind: 'loading' } | { kind: 'ready'; invite: CrewInvite } | { kind: 'notOpen' } | { kind: 'failed' }
 
 const EMBLEM = 120
+/** The inviter's face in the "Priya asked you in" pill. */
+const INVITER_FACE = 24
 /** How long "Joined" shows before the chat opens. */
 const JOINED_MS = 700
 const NOT_OPEN = 'This invite isn’t open any more'
 
 /**
- * An invite received (Flow 10 · 10.3): what an invitee is given, and no more
- * (the emblem, name, bio, tags and who asked — never a member's name or photo;
- * the crew's page is members-only). The consent sentence and "keep me
- * anonymous" sit above Join, always on screen, and tapping Join is the
- * agreement: nothing is sent before it. Not now asks first, because declining
- * is final for 30 days; leaving by Back keeps the invite open. One 404 covers
- * lapsed, withdrawn, left and blocked.
+ * An invite received, as an invite card (board 03 A): the friend who asked leads by face ("Priya asked you in"), then the
+ * crew, big, lit from behind in the screen's hue, its size and tags in one line and its line in quotes. What an invitee is
+ * given, and no more: never a member's name or photo (the crew's page is members-only). The consent sentence and "keep me
+ * anonymous" sit above "Join Nebula", always on screen, and tapping it is the agreement: nothing is sent before it. Not now
+ * asks first, because declining is final for 30 days, and under it the days left are said (`expiresAt`) and that the friend
+ * isn't told. Leaving by Back keeps the invite open. One 404 covers lapsed, withdrawn, left and blocked.
  */
 function CrewInviteScreenContent() {
   const { crewId: param } = useLocalSearchParams<{ crewId: string }>()
   const crewId = String(param)
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   const insets = useSafeAreaInsets()
   const { showToast } = useToast()
   const { user } = useAuth()
@@ -173,48 +174,50 @@ function CrewInviteScreenContent() {
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
   return (
     <View style={styles.container}>
+      {/* Lit from behind in the screen's own hue (TG-14), as the board's glow behind the emblem. */}
+      <Orbs set="feed" tint={sel.edge} />
       <Grain />
-      <TopBar title="Crew invite" onBack={() => router.back()} testID="invite-top" />
+      <TopBar onBack={() => router.back()} testID="invite-top" />
       <Animated.View entering={arrive} style={styles.fill}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
+      {/* One scroll, the dock at its foot: at the largest text the card scrolls whole, so the dock never covers the crew's name. */}
+      <ScrollView testID="invite-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={[styles.hero, styles.heroPad]}>
+          <View accessible accessibilityLabel={askedYouIn(invite.invitedBy)} style={[styles.asked, contrast && IC_HAIRLINE]}>
+            {invite.invitedByPhoto ? (
+              <Avatar kind="photo" uri={invite.invitedByPhoto} size={INVITER_FACE} testID="invite-inviter-photo" />
+            ) : (
+              <Avatar kind="creature" pseudonym={invite.invitedBy} size={INVITER_FACE} testID="invite-inviter-creature" />
+            )}
+            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.shrink]}>
+              {askedYouIn(invite.invitedBy)}
+            </Text>
+          </View>
           {/* "Priya asked you in": the crew waves hello, once. */}
           <CrewEmblem seed={invite.emblemSeed} size={EMBLEM} scene="wave" />
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.centre, styles.ink, styles.name]}>
+          {/* Two lines at most: a 32-character name is never cut to one, nor left to run on. */}
+          <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.centre, styles.ink, styles.name]}>
             {invite.name}
           </Text>
-          {invite.bio ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.centre, { color: secondary }]}>{invite.bio}</Text> : null}
-          {invite.tags.length ? (
-            <View style={styles.tags}>
-              {invite.tags.map((t) => (
-                <Chip key={t.slug} label={t.label} variant="outline" />
-              ))}
-            </View>
-          ) : null}
-          <View accessible accessibilityLabel={inviteWho(invite)} style={styles.who}>
-            {invite.invitedByPhoto ? <Avatar kind="photo" uri={invite.invitedByPhoto} size={24} ring={COLOR.ink} /> : null}
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>{inviteWho(invite)}</Text>
+          <View style={styles.about}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{inviteMeta(invite)}</Text>
+            {invite.bio ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{`“${invite.bio}”`}</Text> : null}
           </View>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, styles.tertiary]}>You’ll see who’s in it once you join.</Text>
+          {/* Under the crew, as the board draws it: read on the way down to Join, never pinned under it. */}
+          <View style={[styles.consent, contrast && IC_HAIRLINE]}>
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{CONSENT_LINE}</Text>
+            <View style={styles.anon}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
+              <Toggle value={keepAnonymous} onValueChange={setKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
+            </View>
+          </View>
         </View>
-      </ScrollView>
       <View
         testID="invite-dock"
         onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}
         style={[styles.dock, { paddingBottom: insets.bottom + SPACE.xl }]}
       >
-        <View style={[styles.consent, contrast && IC_HAIRLINE]}>
-          <View style={styles.consentLine}>
-            <Icon name="eye" size={ICON.control} />
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink, styles.fill]}>{CONSENT_LINE}</Text>
-          </View>
-          <View style={styles.anon}>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.fill]}>{KEEP_ANONYMOUS_LABEL}</Text>
-            <Toggle value={keepAnonymous} onValueChange={setKeepAnonymous} accessibilityLabel={KEEP_ANONYMOUS_LABEL} disabled={joining} />
-          </View>
-        </View>
         <Button
-          label={joined ? 'Joined' : 'Join'}
+          label={joined ? 'Joined' : crewVerb('Join', invite.name)}
           kind={joined ? 'secondary' : 'primary'}
           onPress={() => void join()}
           loading={joining}
@@ -224,7 +227,11 @@ function CrewInviteScreenContent() {
           testID="invite-join"
         />
         <Button label="Not now" kind="tertiary" onPress={confirmDecline} disabled={joining || !!joined} testID="invite-not-now" />
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, styles.tertiary]} testID="invite-note">
+          {inviteNote(invite)}
+        </Text>
       </View>
+      </ScrollView>
       </Animated.View>
       <CrewRefusalSheet refusal={refusal} onClose={() => setRefusal(null)} />
     </View>
@@ -234,13 +241,24 @@ function CrewInviteScreenContent() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
   state: { flex: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
-  content: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.lg, gap: SPACE.xl },
+  content: { flexGrow: 1, justifyContent: 'space-between', paddingTop: SPACE.sm, gap: SPACE.xl },
+  heroPad: { paddingHorizontal: SPACE.gutter },
   hero: { alignItems: 'center', gap: SPACE.md },
   name: { marginTop: SPACE.xs },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: SPACE.sm },
-  who: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
-  consent: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
-  consentLine: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.md },
+  asked: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACE.sm,
+    maxWidth: '100%',
+    paddingLeft: SPACE.xs,
+    paddingRight: SPACE.md,
+    paddingVertical: SPACE.xs,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.surface,
+  },
+  shrink: { flexShrink: 1 },
+  about: { alignItems: 'center', gap: SPACE.xs },
+  consent: { alignSelf: 'stretch', marginTop: SPACE.sm, borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.md },
   anon: {
     flexDirection: 'row',
     alignItems: 'center',

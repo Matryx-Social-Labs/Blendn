@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
-import type { CrewMember } from '../../lib/crews'
+import { membersInOrder, type CrewMember } from '../../lib/crews'
 import { Avatar } from '../ds/Avatar'
 import { PRESSED_WASH, font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
@@ -9,12 +10,16 @@ import { RowsCard } from './RowsCard'
 
 const FACE = 44
 const ROW_HEIGHT = 60
+/** Members drawn before "See all N" (board crews/tags/02-size-25: a crew can be 25). */
+const MEMBERS_FIRST = 8
 
 /**
  * The Members card (flow10.js `detail`): each person by first name and photo
  * ("You" for you, "Owner" under whoever started it), the owner's ⋯ on
  * everyone else, and Invite friends as the card's last row. A member kept
  * apart from you is not here, and the footnote says so without naming anyone.
+ * In order — you, the owner, then by join — the first 8, then "See all N"
+ * draws the rest in place (25 at most: the server's cap, so no windowing).
  */
 export function CrewMembers({
   members,
@@ -39,10 +44,13 @@ export function CrewMembers({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const secondary = contrast ? COLOR.textPrimary : COLOR.textSecondary
+  const [all, setAll] = useState(false)
+  const ordered = membersInOrder(members, myId)
+  const folded = !all && ordered.length > MEMBERS_FIRST
   return (
     <View style={styles.block}>
       <RowsCard testID="crew-members">
-        {members.map((m) => {
+        {(folded ? ordered.slice(0, MEMBERS_FIRST) : ordered).map((m) => {
           const me = m.userId === myId
           const who = me ? 'You' : m.name
           return (
@@ -77,6 +85,16 @@ export function CrewMembers({
             </View>
           )
         })}
+        {folded ? (
+          <Pressable
+            onPress={() => setAll(true)}
+            accessibilityRole="button"
+            accessibilityLabel={`See all ${ordered.length}`}
+            style={({ pressed }) => [styles.row, styles.seeAll, pressed && { backgroundColor: PRESSED_WASH.ios }]}
+          >
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.link]}>{`See all ${ordered.length}`}</Text>
+          </Pressable>
+        ) : null}
         {canInvite ? (
           <Pressable
             onPress={onInvite}
@@ -115,6 +133,9 @@ const styles = StyleSheet.create({
   text: { flex: 1, minWidth: 0 },
   fill: { flex: 1 },
   ink: { color: COLOR.textPrimary },
+  seeAll: { justifyContent: 'center' },
+  /** White, not the board's rose: rose on surface is 3.77:1 (AA fails), and row text actions are white (SectionHeader, R3). */
+  link: { color: COLOR.textPrimary },
   more: { width: SIZE.targetIos, height: SIZE.targetIos, borderRadius: RADIUS.capsule, alignItems: 'center', justifyContent: 'center' },
   inviteWell: {
     width: FACE,
