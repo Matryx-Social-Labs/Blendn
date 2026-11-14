@@ -309,12 +309,21 @@ describe('answering a request in place', () => {
     await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledTimes(2))
   })
 
-  it('a request answered somewhere else is not Waiting on you, on open and on a refresh', async () => {
+  // SCRUM-1036: and it is not left behind as "New friend request" either: an answered friend request leaves the feed.
+  it('a request answered somewhere else is not Waiting on you, and not a "New friend request" either', async () => {
     api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
     await render(<Screen />)
-    await screen.findByText('New friend request')
-    await waitFor(() => expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull())
+    await screen.findByText('You have a new match')
+    await waitFor(() => expect(screen.queryByText('New friend request')).toBeNull())
+    expect(screen.queryByRole('header', { name: /Waiting on you/ })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+  })
+
+  it('the server’s own word that a request is closed (`open: false`) leaves it out from the first frame', async () => {
+    api.getNotifications.mockResolvedValue(feed([{ ...friend, open: false }, match]) as never)
+    await render(<Screen />)
+    await screen.findByText('You have a new match')
+    expect(screen.queryByText('New friend request')).toBeNull()
   })
 
   it('51 requests waiting: one not on the first page of 50 is still waiting, not answered elsewhere', async () => {
@@ -352,8 +361,9 @@ describe('answering a request in place', () => {
       data: { incoming: [{ id: 'other0', person: { userId: 'u_other0' } }], outgoing: [], pagination: { incoming: { limit: 50, hasMore: false, nextCursor: null, totalCount: 1 } } },
     } as never)
     await render(<Screen />)
-    await screen.findByText('New friend request')
+    await screen.findByText('You have a new match')
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull())
+    expect(screen.queryByText('New friend request')).toBeNull()
   })
 
   it('shows the list at once, and reconciles the requests after: a slow requests list holds nothing up', async () => {
@@ -389,7 +399,8 @@ describe('answering a request in place', () => {
     api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
     await act(async () => mockBell?.())
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull())
-    expect(screen.getByText('New friend request')).toBeTruthy()
+    expect(screen.queryByText('New friend request')).toBeNull()
+    expect(screen.getByText('You have a new match')).toBeTruthy()
   })
 
   it('keeps Waiting as it was when the requests list does not load', async () => {

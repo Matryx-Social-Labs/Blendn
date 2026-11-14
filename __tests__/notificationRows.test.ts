@@ -238,10 +238,29 @@ describe('groupFeed', () => {
 
   it('does not wait on a request that has lapsed, or that the server says is closed: it is history, with no pills', () => {
     const lapsed = item({ id: 'l', kind: 'friend_request', createdAt: ago((WAITING_DAYS + 1) * DAY) })
-    const closed = item({ id: 'c', kind: 'friend_request', open: false })
+    const closed = item({ id: 'c', kind: 'crew_invite', open: false, data: { crewId: 'c' } })
     const g = groupFeed([lapsed, closed], { fresh: none, resolved: none, now: NOW })
     expect(g.waiting).toEqual([])
     expect(g.earlier.map((r) => r.actions)).toEqual([[], []])
+  })
+
+  /*
+   * SCRUM-1036: a friend request answered (Accept or Not now, here or on Friends › Requests) stayed in the feed as "New
+   * friend request": the server sends `open: false` and no `display` for it, so the row fell back to the push's title,
+   * which is the unanswered request's. It leaves the feed, as a request answered here does once its outcome has shown.
+   */
+  it('leaves out a friend request that is no longer open: it is not a "New friend request" any more', () => {
+    const answered = item({ id: 'a', kind: 'friend_request', title: 'New friend request', open: false, data: { requestId: 'r2' } })
+    const g = groupFeed([answered, friend, match], { fresh: new Set(['a', 'm']), resolved: none, now: NOW })
+    expect([...g.waiting, ...g.fresh, ...g.earlier].map((r) => r.id)).toEqual(['fr', 'm'])
+  })
+
+  // Control: a crew invite that is closed is still history (the server names it), and an open request still waits.
+  it('control: a closed crew invite stays as history, and a request still open waits', () => {
+    const closedInvite = item({ id: 'x', kind: 'crew_invite', open: false, data: { crewId: 'c' } })
+    const g = groupFeed([closedInvite, friend], { fresh: none, resolved: none, now: NOW })
+    expect(g.waiting.map((r) => r.id)).toEqual(['fr'])
+    expect(g.earlier.map((r) => r.id)).toEqual(['x'])
   })
 
   it('leaves an answered request out of every section once it has left', () => {
