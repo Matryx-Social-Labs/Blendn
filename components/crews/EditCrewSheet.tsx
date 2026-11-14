@@ -121,6 +121,7 @@ export function EditCrewSheet({
         openToSolo={edit.openToSolo}
         onOpenToSolo={(openToSolo) => edited((e) => ({ ...e, openToSolo }))}
         emblemSeed={crew.emblemSeed}
+        size={crew.size}
         intentText={intentLine(edit.choice ? intentOf(edit.choice) : crew.intent) ?? ''}
       />
     </Sheet>

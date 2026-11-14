@@ -63,6 +63,8 @@ export type NameStepProps = {
   emblemSeed: string
   /** Make a crew only: a new look. Absent once the crew exists (Edit crew), as the look is fixed. */
   onShuffle?: () => void
+  /** The crew's size for the preview (Edit crew); a crew being made is you alone. */
+  size?: number
   intentText: string
 }
 
@@ -136,7 +138,7 @@ export function NameStep(p: NameStepProps) {
           crew={{
             name: p.name.trim() || 'Crew name',
             emblemSeed: p.emblemSeed,
-            size: 1,
+            size: p.size ?? 1,
             here: 0,
             bio: p.bio.trim() || 'A line about the crew',
             // No placeholder chip: an outlined "Tags" read as something to tap (D-L17).

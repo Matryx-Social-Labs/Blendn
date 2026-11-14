@@ -556,6 +556,13 @@ describe('editing', () => {
     expect(screen.queryByText(said)).toBeNull()
   })
 
+  it('the stranger’s-card preview counts the crew as it is, not one (drive 2026-11-14: "Crew of 1" on a crew of 13)', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', { size: 13 }) })
+    await openEdit()
+    expect(screen.getByText('Crew of 13 · #Dancefloor')).toBeTruthy()
+    expect(screen.queryByText(/^Crew of 1 ·/)).toBeNull()
+  })
+
   it('a refusal with no field is the form’s: a toast, nothing under the bio', async () => {
     const said = 'A phone number. A crew card is shown to people you haven’t met, so contact details can’t go on it.'
     crews.crew.mockResolvedValue({ success: true, data: crew('owner') })
