@@ -1,3 +1,4 @@
+import { personFace, type PersonFace } from './personFace'
 import type { DmReplyQuote } from './apiClient'
 /**
  * Small, pure decisions for the direct-message thread
@@ -5,32 +6,22 @@ import type { DmReplyQuote } from './apiClient'
  * without mounting the screen.
  */
 
-export type DirectHeaderAvatar =
-  | { kind: 'photo'; url: string }
-  | { kind: 'mark'; seed: string }
-  | { kind: 'initials' }
-
 /**
- * The header's avatar.
+ * The header's face, by `personFace` (owner F1 B): while the conversation is pseudonymous and they have not revealed,
+ * their creature on the pseudonym — the same face the Banter row draws, so the thread and the inbox agree. Once they are
+ * named, the photo the server resolved (`getConversation`'s `otherUser.image`) or, with none, their initial.
  *
- * While the conversation is pseudonymous and they have not revealed, the
- * generated mark seeded on the pseudonym — the same disc the Banter row draws
- * for them (`PseudonymDisc`), so the thread and the inbox agree about who this
- * is. Otherwise the photo the server resolved (`getConversation`'s
- * `otherUser.image`); the creature until it has answered.
- *
- * Never a URL from the route: `blendn://private-chat/x?otherUserAvatar=…` is
- * anybody's link, and drawing it fetched a host the server never named (IP
- * disclosure, Flow 5 security review). Initials for a named person with no photo.
+ * Until the server has answered (`reveal` null) it fails closed: a creature on the route's name, never an initial that
+ * would claim "named". Never a URL from the route: `blendn://private-chat/x?otherUserAvatar=…` is anybody's link, and
+ * drawing it fetched a host the server never named (IP disclosure, Flow 5 security review).
  */
 export function directHeaderAvatar(
   reveal: { displayName: string; pseudonymous?: boolean; theyRevealed: boolean } | null,
-  serverImage: string | null
-): DirectHeaderAvatar {
-  if (reveal && reveal.pseudonymous && !reveal.theyRevealed) {
-    return { kind: 'mark', seed: reveal.displayName }
-  }
-  return reveal && serverImage ? { kind: 'photo', url: serverImage } : { kind: 'initials' }
+  serverImage: string | null,
+  fallbackName: string
+): PersonFace {
+  if (!reveal) return personFace({ named: false, name: fallbackName })
+  return personFace({ named: !(reveal.pseudonymous && !reveal.theyRevealed), name: reveal.displayName, photo: serverImage })
 }
 
 /**

@@ -105,7 +105,8 @@ const HELD_PRESS_MS = 500
  *
  * Anonymity holds here: the server sends the pseudonym and no photo until a
  * person reveals, so an unrevealed match is their creature, seeded on the
- * pseudonym (docs/BANTER.md).
+ * pseudonym (docs/BANTER.md); a revealed person is their photo or, with none,
+ * their initial (`personFace`, owner F1 B).
  */
 function ChatInner() {
   const insets = useSafeAreaInsets()
@@ -258,7 +259,7 @@ function ChatInner() {
         return {
           key: `p:${c.conversation_id}`,
           title: c.other_user_name,
-          face: { kind: 'person', photo: c.they_revealed ? c.other_user_avatar : null, pseudonym: c.other_user_name },
+          face: { kind: 'person', named: c.they_revealed, name: c.other_user_name, photo: c.other_user_avatar },
           line: asked ? line : lineFor(dmThread(c.conversation_id, user?.id), line),
           time: inboxTimeLabel(c.last_message_time, now),
           unread: c.unread_count > 0,

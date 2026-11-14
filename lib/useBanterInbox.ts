@@ -27,6 +27,7 @@ import { useLiveSync } from './useLiveSync'
 import { userMessage } from './userMessage'
 import { previewText } from '../components/banter/inbox'
 import { subscribeCheckInChanged } from './checkIn'
+import type { MetIn } from './personFace'
 
 /*
  * The Banter's data (`app/(tabs)/chat.tsx`): rooms, crew chats and Blends,
@@ -91,6 +92,8 @@ export interface MessageRequest {
   sender_avatar?: string | null
   initial_message?: string | null
   created_at?: string | null
+  /** Where the two of you met, when the server knows (admin #935): "Met in the room at …". */
+  met_in?: MetIn | null
 }
 
 /** A row's last message was a sponsored broadcast: it keeps its time and previews nothing (5.6). */
@@ -204,13 +207,17 @@ const roomsFrom = (data: unknown): unknown =>
   Array.isArray(data) ? data : (data as any).groups || (data as any).rooms || (data as any).data || []
 
 /** A pending message request as `GET /message-requests` sends it. */
-const requestFrom = (r: any): MessageRequest => ({
+const metInFrom = (m: any): MetIn | null =>
+  m && (m.kind === 'event' || m.kind === 'venue_day') && typeof m.name === 'string' ? { kind: m.kind, name: m.name } : null
+
+export const requestFrom = (r: any): MessageRequest => ({
   request_id: r.id,
   sender_id: r.senderId || r.sender?.id || null,
   sender_name: r.sender?.name || null,
   sender_avatar: r.sender?.avatar || null,
   initial_message: r.message || null,
   created_at: r.createdAt || null,
+  met_in: metInFrom(r.metIn),
 })
 
 /** After a page is appended the list's reorder glide stays off this long. */

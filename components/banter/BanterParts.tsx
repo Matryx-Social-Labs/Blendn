@@ -10,6 +10,7 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZ
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { clockTime, unbroken } from '../../lib/time'
+import { personFace } from '../../lib/personFace'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -222,6 +223,7 @@ export function BlendLiveCard({
 export function RequestCard({
   face,
   name,
+  met,
   note,
   foot,
   time,
@@ -235,6 +237,8 @@ export function RequestCard({
 }: {
   face: ReactNode
   name: string
+  /** Where you met ("Met in the room at …", `metInLine`), on its own line in the world's light (Flow 5 · B-A rq). */
+  met?: string | null
   note: string
   /** A quiet line under the answers: what became of one that did not go through. */
   foot?: string
@@ -257,6 +261,7 @@ export function RequestCard({
   useAnnounced(foot)
   const largeText = useLargeText()
   const twoLines = useTwoLineNames()
+  const sel = useSelection()
   return (
     // The card is a surface: its "…" draws the solid disc in the card's chip tone, not glass with nothing to refract (C20).
     <GroundProvider value="surface">
@@ -266,7 +271,7 @@ export function RequestCard({
             onPress={onOpen}
             disabled={!onOpen}
             accessibilityRole={onOpen ? 'button' : 'text'}
-            accessibilityLabel={`${name}. ${note}`}
+            accessibilityLabel={[name, met, note].filter(Boolean).join('. ')}
             accessibilityHint={onOpen ? 'Opens their profile' : undefined}
             style={styles.requestWho}
           >
@@ -279,6 +284,11 @@ export function RequestCard({
               <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
                 {name}
               </Text>
+              {met ? (
+                <Text testID={testID && `${testID}-met`} numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: sel.glyph }]}>
+                  {met}
+                </Text>
+              ) : null}
               <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
                 {note}
               </Text>
@@ -323,8 +333,11 @@ export function RequestCard({
   )
 }
 
-/** A request's 40 pt face: a person round, a crew its emblem. */
-export function RequestFace({ photo, pseudonym, emblemSeed }: { photo?: string | null; pseudonym?: string; emblemSeed?: string }) {
+/**
+ * A request's 40 pt face: a crew its emblem; a named sender (a message request carries their name) by `personFace`, their
+ * photo or initial; an anonymous asker (a Lobby ask) their creature on `pseudonym`.
+ */
+export function RequestFace({ photo, name, pseudonym, emblemSeed }: { photo?: string | null; name?: string; pseudonym?: string; emblemSeed?: string }) {
   if (emblemSeed) {
     return (
       <View style={[styles.square, { width: REQUEST_FACE, height: REQUEST_FACE }]}>
@@ -332,11 +345,13 @@ export function RequestFace({ photo, pseudonym, emblemSeed }: { photo?: string |
       </View>
     )
   }
-  return photo ? <Avatar size={REQUEST_FACE} kind="photo" uri={photo} /> : <Avatar size={REQUEST_FACE} kind="creature" pseudonym={pseudonym ?? 'Someone'} />
+  const face = name !== undefined ? personFace({ named: true, name, photo }) : personFace({ named: false, name: pseudonym ?? 'Someone' })
+  return <Avatar size={REQUEST_FACE} {...face} />
 }
 
 export type RowFace =
-  | { kind: 'person'; photo?: string | null; pseudonym: string }
+  /** `named`: the server shows who they are (a revealed DM, an accepted request); `personFace` picks the picture. */
+  | { kind: 'person'; named: boolean; name: string; photo?: string | null }
   | { kind: 'room'; cover?: string | null }
   | { kind: 'crew'; seed: string | null }
   | { kind: 'pair'; seeds: [string | null, string | null] }
@@ -510,7 +525,7 @@ function Line({ line, unread, lines }: { line: RowLine; unread: boolean; lines: 
 function RowAvatar({ face }: { face: RowFace }) {
   switch (face.kind) {
     case 'person':
-      return face.photo ? <Avatar size={ROW_AVATAR} kind="photo" uri={face.photo} /> : <Avatar size={ROW_AVATAR} kind="creature" pseudonym={face.pseudonym} />
+      return <Avatar size={ROW_AVATAR} {...personFace({ named: face.named, name: face.name, photo: face.photo })} />
     case 'room':
       return face.cover ? (
         <Image source={{ uri: face.cover }} recyclingKey={face.cover} contentFit="cover" accessible={false} style={styles.squareFace} />

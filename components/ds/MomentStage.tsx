@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react'
+import type { PersonFace } from '../../lib/personFace'
 import { AccessibilityInfo, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, withDelay, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 
@@ -29,7 +30,7 @@ export function fade(to: number, duration: number, delay = 0, easing: keyof type
 export const spring = (to: number, name: keyof typeof SPRING, delay = 0) => withDelay(delay, withSpring(to, { ...SPRING[name], reduceMotion: NEVER }), NEVER)
 
 /** A person's face in a moment: a photo only where they are named to you, else their creature (from the pseudonym). */
-export type MomentFace = { kind: 'photo'; uri: string } | { kind: 'creature'; pseudonym: string }
+export type MomentFace = PersonFace
 
 /** Something that happens once at `at` ms into a moment: its haptic, buttons going live, the hand-off. */
 export type Beat = { at: number; run: () => void }

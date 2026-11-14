@@ -4,7 +4,7 @@ import Svg, { Polygon } from 'react-native-svg'
 
 import { Icon } from '../ui/Icon'
 import { MATERIAL, PALETTE_GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
-import { Creature, creatureFor } from './Creature'
+import { Creature, creatureFor, Initial } from './Creature'
 import { useIncreaseContrast } from './shared'
 
 export type AvatarSize = 24 | 32 | 40 | 56 | 72 | 112
@@ -32,6 +32,8 @@ export type AvatarProps = {
   | { kind: 'photo'; uri: string; /** The picture failed to load (a dead URL): the caller draws its own fallback. */ onError?: () => void }
   /** The pseudonym (the `markSeed`, never a user id): it picks the creature and its palette (`creatureFor`). */
   | { kind: 'creature'; pseudonym: string }
+  /** A named person with no photo: their initial on their hue disc (`personFace`, owner F1 B). Never for the anonymous. */
+  | { kind: 'initial'; name: string }
   /** A crew's emblem plate: two colours. */
   | { kind: 'crew'; plate: readonly [string, string] }
 )
@@ -85,6 +87,14 @@ export function Avatar(props: AvatarProps) {
     />
   ) : null
 
+  if (props.kind === 'initial') {
+    return (
+      <View testID={testID} style={{ width: size, height: size }} {...a11y}>
+        {haloRing}
+        <Initial name={props.name} size={size} ring={ringColor} testID={testID} />
+      </View>
+    )
+  }
   if (props.kind === 'creature') {
     return (
       <View testID={testID} style={{ width: size, height: size }} {...a11y}>
