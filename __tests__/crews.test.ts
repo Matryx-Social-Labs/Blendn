@@ -179,11 +179,11 @@ describe('the create body', () => {
     expect(createCrewBody({ ...form, name: '🔥🔥' }, agreed)).not.toHaveProperty('problem')
   })
 
-  it('holds the bio to 140, the tags to 3 and the invites to 11', () => {
+  it('holds the bio to 140, the tags to 3 and the invites to 24 (a crew of 25)', () => {
     expect(createCrewBody({ ...form, bio: 'b'.repeat(141) }, agreed)).toHaveProperty('problem')
     expect(createCrewBody({ ...form, tags: ['a', 'b', 'c', 'd'] }, agreed)).toHaveProperty('problem')
-    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 12 }, (_, i) => `u${i}`) }, agreed)).toHaveProperty('problem')
-    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 11 }, (_, i) => `u${i}`) }, agreed)).not.toHaveProperty('problem')
+    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 25 }, (_, i) => `u${i}`) }, agreed)).toHaveProperty('problem')
+    expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 24 }, (_, i) => `u${i}`) }, agreed)).not.toHaveProperty('problem')
   })
 
   it('a fourth tag does nothing rather than drop the first', () => {
@@ -287,7 +287,7 @@ describe('the Crews view: paging and liking', () => {
     expect(nextCrewOffset(0, [])).toBe(0)
   })
 
-  it('only a crew with "Room for one more" and 6 or fewer is offered a like of a person', () => {
+  it('only a crew with "Room for one more" is offered a like of a person, at any size up to the cap (no 6)', () => {
     const here = [
       { crewId: 'open6', name: 'Open six', presentCount: 2 },
       { crewId: 'closed', name: 'Closed', presentCount: 2 },
@@ -297,9 +297,9 @@ describe('the Crews view: paging and liking', () => {
     const mine = [
       { crewId: 'open6', openToSolo: true, size: 6 },
       { crewId: 'closed', openToSolo: false, size: 2 },
-      { crewId: 'big', openToSolo: true, size: 7 },
+      { crewId: 'big', openToSolo: true, size: 25 },
     ]
-    expect(crewsThatMayLikePeople(here, mine).map((c) => c.crewId)).toEqual(['open6'])
+    expect(crewsThatMayLikePeople(here, mine).map((c) => c.crewId)).toEqual(['open6', 'big'])
     expect(crewsThatMayLikePeople(here, [])).toEqual([])
   })
 

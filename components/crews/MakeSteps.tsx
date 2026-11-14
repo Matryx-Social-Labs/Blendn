@@ -26,8 +26,8 @@ const BIO_MIN_HEIGHT = 72
 const FRIEND_ROW = 64
 /** The list's own height, as a share of the window, inside the tall sheet: it scrolls there and windows its rows. */
 const LIST_SHARE = 0.5
-/** Rows drawn before the first scroll: more than the list shows, so the pick of a short list never waits on a batch. */
-const FIRST_ROWS = 20
+/** Rows drawn before the first scroll: a whole crew's worth (25), so filling a crew never waits on a batch. */
+const FIRST_ROWS = CREW_MAX_MEMBERS
 const NO_FRIENDS = 'Add friends first — a crew is made from your friends.'
 const FRIEND_FACE = 48
 /** The pick circle: 28, ringed at 35% white when off. */
@@ -123,7 +123,7 @@ export function NameStep(p: NameStepProps) {
       <View style={styles.toggleRow}>
         <View style={styles.fill}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can be liked for the crew. Crews of 6 or fewer.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can be liked for the crew.</Text>
         </View>
         <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
       </View>
@@ -195,7 +195,7 @@ export type FriendsStepProps = {
   onRetry: () => void
   /** What an empty list says; Make a crew and Invite differ ("Every friend of yours is in this crew…"). */
   none?: string
-  /** How many can be asked at most (11 for a new crew: twelve with you). At it, the rest dim and the footer says why. */
+  /** How many can be asked at most (24 for a new crew: 25 with you). At it, the rest dim and the footer says why. */
   limit?: number
   /** The friends are read a page at a time: asking for the next, and what the foot says while it comes or when it did not. */
   paging?: { hasMore: boolean; loadingMore: boolean; moreFailed: boolean; onMore: () => void }
@@ -297,7 +297,7 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
       </View>
       {label ? (
         // The label counts the picks; the foot speaks only at the cap, saying why the rest dim.
-        full ? <View accessibilityLiveRegion="polite">{line('A crew has at most 12 people.')}</View> : null
+        full ? <View accessibilityLiveRegion="polite">{line(`A crew has at most ${CREW_MAX_MEMBERS} people.`)}</View> : null
       ) : (
         <View style={styles.footer} accessibilityLiveRegion="polite">
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
@@ -305,7 +305,7 @@ export function FriendsStep({ friends, picked, onToggle, onRetry, none = NO_FRIE
             {' invited'}
           </Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), full ? styles.ink : { color: secondary }, styles.note]}>
-            {full ? 'A crew has at most 12 people.' : 'Invites last 14 days'}
+            {full ? `A crew has at most ${CREW_MAX_MEMBERS} people.` : 'Invites last 14 days'}
           </Text>
         </View>
       )}
@@ -406,7 +406,7 @@ export function VibeStep(p: VibeStepProps) {
       <View style={[styles.block, styles.blockRow]}>
         <View style={styles.fill}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Room for one more</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can find you. Crews of 6 or fewer.</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>Solo people who opt in can find you.</Text>
         </View>
         <Toggle value={p.openToSolo} onValueChange={p.onOpenToSolo} accessibilityLabel="Room for one more" />
       </View>

@@ -155,17 +155,17 @@ describe('step 1 · name and friends (board 02 A)', () => {
     await waitFor(() => screen.getByText('Add friends first — a crew is made from your friends.'))
   })
 
-  it('stops at eleven: a crew has at most twelve people, you included', async () => {
-    const many = Array.from({ length: 12 }, (_, i) => friend(`u${i}`, `Friend${i}`))
-    api.getFriends.mockResolvedValue({ success: true, data: { friends: many, count: 12 } })
+  it('stops at 24: a crew has at most 25 people, you included (owner, 2026-11-14: 6 and 12 were too small)', async () => {
+    const many = Array.from({ length: 25 }, (_, i) => friend(`u${i}`, `Friend${i}`))
+    api.getFriends.mockResolvedValue({ success: true, data: { friends: many, count: 25 } })
     await render(<NewCrewScreen />)
     await waitFor(() => screen.getByRole('checkbox', { name: 'Ask Friend0' }))
-    expect(screen.queryByText('A crew has at most 12 people.')).toBeNull()
+    expect(screen.queryByText('A crew has at most 25 people.')).toBeNull()
     for (const f of many) await pick(f.name)
-    expect(screen.getByRole('checkbox', { name: 'Ask Friend11' }).props.accessibilityState).toEqual({ checked: false, disabled: true })
-    expect(screen.getByText('Friends to ask · 11 picked')).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Ask Friend24' }).props.accessibilityState).toEqual({ checked: false, disabled: true })
+    expect(screen.getByText('Friends to ask · 24 picked')).toBeTruthy()
     // At the cap the foot says why, instead of the rows doing nothing in silence.
-    expect(screen.getByText('A crew has at most 12 people.')).toBeTruthy()
+    expect(screen.getByText('A crew has at most 25 people.')).toBeTruthy()
   })
 })
 
@@ -178,7 +178,7 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     // The line about the crew is not on the board's Make: it is written on the crew page (Edit crew), as before.
     expect(screen.queryByTestId('make-bio-input')).toBeNull()
     expect(screen.getByText('Room for one more')).toBeTruthy()
-    expect(screen.getByText('Solo people who opt in can find you. Crews of 6 or fewer.')).toBeTruthy()
+    expect(screen.getByText('Solo people who opt in can find you.')).toBeTruthy()
     expect(screen.getByText(CONSENT_LINE)).toBeTruthy()
     expect(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL })).toBeTruthy()
     // The button names the crew and the count asked: tapping it is the agreement.
