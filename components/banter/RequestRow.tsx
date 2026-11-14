@@ -4,6 +4,7 @@ import Reanimated, { FadeOut } from 'react-native-reanimated'
 import { DURATION } from '../../lib/design/tokens'
 import type { CrewInvite } from '../../lib/crews'
 import type { MessageRequest, useBanterInbox } from '../../lib/useBanterInbox'
+import { metInLine } from '../../lib/personFace'
 import { inboxTimeLabel } from './inbox'
 import { RequestCard, RequestFace } from './BanterParts'
 import { useReducedMotion } from '../../lib/motion'
@@ -20,6 +21,7 @@ export function RequestRow({ request: r, inbox }: { request: MessageRequest; inb
         testID={`banter-request-${r.request_id}`}
         face={<RequestFace photo={r.sender_avatar} pseudonym={r.sender_name ?? undefined} />}
         name={r.sender_name || 'Someone'}
+        met={metInLine(r.met_in)}
         // The request's note, verbatim (ROUND3 C11).
         note={r.initial_message?.trim() || 'Wants to message you'}
         time={inboxTimeLabel(r.created_at)}

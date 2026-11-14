@@ -222,6 +222,7 @@ export function BlendLiveCard({
 export function RequestCard({
   face,
   name,
+  met,
   note,
   foot,
   time,
@@ -235,6 +236,8 @@ export function RequestCard({
 }: {
   face: ReactNode
   name: string
+  /** Where you met ("Met in the room at …", `metInLine`), on its own line in the world's light (Flow 5 · B-A rq). */
+  met?: string | null
   note: string
   /** A quiet line under the answers: what became of one that did not go through. */
   foot?: string
@@ -257,6 +260,7 @@ export function RequestCard({
   useAnnounced(foot)
   const largeText = useLargeText()
   const twoLines = useTwoLineNames()
+  const sel = useSelection()
   return (
     // The card is a surface: its "…" draws the solid disc in the card's chip tone, not glass with nothing to refract (C20).
     <GroundProvider value="surface">
@@ -266,7 +270,7 @@ export function RequestCard({
             onPress={onOpen}
             disabled={!onOpen}
             accessibilityRole={onOpen ? 'button' : 'text'}
-            accessibilityLabel={`${name}. ${note}`}
+            accessibilityLabel={[name, met, note].filter(Boolean).join('. ')}
             accessibilityHint={onOpen ? 'Opens their profile' : undefined}
             style={styles.requestWho}
           >
@@ -279,6 +283,11 @@ export function RequestCard({
               <Text numberOfLines={twoLines ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
                 {name}
               </Text>
+              {met ? (
+                <Text testID={testID && `${testID}-met`} numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: sel.glyph }]}>
+                  {met}
+                </Text>
+              ) : null}
               <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
                 {note}
               </Text>

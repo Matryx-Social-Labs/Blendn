@@ -159,6 +159,24 @@ it('draws a request with its note verbatim, and both answers', async () => {
   expect(screen.getByLabelText('Decline the request from Asker 0')).toBeTruthy()
 })
 
+it('says where you met on its own line when the server knows, and nothing when it does not (Flow 5 · B-A rq, admin #935)', async () => {
+  const [met, unknown] = rs(0, 2)
+  // An earlier test's unconsumed once-answers would arrive first: start from none.
+  api.getMessageRequests.mockReset()
+  mockInvites.length = 0
+  api.getMessageRequests.mockResolvedValue({
+    success: true,
+    data: { requests: [{ ...met, metIn: { kind: 'event', name: 'Bengaluru Design Festival 2026' } }, { ...unknown, metIn: null }], totalCount: 2 },
+  } as never)
+  await render(<MessageRequests />)
+  await flush()
+  expect(screen.getByText('Met in the room at Bengaluru Design Festival 2026')).toBeTruthy()
+  expect(screen.getAllByText(/^Met in the room at/)).toHaveLength(1)
+  // A screen reader hears it between the name and the note.
+  expect(screen.getByLabelText('Asker 0. Met in the room at Bengaluru Design Festival 2026. hello 0')).toBeTruthy()
+  expect(screen.getByLabelText('Asker 1. hello 1')).toBeTruthy()
+})
+
 it('declining an invite asks first, then it leaves and the count follows', async () => {
   const { crewsApi } = jest.requireMock('../lib/crewsApi')
   const { showSheet } = jest.requireMock('../lib/sheet')
