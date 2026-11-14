@@ -486,7 +486,8 @@ describe('Check out always confirms (Room #16)', () => {
     // No chat yet in this room, so no Mute and no Report; Check out is still there.
     expect(screen.queryByTestId('room-info-mute', HIDDEN)).toBeNull()
     await act(async () => fireEvent.press(screen.getByTestId('room-info-check-out', HIDDEN)))
-    expect(screen.getByText('Check out of this event?', HIDDEN)).toBeTruthy()
+    // One sheet at a time: the confirm rises once Room info has gone.
+    expect(await screen.findByText('Check out of this event?', HIDDEN)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Stay' })).toBeTruthy()
     const buttons = screen.getAllByRole('button', { name: 'Check out' })
     await act(async () => fireEvent.press(buttons[buttons.length - 1]))
@@ -628,19 +629,20 @@ describe('⋯ opens Room info as a sheet over the room (Flow 5 C6, I-A)', () => 
     showSheet.mockClear()
     await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
     expect(showSheet).not.toHaveBeenCalled()
-    expect(screen.getByTestId('room-info', HIDDEN)).toBeTruthy()
+    expect(screen.getByTestId('room-info-event', HIDDEN)).toBeTruthy()
     await act(async () => fireEvent.press(screen.getByTestId('room-info-mute', HIDDEN)))
-    expect(screen.getByText('Mute notifications', HIDDEN)).toBeTruthy()
+    expect(await screen.findByText('Mute notifications', HIDDEN)).toBeTruthy()
   })
 
   it('See all closes the sheet onto People', async () => {
     mockSetRoom(ready({ chatGroupId: 'g1', settled: true }))
     await drawRoom()
     const overlay = jest.requireActual('../lib/blendnOverlay') as typeof import('../lib/blendnOverlay')
-    act(() => overlay.setRoomTab('chat'))
+    const setTab = jest.spyOn(overlay, 'setRoomTab')
     await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
     await act(async () => fireEvent.press(screen.getByTestId('room-info-people', HIDDEN)))
-    expect(overlay.getRoomTab()).toBe('people')
+    expect(setTab).toHaveBeenLastCalledWith('people')
+    setTab.mockRestore()
   })
 })
 
