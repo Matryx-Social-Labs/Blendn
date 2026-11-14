@@ -254,13 +254,16 @@ export function heirOf(crew: Pick<Crew, 'members'>): CrewMember | null {
   return others.reduce<CrewMember | null>((first, m) => (first && first.joinedAt <= m.joinedAt ? first : m), null)
 }
 
-/** Crews 5A (board 06-leave · A, owner): the owner's two doors, each saying what happens to the others. */
-export function ownerSheet(crew: Pick<Crew, 'name' | 'members'>): { title: string; message: string; leave: string; end: string } {
+/**
+ * Crews 5A (board 06-leave · A, owner): the owner's two doors, each saying what happens to the others. In a crew of two
+ * nobody takes it over: leaving closes it, in today's words.
+ */
+export function ownerSheet(crew: Pick<Crew, 'name' | 'size' | 'members'>): { title: string; message: string; leave: string; end: string } {
   const heir = heirOf(crew)
   return {
     title: crew.name,
     message: 'You own this crew.',
-    leave: heir ? `Leave — ${heir.name} takes it over` : 'Leave — it passes on',
+    leave: leavingClosesCrew(crew) ? 'Leave and close the crew' : heir ? `Leave — ${heir.name} takes it over` : 'Leave — it passes on',
     end: 'End the crew for everyone',
   }
 }

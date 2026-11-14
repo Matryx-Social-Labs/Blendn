@@ -251,6 +251,8 @@ describe('leaving and removing', () => {
     expect(ownerSheet(owned)).toEqual({ title: 'Nebula', message: 'You own this crew.', leave: 'Leave — Priya takes it over', end: 'End the crew for everyone' })
     // Nobody listed to hand it to (kept apart from the owner): the door still says it passes on, unnamed.
     expect(ownerSheet({ ...owned, members: owned.members.slice(0, 1) }).leave).toBe('Leave — it passes on')
+    // A crew of two: nobody takes it over, leaving closes it (today's words); End is still there.
+    expect(ownerSheet({ ...owned, size: 2 })).toMatchObject({ leave: 'Leave and close the crew', end: 'End the crew for everyone' })
   })
 
   it('ending says exactly what ends, and that nobody is told', () => {
@@ -262,8 +264,7 @@ describe('leaving and removing', () => {
     })
   })
 
-  it('a crew of two still closes when its owner leaves; a member’s words are unchanged', () => {
-    expect(leaveSheet({ ...owned, size: 2 }).action).toBe('Leave and close the crew')
+  it('a member’s words are unchanged', () => {
     expect(leaveSheet({ name: 'Nebula', size: 4 }).message).toContain('Nobody is told you left')
   })
 

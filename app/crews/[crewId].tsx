@@ -32,7 +32,7 @@ import {
   type CrewReportReason,
 } from '../../lib/crews'
 import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
-import { crewBarState, endSheet, leaveSheet, leavingClosesCrew, ownerSheet, removeSheet, textFieldOf, type CrewTextField } from '../../lib/crewsScreens'
+import { crewBarState, endSheet, leaveSheet, ownerSheet, removeSheet, textFieldOf, type CrewTextField } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
@@ -213,10 +213,10 @@ function CrewScreenContent() {
     return { ok: true, toast: `${crewName} has ended` }
   }
 
-  /* Crews 5A (board 06-leave · A): the owner of a crew that carries on gets two doors; End has its own confirm. A crew of two closes when anyone leaves, so its owner keeps that sheet. */
+  /* Crews 5A (board 06-leave · A): the owner gets two doors, Leave and End; End has its own confirm. A member keeps today's Leave sheet. */
   const confirmLeave = () => {
     if (!crew) return
-    if (owner && !leavingClosesCrew(crew)) {
+    if (owner) {
       const doors = ownerSheet(crew)
       const ending = endSheet(crew)
       return showSheet({

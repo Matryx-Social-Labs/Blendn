@@ -540,10 +540,12 @@ describe('ending the crew', () => {
     expect(router.back).not.toHaveBeenCalled()
   })
 
-  it('the owner of a crew of two keeps the closing sheet: leaving already ends it', async () => {
-    const sheet = await ownerDoors({ size: 2, members: [member('me', 'Sam', 'owner'), member('rh_priya', 'Priya')] })
-    expect(sheet.title).toBe('Leave Nebula?')
-    expect(sheet.actions.map((a) => a.label)).toEqual(['Leave and close the crew', 'Cancel'])
+  it('the owner of a crew of two can end it too; the Leave door says leaving closes it', async () => {
+    crews.leave.mockResolvedValue({ success: true, data: { dissolved: true } })
+    const doors = await ownerDoors({ size: 2, members: [member('me', 'Sam', 'owner'), member('rh_priya', 'Priya')] })
+    expect(doors.actions.map((a) => a.label)).toEqual(['Leave and close the crew', 'End the crew for everyone', 'Cancel'])
+    expect(endConfirm(doors).message).toContain('for all 2 of you')
+    expect(await run(doors, 'Leave and close the crew')).toEqual({ ok: true, toast: 'Nebula has closed' })
   })
 
   it('a member never sees End', async () => {
