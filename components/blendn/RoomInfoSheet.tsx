@@ -206,16 +206,8 @@ function InfoRow({
   const bold = useBoldText()
   const ink = destructive ? COLOR.destructive : COLOR.textPrimary
   const end = typeof trail === 'string' ? <Icon name={trail as IconName} size={ICON.inline} color={COLOR.textTertiary} /> : trail
-  return (
-    <Pressable
-      testID={testID}
-      onPress={onPress}
-      disabled={!onPress}
-      accessibilityRole={onPress ? (trail === 'external-link' ? 'link' : 'button') : 'text'}
-      accessibilityLabel={label ?? [title, typeof hint === 'string' ? hint : null].filter(Boolean).join(', ')}
-      android_ripple={onPress ? { color: PRESSED_WASH.android } : undefined}
-      style={({ pressed }) => [styles.row, pressed && Platform.OS === 'ios' && styles.pressed]}
-    >
+  const body = (
+    <>
       {leading ?? (icon ? <Icon name={icon} size={ICON.control} color={ink} /> : null)}
       <View style={styles.words}>
         <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold), { color: ink }]}>
@@ -229,6 +221,26 @@ function InfoRow({
         ) : null}
       </View>
       {end}
+    </>
+  )
+  const spoken = label ?? [title, typeof hint === 'string' ? hint : null].filter(Boolean).join(', ')
+  // A row with nothing to do (the host) is read as text, never as a dimmed button.
+  if (!onPress)
+    return (
+      <View testID={testID} accessible accessibilityLabel={spoken} style={styles.row}>
+        {body}
+      </View>
+    )
+  return (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      accessibilityRole={trail === 'external-link' ? 'link' : 'button'}
+      accessibilityLabel={spoken}
+      android_ripple={{ color: PRESSED_WASH.android }}
+      style={({ pressed }) => [styles.row, pressed && Platform.OS === 'ios' && styles.pressed]}
+    >
+      {body}
     </Pressable>
   )
 }
