@@ -20,6 +20,7 @@ import {
   type Crew,
   type CrewIntent,
   type CrewInvite,
+  type CrewMember,
 } from './crews'
 import { clockIn } from './time'
 
@@ -236,22 +237,45 @@ export const isGate = (message: string, errorCode?: string | null): boolean => r
  */
 export const leavingClosesCrew = (crew: Pick<Crew, 'size'>): boolean => crew.size <= 2
 
-/**
- * "Leave Nebula?" with the body for a crew that would carry on, or close. The owner's words say where the crew goes:
- * the server hands it to the active member who has been in it longest (admin lib/crews/crews.ts `removeFromCrew`,
- * `settleLocked`). Not named here: the client cannot tell who is active, and members kept apart are off its list.
- */
-export function leaveSheet(crew: Pick<Crew, 'name' | 'size'> & { you?: Crew['you'] }): { title: string; message: string; action: string } {
+/** "Leave Nebula?" with the body for a crew that would carry on, or close. An owner's crew that carries on gets `ownerSheet`. */
+export function leaveSheet(crew: Pick<Crew, 'name' | 'size'>): { title: string; message: string; action: string } {
   const title = `Leave ${crew.name}?`
   if (leavingClosesCrew(crew)) return { title, message: 'Leaving will close the crew — there’ll be one of you left.', action: 'Leave and close the crew' }
-  if (crew.you?.role === 'owner') {
-    return {
-      title,
-      message: 'You leave the crew and its chat. It passes to whoever has been in it longest, who can then edit it and invite people.',
-      action: 'Leave crew',
-    }
-  }
   return { title, message: 'You leave the crew and its chat. Nobody is told you left; the crew just has one fewer.', action: 'Leave crew' }
+}
+
+/**
+ * Who an owner who leaves hands the crew to: the member who joined first. The server (admin lib/crews/crews.ts
+ * `settleLocked`) also passes over anyone suspended or already owning 3 crews, and a member kept apart from the owner is
+ * not on this list. ponytail: then the name is wrong; a server `heir` field fixes it if that ever matters.
+ */
+export function heirOf(crew: Pick<Crew, 'members'>): CrewMember | null {
+  const others = crew.members.filter((m) => m.role !== 'owner')
+  return others.reduce<CrewMember | null>((first, m) => (first && first.joinedAt <= m.joinedAt ? first : m), null)
+}
+
+/**
+ * Crews 5A (board 06-leave · A, owner): the owner's two doors, each saying what happens to the others. In a crew of two
+ * nobody takes it over: leaving closes it, in today's words.
+ */
+export function ownerSheet(crew: Pick<Crew, 'name' | 'size' | 'members'>): { title: string; message: string; leave: string; end: string } {
+  const heir = heirOf(crew)
+  return {
+    title: crew.name,
+    message: 'You own this crew.',
+    leave: leavingClosesCrew(crew) ? 'Leave and close the crew' : heir ? `Leave — ${heir.name} takes it over` : 'Leave — it passes on',
+    end: 'End the crew for everyone',
+  }
+}
+
+/** Crews 5A's confirm: exactly what `DELETE /crews/:crewId` ends (docs/api/API.md → End the crew), and that nobody is pushed. */
+export function endSheet(crew: Pick<Crew, 'name' | 'size'>): { title: string; message: string; action: string } {
+  const everyone = crew.size <= 1 ? 'you' : crew.size === 2 ? 'both of you' : `all ${crew.size} of you`
+  return {
+    title: `End ${crew.name}?`,
+    message: `The crew and its chat close for ${everyone}, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.`,
+    action: `End ${crew.name}`,
+  }
 }
 
 /** "Remove Rohan from Nebula?" and what it does. */

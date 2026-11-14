@@ -1543,6 +1543,14 @@ crew is told. In the admin queue a moderator can **hide** the crew — off every
 surface outside it: no card, no like, no Mix; its members keep their crew and
 its chat — or **dissolve** it (D-15). Both are audited.
 
+**End the crew** (crews 5A): `DELETE /crews/:crewId` → `{ ended: true }`, the
+owner only, ends the crew whatever its size: dissolved for good, every member
+and invite row gone (an open invite is void), its chat given one last line —
+`"{crew} has ended"`, type `system`, metadata `{ kind: "crew_ended" }` — then
+closed (404 from then on), and its open Mixes closed. Friendships stay. Nobody
+is pushed. A member, a stranger, a crew that does not exist and a second call
+all get the same 404. `write` limiter.
+
 **Inside a crew people are named** — first name and one photo, never the full
 name — on `/crews` and in the crew's room. Member ids are handles in the crew's
 room (yours is your own id); `DELETE /crews/:crewId/members/:userId` takes that

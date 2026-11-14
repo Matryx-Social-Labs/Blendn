@@ -21,7 +21,7 @@ jest.mock('../lib/apiClient', () => ({
   apiClient: { getFriends: jest.fn(), muteChatGroup: jest.fn(), unmuteChatGroup: jest.fn() },
 }))
 jest.mock('../lib/crewsApi', () => ({
-  crewsApi: { crew: jest.fn(), myCrews: jest.fn(), update: jest.fn(), invite: jest.fn(), leave: jest.fn(), report: jest.fn(), setKeepMeAnonymous: jest.fn() },
+  crewsApi: { crew: jest.fn(), myCrews: jest.fn(), update: jest.fn(), invite: jest.fn(), leave: jest.fn(), end: jest.fn(), report: jest.fn(), setKeepMeAnonymous: jest.fn() },
 }))
 jest.mock('../lib/roomRow', () => ({ useRoomRow: () => null }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
@@ -472,6 +472,89 @@ describe('leaving, removing and reporting', () => {
     await fireEvent.press(screen.getByLabelText('More'))
     await fireEvent.press(within(screen.getByTestId('crew-menu')).getByLabelText('Leave crew'))
     expect(sheetOf<ActionSheet>().title).toBe('Leave Nebula?')
+  })
+})
+
+// Crews 5A (board 06-leave · A, owner + confirm): the owner's Leave opens two doors; End confirms what ends, then ends.
+describe('ending the crew', () => {
+  const ownerDoors = async (over: Partial<Crew> = {}) => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('owner', over) })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('Leave crew'))
+    await fireEvent.press(screen.getByLabelText('Leave crew'))
+    return sheetOf<ActionSheet>()
+  }
+  const endConfirm = (doors: ActionSheet) => (doors.actions.find((a) => a.label === 'End the crew for everyone') as { next: () => ActionSheet }).next()
+
+  it('the owner sees two doors in rows: Leave names who takes it over, End is the red one, then Cancel', async () => {
+    const doors = await ownerDoors()
+    expect(doors.title).toBe('Nebula')
+    expect(doors.message).toBe('You own this crew.')
+    expect(doors.layout).toBe('rows')
+    expect(doors.actions.map((a) => [a.label, a.variant ?? null])).toEqual([
+      ['Leave — Priya takes it over', null],
+      ['End the crew for everyone', 'destructive'],
+      ['Cancel', null],
+    ])
+    expect(crews.end).not.toHaveBeenCalled()
+  })
+
+  it('the owner’s Leave door leaves at once and hands the crew on', async () => {
+    crews.leave.mockResolvedValue({ success: true, data: { dissolved: false } })
+    const doors = await ownerDoors()
+    expect(await run(doors, 'Leave — Priya takes it over')).toEqual({ ok: true, toast: 'You left Nebula' })
+    expect(crews.leave).toHaveBeenCalledWith('c2', 'me')
+    expect(crews.end).not.toHaveBeenCalled()
+    expect(router.back).toHaveBeenCalled()
+  })
+
+  it('End confirms exactly what ends before anything is sent, then ends it for everyone', async () => {
+    crews.end.mockResolvedValue({ success: true, data: { ended: true } })
+    const confirm = endConfirm(await ownerDoors())
+    expect(confirm.title).toBe('End Nebula?')
+    expect(confirm.message).toBe(
+      'The crew and its chat close for all 3 of you, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.'
+    )
+    expect(confirm.actions.map((a) => [a.label, a.variant ?? null])).toEqual([
+      ['End Nebula', 'destructive'],
+      ['Cancel', null],
+    ])
+    expect(crews.end).not.toHaveBeenCalled()
+    expect(await run(confirm, 'End Nebula')).toEqual({ ok: true, toast: 'Nebula has ended' })
+    expect(crews.end).toHaveBeenCalledWith('c2')
+    expect(crews.leave).not.toHaveBeenCalled()
+    expect(router.back).toHaveBeenCalled()
+  })
+
+  it('ended from the chat, the chat goes too', async () => {
+    mockParams.fromChat = '1'
+    crews.end.mockResolvedValue({ success: true, data: { ended: true } })
+    await run(endConfirm(await ownerDoors()), 'End Nebula')
+    expect(router.dismissTo).toHaveBeenCalledWith('/crews')
+    expect(router.back).not.toHaveBeenCalled()
+  })
+
+  it('an end that fails stays on the confirm and says why', async () => {
+    crews.end.mockResolvedValue({ success: false, error: 'Failed', errorCode: 'SERVER_ERROR' })
+    expect(await run(endConfirm(await ownerDoors()), 'End Nebula')).toEqual({ ok: false, error: 'Couldn’t end the crew. Try again.' })
+    expect(router.back).not.toHaveBeenCalled()
+  })
+
+  it('the owner of a crew of two can end it too; the Leave door says leaving closes it', async () => {
+    crews.leave.mockResolvedValue({ success: true, data: { dissolved: true } })
+    const doors = await ownerDoors({ size: 2, members: [member('me', 'Sam', 'owner'), member('rh_priya', 'Priya')] })
+    expect(doors.actions.map((a) => a.label)).toEqual(['Leave and close the crew', 'End the crew for everyone', 'Cancel'])
+    expect(endConfirm(doors).message).toContain('for both of you')
+    expect(await run(doors, 'Leave and close the crew')).toEqual({ ok: true, toast: 'Nebula has closed' })
+  })
+
+  it('a member never sees End', async () => {
+    crews.crew.mockResolvedValue({ success: true, data: crew('member') })
+    await render(<CrewScreen />)
+    await waitFor(() => screen.getByLabelText('More'))
+    await fireEvent.press(screen.getByLabelText('More'))
+    await fireEvent.press(within(screen.getByTestId('crew-menu')).getByLabelText('Leave crew'))
+    expect(sheetOf<ActionSheet>().actions.map((a) => a.label)).toEqual(['Leave crew', 'Cancel'])
   })
 })
 
