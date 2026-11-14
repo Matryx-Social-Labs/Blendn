@@ -17,7 +17,7 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }))
 jest.mock('../lib/apiClient', () => ({ apiClient: { getFriends: jest.fn() } }))
-jest.mock('../lib/crewsApi', () => ({ crewsApi: { create: jest.fn(), crew: jest.fn() } }))
+jest.mock('../lib/crewsApi', () => ({ crewsApi: { create: jest.fn(), crew: jest.fn(), myCrews: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-me' } }) }))
 // The link-closing signal as lib/pendingRoute gives it; `mockCloseForLink()` is a link closing the modals.
 const mockLinkClosers = new Set<() => void>()
@@ -39,6 +39,9 @@ import { crewDraftThread, draftOf, setDraft } from '../lib/chatOutbox'
 const api = apiClient as jest.Mocked<typeof apiClient>
 const crews = crewsApi as jest.Mocked<typeof crewsApi>
 
+/** `GET /crews` → `tagIdeas` (admin #981), without the #. */
+const IDEAS = ['quizteam', 'runclub', 'technoheads']
+
 const friend = (userId: string, name: string) => ({ userId, name, photo: null, since: '2026-09-01T00:00:00Z' })
 
 beforeEach(() => {
@@ -46,6 +49,7 @@ beforeEach(() => {
   setDraft(crewDraftThread('u-me'), '')
   crews.create.mockReset()
   crews.crew.mockReset()
+  crews.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [], tagIdeas: IDEAS } } as never)
   api.getFriends.mockResolvedValue({ success: true, data: { friends: [friend('u-priya', 'Priya'), friend('u-rohan', 'Rohan')], count: 2 } })
 })
 
@@ -173,8 +177,8 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
   it('shows here-for, tags, Room for one more and the consent — board 02 A’s four, no more — with nothing sent yet', async () => {
     await toVibe()
     expect(screen.getByText('Here for · optional')).toBeTruthy()
-    expect(screen.getByText('Tags · optional')).toBeTruthy()
-    expect(screen.getByLabelText('0 of 3')).toBeTruthy()
+    expect(screen.getByText('Your tags · optional')).toBeTruthy()
+    expect(screen.getByLabelText('0 of 5')).toBeTruthy()
     // The line about the crew is not on the board's Make: it is written on the crew page (Edit crew), as before.
     expect(screen.queryByTestId('make-bio-input')).toBeNull()
     expect(screen.getByText('Room for one more')).toBeTruthy()
@@ -202,25 +206,100 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     expect(screen.getByTestId('make-intent-friendship').props.accessibilityState).toMatchObject({ selected: false })
   })
 
-  it('the tags are today’s ten fixed chips, unchanged: free hashtags wait for the owner’s pick (tags/ options)', async () => {
+  it('offers the server’s ideas as hashtags to tap: a tapped idea becomes a tag you can take off (board tags/01 A)', async () => {
     await toVibe()
-    for (const t of ['Quiz team', 'Dance floor', 'Book club']) expect(screen.getByLabelText(t)).toBeTruthy()
-    expect(screen.queryByLabelText('6 more tags')).toBeNull()
+    await waitFor(() => screen.getByLabelText('#runclub'))
+    expect(screen.getByText('Ideas · tap to add')).toBeTruthy()
+    await fireEvent.press(screen.getByLabelText('#runclub'))
+    // It moves from the ideas to your tags, removable.
+    expect(screen.getByLabelText('#runclub, remove tag')).toBeTruthy()
+    expect(screen.queryByLabelText('#runclub')).toBeNull()
+    expect(screen.getByLabelText('1 of 5')).toBeTruthy()
+    await fireEvent.press(screen.getByLabelText('#runclub, remove tag'))
+    expect(screen.getByLabelText('#runclub')).toBeTruthy()
+    expect(screen.getByLabelText('0 of 5')).toBeTruthy()
+  })
+
+  it('no ideas from the server is no ideas row, and your own still goes in', async () => {
+    crews.myCrews.mockResolvedValue({ success: false, error: 'HTTP 500' } as never)
+    await toVibe()
+    expect(screen.queryByText('Ideas · tap to add')).toBeNull()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'chai🍵')
+    await fireEvent(screen.getByTestId('make-tag-input'), 'submitEditing')
+    expect(screen.getByLabelText('#chai🍵, remove tag')).toBeTruthy()
+  })
+
+  it('your own: the field previews the tag as it will be — # stripped, spaces closed up — and return adds it', async () => {
+    await toVibe()
+    const field = () => screen.getByTestId('make-tag-input')
+    await fireEvent.changeText(field(), '# late night')
+    expect(screen.getByText('Return or comma adds #latenight')).toBeTruthy()
+    // The counter counts the tag, not what was typed: 9 of 24.
+    expect(screen.getByText('9/24', { includeHiddenElements: true })).toBeTruthy()
+    await fireEvent(field(), 'submitEditing')
+    expect(screen.getByLabelText('#latenight, remove tag')).toBeTruthy()
+    expect(field().props.value).toBe('')
+    expect(screen.queryByText(/adds #/)).toBeNull()
+  })
+
+  it('a comma adds what came before it', async () => {
+    await toVibe()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'dosaafter,')
+    expect(screen.getByLabelText('#dosaafter, remove tag')).toBeTruthy()
+    expect(screen.getByTestId('make-tag-input').props.value).toBe('')
+  })
+
+  it('a second spelling of a tag you have is not added twice', async () => {
+    await toVibe()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'RunClub,')
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), '#runclub,')
+    expect(screen.getAllByLabelText(/, remove tag$/)).toHaveLength(1)
+    expect(screen.getByLabelText('#RunClub, remove tag')).toBeTruthy()
+  })
+
+  it('a link or a handle is refused under the field in the server’s words, and stays there to fix', async () => {
+    await toVibe()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'blendn.app')
+    await fireEvent(screen.getByTestId('make-tag-input'), 'submitEditing')
+    expect(screen.getByText('A tag is 1–24 letters, numbers, _ or emoji — no links, @ or contact details')).toBeTruthy()
+    expect(screen.getByTestId('make-tag-input').props.value).toBe('blendn.app')
+    expect(screen.queryAllByLabelText(/, remove tag$/)).toHaveLength(0)
+    // Typing again clears it.
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'blendn')
+    expect(screen.queryByText(/no links, @/)).toBeNull()
+  })
+
+  it('holds five: the ideas dim and the field says so; one taken off frees a place', async () => {
+    await toVibe()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'a, b, c, d, e,')
+    expect(screen.getByLabelText('5 of 5')).toBeTruthy()
+    await waitFor(() => screen.getByLabelText('#runclub'))
+    expect(screen.getByLabelText('#runclub').props.accessibilityState).toMatchObject({ disabled: true })
+    await fireEvent.press(screen.getByLabelText('#runclub'))
+    expect(screen.getByLabelText('5 of 5')).toBeTruthy()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'f')
+    await fireEvent(screen.getByTestId('make-tag-input'), 'submitEditing')
+    expect(screen.getByText('Up to 5 tags')).toBeTruthy()
+    await fireEvent.press(screen.getByLabelText('#a, remove tag'))
+    expect(screen.getByLabelText('4 of 5')).toBeTruthy()
+    expect(screen.getByLabelText('#runclub').props.accessibilityState).toMatchObject({ disabled: false })
+  })
+
+  it('the server’s refusal of a tag stands under the tags, not in a sheet; changing the tags clears it', async () => {
+    crews.create.mockResolvedValue({ success: false, error: 'This can’t be a crew’s tag.', errorCode: 'VALIDATION_FAILED', field: 'tags', errors: [{ field: 'tags', message: 'This can’t be a crew’s tag.' }] } as never)
+    await toVibe()
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'rude,')
+    await pressMake()
+    await waitFor(() => screen.getByText('This can’t be a crew’s tag.'))
+    expect(screen.getByLabelText(S2)).toBeTruthy()
+    expect(screen.queryByTestId('crew-refusal')).toBeNull()
+    await fireEvent.press(screen.getByLabelText('#rude, remove tag'))
+    expect(screen.queryByText('This can’t be a crew’s tag.')).toBeNull()
   })
 
   it('the consent is the meta line the board draws, so it stands above the button without a scroll', async () => {
     await toVibe()
     expect(StyleSheet.flatten(screen.getByText(CONSENT_LINE).props.style).fontSize).toBeLessThan(15)
-  })
-
-  it('holds the tags to three: a fourth does nothing, and a picked one can be put back', async () => {
-    await toVibe()
-    for (const t of ['Quiz team', 'Run club', 'Techno heads']) await fireEvent.press(screen.getByLabelText(t))
-    expect(screen.getByLabelText('3 of 3')).toBeTruthy()
-    await fireEvent.press(screen.getByLabelText('Office gang'))
-    expect(screen.getByLabelText('3 of 3')).toBeTruthy()
-    await fireEvent.press(screen.getByLabelText('Run club'))
-    expect(screen.getByLabelText('2 of 3')).toBeTruthy()
   })
 
   it('insets a label once, 4 pt, at the field label’s own edge: the row around it adds no second left', async () => {
@@ -240,7 +319,10 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     await press('Next')
     await waitFor(() => screen.getByLabelText(S2))
     await fireEvent.press(screen.getByLabelText('Dating'))
-    await fireEvent.press(screen.getByLabelText('Dance floor'))
+    await waitFor(() => screen.getByLabelText('#runclub'))
+    await fireEvent.press(screen.getByLabelText('#runclub'))
+    await fireEvent.changeText(screen.getByTestId('make-tag-input'), 'late night')
+    await fireEvent(screen.getByTestId('make-tag-input'), 'submitEditing')
     await fireEvent.press(screen.getByRole('switch', { name: 'Room for one more' }))
     await fireEvent.press(screen.getByRole('switch', { name: KEEP_ANONYMOUS_LABEL }))
     await press('Make Nebula · ask 1 friend')
@@ -249,7 +331,8 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
     expect(crews.create.mock.calls[0][0]).toEqual({
       name: 'Nebula',
       intent: ['dating'],
-      tags: ['dance-floor'],
+      // As typed and tapped; the server normalises again and its spelling wins.
+      tags: ['runclub', 'latenight'],
       openToSolo: true,
       inviteUserIds: ['u-priya'],
       revealConsent: true,
@@ -366,7 +449,7 @@ describe('step 2 · the vibe, optional, and the consent on the button (board 02 
 
 describe('what the server refuses', () => {
   it('the server’s own length refusal comes back under the name, with no field named', async () => {
-    crews.create.mockResolvedValue({ success: false, error: 'Validation failed', errorCode: 'VALIDATION_FAILED', errors: [{ path: 'name', message: 'A crew name is 2–32 characters' }] })
+    crews.create.mockResolvedValue({ success: false, error: 'Validation failed', errorCode: 'VALIDATION_FAILED', errors: [{ field: 'name', message: 'A crew name is 2–32 characters' }] })
     await toVibe()
     await pressMake()
     await waitFor(() => screen.getByLabelText(S1))

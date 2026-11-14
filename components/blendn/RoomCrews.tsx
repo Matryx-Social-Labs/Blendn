@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, ICON, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
-import { crewBadge, stripCrewsFrom, type Crew, type CrewCard as CrewCardData, type CrewsAtEvent } from '../../lib/crews'
+import { crewBadge, stripCrewsFrom, tagText, type Crew, type CrewCard as CrewCardData, type CrewsAtEvent } from '../../lib/crews'
 import { Button } from '../ds/Button'
 import { CrewCard } from '../ds/CrewCard'
 import { CrewStrip, type StripCrew } from '../ds/CrewStrip'
@@ -195,7 +195,7 @@ export function RoomCrewCard({
     <View style={styles.gutter}>
       <CrewCard
         compact
-        crew={{ name: card.name, emblemSeed: card.emblemSeed, size: card.size, here: card.presentCount, bio: card.bio, tags: card.tags.map((t) => t.label), badge: crewBadge(card.badges) }}
+        crew={{ name: card.name, emblemSeed: card.emblemSeed, size: card.size, here: card.presentCount, bio: card.bio, tags: card.tags.map(tagText), badge: crewBadge(card.badges) }}
         overlap={card.overlaps?.[0]?.text ?? null}
         // Liked: no crew named. Who sent it isn't known here, and the chip's current crew may not be it.
         like={{ liked: card.youLiked, as: card.youLiked ? null : as, onPress: () => void actions.like(card) }}

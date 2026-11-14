@@ -9,6 +9,10 @@ import {
   CREW_REMOVED_LINE,
   OPEN_TO_CREWS_HELPER,
   CREW_MAX_TAGS,
+  CREW_TAG_MAX,
+  addTags,
+  normaliseTag,
+  tagText,
   CREW_REPORT_REASONS,
   blendSides,
   blendTitle,
@@ -29,7 +33,6 @@ import {
   nextCrewOffset,
   roomClosedLine,
   roomKindParam,
-  toggleTag,
   type Blend,
   type BlendPerson,
   type BlendSide,
@@ -179,21 +182,78 @@ describe('the create body', () => {
     expect(createCrewBody({ ...form, name: '🔥🔥' }, agreed)).not.toHaveProperty('problem')
   })
 
-  it('holds the bio to 140, the tags to 3 and the invites to 24 (a crew of 25)', () => {
+  it('holds the bio to 140, the tags to 5 and the invites to 24 (a crew of 25)', () => {
     expect(createCrewBody({ ...form, bio: 'b'.repeat(141) }, agreed)).toHaveProperty('problem')
-    expect(createCrewBody({ ...form, tags: ['a', 'b', 'c', 'd'] }, agreed)).toHaveProperty('problem')
+    expect(createCrewBody({ ...form, tags: ['a', 'b', 'c', 'd', 'e', 'f'] }, agreed)).toHaveProperty('problem')
+    // Control: five is the server's MAX_TAGS (admin #981), not a refusal.
+    expect(createCrewBody({ ...form, tags: ['a', 'b', 'c', 'd', 'e'] }, agreed)).not.toHaveProperty('problem')
     expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 25 }, (_, i) => `u${i}`) }, agreed)).toHaveProperty('problem')
     expect(createCrewBody({ ...form, inviteUserIds: Array.from({ length: 24 }, (_, i) => `u${i}`) }, agreed)).not.toHaveProperty('problem')
   })
+})
 
-  it('a fourth tag does nothing rather than drop the first', () => {
-    const three = ['a', 'b', 'c']
-    expect(toggleTag(three, 'd')).toEqual(three)
-    expect(toggleTag(three, 'b')).toEqual(['a', 'c'])
-    expect(toggleTag(['a'], 'b')).toEqual(['a', 'b'])
-    expect(CREW_MAX_TAGS).toBe(3)
+describe('free hashtags (owner pick A, admin #981)', () => {
+  it('holds the server’s limits: 5 tags, 24 characters each', () => {
+    expect(CREW_MAX_TAGS).toBe(5)
+    expect(CREW_TAG_MAX).toBe(24)
   })
 
+  it('normalises as the server does: trim, the leading #s stripped, spaces closed up', () => {
+    expect(normaliseTag(' # late night ')).toBe('latenight')
+    expect(normaliseTag('##RunClub')).toBe('RunClub')
+    expect(normaliseTag('कैफ़े हॉपिंग')).toBe('कैफ़ेहॉपिंग')
+    // A # inside a tag is not a leading one: left for the rule to refuse.
+    expect(normaliseTag('a#b')).toBe('a#b')
+  })
+
+  it('adds what was typed, as typed, and empties the field', () => {
+    expect(addTags([], '#late night')).toEqual({ tags: ['latenight'], draft: '' })
+    expect(addTags(['a'], 'chai🍵')).toEqual({ tags: ['a', 'chai🍵'], draft: '' })
+  })
+
+  it('a comma splits: each part is its own tag', () => {
+    expect(addTags([], 'runclub, dosa after,')).toEqual({ tags: ['runclub', 'dosaafter'], draft: '' })
+  })
+
+  it('dedupes ignoring case, keeping the first spelling — silently, not a refusal', () => {
+    expect(addTags(['RunClub'], '#runclub')).toEqual({ tags: ['RunClub'], draft: '' })
+    expect(addTags([], 'Foo, FOO')).toEqual({ tags: ['Foo'], draft: '' })
+  })
+
+  it('holds 24 characters as a person counts them: an emoji is one', () => {
+    const t24 = 'a'.repeat(23) + '🍵'
+    expect(addTags([], t24)).toEqual({ tags: [t24], draft: '' })
+    // Control: 25 is refused, and the text stays in the field to fix.
+    const t25 = 'a'.repeat(25)
+    expect(addTags([], t25)).toEqual({ tags: [], draft: t25, problem: expect.stringMatching(/1–24/) })
+  })
+
+  it('refuses a link, an @ or a phone’s + and -, in the server’s words, and keeps the text', () => {
+    for (const bad of ['blendn.app', '@priya', '+91-98', 'a/b', 'x:y']) {
+      expect(addTags(['a'], bad)).toEqual({ tags: ['a'], draft: bad, problem: 'A tag is 1–24 letters, numbers, _ or emoji — no links, @ or contact details' })
+    }
+    // Control: letters in any script, digits, _ and emoji pass.
+    expect(addTags([], 'कैफ़ेहॉपिंग, late_night_2, 🇮🇳, 👍🏽').tags).toEqual(['कैफ़ेहॉपिंग', 'late_night_2', '🇮🇳', '👍🏽'])
+  })
+
+  it('a sixth is not added: the field keeps it and says why', () => {
+    const five = ['a', 'b', 'c', 'd', 'e']
+    expect(addTags(five, 'f')).toEqual({ tags: five, draft: 'f', problem: 'Up to 5 tags' })
+    // Control: the fifth goes in.
+    expect(addTags(five.slice(0, 4), 'e')).toEqual({ tags: five, draft: '' })
+  })
+
+  it('a blank or a lone # adds nothing and says nothing', () => {
+    expect(addTags(['a'], '  # ')).toEqual({ tags: ['a'], draft: '' })
+  })
+
+  it('draws a tag as its label with the spaces closed up, so an old slug reads as a hashtag', () => {
+    expect(tagText({ slug: 'quiz-team', label: 'Quiz team' })).toBe('Quizteam')
+    expect(tagText({ slug: 'sundayrunclub', label: 'SundayRunClub' })).toBe('SundayRunClub')
+  })
+})
+
+describe('crew reports', () => {
   it('reports with exactly the server’s reasons', () => {
     expect(CREW_REPORT_REASONS.map((r) => r.value).sort()).toEqual(
       ['contact_details', 'impersonation', 'offensive', 'other', 'spam'].sort()

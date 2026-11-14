@@ -33,7 +33,7 @@ export const crewsApi = {
    * My crews, and a page of the invites waiting (`invitesPagination`: `{ limit, hasMore, nextCursor, totalCount }`, newest 200 at
    * most). With no `cursor` the first page of 50; `crews` is not paged. A server before the paging sends none: all the invites, no more.
    */
-  myCrews(cursor?: string | null): Promise<ApiResponse<{ crews: Crew[]; invites: CrewInvite[]; invitesPagination?: InvitesPagination }>> {
+  myCrews(cursor?: string | null): Promise<ApiResponse<{ crews: Crew[]; invites: CrewInvite[]; invitesPagination?: InvitesPagination; tagIdeas?: string[] }>> {
     return apiClient.queuedRequest(`/api/mobile/crews?limit=${INVITES_PAGE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`)
   },
 
@@ -77,6 +77,11 @@ export const crewsApi = {
       true,
       2
     )
+  },
+
+  /** Crews 5A, the owner only: members, invites, the chat (closed for good) and open Mixes end. Nobody is pushed; anyone else gets 404. */
+  end(crewId: string): Promise<ApiResponse<{ ended: true }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}`, { method: 'DELETE' }, true, 2)
   },
 
   leave(crewId: string, myId: string): Promise<ApiResponse<{ dissolved: boolean }>> {

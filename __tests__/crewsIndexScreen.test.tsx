@@ -197,7 +197,7 @@ describe('an invite', () => {
     // The friend who asked leads, by face: no photo sent is their creature, never a blank.
     expect(screen.getByText('Aisha asked you in')).toBeTruthy()
     expect(screen.getByTestId('invite-inviter-creature', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByText('Crew of 6 · Quiz team')).toBeTruthy()
+    expect(screen.getByText('Crew of 6 · #Quizteam')).toBeTruthy()
     expect(screen.getByText('“Thursday quiz, Friday regret.”')).toBeTruthy()
     expect(screen.getByText('Open for 11 more days · Aisha isn’t told if you say not now')).toBeTruthy()
     expect(screen.getByText(CONSENT_LINE)).toBeTruthy()

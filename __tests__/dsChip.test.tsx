@@ -116,6 +116,25 @@ describe('<InterestChip>', () => {
   })
 })
 
+describe('dashed (something offered, not yet yours: a crew’s hashtag ideas, board crews/tags/01 A)', () => {
+  it('draws the DashedFrame edge on no fill, and no solid edge', async () => {
+    await draw({ variant: 'dashed', onPress: jest.fn() })
+    expect(screen.getByTestId('c-dashed', { includeHiddenElements: true })).toBeTruthy()
+    expect(flat('c').backgroundColor).toBe('transparent')
+    expect(flat('c-edge').borderWidth).toBeUndefined()
+  })
+
+  it('control: the default chip has no dashes', async () => {
+    await draw({ onPress: jest.fn() })
+    expect(screen.queryByTestId('c-dashed', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('a removable chip may say what it removes', async () => {
+    await draw({ onRemove: jest.fn(), selected: true, accessibilityLabel: '#runclub, remove tag' })
+    expect(screen.getByRole('button', { name: '#runclub, remove tag' })).toBeTruthy()
+  })
+})
+
 describe('Increase Contrast', () => {
   it('the off hairline goes to 1 pt at 50%', async () => {
     jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
@@ -387,3 +406,4 @@ describe('a long label (You hand-off 3: "Sales & Business Development" cut off a
     expect(screen.getByRole('button', { name: LONG })).toBeTruthy()
   })
 })
+
