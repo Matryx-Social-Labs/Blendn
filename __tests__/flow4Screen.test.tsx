@@ -481,20 +481,11 @@ describe('the you-card (Flow 5 R-A): Change goes to Room settings, where the rev
 describe('Check out always confirms (Room #16)', () => {
   it('the confirm: Stay, and Check out in destructiveFill; it closes before the check-out runs', async () => {
     await drawRoom()
-    // Check out is in the room bar's ⋯ until the Room info sheet (Flow 5 C6) holds it.
-    const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
-    showSheet.mockClear()
+    // Check out is the Room info sheet's one exit (Flow 5 C6, I-A), from ⋯ in the room bar.
     await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
-    const sheet = showSheet.mock.calls[0][0] as { layout?: string; actions: { label: string; icon?: string; variant?: string; apart?: boolean; then: () => void }[] }
-    const actions = sheet.actions
-    // No chat yet in this room, so no Room info and no Mute: settings, then Check out.
-    expect(actions.map((a) => a.label)).toEqual(['Room settings', 'Check out'])
-    // Audit B-1: icon rows, and Check out in red on its own, apart from the rest.
-    expect(sheet.layout).toBe('rows')
-    expect(actions[0]).toMatchObject({ icon: 'settings' })
-    expect(actions[1]).toMatchObject({ icon: 'log-out', variant: 'destructive', apart: true })
-    expect(actions[0].apart).toBeFalsy()
-    await act(async () => actions[1].then())
+    // No chat yet in this room, so no Mute and no Report; Check out is still there.
+    expect(screen.queryByTestId('room-info-mute', HIDDEN)).toBeNull()
+    await act(async () => fireEvent.press(screen.getByTestId('room-info-check-out', HIDDEN)))
     expect(screen.getByText('Check out of this event?', HIDDEN)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Stay' })).toBeTruthy()
     const buttons = screen.getAllByRole('button', { name: 'Check out' })
@@ -629,24 +620,27 @@ describe('the room bar (TG-01, Flow 5 R-A)', () => {
   })
 })
 
-describe('the ⋯ sheet as grouped rows (audit B-1)', () => {
-  it('names the room and how you are in it; Room info, Room settings, Mute as rows; Mute opens the mute sheet', async () => {
+describe('⋯ opens Room info as a sheet over the room (Flow 5 C6, I-A)', () => {
+  it('no menu in between: the sheet itself, and its Mute opens the mute sheet', async () => {
     mockSetRoom(ready({ chatGroupId: 'g1', settled: true }))
     await drawRoom()
     const { showSheet } = jest.requireMock('../lib/sheet') as { showSheet: jest.Mock }
     showSheet.mockClear()
     await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
-    const sheet = showSheet.mock.calls[0][0] as { title: string; message?: string; layout?: string; actions: { label: string; icon?: string; apart?: boolean; then: () => void }[] }
-    expect(sheet.title).toBe('Vinyl Night')
-    expect(sheet.message).toMatch(/^7 here · you’re in as /)
-    expect(sheet.actions.map((a) => [a.label, a.icon])).toEqual([
-      ['Room info', 'info'],
-      ['Room settings', 'settings'],
-      ['Mute the room', 'bell-off'],
-      ['Check out', 'log-out'],
-    ])
-    await act(async () => sheet.actions[2].then())
+    expect(showSheet).not.toHaveBeenCalled()
+    expect(screen.getByTestId('room-info', HIDDEN)).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByTestId('room-info-mute', HIDDEN)))
     expect(screen.getByText('Mute notifications', HIDDEN)).toBeTruthy()
+  })
+
+  it('See all closes the sheet onto People', async () => {
+    mockSetRoom(ready({ chatGroupId: 'g1', settled: true }))
+    await drawRoom()
+    const overlay = jest.requireActual('../lib/blendnOverlay') as typeof import('../lib/blendnOverlay')
+    act(() => overlay.setRoomTab('chat'))
+    await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
+    await act(async () => fireEvent.press(screen.getByTestId('room-info-people', HIDDEN)))
+    expect(overlay.getRoomTab()).toBe('people')
   })
 })
 

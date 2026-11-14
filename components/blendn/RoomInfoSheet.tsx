@@ -170,7 +170,7 @@ function useEventDetail(eventId: string | null): EventApiItem | null {
       .then((result) => {
         if (live && result.success && result.data) setEvent(result.data)
       })
-      .catch((error) => Logger.warn('room', 'Room info could not load the event', { error }))
+      .catch((error) => Logger.warn('chat', 'Room info could not load the event', { error }))
     return () => {
       live = false
     }

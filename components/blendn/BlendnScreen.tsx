@@ -41,7 +41,6 @@ import { useRoomWaves, waveShown, type RoomWave } from '../../lib/roomWaves'
 import { wavedAgo, WAVE_SETTLE_MS, WAVE_SETTLE_REDUCED_MS } from '../../lib/waves'
 import { showUserSafetyActions } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
-import { compactCount } from '../../lib/format'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
 import { MuteSheet } from '../chat/RoomSheets'
 import { useAuth } from '../../lib/useAuth'
@@ -74,6 +73,7 @@ import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { useWithCrew, WithCrewChip } from '../crews/WithCrewChip'
 import { faceOf, RoomSkeleton, RoomYouCard, useNow } from './RoomSections'
+import { RoomInfoSheet } from './RoomInfoSheet'
 import { contextLine, lensView } from '../../lib/roomLens'
 import { FriendsHere } from './FriendsHere'
 import { RoomCancelled } from './RoomCancelled'
@@ -872,35 +872,13 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
     setRoomTab('chat')
   }, [chatGroupId, eventId, eventTitle, say])
 
-  /*
-   * ⋯ in the room bar (R-A "Room info"). Until the Room info sheet (I-A, C6) holds them, it is the way to the room's
-   * info, your room settings and Check out, which the old bar carried.
-   */
-  /** Room settings (who sees you, your room name), from the you-card's Change and the ⋯ sheet. */
+  /** Room settings (who sees you, your room name), from the you-card's Change. */
   const openRoomSettings = () => {
     const ev = room.event
     if (ev) router.push(roomSettingsRoute(ev.id, { pseudonym: myPseudonym, revealed: controls.revealed }))
   }
-  const openRoomMenu = () => {
-    const ev = room.event
-    if (!ev) return
-    // Audit B-1 (owner-picked 2026-11-11): the room and how you are in it at the top, icon rows, Check out apart in red.
-    showSheet({
-      kind: 'actions',
-      hue: 'rose',
-      layout: 'rows',
-      title: ev.title,
-      message: `${compactCount(room.hereCount)} here · you’re in as ${controls.revealed ? myName : (myPseudonym ?? 'your room name')}`,
-      actions: [
-        ...(chatGroupId
-          ? [{ label: 'Room info', icon: 'info' as const, then: () => router.push({ pathname: '/chat-info/[id]', params: { id: chatGroupId, roomName: ev.title, eventTitle: ev.title } } as never) }]
-          : []),
-        { label: 'Room settings', icon: 'settings' as const, then: openRoomSettings },
-        ...(chatGroupId ? [{ label: roomMuted ? (muteLabel(roomMute) ?? 'Muted') : 'Mute the room', icon: 'bell-off' as const, then: () => setMuting(chatGroupId) }] : []),
-        { label: 'Check out', icon: 'log-out' as const, variant: 'destructive' as const, apart: true, then: () => setConfirmingOut(true) },
-      ],
-    })
-  }
+  /** ⋯ in the room bar opens Room info as a sheet over the room (Flow 5 C6, I-A; owner call D1, A). */
+  const [infoOpen, setInfoOpen] = useState(false)
 
   // --- waves to you (SCRUM-630); a blocked or reported person's are dropped at the source (`ignoreWavesFrom`) ---
   const waveKeys = useMemo(() => Object.fromEntries(Object.values(waves.received).map((w) => [w.fromUserId, w.at])), [waves.received])
@@ -1163,7 +1141,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           chatUnread={chatUnread}
           onTab={(next) => (next === 'chat' ? void openChat() : setRoomTab('people'))}
           onClose={onClose}
-          onInfo={() => openRoomMenu()}
+          onInfo={() => setInfoOpen(true)}
         />
       ) : mode === 'ended' ? null : (
         <View style={[styles.topBar, { top: barTop(insets.top) }]} pointerEvents="box-none">
@@ -1230,6 +1208,19 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         testID="person-card"
       />
 
+      <RoomInfoSheet
+        visible={infoOpen && !!room.event}
+        onClose={() => setInfoOpen(false)}
+        eventId={room.event?.id ?? null}
+        title={room.event?.title ?? ''}
+        chatGroupId={chatGroupId}
+        hereCount={room.hereCount}
+        faces={youPile}
+        mutedLabel={roomMuted ? (muteLabel(roomMute) ?? 'Muted') : null}
+        onMute={() => setMuting(chatGroupId)}
+        onSeeAll={() => setRoomTab('people')}
+        onCheckOut={() => setConfirmingOut(true)}
+      />
       <MuteSheet chatGroupId={muting} onClose={() => setMuting(null)} />
       <ConnectSheet
         // A new person is a new draft: the sheet keeps none from the last (SCREENS Flow 4, ConnectSheet).

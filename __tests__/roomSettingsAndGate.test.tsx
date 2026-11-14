@@ -45,9 +45,8 @@ describe("the way into the room’s settings", () => {
     expect(code).toContain("router.push(roomSettingsRoute(")
   })
 
-  it("is one function, from the you-card's Change and the ⋯ sheet", () => {
+  it("is one function, from the you-card's Change (⋯ opens Room info since C6, owner call D1 A)", () => {
     expect(code).toMatch(/onChange=\{\(\) => \{[\s\S]{0,160}openRoomSettings\(\)/)
-    expect(code).toContain("{ label: 'Room settings', icon: 'settings' as const, then: openRoomSettings }")
   })
 
 })
