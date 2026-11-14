@@ -103,7 +103,7 @@ function CrewStripRow({ crew, testID }: { crew: StripCrew; testID?: string }) {
             {names}
           </Text>
           {/* Its own text, so a long name truncates before the "+N" does. */}
-          {more ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: secondary }]}>{`+${more}`}</Text> : null}
+          {more ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.more, { color: secondary }]}>{`+${more}`}</Text> : null}
         </View>
       ) : null}
     </View>
@@ -132,6 +132,8 @@ const styles = StyleSheet.create({
   who: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   fill: { flex: 1, minWidth: 0 },
   shrink: { flexShrink: 1, minWidth: 0 },
+  /** A word space after the names (board: "You +9"), not the row's 8. */
+  more: { marginLeft: -SPACE.xs },
   ink: { color: COLOR.textPrimary },
   tabular: { color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
   hairline: { height: StyleSheet.hairlineWidth, marginHorizontal: SPACE.lg, backgroundColor: COLOR.hairline },
