@@ -5,7 +5,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Facepile, type Face } from '../ds/Facepile'
 import { CategoryPlate } from '../ds/EventCard'
 import { Sheet } from '../ds/Sheet'
-import { font, IC_HAIRLINE, PRESSED_WASH, SELECTION, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, IC_HAIRLINE, PRESSED_WASH, SELECTION, useBoldText, useGround, useIncreaseContrast, type Ground } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { apiClient, type EventApiItem } from '../../lib/apiClient'
 import { COMMUNITY_GUIDELINES_URL } from '../../lib/communityGuidelines'
@@ -122,7 +122,7 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
           ) : null}
           <InfoRow
             testID="room-info-people"
-            leading={<Facepile testID="room-info-pile" faces={faces} max={3} total={3} text="" ring={COLOR.surface} accessibilityLabel="" />}
+            leading={<PeoplePile faces={faces} />}
             title="In the room"
             hint={count ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={styles.mono}>{count}</Text> : null}
             hintTail={count ? ' here now' : undefined}
@@ -144,11 +144,23 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
   )
 }
 
-/** The board's grouped rows (`.xlist`): one surface card, a hairline between rows and none under the last. */
+/**
+ * A card's fill on the sheet it sits in: `surface` on iOS's glass (the board's `.xlist`), `surfaceSunken` on Android, whose
+ * sheet is itself `surface` (a `surface` card there has no edge at all: the audit's R3 on the old menu, seen again here).
+ */
+export const cardFill = (ground: Ground): string => (ground === 'surface' ? COLOR.surfaceSunken : COLOR.surface)
+
+/** Three faces, each cut out of the card it sits on. */
+function PeoplePile({ faces }: { faces: Face[] }) {
+  return <Facepile testID="room-info-pile" faces={faces} max={3} total={3} text="" ring={cardFill(useGround())} accessibilityLabel="" />
+}
+
+/** The board's grouped rows (`.xlist`): one card, a hairline between rows and none under the last. */
 function Card({ children }: { children: ReactNode }) {
   const contrast = useIncreaseContrast()
+  const fill = cardFill(useGround())
   return (
-    <View style={[styles.card, contrast && IC_HAIRLINE]}>
+    <View testID="room-info-card" style={[styles.card, { backgroundColor: fill }, contrast && IC_HAIRLINE]}>
       {Children.toArray(children).map((row, i) => (
         <Fragment key={i}>
           {i ? <View style={[styles.hairline, contrast && styles.hairlineContrast]} /> : null}
@@ -250,7 +262,7 @@ const styles = StyleSheet.create({
   event: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   cover: { width: SIZE.disc, height: SIZE.disc, borderRadius: RADIUS.rowInCard, overflow: 'hidden', backgroundColor: COLOR.surface },
   words: { flex: 1, minWidth: 0 },
-  card: { borderRadius: RADIUS.tile, backgroundColor: COLOR.surface, overflow: 'hidden' },
+  card: { borderRadius: RADIUS.tile, overflow: 'hidden' },
   row: {
     minHeight: SIZE.primary,
     flexDirection: 'row',

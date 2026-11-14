@@ -18,7 +18,8 @@ jest.mock('../lib/links', () => ({ openInApp: (...a: unknown[]) => mockOpenInApp
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 
 /* eslint-disable import/first */
-import { RoomInfoSheet } from '../components/blendn/RoomInfoSheet'
+import { cardFill, RoomInfoSheet } from '../components/blendn/RoomInfoSheet'
+import { COLOR } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
 const HIDDEN = { includeHiddenElements: true }
@@ -148,4 +149,13 @@ describe('Room info (I-A)', () => {
     expect(screen.getByText('Rooftop Sundowner', HIDDEN)).toBeTruthy()
     expect(screen.queryByTestId('room-info-host', HIDDEN)).toBeNull()
   })
+})
+
+describe('the cards show on both platforms’ sheets', () => {
+  it('on Android’s surface sheet a card is sunken, never the sheet’s own surface', () => {
+    expect(cardFill('surface')).toBe(COLOR.surfaceSunken)
+    expect(cardFill('surface')).not.toBe(COLOR.surface)
+  })
+  // Control: iOS's glass sheet keeps the board's surface card.
+  it('on iOS’s glass a card is surface', () => expect(cardFill('glass')).toBe(COLOR.surface))
 })
