@@ -32,14 +32,14 @@ import {
   type CrewReportReason,
 } from '../../lib/crews'
 import { crewsApi, type CrewPatch } from '../../lib/crewsApi'
-import { crewBarState, leaveSheet, removeSheet, textFieldOf, type CrewTextField } from '../../lib/crewsScreens'
+import { crewBarState, endSheet, leaveSheet, leavingClosesCrew, ownerSheet, removeSheet, textFieldOf, type CrewTextField } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { FRIEND_SEARCH_OFFER } from '../../lib/friendsPaging'
 import { pickerView, useFriendsList } from '../../lib/useFriendsList'
 import { roomCardRoute } from '../../lib/roomCard'
 import { isMuted, rememberRoomMute, useRoomMute } from '../../lib/roomMembership'
 import { useRoomRow } from '../../lib/roomRow'
-import { showSheet } from '../../lib/sheet'
+import { showSheet, type SheetOutcome } from '../../lib/sheet'
 import { useAuth } from '../../lib/useAuth'
 import { userMessage } from '../../lib/userMessage'
 
@@ -195,8 +195,56 @@ function CrewScreenContent() {
     setEditing(false)
   }
 
+  // From the chat, two screens go: the chat of a crew you left or ended has nothing to show.
+  const leaveScreen = () => (params.fromChat ? router.dismissTo('/crews') : router.back())
+
+  const leave = async (crewName: string): Promise<SheetOutcome> => {
+    if (!myId) return { ok: false, error: 'Couldn’t leave. Try again.' }
+    const result = await crewsApi.leave(crewId, myId)
+    if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t leave. Try again.') }
+    leaveScreen()
+    return { ok: true, toast: result.data?.dissolved ? `${crewName} has closed` : `You left ${crewName}` }
+  }
+
+  const end = async (crewName: string): Promise<SheetOutcome> => {
+    const result = await crewsApi.end(crewId)
+    if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t end the crew. Try again.') }
+    leaveScreen()
+    return { ok: true, toast: `${crewName} has ended` }
+  }
+
+  /* Crews 5A (board 06-leave · A): the owner of a crew that carries on gets two doors; End has its own confirm. A crew of two closes when anyone leaves, so its owner keeps that sheet. */
   const confirmLeave = () => {
     if (!crew) return
+    if (owner && !leavingClosesCrew(crew)) {
+      const doors = ownerSheet(crew)
+      const ending = endSheet(crew)
+      return showSheet({
+        kind: 'actions',
+        hue: 'rose',
+        layout: 'rows',
+        title: doors.title,
+        message: doors.message,
+        actions: [
+          { label: doors.leave, run: () => leave(crew.name) },
+          {
+            label: doors.end,
+            variant: 'destructive',
+            next: () => ({
+              kind: 'actions',
+              hue: 'rose',
+              title: ending.title,
+              message: ending.message,
+              actions: [
+                { label: ending.action, variant: 'destructive', run: () => end(crew.name) },
+                { label: 'Cancel', cancel: true },
+              ],
+            }),
+          },
+          { label: 'Cancel', cancel: true },
+        ],
+      })
+    }
     const sheet = leaveSheet(crew)
     showSheet({
       kind: 'actions',
@@ -205,19 +253,7 @@ function CrewScreenContent() {
       title: sheet.title,
       message: sheet.message,
       actions: [
-        {
-          label: sheet.action,
-          variant: 'destructive',
-          run: async () => {
-            if (!myId) return { ok: false, error: 'Couldn’t leave. Try again.' }
-            const result = await crewsApi.leave(crewId, myId)
-            if (!result.success) return { ok: false, error: crewMessage(result, 'crew', 'Couldn’t leave. Try again.') }
-            // From the chat, two screens go: the chat of a crew you left has nothing to show.
-            if (params.fromChat) router.dismissTo('/crews')
-            else router.back()
-            return { ok: true, toast: result.data?.dissolved ? `${crew.name} has closed` : `You left ${crew.name}` }
-          },
-        },
+        { label: sheet.action, variant: 'destructive', run: () => leave(crew.name) },
         { label: 'Cancel', cancel: true },
       ],
     })

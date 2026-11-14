@@ -79,6 +79,11 @@ export const crewsApi = {
     )
   },
 
+  /** Crews 5A, the owner only: members, invites, the chat (closed for good) and open Mixes end. Nobody is pushed; anyone else gets 404. */
+  end(crewId: string): Promise<ApiResponse<{ ended: true }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}`, { method: 'DELETE' }, true, 2)
+  },
+
   leave(crewId: string, myId: string): Promise<ApiResponse<{ dissolved: boolean }>> {
     return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/members/${enc(myId)}`, { method: 'DELETE' }, true, 2)
   },

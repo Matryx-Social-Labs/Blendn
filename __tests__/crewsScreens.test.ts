@@ -24,7 +24,10 @@ import {
   inviteTitle,
   invitedAgo,
   isGate,
+  endSheet,
+  heirOf,
   leaveSheet,
+  ownerSheet,
   leavingClosesCrew,
   madeLine,
   askedYouIn,
@@ -224,14 +227,44 @@ describe('leaving and removing', () => {
     expect(leaveSheet({ name: 'Nebula', size: 4 }).message).toContain('Nobody is told you left')
   })
 
-  // Drive 7 (YOU-14, D-L16): an owner leaving gave no consequence. Negative control: the member's words fail it.
-  it('an owner leaving a crew that carries on is told where it goes', () => {
-    const owner = { name: 'Nebula', size: 4, you: { role: 'owner' as const, keepMeAnonymous: false } }
-    expect(leaveSheet(owner).message).toBe('You leave the crew and its chat. It passes to whoever has been in it longest, who can then edit it and invite people.')
-    expect(leaveSheet(owner).action).toBe('Leave crew')
-    // A crew of two closes, owner or not.
-    expect(leaveSheet({ ...owner, size: 2 }).action).toBe('Leave and close the crew')
-    expect(leaveSheet({ ...owner, you: { role: 'member', keepMeAnonymous: false } }).message).toContain('Nobody is told you left')
+  // Crews 5A (board 06-leave, A · owner): the owner's two doors. The owner of a crew that carries on no longer gets the member's
+  // Leave sheet; a crew of two still closes, owner or not. Negative control: the member's words fail the owner's.
+  const at = (userId: string, name: string, role: 'owner' | 'member', joinedAt: string) => ({ userId, isFriend: true, name, photo: null, role, joinedAt })
+  const owned = {
+    name: 'Nebula',
+    size: 4,
+    you: { role: 'owner' as const, keepMeAnonymous: false },
+    members: [
+      at('me', 'Sam', 'owner', '2026-10-01T10:00:00Z'),
+      at('rh_kabir', 'Kabir', 'member', '2026-10-05T10:00:00Z'),
+      at('rh_priya', 'Priya', 'member', '2026-10-02T10:00:00Z'),
+      at('rh_arjun', 'Arjun', 'member', '2026-10-03T10:00:00Z'),
+    ],
+  }
+
+  it('the owner’s heir is the member who joined first, never the owner', () => {
+    expect(heirOf(owned)?.name).toBe('Priya')
+    expect(heirOf({ members: [at('me', 'Sam', 'owner', '2026-09-01T10:00:00Z')] })).toBeNull()
+  })
+
+  it('the owner gets two doors, each saying what happens to the others', () => {
+    expect(ownerSheet(owned)).toEqual({ title: 'Nebula', message: 'You own this crew.', leave: 'Leave — Priya takes it over', end: 'End the crew for everyone' })
+    // Nobody listed to hand it to (kept apart from the owner): the door still says it passes on, unnamed.
+    expect(ownerSheet({ ...owned, members: owned.members.slice(0, 1) }).leave).toBe('Leave — it passes on')
+  })
+
+  it('ending says exactly what ends, and that nobody is told', () => {
+    expect(endSheet(owned)).toEqual({
+      title: 'End Nebula?',
+      message:
+        'The crew and its chat close for all 4 of you, and the chat can’t be opened again. Its invites are cancelled and open Mixes close. Your friendships stay. Nobody is notified. This can’t be undone.',
+      action: 'End Nebula',
+    })
+  })
+
+  it('a crew of two still closes when its owner leaves; a member’s words are unchanged', () => {
+    expect(leaveSheet({ ...owned, size: 2 }).action).toBe('Leave and close the crew')
+    expect(leaveSheet({ name: 'Nebula', size: 4 }).message).toContain('Nobody is told you left')
   })
 
   it('removing a member names them, and says they are not told who did it', () => {
