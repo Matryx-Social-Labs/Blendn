@@ -1,6 +1,7 @@
 import { router } from 'expo-router'
 
 import { COLOR } from '../../lib/design/tokens'
+import { personFace } from '../../lib/personFace'
 import type { MessageRequest } from '../../lib/useBanterInbox'
 import { Facepile, type Face } from '../ds/Facepile'
 import { Badge } from '../ds/MonoFamily'
@@ -9,8 +10,8 @@ import { SettingsGroup, SettingsRow } from '../ds/SettingsRow'
 
 const FACES = 3
 
-const faceOf = (r: MessageRequest): Face =>
-  r.sender_avatar ? { kind: 'photo', uri: r.sender_avatar } : { kind: 'creature', pseudonym: r.sender_name ?? r.request_id }
+// A request carries the sender's name by design: their photo, or their initial (F1 B), never a creature.
+const faceOf = (r: MessageRequest): Face => personFace({ named: true, name: r.sender_name || 'Someone', photo: r.sender_avatar })
 
 /**
  * Everyone asking to talk, as one row above the chats: the newest faces and the true count, whatever the number. Sixty

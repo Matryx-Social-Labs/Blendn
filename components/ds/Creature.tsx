@@ -1,10 +1,11 @@
 import { memo, useEffect, useId, type ReactElement } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming } from 'react-native-reanimated'
 import Svg, { Circle, ClipPath, Defs, G, parse, RadialGradient, Stop } from 'react-native-svg'
 
-import { CREATURE_ART, CREATURE_HUES, DURATION, GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
+import { CREATURE_ART, CREATURE_HUES, DURATION, FONT_FAMILY, GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
+import { initialOf } from '../../lib/personFace'
 import { castIndex, fnv1a, nounOf } from '../../lib/pseudonymAvatar'
 
 /*
@@ -632,10 +633,35 @@ export const Creature = memo(function Creature({
   )
 })
 
+/** The initial's height as a share of the disc (owner D1 A, the decision board). */
+const INITIAL_SCALE = 0.44
+
+/**
+ * A named person with no photo (owner F1 B, D1 A, 2026-11-14): their initial in the hue's glyph tone on the very disc and
+ * glow their creature would have, seeded on the name, so they keep their colour and only the face goes. A creature means
+ * anonymous; this never does. Decorative, as the creature is; it never scales with text.
+ */
+export const Initial = memo(function Initial({ name, size = 48, ring, testID }: { name: string; size?: number; ring?: string; testID?: string }) {
+  const id = `in${useId().replace(/[^A-Za-z0-9]/g, '')}`
+  const c = HUES[hueIndex(creatureFor(name).hue)]
+  return (
+    <View style={[styles.initial, { width: size, height: size }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View testID={testID && `${testID}-disc`} style={StyleSheet.absoluteFill}>
+        <Face id={id} size={size} c={c} body="" />
+      </View>
+      <Text allowFontScaling={false} style={{ fontFamily: FONT_FAMILY.brand[700], fontSize: Math.round(size * INITIAL_SCALE), color: c.g }}>
+        {initialOf(name)}
+      </Text>
+      {ring ? <View style={[styles.ring, { borderColor: ring }]} /> : null}
+    </View>
+  )
+})
+
 /** The glow's strength at its core: the hue's edge tone at half, fading to the disc. */
 const GLOW_CORE = 0.5
 
 const styles = StyleSheet.create({
+  initial: { alignItems: 'center', justifyContent: 'center' },
   ring: {
     position: 'absolute',
     top: -SPACE.badgeRing,

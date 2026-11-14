@@ -19,7 +19,7 @@ export function RequestRow({ request: r, inbox }: { request: MessageRequest; inb
     <Reanimated.View exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}>
       <RequestCard
         testID={`banter-request-${r.request_id}`}
-        face={<RequestFace photo={r.sender_avatar} pseudonym={r.sender_name ?? undefined} />}
+        face={<RequestFace photo={r.sender_avatar} name={r.sender_name || 'Someone'} />}
         name={r.sender_name || 'Someone'}
         met={metInLine(r.met_in)}
         // The request's note, verbatim (ROUND3 C11).

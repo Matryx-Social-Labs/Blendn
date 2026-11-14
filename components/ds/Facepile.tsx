@@ -5,11 +5,12 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, ICON, RADIUS, SPACE, SPRING, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
+import type { PersonFace } from '../../lib/personFace'
 import { Avatar } from './Avatar'
 import { font, useBoldText } from './shared'
 
-/** A face: a photo (earned) or a pseudonym's creature, as `<Avatar>` draws them. */
-export type Face = { kind: 'photo'; uri: string } | { kind: 'creature'; pseudonym: string }
+/** A face: a photo (earned), a named person's initial or a pseudonym's creature, as `<Avatar>` draws them (`personFace`). */
+export type Face = PersonFace
 
 /** The arrival ring: 1.5 pt of white outside the 2 pt ink ring (the page's `0 0 0 3.5px #fff`). */
 const ARRIVAL_WIDTH = 1.5
@@ -67,7 +68,7 @@ export function Facepile({
         {shown.map((face, i) => (
           <View
             // By who, so an arrival at the front doesn't repaint every face into its neighbour's slot.
-            key={face.kind === 'photo' ? face.uri : face.pseudonym}
+            key={face.kind === 'photo' ? face.uri : face.kind === 'initial' ? `i:${face.name}` : face.pseudonym}
             testID={testID && `${testID}-slot-${i}`}
             style={i ? { marginLeft: -Math.round(size / 4) } : null}
           >

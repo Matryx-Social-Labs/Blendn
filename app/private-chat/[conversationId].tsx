@@ -11,6 +11,7 @@ import { ChatHeader, chatFeedFrame, chatHeaderBottom } from '../../components/ch
 import { FeedSkeleton, HEADER_FACE, LoadOlder, NewestChip } from '../../components/chat/ChatParts'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { DmMessageRow, MatchOpenerCard, NudgeLine, PhotoPreviewSheet, quoteText, RevealLine, RevealSheets, SayHi, type DmRowHandlers } from '../../components/chat/DmParts'
+import { personFace } from '../../lib/personFace'
 import { Avatar } from '../../components/ds/Avatar'
 import { ChatBubble } from '../../components/ds/ChatBubble'
 import type { Rect } from '../../components/ds/chatShared'
@@ -780,12 +781,12 @@ function PrivateChatInner() {
   }
 
   const opener = matchOpener({ fromMatch: reveal?.fromMatch, otherName: reveal?.displayName })
-  /* Faces only where they have been earned: theirs a photo once they revealed, yours once you did. */
-  // Their mark until they reveal; then the server's photo — never one from the route.
-  const head = ended ? null : directHeaderAvatar(reveal, otherImage)
-  const themFace: Face =
-    head?.kind === 'photo' ? { kind: 'photo', uri: head.url } : { kind: 'creature', pseudonym: head?.kind === 'mark' ? head.seed : ended ? 'Conversation' : name }
-  const youFace: Face = reveal?.youRevealed && authUser?.image ? { kind: 'photo', uri: authUser.image } : { kind: 'creature', pseudonym: 'You' }
+  /*
+   * Faces by `personFace` (owner F1 B), only where they have been earned: theirs a creature until they reveal, then the
+   * server's photo or their initial (never a photo from the route); yours the same once you revealed.
+   */
+  const themFace: Face = ended ? { kind: 'creature', pseudonym: 'Conversation' } : directHeaderAvatar(reveal, otherImage, name)
+  const youFace: Face = reveal?.youRevealed ? personFace({ named: true, name: authUser?.name || YOU, photo: authUser?.image }) : { kind: 'creature', pseudonym: 'You' }
   // Photos once you can both see each other, or the conversation never hid anyone (R9, admin #697).
   const photosAllowed = !!reveal && (!reveal.pseudonymous || (reveal.youRevealed && reveal.theyRevealed))
   const { fontScale } = useWindowDimensions()
@@ -940,7 +941,7 @@ function PrivateChatInner() {
         testID="dm-header"
         title={ended ? 'Conversation' : name}
         leading={
-          <Animated.View key={themFace.kind === 'photo' ? themFace.uri : 'mark'} entering={revealIn}>
+          <Animated.View key={themFace.kind === 'photo' ? themFace.uri : themFace.kind} entering={revealIn}>
             <Avatar size={HEADER_FACE} {...themFace} />
           </Animated.View>
         }

@@ -10,6 +10,7 @@ import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZ
 import { useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
 import { clockTime, unbroken } from '../../lib/time'
+import { personFace } from '../../lib/personFace'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { CrewEmblem } from '../ds/CrewEmblem'
@@ -332,8 +333,11 @@ export function RequestCard({
   )
 }
 
-/** A request's 40 pt face: a person round, a crew its emblem. */
-export function RequestFace({ photo, pseudonym, emblemSeed }: { photo?: string | null; pseudonym?: string; emblemSeed?: string }) {
+/**
+ * A request's 40 pt face: a crew its emblem; a named sender (a message request carries their name) by `personFace`, their
+ * photo or initial; an anonymous asker (a Lobby ask) their creature on `pseudonym`.
+ */
+export function RequestFace({ photo, name, pseudonym, emblemSeed }: { photo?: string | null; name?: string; pseudonym?: string; emblemSeed?: string }) {
   if (emblemSeed) {
     return (
       <View style={[styles.square, { width: REQUEST_FACE, height: REQUEST_FACE }]}>
@@ -341,11 +345,13 @@ export function RequestFace({ photo, pseudonym, emblemSeed }: { photo?: string |
       </View>
     )
   }
-  return photo ? <Avatar size={REQUEST_FACE} kind="photo" uri={photo} /> : <Avatar size={REQUEST_FACE} kind="creature" pseudonym={pseudonym ?? 'Someone'} />
+  const face = name !== undefined ? personFace({ named: true, name, photo }) : personFace({ named: false, name: pseudonym ?? 'Someone' })
+  return <Avatar size={REQUEST_FACE} {...face} />
 }
 
 export type RowFace =
-  | { kind: 'person'; photo?: string | null; pseudonym: string }
+  /** `named`: the server shows who they are (a revealed DM, an accepted request); `personFace` picks the picture. */
+  | { kind: 'person'; named: boolean; name: string; photo?: string | null }
   | { kind: 'room'; cover?: string | null }
   | { kind: 'crew'; seed: string | null }
   | { kind: 'pair'; seeds: [string | null, string | null] }
@@ -519,7 +525,7 @@ function Line({ line, unread, lines }: { line: RowLine; unread: boolean; lines: 
 function RowAvatar({ face }: { face: RowFace }) {
   switch (face.kind) {
     case 'person':
-      return face.photo ? <Avatar size={ROW_AVATAR} kind="photo" uri={face.photo} /> : <Avatar size={ROW_AVATAR} kind="creature" pseudonym={face.pseudonym} />
+      return <Avatar size={ROW_AVATAR} {...personFace({ named: face.named, name: face.name, photo: face.photo })} />
     case 'room':
       return face.cover ? (
         <Image source={{ uri: face.cover }} recyclingKey={face.cover} contentFit="cover" accessible={false} style={styles.squareFace} />

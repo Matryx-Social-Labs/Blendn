@@ -61,21 +61,25 @@ describe('the DM says their name once, in one grammar', () => {
     expect(emptyThreadLine(undefined, '  ')).toBeNull()
   })
 
-  it('draws the pseudonym mark in the header until they reveal', () => {
+  it('draws their creature in the header until they reveal, then their photo', () => {
     const reveal = { displayName: 'Cosmic Panda', pseudonymous: true, theyRevealed: false }
-    expect(directHeaderAvatar(reveal, null)).toEqual({ kind: 'mark', seed: 'Cosmic Panda' })
-    expect(directHeaderAvatar({ ...reveal, theyRevealed: true }, 'https://cdn/them.jpg')).toEqual({
-      kind: 'photo',
-      url: 'https://cdn/them.jpg',
-    })
+    expect(directHeaderAvatar(reveal, null, 'Cosmic Panda')).toEqual({ kind: 'creature', pseudonym: 'Cosmic Panda' })
+    // A photo the server sent before a reveal is still not drawn.
+    expect(directHeaderAvatar(reveal, 'https://cdn/them.jpg', 'Cosmic Panda')).toEqual({ kind: 'creature', pseudonym: 'Cosmic Panda' })
+    expect(directHeaderAvatar({ ...reveal, displayName: 'Mika Rao', theyRevealed: true }, 'https://cdn/them.jpg', 'x')).toEqual({ kind: 'photo', uri: 'https://cdn/them.jpg' })
+  })
+
+  it('a named person with no photo is their initial, never a creature (F1 B)', () => {
+    const named = { displayName: 'Mika', pseudonymous: false, theyRevealed: true }
+    expect(directHeaderAvatar(named, null, 'route name')).toEqual({ kind: 'initial', name: 'Mika' })
+    expect(directHeaderAvatar({ displayName: 'Mika Rao', pseudonymous: true, theyRevealed: true }, null, 'x')).toEqual({ kind: 'initial', name: 'Mika Rao' })
   })
 
   it('draws a photo only from the server’s answer: the creature until it lands', () => {
-    // A route URL is anybody's link (blendn://private-chat/x?otherUserAvatar=…); the helper takes none.
-    expect(directHeaderAvatar(null, null)).toEqual({ kind: 'initials' })
-    expect(directHeaderAvatar(null, 'https://cdn/them.jpg')).toEqual({ kind: 'initials' })
-    const named = { displayName: 'Mika', pseudonymous: false, theyRevealed: true }
-    expect(directHeaderAvatar(named, null)).toEqual({ kind: 'initials' })
+    // A route URL is anybody's link (blendn://private-chat/x?otherUserAvatar=…); the helper takes none. Until the server
+    // says who this is, the face fails closed: a creature on the route's name, never an initial that would claim "named".
+    expect(directHeaderAvatar(null, null, 'Amber Fox')).toEqual({ kind: 'creature', pseudonym: 'Amber Fox' })
+    expect(directHeaderAvatar(null, 'https://cdn/them.jpg', 'Amber Fox')).toEqual({ kind: 'creature', pseudonym: 'Amber Fox' })
   })
 })
 

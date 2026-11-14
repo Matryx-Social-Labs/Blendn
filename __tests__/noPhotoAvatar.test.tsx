@@ -35,22 +35,22 @@ describe('OptimizedImage with nothing to load', () => {
   })
 })
 
-describe('the Banter row', () => {
-  /*
-   * Since the Flow 5 redesign there is one avatar family: a person is their
-   * photo or, with none, their creature (the DS Avatar). Never an image with
-   * an empty source.
-   */
-  it('draws the creature, never an image, for a person with no photo', () => {
-    const src = read('components', 'banter', 'BanterParts.tsx')
+describe('every Banter face goes through personFace (F1 B: a creature means anonymous)', () => {
+  // The rule itself is personFace.test.ts; these pin that each surface asks it rather than choosing its own face.
+  it.each([
+    ['the Banter row', ['components', 'banter', 'BanterParts.tsx'], 'personFace({ named: face.named'],
+    ['the request card', ['components', 'banter', 'BanterParts.tsx'], 'personFace({ named: true'],
+    ['the Requests facepile', ['components', 'banter', 'BanterRequestsRow.tsx'], 'personFace({ named: true'],
+    ['the DM header', ['lib', 'directThread.ts'], 'personFace({'],
+  ])('%s', (_surface, file, call) => {
+    const src = read(...file)
+    expect(src).toContain(call)
     expect(src).not.toMatch(/source=\{\{ uri: [^}]*\?\? ''/)
-    expect(src).toContain('face.photo ? <Avatar size={ROW_AVATAR} kind="photo" uri={face.photo} /> : <Avatar size={ROW_AVATAR} kind="creature" pseudonym={face.pseudonym} />')
   })
 
-  it('the DM header draws them the same way', () => {
+  it('the DM screen draws the header and your own face from the same rule', () => {
     const src = read('app', 'private-chat', '[conversationId].tsx')
-    // directHeaderAvatar decides (socialPolish.test.ts); "initials" draws the creature.
-    expect(src).toContain('directHeaderAvatar(reveal, otherImage)')
-    expect(src).toContain("head?.kind === 'photo' ? { kind: 'photo', uri: head.url } : { kind: 'creature'")
+    expect(src).toContain('directHeaderAvatar(reveal, otherImage, name)')
+    expect(src).toContain('reveal?.youRevealed ? personFace({ named: true')
   })
 })

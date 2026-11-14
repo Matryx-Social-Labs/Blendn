@@ -192,8 +192,8 @@ describe('a match is anonymous until they reveal', () => {
     expect(INBOX()).not.toContain('theyRevealed === true')
   })
 
-  it('draws their creature, seeded on the pseudonym, until they reveal', () => {
-    expect(SCREEN()).toContain("face: { kind: 'person', photo: c.they_revealed ? c.other_user_avatar : null, pseudonym: c.other_user_name }")
+  it('draws their creature, seeded on the pseudonym, until they reveal (personFace decides: personFace.test.ts)', () => {
+    expect(SCREEN()).toContain("face: { kind: 'person', named: c.they_revealed, name: c.other_user_name, photo: c.other_user_avatar }")
   })
 
   it('names an unknown person the way the server does', () => {
