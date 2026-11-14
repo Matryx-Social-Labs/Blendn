@@ -7,7 +7,10 @@ import {
   getRoomTab,
   setRoomTab,
 } from '../lib/blendnOverlay'
-import { chatOpensInRoom, chatTabBadge, chatTabLabel } from '../lib/roomTab'
+import { chatOpensInRoom, chatTabBadge, chatTabLabel, resolveChatOpensInRoom, ROOM_ASK_MS } from '../lib/roomTab'
+
+const mockActive = jest.fn()
+jest.mock('../lib/apiClient', () => ({ apiClient: { getActiveCheckins: () => mockActive(), getChatGroups: jest.fn() } }))
 
 /**
  * Flow 5 C1 (R-A): one room, People | Chat. The disc opens People; "Open the
@@ -122,5 +125,26 @@ describe('the Chat tab’s badge', () => {
     expect(chatTabLabel(1)).toBe('Chat, 1 new')
     expect(chatTabLabel(9)).toBe('Chat, 9 new')
     expect(chatTabLabel(10)).toBe('Chat, 9 or more new')
+  })
+})
+
+describe('asking which room a chat link is (SCRUM-1049)', () => {
+  beforeEach(() => {
+    setLiveHint(null)
+    setLiveRoomChat(null)
+  })
+  afterEach(() => jest.useRealTimers())
+
+  it('a server that does not answer in time is the chat screen, not a blank one', async () => {
+    jest.useFakeTimers()
+    mockActive.mockReturnValue(new Promise(() => {}))
+    const answer = resolveChatOpensInRoom({ id: 'g1', eventId: 'e1' })
+    jest.advanceTimersByTime(ROOM_ASK_MS)
+    await expect(answer).resolves.toBe(false)
+  })
+
+  it('control: an answer in time decides', async () => {
+    mockActive.mockResolvedValue({ success: true, data: { checkIns: [{ eventId: 'e1', event: { title: 'Design festival' } }] } })
+    await expect(resolveChatOpensInRoom({ id: 'g1', eventId: 'e1' })).resolves.toBe(true)
   })
 })
