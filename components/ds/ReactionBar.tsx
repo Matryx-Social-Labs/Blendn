@@ -35,6 +35,8 @@ const EMOJI_FROM = 0.6
 /** The page's 22 pt emoji in the bar; a 24 pt chip on the bubble's corner (Flow 5 F-A `.rx`), popping from 85% when yours lands (#37). */
 const BAR_EMOJI = 22
 const PILL_HEIGHT = 24
+/** The count grows to 1.3x with the text size; the emoji keeps its size. */
+const COUNT_MAX_SCALE = 1.3
 // design-exception: the chip pads 7 at the sides (`.rx`), between the 4 and 8 steps
 const PILL_PAD = 7
 /** The ink ring that lifts the chip off the bubble it sits on: outside its box, as the board's spread shadow is. */
@@ -235,10 +237,15 @@ export function ReactionPill({ emoji, count, mine, onPress, landed = false, test
   const body = (
     <Animated.View testID={testID} style={[styles.pill, mine && { backgroundColor: hue.fill }, popStyle]}>
       <View pointerEvents="none" style={styles.ring} />
-      <Text maxFontSizeMultiplier={1} style={[font('label', bold), styles.pillText]}>
+      {/*
+        SCRUM-1044: Android draws a line height at the full system text size, past maxFontSizeMultiplier, while the
+        line is laid out at the capped one, so at 2.0 both sat low and were cut along the chip's bottom. The emoji never
+        scales, so it does not ask to; the count draws its own line and the row centres it.
+      */}
+      <Text allowFontScaling={false} style={[font('label', bold), styles.pillText]}>
         {emoji}
       </Text>
-      <Text maxFontSizeMultiplier={1.3} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.pillText, styles.count]}>
+      <Text maxFontSizeMultiplier={COUNT_MAX_SCALE} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.count, styles.ownLine]}>
         {compactCount(count)}
       </Text>
     </Animated.View>
@@ -297,5 +304,6 @@ const styles = StyleSheet.create({
     borderColor: COLOR.ink,
   },
   pillText: { lineHeight: PILL_HEIGHT },
+  ownLine: { lineHeight: undefined },
   count: { color: COLOR.textPrimary, fontVariant: ['tabular-nums'] },
 })
