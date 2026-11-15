@@ -73,7 +73,7 @@ export function SearchField({
     // The whole capsule is the target: a tap beside the text focuses it.
     <Pressable
       testID={testID}
-      accessible={false}
+      accessible={false} importantForAccessibility="no"
       onPress={() => input.current?.focus()}
       disabled={disabled}
       style={[styles.field, { backgroundColor: fill }, disabled && { opacity: OPACITY.disabled }]}

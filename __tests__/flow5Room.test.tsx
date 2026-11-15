@@ -611,3 +611,20 @@ describe('a crew’s room draws its members’ photos and opens their room card 
     expect(screen.getByTestId('sender-card')).toBeTruthy()
   })
 })
+
+/*
+ * SCRUM-1040: Android's FlatList clips off-screen rows by default, and re-attaches them a frame after a scroll. Under
+ * Reduce Motion the jump to the newest is instant, so it landed on rows not yet attached: a blank frame, 4 of 4 drives.
+ */
+it('the feed keeps its rows attached, so an instant jump to the newest never lands on a blank frame (SCRUM-1040)', async () => {
+  // FlatList's default is per platform (true on Android only), so the screen is drawn as Android draws it.
+  const { Platform } = jest.requireActual('react-native')
+  const os = Platform.OS
+  Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+  try {
+    await open()
+    expect(screen.getByTestId('room-feed').props.removeClippedSubviews).toBe(false)
+  } finally {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+  }
+})

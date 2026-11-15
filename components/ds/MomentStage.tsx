@@ -166,7 +166,7 @@ export function MomentStage({ label, scrimAlpha, scrim, orbs, orbsOpacity, orbsO
           <Grain />
         </Animated.View>
       ) : null}
-      <Pressable testID={testID && `${testID}-skip`} accessible={false} style={StyleSheet.absoluteFill} onPress={onSkip} />
+      <Pressable testID={testID && `${testID}-skip`} accessible={false} importantForAccessibility="no" style={StyleSheet.absoluteFill} onPress={onSkip} />
       <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
         {children}
       </View>

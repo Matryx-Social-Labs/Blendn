@@ -874,7 +874,7 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
             testID={testID && `${testID}-scrim`}
             style={[StyleSheet.absoluteFill, { backgroundColor: android ? tint(COLOR.ink, ANDROID_SCRIM) : COLOR.backdrop }, scrimStyle]}
           >
-            <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={dismissible ? requestClose : undefined} />
+            <Pressable style={StyleSheet.absoluteFill} accessible={false} importantForAccessibility="no" onPress={dismissible ? requestClose : undefined} />
           </Animated.View>
           {/* Under Reduce Motion a leaving sheet is gone at once: the glass never fades out (SCRUM-1003). */}
           {visible || !reduceMotion || solid ? (

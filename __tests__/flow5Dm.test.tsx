@@ -704,3 +704,17 @@ describe('re-opening from the cache keeps older history reachable', () => {
     expect(cached).toHaveLength(50)
   })
 })
+
+/* SCRUM-1040: as the room's feed (flow5Room): the instant jump under Reduce Motion landed on detached rows on Android. */
+it('the DM feed keeps its rows attached, so an instant jump to the newest never lands on a blank frame (SCRUM-1040)', async () => {
+  // FlatList's default is per platform (true on Android only), so the screen is drawn as Android draws it.
+  const { Platform } = jest.requireActual('react-native')
+  const os = Platform.OS
+  Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true })
+  try {
+    await open()
+    expect(screen.getByTestId('dm-feed').props.removeClippedSubviews).toBe(false)
+  } finally {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
+  }
+})
