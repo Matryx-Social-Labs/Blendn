@@ -18,6 +18,8 @@ import { showRoomReportOptions } from '../../lib/safetyUtils'
 
 /** The board's row (`.xli`): 56 tall, 14 in from the card's edge, the glyph 12 from the words. */
 const ROW_INSET = SPACE.md + SPACE.xxs
+/** Increase Contrast's hairline: 1 pt, as SettingsGroup draws it. */
+const CONTRAST_LINE = 1
 const EMBER = SELECTION.ember
 const ROSE = SELECTION.rose
 
@@ -273,7 +275,7 @@ const styles = StyleSheet.create({
   },
   // Drawn over the row's top edge and taking no height, as the board's inset hairline: three rows are 168, not 168.7.
   hairline: { height: StyleSheet.hairlineWidth, marginBottom: -StyleSheet.hairlineWidth, zIndex: 1, backgroundColor: COLOR.hairline },
-  hairlineContrast: { height: 1, marginBottom: -1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
+  hairlineContrast: { height: CONTRAST_LINE, marginBottom: -CONTRAST_LINE, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   pressed: { backgroundColor: PRESSED_WASH.ios },
   hostMark: {
     width: SIZE.circleButtonSm,
