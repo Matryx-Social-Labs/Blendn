@@ -6,7 +6,7 @@ import { CHECKING_OUT_LABEL, CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, STAY_LABEL,
 import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { HoldToConfirm } from '../ds/HoldToConfirm'
 import { Sheet } from '../ds/Sheet'
-import { font, useAnnounced, useBoldText } from '../ds/shared'
+import { font, useAnnounced, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 
 export type EventHoldProps = {
   reach: PassReach
@@ -77,9 +77,13 @@ export type EventCheckOutSheetProps = {
  * dock's "Check out" opens the app's standard sheet. The event's name is its title; the same deliberate hold, in the DS's
  * quiet kind (`lit`, as GoLiveSheet's), checks you out; its line says what it does without naming the event twice (the hint
  * does name it, for a reader). A refusal is said in the line, not a toast: a toast is drawn under the sheet's modal.
+ * At the accessibility sizes the sentence moves under the hold, so the hold comes straight after the question and is in reach
+ * without scrolling (checked-in audit, owner 2026-11-15: at AX XXXL the sentence pushed it below the sheet's cap).
  */
 export function EventCheckOutSheet({ visible, onClose, onDismissed, name, onConfirm, busy, error }: EventCheckOutSheetProps) {
   const bold = useBoldText()
+  const contrast = useIncreaseContrast()
+  const below = useLargeText()
   useAnnounced(error)
   return (
     <Sheet
@@ -87,7 +91,7 @@ export function EventCheckOutSheet({ visible, onClose, onDismissed, name, onConf
       onClose={busy ? noop : onClose}
       onDismissed={onDismissed}
       title={checkOutQuestion(name)}
-      body={CHECK_OUT_CONSEQUENCE}
+      body={below ? undefined : CHECK_OUT_CONSEQUENCE}
       actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: onClose, disabled: busy, testID: 'scene-checkout-cancel' }]}
       testID="scene-checkout"
     >
@@ -105,6 +109,12 @@ export function EventCheckOutSheet({ visible, onClose, onDismissed, name, onConf
       {error ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityLiveRegion="polite" style={[font('meta', bold), styles.line, styles.error]}>
           {error}
+        </Text>
+      ) : null}
+      {below ? (
+        // The Sheet's own body style, drawn where the Sheet would not put it.
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
+          {CHECK_OUT_CONSEQUENCE}
         </Text>
       ) : null}
     </Sheet>
