@@ -6,7 +6,7 @@ import {
   settleDirectMessage,
   type PrivateMessage,
 } from '../lib/directThread'
-import { profileIdentity, withheldUnlessVisible } from '../lib/profileIdentity'
+import { profileIdentity, roomNameFrom, withheldUnlessVisible } from '../lib/profileIdentity'
 import { markSeed, pseudonymAvatar } from '../lib/pseudonymAvatar'
 import { userMessage } from '../lib/userMessage'
 
@@ -161,28 +161,48 @@ describe('the attendee profile fails closed', () => {
 
   /*
    * SCRUM-1046: opened with no pseudonym in the link (a cold link, Room info), the page said "Someone" although the
-   * server, asked by a room handle, answers with that room's pseudonym. Only a handle's answer is a room's name for
-   * them; a real id's is the flat "Attendee" (or, from a buggy route, a real name) and is never shown.
+   * server, asked by a room handle, answers with that room's pseudonym. That answer is trusted only when it came from
+   * `GET /users/:handle` itself, in its `name` field: never from the `/profiles/:id` fallback, `display_name`, a
+   * failed read or a real id. With no trusted source the page fails closed to "Someone".
    */
-  it('titles them by the server’s room pseudonym when asked by a room handle with no pseudonym in the link', () => {
-    const who = profileIdentity({ name: 'Cosmic Panda', age: 29, identityVisible: false }, { ref: 'rh_abc', roomSeed: 'g1:rh_abc' })
-    expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
-  })
+  describe('the room pseudonym the server sends (SCRUM-1046)', () => {
+    const roomAnswer = { name: 'Cosmic Panda', age: 29, identityVisible: false }
 
-  it('keeps the link’s pseudonym first: it is what the card that opened the page drew', () => {
-    expect(profileIdentity({ name: 'Other Name', identityVisible: false }, { ref: 'rh_abc', pseudonym: 'Cosmic Panda' }).title).toBe(
-      'Cosmic Panda'
-    )
-  })
+    it('is read from a successful handle read’s `name`', () => {
+      expect(roomNameFrom('rh_abc', roomAnswer)).toBe('Cosmic Panda')
+    })
 
-  it('never takes a name from a real-id request, and never says "Attendee"', () => {
-    // A real id: whatever the server sent is not a room's name for them (here, a leaked real name).
-    expect(profileIdentity({ ...leaked, identityVisible: false }, { ref: 'cmb0realid' }).title).toBe('Someone')
-    expect(profileIdentity({ ...leaked, identityVisible: false }).title).toBe('Someone')
-    // A handle the server could not name in its room (a DM's, an erased member): its placeholder is not a name.
-    const placeholder = profileIdentity({ name: 'Attendee', identityVisible: false }, { ref: 'rh_dm', roomSeed: 'g1:rh_dm' })
-    expect(placeholder.title).toBe('Someone')
-    expect(placeholder.seed).toBe('g1:rh_dm')
+    it('is never read from `display_name`', () => {
+      expect(roomNameFrom('rh_abc', { display_name: 'Ben Okafor', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_abc', { name: '', display_name: 'Ben Okafor', identityVisible: false })).toBeNull()
+    })
+
+    it('is nothing when the handle read failed', () => {
+      expect(roomNameFrom('rh_abc', null)).toBeNull()
+      expect(roomNameFrom('rh_abc', undefined)).toBeNull()
+    })
+
+    it('is nothing for a real id, a placeholder, or somebody already shown to you', () => {
+      expect(roomNameFrom('cmb0realid', { name: 'Ben', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_dm', { name: 'Attendee', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_abc', { name: 'Ben', identityVisible: true })).toBeNull()
+    })
+
+    it('titles the page, over the profile’s own name', () => {
+      const who = profileIdentity({ ...roomAnswer, name: 'Ben' }, { roomName: 'Cosmic Panda', roomSeed: 'g1:rh_abc' })
+      expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
+    })
+
+    it('comes after the link’s pseudonym: it is what the card that opened the page drew', () => {
+      expect(profileIdentity(roomAnswer, { pseudonym: 'Amber Fox', roomName: 'Cosmic Panda' }).title).toBe('Amber Fox')
+    })
+
+    it('fails closed without it: a fallback profile carrying a real name is still "Someone"', () => {
+      // What the `/profiles/:id` fallback builds for a handle: a name, no room source.
+      const fallback = profileIdentity({ ...leaked, identityVisible: false }, { roomSeed: 'g1:rh_abc' })
+      expect(fallback.title).toBe('Someone')
+      expect(fallback.seed).toBe('g1:rh_abc')
+    })
   })
 })
 

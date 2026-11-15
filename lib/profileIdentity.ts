@@ -52,20 +52,17 @@ export interface ProfileIdentity {
 /**
  * @param from The room this was opened from, when it was: the person's
  *   pseudonym there, and a per-room seed for the mark when the pseudonym is a
- *   placeholder. `ref` is the id the page asked the server by. Asked by a room
- *   handle, the server answers in that room's terms, so for somebody still
- *   anonymous its `name` is their pseudonym there (SCRUM-1046: a cold link or
- *   Room info passes none). Asked by a real id it is the flat "Attendee", or
- *   whatever a buggy route sent, and is never shown: the page says "Someone".
+ *   placeholder. `roomName` is the pseudonym a handle read sent
+ *   (`roomNameFrom`), for a page opened with none in its link (SCRUM-1046: a
+ *   cold link, Room info). With neither there is no pseudonym to show, and the
+ *   page says "Someone" rather than any name the profile carries.
  */
 export function profileIdentity(
   profile: Pick<ProfileFields, 'name' | 'age' | 'identityVisible'> | null,
-  from: { pseudonym?: string | null; roomSeed?: string | null; ref?: string | null } = {}
+  from: { pseudonym?: string | null; roomSeed?: string | null; roomName?: string | null } = {}
 ): ProfileIdentity {
   const revealed = profile?.identityVisible === true
-  // A placeholder ("Attendee": a DM's handle, an erased member) is no name; `markSeed` knows them all.
-  const roomName = from.ref && isHandle(from.ref) ? markSeed(profile?.name, '') || null : null
-  const pseudonym = from.pseudonym?.trim() || (revealed ? null : roomName)
+  const pseudonym = from.pseudonym?.trim() || (revealed ? null : from.roomName?.trim() || null)
   const fallbackSeed = from.roomSeed || 'someone'
   const age = typeof profile?.age === 'number' && profile.age > 0 ? profile.age : null
   if (revealed) {
@@ -78,6 +75,21 @@ export function profileIdentity(
     }
   }
   return { revealed, title: pseudonym ?? 'Someone', name: pseudonym ?? 'Someone', age, seed: markSeed(pseudonym, fallbackSeed) }
+}
+
+/**
+ * The person's pseudonym in the room a handle names, from `GET /users/:handle`'s own answer (`data`, null when that
+ * read failed). Asked by a room handle, the server answers in that room's terms: for somebody still anonymous to you
+ * its `name` is the pseudonym there (admin `users/[userId]/route.ts`, `roomPseudonymOf`). Only that field of that
+ * answer: never `display_name`, never the `/profiles/:id` fallback, never a real id's answer (the flat "Attendee", or
+ * whatever a buggy route sent). A placeholder ("Attendee": a DM's handle, an erased member) is no name.
+ */
+export function roomNameFrom(
+  ref: string,
+  data: { name?: unknown; display_name?: unknown; identityVisible?: unknown } | null | undefined
+): string | null {
+  if (!isHandle(ref) || !data || data.identityVisible === true || typeof data.name !== 'string') return null
+  return markSeed(data.name, '') || null
 }
 
 type WorkFieldList = { slug: string; label: string }[]
