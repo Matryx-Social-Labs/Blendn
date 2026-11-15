@@ -271,8 +271,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: ROW_INSET,
     paddingVertical: SPACE.xs,
   },
-  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
-  hairlineContrast: { height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
+  // Drawn over the row's top edge and taking no height, as the board's inset hairline: three rows are 168, not 168.7.
+  hairline: { height: StyleSheet.hairlineWidth, marginBottom: -StyleSheet.hairlineWidth, zIndex: 1, backgroundColor: COLOR.hairline },
+  hairlineContrast: { height: 1, marginBottom: -1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   pressed: { backgroundColor: PRESSED_WASH.ios },
   hostMark: {
     width: SIZE.circleButtonSm,
