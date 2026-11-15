@@ -1,31 +1,33 @@
 import Animated from 'react-native-reanimated'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect } from 'react'
-import { FlatList, StyleSheet, Text, View } from 'react-native'
+import { FlatList, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../../components/ds/Button'
 import { Spinner } from '../../components/ds/Loader'
 import { SearchField } from '../../components/ds/SearchField'
-import { HueProvider, font, useBoldText } from '../../components/ds/shared'
+import { HueProvider } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { PersonRow, PersonRowSkeleton, usePersonRowsFixed } from '../../components/friends/PersonRow'
 import { useOffline } from '../../components/OfflineBanner'
 import { useToast } from '../../components/Toast'
-import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
+import { COLOR, SPACE } from '../../lib/design/tokens'
 import { groupedCount, useMessageFriend } from '../../lib/friendsHere'
-import { SEARCH_MAX, FRIEND_ROW_HEIGHT, layoutOf, useFriendsHereList, withLetters, type FriendsListItem } from '../../lib/friendsHereList'
+import { FRIEND_ROW_HEIGHT, FRIENDS_PAGE, SEARCH_ABOVE, SEARCH_MAX, useFriendsHereList } from '../../lib/friendsHereList'
+import type { FriendHere } from '../../lib/friendsHere'
 import { idParam } from '../../lib/routeParams'
 import { useTopBarState } from '../../lib/useTopBarState'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
 /**
- * See all friends here (plans/friends-in-room.md C2, D15): a pushed screen, not a
- * sheet, because a sheet scrolls its children in a ScrollView and 300 rows would not
- * virtualise. Rose, like the Room it came from. A to Z with sticky letters, a search
- * over the friends here only, 64 pt rows (`getItemLayout` is exact, so a fast scroll
- * never shows a blank cell) and the server's pages of 50 by cursor.
+ * See all friends here (plans/friends-in-room.md C2, D15; Flow 5 C6, I-A): a pushed
+ * screen, not a sheet, because a sheet scrolls its children in a ScrollView and 300 rows
+ * would not virtualise. Rose, like the Room it came from. A to Z with no letters (owner
+ * call D4, A); above 20 friends a search over the friends here comes first; 64 pt rows
+ * (`getItemLayout` is exact, so a fast scroll never shows a blank cell); the server's
+ * pages of 20 by cursor, each behind "Show 20 more".
  *
  * Rows are PersonRows with Message, the same one action as the section: real names
  * and photos, and nothing about the event or the room. A very long name ends in an
@@ -36,7 +38,6 @@ function FriendsHereScreenContent() {
   const eventId = idParam(useLocalSearchParams().eventId)
   const insets = useSafeAreaInsets()
   const bar = useTopBarState()
-  const bold = useBoldText()
   const offline = useOffline()
   const { showToast } = useToast()
   const list = useFriendsHereList(eventId)
@@ -45,9 +46,6 @@ function FriendsHereScreenContent() {
 
   // Opened by a link with nothing under it, Back is the Pulse.
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/events'))
-  const rows = withLetters(list.friends)
-  const stickyHeaderIndices = rows.flatMap((r, i) => (r.kind === 'letter' ? [i] : []))
-  const layout = layoutOf(rows)
   // Rows are exactly 64 only at the default size; past it they grow (DS-05) and indexing by 64 would misplace them.
   const fixedRows = usePersonRowsFixed()
   // total is the unfiltered count: clearing a search that matched nobody is an empty list on its way back, not an empty room.
@@ -58,30 +56,25 @@ function FriendsHereScreenContent() {
     if (none) router.back()
   }, [none])
 
-  const renderItem = ({ item }: { item: FriendsListItem }) =>
-    item.kind === 'letter' ? (
-      <View style={styles.letter} accessibilityRole="header">
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} accessibilityLabel={item.letter} style={[font('label', bold, FONT_FAMILY.mono[500]), styles.letterText]}>
-          {item.letter}
-        </Text>
-      </View>
-    ) : (
-      <PersonRow
-        person={item.friend}
-        trailing={
-          <Button
-            kind="lit"
-            size="sm"
-            icon="message-circle"
-            label="Message"
-            accessibilityLabel={`Message ${item.friend.name}`}
-            loading={chat.opening === item.friend.userId}
-            disabled={offline}
-            onPress={() => void chat.message(item.friend)}
-          />
-        }
-      />
-    )
+  const renderItem = ({ item }: { item: FriendHere }) => (
+    <PersonRow
+      person={item}
+      trailing={
+        <Button
+          kind="secondary"
+          size="sm"
+          icon="message-circle"
+          label="Message"
+          accessibilityLabel={`Message ${item.name}`}
+          loading={chat.opening === item.userId}
+          disabled={offline}
+          onPress={() => void chat.message(item)}
+        />
+      }
+    />
+  )
+  // Search first only when there are more than one page shows (the unfiltered total, so a search in progress keeps it).
+  const searchable = !!eventId && list.total > SEARCH_ABOVE
 
   const body = !eventId ? (
     <StateScreen
@@ -106,22 +99,29 @@ function FriendsHereScreenContent() {
       <Animated.View entering={arrive} style={styles.fill}>
       <FlatList
         testID="friends-here-list"
-        data={rows}
-        keyExtractor={(r) => r.key}
+        data={list.friends}
+        keyExtractor={(f) => f.userId}
         renderItem={renderItem}
-        getItemLayout={fixedRows ? (_, index) => layout[index] : undefined}
-        stickyHeaderIndices={stickyHeaderIndices}
+        getItemLayout={fixedRows ? (_, index) => ({ length: FRIEND_ROW_HEIGHT, offset: FRIEND_ROW_HEIGHT * index, index }) : undefined}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        onEndReachedThreshold={1.5}
-        onEndReached={() => void list.loadMore()}
         initialNumToRender={12}
         windowSize={7}
         removeClippedSubviews
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + SPACE.xl }]}
         // Only a search can come up empty: with no search and no friends the screen is already on its way back.
         ListEmptyComponent={list.query.trim() ? <StateScreen icon="search" title="No friend here by that name." testID="friends-here-no-match" gutter /> : null}
-        ListFooterComponent={list.loadingMore ? <View style={styles.more}><Spinner size={20} /></View> : null}
+        ListFooterComponent={
+          list.loadingMore ? (
+            <View style={styles.more}>
+              <Spinner size={20} />
+            </View>
+          ) : list.hasMore ? (
+            <View style={styles.more}>
+              <Button kind="tertiary" label={`Show ${FRIENDS_PAGE} more`} onPress={() => void list.loadMore()} testID="friends-here-more" />
+            </View>
+          ) : null
+        }
         showsVerticalScrollIndicator={false}
         {...bar.scrollProps}
       />
@@ -132,12 +132,12 @@ function FriendsHereScreenContent() {
     <View style={styles.container}>
       {/* ponytail: a DS gap. TopBar's title and sub are plain strings, so the count is not in Geist Mono beside the title as the frame draws it. */}
       <TopBar title="Friends here" sub={list.total > 0 ? groupedCount(list.total) : undefined} state={bar.state} onBack={goBack} testID="friends-here-top" />
-      {eventId ? (
+      {searchable ? (
       <View style={styles.search}>
         <SearchField
           value={list.query}
           onChangeText={list.search}
-          placeholder="Search friends here"
+          placeholder={`Search ${groupedCount(list.total)} friends`}
           busy={list.searching}
           autoCapitalize="none"
           autoCorrect={false}
@@ -157,9 +157,6 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   search: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
   list: { paddingHorizontal: SPACE.gutter },
-  // The sticky letter sits on the page's own ground, so rows slide under it.
-  letter: { height: 32, justifyContent: 'center', backgroundColor: COLOR.ink },
-  letterText: { color: COLOR.textSecondary },
   more: { alignItems: 'center', height: FRIEND_ROW_HEIGHT, justifyContent: 'center' },
 })
 
