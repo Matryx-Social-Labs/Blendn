@@ -115,7 +115,7 @@ function ChatInner() {
   const { showToast } = useToast()
   const inbox = useBanterInbox()
   const { groupChats, setGroupChats, crewRooms, setCrewRooms, personalChats, setPersonalChats, incomingRequests, user } = inbox
-  const crews = useCrewInbox(useCallback((text: string) => showToast(text, 'error', { haptic: 'error' }), [showToast]))
+  const crews = useCrewInbox()
   const outbox = useOutbox()
   const membership = useRoomMembership()
   const [boardCount, setBoardCount] = useState(0)
@@ -443,16 +443,15 @@ function ChatInner() {
   const pull = usePullToRefresh({ refreshing: inbox.refreshing, onRefresh: () => void inbox.onRefresh(), indicatorTop: listTop })
   // On the UI thread: the tab bar's settle (SCRUM-1023), and the pull its offset while it is the pull's.
   const onScroll = useTabListScroll(pull)
-  const invites = crews.invites
-  // The server's count, not the page held, with the crew invites answered on the same page.
-  const requestsWaiting = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length) + Math.max(crews.invitesTotal, invites.length)
+  // The server's count, not the page held. Message requests only: crew invites are answered in Notifications and on Crews (requests placement A).
+  const requestsWaiting = Math.max(inbox.requestsTotal ?? 0, incomingRequests.length)
   // The list's own "Couldn’t load your chats" is up (the empty list's failed state): its Try again is the one.
   const failedState = inbox.listFailed && !inbox.loading && !trimmed && shown.length === 0
   // B-A: one row per open room with waves you have not answered, read again on a pull and on every wave heard.
   const { version: wavesVersion } = useRoomWaves()
   const waiting = useWavesWaiting(`${inbox.boardRefreshKey}:${wavesVersion}`)
   const waveRoomTitle = (eventId: string) => rooms.find((c) => c.event_id === eventId)?.event_title ?? null
-  const hasHeaderContent = waiting.rooms.length + liveRooms.length + blendRooms.length + incomingRequests.length + invites.length + boardCount > 0
+  const hasHeaderContent = waiting.rooms.length + liveRooms.length + blendRooms.length + incomingRequests.length + boardCount > 0
 
   const header = (
     <View style={styles.sections}>

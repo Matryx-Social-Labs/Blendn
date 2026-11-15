@@ -15,8 +15,8 @@ import { calendarDate, weekdayIn, WEEKDAYS } from './time'
  * row with no `display` draws a glyph tile or the event tile, never a wrong face.
  */
 
-/** Accept and Join are `lit` (with their glyph); Decline and View are `secondary`. */
-export type RowAction = { key: 'accept' | 'decline' | 'join' | 'view'; label: string; kind: 'lit' | 'secondary'; icon?: IconName }
+/** Accept and Join are `lit` (with their glyph); Decline is `secondary`. */
+export type RowAction = { key: 'accept' | 'decline' | 'join'; label: string; kind: 'lit' | 'secondary'; icon?: IconName }
 
 export type FeedRow = {
   id: string
@@ -27,6 +27,8 @@ export type FeedRow = {
   actions: RowAction[]
   /** Still the reader's to answer: it sits in Waiting on you. */
   waiting: boolean
+  /** A talk-ask's history line: no pills, a chevron to where it is answered (Banter's Message requests, the chat). */
+  chevron: boolean
 }
 
 export type FeedGroups = { waiting: FeedRow[]; fresh: FeedRow[]; earlier: FeedRow[] }
@@ -38,7 +40,10 @@ export const WAITING_SHOWN = 3
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** The kinds that ask the reader something. */
+/**
+ * The kinds that ask the reader something, answered in place in Waiting on you: the asks that join you to a person or a
+ * group (requests placement A, owner 2026-11-15). Every pill here answers.
+ */
 const REQUEST_ACTIONS: Partial<Record<NotificationKind, RowAction[]>> = {
   friend_request: [
     { key: 'accept', label: 'Accept', kind: 'lit', icon: 'user-check' },
@@ -48,12 +53,22 @@ const REQUEST_ACTIONS: Partial<Record<NotificationKind, RowAction[]>> = {
     { key: 'join', label: 'Join', kind: 'lit', icon: 'users' },
     { key: 'decline', label: 'Decline', kind: 'secondary' },
   ],
-  reveal_request: [{ key: 'view', label: 'View', kind: 'secondary' }],
-  board_request: [{ key: 'view', label: 'View', kind: 'secondary' }],
-  message_request: [{ key: 'view', label: 'View', kind: 'secondary' }],
 }
 
 export const isRequestKind = (kind: string): boolean => kind in REQUEST_ACTIONS
+
+/**
+ * The asks that open a chat: they live in Banter, where they are answered (its Message requests, the Lobby section, the reveal
+ * chip on the DM). Never in Waiting on you and never on the bell; in the history they are a plain line with a chevron, and
+ * their context says where they wait.
+ */
+const TALK_ASK_WHERE: Readonly<Record<string, string>> = {
+  message_request: 'Message requests',
+  board_request: 'The Lobby',
+  reveal_request: 'In your chat',
+}
+
+export const isTalkAskKind = (kind: string): boolean => kind in TALK_ASK_WHERE
 
 /** The glyph tile for a kind that is about somebody, or nobody by design. */
 export const GLYPH: Record<string, IconName> = {
@@ -216,6 +231,12 @@ const FROM_YOUR_MATCH = 'From your match'
 const personOnlyContext = (item: NotificationItem, when: string) =>
   item.kind === 'friend_request' && item.data?.via === 'match' ? joinLine(FROM_YOUR_MATCH, when) : when
 
+function contextOf(item: NotificationItem, when: string, fallback: string): string {
+  if (PERSON_ONLY.has(item.kind)) return personOnlyContext(item, when)
+  const where = TALK_ASK_WHERE[item.kind]
+  return where ? joinLine(where, when) : (text(item.display?.context) ?? fallback)
+}
+
 /** One notification as a row: the server's `display` where it sent one, else the kind's own. */
 export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRow {
   const when = notificationWhen(item.createdAt, now)
@@ -226,18 +247,19 @@ export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRo
     item,
     visual: parseVisual(item.display?.visual) ?? fallbackVisual(item),
     title: text(item.display?.title) ?? fallback.title,
-    context: PERSON_ONLY.has(item.kind) ? personOnlyContext(item, when) : (text(item.display?.context) ?? fallback.context),
+    context: contextOf(item, when, fallback.context),
     actions: waiting ? (REQUEST_ACTIONS[item.kind] ?? []) : [],
     waiting,
+    chevron: isTalkAskKind(item.kind),
   }
 }
 
 /**
- * A friend request that is no longer open (accepted, not now, withdrawn: the server's `open: false`, or `closeAnsweredElsewhere`)
- * has nothing left to say: its only words are the push's "New friend request", the unanswered request's (SCRUM-1036). It
- * leaves the feed, as one answered here does once its outcome has shown.
+ * A friend request or crew invite that is no longer open (accepted, joined, not now, declined, withdrawn: the server's
+ * `open: false`, or `closeAnsweredElsewhere`) has nothing left to say: its only words are the unanswered ask's (SCRUM-1036).
+ * It leaves the feed, as one answered here does once its outcome has shown.
  */
-const answeredFriendRequest = (item: NotificationItem) => item.kind === 'friend_request' && item.open === false
+const answeredAsk = (item: NotificationItem) => (item.kind === 'friend_request' || item.kind === 'crew_invite') && item.open === false
 
 /**
  * Waiting on you · New · Earlier. A request still open is Waiting on you
@@ -251,7 +273,7 @@ export function groupFeed(
 ): FeedGroups {
   const groups: FeedGroups = { waiting: [], fresh: [], earlier: [] }
   for (const item of items) {
-    if (resolved.has(item.id) || answeredFriendRequest(item)) continue
+    if (resolved.has(item.id) || answeredAsk(item)) continue
     const row = rowFor(item, now)
     if (row.waiting) groups.waiting.push(row)
     else if (fresh.has(item.id)) groups.fresh.push(row)
@@ -293,13 +315,24 @@ export function arrivedUnread(loaded: readonly NotificationItem[], page: readonl
 }
 
 /**
- * A friend request whose id is not among the ones still waiting on you (`incoming`) was answered somewhere else: its row
- * is history, not Waiting on you. `null` (the list did not load) closes nothing.
+ * The asks still waiting on you, as the one shared list for each kind has them (`useFriendRequestsState`, `useCrewInvites`):
+ * `open` is every id still waiting when the whole list is read, else null (one missing from a partial list may be on a later
+ * page); `left` is what was answered this session, wherever, and is closed whatever was read.
  */
-export function closeAnsweredElsewhere(items: readonly NotificationItem[], incoming: ReadonlySet<string> | null): NotificationItem[] {
-  if (!incoming) return [...items]
+export type OpenAsks = { open: ReadonlySet<string> | null; left: ReadonlySet<string> }
+const ASK_ID: Readonly<Record<string, 'requestId' | 'crewId'>> = { friend_request: 'requestId', crew_invite: 'crewId' }
+
+/** A friend request or crew invite answered somewhere else is history, not Waiting on you. */
+export function closeAnsweredElsewhere(
+  items: readonly NotificationItem[],
+  asks: { friend_request: OpenAsks; crew_invite: OpenAsks }
+): NotificationItem[] {
   return items.map((n) => {
-    const id = n.data?.requestId
-    return n.kind === 'friend_request' && typeof id === 'string' && !incoming.has(id) ? { ...n, open: false } : n
+    const key = ASK_ID[n.kind]
+    if (!key) return n
+    const id = n.data?.[key]
+    const { open, left } = asks[n.kind as keyof typeof asks]
+    if (typeof id !== 'string') return n
+    return left.has(id) || (open && !open.has(id)) ? { ...n, open: false } : n
   })
 }

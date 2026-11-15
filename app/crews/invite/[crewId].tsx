@@ -18,6 +18,7 @@ import { useSkeletonCrossfade } from '../../../components/motion/useSkeletonCros
 import { useToast } from '../../../components/Toast'
 import { useToastDock } from '../../../components/toastDock'
 import { askCrewPush } from '../../../lib/crewPushAsk'
+import { crewInviteAnswered } from '../../../lib/crewInvites'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, crewMessage, findInvite, type CrewInvite } from '../../../lib/crews'
 import { crewsApi } from '../../../lib/crewsApi'
 import { askedYouIn, crewVerb, inviteMeta, inviteNote } from '../../../lib/crewsScreens'
@@ -142,6 +143,8 @@ function CrewInviteScreenContent() {
       return
     }
     H.success()
+    // Every surface holding the invite lets it go now (Notifications says "You’re in", then lets it go too).
+    crewInviteAnswered(crewId, 'joined', invite.name)
     setJoined({ chatGroupId: result.data.chatGroupId, name: invite.name })
   }
 
@@ -156,6 +159,7 @@ function CrewInviteScreenContent() {
       return
     }
     // Told to nobody, and a gone invite is as good as declined.
+    crewInviteAnswered(crewId, 'declined', invite.name)
     router.back()
   }
 

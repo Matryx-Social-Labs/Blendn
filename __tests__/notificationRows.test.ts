@@ -5,6 +5,7 @@ import {
   findLandingRow,
   groupFeed,
   isRequestKind,
+  isTalkAskKind,
   mergeFeed,
   notificationWhen,
   parseVisual,
@@ -53,12 +54,25 @@ describe('a row from the stored push, which names nobody', () => {
     expect(row.context).toBe('5 min ago')
   })
 
-  it('asks Accept and Decline of a friend request, Join and Decline of an invite, View of the rest', () => {
+  // Requests placement A (owner 2026-11-15): every pill in Waiting on you answers; the asks that open a chat have none.
+  it('asks Accept and Decline of a friend request, Join and Decline of an invite, and nothing of a talk-ask', () => {
     const labels = (kind: NotificationItem['kind']) => rowFor(item({ id: kind, kind }), NOW).actions.map((a) => a.label)
     expect(labels('friend_request')).toEqual(['Accept', 'Decline'])
     expect(labels('crew_invite')).toEqual(['Join', 'Decline'])
-    for (const k of ['reveal_request', 'board_request', 'message_request'] as const) expect(labels(k)).toEqual(['View'])
+    for (const k of ['reveal_request', 'board_request', 'message_request'] as const) expect(labels(k)).toEqual([])
     for (const k of ['match', 'friend_accepted', 'crew_here', 'blend', 'announcement'] as const) expect(labels(k)).toEqual([])
+  })
+
+  it('draws a talk-ask as a plain line with a chevron, saying where it waits, whatever the server’s context', () => {
+    const row = (kind: NotificationItem['kind']) => rowFor(item({ id: kind, kind, display: { context: 'Met in the room' } }), NOW)
+    expect(row('message_request')).toMatchObject({ chevron: true, actions: [], waiting: false, context: 'Message requests · 5 min ago' })
+    expect(row('reveal_request')).toMatchObject({ chevron: true, context: 'In your chat · 5 min ago' })
+    expect(row('board_request')).toMatchObject({ chevron: true, context: 'The Lobby · 5 min ago' })
+    // Control: a join-ask has its pills and no chevron; a plain row neither.
+    expect(row('friend_request')).toMatchObject({ chevron: false, waiting: true })
+    expect(row('match')).toMatchObject({ chevron: false, context: 'Met in the room' })
+    expect(['message_request', 'board_request', 'reveal_request'].every(isTalkAskKind)).toBe(true)
+    expect(['friend_request', 'crew_invite', 'match'].some(isTalkAskKind)).toBe(false)
   })
 
   it('makes the first pill lit, with its glyph: Accept (user-check) and Join (users), nothing else', () => {
@@ -67,7 +81,6 @@ describe('a row from the stored push, which names nobody', () => {
       { key: 'decline', label: 'Decline', kind: 'secondary' },
     ])
     expect(rowFor(item({ id: 'c', kind: 'crew_invite' }), NOW).actions[0]).toEqual({ key: 'join', label: 'Join', kind: 'lit', icon: 'users' })
-    expect(rowFor(item({ id: 'b', kind: 'reveal_request' }), NOW).actions.map((a) => a.kind)).toEqual(['secondary'])
   })
 
   // A friend request comes only through your invite link (app/f/[token]), so it is a person and a time: never an event or a room.
@@ -236,12 +249,20 @@ describe('groupFeed', () => {
     expect(g.earlier.map((r) => r.id)).toEqual(['o'])
   })
 
-  it('does not wait on a request that has lapsed, or that the server says is closed: it is history, with no pills', () => {
+  it('does not wait on a request that has lapsed: it is history, with no pills', () => {
     const lapsed = item({ id: 'l', kind: 'friend_request', createdAt: ago((WAITING_DAYS + 1) * DAY) })
-    const closed = item({ id: 'c', kind: 'crew_invite', open: false, data: { crewId: 'c' } })
-    const g = groupFeed([lapsed, closed], { fresh: none, resolved: none, now: NOW })
+    const lapsedInvite = item({ id: 'li', kind: 'crew_invite', createdAt: ago((WAITING_DAYS + 1) * DAY), data: { crewId: 'c' } })
+    const g = groupFeed([lapsed, lapsedInvite], { fresh: none, resolved: none, now: NOW })
     expect(g.waiting).toEqual([])
     expect(g.earlier.map((r) => r.actions)).toEqual([[], []])
+  })
+
+  // Requests placement A: Waiting on you is the join-asks only. A talk-ask, open and unseen, is a New line.
+  it('never puts a talk-ask in Waiting on you, however open and unseen', () => {
+    const talk = (['message_request', 'board_request', 'reveal_request'] as const).map((kind) => item({ id: kind, kind }))
+    const g = groupFeed([...talk, friend], { fresh: new Set(talk.map((t) => t.id)), resolved: none, now: NOW })
+    expect(g.waiting.map((r) => r.id)).toEqual(['fr'])
+    expect(g.fresh.map((r) => r.id)).toEqual(['message_request', 'board_request', 'reveal_request'])
   })
 
   /*
@@ -255,12 +276,12 @@ describe('groupFeed', () => {
     expect([...g.waiting, ...g.fresh, ...g.earlier].map((r) => r.id)).toEqual(['fr', 'm'])
   })
 
-  // Control: a crew invite that is closed is still history (the server names it), and an open request still waits.
-  it('control: a closed crew invite stays as history, and a request still open waits', () => {
+  // A crew invite joined or declined anywhere leaves too (board 05, A · 1: the row collapses); an open request still waits.
+  it('leaves out a crew invite that is no longer open, and keeps a request still open', () => {
     const closedInvite = item({ id: 'x', kind: 'crew_invite', open: false, data: { crewId: 'c' } })
-    const g = groupFeed([closedInvite, friend], { fresh: none, resolved: none, now: NOW })
+    const g = groupFeed([closedInvite, friend, match], { fresh: none, resolved: none, now: NOW })
     expect(g.waiting.map((r) => r.id)).toEqual(['fr'])
-    expect(g.earlier.map((r) => r.id)).toEqual(['x'])
+    expect(g.earlier.map((r) => r.id)).toEqual(['m'])
   })
 
   it('leaves an answered request out of every section once it has left', () => {
@@ -317,13 +338,27 @@ describe('findLandingRow', () => {
 
 describe('closeAnsweredElsewhere', () => {
   const req = (id: string, requestId: string) => item({ id, kind: 'friend_request', data: { requestId } })
+  const inv = (id: string, crewId: string) => item({ id, kind: 'crew_invite', data: { crewId } })
+  const none = { open: null, left: new Set<string>() }
 
-  it('closes a friend request no longer among the incoming ones, and leaves the rest', () => {
-    const rows = closeAnsweredElsewhere([req('a', 'r1'), req('b', 'r2'), item({ id: 'c', kind: 'crew_invite', data: { crewId: 'x' } })], new Set(['r2']))
-    expect(rows.map((n) => n.open)).toEqual([false, undefined, undefined])
+  it('closes a friend request or crew invite no longer on its whole list, and leaves the rest', () => {
+    const rows = closeAnsweredElsewhere([req('a', 'r1'), req('b', 'r2'), inv('c', 'x'), inv('d', 'y'), item({ id: 'm', kind: 'match' })], {
+      friend_request: { open: new Set(['r2']), left: new Set() },
+      crew_invite: { open: new Set(['y']), left: new Set() },
+    })
+    expect(rows.map((n) => n.open)).toEqual([false, undefined, false, undefined, undefined])
   })
 
-  it('closes nothing when the list did not load', () => {
-    expect(closeAnsweredElsewhere([req('a', 'r1')], null)[0].open).toBeUndefined()
+  // One answer anywhere leaves every surface: a list read only in part cannot say an ask is gone, but an answer can.
+  it('closes what was answered this session even when the list is partial, and nothing else', () => {
+    const rows = closeAnsweredElsewhere([req('a', 'r1'), req('b', 'r2'), inv('c', 'x')], {
+      friend_request: { open: null, left: new Set(['r1']) },
+      crew_invite: { open: null, left: new Set(['x']) },
+    })
+    expect(rows.map((n) => n.open)).toEqual([false, undefined, false])
+  })
+
+  it('closes nothing when neither list has loaded', () => {
+    expect(closeAnsweredElsewhere([req('a', 'r1'), inv('c', 'x')], { friend_request: none, crew_invite: none }).map((n) => n.open)).toEqual([undefined, undefined])
   })
 })

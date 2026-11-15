@@ -6,7 +6,9 @@ import { forgetAuthMethod, rememberAuthMethod } from './authMethod'
 import type { DeletionProof } from './deletionProof'
 import { onCriticalPath } from './criticalPath'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
+import { resetCrewInvites } from './crewInvites'
 import { resetInboxBadge } from './inboxBadge'
+import { resetFriendRequests } from './friendRequests'
 import { Logger } from './logger'
 import { setLocationSharing } from './shareLocation'
 import { outageFrom, type Outage } from './outage'
@@ -325,6 +327,9 @@ const resetLocalSession = () => {
   lastForegroundRefresh = 0
   resetInboxBadge()
   void forgetAuthMethod()
+  // The asks waiting were the last account's: Notifications, Friends, Me and Crews start from nothing.
+  resetFriendRequests()
+  resetCrewInvites()
   // The icon's number was the last account's: the next person to open the app on this phone does not inherit it.
   void setAppIconBadge(0)
   /*

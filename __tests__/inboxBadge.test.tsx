@@ -1,20 +1,27 @@
 /*
- * The Banter tab's dot and the Pulse bell read one feed (BAR-02): the bell is `unreadCount`, the Banter dot is the
- * conversations, `badgeCount - unreadCount`. The fixture is the feed's counts as blendn-admin builds them.
+ * The Banter tab's dot and the Pulse bell read one feed (BAR-02), split by where an ask leads (requests placement A, board 03):
+ * the bell is the unseen rows that are not talk-asks; the Banter dot is the conversations, `badgeCount - unreadCount`, plus the
+ * message requests and Lobby asks waiting. The fixture is the feed's counts as blendn-admin builds them.
  */
 import { act, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 import { Text } from 'react-native'
 
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
-jest.mock('../lib/apiClient', () => ({ apiClient: { getNotifications: jest.fn() } }))
+jest.mock('../lib/apiClient', () => ({
+  apiClient: {
+    getNotifications: jest.fn(),
+    getMessageRequests: jest.fn(async () => ({ success: true, data: { requests: [], totalCount: 0 } })),
+    getBoardRequests: jest.fn(async () => ({ success: true, data: { incoming: [], outgoing: [] } })),
+  },
+}))
 jest.mock('../lib/socketClient', () => ({ subscribeToBell: jest.fn(() => () => {}), subscribeToUserNotifications: jest.fn(() => () => {}) }))
 jest.mock('expo-notifications', () => ({ getPermissionsAsync: jest.fn(async () => ({ status: 'denied' })), setBadgeCountAsync: jest.fn() }))
 
 /* eslint-disable import/first */
 import { apiClient } from '../lib/apiClient'
 import { queryCache } from '../lib/queryCache'
-import { banterUnread, markBellRead, refreshInboxBadge, resetInboxBadge, useInboxBadge, useInboxBadgeSync } from '../lib/inboxBadge'
+import { banterUnread, BELL_PAGE, markBellRead, publishTalkAsks, refreshInboxBadge, refreshTalkAsks, resetInboxBadge, useInboxBadge, useInboxBadgeSync } from '../lib/inboxBadge'
 import { clearDirtyDomains, isDomainDirty } from '../lib/liveSyncState'
 import { subscribeToBell, subscribeToUserNotifications } from '../lib/socketClient'
 /* eslint-enable import/first */
@@ -25,10 +32,13 @@ const feed = (extra: Record<string, unknown>) => ({ success: true, data: { notif
 function Probe() {
   useInboxBadgeSync('u1')
   const b = useInboxBadge()
-  return <Text testID="n">{`${b.unreadCount}/${banterUnread(b)}`}</Text>
+  return <Text testID="n">{`${b.bell}/${banterUnread(b)}`}</Text>
 }
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.clearAllMocks()
+  resetInboxBadge()
+})
 
 it('two unseen rows and one conversation: the bell 2, the Banter dot 1', async () => {
   api.getNotifications.mockResolvedValue(feed({ unreadCount: 2, badgeCount: 3 }))
@@ -173,5 +183,75 @@ describe('an accepted message request makes the Banter read its people again (SC
     await land('event_update')
     expect(queryCache.get(KEY)).not.toBeNull()
     expect(isDomainDirty('chat')).toBe(false)
+  })
+})
+
+describe('requests placement A: a talk-ask lights the Banter dot, never the bell (board 03)', () => {
+  const row = (kind: string, i: number) => ({ id: `${kind}-${i}`, kind, title: 'T', body: 'B', data: null, readAt: null, createdAt: '2026-11-15T10:00:00Z' })
+  const lobbyAsk = (id: string, live: boolean) => ({ id, live, status: 'pending', message: null, createdAt: '', decidedAt: null, counterpart: 'Otter', event: { id: 'e', title: 'E', startTime: '' }, post: { id: 'p', kind: 'ride', body: null } })
+  beforeEach(() => {
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
+    api.getBoardRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } } as never)
+  })
+
+  it('a message request, a Lobby ask and a reveal ask leave the bell; the dot has the conversations and what waits to talk', async () => {
+    // Three unseen rows (one friend request, two talk-asks) and one conversation; 5 message requests and 1 live Lobby ask waiting.
+    const rows = [row('friend_request', 1), row('message_request', 1), row('board_request', 1), row('reveal_request', 1)]
+    api.getNotifications.mockResolvedValue(feed({ unreadCount: 4, badgeCount: 5, notifications: rows }))
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 5 } } as never)
+    api.getBoardRequests.mockResolvedValue({ success: true, data: { incoming: [lobbyAsk('a', true), lobbyAsk('b', false)], outgoing: [] } } as never)
+    const view = await render(<Probe />)
+    // Control for the split: the server's own `unreadCount` (4) would light the bell for every talk-ask too.
+    await waitFor(() => expect(view.getByTestId('n').props.children).toBe('1/7'))
+    expect(api.getNotifications).toHaveBeenCalledWith({ unreadOnly: true, limit: BELL_PAGE })
+  })
+
+  it('past a page of unseen rows the bell is a floor: never a talk-ask counted', async () => {
+    const page = [...Array.from({ length: 25 }, (_, i) => row('message_request', i)), ...Array.from({ length: 5 }, (_, i) => row('match', i))]
+    api.getNotifications.mockResolvedValue({ success: true, data: { notifications: page, pagination: { limit: 30, hasMore: true }, unreadCount: 200, badgeCount: 200 } } as never)
+    const view = await render(<Probe />)
+    await waitFor(() => expect(view.getByTestId('n').props.children).toBe('5/0'))
+  })
+
+  it('opening the bell leaves the talk-asks on the dot', async () => {
+    api.getNotifications.mockResolvedValue(feed({ unreadCount: 2, badgeCount: 2, notifications: [row('match', 1), row('message_request', 1)] }))
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 3 } } as never)
+    const view = await render(<Probe />)
+    await waitFor(() => expect(view.getByTestId('n').props.children).toBe('1/3'))
+    await act(async () => markBellRead())
+    expect(view.getByTestId('n').props.children).toBe('0/3')
+  })
+
+  it('what the Banter knows moves the dot at once: an answered request takes it down', async () => {
+    api.getNotifications.mockResolvedValue(feed({ unreadCount: 0, badgeCount: 0 }))
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 2 } } as never)
+    const view = await render(<Probe />)
+    await waitFor(() => expect(view.getByTestId('n').props.children).toBe('0/2'))
+    await act(async () => publishTalkAsks({ messageRequests: 1 }))
+    expect(view.getByTestId('n').props.children).toBe('0/1')
+  })
+
+  it('a talk-ask row re-reads the talk-asks; a friend request row does not', async () => {
+    api.getNotifications.mockResolvedValue(feed({ unreadCount: 0, badgeCount: 0 }))
+    await render(<Probe />)
+    await act(async () => {})
+    const onRow = (subscribeToBell as jest.Mock).mock.calls.at(-1)[0]
+    api.getMessageRequests.mockClear()
+    await act(async () => onRow({ kind: 'friend_request' }))
+    expect(api.getMessageRequests).not.toHaveBeenCalled()
+    await act(async () => onRow({ kind: 'message_request' }))
+    expect(api.getMessageRequests).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed talk-ask read keeps the last answer; sign-out clears it', async () => {
+    api.getNotifications.mockResolvedValue(feed({ unreadCount: 0, badgeCount: 0 }))
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 4 } } as never)
+    const view = await render(<Probe />)
+    await waitFor(() => expect(view.getByTestId('n').props.children).toBe('0/4'))
+    api.getMessageRequests.mockResolvedValue({ success: false, error: 'down' } as never)
+    await act(async () => refreshTalkAsks())
+    expect(view.getByTestId('n').props.children).toBe('0/4')
+    await act(async () => resetInboxBadge())
+    expect(view.getByTestId('n').props.children).toBe('0/0')
   })
 })

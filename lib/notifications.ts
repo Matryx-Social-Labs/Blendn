@@ -413,8 +413,8 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
      * wiring the notifications centre, which routes through this same
      * function rather than carrying a second copy of it.
      *
-     * The Banter tab, which is where requests are listed (`app/(tabs)/chat.tsx`
-     * loads them) — there is no dedicated route. Deliberately not the sender's
+     * A message request opens Banter's Message requests, where it is answered (requests placement A, 2026-11-15); an
+     * answer to yours, and a Lobby ask, the Banter tab, where the chat and the Lobby section are. Deliberately not the sender's
      * profile: the decision is accept-or-decline, and a request from somebody
      * you have not accepted must not deep-link to a profile you are not yet
      * entitled to see.
@@ -423,7 +423,10 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
      * words, because a lock screen is read by other people — so the client
      * draws nothing from it either.
      */
-    case 'message_request':
+    case 'message_request': {
+      target = '/message-requests'
+      break
+    }
     case 'message_request_response':
     case 'board_request': {
       target = '/(tabs)/chat'
@@ -526,9 +529,10 @@ export function notificationTarget(data: Record<string, any> | undefined): Href 
 /**
  * The kinds that are asked something, whose push lands on the Notifications screen (Flow 9 · 9.2, motion #50):
  * the request is answered there, where Accept and Decline are, and the screen scrolls to it and washes it.
- * (A row's own View/Join, on that screen, goes to `notificationTarget`: the destination, not the feed.)
+ * (A row's own Join, on that screen, goes to `notificationTarget`: the destination, not the feed.) The asks that open a
+ * chat (a message request, a Lobby ask, a reveal ask) are answered in Banter, so their push goes there (requests placement A).
  */
-const LANDS_IN_THE_FEED = ['friend_request', 'crew_invite', 'reveal_request', 'board_request', 'message_request']
+const LANDS_IN_THE_FEED = ['friend_request', 'crew_invite']
 const LANDING_KEYS = ['requestId', 'crewId', 'eventId', 'conversationId'] as const
 
 /** Where a tapped push or banner goes: the Notifications screen with its payload ids for a request kind, otherwise the destination. */
@@ -566,7 +570,7 @@ export function navigateFromNotificationData(data: Record<string, any> | undefin
   try {
     const target = notificationTarget(data)
     // The Banter's requests and people predate the notification being shown: it reads them again on arrival.
-    if (target === '/(tabs)/chat') {
+    if (target === '/(tabs)/chat' || target === '/message-requests') {
       forgetMessageRequests()
       forgetPersonalChats()
     }

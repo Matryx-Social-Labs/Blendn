@@ -28,8 +28,8 @@ import { ProfileBio, ProfileDetail, ProfileInterests, ProfileSection, SECTION_GA
 import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import type { Rect } from '../../components/ds/chatShared'
 import { apiClient } from '../../lib/apiClient'
-import { requestsPageFrom } from '../../lib/friendsPaging'
-import { crewsApi } from '../../lib/crewsApi'
+import { loadFriendRequests, useFriendRequestsState } from '../../lib/friendRequests'
+import { readMyCrews, useCrewInvites } from '../../lib/crewInvites'
 import type { Crew } from '../../lib/crews'
 import { COLOR, SPACE, STAGGER } from '../../lib/design/tokens'
 import type { Badge } from '../../lib/aboutYou'
@@ -109,11 +109,14 @@ function ProfileInner() {
   const [refreshing, setRefreshing] = useState(false)
   // Null until it loads, and on failure: the stat is left out rather than showing a wrong 0.
   const [friendsCount, setFriendsCount] = useState<number | null>(null)
-  // Requests waiting on you. Zero until it loads, and on failure: the row is simply not drawn.
-  const [requestCount, setRequestCount] = useState(0)
-  // Your crews and the invites waiting, for the Crews row; empty until they load, and on failure.
+  /*
+   * Friend requests and crew invites waiting on you: the one shared list of each (requests placement A), so an answer in
+   * Notifications, Friends or Crews is gone from here too. Zero until it loads, and on failure: the row is simply not drawn.
+   */
+  const requestCount = useFriendRequestsState().incoming.total
+  const crewInvites = useCrewInvites().total
+  // Your crews, for the Crews row; empty until they load, and on failure.
   const [crews, setCrews] = useState<Crew[]>([])
-  const [crewInvites, setCrewInvites] = useState(0)
   const [viewer, setViewer] = useState<{ index: number; from: Rect | null } | null>(null)
   // What `GET /profiles/:you` adds (blendn-admin #716): your badges (null: none sent) and the photos moderation took down. Empty until it loads.
   const [badges, setBadges] = useState<Badge[] | null>(null)
@@ -259,17 +262,11 @@ function ProfileInner() {
     void apiClient.getFriends().then((result) => {
       if (result.success && result.data) setFriendsCount(result.data.count)
     })
-    // Its own request, so a slow one never holds up the friend count.
-    void apiClient.getFriendRequests().then((result) => {
-      // The server's count of everyone waiting, not the length of the first page of them.
-      if (result.success && result.data) setRequestCount(requestsPageFrom(result.data, 'incoming')?.total ?? 0)
-    })
-    // Your crews, and the invites waiting: the Crews row's count and dot.
-    void crewsApi.myCrews().then((result) => {
-      if (!result.success || !result.data) return
-      setCrews(result.data.crews)
-      // The server's count of the invites listed, not the length of the first page of them.
-      setCrewInvites(result.data.invitesPagination?.totalCount ?? result.data.invites.length)
+    // Its own request, so a slow one never holds up the friend count; the server's count of everyone waiting.
+    void loadFriendRequests()
+    // Your crews, and the invites waiting (the shared list): the Crews row's count and dot.
+    void readMyCrews().then((result) => {
+      if (result.success && result.data) setCrews(result.data.crews)
     })
   }, [])
 

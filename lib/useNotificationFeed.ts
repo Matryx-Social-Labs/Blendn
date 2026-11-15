@@ -1,17 +1,18 @@
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useIsFocused } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
-import { requestsPageFrom } from './friendsPaging'
 import { iconBadgeAfterRead, iconBadgeFor, setAppIconBadge } from './appBadge'
 import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import { readAnswered, rememberAnswered, type Outcome } from './answeredRequests'
+import { crewInviteAnswered, readMyCrews, useCrewInvites } from './crewInvites'
 import { crewsApi } from './crewsApi'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { Logger } from './logger'
 import type { NotificationItem } from './notificationFormat'
 import { arrivedUnread, closeAnsweredElsewhere, groupFeed, isRequestKind, mergeFeed, type FeedGroups, type FeedRow, type RowAction } from './notificationRows'
+import { friendRequestLeft, loadFriendRequests, useFriendRequestsState } from './friendRequests'
 import { navigateFromNotificationData } from './notifications'
 import { subscribeToBell } from './socketClient'
 
@@ -72,8 +73,18 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const itemsRef = useRef(items)
   const pagingRef = useRef(paging)
   const inFlight = useRef(new Set<string>())
-  /** Who sent each request still waiting (request id → their user id), from the last reconcile. */
+  /*
+   * The one list per ask kind, shared with Friends, Me and Crews (requests placement A): an ask answered on any of them is
+   * closed here, and one answered here leaves them (`friendRequestLeft`, `crewInviteAnswered`).
+   */
+  const friendRequests = useFriendRequestsState()
+  const crewInvites = useCrewInvites()
+  const focused = useIsFocused()
+  /** Who sent each request still waiting (request id → their user id), as the shared list has them. */
   const senders = useRef(new Map<string, string>())
+  useEffect(() => {
+    friendRequests.incoming.items.forEach((r) => senders.current.set(r.id, r.person.userId))
+  }, [friendRequests.incoming.items])
   /** The rows whose answer outlived `ANSWER_DEADLINE_MS`: it may still have landed. */
   const timedOut = useRef(new Set<string>())
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
@@ -129,13 +140,9 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
         setLoad('ready')
         if (arrived.length || page.some((n) => n.readAt === null)) markSeen(iconBadgeAfterRead(result.data))
         else void setAppIconBadge(iconBadgeFor(result.data))
-        // The list shows at once; whether its requests were answered elsewhere is reconciled after (a second read).
-        void incomingRequests(page).then((incoming) => {
-          if (!incoming) return
-          // Who sent each request is true of a partial list as well; only a whole list can say a request is gone.
-          incoming.senders.forEach((sender, requestId) => senders.current.set(requestId, sender))
-          if (incoming.whole) setItems((prev) => closeAnsweredElsewhere(prev, new Set(incoming.senders.keys())))
-        })
+        // The list shows at once; whether its asks were answered elsewhere is the shared lists' to say, read again after.
+        if (page.some((n) => n.kind === 'friend_request' && n.open !== false)) void loadFriendRequests()
+        if (page.some((n) => n.kind === 'crew_invite' && n.open !== false)) void readMyCrews()
       } catch (error) {
         Logger.warn('notifications', 'load:failed', { error: error as never })
         // A list that loaded once stays through a failed refresh: "Quiet for now" over a failed request would be false.
@@ -196,17 +203,38 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   /** Leaving the screen: everything that was New is read (motion #29 plays as the dots go). */
   const settle = useCallback(() => setSettled((prev) => new Set([...prev, ...freshIds])), [freshIds])
 
-  const answeredItems = useMemo(
-    () =>
-      items.flatMap((n) => {
-        const outcome = answered.get(n.id)
-        if (outcome === 'declined') return []
-        // A row showing its answer stays in Waiting until its dwell ends: moved, it remounts done and the moment never plays.
-        if (requestState[n.id] === 'done') return [n.open === false ? { ...n, open: true } : n]
-        return [outcome === 'accepted' ? { ...n, open: false } : n]
-      }),
-    [items, answered, requestState]
-  )
+  /*
+   * A crew invite joined on its consent screen (Join here opens it) comes back saying so: "You’re in {crew}", for the dwell,
+   * then it leaves (board 05, A · 1). By the row's id, to the crew's name.
+   */
+  const joined = useMemo(() => {
+    const names = new Map<string, string>()
+    for (const n of items) {
+      const said = n.kind === 'crew_invite' && n.data?.crewId ? crewInvites.outcomes.get(n.data.crewId) : undefined
+      if (said?.outcome === 'joined' && !resolved.has(n.id) && answered.get(n.id) === undefined) names.set(n.id, said.name)
+    }
+    return names
+  }, [items, crewInvites.outcomes, resolved, answered])
+  const shownState = useMemo(() => {
+    const done = Object.fromEntries([...joined.keys()].map((id) => [id, 'done' as const]))
+    return { ...done, ...requestState }
+  }, [joined, requestState])
+
+  const answeredItems = useMemo(() => {
+    const friendsWhole = friendRequests.loaded && friendRequests.incoming.cursor === null
+    const crewsWhole = crewInvites.loaded && crewInvites.cursor === null
+    const closed = closeAnsweredElsewhere(items, {
+      friend_request: { open: friendsWhole ? new Set(friendRequests.incoming.items.map((r) => r.id)) : null, left: friendRequests.answered },
+      crew_invite: { open: crewsWhole ? new Set(crewInvites.invites.map((i) => i.crewId)) : null, left: new Set(crewInvites.outcomes.keys()) },
+    })
+    return closed.flatMap((n) => {
+      const outcome = answered.get(n.id)
+      if (outcome === 'declined') return []
+      // A row showing its answer stays in Waiting until its dwell ends: moved, it remounts done and the moment never plays.
+      if (shownState[n.id] === 'done') return [n.open === false ? { ...n, open: true } : n]
+      return [outcome === 'accepted' ? { ...n, open: false } : n]
+    })
+  }, [items, answered, shownState, friendRequests, crewInvites])
   const fresh = useMemo(() => new Set([...freshIds].filter((id) => !settled.has(id))), [freshIds, settled])
   const groups: FeedGroups = useMemo(
     () => groupFeed(answeredItems, { fresh: freshIds, resolved, now: readAt }),
@@ -239,10 +267,26 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
     void rememberAnswered(id, outcome)
   }, [])
 
+  // A Join's outcome is seen when the screen is: its dwell starts once you are back on it, not behind the crew's chat.
+  const dwelling = useRef(new Set<string>())
+  useEffect(() => {
+    if (!focused) return
+    for (const id of joined.keys()) {
+      if (dwelling.current.has(id)) continue
+      dwelling.current.add(id)
+      const timer = setTimeout(() => {
+        timers.current.delete(timer)
+        resolve(id)
+        remember(id, 'accepted')
+      }, DONE_DWELL_MS)
+      timers.current.add(timer)
+    }
+  }, [focused, joined, resolve, remember])
+
   const answer = useCallback(
     async (row: FeedRow, action: RowAction['key']) => {
       const { item } = row
-      if (action === 'view' || action === 'join') {
+      if (action === 'join') {
         touch(item.id)
         navigateFromNotificationData(item.data ?? undefined)
         return
@@ -280,6 +324,8 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
         }
         timedOut.current.delete(item.id)
         remember(item.id, outcome)
+        if (item.kind === 'friend_request' && item.data?.requestId) friendRequestLeft('incoming', item.data.requestId)
+        if (item.kind === 'crew_invite' && item.data?.crewId) crewInviteAnswered(item.data.crewId, 'declined', '')
         if (action === 'decline') {
           // Told to nobody: the row collapses and nothing is said.
           setRequest(item.id, null)
@@ -293,7 +339,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
         inFlight.current.delete(item.id)
       }
     },
-    [touch, showToast, setRequest, remember, dwellThenResolve, stillHere]
+    [touch, showToast, setRequest, remember, resolve, dwellThenResolve, stillHere]
   )
 
   /**
@@ -334,7 +380,8 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
     load,
     groups,
     fresh,
-    requestState,
+    requestState: shownState,
+    joined,
     hasMore: paging.hasMore,
     loadingMore,
     refreshing,
@@ -362,24 +409,6 @@ function answerRequest(item: NotificationItem, action: 'accept' | 'decline'): Pr
     return apiClient.respondToFriendRequest(item.data.requestId, action === 'accept' ? 'accept' : 'dismiss')
   }
   return Promise.resolve({ success: false, errorCode: SAID_NO_LONGER_THERE })
-}
-
-/**
- * The friend requests still waiting on you (their id → who sent it), when the page has one to check; `null` when it has none or the list
- * did not load (then nothing is closed). A server that says whether a request's row is still open sends `open` (#716), and an
- * older one does not, so a request accepted or declined on Friends › Requests would wait here for good without this.
- */
-async function incomingRequests(page: readonly NotificationItem[]): Promise<{ senders: ReadonlyMap<string, string>; whole: boolean } | null> {
-  if (!page.some((n) => n.kind === 'friend_request' && n.open !== false)) return null
-  try {
-    const result = await apiClient.getFriendRequests()
-    const page = result.success ? requestsPageFrom(result.data, 'incoming') : null
-    // `whole`: no page behind this one. Only then is a request missing from it answered; with more pages, one not on the first may still be waiting.
-    return page ? { senders: new Map(page.items.map((r) => [r.id, r.person.userId])), whole: page.nextCursor === null } : null
-  } catch (error) {
-    Logger.warn('notifications', 'requests:failed', { error: error as never })
-    return null
-  }
 }
 
 /** Whether the person who sent a request is now a friend: an Accept that timed out landed after all. Unknown reads as no. */

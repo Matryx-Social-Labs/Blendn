@@ -2,7 +2,6 @@ import { router } from 'expo-router'
 import Reanimated, { FadeOut } from 'react-native-reanimated'
 
 import { DURATION } from '../../lib/design/tokens'
-import type { CrewInvite } from '../../lib/crews'
 import type { MessageRequest, useBanterInbox } from '../../lib/useBanterInbox'
 import { metInLine } from '../../lib/personFace'
 import { inboxTimeLabel } from './inbox'
@@ -30,26 +29,6 @@ export function RequestRow({ request: r, inbox }: { request: MessageRequest; inb
         onDecline={() => void inbox.respondToRequest(r, 'decline')}
         onMore={() => inbox.openRequestMore(r)}
         onOpen={r.sender_id ? () => router.push({ pathname: '/user/[id]', params: { id: String(r.sender_id) } } as never) : undefined}
-      />
-    </Reanimated.View>
-  )
-}
-
-/** A crew invite on the same page: it leaves the same way, and the list closes the gap. */
-export function InviteRow({ invite, onDecline }: { invite: CrewInvite; onDecline: (invite: CrewInvite) => void }) {
-  const reduceMotion = useReducedMotion()
-  return (
-    <Reanimated.View exiting={reduceMotion ? undefined : FadeOut.duration(DURATION.quick)}>
-      <RequestCard
-        testID={`requests-invite-${invite.crewId}`}
-        face={<RequestFace emblemSeed={invite.emblemSeed} />}
-        name={invite.name}
-        note={`${invite.invitedBy} invited you to the crew`}
-        time={inboxTimeLabel(invite.invitedAt)}
-        accept="Join"
-        // Join is the consent screen (Flow 10 · 10.3): it reveals you to the crew, so it asks there.
-        onAccept={() => router.push({ pathname: '/crews/invite/[crewId]', params: { crewId: invite.crewId } })}
-        onDecline={() => onDecline(invite)}
       />
     </Reanimated.View>
   )

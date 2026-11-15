@@ -50,11 +50,16 @@ jest.mock('../components/OptimizedImage', () => {
 
 import { apiClient } from '../lib/apiClient'
 import FriendRequestsScreen, { requestsWaiting } from '../app/friends/requests'
+import { resetFriendRequests } from '../lib/friendRequests'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'req-ben', person: { userId: 'u_ben', name: 'Ben', photo: null }, createdAt: '2026-09-27T20:00:00Z' }
 
-beforeEach(() => jest.clearAllMocks())
+beforeEach(() => {
+  jest.clearAllMocks()
+  // The list is one store for every surface (requests placement A): each test starts from nothing.
+  resetFriendRequests()
+})
 
 it('accepts from the list', async () => {
   api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [BEN], outgoing: [] } })
@@ -64,7 +69,7 @@ it('accepts from the list', async () => {
   fireEvent.press(await screen.findByLabelText('Accept Ben'))
 
   await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledWith('req-ben', 'accept'))
-  expect(await screen.findByText('No requests')).toBeTruthy()
+  expect(await screen.findByText('No friend requests')).toBeTruthy()
   expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success', { haptic: 'success' })
   expect(mockAsk).toHaveBeenCalledWith({ stillHere: expect.any(Function) })
 })
@@ -82,15 +87,15 @@ it('says so when an answer throws, and the request can be answered again', async
   api.respondToFriendRequest.mockResolvedValueOnce({ success: true, data: { dismissed: true } })
   fireEvent.press(screen.getByLabelText('Not now, Ben'))
   await waitFor(() => expect(api.respondToFriendRequest).toHaveBeenCalledTimes(2))
-  expect(await screen.findByText('No requests')).toBeTruthy()
+  expect(await screen.findByText('No friend requests')).toBeTruthy()
 })
 
-it('does not call a failed load "No requests"', async () => {
+it('does not call a failed load "No friend requests"', async () => {
   api.getFriendRequests.mockResolvedValueOnce({ success: false, error: 'No internet connection.' })
   await render(<FriendRequestsScreen />)
 
   expect(await screen.findByText("Your requests didn’t load")).toBeTruthy()
-  expect(screen.queryByText('No requests')).toBeNull()
+  expect(screen.queryByText('No friend requests')).toBeNull()
 
   api.getFriendRequests.mockResolvedValueOnce({ success: true, data: { incoming: [BEN], outgoing: [] } })
   fireEvent.press(screen.getByText('Try again'))
@@ -109,27 +114,27 @@ it('says how many are waiting under the title: the server’s count, not the pag
 })
 
 /*
- * SCRUM-1036: the list was read on focus only, so a request that arrived while it was open showed "No requests" until it
+ * SCRUM-1036: the list was read on focus only, so a request that arrived while it was open showed "No friend requests" until it
  * was opened again. A new request lands in your bell (the same socket event the Notifications feed reads): read again.
  */
 describe('a request that arrives while the list is open (SCRUM-1036)', () => {
   it('shows up without leaving the screen', async () => {
     api.getFriendRequests.mockResolvedValueOnce({ success: true, data: { incoming: [], outgoing: [] } })
     await render(<FriendRequestsScreen />)
-    expect(await screen.findByText('No requests')).toBeTruthy()
+    expect(await screen.findByText('No friend requests')).toBeTruthy()
 
     api.getFriendRequests.mockResolvedValueOnce({ success: true, data: { incoming: [BEN], outgoing: [] } })
     await act(async () => mockBell?.({ kind: 'friend_request' }))
 
     expect(await screen.findByLabelText('Accept Ben')).toBeTruthy()
-    expect(screen.queryByText('No requests')).toBeNull()
+    expect(screen.queryByText('No friend requests')).toBeNull()
   })
 
   // Control: a bell row of any other kind is not a request, and is not a reason to read the list again.
   it('does not read the list again for a row of another kind', async () => {
     api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } })
     await render(<FriendRequestsScreen />)
-    expect(await screen.findByText('No requests')).toBeTruthy()
+    expect(await screen.findByText('No friend requests')).toBeTruthy()
     await act(async () => mockBell?.({ kind: 'match' }))
     expect(api.getFriendRequests).toHaveBeenCalledTimes(1)
   })

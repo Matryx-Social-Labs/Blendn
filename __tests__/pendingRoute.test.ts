@@ -146,9 +146,10 @@ describe('View on a request notification (SCRUM-907)', () => {
   const KEY = 'message_requests_u1'
   beforeEach(() => queryCache.set(KEY, { incoming: [], outgoing: [] }, 60_000))
 
-  it('lands on the Banter and drops its cached requests, so the request is read when it arrives', () => {
+  it('lands on Banter’s Message requests and drops its cached requests, so the request is read when it arrives', () => {
     navigateFromNotificationData({ type: 'message_request', requestId: 'r1' })
-    expect(takePendingRoute()).toBe('/(tabs)/chat')
+    // Where it is answered (requests placement A, 2026-11-15).
+    expect(takePendingRoute()).toBe('/message-requests')
     expect(queryCache.get(KEY)).toBeNull()
   })
 

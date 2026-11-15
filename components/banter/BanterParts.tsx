@@ -227,7 +227,6 @@ export function RequestCard({
   note,
   foot,
   time,
-  accept = 'Accept',
   pending = false,
   onAccept,
   onDecline,
@@ -243,7 +242,6 @@ export function RequestCard({
   /** A quiet line under the answers: what became of one that did not go through. */
   foot?: string
   time: string
-  accept?: string
   pending?: boolean
   onAccept: () => void
   onDecline: () => void
@@ -303,7 +301,7 @@ export function RequestCard({
             kind="secondary"
             size="md"
             label="Decline"
-            accessibilityLabel={`Decline the ${accept === 'Join' ? 'invite to' : 'request from'} ${name}`}
+            accessibilityLabel={`Decline the request from ${name}`}
             disabled={pending}
             onPress={onDecline}
             style={styles.grow}
@@ -313,9 +311,9 @@ export function RequestCard({
           <Button
             kind="lit"
             size="md"
-            icon={accept === 'Join' ? 'users' : 'user-check'}
-            label={accept}
-            accessibilityLabel={accept === 'Join' ? `Join ${name}` : `Accept the request from ${name}`}
+            icon="user-check"
+            label="Accept"
+            accessibilityLabel={`Accept the request from ${name}`}
             loading={pending}
             pressHaptic={false}
             onPress={onAccept}
@@ -334,17 +332,10 @@ export function RequestCard({
 }
 
 /**
- * A request's 40 pt face: a crew its emblem; a named sender (a message request carries their name) by `personFace`, their
- * photo or initial; an anonymous asker (a Lobby ask) their creature on `pseudonym`.
+ * A request's 40 pt face: a named sender (a message request carries their name) by `personFace`, their photo or initial; an
+ * anonymous asker (a Lobby ask) their creature on `pseudonym`.
  */
-export function RequestFace({ photo, name, pseudonym, emblemSeed }: { photo?: string | null; name?: string; pseudonym?: string; emblemSeed?: string }) {
-  if (emblemSeed) {
-    return (
-      <View style={[styles.square, { width: REQUEST_FACE, height: REQUEST_FACE }]}>
-        <CrewEmblem seed={emblemSeed} size={REQUEST_FACE} />
-      </View>
-    )
-  }
+export function RequestFace({ photo, name, pseudonym }: { photo?: string | null; name?: string; pseudonym?: string }) {
   const face = name !== undefined ? personFace({ named: true, name, photo }) : personFace({ named: false, name: pseudonym ?? 'Someone' })
   return <Avatar size={REQUEST_FACE} {...face} />
 }
@@ -653,7 +644,6 @@ const styles = StyleSheet.create({
   requestHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   requestWho: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   requestActions: { flexDirection: 'row', gap: SPACE.sm },
-  square: { borderRadius: SPACE.sm + SPACE.xxs, overflow: 'hidden' },
   row: { minHeight: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, backgroundColor: COLOR.ink },
   rowPressed: { backgroundColor: COLOR.surfaceSunken },
   rowText: { flex: 1, minWidth: 0, gap: SPACE.xxs },

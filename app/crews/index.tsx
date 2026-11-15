@@ -16,8 +16,8 @@ import { emptyOut, fadeIn, riseIn } from '../../components/board/boardMotion'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 import { SkeletonBlock } from '../../components/Skeleton'
 import { useToastDock } from '../../components/toastDock'
-import { crewBadge, type Crew, type CrewInvite } from '../../lib/crews'
-import { crewsApi } from '../../lib/crewsApi'
+import { moreCrewInvites, readMyCrews, useCrewInvites } from '../../lib/crewInvites'
+import { crewBadge, type Crew } from '../../lib/crews'
 import { crewRowSub, inviteRows } from '../../lib/crewsScreens'
 import { COLOR, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
@@ -26,7 +26,8 @@ import { useTopBarState } from '../../lib/useTopBarState'
 
 type Load =
   | { kind: 'loading' }
-  | { kind: 'ready'; crews: Crew[]; invites: CrewInvite[]; invitesTotal: number; invitesCursor: string | null }
+  /** The invites are not here: they are the one shared list (`useCrewInvites`), so an answer in Notifications leaves this screen too. */
+  | { kind: 'ready'; crews: Crew[] }
   /** The set-up and age gate (403): the server's sentence, and the way through it. */
   | { kind: 'gate'; line: string }
   | { kind: 'failed' }
@@ -51,6 +52,7 @@ const SKELETON_ROWS = 3
 function CrewsScreenContent() {
   const insets = useSafeAreaInsets()
   const [load, setLoad] = useState<Load>({ kind: 'loading' })
+  const invites = useCrewInvites()
   const [refreshing, setRefreshing] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
@@ -66,7 +68,7 @@ function CrewsScreenContent() {
    * drop as the list rises in (Reduce Motion: a crossfade, no drop). Only that step plays: a first load, a refresh and a list
    * that stays a list never do. State adjusted in render, so the list that replaces the empty one is the one that rises.
    */
-  const isEmpty = load.kind === 'ready' && load.crews.length === 0 && load.invites.length === 0
+  const isEmpty = load.kind === 'ready' && load.crews.length === 0 && invites.invites.length === 0
   const [wasEmpty, setWasEmpty] = useState(false)
   const [firstItem, setFirstItem] = useState(false)
   if (isEmpty !== wasEmpty) {
@@ -81,10 +83,9 @@ function CrewsScreenContent() {
   }, [firstItem])
 
   const read = useCallback(async () => {
-    const result = await crewsApi.myCrews()
+    const result = await readMyCrews()
     if (result.success && result.data) {
-      const { crews, invites, invitesPagination } = result.data
-      setLoad({ kind: 'ready', crews, invites, invitesTotal: invitesPagination?.totalCount ?? invites.length, invitesCursor: invitesPagination?.hasMore ? invitesPagination.nextCursor : null })
+      setLoad({ kind: 'ready', crews: result.data.crews })
       setMoreFailed(false)
     }
     else if (result.errorCode === 'FORBIDDEN') setLoad({ kind: 'gate', line: result.error ?? '' })
@@ -107,18 +108,12 @@ function CrewsScreenContent() {
 
   /** The next page of invites, onto the ones shown; a failure keeps them and offers the retry. */
   const moreInvites = async () => {
-    if (load.kind !== 'ready' || !load.invitesCursor || loadingMore) return
+    if (load.kind !== 'ready' || !invites.cursor || loadingMore) return
     setLoadingMore(true)
     setMoreFailed(false)
-    const result = await crewsApi.myCrews(load.invitesCursor)
+    const landed = await moreCrewInvites()
     setLoadingMore(false)
-    if (!result.success || !result.data) return setMoreFailed(true)
-    const page = result.data.invitesPagination
-    setLoad((now) => {
-      if (now.kind !== 'ready') return now
-      const seen = new Set(now.invites.map((i) => i.crewId))
-      return { ...now, invites: [...now.invites, ...result.data!.invites.filter((i) => !seen.has(i.crewId))], invitesCursor: page?.hasMore ? page.nextCursor : null, invitesTotal: page?.totalCount ?? now.invitesTotal }
-    })
+    setMoreFailed(!landed)
   }
 
   const openNew = () => router.push('/crews/new')
@@ -147,7 +142,7 @@ function CrewsScreenContent() {
         testID="crews-gate"
       />
     )
-  } else if (!load.crews.length && !load.invites.length) {
+  } else if (!load.crews.length && !invites.invites.length) {
     body = (
       <Animated.View exiting={emptyOut(reduceMotion)}>
         <StateScreen
@@ -160,18 +155,18 @@ function CrewsScreenContent() {
       </Animated.View>
     )
   } else {
-    const rows = inviteRows(load.invites)
+    const rows = inviteRows(invites.invites)
     body = (
       <Animated.View entering={firstItem ? (reduceMotion ? fadeIn(0) : riseIn(0)) : arrive} style={styles.sections}>
         {rows.length ? (
           <View style={styles.section}>
-            <SectionHeader title="Invites" count={load.invitesTotal} />
+            <SectionHeader title="Invites" count={invites.total} />
             <RowsCard testID="crews-invites">
               {rows.map((row) => (
                 <InviteRow key={row.invite.crewId} row={row} onSee={() => seeInvite(row.invite.crewId)} />
               ))}
             </RowsCard>
-            {load.invitesCursor ? (
+            {invites.cursor ? (
               <Button
                 kind="secondary"
                 size="md"
@@ -206,7 +201,7 @@ function CrewsScreenContent() {
   }
 
   // The dock is a crew screen's one action once there is a list to put a crew in.
-  const docked = load.kind === 'ready' && (load.crews.length > 0 || load.invites.length > 0)
+  const docked = load.kind === 'ready' && (load.crews.length > 0 || invites.invites.length > 0)
   // The Android snackbar stands above the docked button (the toast adds the bottom inset itself).
   useToastDock(docked ? dockHeight + DOCK_GAP : 0)
 

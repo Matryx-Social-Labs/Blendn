@@ -1,6 +1,7 @@
 /**
- * The Requests page (M3, SCRUM-760): every message request and crew invite waiting, in one windowed list, a page at a time as
- * the end comes near, and where they are answered. None of the Banter's chats load.
+ * The Message requests page (M3, SCRUM-760): every message request waiting, in one windowed list, a page at a time as the end
+ * comes near, and where they are answered. None of the Banter's chats load, and no crew invites: since requests placement A
+ * (owner 2026-11-15) those are answered in Notifications and on Crews.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 
@@ -93,60 +94,36 @@ it('loads nothing of the Banter but the requests', async () => {
   expect(api.getConversations).not.toHaveBeenCalled()
 })
 
-it('an empty screen says so', async () => {
+it('an empty screen says so, in the board’s words (04 · A)', async () => {
   api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
   await render(<MessageRequests />)
   await flush()
-  expect(screen.getByText('No requests waiting')).toBeTruthy()
+  expect(screen.getByText('No message requests')).toBeTruthy()
+  expect(screen.getByText('Somebody you met who asks to message you shows up here.')).toBeTruthy()
 })
 
-it('a crew invite is answered here too, since the Banter now only counts it', async () => {
+// Requests placement A: Banter's count is message requests only. Today's page added the crew invites (72 = 60 + 12).
+it('holds message requests only: crew invites waiting are neither drawn nor counted, nor read', async () => {
+  const { crewsApi } = jest.requireMock('../lib/crewsApi')
   mockInvites.splice(0, mockInvites.length, { crewId: 'c1', name: 'Run Club', invitedBy: 'Asha', invitedAt: '2026-01-01T00:00:00Z', emblemSeed: 's' })
   try {
-    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
+    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 2), totalCount: 2 } } as never)
     await render(<MessageRequests />)
     await flush()
-    expect(screen.getByText('Asha invited you to the crew')).toBeTruthy()
-    expect(screen.queryByText('No requests waiting')).toBeNull()
+    expect(screen.getByText('Message requests')).toBeTruthy()
+    expect(screen.getByText('2 waiting')).toBeTruthy()
+    expect(screen.queryByText('Asha invited you to the crew')).toBeNull()
+    expect(crewsApi.myCrews).not.toHaveBeenCalled()
   } finally {
     mockInvites.splice(0, mockInvites.length)
   }
 })
 
-const invitesOf = (n: number) =>
-  Array.from({ length: n }, (_, i) => ({ crewId: `c${i}`, name: `Crew ${i}`, invitedBy: 'Asha', invitedAt: '2026-01-01T00:00:00Z', emblemSeed: 's' }))
-
-it('54 crew invites are windowed with the requests, not all drawn in a header', async () => {
-  mockInvites.splice(0, mockInvites.length, ...invitesOf(54))
-  try {
-    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
-    await render(<MessageRequests />)
-    await flush()
-    expect(screen.getByText('54 waiting')).toBeTruthy()
-    const drawn = screen.getAllByText('Asha invited you to the crew').length
-    expect(drawn).toBeGreaterThan(0)
-    expect(drawn).toBeLessThan(54)
-  } finally {
-    mockInvites.splice(0, mockInvites.length)
-  }
-})
-
-it('says nothing is waiting only once the invites have answered too', async () => {
-  const { crewsApi } = jest.requireMock('../lib/crewsApi')
-  let answer: (v: unknown) => void = () => {}
-  crewsApi.myCrews.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
-  api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
-  await render(<MessageRequests />)
-  await flush()
-  expect(screen.queryByText('No requests waiting')).toBeNull()
-  await act(async () => answer({ success: true, data: { crews: [], invites: [] } }))
-  await flush()
-  expect(screen.getByText('No requests waiting')).toBeTruthy()
-})
-
-it('the Banter row with invites only draws no empty face stack', async () => {
-  await render(<BanterRequestsRow requests={[]} total={54} />)
-  expect(screen.getByLabelText('Requests, 54')).toBeTruthy()
+it('the Banter row says Message requests and the message requests’ count', async () => {
+  await render(<BanterRequestsRow requests={[]} total={60} />)
+  expect(screen.getByLabelText('Message requests, 60')).toBeTruthy()
+  expect(screen.getByText('Message requests')).toBeTruthy()
+  expect(screen.queryByText('Requests')).toBeNull()
   expect(screen.queryByLabelText('0 people here')).toBeNull()
 })
 
@@ -177,64 +154,17 @@ it('says where you met on its own line when the server knows, and nothing when i
   expect(screen.getByLabelText('Asker 1. hello 1')).toBeTruthy()
 })
 
-it('declining an invite asks first, then it leaves and the count follows', async () => {
-  const { crewsApi } = jest.requireMock('../lib/crewsApi')
-  const { showSheet } = jest.requireMock('../lib/sheet')
-  mockInvites.splice(0, mockInvites.length, ...invitesOf(2))
-  try {
-    crewsApi.decline.mockResolvedValue({ success: true })
-    api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: [], totalCount: 0 } } as never)
-    await render(<MessageRequests />)
-    await flush()
-    await act(async () => fireEvent.press(screen.getAllByLabelText(/^Decline/)[0]))
-    const sheet = showSheet.mock.calls[0][0]
-    expect(crewsApi.decline).not.toHaveBeenCalled()
-    await act(async () => sheet.actions[0].then())
-    await flush()
-    expect(crewsApi.decline).toHaveBeenCalledWith('c0')
-    expect(screen.getByText('1 waiting')).toBeTruthy()
-  } finally {
-    mockInvites.splice(0, mockInvites.length)
-  }
-})
-
-it('a failed requests read offers a retry, never "No requests waiting"', async () => {
+it('a failed requests read offers a retry, never "No message requests"', async () => {
   api.getMessageRequests.mockResolvedValue({ success: false, error: 'offline' } as never)
   await render(<MessageRequests />)
   await flush()
-  expect(screen.queryByText('No requests waiting')).toBeNull()
+  expect(screen.queryByText('No message requests')).toBeNull()
   expect(screen.getByTestId('requests-failed')).toBeTruthy()
   api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 1), totalCount: 1 } } as never)
   await act(async () => fireEvent.press(screen.getByLabelText('Try again')))
   await flush()
   expect(screen.getByText('hello 0')).toBeTruthy()
   expect(screen.queryByTestId('requests-failed')).toBeNull()
-})
-
-it('a failed invites read with requests drawn says the list is partial', async () => {
-  const { crewsApi } = jest.requireMock('../lib/crewsApi')
-  crewsApi.myCrews.mockResolvedValueOnce({ success: false, error: 'offline' })
-  api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 1), totalCount: 1 } } as never)
-  await render(<MessageRequests />)
-  await flush()
-  expect(screen.getByText('hello 0')).toBeTruthy()
-  expect(screen.getByTestId('requests-failed')).toBeTruthy()
-})
-
-it('pages the invites by cursor before the requests, and counts from the server total', async () => {
-  const { crewsApi } = jest.requireMock('../lib/crewsApi')
-  crewsApi.myCrews.mockResolvedValueOnce({ success: true, data: { crews: [], invites: invitesOf(2), invitesPagination: { limit: 2, hasMore: true, nextCursor: 'next', totalCount: 120 } } })
-  api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 1), totalCount: 1 } } as never)
-  await render(<MessageRequests />)
-  await flush()
-  expect(screen.getByText('121 waiting')).toBeTruthy()
-  api.getMessageRequests.mockClear()
-  crewsApi.myCrews.mockResolvedValueOnce({ success: true, data: { crews: [], invites: [{ ...invitesOf(1)[0], crewId: 'c9' }], invitesPagination: { limit: 2, hasMore: false, nextCursor: null, totalCount: 3 } } })
-  await act(async () => fireEvent(screen.getByTestId('requests-list'), 'endReached'))
-  await flush()
-  expect(crewsApi.myCrews).toHaveBeenLastCalledWith('next')
-  expect(api.getMessageRequests).not.toHaveBeenCalled()
-  expect(screen.getByText('4 waiting')).toBeTruthy()
 })
 
 it('answering keeps the older pages: the list does not start over', async () => {

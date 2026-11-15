@@ -5,8 +5,8 @@
  * empty, populated in three sections, the request answered in place (pending → done, stale, decline),
  * See all, the ⋯ menu and Clear all, paging, opening marking everything seen.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
-import { StyleSheet, View } from 'react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -39,7 +39,7 @@ jest.mock('../lib/apiClient', () => ({
 }))
 // The fetch deadline at 100 ms, so the answer's (three of them) passes in a test's time.
 jest.mock('../lib/fetchTimeout', () => ({ ...jest.requireActual('../lib/fetchTimeout'), REQUEST_TIMEOUT_MS: 100 }))
-jest.mock('../lib/crewsApi', () => ({ crewsApi: { decline: jest.fn() } }))
+jest.mock('../lib/crewsApi', () => ({ crewsApi: { decline: jest.fn(), myCrews: jest.fn() } }))
 jest.mock('../lib/notifications', () => ({
   navigateFromNotificationData: jest.fn(),
   initializePushNotifications: jest.fn(async () => null),
@@ -76,6 +76,9 @@ import * as sheetModule from '../lib/sheet'
 import { closeSheet } from '../lib/sheet'
 import { ANSWER_DEADLINE_MS, DONE_DWELL_MS } from '../lib/useNotificationFeed'
 import { forgetPushPermission } from '../lib/pushStatus'
+import { resetFriendRequests, useFriendRequestsState } from '../lib/friendRequests'
+import { crewInviteAnswered, resetCrewInvites, useCrewInvites } from '../lib/crewInvites'
+import { useFriendRequests } from '../lib/useFriendRequests'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const permissions = Notifications.getPermissionsAsync as jest.Mock
@@ -132,6 +135,11 @@ beforeEach(async () => {
     async () =>
       ({ success: true, data: { incoming: ['r1', 'r2', 'ra', 'rb', 'rc', 'rd', 're'].map((id) => ({ id, person: { userId: `u_${id}` } })), outgoing: [] } }) as never
   )
+  // Every crew invite the fixtures name is still waiting too: the one list Crews and Me read (requests placement A).
+  ;(crewsApi.myCrews as jest.Mock).mockResolvedValue({ success: true, data: { crews: [], invites: ['cr1', 'cr2'].map((crewId) => ({ crewId, name: `Crew ${crewId}` })) } })
+  // Those lists are shared by every surface, so each test starts them from nothing.
+  resetFriendRequests()
+  resetCrewInvites()
   api.getFriends.mockResolvedValue({ success: true, data: { friends: [], count: 0 } } as never)
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
@@ -162,7 +170,8 @@ describe('the states', () => {
     api.getNotifications.mockResolvedValue(feed([]) as never)
     await render(<Screen />)
     expect(await screen.findByText('Quiet for now')).toBeTruthy()
-    expect(screen.getByText(/land here\. Messages are in Banter\./)).toBeTruthy()
+    // Requests placement A, board 04: message requests are in Banter now, and the copy says so.
+    expect(screen.getByText('Friend requests, crew invites, matches and event changes land here. Messages and message requests are in Banter.')).toBeTruthy()
     expect(screen.queryByText(/Waves, matches and reminders/)).toBeNull()
   })
 
@@ -557,7 +566,7 @@ describe('the ⋯ menu and Clear all', () => {
     fireEvent.press(screen.getAllByText('Clear all').slice(-1)[0])
     // Empty, and true about it: the requests were not answered by clearing.
     expect(await screen.findByText('Quiet for now')).toBeTruthy()
-    expect(screen.getByText('Requests you haven’t answered are still open in Friends and Crews.')).toBeTruthy()
+    expect(screen.getByText('Friend requests and crew invites you haven’t answered are still open in Friends and Crews.')).toBeTruthy()
   })
 
   it('a clear given up on that lands after all reads the list again, so the screen ends up as the server is', async () => {
@@ -735,5 +744,136 @@ describe('the app icon (badgeCount, Flow 9 · 9.4)', () => {
     await waitFor(() => expect(api.markNotificationsRead).toHaveBeenCalled())
     await act(async () => {})
     expect(setBadge).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * Requests placement A (owner 2026-11-15, board 05): friend requests and crew invites are ONE list each, read by
+ * Notifications · Waiting on you, Friends/Me and Crews. An answer on any surface takes the ask off every surface at once,
+ * with no reload, so it can be answered once (SCRUM-1036: three lists, three counts, and they drifted).
+ */
+describe('one list per ask kind, every surface at once (requests placement A)', () => {
+  /** Me's row and the Friends page's count: the shared list's total. */
+  function FriendsCount() {
+    return <Text testID="friends-count">{String(useFriendRequestsState().incoming.total)}</Text>
+  }
+  /** Friends › Friend requests: its own Accept, on the same list. */
+  function FriendsPage() {
+    const { incoming, respond } = useFriendRequests()
+    return (
+      <View>
+        {incoming.map((r) => (
+          <Pressable key={r.id} accessibilityRole="button" accessibilityLabel={`Friends accept ${r.id}`} onPress={() => void respond(r, 'accept')} />
+        ))}
+      </View>
+    )
+  }
+  /** Crews › Invites and Me's Crews dot: the shared list. */
+  function CrewsCount() {
+    const { invites, total } = useCrewInvites()
+    return <Text testID="crews-count">{`${total}:${invites.map((i) => i.crewId).join(',')}`}</Text>
+  }
+  const Surfaces = () => (
+    <View>
+      <Screen />
+      <FriendsCount />
+      <FriendsPage />
+      <CrewsCount />
+    </View>
+  )
+  const crewsRead = { success: true, data: { crews: [], invites: [{ crewId: 'cr1', name: 'Night Owls' }], invitesPagination: { hasMore: false, nextCursor: null, totalCount: 1 } } }
+  beforeEach(() => {
+    api.getNotifications.mockResolvedValue(feed([friend, invite, match]) as never)
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [{ id: 'r1', person: { userId: 'u_r1', name: 'Asha' } }], outgoing: [] } } as never)
+    ;(crewsApi.myCrews as jest.Mock).mockResolvedValue(crewsRead)
+  })
+  const settled = async () => {
+    await screen.findByText('New friend request')
+    await waitFor(() => expect(screen.getByTestId('friends-count').props.children).toBe('1'))
+    await waitFor(() => expect(screen.getByTestId('crews-count').props.children).toBe('1:cr1'))
+  }
+
+  it('Accept in Waiting on you takes the request off Friends and Me at once, without reading the list again', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Surfaces />)
+    await settled()
+    api.getFriendRequests.mockClear()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Accept' })))
+    expect(screen.getByTestId('friends-count').props.children).toBe('0')
+    expect(screen.queryByRole('button', { name: 'Friends accept r1' })).toBeNull()
+    expect(api.getFriendRequests).not.toHaveBeenCalled()
+    // One answer: the Friends page has nothing left to send a second.
+    expect(api.respondToFriendRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('Accept on Friends takes the row out of Waiting on you at once', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Surfaces />)
+    await settled()
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Friends accept r1' })))
+    expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
+    expect(screen.queryByText('New friend request')).toBeNull()
+    expect(screen.getByTestId('friends-count').props.children).toBe('0')
+    expect(api.respondToFriendRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('Decline of a crew invite in Waiting on you takes it off Crews and Me’s dot at once', async () => {
+    ;(crewsApi.decline as jest.Mock).mockResolvedValue({ success: true })
+    api.getNotifications.mockResolvedValue(feed([invite]) as never)
+    await render(<Surfaces />)
+    await waitFor(() => expect(screen.getByTestId('crews-count').props.children).toBe('1:cr1'))
+    ;(crewsApi.myCrews as jest.Mock).mockClear()
+    await act(async () => fireEvent.press(await screen.findByRole('button', { name: 'Decline' })))
+    expect(screen.getByTestId('crews-count').props.children).toBe('0:')
+    expect(crewsApi.myCrews).not.toHaveBeenCalled()
+  })
+
+  it('a Join on the consent screen comes back saying so, then the row leaves; Crews has let it go already', async () => {
+    jest.useFakeTimers()
+    try {
+      await render(<Surfaces />)
+      await settled()
+      await act(async () => crewInviteAnswered('cr1', 'joined', 'Thiruvananthapuram Night Owls'))
+      expect(screen.getByTestId('crews-count').props.children).toBe('0:')
+      expect(screen.getByText('You’re in Thiruvananthapuram Night Owls')).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Join' })).toBeNull()
+      await act(async () => jest.advanceTimersByTime(DONE_DWELL_MS + 50))
+      expect(screen.queryByText('You’re in Thiruvananthapuram Night Owls')).toBeNull()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  // Control: a read that began before an answer and lands after it does not put the ask back on any surface.
+  it('a list read that was out before the answer does not bring the ask back', async () => {
+    api.respondToFriendRequest.mockResolvedValue({ success: true } as never)
+    await render(<Surfaces />)
+    await settled()
+    let land: (v: unknown) => void = () => {}
+    api.getFriendRequests.mockImplementationOnce(() => new Promise((r) => (land = r)) as never)
+    const { loadFriendRequests } = jest.requireActual('../lib/friendRequests') as typeof import('../lib/friendRequests')
+    const read = loadFriendRequests()
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Accept' })))
+    await act(async () => {
+      land({ success: true, data: { incoming: [{ id: 'r1', person: { userId: 'u_r1', name: 'Asha' } }], outgoing: [] } })
+      await read
+    })
+    expect(screen.getByTestId('friends-count').props.children).toBe('0')
+    expect(screen.queryByRole('button', { name: 'Friends accept r1' })).toBeNull()
+  })
+
+  it('a message request is never in Waiting on you: it is a plain line with a chevron, and opens Banter', async () => {
+    const ask = item({ id: 'mr1', kind: 'message_request', title: 'Venkatalakshmi wants to message you', data: { requestId: 'm1' } })
+    api.getNotifications.mockResolvedValue(feed([ask, friend]) as never)
+    await render(<Screen />)
+    await screen.findByText('Venkatalakshmi wants to message you')
+    expect(screen.getByTestId('notifications-waiting-card')).toBeTruthy()
+    expect(within(screen.getByTestId('notifications-waiting-card')).queryByText('Venkatalakshmi wants to message you')).toBeNull()
+    expect(screen.getByText('Message requests · 5 min ago')).toBeTruthy()
+    expect(screen.getByTestId('notification-mr1-chevron')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'View' })).toBeNull()
+    fireEvent.press(screen.getByRole('button', { name: /^Venkatalakshmi wants to message you/ }))
+    expect(navigateFromNotificationData).toHaveBeenCalledWith({ requestId: 'm1' })
   })
 })

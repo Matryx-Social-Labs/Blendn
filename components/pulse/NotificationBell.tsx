@@ -31,7 +31,8 @@ const UNREAD_CAP = 1000
 /** `onMap`: the bell floats on the home map, where the solid tier draws it ink like the drawer (`useMapInk`). */
 export function NotificationBell({ onMap = false }: { onMap?: boolean } = {}) {
   const mapInk = useMapInk()
-  const { unreadCount: unread } = useInboxBadge()
+  // Unseen rows that are not talk-asks: a message request, a Lobby ask or a reveal ask lights the Banter dot instead (requests placement A).
+  const { bell: unread } = useInboxBadge()
   const load = useRefreshInboxBadge()
 
   /*
