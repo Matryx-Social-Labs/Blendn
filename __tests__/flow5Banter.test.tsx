@@ -158,13 +158,27 @@ describe('the fourth tip: "Swipe a chat left to mute it." (ROOM-18)', () => {
   })
 })
 
-it('draws Live now, Requests, People and Past rooms, with a request’s note verbatim', async () => {
+it('draws Live now, Message requests, People and Past rooms, with a request’s note verbatim', async () => {
   await open()
-  for (const heading of ['Live now', 'Requests', 'People', 'Past rooms']) expect(screen.getAllByText(heading).length).toBeGreaterThan(0)
+  for (const heading of ['Live now', 'Message requests', 'People', 'Past rooms']) expect(screen.getAllByText(heading).length).toBeGreaterThan(0)
   expect(screen.getAllByText('Vinyl Night').length).toBeGreaterThan(0)
   // Answers live on the Requests page: the Banter says who and how many, in one row.
-  expect(screen.getByLabelText('Requests, 1')).toBeTruthy()
+  expect(screen.getByLabelText('Message requests, 1')).toBeTruthy()
   expect(screen.queryByLabelText('Accept the request from Quiet Otter')).toBeNull()
+})
+
+// Requests placement A (owner 2026-11-15): crew invites leave Banter. Today's row counted them with the message requests (72 = 60 + 12).
+it('counts message requests only on its row: crew invites waiting add nothing, and alone draw no row', async () => {
+  const { crewsApi } = jest.requireMock('../lib/crewsApi')
+  const invite = { crewId: 'c1', name: 'Run Club', invitedBy: 'Asha', invitedAt: '2026-01-01T00:00:00Z', emblemSeed: 's', tags: [], size: 3, bio: null }
+  crewsApi.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [invite, { ...invite, crewId: 'c2' }], invitesPagination: { hasMore: false, nextCursor: null, totalCount: 2 } } })
+  try {
+    await open()
+    expect(screen.getByLabelText('Message requests, 1')).toBeTruthy()
+    expect(screen.queryByLabelText('Message requests, 3')).toBeNull()
+  } finally {
+    crewsApi.myCrews.mockResolvedValue({ success: true, data: { crews: [], invites: [] } })
+  }
 })
 
 it('a room with a `locked` status says no organizer lock (SCRUM-893): its last message, like any past room', async () => {
@@ -620,14 +634,14 @@ describe('a Banter of thousands (SCRUM-760 b)', () => {
     api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 20), totalCount: 140 } } as never)
     await open()
     expect(screen.queryByLabelText(/^Accept the request from/)).toBeNull()
-    await act(async () => fireEvent.press(screen.getByLabelText('Requests, 140')))
+    await act(async () => fireEvent.press(screen.getByLabelText('Message requests, 140')))
     expect(router.push).toHaveBeenCalledWith('/message-requests')
   })
 
   it('one request is still the row, and says one', async () => {
     serve()
     await open()
-    expect(screen.getByLabelText('Requests, 1')).toBeTruthy()
+    expect(screen.getByLabelText('Message requests, 1')).toBeTruthy()
     expect(screen.queryByLabelText(/^Show all/)).toBeNull()
   })
 })
@@ -683,7 +697,7 @@ it('reads the room’s own line from lastMessage.type: system has no "You:", a p
 })
 
 describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
-  const requestRow = 'Requests, 1'
+  const requestRow = 'Message requests, 1'
   // The server has the request; the SWR copy is still the empty list, and only a forced read has it.
   const serveRequestAfterSwr = () =>
     api.getMessageRequests.mockImplementation((async (_p?: unknown, o?: { force?: boolean }) => ({

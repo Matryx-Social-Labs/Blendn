@@ -46,6 +46,18 @@ it('the bell says its own rows, and the icon says rows and conversations', async
   expect(screen.getByLabelText('Notifications').props.accessibilityValue).toEqual({ text: '2 unseen' })
 })
 
+// Requests placement A (board 03), found driving the build: the bell drew the server's `unreadCount`, which still counts talk-asks.
+it('a message request, a Lobby ask or a reveal ask never lights the bell: the badge counts the other rows', async () => {
+  const row = (kind: string) => ({ id: kind, kind, title: 'T', body: 'B', data: null, readAt: null, createdAt: '2026-11-15T10:00:00Z' })
+  api.getNotifications.mockResolvedValue(
+    feed({ unreadCount: 5, badgeCount: 5, notifications: ['friend_request', 'crew_invite', 'message_request', 'board_request', 'reveal_request'].map(row) })
+  )
+  await render(<NotificationBell />)
+  await waitFor(() => expect(screen.getByLabelText('Notifications').props.accessibilityValue).toEqual({ text: '2 unseen' }))
+  expect(screen.getByText('2', { includeHiddenElements: true })).toBeTruthy()
+  expect(screen.queryByText('5', { includeHiddenElements: true })).toBeNull()
+})
+
 it('opening the bell clears the bell at once; the icon is the conversations\' until the next read', async () => {
   api.getNotifications.mockResolvedValue(feed({ unreadCount: 2, badgeCount: 3 }))
   await render(<NotificationBell />)

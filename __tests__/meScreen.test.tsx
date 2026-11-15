@@ -49,6 +49,8 @@ import { SIZE, SPACE } from '../lib/design/tokens'
 import { queryCache } from '../lib/queryCache'
 import * as FadeInUpModule from '../components/motion/FadeInUp'
 import { noteReturn } from '../lib/backFromBackground'
+import { resetFriendRequests } from '../lib/friendRequests'
+import { resetCrewInvites } from '../lib/crewInvites'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -72,6 +74,9 @@ afterEach(async () => {
 beforeEach(() => {
   jest.clearAllMocks()
   queryCache.invalidate('')
+  // Me reads the one shared list of each ask (requests placement A): each test starts them from nothing.
+  resetFriendRequests()
+  resetCrewInvites()
 })
 
 it('draws the frame: name, circles, requests, crews with its count and dot, stats, nights', async () => {

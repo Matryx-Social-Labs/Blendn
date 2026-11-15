@@ -39,6 +39,12 @@ const BANNED: readonly { name: string; pattern: RegExp; allowIn?: readonly strin
     // A crew's like of a crew (the Mix) is still a like until crew waves ship.
     allowIn: ['components/ds/CrewCard.tsx', 'components/crews/CrewsView.tsx'],
   },
+  /*
+   * Requests placement A (owner 2026-11-15, SCRUM-1036): two screens were both titled "Requests". Banter's row and page are
+   * "Message requests", the Friends page "Friend requests". Add friends keeps its own "Requests" section above the people
+   * asking you, inside a screen that is only about friends.
+   */
+  { name: 'Requests, as a title (now Message requests or Friend requests)', pattern: /^Requests$/, allowIn: ['app/friends/add.tsx'] },
 ]
 
 /** A server's sentence from before the rename, read so an older server still lands on the Lobby's own copy (lib/board.ts). */

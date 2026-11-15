@@ -136,7 +136,8 @@ describe('every kind the server can send goes somewhere', () => {
     const req = src.slice(src.indexOf("case 'message_request':"))
     const block = codeOnly(req.slice(0, req.indexOf('break')))
     expect(block).not.toContain('/user/')
-    expect(block).toContain("target = '/(tabs)/chat'")
+    // Banter's Message requests, where it is answered (requests placement A).
+    expect(block).toContain("target = '/message-requests'")
   })
 })
 
@@ -246,16 +247,18 @@ describe('a tapped push lands where the request is answered (Flow 9, motion #50)
     }
   }
 
-  it('sends each request kind to the Notifications screen with the ids that name its row', () => {
+  it('sends each join-ask to the Notifications screen with the ids that name its row', () => {
     const { lib } = loadLib()
     expect(lib.landingTarget({ type: 'friend_request', requestId: 'r1' })).toEqual({ pathname: '/notifications', params: { type: 'friend_request', requestId: 'r1' } })
     expect(lib.landingTarget({ type: 'crew_invite', crewId: 'c1' })).toEqual({ pathname: '/notifications', params: { type: 'crew_invite', crewId: 'c1' } })
-    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r2' })).toEqual({
-      pathname: '/notifications',
-      params: { type: 'board_request', eventId: 'e1', requestId: 'r2' },
-    })
-    expect(lib.landingTarget({ type: 'reveal_request', conversationId: 'v1' })).toEqual({ pathname: '/notifications', params: { type: 'reveal_request', conversationId: 'v1' } })
-    expect(lib.landingTarget({ type: 'message_request', requestId: 'm1' })).toMatchObject({ pathname: '/notifications' })
+  })
+
+  // Requests placement A (owner 2026-11-15): an ask that opens a chat is answered in Banter, so its push lands there.
+  it('sends each talk-ask to Banter, where it is answered: Message requests, the Lobby section, the chat', () => {
+    const { lib } = loadLib()
+    expect(lib.landingTarget({ type: 'message_request', requestId: 'm1' })).toBe('/message-requests')
+    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r2' })).toBe('/(tabs)/chat')
+    expect(lib.landingTarget({ type: 'reveal_request', conversationId: 'v1' })).toEqual({ pathname: '/private-chat/[conversationId]', params: { conversationId: 'v1' } })
   })
 
   it('leaves every other kind going to its destination, and a request’s own View/Join too', () => {
@@ -337,8 +340,8 @@ describe('the Lobby’s pushes open the Lobby’s places (SCRUM-1026, 6/6)', () 
       pathname: '/private-chat/[conversationId]',
       params: { conversationId: 'c1' },
     })
-    // An ask on your post is answered where Accept is; its row's own View is your asks, in the Banter.
-    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r1' })).toMatchObject({ pathname: '/notifications' })
+    // An ask on your post is answered where Accept is: the Lobby section, in the Banter (requests placement A).
+    expect(lib.landingTarget({ type: 'board_request', eventId: 'e1', requestId: 'r1' })).toBe('/(tabs)/chat')
     expect(lib.notificationTarget({ type: 'board_request', eventId: 'e1', requestId: 'r1' })).toBe('/(tabs)/chat')
   })
 

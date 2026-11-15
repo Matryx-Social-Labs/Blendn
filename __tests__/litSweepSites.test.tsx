@@ -53,17 +53,15 @@ describe('Friends › Requests (rose)', () => {
 })
 
 describe('Banter (rose)', () => {
-  const card = (accept?: string) =>
-    render(world('rose', <RequestCard face={null} name="Nebula" note="asked you to join" time="3 h" accept={accept} onAccept={jest.fn()} onDecline={jest.fn()} testID="r" />))
+  const card = () =>
+    render(world('rose', <RequestCard face={null} name="Nebula" note="asked you to message" time="3 h" onAccept={jest.fn()} onDecline={jest.fn()} testID="r" />))
 
-  it('Accept and Join are lit, Decline is quiet, and neither plays a press haptic', async () => {
+  it('Accept is lit, Decline is quiet, and neither plays a press haptic', async () => {
     await card()
     expect(flat('r-accept').backgroundColor).toBe(SELECTION.rose.fill)
     expect(flat('r-decline').backgroundColor).not.toBe(SELECTION.rose.fill)
     await fireEvent(screen.getByTestId('r-accept'), 'pressIn')
     expect(H.primary).not.toHaveBeenCalled()
-    await card('Join')
-    expect(flat('r-accept').backgroundColor).toBe(SELECTION.rose.fill)
   })
 })
 

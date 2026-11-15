@@ -53,7 +53,7 @@ function FriendRequestsScreenContent() {
   ) : (
     <StateScreen
       icon="user-plus"
-      title="No requests"
+      title="No friend requests"
       body="When somebody opens your link and asks to be your friend, they’ll be here."
     />
   )
@@ -61,7 +61,7 @@ function FriendRequestsScreenContent() {
   return (
     <View style={styles.container}>
       {/* The server's count of everyone waiting, never the rows loaded (D-LM2). */}
-      <TopBar title="Requests" sub={incomingTotal > 0 ? requestsWaiting(incomingTotal) : undefined} state={bar.state} onBack={() => router.back()} />
+      <TopBar title="Friend requests" sub={incomingTotal > 0 ? requestsWaiting(incomingTotal) : undefined} state={bar.state} onBack={() => router.back()} />
       {offline ? (
         <View style={styles.offline}>
           <OfflineStrip offline />

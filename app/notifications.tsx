@@ -36,10 +36,10 @@ import { usePushPreference } from '../lib/usePushPreference'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 
 /** What the screen says when it has nothing to show, and when it could not read (Flow 9 · 9.2 frames 02, 03). */
-const EMPTY_BODY = 'Friend requests, matches, crew news and event changes land here. Messages are in Banter.'
+const EMPTY_BODY = 'Friend requests, crew invites, matches and event changes land here. Messages and message requests are in Banter.'
 /** The server clears every row, requests too, but answers none of them: they stay open where they live. */
 const CLEAR_OVER_REQUESTS = 'This clears every notification here. Requests waiting on you stay open in Friends and Crews until you answer them. Nothing is sent to anyone.'
-const EMPTY_AFTER_CLEAR = 'Requests you haven’t answered are still open in Friends and Crews.'
+const EMPTY_AFTER_CLEAR = 'Friend requests and crew invites you haven’t answered are still open in Friends and Crews.'
 const FOOTNOTE = 'That’s everything we keep: read notifications for 30 days, unread for 90.'
 const PUSH_OFF_TEXT = 'Push is off. These still land here, but your phone won’t tell you.'
 const DONE_TEXT: Record<string, string> = { friend_request: 'You’re friends now' }
@@ -188,6 +188,11 @@ function NotificationsScreenContent() {
     ...(feed.items.length ? [{ icon: 'trash-2' as const, label: 'Clear all', onPress: confirmClear }] : []),
   ]
 
+  // A crew joined on its consent screen says where you are now (board 05, A · 1).
+  const joinedText = (row: FeedRow) => {
+    const name = feed.joined.get(row.id)
+    return name ? `You’re in ${name}` : undefined
+  }
   const visualOf = (row: FeedRow, requestState: string | undefined) => {
     const answered = requestState === 'done' ? DONE_GLYPH[row.item.kind] : undefined
     return answered && row.visual.type === 'glyph' ? { ...row.visual, icon: answered } : row.visual
@@ -202,8 +207,9 @@ function NotificationsScreenContent() {
         fresh={feed.fresh.has(row.id)}
         actions={row.actions.length ? actionsOf(row) : undefined}
         state={feed.requestState[row.id]}
-        doneText={DONE_TEXT[row.item.kind]}
+        doneText={joinedText(row) ?? DONE_TEXT[row.item.kind]}
         onPress={() => open(row)}
+        chevron={row.chevron}
         ground={ground}
       />
       <LandingHighlight key={landing?.id === row.id ? landing.run : 'rest'} active={landing?.id === row.id} onDone={() => setLanding(null)} testID={`landing-${row.id}`} />

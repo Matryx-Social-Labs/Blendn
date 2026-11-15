@@ -7,6 +7,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native'
 
 import AddFriendsScreen from '../app/friends/add'
 import FriendRequestsScreen from '../app/friends/requests'
+import { resetFriendRequests } from '../lib/friendRequests'
 
 const mockPush = jest.fn()
 const mockGet = jest.fn()
@@ -50,6 +51,8 @@ const reqs = (n: number, from = 0) => Array.from({ length: n }, (_, i) => req(fr
 const meta = (total: number, next: string | null) => ({ limit: 50, hasMore: next !== null, nextCursor: next, totalCount: total })
 
 beforeEach(() => {
+  // The list is one store for every surface (requests placement A): each test starts from nothing.
+  resetFriendRequests()
   jest.clearAllMocks()
   mockRespond.mockResolvedValue({ success: true, data: { state: 'friends' } })
 })
@@ -66,10 +69,10 @@ describe('Requests (incoming)', () => {
     })
   }
 
-  it('0 waiting: "No requests"', async () => {
+  it('0 waiting: "No friend requests"', async () => {
     mockGet.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [], pagination: { incoming: meta(0, null), outgoing: meta(0, null) } } })
     await open()
-    expect(screen.getByText('No requests')).toBeTruthy()
+    expect(screen.getByText('No friend requests')).toBeTruthy()
   })
 
   it('1 waiting: one card, no foot, and a second look at the end asks for nothing', async () => {

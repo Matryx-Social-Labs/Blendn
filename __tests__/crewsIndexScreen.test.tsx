@@ -46,6 +46,7 @@ import { SPACE } from '../lib/design/tokens'
 import InviteScreen from '../app/crews/invite/[crewId]'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, type Crew, type CrewInvite } from '../lib/crews'
 import { crewsApi } from '../lib/crewsApi'
+import { resetCrewInvites } from '../lib/crewInvites'
 import { showSheet, type ActionSheet } from '../lib/sheet'
 
 const api = crewsApi as jest.Mocked<typeof crewsApi>
@@ -84,6 +85,8 @@ beforeEach(() => {
   jest.clearAllMocks()
   Object.values(api).forEach((fn) => (fn as jest.Mock).mockReset())
   for (const k of Object.keys(mockParams)) delete mockParams[k]
+  // The invites are one list shared by every surface (requests placement A): each test starts it from nothing.
+  resetCrewInvites()
 })
 
 describe('Crews', () => {
@@ -385,7 +388,8 @@ describe('invites, a page at a time (admin invitesPagination)', () => {
     api.myCrews.mockResolvedValueOnce(withPage(many(50), true, 120))
     await render(<CrewsScreen />)
     await waitFor(() => screen.getByTestId('crews-more-invites'))
-    expect(api.myCrews).toHaveBeenCalledWith()
+    // The first page: no cursor (through the one shared invite list, `readMyCrews`).
+    expect(api.myCrews).toHaveBeenCalledWith(undefined)
     expect(screen.getByLabelText('Invites, 120')).toBeTruthy()
     api.myCrews.mockResolvedValueOnce(withPage(many(50, 50), false, 120))
     await fireEvent.press(screen.getByTestId('crews-more-invites'))

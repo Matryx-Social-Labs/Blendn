@@ -43,7 +43,9 @@ const EVENT_BADGE = SPACE.lg
 const EVENT_BADGE_GLYPH = SPACE.sm + SPACE.xxs
 /** A cancelled cover: grey at 70% (the greyscale is Android's; iOS draws the fade alone). */
 const CANCELLED_OPACITY = 0.7
-/** The unread dot sits level with the title's first line. */
+/** The board's history-line chevron (requests placement A, `.rpnr .go`). design-exception: 18 sits between ICON.inline and ICON.control, as `DOCK_GLYPH` does. */
+const CHEVRON = 18
+/** The unread dot, and a history line's chevron, sit level with the title's first line. */
 const DOT_TOP = SPACE.sm + SPACE.xxs
 const STALE_OPACITY = 0.5
 /** A row's visual; the in-app banner draws it at 32. */
@@ -156,6 +158,8 @@ export type NotificationRowProps = {
   doneText?: string
   /** Where the push would go. */
   onPress?: () => void
+  /** A history line that leads somewhere to be answered (a talk-ask, requests placement A): the chevron, never the unread dot. */
+  chevron?: boolean
   /** The colour behind the row (`COLOR.surface` in the Waiting card). */
   ground?: string
   testID?: string
@@ -225,6 +229,7 @@ export function NotificationRow({
   state,
   doneText,
   onPress,
+  chevron = false,
   ground = COLOR.ink,
   testID,
 }: NotificationRowProps) {
@@ -266,7 +271,11 @@ export function NotificationRow({
           </Text>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
         </View>
-        {fresh && !pills ? (
+        {chevron ? (
+          <View style={styles.dot} testID={testID && `${testID}-chevron`}>
+            <Icon name="chevron-right" size={CHEVRON} color={detail} />
+          </View>
+        ) : fresh && !pills ? (
           // Motion #29, unread → read: the dot leaves over `quick` as the title's weight swaps (at once, in the font above). Reduce Motion: it goes.
           <Animated.View style={styles.dot} exiting={reduceMotion ? undefined : DOT_EXIT}>
             <PresenceDot size={SPACE.sm} color={sel.glyph} testID={testID && `${testID}-dot`} />

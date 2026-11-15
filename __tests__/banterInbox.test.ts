@@ -86,7 +86,8 @@ describe('message requests', () => {
     expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'accept')")
     expect(REQUEST_ROW()).toContain("inbox.respondToRequest(r, 'decline')")
     expect(stripComments(read('app/message-requests.tsx'))).toContain('<RequestRow')
-    expect(stripComments(read('app/message-requests.tsx'))).toContain('crews.invites')
+    // Message requests only (requests placement A): crew invites are answered in Notifications and on Crews.
+    expect(stripComments(read('app/message-requests.tsx'))).not.toMatch(/useCrewInbox|invites/)
   })
 
   it('show the note verbatim, in two lines (four at the accessibility sizes: RC drive 5) (ROUND3 C11)', () => {
@@ -97,7 +98,7 @@ describe('message requests', () => {
   it('put Decline before Accept, at 48, and hold both while one is in flight', () => {
     const parts = PARTS()
     const actions = parts.slice(parts.indexOf('styles.requestActions'))
-    expect(actions.indexOf('label="Decline"')).toBeLessThan(actions.indexOf('label={accept}'))
+    expect(actions.indexOf('label="Decline"')).toBeLessThan(actions.indexOf('label="Accept"'))
     expect(actions).toContain('disabled={pending}')
     expect(actions).toContain('loading={pending}')
     expect(actions.match(/size="md"/g)).toHaveLength(2)
@@ -114,11 +115,9 @@ describe('message requests', () => {
     expect(stripComments(read('app/message-requests.tsx'))).toContain('itemLayoutAnimation={reduceMotion ? undefined : REQUEST_REFLOW}')
   })
 
-  it('show crew invites as requests, with Join opening the invite, which holds the consent (R2-D2 #02)', () => {
-    const src = stripComments(read('components/banter/RequestRow.tsx'))
-    expect(src).toContain('accept="Join"')
-    expect(src).toContain("pathname: '/crews/invite/[crewId]'")
-    expect(stripComments(read('app/message-requests.tsx'))).toContain('onDecline={decline}')
+  it('hold no crew invites: those left Banter for Notifications and Crews (requests placement A, 2026-11-15)', () => {
+    expect(stripComments(read('components/banter/RequestRow.tsx'))).not.toContain('InviteRow')
+    expect(SCREEN()).not.toMatch(/invitesTotal|crews\.invites/)
   })
 })
 
