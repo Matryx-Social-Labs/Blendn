@@ -48,13 +48,8 @@ const BANNED: readonly { name: string; pattern: RegExp; allowIn?: readonly strin
   // Flow 5 C7 (owner 2026-11-10, SCRUM-1042): one room, "Show who you are" (the confirm says "Show them"), the host as the
   // org, Message for every ask to talk, Check out and Mute this room.
   { name: 'Room chat (one room)', pattern: /\broom chat\b/i },
-  {
-    name: 'Leave room (now Check out or Mute this room)',
-    pattern: /\bleave room\b/i,
-    // ponytail: the chat-leave on `chat-info/[id]` and the Banter swipe is neither a check-out nor a mute; its name is the
-    // owner's call (C7 report). Drop these once it is named.
-    allowIn: ['app/chat-info/[id].tsx', 'components/chat/RoomSheets.tsx'],
-  },
+  // I-A: one exit, Check out; leaving the chat but staying checked in is Mute this room. "Leave this room?" went with it.
+  { name: 'Leave room (now Check out or Mute this room)', pattern: /\bleave (this )?room\b/i },
   { name: 'Show who I am (now Show who you are)', pattern: /\bshow who I am\b/i },
   { name: 'Show them who you are (now Show who you are)', pattern: /\bshow them who you are\b/i },
   { name: 'Reveal me (now Show who you are; the confirm says Show them)', pattern: /\bReveal me\b/ },
@@ -129,6 +124,7 @@ describe('retired names stay retired (naming review 2026-11-05)', () => {
       "hint: 'They’re only told if they like you back.'",
       "<Text>Room chat</Text>",
       "accessibilityLabel=\"Leave room\"",
+      "title=\"Leave this room?\"",
       "action: () => 'Show who I am'",
       'label="Show them who you are"',
       "label: 'Reveal me'",

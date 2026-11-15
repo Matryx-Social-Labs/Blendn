@@ -128,7 +128,7 @@ describe('the screens', () => {
   const HEADER = read('components/chat/ChatHeader.tsx')
   const BANTER = read('app/(tabs)/chat.tsx')
 
-  it('Room info offers mute, a room report and leave — and no longer reports the event', () => {
+  it('Room info offers mute, a room report and Check out — and no longer reports the event', () => {
     expect(INFO).toContain(": 'Mute this room'")
     expect(INFO).toContain('<MuteSheet')
     expect(SHEETS).toContain('apiClient.muteChatGroup(')
@@ -136,16 +136,19 @@ describe('the screens', () => {
     expect(INFO).toContain('title="Report this room"')
     expect(INFO).toContain('showRoomReportOptions(chatGroupId)')
     expect(INFO).not.toContain('showEventReportOptions')
-    expect(INFO).toContain('accessibilityLabel="Leave room"')
-    expect(INFO).toContain('<LeaveRoomSheet')
-    expect(SHEETS).toContain('apiClient.leaveChatGroup(')
+    // I-A: one exit, Check out, through the check-out path; a chat leave is not an exit anywhere on this page.
+    expect(INFO).toContain('accessibilityLabel="Check out"')
+    expect(INFO).toContain('<CheckOutSheet')
+    expect(SHEETS).toContain('useCheckOut(eventId)')
+    expect(INFO + SHEETS).not.toContain('leaveChatGroup(')
     expect(INFO).toContain("router.dismissTo('/(tabs)/chat')")
     // Popups go through a sheet, never Alert.
     expect(INFO + SHEETS).not.toMatch(/Alert\.alert/)
   })
 
-  it('the leave confirmation says how to come back', () => {
-    expect(SHEETS).toMatch(/rejoin by checking in at the event again/)
+  it('the check-out confirmation asks the shared question and says what it costs', () => {
+    expect(SHEETS).toContain('title={checkOutQuestion(name)}')
+    expect(SHEETS).toContain('body={CHECK_OUT_CONSEQUENCE}')
   })
 
   it('the room answers LEFT_ROOM and a plain 403 with the left state and Rejoin', () => {

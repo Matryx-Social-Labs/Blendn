@@ -8,7 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrokenLink } from '../../components/chat/BrokenLink'
 import { PageFooter } from '../../components/chat/PageFooter'
-import { LeaveRoomSheet, leavePlaceLine, MuteSheet } from '../../components/chat/RoomSheets'
+import { CheckOutSheet, MuteSheet } from '../../components/chat/RoomSheets'
+import { HostMark, useEventDetail } from '../../components/blendn/RoomInfoSheet'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
 import { Avatar } from '../../components/ds/Avatar'
 import { IconButton } from '../../components/ds/IconButton'
@@ -27,6 +28,7 @@ import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE, TYPE } from '.
 import { liveNowWord } from '../../lib/home'
 import { openInApp } from '../../lib/links'
 import { printable } from '../../lib/pulseSections'
+import { roomHost } from '../../lib/roomInfo'
 import { Logger } from '../../lib/logger'
 import { markSeed } from '../../lib/pseudonymAvatar'
 import { isMuted, muteLabel, useRoomMute } from '../../lib/roomMembership'
@@ -54,20 +56,25 @@ const FACE_INSET = SPACE.sm
 /** A name and a role badge grow with the text size only this far, so a row's height holds. */
 const NAME_SCALE_CAP = 1.3
 /** The danger zone's row: 64 tall, a hint under its title. */
-const LEAVE_HEIGHT = 64
+const EXIT_HEIGHT = 64
+/** Under Check out: the words C6's Room info sheet says. */
+const CHECK_OUT_HINT = 'You leave the room and its chat.'
 
-/** Only the two roles that change what someone can do here get a badge. */
-const roleLabel = (role: string) => (role === 'admin' ? 'Host' : role === 'moderator' ? 'Moderator' : null)
+/**
+ * A moderator's badge. The host is never a badge on somebody's creature: it is the org, in its own row (I-A, as Room info's
+ * sheet draws it), so an `admin` member is drawn as everyone else is.
+ */
+const roleLabel = (role: string) => (role === 'moderator' ? 'Moderator' : null)
 
 /**
  * The room's info (Flow 5 Room info frames, R3-D5 5.12): the cover as a
  * scrimmed hero with the title, a still Live badge and the bell-slash chip
  * when you muted it; Mute · Guidelines · Report; the room's people as a crowd
- * of creatures with their role badges, each opening their card; Leave apart,
- * in the danger zone.
+ * of creatures with their role badges, each opening their card; Check out
+ * apart, in the danger zone, while you are checked in.
  *
  * - **Mute** silences the room's pushes to you and nothing else; nobody is told.
- * - **Leave** is the one removal that is yours to undo, and the confirm says so.
+ * - **Check out** is the one exit (I-A); the shared question confirms it.
  * - **Report this room** is for what no single message shows.
  *
  * Members are drawn exactly as their bubbles: the creature seeded on their
@@ -125,7 +132,7 @@ function ChatInfoInner() {
   const [loadingMore, setLoadingMore] = useState(false)
   /* A later page that did not come: the rest stays where it was, with its own retry. */
   const [moreFailed, setMoreFailed] = useState(false)
-  const [sheet, setSheet] = useState<'mute' | 'leave' | null>(null)
+  const [sheet, setSheet] = useState<'mute' | 'checkout' | null>(null)
   const [cardFor, setCardFor] = useState<Sender | null>(null)
   // One value for the screen's life; a lazy state, so nothing reads a ref while rendering.
   const [scrollY] = useState(() => new Animated.Value(0))
@@ -214,7 +221,14 @@ function ChatInfoInner() {
   const people = printable(row?.kind ? total || null : here)
   const count = row?.venueId ? bucket : people === null ? null : people.toLocaleString('en-US')
 
-  const leaveHint = place ? leavePlaceLine(place) : 'Rejoin by checking in at the event again.'
+  /*
+   * One exit, Check out (I-A), and only while you are checked in here: an event's or a place's room. Leaving the chat but
+   * staying checked in is Mute this room. A Lobby post's room is not in your rooms list (no row), so it has no exit.
+   */
+  const checkOutOf = row?.eventId && row.live ? row.eventId : null
+  const checkOutName = place ?? eventTitle ?? row?.title ?? null
+  // The host is the org (C6's row): none for a room no org owns.
+  const host = roomHost(useEventDetail(row?.eventId ?? null)?.organizer)
 
   const openGuidelines = () => {
     openInApp(COMMUNITY_GUIDELINES_URL).catch((error) => Logger.warn('chat', 'Could not open the community guidelines', { error }))
@@ -308,6 +322,11 @@ function ChatInfoInner() {
               testID="info-report"
             />
           </SettingsGroup>
+          {host ? (
+            <SettingsGroup>
+              <SettingsRow leading={<HostMark testID="info-host-mark" />} title={host.name} hint="Host" label={`Host, ${host.name}`} testID="info-host" />
+            </SettingsGroup>
+          ) : null}
         </View>
 
         {/* The cards this list holds (the server's total for it, paged), not the room's number in the line above: a hidden friend is counted there, not listed. Five and up; nothing until the row says whether this is a place, and a place says no count at all. */}
@@ -346,21 +365,25 @@ function ChatInfoInner() {
       {showPeople ? <PageFooter loading={loadingMore} failed={moreFailed} onRetry={() => { setMoreFailed(false); fetchMore() }} what="people" testID="info-members-more-failed" /> : null}
 
       {/* The danger zone: apart, after a hairline, in the destructive tint. */}
-      <View style={styles.hairline} />
-      <Pressable
-        testID="info-leave"
-        onPress={() => setSheet('leave')}
-        accessibilityRole="button"
-        accessibilityLabel="Leave room"
-        accessibilityHint={leaveHint}
-        style={({ pressed }) => [styles.leave, pressed && styles.pressed]}
-      >
-        <Icon name="log-out" size={ICON.control} />
-        <View style={styles.leaveText}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Leave room</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{leaveHint}</Text>
-        </View>
-      </Pressable>
+      {checkOutOf ? (
+        <>
+          <View style={styles.hairline} />
+          <Pressable
+            testID="info-check-out"
+            onPress={() => setSheet('checkout')}
+            accessibilityRole="button"
+            accessibilityLabel="Check out"
+            accessibilityHint={CHECK_OUT_HINT}
+            style={({ pressed }) => [styles.leave, pressed && styles.pressed]}
+          >
+            <Icon name="log-out" size={ICON.control} />
+            <View style={styles.leaveText}>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Check out</Text>
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{CHECK_OUT_HINT}</Text>
+            </View>
+          </Pressable>
+        </>
+      ) : null}
     </View>
   )
 
@@ -374,7 +397,7 @@ function ChatInfoInner() {
       {/*
        * The people are a virtualised list, four across, a page of 100 at a time as the end comes near: a concert
        * room's thousands never mount at once. Everything above them is the list's header, so the hero still scrolls
-       * away under the shield, and the leave zone is its footer.
+       * away under the shield, and the exit is its footer.
        */}
       <Animated.FlatList
         testID="info-list"
@@ -410,7 +433,7 @@ function ChatInfoInner() {
       />
 
       <MuteSheet chatGroupId={sheet === 'mute' ? chatGroupId : null} onClose={() => setSheet(null)} />
-      <LeaveRoomSheet chatGroupId={sheet === 'leave' ? chatGroupId : null} place={place} onClose={() => setSheet(null)} onLeft={() => router.dismissTo('/(tabs)/chat')} />
+      <CheckOutSheet eventId={sheet === 'checkout' ? checkOutOf : null} name={checkOutName} onClose={() => setSheet(null)} onCheckedOut={() => router.dismissTo('/(tabs)/chat')} />
 
       <SenderCard sender={cardFor} eventId={row?.eventId ?? null} chatGroupId={chatGroupId} onClose={() => setCardFor(null)} onBlocked={removeMember} />
     </View>
@@ -509,10 +532,10 @@ const styles = StyleSheet.create({
   more: { alignSelf: 'flex-start', paddingVertical: SPACE.sm },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline, marginTop: SPACE.sm },
   leave: {
-    minHeight: LEAVE_HEIGHT,
+    minHeight: EXIT_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    // SettingsRow's glyph-to-text gap, so "Leave room" starts on the rows' text edge above it (r7 L1).
+    // SettingsRow's glyph-to-text gap, so "Check out" starts on the rows' text edge above it (r7 L1).
     gap: SPACE.lg,
     paddingHorizontal: SPACE.lg,
     borderRadius: RADIUS.rowInCard,

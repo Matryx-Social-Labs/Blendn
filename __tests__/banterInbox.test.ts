@@ -255,9 +255,10 @@ describe('R3-D5 on the Banter', () => {
     expect(SCREEN()).toContain('const held = outboxLine(outbox, thread)')
   })
 
-  it('5.11: a room row swipes to Mute and Leave, a DM to Mark read only, a muted DM never exists', () => {
+  it('5.11: a room row swipes to Mute only (I-A; flow5Banter drives it), a DM to Mark read only, a muted DM never exists', () => {
     const src = SCREEN()
-    expect(src).toContain("{ icon: 'log-out', label: 'Leave', destructive: true, onPress: () => setLeaveFor(c.chat_room_id) }")
+    expect(src).toContain("swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(c.chat_room_id) }],")
+    expect(src).not.toContain("label: 'Leave'")
     expect(src).toContain("[{ icon: 'check-check', label: 'Mark read', onPress: () => void markRead(c) }]")
     expect(src).toContain('muted: false,')
   })

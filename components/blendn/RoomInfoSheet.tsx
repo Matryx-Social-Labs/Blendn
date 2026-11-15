@@ -113,9 +113,7 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
             <InfoRow
               testID="room-info-host"
               leading={
-                <View testID="room-info-host-mark" style={styles.hostMark}>
-                  <Icon name="megaphone" size={ICON.control} color={EMBER.glyph} />
-                </View>
+                <HostMark testID="room-info-host-mark" />
               }
               title={host.name}
               hint="Host"
@@ -174,7 +172,7 @@ function Card({ children, testID }: { children: ReactNode; testID: string }) {
 }
 
 /** The event's detail while the sheet is open: its cover, its time and venue, and its host. Cached by the client for 30 s. */
-function useEventDetail(eventId: string | null): EventApiItem | null {
+export function useEventDetail(eventId: string | null): EventApiItem | null {
   const [event, setEvent] = useState<EventApiItem | null>(null)
   useEffect(() => {
     if (!eventId) return
@@ -190,6 +188,15 @@ function useEventDetail(eventId: string | null): EventApiItem | null {
     }
   }, [eventId])
   return event
+}
+
+/** The host's mark: an ember megaphone, never a face or a creature (the host is the org, I-A). The Room info page uses it too. */
+export function HostMark({ testID }: { testID?: string }) {
+  return (
+    <View testID={testID} style={styles.hostMark}>
+      <Icon name="megaphone" size={ICON.control} color={EMBER.glyph} />
+    </View>
+  )
 }
 
 /** One of the board's grouped rows: a glyph (or a mark), the words, and a chevron, a link glyph or a word at the end. */
