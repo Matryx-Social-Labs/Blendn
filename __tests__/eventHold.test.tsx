@@ -5,7 +5,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Pressable, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Pressable, StyleSheet } from 'react-native'
 
 import { EventCheckOutSheet, EventHold } from '../components/scene/EventHold'
 import { ROOM_WAIT_MS, useEventCheckIn } from '../components/scene/useEventCheckIn'
@@ -185,6 +185,31 @@ describe('checked into this event already: "Check out" opens the sheet with the 
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
     // The old line under the hold is gone at rest; a refusal still has its place there.
     expect(screen.queryByText('Checks you out of this event.', HIDDEN)).toBeNull()
+  })
+
+  // checked-in.md, owner 2026-11-15: at AX XXXL on iOS the question and the sentence pushed the hold below the sheet's cap.
+  it.each([
+    [1, 'over'],
+    [1.35, 'over'],
+    [1.5, 'under'],
+    [3.571, 'under'],
+  ])('at text size %p the sentence sits %s the hold: at the accessibility sizes the hold comes straight after the question', async (fontScale, where) => {
+    const window = Dimensions.get('window')
+    Dimensions.set({ window: { ...window, fontScale } })
+    try {
+      await render(<Page going />)
+      await open()
+      // Tree order is reading and drawing order: every node, depth first.
+      type Node = { children?: readonly (Node | string)[] }
+      const walk = (n: Node): Node[] => [n, ...(n.children ?? []).flatMap((c) => (typeof c === 'string' ? [] : walk(c)))]
+      const order: unknown[] = walk(screen.container as unknown as Node)
+      const [sentence, hold] = [order.indexOf(screen.getByText(CHECK_OUT_CONSEQUENCE)), order.indexOf(Hold()!)]
+      expect(sentence).toBeGreaterThan(-1)
+      expect(hold).toBeGreaterThan(-1)
+      expect(sentence < hold ? 'over' : 'under').toBe(where)
+    } finally {
+      Dimensions.set({ window })
+    }
   })
 
   it('is the quiet hold, the lit kind with its hue pouring in, not the gradient', async () => {
