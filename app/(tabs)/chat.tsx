@@ -24,7 +24,7 @@ import { heldList, inboxTimeLabel, previewWithSender } from '../../components/ba
 import { holdController } from '../../components/banter/hold'
 import { BanterPressGuard, type PressGuard } from '../../components/banter/pressGuard'
 import { BoardRequestsSection } from '../../components/board/BoardRequestsSection'
-import { LeaveRoomSheet, MuteSheet } from '../../components/chat/RoomSheets'
+import { MuteSheet } from '../../components/chat/RoomSheets'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
 import { SearchField } from '../../components/ds/SearchField'
@@ -122,7 +122,6 @@ function ChatInner() {
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
   const [muteFor, setMuteFor] = useState<string | null>(null)
-  const [leaveFor, setLeaveFor] = useState<string | null>(null)
   const [openSwipe, setOpenSwipe] = useState<string | null>(null)
   const [scrolling, setScrolling] = useState(false)
   // Tapping Banter while already on it goes back to the top (the bar emits `tabPress`).
@@ -291,10 +290,11 @@ function ChatInner() {
           sortTime: c.last_message_time ? Date.parse(c.last_message_time) : 0,
           searchText: `${c.event_title} ${text} ${c.last_sender_name ?? ''}`.toLowerCase(),
           open: () => openRoom(c),
-          swipe: [
-            { icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(c.chat_room_id) },
-            { icon: 'log-out', label: 'Leave', destructive: true, onPress: () => setLeaveFor(c.chat_room_id) },
-          ],
+          /*
+           * Mute only (I-A: one exit, Check out, and only where you are checked in). These rows are the rooms you are not
+           * in; the one you are in is Live now's card, whose room has Check out in its ⋯.
+           */
+          swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(c.chat_room_id) }],
           canMute: true,
         }
       })
@@ -637,7 +637,6 @@ function ChatInner() {
       ) : null}
 
       <MuteSheet chatGroupId={muteFor} onClose={() => setMuteFor(null)} />
-      <LeaveRoomSheet chatGroupId={leaveFor} onClose={() => setLeaveFor(null)} onLeft={() => setOpenSwipe(null)} />
     </View>
   )
 }

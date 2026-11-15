@@ -21,7 +21,7 @@ const LOOK: Record<BannerKind, { fill: string; icon: IconName }> = {
 }
 
 /**
- * Whose action is lit: an offer inside the screen's world (Turn on, Show who I am). Offline, paused and error are a problem
+ * Whose action is lit: an offer inside the screen's world (Turn on, Show who you are). Offline, paused and error are a problem
  * being reported on a tinted strip: their action (Retry, Resume) is the quiet `secondary`, so the hue never cheers a failure.
  */
 const LIT_KINDS: ReadonlySet<BannerKind> = new Set(['info', 'visibility'])
@@ -58,7 +58,7 @@ export type BannerProps = {
  * VisibilityBanner is read in place. On `info` and `visibility` the action is a `lit` Button in the screen's hue; on offline, paused
  * and error it is `secondary` (`LIT_KINDS`). Text scales freely; past 1.3× the action
  * wraps under the sentence, and below it too whenever the sentence beside it would be narrower than its measure
- * (`useMinMeasure`: 360 dp at 1.3 drew "You're / anony / mous" beside Show who I am, RC drive 3). Increase Contrast adds the
+ * (`useMinMeasure`: 360 dp at 1.3 drew "You're / anony / mous" beside Show who you are, RC drive 3). Increase Contrast adds the
  * 50% hairline.
  */
 /** The floating controls' glass under a banner on the map, with the map's ink where glass cannot show (`useMapInk`). */
@@ -171,7 +171,7 @@ const VISIBILITY: Record<Visibility, { icon: IconName; text: (name: string | und
     text: (name) => `You’re in this room as ${name}, with your photo. People here can see you.`,
     action: () => 'Go anonymous',
   },
-  anon: { icon: 'eye-off', text: (name) => `You’re ${asName(name)}. Nobody here sees your name or photo.`, action: () => 'Show who I am' },
+  anon: { icon: 'eye-off', text: (name) => `You’re ${asName(name)}. Nobody here sees your name or photo.`, action: () => 'Show who you are' },
   hidden: { icon: 'cloud-off', text: () => 'You’re not listed here. Show online status is off.', action: () => 'Turn it on' },
   blocked: {
     icon: 'eye-off',

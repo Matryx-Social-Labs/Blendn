@@ -782,3 +782,20 @@ describe('the Banter is fresh when you come back to it (SCRUM-907)', () => {
     expect(api.getChatGroups).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('one exit (I-A): a room row swipes to Mute only', () => {
+  const actionsOf = (testID: string) =>
+    (within(screen.getByTestId(testID)).getAllByRole('button').find((n) => Array.isArray(n.props.accessibilityActions))!.props
+      .accessibilityActions as { name: string }[]).map((a) => a.name)
+
+  it('a room you are not in offers Mute alone: no Leave, no Check out', async () => {
+    await open()
+    expect(actionsOf('banter-swipe-g:g-past')).toEqual(['Mute'])
+  })
+
+  it('the room you are in is Live now’s card, with no swipe (its Check out is in the room’s ⋯)', async () => {
+    await open()
+    expect(screen.getByTestId('banter-live-g-live')).toBeTruthy()
+    expect(screen.queryByTestId('banter-swipe-g:g-live', { includeHiddenElements: true })).toBeNull()
+  })
+})

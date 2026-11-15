@@ -93,6 +93,10 @@ import UserProfile, { SELF_PREVIEW, stillAnonymous } from '../app/user/[id]'
 import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
 import { COLOR, MAX_FONT_SCALE } from '../lib/design/tokens'
 
+/** Message as a request (C7: "Connect" retired): the dock's label is Message either way; only the ask says what it sends. */
+const ASK = /^Message .+\. Sends a request and shows them your name and photo$/
+
+
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'rh_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
 
@@ -145,15 +149,16 @@ describe('with the server’s `connection`', () => {
     expect(await screen.findByText('Requested')).toBeTruthy()
   })
 
-  it('offers Connect when it says there is nothing, without second-guessing it from the lists', async () => {
+  it('offers Message as a request when it says there is nothing, without second-guessing it from the lists', async () => {
     api.getPublicProfile.mockResolvedValue({
       success: true,
       data: { ...BEN, connection: { conversationId: null, request: null } },
     })
     await render(<UserProfile />)
 
-    expect(await screen.findByText('Connect')).toBeTruthy()
-    expect(screen.getByText('Connect sends a request and reveals your name and photo.')).toBeTruthy()
+    expect(await screen.findByLabelText(ASK)).toBeTruthy()
+    // No line under it: the request sheet says what sending costs (C7).
+    expect(screen.queryByText('You can message each other.')).toBeNull()
     expect(api.getConversations).not.toHaveBeenCalled()
   })
 })
@@ -188,17 +193,17 @@ describe('without it — an older server, or somebody still anonymous to you', (
     expect(await screen.findByText('Requested')).toBeTruthy()
   })
 
-  it('offers Connect when neither list has them', async () => {
+  it('offers Message as a request when neither list has them', async () => {
     api.getPublicProfile.mockResolvedValue({ success: true, data: BEN })
     await render(<UserProfile />)
 
-    expect(await screen.findByText('Connect')).toBeTruthy()
+    expect(await screen.findByLabelText(ASK)).toBeTruthy()
     expect(api.getConversations).toHaveBeenCalled()
     expect(api.getMessageRequests).toHaveBeenCalled()
   })
 })
 
-describe('Connect', () => {
+describe('Message, as a request', () => {
   const NOTHING = { ...BEN, connection: { conversationId: null, request: null } }
 
   it('says Requested once the request is sent', async () => {
@@ -206,7 +211,7 @@ describe('Connect', () => {
     api.createMessageRequest.mockResolvedValue({ success: true, data: {} } as never)
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
     expect(await screen.findByText('Requested')).toBeTruthy()
@@ -217,13 +222,13 @@ describe('Connect', () => {
     api.createMessageRequest.mockResolvedValue({ success: false, error: 'No internet connection.' })
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
     // In the sheet, under the note — a toast sat dimmed behind the sheet's scrim (drive 2026-10-27).
     expect(await screen.findByText("Your request didn’t send. Try again.")).toBeTruthy()
     expect(mockShowToast).not.toHaveBeenCalled()
-    expect(screen.getByText('Connect')).toBeTruthy()
+    expect(screen.getByLabelText(ASK)).toBeTruthy()
     expect(screen.queryByText('Requested')).toBeNull()
     // The sheet stays open, with the message in it.
     expect(screen.getByText('Send request')).toBeTruthy()
@@ -234,7 +239,7 @@ describe('Connect', () => {
     api.createMessageRequest.mockResolvedValue({ success: false, error: 'exists', errorCode: 'CONFLICT' })
     await render(<UserProfile />)
 
-    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
     expect(await screen.findByText('Requested')).toBeTruthy()
@@ -261,7 +266,7 @@ describe('Connect', () => {
     await render(<UserProfile />)
 
     expect(await screen.findByText('Slow Kite, 27')).toBeTruthy()
-    fireEvent.press(await screen.findByText('Connect'))
+    fireEvent.press(await screen.findByLabelText(ASK))
     fireEvent.press(await screen.findByText('Send request'))
 
     expect(await screen.findByText('Requested')).toBeTruthy()
@@ -271,10 +276,10 @@ describe('Connect', () => {
 })
 
 describe('no Like (Wave replaced it, SCRUM-1042)', () => {
-  it('a profile with an event but no room card offers Connect and no Like; Wave lives on the room page (profileLensPage)', async () => {
+  it('a profile with an event but no room card offers Message as a request and no Like; Wave lives on the room page (profileLensPage)', async () => {
     api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
     await render(<UserProfile />)
-    expect(await screen.findByText('Connect')).toBeTruthy()
+    expect(await screen.findByLabelText(ASK)).toBeTruthy()
     expect(screen.queryByText('Like')).toBeNull()
   })
 })
@@ -288,7 +293,7 @@ describe('when the profile does not load', () => {
     expect(await screen.findByText('This profile didn’t load')).toBeTruthy()
     api.getPublicProfile.mockResolvedValueOnce({ success: true, data: { ...BEN, connection: { conversationId: null, request: null } } })
     fireEvent.press(screen.getByText('Try again'))
-    expect(await screen.findByText('Connect')).toBeTruthy()
+    expect(await screen.findByLabelText(ASK)).toBeTruthy()
   })
 
   it('keeps a way back, since the top bar over the hero never drew', async () => {
@@ -392,7 +397,7 @@ describe('a request they sent you, opened from their profile (R4.1 6.2)', () => 
     expect(screen.getByLabelText('Accept Ben’s request')).toBeTruthy()
     expect(screen.getByLabelText('Decline Ben’s request')).toBeTruthy()
     // The tray is theirs: no Like and no Connect beside it.
-    expect(screen.queryByText('Connect')).toBeNull()
+    expect(screen.queryByLabelText(ASK)).toBeNull()
   })
 
   it('Accept answers that request, says success once, and opens the chat', async () => {
@@ -436,7 +441,7 @@ describe('their badges', () => {
   const openWith = async (users: Record<string, unknown>) => {
     api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, connection, ...users } } as never)
     await render(<UserProfile />)
-    await screen.findByText('Connect')
+    await screen.findByLabelText(ASK)
   }
 
   it('reads them from the one answer, and asks nothing more', async () => {
@@ -463,7 +468,7 @@ describe('their badges', () => {
   it('draws none for somebody still anonymous to you, whatever the payload carries', async () => {
     api.getPublicProfile.mockResolvedValue({ success: true, data: { id: 'rh_ben', name: 'Amber Fox', identityVisible: false, badges: NIGHTS } })
     await render(<UserProfile />)
-    await screen.findByText('Connect')
+    await screen.findByLabelText(ASK)
     expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
     expect(api.getProfile).not.toHaveBeenCalled()
   })

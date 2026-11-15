@@ -36,8 +36,8 @@ tags:
 - takeScreenshot: flow5-04-sent
 
 # --- The reveal (Flow 5 DM #06, #23) ---
-- assertVisible: "Show them who you are"
-- tapOn: "Show them who you are"
+- assertVisible: "Show who you are"
+- tapOn: "Show who you are"
 - extendedWaitUntil:
     visible: "Show .* who you are\\?"
     timeout: 5000

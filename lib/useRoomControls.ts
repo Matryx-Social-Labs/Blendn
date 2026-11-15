@@ -102,12 +102,22 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
     }
   }, [eventId, revealed, revealBusy, readiness.ok, showToast])
 
+  const { checkOut, checkOutBusy } = useCheckOut(eventId)
+
+  return { readiness, revealed, revealBusy, toggleReveal, listed, checkOut, checkOutBusy }
+}
+
+/**
+ * Checking out of `eventId` (the room's ⋯, the Room info page, the Banter's swipe): one path, `checkOutOf`. The failure
+ * is a toast, said wherever you asked.
+ */
+export function useCheckOut(eventId: string | null) {
+  const { showToast } = useToast()
   /*
    * Leaving the room.
    *
-   * No confirmation. Checking out ends your *presence* — off the roster and out
-   * of the headcount — and presence is reversible: walk back in and check in
-   * again. It does not touch attendance, so the room chat stays writable.
+   * The confirm is the caller's (`checkOutQuestion`, the same everywhere). Checking out ends your *presence* — off the
+   * roster and out of the headcount — and presence is reversible: walk back in and check in again.
    *
    * Resolves true only on success. Closing first would be a lie about a
    * request that might still fail, and the failure worth catching is somebody
@@ -133,6 +143,5 @@ export function useRoomControls(eventId: string | null, initiallyRevealed: boole
       setCheckOutBusy(false)
     }
   }, [eventId, checkOutBusy, showToast])
-
-  return { readiness, revealed, revealBusy, toggleReveal, listed, checkOut, checkOutBusy }
+  return { checkOut, checkOutBusy }
 }

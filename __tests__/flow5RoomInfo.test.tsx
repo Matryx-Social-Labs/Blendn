@@ -3,7 +3,7 @@
  * from the server's row, the crowd with its role badges, the members' failed
  * read, the muted hero, and the Mute and Leave sheets.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
 import { AX_XXXL, atScale, clipped, resetScale, subtree, uncapped } from './helpers/ax'
 import { MAX_FONT_SCALE } from '../lib/design/tokens'
 
@@ -20,7 +20,7 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), warn: jest.fn(), error: jest.fn(), info: jest.fn(), journey: jest.fn() } }))
 jest.mock('../lib/useAuth', () => ({ useAuth: () => ({ user: { id: 'u-a' } }) }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getChatGroups: jest.fn(), getRoomPreview: jest.fn(async () => ({ success: false })), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), getVenue: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn() },
+  apiClient: { getChatGroups: jest.fn(), getRoomPreview: jest.fn(async () => ({ success: false })), getChatParticipants: jest.fn(), getEventMatches: jest.fn(), getVenue: jest.fn(), setChatGroupMute: jest.fn(), leaveChatGroup: jest.fn(), getEvent: jest.fn(), checkOut: jest.fn() },
 }))
 /** The event's checkout listeners: Room info's count follows the server's recount. */
 const mockCheckOut: ((data: { hereCount?: number }) => void)[] = []
@@ -55,7 +55,9 @@ import { resetRoomMembership } from '../lib/roomMembership'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const COVER = 'https://cdn.blendn.app/covers/vinyl.jpg'
-const eventRow = { id: 'g1', name: 'Vinyl Night', memberCount: 3, event: { id: 'e1', title: 'Vinyl Night', coverImageUrl: COVER } }
+const eventRow = { id: 'g1', name: 'Vinyl Night', memberCount: 3, isCheckedIn: true, event: { id: 'e1', title: 'Vinyl Night', coverImageUrl: COVER } }
+/** The event's detail: its host is the org (C6's `roomHost`). */
+const ORG = { id: 'o1', name: 'Nightshift Collective' }
 const crowd = {
   success: true,
   data: {
@@ -92,6 +94,7 @@ beforeEach(() => {
   mockParams = { id: 'g1' }
   api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [eventRow] } } as never)
   api.getChatParticipants.mockResolvedValue(crowd as never)
+  api.getEvent.mockResolvedValue({ success: true, data: { id: 'e1', title: 'Vinyl Night', organizer: ORG } } as never)
 })
 
 it('draws the server’s cover and title, never an image or a name from the route', async () => {
@@ -103,9 +106,11 @@ it('draws the server’s cover and title, never an image or a name from the rout
   expect(screen.getAllByText('Vinyl Night').length).toBeGreaterThan(0)
 })
 
-it('the crowd: creatures with their role badges, and you as "You"', async () => {
+it('the crowd: creatures, a moderator’s badge, and you as "You"; the host is never a badge on a creature', async () => {
   await open()
-  expect(screen.getByLabelText('Amber Fox, Organizer')).toBeTruthy()
+  // The chat's `admin` is drawn as everyone else is (I-A): no HOST, no Organizer on a person.
+  expect(screen.getByLabelText('Amber Fox')).toBeTruthy()
+  expect(screen.queryByText('HOST')).toBeNull()
   expect(screen.getByLabelText('Quiet Otter, Moderator')).toBeTruthy()
   expect(screen.getByLabelText('You')).toBeTruthy()
 })
@@ -124,16 +129,57 @@ it('muted: the hero says so, and Mute offers Unmute', async () => {
   expect(screen.getByLabelText('Unmute')).toBeTruthy()
 })
 
-it('Mute opens the four choices; Leave is apart and asks first', async () => {
+it('the host is the org, in its own row with the ember mark (C6’s row)', async () => {
   await open()
-  await act(async () => fireEvent.press(screen.getByTestId('info-mute')))
-  for (const label of ['For 1 hour', 'For 8 hours', 'Until tomorrow', 'Until I turn it back on']) expect(screen.getByText(label)).toBeTruthy()
-  await act(async () => fireEvent.press(screen.getByLabelText('Cancel')))
-  await act(async () => fireEvent.press(screen.getByTestId('info-leave')))
-  // One sheet on screen at a time (lib/modalTurn): Leave rises once Mute has gone, here on the fallback (no onDismiss in tests).
-  for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
-  expect(screen.getByText('Leave this room?')).toBeTruthy()
-  expect(api.leaveChatGroup).not.toHaveBeenCalled()
+  expect(screen.getByLabelText('Host, Nightshift Collective')).toBeTruthy()
+  expect(screen.getByTestId('info-host-mark')).toBeTruthy()
+})
+
+it('no host row when no org owns the event (a curated event: "Blendn", no id)', async () => {
+  api.getEvent.mockResolvedValue({ success: true, data: { id: 'e1', title: 'Vinyl Night', organizer: { id: null, name: 'Blendn' } } } as never)
+  await open()
+  expect(screen.queryByTestId('info-host')).toBeNull()
+  expect(screen.queryByText('Host')).toBeNull()
+})
+
+describe('one exit, Check out (I-A)', () => {
+  const settle = async () => {
+    // One sheet on screen at a time (lib/modalTurn): the next rises once the last has gone, here on the fallback.
+    for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
+  }
+
+  it('Mute opens the four choices; Check out is apart, asks the shared question, and runs the check-out, never a chat leave', async () => {
+    api.checkOut.mockResolvedValue({ success: true, data: {} } as never)
+    await open()
+    await act(async () => fireEvent.press(screen.getByTestId('info-mute')))
+    for (const label of ['For 1 hour', 'For 8 hours', 'Until tomorrow', 'Until I turn it back on']) expect(screen.getByText(label)).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByLabelText('Cancel')))
+    await act(async () => fireEvent.press(screen.getByTestId('info-check-out')))
+    await settle()
+    expect(screen.getByText('Check out of Vinyl Night?')).toBeTruthy()
+    expect(api.checkOut).not.toHaveBeenCalled()
+    const confirm = screen.getByTestId('check-out-confirm')
+    await act(async () => fireEvent.press(within(confirm).getByLabelText('Check out')))
+    await settle()
+    expect(api.checkOut).toHaveBeenCalledWith('e1')
+    expect(api.leaveChatGroup).not.toHaveBeenCalled()
+  })
+
+  it('no exit for an event room you are not checked in to: Mute this room is still there', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...eventRow, isCheckedIn: false }] } } as never)
+    await open()
+    expect(screen.getByTestId('info-mute')).toBeTruthy()
+    expect(screen.queryByTestId('info-check-out')).toBeNull()
+    expect(screen.queryByText('Check out')).toBeNull()
+  })
+
+  it('a Lobby post’s room (not in your rooms list) has no exit, only Mute this room', async () => {
+    mockParams = { id: 'g-post', roomName: 'Ride to the venue' }
+    await open()
+    expect(screen.getByText('Mute this room')).toBeTruthy()
+    expect(screen.queryByTestId('info-check-out')).toBeNull()
+    expect(screen.queryByText(/leave/i)).toBeNull()
+  })
 })
 
 describe('nothing collides with the clock or the back button (drive 2)', () => {
@@ -144,7 +190,7 @@ describe('nothing collides with the clock or the back button (drive 2)', () => {
     const shield = StyleSheet.flatten(screen.getByTestId('info-status-shield').props.style)
     // The inset (whatever the device's), the back button's row and the 10 pt the glass reaches under it.
     expect(shield.height).toBeGreaterThanOrEqual(SIZE.circleButton + SPACE.sm + SPACE.xxs)
-    expect(screen.getByText('ORGANIZER').props.numberOfLines).toBe(1)
+    expect(screen.getByText('MODERATOR').props.numberOfLines).toBe(1)
   })
 })
 
@@ -166,9 +212,9 @@ describe('the hero with no cover, and the rows’ edge (r7 M6, L1)', () => {
     expect(screen.queryByTestId('info-hero-plate', { includeHiddenElements: true })).toBeNull()
   })
 
-  it('Leave room’s words start on the rows’ text edge (SettingsRow’s 16 pt from the glyph)', async () => {
+  it('Check out’s words start on the rows’ text edge (SettingsRow’s 16 pt from the glyph)', async () => {
     await open()
-    let node = screen.getByText('Leave room').parent
+    let node = within(screen.getByTestId('info-check-out')).getByText('Check out').parent
     while (node && StyleSheet.flatten(node.props.style)?.minHeight === undefined) node = node.parent
     expect(StyleSheet.flatten(node!.props.style).gap).toBe(SPACE.lg)
   })
@@ -282,9 +328,17 @@ describe('a place’s room (C5, 5-2)', () => {
     expect(screen.queryByLabelText(/^In the room, \d/)).toBeNull()
   })
 
-  it('leaving says what it does to tonight, and that going live again brings you back', async () => {
+  it('live at the place: one exit, Check out of the place, through its venue day’s check-out', async () => {
+    api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [{ ...placeRow, isCheckedIn: true }] } } as never)
+    api.checkOut.mockResolvedValue({ success: true, data: {} } as never)
     await open()
-    expect(screen.getByText('You leave Toit’s room for tonight. Go live again any time you’re here.')).toBeTruthy()
+    await act(async () => fireEvent.press(screen.getByTestId('info-check-out')))
+    for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
+    expect(screen.getByText('Check out of Toit?')).toBeTruthy()
+    await act(async () => fireEvent.press(within(screen.getByTestId('check-out-confirm')).getByLabelText('Check out')))
+    for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
+    expect(api.checkOut).toHaveBeenCalledWith('d1')
+    expect(api.leaveChatGroup).not.toHaveBeenCalled()
   })
 
   it('below five live it says nothing rather than "Under 5"', async () => {
@@ -346,7 +400,7 @@ it('a block made anywhere reads the roster again from the start (H2)', async () 
   api.getChatParticipants.mockResolvedValue({ success: true, data: { participants: [{ userId: 'u-a', name: 'Cosmic Panda', role: 'member' }], totalCount: 1 } } as never)
   await act(async () => noteBlocked())
   expect(api.getChatParticipants).toHaveBeenCalledWith('g1', { limit: 100, offset: 0 })
-  expect(screen.queryByLabelText('Amber Fox, Organizer')).toBeNull()
+  expect(screen.queryByLabelText('Amber Fox')).toBeNull()
 })
 
 it('lists its rows by fixed layout once the header is measured, and not before (getItemLayout)', async () => {
@@ -373,7 +427,7 @@ describe('at AX XXXL (TG-03)', () => {
     expect(uncapped(hero)).toEqual([])
     expect(clipped(hero)).toEqual([])
     expect(screen.getByRole('header', { name: title }).props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.title)
-    expect(uncapped(subtree(screen.toJSON() as never, 'info-leave'))).toEqual([])
+    expect(uncapped(subtree(screen.toJSON() as never, 'info-check-out'))).toEqual([])
   })
 })
 

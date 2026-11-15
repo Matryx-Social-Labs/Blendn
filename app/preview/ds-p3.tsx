@@ -324,7 +324,7 @@ const MENUS: [string, MenuItem[], number?][] = [
     [
       { icon: 'bell-off', label: 'Mute', onPress: noop },
       { icon: 'info', label: 'Room info', onPress: noop },
-      { icon: 'log-out', label: 'Leave room', destructive: true, onPress: noop },
+      { icon: 'log-out', label: 'Check out', destructive: true, onPress: noop },
     ],
   ],
   ['pressed', MESSAGE_MENU.slice(1, 4), 1],
