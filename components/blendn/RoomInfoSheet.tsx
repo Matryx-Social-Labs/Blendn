@@ -62,7 +62,7 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
   }
 
   return (
-    <Sheet visible={visible} onClose={onClose} testID="room-info">
+    <Sheet visible={visible} onClose={onClose} flush testID="room-info">
       <View style={styles.blocks}>
         <View testID="room-info-event" accessible accessibilityRole="header" accessibilityLabel={[event?.title ?? title, line].filter(Boolean).join(', ')} style={styles.event}>
           <View style={styles.cover}>
@@ -80,7 +80,7 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
           </View>
         </View>
 
-        <Card>
+        <Card testID="room-info-rows">
           {chatGroupId ? (
             <InfoRow testID="room-info-mute" icon="bell-off" title={mutedLabel ?? 'Mute this room'} hint="Only your pushes. Nobody is told." trail="chevron-right" onPress={then(onMute)} />
           ) : null}
@@ -106,7 +106,7 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
           ) : null}
         </Card>
 
-        <Card>
+        <Card testID="room-info-people-card">
           {host ? (
             <InfoRow
               testID="room-info-host"
@@ -136,7 +136,7 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
           />
         </Card>
 
-        <Card>
+        <Card testID="room-info-exit">
           <InfoRow testID="room-info-check-out" icon="log-out" title="Check out" hint="You leave the room and its chat." destructive onPress={then(onCheckOut)} />
         </Card>
       </View>
@@ -156,11 +156,11 @@ function PeoplePile({ faces }: { faces: Face[] }) {
 }
 
 /** The board's grouped rows (`.xlist`): one card, a hairline between rows and none under the last. */
-function Card({ children }: { children: ReactNode }) {
+function Card({ children, testID }: { children: ReactNode; testID: string }) {
   const contrast = useIncreaseContrast()
   const fill = cardFill(useGround())
   return (
-    <View testID="room-info-card" style={[styles.card, { backgroundColor: fill }, contrast && IC_HAIRLINE]}>
+    <View testID={testID} style={[styles.card, { backgroundColor: fill }, contrast && IC_HAIRLINE]}>
       {Children.toArray(children).map((row, i) => (
         <Fragment key={i}>
           {i ? <View style={[styles.hairline, contrast && styles.hairlineContrast]} /> : null}
