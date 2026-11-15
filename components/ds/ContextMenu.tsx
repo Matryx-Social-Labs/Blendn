@@ -30,7 +30,7 @@ export type MenuItem = {
   /** The verb, or the person ("Cosmic Panda" with `chevron`, to their card). */
   label: string
   onPress: () => void
-  /** Last, in red: Block…, Leave room. */
+  /** Last, in red: Block…, Check out. */
   destructive?: boolean
   /** It opens something (the sender's card). */
   chevron?: boolean

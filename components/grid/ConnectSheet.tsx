@@ -106,7 +106,7 @@ export function ConnectSheet({
       visible={visible}
       onClose={onDismiss}
       icon="message-circle"
-      title={`Connect with ${displayName}`}
+      title={`Message ${displayName}`}
       /*
        * Above the field, not in a confirmation after it. Somebody who has typed a paragraph has already decided; the cost
        * belongs before the effort, where it can still change the answer.

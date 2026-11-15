@@ -58,7 +58,7 @@ describe('<RevealSheet>', () => {
   it('solo: the “yourself” form', async () => {
     await render(<RevealSheet visible onClose={jest.fn()} crew={null} audience={4} onReveal={jest.fn()} />)
     expect(screen.getByRole('header', { name: 'Reveal yourself to this Mix?' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Reveal me' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Show them' })).toBeTruthy()
   })
 })
 

@@ -57,7 +57,7 @@ const NAME_SCALE_CAP = 1.3
 const LEAVE_HEIGHT = 64
 
 /** Only the two roles that change what someone can do here get a badge. */
-const roleLabel = (role: string) => (role === 'admin' ? 'Organizer' : role === 'moderator' ? 'Moderator' : null)
+const roleLabel = (role: string) => (role === 'admin' ? 'Host' : role === 'moderator' ? 'Moderator' : null)
 
 /**
  * The room's info (Flow 5 Room info frames, R3-D5 5.12): the cover as a
@@ -288,7 +288,7 @@ function ChatInfoInner() {
           <SettingsGroup>
             <SettingsRow
               icon={muted ? 'bell-off' : 'bell'}
-              title={muted ? `Notifications · ${muteLabel(mute)?.replace(/^Muted/, 'muted')}` : 'Mute notifications'}
+              title={muted ? `Notifications · ${muteLabel(mute)?.replace(/^Muted/, 'muted')}` : 'Mute this room'}
               hint="Only your pushes. Nobody is told."
               trail="chevron"
               onPress={() => setSheet('mute')}

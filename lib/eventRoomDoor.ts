@@ -32,7 +32,7 @@ export async function eventRoomDoor(eventId: string, eventTitle: string): Promis
       return { kind: 'route', params: { id: r.chatGroupId, ...named } }
     }
   } catch (e) {
-    Logger.warn('chat', 'room chat lookup failed', { error: e })
+    Logger.warn('chat', 'event room lookup failed', { error: e })
   }
   // With no room to open yet, when it opens is still said, not "not open" alone.
   const opensIn = opensAt ? opensInLabelAt(opensAt, Date.now() + serverOffset()) : null

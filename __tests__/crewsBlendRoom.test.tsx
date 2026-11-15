@@ -195,7 +195,7 @@ describe('revealing', () => {
     await render(<Room />)
     // One person facing a crew: "Blend with Five", not "Crew Five" (flow10b.js `blendRoom`, solo).
     await waitFor(() => screen.getByText('Mix with Five'))
-    await fireEvent.press(screen.getByLabelText('Reveal me'))
+    await fireEvent.press(screen.getByLabelText('Show who you are'))
     expect(screen.getByText('Reveal yourself to this Mix?')).toBeTruthy()
   })
 

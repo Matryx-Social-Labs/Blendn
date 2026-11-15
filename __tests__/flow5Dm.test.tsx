@@ -163,7 +163,7 @@ describe('the reveal bar', () => {
     api.requestReveal.mockResolvedValue({ success: true } as never)
     await open()
     expect(screen.getByText('Both anonymous')).toBeTruthy()
-    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(screen.getByLabelText('Show who you are')).toBeTruthy()
     await act(async () => fireEvent.press(screen.getByLabelText('Ask them')))
     await flush()
     expect(api.requestReveal).toHaveBeenCalledWith('c1')
@@ -175,14 +175,14 @@ describe('the reveal bar', () => {
     api.getConversation.mockResolvedValue({ success: true, data: { ...anonymous, youRevealed: true } } as never)
     await open()
     expect(screen.getByText('They see you · you don’t see them')).toBeTruthy()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Show who you are')).toBeNull()
   })
 
   it('both revealed: no bar, and the line says so', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: named } as never)
     await open()
     expect(screen.getByText('You see each other')).toBeTruthy()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Show who you are')).toBeNull()
   })
 })
 
@@ -221,10 +221,10 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
 
   it('a touch on the thread folds it, and the feed gives its room back', async () => {
     await open()
-    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(screen.getByLabelText('Show who you are')).toBeTruthy()
     await touch()
     await flush()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Show who you are')).toBeNull()
     // The header still says where things stand.
     expect(screen.getByText('Both anonymous')).toBeTruthy()
   })
@@ -233,7 +233,7 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await open()
     await act(async () => fireEvent(feed(), 'scrollEndDrag', { nativeEvent: { contentOffset: { x: 0, y: 0 }, contentSize: { width: 393, height: 2000 }, layoutMeasurement: { width: 393, height: 800 }, velocity: { x: 0, y: 0 } } }))
     await flush()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Show who you are')).toBeNull()
   })
 
   it('nothing moves while the finger is down: the first tap on a message is not cancelled by the feed shifting', async () => {
@@ -246,12 +246,12 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await act(async () => fireEvent(feed(), 'touchStart'))
     await act(async () => fireEvent(feed(), 'touchMove'))
     await flush()
-    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(screen.getByLabelText('Show who you are')).toBeTruthy()
     expect(padding()).toBe(before)
     // The press lands on the message first, and only then does the panel fold.
     await act(async () => fireEvent(feed(), 'touchEnd'))
     await flush()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Show who you are')).toBeNull()
     expect(padding()).toBeLessThan(before as number)
   })
 
@@ -261,7 +261,7 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await flush()
     await act(async () => fireEvent.press(screen.getByLabelText('Arctic Falcon')))
     await flush()
-    expect(screen.getByLabelText('Show them who you are')).toBeTruthy()
+    expect(screen.getByLabelText('Show who you are')).toBeTruthy()
   })
 
   it('a new state brings it back: they asked, or you did', async () => {
@@ -284,7 +284,7 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await open()
     await touch()
     await flush()
-    expect(screen.queryByLabelText('Show them who you are')).toBeNull()
+    expect(screen.queryByLabelText('Show who you are')).toBeNull()
     expect(screen.getByLabelText('Mika')).toBeTruthy()
   })
 })

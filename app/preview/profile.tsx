@@ -89,14 +89,14 @@ export default function ProfilePreview() {
             </ProfileSection>
           ) : (
             <ProfileSection title="Still anonymous">
-              <ProfileBio text="Cosmic Panda has not revealed who they are yet. Connect, talk, and either of you can reveal when you want to." />
+              <ProfileBio text="Cosmic Panda has not revealed who they are yet. Message them, and either of you can reveal when you want to." />
             </ProfileSection>
           )}
         </View>
       </ScrollView>
-      <ProfileDock note="Connect sends a request and reveals your name and photo.">
+      <ProfileDock>
         <Button kind="lit" icon="hand" label="Wave" onPress={() => {}} style={styles.flex} />
-        <Button kind="secondary" label="Connect" onPress={() => {}} style={styles.flex} />
+        <Button kind="secondary" label="Message" onPress={() => {}} style={styles.flex} />
       </ProfileDock>
 
       <Pressable

@@ -49,7 +49,7 @@ export function MuteSheet({ chatGroupId, onClose }: { chatGroupId: string | null
       visible={!!chatGroupId}
       onClose={onClose}
       icon="bell-off"
-      title={muted ? 'Notifications' : 'Mute notifications'}
+      title={muted ? 'Notifications' : 'Mute this room'}
       body={
         muted
           ? `${muteLabel(mute)}. You still see every message here; the room just doesn’t notify you.`

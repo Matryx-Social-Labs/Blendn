@@ -83,7 +83,7 @@ describe('an opener (SCRUM-1042 state 1 A) arrives typed, and nothing more', () 
     expect(note()).toBe('First time here?')
     expect(onSend).not.toHaveBeenCalled()
     // The disclosure (your name and photo) is the sheet's as ever: the opener only fills the field.
-    expect(screen.getByText('Connect with Fierce Owl')).toBeTruthy()
+    expect(screen.getByText('Message Fierce Owl')).toBeTruthy()
   })
   it('a later opening for somebody else takes that opening’s opener, never the last one (control: no draft is empty)', async () => {
     const view = await render(withDraft(true, 'Fierce Owl', 'First time here?'))

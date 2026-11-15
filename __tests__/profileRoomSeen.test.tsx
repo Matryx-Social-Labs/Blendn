@@ -90,6 +90,10 @@ jest.mock('../components/profile/ProfileSections', () => {
 import { apiClient } from '../lib/apiClient'
 import UserProfile from '../app/user/[id]'
 
+/** Message as a request (C7: "Connect" retired): the dock's label is Message either way; only the ask says what it sends. */
+const ASK = /^Message .+\. Sends a request and shows them your name and photo$/
+
+
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'u_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: false }
 
@@ -110,22 +114,22 @@ it('offers no Like, even opened from a room', async () => {
   expect(screen.queryByText('Liked')).toBeNull()
 })
 
-it('offers Message, not Connect, when the room says you both waved', async () => {
+it('offers Message, not a request, when the room says you both waved', async () => {
   await open({ conversationId: 'c1' })
   expect(screen.getByText('Message')).toBeTruthy()
-  expect(screen.queryByText('Connect')).toBeNull()
+  expect(screen.queryByLabelText(ASK)).toBeNull()
 })
 
 describe('a match that arrives while the profile is open (SCRUM-960)', () => {
   const match = (over: Partial<{ eventId: string; otherUserId: string }> = {}) =>
     act(async () => mockMatchHandler?.({ eventId: 'e1', otherUserId: 'rh_ben', conversationId: 'c9', name: 'Dancing Gecko', ...over }))
 
-  it('flips an open profile from Connect to Message', async () => {
+  it('flips an open profile from a request to Message', async () => {
     await open({})
-    expect(screen.getByText('Connect')).toBeTruthy()
+    expect(screen.getByLabelText(ASK)).toBeTruthy()
     await match()
     expect(await screen.findByText('Message')).toBeTruthy()
-    expect(screen.queryByText('Connect')).toBeNull()
+    expect(screen.queryByLabelText(ASK)).toBeNull()
   })
 
   it.each([
@@ -134,7 +138,7 @@ describe('a match that arrives while the profile is open (SCRUM-960)', () => {
   ])('ignores a match with %s', async (_n, over) => {
     await open({})
     await match(over)
-    expect(screen.getByText('Connect')).toBeTruthy()
+    expect(screen.getByLabelText(ASK)).toBeTruthy()
   })
 })
 

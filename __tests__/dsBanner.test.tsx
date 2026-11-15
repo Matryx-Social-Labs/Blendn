@@ -122,7 +122,7 @@ describe('<Banner>', () => {
 describe('<VisibilityBanner>', () => {
   it.each([
     ['named', 'You’re in this room as Sam, with your photo. People here can see you.', 'Go anonymous'],
-    ['anon', 'You’re in this room as Sam. Nobody here sees your name or photo.', 'Show who I am'],
+    ['anon', 'You’re in this room as Sam. Nobody here sees your name or photo.', 'Show who you are'],
     ['hidden', 'You’re not listed here. Show online status is off.', 'Turn it on'],
     ['blocked', 'You’re in this room as Sam. Add a photo to your profile first; that’s what other people would see.', 'Add a photo'],
   ] as const)('%s: its own sentence and action', async (state, sentence, action) => {
