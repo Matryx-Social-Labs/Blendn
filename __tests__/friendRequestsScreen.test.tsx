@@ -4,7 +4,7 @@
  * Accept answers this request and takes it off the list; a list that did not
  * load says so and can be tried again, rather than claiming there are none.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 
 const mockAsk = jest.fn()
 jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: (...a: unknown[]) => mockAsk(...a), useStillHere: () => () => true }))
@@ -28,6 +28,16 @@ jest.mock('../lib/apiClient', () => ({
     getFriendRequests: jest.fn(),
     respondToFriendRequest: jest.fn(),
     withdrawFriendRequest: jest.fn(),
+  },
+}))
+// The bell's socket event: a row landed in your notifications (`notification:new`, with its kind).
+let mockBell: ((data: { kind: string }) => void) | null = null
+jest.mock('../lib/socketClient', () => ({
+  subscribeToBell: (cb: (data: { kind: string }) => void) => {
+    mockBell = cb
+    return () => {
+      if (mockBell === cb) mockBell = null
+    }
   },
 }))
 const mockShowToast = jest.fn()
@@ -96,4 +106,39 @@ it('says how many are waiting under the title: the server’s count, not the pag
   await render(<FriendRequestsScreen />)
   expect(await screen.findByText('60 waiting')).toBeTruthy()
   expect(requestsWaiting(1204)).toBe('1,204 waiting')
+})
+
+/*
+ * SCRUM-1036: the list was read on focus only, so a request that arrived while it was open showed "No requests" until it
+ * was opened again. A new request lands in your bell (the same socket event the Notifications feed reads): read again.
+ */
+describe('a request that arrives while the list is open (SCRUM-1036)', () => {
+  it('shows up without leaving the screen', async () => {
+    api.getFriendRequests.mockResolvedValueOnce({ success: true, data: { incoming: [], outgoing: [] } })
+    await render(<FriendRequestsScreen />)
+    expect(await screen.findByText('No requests')).toBeTruthy()
+
+    api.getFriendRequests.mockResolvedValueOnce({ success: true, data: { incoming: [BEN], outgoing: [] } })
+    await act(async () => mockBell?.({ kind: 'friend_request' }))
+
+    expect(await screen.findByLabelText('Accept Ben')).toBeTruthy()
+    expect(screen.queryByText('No requests')).toBeNull()
+  })
+
+  // Control: a bell row of any other kind is not a request, and is not a reason to read the list again.
+  it('does not read the list again for a row of another kind', async () => {
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } })
+    await render(<FriendRequestsScreen />)
+    expect(await screen.findByText('No requests')).toBeTruthy()
+    await act(async () => mockBell?.({ kind: 'match' }))
+    expect(api.getFriendRequests).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops listening when the screen goes', async () => {
+    api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [], outgoing: [] } })
+    await render(<FriendRequestsScreen />)
+    expect(mockBell).not.toBeNull()
+    await screen.unmount()
+    expect(mockBell).toBeNull()
+  })
 })

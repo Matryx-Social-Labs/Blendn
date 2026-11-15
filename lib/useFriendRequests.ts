@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useToast } from '../components/Toast'
 import { apiClient } from './apiClient'
@@ -8,6 +8,7 @@ import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import type { FriendRequest } from './friends'
 import { appendUnique, refreshFirstPage, requestsPageFrom, type RequestSide } from './friendsPaging'
 import { Logger } from './logger'
+import { subscribeToBell } from './socketClient'
 
 const FAILED_LINE = "That didn’t go through. Try again."
 const requestKey = (r: FriendRequest) => r.id
@@ -25,7 +26,8 @@ const pageOf = (side: Side): RequestsPage => ({ hasMore: side.cursor !== null, l
  *
  * Shared by Add friends and the Requests list, so Accept means the same thing
  * — and says the same thing — wherever it is tapped. Loaded on focus: an answer
- * given on one screen should be gone from the other when you come back.
+ * given on one screen should be gone from the other when you come back. And
+ * read again when a new request lands in the bell, so an open list shows it.
  *
  * Each side is read a page at a time by the server's cursor (admin #724: `?list=incoming|outgoing&cursor=`), and its
  * `total` is the server's count, never the length of what is loaded: the badge on Friends says how many are waiting,
@@ -108,6 +110,8 @@ export function useFriendRequests() {
       void load()
     }, [load])
   )
+  // A request that lands while a list is open (SCRUM-1036): the bell's socket event says so, as it does for the Notifications feed.
+  useEffect(() => subscribeToBell(({ kind }) => kind === 'friend_request' && void load()), [load])
 
   /** The next page of one side, never twice at once; a failed page keeps what is here (`moreFailed`) and asking again is its retry. */
   const loadMore = useCallback(

@@ -160,7 +160,7 @@ export function OnboardingScreen({
               </Text>
             ) : null}
             {/* A disabled primary takes no press: the wrapper does, so a tap on it can say why it is off. */}
-            <Pressable accessible={false} disabled={!ctaDisabled || !onCtaDisabledPress} onPress={onCtaDisabledPress} testID="onboarding-primary-frame">
+            <Pressable accessible={false} importantForAccessibility="no" disabled={!ctaDisabled || !onCtaDisabledPress} onPress={onCtaDisabledPress} testID="onboarding-primary-frame">
               {/* The landing's white primary; still the screen's one primary, so it keeps the primary's press-in haptic. */}
               <Button label={ctaLabel} kind="strong" pressHaptic={H.primary} onPress={onContinue} disabled={ctaDisabled} refused={ctaRefused} loading={ctaBusy} testID="onboarding-primary" />
             </Pressable>

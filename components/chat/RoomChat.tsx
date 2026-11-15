@@ -1057,6 +1057,8 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={KEYBOARD_DISMISS}
+              // Android clips off-screen rows by default; the jump to the newest under Reduce Motion lands before they are re-attached, a blank frame (SCRUM-1040).
+              removeClippedSubviews={false}
               maxToRenderPerBatch={12}
               windowSize={10}
               initialNumToRender={25}

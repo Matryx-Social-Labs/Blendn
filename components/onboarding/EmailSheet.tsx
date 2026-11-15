@@ -163,7 +163,7 @@ export function EmailSheet({ title, children, dock, reveal, drivesLanding = fals
       {/* A link straight to the form has no landing under it: the sky it would have been on. */}
       {behind ? <Backdrop level={ORB_LEVEL.landing} /> : null}
       {/* A tap on the sky above the sheet puts the keyboard away; it is not a control, so it is not announced. */}
-      <Pressable testID={testID && `${testID}-sky`} accessible={false} onPress={Keyboard.dismiss} style={StyleSheet.absoluteFill} />
+      <Pressable testID={testID && `${testID}-sky`} accessible={false} importantForAccessibility="no" onPress={Keyboard.dismiss} style={StyleSheet.absoluteFill} />
       <Animated.View style={[styles.back, { top: barTop(insets.top) }, backStyle]}>
         <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={close} testID={testID && `${testID}-back`} />
       </Animated.View>

@@ -233,10 +233,17 @@ export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRo
 }
 
 /**
+ * A friend request that is no longer open (accepted, not now, withdrawn: the server's `open: false`, or `closeAnsweredElsewhere`)
+ * has nothing left to say: its only words are the push's "New friend request", the unanswered request's (SCRUM-1036). It
+ * leaves the feed, as one answered here does once its outcome has shown.
+ */
+const answeredFriendRequest = (item: NotificationItem) => item.kind === 'friend_request' && item.open === false
+
+/**
  * Waiting on you · New · Earlier. A request still open is Waiting on you
  * whatever its age on the screen; the rest is New if it was unseen when the
  * screen opened (or landed since) and Earlier otherwise. `resolved` rows (an
- * answered request, once its outcome has shown) are not in any of them.
+ * answered request, once its outcome has shown) and answered friend requests are not in any of them.
  */
 export function groupFeed(
   items: readonly NotificationItem[],
@@ -244,7 +251,7 @@ export function groupFeed(
 ): FeedGroups {
   const groups: FeedGroups = { waiting: [], fresh: [], earlier: [] }
   for (const item of items) {
-    if (resolved.has(item.id)) continue
+    if (resolved.has(item.id) || answeredFriendRequest(item)) continue
     const row = rowFor(item, now)
     if (row.waiting) groups.waiting.push(row)
     else if (fresh.has(item.id)) groups.fresh.push(row)
