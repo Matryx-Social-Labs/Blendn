@@ -1,3 +1,4 @@
+import { isHandle } from './friendOffer'
 import { markSeed } from './pseudonymAvatar'
 
 /**
@@ -51,15 +52,20 @@ export interface ProfileIdentity {
 /**
  * @param from The room this was opened from, when it was: the person's
  *   pseudonym there, and a per-room seed for the mark when the pseudonym is a
- *   placeholder. Opened from anywhere else there is no pseudonym to show, and
- *   the page says "Someone" rather than the server's flat "Attendee".
+ *   placeholder. `ref` is the id the page asked the server by. Asked by a room
+ *   handle, the server answers in that room's terms, so for somebody still
+ *   anonymous its `name` is their pseudonym there (SCRUM-1046: a cold link or
+ *   Room info passes none). Asked by a real id it is the flat "Attendee", or
+ *   whatever a buggy route sent, and is never shown: the page says "Someone".
  */
 export function profileIdentity(
   profile: Pick<ProfileFields, 'name' | 'age' | 'identityVisible'> | null,
-  from: { pseudonym?: string | null; roomSeed?: string | null } = {}
+  from: { pseudonym?: string | null; roomSeed?: string | null; ref?: string | null } = {}
 ): ProfileIdentity {
   const revealed = profile?.identityVisible === true
-  const pseudonym = from.pseudonym?.trim() || null
+  // A placeholder ("Attendee": a DM's handle, an erased member) is no name; `markSeed` knows them all.
+  const roomName = from.ref && isHandle(from.ref) ? markSeed(profile?.name, '') || null : null
+  const pseudonym = from.pseudonym?.trim() || (revealed ? null : roomName)
   const fallbackSeed = from.roomSeed || 'someone'
   const age = typeof profile?.age === 'number' && profile.age > 0 ? profile.age : null
   if (revealed) {

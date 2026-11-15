@@ -158,6 +158,32 @@ describe('the attendee profile fails closed', () => {
   it('names them once the server says so', () => {
     expect(profileIdentity({ ...leaked, identityVisible: true }).title).toBe('Ben, 29')
   })
+
+  /*
+   * SCRUM-1046: opened with no pseudonym in the link (a cold link, Room info), the page said "Someone" although the
+   * server, asked by a room handle, answers with that room's pseudonym. Only a handle's answer is a room's name for
+   * them; a real id's is the flat "Attendee" (or, from a buggy route, a real name) and is never shown.
+   */
+  it('titles them by the server’s room pseudonym when asked by a room handle with no pseudonym in the link', () => {
+    const who = profileIdentity({ name: 'Cosmic Panda', age: 29, identityVisible: false }, { ref: 'rh_abc', roomSeed: 'g1:rh_abc' })
+    expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
+  })
+
+  it('keeps the link’s pseudonym first: it is what the card that opened the page drew', () => {
+    expect(profileIdentity({ name: 'Other Name', identityVisible: false }, { ref: 'rh_abc', pseudonym: 'Cosmic Panda' }).title).toBe(
+      'Cosmic Panda'
+    )
+  })
+
+  it('never takes a name from a real-id request, and never says "Attendee"', () => {
+    // A real id: whatever the server sent is not a room's name for them (here, a leaked real name).
+    expect(profileIdentity({ ...leaked, identityVisible: false }, { ref: 'cmb0realid' }).title).toBe('Someone')
+    expect(profileIdentity({ ...leaked, identityVisible: false }).title).toBe('Someone')
+    // A handle the server could not name in its room (a DM's, an erased member): its placeholder is not a name.
+    const placeholder = profileIdentity({ name: 'Attendee', identityVisible: false }, { ref: 'rh_dm', roomSeed: 'g1:rh_dm' })
+    expect(placeholder.title).toBe('Someone')
+    expect(placeholder.seed).toBe('g1:rh_dm')
+  })
 })
 
 describe('userMessage: the server’s words only when they were written for a person', () => {

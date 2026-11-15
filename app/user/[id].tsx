@@ -152,10 +152,12 @@ function UserProfileInner() {
    * server now answers in that room's terms: somebody still anonymous to you
    * comes back as their pseudonym there, with no `connection` (admin #498).
    * The params still title the page, so the name and the creature match the
-   * card that opened it from the first paint, before the server answers, and
-   * nothing here trusts a `name` for somebody `identityVisible` withholds.
-   * Asked by a real id with no room, the server still says "Attendee", which
-   * this page never shows (`lib/profileIdentity.ts`).
+   * card that opened it from the first paint, before the server answers.
+   * Without them (a cold link, Room info) the handle's answer titles the page
+   * (SCRUM-1046); a `name` is trusted for somebody `identityVisible` withholds
+   * only when it was asked by a handle. Asked by a real id with no room, the
+   * server still says "Attendee", which this page never shows
+   * (`lib/profileIdentity.ts`).
    */
   const { id, eventId, pseudonym, roomSeed, conversationId: roomConversationId } = useLocalSearchParams<{
     id: string
@@ -249,7 +251,7 @@ function UserProfileInner() {
   const [incoming, setIncoming] = useState<{ id: string; note: string | null } | null>(null)
   const [answering, setAnswering] = useState<'accept' | 'decline' | null>(null)
   // Who this is, as far as the server lets this screen say (`lib/profileIdentity`).
-  const identity = profileIdentity(profile, { pseudonym, roomSeed })
+  const identity = profileIdentity(profile, { pseudonym, roomSeed, ref: id })
   // Whether to offer "Add friend" (SCRUM-750): the server's `friend` from `GET /profiles/:id`, for somebody you may see.
   const [friend, setFriend] = useState<FriendOffer | null>(null)
   const friendAsk = useFriendAsk(identity.title)

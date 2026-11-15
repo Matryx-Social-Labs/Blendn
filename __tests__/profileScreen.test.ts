@@ -33,6 +33,10 @@ describe('the screen never re-decides the identity gate', () => {
     expect(src).not.toContain('theyRevealed')
   })
 
+  it('tells the title which ref it asked by, so a room handle’s answer can name them (SCRUM-1046)', () => {
+    expect(SCREEN()).toContain('profileIdentity(profile, { pseudonym, roomSeed, ref: id })')
+  })
+
   it('reads the fallback’s photos from the nested profile, which is where /profiles/:id puts them (YOU-13)', () => {
     const src = SCREEN()
     expect(src).toContain('photos: p.photos ?? []')
