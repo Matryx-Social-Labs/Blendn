@@ -114,6 +114,16 @@ describe('the pill', () => {
     expect(animated('h-fill-label').transform).toEqual([{ translateX: 180 }])
   })
 
+  it('at rest the fill is wholly off the track at a fractional width: no gradient sliver at the left edge (Android 411.43 dp)', async () => {
+    jest.useFakeTimers()
+    await draw({ disabled: true })
+    await fireEvent(screen.getByTestId('h'), 'layout', { nativeEvent: { layout: { width: 363.43, height: 56 } } })
+    await act(async () => jest.advanceTimersByTime(16))
+    // The fill is the track's own width (absoluteFill), so it must move by all of it: rounded to 363, 0.43 dp stayed on screen.
+    expect(animated('h-fill').transform).toEqual([{ translateX: -363.43 }])
+    expect(animated('h-fill-label').transform).toEqual([{ translateX: 363.43 }])
+  })
+
   it('a long label shrinks to fit the pill rather than losing its tail', async () => {
     await draw({ disabled: true, label: 'Go live when you’re here · 350 m' })
     for (const l of screen.getAllByText('Go live when you’re here · 350 m', { includeHiddenElements: true })) {

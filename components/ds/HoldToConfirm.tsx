@@ -203,7 +203,7 @@ export function HoldToConfirm({
       <GestureDetector gesture={hold}>
         <View
           testID={testID}
-          onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}
+          onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
           accessible
           accessibilityRole="button"
           accessibilityLabel={text}
