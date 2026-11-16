@@ -18,6 +18,7 @@ import type { Face } from './Facepile'
 import { Sheet } from './Sheet'
 import { announceOutcome, CONTROL_FONT_CAP, focusRing, font, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
 import { StateScreen } from './StateScreen'
+import { Title } from './Title'
 
 /** ROUND3 D · 4.1: here now · was here · pre-event room · matched · friend · unavailable · thin. */
 export type PersonVariant = 'here' | 'was' | 'pre' | 'matched' | 'friend' | 'gone' | 'thin'
@@ -244,9 +245,9 @@ export function PersonCardContent({
         >
           <Avatar size={FACE} ring={COLOR.ink} testID={id('face')} blink {...person.face} />
           <View style={styles.headText}>
-            <Text testID={id('name')} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
+            <Title testID={id('name')} style={styles.ink}>
               {name}
-            </Text>
+            </Title>
             {meta ? (
               <Text testID={id('meta')} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.metaLine, { color: quiet }]}>
                 {meta}

@@ -10,6 +10,7 @@ import { Button } from './Button'
 import { CountTicks } from './CountTicks'
 import { CrewEmblem, type CrewScene } from './CrewEmblem'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, minTarget, PRESSED_WASH, useBoldText, useIncreaseContrast } from './shared'
+import { Title } from './Title'
 
 /** The emblem: 96 on a card, 56 compact (the page); 40 in a row. */
 const EMBLEM = { full: 96, compact: 56, row: 40 } as const
@@ -112,12 +113,9 @@ export function CrewCard({
             <CountTicks size={crew.size} here={here} />
           </View>
           <View style={styles.text}>
-            <Text
-              maxFontSizeMultiplier={MAX_FONT_SCALE[compact ? 'heading' : 'title']}
-              style={[font(compact ? 'heading' : 'title', bold), styles.ink, onMore ? styles.clearMore : null]}
-            >
+            <Title variant={compact ? 'heading' : 'title'} style={[styles.ink, onMore ? styles.clearMore : null]}>
               {crew.name}
-            </Text>
+            </Title>
             {/* The hashtags ride the count's line: one line, cut at the end (board crews/tags/01 · Crew card), so five never wrap the card. */}
             <Text numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
               {[`Crew of ${crew.size}`, here ? `${here} here now` : null, ...hashtags].filter(Boolean).join(' · ')}

@@ -16,6 +16,7 @@ import { IconButton } from '../../components/ds/IconButton'
 import { ScrimPill, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
+import { Title } from '../../components/ds/Title'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { CategoryPlate } from '../../components/ds/EventCard'
@@ -280,9 +281,9 @@ function ChatInfoInner() {
               ) : null}
             </View>
           ) : null}
-          <Text accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>
+          <Title accessibilityRole="header" numberOfLines={2} style={styles.ink}>
             {title}
-          </Text>
+          </Title>
           {count || (eventTitle && eventTitle !== title) ? (
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.ink]}>
               {count ? (

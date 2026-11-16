@@ -13,7 +13,8 @@ import { IconButton } from '../../components/ds/IconButton'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Sheet, type SheetAction } from '../../components/ds/Sheet'
 import { SessionSheet } from '../../components/ds/SessionSheet'
-import { announceOutcome, font, PAGE_TITLE, useBoldText } from '../../components/ds/shared'
+import { Title } from '../../components/ds/Title'
+import { announceOutcome, font, useBoldText } from '../../components/ds/shared'
 import { useToast } from '../../components/Toast'
 import { UpcomingSheet } from '../../components/venue/UpcomingSheet'
 import { VenueDock } from '../../components/venue/VenueDock'
@@ -495,9 +496,9 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         <VenueHero latitude={venue.latitude} longitude={venue.longitude} plate={plateFor(venue.venueType)} onDirections={directions} />
         {/* Flow 4 V-A: the name, then the type and area on their own line, then the hours in their own slot, only when known. */}
         <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={[venue.name, typeArea, hours?.text].filter(Boolean).join('. ')} testID="venue-head">
-          <Text testID="venue-name" numberOfLines={NAME_LINES} maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={styles.name}>
+          <Title variant="page" testID="venue-name" numberOfLines={NAME_LINES} style={styles.name}>
             {venue.name}
-          </Text>
+          </Title>
           {typeArea ? (
             <Text testID="venue-type-area" numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('control', bold, FONT_FAMILY.brand[400]), styles.secondary, styles.typeArea]}>
               {typeArea}
@@ -639,7 +640,6 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
   )
 }
 
-const TITLE_TYPE = PAGE_TITLE
 /** A seeded place's name can be a listing's whole SEO line: three lines, then the ellipsis (the header reads it whole). */
 const NAME_LINES = 3
 // design-exception: the board puts 28 above each section (`.sh4` margin-top), between SPACE.xl and SPACE.xxl.
@@ -650,7 +650,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   // `.col4` from 284: the name sits 16 up into the map's fade.
   head: { paddingHorizontal: SPACE.gutter, marginTop: -SPACE.lg },
-  name: { ...TITLE_TYPE, color: COLOR.textPrimary },
+  name: { color: COLOR.textPrimary },
   typeArea: { marginTop: SPACE.xs },
   hours: { marginTop: SPACE.xxs },
   open: { color: COLOR.live },

@@ -7,6 +7,7 @@ import { H } from '../../lib/haptics'
 import { PresenceDot } from './MonoFamily'
 import { Sheet, type SheetAction } from './Sheet'
 import { announceOutcome, font, useBoldText, useIncreaseContrast } from './shared'
+import { Title } from './Title'
 
 /** Where live time stands: minutes left (updated once a minute), the last 5 minutes in mm:ss, or Stay. */
 export type SessionTime =
@@ -150,7 +151,7 @@ export function SessionSheet({
               {time.kind === 'minutes' ? String(time.left) : time.clock}
             </Text>
           )}
-          {time?.kind === 'minutes' ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), { color: COLOR.textSecondary }]}>min</Text> : null}
+          {time?.kind === 'minutes' ? <Title style={{ color: COLOR.textSecondary }}>min</Title> : null}
         </View>
         {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: detail }]}>{sub}</Text> : null}
         {extended && extendedLine ? (

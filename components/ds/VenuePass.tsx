@@ -10,6 +10,7 @@ import { COLOR, FONT_FAMILY, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE
 import { tint } from '../../lib/theme'
 import { HoldToConfirm } from './HoldToConfirm'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { Title } from './Title'
 
 const THUMB = SIZE.primary
 /** The tease's "?" discs: three at 32, overlapping by 8, ringed in 80% ink. */
@@ -99,9 +100,9 @@ export function VenuePass({
         </View>
         <View style={styles.headText}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{where.toUpperCase()}</Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={1} style={[font('title', bold), styles.primary]}>
+          <Title numberOfLines={1} style={styles.primary}>
             {title}
-          </Text>
+          </Title>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
             {hereCount > 0 ? (
               <>

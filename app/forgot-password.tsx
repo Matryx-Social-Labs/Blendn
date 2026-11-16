@@ -16,6 +16,7 @@ import { BannerPresence } from '../components/motion/BannerPresence'
 import { Button } from '../components/ds/Button'
 import { GlyphWell } from '../components/ds/StateScreen'
 import { TextField } from '../components/ds/TextField'
+import { Title } from '../components/ds/Title'
 import { font, useBoldText } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
@@ -195,9 +196,9 @@ export default function ForgotPassword() {
           <GlyphWell icon="mail" size="screen" testID="forgot-sent-well" />
         </Animated.View>
         <View style={styles.headline}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
+          <Title style={[styles.title, styles.centre]} accessibilityRole="header">
             Check your inbox
-          </Text>
+          </Title>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.body, styles.centre]} testID="forgot-sent-body">
             If{address.length > LONG_ADDRESS ? '\n' : ' '}
             <Text style={[font('body', bold, FONT_FAMILY.brand[700]), styles.address]}>{address}</Text>
@@ -216,9 +217,9 @@ export default function ForgotPassword() {
       testID="forgot"
       reveal="email"
       title={
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.centre]} accessibilityRole="header">
+        <Title style={[styles.title, styles.centre]} accessibilityRole="header">
           Forgot your password?
-        </Text>
+        </Title>
       }
       dock={
         // The server's answer plays its own haptic within a second (H.success, or the refusal's H.error), so the press-in is silent.

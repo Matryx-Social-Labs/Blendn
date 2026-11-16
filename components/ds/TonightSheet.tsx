@@ -10,6 +10,7 @@ import { NightPassRow, PlanCard, PlanList } from './PlanCard'
 import { Sheet } from './Sheet'
 import { tint } from '../../lib/theme'
 import { font, useBoldText, useIncreaseContrast } from './shared'
+import { Title } from './Title'
 
 /** The header's level glyph (Flow 12 `tonight`): a 44 ring at 22%, a 20 disc in a 1.5 white edge, filled to 45%. */
 const GLYPH = SIZE.circleButton
@@ -133,7 +134,7 @@ export function TonightSheet({
     <Sheet visible={visible} onClose={onClose} focusRef={header}>
       <View style={styles.head}>
         <View ref={header} accessible accessibilityRole="header" accessibilityLabel={copy.title} style={styles.fill}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]}>{copy.title}</Text>
+          <Title style={styles.ink}>{copy.title}</Title>
         </View>
         <View style={styles.glyph} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <View style={styles.level}>

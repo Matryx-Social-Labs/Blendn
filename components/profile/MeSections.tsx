@@ -4,6 +4,7 @@ import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
 import { joinedDate } from '../../lib/meProfile'
 import { Button } from '../ds/Button'
 import { RollingNumber } from '../ds/RollingNumber'
+import { Title } from '../ds/Title'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { SkeletonBlock } from '../Skeleton'
@@ -94,9 +95,9 @@ function Stat({ value, label, onPress, hint = 'Opens Going' }: { value: number; 
   const body = (
     <>
       {value > STAT_MAX ? (
-        <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('title', bold, FONT_FAMILY.mono[700]), styles.ink]}>
+        <Title family={FONT_FAMILY.mono[700]} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={styles.ink}>
           {compactCount(value)}
-        </Text>
+        </Title>
       ) : (
         // Grouped (D-L2): "1,002" reads at a glance where "1002" ran to the card's edge.
         <RollingNumber value={value} role="title" grouping />

@@ -12,6 +12,7 @@ import { MomentReady } from '../../components/ds/MomentReady'
 import { MomentRecap, type MomentRecapProps } from '../../components/ds/MomentRecap'
 import type { MomentFace } from '../../components/ds/MomentStage'
 import { Orbs, type OrbSet, type OrbTime } from '../../components/ds/Orbs'
+import { Title } from '../../components/ds/Title'
 import { COLOR, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 
 /**
@@ -121,7 +122,7 @@ export default function DsP5Preview() {
             <Cell key={`${set}-${time}`} label={`${set} · ${time}`} testID={`ds-orbs-${set}-${time}`} style={styles.backdrop}>
               <Orbs set={set} time={time} />
               <Grain />
-              <Text style={styles.title}>Tonight</Text>
+              <Title style={styles.title}>Tonight</Title>
             </Cell>
           ))}
           <Cell label="the clock’s set, drifting" testID="ds-orbs-clock" style={styles.backdrop}>
@@ -238,7 +239,7 @@ const styles = StyleSheet.create({
   cells: { gap: SPACE.lg },
   cell: { gap: SPACE.sm, maxWidth: CELL_WIDTH },
   caption: { ...TYPE.label, color: COLOR.textTertiary },
-  title: { ...TYPE.title, color: COLOR.textPrimary, margin: SPACE.lg },
+  title: { color: COLOR.textPrimary, margin: SPACE.lg },
   stage: { borderRadius: RADIUS.rowInCard, borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline, overflow: 'hidden' },
   backdrop: { height: BACKDROP_HEIGHT, backgroundColor: COLOR.ink },
   tall: { height: RECAP_HEIGHT },

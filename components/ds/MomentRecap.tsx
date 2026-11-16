@@ -15,6 +15,7 @@ import { IconButton } from './IconButton'
 import { fade, type MomentFace } from './MomentStage'
 import { Orbs } from './Orbs'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { Title } from './Title'
 
 /** flow4.js `recap`: your face at 80 (the Avatar scale's nearest is 72). */
 const FACE = 72
@@ -120,9 +121,9 @@ export function MomentRecap({ face, title, venue, minutes, matches, rated, onRat
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), { color: contrast ? COLOR.textPrimary : COLOR.textTertiary }]}>
                   {t.label.toUpperCase()}
                 </Text>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.numericDisplay} style={[font('title', bold, FONT_FAMILY.mono[700]), styles.number]}>
+                <Title family={FONT_FAMILY.mono[700]} maxFontSizeMultiplier={MAX_FONT_SCALE.numericDisplay} style={styles.number}>
                   {t.value}
-                </Text>
+                </Title>
               </View>
             </Block>
           ))}

@@ -4,7 +4,7 @@ import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { H } from '../../lib/haptics'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { AccessibilityInfo, Linking, Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { AccessibilityInfo, Linking, Platform, StyleSheet, View, useWindowDimensions } from 'react-native'
 import Animated, { FadeIn, LayoutAnimationConfig, LinearTransition, ReduceMotion, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { OverflowMenu } from '../crews/OverflowMenu'
@@ -54,10 +54,11 @@ import {
   EventCheckInCallback,
   EventInterestCallback
 } from '../../lib/socketClient'
-import { COLOR, DURATION, MAX_FONT_SCALE, RADIUS, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
+import { COLOR, DURATION, RADIUS, SPACE, SPRING, STAGGER } from '../../lib/design/tokens'
 import { PosterLight, SceneHero, posterSide } from '../scene/SceneHero'
 import { EventGuide } from '../scene/EventGuide'
 import { DockRow } from '../ds/DockRow'
+import { Title } from '../ds/Title'
 import { PAGE_TITLE } from '../ds/shared'
 import { dateStamp, eventDock, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
 import { SceneLightbox } from '../scene/SceneLightbox'
@@ -1041,9 +1042,9 @@ export default function EventDetail() {
             </View>
           ) : (
             <>
-              <Text testID="scene-title" accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} style={styles.title}>
+              <Title variant="page" testID="scene-title" accessibilityRole="header" style={styles.title}>
                 {event?.title || ''}
-              </Text>
+              </Title>
 
               {/* The state's own slot under the title (never glued to a value): offline, called off, waitlisted, the room's hour, what moved. */}
               <View style={styles.state}>
@@ -1196,14 +1197,13 @@ export default function EventDetail() {
   )
 }
 
-const TITLE_TYPE = PAGE_TITLE
-const TITLE_LINE = TITLE_TYPE.lineHeight
+const TITLE_LINE = PAGE_TITLE.lineHeight
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLOR.ink },
   posterSlot: { alignItems: 'center' },
   content: { paddingHorizontal: SCENE_PADDING_HORIZONTAL, paddingTop: SPACE.xl },
-  title: { ...TITLE_TYPE, color: COLOR.textPrimary },
+  title: { color: COLOR.textPrimary },
   // The state slot: empty takes no room; each banner 16 below the title.
   state: { gap: SPACE.lg, paddingTop: SPACE.lg },
   sections: { marginTop: SPACE.xxl, gap: SCENE_SECTION_GAP },

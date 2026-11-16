@@ -13,6 +13,7 @@ import { BannerPresence } from '../components/motion/BannerPresence'
 import { Button } from '../components/ds/Button'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { TextField } from '../components/ds/TextField'
+import { Title } from '../components/ds/Title'
 import { font, useBoldText, useAnnounced } from '../components/ds/shared'
 import { COLOR, DURATION, FONT_FAMILY, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { useReducedMotion } from '../lib/motion'
@@ -281,9 +282,9 @@ export default function SignIn() {
       drivesLanding
       reveal={focusedField}
       title={
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.title]}>
+        <Title accessibilityRole="header" style={styles.title}>
           {isSignup ? 'Create your account' : 'Sign in with email'}
-        </Text>
+        </Title>
       }
       dock={dock}
     >

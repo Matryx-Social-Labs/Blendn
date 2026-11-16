@@ -5,6 +5,7 @@ import { tagText, type Crew } from '../../lib/crews'
 import { intentLine } from '../../lib/crewsScreens'
 import { Chip } from '../ds/Chip'
 import { CrewEmblem } from '../ds/CrewEmblem'
+import { Title } from '../ds/Title'
 import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
 
 const EMBLEM = 120
@@ -26,9 +27,9 @@ export function CrewHead({ crew }: { crew: Pick<Crew, 'name' | 'bio' | 'tags' | 
       {/* The crew page's entry: the crew dances once (SCRUM-1053). */}
       <CrewEmblem seed={crew.emblemSeed} size={EMBLEM} scene="dance" />
       {/* At its roles' caps (YOU-06, D-L15): at AX XXXL an uncapped name and bio pushed the members off the screen. */}
-      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, styles.centre]}>
+      <Title accessibilityRole="header" style={[styles.ink, styles.centre]}>
         {crew.name}
-      </Text>
+      </Title>
       {crew.bio ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('body', bold), styles.centre, { color: secondary }]}>
           {crew.bio}

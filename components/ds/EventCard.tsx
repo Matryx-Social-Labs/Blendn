@@ -18,6 +18,7 @@ import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 import { compactCount } from '../../lib/format'
 import { DateStamp } from './DateStamp'
+import { Title } from './Title'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
 
@@ -369,9 +370,9 @@ export function EventCard(props: EventCardProps) {
               {overline.toUpperCase()}
             </Text>
           ) : null}
-          <Text numberOfLines={2} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font(hero ? 'title' : 'bodyStrong', bold), styles.ink]}>
+          <Title variant={hero ? 'title' : 'bodyStrong'} numberOfLines={2} maxFontSizeMultiplier={FOOT_FONT_CAP} style={styles.ink}>
             {title}
-          </Text>
+          </Title>
           {/* "at <venue>" gives way to a long name; " · 2.2 km" is its own slot and stays whole. */}
           <View style={styles.footWhere}>
             <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={FOOT_FONT_CAP} style={[font('meta', bold), styles.ink, styles.shrink]}>
