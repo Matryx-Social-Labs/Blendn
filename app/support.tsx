@@ -103,7 +103,7 @@ export default function SupportScreen() {
 
         <Text style={[font('meta', bold), styles.foot]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>Nothing is sent until you press Send in your mail app.</Text>
       </ScrollView>
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar title="Contact support" state={bar.state} onBack={() => router.back()} testID="support-top" />
       </View>
     </View>

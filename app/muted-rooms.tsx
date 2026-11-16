@@ -117,7 +117,7 @@ function MutedRoomsContent() {
         refreshControl={<RefreshControl refreshing={muted.loading && muted.rooms.length > 0} onRefresh={muted.refresh} tintColor={COLOR.textSecondary} progressViewOffset={bar.indicatorTop} />}
         {...bar.scrollProps}
       />
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar title="Muted rooms" state={bar.state} onBack={() => router.back()} testID="muted-rooms-top" />
       </View>
     </View>

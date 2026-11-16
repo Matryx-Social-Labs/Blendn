@@ -178,7 +178,7 @@ function ManageContent() {
           </Animated.View>
         ) : null}
       </ScrollView>
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar title="Blend’n+" state={bar.state} onBack={() => router.back()} testID="plus-manage-top" />
       </View>
     </View>

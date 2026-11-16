@@ -152,7 +152,7 @@ function NotificationSettingsContent() {
         </SettingsGroup>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{(ANDROID ? ANDROID_FOOT : '') + PREFS_FOOT}</Text>
       </ScrollView>
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar title="Notifications" state={bar.state} onBack={() => router.back()} testID="notification-settings-top" />
       </View>
     </View>

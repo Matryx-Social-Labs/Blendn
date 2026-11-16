@@ -4,6 +4,7 @@
  * (owner 2026-11-15) those are answered in Notifications and on Crews.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('expo-router', () => {
@@ -71,6 +72,23 @@ it('draws the requests the first page brought, windowed, and says the true total
   const drawn = screen.getAllByLabelText(/^Accept the request from/).length
   expect(drawn).toBeGreaterThan(0)
   expect(drawn).toBeLessThan(20)
+})
+
+// SCRUM-1059 A: at the largest text "Message requests" and "12,480 waiting" grow the bar past its fixed height; the list
+// starts 8 under the bar as it is drawn, and its indicator below it.
+it('starts the list 8 under the bar as tall as it draws; a bar no taller than the fixed one changes nothing (control)', async () => {
+  api.getMessageRequests.mockResolvedValue({ success: true, data: { requests: rs(0, 2), totalCount: 12480 } } as never)
+  const view = await render(<MessageRequests />)
+  await flush()
+  const list = () => view.getByTestId('requests-list').props
+  const top = () => StyleSheet.flatten(list().contentContainerStyle).paddingTop as number
+  const fixed = top()
+  const layout = (height: number) => fireEvent(view.getByTestId('requests-top'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height } } })
+  await layout(40)
+  expect(top()).toBe(fixed)
+  await layout(160)
+  expect(top()).toBe(160 + 8)
+  expect(list().scrollIndicatorInsets.top).toBe(160)
 })
 
 it('asks for the next page by offset as the end comes near, appended once, and stops at the total', async () => {

@@ -476,7 +476,7 @@ function EventPreferencesContent() {
         under the ✕ or, on Android, the status bar. Last of the page's pieces in the tree but first to be read: the page is
         modal, and Close is the first thing a screen reader should land on.
       */}
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar close state={bar.state} onBack={leave} testID="prefs-top" />
       </View>
       {/* Docked, not at the end of the scroll: with four intents it fell below the fold. The first-door answer cannot be nothing: an empty save would write an empty default. */}

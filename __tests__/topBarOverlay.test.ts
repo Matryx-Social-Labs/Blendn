@@ -28,3 +28,24 @@ it('the circles end a circle below the rowâ€™s top (the Me column and the heroâ€
   expect(barCircleBottom(59, false)).toBe(105)
   expect(barCircleBottom(59, false) + 18).toBe(123)
 })
+
+// SCRUM-1059 A: the hook measures the bar, so every screen that pins one must hand it the bar's layout. A screen that
+// forgets keeps the fixed top, and its content runs under a bar grown by the largest text.
+describe('every pinned TopBar is measured by useTopBarOverlay', () => {
+  const fs = require('fs') as typeof import('fs')
+  const nodePath = require('path') as typeof import('path')
+  const root = nodePath.join(__dirname, '..')
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(nodePath.join(dir, d.name)) : /\.tsx?$/.test(d.name) ? [nodePath.join(dir, d.name)] : []))
+  const callers = [...walk(nodePath.join(root, 'app')), ...walk(nodePath.join(root, 'components'))].filter((f) => fs.readFileSync(f, 'utf8').includes('useTopBarOverlay()'))
+
+  it('finds the 13 screens', () => {
+    expect(callers.length).toBe(13)
+  })
+
+  it.each(callers.map((f) => [nodePath.relative(root, f), f]))('%s hands the bar its layout and keeps no local copy', (_, f) => {
+    const src = fs.readFileSync(f, 'utf8')
+    expect(src).toContain('onLayout={bar.onBarLayout}')
+    expect(src).not.toMatch(/barDrawn/)
+  })
+})

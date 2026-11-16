@@ -83,7 +83,7 @@ function RequestsScreen() {
         scrollIndicatorInsets={{ top: bar.indicatorTop }}
         {...bar.scrollProps}
       />
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar title="Message requests" sub={total ? `${total} waiting` : undefined} state={bar.state} onBack={() => router.back()} testID="requests-top" />
       </View>
     </View>
