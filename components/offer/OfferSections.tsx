@@ -9,7 +9,8 @@ import { IconButton } from '../ds/IconButton'
 import { LiquidDisc } from '../ds/LiquidDisc'
 import { MonoRun } from '../ds/MonoFamily'
 import { VenuePlate } from '../ds/VenuePlate'
-import { font, IC_HAIRLINE, useAnnounced, useBoldText, useIncreaseContrast, useMinMeasure } from '../ds/shared'
+import { Title } from '../ds/Title'
+import { font, IC_HAIRLINE, useAnnounced, useBoldText, useIncreaseContrast, useLargeText, useMinMeasure } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { knownLine, REGULAR_COPY, type PassView, type RegularPrefs } from '../../lib/offers'
@@ -103,11 +104,13 @@ export function DoorTicket({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  // At the accessibility sizes the tile stacks over the venue, so the venue has the ticket's full line (SCRUM-1041 D).
+  const largeText = useLargeText()
   const plate = plateOf(venueType)
   return (
     <View testID="door-ticket" style={[styles.ticket, contrast ? IC_HAIRLINE : styles.edge]}>
       <View accessible accessibilityLabel={[`Offer from ${venueName}.`, `${offerText}.`, until && `${until}.`].filter(Boolean).join(' ')} style={styles.top}>
-        <View style={styles.headRow}>
+        <View testID="door-head" style={[styles.headRow, largeText && styles.headStacked]}>
           <View testID="door-tile" style={styles.tile}>
             {plate ? (
               <VenuePlate type={plate} size={TILE} radius={RADIUS.thumb} testID="door-plate" />
@@ -115,11 +118,11 @@ export function DoorTicket({
               <Icon name="gift" size={ICON.nav} color={COLOR.textSecondary} />
             )}
           </View>
-          <View style={styles.fill}>
+          <View style={largeText ? styles.headFull : styles.fill}>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary, styles.headLabel]}>OFFER</Text>
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.ink, styles.venue]}>
+            <Title accessibilityRole="header" style={[styles.ink, styles.venue]}>
               {venueName}
-            </Text>
+            </Title>
           </View>
         </View>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink, styles.offerText]}>{offerText}</Text>
@@ -243,6 +246,9 @@ const styles = StyleSheet.create({
   /** The board's .pass: 20 round the head; then .ob 14 under it, .ov 2 under that. */
   top: { paddingHorizontal: SPACE.xl - SPACE.xs, paddingTop: SPACE.xl - SPACE.xs },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  /** The long-titles board's D (`.thead.stack`): the tile over the venue, both from the left edge, the same 12 apart. */
+  headStacked: { flexDirection: 'column', alignItems: 'flex-start' },
+  headFull: { alignSelf: 'stretch' },
   tile: { width: TILE, height: TILE, borderRadius: RADIUS.thumb, backgroundColor: COLOR.surfaceSunken, alignItems: 'center', justifyContent: 'center' },
   headLabel: { lineHeight: HEAD_LABEL_LINE },
   venue: { marginTop: SPACE.xxs },

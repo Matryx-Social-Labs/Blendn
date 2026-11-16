@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Chip } from '../ds/Chip'
+import { Title } from '../ds/Title'
 import { font, useBoldText, useSelection } from '../ds/shared'
 import { OptimizedImage } from '../OptimizedImage'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
@@ -35,9 +36,9 @@ export function PayoffCard({ first, age, photo, interest }: { first?: string; ag
         </View>
         <View style={styles.body}>
           {name ? (
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={2} style={[font('title', bold), styles.name]}>
+            <Title numberOfLines={2} style={styles.name}>
               {name}
-            </Text>
+            </Title>
           ) : null}
           {interest ? <Chip label={interest} selected /> : null}
         </View>

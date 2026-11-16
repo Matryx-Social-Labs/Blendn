@@ -7,6 +7,7 @@ import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import { isWavesPage, wavedAgoLine, wavedAtYouLine } from '../../lib/receivedWaves'
 import { Avatar } from '../ds/Avatar'
+import { Title } from '../ds/Title'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { PagedFooter } from '../friends/PagedFooter'
 import { WaveBackPill } from './WaveBackPill'
@@ -104,9 +105,9 @@ export function WavedAtYouList({
   return (
     <View style={styles.wrap}>
       <View style={styles.head} accessible accessibilityRole="header" accessibilityLabel={`Waved at you, ${list.total}`}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('title', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+        <Title family={FONT_FAMILY.brand[700]} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={styles.ink}>
           Waved at you
-        </Text>
+        </Title>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.mono[500]), { color: secondary }]}>
           {list.total}
         </Text>

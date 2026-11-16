@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
+import { Title } from '../ds/Title'
 import { font, useBoldText, useSelection } from '../ds/shared'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
@@ -41,9 +42,9 @@ export function ProfileLensHero({ photo, seed, name, meta, testID }: ProfileLens
         {/* Outside the face, as the board's box-shadow is: it takes no room, so the face stays 120. */}
         <View pointerEvents="none" style={[styles.rim, { borderColor: tint(sel.edge, RIM) }]} />
       </View>
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), NAME, styles.name]}>
+      <Title style={[NAME, styles.name]}>
         {name}
-      </Text>
+      </Title>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('control', bold, FONT_FAMILY.brand[400]), META, styles.meta]}>
         {meta}
       </Text>

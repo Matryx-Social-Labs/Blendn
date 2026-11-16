@@ -10,6 +10,7 @@ import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
 import { monoCaption } from './MonoFamily'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { Title } from './Title'
 
 /** One component, two well sizes (the R3 ruling): 56 inline (a list, a card), 80 for a whole screen. */
 const WELL = { inline: 56, screen: 80 } as const
@@ -136,15 +137,9 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
       )}
       {/* Inline, the state sits in a list or under a section heading, so its title is a step below both (r7 M5: 24 pt bold read louder than the page). */}
       {/* Every line stops at its role's cap, so at AX XXXL the actions under it stay on the screen (A21, A25). */}
-      <Text
-        accessibilityRole="header"
-        textBreakStrategy="balanced"
-        lineBreakStrategyIOS="standard"
-        maxFontSizeMultiplier={MAX_FONT_SCALE[screen ? 'title' : 'bodyStrong']}
-        style={[font(screen ? 'title' : 'bodyStrong', bold), styles.title]}
-      >
+      <Title variant={screen ? 'title' : 'bodyStrong'} accessibilityRole="header" textBreakStrategy="balanced" lineBreakStrategyIOS="standard" style={styles.title}>
         {title}
-      </Text>
+      </Title>
       {body ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.center, { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
           <BodyWithLink body={body} link={bodyLink} />

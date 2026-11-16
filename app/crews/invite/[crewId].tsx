@@ -10,6 +10,7 @@ import { Button } from '../../../components/ds/Button'
 import { CrewEmblem } from '../../../components/ds/CrewEmblem'
 import { Grain } from '../../../components/ds/Grain'
 import { Orbs } from '../../../components/ds/Orbs'
+import { Title } from '../../../components/ds/Title'
 import { font, HueProvider, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from '../../../components/ds/shared'
 import { StateScreen } from '../../../components/ds/StateScreen'
 import { Toggle } from '../../../components/ds/Toggle'
@@ -199,9 +200,9 @@ function CrewInviteScreenContent() {
           {/* "Priya asked you in": the crew waves hello, once. */}
           <CrewEmblem seed={invite.emblemSeed} size={EMBLEM} scene="wave" />
           {/* Two lines at most: a 32-character name is never cut to one, nor left to run on. */}
-          <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header" style={[font('title', bold), styles.centre, styles.ink, styles.name]}>
+          <Title numberOfLines={2} accessibilityRole="header" style={[styles.centre, styles.ink, styles.name]}>
             {invite.name}
-          </Text>
+          </Title>
           <View style={styles.about}>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{inviteMeta(invite)}</Text>
             {invite.bio ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.centre, { color: secondary }]}>{`“${invite.bio}”`}</Text> : null}

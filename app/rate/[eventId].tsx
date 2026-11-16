@@ -14,6 +14,7 @@ import { useTopBarOverlay } from '../../lib/useTopBarState'
 import { useFocusWhen } from '../../lib/focusReturn'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TextArea } from '../../components/ds/TextField'
+import { Title } from '../../components/ds/Title'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { fadeInFast } from '../../components/motion/presence'
 import { OfflineBanner, useOffline } from '../../components/OfflineBanner'
@@ -487,15 +488,14 @@ function RatePeersContent() {
                 {offlineNote}
                 {/* The night itself in a row (Flow 4): its cover or plate, the title, its day and venue. Never no art. */}
                 <EventRow title={load.title || 'This night'} day={load.day} venue={load.venue} cover={load.cover} category={load.category} />
-                <Text
+                <Title
                   ref={header}
                   testID="rate-title"
                   accessibilityRole="header"
-                  maxFontSizeMultiplier={MAX_FONT_SCALE.title}
-                  style={[font('title', bold), NIGHT_TITLE, styles.ink, { marginTop: GAP.question }]}
+                  style={[NIGHT_TITLE, styles.ink, { marginTop: GAP.question }]}
                 >
                   How was the night?
-                </Text>
+                </Title>
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('lede', bold), styles.secondary, { marginTop: GAP.line }]}>
                   One tap. It helps whoever puts on the next one.
                 </Text>
@@ -534,9 +534,9 @@ function RatePeersContent() {
               >
                 {offlineNote}
                 <PersonRow ref={header as React.RefObject<View>} name={person.name} photo={person.photo ?? null} />
-                <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink, { marginTop: GAP.question }]}>
+                <Title accessibilityRole="header" style={[styles.ink, { marginTop: GAP.question }]}>
                   How was meeting them?
-                </Text>
+                </Title>
                 <View style={{ marginTop: GAP.scale }}>
                   <Scale value={rating} onChoose={chooseRating} low="Not for me" high="Would meet again" subject={`Meeting ${person.name}`} />
                 </View>

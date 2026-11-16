@@ -19,6 +19,7 @@ import { MonoRun, PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Button } from '../../components/ds/Button'
+import { Title } from '../../components/ds/Title'
 import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../../components/ds/shared'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
@@ -509,9 +510,9 @@ function GoingScreenInner() {
             </View>
             <View style={styles.heroBody}>
               {when ? <NextUpWhen when={when} live={live} /> : null}
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.ink]} numberOfLines={2}>
+              <Title style={styles.ink} numberOfLines={2}>
                 {row.title}
-              </Text>
+              </Title>
               {place ? (
                 <View style={styles.heroPlace}>
                   <Icon name="map-pin" size={ICON.inline} color={COLOR.textSecondary} />

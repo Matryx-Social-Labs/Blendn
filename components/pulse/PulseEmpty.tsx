@@ -5,6 +5,7 @@ import { drawableCityArt } from '../cityArt/drawable'
 import { Button } from '../ds/Button'
 import { monoCaption } from '../ds/MonoFamily'
 import { SectionHeader } from '../ds/SectionHeader'
+import { Title } from '../ds/Title'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import { StateScreen } from '../ds/StateScreen'
 import ScalePress from '../motion/ScalePress'
@@ -107,9 +108,9 @@ function NotHereYet({
   return (
     <View style={styles.notHere} testID="pulse-empty-notLive">
       <View style={styles.words}>
-        <Text style={[font('title', bold), styles.ink]} maxFontSizeMultiplier={MAX_FONT_SCALE.title} accessibilityRole="header">
+        <Title style={styles.ink} accessibilityRole="header">
           {copy.title}
-        </Text>
+        </Title>
         <Text style={[font('body', bold), styles.secondary]} maxFontSizeMultiplier={MAX_FONT_SCALE.body}>
           {copy.message}
         </Text>

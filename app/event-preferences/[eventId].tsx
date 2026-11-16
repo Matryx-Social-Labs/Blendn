@@ -14,6 +14,7 @@ import { LookingForCard } from '../../components/ds/LookingForCard'
 import { RadioCard } from '../../components/ds/RadioCard'
 import { SettingsRow } from '../../components/ds/SettingsRow'
 import { TextArea } from '../../components/ds/TextField'
+import { Title } from '../../components/ds/Title'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { bannerFadeIn, bannerOut } from '../../components/motion/presence'
 import { useToast } from '../../components/Toast'
@@ -98,12 +99,11 @@ const STACK_FROM_SCALE = 1.5
 
 /** A section's question and its line: the screen's title when it leads, a heading when it follows (Flow 4 `.t24` / `.t20`). */
 function Head({ lead, title, sub, bold, testID }: { lead: boolean; title: string; sub: string; bold: boolean; testID: string }) {
-  const role = lead ? 'title' : 'heading'
   return (
     <View style={styles.head}>
-      <Text testID={testID} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE[role]} style={[font(role, bold), styles.ink]}>
+      <Title variant={lead ? 'title' : 'heading'} testID={testID} accessibilityRole="header" style={styles.ink}>
         {title}
-      </Text>
+      </Title>
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.lede} style={[font('lede', bold), styles.secondary]}>
         {sub}
       </Text>

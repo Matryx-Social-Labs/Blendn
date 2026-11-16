@@ -28,6 +28,7 @@ import { notifySheetDismissed } from '../../lib/sheetDismissed'
 import { OPACITY, tint } from '../../lib/theme'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
 import { CONTROL_FONT_CAP, FADE_END_ONLY, font, GroundProvider, IC_HAIRLINE, minTarget, useBoldText, useIncreaseContrast, useLargeText } from './shared'
+import { Title } from './Title'
 
 export type Detent = 'short' | 'medium' | 'tall'
 
@@ -728,9 +729,9 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
   ) : title || headerAction || headerNote ? (
       <View style={styles.titleRow}>
         {title ? (
-          <Text ref={titleRef} accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={[font('title', bold), styles.title, styles.titleText]}>
+          <Title ref={titleRef} accessibilityRole="header" style={[styles.title, styles.titleText]}>
             {title}
-          </Text>
+          </Title>
         ) : (
           <View style={styles.titleText} />
         )}
