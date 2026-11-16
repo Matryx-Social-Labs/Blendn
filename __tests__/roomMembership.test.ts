@@ -129,7 +129,7 @@ describe('the screens', () => {
   const BANTER = read('app/(tabs)/chat.tsx')
 
   it('Room info offers mute, a room report and Check out — and no longer reports the event', () => {
-    expect(INFO).toContain(": 'Mute this room'")
+    expect(INFO).toContain("|| 'Mute this room'")
     expect(INFO).toContain('<MuteSheet')
     expect(SHEETS).toContain('apiClient.muteChatGroup(')
     expect(SHEETS).toContain('apiClient.unmuteChatGroup(')
