@@ -3,6 +3,7 @@
  * opened with. The rule is the server's; this screen draws what it is sent.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({ router: { back: jest.fn() }, useLocalSearchParams: () => ({ id: 'rh_v', name: 'Venkatalakshmi' }) }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -29,6 +30,24 @@ it('asks for this handle, says with whom and how many, and draws the rows with t
   expect(screen.getByText('With Venkatalakshmi · 2 events, newest first')).toBeTruthy()
   expect(screen.getByText('Night 0')).toBeTruthy()
   expect(screen.getAllByText('12 Oct · Champaca Bookstore').length).toBe(2)
+})
+
+// SCRUM-1059 A: the two-line sub ("With … · N events, newest first") at the largest text is the worst overlap; the list
+// starts 8 under the bar as it is drawn.
+it('starts the list 8 under the bar as tall as it draws; a short bar keeps the fixed top (control)', async () => {
+  // mockReset: a Once queued and not read by an earlier test would answer this render.
+  api.getSharedEvents.mockReset().mockResolvedValue(page(0, 2, 2, null) as never)
+  const view = await render(<SharedEventsScreen />)
+  await settle()
+  const list = () => view.getByTestId('shared-events-list').props
+  const top = () => StyleSheet.flatten(list().contentContainerStyle).paddingTop as number
+  const fixed = top()
+  const layout = (height: number) => fireEvent(view.getByTestId('shared-events-top'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height } } })
+  await layout(40)
+  expect(top()).toBe(fixed)
+  await layout(200)
+  expect(top()).toBe(200 + 8)
+  expect(list().scrollIndicatorInsets.top).toBe(200)
 })
 
 it('reads the next page by its cursor at the end of the list, and only while there is one', async () => {

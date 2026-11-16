@@ -390,7 +390,7 @@ function RatePeersContent() {
   // First in the tree, so a screen reader starts at Close. The DS bar, pinned over the form: the form scrolls under it and the
   // glass comes in behind (#30). "n of m" is Geist Mono at the right.
   const topBar = (
-    <View style={[bar.barPin, styles.pin]}>
+    <View style={[bar.barPin, styles.pin]} onLayout={bar.onBarLayout}>
       <TopBar
         close
         onBack={close}

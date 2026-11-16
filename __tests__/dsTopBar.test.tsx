@@ -218,3 +218,24 @@ describe('subLines (Lobby, L-A: the event under "Lobby" is one line, ellipsized)
     expect(screen.getByText(long).props.numberOfLines).toBe(2)
   })
 })
+
+// SCRUM-1059 A: at the large sizes a title and a two-line sub make a block far taller than the circle; centred, the back
+// circle floats mid-block. It sits level with the title instead: the row is top-aligned and the title line is centred on
+// the circle. Default text keeps today's centred row.
+describe('the back circle level with the title at the large sizes (SCRUM-1059 A)', () => {
+  it.each([['ios', 44], ['android', 48]] as const)('%s: top-aligned, the title line centred on the %i pt circle; default stays centred (control)', async (os, circle) => {
+    on(os)
+    try {
+      await atScale(1) // the jest Dimensions mock defaults to fontScale 2
+      await draw({ title: 'Message requests', sub: '12,480 waiting' })
+      expect(flat('top-row').alignItems).toBe('center')
+      expect(flat('top-titles').paddingTop ?? 0).toBe(0)
+      await atScale(AX_XXXL)
+      expect(flat('top-row').alignItems).toBe('flex-start')
+      // The title is capped at 1.3×: a 33.8 pt line on the 26 pt heading.
+      expect(flat('top-titles').paddingTop).toBeCloseTo((circle - TYPE.heading.lineHeight * 1.3) / 2, 5)
+    } finally {
+      on('ios')
+    }
+  })
+})

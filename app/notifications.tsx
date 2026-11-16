@@ -304,7 +304,7 @@ function NotificationsScreenContent() {
         </View>
       )}
       {pill ? <NewPill top={bar.indicatorTop + SPACE.md} onPress={toTop} testID="notifications-new-pill" /> : null}
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar
           title="Notifications"
           state={bar.state}

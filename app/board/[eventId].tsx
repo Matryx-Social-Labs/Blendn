@@ -177,12 +177,8 @@ export function BoardScreen() {
   const bar = useTopBarOverlay()
   /** Scrolled into the list (the bar has gone glass): only then can something arriving above make it jump. */
   const scrolledRef = useLatest(bar.state !== 'rest')
-  /*
-   * The bar as tall as it draws. `contentTop` is fixed, and at AX XXXL the title and the event under it grow past it,
-   * so the list would start under them; it starts under whichever is lower.
-   */
-  const [barDrawn, setBarDrawn] = useState(0)
-  const contentTop = Math.max(bar.contentTop, barDrawn + SPACE.sm)
+  /* The bar as tall as it draws (L-A): at AX XXXL the title and the event under it grow it, and the hook measures it. */
+  const { contentTop } = bar
 
   // An older server still closes the Lobby at doors, in its old sentence: the doors banner, and nothing under it.
   const [doorsShut, setDoorsShut] = useState(false)
@@ -772,7 +768,7 @@ export function BoardScreen() {
         </View>
       )}
       {held.size > 0 && load.kind === 'ready' && !card ? <NewPostsPill count={held.size} top={contentTop + SPACE.sm} onPress={showHeld} /> : null}
-      <View testID="lobby-bar" style={bar.barPin} pointerEvents="box-none" onLayout={(e) => setBarDrawn(e.nativeEvent.layout.height)}>
+      <View testID="lobby-bar" style={bar.barPin} pointerEvents="box-none" onLayout={bar.onBarLayout}>
         <TopBar
           title="Lobby"
           sub={event?.title}

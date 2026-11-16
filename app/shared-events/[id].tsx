@@ -81,7 +81,7 @@ function SharedEventsContent() {
         windowSize={7}
         {...bar.scrollProps}
       />
-      <View style={bar.barPin} pointerEvents="box-none">
+      <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar title="You’ve both been to" sub={sub || undefined} state={bar.state} onBack={() => router.back()} testID="shared-events-top" />
       </View>
     </View>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Platform, StyleSheet, Text, View } from 'react-native'
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { type IconName } from '../ui/Icon'
@@ -8,7 +8,7 @@ import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
 import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { Button } from './Button'
 import { IconButton } from './IconButton'
-import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 
 /** rest: no bar, straight on the body · scrolled: the bar glass behind · condensed: a 17 pt centred title. */
 export type TopBarState = 'rest' | 'scrolled' | 'condensed'
@@ -67,6 +67,12 @@ export function TopBar({ title, sub, subLines = 2, state = 'rest', onBack, close
   // The condensed title is centred, so it keeps clear of the wider side on both: the back circle, or the actions and Save.
   const [rightWidth, setRightWidth] = useState(0)
   const inset = SPACE.lg + Math.max(circle, rightWidth) + SPACE.md
+  // At the large sizes the title and its sub outgrow the circle: the circle sits level with the title line, not
+  // mid-block (SCRUM-1059 A). The title is capped, so its line is the heading's at most 1.3×.
+  const { fontScale } = useWindowDimensions()
+  const large = useLargeText()
+  const titleLine = TYPE.heading.lineHeight * Math.min(fontScale, CONTROL_FONT_CAP)
+  const levelWithTitle = large ? { paddingTop: Math.max(0, (circle - titleLine) / 2) } : null
 
   return (
     <View testID={testID} style={[styles.header, { paddingTop: top }, !condensed && styles.roomBelow]}>
@@ -76,9 +82,9 @@ export function TopBar({ title, sub, subLines = 2, state = 'rest', onBack, close
           {contrast ? <View testID={testID && `${testID}-bar-contrast`} style={styles.contrast} /> : null}
         </View>
       ) : null}
-      <View style={[styles.row, { minHeight: circle }]}>
+      <View testID={testID && `${testID}-row`} style={[styles.row, { minHeight: circle }, large && styles.rowTop]}>
         <IconButton icon={close ? 'x' : android ? 'arrow-left' : 'chevron-left'} accessibilityLabel={close ? 'Close' : 'Back'} onPress={onBack} testID={testID && `${testID}-back`} />
-        <View style={styles.titles}>
+        <View testID={testID && `${testID}-titles`} style={[styles.titles, levelWithTitle]}>
           {condensed || !title ? null : (
             <>
               <Text
@@ -145,6 +151,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: SPACE.lg },
   roomBelow: { paddingBottom: BAR_BOTTOM },
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
+  rowTop: { alignItems: 'flex-start' },
   titles: { flex: 1, minWidth: 0 },
   ink: { color: COLOR.textPrimary },
   sub: { color: COLOR.textSecondary },
