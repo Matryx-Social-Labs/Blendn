@@ -45,6 +45,19 @@ describe('<Icon>', () => {
     expect((ICON.stroke * ICON.inline) / ICON.nav).toBe(ICON.strokeAt16)
   })
 
+  // SCRUM-1057 A: an armed hold's glyph is stroked in the brand gradient, through the one gradient helper (BrandGradient).
+  it('gradient: the stroke is a brand gradient across the 24-unit box, its own id; without it, the colour (control)', async () => {
+    await render(<Icon name="heart" gradient="fill" />)
+    const json = JSON.stringify(screen.toJSON())
+    const ref = /"stroke":"url\(#(\w+)\)"/.exec(json)?.[1]
+    expect(ref).toBeTruthy()
+    expect(json).toContain(`"name":"${ref}"`)
+    expect(json).toContain('"x2":24')
+    expect((json.match(/"gradient":\[[^\]]*\]/)?.[0].split(',') ?? []).length).toBe(GRADIENT.fill.colors.length * 2)
+    await render(<Icon name="heart" color="#B3AEAD" />)
+    expect(svg().stroke).toBe('#B3AEAD')
+  })
+
   it('imports each glyph on its own, never the package root (Metro does not tree-shake)', () => {
     expect(source).not.toMatch(/^import (?!type).* from 'lucide-react-native'$/m)
   })

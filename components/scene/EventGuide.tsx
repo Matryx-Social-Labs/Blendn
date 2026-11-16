@@ -93,10 +93,10 @@ export function EventGuide({
 }: {
   when: { day: string; time: string | null; until: string | null; add?: GuideAction }
   where: { venue: string; area: string | null; distance: string | null; directions?: GuideAction } | null
-  who: { count: string | null; word: string; facts: readonly string[]; first: boolean; host: string | null } | null
+  who: { count: string | null; word: string; facts: readonly string[]; lead: string | null; host: string | null } | null
   testID?: string
 }) {
-  const whoWords = who ? (who.first ? 'Be one of the first' : [who.count ? `${who.count} ${who.word}` : null, ...who.facts].filter(Boolean).join(' · ')) : ''
+  const whoWords = who ? (who.lead ?? [who.count ? `${who.count} ${who.word}` : null, ...who.facts].filter(Boolean).join(' · ')) : ''
   const hostLine = who?.host ? `By ${who.host}` : null
   return (
     <View testID={testID}>
@@ -142,7 +142,7 @@ export function EventGuide({
           icon="users"
           firstLines={2}
           first={
-            who.count && !who.first ? (
+            who.count ? (
               <>
                 <Mono>{who.count}</Mono> {who.word}
                 {who.facts.map((f) => ` · ${f}`).join('')}

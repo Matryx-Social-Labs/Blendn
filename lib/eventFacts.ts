@@ -43,13 +43,42 @@ export const PRINTED_FROM = 5
 /**
  * The Who row: "12,480 going · 18+ · Guest list". Exact and grouped, because a page row is not a compact surface
  * (FLOW-WALK Flow 4, decided). The entry facts follow in their own segments: the age floor the organizer set, the door
- * ("Guest list"), and how full it is ("8 spots left"). Under five there is no number; with nothing at all, "Be one of
- * the first".
+ * ("Guest list"), and how full it is ("8 spots left"). Under five there is no number; with nothing at all, the `lead`
+ * says what is true from where you stand (SCRUM-1057 A):
+ * - checked in and the count is who is here: "You’re the first here" alone, "You’re one of the first here" with 1–3
+ *   others (the server's here count includes you, so 0 or 1 is you alone);
+ * - going and the count is who is going: "You’re one of the first going";
+ * - after the event: nothing, so the host line stands alone;
+ * - otherwise "Be one of the first".
  */
-export function whoLine({ count, word, minAge, door, spots }: { count: number; word: string; minAge: number | null | undefined; door?: string | null; spots?: string | null }) {
+export function whoLine({
+  count,
+  word,
+  minAge,
+  door,
+  spots,
+  viewer = null,
+  ended = false,
+}: {
+  count: number
+  word: string
+  minAge: number | null | undefined
+  door?: string | null
+  spots?: string | null
+  /** Whether you are in the count: checked in (`here`) or going (`going`). */
+  viewer?: 'here' | 'going' | null
+  ended?: boolean
+}) {
   const printed = count >= PRINTED_FROM ? count.toLocaleString('en-US') : null
   const facts = [minAge ? `${minAge}+` : null, door, spots].filter((f): f is string => !!f)
-  return { count: printed, word, facts, first: !printed && facts.length === 0 }
+  const lead = printed || facts.length || ended ? null : firstWords(count, word, viewer)
+  return { count: printed, word, facts, lead }
+}
+
+function firstWords(count: number, word: string, viewer: 'here' | 'going' | null): string {
+  if (viewer === 'here' && word === 'here now') return count <= 1 ? 'You’re the first here' : 'You’re one of the first here'
+  if (viewer === 'going' && word === 'going') return 'You’re one of the first going'
+  return 'Be one of the first'
 }
 
 export type DockDoes = 'rsvp' | 'invite' | 'openRoom' | 'room' | 'tonight' | 'rate'
