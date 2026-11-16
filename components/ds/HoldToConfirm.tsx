@@ -180,9 +180,12 @@ export function HoldToConfirm({
   }
 
   const text = confirmedLabel ?? (busy && busyLabel ? busyLabel : label)
-  const labelRow = (color: string) => (
+  // Armed (the gradient kind, in reach): a white label and a gradient glyph over a gradient rim, so armed and out of reach
+  // differ in colour, not only in opacity (SCRUM-1057 A). Out of reach keeps the grey, at 45%.
+  const armed = !lit && !disabled
+  const labelRow = (color: string, glyph?: 'gradient') => (
     <>
-      <Icon name={icon} size={ICON.control} color={lit ? sel.glyph : color} />
+      <Icon name={icon} size={ICON.control} color={lit ? sel.glyph : color} gradient={glyph && 'fill'} testID={testID && `${testID}-glyph`} />
       <Text
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -212,8 +215,14 @@ export function HoldToConfirm({
           }}
           style={[styles.track, lit && { backgroundColor: sel.fill }]}
         >
+          {armed ? (
+            <>
+              <GradientFill testID={testID && `${testID}-gradient-rim`} pointerEvents="none" style={StyleSheet.absoluteFill} />
+              <View testID={testID && `${testID}-gradient-rim-inset`} pointerEvents="none" style={styles.rimInset} />
+            </>
+          ) : null}
           <View style={styles.labelRow} pointerEvents="none">
-            {labelRow(lit ? COLOR.textPrimary : COLOR.textSecondary)}
+            {labelRow(lit || armed ? COLOR.textPrimary : COLOR.textSecondary, armed ? 'gradient' : undefined)}
           </View>
           <Animated.View testID={testID && `${testID}-fill`} pointerEvents="none" style={[styles.fill, fillStyle]}>
             {lit ? (
@@ -232,6 +241,9 @@ export function HoldToConfirm({
     </View>
   )
 }
+
+/** The armed hold's gradient rim: the board's 1.5 pt (fixes-1115/SCRUM-1057 hold A). */
+const GRADIENT_RIM = 1.5
 
 const styles = StyleSheet.create({
   disabled: { opacity: OPACITY.disabled },
@@ -255,4 +267,14 @@ const styles = StyleSheet.create({
   edge: { ...StyleSheet.absoluteFill, borderRadius: RADIUS.button },
   /** The lit kind's rim, as the lit button's: 1 pt in the hue's edge. */
   rim: { borderWidth: 1 },
+  /** The armed gradient kind's rim (SCRUM-1057 A): the gradient behind, the sunken track inset by the rim's width. */
+  rimInset: {
+    position: 'absolute',
+    top: GRADIENT_RIM,
+    left: GRADIENT_RIM,
+    right: GRADIENT_RIM,
+    bottom: GRADIENT_RIM,
+    borderRadius: RADIUS.button - GRADIENT_RIM,
+    backgroundColor: COLOR.surfaceSunken,
+  },
 })

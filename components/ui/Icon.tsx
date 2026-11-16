@@ -20,6 +20,8 @@
  */
 
 import type { LucideIcon } from 'lucide-react-native'
+import { useId } from 'react'
+import { Defs } from 'react-native-svg'
 import Accessibility from 'lucide-react-native/icons/accessibility'
 import Apple from 'lucide-react-native/icons/apple'
 import Archive from 'lucide-react-native/icons/archive'
@@ -186,7 +188,8 @@ import Trophy from 'lucide-react-native/icons/trophy'
 import AtSign from 'lucide-react-native/icons/at-sign'
 import Star from 'lucide-react-native/icons/star'
 import StarOff from 'lucide-react-native/icons/star-off'
-import { COLOR, ICON } from '../../lib/design/tokens'
+import { COLOR, GRADIENT, ICON } from '../../lib/design/tokens'
+import { BrandGradient } from '../ds/DiscMark'
 
 const ICONS = {
   accessibility: Accessibility,
@@ -373,14 +376,29 @@ export function Icon({
   size = ICON.nav,
   color = COLOR.textPrimary,
   active = false,
+  gradient,
+  testID,
 }: {
   name: IconName
   size?: number
   color?: string
   active?: boolean
+  /** The stroke in a brand gradient (`GRADIENT`), 135° across the glyph's box, instead of `color`: an armed hold's glyph (SCRUM-1057 A). */
+  gradient?: keyof typeof GRADIENT
+  testID?: string
 }) {
   const Glyph = ICONS[name]
-  return <Glyph size={size} color={color} strokeWidth={active ? ICON.strokeActive : ICON.stroke} />
+  // An SVG id is document-wide on the web and per Svg here; a stable unique one either way (no ':' in a url()).
+  const id = `icon${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+  const strokeWidth = active ? ICON.strokeActive : ICON.stroke
+  if (!gradient) return <Glyph size={size} color={color} strokeWidth={strokeWidth} testID={testID} />
+  return (
+    <Glyph size={size} color={`url(#${id})`} strokeWidth={strokeWidth} testID={testID}>
+      <Defs>
+        <BrandGradient id={id} gradient={gradient} x1={0} y1={0} x2={ICON.nav} y2={ICON.nav} gradientUnits="userSpaceOnUse" />
+      </Defs>
+    </Glyph>
+  )
 }
 
 /**

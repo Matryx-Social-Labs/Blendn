@@ -903,6 +903,8 @@ export default function EventDetail() {
   const waitlisted = rsvpStatus === 'waitlisted'
   const crowdWord = isEnded ? 'went' : isLive ? 'here now' : goingCount > 0 ? 'going' : 'interested'
   const crowdCount = cancelled ? 0 : isEnded ? checkInCount : isLive ? (hereNow ?? detailHere ?? checkInCount) : goingCount || interestCount
+  /** Whether you are in that count (SCRUM-1057 A): the Who row then speaks to you. A cancelled night counts nobody. */
+  const crowdViewer = cancelled ? null : isCheckedIn ? 'here' : rsvpStatus === 'going' ? 'going' : null
 
   const ctaState = ctaNow()
 
@@ -1065,7 +1067,7 @@ export default function EventDetail() {
                       ? { venue: event.venue_name, area: area || null, distance: shortDistance(away), directions: { label: 'Directions', icon: 'navigation', onPress: openInMaps, testID: 'scene-directions' } }
                       : null
                   }
-                  who={{ ...whoLine({ count: crowdCount, word: crowdWord, minAge, door, spots }), host: event?.organizer || null }}
+                  who={{ ...whoLine({ count: crowdCount, word: crowdWord, minAge, door, spots, viewer: crowdViewer, ended: isEnded }), host: event?.organizer || null }}
                 />
               </FadeInUp>
 

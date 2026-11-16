@@ -50,15 +50,41 @@ describe('shortDistance: the Where row’s "4.3 km"', () => {
 
 describe('whoLine: a count, not a list; the exact number, because a page row is not a compact surface', () => {
   it('prints five and up, grouped, with the word for the hour', () => {
-    expect(whoLine({ count: WORST.count, word: 'going', minAge: 18 })).toEqual({ count: '12,480', word: 'going', facts: ['18+'], first: false })
-    expect(whoLine({ count: 23, word: 'here now', minAge: null })).toEqual({ count: '23', word: 'here now', facts: [], first: false })
+    expect(whoLine({ count: WORST.count, word: 'going', minAge: 18 })).toEqual({ count: '12,480', word: 'going', facts: ['18+'], lead: null })
+    expect(whoLine({ count: 23, word: 'here now', minAge: null })).toEqual({ count: '23', word: 'here now', facts: [], lead: null })
   })
   it('the entry facts follow, each its own segment: the age, the door, how full', () => {
     expect(whoLine({ count: 42, word: 'going', minAge: 21, door: 'Guest list', spots: '8 spots left' }).facts).toEqual(['21+', 'Guest list', '8 spots left'])
   })
   it('under five there is no number: the age alone, or "Be one of the first"', () => {
-    expect(whoLine({ count: 4, word: 'going', minAge: 21 })).toEqual({ count: null, word: 'going', facts: ['21+'], first: false })
-    expect(whoLine({ count: 0, word: 'going', minAge: null })).toEqual({ count: null, word: 'going', facts: [], first: true })
+    expect(whoLine({ count: 4, word: 'going', minAge: 21 })).toEqual({ count: null, word: 'going', facts: ['21+'], lead: null })
+    expect(whoLine({ count: 0, word: 'going', minAge: null })).toEqual({ count: null, word: 'going', facts: [], lead: 'Be one of the first' })
+  })
+})
+
+// SCRUM-1057 copy A: under five, with no entry facts, the line says what is true from where you stand. It speaks to you
+// only when the count is about you (checked in and the count is who is here, going and it is who is going); after the
+// event it says nothing and the host line stands alone. No number is printed under five in any of them.
+describe('whoLine under five, by your state (SCRUM-1057 A)', () => {
+  const lead = (count: number, word: string, viewer?: 'here' | 'going' | null, ended?: boolean) => whoLine({ count, word, minAge: null, viewer, ended }).lead
+  it.each([
+    ['checked in, alone (the live count is you)', 1, 'here now', 'here', 'You’re the first here'],
+    ['checked in, a count not yet caught up with you', 0, 'here now', 'here', 'You’re the first here'],
+    ['checked in with 1–3 others', 2, 'here now', 'here', 'You’re one of the first here'],
+    ['checked in with 3 others', 4, 'here now', 'here', 'You’re one of the first here'],
+    ['going, under five going', 3, 'going', 'going', 'You’re one of the first going'],
+    ['not going (control)', 2, 'going', null, 'Be one of the first'],
+    ['going, but the live count is who is here, and you are not (control)', 2, 'here now', 'going', 'Be one of the first'],
+  ] as const)('%s', (_, count, word, viewer, words) => {
+    expect(lead(count, word, viewer)).toBe(words)
+  })
+  it('ended: no Who words at all, whoever you were (the host line alone)', () => {
+    expect(lead(2, 'went', 'here', true)).toBeNull()
+    expect(lead(0, 'went', null, true)).toBeNull()
+    expect(whoLine({ count: 2, word: 'went', minAge: null, ended: true })).toEqual({ count: null, word: 'went', facts: [], lead: null })
+  })
+  it('five and up, the count as today, whoever you are (control)', () => {
+    expect(whoLine({ count: 12480, word: 'going', minAge: null, viewer: 'going' })).toEqual({ count: '12,480', word: 'going', facts: [], lead: null })
   })
 })
 

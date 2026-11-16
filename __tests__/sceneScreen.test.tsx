@@ -72,7 +72,7 @@ import { showEventReportOptions } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { markOffline, markOnline } from '../lib/networkStatus'
 import { clockTime, refreshPhoneZone } from '../lib/time'
-import { MAX_FONT_SCALE } from '../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -608,6 +608,40 @@ describe('no people count under five is printed (the Pulse\'s rule)', () => {
     api.getEvent.mockResolvedValue(detail({ minAge: null, stats: { rsvpCount: 0, favoriteCount: 0, checkInCount: 0 } }) as never)
     await open()
     expect((await screen.findByTestId('scene-guide-who')).props.accessibilityLabel).toBe('Be one of the first. By Toit')
+  })
+
+  // SCRUM-1057 copy A on the page itself: the screen hands whoLine your state and the phase.
+  const who = async () => (await screen.findByTestId('scene-guide-who')).props.accessibilityLabel as string
+  const liveNoFacts = (here: number, status: Record<string, unknown>) =>
+    detail({ minAge: null, startTime: hours(-1), endTime: hours(3), stats: { rsvpCount: 1, favoriteCount: 0, checkInCount: 1, hereCount: here } }, status)
+  it('checked in alone: "You’re the first here"', async () => {
+    api.getEvent.mockResolvedValue(liveNoFacts(1, { isCheckedIn: true, rsvpStatus: 'going' }) as never)
+    await open()
+    expect(await who()).toBe('You’re the first here. By Toit')
+  })
+  it('checked in with 1–3 others: "You’re one of the first here"', async () => {
+    api.getEvent.mockResolvedValue(liveNoFacts(3, { isCheckedIn: true, rsvpStatus: 'going' }) as never)
+    await open()
+    expect(await who()).toBe('You’re one of the first here. By Toit')
+  })
+  it('going, under five going: "You’re one of the first going"', async () => {
+    api.getEvent.mockResolvedValue(detail({ minAge: null, stats: { rsvpCount: 2, favoriteCount: 0, checkInCount: 0 } }, { rsvpStatus: 'going' }) as never)
+    await open()
+    expect(await who()).toBe('You’re one of the first going. By Toit')
+  })
+  it('ended, under five went: the host line alone', async () => {
+    api.getEvent.mockResolvedValue(detail({ minAge: null, startTime: hours(-6), endTime: hours(-3), stats: { rsvpCount: 2, favoriteCount: 0, checkInCount: 2 } }, { checkInStatus: 'checked_out' }) as never)
+    await open()
+    expect(await who()).toBe('By Toit')
+    // The host is the row's one line (the board's host-only row), in the first line's ink, not an empty line above it.
+    const row = screen.getByTestId('scene-guide-who')
+    expect(within(row).getAllByText(/./)).toHaveLength(1)
+    expect(StyleSheet.flatten(within(row).getByText('By Toit').props.style).color).toBe(COLOR.textPrimary)
+  })
+  it('live, not checked in, under five here: "Be one of the first" (control)', async () => {
+    api.getEvent.mockResolvedValue(liveNoFacts(2, {}) as never)
+    await open()
+    expect(await who()).toBe('Be one of the first. By Toit')
   })
 })
 

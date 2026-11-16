@@ -68,15 +68,41 @@ const hold = (phase: Phase) =>
   })
 
 describe('the pill', () => {
-  it('is a 56 pt surfaceSunken track at radius 28; the label sits twice, textSecondary under, white on the fill', async () => {
+  // SCRUM-1057 hold A: armed read as off (a grey label on the sunken track, the disabled pill only fainter). Armed: a
+  // white label, the glyph in the brand gradient and a 1.5 pt gradient rim. Out of reach: today's grey at 45%, no rim.
+  /** The glyph's stroke under the fill (the first of the two glyphs). */
+  const glyph = () => screen.getAllByTestId('h-glyph', { includeHiddenElements: true })[0].props.stroke as string
+  it('armed: a white label, a gradient glyph and a 1.5 pt gradient rim around a sunken inset', async () => {
+    await draw()
+    const under = screen.getAllByText('Hold to blend in', { includeHiddenElements: true })[0]
+    expect(StyleSheet.flatten(under.props.style).color).toBe(COLOR.textPrimary)
+    expect(glyph()).toMatch(/^url\(#/)
+    // The rim's gradient and the pour's (the mock names every LinearGradient 'gradient').
+    expect(screen.getAllByTestId('gradient', { includeHiddenElements: true })).toHaveLength(2)
+    expect(flat('h-gradient-rim-inset')).toMatchObject({ top: 1.5, left: 1.5, right: 1.5, bottom: 1.5, borderRadius: RADIUS.button - 1.5, backgroundColor: COLOR.surfaceSunken })
+  })
+  it('out of reach: the grey label and glyph, no rim, at 45% (control: armed and off differ in colour, not only opacity)', async () => {
+    await draw({ disabled: true })
+    const under = screen.getAllByText('Hold to blend in', { includeHiddenElements: true })[0]
+    expect(StyleSheet.flatten(under.props.style).color).toBe(COLOR.textSecondary)
+    expect(glyph()).toBe(COLOR.textSecondary)
+    expect(screen.queryByTestId('h-gradient-rim-inset', { includeHiddenElements: true })).toBeNull()
+    expect(screen.getAllByTestId('gradient', { includeHiddenElements: true })).toHaveLength(1)
+    expect(flat('h-wrap').opacity).toBe(OPACITY.disabled)
+  })
+  it('lit (Go Live, Check out) is untouched: no gradient rim', async () => {
+    await draw({ kind: 'lit' })
+    expect(screen.queryByTestId('h-gradient-rim-inset', { includeHiddenElements: true })).toBeNull()
+  })
+  it('is a 56 pt surfaceSunken track at radius 28; the label sits twice, white under (armed, SCRUM-1057 A), white on the fill', async () => {
     await draw({ previewProgress: 0.4 })
     expect(flat('h')).toMatchObject({ height: SIZE.primary, borderRadius: RADIUS.button, backgroundColor: COLOR.surfaceSunken })
     const labels = screen.getAllByText('Hold to blend in', { includeHiddenElements: true })
     expect(labels).toHaveLength(2)
-    expect(StyleSheet.flatten(labels[0].props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[700], color: COLOR.textSecondary })
+    expect(StyleSheet.flatten(labels[0].props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[700], color: COLOR.textPrimary })
     expect(StyleSheet.flatten(labels[1].props.style).color).toBe(COLOR.textOnGradient)
     for (const l of labels) expect(l.props.maxFontSizeMultiplier).toBe(1.3)
-    expect(screen.getByTestId('gradient', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getAllByTestId('gradient', { includeHiddenElements: true }).length).toBeGreaterThan(0)
   })
 
   it('the fill sits where the progress is: 40% in is 60% of the width still to go', async () => {
