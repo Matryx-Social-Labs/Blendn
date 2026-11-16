@@ -465,7 +465,7 @@ it('revealing yourself re-reads the conversation, so Add friend appears once the
     </>
   )
   await flush()
-  await act(async () => fireEvent.press(screen.getByLabelText('Show them who you are')))
+  await act(async () => fireEvent.press(screen.getByLabelText('Show who you are')))
   await act(async () => fireEvent.press(screen.getByText('Show them')))
   await flush()
   expect(api.getConversation).toHaveBeenCalledTimes(2)

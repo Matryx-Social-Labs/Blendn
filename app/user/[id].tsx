@@ -125,13 +125,12 @@ const CTA_LABEL: Record<ProfileCtaMode, string> = {
   self: 'You',
   requested: 'Requested',
   message: 'Message',
-  connect: 'Connect',
+  connect: 'Message',
   declined: 'Declined',
 }
 
 /** The line under the action, said the way a person would. */
 const CTA_HINT = {
-  connect: 'Connect sends a request and reveals your name and photo.',
   requested: 'Request sent. You can chat once they accept.',
   message: 'You can message each other.',
   declined: 'You declined this request.',
@@ -261,7 +260,7 @@ function UserProfileInner() {
   const hydrateCtaState = useCallback(async (targetUserId: string, connection?: ProfileConnection, waveConversation?: string | null) => {
     if (!authUser) {
       setCtaMode('connect')
-      setCtaMessage('Sign in to connect.')
+      setCtaMessage('Sign in to send a message.')
       return
     }
     if (authUser.id === targetUserId) {
@@ -300,7 +299,8 @@ function UserProfileInner() {
         }
       } else {
         setCtaMode('connect')
-        setCtaMessage(CTA_HINT.connect)
+        // No line under Message: the request sheet says what sending costs, before the effort (C7).
+        setCtaMessage('')
       }
       return
     }
@@ -354,7 +354,7 @@ function UserProfileInner() {
       }
     } catch {}
     setCtaMode('connect')
-    setCtaMessage(CTA_HINT.connect)
+    setCtaMessage('')
   }, [authUser, roomConversationId])
 
 
@@ -980,9 +980,9 @@ function UserProfileInner() {
             <Button
               kind={ctaLit ? 'lit' : 'secondary'}
               size="md"
-              icon={ctaMode === 'connect' ? 'user-plus' : ctaMode === 'message' ? 'message-circle' : undefined}
+              icon={ctaMode === 'connect' || ctaMode === 'message' ? 'message-circle' : undefined}
               label={CTA_LABEL[ctaMode]}
-              accessibilityLabel={ctaMode === 'connect' ? `Connect with ${heroTitle}. Sends a message and shows them your name and photo` : undefined}
+              accessibilityLabel={ctaMode === 'connect' ? `Message ${heroTitle}. Sends a request and shows them your name and photo` : undefined}
               disabled={ctaDisabled}
               onPress={ctaMode === 'connect' ? () => setConnectOpen(true) : () => handleConnect()}
               style={styles.flex}
@@ -1051,7 +1051,7 @@ function UserProfileInner() {
 export const SELF_PREVIEW = 'How others see you'
 
 /** Flow 6 `user` 01: the note an unrevealed profile carries above its sections. */
-export const stillAnonymous = (name: string) => `${name} hasn’t revealed who they are yet. Connect, talk, and either of you can reveal when you want to.`
+export const stillAnonymous = (name: string) => `${name} hasn’t revealed who they are yet. Message them, and either of you can reveal when you want to.`
 
 /** The frame's shape while it loads (Flow 6 `user` 13), so the page does not jump when it lands: the hero, the name, a line. */
 function ProfileSkeleton({ width }: { width: number }) {

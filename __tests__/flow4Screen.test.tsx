@@ -631,7 +631,7 @@ describe('⋯ opens Room info as a sheet over the room (Flow 5 C6, I-A)', () => 
     expect(showSheet).not.toHaveBeenCalled()
     expect(screen.getByTestId('room-info-event', HIDDEN)).toBeTruthy()
     await act(async () => fireEvent.press(screen.getByTestId('room-info-mute', HIDDEN)))
-    expect(await screen.findByText('Mute notifications', HIDDEN)).toBeTruthy()
+    expect(await screen.findByText('Mute this room', HIDDEN)).toBeTruthy()
   })
 
   it('See all closes the sheet onto People', async () => {

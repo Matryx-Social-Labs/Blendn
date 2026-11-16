@@ -22,7 +22,7 @@ export const dockClearance = (insetBottom: number) => SIZE.primary + SPACE.md * 
  * 12 pt of padding and 8 pt between its buttons, floating `SPACE.lg` over the bottom inset (which on Android is the
  * navigation bar) on an ink fade, and staying put while the page scrolls beneath it.
  *
- * `note` is the frame's line under the tray ("Connect sends a request and reveals your name and photo."): it is read before
+ * `note` is the frame's line under the tray ("Request sent. You can chat once they accept."): it is read before
  * the tray, so the reason for a button comes before the button. Last in the screen's tree and last in the focus order.
  */
 export function ProfileDock({

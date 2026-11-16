@@ -45,6 +45,17 @@ const BANNED: readonly { name: string; pattern: RegExp; allowIn?: readonly strin
    * asking you, inside a screen that is only about friends.
    */
   { name: 'Requests, as a title (now Message requests or Friend requests)', pattern: /^Requests$/, allowIn: ['app/friends/add.tsx'] },
+  // Flow 5 C7 (owner 2026-11-10, SCRUM-1042): one room, "Show who you are" (the confirm says "Show them"), the host as the
+  // org, Message for every ask to talk, Check out and Mute this room.
+  { name: 'Room chat (one room)', pattern: /\broom chat\b/i },
+  // I-A: one exit, Check out; leaving the chat but staying checked in is Mute this room. "Leave this room?" went with it.
+  { name: 'Leave room (now Check out or Mute this room)', pattern: /\bleave (this )?room\b/i },
+  { name: 'Show who I am (now Show who you are)', pattern: /\bshow who I am\b/i },
+  { name: 'Show them who you are (now Show who you are)', pattern: /\bshow them who you are\b/i },
+  { name: 'Reveal me (now Show who you are; the confirm says Show them)', pattern: /\bReveal me\b/ },
+  { name: 'Connect, the ask to talk (now Message)', pattern: /\bConnect\b/ },
+  { name: 'Organizer as a badge under a person (now Host)', pattern: /^organi[sz]er$/i },
+  { name: 'Mute notifications (now Mute this room)', pattern: /\bmute notifications\b/i },
 ]
 
 /** A server's sentence from before the rename, read so an older server still lands on the Lobby's own copy (lib/board.ts). */
@@ -111,6 +122,17 @@ describe('retired names stay retired (naming review 2026-11-05)', () => {
       "label: 'Liked'",
       'const a = `You liked ${name}`',
       "hint: 'They’re only told if they like you back.'",
+      "<Text>Room chat</Text>",
+      "accessibilityLabel=\"Leave room\"",
+      "title=\"Leave this room?\"",
+      "action: () => 'Show who I am'",
+      'label="Show them who you are"',
+      "label: 'Reveal me'",
+      "label: 'Connect'",
+      'title={`Connect with ${name}`}',
+      "role === 'admin' ? 'Organizer' : null",
+      "<Text>ORGANIZER</Text>",
+      "title: 'Mute notifications'",
     ]
     for (const source of planted) expect({ source, hits: offences(copyIn(source)).length }).toEqual({ source, hits: 1 })
   })
@@ -136,6 +158,16 @@ describe('retired names stay retired (naming review 2026-11-05)', () => {
       "'You both waved'",
       "'That looks like an email'",
       "'Wave back'",
+      "'Show who you are'",
+      "label: 'Show them'",
+      "'Reveal my crew'",
+      'title={`Message ${name}`}',
+      "'Host'",
+      "'Mute this room'",
+      "'Check out'",
+      "'Cancelled by the organizer'",
+      "'Couldn’t connect. Check your connection.'",
+      "'Connected successfully'",
     ]
     for (const source of fine) expect({ source, hits: offences(copyIn(source)) }).toEqual({ source, hits: [] })
   })

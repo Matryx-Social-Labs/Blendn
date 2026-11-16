@@ -60,7 +60,7 @@ export function RevealSheet({
           : `You’ll be shown by first name and one photo ${reach}`
       }
       actions={[
-        { label: crew ? `Reveal ${crew}` : 'Reveal me', kind: 'primary', onPress: onReveal, loading: revealing, pressHaptic: false },
+        { label: crew ? `Reveal ${crew}` : 'Show them', kind: 'primary', onPress: onReveal, loading: revealing, pressHaptic: false },
         { label: 'Not now', kind: 'tertiary', onPress: onClose },
       ]}
     >
@@ -99,7 +99,7 @@ export type RevealSideOf = { kind: 'crew'; name: string; emblemSeed: string } | 
  * ("3 revealed · 1 keeps it private"). Revealed first, then private: the order
  * never says who chose what (give `people` in alphabetical order).
  *
- * Your side carries "Reveal my crew" (or "Reveal me"), which opens the sheet;
+ * Your side carries "Reveal my crew" (or "Show who you are"), which opens the sheet;
  * once revealed it reads "Revealed". Each disc cross-fades to its photo in
  * place over `base`, 40 ms apart, no flip, no confetti (the Flow 10
  * prototype); under Reduce Motion the photos swap in. No haptic here: the
@@ -187,7 +187,7 @@ export function RevealSide({
             </View>
           ) : mine && onReveal ? (
             <View style={styles.action}>
-              <Button kind="lit" size="sm" label={side.kind === 'crew' ? 'Reveal my crew' : 'Reveal me'} onPress={onReveal} />
+              <Button kind="lit" size="sm" label={side.kind === 'crew' ? 'Reveal my crew' : 'Show who you are'} onPress={onReveal} />
             </View>
           ) : null}
         </View>

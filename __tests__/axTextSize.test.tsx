@@ -300,7 +300,7 @@ describe('a 360 dp phone at font scale 1.3 (Android, RC drive 3: text one word p
   const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, hidden).props.style)
   beforeEach(at360)
 
-  it('the room’s anonymity banner: the sentence keeps six ems of measure, and Show who I am wraps under it rather than squeeze it ("You’re / anony / mous")', async () => {
+  it('the room’s anonymity banner: the sentence keeps six ems of measure, and Show who you are wraps under it rather than squeeze it ("You’re / anony / mous")', async () => {
     await render(<VisibilityBanner state="anon" onAction={jest.fn()} testID="b" />)
     const body = screen.getByTestId('b-body', hidden)
     expect(StyleSheet.flatten(body.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' })
