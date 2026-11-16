@@ -148,10 +148,11 @@ export function EventGuide({
                 {who.facts.map((f) => ` · ${f}`).join('')}
               </>
             ) : (
-              whoWords
+              // No Who words (an ended night under five, SCRUM-1057 A): the host is the row's one line.
+              whoWords || hostLine
             )
           }
-          second={hostLine}
+          second={whoWords ? hostLine : null}
           label={[whoWords, hostLine].filter(Boolean).join('. ')}
         />
       ) : null}
