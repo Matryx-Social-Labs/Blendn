@@ -448,7 +448,7 @@ export const UNKNOWN_ROOM_NAME = 'Chat'
 
 /** The header's name for a room opened without one (from a push, say). */
 export function defaultRoomName(kind: 'crew' | 'blend' | null): string {
-  return kind === 'crew' ? 'Crew chat' : kind === 'blend' ? 'Your Mix' : 'Event chat'
+  return kind === 'crew' ? 'Crew chat' : kind === 'blend' ? 'Your Mix' : 'The room'
 }
 
 /**

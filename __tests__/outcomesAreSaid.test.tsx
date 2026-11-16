@@ -136,7 +136,7 @@ describe('the follow-up’s outcomes, said', () => {
 
   it('a mute that arrives while you are in the chat', async () => {
     await render(<JustMutedLine />)
-    expect(said()).toEqual(['Just now · the organizer muted you'])
+    expect(said()).toEqual(['Just now · the host muted you'])
   })
 
   it('changesOnly: what is there on arrival is not said, a change is', async () => {

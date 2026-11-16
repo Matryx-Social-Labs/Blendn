@@ -56,7 +56,7 @@ export function mutedRoomsFrom(payload: unknown, now: Date = new Date()): MutedR
     const id = String(g?.id || g?.chat_room_id || g?.chatRoomId || '')
     if (!id || !mute || !isMuted(mute, now)) continue
     const eventTitle = g?.event?.title ? String(g.event.title) : undefined
-    const title = roomDisplayTitle(g) || g.event_title || g.eventTitle || g.title || g.name || 'Event chat'
+    const title = roomDisplayTitle(g) || g.event_title || g.eventTitle || g.title || g.name || 'The room'
     out.push({ id, title: String(title), kind: 'event', eventTitle, mute })
   }
   for (const r of crewRoomsFrom(payload)) {

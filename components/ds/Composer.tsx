@@ -42,7 +42,7 @@ type Locked = Exclude<ComposerState, 'normal' | 'failed' | 'banned' | 'left' | '
 
 /** Why it can't post, in the server's words where it has them (ROUND3 C2–C4). No mute says when it lifts (R11). */
 const LOCKED: Record<Locked, { icon: IconName; title: string; body?: string }> = {
-  muted: { icon: 'mic-off', title: 'Muted', body: 'The organizer has muted you in this room.' },
+  muted: { icon: 'mic-off', title: 'Muted', body: 'The host has muted you in this room.' },
   automuted: {
     icon: 'mic-off',
     title: 'Muted',

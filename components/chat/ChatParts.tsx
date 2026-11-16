@@ -121,7 +121,7 @@ const PILL = SIZE.tagHeader
 const PILL_PAD = 14
 const ROSE = SELECTION.rose
 
-const JUST_MUTED = 'Just now · the organizer muted you'
+const JUST_MUTED = 'Just now · the host muted you'
 
 /** A mute that arrived while you were here (R2-D2 #06): one line over the flipped composer. */
 export function JustMutedLine() {

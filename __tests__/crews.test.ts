@@ -127,7 +127,7 @@ describe('a crew or Mix room that is over', () => {
     expect(roomKindParam(undefined)).toBeNull()
     expect(roomKindParam(['blend'])).toBeNull()
     expect(defaultRoomName('blend')).toBe('Your Mix')
-    expect(defaultRoomName(null)).toBe('Event chat')
+    expect(defaultRoomName(null)).toBe('The room')
   })
 })
 

@@ -308,7 +308,7 @@ it('a mute that lands while you are here flips the composer, and says it just ha
   expect(screen.getByLabelText('Message')).toBeTruthy()
   await act(async () => mockMuted.forEach((f) => f({ userId: 'u-a', muted: true })))
   expect(screen.queryByLabelText('Message')).toBeNull()
-  expect(screen.getByText('Just now · the organizer muted you')).toBeTruthy()
+  expect(screen.getByText('Just now · the host muted you')).toBeTruthy()
 })
 
 describe('the newest chip counts a message once', () => {
@@ -530,7 +530,7 @@ describe('rc8 #6: a room opened by a bare link', () => {
     await open()
     expect(screen.getAllByText('Crew Nebula × Crew Orbit').length).toBeGreaterThan(0)
     expect(screen.getByText(/Mix/)).toBeTruthy()
-    expect(screen.queryByText('Event chat')).toBeNull()
+    expect(screen.queryByText('The room')).toBeNull()
     expect(screen.queryByText('Your Mix')).toBeNull()
   })
 
@@ -549,7 +549,7 @@ describe('rc8 #6: a room opened by a bare link', () => {
     api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [], rooms: [] } } as never)
     api.getChatMessages.mockReturnValue(new Promise(() => {}) as never)
     await open()
-    expect(screen.queryByText('Event chat')).toBeNull()
+    expect(screen.queryByText('The room')).toBeNull()
   })
 })
 

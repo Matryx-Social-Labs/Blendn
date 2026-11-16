@@ -56,6 +56,11 @@ const BANNED: readonly { name: string; pattern: RegExp; allowIn?: readonly strin
   { name: 'Connect, the ask to talk (now Message)', pattern: /\bConnect\b/ },
   { name: 'Organizer as a badge under a person (now Host)', pattern: /^organi[sz]er$/i },
   { name: 'Mute notifications (now Mute this room)', pattern: /\bmute notifications\b/i },
+  // C7 naming follow-ups (owner 2026-11-15, SCRUM-1042): a room with no name is "The room"; the muted row says "Muted until …"
+  // as C6 does; the chat's own lines name the host, who may be a venue as well as an organizer.
+  { name: 'Event chat, the fallback room title (now The room)', pattern: /\bEvent chat\b/i },
+  { name: 'Notifications · muted until (now Muted until …)', pattern: /^Notifications ·$|\bNotifications · muted\b/i },
+  { name: 'the organizer muted / removed you (now the host)', pattern: /\borgani[sz]er (has )?(muted|removed) you\b/i },
 ]
 
 /** A server's sentence from before the rename, read so an older server still lands on the Lobby's own copy (lib/board.ts). */
@@ -133,6 +138,10 @@ describe('retired names stay retired (naming review 2026-11-05)', () => {
       "role === 'admin' ? 'Organizer' : null",
       "<Text>ORGANIZER</Text>",
       "title: 'Mute notifications'",
+      "row?.title || 'Event chat'",
+      'title={muted ? `Notifications · ${label}` : x}',
+      "const JUST_MUTED = 'Just now · the organizer muted you'",
+      "setRemovedLine('The organizer has removed you from this room.')",
     ]
     for (const source of planted) expect({ source, hits: offences(copyIn(source)).length }).toEqual({ source, hits: 1 })
   })
@@ -168,6 +177,11 @@ describe('retired names stay retired (naming review 2026-11-05)', () => {
       "'Cancelled by the organizer'",
       "'Couldn’t connect. Check your connection.'",
       "'Connected successfully'",
+      "row?.title || 'The room'",
+      "'Event chats stay open for 24 hours after the event ends.'",
+      "'Muted until tomorrow, 9 PM'",
+      "'Just now · the host muted you'",
+      "'The host has removed you from this room.'",
     ]
     for (const source of fine) expect({ source, hits: offences(copyIn(source)) }).toEqual({ source, hits: [] })
   })
