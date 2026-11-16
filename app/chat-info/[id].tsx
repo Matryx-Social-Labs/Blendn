@@ -206,7 +206,7 @@ function ChatInfoInner() {
    */
   const place = row?.venueId ? row.title : undefined
   const bucket = usePlaceBucket(row?.venueId)
-  const title = place ? `${place} · tonight` : row?.title || nameParam(params.roomName) || nameParam(params.eventTitle) || 'Event chat'
+  const title = place ? `${place} · tonight` : row?.title || nameParam(params.roomName) || nameParam(params.eventTitle) || 'The room'
   const eventTitle = place ? undefined : row?.eventTitle || nameParam(params.eventTitle)
   const cover = row?.image || null
   /*
@@ -302,7 +302,7 @@ function ChatInfoInner() {
           <SettingsGroup>
             <SettingsRow
               icon={muted ? 'bell-off' : 'bell'}
-              title={muted ? `Notifications · ${muteLabel(mute)?.replace(/^Muted/, 'muted')}` : 'Mute this room'}
+              title={(muted && muteLabel(mute)) || 'Mute this room'}
               hint="Only your pushes. Nobody is told."
               trail="chevron"
               onPress={() => setSheet('mute')}

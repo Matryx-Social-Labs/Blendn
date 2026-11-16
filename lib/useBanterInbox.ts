@@ -145,7 +145,7 @@ export const groupChatFrom = (room: any, userId: string | undefined): GroupChat 
     chat_room_id: String(room.id || room.chat_room_id || room.chatRoomId || ''),
     ...(room.event?.id ? { event_id: String(room.event.id) } : {}),
     // A place's room is named for the place; its venue day's title is bookkeeping (step 5).
-    event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'Event chat',
+    event_title: roomDisplayTitle(room) || room.event_title || room.eventTitle || room.title || room.name || 'The room',
     // In the room now, the Room's number; never for a place's room (H5, D-19).
     participant_count: roomHereCount(room) ?? 0,
     event_image: room.event?.coverImageUrl || room.event?.cover_image_url || room.coverImageUrl || room.cover_image_url || null,

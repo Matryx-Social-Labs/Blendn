@@ -97,7 +97,7 @@ describe('<Composer>', () => {
   })
 
   it.each([
-    ['muted', 'Muted. The organizer has muted you in this room.'],
+    ['muted', 'Muted. The host has muted you in this room.'],
     ['automuted', 'Muted. You are muted in this room. Your messages have been flagged for policy violations.'],
     ['closed', 'This chat has closed. Event chats stay open for 24 hours after the event ends.'],
     // R2-D2: the two CHAT_CLOSED reasons the server words apart.
@@ -124,7 +124,7 @@ describe('<Composer>', () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
     await render(composer())
     await screen.rerender(composer({ state: 'muted' }))
-    expect(announce).toHaveBeenCalledWith('Muted. The organizer has muted you in this room.')
+    expect(announce).toHaveBeenCalledWith('Muted. The host has muted you in this room.')
   })
 
   it('a mute carries no countdown; a rate limit carries the server’s, as the hint', async () => {

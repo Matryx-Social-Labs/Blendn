@@ -34,7 +34,7 @@ it('not open yet with no room to open: when it opens, in words', async () => {
 
 it('left it: the chat, on its Rejoin', async () => {
   chat.mockResolvedValue({ success: false, errorCode: 'LEFT_ROOM', chatGroupId: 'g1' })
-  await expect(eventRoomDoor('e1', '')).resolves.toEqual({ kind: 'route', params: { id: 'g1', roomName: 'Event chat', eventTitle: '' } })
+  await expect(eventRoomDoor('e1', '')).resolves.toEqual({ kind: 'route', params: { id: 'g1', roomName: 'The room', eventTitle: '' } })
   expect(markRoomLeft).toHaveBeenCalledWith('g1')
 })
 

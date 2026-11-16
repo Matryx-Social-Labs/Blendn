@@ -16,7 +16,7 @@ import { serverOffset } from './serverClock'
 export type EventRoomDoor = { kind: 'route'; params: Record<string, string> } | { kind: 'say'; line: string }
 
 export async function eventRoomDoor(eventId: string, eventTitle: string): Promise<EventRoomDoor> {
-  const named = { roomName: eventTitle || 'Event chat', eventTitle }
+  const named = { roomName: eventTitle || 'The room', eventTitle }
   let gone = false
   let opensAt: string | null = null
   try {
