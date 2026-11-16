@@ -30,7 +30,7 @@ import { subscribeToRoomMatch } from '../../lib/socketClient'
 import { heroFoldHeight } from '../../lib/profileFold'
 import { interestNames } from '../../lib/meProfile'
 import { useWorkFields } from '../../components/profile/useWorkFields'
-import { profileIdentity, withheldUnlessVisible, workFieldLabel } from '../../lib/profileIdentity'
+import { profileIdentity, roomNameFrom, withheldUnlessVisible, workFieldLabel } from '../../lib/profileIdentity'
 import { aboutLine, type Badge } from '../../lib/aboutYou'
 import { FRIEND_COPY, friendAction, isHandle, parseFriendOffer, type FriendOffer } from '../../lib/friendOffer'
 import { parseBadges } from '../../lib/profileBadges'
@@ -65,6 +65,8 @@ interface UserProfileView {
   interests?: string[]
   /** Coarse, and outside the identity gate on purpose. See the hero subtitle. */
   workField?: string
+  /** Their pseudonym in the room a handle names, from `GET /users/:handle`'s own answer only (`roomNameFrom`, SCRUM-1046). */
+  roomName?: string | null
   /**
    * The 40px derivative of their main photo, sent only when they have NOT
    * revealed — the blurred half of "pseudonyms + blurred photos".
@@ -151,10 +153,12 @@ function UserProfileInner() {
    * server now answers in that room's terms: somebody still anonymous to you
    * comes back as their pseudonym there, with no `connection` (admin #498).
    * The params still title the page, so the name and the creature match the
-   * card that opened it from the first paint, before the server answers, and
-   * nothing here trusts a `name` for somebody `identityVisible` withholds.
-   * Asked by a real id with no room, the server still says "Attendee", which
-   * this page never shows (`lib/profileIdentity.ts`).
+   * card that opened it from the first paint, before the server answers.
+   * Without them (a cold link, Room info) the handle's answer titles the page
+   * (SCRUM-1046), and only that read's own `name` (`roomNameFrom`): nothing
+   * else here trusts a name for somebody `identityVisible` withholds. Asked
+   * by a real id with no room, the server still says "Attendee", which this
+   * page never shows (`lib/profileIdentity.ts`).
    */
   const { id, eventId, pseudonym, roomSeed, conversationId: roomConversationId } = useLocalSearchParams<{
     id: string
@@ -248,7 +252,7 @@ function UserProfileInner() {
   const [incoming, setIncoming] = useState<{ id: string; note: string | null } | null>(null)
   const [answering, setAnswering] = useState<'accept' | 'decline' | null>(null)
   // Who this is, as far as the server lets this screen say (`lib/profileIdentity`).
-  const identity = profileIdentity(profile, { pseudonym, roomSeed })
+  const identity = profileIdentity(profile, { pseudonym, roomSeed, roomName: profile?.roomName })
   // Whether to offer "Add friend" (SCRUM-750): the server's `friend` from `GET /profiles/:id`, for somebody you may see.
   const [friend, setFriend] = useState<FriendOffer | null>(null)
   const friendAsk = useFriendAsk(identity.title)
@@ -404,6 +408,8 @@ function UserProfileInner() {
               : [],
             about: aboutLine(data as { languages?: string[]; homeState?: string | null; sign?: string | null }),
             identityVisible: data.identityVisible === true || data.isOwnProfile === true,
+            // The room's pseudonym, from this handle read's own `name` only (SCRUM-1046); the fallback below never sets it.
+            roomName: roomNameFrom(id, data),
             tonight: parseTonight((data as { tonight?: unknown }).tonight),
           }
         } else {

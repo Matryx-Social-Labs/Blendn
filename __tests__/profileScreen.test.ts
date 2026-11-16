@@ -33,6 +33,17 @@ describe('the screen never re-decides the identity gate', () => {
     expect(src).not.toContain('theyRevealed')
   })
 
+  it('titles by the room’s pseudonym only from the handle read itself, never from the fallback (SCRUM-1046)', () => {
+    const src = SCREEN()
+    expect(src).toContain('profileIdentity(profile, { pseudonym, roomSeed, roomName: profile?.roomName })')
+    // Set once, from `getPublicProfile`'s own answer...
+    expect(src.match(/roomName: roomNameFrom\(id, data\)/g)).toHaveLength(1)
+    const fallback = src.slice(src.indexOf('apiClient.getProfile(id)'), src.indexOf('withheldUnlessVisible(nextProfile)'))
+    expect(src.indexOf('roomName: roomNameFrom(id, data)')).toBeLessThan(src.indexOf('apiClient.getProfile(id)'))
+    // ...and the `/profiles/:id` fallback never carries one.
+    expect(fallback).not.toContain('roomName')
+  })
+
   it('reads the fallback’s photos from the nested profile, which is where /profiles/:id puts them (YOU-13)', () => {
     const src = SCREEN()
     expect(src).toContain('photos: p.photos ?? []')

@@ -6,7 +6,7 @@ import {
   settleDirectMessage,
   type PrivateMessage,
 } from '../lib/directThread'
-import { profileIdentity, withheldUnlessVisible } from '../lib/profileIdentity'
+import { profileIdentity, roomNameFrom, withheldUnlessVisible } from '../lib/profileIdentity'
 import { markSeed, pseudonymAvatar } from '../lib/pseudonymAvatar'
 import { userMessage } from '../lib/userMessage'
 
@@ -157,6 +157,52 @@ describe('the attendee profile fails closed', () => {
 
   it('names them once the server says so', () => {
     expect(profileIdentity({ ...leaked, identityVisible: true }).title).toBe('Ben, 29')
+  })
+
+  /*
+   * SCRUM-1046: opened with no pseudonym in the link (a cold link, Room info), the page said "Someone" although the
+   * server, asked by a room handle, answers with that room's pseudonym. That answer is trusted only when it came from
+   * `GET /users/:handle` itself, in its `name` field: never from the `/profiles/:id` fallback, `display_name`, a
+   * failed read or a real id. With no trusted source the page fails closed to "Someone".
+   */
+  describe('the room pseudonym the server sends (SCRUM-1046)', () => {
+    const roomAnswer = { name: 'Cosmic Panda', age: 29, identityVisible: false }
+
+    it('is read from a successful handle read’s `name`', () => {
+      expect(roomNameFrom('rh_abc', roomAnswer)).toBe('Cosmic Panda')
+    })
+
+    it('is never read from `display_name`', () => {
+      expect(roomNameFrom('rh_abc', { display_name: 'Ben Okafor', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_abc', { name: '', display_name: 'Ben Okafor', identityVisible: false })).toBeNull()
+    })
+
+    it('is nothing when the handle read failed', () => {
+      expect(roomNameFrom('rh_abc', null)).toBeNull()
+      expect(roomNameFrom('rh_abc', undefined)).toBeNull()
+    })
+
+    it('is nothing for a real id, a placeholder, or somebody already shown to you', () => {
+      expect(roomNameFrom('cmb0realid', { name: 'Ben', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_dm', { name: 'Attendee', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_abc', { name: 'Ben', identityVisible: true })).toBeNull()
+    })
+
+    it('titles the page, over the profile’s own name', () => {
+      const who = profileIdentity({ ...roomAnswer, name: 'Ben' }, { roomName: 'Cosmic Panda', roomSeed: 'g1:rh_abc' })
+      expect(who).toEqual({ revealed: false, title: 'Cosmic Panda', name: 'Cosmic Panda', age: 29, seed: 'Cosmic Panda' })
+    })
+
+    it('comes after the link’s pseudonym: it is what the card that opened the page drew', () => {
+      expect(profileIdentity(roomAnswer, { pseudonym: 'Amber Fox', roomName: 'Cosmic Panda' }).title).toBe('Amber Fox')
+    })
+
+    it('fails closed without it: a fallback profile carrying a real name is still "Someone"', () => {
+      // What the `/profiles/:id` fallback builds for a handle: a name, no room source.
+      const fallback = profileIdentity({ ...leaked, identityVisible: false }, { roomSeed: 'g1:rh_abc' })
+      expect(fallback.title).toBe('Someone')
+      expect(fallback.seed).toBe('g1:rh_abc')
+    })
   })
 })
 
