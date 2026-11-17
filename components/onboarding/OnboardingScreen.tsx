@@ -162,7 +162,7 @@ export function OnboardingScreen({
             {/* A disabled primary takes no press: the wrapper does, so a tap on it can say why it is off. */}
             <Pressable accessible={false} importantForAccessibility="no" disabled={!ctaDisabled || !onCtaDisabledPress} onPress={onCtaDisabledPress} testID="onboarding-primary-frame">
               {/* The landing's white primary; still the screen's one primary, so it keeps the primary's press-in haptic. */}
-              <Button label={ctaLabel} kind="strong" pressHaptic={H.primary} onPress={onContinue} disabled={ctaDisabled} refused={ctaRefused} loading={ctaBusy} testID="onboarding-primary" />
+              <Button label={ctaLabel} kind="primary" pressHaptic={H.primary} onPress={onContinue} disabled={ctaDisabled} refused={ctaRefused} loading={ctaBusy} testID="onboarding-primary" />
             </Pressable>
             {/* The way out stays with the button; only the note waits for the keyboard to go. Off while the primary saves: a Skip during a save navigated twice. */}
             {secondaryLabel && onSecondary ? (

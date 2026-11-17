@@ -123,10 +123,10 @@ describe('the lock-screen ask (SCRUM-1006)', () => {
     expect(askSamples('rsvp', '   ')[0].title).toBe('Your event')
   })
 
-  it('a white "Turn on notifications" first, "Not now" as text; the body is short enough to stay clear of them', async () => {
+  it('a lit "Turn on notifications" first (board C: strong is retired), "Not now" as text; the body is short enough to stay clear of them', async () => {
     await askPushInContext('rsvp', 'Rooftop Sundowner')
     expect(sheet().actions.map((a) => [a.label, a.variant])).toEqual([
-      ['Turn on notifications', 'strong'],
+      ['Turn on notifications', 'primary'],
       ['Not now', 'tertiary'],
     ])
     expect(sheet().title).toBe(ASK_COPY.rsvp.title)

@@ -137,7 +137,7 @@ describe('the screens', () => {
     expect(INFO).toContain('showRoomReportOptions(chatGroupId)')
     expect(INFO).not.toContain('showEventReportOptions')
     // I-A: one exit, Check out, through the check-out path; a chat leave is not an exit anywhere on this page.
-    expect(INFO).toContain('accessibilityLabel="Check out"')
+    expect(INFO).toContain('label="Check out"')
     expect(INFO).toContain('<CheckOutSheet')
     expect(SHEETS).toContain('useCheckOut(eventId)')
     expect(INFO + SHEETS).not.toContain('leaveChatGroup(')

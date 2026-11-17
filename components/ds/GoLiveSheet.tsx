@@ -260,7 +260,6 @@ export function GoLiveSheet({
         busyLabel="Going live…"
         busy={busy}
         icon="radio"
-        kind="lit"
         srLabel={`Go live at ${venue} for ${picked.spoken} as ${pseudonym}`}
         consequence={leaving ? `Leaves ${leaving}.` : undefined}
         onConfirm={onGoLive}

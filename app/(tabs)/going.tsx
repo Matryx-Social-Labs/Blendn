@@ -20,7 +20,7 @@ import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Button } from '../../components/ds/Button'
 import { Title } from '../../components/ds/Title'
-import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useBoldText } from '../../components/ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../../components/ds/shared'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
 import { apiClient } from '../../lib/apiClient'
@@ -858,30 +858,10 @@ function rowWhen(start: string, timeZone?: string | null): string {
   return day === 'Today' || !day ? time : `${day} · ${time}`
 }
 
-/**
- * "{n} more nights with Blend'n+": Plus's door, in Plus's violet (its selection fill, edge and glyph). Named, not provided:
- * the screen stays one ember world (hueWorlds), and the card is Plus's mark inside it, as a Plus badge would be.
- */
+/** "{n} more nights with Blend'n+": Plus's door, a positive action (buttons board C): `lit`, as every yes is. */
 function LockedNights({ count, onPress }: { count: number; onPress: () => void }) {
-  const bold = useBoldText()
-  const sel = SELECTION.violet
-  const label = lockedNightsLabel(count)
   return (
-    <ScalePress
-      style={[styles.inset, styles.locked, { backgroundColor: sel.fill, borderColor: sel.edge }]}
-      pressedScale={0.97}
-      haptic={false}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint="Opens Blend’n+"
-    >
-      <Icon name="lock" size={ICON.control} color={sel.glyph} />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink, styles.shrink]}>
-        {label}
-      </Text>
-      <Icon name="chevron-right" size={ICON.inline} color={sel.glyph} />
-    </ScalePress>
+    <Button kind="lit" size="md" icon="lock" label={lockedNightsLabel(count)} accessibilityHint="Opens Blend’n+" onPress={onPress} style={[styles.inset, styles.locked]} />
   )
 }
 
@@ -1189,15 +1169,7 @@ const styles = StyleSheet.create({
   // 24 under the hero, 12 between rows (flow4.js going `loading`).
   skeletonFirstRow: { marginTop: SPACE.xl },
   skeletonRow: { marginTop: SPACE.md },
-  locked: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.md,
-    marginTop: SPACE.md,
-    padding: SPACE.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: RADIUS.rowInCard,
-  },
+  locked: { marginTop: SPACE.md },
   heroLit: { flex: 1 },
   // The ⋯ and the "Show more" row: the row's own air, nothing bordered.
   // Controls beside each other keep their 44 apart (the Android 48 reach is 8 either side of a 32), so no two reaches overlap.

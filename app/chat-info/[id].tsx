@@ -12,6 +12,7 @@ import { CheckOutSheet, MuteSheet } from '../../components/chat/RoomSheets'
 import { HostMark, useEventDetail } from '../../components/blendn/RoomInfoSheet'
 import { SenderCard, type Sender } from '../../components/chat/SenderCard'
 import { Avatar } from '../../components/ds/Avatar'
+import { Button } from '../../components/ds/Button'
 import { IconButton } from '../../components/ds/IconButton'
 import { ScrimPill, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
@@ -41,7 +42,6 @@ import { showRoomReportOptions } from '../../lib/safetyUtils'
 import { subscribeToChatMemberLeft } from '../../lib/socketClient'
 import { useAuth } from '../../lib/useAuth'
 import { useOnBlock } from '../../lib/useOnBlock'
-import { OPACITY } from '../../lib/theme'
 
 type Member = { userId: string; name: string | null; role: string; avatar?: string | null }
 
@@ -56,8 +56,6 @@ const CELL_GAP = SPACE.md
 const FACE_INSET = SPACE.sm
 /** A name and a role badge grow with the text size only this far, so a row's height holds. */
 const NAME_SCALE_CAP = 1.3
-/** The danger zone's row: 64 tall, a hint under its title. */
-const EXIT_HEIGHT = 64
 /** Under Check out: the words C6's Room info sheet says. */
 const CHECK_OUT_HINT = 'You leave the room and its chat.'
 
@@ -365,24 +363,13 @@ function ChatInfoInner() {
     <View style={styles.body}>
       {showPeople ? <PageFooter loading={loadingMore} failed={moreFailed} onRetry={() => { setMoreFailed(false); fetchMore() }} what="people" testID="info-members-more-failed" /> : null}
 
-      {/* The danger zone: apart, after a hairline, in the destructive tint. */}
+      {/* The way out: apart, after a hairline. */}
       {checkOutOf ? (
         <>
           <View style={styles.hairline} />
-          <Pressable
-            testID="info-check-out"
-            onPress={() => setSheet('checkout')}
-            accessibilityRole="button"
-            accessibilityLabel="Check out"
-            accessibilityHint={CHECK_OUT_HINT}
-            style={({ pressed }) => [styles.leave, pressed && styles.pressed]}
-          >
-            <Icon name="log-out" size={ICON.control} />
-            <View style={styles.leaveText}>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>Check out</Text>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{CHECK_OUT_HINT}</Text>
-            </View>
-          </Pressable>
+          {/* Leaving is not a yes (buttons board C): the neutral Button, and its sheet commits with the event page's neutral hold. */}
+          <Button kind="secondary" size="md" icon="log-out" label="Check out" accessibilityHint={CHECK_OUT_HINT} onPress={() => setSheet('checkout')} testID="info-check-out" />
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary, styles.leaveHint]}>{CHECK_OUT_HINT}</Text>
         </>
       ) : null}
     </View>
@@ -532,18 +519,7 @@ const styles = StyleSheet.create({
   onWhite: { color: COLOR.ink },
   more: { alignSelf: 'flex-start', paddingVertical: SPACE.sm },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline, marginTop: SPACE.sm },
-  leave: {
-    minHeight: EXIT_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    // SettingsRow's glyph-to-text gap, so "Check out" starts on the rows' text edge above it (r7 L1).
-    gap: SPACE.lg,
-    paddingHorizontal: SPACE.lg,
-    borderRadius: RADIUS.rowInCard,
-    backgroundColor: COLOR.destructiveTint,
-  },
-  pressed: { opacity: OPACITY.pressed },
-  leaveText: { flex: 1, paddingVertical: SPACE.md },
+  leaveHint: { textAlign: 'center' },
   back: { position: 'absolute', left: SPACE.lg, zIndex: 2 },
   shield: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 1, backgroundColor: COLOR.ink },
   headScrim: { position: 'absolute', left: 0, right: 0, top: 0, height: STATUS_SCRIM_HEIGHT },

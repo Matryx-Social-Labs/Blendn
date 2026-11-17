@@ -27,14 +27,14 @@ export function AccountStateScreen({ state }: { state: AccountState }) {
   const actions =
     state.kind === 'suspended'
       ? [
-          { label: 'Email support', kind: 'strong' as const, pressHaptic: () => H.primary(), onPress: mail("Blend’n account suspended") },
+          { label: 'Email support', kind: 'primary' as const, pressHaptic: () => H.primary(), onPress: mail("Blend’n account suspended") },
           { label: 'Back to start', kind: 'tertiary' as const, onPress: dismiss },
         ]
       : state.kind === 'staff'
         ? [
             {
               label: 'Open the dashboard',
-              kind: 'strong' as const,
+              kind: 'primary' as const,
               icon: 'arrow-up-right' as const,
               pressHaptic: () => H.primary(),
               onPress: () =>
@@ -43,7 +43,7 @@ export function AccountStateScreen({ state }: { state: AccountState }) {
             { label: 'Use a different account', kind: 'tertiary' as const, onPress: dismiss },
           ]
         : [
-            { label: 'Contact support', kind: 'strong' as const, pressHaptic: () => H.primary(), onPress: mail("Blend’n sign-in") },
+            { label: 'Contact support', kind: 'primary' as const, pressHaptic: () => H.primary(), onPress: mail("Blend’n sign-in") },
             { label: 'Use a different account', kind: 'tertiary' as const, onPress: dismiss },
           ]
 

@@ -7,7 +7,7 @@
  * moves to these as its screen is redesigned.
  */
 
-/** Colour, DESIGN-BRIEF §4. Dark only. `textOnGradient` is white on `GRADIENT.fill`; `textOnOrangeFlat` is ink on `brandOrange` (white on it is 3.50:1); `brandRoseFill` is brand rose deepened at the same hue for a filled rose pill, white on it 5.31:1 (on `brandRose` 4.23:1). */
+/** Colour, DESIGN-BRIEF §4. Dark only. `textOnGradient` is white on `GRADIENT.fill`; `textOnOrangeFlat` is ink on `brandOrange` (white on it is 3.50:1). */
 export const COLOR = {
   ink: '#0D0C0C',
   surfaceSunken: '#1A1818',
@@ -25,7 +25,6 @@ export const COLOR = {
   backdrop: 'rgba(0,0,0,0.60)',
   brandOrange: '#F05423',
   brandRose: '#BE5C71',
-  brandRoseFill: '#B2475E',
   brandViolet: '#925DA9',
   brandVioletText: '#A47BBF',
   gradientFillStart: '#D83F0F',
@@ -91,6 +90,16 @@ export const GRADIENT = {
     colors: ['#F05423', '#BE5C71', '#A47BBF'],
     locations: [0, 0.5, 1],
   },
+  lit: {
+    angle: 135,
+    colors: ['#772F19', '#693943', '#573D60'],
+    locations: [0, 0.5, 1],
+  },
+  litPressed: {
+    angle: 135,
+    colors: ['#973415', '#854250', '#6A4778'],
+    locations: [0, 0.5, 1],
+  },
 } as const
 
 /** Material tiers (§5): glass (iOS 26+), blur (iOS 16.4–25), solid (Android Tier B, Reduce Transparency). Drawn only by `<Material>`. */
@@ -141,6 +150,14 @@ export const MATERIAL = {
       radius: 60,
       spread: -18,
       color: 'rgba(240,84,35,0.55)',
+    },
+  ],
+  glowHero: [
+    {
+      offsetY: 8,
+      radius: 22,
+      spread: -6,
+      color: 'rgba(187,85,107,0.55)',
     },
   ],
 } as const

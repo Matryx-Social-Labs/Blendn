@@ -525,7 +525,7 @@ describe('the wait and the store', () => {
     await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
     expect(screen.getByText(/Your payment is pending/)).toBeTruthy()
     expect(apiClient.getMyPlus).not.toHaveBeenCalled()
-    expect(screen.getByText('Done')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: MONTHLY_CTA })).toBeNull()
   })
 
@@ -537,7 +537,7 @@ describe('the wait and the store', () => {
       ;(apiClient.getMyPlus as jest.Mock).mockRejectedValue(new Error('queue cleared'))
       await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
       expect(screen.getByText('Confirming with the store…')).toBeTruthy()
-      expect(screen.getByText('Done')).toBeTruthy()
+      expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy()
       expect(button('Restore purchases').props.accessibilityState).toMatchObject({ disabled: true })
       await act(async () => { fireEvent.press(button('Restore purchases')) })
       expect(restore).not.toHaveBeenCalled()

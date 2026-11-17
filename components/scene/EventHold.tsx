@@ -74,9 +74,9 @@ export type EventCheckOutSheetProps = {
 
 /**
  * The way out of the event you are checked into (option A, SCRUM-1035; was the hold under "Open the room", SCRUM-970): the
- * dock's "Check out" opens the app's standard sheet. The event's name is its title; the same deliberate hold, in the DS's
- * quiet kind (`lit`, as GoLiveSheet's), checks you out; its line says what it does without naming the event twice (the hint
- * does name it, for a reader). A refusal is said in the line, not a toast: a toast is drawn under the sheet's modal.
+ * dock's "Check out" opens the app's standard sheet. The event's name is its title; the same deliberate hold
+ * checks you out; its line says what it does without naming the event twice (the hint
+ * does name it, for a reader). The hold is the neutral one (buttons board C, owner 2026-11-17): leaving is not a yes. A refusal is said in the line, not a toast: a toast is drawn under the sheet's modal.
  * At the accessibility sizes the sentence moves under the hold, so the hold comes straight after the question and is in reach
  * without scrolling (checked-in audit, owner 2026-11-15: at AX XXXL the sentence pushed it below the sheet's cap).
  */
@@ -96,7 +96,7 @@ export function EventCheckOutSheet({ visible, onClose, onDismissed, name, onConf
       testID="scene-checkout"
     >
       <HoldToConfirm
-        kind="lit"
+        kind="neutral"
         label={CHECK_OUT_LABEL}
         busyLabel={CHECKING_OUT_LABEL}
         srLabel="Check out"

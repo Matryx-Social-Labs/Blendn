@@ -79,6 +79,7 @@ import { forgetPushPermission } from '../lib/pushStatus'
 import { resetFriendRequests, useFriendRequestsState } from '../lib/friendRequests'
 import { crewInviteAnswered, resetCrewInvites, useCrewInvites } from '../lib/crewInvites'
 import { useFriendRequests } from '../lib/useFriendRequests'
+import { isLitControl } from './helpers/lit'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const permissions = Notifications.getPermissionsAsync as jest.Mock
@@ -481,13 +482,13 @@ describe('answering a request in place', () => {
 describe('the rose world (foundations C, part 2)', () => {
   const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 
-  it('lights the Waiting count, the glyph tile and the Accept pill in rose', async () => {
+  it('lights the Waiting count and the glyph tile in rose; the Accept pill is the one positive look (board C)', async () => {
     await render(<Screen />)
     await screen.findByText('New friend request')
     expect(flat('notifications-waiting-count').backgroundColor).toBe(COLOR.selectionRoseFill)
     expect(flat('notifications-waiting-count').borderColor).toBe(COLOR.brandRose)
     expect(flat('notification-f1-art-tile').backgroundColor).toBe(COLOR.selectionRoseFill)
-    expect(flat('notification-f1-pill-0').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(isLitControl(screen.getByTestId('notification-f1-pill-0'))).toBe(true)
     expect(screen.getByRole('header', { name: 'Waiting on you, 1' })).toBeTruthy()
   })
 
@@ -508,11 +509,11 @@ describe('the rose world (foundations C, part 2)', () => {
     expect(JSON.stringify(screen.getByTestId('notification-f1-art-tile', { includeHiddenElements: true }).children)).not.toBe(before)
   })
 
-  it('Turn on is a lit button with the bell, in rose', async () => {
+  it('Turn on is a lit button with the bell (board C: no hue on buttons)', async () => {
     permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
     await render(<Screen />)
     await screen.findByText(/Push is off/)
-    expect(flat('notifications-push-off-action').backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(isLitControl(screen.getByTestId('notifications-push-off-action'))).toBe(true)
   })
 })
 
@@ -547,14 +548,14 @@ describe('the ⋯ menu and Clear all', () => {
     expect(router.push).toHaveBeenCalledWith('/notification-settings')
   })
 
-  it('asks for the strong (white) Clear all confirm, not red and not the rose lit one (SYS-05, E13)', async () => {
+  it('asks for the neutral Clear all confirm: not red (E13), not lit (not a yes), and strong is retired (board C)', async () => {
     const show = jest.spyOn(sheetModule, 'showSheet')
     await render(<Screen />)
     await screen.findByText('You have a new match')
     await openMenu()
     fireEvent.press(screen.getByRole('button', { name: 'Clear all' }))
     const sheet = show.mock.calls[0][0] as { actions: { label: string; variant?: string }[] }
-    expect(sheet.actions.find((a) => a.label === 'Clear all')?.variant).toBe('strong')
+    expect(sheet.actions.find((a) => a.label === 'Clear all')?.variant).toBe('secondary')
     show.mockRestore()
   })
 

@@ -9,7 +9,8 @@ import { Facepile } from '../ds/Facepile'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
-import { WaveBackPill } from './WaveBackPill'
+import { Button } from '../ds/Button'
+import { WavingHand } from '../ds/PersonCard'
 
 /** Board 03 `.strip`: a 36 face for one wave, a 30 pile (the DS's 32) for several. */
 const FACE = 36
@@ -90,7 +91,19 @@ export function WavedAtYouStrip({
           <Icon name="chevron-right" size={ICON.inline} color={sel.glyph} />
         </View>
       ) : (
-        <WaveBackPill name={lead.displayName} state={sending === lead.userId ? 'sending' : 'ready'} onPress={() => onWaveBack(lead)} testID="waved-strip-wave" />
+        <Button
+          kind="lit"
+          size="pill"
+          icon="hand"
+          label="Wave back"
+          leading={sending === lead.userId ? <WavingHand size={ICON.inline} /> : undefined}
+          pressHaptic={sending === lead.userId ? false : H.select}
+          onPress={() => {
+            if (sending !== lead.userId) onWaveBack(lead)
+          }}
+          accessibilityLabel={`Wave back at ${lead.displayName}`}
+          testID="waved-strip-wave"
+        />
       )}
     </ScalePress>
   )

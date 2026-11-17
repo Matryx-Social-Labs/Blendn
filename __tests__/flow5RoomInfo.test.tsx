@@ -51,6 +51,7 @@ import RoomInfo from '../app/chat-info/[id]'
 import { apiClient } from '../lib/apiClient'
 import { noteBlocked } from '../lib/blockEpoch'
 import { resetRoomMembership } from '../lib/roomMembership'
+import { isLitControl } from './helpers/lit'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -158,8 +159,8 @@ describe('one exit, Check out (I-A)', () => {
     await settle()
     expect(screen.getByText('Check out of Vinyl Night?')).toBeTruthy()
     expect(api.checkOut).not.toHaveBeenCalled()
-    const confirm = screen.getByTestId('check-out-confirm')
-    await act(async () => fireEvent.press(within(confirm).getByLabelText('Check out')))
+    // The neutral hold (buttons board C), activated as Switch Control and Voice Control do.
+    await act(async () => fireEvent(within(screen.getByTestId('check-out-confirm')).getByTestId('check-out-confirm-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
     await settle()
     expect(api.checkOut).toHaveBeenCalledWith('e1')
     expect(api.leaveChatGroup).not.toHaveBeenCalled()
@@ -212,11 +213,13 @@ describe('the hero with no cover, and the rows’ edge (r7 M6, L1)', () => {
     expect(screen.queryByTestId('info-hero-plate', { includeHiddenElements: true })).toBeNull()
   })
 
-  it('Check out’s words start on the rows’ text edge (SettingsRow’s 16 pt from the glyph)', async () => {
+  it('Check out is the DS neutral button (buttons board C: leaving is not a yes), its hint under it', async () => {
     await open()
-    let node = within(screen.getByTestId('info-check-out')).getByText('Check out').parent
-    while (node && StyleSheet.flatten(node.props.style)?.minHeight === undefined) node = node.parent
-    expect(StyleSheet.flatten(node!.props.style).gap).toBe(SPACE.lg)
+    const out = screen.getByRole('button', { name: 'Check out' })
+    expect(out.props.accessibilityHint).toBe('You leave the room and its chat.')
+    expect(isLitControl(out)).toBe(false)
+    expect(StyleSheet.flatten(out.props.style).backgroundColor).toBe(COLOR.surface)
+    expect(screen.getByText('You leave the room and its chat.')).toBeTruthy()
   })
 })
 
@@ -335,7 +338,7 @@ describe('a place’s room (C5, 5-2)', () => {
     await act(async () => fireEvent.press(screen.getByTestId('info-check-out')))
     for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
     expect(screen.getByText('Check out of Toit?')).toBeTruthy()
-    await act(async () => fireEvent.press(within(screen.getByTestId('check-out-confirm')).getByLabelText('Check out')))
+    await act(async () => fireEvent(within(screen.getByTestId('check-out-confirm')).getByTestId('check-out-confirm-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
     for (let i = 0; i < 2; i++) await act(async () => new Promise((r) => setTimeout(r, 700)))
     expect(api.checkOut).toHaveBeenCalledWith('d1')
     expect(api.leaveChatGroup).not.toHaveBeenCalled()

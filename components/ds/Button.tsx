@@ -10,6 +10,7 @@ import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
+import { HeroGlow, LIT_RIM, LitFill } from './LitFill'
 import { Spinner } from './Loader'
 import { RollingNumber } from './RollingNumber'
 import { useLabelSwap } from './useLabelSwap'
@@ -25,11 +26,10 @@ import {
   SPINNER_GRACE_MS,
   useBoldText,
   useIncreaseContrast,
-  useSelection,
-  type Selection,
 } from './shared'
 
-export type ButtonKind = 'primary' | 'lit' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
+/** `strong` (white) is retired (buttons board C, owner 2026-11-17): a screen's one CTA is `primary`, a sheet's yes is `lit`. */
+export type ButtonKind = 'primary' | 'lit' | 'secondary' | 'tertiary' | 'destructive'
 export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised' | 'dock' | 'pill'
 
 /**
@@ -56,17 +56,13 @@ const PRESS_SPRING = { ...SPRING.press, reduceMotion: ReduceMotion.Never }
 const DISABLE_FADE = quickTransition('opacity')
 /** The width follows a label swap on M.settle (#45). */
 const WIDTH_FOLLOWS = LinearTransition.springify().stiffness(SPRING.settle.stiffness).damping(SPRING.settle.damping).mass(SPRING.settle.mass)
-/** The lit button's flare: poured in from the leading edge over `press` on `snapOut` (down, or busy), drained over `quick`. */
+/** The lit button's press: `GRADIENT.litPressed` poured in from the leading edge over `press` on `snapOut` (down, or busy), drained over `quick`. */
 const FLARE = pourStyles(DURATION.press, DURATION.press, EASING.snapOut)
-/** The lit button's rim, as the selected chip's: 1 pt in the hue's edge. */
-const LIT_RIM = 1
 /** `lg` is the primary's 56 pt; a lit action is a row action (36) or a card / dock action (44, 48). */
 const LIT_LG_WARNING = 'Button kind="lit" is never size="lg": 56 pt is the primary’s'
 let warnedLitLg = false
 
-function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean, sel: Selection) {
-  if (kind === 'lit') return sel.fill
-  if (kind === 'strong') return COLOR.textPrimary
+function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean) {
   if (kind === 'destructive') return COLOR.destructiveFill
   if (kind === 'secondary') return onGlass ? MATERIAL.fillOnGlass : size === 'sm' || size === 'raised' ? COLOR.surfaceRaised : COLOR.surface
   return 'transparent'
@@ -147,7 +143,7 @@ export type ButtonProps = {
   /**
    * `false` when the action's own outcome haptic follows within ~1 s (I'm going, §10.2);
    * a vocabulary cue to play on press-in instead of the kind's own, where a page names one
-   * (H.primary on a strong "Use at the door", H.select on Extend).
+   * (H.primary on "Use at the door", H.select on Extend).
    */
   pressHaptic?: boolean | (() => void)
   /**
@@ -166,10 +162,11 @@ export type ButtonProps = {
 /**
  * The button (DESIGN-BRIEF §12, guidelines/components/Button.html).
  *
- * - `primary`: the gradient fill, white label. One per screen (§4.7).
- * - `lit`: a positive action inside a hue world (`HueProvider`): the hue's fill, a 1 pt rim in its edge, a white 700 label, the
- *   glyph in its light tone. Press-in pours the flare in from the leading edge, and a busy button holds it. Never `lg`.
- * - `strong`: white with an ink label, only where there is no world (system screens) and over a photo.
+ * - `primary`: the hero. The gradient fill, white label, a soft rose glow under it (`HeroGlow`). One per screen (§4.7).
+ * - `lit`: every other positive action (Accept, Join, Message, Wave, Turn on), the same on every screen (buttons board C,
+ *   owner 2026-11-17): the tinted gradient (`GRADIENT.lit`) inside the hold's 1.5 pt gradient rim, a white label and glyph.
+ *   Press-in pours `GRADIENT.litPressed` in from the leading edge, and a busy button holds it. The screen's hue no longer tints
+ *   it (chips, segments and toggles keep theirs). Never `lg`.
  * - `secondary`: `surface`, 8% white on glass. `tertiary`: text.
  * - `destructive`: `destructiveFill`, never the text red.
  *
@@ -205,7 +202,6 @@ export function Button({
   const contrast = useIncreaseContrast()
   const spinner = useGrace(loading)
   const reduceMotion = useReducedMotion()
-  const sel = useSelection()
   const [down, setDown] = useState(false)
   const shake = useRefusal(refused)
   const [focused, setFocused] = useState(false)
@@ -234,8 +230,9 @@ export function Button({
   const flareIn = down || loading || pressed
   const flare = reduceMotion ? (flareIn ? FLARE.pourReduced : FLARE.drainReduced) : flareIn ? FLARE.pour : FLARE.drain
 
-  const ink = kind === 'strong' ? COLOR.ink : muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : COLOR.textOnGradient
-  const glyphInk = lit ? sel.glyph : ink
+  const ink = muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : COLOR.textOnGradient
+  // The lit tint's inner corner follows the pill's as Android squares it off.
+  const litInset = useAnimatedStyle(() => ({ borderRadius: Math.max(radius.get() - LIT_RIM, 0) }))
   const sm = size === 'sm'
   const pill = size === 'pill'
   /** Small glyphs: the row action and the raised action. */
@@ -254,6 +251,7 @@ export function Button({
 
   return (
     <Animated.View layout={swap.swapped ? WIDTH_FOLLOWS : undefined} style={[(sm || pill) && !StyleSheet.flatten(style)?.alignSelf ? styles.inline : null, pressed && !android ? styles.pressedIos : null, shake, style]}>
+      {kind === 'primary' ? <HeroGlow radius={round} disabled={disabled} testID={testID && `${testID}-glow`} /> : null}
       <ScalePress
         testID={testID}
         onPress={onPress}
@@ -282,7 +280,7 @@ export function Button({
         style={[
           styles.body,
           textOnly ? styles.bodyText : sm ? styles.bodySm : size === 'dock' ? styles.bodyDock : styles.bodyLg,
-          { height, backgroundColor: fill(kind, size, onGlass, sel) },
+          { height, backgroundColor: fill(kind, size, onGlass) },
           // Enabled ↔ disabled crosses over `quick` (a count arriving, a field becoming valid), never snaps.
           { opacity: disabled ? OPACITY.disabled : 1 },
           DISABLE_FADE,
@@ -291,10 +289,12 @@ export function Button({
       >
         {kind === 'primary' ? <GradientFill style={StyleSheet.absoluteFill} /> : null}
         {lit ? (
-          // The flare sits under the label, inside the pill's own corner: the clip follows the pill as Android squares it off.
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clip, shape]}>
-            <Animated.View testID={testID && `${testID}-flare`} style={[StyleSheet.absoluteFill, { backgroundColor: sel.flare }, flare]} />
-          </Animated.View>
+          // The pour sits under the label, inside the tint's own corner: the clip follows the pill as Android squares it off.
+          <LitFill radius={round} inset={litInset as unknown as ViewStyle} testID={testID && `${testID}-lit`}>
+            <Animated.View testID={testID && `${testID}-flare`} style={[StyleSheet.absoluteFill, flare]}>
+              <GradientFill gradient="litPressed" style={StyleSheet.absoluteFill} />
+            </Animated.View>
+          </LitFill>
         ) : null}
         {pressed && android ? <View style={[StyleSheet.absoluteFill, { backgroundColor: PRESSED_WASH.android }]} /> : null}
         {/*
@@ -304,7 +304,7 @@ export function Button({
           * the label could not be added to its new parent: Android died in addViewAt ("already has a parent").
           */}
         <View collapsable={false} style={[styles.content, spinner && styles.hidden]}>
-          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : size === 'dock' ? DOCK_GLYPH : ICON.control} color={glyphInk} /> : null)}
+          {leading ?? (icon ? <Icon name={icon} size={compact ? ICON.inline : size === 'dock' ? DOCK_GLYPH : ICON.control} color={ink} /> : null)}
           {count !== undefined ? (
             // A rolling number is a row of columns, not a run of text: the sentence is a row, a word space apart.
             // It keeps the widest it has been, so a count losing a digit (10 → 9, "Resend in 9s") moves only the digits.
@@ -345,15 +345,8 @@ export function Button({
         </View>
         {spinner ? (
           <View style={[StyleSheet.absoluteFill, styles.center]}>
-            <Spinner testID={testID && `${testID}-spinner`} size={compact ? 16 : 20} dark={kind === 'strong'} color={lit ? sel.glyph : undefined} />
+            <Spinner testID={testID && `${testID}-spinner`} size={compact ? 16 : 20} />
           </View>
-        ) : null}
-        {lit ? (
-          <Animated.View
-            testID={testID && `${testID}-rim`}
-            pointerEvents="none"
-            style={[StyleSheet.absoluteFill, { borderWidth: LIT_RIM, borderColor: sel.edge }, shape]}
-          />
         ) : null}
         {outlined || (refused && kind !== 'tertiary') ? (
           <Animated.View
@@ -388,7 +381,6 @@ const styles = StyleSheet.create({
   gluedBefore: { marginRight: -SPACE.xs },
   gluedAfter: { marginLeft: -SPACE.xs },
   hidden: { opacity: 0 },
-  clip: { overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
   refused: { borderWidth: SPACE.xxs, borderColor: COLOR.destructive },
 })

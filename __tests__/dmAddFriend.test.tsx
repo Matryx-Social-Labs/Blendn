@@ -77,6 +77,7 @@ import { apiClient } from '../lib/apiClient'
 import { clearOutbox, dmThread, setDraft } from '../lib/chatOutbox'
 import { COLOR } from '../lib/design/tokens'
 import { closeSheet } from '../lib/sheet'
+import { isLitControl } from './helpers/lit'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -300,7 +301,7 @@ describe('the card in the thread, once you can both see each other', () => {
     expect(within(screen.getByTestId('dm-reveal')).getByText('You can both see each other')).toBeTruthy()
     expect(within(screen.getByTestId('dm-reveal')).getByText('Add friend')).toBeTruthy()
     // Lit in the thread's rose, never the white strong or the gradient.
-    expect(StyleSheet.flatten(within(screen.getByTestId('dm-reveal')).getByRole('button', { name: 'Add friend' }).props.style).backgroundColor).toBe(COLOR.selectionRoseFill)
+    expect(isLitControl(within(screen.getByTestId('dm-reveal')).getByRole('button', { name: 'Add friend' }))).toBe(true)
   })
 
   it('reads both sides as seen', async () => {
