@@ -54,6 +54,44 @@ describe('a long hyphenated name in a row at Android font 2.0', () => {
     expect(size()).toBe(21)
   })
 
+  // iOS breaks after a hyphen, so at AX XXXL the 2-line clamp cut the name instead: "Marc-André / Lefebvre-Desrosi…". A word the
+  // clamp cuts is a split word too (ruling A): it is fitted to the line, so the name ends whole.
+  // iOS breaks after a hyphen, so at AX XXXL the 2-line clamp cut the name instead: "Marc-André / Lefebvre-Desr…". iOS reports the
+  // clamped last line holding all the rest, filling the box. A word the clamp cuts is a split word too (ruling A): it is fitted.
+  it('iOS AX XXXL: a one-word last line the clamp cut is fitted to the line, not ellipsized', async () => {
+    await atScale(3.12)
+    await render(<PersonRow person={person} detail="Friends since " detailMono="Nov 2026" />)
+    const name = screen.getByText(NAME)
+    await fireEvent(name, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 200, height: 0 } } })
+    await fireEvent(name, 'textLayout', { nativeEvent: { lines: [lines('Marc-André ')[0], { ...lines('Lefebvre-Desrosiers')[0], width: 200 }] } })
+    expect(measuring()).toBeTruthy()
+    await fireEvent(measuring()!, 'textLayout', { nativeEvent: { lines: [{ ...lines('w')[0], width: 160 }] } })
+    expect(size()).toBe(21)
+    // Drawn at 21 the word fills its line, as fitted: it stays at 21 rather than stepping down to the floor.
+    await fireEvent(screen.getByText(NAME), 'textLayout', { nativeEvent: { lines: [lines('Marc-André ')[0], { ...lines('Lefebvre-Desrosiers')[0], width: 199.5 }] } })
+    expect(size()).toBe(21)
+  })
+
+  it('iOS: a one-word last line that fits at the drawn size is measured and left as it is (only a word that does not fit shrinks)', async () => {
+    await atScale(3.12)
+    await render(<PersonRow person={person} detail="Friends since " detailMono="Nov 2026" />)
+    const name = screen.getByText(NAME)
+    await fireEvent(name, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 600, height: 0 } } })
+    await fireEvent(name, 'textLayout', { nativeEvent: { lines: [lines('Marc-André ')[0], { ...lines('Lefebvre-Desrosiers')[0], width: 500 }] } })
+    await fireEvent(measuring()!, 'textLayout', { nativeEvent: { lines: [{ ...lines('w')[0], width: 160 }] } })
+    expect(size()).toBe(TYPE.bodyStrong.fontSize)
+    expect(screen.getByText(NAME).props.allowFontScaling).not.toBe(false)
+  })
+
+  it('iOS AX XXXL, when the layout reports the hidden line too: the clamp cuts "Lefebvre-" from "Desrosiers", so the word is fitted', async () => {
+    await atScale(3.12)
+    await render(<PersonRow person={person} detail="Friends since " detailMono="Nov 2026" />)
+    const name = screen.getByText(NAME)
+    await fireEvent(name, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 200, height: 0 } } })
+    await fireEvent(name, 'textLayout', { nativeEvent: { lines: lines('Marc-André ', 'Lefebvre-', 'Desrosiers') } })
+    expect(measuring()).toBeTruthy()
+  })
+
   it('a name that breaks only between words is left as the role draws it', async () => {
     await atScale(2)
     await render(<PersonRow person={person} />)
