@@ -2,7 +2,7 @@
  * The event page's words (Flow 4 E-B, `flow-4/screens.js`): the date stamp, the guide rows' lines, and the dock's state
  * and one action per attendance state. Pure, so every branch is pinned here; the screen test checks they are drawn.
  */
-import { dateStamp, eventDock, shortDistance, untilWords, whoLine } from '../lib/eventFacts'
+import { holdUnder, dateStamp, eventDock, shortDistance, untilWords, whoLine } from '../lib/eventFacts'
 import { WORST } from './helpers/longText'
 
 const IST = 'Asia/Kolkata'
@@ -101,7 +101,7 @@ describe('eventDock: state on the left in its own slot, one action on the right'
   it('going, before the doors: "You’re going", Change, and a lit Invite (the system share sheet)', () => {
     expect(eventDock({ ...base, cta: 'rsvpd' })).toEqual({
       state: 'You’re going',
-      sub: 'Change',
+      link: 'Change',
       change: true,
       action: { label: 'Invite', kind: 'lit', icon: 'share', does: 'invite' },
     })
@@ -109,14 +109,16 @@ describe('eventDock: state on the left in its own slot, one action on the right'
   it('an event that may not be shared has no Invite (hidden, never disabled)', () => {
     expect(dock({ cta: 'rsvpd', canInvite: false }).action).toBeUndefined()
   })
-  it('between the days of a run the next door is said where Change was; the state still changes the RSVP', () => {
+  it('between the days of a run the next door is said after Change, which stays drawn (SCRUM-1074)', () => {
     const d = dock({ cta: 'rsvpd', between: 'Day 3 starts Tue 29 Sep, 9 PM' })
+    expect(d.link).toBe('Change')
     expect(d.sub).toBe('Day 3 starts Tue 29 Sep, 9 PM')
     expect(d.change).toBe(true)
   })
-  it('the room is open: "The room is open" and Open the room, which is the primary', () => {
+  it('the room is open: Change stays drawn before "The room is open", and Open the room is the primary (SCRUM-1074)', () => {
     expect(eventDock({ ...base, cta: 'rsvpd', roomOpen: true })).toEqual({
       state: 'You’re going',
+      link: 'Change',
       sub: 'The room is open',
       change: true,
       action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'openRoom' },
@@ -130,13 +132,14 @@ describe('eventDock: state on the left in its own slot, one action on the right'
   it('waitlisted is never "You’re going", and asks nobody else to a full night', () => {
     const d = dock({ cta: 'waitlisted' })
     expect(d.state).toBe('On the waitlist')
+    expect(d.link).toBe('Change')
     expect(d.change).toBe(true)
     expect(d.action).toBeUndefined()
   })
   it('checked in: the room, and the way out under the state as its own link (option A, SCRUM-1035)', () => {
     expect(eventDock({ ...base, cta: 'going' })).toEqual({
       state: 'You’re in',
-      sub: 'Check out',
+      link: 'Check out',
       checkOut: true,
       action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'room' },
     })
@@ -158,5 +161,33 @@ describe('eventDock: state on the left in its own slot, one action on the right'
   })
   it('at the doors the hold is the dock (null here)', () => {
     expect(eventDock({ ...base, cta: 'join' })).toBeNull()
+  })
+  it('live, after "Can’t make it": "Not going" and I’m going, which puts it back (SCRUM-1074 sheet 05)', () => {
+    expect(eventDock({ ...base, cta: 'join', when: 'Live now · till 1:15 AM', leftTonight: true })).toEqual({
+      state: 'Not going',
+      sub: 'Live now · till 1:15 AM',
+      action: { label: 'I’m going', kind: 'primary', does: 'rsvp' },
+    })
+  })
+  it('only before the doors or live is anything a link: the others draw none', () => {
+    for (const cta of ['rsvp', 'rate', 'ended', 'cancelled'] as const) expect(dock({ cta }).link).toBeUndefined()
+  })
+})
+
+describe('holdUnder: the line under the hold once the doors are open (SCRUM-1074)', () => {
+  it('going: who is here, and "Can’t make it"', () => {
+    expect(holdUnder({ rsvpStatus: 'going', hereNow: 40 })).toEqual({ left: '40 here now', link: 'Can’t make it' })
+  })
+  it('a worst-case count is compact in its slot', () => {
+    expect(holdUnder({ rsvpStatus: 'going', hereNow: 12480 })?.left).toBe('12k here now')
+  })
+  it('nobody here yet: the link alone', () => {
+    expect(holdUnder({ rsvpStatus: 'going', hereNow: 0 })).toEqual({ left: null, link: 'Can’t make it' })
+  })
+  it('waitlisted: the list, and the way off it', () => {
+    expect(holdUnder({ rsvpStatus: 'waitlisted', hereNow: 40 })).toEqual({ left: 'On the waitlist', link: 'Leave the waitlist' })
+  })
+  it('not going: nothing under the hold (control)', () => {
+    expect(holdUnder({ rsvpStatus: null, hereNow: 40 })).toBeNull()
   })
 })

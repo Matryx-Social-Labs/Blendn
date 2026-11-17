@@ -18,7 +18,7 @@ jest.mock('../lib/apiClient', () => ({
 }))
 jest.mock('../lib/lobbySeen', () => ({ lobbySeenAt: jest.fn(), rememberLobbySeen: jest.fn() }))
 
-import { EventLobbyPreview, NewInLobbyRow } from '../components/board/LobbyPreview'
+import { EventLobbyPreview, LobbyRowNews, NewInLobbyRow } from '../components/board/LobbyPreview'
 import { LobbyAlertsSheet } from '../components/board/LobbyAlertsSheet'
 import { apiClient } from '../lib/apiClient'
 import { lobbySeenAt } from '../lib/lobbySeen'
@@ -163,11 +163,13 @@ describe('Going: New in the Lobby', () => {
     expect(screen.getByRole('button', { name: 'New in the Lobby, 5 new posts' })).toBeTruthy()
   })
 
-  it('is not there when nothing is new, or the Lobby refuses (control: one new post shows it)', async () => {
+  it('nothing new: the quiet line, still the way in (L2, owner 2026-11-17); a refusal draws nothing (control: one new post is the news line)', async () => {
     seenAt.mockResolvedValue(new Date(Date.now() + 60_000).toISOString())
     api.getBoard.mockResolvedValue(page(3))
     await render(<NewInLobbyRow eventId="ev1" />)
-    expect(screen.toJSON()).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'The Lobby. Rides, plus-ones and hellos before the night' }))
+    expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
+    expect(screen.queryByText('New in the Lobby')).toBeNull()
     seenAt.mockResolvedValue(null)
     api.getBoard.mockResolvedValue({ success: false, error: 'closed' })
     await render(<NewInLobbyRow eventId="ev1" />)
@@ -175,6 +177,23 @@ describe('Going: New in the Lobby', () => {
     api.getBoard.mockResolvedValue(page(1))
     await render(<NewInLobbyRow eventId="ev1" />)
     expect(screen.getByRole('button', { name: 'New in the Lobby, 1 new post' })).toBeTruthy()
+  })
+})
+
+describe('Going rows: Lobby · N new (L2), only when the server sends a count', () => {
+  it('says the count, compact past 999, the exact number in its label, and opens the Lobby', async () => {
+    await render(<LobbyRowNews eventId="ev1" count={12480} />)
+    expect(screen.getByText('Lobby · 12k new')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Lobby, 12,480 new posts' }))
+    expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
+  })
+  it('draws nothing with no count, or none new (control: 3 is drawn)', async () => {
+    await render(<LobbyRowNews eventId="ev1" count={undefined} />)
+    expect(screen.toJSON()).toBeNull()
+    await render(<LobbyRowNews eventId="ev1" count={0} />)
+    expect(screen.toJSON()).toBeNull()
+    await render(<LobbyRowNews eventId="ev1" count={3} />)
+    expect(screen.getByText('Lobby · 3 new')).toBeTruthy()
   })
 })
 

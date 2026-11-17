@@ -41,6 +41,8 @@ const ROOM_GLOW = [{ offsetX: 0, offsetY: 18, blurRadius: 50, spreadDistance: -2
 const HAIR = StyleSheet.hairlineWidth
 const PILL_ABOVE = 15
 const PILL_BELOW = 5
+/** The row line is 18 pt of text: the slop makes its target 44. */
+const ROW_NEWS_SLOP = 13
 /** The preview shows two posts. */
 const PREVIEW_POSTS = 2
 
@@ -199,7 +201,30 @@ export function NewInLobbyRow({ eventId, style }: { eventId: string; style?: Sty
       }
     }, [eventId])
   )
-  if (!news || news.count === 0) return null
+  if (!news) return null
+  // Nothing new: the line stays, quiet, so the Lobby is always reachable from Next up while it is open (L2, owner 2026-11-17).
+  if (news.count === 0) {
+    return (
+      <Pressable
+        testID="going-lobby-quiet"
+        onPress={() => openLobby(eventId)}
+        accessibilityRole="button"
+        accessibilityLabel={`The Lobby. ${QUIET_LINE}`}
+        style={({ pressed }) => [styles.news, styles.quiet, style, pressed && styles.pressed]}
+      >
+        <Icon name="door-open" size={ICON.control + 2} color={ROSE.glyph} />
+        <View style={styles.shrink} importantForAccessibility="no-hide-descendants">
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('control', bold), styles.ink]}>
+            The Lobby
+          </Text>
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+            {QUIET_LINE}
+          </Text>
+        </View>
+        <Icon name="chevron-right" size={ICON.inline + 2} color={ROSE.glyph} />
+      </Pressable>
+    )
+  }
   const badge = badgeCount(news.count)
   return (
     <Pressable
@@ -223,6 +248,32 @@ export function NewInLobbyRow({ eventId, style }: { eventId: string; style?: Sty
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.mono[700]), styles.badgeInk]}>{badge}</Text>
       </View>
       <Icon name="chevron-right" size={ICON.inline + 2} color={ROSE.glyph} />
+    </Pressable>
+  )
+}
+
+const QUIET_LINE = 'Rides, plus-ones and hellos before the night'
+
+/**
+ * A Going row's "Lobby · 3 new" (L2): only when the server sends the row's count (ROADMAP § Backend later, Going lifecycle
+ * 6), so it draws nothing today. Compact past 999 (12k), the exact number in its label; its own 44 pt target.
+ */
+export function LobbyRowNews({ eventId, count }: { eventId: string; count: number | undefined }) {
+  const bold = useBoldText()
+  if (!count || count <= 0) return null
+  return (
+    <Pressable
+      testID={`going-row-lobby-${eventId}`}
+      onPress={() => openLobby(eventId)}
+      accessibilityRole="button"
+      accessibilityLabel={`Lobby, ${exact(count)} new ${count === 1 ? 'post' : 'posts'}`}
+      hitSlop={ROW_NEWS_SLOP}
+      style={({ pressed }) => [styles.rowNews, pressed && styles.pressed]}
+    >
+      <Icon name="door-open" size={ICON.inline} color={ROSE.glyph} />
+      <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.rose, styles.shrinkText]}>
+        {`Lobby · ${compactCount(count)} new`}
+      </Text>
     </Pressable>
   )
 }
@@ -270,6 +321,10 @@ const styles = StyleSheet.create({
   // `.stk .crt`: the 2 pt ring is a shadow on the board, outside the box, so it gives its room back.
   stackRing: { borderRadius: RADIUS.capsule, borderWidth: STACK_RING, borderColor: ROSE.fill, margin: -STACK_RING },
   stackOverlap: { marginLeft: -SPACE.sm - STACK_RING },
+  quiet: { backgroundColor: COLOR.surfaceRaised, borderColor: COLOR.hairlineStrong },
+  rowNews: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + 1, alignSelf: 'flex-start', maxWidth: '100%' },
+  rose: { color: ROSE.glyph },
+  shrinkText: { flexShrink: 1 },
   // Ink on brand rose, 4.61:1: white was 4.23:1, under AA at 13 pt (going-lifecycle sheet 12, 2026-11-17).
   badgeInk: { color: COLOR.selectionInk },
   badge: { minWidth: BADGE, height: BADGE, paddingHorizontal: SPACE.xs + 3, borderRadius: BADGE / 2, backgroundColor: ROSE.edge, alignItems: 'center', justifyContent: 'center' },
