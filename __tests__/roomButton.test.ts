@@ -154,10 +154,9 @@ describe('the Pulse no longer carries the checked-in strip', () => {
      * `useRoomControls`, which calls `checkOutOf`). The room's asks first
      * now — one stray tap closed the room — but it is still one sheet away.
      */
-    expect(pulse).toContain("label: 'Check out'")
-    // And asks first, like the room's, before `handleCheckOut` runs.
-    expect(pulse).toContain('title: checkOutQuestion(event.title),')
-    expect(pulse).toContain('void handleCheckOut(event)')
+    // The peek's Check out opens the room's own sheet (its question, then the neutral hold: buttons board C).
+    expect(pulse).toContain('setCheckingOut(event)')
+    expect(pulse).toMatch(/<CheckOutSheet eventId=\{checkingOut \?/)
     const blendn = readFileSync(join(__dirname, '..', 'components/blendn/BlendnScreen.tsx'), 'utf8')
     // Since C6 (I-A) the room's one exit is Room info's Check out, into the same confirm.
     expect(blendn).toContain('onCheckOut={() => setConfirmingOut(true)}')

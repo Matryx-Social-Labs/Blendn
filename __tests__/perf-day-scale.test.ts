@@ -31,8 +31,9 @@ describe("the Pulse handlers keep their identity", () => {
   const src = code("app/(tabs)/events.tsx")
 
   it("reads the volatile maps through refs inside handlers", () => {
+    // `latestCheckinStatusesRef` went with `handleCheckOut`: the peek's Check out is the room's CheckOutSheet now
+    // (buttons board C), and no handler reads the check-in map on a tap.
     for (const ref of [
-      "latestCheckinStatusesRef",
       "latestInterestStatusesRef",
       "latestInterestCountsRef",
     ]) {
@@ -59,7 +60,7 @@ describe("the Pulse handlers keep their identity", () => {
      */
     const HANDLERS = [
       "handleEventPress",
-      "handleCheckOut",
+      "onCheckedOut",
       "toggleInterest",
       "onPeekAction",
     ]
