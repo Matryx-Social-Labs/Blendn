@@ -40,7 +40,8 @@ export function PulseTopBar({ actions }: { floating: true; actions?: React.React
 }
 
 const styles = StyleSheet.create({
-  bar: { position: 'absolute', backgroundColor: 'transparent' },
+  // Edge to edge: without left/right the absolute bar shrinks to its content and the bell slides in beside the wordmark.
+  bar: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'transparent' },
   // The capsule and the bell start at the safe-area top (Flow 3 `home`: top 62 under a 59 pt status bar), not centred in the band under it.
   row: {
     height: TOP_BAR_HEIGHT,
