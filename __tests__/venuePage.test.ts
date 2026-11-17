@@ -11,7 +11,6 @@ import {
   goodToKnow,
   kmParam,
   liveDockLine,
-  minutesWords,
   nextTickMs,
   ringWords,
   sessionTime,
@@ -246,18 +245,19 @@ describe('where your window stands', () => {
     expect(spokenLeft(t!)).toBe('42 minutes left')
     expect(ringWords(sessionTime({ expiresAt: iso(min(165)) }, NOW))).toBe('Live · 2h 45m left')
     expect(spokenLeft(sessionTime({ expiresAt: iso(min(165)) }, NOW)!)).toBe('2 hours 45 minutes left')
-    expect(spokenLeft(sessionTime({ expiresAt: iso(min(1)) }, NOW)!)).toBe('1 minute left')
+    expect(spokenLeft(sessionTime({ expiresAt: iso(min(60)) }, NOW)!)).toBe('1 hour left')
     const ending = sessionTime({ expiresAt: iso(NOW + 4 * 60_000 + 59_000) }, NOW)!
     expect(spokenLeft(ending)).toBe('4:59 left, ending soon')
     const stay = sessionTime({ expiresAt: null, stay: true }, NOW)!
     expect(ringWords(stay)).toBe('Live · staying')
   })
 
-  it('one formatter for the minutes: “42 min” under an hour, “2h 45m” over, “1h” on the hour', () => {
-    expect(minutesWords(42)).toBe('42 min')
-    expect(minutesWords(60)).toBe('1h')
-    expect(minutesWords(165)).toBe('2h 45m')
-    expect(minutesWords(61)).toBe('1h 1m')
+  it('the recap’s one formatter for the minutes: “42 min” under an hour, “2h 45m” over, “1h” on the hour', () => {
+    const left = (m: number) => liveDockLine(sessionTime({ expiresAt: iso(min(m)) }, NOW), 'Toit').clock?.text
+    expect(left(42)).toBe('42 min')
+    expect(left(60)).toBe('1h')
+    expect(left(165)).toBe('2h 45m')
+    expect(left(61)).toBe('1h 1m')
   })
 })
 

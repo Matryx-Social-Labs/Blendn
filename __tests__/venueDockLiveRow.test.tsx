@@ -65,7 +65,7 @@ async function dock(over: object = {}, props: Partial<React.ComponentProps<typeo
   )
 }
 
-const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style)
+const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 
 describe('the state line', () => {
   beforeEach(() => atScale(1, 360))

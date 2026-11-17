@@ -72,7 +72,7 @@ import {
 } from '../../lib/venuePage'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
-type SheetKind = 'dial' | 'session' | 'leave' | 'claim' | 'upcoming'
+type SheetKind = 'dial' | 'session' | 'claim' | 'upcoming'
 type Tray = { visible: boolean; title: string; message: string; buttons: TrayButton[]; extra?: TrayExtra }
 
 /** The shield under the status bar and the back button fades in as the rows reach it. */
@@ -90,8 +90,8 @@ const DIAL_GONE_FALLBACK_MS = 800
  * not send yet is a tile, a section or a line that is not drawn (docs/PLACES.md).
  *
  * The hero is tonight's cover, else the type's plate. The dock holds one slot:
- * Go live (a dial, then the hold), Go live again in one tap, the live pill with
- * Open the room and Leave, the hand-off to an event's check-in, or the server's
+ * Go live (a dial, then the hold), Go live again in one tap, live (the
+ * checked-in line: its state opens the live sheet, and Open the room), the hand-off to an event's check-in, or the server's
  * sentence. The check-in area is never drawn, in any state. The room, Who's
  * here and the people are for the people live here; the claim link is the
  * server's, quiet, and leaves the app.
@@ -125,7 +125,6 @@ function SessionHost(props: {
   live: VenueDetail['live']
   venue: string
   visible: boolean
-  confirmFirst: boolean
   extended: boolean
   extending: boolean
   ending: boolean
@@ -146,7 +145,6 @@ function SessionHost(props: {
       ending={props.ending}
       onExtend={props.onExtend}
       onEnd={props.onEnd}
-      startConfirming={props.confirmFirst}
     />
   )
 }
@@ -212,7 +210,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
 
   /** The session sheet away, and its "Extended" line with it. */
   const closeSession = useCallback(() => {
-    setSheet((s) => (s === 'session' || s === 'leave' ? null : s))
+    setSheet((s) => (s === 'session' ? null : s))
     setExtended(false)
   }, [])
 
@@ -557,7 +555,6 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
         onPickAnother={openDial}
         onOpenRoom={openRoom}
         onPill={() => setSheet('session')}
-        onLeave={() => setSheet('leave')}
         onEvent={() => action.kind === 'handoff' && openEvent(action.eventId)}
         onZero={load}
       />
@@ -586,8 +583,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
       <SessionHost
         live={live}
         venue={venue.name}
-        visible={sheet === 'session' || sheet === 'leave'}
-        confirmFirst={sheet === 'leave'}
+        visible={sheet === 'session'}
         extended={extended}
         extending={extending}
         ending={leaving}

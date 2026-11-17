@@ -366,10 +366,10 @@ describe('the page, the design’s details', () => {
     expect(screen.getAllByText(/Bengaluru/, { includeHiddenElements: true }).length).toBeGreaterThan(0)
   })
 
-  it('the dock’s pill in the last five minutes reads Ending, then Extend', async () => {
+  it('the dock’s line in the last five minutes reads “Ending · 4:59” over “Extend”', async () => {
     await mount(venue({ live: liveOver({ expiresAt: new Date(NOW + 4 * 60_000 + 59_000).toISOString() }) }))
-    const chips = screen.getAllByText(/^(Ending|Extend)$/, { includeHiddenElements: true }).map((t) => t.props.children)
-    expect(chips).toEqual(['Ending', 'Extend'])
+    expect(screen.getByTestId('venue-live-state')).toHaveTextContent('Ending ·', { exact: false })
+    expect(screen.getByTestId('venue-live-sub')).toHaveTextContent('Extend')
   })
 })
 

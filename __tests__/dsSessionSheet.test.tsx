@@ -156,13 +156,15 @@ describe('<SessionSheet>', () => {
     expect(destructive).not.toHaveBeenCalled()
   })
 
-  it('a swipe away from the confirm closes the sheet, and the next open starts on the session again', async () => {
+  it('a swipe away from the confirm goes back to the session, and every open starts on the session', async () => {
     const time = { kind: 'minutes' as const, left: 32, until: '21:50' }
     const onClose = jest.fn()
     const { rerender } = await render(<SessionSheet {...base} onClose={onClose} visible time={time} />)
     await fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     await fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
-    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByRole('header', { name: 'Live at Toit' })).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     await rerender(<SessionSheet {...base} visible={false} time={time} />)
     await rerender(<SessionSheet {...base} visible time={time} />)
     expect(screen.getByRole('header', { name: 'Live at Toit' })).toBeTruthy()
