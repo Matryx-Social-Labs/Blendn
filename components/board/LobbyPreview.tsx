@@ -220,7 +220,7 @@ export function NewInLobbyRow({ eventId, style }: { eventId: string; style?: Sty
         New in the Lobby
       </Text>
       <View style={styles.badge}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.mono[700]), styles.ink]}>{badge}</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.mono[700]), styles.badgeInk]}>{badge}</Text>
       </View>
       <Icon name="chevron-right" size={ICON.inline + 2} color={ROSE.glyph} />
     </Pressable>
@@ -270,5 +270,7 @@ const styles = StyleSheet.create({
   // `.stk .crt`: the 2 pt ring is a shadow on the board, outside the box, so it gives its room back.
   stackRing: { borderRadius: RADIUS.capsule, borderWidth: STACK_RING, borderColor: ROSE.fill, margin: -STACK_RING },
   stackOverlap: { marginLeft: -SPACE.sm - STACK_RING },
+  // Ink on brand rose, 4.61:1: white was 4.23:1, under AA at 13 pt (going-lifecycle sheet 12, 2026-11-17).
+  badgeInk: { color: COLOR.selectionInk },
   badge: { minWidth: BADGE, height: BADGE, paddingHorizontal: SPACE.xs + 3, borderRadius: BADGE / 2, backgroundColor: ROSE.edge, alignItems: 'center', justifyContent: 'center' },
 })

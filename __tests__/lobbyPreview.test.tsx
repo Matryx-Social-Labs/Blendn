@@ -23,6 +23,8 @@ import { LobbyAlertsSheet } from '../components/board/LobbyAlertsSheet'
 import { apiClient } from '../lib/apiClient'
 import { lobbySeenAt } from '../lib/lobbySeen'
 import { WORST } from './helpers/longText'
+import { StyleSheet } from 'react-native'
+import { COLOR } from '../lib/design/tokens'
 
 /** The board's worst-case pseudonym and a body far past two lines. */
 const LONG_NAME = 'Midnight Butterfly'
@@ -145,6 +147,13 @@ describe('Going: New in the Lobby', () => {
     expect(screen.getByText('9+')).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'New in the Lobby, 9+ new posts' }))
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
+  })
+
+  it('the count is ink on rose, 4.61:1 (white was 4.23:1, under AA for 13 pt text; going-lifecycle sheet 12)', async () => {
+    seenAt.mockResolvedValue(null)
+    api.getBoard.mockResolvedValue(page(3))
+    await render(<NewInLobbyRow eventId="ev1" />)
+    expect(StyleSheet.flatten(screen.getByText('3').props.style).color).toBe(COLOR.selectionInk)
   })
 
   it('counts exactly under ten, never your own', async () => {
