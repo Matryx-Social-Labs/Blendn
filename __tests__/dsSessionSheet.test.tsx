@@ -2,13 +2,14 @@
  * <SessionSheet> (guidelines/components/SessionSheet.html, Flow 11 · 11.3):
  * while you are live at a venue. The time left, Extend in the last 5 minutes
  * (labelled with the new end; H.primary, H.success when it lands), End
- * (which confirms in the same sheet: check-out always confirms), and Stay.
+ * (which confirms in the same sheet with the neutral hold: check-out always confirms), and Stay.
  */
 import { fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform } from 'react-native'
+import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 
 import { SessionSheet } from '../components/ds/SessionSheet'
+import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -104,37 +105,54 @@ describe('<SessionSheet>', () => {
     expect(screen.getByText('Each time your phone sees you inside Toit, your time carries 20 minutes further.')).toBeTruthy()
   })
 
-  it('End turns the one sheet into the confirm; its End plays H.destructive; Keep going goes back', async () => {
+  /*
+   * Stopping being live is leaving, not a yes and not a loss (owner 2026-11-17, buttons board C): the same neutral hold as
+   * Check out, in the same words' shape. One question from either way in: the pill's End and the dock's Leave.
+   */
+  const hold = () => screen.getByTestId('session-stop-hold')
+  const held = async () => fireEvent(hold(), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
+
+  it('End turns the one sheet into the confirm: the question, then the neutral hold; Stay goes back to the session', async () => {
     const onEnd = jest.fn()
     await render(<SessionSheet {...base} onEnd={onEnd} time={{ kind: 'minutes', left: 32, until: '21:50' }} />)
     await fireEvent.press(screen.getByRole('button', { name: 'End' }))
     expect(onEnd).not.toHaveBeenCalled()
-    expect(screen.getByRole('header', { name: 'End your live time at Toit?' })).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'Keep going' }))
-    expect(screen.getByRole('header', { name: 'Live at Toit' })).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'End' }))
+    expect(screen.getByRole('header', { name: 'Stop being live at Toit?' })).toBeTruthy()
     // One modal at a time: the session gave way to the confirm in the same sheet.
     expect(screen.queryByRole('header', { name: 'Live at Toit' })).toBeNull()
-    const end = screen.getByRole('button', { name: 'End' })
-    await fireEvent(end, 'pressIn')
-    await fireEvent.press(end)
-    expect(destructive).toHaveBeenCalledTimes(1)
+    await fireEvent.press(screen.getByRole('button', { name: 'Stay' }))
+    expect(screen.getByRole('header', { name: 'Live at Toit' })).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'End' }))
+    await held()
     expect(onEnd).toHaveBeenCalledTimes(1)
   })
-  it('Leave (startConfirming) opens on R12’s “Stop being live at ‹place›?”; Stay, or a swipe, closes the sheet rather than falling back to the session', async () => {
+
+  it('the confirm is the neutral hold, never a red button: surface, the grey rim, its tone pouring in', async () => {
+    await render(<SessionSheet {...base} visible startConfirming time={{ kind: 'minutes', left: 32, until: '21:50' }} />)
+    expect(hold().props.accessibilityLabel).toBe('Hold to stop being live')
+    expect(hold().props.accessibilityHint).toBe('Ends your live time at Toit.')
+    expect(StyleSheet.flatten(screen.getByTestId('session-stop-hold-track-inset').props.style).backgroundColor).toBe(COLOR.surface)
+    expect(StyleSheet.flatten(screen.getByTestId('session-stop-hold-fill-ground').props.style).backgroundColor).toBe(COLOR.hairlineStrong)
+    expect(screen.queryByRole('button', { name: /^(Stop|End)$/ })).toBeNull()
+    await held()
+    expect(destructive).not.toHaveBeenCalled()
+  })
+
+  it('Leave (startConfirming) opens on the same question; Stay, or a swipe, closes the sheet rather than falling back to the session', async () => {
     const time = { kind: 'minutes' as const, left: 32, until: '21:50' }
     const onClose = jest.fn()
     const onEnd = jest.fn()
     const { rerender } = await render(<SessionSheet {...base} onClose={onClose} onEnd={onEnd} visible={false} startConfirming time={time} />)
     await rerender(<SessionSheet {...base} onClose={onClose} onEnd={onEnd} visible startConfirming time={time} />)
     expect(screen.getByRole('header', { name: 'Stop being live at Toit?' })).toBeTruthy()
+    expect(screen.getByText('You leave today’s room at that second. Go live again any time you’re here.')).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'Stay' }))
     expect(onClose).toHaveBeenCalledTimes(1)
     await fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
     expect(onClose).toHaveBeenCalledTimes(2)
-    await fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
+    await held()
     expect(onEnd).toHaveBeenCalledTimes(1)
-    // Each open starts there again; the pill’s open starts on the session, whose End keeps its own words.
+    // Each open starts there again; the pill’s open starts on the session.
     await rerender(<SessionSheet {...base} visible={false} startConfirming time={time} />)
     await rerender(<SessionSheet {...base} visible startConfirming time={time} />)
     expect(screen.getByRole('header', { name: 'Stop being live at Toit?' })).toBeTruthy()
@@ -143,17 +161,17 @@ describe('<SessionSheet>', () => {
     expect(screen.getByRole('header', { name: 'Live at Toit' })).toBeTruthy()
   })
 
-  it('while it ends the button reads “Stopping…” and holds', async () => {
+  it('while it ends the hold stays full under “Stopping…”, busy', async () => {
     await render(<SessionSheet {...base} visible startConfirming ending time={{ kind: 'minutes', left: 32, until: '21:50' }} />)
-    const stop = screen.getByRole('button', { name: 'Stopping…' })
-    expect(stop.props.accessibilityState).toMatchObject({ busy: true })
+    expect(hold().props.accessibilityLabel).toBe('Stopping…')
+    expect(hold().props.accessibilityState).toMatchObject({ busy: true })
   })
 
   it('with no end to count to (no expiry, not a stay) it says only that you are live, and End still confirms', async () => {
     await render(<SessionSheet {...base} time={null} />)
     expect(screen.getByLabelText('Live')).toBeTruthy()
     await fireEvent.press(screen.getByRole('button', { name: 'End' }))
-    expect(screen.getByRole('header', { name: 'End your live time at Toit?' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Stop being live at Toit?' })).toBeTruthy()
   })
 
   it('Stay with no hard end sent says nothing about one', async () => {

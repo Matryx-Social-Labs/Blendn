@@ -471,7 +471,7 @@ const SESSIONS: Record<string, { time: SessionTime; extended?: boolean }> = {
 function Session() {
   const [open, setOpen] = useState<string | null>(null)
   return (
-    <Section title="SessionSheet" note="Extend in the last 5 minutes: H.primary, H.success on OK · End confirms (H.destructive on the confirm)">
+    <Section title="SessionSheet" note="Extend in the last 5 minutes: H.primary, H.success on OK · End asks with the neutral hold (H.tick ×3, H.commit)">
       {Object.keys(SESSIONS).map((k) => (
         <Open key={k} id={`session-${k}`} label={`Open: ${k}`} onPress={() => setOpen(k)} />
       ))}

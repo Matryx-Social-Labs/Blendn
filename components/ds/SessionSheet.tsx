@@ -4,7 +4,9 @@ import { StyleSheet, Text, View } from 'react-native'
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
+import { STAY_LABEL, STOP_LIVE_CONSEQUENCE, STOP_LIVE_LABEL, STOPPING_LIVE_LABEL, stopLiveCaption, stopLiveQuestion } from '../../lib/switchCopy'
 import { PresenceDot } from './MonoFamily'
+import { HoldToConfirm } from './HoldToConfirm'
 import { Sheet, type SheetAction } from './Sheet'
 import { announceOutcome, font, useBoldText, useIncreaseContrast } from './shared'
 import { Title } from './Title'
@@ -44,12 +46,14 @@ const DOT = SPACE.sm + SPACE.xxs
  * "Staying" with its 4-hour cap and how each ping inside carries it.
  *
  * One sheet: End turns it into the confirm (iOS will not present a second
- * modal while the first is still leaving), and Keep going turns it back.
+ * modal while the first is still leaving), and Stay turns it back. The confirm
+ * is Check out's: the question, the neutral hold, Stay (buttons board C, owner
+ * 2026-11-17: stopping being live is leaving, not a loss, so never red).
  *
  * `H.primary` on Extend's press-in and `H.success` when the extension lands
  * (`extended` turning on: the server's OK), announced; none on End or on the
- * sheet; the confirm's End is the destructive button (`H.destructive`). Flow
- * 11's annotations overrule the page's `H.select`. The count is read as one
+ * sheet; the hold plays its ticks and `H.commit`. Flow 11's annotations
+ * overrule the page's `H.select`. The count is read as one
  * line, "32 minutes left, live until 21:50". Nothing ticks: the caller updates
  * the minutes once a minute, the clock each second only in the last 5.
  */
@@ -79,9 +83,9 @@ export function SessionSheet({
   /** End is on its way to the server. */
   ending?: boolean
   /**
-   * Opens on the confirm (the dock's Leave, R4 R12: "Stop being live at ‹place›?" · Stay · Stop, then
-   * "Stopping…"); Stay, or a swipe, then closes the sheet. The pill opens on the session, whose End
-   * confirms in the same sheet and goes back to it on Keep going. Read as the sheet opens.
+   * Opens on the confirm (the dock's Leave, R4 R12: "Stop being live at ‹place›?" · the hold, then
+   * "Stopping…" · Stay); Stay, or a swipe, then closes the sheet. The pill opens on the session, whose End
+   * asks the same question in the same sheet and goes back to it on Stay. Read as the sheet opens.
    */
   startConfirming?: boolean
 }) {
@@ -99,21 +103,27 @@ export function SessionSheet({
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
 
   if (confirming) {
-    const stop = startConfirming
     // Leaving from the dock closes the sheet on Stay; ending from the session goes back to it.
-    const cancel = stop ? onClose : () => setConfirming(false)
+    const cancel = startConfirming ? onClose : () => setConfirming(false)
     return (
       <Sheet
         visible={visible}
         onClose={cancel}
-        icon="log-out"
-        title={stop ? `Stop being live at ${venue}?` : `End your live time at ${venue}?`}
-        body="You leave today’s room at that second. Go live again any time you’re here."
-        actions={[
-          { label: stop ? (ending ? 'Stopping…' : 'Stop') : 'End', kind: 'destructive', onPress: onEnd, loading: ending },
-          { label: stop ? 'Stay' : 'Keep going', kind: 'tertiary', onPress: cancel },
-        ]}
-      />
+        title={stopLiveQuestion(venue)}
+        body={STOP_LIVE_CONSEQUENCE}
+        actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: cancel }]}
+      >
+        <HoldToConfirm
+          kind="neutral"
+          label={STOP_LIVE_LABEL}
+          busyLabel={STOPPING_LIVE_LABEL}
+          srLabel="Stop being live"
+          consequence={stopLiveCaption(venue)}
+          onConfirm={onEnd}
+          busy={ending}
+          testID="session-stop-hold"
+        />
+      </Sheet>
     )
   }
 
