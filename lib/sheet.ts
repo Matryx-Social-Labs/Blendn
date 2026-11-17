@@ -50,6 +50,10 @@ export type SheetAction = {
   variant?: 'primary' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
   /** A row's glyph, in a `rows` sheet (the DM's options). */
   icon?: IconName
+  /** In a `rows` sheet, a line under the label that says the consequence ("They won’t be told"). */
+  detail?: string
+  /** In a `rows` sheet, whether the row draws a chevron; default: when it opens another step. A menu the board draws without one says false. */
+  chevron?: boolean
   /** In a `rows` sheet, this row stands on its own after a gap, with no hairline: leaving the room (audit B-1). */
   apart?: boolean
   /** A state, not an action ("Requested"): the row is drawn quiet and does nothing. */
@@ -84,6 +88,11 @@ export type ActionSheet = InWorld & {
   message?: string
   /** The glyph well above the title (the design's sheets: Not sent, Leave, Mute). */
   icon?: IconName
+  /**
+   * Who the sheet is about, as its header: their face and their name on one line (Flow 7 5-A), in place of a title that ran a
+   * long name over three lines. `title` stays the sheet's name for a screen reader.
+   */
+  person?: { name: string; photo: string | null }
   /** A picture above the title, in place of the icon: the push ask's lock screen (`lib/pushAsk`). */
   art?: ReactNode
   /**

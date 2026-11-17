@@ -41,7 +41,7 @@ jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToas
 
 import { router } from 'expo-router'
 import CrewsScreen from '../app/crews/index'
-import { StyleSheet } from 'react-native'
+import { Dimensions, StyleSheet } from 'react-native'
 import { SPACE } from '../lib/design/tokens'
 import InviteScreen from '../app/crews/invite/[crewId]'
 import { CONSENT_LINE, KEEP_ANONYMOUS_LABEL, type Crew, type CrewInvite } from '../lib/crews'
@@ -209,6 +209,30 @@ describe('an invite', () => {
     expect(screen.queryByText('You’ll see who’s in it once you join.')).toBeNull()
     expect(screen.queryByText('Aisha invited you · Crew of 6')).toBeNull()
     expect(api.join).not.toHaveBeenCalled()
+  })
+
+  // Text fits at large sizes (owner 2026-11-17, SCRUM-1061): the crew page draws its name whole at the AX sizes, and so does the invite.
+  it('the crew name keeps its 2-line cap at the default size and lifts it at the AX sizes (≥1.5×)', async () => {
+    const window = Dimensions.get('window')
+    const at = (fontScale: number) => act(async () => Dimensions.set({ window: { ...window, fontScale }, screen: { ...window, fontScale } }))
+    api.myCrews.mockResolvedValue(list([], [invite({ name: 'Saint-Jean-sur-Richelieu Runners' })]))
+    try {
+      await at(1)
+      await render(<InviteScreen />)
+      await waitFor(() => screen.getByText('Saint-Jean-sur-Richelieu Runners'))
+      expect(screen.getByRole('header', { name: 'Saint-Jean-sur-Richelieu Runners' }).props.numberOfLines).toBe(2)
+      await at(1.5)
+      expect(screen.getByRole('header', { name: 'Saint-Jean-sur-Richelieu Runners' }).props.numberOfLines).toBeUndefined()
+    } finally {
+      await at(window.fontScale)
+    }
+  })
+
+  it('"{name} asked you in" wraps to two lines rather than cutting the name', async () => {
+    api.myCrews.mockResolvedValue(list([], [invite({ invitedBy: 'Venkatalakshmi Subramanian' })]))
+    await render(<InviteScreen />)
+    await waitFor(() => screen.getByText('Venkatalakshmi Subramanian asked you in'))
+    expect(screen.getByText('Venkatalakshmi Subramanian asked you in').props.numberOfLines).toBe(2)
   })
 
   it('the inviter’s photo leads when it is sent, and a short crew name is on the Join button', async () => {

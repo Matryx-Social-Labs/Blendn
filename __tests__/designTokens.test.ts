@@ -30,6 +30,7 @@ describe('design tokens', () => {
       .filter((f) => /\bfontSize:\s*-?\d/.test(fs.readFileSync(path.join(root, f), 'utf8')))
       .sort()
     expect(raw).toEqual([
+      'app/f/[token].tsx', // Flow 7 3-A's headline: the name alone at 34/38, 30/34 for a long one, between display and title
       'app/index.tsx', // the Google mark's label, drawn to Google's spec
       'app/rate/[eventId].tsx', // Flow 4 rate's "How was the night?", 28/33: no role at 28
       'components/chat/ChatParts.tsx', // an emoji in flight

@@ -105,7 +105,7 @@ describe('only links lose their query; the app’s own navigation keeps its para
   })
 
   it.each([
-    ['a DM from a friend’s profile keeps otherUserName', 'app/friends/[userId].tsx', /otherUserName: friend\.name/],
+    ['a DM to a friend (profile and list, lib/friendChat) keeps otherUserName', 'lib/friendChat.ts', /otherUserName: friend\.name/],
     ['a DM from a room keeps otherUserName and the draft', 'components/blendn/BlendnScreen.tsx', /otherUserName: p\.name[^}]*draft/],
     ['sign-in keeps the notice it is sent with', 'app/index.tsx', /pathname: '\/sign-in', params: \{ notice \}/],
     ['forgot-password keeps the email it is sent with', 'app/sign-in.tsx', /pathname: '\/forgot-password', params: \{ email: trimmedEmail \}/],

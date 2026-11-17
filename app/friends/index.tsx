@@ -1,6 +1,6 @@
 import Animated from 'react-native-reanimated'
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FlatList, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -9,14 +9,24 @@ import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PagedFooter } from '../../components/friends/PagedFooter'
-import { PersonRow, PersonRowSkeleton, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../../components/friends/PersonRow'
+import { LIST_FACE, PersonRow, PersonRowSkeleton, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../../components/friends/PersonRow'
+import { InviteLinkCard } from '../../components/friends/InviteLinkCard'
+import { LetterScrubber } from '../../components/friends/LetterScrubber'
+import { Button } from '../../components/ds/Button'
+import { IconButton } from '../../components/ds/IconButton'
+import { Title } from '../../components/ds/Title'
+import { useToast } from '../../components/Toast'
 import { MakeCrewRow } from '../../components/friends/MakeCrewRow'
 import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { friendsSinceParts, type Friend } from '../../lib/friends'
+import { CHAT_FAILED, openFriendChat } from '../../lib/friendChat'
+import { friendItems, indexForLetter, letterHeads, listMode, SCRUBBER_FROM, scrubberLetters, type FriendItem } from '../../lib/friendsIndex'
+import { useAuth } from '../../lib/useAuth'
+import { useFriendInvite } from '../../lib/useFriendInvite'
 import { groupedCount } from '../../lib/friendsHere'
 import { FRIEND_SEARCH_MAX, FRIENDS_PAGE } from '../../lib/friendsPaging'
-import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, SIZE, SPACE } from '../../lib/design/tokens'
 import { useFriendRequests } from '../../lib/useFriendRequests'
 import { useFriendsList } from '../../lib/useFriendsList'
 import { usePullToRefresh } from '../../lib/usePullToRefresh'
@@ -24,44 +34,8 @@ import { useTopBarState } from '../../lib/useTopBarState'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfade'
 
-/** D7: "Recently added" holds this many (the server's newest first). */
-export const RECENTLY_ADDED = 5
-/** Below this many friends the list is a screenful and visibly all of itself: no sections. */
-export const SECTIONS_FROM = 12
 /** A section's head: one capped line on a fixed height, so the list keeps `getItemLayout`. */
 const SECTION_HEAD = SIZE.tag
-
-export type FriendItem = { kind: 'head'; key: string; title: string } | { kind: 'friend'; key: string; friend: Friend }
-
-/** "A" for Aarav and Ábhi; "#" for a name that starts with no Latin letter. */
-const letterOf = (name: string): string => {
-  const c = name.trim().normalize('NFD').charAt(0).toUpperCase()
-  return c >= 'A' && c <= 'Z' ? c : '#'
-}
-
-/**
- * D7 (D-LM1): the loaded friends as "Recently added" (the server's newest, up to `RECENTLY_ADDED`), then A–Z under a head
- * per letter, "#" last. Built from the pages read so far: a later page adds names into the letters it belongs to. A search,
- * or a list short enough to be visibly all of itself, is one plain run.
- */
-export function friendItems(friends: readonly Friend[], sectioned: boolean): FriendItem[] {
-  const row = (prefix: string) => (friend: Friend): FriendItem => ({ kind: 'friend', key: `${prefix}${friend.userId}`, friend })
-  if (!sectioned) return friends.map(row(''))
-  const sorted = [...friends].sort((a, b) => {
-    const [la, lb] = [letterOf(a.name), letterOf(b.name)]
-    if ((la === '#') !== (lb === '#')) return la === '#' ? 1 : -1
-    return a.name.localeCompare(b.name, 'en', { sensitivity: 'base' })
-  })
-  const items: FriendItem[] = [{ kind: 'head', key: 'h:recent', title: 'Recently added' }, ...friends.slice(0, RECENTLY_ADDED).map(row('r:'))]
-  let letter = ''
-  for (const friend of sorted) {
-    const next = letterOf(friend.name)
-    if (next !== letter) items.push({ kind: 'head', key: `h:${next}`, title: next })
-    letter = next
-    items.push(row('a:')(friend))
-  }
-  return items
-}
 
 /** Each item's length and offset, for `getItemLayout`: heads are `SECTION_HEAD`, rows `PERSON_ROW_HEIGHT`. */
 export function itemOffsets(items: readonly FriendItem[]): number[] {
@@ -75,7 +49,7 @@ export function itemOffsets(items: readonly FriendItem[]): number[] {
 }
 
 /**
- * Your friends — the list the count on the Me tab opens.
+ * Your friends — what the Friends row on the Me tab opens.
  *
  * Real names and photos: both people said yes. Tapping one opens their
  * profile; the top-right opens Add friends, which is where your link is.
@@ -83,7 +57,8 @@ export function itemOffsets(items: readonly FriendItem[]): number[] {
  * crew from the list once there is anybody to make one with.
  *
  * Read a page at a time by the server's cursor and windowed (fixed 64 pt rows and 32 pt sticky heads, `getItemLayout`), so a
- * thousand friends cost a screenful. Past a screenful the list is sectioned: Recently added, then A–Z (`friendItems`). The count under the title is the server's whole list, drawn once it is more than one page: a short
+ * thousand friends cost a screenful. Past a screenful, up to `ALL_AT_ONCE`, every page is read and the list is Recently added, then A–Z
+ * with an index down the edge (`lib/friendsIndex`); past that it stays newest first. The count under the title is the server's whole list, drawn once it is more than one page: a short
  * list is visibly all of itself.
  */
 function FriendsScreenContent() {
@@ -114,10 +89,28 @@ function FriendsScreenContent() {
   const failed = list.status === 'failed'
 
   const searched = list.searched !== null
-  const items = useMemo(() => friendItems(list.friends, !searched && list.allTotal >= SECTIONS_FROM), [list.friends, list.allTotal, searched])
+  const mode = listMode(list.allTotal, searched)
+  // A–Z needs every page first (the server pages newest first): until the last lands the rows are the skeleton, never a list that
+  // would reshuffle under the finger as each page filed its names in (`ALL_AT_ONCE`).
+  const completing = mode === 'az' && list.hasMore
+  useEffect(() => {
+    if (completing && !list.loadingMore && !list.moreFailed) void list.loadMore()
+  }, [completing, list.loadingMore, list.moreFailed, list.friends.length]) // eslint-disable-line react-hooks/exhaustive-deps -- `loadMore` is stable; `list` is a new object each render
+  const items = useMemo(() => friendItems(list.friends, mode), [list.friends, mode])
   const offsets = useMemo(() => itemOffsets(items), [items])
   // Rows are exactly 64 only at the default size; past it they grow (DS-05) and indexing by 64 would misplace them.
   const fixedRows = usePersonRowsFixed()
+  // The index down the edge, past 12 letter heads, and only while rows have their fixed height (an exact jump needs `getItemLayout`;
+  // at the large sizes the heads are still headers, which a screen reader's heading navigation walks).
+  const letters = useMemo(() => (mode === 'az' && fixedRows && letterHeads(items) > SCRUBBER_FROM ? scrubberLetters(items) : null), [mode, fixedRows, items])
+  const listRef = useRef<FlatList<FriendItem>>(null)
+  const jumpTo = (letter: string) => {
+    if (!letters) return
+    const index = indexForLetter(items, letters, letter)
+    // `ListHeaderComponent` sits above index 0, so ★ (the top) scrolls to the very top rather than to Recently added under it.
+    if (index === 0) listRef.current?.scrollToOffset({ offset: 0, animated: false })
+    else listRef.current?.scrollToIndex({ index, animated: false })
+  }
   const empty = failed ? (
     <StateScreen
       icon="cloud-off"
@@ -129,27 +122,17 @@ function FriendsScreenContent() {
     // Only a search can come up empty with friends behind it: the list is still there, under another word.
     <StateScreen icon="search" title="No friend by that name." gutter testID="friends-no-match" />
   ) : (
-    <StateScreen
-      icon="users"
-      title="No friends yet"
-      body="Nobody can find you by searching. Share your link with the people you want here."
-      actions={[{ label: 'Add friends', onPress: openAdd }]}
-    />
+    <FriendsEmpty />
   )
 
+  // Flow 7 1-A: Friend requests and Make a crew in one group above the list (they were two cards pushing the first friend down).
   const header =
     !searched && (requests.incomingTotal > 0 || list.total > 0) ? (
       <View style={styles.rows}>
-        {requests.incomingTotal > 0 ? (
-          <SettingsGroup>
-            <RequestsRow count={requests.incomingTotal} />
-          </SettingsGroup>
-        ) : null}
-        {list.total > 0 ? (
-          <SettingsGroup>
-            <MakeCrewRow />
-          </SettingsGroup>
-        ) : null}
+        <SettingsGroup>
+          {requests.incomingTotal > 0 ? <RequestsRow count={requests.incomingTotal} faces={requests.incoming.slice(0, 3).map((r) => r.person)} /> : null}
+          {list.total > 0 ? <MakeCrewRow /> : null}
+        </SettingsGroup>
       </View>
     ) : null
 
@@ -158,7 +141,7 @@ function FriendsScreenContent() {
       <TopBar
         title="Friends"
         // The whole list's count, drawn once it is more than a page; a search narrows the list, never this number.
-        sub={list.allTotal > FRIENDS_PAGE ? groupedCount(list.allTotal) : undefined}
+        sub={list.allTotal > FRIENDS_PAGE ? `${groupedCount(list.allTotal)} friends` : undefined}
         state={bar.state}
         onBack={() => router.back()}
         actions={[{ icon: 'user-plus', label: 'Add friends', onPress: openAdd }]}
@@ -186,11 +169,16 @@ function FriendsScreenContent() {
       ) : null}
       {/* No friends to scroll: the rows that stand above them stand above the empty state too. */}
       {list.friends.length ? null : header}
-      {list.status === 'loading' ? (
-        <PersonRowSkeleton />
+      {list.status === 'loading' || completing ? (
+        <>
+          {completing ? header : null}
+          <PersonRowSkeleton />
+          {completing && list.moreFailed ? <PagedFooter loading={false} failed onRetry={() => void list.loadMore()} testID="friends-more" /> : null}
+        </>
       ) : (
         <Animated.View entering={arrive} style={styles.flex}>
           <FlatList
+            ref={listRef}
             testID="friends-list"
             data={items}
             keyExtractor={(item) => item.key}
@@ -203,7 +191,7 @@ function FriendsScreenContent() {
             initialNumToRender={12}
             windowSize={7}
             removeClippedSubviews
-            contentContainerStyle={[list.friends.length ? styles.list : styles.emptyList, { paddingBottom: insets.bottom + SPACE.xl }]}
+            contentContainerStyle={[list.friends.length ? styles.list : searched || failed ? styles.emptyList : styles.emptyTop, { paddingBottom: insets.bottom + SPACE.xl }]}
             ListHeaderComponent={list.friends.length ? header : null}
             ListEmptyComponent={empty}
             ListFooterComponent={<PagedFooter loading={list.loadingMore} failed={list.moreFailed} onRetry={() => void list.loadMore()} testID="friends-more" />}
@@ -213,6 +201,11 @@ function FriendsScreenContent() {
             {...pull.listProps}
           />
           {pull.indicator}
+          {letters ? (
+            <View style={styles.scrubber}>
+              <LetterScrubber letters={letters} onLetter={jumpTo} testID="friends-scrubber" />
+            </View>
+          ) : null}
         </Animated.View>
       )}
     </View>
@@ -236,17 +229,54 @@ function SectionHead({ title, fixed }: { title: string; fixed: boolean }) {
   )
 }
 
-/** One friend: "Friends since Mar 2026", and nothing of any event or room. */
+/** One friend: "Friends since Mar 2026", and nothing of any event or room; Message on the row (Flow 7 1-A), the profile on a tap. */
 function FriendRow({ friend }: { friend: Friend }) {
   const since = friendsSinceParts(friend.since)
+  const { showToast } = useToast()
+  const [opening, setOpening] = useState(false)
+  const message = async () => {
+    if (opening) return
+    setOpening(true)
+    const opened = await openFriendChat(friend)
+    setOpening(false)
+    if (!opened) showToast(CHAT_FAILED, 'error', { haptic: 'error' })
+  }
   return (
     <PersonRow
       person={friend}
+      avatar={LIST_FACE}
       detail={since.words}
       detailMono={since.date ?? undefined}
       onPress={() => router.push({ pathname: '/friends/[userId]', params: { userId: friend.userId } })}
-      chevron
+      trailing={<IconButton size="sm" icon="message-circle" accessibilityLabel={`Message ${friend.name}`} onPress={() => void message()} disabled={opening} />}
     />
+  )
+}
+
+/**
+ * Flow 7 1b-A: with nobody yet, the way in is on the page — your invite card, Share my link, and your QR code one tap away — rather
+ * than a screen further on.
+ */
+function FriendsEmpty() {
+  const bold = useBoldText()
+  const { user } = useAuth()
+  const { invite, failed, share } = useFriendInvite()
+  return (
+    <View testID="friends-empty" style={styles.empty}>
+      <View style={styles.emptyWords}>
+        <Title variant="page" accessibilityRole="header" style={[styles.emptyTitle, styles.centre]}>
+          No friends yet
+        </Title>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.lede} style={[font('lede', bold), styles.muted, styles.centre]}>
+          Nobody can find you by searching. Send your link to the people you want here.
+        </Text>
+      </View>
+      <InviteLinkCard url={invite?.url} failed={failed} name={user?.name} photo={user?.image} />
+      <View style={styles.emptyActions}>
+        <Button label="Share my link" icon="share" onPress={() => void share()} disabled={!invite} />
+        <Button kind="tertiary" muted icon="qr-code" label="Show my QR code" onPress={() => router.push({ pathname: '/friends/add', params: { side: 'qr' } })} />
+      </View>
+    </View>
   )
 }
 
@@ -255,6 +285,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
+  emptyTop: { flexGrow: 1, paddingHorizontal: SPACE.gutter },
   // The frame's column: the request card and Make a crew stand 8 apart, and the first friend 8 under them.
   rows: { gap: SPACE.sm, paddingBottom: SPACE.sm, paddingHorizontal: 0 },
   search: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
@@ -263,6 +294,15 @@ const styles = StyleSheet.create({
   headGrows: { minHeight: SECTION_HEAD, paddingVertical: SPACE.sm },
   headText: { color: COLOR.textSecondary },
   offline: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xs, paddingBottom: SPACE.sm },
+  // design-exception: the board's index sits 4 in from the right edge (fr.css `.frscrub`).
+  scrubber: { position: 'absolute', right: 4, top: SPACE.md },
+  // design-exception: Flow 7 1b-A (fr.js `emptyA`): 40 above the words, the card 24 under them, the buttons 16 under it.
+  empty: { paddingTop: 40, gap: SPACE.xl },
+  emptyWords: { gap: SPACE.sm },
+  emptyTitle: { color: COLOR.textPrimary },
+  emptyActions: { gap: SPACE.sm },
+  centre: { textAlign: 'center' },
+  muted: { color: COLOR.textSecondary },
 })
 
 /** Rose world: one hue on this screen (`HueProvider`). */

@@ -46,15 +46,16 @@ it('the viewer counts nine photos', async () => {
 })
 
 it('huge counts stay four digits in the stats card, and say the true number', async () => {
-  await render(<StatsCard attended={1234567} saved={0} friends={100000} hosted={0} onGoing={jest.fn()} onFriends={jest.fn()} />)
+  await render(<StatsCard attended={1234567} saved={0} hosted={0} onGoing={jest.fn()} />)
   expect(screen.getByLabelText('1234567 Nights')).toBeTruthy()
-  expect(screen.getByLabelText('100000 Friends')).toBeTruthy()
+  // Flow 7 6-A: friends are a row in the group, never a stat ("0 FRIENDS").
+  expect(screen.queryByLabelText(/Friends/)).toBeNull()
   expect(screen.getByLabelText('0 Saved')).toBeTruthy()
 })
 
 // D-L2: "1002" ran to the card's edge; grouped it reads at a glance. Negative control: without `grouping` there is no comma.
 it('a four-digit count is grouped in the stats card: 1,002', async () => {
-  await render(<StatsCard attended={1002} saved={0} friends={null} hosted={0} onGoing={jest.fn()} onFriends={jest.fn()} />)
+  await render(<StatsCard attended={1002} saved={0} hosted={0} onGoing={jest.fn()} />)
   expect(screen.getAllByText(',', { includeHiddenElements: true })).toHaveLength(1)
 })
 

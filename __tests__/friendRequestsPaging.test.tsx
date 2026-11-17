@@ -27,6 +27,7 @@ jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: jest.fn(), useStil
 let mockFocus: () => void = () => {}
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: (...a: unknown[]) => mockPush(...a) },
+  useLocalSearchParams: () => ({}),
   useFocusEffect: (effect: () => void) => {
     const { useEffect } = require('react')
     mockFocus = effect
@@ -177,15 +178,15 @@ describe('Add friends', () => {
     await act(async () => {})
   }
 
-  it('shows the first three requests and one row to the rest, with the true count', async () => {
+  it('shows the first three requests and See all with the true count (Flow 7 2-A)', async () => {
     mockGet.mockResolvedValue({ success: true, data: { incoming: reqs(50), outgoing: [], pagination: { incoming: meta(120, 'i1'), outgoing: meta(0, null) } } })
     await open()
     expect(screen.getByLabelText('Accept Person 0')).toBeTruthy()
     expect(screen.getByLabelText('Accept Person 2')).toBeTruthy()
     expect(screen.queryByLabelText('Accept Person 3')).toBeNull()
-    expect(screen.getByLabelText('120 friend requests')).toBeTruthy()
+    expect(screen.getByText('See all 120')).toBeTruthy()
     await act(async () => {
-      fireEvent.press(screen.getByLabelText('120 friend requests'))
+      fireEvent.press(screen.getByLabelText('See all 120 friend requests'))
     })
     expect(mockPush).toHaveBeenCalledWith('/friends/requests')
   })
@@ -193,7 +194,7 @@ describe('Add friends', () => {
   it('three or fewer: no row to more, because there is no more', async () => {
     mockGet.mockResolvedValue({ success: true, data: { incoming: reqs(3), outgoing: [], pagination: { incoming: meta(3, null), outgoing: meta(0, null) } } })
     await open()
-    expect(screen.queryByTestId('requests-row')).toBeNull()
+    expect(screen.queryByTestId('requests-see-all')).toBeNull()
   })
 
   it('Sent is a windowed list that pages its own side', async () => {

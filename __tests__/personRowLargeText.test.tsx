@@ -11,7 +11,7 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 
 /* eslint-disable import/first */
-import { IncomingRequestRow, REQUEST_LINE } from '../components/friends/IncomingRequestRow'
+import { IncomingRequestRow } from '../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../components/friends/InviteLinkCard'
 import { PersonRow, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../components/friends/PersonRow'
 import { RevealBar } from '../components/ds/RevealBar'
@@ -62,15 +62,42 @@ describe('PersonRow', () => {
 describe('IncomingRequestRow (D-M5, D-LM2)', () => {
   const request = { id: 'r1', person, createdAt: new Date(Date.now() - 3 * 3600_000).toISOString() }
 
-  it('at AX XXXL the name is not held to one line at the control cap while the line under it grows', async () => {
+  it('at AX XXXL the name and the line under it each take two lines at their caps, and the answers go under them', async () => {
     await at(402, AX_XXXL)
-    await render(<IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />)
+    await render(<IncomingRequestRow request={{ ...request, via: 'link' }} busy={false} onRespond={jest.fn()} />)
     expect(screen.getByText(person.name).props).toMatchObject({ maxFontSizeMultiplier: MAX_FONT_SCALE.bodyStrong, numberOfLines: 2 })
-    expect(screen.getByText(REQUEST_LINE).props).toMatchObject({ maxFontSizeMultiplier: MAX_FONT_SCALE.meta, numberOfLines: 4 })
+    expect(screen.getByTestId('request-line').props).toMatchObject({ maxFontSizeMultiplier: MAX_FONT_SCALE.meta, numberOfLines: 2 })
     expect(uncapped(screen.toJSON())).toEqual([])
   })
 
-  it('shows how long ago they asked, as a tag in Geist Mono at the control cap ("3h")', async () => {
+  /*
+   * Flow 7 4-A: the source only when the server says it (`via`, ROADMAP § Backend later). Today's server sends none, and the old
+   * line ("Opened your link") was wrong for every request from a match. Negative control: the old constant line fails the first.
+   */
+  it('says no source when the server sends none: the line is the age alone', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />)
+    expect(screen.queryByText(/From your link|From a match|Opened your link/)).toBeNull()
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^\S+$/)
+  })
+
+  it('says From your link or From a match when the server does, before the age', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={{ ...request, via: 'match' }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^From a match · \S+$/)
+    await render(<IncomingRequestRow request={{ ...request, via: 'link' }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^From your link · \S+$/)
+  })
+
+  it('is a 68 pt row with Not now and Accept named for the person', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />)
+    expect(StyleSheet.flatten(screen.getByTestId('request-row').props.style).minHeight).toBe(68)
+    expect(screen.getByLabelText(`Not now, ${person.name}`)).toBeTruthy()
+    expect(screen.getByLabelText(`Accept ${person.name}`)).toBeTruthy()
+  })
+
+  it('shows how long ago they asked, in Geist Mono ("3h")', async () => {
     // Midday, so three hours ago is still today: run between 00:00 and 03:00 it read "Yesterday".
     const noon = new Date()
     noon.setHours(12, 0, 0, 0)
@@ -81,7 +108,6 @@ describe('IncomingRequestRow (D-M5, D-LM2)', () => {
       await render(<IncomingRequestRow request={{ ...request, createdAt }} busy={false} onRespond={jest.fn()} />)
       const time = screen.getByTestId('request-age', hidden)
       expect(time.props.children).toBe('3h')
-      expect(time.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
       expect(StyleSheet.flatten(time.props.style).fontFamily).toBe(FONT_FAMILY.mono[500])
       expect(screen.getByText(person.name).props.numberOfLines).toBe(1)
     } finally {
@@ -96,7 +122,7 @@ describe('IncomingRequestRow (D-M5, D-LM2)', () => {
     await render(<IncomingRequestRow request={{ ...request, createdAt: yesterday.toISOString() }} busy={false} onRespond={jest.fn()} />)
     const time = screen.getByTestId('request-age', hidden)
     expect(time.props.children).toBe('Yesterday')
-    expect(StyleSheet.flatten(time.props.style).fontFamily).not.toBe(FONT_FAMILY.mono[500])
+    expect(StyleSheet.flatten(time.props.style)?.fontFamily).not.toBe(FONT_FAMILY.mono[500])
   })
 })
 

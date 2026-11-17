@@ -125,6 +125,7 @@ import Pencil from 'lucide-react-native/icons/pencil'
 import Pin from 'lucide-react-native/icons/pin'
 import Play from 'lucide-react-native/icons/play'
 import Plus from 'lucide-react-native/icons/plus'
+import QrCode from 'lucide-react-native/icons/qr-code'
 import Radar from 'lucide-react-native/icons/radar'
 import Radio from 'lucide-react-native/icons/radio'
 import Rainbow from 'lucide-react-native/icons/rainbow'
@@ -296,6 +297,7 @@ const ICONS = {
   pin: Pin,
   play: Play,
   plus: Plus,
+  'qr-code': QrCode,
   radar: Radar,
   radio: Radio,
   rainbow: Rainbow,

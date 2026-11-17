@@ -7,6 +7,7 @@
  * when the server agreed.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) },
@@ -58,7 +59,7 @@ it('says a dead link does not work, and nothing about why', async () => {
   await screen.findByText('This link doesn’t work')
   expect(screen.getByText('Ask the person who sent it for a new one.')).toBeTruthy()
   // No action on the link itself; but not a dead end (D-LM9): Add friends, lit, goes to your own link. Negative control: no action fails it.
-  expect(screen.queryByText('Send friend request')).toBeNull()
+  expect(screen.queryByText('Add friend')).toBeNull()
   fireEvent.press(screen.getByText('Add friends'))
   expect(router.replace).toHaveBeenCalledWith('/friends/add')
 })
@@ -71,8 +72,8 @@ it('calls a link that failed to load a failed load, not a dead link, and tries a
 
   api.openFriendInvite.mockResolvedValueOnce({ success: true, data: { person: ANA, state: 'none' } })
   fireEvent.press(screen.getByText('Try again'))
-  await screen.findByText('Ana wants to blend with you')
-  expect(screen.getByText('Send friend request')).toBeTruthy()
+  await screen.findByText('Ana')
+  expect(screen.getByText('Add friend')).toBeTruthy()
 })
 
 it('shows who sent it and asks with the token, then says Requested', async () => {
@@ -80,8 +81,8 @@ it('shows who sent it and asks with the token, then says Requested', async () =>
   api.sendFriendRequest.mockResolvedValue({ success: true, data: { state: 'requested' } })
   await render(<InviteScreen />)
 
-  await screen.findByText('Ana wants to blend with you')
-  fireEvent.press(screen.getByText('Send friend request'))
+  await screen.findByText('Ana')
+  fireEvent.press(screen.getByText('Add friend'))
 
   await waitFor(() => expect(api.sendFriendRequest).toHaveBeenCalledWith({ token: 'abcdefghijklmnopqrstuv' }))
   await screen.findByText('Requested')
@@ -89,16 +90,44 @@ it('shows who sent it and asks with the token, then says Requested', async () =>
   expect(mockAsk).not.toHaveBeenCalled()
 })
 
+/*
+ * Flow 7 3-A: the name alone is the headline (the shared Title, a header), then "invited you to be friends on Blend’n", then Add
+ * friend with its user-plus; after it, "Request sent…" and a quiet Requested, heard as "Friend request sent". A long name heads at
+ * 30, a short one at 34. Negative control: "{name} wants to blend with you" and its repeat line fail it.
+ */
+it('the name alone heads the page, one line says what happened, and Add friend then Requested', async () => {
+  const VENKATA = { userId: 'u_v', name: 'Venkata Subramanian Raghunathan Krishnamurthy', photo: null }
+  api.openFriendInvite.mockResolvedValue({ success: true, data: { person: VENKATA, state: 'none' } })
+  api.sendFriendRequest.mockResolvedValue({ success: true, data: { state: 'requested' } })
+  await render(<InviteScreen />)
+  const head = await screen.findByRole('header', { name: VENKATA.name })
+  expect(StyleSheet.flatten(head.props.style)).toMatchObject({ fontSize: 30 })
+  expect(head.props.numberOfLines).toBe(3)
+  expect(screen.getByText('invited you to be friends on Blend’n')).toBeTruthy()
+  expect(screen.queryByText(/wants to blend|Wants you as a friend/)).toBeNull()
+  fireEvent.press(screen.getByText('Add friend'))
+  await screen.findByText('Requested')
+  expect(screen.getByLabelText('Friend request sent')).toBeTruthy()
+  expect(screen.getByText('Request sent. You’ll hear when they accept.')).toBeTruthy()
+})
+
+it('a short name heads the page at 34, Devanagari included', async () => {
+  api.openFriendInvite.mockResolvedValue({ success: true, data: { person: { userId: 'u_p', name: 'प्रियंका शर्मा', photo: null }, state: 'none' } })
+  await render(<InviteScreen />)
+  const head = await screen.findByRole('header', { name: 'प्रियंका शर्मा' })
+  expect(StyleSheet.flatten(head.props.style)).toMatchObject({ fontSize: 34 })
+})
+
 it('stays put and says so when the request fails', async () => {
   api.openFriendInvite.mockResolvedValue({ success: true, data: { person: ANA, state: 'none' } })
   api.sendFriendRequest.mockResolvedValue({ success: false, error: 'nope' })
   await render(<InviteScreen />)
 
-  await screen.findByText('Ana wants to blend with you')
-  fireEvent.press(screen.getByText('Send friend request'))
+  await screen.findByText('Ana')
+  fireEvent.press(screen.getByText('Add friend'))
 
   await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith("That didn’t go through. Try again.", 'error', { haptic: 'error' }))
-  expect(screen.getByText('Send friend request')).toBeTruthy()
+  expect(screen.getByText('Add friend')).toBeTruthy()
 })
 
 it('accepting from the link makes you friends at once', async () => {
@@ -120,14 +149,14 @@ it('is the page’s own shape while it loads, not a bare spinner', async () => {
   api.openFriendInvite.mockReturnValue(new Promise(() => {}))
   await render(<InviteScreen />)
   expect(screen.getByTestId('invite-loading')).toBeTruthy()
-  expect(screen.queryByText('Send friend request')).toBeNull()
+  expect(screen.queryByText('Add friend')).toBeNull()
 })
 
-it('says your own link is yours, with Share your link', async () => {
+it('says your own link is yours, with Share my link', async () => {
   api.openFriendInvite.mockResolvedValue({ success: true, data: { person: ANA, state: 'self' } })
   await render(<InviteScreen />)
   await screen.findByText('Your invite link')
-  fireEvent.press(screen.getByText('Share your link'))
+  fireEvent.press(screen.getByText('Share my link'))
   expect(router.replace).toHaveBeenCalledWith('/friends/add')
 })
 
@@ -135,7 +164,7 @@ it('keeps Requested as a disabled secondary with the waiting line, and Not now c
   api.openFriendInvite.mockResolvedValue({ success: true, data: { person: ANA, state: 'requested' } })
   await render(<InviteScreen />)
   await screen.findByText('Requested')
-  expect(screen.getByText('Your request is waiting. You’ll hear when they accept.')).toBeTruthy()
+  expect(screen.getByText('Request sent. You’ll hear when they accept.')).toBeTruthy()
   expect(api.sendFriendRequest).not.toHaveBeenCalled()
   fireEvent.press(screen.getByText('Not now'))
   expect(router.back).toHaveBeenCalled()
@@ -162,8 +191,8 @@ describe('a refusal with a fix (Flow 15 15.19): the link is not "didn’t open"'
     fireEvent.press(await screen.findByText('Finish my profile'))
     api.openFriendInvite.mockResolvedValueOnce({ success: true, data: { person: ANA, state: 'none' } })
     mockFocus()
-    await screen.findByText('Ana wants to blend with you')
-    expect(screen.getByText('Send friend request')).toBeTruthy()
+    await screen.findByText('Ana')
+    expect(screen.getByText('Add friend')).toBeTruthy()
   })
 
   it('Not now closes without finishing', async () => {
@@ -178,7 +207,7 @@ describe('a refusal with a fix (Flow 15 15.19): the link is not "didn’t open"'
     api.openFriendInvite.mockResolvedValue({ success: true, data: { person: ANA, state: 'none' } })
     api.sendFriendRequest.mockResolvedValue(PROFILE)
     await render(<InviteScreen />)
-    fireEvent.press(await screen.findByText('Send friend request'))
+    fireEvent.press(await screen.findByText('Add friend'))
     await screen.findByText('Finish your profile to add friends')
     expect(mockShowToast).not.toHaveBeenCalled()
   })
@@ -205,7 +234,7 @@ describe('a refusal with a fix (Flow 15 15.19): the link is not "didn’t open"'
       await act(async () => {
         fireEvent.press(screen.getByText('Try again'))
       })
-      expect(screen.getByText('Ana wants to blend with you')).toBeTruthy()
+      expect(screen.getByText('Ana')).toBeTruthy()
     })
 
     it('M7: counts to a deadline, so a phone that was away comes back to the wait that is really left', async () => {

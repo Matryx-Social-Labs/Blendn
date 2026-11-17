@@ -126,22 +126,17 @@ function Stat({ value, label, onPress, hint = 'Opens Going' }: { value: number; 
 export function StatsCard({
   attended,
   saved,
-  friends,
   hosted,
   onGoing,
-  onFriends,
 }: {
   attended: number
   saved: number
-  friends: number | null
   hosted: number
   onGoing: () => void
-  onFriends: () => void
 }) {
   const columns = [
     { key: 'attended', node: <Stat value={attended} label="Nights" onPress={onGoing} /> },
     { key: 'saved', node: <Stat value={saved} label="Saved" onPress={onGoing} /> },
-    ...(friends !== null ? [{ key: 'friends', node: <Stat value={friends} label="Friends" onPress={onFriends} hint="Opens your friends" /> }] : []),
     ...(hosted > 0 ? [{ key: 'hosted', node: <Stat value={hosted} label="Hosted" /> }] : []),
   ]
   return (
