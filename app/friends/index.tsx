@@ -274,7 +274,7 @@ function FriendsEmpty() {
       <InviteLinkCard url={invite?.url} failed={failed} name={user?.name} photo={user?.image} />
       <View style={styles.emptyActions}>
         <Button label="Share my link" icon="share" onPress={() => void share()} disabled={!invite} />
-        <Button kind="tertiary" icon="qr-code" label="Show my QR code" onPress={() => router.push({ pathname: '/friends/add', params: { side: 'qr' } })} />
+        <Button kind="tertiary" muted icon="qr-code" label="Show my QR code" onPress={() => router.push({ pathname: '/friends/add', params: { side: 'qr' } })} />
       </View>
     </View>
   )
