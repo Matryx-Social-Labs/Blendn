@@ -18,6 +18,7 @@ import { settlePage } from '../../lib/home'
 import { useReducedMotion } from '../../lib/motion'
 import { tint } from '../../lib/theme'
 import { useLatest } from '../../lib/useLatest'
+import { useMediaSaver } from '../../lib/mediaSaver'
 import { Text } from '../ui/Text'
 
 /** One page of the lead: what the DS hero card draws, and the event's media for its turn. */
@@ -139,7 +140,7 @@ function TurnMedia({
  * - A swipe ends the lap for the visit and flies the map to that venue (`onPage`); so does a touch on the map
  *   (`tookOver`). A finger on the card holds it. Nothing runs off screen (`visible`), in another tab, in the background,
  *   for a screen reader or under Reduce Motion; Play runs it again (stills only under Reduce Motion). Low Power and
- *   cellular show a clip's poster (`saveData`).
+ *   cellular show a clip's poster (`useMediaSaver`).
  * - A screen reader hears one element ("Featured, 1 of 3. …"), adjustable by page; activate opens it.
  */
 export function LeadPager({
@@ -154,7 +155,6 @@ export function LeadPager({
   visible = true,
   screenReader = false,
   tookOver: mapTookOver = false,
-  saveData = false,
   testID = 'pulse-lead',
 }: {
   cards: LeadCard[]
@@ -172,11 +172,11 @@ export function LeadPager({
   screenReader?: boolean
   /** The map was touched this visit: the lap is over (pulse-map, "your touch wins"). */
   tookOver?: boolean
-  /** Low Power or an expensive network: clips show their poster. */
-  saveData?: boolean
   testID?: string
 }) {
   const reduceMotion = useReducedMotion()
+  // Low Power or cellular: a clip shows its poster (no decoder), stills still rotate.
+  const { lowPower, expensiveNetwork } = useMediaSaver()
   const count = cards.length
   const [step, setStep] = useState<LapStep>(START)
   const [play, setPlay] = useState<'auto' | 'paused' | 'playing'>('auto')
@@ -200,8 +200,8 @@ export function LeadPager({
     touching,
     screenReader,
     reduceMotion,
-    lowPower: saveData,
-    expensiveNetwork: false,
+    lowPower,
+    expensiveNetwork,
     play,
     tookOver: swiped || mapTookOver,
     lapDone: step.lapDone,

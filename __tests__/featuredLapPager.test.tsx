@@ -9,6 +9,8 @@ import { AppState } from 'react-native'
 
 let mockReduce = false
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => mockReduce }))
+let mockSaver = { lowPower: false, expensiveNetwork: false }
+jest.mock('../lib/mediaSaver', () => ({ useMediaSaver: () => mockSaver }))
 jest.mock('../lib/haptics', () => ({ H: new Proxy({}, { get: () => jest.fn() }) }))
 jest.mock('expo-image', () => ({ Image: Object.assign(() => null, { prefetch: jest.fn(async () => true) }) }))
 const mockPlayer = { play: jest.fn(), pause: jest.fn(), addListener: () => ({ remove: () => {} }), loop: false, muted: false }
@@ -40,6 +42,7 @@ async function wait(ms: number) {
 beforeEach(() => {
   jest.useFakeTimers()
   mockReduce = false
+  mockSaver = { lowPower: false, expensiveNetwork: false }
 })
 afterEach(() => jest.useRealTimers())
 
@@ -179,8 +182,12 @@ describe('the turn', () => {
     expect(mockPlayer.pause).toHaveBeenCalled()
   })
 
-  it('cellular / Low Power (saveData): the clip shows its poster for a still’s dwell, no player', async () => {
-    const { onLight } = await draw({ cards: [media, card('b')], saveData: true })
+  it.each([
+    ['Low Power', { lowPower: true, expensiveNetwork: false }],
+    ['cellular', { lowPower: false, expensiveNetwork: true }],
+  ])('%s: the clip shows its poster for a still’s dwell, no player', async (_, saver) => {
+    mockSaver = saver
+    const { onLight } = await draw({ cards: [media, card('b')] })
     await wait(STILL_MS * 2)
     expect(screen.queryByTestId('lead-clip', { includeHiddenElements: true })).toBeNull()
     await wait(STILL_MS)
