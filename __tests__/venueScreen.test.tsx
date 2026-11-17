@@ -703,7 +703,7 @@ describe('live', () => {
     expect(goLiveApi).toHaveBeenCalledWith('v1', expect.objectContaining({ minutes: 45 }))
   })
 
-  it('the pill’s sheet: End confirms in the same sheet and Keep going goes back to the session', async () => {
+  it('the pill’s sheet: End asks in the same sheet, and Stay goes back to the session', async () => {
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: true })
     await mount(venue({ live: liveOver() }))
     await act(async () => {
@@ -712,15 +712,15 @@ describe('live', () => {
     await act(async () => {
       fireEvent.press(screen.getByRole('button', { name: 'End' }))
     })
-    expect(screen.getByRole('header', { name: 'End your live time at The Humming Tree?' })).toBeTruthy()
+    expect(screen.getByRole('header', { name: 'Stop being live at The Humming Tree?' })).toBeTruthy()
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Keep going' }))
+      fireEvent.press(screen.getByRole('button', { name: 'Stay' }))
     })
     expect(checkOutOf).not.toHaveBeenCalled()
     expect(screen.getByRole('header', { name: 'Live at The Humming Tree' })).toBeTruthy()
   })
 
-  it('Leave is R12’s “Stop being live at ‹place›?”: Stay, or a swipe, closes the sheet; Stop checks out', async () => {
+  it('Leave is R12’s “Stop being live at ‹place›?”: Stay, or a swipe, closes the sheet; the neutral hold checks out', async () => {
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: true })
     await mount(venue({ live: liveOver() }))
     await act(async () => {
@@ -745,12 +745,12 @@ describe('live', () => {
       fireEvent.press(screen.getByTestId('venue-leave'))
     })
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
+      fireEvent(screen.getByTestId('session-stop-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
     })
     expect(checkOutOf).toHaveBeenCalledWith('day-1')
   })
 
-  it('Stopping… is the button’s word while the check-out is on the wire', async () => {
+  it('Stopping… is the hold’s word while the check-out is on the wire', async () => {
     let release: (v: unknown) => void = () => {}
     ;(checkOutOf as jest.Mock).mockReturnValue(new Promise((r) => { release = r }))
     await mount(venue({ live: liveOver() }))
@@ -758,7 +758,7 @@ describe('live', () => {
       fireEvent.press(screen.getByTestId('venue-leave'))
     })
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
+      fireEvent(screen.getByTestId('session-stop-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
     })
     expect(screen.getByRole('button', { name: 'Stopping…' })).toBeTruthy()
     await act(async () => { release({ success: true }) })
@@ -781,7 +781,7 @@ describe('live', () => {
     })
     const reads = (apiClient.getVenue as jest.Mock).mock.calls.length
     await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
+      fireEvent(screen.getByTestId('session-stop-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
     })
     expect(mockShowToast).toHaveBeenCalledWith("Couldn’t stop. Try again.", 'error', { haptic: 'error' })
     expect((apiClient.getVenue as jest.Mock).mock.calls.length).toBe(reads + 1)
