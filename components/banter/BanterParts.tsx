@@ -18,10 +18,9 @@ import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, GroundProvider, minTarget, useAnnounced, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, useAnnounced, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { glassContentsIn, glassRiseIn } from '../motion/presence'
 import { PhotoScrim } from '../ui/GradientFill'
 
 /** The Banter's rows: 52 pt avatars on a 64 pt row (Flow 5 Banter frames). */
@@ -574,24 +573,6 @@ export function BanterSkeleton() {
 const LINE_SHORT = 140
 const LINE_LONG = 220
 
-const NEW_PILL = SPACE.xxl - SPACE.xs
-
-/** #27: a message landed while your finger was down — "↑ New" instead of moving the rows under it. */
-export function NewAbovePill({ top, onPress }: { top: number; onPress: () => void }) {
-  const bold = useBoldText()
-  return (
-    <Animated.View entering={glassRiseIn} exiting={FadeOut.duration(DURATION.quick)} style={[styles.newPlace, { top }]}>
-      <Pressable onPress={onPress} hitSlop={(minTarget() - NEW_PILL) / 2} accessibilityRole="button" accessibilityLabel="New messages above">
-        <Material role="control" style={styles.newPill} testID="banter-new-above-pill">
-          <Animated.View entering={glassContentsIn} style={styles.newPillContents}>
-            <Icon name="arrow-up" size={ICON.inline} />
-            <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.ink]}>New</Text>
-          </Animated.View>
-        </Material>
-      </Pressable>
-    </Animated.View>
-  )
-}
 
 const styles = StyleSheet.create({
   header: {
@@ -678,7 +659,4 @@ const styles = StyleSheet.create({
   skeletonLines: { flex: 1, gap: SPACE.sm },
   lineShort: { width: LINE_SHORT, height: SPACE.lg },
   lineLong: { width: LINE_LONG, height: SPACE.md + SPACE.xxs },
-  newPlace: { position: 'absolute', alignSelf: 'center', zIndex: 3 },
-  newPillContents: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
-  newPill: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, height: NEW_PILL, paddingHorizontal: SPACE.md, borderRadius: RADIUS.capsule },
 })

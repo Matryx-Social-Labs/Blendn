@@ -14,7 +14,8 @@ import { getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
 import { HoldToConfirm } from '../components/ds/HoldToConfirm'
-import { COLOR, DURATION, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPRING } from '../lib/design/tokens'
+import { isLitControl } from './helpers/lit'
+import { COLOR, DURATION, FONT_FAMILY, GRADIENT, MATERIAL, RADIUS, SIZE, SPRING } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -68,41 +69,50 @@ const hold = (phase: Phase) =>
   })
 
 describe('the pill', () => {
-  // SCRUM-1057 hold A: armed read as off (a grey label on the sunken track, the disabled pill only fainter). Armed: a
-  // white label, the glyph in the brand gradient and a 1.5 pt gradient rim. Out of reach: today's grey at 45%, no rim.
+  // Buttons board C (owner 2026-11-17): the hold is a positive button that fills. Armed: the lit tint inside the 1.5 pt
+  // gradient rim, a white label and glyph, filling to the full gradient. Out of reach (`.hold.far`): the same tint, a grey
+  // rim and a secondary label. The check-out hold is neutral: surface inside a grey rim, white, pouring the rim's tone.
   /** The glyph's stroke under the fill (the first of the two glyphs). */
   const glyph = () => screen.getAllByTestId('h-glyph', { includeHiddenElements: true })[0].props.stroke as string
-  it('armed: a white label, a gradient glyph and a 1.5 pt gradient rim around a sunken inset', async () => {
+  const under = () => StyleSheet.flatten(screen.getAllByText(/Hold to/, { includeHiddenElements: true })[0].props.style).color
+  const gradients = () => screen.getAllByTestId('gradient', { includeHiddenElements: true }).map((g) => g.props.colors)
+
+  it('armed: the lit tint inside the 1.5 pt gradient rim, a white label and a white glyph; it fills with the full gradient', async () => {
     await draw()
-    const under = screen.getAllByText('Hold to blend in', { includeHiddenElements: true })[0]
-    expect(StyleSheet.flatten(under.props.style).color).toBe(COLOR.textPrimary)
-    expect(glyph()).toMatch(/^url\(#/)
-    // The rim's gradient and the pour's (the mock names every LinearGradient 'gradient').
-    expect(screen.getAllByTestId('gradient', { includeHiddenElements: true })).toHaveLength(2)
-    expect(flat('h-gradient-rim-inset')).toMatchObject({ top: 1.5, left: 1.5, right: 1.5, bottom: 1.5, borderRadius: RADIUS.button - 1.5, backgroundColor: COLOR.surfaceSunken })
+    expect(under()).toBe(COLOR.textPrimary)
+    expect(glyph()).toBe(COLOR.textPrimary)
+    // The rim, the tint, the pour.
+    expect(gradients()).toEqual([GRADIENT.fill.colors, GRADIENT.lit.colors, GRADIENT.fill.colors])
+    expect(flat('h-track-inset')).toMatchObject({ top: 1.5, left: 1.5, right: 1.5, bottom: 1.5, borderRadius: RADIUS.button - 1.5 })
   })
-  it('out of reach: the grey label and glyph, no rim, at 45% (control: armed and off differ in colour, not only opacity)', async () => {
+
+  it('out of reach: the same tint, a grey rim, the secondary label and glyph, no 45% (control: differs from armed in colour)', async () => {
     await draw({ disabled: true })
-    const under = screen.getAllByText('Hold to blend in', { includeHiddenElements: true })[0]
-    expect(StyleSheet.flatten(under.props.style).color).toBe(COLOR.textSecondary)
+    expect(under()).toBe(COLOR.textSecondary)
     expect(glyph()).toBe(COLOR.textSecondary)
-    expect(screen.queryByTestId('h-gradient-rim-inset', { includeHiddenElements: true })).toBeNull()
-    expect(screen.getAllByTestId('gradient', { includeHiddenElements: true })).toHaveLength(1)
-    expect(flat('h-wrap').opacity).toBe(OPACITY.disabled)
+    expect(flat('h-track').backgroundColor).toBe(COLOR.hairlineStrong)
+    expect(gradients()).toEqual([GRADIENT.lit.colors, GRADIENT.fill.colors])
+    expect(screen.getByTestId('h-wrap').props.style).toBeUndefined()
   })
-  it('lit (Go Live, Check out) is untouched: no gradient rim', async () => {
-    await draw({ kind: 'lit' })
-    expect(screen.queryByTestId('h-gradient-rim-inset', { includeHiddenElements: true })).toBeNull()
+
+  it('neutral (check-out): surface inside the grey rim, a white label, the rim’s tone pouring in; no gradient anywhere', async () => {
+    await draw({ kind: 'neutral', label: 'Hold to check out', previewProgress: 0.4 })
+    expect(flat('h-track').backgroundColor).toBe(COLOR.hairlineStrong)
+    expect(flat('h-track-inset').backgroundColor).toBe(COLOR.surface)
+    expect(flat('h-fill-ground').backgroundColor).toBe(COLOR.hairlineStrong)
+    expect(screen.queryAllByTestId('gradient', { includeHiddenElements: true })).toHaveLength(0)
+    const labels = screen.getAllByText('Hold to check out', { includeHiddenElements: true })
+    for (const l of labels) expect(StyleSheet.flatten(l.props.style).color).toBe(COLOR.textPrimary)
   })
-  it('is a 56 pt surfaceSunken track at radius 28; the label sits twice, white under (armed, SCRUM-1057 A), white on the fill', async () => {
+
+  it('is a 56 pt track at radius 28; the label sits twice, white under, white on the fill', async () => {
     await draw({ previewProgress: 0.4 })
-    expect(flat('h')).toMatchObject({ height: SIZE.primary, borderRadius: RADIUS.button, backgroundColor: COLOR.surfaceSunken })
+    expect(flat('h')).toMatchObject({ height: SIZE.primary, borderRadius: RADIUS.button })
     const labels = screen.getAllByText('Hold to blend in', { includeHiddenElements: true })
     expect(labels).toHaveLength(2)
     expect(StyleSheet.flatten(labels[0].props.style)).toMatchObject({ fontFamily: FONT_FAMILY.brand[700], color: COLOR.textPrimary })
     expect(StyleSheet.flatten(labels[1].props.style).color).toBe(COLOR.textOnGradient)
     for (const l of labels) expect(l.props.maxFontSizeMultiplier).toBe(1.3)
-    expect(screen.getAllByTestId('gradient', { includeHiddenElements: true }).length).toBeGreaterThan(0)
   })
 
   it('the fill sits where the progress is: 40% in is 60% of the width still to go', async () => {
@@ -201,10 +211,9 @@ describe('the hold', () => {
 })
 
 describe('states', () => {
-  it('disabled: 45%, no hold, read as disabled', async () => {
+  it('disabled: no hold, read as disabled', async () => {
     const onConfirm = jest.fn()
     await draw({ disabled: true, onConfirm, label: 'Go live when you’re here · 350 m' })
-    expect(flat('h-wrap').opacity).toBe(OPACITY.disabled)
     expect(screen.getByRole('button').props.accessibilityState).toMatchObject({ disabled: true })
     await act(async () => {
       screen.getByRole('button').props.onAccessibilityAction({ nativeEvent: { actionName: 'activate' } })
@@ -276,13 +285,16 @@ describe('accessibility settings', () => {
     expect(flat('h-contrast')).toMatchObject({ borderWidth: 1, borderColor: MATERIAL.hairlineIncreaseContrast })
   })
 
-  it('a screen reader gets one strong button: a double-tap confirms, no hold', async () => {
+  it('a screen reader gets one lit button (secondary for the neutral hold): a double-tap confirms, no hold', async () => {
     jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true)
+    await draw({ kind: 'neutral', srLabel: 'Check out' })
+    await act(async () => {})
+    expect(isLitControl(screen.getByRole('button', { name: 'Check out' }))).toBe(false)
     const onConfirm = jest.fn()
     await draw({ onConfirm, srLabel: 'Check in' })
     await act(async () => {})
     const button = screen.getByRole('button', { name: 'Check in' })
-    expect(StyleSheet.flatten(button.props.style).backgroundColor).toBe(COLOR.textPrimary)
+    expect(isLitControl(button)).toBe(true)
     await fireEvent.press(button)
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expect(haptics.commit).toHaveBeenCalledTimes(1)

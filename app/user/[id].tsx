@@ -915,8 +915,8 @@ function UserProfileInner() {
           <View testID="profile-lens-dock-row" accessibilityLiveRegion="polite" style={styles.dockRow}>
             {wave === 'mutual' ? null : (
               <Button
-                // Wave dock A: Wave is lit, Wave back the filled one; ✓ Waved is still (no Wave again).
-                kind={wave === 'wavedAtYou' ? 'primary' : wave === 'waved' ? 'secondary' : 'lit'}
+                // Wave and Wave back are one positive (buttons board C: no flip to the full gradient); ✓ Waved is still (no Wave again).
+                kind={wave === 'waved' ? 'secondary' : 'lit'}
                 size="dock"
                 onGlass
                 // Owner pick r3 A: while it sends, the hand waves as the sheet's does, not a spinner.

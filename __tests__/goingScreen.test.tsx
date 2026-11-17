@@ -51,6 +51,7 @@ import { router } from 'expo-router'
 import Going from '../app/(tabs)/going'
 import { apiClient } from '../lib/apiClient'
 import { showSheet } from '../lib/sheet'
+import { isLitControl } from './helpers/lit'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>
@@ -374,9 +375,8 @@ describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
     await open()
     const lock = await screen.findByLabelText('45 more nights with Blend’n+')
     expect(lock.props.accessibilityHint).toBe('Opens Blend’n+')
-    const { COLOR } = require('../lib/design/tokens')
-    const { StyleSheet } = require('react-native')
-    expect(StyleSheet.flatten(lock.props.style).backgroundColor).toBe(COLOR.selectionVioletFill)
+    // A positive, lit as every one is (buttons board C), not Plus's violet card.
+    expect(isLitControl(lock)).toBe(true)
   })
 })
 

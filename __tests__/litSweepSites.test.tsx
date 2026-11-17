@@ -17,6 +17,7 @@ import { TopBar } from '../components/ds/TopBar'
 import { IncomingRequestRow } from '../components/friends/IncomingRequestRow'
 import { COLOR, SIZE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
@@ -30,11 +31,10 @@ jest.mock('expo-linear-gradient', () => {
 })
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
 
-const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const button = (name: string) => StyleSheet.flatten(screen.getByRole('button', { name }).props.style)
 const world = (hue: Hue, node: React.ReactElement) => <HueProvider value={hue}>{node}</HueProvider>
-/** A lit Button draws its hue's fill, and a quiet one does not. */
-const isLit = (name: string, hue: Hue) => button(name).backgroundColor === SELECTION[hue].fill
+/** A lit Button draws the positive look (buttons board C: the same in every hue), and a quiet one does not. */
+const isLit = (name: string, _hue?: Hue) => isLitControl(screen.getByRole('button', { name }))
 
 beforeEach(() => {
   jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false)
@@ -49,7 +49,8 @@ describe('Friends › Requests (rose)', () => {
     expect(isLit('Accept Priya Raman', 'rose')).toBe(true)
     expect(button('Accept Priya Raman').height).toBe(36)
     expect(isLit('Not now, Priya Raman', 'rose')).toBe(false)
-    expect(JSON.stringify(screen.toJSON())).toContain(SELECTION.rose.glyph)
+    // Its glyph is white now, not the hue's light tone (board C).
+    expect(JSON.stringify(screen.toJSON())).not.toContain(SELECTION.rose.glyph)
   })
 })
 
@@ -59,8 +60,8 @@ describe('Banter (rose)', () => {
 
   it('Accept is lit, Decline is quiet, and neither plays a press haptic', async () => {
     await card()
-    expect(flat('r-accept').backgroundColor).toBe(SELECTION.rose.fill)
-    expect(flat('r-decline').backgroundColor).not.toBe(SELECTION.rose.fill)
+    expect(isLitControl(screen.getByTestId('r-accept'))).toBe(true)
+    expect(isLitControl(screen.getByTestId('r-decline'))).toBe(false)
     await fireEvent(screen.getByTestId('r-accept'), 'pressIn')
     expect(H.primary).not.toHaveBeenCalled()
   })

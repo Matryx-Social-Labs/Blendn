@@ -34,8 +34,8 @@ export type Detent = 'short' | 'medium' | 'tall'
 
 /** Fractions of the screen (the Sheet page). */
 const DETENT: Record<Detent, number> = { short: 0.34, medium: 0.56, tall: 0.92 }
-/** The fixed order, app-wide: primary · lit · strong · secondary · destructive · text. */
-const ORDER: ButtonKind[] = ['primary', 'lit', 'strong', 'secondary', 'destructive', 'tertiary']
+/** The fixed order, app-wide: primary · lit · secondary · destructive · text. */
+const ORDER: ButtonKind[] = ['primary', 'lit', 'secondary', 'destructive', 'tertiary']
 /** #5: dismiss past 30% of the lowest detent or at 800 pt/s; a fling that fast steps one detent. */
 const DISMISS_FRACTION = 0.3
 const FLING_VELOCITY = 800

@@ -192,7 +192,7 @@ describe('<Sheet>', () => {
           { label: 'Cancel', kind: 'tertiary', onPress: jest.fn() },
           { label: 'Delete', kind: 'destructive', onPress: jest.fn() },
           { label: 'Copy link', kind: 'secondary', onPress: jest.fn() },
-          { label: 'WhatsApp', kind: 'strong', onPress: jest.fn() },
+          { label: 'WhatsApp', kind: 'lit', onPress: jest.fn() },
         ],
       })
     )
@@ -1170,7 +1170,7 @@ describe('dismissible={false}: a question that has to be answered (Flow 7 "Still
   it('has no handle, ignores the scrim and system back, and keeps its actions working', async () => {
     const onClose = jest.fn()
     const onPress = jest.fn()
-    await render(signOut({ onClose, dismissible: false, actions: [{ label: 'I’m still here', kind: 'strong', onPress }] }))
+    await render(signOut({ onClose, dismissible: false, actions: [{ label: 'I’m still here', kind: 'lit', onPress }] }))
     expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull()
     expect(screen.queryByTestId('s-handle', { includeHiddenElements: true })).toBeNull()
     await fireEvent(screen.getByTestId('s-modal'), 'requestClose')

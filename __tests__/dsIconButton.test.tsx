@@ -13,6 +13,7 @@ import { GroundProvider, HueProvider } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS, SIZE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('react-native-reanimated', () => ({ ...jest.requireActual('react-native-reanimated'), __esModule: true, useReducedMotion: jest.fn(() => false) }))
 jest.mock('expo-glass-effect', () => {
@@ -79,14 +80,21 @@ describe('<IconButton>', () => {
     expect(select).toHaveBeenCalledTimes(1)
   })
 
-  it('selected lights in the screen’s hue, never white (direction C): the fill, a 1 pt rim, the light glyph', async () => {
+  it('selected is lit as every positive is (buttons board C): the tinted disc inside the gradient rim, a white glyph, in any hue', async () => {
     await render(
       <HueProvider value="rose">
-        <IconButton icon="search" accessibilityLabel="Search" selected onPress={jest.fn()} testID="i" />
+        <IconButton icon="hand" accessibilityLabel="Wave" selected onPress={jest.fn()} testID="i" />
       </HueProvider>
     )
-    expect(flat('i-selected')).toMatchObject({ backgroundColor: COLOR.selectionRoseFill, borderWidth: 1, borderColor: COLOR.brandRose })
-    expect(flat('i-selected').backgroundColor).not.toBe(COLOR.selectionFill)
+    expect(isLitControl(screen.getByTestId('i'))).toBe(true)
+    expect(flat('i-selected-inset')).toMatchObject({ top: 1.5, left: 1.5, right: 1.5, bottom: 1.5 })
+    // The glyph is white, and nothing is drawn in the hue (the old disc was its fill, its glyph tone).
+    expect(JSON.stringify(screen.getByTestId('i-glyph').children)).toContain(`"stroke":"${COLOR.textPrimary}"`)
+    expect(JSON.stringify(screen.toJSON())).not.toContain(COLOR.selectionRoseFill)
+    expect(JSON.stringify(screen.toJSON())).not.toContain(COLOR.selectionRoseGlyph)
+    // Control: unselected it is glass, not lit.
+    await render(<IconButton icon="hand" accessibilityLabel="Wave" selected={false} onPress={jest.fn()} testID="i" />)
+    expect(isLitControl(screen.getByTestId('i'))).toBe(false)
   })
 
   it('over a photo (media) the selected disc stays white with an ink glyph (§4.7): a hue on a photo is not legible', async () => {

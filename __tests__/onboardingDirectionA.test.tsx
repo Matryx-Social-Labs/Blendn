@@ -158,7 +158,8 @@ describe('the two lights', () => {
 
 it('the primary is the landing’s white button (ink on white), not the gradient', async () => {
   await frame('basics')
-  expect(StyleSheet.flatten(screen.getByTestId('onboarding-primary').props.style).backgroundColor).toBe(COLOR.textPrimary)
+  // Continue is the hero (buttons board C, owner 2026-11-17: strong is retired): the gradient, with its glow.
+  expect(screen.getByTestId('onboarding-primary-glow', { includeHiddenElements: true })).toBeTruthy()
 })
 
 it('the hero sits above the question, and the dock caption above the primary', async () => {

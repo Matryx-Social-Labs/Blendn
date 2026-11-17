@@ -15,7 +15,7 @@ import { TopBar } from '../components/ds/TopBar'
 import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 import { CollapsingRow } from '../components/notifications/CollapsingRow'
 import { LandingHighlight } from '../components/notifications/LandingHighlight'
-import { NewPill } from '../components/notifications/NewPill'
+import { NewPill } from '../components/ds/NewPill'
 import { NotificationsSkeleton } from '../components/notifications/NotificationsSkeleton'
 import type { IconName } from '../components/ui/Icon'
 import { OfflineBanner, useOffline } from '../components/OfflineBanner'
@@ -185,7 +185,7 @@ function NotificationsScreenContent() {
           ? CLEAR_OVER_REQUESTS
           : 'This clears the list. Nothing is sent to anyone.',
       actions: [
-        { label: 'Clear all', variant: 'strong', then: () => void feed.clear() },
+        { label: 'Clear all', variant: 'secondary', then: () => void feed.clear() },
         { label: 'Cancel', cancel: true },
       ],
     })
@@ -311,7 +311,7 @@ function NotificationsScreenContent() {
           <PullIndicator progress={pull.progress} />
         </View>
       )}
-      {pill ? <NewPill top={bar.indicatorTop + SPACE.md} onPress={toTop} testID="notifications-new-pill" /> : null}
+      {pill ? <NewPill label="New" accessibilityLabel="New notifications, go to the top" top={bar.indicatorTop + SPACE.md} onPress={toTop} testID="notifications-new-pill" /> : null}
       <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
         <TopBar
           title="Notifications"

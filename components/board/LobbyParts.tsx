@@ -6,7 +6,7 @@ import { Chip } from '../ds/Chip'
 import { monoCaption } from '../ds/MonoFamily'
 import { font, SELECTION, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
-import { lobbyChips, newPostsWords, postAge, readOnlyLine, type LobbyCounts, type LobbyFilter, type LobbyHostPost } from '../../lib/lobby'
+import { lobbyChips, postAge, readOnlyLine, type LobbyCounts, type LobbyFilter, type LobbyHostPost } from '../../lib/lobby'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY, tint } from '../../lib/theme'
 
@@ -88,7 +88,7 @@ export function ReadOnlyBanner({ closesAt, timeZone, onOpenRoom }: { closesAt?: 
         <Line strong="group">The doors are open</Line>
       </View>
       <Line lede>{readOnlyLine(closesAt, timeZone)}</Line>
-      <Button kind="primary" size="pill" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
+      <Button kind="lit" size="pill" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
     </View>
   )
 }
@@ -102,7 +102,7 @@ export function LiveEmptyCard({ onOpenRoom }: { onOpenRoom: () => void }) {
         <Line strong="group">Nobody posted in the Lobby.</Line>
       </View>
       <Line lede>The room is open.</Line>
-      <Button kind="primary" size="pill" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
+      <Button kind="lit" size="pill" icon="door-open" label="Open the room" onPress={onOpenRoom} style={styles.start} testID="lobby-open-room" />
     </View>
   )
 }
@@ -213,26 +213,6 @@ export function LobbyChips({ counts, filter, onFilter }: { counts: LobbyCounts; 
   )
 }
 
-/** New posts wait behind this, so the list never jumps under a reader's thumb. */
-export function NewPostsPill({ count, top, onPress }: { count: number; top: number; onPress: () => void }) {
-  const bold = useBoldText()
-  const words = newPostsWords(count)
-  return (
-    <Pressable
-      testID="lobby-new-posts"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${words}. Show them`}
-      accessibilityLiveRegion="polite"
-      style={({ pressed }) => [styles.newPill, { top }, pressed && styles.pressed]}
-    >
-      <Icon name="arrow-up" size={ICON.inline} color={COLOR.textPrimary} />
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('control', bold), styles.ink]}>
-        {words}
-      </Text>
-    </Pressable>
-  )
-}
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
@@ -279,18 +259,4 @@ const styles = StyleSheet.create({
   chipsRow: { marginHorizontal: -SPACE.gutter },
   chips: { gap: SPACE.sm, paddingHorizontal: SPACE.gutter },
 
-  newPill: {
-    position: 'absolute',
-    alignSelf: 'center',
-    zIndex: 5,
-    minHeight: SIZE.tagHeader,
-    paddingHorizontal: SPACE.md + SPACE.xxs,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: ROSE.fill,
-    borderWidth: 1,
-    borderColor: ROSE.edge,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.xs + SPACE.xxs,
-  },
 })

@@ -10,7 +10,6 @@ import {
   BanterSkeleton,
   BlendLiveCard,
   LiveHero,
-  NewAbovePill,
   rowLabel,
   banterHeaderHeight,
   type RowFace,
@@ -27,6 +26,7 @@ import { BoardRequestsSection } from '../../components/board/BoardRequestsSectio
 import { MuteSheet } from '../../components/chat/RoomSheets'
 import { markCoachUsed, useCoachMark } from '../../lib/coachMarks'
 import { useCoachMarkSpot } from '../../components/ds/CoachMarkHost'
+import { NewPill } from '../../components/ds/NewPill'
 import { SearchField } from '../../components/ds/SearchField'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { Button } from '../../components/ds/Button'
@@ -627,8 +627,11 @@ function ChatInner() {
 
       <RealtimeStatusBanner status={inbox.socketStatus} withoutRetry={failedState} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
       {newAbove ? (
-        <NewAbovePill
+        <NewPill
+          label="New"
           top={listTop}
+          accessibilityLabel="New messages above"
+          testID="banter-new-above-pill"
           onPress={() => {
             step('release')
             listRef.current?.scrollToOffset({ offset: 0, animated: !reduceMotion })
