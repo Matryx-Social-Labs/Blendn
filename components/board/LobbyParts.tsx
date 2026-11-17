@@ -2,12 +2,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
-import { NewPill } from '../ds/NewPill'
 import { Chip } from '../ds/Chip'
 import { monoCaption } from '../ds/MonoFamily'
 import { font, SELECTION, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
-import { lobbyChips, newPostsWords, postAge, readOnlyLine, type LobbyCounts, type LobbyFilter, type LobbyHostPost } from '../../lib/lobby'
+import { lobbyChips, postAge, readOnlyLine, type LobbyCounts, type LobbyFilter, type LobbyHostPost } from '../../lib/lobby'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { OPACITY, tint } from '../../lib/theme'
 
@@ -214,11 +213,6 @@ export function LobbyChips({ counts, filter, onFilter }: { counts: LobbyCounts; 
   )
 }
 
-/** New posts wait behind this, so the list never jumps under a reader's thumb. */
-export function NewPostsPill({ count, top, onPress }: { count: number; top: number; onPress: () => void }) {
-  const words = newPostsWords(count)
-  return <NewPill label={words} top={top} accessibilityLabel={`${words}. Show them`} announce onPress={onPress} testID="lobby-new-posts" />
-}
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },

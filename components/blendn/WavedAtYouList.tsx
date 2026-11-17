@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { apiClient, type ReceivedWave } from '../../lib/apiClient'
-import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { Logger } from '../../lib/logger'
 import { isWavesPage, wavedAgoLine, wavedAtYouLine } from '../../lib/receivedWaves'
@@ -10,7 +10,8 @@ import { Avatar } from '../ds/Avatar'
 import { Title } from '../ds/Title'
 import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { PagedFooter } from '../friends/PagedFooter'
-import { WaveBackPill } from './WaveBackPill'
+import { Button } from '../ds/Button'
+import { WavingHand } from '../ds/PersonCard'
 
 /** A row: the 32 face, the name and "Waved at you · 4 min" (board 03 See all). */
 const ROW = 60
@@ -159,9 +160,22 @@ export function WavedAtYouList({
                   </Text>
                 </View>
                 {answerable || sending === w.userId ? (
-                  <WaveBackPill name={w.displayName} state={sending === w.userId ? 'sending' : 'ready'} onPress={() => void answer(w)} testID={`waved-row-${w.userId}-wave`} />
+                  <Button
+                    kind="lit"
+                    size="pill"
+                    icon="hand"
+                    label="Wave back"
+                    leading={sending === w.userId ? <WavingHand size={ICON.inline} /> : undefined}
+                    pressHaptic={sending === w.userId ? false : H.select}
+                    onPress={() => {
+                      if (sending !== w.userId) void answer(w)
+                    }}
+                    accessibilityLabel={`Wave back at ${w.displayName}`}
+                    testID={`waved-row-${w.userId}-wave`}
+                  />
                 ) : w.wavedBack ? (
-                  <WaveBackPill name={w.displayName} state="waved" />
+                  // ✓ Waved is still: the neutral, disabled (no Wave again), as the person page's.
+                  <Button kind="secondary" size="pill" icon="check" label="Waved" disabled accessibilityLabel={`Waved at ${w.displayName}`} />
                 ) : null}
               </Pressable>
             )

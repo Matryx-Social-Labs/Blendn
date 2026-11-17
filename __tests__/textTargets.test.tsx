@@ -11,7 +11,7 @@ jest.mock('react-native-safe-area-context', () => jest.requireActual('react-nati
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn() } }))
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 
-import { NewAbovePill } from '../components/banter/BanterParts'
+import { NewPill } from '../components/ds/NewPill'
 import { minTarget } from '../components/ds/shared'
 import { SIZE, SPACE } from '../lib/design/tokens'
 
@@ -37,8 +37,8 @@ it('no target slop is measured from a spacing step instead of the line it pads (
   expect(found).toEqual([])
 })
 
-it('the Banter "New" pill reaches a full target (M12)', async () => {
-  await render(<NewAbovePill top={0} onPress={jest.fn()} />)
+it('the "New" pill (DS NewPill, Banter’s and the others’) reaches a full target (M12)', async () => {
+  await render(<NewPill label="New" top={0} accessibilityLabel="New messages above" onPress={jest.fn()} />)
   const pill = screen.getByRole('button', { name: 'New messages above' })
   // The DS NewPill: 36 pt (`SIZE.tag + SPACE.xs`), slop above and below.
   expect(SIZE.tag + SPACE.xs + 2 * (pill.props.hitSlop as { top: number }).top).toBeGreaterThanOrEqual(minTarget())

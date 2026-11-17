@@ -6,13 +6,14 @@ import Animated from 'react-native-reanimated'
 
 import { PageFooter } from '../../components/chat/PageFooter'
 import { font, HueProvider, useBoldText } from '../../components/ds/shared'
+import { NewPill } from '../../components/ds/NewPill'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { TopBar } from '../../components/ds/TopBar'
 import { announce, BoardPostCard, IDLE, type AskState } from '../../components/board/BoardSections'
 import { LobbyAlertsSheet } from '../../components/board/LobbyAlertsSheet'
 import { LobbyCompose } from '../../components/board/LobbyCompose'
 import { useLinkedPost } from '../../components/board/useLinkedPost'
-import { ClosedCard, LiveEmptyCard, LobbyChips, LobbyComposerRow, LobbyGate, LobbyStarts, NewPostsPill, PinnedPost, ReadOnlyBanner } from '../../components/board/LobbyParts'
+import { ClosedCard, LiveEmptyCard, LobbyChips, LobbyComposerRow, LobbyGate, LobbyStarts, PinnedPost, ReadOnlyBanner } from '../../components/board/LobbyParts'
 import { emptyOut, fadeIn, riseDelay, riseIn } from '../../components/board/boardMotion'
 import { OfflineBanner } from '../../components/OfflineBanner'
 import { SkeletonBlock } from '../../components/Skeleton'
@@ -37,7 +38,7 @@ import { useLatest } from '../../lib/useLatest'
 import { useLiveSync } from '../../lib/useLiveSync'
 import { useOnBlock } from '../../lib/useOnBlock'
 import { boardSafetySheet } from '../../lib/safetyUtils'
-import { composerSlot, filterQuery, freshOnTop, lobbyLayout, newestPostAt, type LobbyDraft, type LobbyFilter, type LobbyMeta } from '../../lib/lobby'
+import { composerSlot, filterQuery, freshOnTop, lobbyLayout, newestPostAt, newPostsWords, type LobbyDraft, type LobbyFilter, type LobbyMeta } from '../../lib/lobby'
 import { showSheet } from '../../lib/sheet'
 import { cursorOf, getBoardPage, goneFrom, type BoardPostView, type TakenDown } from '../../lib/chatPaging'
 import { COLOR, RADIUS, SPACE, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -767,7 +768,9 @@ export function BoardScreen() {
           <View style={card ? styles.cardSlot : styles.state}>{content}</View>
         </View>
       )}
-      {held.size > 0 && load.kind === 'ready' && !card ? <NewPostsPill count={held.size} top={contentTop + SPACE.sm} onPress={showHeld} /> : null}
+      {held.size > 0 && load.kind === 'ready' && !card ? (
+        <NewPill label={newPostsWords(held.size)} top={contentTop + SPACE.sm} accessibilityLabel={`${newPostsWords(held.size)}. Show them`} announce onPress={showHeld} testID="lobby-new-posts" />
+      ) : null}
       <View testID="lobby-bar" style={bar.barPin} pointerEvents="box-none" onLayout={bar.onBarLayout}>
         <TopBar
           title="Lobby"

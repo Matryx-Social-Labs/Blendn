@@ -13,7 +13,6 @@ import { clockTime, unbroken } from '../../lib/time'
 import { personFace } from '../../lib/personFace'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
-import { NewPill } from '../ds/NewPill'
 import { CrewEmblem } from '../ds/CrewEmblem'
 import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
@@ -574,10 +573,6 @@ export function BanterSkeleton() {
 const LINE_SHORT = 140
 const LINE_LONG = 220
 
-/** #27: a message landed while your finger was down — "↑ New" instead of moving the rows under it. */
-export function NewAbovePill({ top, onPress }: { top: number; onPress: () => void }) {
-  return <NewPill label="New" top={top} accessibilityLabel="New messages above" onPress={onPress} testID="banter-new-above-pill" />
-}
 
 const styles = StyleSheet.create({
   header: {

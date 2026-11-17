@@ -11,7 +11,6 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { BanterWavesRow } from '../components/banter/BanterWavesRow'
-import { WaveBackPill } from '../components/blendn/WaveBackPill'
 import { WaveToast } from '../components/blendn/WaveToast'
 import { WavedAtYouList } from '../components/blendn/WavedAtYouList'
 import { WavedAtYouStrip } from '../components/blendn/WavedAtYouStrip'
@@ -319,18 +318,21 @@ describe('B-A: the pile (owner 2026-11-13: the board’s three faces)', () => {
   })
 })
 
-describe('Wave back is the DS positive (buttons board C: WaveBackPill retired onto Button lit pill)', () => {
-  it('Wave back is lit, white ink, 40 pt', async () => {
-    await render(<WaveBackPill name="Harbour Heron" state="ready" onPress={jest.fn()} testID="pill" />)
-    expect(isLitControl(screen.getByTestId('pill'))).toBe(true)
-    expect(StyleSheet.flatten(screen.getByTestId('pill').props.style).height).toBe(40)
+describe('Wave back is the DS positive (buttons board C: the hand-rolled WaveBackPill is deleted)', () => {
+  it('the strip’s Wave back is the lit Button, 40 pt, white ink', async () => {
+    await render(<WavedAtYouStrip page={page([wave(4)])} now={NOW} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} />)
+    const pill = screen.getByTestId('waved-strip-wave')
+    expect(isLitControl(pill)).toBe(true)
+    expect(StyleSheet.flatten(pill.props.style).height).toBe(40)
     expect(StyleSheet.flatten(screen.getByText('Wave back').props.style).color).toBe(COLOR.textPrimary)
   })
 
-  it('control: ✓ Waved is the still neutral, disabled (no Wave again), never lit', async () => {
-    await render(<WaveBackPill name="Harbour Heron" state="waved" testID="pill" />)
-    expect(isLitControl(screen.getByTestId('pill'))).toBe(false)
-    expect(screen.getByTestId('pill').props.accessibilityState).toMatchObject({ disabled: true })
+  it('control: a row answered is ✓ Waved, the still neutral, disabled (no Wave again), never lit', async () => {
+    mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([wave(21, { wavedBack: true })]) })
+    await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn()} onSafety={jest.fn()} />)
+    const waved = await screen.findByRole('button', { name: 'Waved at Person 21' })
+    expect(isLitControl(waved)).toBe(false)
+    expect(waved.props.accessibilityState).toMatchObject({ disabled: true })
   })
 })
 

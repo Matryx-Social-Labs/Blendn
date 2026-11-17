@@ -20,7 +20,7 @@ const ROOT = path.join(__dirname, '..')
 const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), 'utf8')
 
 describe('the four sites draw the one DS NewPill', () => {
-  const SITES = ['components/chat/ChatParts.tsx', 'components/board/LobbyParts.tsx', 'components/banter/BanterParts.tsx', 'app/notifications.tsx']
+  const SITES = ['components/chat/ChatParts.tsx', 'app/board/[eventId].tsx', 'app/(tabs)/chat.tsx', 'app/notifications.tsx']
 
   it.each(SITES)('%s imports it and draws no pill of its own', (rel) => {
     const src = read(rel)
@@ -30,8 +30,11 @@ describe('the four sites draw the one DS NewPill', () => {
     expect(src).not.toMatch(/styles\.(newPill|pill|newPlace)\b/)
   })
 
-  it('the notifications-only pill is gone', () => {
+  it('the old pills are deleted, not left beside it (owner rule 2026-11-17: superseded means gone)', () => {
     expect(fs.existsSync(path.join(ROOT, 'components/notifications/NewPill.tsx'))).toBe(false)
+    expect(read('components/board/LobbyParts.tsx')).not.toMatch(/export function NewPostsPill\b/)
+    expect(read('components/banter/BanterParts.tsx')).not.toMatch(/export function NewAbovePill\b/)
+    expect(fs.existsSync(path.join(ROOT, 'components/blendn/WaveBackPill.tsx'))).toBe(false)
   })
 
   it('control: the source check would catch a site that still drew its own', () => {
