@@ -64,8 +64,8 @@ describe('the verb table', () => {
   })
 
   it('a glyph not listed pops, by default', async () => {
-    expect(GLYPH_VERB.cat).toBeUndefined()
-    await choose('cat')
+    expect(GLYPH_VERB.archive).toBeUndefined()
+    await choose('archive')
     expect(spring).toHaveBeenCalledWith(1, SPRING.pop)
   })
 })

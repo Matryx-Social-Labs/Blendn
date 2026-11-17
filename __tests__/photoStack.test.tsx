@@ -6,13 +6,13 @@ import { PhotoStack } from '../components/profile/PhotoStack'
 jest.mock('../components/OptimizedImage', () => ({ OptimizedImage: () => null }))
 
 it('offers the next-photo action and the swipe hint with several photos', async () => {
-  await render(<PhotoStack photos={['a', 'b', 'c']} onPress={jest.fn()} />)
+  await render(<PhotoStack photos={['a', 'b', 'c']} name="Ivy" onPress={jest.fn()} />)
   const deck = screen.getByLabelText('Your photos')
   expect(deck.props.accessibilityActions).toEqual([{ name: 'activate' }, { name: 'increment', label: 'Next photo' }])
   expect(deck.props.accessibilityHint).toMatch(/Swipe the photos sideways/)
 })
 
 it('with one photo there is nothing to flick: it only opens', async () => {
-  await render(<PhotoStack photos={['a']} onPress={jest.fn()} />)
+  await render(<PhotoStack photos={['a']} name="Ivy" onPress={jest.fn()} />)
   expect(screen.getByLabelText('Your photos').props.accessibilityActions).toEqual([{ name: 'activate' }])
 })

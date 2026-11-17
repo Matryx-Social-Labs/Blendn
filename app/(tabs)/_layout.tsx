@@ -261,6 +261,7 @@ const BlendnTabBar = memo(({ state, navigation }: BottomTabBarProps) => {
         onSelect={select}
         disc={{ target, onPress: () => openBlendn(), venue: venue ?? undefined, here: insideCount }}
         mePhoto={mePhoto ?? undefined}
+        meName={authUser?.name ?? undefined}
         banterUnread={banter}
         discRef={discRef}
         settle={settle}

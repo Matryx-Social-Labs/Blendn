@@ -84,7 +84,7 @@ export function MeIdentity({
         ) : null}
         <Button kind="lit" size="md" icon="pencil" label="Edit profile" onPress={onEdit} style={styles.edit} />
       </View>
-      <PhotoStack photos={photos} onPress={onPhotos} />
+      <PhotoStack photos={photos} name={name} onPress={onPhotos} />
     </View>
   )
 }
