@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
+import { personFace } from '../../lib/personFace'
 import { Spinner } from '../ds/Loader'
 import { SegmentedControl } from '../ds/SegmentedControl'
 import { InviteQr } from './InviteQr'
@@ -95,7 +96,7 @@ export function InviteLinkCard({
     <View testID="invite-link-card" style={[styles.card, contrast ? styles.cardContrast : styles.cardEdge]}>
       {who ? (
         <View style={styles.who}>
-          {photo ? <Avatar kind="photo" uri={photo} size={FACE} /> : <Avatar kind="creature" pseudonym={who} size={FACE} />}
+          <Avatar size={FACE} {...personFace({ named: true, name: who, photo })} />
           <View style={styles.whoText}>
             {/* Your name grows to the heading cap and takes two lines at the AX sizes; the line under it stops at meta's (D-LM10). */}
             <FitText variant="heading" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={styles.ink}>

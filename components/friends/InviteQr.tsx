@@ -5,6 +5,7 @@ import { toQR } from 'toqr'
 
 import { COLOR, RADIUS } from '../../lib/design/tokens'
 import { Avatar } from '../ds/Avatar'
+import { personFace } from '../../lib/personFace'
 
 /** toqr's error-correction levels (its `ECLevel` is a const enum, which isolated modules cannot read): H recovers about 30%. */
 const EC_HIGH = 2
@@ -57,7 +58,7 @@ export function InviteQr({ url, size, face }: { url: string; size: number; face:
         ))}
       </Svg>
       <View style={[styles.face, { borderRadius: face.size / 2 + FACE_RING, padding: FACE_RING, marginLeft: -(face.size / 2 + FACE_RING), marginTop: -(face.size / 2 + FACE_RING) }]}>
-        {face.photo ? <Avatar kind="photo" uri={face.photo} size={face.size} /> : <Avatar kind="creature" pseudonym={face.name} size={face.size} />}
+        <Avatar size={face.size} {...personFace({ named: true, name: face.name, photo: face.photo })} />
       </View>
     </View>
   )
