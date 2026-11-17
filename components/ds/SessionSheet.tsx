@@ -8,7 +8,7 @@ import { STAY_LABEL, STOP_LIVE_CONSEQUENCE, STOP_LIVE_LABEL, STOPPING_LIVE_LABEL
 import { PresenceDot } from './MonoFamily'
 import { HoldToConfirm } from './HoldToConfirm'
 import { Sheet, type SheetAction } from './Sheet'
-import { announceOutcome, font, useBoldText, useIncreaseContrast } from './shared'
+import { announceOutcome, font, useBoldText, useIncreaseContrast, useLargeText } from './shared'
 import { Title } from './Title'
 
 /** Where live time stands: minutes left (updated once a minute), the last 5 minutes in mm:ss, or Stay. */
@@ -91,6 +91,7 @@ export function SessionSheet({
 }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const large = useLargeText()
   const [confirming, setConfirming] = useState(visible && startConfirming)
   // Each open starts where it was asked to (the session, or the confirm); a close resets (state adjusted in render).
   const [wasVisible, setWasVisible] = useState(visible)
@@ -110,7 +111,7 @@ export function SessionSheet({
         visible={visible}
         onClose={cancel}
         title={stopLiveQuestion(venue)}
-        body={STOP_LIVE_CONSEQUENCE}
+        body={large ? undefined : STOP_LIVE_CONSEQUENCE}
         // Stay while the stop is on the wire would promise what the server is already undoing.
         actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: cancel, disabled: ending }]}
       >
@@ -124,6 +125,12 @@ export function SessionSheet({
           busy={ending}
           testID="session-stop-hold"
         />
+        {/* At the accessibility sizes the sentence moves under the hold, so a long place name cannot push it out of reach (Check out's rule). */}
+        {large ? (
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color: detail }]}>
+            {STOP_LIVE_CONSEQUENCE}
+          </Text>
+        ) : null}
       </Sheet>
     )
   }

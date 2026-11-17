@@ -6,11 +6,12 @@
  */
 import { fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
+import { AccessibilityInfo, Dimensions, Platform, StyleSheet } from 'react-native'
 
 import { SessionSheet } from '../components/ds/SessionSheet'
 import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { STOP_LIVE_CONSEQUENCE } from '../lib/switchCopy'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('react-native-reanimated', () => {
@@ -166,6 +167,26 @@ describe('<SessionSheet>', () => {
     expect(hold().props.accessibilityLabel).toBe('Stopping…')
     expect(hold().props.accessibilityState).toMatchObject({ busy: true })
     expect(screen.getByRole('button', { name: 'Stay' }).props.accessibilityState).toMatchObject({ disabled: true })
+  })
+
+  it.each([
+    [1, 'over'],
+    [3.571, 'under'],
+  ])('at text size %p the sentence sits %s the hold: at the accessibility sizes the hold comes straight after the question, as Check out’s', async (fontScale, where) => {
+    const window = Dimensions.get('window')
+    Dimensions.set({ window: { ...window, fontScale } })
+    try {
+      await render(<SessionSheet {...base} visible startConfirming time={{ kind: 'minutes', left: 32, until: '21:50' }} />)
+      type Node = { children?: readonly (Node | string)[] }
+      const walk = (n: Node): Node[] => [n, ...(n.children ?? []).flatMap((c) => (typeof c === 'string' ? [] : walk(c)))]
+      const order: unknown[] = walk(screen.container as unknown as Node)
+      const [sentence, at] = [order.indexOf(screen.getByText(STOP_LIVE_CONSEQUENCE)), order.indexOf(hold())]
+      expect(sentence).toBeGreaterThan(-1)
+      expect(at).toBeGreaterThan(-1)
+      expect(sentence < at ? 'over' : 'under').toBe(where)
+    } finally {
+      Dimensions.set({ window })
+    }
   })
 
   it('with no end to count to (no expiry, not a stay) it says only that you are live, and End still confirms', async () => {
