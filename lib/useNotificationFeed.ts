@@ -268,7 +268,8 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
    * yet counts its rows. A row showing its outcome is not counted: the list has let it go already.
    */
   const waitingTotal = useMemo(() => {
-    const live = (kind: string) => groups.waiting.filter((r) => r.item.kind === kind && !shownState[r.id]).length
+    const live = (kind: string) =>
+      groups.waiting.filter((r) => r.item.kind === kind && shownState[r.id] !== 'done' && shownState[r.id] !== 'stale').length
     const friends = friendRequests.loaded ? friendRequests.incoming.total : live('friend_request')
     const crews = crewInvites.loaded ? crewInvites.total : live('crew_invite')
     return friends + crews
