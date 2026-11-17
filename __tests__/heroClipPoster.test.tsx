@@ -5,9 +5,10 @@
  * painted under every clip and stayed mounted while it played, and when the clip had no poster of its own the poster was
  * the event's cover. So the cover (another picture, at another ratio) filled the bars above and below the clip.
  *
- * Now the poster is the clip's own `thumbnail_url` or nothing, and it goes once the clip draws its first frame: the bars
- * show the hero's own dark surface. Until that frame (a stall, Reduce Motion) the poster stays, or the surface if there
- * is none.
+ * Now the poster is the clip's own `thumbnail_url` or nothing, and it goes once the clip draws its first frame. Under fit
+ * rule B (owner 2026-11-17) the bars show the poster's own blurred copy, the same picture (`ContainedCover`'s fill), which
+ * stays under the clip; with no poster, the hero's dark surface. Until that frame (a stall, Reduce Motion) the poster
+ * stays.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -27,9 +28,9 @@ jest.mock('expo-video', () => ({
   },
 }))
 jest.mock('expo-image', () => ({
-  Image: (p: { source?: { uri?: string | null } }) => {
+  Image: (p: { source?: { uri?: string | null }; blurRadius?: number }) => {
     const { View: V } = jest.requireActual('react-native')
-    return <V testID="hero-still" accessibilityLabel={p.source?.uri ?? 'no-uri'} />
+    return <V testID={p.blurRadius ? 'hero-fill' : 'hero-still'} accessibilityLabel={p.source?.uri ?? 'no-uri'} />
   },
 }))
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -41,13 +42,15 @@ const CLIP_URL = 'https://cdn.example/clip.mp4'
 const POSTER = 'https://cdn.example/first-frame.jpg'
 
 const stills = () => screen.queryAllByTestId('hero-still').map((n) => n.props.accessibilityLabel as string)
+/** Fit rule B's blurred copies: only ever of the picture on that page. */
+const fills = () => screen.queryAllByTestId('hero-fill').map((n) => n.props.accessibilityLabel as string)
 const firstFrame = async () => {
   await act(async () => {
     screen.getByTestId('hero-clip').props.onFirstFrameRender()
   })
 }
 const media = (playlist: FeedMediaItem[], over: Partial<React.ComponentProps<typeof SceneHeroMedia>> = {}) => (
-  <SceneHeroMedia playlist={playlist} width={345} height={345} fit="contain" autoAdvance={false} pips="center" {...over} />
+  <SceneHeroMedia playlist={playlist} width={345} height={345} autoAdvance={false} pips="center" {...over} />
 )
 
 beforeEach(() => {
@@ -78,13 +81,20 @@ describe('the poster is the clip’s own, never the event cover', () => {
 })
 
 describe('the poster under a playing clip', () => {
-  it('is on screen until the clip draws its first frame, then unmounted', async () => {
+  it('is on screen until the clip draws its first frame, then unmounted; its blurred copy stays in the bars', async () => {
     await render(media([{ kind: 'video', url: CLIP_URL, posterUrl: POSTER }]))
     expect(screen.getByTestId('hero-clip')).toBeTruthy()
     expect(stills()).toEqual([POSTER])
     await firstFrame()
     expect(stills()).toEqual([])
+    expect(fills()).toEqual([POSTER])
     expect(screen.getByTestId('hero-clip')).toBeTruthy()
+  })
+
+  it('the clip takes its poster’s fit: contained until the poster is known to be within ±15% of the square', async () => {
+    await render(media([{ kind: 'video', url: CLIP_URL, posterUrl: POSTER }]))
+    expect(screen.getByTestId('hero-clip').props.contentFit).toBe('contain')
+    expect(screen.getByTestId('hero-clip').props.surfaceType).toBe('textureView')
   })
 
   it('a stall before the first frame keeps the poster', async () => {

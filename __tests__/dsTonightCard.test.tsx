@@ -74,7 +74,8 @@ describe('the same stack as the Me photo stack (SCRUM-964)', () => {
   it('draws each card with its cover, so the ones behind are not blank', async () => {
     const covers = ['https://c/a.jpg', 'https://c/b.jpg', 'https://c/c.jpg']
     await draw({ events: DECK.map((e, i) => ({ ...e, cover: covers[i] })) })
-    for (const c of covers) expect(screen.getByTestId(`img:${c}`, { includeHiddenElements: true })).toBeTruthy()
+    // Fit rule B: the upload, and (until it is known to fit) its own blurred copy under it: never another picture.
+    for (const c of covers) expect(screen.getAllByTestId(`img:${c}`, { includeHiddenElements: true }).length).toBeGreaterThan(0)
   })
 
   it('prefetches the top cover and the next few, once, into the disk cache', async () => {

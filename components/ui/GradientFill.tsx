@@ -42,6 +42,24 @@ export function PhotoScrim({ contrast = false, foot: ends, ...rest }: ViewProps 
   return <LinearGradient {...rest} colors={[tint(COLOR.ink, 0), tint(COLOR.ink, foot)]} />
 }
 
+/**
+ * The Pulse lead's rotation scrim (pulse-media sheet 08, owner 2026-11-17): Featured C rotates through frames nobody chose
+ * as the cover, so the words must hold over any of them. Ink from 15% of the card: 62% by 35%, 86% by 70%, 94% at the
+ * foot (the board's worst staging frame: overline 5.9:1, 3-line title 7.4:1). Increase Contrast deepens it 20%, as the
+ * photo scrim's.
+ */
+export const ROTATION_SCRIM = [
+  { at: 0, alpha: 0 },
+  { at: 0.15, alpha: 0 },
+  { at: 0.35, alpha: 0.62 },
+  { at: 0.7, alpha: 0.86 },
+  { at: 1, alpha: 0.94 },
+] as const
+export function RotationScrim({ contrast = false, ...rest }: ViewProps & { contrast?: boolean }) {
+  const deeper = (a: number) => (a > 0 && contrast ? Math.min(1, a + PHOTO_SCRIM.contrast) : a)
+  return <LinearGradient {...rest} colors={ROTATION_SCRIM.map((s) => tint(COLOR.ink, deeper(s.alpha))) as [string, string, ...string[]]} locations={ROTATION_SCRIM.map((s) => s.at) as [number, number, ...number[]]} />
+}
+
 /** A photo's head under the status bar (Flow 5 Room info hero: 45% → 0), so the clock reads over any cover. */
 export const STATUS_SCRIM = 0.45
 export function StatusScrim(props: ViewProps) {
