@@ -187,9 +187,9 @@ describe('before it is drawn', () => {
     await render(<VenueScreen />)
     await act(async () => { mockAppStateCb?.('active') })
     await act(async () => { await Promise.resolve() })
-    expect(screen.queryByTestId('venue-live-pill')).toBeNull()
+    expect(screen.queryByTestId('venue-live')).toBeNull()
     await act(async () => { releaseOld(venue({ live: liveOver() })) })
-    expect(screen.queryByTestId('venue-live-pill')).toBeNull()
+    expect(screen.queryByTestId('venue-live')).toBeNull()
   })
 })
 
@@ -653,11 +653,11 @@ describe('the dock', () => {
 })
 
 describe('live', () => {
-  it('the hero says you are live and the clock steps once a minute; the pill carries it in the dock', async () => {
+  it('the hero says you are live and the clock steps once a minute; the dock’s state line carries it', async () => {
     await mount(venue({ live: liveOver() }))
-    expect(screen.getByLabelText('Live at The Humming Tree, 20 minutes left')).toBeTruthy()
+    expect(screen.getByLabelText('Live at The Humming Tree, 20 minutes left. Extend or stop')).toBeTruthy()
     await act(async () => { jest.advanceTimersByTime(60_000) })
-    expect(screen.getByLabelText('Live at The Humming Tree, 19 minutes left')).toBeTruthy()
+    expect(screen.getByLabelText('Live at The Humming Tree, 19 minutes left. Extend or stop')).toBeTruthy()
   })
 
   it('a stay window says staying, with no countdown', async () => {
@@ -665,18 +665,12 @@ describe('live', () => {
     expect(screen.getByLabelText(/^Live at The Humming Tree/).props.accessibilityLabel).not.toMatch(/\d+ min/)
   })
 
-  it('the last five minutes: seconds, and an Extend chip beside Ending', async () => {
+  it('the last five minutes: “Ending · 4:59” over “Extend”, ticking each second', async () => {
     await mount(venue({ live: liveOver({ expiresAt: new Date(NOW + 4 * 60_000 + 59_000).toISOString() }) }))
-    expect(screen.getByLabelText('Live at The Humming Tree, 4:59 left, ending soon')).toBeTruthy()
-    expect(screen.getByText('Extend', { includeHiddenElements: true })).toBeTruthy()
-    expect(screen.getByText('Ending', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByLabelText('Live at The Humming Tree, 4:59 left, ending soon. Extend')).toBeTruthy()
+    expect(screen.getByTestId('venue-live-clock')).toHaveTextContent('4:59')
     await act(async () => { jest.advanceTimersByTime(1_000) })
-    expect(screen.getByLabelText('Live at The Humming Tree, 4:58 left, ending soon')).toBeTruthy()
-  })
-
-  it('the pill is a 44 pt target though it draws 36 (motion audit M21)', async () => {
-    await mount(venue({ live: liveOver() }))
-    expect(screen.getByTestId('venue-live-pill').props.hitSlop).toBe(4)
+    expect(screen.getByLabelText('Live at The Humming Tree, 4:58 left, ending soon. Extend')).toBeTruthy()
   })
 
   it('the last five minutes are said once, as they start, not on every tick (motion audit M21)', async () => {
@@ -689,11 +683,21 @@ describe('live', () => {
     say.mockRestore()
   })
 
-  it('the pill opens the session sheet; in the last five minutes it offers Extend, named with the new end', async () => {
-    await mount(venue({ live: liveOver({ expiresAt: new Date(NOW + 4 * 60_000 + 59_000).toISOString() }) }))
+  /** The dock's state line: the way to the live sheet (venue live pill B). */
+  const openSheet = async () => {
     await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-live-pill'))
+      fireEvent.press(screen.getByTestId('venue-live-left'))
     })
+  }
+  const holdStop = async () => {
+    await act(async () => {
+      fireEvent(screen.getByTestId('session-stop-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
+    })
+  }
+
+  it('the state opens the session sheet; in the last five minutes it offers Extend, named with the new end', async () => {
+    await mount(venue({ live: liveOver({ expiresAt: new Date(NOW + 4 * 60_000 + 59_000).toISOString() }) }))
+    await openSheet()
     expect(H.primary).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('header', { name: 'Live at The Humming Tree' })).toBeTruthy()
     const extend = screen.getByRole('button', { name: /^Extend · Live until \d\d:\d\d$/ })
@@ -703,14 +707,19 @@ describe('live', () => {
     expect(goLiveApi).toHaveBeenCalledWith('v1', expect.objectContaining({ minutes: 45 }))
   })
 
-  it('the pill’s sheet: End asks in the same sheet, and Stay goes back to the session', async () => {
+  it('“Extend or stop” is what the sheet holds: with 20 minutes left, Extend (it moves the end) and Stop', async () => {
+    await mount(venue({ live: liveOver() }))
+    await openSheet()
+    expect(screen.getByRole('button', { name: /^Extend · Live until \d\d:\d\d$/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy()
+  })
+
+  it('the sheet’s Stop asks in the same sheet, and Stay goes back to the session', async () => {
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: true })
     await mount(venue({ live: liveOver() }))
+    await openSheet()
     await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-live-pill'))
-    })
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'End' }))
+      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
     expect(screen.getByRole('header', { name: 'Stop being live at The Humming Tree?' })).toBeTruthy()
     await act(async () => {
@@ -720,73 +729,67 @@ describe('live', () => {
     expect(screen.getByRole('header', { name: 'Live at The Humming Tree' })).toBeTruthy()
   })
 
-  it('Leave is R12’s “Stop being live at ‹place›?”: Stay, or a swipe, closes the sheet; the neutral hold checks out', async () => {
+  it('the sheet’s Stop ends the session: the neutral hold checks out of the venue day, the sheet closes, Go live is back', async () => {
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: true })
     await mount(venue({ live: liveOver() }))
+    await openSheet()
     await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-leave'))
+      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
-    expect(screen.getByRole('header', { name: 'Stop being live at The Humming Tree?' })).toBeTruthy()
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Stay' }))
-    })
-    await act(async () => { jest.advanceTimersByTime(1000) })
-    expect(screen.queryByRole('header', { name: /Stop being live|Live at The Humming Tree/ })).toBeNull()
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-leave'))
-    })
-    await act(async () => {
-      fireEvent.press(screen.getByRole('button', { name: 'Dismiss' }))
-    })
-    await act(async () => { jest.advanceTimersByTime(1000) })
-    expect(screen.queryByRole('header', { name: /Stop being live|Live at The Humming Tree/ })).toBeNull()
-    expect(checkOutOf).not.toHaveBeenCalled()
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-leave'))
-    })
-    await act(async () => {
-      fireEvent(screen.getByTestId('session-stop-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
-    })
+    ;(apiClient.getVenue as jest.Mock).mockResolvedValue(venue())
+    await holdStop()
     expect(checkOutOf).toHaveBeenCalledWith('day-1')
+    await act(async () => { jest.advanceTimersByTime(1000) })
+    expect(screen.queryByRole('header', { name: /Stop being live|Live at The Humming Tree/ })).toBeNull()
+    expect(screen.queryByTestId('venue-live')).toBeNull()
+    expect(screen.getByTestId('venue-go-live')).toBeTruthy()
+  })
+
+  it('there is no Leave button: the only way to stop is the sheet', async () => {
+    await mount(venue({ live: liveOver() }))
+    expect(screen.queryByTestId('venue-leave')).toBeNull()
+    expect(within(screen.getByTestId('venue-dock')).queryByRole('button', { name: 'Leave' })).toBeNull()
+    expect(within(screen.getByTestId('venue-dock')).getAllByRole('button').map((b) => b.props.accessibilityLabel)).toEqual([
+      'Live at The Humming Tree, 20 minutes left. Extend or stop',
+      'Open the room',
+    ])
   })
 
   it('Stopping… is the hold’s word while the check-out is on the wire', async () => {
     let release: (v: unknown) => void = () => {}
     ;(checkOutOf as jest.Mock).mockReturnValue(new Promise((r) => { release = r }))
     await mount(venue({ live: liveOver() }))
+    await openSheet()
     await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-leave'))
+      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
-    await act(async () => {
-      fireEvent(screen.getByTestId('session-stop-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
-    })
+    await holdStop()
     expect(screen.getByRole('button', { name: 'Stopping…' })).toBeTruthy()
     await act(async () => { release({ success: true }) })
   })
 
-  it('live with no clock (no expiry, not a stay) still shows the pill, and Leave still opens the confirm', async () => {
+  it('live with no clock (no expiry, not a stay) still shows the state, and its sheet still stops', async () => {
     await mount(venue({ live: liveOver({ expiresAt: null }) }))
-    expect(screen.getByLabelText('Live at The Humming Tree')).toBeTruthy()
+    expect(screen.getByLabelText('Live at The Humming Tree. Stop')).toBeTruthy()
+    await openSheet()
     await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-leave'))
+      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
     expect(screen.getByRole('header', { name: 'Stop being live at The Humming Tree?' })).toBeTruthy()
   })
 
-  it('a failed End is an error toast, and the place is read again', async () => {
+  it('a failed Stop is an error toast, and the place is read again', async () => {
     ;(checkOutOf as jest.Mock).mockResolvedValue({ success: false, error: '' })
     await mount(venue({ live: liveOver() }))
+    await openSheet()
     await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-leave'))
+      fireEvent.press(screen.getByRole('button', { name: 'Stop' }))
     })
     const reads = (apiClient.getVenue as jest.Mock).mock.calls.length
-    await act(async () => {
-      fireEvent(screen.getByTestId('session-stop-hold'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } })
-    })
+    await holdStop()
     expect(mockShowToast).toHaveBeenCalledWith("Couldn’t stop. Try again.", 'error', { haptic: 'error' })
     expect((apiClient.getVenue as jest.Mock).mock.calls.length).toBe(reads + 1)
   })
-
   it('opens the room with the place, so the room can go back to it ("Go live again")', async () => {
     await mount(venue({ live: liveOver() }))
     await fireEvent.press(screen.getByRole('button', { name: 'Open the room' }))
@@ -831,9 +834,7 @@ describe('live', () => {
 
   it('the window ending closes the session sheet, and Go live is back', async () => {
     await mount(venue({ live: liveOver() }))
-    await act(async () => {
-      fireEvent.press(screen.getByTestId('venue-live-pill'))
-    })
+    await openSheet()
     ;(apiClient.getVenue as jest.Mock).mockResolvedValue(venue())
     await act(async () => { mockAppStateCb?.('active') })
     await waitFor(() => expect(screen.queryByRole('header', { name: 'Live at The Humming Tree' })).toBeNull())

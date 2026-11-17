@@ -10,7 +10,8 @@ import {
   dockMode,
   goodToKnow,
   kmParam,
-  liveWords,
+  liveDockLine,
+  minutesWords,
   nextTickMs,
   ringWords,
   sessionTime,
@@ -215,7 +216,10 @@ describe('the dock', () => {
 
 describe('where your window stands', () => {
   it('minutes with the end clock; the last five minutes as mm:ss with the new end an Extend gives; stay', () => {
-    expect(sessionTime({ expiresAt: iso(min(32)) }, NOW)).toEqual({ kind: 'minutes', left: 32, until: clock24(min(32)) })
+    // Under 45 minutes an Extend (45) moves the end, so the window carries the end it would give.
+    expect(sessionTime({ expiresAt: iso(min(32)) }, NOW)).toEqual({ kind: 'minutes', left: 32, until: clock24(min(32)), extendUntil: clock24(min(45)) })
+    // From 45 up it would not (going live again never shortens): no Extend to offer.
+    expect(sessionTime({ expiresAt: iso(min(45)) }, NOW)).toEqual({ kind: 'minutes', left: 45, until: clock24(min(45)) })
     // Partial minutes round up: 31:01 left reads 32.
     expect(sessionTime({ expiresAt: iso(min(31) + 1000) }, NOW)).toMatchObject({ kind: 'minutes', left: 32 })
     expect(sessionTime({ expiresAt: iso(min(5)) }, NOW)).toEqual({ kind: 'ending', clock: '5:00', extendUntil: clock24(min(45)) })
@@ -236,18 +240,54 @@ describe('where your window stands', () => {
     expect(nextTickMs({ expiresAt: null }, NOW)).toBeNull()
   })
 
-  it('the words on the pill, the ring and for a screen reader', () => {
+  it('the words on the ring and for a screen reader', () => {
     const t = sessionTime({ expiresAt: iso(min(42)) }, NOW)
-    expect(liveWords(t)).toBe('You’re live · 42 min')
     expect(ringWords(t)).toBe('Live · 42 min left')
     expect(spokenLeft(t!)).toBe('42 minutes left')
+    expect(ringWords(sessionTime({ expiresAt: iso(min(165)) }, NOW))).toBe('Live · 2h 45m left')
+    expect(spokenLeft(sessionTime({ expiresAt: iso(min(165)) }, NOW)!)).toBe('2 hours 45 minutes left')
+    expect(spokenLeft(sessionTime({ expiresAt: iso(min(1)) }, NOW)!)).toBe('1 minute left')
     const ending = sessionTime({ expiresAt: iso(NOW + 4 * 60_000 + 59_000) }, NOW)!
-    expect(liveWords(ending)).toBe('You’re live · 4:59')
     expect(spokenLeft(ending)).toBe('4:59 left, ending soon')
     const stay = sessionTime({ expiresAt: null, stay: true }, NOW)!
-    expect(liveWords(stay)).toBe('You’re live · staying')
     expect(ringWords(stay)).toBe('Live · staying')
-    expect(liveWords(null)).toBe('You’re live')
+  })
+
+  it('one formatter for the minutes: “42 min” under an hour, “2h 45m” over, “1h” on the hour', () => {
+    expect(minutesWords(42)).toBe('42 min')
+    expect(minutesWords(60)).toBe('1h')
+    expect(minutesWords(165)).toBe('2h 45m')
+    expect(minutesWords(61)).toBe('1h 1m')
+  })
+})
+
+describe('the live dock’s line (venue live pill B, owner 2026-11-17)', () => {
+  const at = (ms: number) => sessionTime({ expiresAt: iso(NOW + ms) }, NOW)
+  it('live: “Live ·” and its time in their own slot, over what the sheet holds', () => {
+    expect(liveDockLine(at(20 * 60_000), 'Toit')).toEqual({
+      dot: 'live',
+      state: 'Live',
+      clock: { text: '20 min', mono: false },
+      sub: 'Extend or stop',
+      label: 'Live at Toit, 20 minutes left. Extend or stop',
+    })
+    // An Extend would not move a later end: the line offers what the sheet has, Stop.
+    expect(liveDockLine(at(165 * 60_000), 'Toit')).toMatchObject({ clock: { text: '2h 45m', mono: false }, sub: 'Stop' })
+  })
+
+  it('the last five minutes: the warning dot, “Ending ·” and the mono clock, over “Extend”', () => {
+    expect(liveDockLine(at(4 * 60_000 + 59_000), 'Toit')).toEqual({
+      dot: 'ending',
+      state: 'Ending',
+      clock: { text: '4:59', mono: true },
+      sub: 'Extend',
+      label: 'Live at Toit, 4:59 left, ending soon. Extend',
+    })
+  })
+
+  it('a stay, and a window with no end, have no clock and offer Stop', () => {
+    expect(liveDockLine(sessionTime({ expiresAt: null, stay: true }, NOW), 'Toit')).toEqual({ dot: 'live', state: 'Live · staying', clock: undefined, sub: 'Stop', label: 'Live at Toit, staying. Stop' })
+    expect(liveDockLine(null, 'Toit')).toEqual({ dot: 'live', state: 'Live', clock: undefined, sub: 'Stop', label: 'Live at Toit. Stop' })
   })
 })
 
