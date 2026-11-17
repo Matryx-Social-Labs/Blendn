@@ -53,7 +53,7 @@ export const COLOR = {
   selectionRoseGlyph: '#EB8EA1',
   selectionRoseFlare: '#653A43',
   selectionVioletFill: '#433247',
-  selectionVioletGlyph: '#B58FD0',
+  selectionVioletGlyph: '#BA96D3',
   selectionVioletFlare: '#523A5A',
   tabCapsule: 'rgba(255,255,255,0.22)',
   switchOffTrack: '#959090',

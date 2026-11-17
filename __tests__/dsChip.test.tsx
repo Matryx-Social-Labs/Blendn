@@ -342,6 +342,27 @@ describe('count, the fold chip, the caller’s label', () => {
     expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.selectionEmberGlyph)
   })
 
+  // Re-audit 2026-11-17: the hue's light tone on the press (Android's wash) is 3.0–3.6:1; white there is 8:1 on every hue.
+  it('a selected chip’s count is white while it is pressed, and the hue’s tone again at rest', async () => {
+    await render(
+      <HueProvider value="violet">
+        <Chip label="Jazz" selected count={12} previewState="pressed" onPress={jest.fn()} testID="c" />
+      </HueProvider>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.textPrimary)
+    await screen.rerender(
+      <HueProvider value="violet">
+        <Chip label="Jazz" selected count={12} onPress={jest.fn()} testID="c" />
+      </HueProvider>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.selectionVioletGlyph)
+  })
+
+  it('an unselected chip’s count stays secondary white when pressed: only the lit count changes', async () => {
+    await draw({ count: 3, previewState: 'pressed' })
+    expect(StyleSheet.flatten(screen.getByTestId('c-count').props.style).color).toBe(COLOR.textSecondary)
+  })
+
   it('reads the caller’s label, else “label, count”, else the label', async () => {
     await draw({ label: 'Nightlife', count: 4, accessibilityLabel: 'Nightlife, 4 events' })
     expect(screen.getByRole('button', { name: 'Nightlife, 4 events' })).toBeTruthy()

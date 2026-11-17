@@ -245,8 +245,9 @@ export function Chip({
           maxFontSizeMultiplier={CONTROL_FONT_CAP}
           style={[
             monoCaption(bold),
-            // Lit with its chip (board `.qc.on .n`): the hue's light tone on the fill, never grey on ember.
-            { color: selected ? sel.glyph : COLOR.textSecondary },
+            // Lit with its chip (board `.qc.on .n`): the hue's light tone on the fill, never grey on ember. White while pressed:
+            // the tone is 3.0–3.6:1 under the press wash, white 8:1 (colour re-audit 2026-11-17, themeContrast).
+            { color: selected ? (pressed ? COLOR.textPrimary : sel.glyph) : COLOR.textSecondary },
           ]}
         >
           {count}
