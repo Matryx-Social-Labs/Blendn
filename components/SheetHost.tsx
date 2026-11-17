@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { closeSheet, dismissSheet, stepSheet, useSheet, type Sheet, type SheetAction, type SheetOutcome } from '../lib/sheet'
 import { COLOR, ICON, MATERIAL, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { OPACITY } from '../lib/theme'
 import type { ButtonKind } from './ds/Button'
+import { Avatar } from './ds/Avatar'
 import { Spinner } from './ds/Loader'
 import { Sheet as DsSheet, type SheetAction as DsAction } from './ds/Sheet'
 import { font, HueProvider, PRESSED_WASH, useAnnounced, useBoldText, useIncreaseContrast, useSelection } from './ds/shared'
@@ -47,6 +48,7 @@ export function SheetHost() {
   const [shown, setShown] = useState<Sheet | null>(null)
   const [stepKey, setStepKey] = useState(key)
   const [busy, setBusy] = useState<number | null>(null)
+  const personRef = useRef<View>(null)
   const [error, setError] = useState<{ index: number; text: string } | null>(null)
   /** "Something else": the reason waiting for its note. */
   const [noting, setNoting] = useState<string | null>(null)
@@ -112,7 +114,9 @@ export function SheetHost() {
       <DsSheet
         visible={sheet !== null}
         onClose={dismissSheet}
-        title={current.title}
+        title={current.person ? undefined : current.title}
+        header={current.person ? <PersonHead person={current.person} focus={personRef} /> : undefined}
+        focusRef={current.person ? personRef : undefined}
         body={current.message}
         icon={current.icon}
         art={current.art}
@@ -131,10 +135,11 @@ export function SheetHost() {
                       label: a.label,
                       accessibilityLabel: a.accessibilityLabel,
                       icon: a.icon,
+                      detail: a.detail,
                       destructive: a.variant === 'destructive',
                       apart: !!a.apart,
                       lit: a.variant === 'primary',
-                      chevron: 'next' in a,
+                      chevron: a.chevron ?? 'next' in a,
                       busy: busy === i,
                       disabled: !!a.disabled || (busy !== null && busy !== i),
                       onPress: () => perform(a, i),
@@ -212,6 +217,8 @@ type OptionRow = {
   label: string
   accessibilityLabel?: string
   icon?: IconName
+  /** A line under the label, in meta: the consequence. */
+  detail?: string
   destructive?: boolean
   /** Its own group after a gap, no hairline (the room's Check out). */
   apart?: boolean
@@ -239,7 +246,7 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
             onPress={row.onPress}
             disabled={row.disabled || row.busy}
             accessibilityRole="button"
-            accessibilityLabel={row.accessibilityLabel ?? row.label}
+            accessibilityLabel={row.accessibilityLabel ?? (row.detail ? `${row.label}, ${row.detail}` : row.label)}
             accessibilityState={{ disabled: !!row.disabled, busy: !!row.busy }}
             android_ripple={{ color: PRESSED_WASH.android }}
             style={({ pressed }) => [
@@ -250,7 +257,14 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
             ]}
           >
             {row.icon ? <Icon name={row.icon} size={ICON.inline} color={color} /> : null}
-            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.label, { color }]}>{row.label}</Text>
+            {row.detail ? (
+              <View style={styles.label}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), { color }]}>{row.label}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.detail]}>{row.detail}</Text>
+              </View>
+            ) : (
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.label, { color }]}>{row.label}</Text>
+            )}
             {row.busy ? <Spinner size={16} color={color} /> : row.chevron ? <Icon name="chevron-right" size={ICON.inline} color={COLOR.textSecondary} /> : null}
           </Pressable>
         )
@@ -258,6 +272,20 @@ export function OptionRows({ rows }: { rows: OptionRow[] }) {
     </View>
   )
 }
+
+/** A sheet about one person: their face and name on one line, a header to a screen reader (Flow 7 5-A). */
+function PersonHead({ person, focus }: { person: { name: string; photo: string | null }; focus: RefObject<View | null> }) {
+  const bold = useBoldText()
+  return (
+    <View ref={focus} accessible accessibilityRole="header" accessibilityLabel={person.name} style={styles.person} testID="sheet-person">
+      {person.photo ? <Avatar kind="photo" uri={person.photo} size={PERSON_FACE} /> : <Avatar kind="creature" pseudonym={person.name} size={PERSON_FACE} />}
+      <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.personName]}>
+        {person.name}
+      </Text>
+    </View>
+  )
+}
+const PERSON_FACE = 40
 
 /** What failed, in the server's words where it gave some. */
 function ErrorLine({ text }: { text: string }) {
@@ -278,5 +306,9 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: PRESSED_WASH.ios },
   dim: { opacity: OPACITY.disabled },
   label: { flex: 1 },
+  detail: { color: COLOR.textSecondary },
+  // design-exception: the board's sheet head is a 40 pt face beside the name, 8 above the rows (fr.js `menuA`).
+  person: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.sm },
+  personName: { flex: 1, color: COLOR.textPrimary },
   error: { color: COLOR.destructive },
 })

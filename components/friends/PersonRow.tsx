@@ -4,6 +4,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { FriendPerson } from '../../lib/friends'
 import { Avatar } from '../ds/Avatar'
+import { FitText } from '../ds/Title'
 import { MonoRun } from '../ds/MonoFamily'
 import { font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
@@ -13,6 +14,9 @@ import { Icon } from '../ui/Icon'
 
 /** The avatar's box and its decode hint, one number so they cannot drift (Flow 6 `personRow`: 48). */
 const AVATAR = 48
+/** The face on Flow 7's friend rows and requests (fr.js `av(p)`: 44). */
+// design-exception: the Flow 7 board's row face is 44, between the DS avatar steps
+export const LIST_FACE = 44
 /** The row's height at the default text size: the frame's 64. A minimum: past the default size a row can grow. */
 export const PERSON_ROW_HEIGHT = SIZE.primary + SPACE.sm
 const ROW = PERSON_ROW_HEIGHT
@@ -44,8 +48,11 @@ export function PersonRow({
   onPress,
   trailing,
   chevron = false,
+  avatar = AVATAR,
 }: {
   person: FriendPerson
+  /** The face's size: 48 on Flow 6's surfaces, 44 on Flow 7's friends list (fr.js `av`). */
+  avatar?: number
   detail?: string
   /** Drawn in Geist Mono right after `detail` ("Friends since " + "Mar 2026"). */
   detailMono?: string
@@ -62,7 +69,7 @@ export function PersonRow({
   const line = [detail, detailMono, detailTail].filter(Boolean).join('')
   const body = (
     <>
-      <PersonAvatar person={person} />
+      <PersonAvatar person={person} size={avatar} />
       <View style={styles.text}>
         {/*
           Reading text, as Banter's request card (fc5eb48): the name grows to its role's cap and the line under it to meta's,
@@ -70,14 +77,17 @@ export function PersonRow({
           the line under it grows past it (D-M5). With no line under it the name may take that line's place. The row's height
           is a minimum, so nothing is cut (P5: the line truncated at 360 dp and 1.3).
         */}
-        <Text
+        {/* The DS word fit: a word too wide for its line shrinks rather than splitting (SCRUM-1041 A, names in rows). */}
+        <FitText
           testID="person-name"
+          variant="bodyStrong"
+          family={FONT_FAMILY.brand[500]}
           numberOfLines={line && !largeText ? 1 : NAME_LINES_ALONE}
           maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}
-          style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}
+          style={styles.ink}
         >
           {person.name}
-        </Text>
+        </FitText>
         {line ? (
           <Text testID="person-detail" numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
             {detail}
@@ -123,13 +133,13 @@ export function PersonRow({
  * Photo, or the name's creature (the frame's `avatar(r, p, 48)`): a disc of its own on any surface, where the initial on `surface`
  * vanished into a request card of the same colour. Decorative: the name beside it says who this is.
  */
-export function PersonAvatar({ person }: { person: FriendPerson }) {
+export function PersonAvatar({ person, size = AVATAR }: { person: FriendPerson; size?: number }) {
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {person.photo ? (
-        <OptimizedImage source={person.photo} style={styles.avatar} width={AVATAR} height={AVATAR} contentFit="cover" />
+        <OptimizedImage source={person.photo} style={{ width: size, height: size, borderRadius: RADIUS.capsule }} width={size} height={size} contentFit="cover" />
       ) : (
-        <Avatar kind="creature" pseudonym={person.name} size={AVATAR} testID="person-creature" />
+        <Avatar kind="creature" pseudonym={person.name} size={size} testID="person-creature" />
       )}
     </View>
   )
@@ -158,7 +168,6 @@ const styles = StyleSheet.create({
   // A minimum (shared.ts): at the default size every row is exactly this, which is when a list may window them (`usePersonRowsFixed`).
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, minHeight: ROW },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: ROW },
-  avatar: { width: AVATAR, height: AVATAR, borderRadius: RADIUS.capsule },
   chevron: { marginRight: SPACE.lg },
   text: { flex: 1, minWidth: 0 },
   // Centred on the row: a small button inside hugs its label, and without this it would sit at the row's top.

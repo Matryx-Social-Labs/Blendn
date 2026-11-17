@@ -2,6 +2,9 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { Avatar } from '../ds/Avatar'
 import { Spinner } from '../ds/Loader'
+import { SegmentedControl } from '../ds/SegmentedControl'
+import { InviteQr } from './InviteQr'
+import { FitText } from '../ds/Title'
 import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText, useAnnounced } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -35,8 +38,8 @@ export function shortInviteLink(url: string): string {
  * Messages, WhatsApp, Instagram and the rest. A failure keeps the card's height and says so in a sentence, with the primary
  * becoming Try again.
  *
- * (The frame also draws a QR code beside the name. There is no QR library in the app, and a drawn stand-in that does not scan is worse
- * than none, so the card has none.)
+ * Flow 7 2-A: the same card flips between the link and a QR code of the same URL with your face in the middle (`side`), by the
+ * segmented control at its foot, so somebody at the same table can scan it. The QR side shows only once the link has loaded.
  */
 const LINK_FAILED = 'Your link didn’t load. Check your connection and try again.'
 
@@ -46,10 +49,15 @@ export function InviteLinkCard({
   shared,
   name,
   photo,
+  side = 'link',
+  onSide,
 }: {
   url?: string | null
   failed?: boolean
   shared?: boolean
+  /** Which face of the card is up; with `onSide`, the Link | QR code control is drawn at its foot. */
+  side?: InviteSide
+  onSide?: (side: InviteSide) => void
   /** Yours, as people will see it when they open the link. */
   name?: string | null
   photo?: string | null
@@ -59,6 +67,30 @@ export function InviteLinkCard({
   const largeText = useLargeText()
   const who = name?.trim() || null
   useAnnounced(failed && !url ? LINK_FAILED : null)
+  const qr = side === 'qr' && !!url
+  const flip = url && onSide ? (
+    <SegmentedControl compact items={SIDES} selected={side === 'qr' ? 1 : 0} onChange={(i) => onSide(i === 1 ? 'qr' : 'link')} testID="invite-side" />
+  ) : null
+  if (qr) {
+    return (
+      <View testID="invite-link-card" style={[styles.card, contrast ? styles.cardContrast : styles.cardEdge]}>
+        <View style={styles.qrSide}>
+          <InviteQr url={url} size={QR_SIZE} face={{ name: who ?? '', photo: photo ?? null, size: QR_FACE }} />
+          <View>
+            {who ? (
+              <FitText variant="heading" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[styles.ink, styles.centre]}>
+                {who}
+              </FitText>
+            ) : null}
+            <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.muted, styles.centre]}>
+              Scan to ask to be friends
+            </Text>
+          </View>
+        </View>
+        {flip}
+      </View>
+    )
+  }
   return (
     <View testID="invite-link-card" style={[styles.card, contrast ? styles.cardContrast : styles.cardEdge]}>
       {who ? (
@@ -66,9 +98,9 @@ export function InviteLinkCard({
           {photo ? <Avatar kind="photo" uri={photo} size={FACE} /> : <Avatar kind="creature" pseudonym={who} size={FACE} />}
           <View style={styles.whoText}>
             {/* Your name grows to the heading cap and takes two lines at the AX sizes; the line under it stops at meta's (D-LM10). */}
-            <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
+            <FitText variant="heading" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={styles.ink}>
               {who}
-            </Text>
+            </FitText>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.onBlendn]}>
               on Blend’n
             </Text>
@@ -112,6 +144,7 @@ export function InviteLinkCard({
           </View>
         )}
       </View>
+      {flip}
       {url && shared ? (
         <View style={styles.sharedRow}>
           <Icon name="circle-check" size={ICON.inline} color={COLOR.live} />
@@ -124,7 +157,15 @@ export function InviteLinkCard({
   )
 }
 
+export type InviteSide = 'link' | 'qr'
+const SIDES = ['Link', 'QR code'] as const
+// design-exception: the board's QR is 196 with a 48 face (fr.js `cardSeg`)
+const QR_SIZE = 196
+const QR_FACE = 48
+
 const styles = StyleSheet.create({
+  qrSide: { alignItems: 'center', gap: SPACE.md },
+  centre: { textAlign: 'center' },
   card: { gap: SPACE.lg, padding: CARD_PAD, borderRadius: RADIUS.card, backgroundColor: COLOR.surface, overflow: 'hidden' },
   cardEdge: { borderWidth: StyleSheet.hairlineWidth, borderColor: COLOR.hairline },
   cardContrast: { borderWidth: 1, borderColor: COLOR.hairlineStrong },

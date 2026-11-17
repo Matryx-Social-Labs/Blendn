@@ -18,7 +18,10 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../lib/apiClient', () => ({
   apiClient: { getFriend: jest.fn(), openFriendConversation: jest.fn(), removeFriend: jest.fn(), getWorkFields: jest.fn() },
 }))
-jest.mock('../lib/safetyUtils', () => ({ showUserSafetyActions: jest.fn() }))
+jest.mock('../lib/safetyUtils', () => {
+  const actual = jest.requireActual('../lib/safetyUtils')
+  return { showUserSafetyActions: jest.fn(), blockStep: actual.blockStep, userReportStep: actual.userReportStep }
+})
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
@@ -143,6 +146,30 @@ it('asks in the app’s sheet, and stays on the profile saying so when removing 
   expect(router.back).not.toHaveBeenCalled()
 })
 
+/*
+ * Flow 7 5-A, one weight per consequence: the menu is rows under the friend's face and one-line name; Remove friend is plain with
+ * "They won’t be told", only Block is red, with "Also removes them as a friend"; the confirms say a first name. Negative
+ * control: the old menu (title only, Remove friend and Block both destructive, Block's stranger copy) fails it.
+ */
+it('the menu: face and name as the head, Remove friend plain, only Block red, and Block says it ends the friendship', async () => {
+  const marc = { ...BEN, userId: 'u_marc', name: 'Marc-André Lefebvre-Desrosiers' }
+  api.getFriend.mockResolvedValue({ success: true, data: marc })
+  await render(<FriendProfileScreen />)
+  fireEvent.press(await screen.findByLabelText('More'))
+  const sheet = menu()
+  expect(sheet).toMatchObject({ layout: 'rows', person: { name: 'Marc-André Lefebvre-Desrosiers' } })
+  const rows = sheet.actions.filter((a: { cancel?: boolean }) => !a.cancel)
+  expect(rows.map((a: { label: string; variant?: string; detail?: string }) => [a.label, a.variant ?? 'plain', a.detail ?? null])).toEqual([
+    ['Remove friend', 'plain', 'They won’t be told'],
+    ['Block', 'destructive', 'Also removes them as a friend'],
+    ['Report', 'plain', null],
+  ])
+  const block = rows[1].next()
+  expect(block.title).toBe('Block Marc-André?')
+  expect(block.message).toBe('They won’t be told. You won’t see each other in rooms, and they’re no longer your friend. Your messages are hidden.')
+  expect(rows[0].next()).toMatchObject({ title: 'Remove Marc-André?', message: 'They won’t be told. Your messages stay, and you can add each other again with a link.' })
+})
+
 it('leaves once the server agreed', async () => {
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   api.removeFriend.mockResolvedValue({ success: true, data: {} } as never)
@@ -164,7 +191,7 @@ it('does not repeat the hero’s first photo in the gallery', async () => {
 it('says plainly when they are no longer a friend', async () => {
   api.getFriend.mockResolvedValue({ success: false, error: 'Not found', errorCode: 'NOT_FOUND' })
   await render(<FriendProfileScreen />)
-  expect(await screen.findByText('You’re not friends with this person any more.')).toBeTruthy()
+  expect(await screen.findByText('You’re no longer friends')).toBeTruthy()
 })
 
 it('does not call a failed load an unfriending, and tries again', async () => {
@@ -172,7 +199,7 @@ it('does not call a failed load an unfriending, and tries again', async () => {
   api.getFriend.mockResolvedValueOnce({ success: false, error: 'No internet connection. Check your network and try again.' })
   await render(<FriendProfileScreen />)
   expect(await screen.findByText('This profile didn’t load')).toBeTruthy()
-  expect(screen.queryByText('You’re not friends with this person any more.')).toBeNull()
+  expect(screen.queryByText('You’re no longer friends')).toBeNull()
   // And the way out is there, since the hero's top bar never drew.
   expect(screen.getByLabelText('Back')).toBeTruthy()
 

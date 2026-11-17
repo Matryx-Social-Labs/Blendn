@@ -33,6 +33,18 @@ export interface FriendRequest {
   id: string
   person: FriendPerson
   createdAt: string
+  /**
+   * How it came (ROADMAP § Backend later: `via` on each incoming row): your link, or a match where you both revealed. Not sent
+   * by today's server, so absent is the usual case, and then no source is said at all: a guess was wrong for every match.
+   */
+  via?: 'link' | 'match'
+}
+
+/** "From your link" / "From a match", only when the server said which (Flow 7 4-A); null otherwise, never a guess. */
+export function requestSource(request: Pick<FriendRequest, 'via'>): string | null {
+  if (request.via === 'link') return 'From your link'
+  if (request.via === 'match') return 'From a match'
+  return null
 }
 
 /** The server's page meta (admin #724). Absent on an older server: read as one page, the whole list. */
@@ -101,7 +113,7 @@ export interface FriendInvite {
 export function inviteCta(state: FriendState): { label: string; action: 'ask' | 'open' | 'share' | null } {
   switch (state) {
     case 'none':
-      return { label: 'Send friend request', action: 'ask' }
+      return { label: 'Add friend', action: 'ask' }
     case 'incoming':
       return { label: 'Accept friend request', action: 'ask' }
     case 'requested':
@@ -109,7 +121,7 @@ export function inviteCta(state: FriendState): { label: string; action: 'ask' | 
     case 'friends':
       return { label: 'View profile', action: 'open' }
     case 'self':
-      return { label: 'Share your link', action: 'share' }
+      return { label: 'Share my link', action: 'share' }
   }
 }
 
@@ -121,11 +133,11 @@ export function inviteLine(state: FriendState): string {
     case 'friends':
       return 'You’re friends.'
     case 'requested':
-      return 'Your request is waiting. You’ll hear when they accept.'
+      return 'Request sent. You’ll hear when they accept.'
     case 'incoming':
       return 'They asked to be your friend.'
     case 'none':
-      return 'Wants you as a friend on Blend’n.'
+      return 'invited you to be friends on Blend’n'
   }
 }
 

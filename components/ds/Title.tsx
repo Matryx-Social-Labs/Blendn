@@ -49,10 +49,24 @@ function tokenAt(text: string, at: number): string {
   return text.slice(start, end)
 }
 
-/** Every word the layout split across two lines: a line that ends inside a word, not on a space, a hyphen or a dash. */
-export function splitWords(lines: readonly { text: string }[]): string[] {
+/**
+ * Every word the layout split across two lines: a line that ends inside a word, not on a space, a hyphen or a dash. Given the whole
+ * text (`full`), a word the line clamp cut is one too: iOS breaks after a hyphen, so at AX a 2-line name ended "Lefebvre-Desrosi…"
+ * where Android split it (SCRUM-1041 A, names in rows).
+ */
+export function splitWords(lines: readonly { text: string }[], full?: string, clamp?: number): string[] {
   const text = lines.map((line) => line.text).join('')
   const words = new Set<string>()
+  const cutInside = (whole: string, cut: number) =>
+    cut > 0 && cut < whole.length && !SPACE_CHAR.test(whole[cut - 1]) && !SPACE_CHAR.test(whole[cut]) && !NO_SPACES.test(whole[cut])
+  // iOS reports every line, the hidden ones too: the clamp cuts at the end of its last line, even after a hyphen.
+  if (clamp && lines.length > clamp) {
+    const cut = lines.slice(0, clamp).reduce((n, line) => n + line.text.length, 0)
+    if (cutInside(text, cut)) words.add(tokenAt(text, cut))
+  }
+  // Or only the shown lines, the last ending where the clamp cut.
+  const shown = text.replace(/…$/, '')
+  if (full && full.startsWith(shown) && cutInside(full, shown.length)) words.add(tokenAt(full, shown.length))
   let at = 0
   for (const line of lines.slice(0, -1)) {
     at += line.text.length
@@ -138,7 +152,16 @@ export function Title({ variant = 'title', family, maxFontSizeMultiplier, style,
 
   const handleTextLayout = (e: TextLayoutEvent) => {
     onTextLayout?.(e)
-    const words = splitWords(e.nativeEvent.lines)
+    const { lines } = e.nativeEvent
+    let words = splitWords(lines, textOf(children), rest.numberOfLines)
+    // iOS lays a clamped text out as its last line holding all the rest ("Lefebvre-Desrosiers", drawn "Lefebvre-Desr…"), with a
+    // used width a glyph short of the box, so the width cannot say it was cut. A one-word last line at the clamp is measured, and
+    // `handleMeasure` shrinks only a word that does not fit. ponytail: one-word last lines only; a cut inside a later word of a
+    // longer last line still ellipsizes. Not once shrunk: the fitted word fills its line by design.
+    const last = lines[lines.length - 1]
+    if (!words.length && !shrunk && rest.numberOfLines && lines.length === rest.numberOfLines && last && /^\S+$/.test(last.text.trim())) {
+      words = [last.text.trim()]
+    }
     if (!words.length) return
     // Still split once shrunk (a glyph rounding the width past the line): one more step, down to the floor.
     if (shrunk) return shrunk.size - SIZE_STEP >= base.fontSize ? setFit({ ...shrunk, size: shrunk.size - SIZE_STEP }) : undefined
@@ -151,7 +174,8 @@ export function Title({ variant = 'title', family, maxFontSizeMultiplier, style,
     const widest = Math.max(...e.nativeEvent.lines.map((l) => l.width))
     const size = fittedSize(base, widest, pending.line)
     setPending(null)
-    if (size !== null) setFit({ key: pending.key, size })
+    // Only ever smaller than drawn: a word that already fits at the scaled size is left as it is.
+    if (size !== null && size < base.fontSize * Math.min(fontScale, cap)) setFit({ key: pending.key, size })
   }
 
   const measuring = canShrink && !shrunk && pending?.key === key
@@ -185,6 +209,13 @@ export function Title({ variant = 'title', family, maxFontSizeMultiplier, style,
     </>
   )
 }
+
+/**
+ * The same measured word fit for text that is not a title but must never split a word either: a person's name in a row (SCRUM-1041
+ * ruling A, extended to names 2026-11-17: Android at font 2.0 drew "Marc-André Lefebv / re-Desrosiers"). Pass the row's role as
+ * `variant` (`bodyStrong`, `rowTitle`, `heading`) and its cap; nothing else about the text changes, and no header role is implied.
+ */
+export const FitText = Title
 
 /** Only what sets a glyph's width, at the role's 1× size. */
 const MEASURED = (flat: TextStyle): TextStyle => ({

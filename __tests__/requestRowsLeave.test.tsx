@@ -27,7 +27,7 @@ describe('IncomingRequestRow: the answer in flight', () => {
   it.each([
     ['accept', 'Accept Ben', 'Not now, Ben'],
     ['dismiss', 'Not now, Ben', 'Accept Ben'],
-  ] as const)('%s: the pressed answer is busy, the other is dimmed', async (action, pressed, other) => {
+  ] as const)('%s: neither answer can be sent twice while one is in flight; Accept carries the wait', async (action, pressed, other) => {
     const onRespond = jest.fn()
     const { rerender } = await render(<IncomingRequestRow request={request} busy={false} onRespond={onRespond} />)
 
@@ -35,8 +35,11 @@ describe('IncomingRequestRow: the answer in flight', () => {
     expect(onRespond).toHaveBeenCalledWith(action)
     await rerender(<IncomingRequestRow request={request} busy onRespond={onRespond} />)
 
-    expect(state(pressed)).toEqual(expect.objectContaining({ busy: true }))
-    expect(state(other)).toEqual(expect.objectContaining({ disabled: true, busy: false }))
+    // Flow 7 4-A: Not now is the DS glass ×, which has no busy state; it is disabled while either answer is out.
+    if (action === 'accept') expect(state(pressed)).toEqual(expect.objectContaining({ busy: true }))
+    else expect(state(pressed)).toEqual(expect.objectContaining({ disabled: true }))
+    expect(state(other)).toEqual(expect.objectContaining({ disabled: true }))
+    expect(state(other)?.busy).toBeFalsy()
   })
 
   it('a failed answer gives the row back: neither is busy or dimmed', async () => {
@@ -47,7 +50,8 @@ describe('IncomingRequestRow: the answer in flight', () => {
     await rerender(<IncomingRequestRow request={request} busy={false} onRespond={onRespond} />)
 
     expect(state('Accept Ben')).toEqual(expect.objectContaining({ busy: false, disabled: false }))
-    expect(state('Not now, Ben')).toEqual(expect.objectContaining({ busy: false, disabled: false }))
+    expect(state('Not now, Ben')).toEqual(expect.objectContaining({ disabled: false }))
+    expect(state('Not now, Ben')?.busy).toBeFalsy()
   })
 })
 

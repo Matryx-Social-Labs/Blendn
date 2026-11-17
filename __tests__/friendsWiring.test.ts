@@ -81,9 +81,10 @@ describe('a friend\'s profile', () => {
 })
 
 describe('the Me tab', () => {
-  it('counts friends and opens the list, and has Add friends as a bar circle beside Settings', () => {
+  it('counts friends on the Friends row (Flow 7 6-A, no Friends stat) and opens the list, and has Add friends as a bar circle beside Settings', () => {
     const src = read('app/(tabs)/profile.tsx')
-    expect(read('components/profile/MeSections.tsx')).toContain('<Stat value={friends} label="Friends" onPress={onFriends} hint="Opens your friends" />')
+    expect(read('components/profile/MeSections.tsx')).not.toContain('label="Friends"')
+    expect(src).toContain('testID="friends-row"')
     expect(src).toContain("const openFriends = () => router.push('/friends')")
     expect(src).toContain("router.push('/friends/add')")
     expect(src).toContain("label: 'Add friends'")

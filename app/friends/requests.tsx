@@ -110,7 +110,8 @@ const styles = StyleSheet.create({
   offline: { paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.sm },
   container: { flex: 1, backgroundColor: COLOR.ink },
   fill: { flex: 1 },
-  list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm, gap: SPACE.md },
+  // Flow 7 4-A: 68 pt rows edge to edge, no gap between them.
+  list: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
   emptyList: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: SPACE.gutter },
 })
 
