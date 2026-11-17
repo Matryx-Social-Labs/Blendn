@@ -8,6 +8,7 @@
  * `#F05423` is 3.50:1. `EMBER` stays tested at the end while screens still
  * draw with it.
  */
+import { PRESSED_WASH, SELECTION } from '../components/ds/shared'
 import { BLUR, GLASS, SOLID, type MaterialRole } from '../components/ui/Material'
 import { COLOR, GRADIENT, MAX_FONT_SCALE as DESIGN_MAX_FONT_SCALE, TYPE as DESIGN_TYPE } from '../lib/design/tokens'
 import { EMBER, MAX_FONT_SCALE, TYPE } from '../lib/theme'
@@ -100,6 +101,35 @@ describe('text on colour', () => {
   it('puts white on the filled destructive button, and ink on a selection', () => {
     expect(contrast(COLOR.textPrimary, COLOR.destructiveFill)).toBeGreaterThanOrEqual(4.5)
     expect(contrast(COLOR.textOnSelection, COLOR.selectionFill)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+/*
+ * Every label the design system draws on a lit fill clears AA (4.5:1) in every state it can be read in (colour and buttons
+ * re-audit, 2026-11-17, "fix now"). A token moved without its pair fails here: `selectionVioletGlyph #B58FD0` was 4.37:1 as the
+ * selected violet chip's count on `#433247`.
+ */
+describe('every DS label on its fill, in every state', () => {
+  const ANDROID_PRESS = (fill: string) => over(PRESSED_WASH.android, rgb(fill))
+  for (const [hue, sel] of Object.entries(SELECTION)) {
+    it(`${hue}: the lit glyph tone as text (a selected chip's count) is AA on its fill`, () => {
+      expect(contrast(sel.glyph, sel.fill)).toBeGreaterThanOrEqual(4.5)
+    })
+    it(`${hue}: the lit glyph tone as text is AA on the page`, () => {
+      expect(contrast(sel.glyph, COLOR.ink)).toBeGreaterThanOrEqual(4.5)
+    })
+    it(`${hue}: white, the label while pressed, is AA on the flare and on the fill under Android's press wash`, () => {
+      expect(contrast(COLOR.textPrimary, sel.flare)).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(rgb(COLOR.textPrimary), ANDROID_PRESS(sel.fill))).toBeGreaterThanOrEqual(4.5)
+    })
+  }
+
+  // Control: the reason the count turns white while pressed. The glyph tone is not AA under the press, on any hue.
+  it('the glyph tone under the press is below AA, so a pressed count must not keep it', () => {
+    for (const sel of Object.values(SELECTION)) {
+      expect(contrast(sel.glyph, sel.flare)).toBeLessThan(4.5)
+      expect(ratio(rgb(sel.glyph), ANDROID_PRESS(sel.fill))).toBeLessThan(4.5)
+    }
   })
 })
 
