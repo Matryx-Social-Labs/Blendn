@@ -7,7 +7,8 @@ import {
   type PrivateMessage,
 } from '../lib/directThread'
 import { profileIdentity, roomNameFrom, withheldUnlessVisible } from '../lib/profileIdentity'
-import { markSeed, pseudonymAvatar } from '../lib/pseudonymAvatar'
+import { creatureFor } from '../components/ds/Creature'
+import { markSeed } from '../lib/creatureSeed'
 import { userMessage } from '../lib/userMessage'
 
 /*
@@ -19,25 +20,24 @@ import { userMessage } from '../lib/userMessage'
 describe('one seed rule for a person’s mark', () => {
   it('draws the animal the pseudonym names', () => {
     // "Cosmic Panda" and "Quiet Otter" both drew a bee.
-    expect(pseudonymAvatar('Cosmic Panda').character).toBe('🐼')
-    expect(pseudonymAvatar('Quiet Otter').character).toBe('🦦')
-    expect(pseudonymAvatar('Amber Fox').character).toBe('🦊')
-    expect(pseudonymAvatar('Velvet Heron').character).toBe('🐦')
+    expect(creatureFor('Cosmic Panda').species).toBe('panda')
+    expect(creatureFor('Quiet Otter').species).toBe('otter')
+    expect(creatureFor('Amber Fox').species).toBe('fox')
     // A collision suffix does not hide the noun.
-    expect(pseudonymAvatar('Cosmic Panda 2').character).toBe('🐼')
+    expect(creatureFor('Cosmic Panda 2').species).toBe('panda')
   })
 
-  it('keeps the hashed cast for a noun that is not a creature', () => {
-    const a = pseudonymAvatar('Neon Comet')
-    expect(a.character).toBeTruthy()
-    expect(pseudonymAvatar('Neon Comet')).toEqual(a)
+  it('keeps the seeded cast for a noun that is not a creature', () => {
+    const a = creatureFor('Neon Comet')
+    expect(a.species).toBeTruthy()
+    expect(creatureFor('Neon Comet')).toEqual(a)
   })
 
   it('seeds on the pseudonym, so every surface that has the name agrees', () => {
-    // The Room grid's `Face` seeds `pseudonymAvatar(name)`; the chat now seeds
+    // The Room grid seeds the creature on the name; the chat seeds
     // `markSeed(senderName, room:sender)`, which is the same string.
     expect(markSeed('Cosmic Panda', 'g1:rh_x')).toBe('Cosmic Panda')
-    expect(pseudonymAvatar(markSeed('Cosmic Panda', 'g1:rh_x'))).toEqual(pseudonymAvatar('Cosmic Panda'))
+    expect(creatureFor(markSeed('Cosmic Panda', 'g1:rh_x'))).toEqual(creatureFor('Cosmic Panda'))
   })
 
   it('falls back per person and per room for a placeholder name, never to a bare id', () => {

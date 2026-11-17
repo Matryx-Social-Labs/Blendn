@@ -12,7 +12,7 @@
  */
 
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
-import { fnv1a } from './pseudonymAvatar'
+import { fnv1a } from './creatureSeed'
 import { dateIn, hourIn, instantIn, MONTHS, weekdayIn, WEEKDAYS } from './time'
 import { compactCount } from './format'
 

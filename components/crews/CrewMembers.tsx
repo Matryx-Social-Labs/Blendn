@@ -7,6 +7,7 @@ import { Avatar } from '../ds/Avatar'
 import { PRESSED_WASH, font, minTarget, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { RowsCard } from './RowsCard'
+import { personFace } from '../../lib/personFace'
 
 const FACE = 44
 const ROW_HEIGHT = 60
@@ -63,7 +64,7 @@ export function CrewMembers({
                 onPress={() => onOpen(m)}
                 style={({ pressed }) => [styles.who, pressed && { backgroundColor: PRESSED_WASH.ios }]}
               >
-                {m.photo ? <Avatar kind="photo" uri={m.photo} size={FACE} /> : <Avatar kind="creature" pseudonym={m.name} size={FACE} />}
+                <Avatar {...personFace({ named: true, name: m.name, photo: m.photo })} size={FACE} />
                 <View style={styles.text}>
                   <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
                     {who}

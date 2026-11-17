@@ -5,13 +5,11 @@
  * The redesign's pairs come first. The old system's rule — dark text on a flat
  * orange accent, `onGradient #5B1600` — is retired (§4.3): the redesign puts
  * white on `GRADIENT.fill`, and ink on flat `brandOrange`, because white on
- * `#F05423` is 3.50:1. `EMBER` stays tested at the end while screens still
- * draw with it.
+ * `#F05423` is 3.50:1. `EMBER` itself was deleted (`retiredDesign.test.ts`).
  */
 import { PRESSED_WASH, SELECTION } from '../components/ds/shared'
 import { BLUR, GLASS, SOLID, type MaterialRole } from '../components/ui/Material'
 import { COLOR, GRADIENT, MAX_FONT_SCALE as DESIGN_MAX_FONT_SCALE, TYPE as DESIGN_TYPE } from '../lib/design/tokens'
-import { EMBER, MAX_FONT_SCALE, TYPE } from '../lib/theme'
 
 jest.mock('expo-glass-effect', () => ({}))
 jest.mock('expo-blur', () => ({}))
@@ -230,12 +228,6 @@ describe('on <Material>, over the worst backdrop', () => {
 })
 
 describe('type scales', () => {
-  it('caps text in fixed boxes tighter than reading text', () => {
-    expect(MAX_FONT_SCALE.button).toBeLessThan(MAX_FONT_SCALE.body)
-    expect(MAX_FONT_SCALE.display).toBeLessThanOrEqual(MAX_FONT_SCALE.button)
-    expect(Object.keys(MAX_FONT_SCALE).sort()).toEqual(Object.keys(TYPE).sort())
-  })
-
   it('gives every redesign role a cap, and keeps the 12pt floor', () => {
     expect(Object.keys(DESIGN_MAX_FONT_SCALE).sort()).toEqual(Object.keys(DESIGN_TYPE).sort())
     expect(DESIGN_MAX_FONT_SCALE.caption).toBeLessThan(DESIGN_MAX_FONT_SCALE.body)
@@ -248,28 +240,5 @@ describe('type scales', () => {
     for (const bg of [COLOR.ink, COLOR.surfaceSunken, COLOR.surface, COLOR.surfaceRaised]) {
       expect(contrast(COLOR.textSecondary, bg)).toBeGreaterThanOrEqual(4.5)
     }
-  })
-})
-
-/** The palette today's screens still draw with, until each is redesigned. */
-describe('EMBER, while it ships', () => {
-  const EMBER_SURFACES = { bg: EMBER.bg, surfaceSunken: EMBER.surfaceSunken, surface: EMBER.surface }
-  const EMBER_TEXT = {
-    textPrimary: EMBER.textPrimary,
-    textSecondary: EMBER.textSecondary,
-    textTertiary: EMBER.textTertiary,
-    textPlaceholder: EMBER.textPlaceholder,
-  }
-  for (const [textName, fg] of Object.entries(EMBER_TEXT)) {
-    for (const [surfaceName, bg] of Object.entries(EMBER_SURFACES)) {
-      it(`${textName} is AA on ${surfaceName}`, () => {
-        expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5)
-      })
-    }
-  }
-
-  it('keeps dark text on its flat accent, which white would fail', () => {
-    expect(contrast(EMBER.onGradient, EMBER.accent)).toBeGreaterThanOrEqual(4.5)
-    expect(contrast(EMBER.textPrimary, EMBER.accent)).toBeLessThan(4.5)
   })
 })

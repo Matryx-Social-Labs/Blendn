@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native'
 import Animated from 'react-native-reanimated'
 
 import { MAP_THEME } from '../../lib/mapTheme'
-import { SPACE } from '../../lib/theme'
+import { SPACE } from '../../lib/design/tokens'
 import { Text } from '../ui/Text'
 import { useReducedMotion } from '../../lib/motion'
 

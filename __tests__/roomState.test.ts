@@ -49,16 +49,21 @@ describe('no organizer lock (SCRUM-893)', () => {
 describe('myRoomFace (ROOM-01): anonymous is never your photo', () => {
   const photo = 'https://cdn/me.jpg'
   it('anonymous + a photo + no pseudonym yet: the creature, seeded per room', () => {
-    const face = myRoomFace({ revealed: false, photo, pseudonym: null, eventId: 'e1' })
+    const face = myRoomFace({ revealed: false, name: null, photo, pseudonym: null, eventId: 'e1' })
     expect(face).toEqual({ kind: 'creature', pseudonym: 'e1' })
   })
   it('anonymous + a pseudonym: that creature', () => {
-    expect(myRoomFace({ revealed: false, photo, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'creature', pseudonym: 'Night Cat' })
+    expect(myRoomFace({ revealed: false, name: null, photo, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'creature', pseudonym: 'Night Cat' })
   })
   it('named + a photo: the photo', () => {
-    expect(myRoomFace({ revealed: true, photo, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'photo', uri: photo })
+    expect(myRoomFace({ revealed: true, name: null, photo, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'photo', uri: photo })
   })
   it('named with no photo: the creature, not a blank', () => {
-    expect(myRoomFace({ revealed: true, photo: null, pseudonym: null, eventId: null })).toEqual({ kind: 'creature', pseudonym: 'room' })
+    expect(myRoomFace({ revealed: true, name: null, photo: null, pseudonym: null, eventId: null })).toEqual({ kind: 'creature', pseudonym: 'room' })
+    // Revealed, named, no photo: your initial on your hue disc, never a creature (personFace, D1 A).
+    expect(myRoomFace({ revealed: true, name: 'Priya Rao', photo: null, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'initial', name: 'Priya Rao' })
+    expect(myRoomFace({ revealed: true, name: 'Priya Rao', photo, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'photo', uri: photo })
+    // Anonymous with a name known: still the creature.
+    expect(myRoomFace({ revealed: false, name: 'Priya Rao', photo: null, pseudonym: 'Night Cat', eventId: 'e1' })).toEqual({ kind: 'creature', pseudonym: 'Night Cat' })
   })
 })

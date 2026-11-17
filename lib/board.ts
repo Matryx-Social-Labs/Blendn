@@ -1,5 +1,5 @@
 import type { LobbyPhoto, LobbySubKind } from './lobby'
-import { markSeed } from './pseudonymAvatar'
+import { markSeed } from './creatureSeed'
 
 /**
  * The pre-event board: going alone, and looking for somebody to go with.

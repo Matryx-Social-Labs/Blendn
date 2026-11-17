@@ -9,6 +9,7 @@ import type { Face } from '../ds/Facepile'
 import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { Icon } from '../ui/Icon'
+import { personFace } from '../../lib/personFace'
 
 /** The section's later arrival (first friend arrives): it fades in as it rises `RISE.list` on the entrance ease. */
 const enter = () => {
@@ -22,7 +23,8 @@ const enter = () => {
   }
 }
 
-const faceOf = (f: FriendHere): Face => (f.photo ? { kind: 'photo', uri: f.photo } : { kind: 'creature', pseudonym: f.name })
+/** A friend is named: their photo, else their initial (`personFace`), never a creature. */
+const faceOf = (f: FriendHere): Face => personFace({ named: true, name: f.name, photo: f.photo })
 
 /** The row's stack (R-A `friendsHere`): three 28 pt faces, each over the last by 8. */
 const STACK = 3

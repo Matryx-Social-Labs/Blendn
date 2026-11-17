@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } fr
 import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Avatar, type AvatarSize } from '../../components/ds/Avatar'
+import { CrewEmblem } from '../../components/ds/CrewEmblem'
 import { Banner, VisibilityBanner, type Visibility } from '../../components/ds/Banner'
 import { Button, type ButtonKind, type ButtonSize } from '../../components/ds/Button'
 import { IconButton } from '../../components/ds/IconButton'
@@ -11,7 +12,7 @@ import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { Sheet, type SheetProps } from '../../components/ds/Sheet'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Toast, type ToastKind } from '../../components/ds/Toast'
-import { COLOR, CREATURE_PALETTES, RADIUS, SIZE, SPACE, TYPE, VENUE_PLATES } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SIZE, SPACE, TYPE, VENUE_PLATES } from '../../lib/design/tokens'
 
 /**
  * Every P0 system component in every state it draws, on demand
@@ -288,7 +289,6 @@ function Settings() {
 }
 
 const SIZES_AVATAR: AvatarSize[] = [24, 32, 40, 56, 72, 112]
-const CREW_PLATE = [CREATURE_PALETTES[0][0], CREATURE_PALETTES[2][1]] as const
 const PSEUDONYMS = ['Night Cat', 'Velvet Heron', 'Cosmic Panda', 'Quiet Fox', 'Neon Owl', 'Lucky Otter', 'Cosmic Comet', 'Velvet Lion']
 const PHOTO = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256'
 
@@ -301,8 +301,8 @@ function Avatars() {
       <Cell label="creature" testID="ds-avatar-creature" style={styles.rowEnd}>
         {SIZES_AVATAR.map((s) => <Avatar key={s} kind="creature" pseudonym="Night Cat" size={s} />)}
       </Cell>
-      <Cell label="crew square" testID="ds-avatar-crew" style={styles.rowEnd}>
-        {SIZES_AVATAR.map((s) => <Avatar key={s} kind="crew" plate={CREW_PLATE} size={s} />)}
+      <Cell label="crew emblem" testID="ds-avatar-crew" style={styles.rowEnd}>
+        {SIZES_AVATAR.map((s) => <CrewEmblem key={s} seed="nebula" size={s} />)}
       </Cell>
       <Cell label="ring on ink · white ring" testID="ds-avatar-ring" style={styles.row}>
         <Avatar kind="photo" uri={PHOTO} size={32} ring={COLOR.ink} />
