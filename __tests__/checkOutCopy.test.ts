@@ -18,11 +18,19 @@ describe('the check-out question', () => {
     expect(STAY_LABEL).toBe('Stay')
   })
 
-  it.each(['components/blendn/BlendnScreen.tsx', 'app/(tabs)/events.tsx', 'components/scene/EventHold.tsx'])('%s asks with the shared words, not its own copy', (f) => {
+  it.each(['components/blendn/BlendnScreen.tsx', 'components/chat/RoomSheets.tsx', 'components/scene/EventHold.tsx'])('%s asks with the shared words, not its own copy', (f) => {
     const s = src(f)
     expect(s).toContain('CHECK_OUT_CONSEQUENCE')
     expect(s).toContain('checkOutQuestion(')
     expect(s).not.toContain('You’ll leave the room and its people')
+  })
+
+  // Buttons board C (owner 2026-11-17): Check out is the neutral hold at every door. The Events list's ⋯ asked with a
+  // red destructive confirm; it now opens the room's own sheet, so its words and its hold are the room's.
+  it('the Events list’s ⋯ commits through the room’s CheckOutSheet (the neutral hold), never a destructive confirm', () => {
+    const s = src('app/(tabs)/events.tsx')
+    expect(s).toMatch(/<CheckOutSheet\b/)
+    expect(s).not.toMatch(/label:\s*'Check out',\s*variant:\s*'destructive'/)
   })
 
   it('the consequence is the room’s sentence', () => {
