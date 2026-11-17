@@ -479,7 +479,7 @@ describe('the you-card (Flow 5 R-A): Change goes to Room settings, where the rev
 
 
 describe('Check out always confirms (Room #16)', () => {
-  it('the confirm: Stay, and Check out in destructiveFill; it closes before the check-out runs', async () => {
+  it('the confirm: Stay, and the neutral hold (buttons board C: one look for Check out); it closes before the check-out runs', async () => {
     await drawRoom()
     // Check out is the Room info sheet's one exit (Flow 5 C6, I-A), from ⋯ in the room bar.
     await fireEvent.press(screen.getByRole('button', { name: 'Room info' }))
@@ -489,8 +489,7 @@ describe('Check out always confirms (Room #16)', () => {
     // One sheet at a time: the confirm rises once Room info has gone.
     expect(await screen.findByText('Check out of this event?', HIDDEN)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Stay' })).toBeTruthy()
-    const buttons = screen.getAllByRole('button', { name: 'Check out' })
-    await act(async () => fireEvent.press(buttons[buttons.length - 1]))
+    await act(async () => fireEvent(screen.getByTestId('check-out-confirm-hold', HIDDEN), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } }))
     expect(mockControls.checkOut).toHaveBeenCalledTimes(1)
   })
 })

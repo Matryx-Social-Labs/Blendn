@@ -87,7 +87,7 @@ export async function askPushInContext(moment: AskMoment, eventTitle?: string): 
       actions: [
         {
           label: 'Turn on notifications',
-          variant: 'strong',
+          variant: 'primary',
           then: () => void clearPushDeclined(user.id).then(() => initializePushNotifications()).catch(() => {}),
         },
         // Not now is a no too: the next moment does not ask again.

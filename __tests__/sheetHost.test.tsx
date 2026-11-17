@@ -15,6 +15,7 @@ import { StyleSheet } from 'react-native'
 import { SheetHost } from '../components/SheetHost'
 import { COLOR } from '../lib/design/tokens'
 import { closeSheet, showSheet, type SheetOutcome } from '../lib/sheet'
+import { isLitControl } from './helpers/lit'
 /* eslint-enable import/first */
 
 const settle = async () => {
@@ -81,36 +82,26 @@ describe('rows: a positive action is lit in the world, a state is quiet and does
 describe('the affirmative is lit in the world the sheet is asked from', () => {
   const ask = (hue?: 'rose' | 'violet') =>
     showSheet({ kind: 'actions', hue, title: 'Sign out?', actions: [{ label: 'Sign out', variant: 'primary', then: jest.fn() }, { label: 'Cancel', cancel: true }] })
-  const fill = () => StyleSheet.flatten(screen.getByRole('button', { name: 'Sign out' }).props.style).backgroundColor
+  const button = () => screen.getByRole('button', { name: 'Sign out' })
 
-  it.each([
-    ['violet', COLOR.selectionVioletFill],
-    ['rose', COLOR.selectionRoseFill],
-  ] as const)('%s: the caller’s hue', async (hue, expected) => {
+  it.each(['violet', 'rose', undefined] as const)('%s: the one positive look whatever the caller’s hue (buttons board C)', async (hue) => {
     await render(<SheetHost />)
     await act(async () => ask(hue))
-    expect(fill()).toBe(expected)
-  })
-
-  it('ember when the caller names none; never the white strong', async () => {
-    await render(<SheetHost />)
-    await act(async () => ask())
-    expect(fill()).toBe(COLOR.selectionEmberFill)
-    expect(fill()).not.toBe(COLOR.textPrimary)
+    expect(isLitControl(button())).toBe(true)
+    expect(StyleSheet.flatten(button().props.style).backgroundColor).not.toBe(COLOR.textPrimary)
   })
 })
 
-describe('a strong action is the DS white button, whatever hue the sheet is asked from (SYS-05)', () => {
-  it.each(['rose', 'violet'] as const)('%s: white fill, ink label', async (hue) => {
+describe('Clear all is the neutral button (strong is retired, buttons board C): not red, not a yes', () => {
+  it.each(['rose', 'violet'] as const)('%s: the secondary, never lit', async (hue) => {
     await render(<SheetHost />)
     await act(async () =>
-      showSheet({ kind: 'actions', hue, title: 'Clear all notifications?', actions: [{ label: 'Clear all', variant: 'strong', then: jest.fn() }, { label: 'Cancel', cancel: true }] })
+      showSheet({ kind: 'actions', hue, title: 'Clear all notifications?', actions: [{ label: 'Clear all', variant: 'secondary', then: jest.fn() }, { label: 'Cancel', cancel: true }] })
     )
     const button = screen.getByRole('button', { name: 'Clear all' })
-    expect(StyleSheet.flatten(button.props.style).backgroundColor).toBe(COLOR.textPrimary)
-    expect(StyleSheet.flatten(screen.getByText('Clear all').props.style).color).toBe(COLOR.ink)
-    // The frame's strong button is the 56 pt one (a lit action is what stacks a sheet at 48).
-    expect(StyleSheet.flatten(button.props.style).height).toBe(56)
+    expect(isLitControl(button)).toBe(false)
+    expect(StyleSheet.flatten(button.props.style).backgroundColor).not.toBe(COLOR.destructiveFill)
+    expect(StyleSheet.flatten(screen.getByText('Clear all').props.style).color).toBe(COLOR.textPrimary)
   })
 })
 

@@ -98,7 +98,7 @@ describe('<StateScreen>', () => {
         icon="circle-slash"
         title="Not open to you"
         body="This event is 21+."
-        actions={[{ label: 'OK', kind: 'strong', onPress: jest.fn() }]}
+        actions={[{ label: 'OK', kind: 'primary', onPress: jest.fn() }]}
         testID="s"
       />
     )

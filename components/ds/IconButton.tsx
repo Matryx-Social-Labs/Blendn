@@ -8,10 +8,9 @@ import { Material } from '../ui/Material'
 import { COLOR, PRESS, RADIUS, SIZE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY } from '../../lib/theme'
-import { chipRest, focusRing, IC_HAIRLINE, PRESSED_WASH, useGround, useIncreaseContrast, useSelection } from './shared'
+import { LitFill } from './LitFill'
+import { chipRest, focusRing, IC_HAIRLINE, PRESSED_WASH, useGround, useIncreaseContrast } from './shared'
 
-/** The lit disc's rim, as the lit button's and the selected chip's. */
-const LIT_RIM = 1
 
 export type IconButtonProps = {
   icon: IconName
@@ -34,8 +33,8 @@ export type IconButtonProps = {
 /**
  * The glass circle (DESIGN-BRIEF §12, guidelines/components/IconButton.html):
  * 44 pt on iOS, 48 dp on Android, a 24 pt outlined glyph. Navigation (back,
- * close, share) is silent; a toggle plays `H.select` and, when selected, lights in its screen's hue (direction C: no white
- * selection): the hue's fill, a 1 pt rim in its edge, the glyph in its light tone, playing its verb once (DS #15: Like pops).
+ * close, share) is silent; a toggle plays `H.select` and, when selected, is lit as every positive is (buttons board C, owner
+ * 2026-11-17): the tinted gradient disc inside the 1.5 pt gradient rim, a white glyph, playing its verb once (DS #15: Like pops).
  * Over a photo (`media`) the selected disc stays white with an ink glyph: a hue on a photo is not legible (§4.7). Never two
  * touching: 8 pt apart.
  *
@@ -70,13 +69,11 @@ export function IconButton({
   const slop = (full - size) / 2
   const radius = android && pressed ? RADIUS.pressedAndroid : round
   const shape = { width: size, height: size, borderRadius: radius }
-  const sel = useSelection()
   const white = tier === 'media'
   // On a surface card (`GroundProvider value="surface"`) glass has nothing to refract and drew no disc (C20, the request
   // card's "…" on iOS): the circle is solid there, in the card's chip tone, on both platforms.
   const onCard = useGround() === 'surface' && tier === 'control'
-  const glyphColor = !selected ? COLOR.textPrimary : white ? COLOR.selectionInk : sel.glyph
-  const disc = white ? styles.selected : { backgroundColor: sel.fill, borderWidth: LIT_RIM, borderColor: sel.edge, borderRadius: radius }
+  const glyphColor = selected && white ? COLOR.selectionInk : COLOR.textPrimary
 
   const glyph = (
     <View testID={testID && `${testID}-glyph`} style={disabled && { opacity: OPACITY.disabled }}>
@@ -109,7 +106,11 @@ export function IconButton({
         {/* The disc and the glass swap under the glyph, which stays one mounted node: a glyph remounted by the swap could
             never see `selected` rise, and so never pop. */}
         {selected ? (
-          <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, disc]} />
+          white ? (
+            <View testID={testID && `${testID}-selected`} style={[StyleSheet.absoluteFill, styles.selected]} />
+          ) : (
+            <LitFill radius={radius} testID={testID && `${testID}-selected`} />
+          )
         ) : onCard ? (
           <View testID={testID && `${testID}-disc`} style={[StyleSheet.absoluteFill, { backgroundColor: chipRest('surface'), borderRadius: radius }]} />
         ) : (
