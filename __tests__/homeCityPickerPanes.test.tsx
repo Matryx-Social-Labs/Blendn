@@ -11,7 +11,7 @@
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet, type ReactTestInstance } from 'react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -166,8 +166,9 @@ async function settle() {
 }
 
 /** On screen: no ancestor hidden with `display: 'none'` (how the shell hides the pane that is not showing). */
-function shown(node: ReactTestInstance): boolean {
-  for (let n: ReactTestInstance | null = node; n; n = n.parent) {
+type Node = ReturnType<typeof screen.getByTestId>
+function shown(node: Node): boolean {
+  for (let n: Node | null = node; n; n = n.parent) {
     if ((StyleSheet.flatten(n.props.style) as { display?: string } | undefined)?.display === 'none') return false
   }
   return true
