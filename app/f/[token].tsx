@@ -23,6 +23,7 @@ import { inviteCta, inviteLine, type FriendPerson, type FriendState } from '../.
 import { askFriendsSeeMe, useStillHere } from '../../lib/friendsSeeMeAsk'
 import { isGone } from '../../lib/loadFailure'
 import { RouteModal } from '../../components/system/RouteModal'
+import { personFace } from '../../lib/personFace'
 
 /** Flow 6 `invite`: the face is 160. */
 const FACE = 160
@@ -190,7 +191,7 @@ function InviteScreen() {
             <FadeInUp style={styles.stage}>
               {/* Decorative: the name under it says who this is. */}
               <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                {person.photo ? <Avatar kind="photo" uri={person.photo} size={FACE} /> : <Avatar kind="creature" pseudonym={person.name} size={FACE} />}
+                <Avatar {...personFace({ named: true, name: person.name, photo: person.photo })} size={FACE} />
               </View>
               <View style={styles.words}>
                 {/*

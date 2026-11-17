@@ -76,7 +76,7 @@ describe('design tokens', () => {
       'const g = { lineHeight: 26, textTransform: "uppercase" }',
       '<HeartIcon size={18} />',
       // on the scale: none of these should be reported
-      'const ok = { color: EMBER.textPrimary, borderRadius: EMBER_RADIUS.pill, backgroundColor: tint(EMBER.success, 0.16) }',
+      'const ok = { color: COLOR.textPrimary, borderRadius: RADIUS.capsule, backgroundColor: tint(COLOR.brandRose, 0.16) }',
       'const ok2 = { borderRadius: 0 }',
       "// design-exception: Google’s own button chrome",
       "const brand = { backgroundColor: '#FFFFFF' }",

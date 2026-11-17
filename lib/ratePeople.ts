@@ -18,8 +18,10 @@ export interface RatePerson {
   id: string
   /** How they appear to you. Never their real name unless they revealed. */
   name: string
-  /** Only when they revealed. `Face` draws their creature otherwise. */
+  /** Only when they revealed. */
   photo: string | null
+  /** They revealed (the conversation's `theyRevealed`, or a photo, which only a reveal sends): `personFace` draws their photo or initial, never a creature. */
+  named: boolean
 }
 
 /** Somebody the list has not caught up with: a safe, anonymous stand-in. */
@@ -33,18 +35,20 @@ function otherUserOf(c: ConversationLike): { id?: unknown; name?: unknown; image
 }
 
 export function ratePeople(userIds: readonly string[], conversations: readonly ConversationLike[]): RatePerson[] {
-  const known = new Map<string, { name: string | null; photo: string | null }>()
+  const known = new Map<string, { name: string | null; photo: string | null; named: boolean }>()
   for (const c of conversations) {
     const other = otherUserOf(c)
     if (!other || typeof other.id !== 'string') continue
+    const photo = typeof other.image === 'string' && other.image ? other.image : null
     known.set(other.id, {
       name: typeof other.name === 'string' && other.name.trim() ? other.name.trim() : null,
-      photo: typeof other.image === 'string' && other.image ? other.image : null,
+      photo,
+      named: c.theyRevealed === true || photo !== null,
     })
   }
   return userIds.map((id) => {
     const k = known.get(id)
-    return { id, name: k?.name ?? UNKNOWN_MATCH, photo: k?.photo ?? null }
+    return { id, name: k?.name ?? UNKNOWN_MATCH, photo: k?.photo ?? null, named: Boolean(k?.named && k.name) }
   })
 }
 

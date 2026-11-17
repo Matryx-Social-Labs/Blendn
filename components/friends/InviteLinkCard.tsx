@@ -9,6 +9,7 @@ import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText,
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
+import { personFace } from '../../lib/personFace'
 
 /** Flow 6 `add`: the link pill is 48 tall on the card's 20 pt padding. */
 // design-exception: the frame's card padding is 20
@@ -95,7 +96,7 @@ export function InviteLinkCard({
     <View testID="invite-link-card" style={[styles.card, contrast ? styles.cardContrast : styles.cardEdge]}>
       {who ? (
         <View style={styles.who}>
-          {photo ? <Avatar kind="photo" uri={photo} size={FACE} /> : <Avatar kind="creature" pseudonym={who} size={FACE} />}
+          <Avatar {...personFace({ named: true, name: who, photo })} size={FACE} />
           <View style={styles.whoText}>
             {/* Your name grows to the heading cap and takes two lines at the AX sizes; the line under it stops at meta's (D-LM10). */}
             <FitText variant="heading" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={styles.ink}>

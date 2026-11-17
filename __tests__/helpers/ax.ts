@@ -25,7 +25,7 @@ const kids = (n: Node): Node[] => (n.children ?? []).filter((c): c is Node => ty
 const roots = (tree: Tree): Node[] => (Array.isArray(tree) ? tree : tree ? [tree] : [])
 
 /**
- * Every Text the scale reaches (no cap, or a cap above CONTROL_FONT_CAP) that sits inside a box of fixed `height`: at
+ * Every Text the scale reaches (no cap, or a cap above CONTROL_FONT_CAP; `allowFontScaling={false}` never grows) that sits inside a box of fixed `height`: at
  * AX XXXL its glyphs outgrow the box and are sliced. A `minHeight` grows; a `height` does not.
  */
 export function clipped(tree: Tree): string[] {
@@ -35,7 +35,7 @@ export function clipped(tree: Tree): string[] {
     const boxed = fixed || typeof style?.height === 'number'
     if (n.type === 'Text') {
       const cap = n.props.maxFontSizeMultiplier as number | undefined
-      const grows = cap === undefined || cap === 0 || cap > CONTROL_FONT_CAP
+      const grows = n.props.allowFontScaling !== false && (cap === undefined || cap === 0 || cap > CONTROL_FONT_CAP)
       if (boxed && grows) found.push(JSON.stringify(n.children))
       return
     }
@@ -50,7 +50,7 @@ export function uncapped(tree: Tree): string[] {
   const found: string[] = []
   const walk = (n: Node) => {
     if (n.type === 'Text') {
-      if (!n.props.maxFontSizeMultiplier) found.push(JSON.stringify(n.children))
+      if (!n.props.maxFontSizeMultiplier && n.props.allowFontScaling !== false) found.push(JSON.stringify(n.children))
       return
     }
     kids(n).forEach(walk)

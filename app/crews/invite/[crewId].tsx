@@ -27,6 +27,7 @@ import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE, TYPE } from '../../../lib/design/
 import { H } from '../../../lib/haptics'
 import { showSheet } from '../../../lib/sheet'
 import { useAuth } from '../../../lib/useAuth'
+import { personFace } from '../../../lib/personFace'
 
 type Load = { kind: 'loading' } | { kind: 'ready'; invite: CrewInvite } | { kind: 'notOpen' } | { kind: 'failed' }
 
@@ -189,11 +190,11 @@ function CrewInviteScreenContent() {
       <ScrollView testID="invite-scroll" contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.hero, styles.heroPad]}>
           <View accessible accessibilityLabel={askedYouIn(invite.invitedBy)} style={[styles.asked, contrast && IC_HAIRLINE]}>
-            {invite.invitedByPhoto ? (
-              <Avatar kind="photo" uri={invite.invitedByPhoto} size={INVITER_FACE} testID="invite-inviter-photo" />
-            ) : (
-              <Avatar kind="creature" pseudonym={invite.invitedBy} size={INVITER_FACE} testID="invite-inviter-creature" />
-            )}
+            <Avatar
+              {...personFace({ named: true, name: invite.invitedBy, photo: invite.invitedByPhoto })}
+              size={INVITER_FACE}
+              testID={invite.invitedByPhoto ? 'invite-inviter-photo' : 'invite-inviter-initial'}
+            />
             {/* Two lines before an ellipsis: a long first name ("Venkatalakshmi") is never cut at the large sizes. */}
             <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.shrink]}>
               {askedYouIn(invite.invitedBy)}

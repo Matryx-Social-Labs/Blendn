@@ -539,7 +539,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
   /** The creature's seed while anonymous: never your real name. */
   const myMarkSeed = myPseudonym ?? markSeed('You', eventId ?? 'room')
   /** Your face as this room knows it: your photo when you are named, else your creature (once its pseudonym is known). */
-  const myFace: Face = myRoomFace({ revealed: controls.revealed, photo: myPhoto, pseudonym: myPseudonym, eventId })
+  const myFace: Face = myRoomFace({ revealed: controls.revealed, name: user?.name ?? null, photo: myPhoto, pseudonym: myPseudonym, eventId })
 
   // --- crews (R2-D1: People | Crews, the strip, crew cards, Liking as) ---------
   const [gridView, setGridView] = useState<'people' | 'crews'>('people')
@@ -1277,7 +1277,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         <MomentMatch
           // A new match is a new moment: it plays, buzzes and is said again.
           key={room.match.conversationId}
-          you={myRoomFace({ revealed: controls.revealed, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}
+          you={myRoomFace({ revealed: controls.revealed, name: user?.name ?? null, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}
           them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}
           name={room.match.name}
           // M-A: tonight's question and their answer, else a line to try.

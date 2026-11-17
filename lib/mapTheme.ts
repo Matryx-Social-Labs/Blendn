@@ -14,12 +14,12 @@
  * have one source; the brand tokens the app theme does not carry are below.
  * A value that is not a token says why.
  */
-import { SPACE } from './design/tokens'
+import { COLOR, SPACE } from './design/tokens'
 
-/** Brand tokens `lib/theme.ts` does not carry, by their `colors.css` names. */
+/** The brand colours from the tokens, and the one stop they do not carry by its `colors.css` name. */
 const TOKEN = {
-  brandOrange: '#F05423', // --brand-orange
-  brandRose: '#BE5C71', // --brand-rose
+  brandOrange: COLOR.brandOrange,
+  brandRose: COLOR.brandRose,
   emberEnd: '#FF6D8D', // the far end of --gradient-ember
 } as const
 

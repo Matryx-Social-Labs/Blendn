@@ -8,6 +8,7 @@ import { apiClient } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { isGone } from '../../lib/loadFailure'
 import { pendingInviteToken } from '../../lib/pendingRoute'
+import { personFace } from '../../lib/personFace'
 
 /** The avatar's box: the pill is 48 tall, the face 32 with 8 around it (Flow 1 `pendingInvite`). */
 const AVATAR = 32
@@ -75,11 +76,7 @@ export function PendingInvite({ signIn = false }: { signIn?: boolean }) {
 
   return (
     <View testID="pending-invite" accessible accessibilityLabel={pendingInviteLine(preview.name, signIn)} style={pill}>
-      {preview.photoUrl ? (
-        <Avatar kind="photo" uri={preview.photoUrl} size={AVATAR} />
-      ) : (
-        <Avatar kind="creature" pseudonym={preview.name} size={AVATAR} />
-      )}
+      <Avatar {...personFace({ named: true, name: preview.name, photo: preview.photoUrl })} size={AVATAR} />
       <Text style={[font('meta', bold), styles.line, styles.fill]} numberOfLines={2} maxFontSizeMultiplier={1.4}>
         <Text style={font('meta', bold, FONT_FAMILY.brand[700])}>{preview.name}</Text>
         {signIn ? ' invited you. Sign in to accept.' : ' invited you'}

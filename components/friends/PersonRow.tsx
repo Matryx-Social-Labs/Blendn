@@ -11,6 +11,7 @@ import ScalePress from '../motion/ScalePress'
 import { OptimizedImage } from '../OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../Skeleton'
 import { Icon } from '../ui/Icon'
+import { personFace } from '../../lib/personFace'
 
 /** The avatar's box and its decode hint, one number so they cannot drift (Flow 6 `personRow`: 48). */
 const AVATAR = 48
@@ -42,6 +43,7 @@ export function usePersonRowsFixed(): boolean {
  */
 export function PersonRow({
   person,
+  named = true,
   detail,
   detailMono,
   detailTail,
@@ -51,6 +53,8 @@ export function PersonRow({
   avatar = AVATAR,
 }: {
   person: FriendPerson
+  /** False for a blocked person: their creature, never a face (E10). */
+  named?: boolean
   /** The face's size: 48 on Flow 6's surfaces, 44 on Flow 7's friends list (fr.js `av`). */
   avatar?: number
   detail?: string
@@ -69,7 +73,7 @@ export function PersonRow({
   const line = [detail, detailMono, detailTail].filter(Boolean).join('')
   const body = (
     <>
-      <PersonAvatar person={person} size={avatar} />
+      <PersonAvatar person={person} size={avatar} named={named} />
       <View style={styles.text}>
         {/*
           Reading text, as Banter's request card (fc5eb48): the name grows to its role's cap and the line under it to meta's,
@@ -130,16 +134,17 @@ export function PersonRow({
 }
 
 /**
- * Photo, or the name's creature (the frame's `avatar(r, p, 48)`): a disc of its own on any surface, where the initial on `surface`
- * vanished into a request card of the same colour. Decorative: the name beside it says who this is.
+ * Their face by `personFace`: a friend (or a request, which names its sender) is named, so their photo, else their initial
+ * on their hue disc, never a creature. A blocked person is not (`named={false}`): always their creature (E10). Decorative.
  */
-export function PersonAvatar({ person, size = AVATAR }: { person: FriendPerson; size?: number }) {
+export function PersonAvatar({ person, size = AVATAR, named = true }: { person: FriendPerson; size?: number; named?: boolean }) {
+  const face = personFace({ named, name: person.name, photo: person.photo })
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {person.photo ? (
-        <OptimizedImage source={person.photo} style={{ width: size, height: size, borderRadius: RADIUS.capsule }} width={size} height={size} contentFit="cover" />
+      {face.kind === 'photo' ? (
+        <OptimizedImage source={face.uri} style={{ width: size, height: size, borderRadius: RADIUS.capsule }} width={size} height={size} contentFit="cover" />
       ) : (
-        <Avatar kind="creature" pseudonym={person.name} size={size} testID="person-creature" />
+        <Avatar {...face} size={size} testID={face.kind === 'creature' ? 'person-creature' : 'person-face'} />
       )}
     </View>
   )

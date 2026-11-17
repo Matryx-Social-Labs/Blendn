@@ -77,8 +77,8 @@ it('a friend with a long name and no photo keeps its name to one line below the 
   await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
   await render(<PersonRow person={{ userId: 'u', name: LONG, photo: null }} detail="Friends since " detailMono="Mar 2026" onPress={jest.fn()} chevron />)
   expect(screen.getByText(LONG).props.numberOfLines).toBe(1)
-  // No photo: the name's creature, a disc of its own (the initial on `surface` vanished into a card of the same colour).
-  expect(screen.getByTestId('person-creature', { includeHiddenElements: true })).toBeTruthy()
+  // No photo: a friend is named, so their initial on their hue disc, never a creature (personFace, F1 B).
+  expect(screen.getByTestId('person-face', { includeHiddenElements: true })).toBeTruthy()
   Dimensions.set({ window, screen: window })
 })
 
