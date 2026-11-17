@@ -242,10 +242,10 @@ export type GoingItem =
  * **Next up** — the soonest RSVP, as the one large card: the event you are
  * about to leave the house for, with its directions, calendar and share. **The
  * rest of your RSVPs** — under day headings, one row each, the way the Pulse's
- * Upcoming reads. The tab was named for these and once listed only hearts, so
+ * Upcoming reads. The tab was named for these and once listed only saves, so
  * somebody who tapped "I'm going" did not find the event under Going. There is
  * no "Going" heading over them: the screen's title already says it.
- * **Saved** — the hearts, minus anything already under Going: one event, one
+ * **Saved** — the saves, minus anything already under Going: one event, one
  * row. **Past** — events you attended that have ended, which is where "rate
  * the people you met" lives; `rate/[eventId]` was reachable only by reopening
  * an old event.

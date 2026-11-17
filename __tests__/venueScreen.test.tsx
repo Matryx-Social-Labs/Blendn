@@ -918,9 +918,15 @@ describe('regulars (Flow 13 · 13.4)', () => {
 describe('claiming', () => {
   const url = 'https://staging-dashboard.blendn.app/claim/venue/v1'
 
-  it('the last line, only while unclaimed; a sheet says it leaves the app and promises nothing, then opens the page as the server gave it', async () => {
+  it('a card under the name (SCRUM-1074 C1), only while unclaimed; a sheet says it leaves the app and promises nothing, then opens the page as the server gave it', async () => {
     await mount(venue({ claim: { url } }))
-    await fireEvent.press(screen.getByTestId('claim-venue-link'))
+    const card = screen.getByTestId('claim-venue-card')
+    expect(within(card).getByText('Nobody runs this place on Blend’n yet')).toBeTruthy()
+    // Under the name: the head, then the card, before the rest of the page (the map's Where included).
+    const ids = screen.root!.queryAll((n) => typeof n.props.testID === 'string' && /^(venue-head|claim-venue-card|venue-offline)$/.test(n.props.testID)).map((n) => n.props.testID as string)
+    expect([...new Set(ids)].slice(0, 2)).toEqual(['venue-head', 'claim-venue-card'])
+    expect(screen.queryByTestId('claim-venue-link')).toBeNull()
+    await fireEvent.press(screen.getByRole('link', { name: /Nobody runs this place on Blend’n yet.*Claim it/ }))
     expect(screen.getByRole('header', { name: 'Own this place?' })).toBeTruthy()
     expect(screen.getByText(/filing one grants nothing yet/)).toBeTruthy()
     await act(async () => {
@@ -931,9 +937,9 @@ describe('claiming', () => {
 
   it('offers no claim line for a claimed place, whatever the payload carries; refuses a foreign host', async () => {
     await mount(venue({ venue: { claimed: true }, claim: { url } }))
-    expect(screen.queryByTestId('claim-venue-link')).toBeNull()
+    expect(screen.queryByTestId('claim-venue-card')).toBeNull()
     await mount(venue({ claim: { url: 'https://evil.example/claim/venue/v1' } }))
-    expect(screen.queryByTestId('claim-venue-link')).toBeNull()
+    expect(screen.queryByTestId('claim-venue-card')).toBeNull()
   })
 })
 

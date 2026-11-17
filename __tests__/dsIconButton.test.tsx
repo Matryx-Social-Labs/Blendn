@@ -102,6 +102,22 @@ describe('<IconButton>', () => {
     expect(flat('i-selected').backgroundColor).toBe(COLOR.selectionFill)
   })
 
+  it('with a label it is a pill (going-lifecycle S1, Save): the glyph then the word, as tall as its circles, glass at rest', async () => {
+    await draw({ icon: 'bookmark', label: 'Save', accessibilityLabel: 'Save', selected: false, tier: 'media' })
+    expect(flat('i')).toMatchObject({ height: SIZE.circleButton, borderRadius: RADIUS.capsule })
+    expect(flat('i').width).toBeUndefined()
+    expect(screen.getByText('Save')).toBeTruthy()
+    expect(screen.getByTestId('glass')).toBeTruthy()
+    expect(isLitControl(screen.getByTestId('i'))).toBe(false)
+  })
+
+  it('a selected pill is the lit rim even over a photo (a state, direction C), with the glyph filled; never the white disc', async () => {
+    await draw({ icon: 'bookmark', label: 'Saved', accessibilityLabel: 'Saved', selected: true, tier: 'media' })
+    expect(isLitControl(screen.getByTestId('i'))).toBe(true)
+    expect(screen.getByRole('button', { name: 'Saved' }).props.accessibilityState).toMatchObject({ selected: true })
+    expect(screen.root!.queryAll((n) => n.props.fill === COLOR.textPrimary && n.props.stroke !== undefined).length).toBeGreaterThan(0)
+  })
+
   it('disabled dims the glyph, never the glass (§5.2 rule 6), and does not press', async () => {
     const onPress = jest.fn()
     await draw({ disabled: true, onPress })

@@ -1,4 +1,5 @@
 import { BAR_BOTTOM, barTop } from '../../lib/barGeometry'
+import { useState } from 'react'
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import Animated, { Easing, interpolate, useAnimatedStyle, useDerivedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -26,9 +27,10 @@ const circle = () => (Platform.OS === 'android' ? SIZE.circleButtonAndroid : SIZ
  * the left; 16 in, three circles with their two 8 pt gaps, 12 of air on the right. Not symmetric: the right side is wider,
  * and a symmetric inset left the title 41 pt on a 393 pt screen.
  */
-export function sceneBarTitleSpan(width: number, side: number) {
+export function sceneBarTitleSpan(width: number, side: number, actions: number = 3 * side + 2 * SPACE.sm) {
   const left = SPACE.lg + side + SPACE.md
-  const right = SPACE.lg + 3 * side + 2 * SPACE.sm + SPACE.md
+  // The right-hand controls as measured: the Save pill is wider than a circle and its word changes (Save / Saved).
+  const right = SPACE.lg + actions + SPACE.md
   return { left, right, width: Math.max(0, width - left - right) }
 }
 
@@ -54,10 +56,11 @@ export type SceneBarProps = {
 }
 
 /**
- * The Scene's top chrome (Flow 3 `scene`, DS TopBar and IconButton): back on the left; the heart, the share and the
+ * The Scene's top chrome (Flow 3 `scene`, DS TopBar and IconButton): back on the left; Save, the share and the
  * ⋯ on the right, 44 pt iOS · 48 dp Android `media` circles, 8 pt apart, over the hero's head scrim. Scrolled, the
  * glass bar comes up behind them over the first 8 pt (#30) and the event's name crossfades in between 24 and
- * 56 pt. The heart is the one toggle: white disc and ink glyph when saved, `H.select` through the IconButton.
+ * 56 pt. Save is the one toggle, a bookmark with its word (going-lifecycle S1): glass at rest, the lit rim once saved, `H.select`
+ * through the IconButton.
  *
  * One bar, first in the tree, so a screen reader reaches Back before the page.
  */
@@ -90,7 +93,8 @@ export function SceneBar({ title, saved, onBack, onSave, onShare, onMore, scroll
 
   const height = sceneBarHeight(insets.top)
   const side = circle()
-  const span = sceneBarTitleSpan(width, side)
+  const [actions, setActions] = useState<number | undefined>(undefined)
+  const span = sceneBarTitleSpan(width, side, actions)
   return (
     <View testID="scene-bar" pointerEvents="box-none" style={[styles.bar, { height, paddingTop: barTop(insets.top) }]}>
       <Animated.View testID="scene-bar-glass" pointerEvents="none" style={[StyleSheet.absoluteFill, glassStyle]}>
@@ -98,8 +102,8 @@ export function SceneBar({ title, saved, onBack, onSave, onShare, onMore, scroll
       </Animated.View>
       <View pointerEvents="box-none" style={styles.row}>
         <IconButton icon={android ? 'arrow-left' : 'chevron-left'} tier="media" accessibilityLabel="Back" onPress={onBack} testID="scene-back" />
-        <View pointerEvents="box-none" style={styles.actions}>
-          <IconButton icon="heart" tier="media" selected={saved} accessibilityLabel={saved ? 'Saved' : 'Save'} onPress={onSave} testID="scene-save" />
+        <View pointerEvents="box-none" style={styles.actions} testID="scene-bar-actions" onLayout={(e) => setActions(e.nativeEvent.layout.width)}>
+          <IconButton icon="bookmark" label={saved ? 'Saved' : 'Save'} tier="media" selected={saved} accessibilityLabel={saved ? 'Saved' : 'Save'} onPress={onSave} testID="scene-save" />
           {onShare ? <IconButton icon="share" tier="media" accessibilityLabel="Share" onPress={onShare} testID="scene-share" /> : null}
           <IconButton icon="ellipsis" tier="media" accessibilityLabel="More options" onPress={onMore} testID="scene-more" />
         </View>

@@ -86,7 +86,7 @@ import { useTabListScroll } from '../../lib/tabBarSettle'
  * From `goingItems` (lib/savedEvents.ts), top to bottom: your soonest RSVP
  * (from `/me/rsvps`) as the one large **next up** card, with directions,
  * calendar and share; the rest of your RSVPs as rows under day headings;
- * **Saved** — hearts not already above, the heart on each row removing it;
+ * **Saved** — saves not already above, the bookmark on each row removing it;
  * **Past** — events you attended, each with the way in to rating the people
  * you met there, which had no entry point but reopening an old event.
  */
@@ -688,7 +688,7 @@ function GoingScreenInner() {
       )
     }
 
-    // Saved. The heart is the remove. `exiting` on every row; `entering` only
+    // Saved. The bookmark is the remove. `exiting` on every row; `entering` only
     // on the one Undo just put back — an entrance on every row would replay as
     // the list virtualises. The rows carry no blur or shadow, which is what
     // makes the list's layout transition safe here (see tasks/lessons.md).
@@ -711,7 +711,7 @@ function GoingScreenInner() {
           trailing={
             <>
               {cancelled ? <RowNote text="Cancelled" bad /> : changedTag(row) ? <RowNote text={changedTag(row) as string} /> : null}
-              <SavedHeart title={row.title} onPress={() => void removeSave(row)} />
+              <SavedMark title={row.title} onPress={() => void removeSave(row)} />
               <RowMore title={row.title} onPress={() => rowActions(row)} />
             </>
           }
@@ -797,7 +797,7 @@ function GoingScreenInner() {
         <StateScreen
           icon="calendar"
           title="Nothing here yet"
-          body="Tap “I’m going” or the heart on an event and it shows up here."
+          body="Tap “I’m going” or Save on an event and it shows up here."
           actions={[{ label: 'Browse events', onPress: () => router.navigate('/(tabs)/events' as any) }]}
           gutter
           testID="going-empty"
@@ -1003,7 +1003,7 @@ function RowMore({ title, onPress }: { title: string; onPress: () => void }) {
       onPress={onPress}
       pressedScale={0.97}
       haptic={false}
-      hitSlop={(minTarget() - HEART) / 2}
+      hitSlop={(minTarget() - MARK) / 2}
       accessibilityRole="button"
       accessibilityLabel={`More about ${title}`}
       accessibilityHint="Share, directions, add to calendar"
@@ -1056,20 +1056,20 @@ function RowNote({ text, bad = false }: { text: string; bad?: boolean }) {
   return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), bad ? styles.bad : styles.secondary]}>{text}</Text>
 }
 
-/** Saved: a 32 pt white disc with the ink heart; the tap removes the save (with Undo). */
-function SavedHeart({ title, onPress }: { title: string; onPress: () => void }) {
+/** Saved: the filled bookmark (going-lifecycle S1, sheet 08); the tap removes the save (with Undo). */
+function SavedMark({ title, onPress }: { title: string; onPress: () => void }) {
   return (
     <ScalePress
       onPress={onPress}
       pressedScale={0.97}
       haptic={false}
-      hitSlop={(minTarget() - HEART) / 2}
+      hitSlop={(minTarget() - MARK) / 2}
       accessibilityRole="button"
       accessibilityLabel={`Saved, ${title}`}
       accessibilityHint="Removes it from saved"
-      style={styles.heart}
+      style={styles.mark}
     >
-      <Icon name="heart" size={ICON.inline} color={COLOR.selectionInk} active />
+      <Icon name="bookmark" size={ICON.control} color={COLOR.textPrimary} filled />
     </ScalePress>
   )
 }
@@ -1099,8 +1099,8 @@ const HERO_PHOTO = 180
 /** Loading: the hero card and two rows (flow4.js going `loading`). */
 const SKELETON_HERO = 330
 const SKELETON_ROW = 72
-/** The saved heart's white disc. */
-const HEART = SIZE.tag
+/** A row's trailing controls, the Saved mark and the ⋯: 32 pt, reached at 44 / 48 by slop. */
+const MARK = SIZE.tag
 
 
 /** The Pulse lead's ember underglow (`glowLead`), on Next up (board `.nu`). */
@@ -1173,18 +1173,11 @@ const styles = StyleSheet.create({
   heroLit: { flex: 1 },
   // The ⋯ and the "Show more" row: the row's own air, nothing bordered.
   // Controls beside each other keep their 44 apart (the Android 48 reach is 8 either side of a 32), so no two reaches overlap.
-  trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - HEART },
-  more: { width: HEART, height: HEART, alignItems: 'center', justifyContent: 'center' },
+  trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - MARK },
+  more: { width: MARK, height: MARK, alignItems: 'center', justifyContent: 'center' },
   moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm, minHeight: minTarget(), marginTop: SPACE.xs },
   venueTag: { height: SPACE.xl, paddingHorizontal: SPACE.sm, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface, justifyContent: 'center' },
-  heart: {
-    width: HEART,
-    height: HEART,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: COLOR.selectionFill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  mark: { width: MARK, height: MARK, alignItems: 'center', justifyContent: 'center' },
 })
 
 /*

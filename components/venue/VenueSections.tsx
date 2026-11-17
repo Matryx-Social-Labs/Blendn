@@ -302,29 +302,6 @@ export function Where({
   )
 }
 
-/** "Own this place? Claim it ↗": the last line, never a button in the dock. The server decides whether it shows. */
-export function ClaimLine({ onPress }: { onPress: () => void }) {
-  const bold = useBoldText()
-  return (
-    <View style={styles.claimRule}>
-      <Pressable
-        testID="claim-venue-link"
-        onPress={onPress}
-        accessibilityRole="link"
-        accessibilityLabel="Own this place? Claim it"
-        accessibilityHint="Opens the Blend’n dashboard in your browser"
-        hitSlop={(minTarget() - TYPE.meta.lineHeight) / 2}
-        style={({ pressed }) => [styles.claim, pressed && styles.dim]}
-      >
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
-          Own this place? <Text style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink, styles.underline]}>Claim it</Text>
-        </Text>
-        <Icon name="arrow-up-right" size={ICON.inline} color={COLOR.textSecondary} />
-      </Pressable>
-    </View>
-  )
-}
-
 /** The Tonight card's cover and the Coming up stamp (`th56`, `stamp(48)`). */
 const THUMB = SIZE.disc
 const STAMP = SPACE.xxxl
@@ -377,9 +354,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  claimRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: COLOR.hairline, paddingTop: SPACE.lg },
-  claim: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, alignSelf: 'flex-start' },
-  underline: { textDecorationLine: 'underline' },
   fill: { flex: 1 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },

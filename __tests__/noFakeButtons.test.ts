@@ -29,7 +29,7 @@ const DRAWN_FILL = /<(Material|GradientFill)\b/
 const ICON_CIRCLE = 'a hand-drawn icon circle (no label); not on the board’s retire list. Follow-up: IconButton (SCRUM-1063)'
 const ALLOWED: Record<string, { count: number; why: string }> = {
   'app/index.tsx': { count: 2, why: 'the Google and email sign-in buttons: brand-mandated looks (board: acceptable brand exceptions)' },
-  'app/(tabs)/going.tsx': { count: 2, why: ICON_CIRCLE },
+  'app/(tabs)/going.tsx': { count: 1, why: ICON_CIRCLE },
   'app/about.tsx': { count: 1, why: 'the version chip (tap to copy): a chip, not an action' },
   'components/board/ComposePhoto.tsx': { count: 2, why: 'remove and alt-text controls drawn on a photo: overlay controls' },
   'components/board/FromTheLobby.tsx': { count: 1, why: 'the From the Lobby bar: a banner that opens the Lobby, not a button' },

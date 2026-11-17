@@ -28,7 +28,7 @@ type Props = {
 }
 
 /**
- * One Everything-else row: the DS `EventCard row`, its "Checked in" / "Ended" pill and the save heart. Memoised on
+ * One Everything-else row: the DS `EventCard row`, its "Checked in" / "Ended" pill and the Save bookmark. Memoised on
  * per-row values (this event's saved flag and note, plus stable handlers), so saving one row re-renders that row and not
  * the list: the handlers take the event, they are not made per row.
  */
@@ -57,7 +57,7 @@ export const MoreRow = memo(function MoreRow({ event, title, time, venue, distan
       ) : null}
       {/* Saving is the whole of `event_favorites` and what the Going tab's Saved is built from: a silent toggle beside the row. */}
       <IconButton
-        icon="heart"
+        icon="bookmark"
         selected={saved}
         accessibilityLabel={saved ? `Saved, ${title}` : `Save ${title}`}
         onPress={() => onSave(event)}

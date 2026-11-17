@@ -317,7 +317,7 @@ describe('the row\'s ⋯ and the visit\'s art', () => {
 
   it('the controls beside each other keep their reaches apart', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'going.tsx'), 'utf8') as string
-    expect(src).toContain("trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - HEART }")
+    expect(src).toContain("trailing: { flexDirection: 'row', alignItems: 'center', gap: minTarget() - MARK }")
   })
 
   it('a visit\'s thumb is its place\'s type when the server says it', async () => {
