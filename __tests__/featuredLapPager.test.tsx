@@ -155,6 +155,22 @@ describe('the turn', () => {
     expect(onLight).not.toHaveBeenCalled()
   })
 
+  it('a clip with no poster of its own: the cover never shows in its bars (the dark surface does)', async () => {
+    const bare: LeadCard = card('n', {
+      cover: 'https://x/c.jpg',
+      playlist: [
+        { kind: 'image', url: 'https://x/c.jpg' },
+        { kind: 'video', url: 'https://x/v.mp4', posterUrl: null },
+      ],
+    })
+    await draw({ cards: [bare, card('b')] })
+    // The control: on the cover, nothing covers it.
+    expect(screen.queryByTestId('pulse-lead-clip-ground', { includeHiddenElements: true })).toBeNull()
+    await wait(STILL_MS + 1000)
+    expect(screen.getAllByTestId('lead-clip', { includeHiddenElements: true })).toHaveLength(1)
+    expect(screen.getByTestId('pulse-lead-clip-ground', { includeHiddenElements: true })).toBeTruthy()
+  })
+
   it('a finger on the card, or Pause, holds the clip on its frame: the player stays, paused', async () => {
     await draw({ cards: [media, card('b')] })
     await wait(STILL_MS * 2 + 1000)

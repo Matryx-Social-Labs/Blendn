@@ -103,7 +103,13 @@ function TurnMedia({
       {floorUri ? <ContainedCover uri={floorUri} auto /> : null}
       {current && at > 0 ? (
         <Animated.View key={key} entering={ITEM_IN} style={StyleSheet.absoluteFill}>
-          {still(current) ? <ContainedCover uri={still(current) as string} auto fillOnly={playing && framed === key} onFit={setFit} /> : null}
+          {still(current) ? (
+            <ContainedCover uri={still(current) as string} auto fillOnly={playing && framed === key} onFit={setFit} />
+          ) : (
+            // A clip with no poster of its own: the cover underneath must not show in its bars (never another picture,
+            // SCRUM-1066); the card's dark surface does, as the event hero's.
+            <View testID="pulse-lead-clip-ground" style={[StyleSheet.absoluteFill, styles.clipGround]} />
+          )}
         </Animated.View>
       ) : null}
       {playing && current?.kind === 'video' ? (
@@ -433,5 +439,6 @@ const styles = StyleSheet.create({
   pipOff: { width: PIP.off, backgroundColor: PIP_OFF },
   pipFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: COLOR.textPrimary },
   sep: { width: RIM, height: PILL.sep, backgroundColor: SEP },
+  clipGround: { backgroundColor: COLOR.surfaceSunken },
   glyph: { width: PILL.glyph, height: PILL.glyph, alignItems: 'center', justifyContent: 'center' },
 })
