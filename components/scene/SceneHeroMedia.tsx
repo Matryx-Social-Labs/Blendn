@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
+import { STILL_MS } from '../../lib/featuredLap'
 import { COLOR, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
 import { ContainedCover } from '../ds/LinkPreviewCard'
 import { useReduceTransparency } from '../ds/shared'
@@ -32,7 +33,7 @@ import { useReducedMotion } from '../../lib/motion'
  * never cut off mid-shot and a fixed dwell never freezes on its last frame.
  * Same rule as the feed, for the same reason: the length is the organiser's.
  */
-const IMAGE_DWELL_MS = 4000
+const IMAGE_DWELL_MS = STILL_MS
 
 /**
  * How long to wait for a clip to say *anything* before giving up on it.
@@ -342,7 +343,7 @@ const styles = StyleSheet.create({
 })
 
 /**
- * A clip in the hero.
+ * A clip in the hero, and in the Pulse lead's turn (Featured C reuses it: the same watchdog, end event and first frame).
  *
  * Separate from `FeedVideo`, which infers looping from whether a callback was
  * passed. A hero clip has to loop or advance depending on whether the viewer
@@ -351,7 +352,7 @@ const styles = StyleSheet.create({
  * Muted, like the feed. Sound belongs in the lightbox, where opening it is a
  * deliberate act.
  */
-function HeroVideo({
+export function HeroVideo({
   source,
   paused,
   loop,

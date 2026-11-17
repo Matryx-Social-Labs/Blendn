@@ -29,6 +29,8 @@ import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
 import { CONTROL_FONT_CAP } from '../../components/ds/shared'
 import { LeadPager, type LeadCard } from '../../components/pulse/LeadPager'
+import { lapOrder } from '../../lib/featuredLap'
+import { feedPlaylist } from '../../lib/feedMedia'
 import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
@@ -96,7 +98,7 @@ import { saveHomeCity, useHomeCitySlug } from '../../lib/homeCity'
 
 import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
-import { FIX_MAX_AGE_MS, fixOf, type PreciseFix } from '../../lib/roomButton'
+import { FIX_MAX_AGE_MS, fixAfterPermission, fixOf, type PreciseFix } from '../../lib/roomButton'
 import { homeCardProps, groupByDay } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import {
@@ -818,6 +820,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           }, 600)
         } else if (status === 'denied') {
           setLocationStatus('denied')
+          setUserLocation(null)
         } else {
           // 'undetermined' - permission not yet requested
           setLocationStatus('undetermined')
@@ -1238,9 +1241,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       Location.getForegroundPermissionsAsync()
         .then(({ status }) => {
           setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
+          // Location turned off in Settings while away: the fix from before goes, and every distance with it.
+          setUserLocation((current) => fixAfterPermission(status, current))
+          return status === 'granted' ? Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS }) : null
         })
-        .catch(() => {})
-      Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS })
         .then((position) => {
           if (!position) return
           // The state keeps its identity for a nearby fix (a new one would refetch the feed).
@@ -1563,9 +1567,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * narrowed page); under a search there is none (somebody who typed a name knows what they want).
    */
   const featuredSection = sections.find((x) => x.key === 'featured')
+  // Featured C's lap runs nearest first; the server's (sponsor's) order only breaks ties, and is the order with no fix.
   const leadEvents = useMemo(
-    () => (isSearching ? [] : isNarrowed ? featuredPick(events, now, seedDate) : (featuredSection?.events ?? [])),
-    [isSearching, isNarrowed, events, now, seedDate, featuredSection]
+    () => lapOrder(isSearching ? [] : isNarrowed ? featuredPick(events, now, seedDate) : (featuredSection?.events ?? []), hasFix),
+    [isSearching, isNarrowed, events, now, seedDate, featuredSection, hasFix]
   )
   const leadCards = useMemo<LeadCard[]>(
     () =>
@@ -1577,6 +1582,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           promoted: featuredLabel(e) === PROMOTED_LABEL,
           category: e.category_group ?? undefined,
           overline: e.category ? `Featured · ${e.category}` : 'Featured',
+          playlist: feedPlaylist(e.media, e.cover_image_url),
         }
       }),
     [leadEvents, now, hasFix]
@@ -1586,6 +1592,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const [leadAt, setLeadAt] = useState({ key: '', page: 0, swipes: 0 })
   const leadPage = leadAt.key === leadKey ? Math.min(leadAt.page, Math.max(0, leadEvents.length - 1)) : 0
   const onLeadPage = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.swipes + 1 })), [leadKey])
+  // The lap moved on by itself: the venue lights where it stands, and the camera stays (no new swipe, so `focus.n` holds).
+  const onLeadLight = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.key === leadKey ? at.swipes : 0 })), [leadKey])
   const leadEvent = leadEvents[leadPage] ?? null
   const focusPin = useMemo(() => (leadEvent ? (pinsFor('events', { events: [leadEvent], venues: [] })[0] ?? null) : null), [leadEvent])
   const focus = useMemo(() => (focusPin ? { pin: focusPin, n: leadAt.key === leadKey ? leadAt.swipes : 0 } : null), [focusPin, leadAt, leadKey])
@@ -1978,6 +1986,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           onPressIn={(i) => warmEvent(leadEvents[i])}
           onLongPress={(i, anchor) => openPeek(leadEvents[i], anchor, 'hero')}
           onPage={onLeadPage}
+          onLight={onLeadLight}
+          visible={visible}
+          screenReader={shell?.screenReader ?? false}
+          tookOver={shell?.mapTouched ?? false}
         />
       </View>
     ) : null

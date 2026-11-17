@@ -52,6 +52,8 @@ export type EventCardProps = {
    */
   layout?: 'lead' | 'result'
   cover?: string | null
+  /** `hero` only: what plays in place of the cover (the Pulse lead's turn, Featured C). The scrim and words stay on top. */
+  media?: ReactNode
   /**
    * `row` only: the date stamp leads the row in place of the cover (Flow 4 G-A, Going): one row shape for every event, and
    * a missing cover can never show. `past` dims the day.
@@ -318,11 +320,7 @@ export function EventCard(props: EventCardProps) {
         {...a11y}
         style={[styles.card, { borderRadius: radius }]}
       >
-        {cover ? (
-          <ContainedCover uri={cover} auto />
-        ) : (
-          <CategoryPlate category={category} testID={testID && `${testID}-plate`} />
-        )}
+        {props.media ?? (cover ? <ContainedCover uri={cover} auto /> : <CategoryPlate category={category} testID={testID && `${testID}-plate`} />)}
         {layout === 'lead' ? (
           // Featured C shows frames nobody chose as the cover: the rotation scrim holds the words over any of them.
           <RotationScrim testID={testID && `${testID}-scrim`} contrast={contrast} large={fontScale > CONTROL_FONT_CAP} style={StyleSheet.absoluteFill} />

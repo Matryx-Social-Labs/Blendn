@@ -7,7 +7,7 @@ import React from 'react'
 
 const mockSelect = jest.fn()
 jest.mock('../lib/haptics', () => ({ H: new Proxy({}, { get: (_t, k) => (k === 'select' ? mockSelect : jest.fn()) }) }))
-jest.mock('expo-image', () => ({ Image: () => null }))
+jest.mock('expo-image', () => ({ Image: Object.assign(() => null, { prefetch: jest.fn(async () => true) }) }))
 
 /* eslint-disable import/first */
 import { LeadPager, leadLabel, type LeadCard } from '../components/pulse/LeadPager'
@@ -41,7 +41,8 @@ it('a screen reader steps through the pages, each step a page change with its ha
   await act(async () => fireEvent(lead, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } }))
   expect(onPage).toHaveBeenLastCalledWith(1)
   expect(mockSelect).toHaveBeenCalledTimes(1)
-  expect(screen.getByTestId('pulse-lead').props.accessibilityLabel).toMatch(/^Featured, 2 of 3\. Night b/)
+  // A step is a swipe: Featured C's lap is over for the visit, so the pill's state is said (pulse-map 10).
+  expect(screen.getByTestId('pulse-lead').props.accessibilityLabel).toMatch(/^Featured, 2 of 3, paused\. Night b/)
   // The last page does not wrap, and a step that goes nowhere plays nothing.
   await act(async () => fireEvent(lead, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } }))
   await act(async () => fireEvent(lead, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } }))
