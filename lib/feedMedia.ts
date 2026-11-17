@@ -13,18 +13,13 @@
  * So a clip is simply the first `video` row, and this file is the one place
  * that decides what "first" means.
  *
- * ## The poster is never allowed to be missing
+ * ## A still is never missing; a clip's poster may be
  *
- * A card whose video is still buffering shows its poster, so a poster that is
- * `null` is a black rectangle for the length of a network round trip. The
- * fallback chain is the clip's own `thumbnail_url`, then the event's
- * `cover_image_url`, then nothing — and "nothing" means this returns no clip at
- * all rather than a clip that will flash black.
- *
- * That last rule is the one worth stating out loud: **we would rather show a
- * still event than a broken-looking one.** An organiser who uploads a video and
- * no poster gets their photograph, not a black card, and the upload path is
- * where that should be fixed rather than here.
+ * `feedPoster` (a card's still) falls back from the cover to any image to a
+ * clip's thumbnail, so a card is never blank. `feedPlaylist` gives a clip only
+ * its own `thumbnail_url` as a poster, never the cover: a poster at another
+ * ratio shows around a letterboxed clip (SCRUM-1066). The upload path is where
+ * a missing first-frame poster should be fixed, not here.
  */
 
 export interface EventMediaItem {
@@ -40,7 +35,8 @@ export interface EventMediaItem {
 /** One thing a card can show. */
 export type FeedMediaItem =
   | { kind: 'image'; url: string }
-  | { kind: 'video'; url: string; posterUrl: string }
+  /** `posterUrl`: the clip's own still (`thumbnail_url`), or null: never the event's cover (SCRUM-1066). */
+  | { kind: 'video'; url: string; posterUrl: string | null }
 
 /**
  * Media with a URL, by `order` rather than array position.
@@ -92,12 +88,13 @@ export function feedPoster(
  * playlist that shows the same photograph twice in a row and reads as a stuck
  * carousel rather than a loop.
  *
- * ## A video with no poster is dropped, not skipped-with-a-gap
+ * ## A clip's poster is its own, or none
  *
- * The still under a player is what shows while the
- * first frame decodes, so a video we cannot poster is a black rectangle mid-loop
- * — worse in a carousel than as a static card, because it arrives while
- * somebody is already watching.
+ * The still under a player is what shows until its first frame. It is the
+ * clip's `thumbnail_url` and nothing else: the event's cover is another picture
+ * at another ratio, and in the hero's `contain` frame it showed around a
+ * letterboxed clip (SCRUM-1066). A clip added by URL has no thumbnail, so it
+ * has no poster, and the frame's own dark surface shows until it plays.
  *
  * ## Documents never appear
  *
@@ -124,9 +121,7 @@ export function feedPlaylist(
     }
 
     if (m.type === 'video') {
-      const posterUrl = m.thumbnail_url || m.thumbnailUrl || coverImageUrl
-      if (!posterUrl) continue
-      out.push({ kind: 'video', url: m.url as string, posterUrl })
+      out.push({ kind: 'video', url: m.url as string, posterUrl: m.thumbnail_url || m.thumbnailUrl || null })
     }
   }
 
@@ -146,8 +141,7 @@ export function feedPlaylist(
  * Opening the event is a different act. The person has committed a tap, the
  * hero is two thirds of the screen, and the clip is the best thing the
  * organiser uploaded — so it plays first and the stills follow one by one. The
- * cover is not lost; it is the next item, and it is also the poster painted
- * under the clip while it buffers.
+ * cover is not lost; it is the next item.
  *
  * Stable otherwise: relative order is preserved for everything else, so an
  * organiser's arrangement survives apart from the one promotion.

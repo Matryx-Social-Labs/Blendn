@@ -6,11 +6,9 @@ import { feedPlaylist, feedPoster, type EventMediaItem , clipFirst } from '../li
 /*
  * Which asset a feed card draws.
  *
- * The rule worth testing is the refusal: a clip with no poster is not returned
- * at all, because a card whose video is buffering shows its poster, and a null
- * poster is a black rectangle for the length of a round trip. We would rather
- * show a still event than a broken-looking one — and that decision is invisible
- * in a screenshot taken on a warm cache, which is every screenshot anyone takes.
+ * The rule worth testing is the poster: a clip's own thumbnail or none, never
+ * the event's cover (SCRUM-1066). The cover is another picture at another
+ * ratio, and in the hero's `contain` frame it showed around the clip.
  */
 
 const video = (over: Partial<EventMediaItem> = {}): EventMediaItem => ({
@@ -81,11 +79,12 @@ describe('feedPlaylist', () => {
     expect(p.map((i) => i.url)).toEqual(['a.jpg', 'b.jpg'])
   })
 
-  it('drops a video it cannot poster rather than leaving a gap', () => {
-    // A black rectangle mid-loop is worse than on a static card: it arrives
-    // while somebody is already watching.
-    const p = feedPlaylist([video({ thumbnail_url: null })], null)
-    expect(p).toEqual([])
+  it('keeps a clip with no poster of its own, posterless rather than wearing the cover (SCRUM-1066)', () => {
+    // A clip added by URL has no thumbnail. The cover is another picture at
+    // another ratio, and it showed around the letterboxed clip in the hero;
+    // the frame's dark surface shows until the first frame instead.
+    expect(feedPlaylist([video({ thumbnail_url: null })], null)).toEqual([{ kind: 'video', url: 'https://cdn.example/clip.mp4', posterUrl: null }])
+    expect(feedPlaylist([video({ thumbnail_url: null })], 'https://cdn.example/cover.jpg')).toContainEqual({ kind: 'video', url: 'https://cdn.example/clip.mp4', posterUrl: null })
   })
 
   it('never includes a document', () => {
