@@ -1,4 +1,3 @@
-import { Image } from 'expo-image'
 import { memo, useEffect, useState } from 'react'
 import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
@@ -32,6 +31,7 @@ import {
 } from '../../lib/placesPane'
 import { QuietRow } from './PlaceParts'
 import { openPlace } from './openPlace'
+import { ContainedCover } from '../ds/LinkPreviewCard'
 
 /** The live tile is a square (BUILD-SPEC B2); the open card is 200 × 132 (B3). */
 export const TILE_WIDTH = 156
@@ -50,7 +50,7 @@ function PlaceArt({ venue, now, size, radius }: { venue: VenueListItem; now: num
   if (cover) {
     return (
       <View style={frame}>
-        <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" accessible={false} />
+        <ContainedCover uri={cover} auto />
       </View>
     )
   }

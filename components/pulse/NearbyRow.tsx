@@ -1,4 +1,3 @@
-import { Image } from 'expo-image'
 import { memo } from 'react'
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
@@ -14,6 +13,7 @@ import { eventClock } from '../../lib/time'
 import { splitClock } from './SetList'
 import { tint } from '../../lib/theme'
 import { compactCount } from '../../lib/format'
+import { ContainedCover } from '../ds/LinkPreviewCard'
 
 /** "From ₹799": a price on sale, whole units in its own currency. */
 export const priceText = (p: { minor: number; currency: string }) =>
@@ -123,7 +123,7 @@ function NearbyRowImpl<E extends RowEvent>({
             )}
           </View>
           <View testID="nearby-row-thumb" style={styles.thumb} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-            {event.cover_image_url ? <Image source={{ uri: event.cover_image_url }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+            {event.cover_image_url ? <ContainedCover uri={event.cover_image_url} auto /> : null}
           </View>
         </>
       )}

@@ -1,4 +1,3 @@
-import { Image } from 'expo-image'
 import { useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native'
 
@@ -8,7 +7,7 @@ import { measureAnchor } from './anchor'
 import type { Rect } from './chatShared'
 
 import ScalePress from '../motion/ScalePress'
-import { PhotoScrim } from '../ui/GradientFill'
+import { PhotoScrim, RotationScrim } from '../ui/GradientFill'
 import { COLOR, FONT_FAMILY, ICON, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { Icon, type IconName } from '../ui/Icon'
 import { Plate, VenuePlate } from './VenuePlate'
@@ -19,6 +18,7 @@ import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldTe
 import { compactCount } from '../../lib/format'
 import { DateStamp } from './DateStamp'
 import { Title } from './Title'
+import { ContainedCover } from './LinkPreviewCard'
 
 export type EventCardKind = 'hero' | 'compact' | 'row'
 
@@ -97,8 +97,7 @@ export type EventCardProps = {
 const DEFAULT_SIZE: Record<'hero' | 'compact', ViewStyle> = { hero: { height: 300 }, compact: { width: 240, height: 170 } }
 /** The scrim covers the lower 62% of the photo (the page). */
 const SCRIM_HEIGHT = '62%'
-/** The Pulse lead's scrim (board `.lead .scrim`): 70%, and 78% at large text, where the words climb higher. */
-const LEAD_SCRIM = { base: '70%', large: '78%' } as const
+/** Board `.lead .lbl` on a hero's scrim: white at 78%; the lead's rotation scrim carries it at 100% (pulse-media sheet 08). */
 const OVERLINE_ALPHA = 0.78
 /** A row's height at one line of title; a two-line title grows it (a minimum, never a box). */
 const ROW_HEIGHT = 64
@@ -197,7 +196,7 @@ export function EventCard(props: EventCardProps) {
             {stamp ? (
               <DateStamp iso={stamp.iso} timeZone={stamp.timeZone} past={stamp.past} />
             ) : cover ? (
-              <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+              <ContainedCover uri={cover} auto />
             ) : plate ? (
               <VenuePlate type={plate} />
             ) : (
@@ -320,11 +319,16 @@ export function EventCard(props: EventCardProps) {
         style={[styles.card, { borderRadius: radius }]}
       >
         {cover ? (
-          <Image source={{ uri: cover }} recyclingKey={cover} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+          <ContainedCover uri={cover} auto />
         ) : (
           <CategoryPlate category={category} testID={testID && `${testID}-plate`} />
         )}
-        <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={[styles.scrim, layout === 'lead' && { height: fontScale > CONTROL_FONT_CAP ? LEAD_SCRIM.large : LEAD_SCRIM.base }]} />
+        {layout === 'lead' ? (
+          // Featured C shows frames nobody chose as the cover: the rotation scrim holds the words over any of them.
+          <RotationScrim testID={testID && `${testID}-scrim`} contrast={contrast} large={fontScale > CONTROL_FONT_CAP} style={StyleSheet.absoluteFill} />
+        ) : (
+          <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={styles.scrim} />
+        )}
         <View style={styles.pills}>
           <TimeBadge when={time} />
           {layout === 'lead' ? null : here ? (
@@ -366,7 +370,7 @@ export function EventCard(props: EventCardProps) {
         ) : null}
         <View testID={testID && `${testID}-foot`} style={[styles.foot, hero ? (layout === 'lead' ? styles.footLead : styles.footHero) : styles.footCompact]}>
           {hero && overline ? (
-            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.overline]}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), layout === 'lead' ? styles.overlineLead : styles.overline]}>
               {overline.toUpperCase()}
             </Text>
           ) : null}
@@ -450,6 +454,7 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   // Board `.lead .lbl`: white at 78% on the photo's scrim, brighter than the page's secondary grey.
   overline: { color: tint(COLOR.textPrimary, OVERLINE_ALPHA) },
+  overlineLead: { color: COLOR.textPrimary },
   tabular: { fontVariant: ['tabular-nums'] },
   wash: { backgroundColor: PRESSED_WASH.android },
   row: { minHeight: ROW_HEIGHT, paddingVertical: SPACE.xs, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, borderRadius: RADIUS.rowInCard },

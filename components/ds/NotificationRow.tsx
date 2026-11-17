@@ -15,6 +15,7 @@ import { CrewEmblem } from './CrewEmblem'
 import { CategoryPlate } from './EventCard'
 import { Badge, PresenceDot } from './MonoFamily'
 import { announceOutcome, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { ContainedCover } from './LinkPreviewCard'
 
 /** Someone in a stack, as the server lets you see them: a photo only where the face is already yours to see. */
 export type StackPerson = { pseudonym: string } | { uri: string }
@@ -99,7 +100,7 @@ export function NotificationVisual({
         <>
           <View style={[box, styles.cover, { borderRadius: corner }, visual.cancelled && styles.cancelled]}>
             {visual.cover ? (
-              <Image source={{ uri: visual.cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
+              <ContainedCover uri={visual.cover} auto />
             ) : (
               <CategoryPlate category={visual.category} size={size} testID="notification-event-plate" />
             )}
