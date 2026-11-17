@@ -328,7 +328,7 @@ function EventPreferencesContent() {
           detail={pseudonym ?? NO_PSEUDONYM_YET}
           hint="That’s all people here see, plus what you have in common."
           // The room's own face for you (lib/roomState.ts): your pseudonym's creature, or the room's stand-in before it has one.
-          avatar={<Avatar {...myRoomFace({ revealed: false, photo: null, pseudonym, eventId: String(eventId) })} size={AVATAR} ring={COLOR.surface} />}
+          avatar={<Avatar {...myRoomFace({ revealed: false, name: null, photo: null, pseudonym, eventId: String(eventId) })} size={AVATAR} ring={COLOR.surface} />}
           selected={!revealed}
           onPress={() => setRevealed(false)}
           testID="prefs-anonymous"

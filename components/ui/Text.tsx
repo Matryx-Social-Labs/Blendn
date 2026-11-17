@@ -1,19 +1,19 @@
 import { Text as RNText, type TextProps } from 'react-native'
 
-import { MAX_FONT_SCALE, TYPE, type TypeRole } from '../../lib/theme'
+import { COLOR, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
+import { font, useBoldText } from '../ds/shared'
+
+export type TypeRole = keyof typeof TYPE
+
+/** Secondary roles read in `textSecondary` unless the call site says otherwise; everything else in `textPrimary`. */
+const SECONDARY: ReadonlySet<TypeRole> = new Set<TypeRole>(['meta', 'note', 'caption', 'label'])
 
 /**
- * Text on the design system's type scale.
+ * Text on the design system's type roles (`lib/design/tokens` TYPE: Satoshi for words, Geist Mono for labels).
  *
- * A role, not a size: `variant="meta"` is a date or a venue wherever it
- * appears, so changing what a date looks like is one edit in `lib/theme.ts`.
- * `color` is the one thing a call site commonly varies, so it is a prop rather
- * than a style override.
- *
- * Each role also caps how far the phone's text size may grow it
- * (`MAX_FONT_SCALE`): reading text scales freely, text in a fixed box (a
- * button, a tab label) stops before it is clipped. A call site's own
- * `maxFontSizeMultiplier` wins.
+ * A role, not a size. `color` is the one thing a call site commonly varies, so it is a prop rather than a style
+ * override. Bold Text steps the family up (`font`). Each role caps how far the phone's text size may grow it
+ * (`MAX_FONT_SCALE`); a call site's own `maxFontSizeMultiplier` wins.
  */
 export function Text({
   variant = 'body',
@@ -22,11 +22,12 @@ export function Text({
   maxFontSizeMultiplier,
   ...rest
 }: TextProps & { variant?: TypeRole; color?: string }) {
+  const bold = useBoldText()
   return (
     <RNText
       maxFontSizeMultiplier={maxFontSizeMultiplier ?? MAX_FONT_SCALE[variant]}
       {...rest}
-      style={[TYPE[variant], color ? { color } : null, style]}
+      style={[font(variant, bold), { color: color ?? (SECONDARY.has(variant) ? COLOR.textSecondary : COLOR.textPrimary) }, style]}
     />
   )
 }

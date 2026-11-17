@@ -10,7 +10,7 @@
  * sent, and when there is nothing true to say the fallback is presence.
  */
 
-import { fnv1a } from './pseudonymAvatar'
+import { fnv1a } from './creatureSeed'
 import { clockTime, eventClock } from './time'
 
 /**

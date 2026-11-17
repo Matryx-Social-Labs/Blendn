@@ -45,7 +45,7 @@ it('Event preferences draws the DS TopBar (a ✕ and no heading) instead of a fl
 })
 
 it('the floating Pulse capsule and bell start at the top of their band, not centred in it', () => {
-  expect(read('components/pulse/PulseTopBar.tsx')).toMatch(/floatingRow:[^\n]*alignItems: 'flex-start'/)
+  expect(read('components/pulse/PulseTopBar.tsx')).toMatch(/\brow: \{[^}]*alignItems: 'flex-start'/)
 })
 
 it('the Pulse band, the Me column and the hero pips are measured from the circles, not from a gap above them', () => {

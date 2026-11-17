@@ -10,6 +10,7 @@ import { CrewEmblem } from '../ds/CrewEmblem'
 import { Facepile, type Face } from '../ds/Facepile'
 import { font, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { useToast } from '../Toast'
+import { personFace } from '../../lib/personFace'
 
 type MyCrew = Pick<Crew, 'crewId' | 'name' | 'emblemSeed'>
 
@@ -107,7 +108,7 @@ export function GoingTogether({ eventId, plans, onChanged }: { eventId: string; 
       </View>
       {going.map((p) => (
         <View key={p.crewId} testID={`going-together-${p.crewId}`} accessible style={[styles.card, styles.top]}>
-          <Facepile faces={inYouLast(p.going).filter((x) => !x.you).map((x): Face => (x.photo ? { kind: 'photo', uri: x.photo } : { kind: 'creature', pseudonym: x.name }))} size={FACE} max={3} ring={COLOR.surface} accessibilityLabel="" />
+          <Facepile faces={inYouLast(p.going).filter((x) => !x.you).map((x): Face => personFace({ named: true, name: x.name, photo: x.photo }))} size={FACE} max={3} ring={COLOR.surface} accessibilityLabel="" />
           <View style={styles.fill}>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={2} style={[font('bodyStrong', bold), styles.ink]}>
               {goingLine(p.going)}

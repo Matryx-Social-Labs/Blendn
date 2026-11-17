@@ -10,6 +10,7 @@ import { Icon } from '../ui/Icon'
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import type { PeerRatingIssue } from '../../lib/apiClient'
+import { personFace } from '../../lib/personFace'
 
 /*
  * The rows of Rate (Flow 4 `rate`, rose): the night or the person being rated, the issues as a radio list, and the
@@ -78,13 +79,13 @@ export function EventRow({
  * The person being rated: their face (or their creature) at 56 pt, the name they are known by in one line, and why they
  * are here. A header, and the card's focus target (M5): read as "<name>. You both waved at this event".
  */
-export const PersonRow = forwardRef<View, { name: string; photo: string | null }>(function PersonRow({ name, photo }, ref) {
+export const PersonRow = forwardRef<View, { name: string; photo: string | null; named: boolean }>(function PersonRow({ name, photo, named }, ref) {
   const bold = useBoldText()
   // One line as the board draws it; at the accessibility sizes, two, so the largest text still says who this is.
   const lines = useWindowDimensions().fontScale >= WRAP_FROM_SCALE ? 2 : 1
   return (
     <View ref={ref} testID="rate-person" accessible accessibilityRole="header" accessibilityLabel={`${name}. You both waved at this event`} style={styles.row}>
-      {photo ? <Avatar kind="photo" uri={photo} size={SIZE.primary} label={name} /> : <Avatar kind="creature" pseudonym={name} size={SIZE.primary} label={name} />}
+      <Avatar {...personFace({ named, name, photo })} size={SIZE.primary} label={name} />
       <View style={styles.text}>
         <Text testID="rate-person-name" numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
           {name}

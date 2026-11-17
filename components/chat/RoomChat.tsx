@@ -969,6 +969,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
       <RoomMessageRow
         item={item}
         roomId={roomId}
+        namedSenders={roomKind === 'crew'}
         mine={item.sender_id === myId}
         first={place.first}
         last={place.last}
@@ -1076,7 +1077,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
                 typingUsers.size > 0 ? (
                   <View style={styles.typing}>
                     <TypingIndicator
-                      people={Array.from(typingUsers.entries()).map(([id, n]) => senderOf({ sender_name: n || 'Someone', sender_id: id }, roomId))}
+                      people={Array.from(typingUsers.entries()).map(([id, n]) => senderOf({ sender_name: n || 'Someone', sender_id: id }, roomId, roomKind === 'crew'))}
                       testID="room-typing"
                     />
                   </View>
@@ -1223,7 +1224,7 @@ function RoomChatInner({ params, embedded }: { params: RoomChatParams; embedded?
           <ChatBubble
             lifted
             mine={menu.message.sender_id === myId}
-            sender={senderOf(menu.message, roomId)}
+            sender={senderOf(menu.message, roomId, roomKind === 'crew')}
             text={menu.message.message_text}
             replyTo={menu.message.replyTo ? { name: menu.message.replyTo.sender_name, text: menu.message.replyTo.message_text } : undefined}
             time={clockTime(menu.message.created_at)}

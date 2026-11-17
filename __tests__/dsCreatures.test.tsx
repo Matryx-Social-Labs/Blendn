@@ -28,7 +28,7 @@ import { ProfileLensHero } from '../components/profile/ProfileLensHero'
 import { VENUE_PLATE_GLYPHS, VenuePlate } from '../components/ds/VenuePlate'
 import { Icon } from '../components/ui/Icon'
 import { CREATURE_ART, CREATURE_HUES, PALETTE_GLYPH, VENUE_PLATES } from '../lib/design/tokens'
-import { fnv1a } from '../lib/pseudonymAvatar'
+import { fnv1a } from '../lib/creatureSeed'
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),

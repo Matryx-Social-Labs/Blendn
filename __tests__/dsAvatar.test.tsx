@@ -1,15 +1,15 @@
 /*
- * <Avatar> (guidelines/components/Avatar.html): photo, creature and crew square
+ * <Avatar> (guidelines/components/Avatar.html): photo, creature and initial (a crew is its CrewEmblem)
  * from 24 to 112, the cut-out ring, Increase Contrast's white ring, and the
  * name read rather than the picture.
  */
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { AccessibilityInfo, processColor, StyleSheet } from 'react-native'
+import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { Avatar } from '../components/ds/Avatar'
 import { Creature, creatureFor } from '../components/ds/Creature'
-import { COLOR, CREATURE_PALETTES, MATERIAL, RADIUS } from '../lib/design/tokens'
+import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 
@@ -24,28 +24,18 @@ describe('<Avatar>', () => {
     expect(drawn((screen.toJSON() as { children: unknown[] }).children)).toBe(`[${disc}]`)
   })
 
-  it('a crew is a square with 30% corners on its two-colour plate', async () => {
-    await render(<Avatar kind="crew" plate={CREATURE_PALETTES[3]} size={56} testID="a" />)
-    expect(flat('a-body').borderRadius).toBe(Math.round(56 * 0.3))
-    // react-native-svg hands the native side `{ type, payload }` with the processed colour.
-    const fills = screen.getAllByTestId('a-plate', { includeHiddenElements: true }).map((p) => p.props.fill.payload)
-    expect(fills).toEqual(CREATURE_PALETTES[3].map((c) => processColor(c)))
-  })
-
   it('a photo is a circle', async () => {
     await render(<Avatar kind="photo" uri="https://x/y.jpg" size={40} testID="a" />)
     expect(flat('a-body')).toMatchObject({ width: 40, borderRadius: RADIUS.capsule })
   })
 
-  it('is decorative beside a name; alone, it reads the name, a crew adds “crew”, never “image”', async () => {
+  it('is decorative beside a name; alone, it reads the name, never “image”', async () => {
     await render(<Avatar kind="creature" pseudonym="Night Cat" size={32} testID="a" />)
     expect(screen.queryByTestId('a')).toBeNull()
 
     await render(<Avatar kind="creature" pseudonym="Night Cat" size={32} label="Night Cat" testID="a" />)
     expect(screen.getByLabelText('Night Cat').props.accessibilityRole).toBeUndefined()
 
-    await render(<Avatar kind="crew" plate={CREATURE_PALETTES[0]} size={32} label="Vinyl Club" testID="a" />)
-    expect(screen.getByLabelText('Vinyl Club, crew')).toBeTruthy()
   })
 
   it('draws a 2 pt cut-out ring in the colour behind it', async () => {
@@ -58,7 +48,7 @@ describe('<Avatar>', () => {
     await render(<Avatar kind="creature" pseudonym="Night Cat" size={56} testID="a" />)
     await act(async () => {})
     expect(flat('creature-ring').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
-    await render(<Avatar kind="crew" plate={CREATURE_PALETTES[0]} size={56} testID="a" />)
+    await render(<Avatar kind="photo" uri="https://x/y.jpg" size={56} testID="a" />)
     await act(async () => {})
     expect(flat('a-ring').backgroundColor).toBe(MATERIAL.hairlineIncreaseContrast)
   })
@@ -81,11 +71,9 @@ describe('<Avatar halo>', () => {
     expect(flat('a-halo')).toMatchObject({ top: -2, borderColor: COLOR.brandRose })
   })
 
-  it('a creature takes it too, and a crew’s corners follow the square', async () => {
+  it('a creature takes it too', async () => {
     await render(<Avatar kind="creature" pseudonym="Night Cat" size={40} ring={COLOR.ink} halo={COLOR.brandRose} testID="a" />)
     expect(flat('a-halo')).toMatchObject({ top: -4, borderColor: COLOR.brandRose })
-    await render(<Avatar kind="crew" plate={CREATURE_PALETTES[3]} size={56} halo={COLOR.brandRose} testID="b" />)
-    expect(flat('b-halo').borderRadius).toBe(Math.round(56 * 0.3) + 2)
   })
 
   it('no halo, no ring: nothing is drawn', async () => {

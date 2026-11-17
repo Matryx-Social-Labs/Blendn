@@ -14,12 +14,12 @@
  * have one source; the brand tokens the app theme does not carry are below.
  * A value that is not a token says why.
  */
-import { EMBER, SPACE } from './theme'
+import { COLOR, SPACE } from './design/tokens'
 
-/** Brand tokens `lib/theme.ts` does not carry, by their `colors.css` names. */
+/** The brand colours from the tokens, and the one stop they do not carry by its `colors.css` name. */
 const TOKEN = {
-  brandOrange: '#F05423', // --brand-orange
-  brandRose: '#BE5C71', // --brand-rose
+  brandOrange: COLOR.brandOrange,
+  brandRose: COLOR.brandRose,
   emberEnd: '#FF6D8D', // the far end of --gradient-ember
 } as const
 
@@ -130,7 +130,8 @@ export const MAP_THEME = {
   event: {
     /** Foot to top. The foot is not a token: a darker step of brand orange, so the wall reads as lit from above. */
     walls: ['#A8330F', TOKEN.brandOrange],
-    crown: EMBER.accent,
+    /** The old Ember accent, kept as the map's own value until the Pulse map board restyles the crown. Not a token. */
+    crown: '#FF906D',
     /** A building in our tiles is one colour; live, it is a brighter step of the accent. Not a token. */
     liveCrown: '#FFB394',
     glow: EMBER_GLOW,
@@ -174,7 +175,8 @@ export const MAP_THEME = {
   /** Below the buildings' zoom, a pin is a dot (and a venue's glow steps with its bucket). */
   pin: {
     dotRadiusPx: 6,
-    dotStroke: EMBER.bg,
+    /** The map's ground under a dot. Not a token. */
+    dotStroke: '#0F0E0E',
     dotStrokePx: 2,
     glowPxPerStep: 12,
     glowOpacity: 0.5,

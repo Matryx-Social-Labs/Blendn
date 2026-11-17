@@ -12,6 +12,7 @@ import { font, HueProvider, PRESSED_WASH, useAnnounced, useBoldText, useIncrease
 import { TextArea } from './ds/TextField'
 import { Icon, type IconName } from './ui/Icon'
 import { useToast } from './Toast'
+import { personFace } from '../lib/personFace'
 
 /** Long enough for "what happened", short of an essay. The leave route caps at 2000. */
 const NOTE_MAX = 500
@@ -277,7 +278,7 @@ function PersonHead({ person, focus }: { person: { name: string; photo: string |
   const bold = useBoldText()
   return (
     <View ref={focus} accessible accessibilityRole="header" accessibilityLabel={person.name} style={styles.person} testID="sheet-person">
-      {person.photo ? <Avatar kind="photo" uri={person.photo} size={PERSON_FACE} /> : <Avatar kind="creature" pseudonym={person.name} size={PERSON_FACE} />}
+      <Avatar {...personFace({ named: true, name: person.name, photo: person.photo })} size={PERSON_FACE} />
       <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.group} style={[font('group', bold), styles.personName]}>
         {person.name}
       </Text>

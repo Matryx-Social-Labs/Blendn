@@ -6,7 +6,7 @@ import Svg, { Circle, ClipPath, Defs, G, parse, RadialGradient, Stop } from 'rea
 import { CREATURE_ART, CREATURE_HUES, DURATION, FONT_FAMILY, GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 import { initialOf } from '../../lib/personFace'
-import { castIndex, fnv1a, nounOf } from '../../lib/pseudonymAvatar'
+import { castIndex, fnv1a, nounOf } from '../../lib/creatureSeed'
 
 /*
  * The anonymous faces ("C · Faces", owner-approved 2026-11-12, SCRUM-1047). One 24×24 face system: the noun picks the
@@ -407,7 +407,7 @@ export type CreatureLook = { species: CreatureSpecies; mood: CreatureMood; hue: 
 
 /**
  * A pseudonym's face: the noun's species (or a seeded friendly one), the adjective's mood, and the hue, |FNV-1a| % 8 of
- * the whole pseudonym (`pseudonymAvatar`'s hash), so one person is one face everywhere under that name and a different
+ * the whole pseudonym (`fnv1a`, lib/creatureSeed), so one person is one face everywhere under that name and a different
  * one at the next event. Feed it the `markSeed`, never a user id. Spread it into `<Creature>`.
  */
 export function creatureFor(pseudonym: string): CreatureLook {

@@ -9,6 +9,7 @@ import { COUNT_TICKS_MAX, CountTicks } from './CountTicks'
 import { CrewEmblem } from './CrewEmblem'
 import { Facepile, type Face } from './Facepile'
 import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { personFace } from '../../lib/personFace'
 
 /** One crew's row: `StripCrewRow` (lib/crews.ts), and `cheer` for your own crew check-in moment. */
 export type StripCrew = StripCrewRow & {
@@ -110,7 +111,7 @@ function CrewStripRow({ crew, testID }: { crew: StripCrew; testID?: string }) {
   )
 }
 
-const faceOf = (x: CrewmateIn): Face => (x.photo ? { kind: 'photo', uri: x.photo } : { kind: 'creature', pseudonym: x.name })
+const faceOf = (x: CrewmateIn): Face => personFace({ named: true, name: x.name, photo: x.photo })
 
 /** Faces before "+N" in the names row (the Facepile's own default). */
 const FACES_SHOWN = 5
