@@ -1,6 +1,7 @@
 import type { NotificationItem } from '../lib/notificationFormat'
 import {
   arrivedUnread,
+  askItems,
   closeAnsweredElsewhere,
   findLandingRow,
   groupFeed,
@@ -10,7 +11,7 @@ import {
   notificationWhen,
   parseVisual,
   rowFor,
-  WAITING_DAYS,
+  withAsks,
 } from '../lib/notificationRows'
 
 const NOW = Date.parse('2026-10-22T12:00:00Z')
@@ -249,12 +250,27 @@ describe('groupFeed', () => {
     expect(g.earlier.map((r) => r.id)).toEqual(['o'])
   })
 
-  it('does not wait on a request that has lapsed: it is history, with no pills', () => {
-    const lapsed = item({ id: 'l', kind: 'friend_request', createdAt: ago((WAITING_DAYS + 1) * DAY) })
-    const lapsedInvite = item({ id: 'li', kind: 'crew_invite', createdAt: ago((WAITING_DAYS + 1) * DAY), data: { crewId: 'c' } })
-    const g = groupFeed([lapsed, lapsedInvite], { fresh: none, resolved: none, now: NOW })
-    expect(g.waiting).toEqual([])
-    expect(g.earlier.map((r) => r.actions)).toEqual([[], []])
+  /*
+   * SCRUM-1062: a friend request has no lapse (Friends lists it until it is answered), and a crew invite's is the server's
+   * (`open: false` once it lapses). Aged out here at 14 days, Waiting on you said 8 while Friends said 14 waiting.
+   */
+  it('waits on an open request however old it is: the server says when one has closed, not its age', () => {
+    const old15 = item({ id: 'l', kind: 'friend_request', createdAt: ago(15 * DAY), data: { requestId: 'r15' } })
+    const oldInvite = item({ id: 'li', kind: 'crew_invite', createdAt: ago(15 * DAY), data: { crewId: 'c15' } })
+    const g = groupFeed([old15, oldInvite], { fresh: none, resolved: none, now: NOW })
+    expect(g.waiting.map((r) => r.id)).toEqual(['l', 'li'])
+    expect(g.waiting.map((r) => r.actions.map((a) => a.key))).toEqual([
+      ['accept', 'decline'],
+      ['join', 'decline'],
+    ])
+    expect(g.earlier).toEqual([])
+  })
+
+  it('orders Waiting on you newest first, whichever list a row came from', () => {
+    const recent = item({ id: 'n', kind: 'crew_invite', createdAt: ago(HOUR), data: { crewId: 'c1' } })
+    const older = item({ id: 'o2', kind: 'friend_request', createdAt: ago(9 * DAY), data: { requestId: 'r9' } })
+    const g = groupFeed([older, recent], { fresh: none, resolved: none, now: NOW })
+    expect(g.waiting.map((r) => r.id)).toEqual(['n', 'o2'])
   })
 
   // Requests placement A: Waiting on you is the join-asks only. A talk-ask, open and unseen, is a New line.
@@ -360,5 +376,64 @@ describe('closeAnsweredElsewhere', () => {
 
   it('closes nothing when neither list has loaded', () => {
     expect(closeAnsweredElsewhere([req('a', 'r1'), inv('c', 'x')], { friend_request: none, crew_invite: none }).map((n) => n.open)).toEqual([undefined, undefined])
+  })
+})
+
+/*
+ * SCRUM-1062: Waiting on you is the shared lists (`lib/friendRequests`, `lib/crewInvites`), not the notification rows. A request
+ * with no row in the feed (older than its first page, cleared, seeded, swept) is still waiting, and is drawn from the list.
+ */
+describe('askItems and withAsks', () => {
+  const none = new Set<string>()
+  const person = (name: string, photo: string | null = null) => ({ userId: `u_${name}`, name, photo })
+  const request = (id: string, days: number, name = 'Asha Rao') => ({ id, person: person(name), createdAt: ago(days * DAY) })
+  const crewInvite = (crewId: string, days: number) => ({
+    crewId,
+    name: `Crew ${crewId}`,
+    bio: null,
+    emblemSeed: `seed-${crewId}`,
+    tags: [],
+    size: 3,
+    invitedBy: 'Asha',
+    invitedAt: ago(days * DAY),
+  })
+
+  it('draws a request older than 7 days from the list, with its pills, the person and the time', () => {
+    const [row] = groupFeed(askItems([request('r8', 8)], []), { fresh: none, resolved: none, now: NOW }).waiting
+    expect(row.item.data).toEqual({ type: 'friend_request', requestId: 'r8' })
+    expect(row.title).toBe('Asha wants to be friends')
+    expect(row.context).toBe(notificationWhen(ago(8 * DAY), NOW))
+    expect(row.actions.map((a) => a.key)).toEqual(['accept', 'decline'])
+  })
+
+  it('draws a crew invite older than 7 days from the list the same way: its emblem, its name, Join and Decline', () => {
+    const [row] = groupFeed(askItems([], [crewInvite('c9', 9)]), { fresh: none, resolved: none, now: NOW }).waiting
+    expect(row.item.data).toEqual({ type: 'crew_invite', crewId: 'c9' })
+    expect(row.visual).toEqual({ type: 'emblem', seed: 'seed-c9' })
+    expect(row.context).toBe('Crew c9')
+    expect(row.actions.map((a) => a.key)).toEqual(['join', 'decline'])
+  })
+
+  it('a photo the list has is the row’s face; a name it lacks is the push’s own words, never an invented one', () => {
+    const [withPhoto, nameless] = askItems([{ ...request('a', 1), person: person('Ravi', 'https://x/p.jpg') }, { ...request('b', 1), person: person('') }], [])
+    expect(rowFor(withPhoto, NOW).visual).toEqual({ type: 'photo', uri: 'https://x/p.jpg' })
+    expect(rowFor(nameless, NOW).title).toBe('New friend request')
+    expect(rowFor(nameless, NOW).visual).toEqual({ type: 'glyph', icon: 'user-plus' })
+  })
+
+  it('keeps the notification row where the feed has one for the same ask, and adds the rest once each', () => {
+    const feedRow = item({ id: 'n1', kind: 'friend_request', data: { requestId: 'r1' } })
+    const asks = askItems([request('r1', 1), request('r2', 8)], [crewInvite('c1', 10)])
+    const merged = withAsks([feedRow], [...asks, ...asks])
+    expect(merged.map((n) => n.id)).toEqual(['n1', 'friend_request:r2', 'crew_invite:c1'])
+  })
+
+  // Negative control: 14 waiting on the list, 8 of them with a row in the feed, is 14 in Waiting on you, not 8.
+  it('14 on the list and 8 in the feed is 14 waiting', () => {
+    const list = Array.from({ length: 14 }, (_, i) => request(`r${i}`, i))
+    const feed = list.slice(0, 8).map((r) => item({ id: `n${r.id}`, kind: 'friend_request', createdAt: r.createdAt, data: { requestId: r.id } }))
+    const g = groupFeed(withAsks(feed, askItems(list, [])), { fresh: none, resolved: none, now: NOW })
+    expect(g.waiting).toHaveLength(14)
+    expect(groupFeed(feed, { fresh: none, resolved: none, now: NOW }).waiting).toHaveLength(8)
   })
 })

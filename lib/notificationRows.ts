@@ -1,5 +1,7 @@
 import type { NotificationVisualSpec, StackPerson } from '../components/ds/NotificationRow'
 import type { IconName } from '../components/ui/Icon'
+import type { CrewInvite } from './crews'
+import type { FriendRequest } from './friends'
 import type { NotificationItem, NotificationKind } from './notificationFormat'
 import { calendarDate, weekdayIn, WEEKDAYS } from './time'
 
@@ -33,8 +35,6 @@ export type FeedRow = {
 
 export type FeedGroups = { waiting: FeedRow[]; fresh: FeedRow[]; earlier: FeedRow[] }
 
-/** A request older than this has lapsed (a crew invite's 14 days, the longest); it reads as history, with no pills. */
-export const WAITING_DAYS = 14
 /** Waiting on you shows this many before "See all N". */
 export const WAITING_SHOWN = 3
 
@@ -213,9 +213,11 @@ function fallbackCopy(item: NotificationItem, when: string): { title: string; co
   }
 }
 
-/** Whether a request is still the reader's to answer. */
-const stillWaiting = (item: NotificationItem, now: number) =>
-  isRequestKind(item.kind) && item.open !== false && now - new Date(item.createdAt).getTime() < WAITING_DAYS * DAY_MS
+/**
+ * Whether a request is still the reader's to answer: the server's word (`open`), never its age. A friend request does not
+ * lapse, and a crew invite's lapse is the server's; aged out here at 14 days, Waiting on you said 8 where Friends said 14 (SCRUM-1062).
+ */
+const stillWaiting = (item: NotificationItem) => isRequestKind(item.kind) && item.open !== false
 
 /**
  * A friend request comes through your invite link (`app/f/[token]`) or, since SCRUM-750, from a match where you both
@@ -240,7 +242,7 @@ function contextOf(item: NotificationItem, when: string, fallback: string): stri
 /** One notification as a row: the server's `display` where it sent one, else the kind's own. */
 export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRow {
   const when = notificationWhen(item.createdAt, now)
-  const waiting = stillWaiting(item, now)
+  const waiting = stillWaiting(item)
   const fallback = fallbackCopy(item, when)
   return {
     id: item.id,
@@ -279,7 +281,9 @@ export function groupFeed(
     else if (fresh.has(item.id)) groups.fresh.push(row)
     else groups.earlier.push(row)
   }
-  return groups
+  // Two lists meet here (friend requests, crew invites), each newest first: so is the one they make.
+  const at = (r: FeedRow) => new Date(r.item.createdAt).getTime()
+  return { ...groups, waiting: [...groups.waiting].sort((a, b) => at(b) - at(a)) }
 }
 
 /** The payload ids that say which thing a notification is about. */
@@ -335,4 +339,61 @@ export function closeAnsweredElsewhere(
     if (typeof id !== 'string') return n
     return left.has(id) || (open && !open.has(id)) ? { ...n, open: false } : n
   })
+}
+
+/** The ask a request row is about, whichever way it came (a notification, or the shared list): `friend_request:<id>`. */
+const askKeyOf = (n: NotificationItem): string | null => {
+  const key = ASK_ID[n.kind]
+  const id = key ? n.data?.[key] : undefined
+  return typeof id === 'string' ? `${n.kind}:${id}` : null
+}
+
+/**
+ * The asks waiting on you as rows, from the one shared list for each kind (SCRUM-1062): Waiting on you lists and counts what
+ * Friends and Crews do, not what the notification feed happens to hold (its first page, what Clear all and retention left). Each
+ * says what the server's `display` would: the person and their photo, the crew's name and emblem; a name the list lacks is the
+ * push's own words. Read already, so none is New.
+ */
+export function askItems(requests: readonly FriendRequest[], invites: readonly CrewInvite[]): NotificationItem[] {
+  const friendRows = requests.map((r): NotificationItem => {
+    const name = text(r.person?.name)
+    const photo = text(r.person?.photo)
+    return {
+      id: `friend_request:${r.id}`,
+      kind: 'friend_request',
+      title: 'New friend request',
+      body: '',
+      data: { type: 'friend_request', requestId: r.id },
+      readAt: r.createdAt,
+      createdAt: r.createdAt,
+      display: { ...(name && { title: `${name.split(/\s+/)[0]} wants to be friends` }), ...(photo && { visual: { type: 'photo', uri: photo } }) },
+      open: true,
+    }
+  })
+  const crewRows = invites.map(
+    (i): NotificationItem => ({
+      id: `crew_invite:${i.crewId}`,
+      kind: 'crew_invite',
+      title: 'You’re invited to a crew',
+      body: '',
+      data: { type: 'crew_invite', crewId: i.crewId },
+      readAt: i.invitedAt,
+      createdAt: i.invitedAt,
+      display: { ...(text(i.name) && { context: i.name }), ...(text(i.emblemSeed) && { visual: { type: 'emblem', seed: i.emblemSeed } }) },
+      open: true,
+    })
+  )
+  return [...friendRows, ...crewRows]
+}
+
+/** The feed with the asks it has no row for, each once: a notification for the same ask is kept (its id is what a push lands on). */
+export function withAsks(items: readonly NotificationItem[], asks: readonly NotificationItem[]): NotificationItem[] {
+  const seen = new Set(items.map(askKeyOf).filter((k): k is string => k !== null))
+  const added = asks.filter((a) => {
+    const key = askKeyOf(a)
+    if (key === null || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return [...items, ...added]
 }

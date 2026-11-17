@@ -11,10 +11,15 @@ export type NotificationEntry =
   | { type: 'row'; key: string; row: FeedRow }
   | { type: 'footer'; key: 'footer'; more: boolean }
 
-export function buildEntries(groups: FeedGroups, { allWaiting, hasMore }: { allWaiting: boolean; hasMore: boolean }): NotificationEntry[] {
+/** `waitingTotal` is the shared lists' count (SCRUM-1062), which may run past the rows read so far; absent, the rows are counted. */
+export function buildEntries(
+  groups: FeedGroups,
+  { allWaiting, hasMore, waitingTotal = groups.waiting.length }: { allWaiting: boolean; hasMore: boolean; waitingTotal?: number }
+): NotificationEntry[] {
   const entries: NotificationEntry[] = []
   if (groups.waiting.length) {
-    entries.push({ type: 'waiting', key: 'waiting', rows: allWaiting ? groups.waiting : groups.waiting.slice(0, WAITING_SHOWN), total: groups.waiting.length })
+    const rows = allWaiting ? groups.waiting : groups.waiting.slice(0, WAITING_SHOWN)
+    entries.push({ type: 'waiting', key: 'waiting', rows, total: waitingTotal })
   }
   for (const [title, rows] of [
     ['New', groups.fresh],

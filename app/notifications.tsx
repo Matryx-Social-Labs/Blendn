@@ -119,7 +119,15 @@ function NotificationsScreenContent() {
     () => ({ fresh: feed.fresh, requests: feed.requestState, landing: landing?.run, live: feed.liveIds, bannerShown }),
     [feed.fresh, feed.requestState, landing?.run, feed.liveIds, bannerShown]
   )
-  const entries = useMemo(() => buildEntries(feed.groups, { allWaiting, hasMore: feed.hasMore }), [feed.groups, allWaiting, feed.hasMore])
+  /** See all N: every row read, and the next page of the lists when N runs past them (SCRUM-1062). */
+  const seeAllWaiting = () => {
+    setAllWaiting(true)
+    feed.moreWaiting()
+  }
+  const entries = useMemo(
+    () => buildEntries(feed.groups, { allWaiting, hasMore: feed.hasMore, waitingTotal: feed.waitingTotal }),
+    [feed.groups, allWaiting, feed.hasMore, feed.waitingTotal]
+  )
 
   // Landing from a push or a link: scroll to a third of the screen, then the highlight (motion #50). Once, and only for a row it can find.
   const landingId = useMemo(() => {
@@ -228,7 +236,7 @@ function NotificationsScreenContent() {
                 title="Waiting on you"
                 count={entry.total}
                 countStyle="lit"
-                action={entry.total > entry.rows.length ? { label: `See all ${entry.total}`, onPress: () => setAllWaiting(true) } : undefined}
+                action={entry.total > entry.rows.length ? { label: `See all ${entry.total}`, onPress: seeAllWaiting } : undefined}
                 testID="notifications-waiting"
               />
             </View>
@@ -357,7 +365,10 @@ function NotificationsScreenContent() {
           contentInset={{ top: pull.holdInset }}
           // A row that lands above while scrolled down does not move what is under the finger; at the top the list shows it.
           maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: SPACE.sm }}
-          onEndReached={() => void feed.loadMore()}
+          onEndReached={() => {
+            void feed.loadMore()
+            if (allWaiting) feed.moreWaiting()
+          }}
           onEndReachedThreshold={0.5}
           onScrollToIndexFailed={({ index, averageItemLength }) => {
             list.current?.scrollToOffset({ offset: index * averageItemLength, animated: false })
