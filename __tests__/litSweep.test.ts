@@ -1,7 +1,6 @@
 /*
- * Inside a world a positive action is `lit`, never the white `strong` pill (foundations C, part 2). `strong` stays only where
- * there is no world to light in: the system screens, which sit outside every screen's `HueProvider`, and the screen-reader
- * fallback of a control that mirrors another. The app-level sheet host is not one: its caller names a hue (`lib/sheet`).
+ * A positive action is `lit`, never the white `strong` pill (foundations C, part 2), and since buttons board C (owner
+ * 2026-11-17) `strong` is retired everywhere: no screen, sheet or fallback names it.
  * A white selection drawn by hand (`COLOR.selectionFill`) is pinned by `selectionColour.test.tsx`.
  * This pins it by source: a new white action fails here, and has to be argued for in the table below, with its reason, before it can land. The counts are exact, so a second `strong` in a file
  * that is allowed one fails too.
@@ -26,20 +25,11 @@ const walk = (dir: string): string[] =>
  */
 const STRONG = /['"]strong['"]/g
 
-/** File → how many literals it may hold, and why. */
-const STRONG_STAYS: Record<string, { count: number; why: string }> = {
-  'components/ds/Button.tsx': { count: 4, why: 'the kind itself: its type, its fill, its ink, its spinner' },
-  'components/ds/Sheet.tsx': { count: 1, why: 'the fixed order of a sheet’s actions names every kind' },
-  'components/system/AccountStateScreen.tsx': { count: 3, why: 'a suspended or signed-out account: a system screen with no world' },
-  'app/+not-found.tsx': { count: 1, why: 'a system screen with no world' },
-  'lib/linkRefusalCard.ts': { count: 2, why: 'the card a refused link lands on, before any screen has a world' },
-  'lib/sheet.ts': { count: 1, why: 'the sheet action variant that asks for the frame’s white button (SYS-05)' },
-  'components/SheetHost.tsx': { count: 1, why: 'maps that variant to the DS strong kind' },
-  'app/notifications.tsx': { count: 1, why: 'the Clear all confirm: flow-9 frame 9.7 draws the white button, owner ruling 2026-10-31 (SCRUM-842)' },
-  'components/ds/HoldToConfirm.tsx': { count: 1, why: 'its screen-reader fallback mirrors the hold’s own white ink' },
-  'components/onboarding/OnboardingScreen.tsx': { count: 1, why: 'onboarding’s primary is the landing’s white button: direction A, owner’s pick 2026-11-01 (SCRUM-1002)' },
-  'lib/pushAsk.ts': { count: 1, why: 'the push ask’s “Turn on notifications” is the white button under its lit lock screen: owner’s idea 2026-11-01, FLOW-WALK § 2.x (SCRUM-1006)' },
-}
+/**
+ * File → how many literals it may hold, and why. Empty: `strong` is retired (buttons board C, owner 2026-11-17). A screen's
+ * one way on is its `primary`, a sheet's yes is `lit`; the kind is gone from `ButtonKind`, so it cannot come back typed.
+ */
+const STRONG_STAYS: Record<string, { count: number; why: string }> = {}
 
 const found = Object.fromEntries(
   [...walk('app'), ...walk('components'), ...walk('lib')]
@@ -50,10 +40,6 @@ const found = Object.fromEntries(
 describe('the white strong button', () => {
   it('is used only where there is no world, as the table below says, and nowhere else', () => {
     expect(found).toEqual(Object.fromEntries(Object.entries(STRONG_STAYS).map(([file, { count }]) => [file, count])))
-  })
-
-  it.each(Object.entries(STRONG_STAYS))('%s says why it may', (_file, { why }) => {
-    expect(why.length).toBeGreaterThan(10)
   })
 
   it('every allowed file exists, so the table cannot outlive what it excuses', () => {

@@ -1,11 +1,10 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 
-import { font, PRESSED_WASH, useBoldText, CONTROL_FONT_CAP } from '../ds/shared'
+import { Button } from '../ds/Button'
 import { VENUE_PLATE_GLYPHS } from '../ds/VenuePlate'
 import { PhotoScrim } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
-import { Material } from '../ui/Material'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 import type { PlateKey } from '../../lib/placesPane'
 import { VenueMap } from './VenueMap'
@@ -24,8 +23,8 @@ const PIN = SPACE.xxl + SPACE.md
 // design-exception: the board's pin glow (`0 0 24px` ember 55%) and its 22 pt glyph (`ic(glyph,22)`).
 const PIN_GLOW = [{ offsetX: 0, offsetY: 0, blurRadius: 24, spreadDistance: 0, color: tint(COLOR.brandOrange, 0.55) }]
 const PIN_GLYPH = 22
-/** `.dir`: 40 tall, 16 in from the right, its foot 24 above the map's. */
-const DIR_HEIGHT = SPACE.xxl + SPACE.sm
+/** `.dir`: the lit raised Button (44), 16 in from the right, its foot 24 above the map's. */
+const DIR_HEIGHT = SPACE.xxl + SPACE.md
 const DIR_TOP = VENUE_HERO_HEIGHT - DIR_HEIGHT - SPACE.xl
 
 export function VenueHero({
@@ -39,7 +38,6 @@ export function VenueHero({
   plate: PlateKey
   onDirections?: () => void
 }) {
-  const bold = useBoldText()
   const located = !!latitude && !!longitude
   return (
     <View style={styles.hero} testID="venue-hero">
@@ -51,13 +49,8 @@ export function VenueHero({
         </View>
       </View>
       {located && onDirections ? (
-        <Pressable onPress={onDirections} accessibilityRole="button" accessibilityLabel="Directions" android_ripple={{ color: PRESSED_WASH.android }} style={styles.dir} testID="venue-directions">
-          <Material role="media" style={StyleSheet.absoluteFill} />
-          <Icon name="navigation" size={ICON.inline} color={COLOR.textPrimary} />
-          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('control', bold, FONT_FAMILY.brand[700]), styles.ink]}>
-            Directions
-          </Text>
-        </Pressable>
+        // A positive action, as every one is (buttons board C): lit, raised.
+        <Button kind="lit" size="raised" icon="navigation" label="Directions" onPress={onDirections} style={styles.dir} testID="venue-directions" />
       ) : null}
     </View>
   )
@@ -80,17 +73,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     boxShadow: PIN_GLOW,
   },
-  dir: {
-    position: 'absolute',
-    right: SPACE.lg,
-    top: DIR_TOP,
-    height: DIR_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.xs + SPACE.xxs,
-    paddingHorizontal: SPACE.md + SPACE.xxs,
-    borderRadius: RADIUS.capsule,
-    overflow: 'hidden',
-  },
-  ink: { color: COLOR.textPrimary },
+  dir: { position: 'absolute', right: SPACE.lg, top: DIR_TOP },
 })

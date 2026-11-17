@@ -14,7 +14,7 @@ import ScalePress from '../motion/ScalePress'
 import { Material } from '../ui/Material'
 import { Avatar } from '../ds/Avatar'
 import { Facepile } from '../ds/Facepile'
-import { WaveBackPill } from './WaveBackPill'
+import { Button } from '../ds/Button'
 
 /** #19: in from 16 pt above. */
 const ENTER_FROM = -SPACE.lg
@@ -132,12 +132,13 @@ export function WaveToast({
           <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.text]}>
             {text}
           </Text>
-          <WaveBackPill
-            name={one?.fromName ?? ''}
-            state="ready"
+          {/* Wave back is the DS positive (buttons board C); the toast's has no hand (board 03 L-A). */}
+          <Button
+            kind="lit"
+            size="pill"
             label={one ? 'Wave back' : 'See'}
-            hand={false}
-            accessibilityLabel={one ? undefined : 'See who waved'}
+            pressHaptic={H.select}
+            accessibilityLabel={one ? `Wave back at ${one.fromName}` : 'See who waved'}
             onPress={() => {
               if (one) onWaveBack(one)
               else onSeeAll()

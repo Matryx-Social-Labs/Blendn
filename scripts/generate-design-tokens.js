@@ -121,14 +121,21 @@ function build(json) {
   const maxScale = Object.fromEntries(Object.entries(type.roles).map(([role, r]) => [camel(role), r.maxScale]))
 
   const tokens = {
-    COLOR: camelKeys(omit(color, ['gradient-brand', 'gradient-fill', 'gradient-text'])),
-    GRADIENT: { brand: percentGradient(color['gradient-brand']), fill: percentGradient(color['gradient-fill']), text: percentGradient(color['gradient-text']) },
+    COLOR: camelKeys(omit(color, ['gradient-brand', 'gradient-fill', 'gradient-text', 'gradient-lit', 'gradient-lit-pressed'])),
+    GRADIENT: {
+      brand: percentGradient(color['gradient-brand']),
+      fill: percentGradient(color['gradient-fill']),
+      text: percentGradient(color['gradient-text']),
+      lit: percentGradient(color['gradient-lit']),
+      litPressed: percentGradient(color['gradient-lit-pressed']),
+    },
     MATERIAL: {
-      ...camelKeys(omit(material, ['glass-edge', 'solid-inner-highlight', 'glow-check-in', 'glow-lead'])),
+      ...camelKeys(omit(material, ['glass-edge', 'solid-inner-highlight', 'glow-check-in', 'glow-lead', 'glow-hero'])),
       glassEdge: border(material['glass-edge']),
       solidInnerHighlight: highlight(material['solid-inner-highlight']),
       glowCheckIn: glows(material['glow-check-in']),
       glowLead: glows(material['glow-lead']),
+      glowHero: glows(material['glow-hero']),
     },
     // Only the weights a role uses: each one is a file every cold start loads.
     FONT_FAMILY: Object.fromEntries(
@@ -179,7 +186,7 @@ function build(json) {
 }
 
 const DOCS = {
-  COLOR: 'Colour, DESIGN-BRIEF §4. Dark only. `textOnGradient` is white on `GRADIENT.fill`; `textOnOrangeFlat` is ink on `brandOrange` (white on it is 3.50:1); `brandRoseFill` is brand rose deepened at the same hue for a filled rose pill, white on it 5.31:1 (on `brandRose` 4.23:1).',
+  COLOR: 'Colour, DESIGN-BRIEF §4. Dark only. `textOnGradient` is white on `GRADIENT.fill`; `textOnOrangeFlat` is ink on `brandOrange` (white on it is 3.50:1).',
   GRADIENT: 'The two gradients, 135° top-left → bottom-right (§4.3). `brand` for the mark and graphics, `fill` for any surface with white text on it. Drawn only by `<GradientFill>`.',
   MATERIAL: 'Material tiers (§5): glass (iOS 26+), blur (iOS 16.4–25), solid (Android Tier B, Reduce Transparency). Drawn only by `<Material>`.',
   FONT_FAMILY: 'Registered font names by family and weight (`lib/fonts.ts` loads them). Weight lives in the name: Android ignores `fontWeight` on custom fonts.',

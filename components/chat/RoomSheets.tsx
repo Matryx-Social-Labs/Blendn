@@ -3,9 +3,10 @@ import { useState } from 'react'
 import { apiClient } from '../../lib/apiClient'
 import { H } from '../../lib/haptics'
 import { isMuted, MUTE_OPTIONS, muteLabel, muteUntil, rememberRoomMute, useRoomMute, type MuteOption } from '../../lib/roomMembership'
-import { CHECK_OUT_CONSEQUENCE, checkedOutLine, checkOutQuestion, STAY_LABEL } from '../../lib/switchCopy'
+import { CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, CHECKING_OUT_LABEL, checkedOutLine, checkOutCaption, checkOutQuestion, STAY_LABEL } from '../../lib/switchCopy'
 import { useCheckOut } from '../../lib/useRoomControls'
 import { userMessage } from '../../lib/userMessage'
+import { HoldToConfirm } from '../ds/HoldToConfirm'
 import { Sheet } from '../ds/Sheet'
 import { OptionRows } from '../SheetHost'
 import { useToast } from '../Toast'
@@ -68,8 +69,9 @@ export function MuteSheet({ chatGroupId, onClose }: { chatGroupId: string | null
 
 /**
  * Check out of the room's event (I-A: one exit; staying in the chat without its pushes is Mute this room). The question
- * and its consequence are the shared words (`lib/switchCopy.ts`), as the room's ⋯ and the event page ask them. The
- * confirm closes first, so a refusal's toast is seen; `useCheckOut` is single-flight.
+ * and its consequence are the shared words (`lib/switchCopy.ts`), as the room's ⋯ and the event page ask them, and the commit
+ * is the event page's: the neutral hold (buttons board C, owner 2026-11-17: leaving is not a yes, one look for Check out).
+ * The confirm closes first, so a refusal's toast is seen; `useCheckOut` is single-flight.
  */
 export function CheckOutSheet({
   eventId,
@@ -99,11 +101,19 @@ export function CheckOutSheet({
       onClose={onClose}
       title={checkOutQuestion(name)}
       body={CHECK_OUT_CONSEQUENCE}
-      actions={[
-        { label: STAY_LABEL, kind: 'secondary', onPress: onClose },
-        { label: 'Check out', kind: 'destructive', loading: checkOutBusy, onPress: () => void out() },
-      ]}
+      actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: onClose }]}
       testID="check-out-confirm"
-    />
+    >
+      <HoldToConfirm
+        kind="neutral"
+        label={CHECK_OUT_LABEL}
+        busyLabel={CHECKING_OUT_LABEL}
+        srLabel="Check out"
+        consequence={checkOutCaption(name)}
+        onConfirm={() => void out()}
+        busy={checkOutBusy}
+        testID="check-out-confirm-hold"
+      />
+    </Sheet>
   )
 }

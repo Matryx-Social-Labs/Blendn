@@ -92,6 +92,7 @@ import { showUserSafetyActions } from '../lib/safetyUtils'
 import UserProfile, { SELF_PREVIEW, stillAnonymous } from '../app/user/[id]'
 import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
 import { COLOR, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { isLitControl } from './helpers/lit'
 
 /** Message as a request (C7: "Connect" retired): the dock's label is Message either way; only the ask says what it sends. */
 const ASK = /^Message .+\. Sends a request and shows them your name and photo$/
@@ -542,13 +543,13 @@ describe('one profile body', () => {
     expect(router.push).toHaveBeenCalledWith('/edit-profile')
   })
 
-  it('your own profile is the violet world (you), not rose: its Edit is lit violet (rc7 D11)', async () => {
+  it('your own profile is the violet world (you), not rose: its Edit is lit (rc7 D11; board C: one positive look)', async () => {
     mockParams = { id: 'u_me' }
     api.getPublicProfile.mockResolvedValue({ success: true, data: { ...BEN, id: 'u_me', isOwnProfile: true } })
     await render(<UserProfile />)
     await screen.findByText(SELF_PREVIEW)
     const fills = JSON.stringify(screen.toJSON())
-    expect(fills).toContain(COLOR.selectionVioletFill)
+    expect(isLitControl(screen.getByTestId('profile-self-edit'))).toBe(true)
     expect(fills).not.toContain(COLOR.selectionRoseFill)
   })
 })

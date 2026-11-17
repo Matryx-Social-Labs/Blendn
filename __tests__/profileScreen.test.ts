@@ -165,9 +165,9 @@ describe('the profile carries the Grid\'s two actions', () => {
     )
   })
 
-  it('keeps Wave, the anonymous action, prominent here too: lit, Wave back the filled one, before Message', () => {
+  it('keeps Wave, the anonymous action, prominent here too: lit, Wave back the same lit (board C, no flip to the gradient), before Message', () => {
     const src = SCREEN()
-    const wave = src.indexOf("kind={wave === 'wavedAtYou' ? 'primary' : wave === 'waved' ? 'secondary' : 'lit'}")
+    const wave = src.indexOf("kind={wave === 'waved' ? 'secondary' : 'lit'}")
     expect(wave).toBeGreaterThan(-1)
     expect(wave).toBeLessThan(src.indexOf("kind={ctaLit ? 'lit' : 'secondary'}"))
   })

@@ -9,7 +9,8 @@ import { useReducedMotion } from '../../lib/motion'
 import { compactCount } from '../../lib/format'
 import { BUBBLE, plural } from '../ds/chatShared'
 import { PresenceDot } from '../ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, minTarget, SELECTION, useAnnounced, useBoldText } from '../ds/shared'
+import { NewPill } from '../ds/NewPill'
+import { CONTROL_FONT_CAP, font, minTarget, useAnnounced, useBoldText } from '../ds/shared'
 import { glassContentsIn, glassRiseIn, popOut } from '../motion/presence'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
@@ -64,12 +65,11 @@ export function LoadOlder({ busy, onPress }: { busy: boolean; onPress: () => voi
 
 /**
  * Scroll to newest (Flow 5 room #15): a glass capsule above the composer. Once
- * something arrives while you read back it is the F-A pill, centred and rose:
+ * something arrives while you read back it is the DS `NewPill`, centred:
  * "48 new messages", the count in Geist Mono (compact past 999, said whole),
  * announced once. Nothing moves the list but a tap on it. No haptic.
  */
 export function NewestChip({ count, bottom, onPress }: { count: number; bottom: number; onPress: () => void }) {
-  const bold = useBoldText()
   const said = useRef(false)
   const words = count === 1 ? 'new message' : 'new messages'
   useEffect(() => {
@@ -79,21 +79,15 @@ export function NewestChip({ count, bottom, onPress }: { count: number; bottom: 
   }, [count])
   if (count) {
     return (
-      <Animated.View entering={glassRiseIn} exiting={popOut} pointerEvents="box-none" style={[styles.pillPlace, { bottom }]}>
-        <Pressable
-          testID="chat-newest"
-          onPress={onPress}
-          hitSlop={(minTarget() - PILL) / 2}
-          accessibilityRole="button"
-          accessibilityLabel={`${plural(count, 'new message')}, jump to the newest`}
-          style={styles.pill}
-        >
-          <Icon name="arrow-down" size={ICON.inline} color={ROSE.glyph} />
-          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.brand[500]), styles.ink]}>
-            <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{compactCount(count)}</Text> {words}
-          </Text>
-        </Pressable>
-      </Animated.View>
+      <NewPill
+        direction="down"
+        count={compactCount(count)}
+        label={words}
+        bottom={bottom}
+        accessibilityLabel={`${plural(count, 'new message')}, jump to the newest`}
+        onPress={onPress}
+        testID="chat-newest"
+      />
     )
   }
   return (
@@ -115,11 +109,6 @@ export function NewestChip({ count, bottom, onPress }: { count: number; bottom: 
   )
 }
 const CHIP = SIZE.control - SPACE.sm
-/** F-A `.xnew`: a 36 pt rose capsule, 14 at the sides. */
-const PILL = SIZE.tagHeader
-// design-exception: the pill pads 14 at the sides (`.xnew`), between the 12 and 16 steps
-const PILL_PAD = 14
-const ROSE = SELECTION.rose
 
 const JUST_MUTED = 'Just now · the host muted you'
 
@@ -217,18 +206,6 @@ const styles = StyleSheet.create({
   ink: { color: COLOR.textPrimary },
   tabular: { fontVariant: ['tabular-nums'] },
   chipPlace: { position: 'absolute', right: SPACE.xl },
-  pillPlace: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  pill: {
-    height: PILL,
-    paddingHorizontal: PILL_PAD,
-    borderRadius: RADIUS.capsule,
-    backgroundColor: ROSE.fill,
-    borderWidth: 1,
-    borderColor: ROSE.edge,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACE.xs + SPACE.xxs,
-  },
   chip: {
     height: CHIP,
     borderRadius: RADIUS.capsule,

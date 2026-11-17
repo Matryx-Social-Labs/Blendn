@@ -65,6 +65,7 @@ import { showSheet } from '../lib/sheet'
 import FriendProfileScreen from '../app/friends/[userId]'
 import { PROFILE_EMPTY } from '../components/profile/ProfileSections'
 import { SELECTION } from '../components/ds/shared'
+import { isLitControl } from './helpers/lit'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = {
@@ -217,7 +218,7 @@ it('Message is lit, Remove friend is in the corner menu, and an empty profile sa
   api.getFriend.mockResolvedValue({ success: true, data: BEN })
   await render(<FriendProfileScreen />)
   await screen.findByTestId('friend-message')
-  expect(StyleSheet.flatten(screen.getByTestId('friend-message').props.style).backgroundColor).toBe(SELECTION.rose.fill)
+  expect(isLitControl(screen.getByTestId('friend-message'))).toBe(true)
   expect(screen.queryByText('Remove friend')).toBeNull()
   expect(screen.getByText(PROFILE_EMPTY)).toBeTruthy()
   fireEvent.press(screen.getByLabelText('More'))

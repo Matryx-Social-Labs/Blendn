@@ -178,7 +178,7 @@ export function VenueDock({
           <View style={styles.liveRow}>
             <LivePill name={name} live={live} onZero={onZero} onPress={onPill} />
             {live.chatGroupId ? (
-              <Button label="Open the room" kind="lit" size="md" icon="radio" onPress={onOpenRoom} style={styles.grow} testID="venue-open-room" />
+              <Button label="Open the room" kind="lit" size="md" icon="radio" onPress={onOpenRoom} style={styles.roomAction} testID="venue-open-room" />
             ) : (
               <View style={styles.grow} />
             )}
@@ -233,6 +233,11 @@ const styles = StyleSheet.create({
   modes: { gap: SPACE.xs },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm, minHeight: SIZE.primary },
   grow: { flex: 1 },
+  /**
+   * Open the room keeps its whole label and takes the rest of the row; the live pill gives way (it truncates). With
+   * `flex: 1` (a zero basis) a long venue name squeezed the button to a sliver of its glyph (buttons-c drive, 2026-11-17).
+   */
+  roomAction: { flexGrow: 1, flexShrink: 0 },
   pill: {
     height: PILL_HEIGHT,
     flexShrink: 1,

@@ -11,7 +11,6 @@ import React from 'react'
 import { AccessibilityInfo, StyleSheet } from 'react-native'
 
 import { BanterWavesRow } from '../components/banter/BanterWavesRow'
-import { WaveBackPill } from '../components/blendn/WaveBackPill'
 import { WaveToast } from '../components/blendn/WaveToast'
 import { WavedAtYouList } from '../components/blendn/WavedAtYouList'
 import { WavedAtYouStrip } from '../components/blendn/WavedAtYouStrip'
@@ -20,6 +19,7 @@ import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { othersLine, toastTitle, waitingStrip, wavedAtYouLine } from '../lib/receivedWaves'
 import { FOLD_MS, ignoreWavesFrom, listenForWaves, useRoomWaves, waveShown } from '../lib/roomWaves'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 const mockWaveListeners = new Set<(d: { eventId: string; fromUserId: string; fromName: string }) => void>()
@@ -318,19 +318,21 @@ describe('B-A: the pile (owner 2026-11-13: the board’s three faces)', () => {
   })
 })
 
-describe('the filled rose pill (owner 2026-11-13: white on a deeper rose, AA)', () => {
-  it('Wave back is filled with brandRoseFill, white ink', async () => {
-    await render(<WaveBackPill name="Harbour Heron" state="ready" onPress={jest.fn()} testID="pill" />)
-    const ready = StyleSheet.flatten(screen.getByTestId('pill').props.style)
-    expect(ready).toMatchObject({ backgroundColor: COLOR.brandRoseFill, borderColor: COLOR.brandRoseFill })
+describe('Wave back is the DS positive (buttons board C: the hand-rolled WaveBackPill is deleted)', () => {
+  it('the strip’s Wave back is the lit Button, 40 pt, white ink', async () => {
+    await render(<WavedAtYouStrip page={page([wave(4)])} now={NOW} onWaveBack={jest.fn()} onSeeAll={jest.fn()} onSafety={jest.fn()} />)
+    const pill = screen.getByTestId('waved-strip-wave')
+    expect(isLitControl(pill)).toBe(true)
+    expect(StyleSheet.flatten(pill.props.style).height).toBe(40)
     expect(StyleSheet.flatten(screen.getByText('Wave back').props.style).color).toBe(COLOR.textPrimary)
   })
 
-  it('control: ✓ Waved stays the rose outline, never the fill', async () => {
-    await render(<WaveBackPill name="Harbour Heron" state="waved" testID="pill" />)
-    const waved = StyleSheet.flatten(screen.getByTestId('pill').props.style)
-    expect(waved.backgroundColor).toBeUndefined()
-    expect(waved.borderColor).not.toBe(COLOR.brandRoseFill)
+  it('control: a row answered is ✓ Waved, the still neutral, disabled (no Wave again), never lit', async () => {
+    mockGetReceivedWaves.mockResolvedValueOnce({ success: true, data: page([wave(21, { wavedBack: true })]) })
+    await render(<WavedAtYouList eventId="e1" now={NOW} onWaveBack={jest.fn()} onSafety={jest.fn()} />)
+    const waved = await screen.findByRole('button', { name: 'Waved at Person 21' })
+    expect(isLitControl(waved)).toBe(false)
+    expect(waved.props.accessibilityState).toMatchObject({ disabled: true })
   })
 })
 

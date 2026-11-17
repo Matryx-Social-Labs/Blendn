@@ -86,6 +86,7 @@ import { showUserSafetyActions } from '../lib/safetyUtils'
 import UserProfile, { stillAnonymous } from '../app/user/[id]'
 import { SELECTION } from '../components/ds/shared'
 import { H } from '../lib/haptics'
+import { isLitControl } from './helpers/lit'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'u_ben', name: 'Ben', photos: ['https://cdn/ben.jpg'], bio: 'Hi', identityVisible: true }
@@ -107,8 +108,9 @@ beforeEach(() => {
   mockShowToast.mockReset()
 })
 
-const fillOf = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style).backgroundColor
-const LIT = SELECTION.rose.fill
+/** Lit (the positive look, board C) or not: `fillOf(id) === LIT` reads as before. */
+const fillOf = (id: string) => (isLitControl(screen.getByTestId(id)) ? LIT : 'quiet')
+const LIT = 'lit'
 
 describe('what the dock draws for each state: one lit action', () => {
   it('none + canAdd: a lit Add friend, and Message steps down to secondary', async () => {

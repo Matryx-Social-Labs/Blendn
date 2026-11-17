@@ -1,6 +1,6 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
 import { handRoomPerson } from '../../lib/roomPersonHandoff'
-import { CHECK_OUT_CONSEQUENCE, STAY_LABEL, checkOutQuestion } from '../../lib/switchCopy'
+import { CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, CHECKING_OUT_LABEL, STAY_LABEL, checkOutCaption, checkOutQuestion } from '../../lib/switchCopy'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
@@ -64,6 +64,7 @@ import { MomentPour, ORBS_LIFT_MS, type PourFrame } from '../ds/MomentPour'
 import { MomentRecap } from '../ds/MomentRecap'
 import { PeopleFromTonight } from './PeopleFromTonight'
 import { PersonCard, type PersonVariant } from '../ds/PersonCard'
+import { HoldToConfirm } from '../ds/HoldToConfirm'
 import { Sheet } from '../ds/Sheet'
 import { HueProvider, useIncreaseContrast } from '../ds/shared'
 import { Toast, type ToastKind } from '../ds/Toast'
@@ -1318,12 +1319,21 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         onClose={() => setConfirmingOut(false)}
         title={checkOutQuestion(null)}
         body={CHECK_OUT_CONSEQUENCE}
-        actions={[
-          { label: STAY_LABEL, kind: 'secondary', onPress: () => setConfirmingOut(false) },
-          { label: 'Check out', kind: 'destructive', loading: controls.checkOutBusy, onPress: () => void checkOut() },
-        ]}
+        actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: () => setConfirmingOut(false) }]}
         testID="check-out-confirm"
-      />
+      >
+        {/* The event page's neutral hold (buttons board C): one look for Check out. */}
+        <HoldToConfirm
+          kind="neutral"
+          label={CHECK_OUT_LABEL}
+          busyLabel={CHECKING_OUT_LABEL}
+          srLabel="Check out"
+          consequence={checkOutCaption(room.event?.title)}
+          onConfirm={() => void checkOut()}
+          busy={controls.checkOutBusy}
+          testID="check-out-confirm-hold"
+        />
+      </Sheet>
 
       {toast ? <Toast key={toast.key} kind={toast.kind} text={toast.text} onDismiss={() => setToast(null)} testID="blendn-toast" /> : null}
     </View>

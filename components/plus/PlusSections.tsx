@@ -3,12 +3,11 @@ import { Fragment, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import ScalePress from '../motion/ScalePress'
 import { Button } from '../ds/Button'
 import { IconButton } from '../ds/IconButton'
 import { Spinner } from '../ds/Loader'
 import { PlusMark } from '../ds/ManageStatusRow'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useAnnounced, useBoldText, useIncreaseContrast } from '../ds/shared'
+import { font, IC_HAIRLINE, useAnnounced, useBoldText, useIncreaseContrast } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
@@ -45,10 +44,8 @@ export function useHeaderHeight() {
  */
 export function PlusHeader({ done, onClose, state = 'rest' }: { done: boolean; onClose: () => void; state?: 'rest' | 'scrolled' }) {
   const insets = useSafeAreaInsets()
-  const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const android = Platform.OS === 'android'
-  const circle = android ? SIZE.circleButtonAndroid : SIZE.circleButton
   const label = done ? 'Done' : 'Not now'
   const height = useHeaderHeight()
   return (
@@ -61,18 +58,8 @@ export function PlusHeader({ done, onClose, state = 'rest' }: { done: boolean; o
       ) : null}
       <View style={styles.headerRow}>
         <IconButton icon={android ? 'arrow-left' : 'chevron-left'} accessibilityLabel="Back" onPress={onClose} />
-        <ScalePress
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel={label}
-          style={[styles.pill, { height: circle }]}
-        >
-          <Material role="control" style={[StyleSheet.absoluteFill, styles.pillFill]} />
-          {contrast ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, IC_HAIRLINE, styles.pillFill]} /> : null}
-          <Text style={[font('button', bold), styles.ink]} maxFontSizeMultiplier={CONTROL_FONT_CAP} numberOfLines={1}>
-            {label}
-          </Text>
-        </ScalePress>
+        {/* Leaving the page is neutral (buttons board C): the DS secondary, 8% white once the bar's glass is under it. */}
+        <Button kind="secondary" size="md" label={label} onGlass={state === 'scrolled'} onPress={onClose} testID="plus-header-close" />
       </View>
     </View>
   )
@@ -326,8 +313,6 @@ const styles = StyleSheet.create({
   header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, paddingHorizontal: SPACE.lg },
   barContrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  pill: { overflow: 'hidden', justifyContent: 'center', paddingHorizontal: SPACE.lg, borderRadius: RADIUS.capsule },
-  pillFill: { borderRadius: RADIUS.capsule },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 2, paddingTop: SPACE.lg, paddingHorizontal: SPACE.xl, gap: SPACE.md },
   dockContrast: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   dockLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm },
