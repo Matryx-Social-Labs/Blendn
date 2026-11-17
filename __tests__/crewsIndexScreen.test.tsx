@@ -197,9 +197,10 @@ describe('an invite', () => {
   it('shows what an invitee is given as board 03 A draws it, and the consent on screen with nothing sent', async () => {
     await render(<InviteScreen />)
     await waitFor(() => screen.getByText('The Usual Suspects'))
-    // The friend who asked leads, by face: no photo sent is their creature, never a blank.
+    // The friend who asked leads, by face: named, so no photo sent is their initial (personFace), never a creature or a blank.
     expect(screen.getByText('Aisha asked you in')).toBeTruthy()
-    expect(screen.getByTestId('invite-inviter-creature', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByTestId('invite-inviter-initial', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByText('A', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.getByText('Crew of 6 · #Quizteam')).toBeTruthy()
     expect(screen.getByText('“Thursday quiz, Friday regret.”')).toBeTruthy()
     expect(screen.getByText('Open for 11 more days · Aisha isn’t told if you say not now')).toBeTruthy()

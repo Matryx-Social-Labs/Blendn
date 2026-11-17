@@ -24,17 +24,22 @@ describe('ratePeople', () => {
     { id: 'c1', otherUser: { id: 'u1', name: 'Velvet Otter', image: null } },
     { id: 'c2', otherUser: { id: 'u2', name: 'Priya', image: 'https://img/p.jpg' } },
     { id: 'c3', otherUser: { id: 'u9', name: 'Someone else', image: null } },
+    { id: 'c4', theyRevealed: true, otherUser: { id: 'u4', name: 'Kabir Shah', image: null } },
   ]
 
   it('keeps the server order and resolves each person as they appear to you', () => {
     expect(ratePeople(['u2', 'u1'], conversations)).toEqual([
-      { id: 'u2', name: 'Priya', photo: 'https://img/p.jpg' },
-      { id: 'u1', name: 'Velvet Otter', photo: null },
+      { id: 'u2', name: 'Priya', photo: 'https://img/p.jpg', named: true },
+      { id: 'u1', name: 'Velvet Otter', photo: null, named: false },
     ])
   })
 
+  it('a revealed person with no photo is named, so their initial, never a creature (personFace, D1 A)', () => {
+    expect(ratePeople(['u4'], conversations)).toEqual([{ id: 'u4', name: 'Kabir Shah', photo: null, named: true }])
+  })
+
   it('never invents a name for somebody the list has not caught up with', () => {
-    expect(ratePeople(['u3'], conversations)).toEqual([{ id: 'u3', name: UNKNOWN_MATCH, photo: null }])
+    expect(ratePeople(['u3'], conversations)).toEqual([{ id: 'u3', name: UNKNOWN_MATCH, photo: null, named: false }])
   })
 
   it('tolerates a malformed row', () => {

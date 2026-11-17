@@ -6,7 +6,7 @@ import { Button } from '../../components/ds/Button'
 import { ProfileDock } from '../../components/profile/ProfileDock'
 import { ProfileHeroStage } from '../../components/profile/ProfileHeroStage'
 import { ProfileBio, ProfileDetail, ProfileGallery, ProfileInterests, ProfileSection } from '../../components/profile/ProfileSections'
-import { EMBER, EMBER_RADIUS, GUTTER, SPACE, TYPE } from '../../lib/theme'
+import { COLOR, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 
 /**
  * The attendee profile against fixtures — frame `1141:5163`.
@@ -47,7 +47,7 @@ export default function ProfilePreview() {
   const [revealed, setRevealed] = useState(true)
 
   const photos = PHOTOS
-  const columnWidth = (W - GUTTER * 2 - SPACE.lg) / 2
+  const columnWidth = (W - SPACE.gutter * 2 - SPACE.lg) / 2
 
   return (
     <View style={styles.container}>
@@ -112,18 +112,18 @@ export default function ProfilePreview() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: EMBER.bg },
-  canvas: { paddingHorizontal: GUTTER, paddingTop: SPACE.xxl, gap: SPACE.xxl },
+  container: { flex: 1, backgroundColor: COLOR.ink },
+  canvas: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxl, gap: SPACE.xxl },
   section: { gap: SPACE.lg },
   details: { gap: SPACE.xl },
   flex: { flex: 1 },
   toggle: {
     position: 'absolute',
-    right: GUTTER,
+    right: SPACE.gutter,
     paddingHorizontal: SPACE.md,
     paddingVertical: SPACE.sm,
-    borderRadius: EMBER_RADIUS.pill,
-    backgroundColor: EMBER.scrim,
+    borderRadius: RADIUS.capsule,
+    backgroundColor: COLOR.scrim,
   },
-  toggleLabel: { ...TYPE.label, color: EMBER.textPrimary },
+  toggleLabel: { ...TYPE.label, color: COLOR.textPrimary },
 })

@@ -7,7 +7,7 @@ import { broadcastParts } from '../../lib/chatFeed'
 import { crewLikeLine } from '../../lib/crews'
 import { goneKindFor } from '../../lib/chatGone'
 import { liveEndedState, type LiveEndedAction } from '../../lib/chatLiveEnded'
-import { markSeed } from '../../lib/pseudonymAvatar'
+import { markSeed } from '../../lib/creatureSeed'
 import { DURATION, SPACE } from '../../lib/design/tokens'
 import { isTemp, QUOTE_UNAVAILABLE, type RoomMessage } from '../../lib/roomMessages'
 import { clockTime } from '../../lib/time'
@@ -42,8 +42,10 @@ export type RowHandlers = {
  * on it — the one seed rule every surface shares (`markSeed`): the Grid, Room
  * info and the profile agree, and two unresolved people never share one.
  */
-export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id' | 'sender_image'>, roomId: string) => ({
+/** `named`: a crew's room names its members (SV-6); an event's room never does. */
+export const senderOf = (m: Pick<RoomMessage, 'sender_name' | 'sender_id' | 'sender_image'>, roomId: string, named = false) => ({
   name: m.sender_name,
+  named: named || Boolean(m.sender_image),
   pseudonym: markSeed(m.sender_name, `${roomId}:${m.sender_id}`),
   // A crew's members are named and photographed (SV-6); an event's room never sends one, so it stays a creature.
   ...(m.sender_image ? { photoUri: m.sender_image } : {}),
@@ -65,6 +67,7 @@ const bubbleReactions = (r: RoomMessage['reactions']): BubbleReaction[] => (r ??
 export const RoomMessageRow = memo(function RoomMessageRow({
   item,
   roomId,
+  namedSenders = false,
   mine,
   first,
   last,
@@ -79,6 +82,8 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   item: RoomMessage
   /** The room: an unresolved name ("Attendee") is seeded per person here, never shared (`markSeed`). */
   roomId: string
+  /** A crew's room: its members are named, so one with no photo is their initial (`personFace`). */
+  namedSenders?: boolean
   mine: boolean
   first: boolean
   last: boolean
@@ -139,7 +144,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
       <ChatBubble
         testID={`bubble-${item.message_id}`}
         mine={mine}
-        sender={senderOf(item, roomId)}
+        sender={senderOf(item, roomId, namedSenders)}
         first={first}
         last={last}
         text={item.removed ? '' : item.message_text}

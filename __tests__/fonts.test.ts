@@ -1,9 +1,9 @@
 /*
  * Every family the type scale names is a family the app actually loads.
  *
- * This is the one font failure that is silent. `fontFamily: 'Manrope_600Semibold'`
- * — lowercase b — does not throw, does not warn, and does not fall back to
- * Manrope. It falls back to the *system* font, which on a dark screen at a
+ * This is the one font failure that is silent. `fontFamily: 'Satoshi_500medium'`
+ * — lowercase m — does not throw, does not warn, and does not fall back to
+ * Satoshi. It falls back to the *system* font, which on a dark screen at a
  * glance reads as a slightly different weight rather than as a bug, and which
  * is exactly what a designer would flag three weeks later as "the labels look
  * wrong on Android".
@@ -18,29 +18,27 @@ import fs from 'fs'
 import path from 'path'
 
 import { FONT_FAMILY, NUMERIC, TYPE as DESIGN_TYPE } from '../lib/design/tokens'
-import { EMBER_FONT_MODULES } from '../lib/fonts'
-import { EMBER_FONTS, TYPE } from '../lib/theme'
+import { FONT_MODULES } from '../lib/fonts'
 
-const loaded = new Set(Object.keys(EMBER_FONT_MODULES))
+const loaded = new Set(Object.keys(FONT_MODULES))
 const ROOT = path.resolve(__dirname, '..')
 
-/** Every style that names a family: today's scale, the redesign's roles and its numeric style. */
+/** Every style that names a family: the design system's roles and its numeric style. */
 const STYLES: [string, { fontFamily: string }][] = [
-  ...Object.entries(TYPE),
   ...Object.entries(DESIGN_TYPE).map(([k, v]): [string, { fontFamily: string }] => [`design.${k}`, v]),
   ['design.numeric', NUMERIC],
 ]
 
-describe('Ember fonts', () => {
+describe('fonts', () => {
   it('loads every family the token layer names', () => {
-    const named = [...Object.values(EMBER_FONTS), ...Object.values(FONT_FAMILY).flatMap((w) => Object.values(w))]
+    const named = [...Object.values(FONT_FAMILY).flatMap((w) => Object.values(w))]
     for (const family of named) {
       expect([family, loaded.has(family)]).toEqual([family, true])
     }
   })
 
   it('loads every family the type scale uses', () => {
-    // Via `TYPE` rather than `EMBER_FONTS`, because a style could name a
+    // Via `TYPE` rather than `FONT_FAMILY`, because a style could name a
     // family string directly and bypass the constant.
     for (const [name, style] of STYLES) {
       expect([name, loaded.has(style.fontFamily)]).toEqual([name, true])

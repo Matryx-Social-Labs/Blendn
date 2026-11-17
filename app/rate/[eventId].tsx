@@ -533,7 +533,7 @@ function RatePeersContent() {
                 {...bar.scrollProps}
               >
                 {offlineNote}
-                <PersonRow ref={header as React.RefObject<View>} name={person.name} photo={person.photo ?? null} />
+                <PersonRow ref={header as React.RefObject<View>} name={person.name} photo={person.photo ?? null} named={person.named} />
                 <Title accessibilityRole="header" style={[styles.ink, { marginTop: GAP.question }]}>
                   How was meeting them?
                 </Title>

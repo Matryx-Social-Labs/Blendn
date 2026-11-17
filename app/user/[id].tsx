@@ -51,6 +51,7 @@ import { hereFor, lensView, parseLens, parseWorkIntent, type RoomLens, type Work
 import { Chip } from '../../components/ds/Chip'
 import { OtherPhotos, SayHi, SHARED_SHOWN, SharedEvents } from '../../components/profile/ProfileSparseBlocks'
 import { roomPersonFor } from '../../lib/roomPersonHandoff'
+import { personFace } from '../../lib/personFace'
 import { barCircleBottom } from '../../lib/barGeometry'
 
 
@@ -1031,7 +1032,7 @@ function UserProfileInner() {
       {match ? (
         <MomentMatch
           you={{ kind: 'creature', pseudonym: match.you ?? 'You' }}
-          them={revealed && photos[0] ? { kind: 'photo', uri: photos[0] } : { kind: 'creature', pseudonym: heroTitle }}
+          them={personFace({ named: revealed, name: identity.name, photo: photos[0] })}
           name={heroTitle}
           // M-A: tonight's question and their answer, as the room's moment says it.
           tonight={tonight?.lens?.question ? { question: tonight.lens.question, answer: tonight.answer ?? null } : null}

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /* global __dirname */
 /*
- * Fails on UI values that bypass the design system: `lib/theme.ts` for the
- * screens not yet redesigned, `lib/design/tokens.ts` (generated from
- * `design/tokens.json`) for the redesign.
+ * Fails on UI values that bypass the design system: `lib/design/tokens.ts`
+ * (generated from `design/tokens.json`). Liquid Ember's tokens were deleted
+ * (`__tests__/retiredDesign.test.ts`).
  *
  * Why a script and not an ESLint rule: the values live in `StyleSheet.create`
  * objects and JSX props, and a line-level check over source is enough to catch
@@ -15,9 +15,8 @@
  * - `fontWeight` — custom fonts ignore it on Android; weight is the family
  * - padding, margin or gap off `SPACE` (0 2 4 8 12 16 24 32 48)
  * - an icon `size={n}` other than 16, 20, 24, or a decorative 28+
- * - a raw colour (`'#hex'`, `rgba()`) — use `COLOR` (or `EMBER` on an
- *   unmigrated screen), or `tint(COLOR.x, a)`
- * - a raw `borderRadius` — use `RADIUS` / `EMBER_RADIUS` (circles are capsules)
+ * - a raw colour (`'#hex'`, `rgba()`) — use `COLOR`, or `tint(COLOR.x, a)`
+ * - a raw `borderRadius` — use `RADIUS` (circles are capsules)
  * - a raw `lineHeight` or `textTransform` — the TYPE role sets both
  * - shadows — content is flat (DESIGN-BRIEF §5.5)
  * - glass and blur outside `<Material>`: `BlurView`, `expo-blur` and
@@ -29,14 +28,13 @@
  *   `lib/haptics.ts` (§10), in `lib/` as well
  * - an icon outside `<Icon>`: `lucide-react-native` belongs to
  *   `components/ui/Icon.tsx`, which keeps the name map and the outline
- * - retired tokens: `EMBER_TYPE`, `EMBER_GRADIENT` and its `gradientFrom/To`,
- *   `EMBER_CONTROL_HEIGHT`, `EMBER_RADIUS.input` — use `TYPE`, a flat
- *   `EMBER.accent`, `CONTROL.lg`, `EMBER_RADIUS.pill`
+ * - retired tokens: Liquid Ember's `EMBER` palette and `EMBER_*` scales — use
+ *   `COLOR`, `TYPE`, `RADIUS`, `SIZE`
  * - the legacy `APP_*` palette and the old `Typography` component (also in
  *   `lib/`, where a screen's constants can hide it)
  * - a number added to a safe-area inset (`insets.bottom + 16`) — use SPACE
  * - a literal `minWidth` / `maxWidth` / `minHeight` / `maxHeight` — use
- *   CONTROL, SPACE or a named constant
+ *   SIZE, SPACE or a named constant
  * - a literal `opacity: 0.x` — use OPACITY (pressed / disabled) or name it
  *
  * The last three arrived after most screens were written. Every shipped file
@@ -53,11 +51,11 @@ const path = require('path')
 const ROOT = path.resolve(__dirname, '..')
 const DIRS = ['app', 'components']
 // `lib/` holds constants screens read (tray specs, map styles). Only the rules
-// marked `lib` apply there (the legacy palette, haptics); `theme.ts` is where
-// the old tokens live.
+// marked `lib` apply there (the legacy palette, haptics); `theme.ts` holds
+// `tint` and `OPACITY`.
 const LIB_DIR = 'lib'
 const LIB_SKIP = new Set(['theme.ts'])
-/* The scales come from the redesign's tokens; they are the scales `lib/theme.ts` already used. */
+/* The scales come from the design system's tokens. */
 const TOKENS = require('../design/tokens.json')
 const SPACE = new Set([0, ...Object.values(TOKENS.space)])
 const ICON = new Set([TOKENS.icon.inline, TOKENS.icon.control, TOKENS.icon.nav])
@@ -85,23 +83,23 @@ const RULES = [
   {
     id: 'font-weight',
     test: /\bfontWeight:/,
-    message: 'fontWeight — pick the weight through the TYPE role / FONT_FAMILY (EMBER_FONTS) family',
+    message: 'fontWeight — pick the weight through the TYPE role / FONT_FAMILY family',
   },
   {
     id: 'legacy-palette',
     test: /\bAPP_(COLORS|SPACING|RADIUS|SIZE|CTA|ELEVATION)\b/,
-    message: 'legacy APP_* token — use EMBER / SPACE / ICON / CONTROL / EMBER_RADIUS',
+    message: 'legacy APP_* token — use COLOR / SPACE / ICON / SIZE / RADIUS',
     lib: true,
   },
   {
     id: 'raw-colour',
     test: /['"`]#[0-9a-fA-F]{3,8}['"`]|\brgba?\(/,
-    message: 'raw colour — use a COLOR token (EMBER on an unmigrated screen), or tint(COLOR.x, alpha)',
+    message: 'raw colour — use a COLOR token, or tint(COLOR.x, alpha)',
   },
   {
     id: 'raw-radius',
     test: /\bborder(TopLeft|TopRight|BottomLeft|BottomRight|TopStart|TopEnd|BottomStart|BottomEnd)?Radius(:\s*|=\{)[1-9]/,
-    message: 'raw borderRadius — use RADIUS / EMBER_RADIUS (a circle is RADIUS.capsule)',
+    message: 'raw borderRadius — use RADIUS (a circle is RADIUS.capsule)',
   },
   {
     id: 'raw-line-height',
@@ -146,8 +144,8 @@ const RULES = [
   },
   {
     id: 'retired-token',
-    test: /\b(EMBER_TYPE|EMBER_GRADIENT|EMBER_CONTROL_HEIGHT|EMBER_GLOW|EMBER_ATMOSPHERE)\b|EMBER_RADIUS\.input\b|EMBER\.(gradientFrom|gradientTo|onGradientChip)\b/,
-    message: 'retired token — TYPE / flat EMBER.accent / CONTROL.lg / EMBER_RADIUS.pill',
+    test: /\bEMBER_(RADIUS|FONTS|FONT_MODULES|TYPE|GRADIENT|CONTROL_HEIGHT|GLOW|ATMOSPHERE)\b|\bimport \{[^}]*\bEMBER\b[^}]*\} from ['"][./]*lib\/theme['"]/,
+    message: 'retired Liquid Ember token — COLOR / TYPE / RADIUS / SIZE from lib/design/tokens',
   },
   {
     id: 'legacy-typography',

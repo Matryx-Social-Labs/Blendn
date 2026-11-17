@@ -20,6 +20,7 @@ import { FieldLabel, TextArea, TextField } from '../ds/TextField'
 import { Toggle } from '../ds/Toggle'
 import { Glyph } from '../ui/Glyph'
 import { TagsInput } from './TagsInput'
+import { personFace } from '../../lib/personFace'
 
 /** flow10.js `make`: the line about the crew is a one-liner's height. */
 const BIO_MIN_HEIGHT = 72
@@ -163,11 +164,7 @@ function FriendPick({ friend, picked, capped, onToggle }: { friend: Friend; pick
       accessibilityLabel={`Ask ${friend.name}`}
       style={[styles.friend, capped && styles.capped]}
     >
-      {friend.photo ? (
-        <Avatar kind="photo" uri={friend.photo} size={FRIEND_FACE} />
-      ) : (
-        <Avatar kind="creature" pseudonym={friend.name} size={FRIEND_FACE} />
-      )}
+      <Avatar {...personFace({ named: true, name: friend.name, photo: friend.photo })} size={FRIEND_FACE} />
       <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold), styles.ink, styles.fill]}>
         {friend.name}
       </Text>

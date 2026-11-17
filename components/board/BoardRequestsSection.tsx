@@ -23,8 +23,8 @@ import { publishTalkAsks } from '../../lib/inboxBadge'
 import { Logger } from '../../lib/logger'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
-import { COLOR } from '../../lib/design/tokens'
-import { CONTROL, OPACITY, SPACE } from '../../lib/theme'
+import { COLOR, SIZE, SPACE } from '../../lib/design/tokens'
+import { OPACITY } from '../../lib/theme'
 import { BoardMark } from './BoardSections'
 import { useBanterPress } from '../banter/pressGuard'
 import { rowBack, rowOut, rowReflow } from '../motion/presence'
@@ -313,5 +313,5 @@ const styles = StyleSheet.create({
   outgoing: { gap: SPACE.md },
   outRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   outText: { flex: 1 },
-  withdraw: { minHeight: CONTROL.md, justifyContent: 'center', paddingHorizontal: SPACE.sm },
+  withdraw: { minHeight: SIZE.control, justifyContent: 'center', paddingHorizontal: SPACE.sm },
 })

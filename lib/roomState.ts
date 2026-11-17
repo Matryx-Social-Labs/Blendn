@@ -10,7 +10,8 @@
  */
 import type { Href } from 'expo-router'
 import type { Face } from '../components/ds/Facepile'
-import { markSeed } from './pseudonymAvatar'
+import { markSeed } from './creatureSeed'
+import { personFace } from './personFace'
 import type { EventChatData } from './apiClient'
 
 export type RoomState = 'muted' | null
@@ -28,10 +29,13 @@ export function roomStateLine(state: RoomState): string | null {
 /**
  * Your own face in a room (ROOM-01, flow4.js `room()`: `you = vis==='anon'||'blocked' ? {creature} : JF.you`).
  *
- * Named: your photo, if you have one. Anonymous: ALWAYS the creature, even when the server has not said the
- * pseudonym yet. A photo under "Nobody here sees your name or photo" is the one lie this room must never tell.
+ * Named (`personFace`): your photo, else your initial on your hue disc. Anonymous: ALWAYS the creature, even when the
+ * server has not said the pseudonym yet. A photo under "Nobody here sees your name or photo" is the one lie this room
+ * must never tell.
  */
-export function myRoomFace(input: { revealed: boolean; photo: string | null; pseudonym: string | null; eventId: string | null }): Face {
+export function myRoomFace(input: { revealed: boolean; name: string | null; photo: string | null; pseudonym: string | null; eventId: string | null }): Face {
+  const name = input.name?.trim()
+  if (input.revealed && name) return personFace({ named: true, name, photo: input.photo })
   if (input.revealed && input.photo) return { kind: 'photo', uri: input.photo }
   return { kind: 'creature', pseudonym: input.pseudonym ?? markSeed('You', input.eventId ?? 'room') }
 }
