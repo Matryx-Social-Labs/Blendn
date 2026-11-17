@@ -8,7 +8,7 @@ import { Icon } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
 import type { VenueDetail } from '../../lib/apiClient'
-import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { againLabel, liveDockLine, venueDockLine, type DockMode } from '../../lib/venuePage'
@@ -43,7 +43,7 @@ function LiveLine({ name, live, onZero, onPress, onOpenRoom }: { name: string; l
         onPress()
       }}
       stateHint="Opens your live time"
-      action={onOpenRoom ? { label: 'Open the room', kind: 'lit', icon: 'radio', onPress: onOpenRoom, testID: 'venue-open-room' } : undefined}
+      action={onOpenRoom ? { label: 'Open the room', kind: 'lit', size: 'md', icon: 'radio', onPress: onOpenRoom, testID: 'venue-open-room' } : undefined}
     />
   )
 }
@@ -92,7 +92,7 @@ export function VenueDock({
   const contrast = useIncreaseContrast()
   // The Android snackbar stands above the dock.
   const [height, setHeight] = useState(0)
-  const line = (mode.kind === 'goLive' && !mode.again) || mode.kind === 'handoff' || mode.kind === 'live'
+  const line = (mode.kind === 'goLive' && !mode.again) || mode.kind === 'handoff'
   // The toast adds the bottom inset itself, and this dock's height already holds it.
   useToastDock(Math.max(0, height - insets.bottom))
   return (
@@ -106,7 +106,8 @@ export function VenueDock({
       style={[
         styles.dock,
         // Flow 4 V-A: the one-line dock (`.dock4`) is a straight bar, 12 over the row, the home indicator's room under it;
-        // a closed place is its note (`.dock4.note`, 16 over). Live is the same line (venue live pill B).
+        // a closed place is its note (`.dock4.note`, 16 over). Live keeps the standard dock: venue live pill B is drawn in
+        // it (16 over, the 24 gutter both sides) with an md action, which leaves "Ending · 4:59" whole at 360.
         line ? [styles.line, { paddingBottom: Math.max(insets.bottom, SPACE.md) }] : mode.kind === 'closed' ? [styles.line, styles.note, { paddingBottom: Math.max(insets.bottom, SPACE.md) }] : { paddingBottom: Math.max(insets.bottom, SPACE.lg) },
         contrast && IC_HAIRLINE,
       ]}
@@ -132,7 +133,12 @@ export function VenueDock({
             {mode.again ? <Button label="Pick another time" kind="tertiary" size="md" onPress={onPickAnother} disabled={busy} testID="venue-pick-another" /> : null}
           </>
         ) : null}
-        {mode.kind === 'live' ? <LiveLine name={name} live={live} onZero={onZero} onPress={onPill} onOpenRoom={live.chatGroupId ? onOpenRoom : undefined} /> : null}
+        {mode.kind === 'live' ? (
+          // The board's row is 56 (`.dr` min-height), the md action centred in it.
+          <View style={styles.liveRow}>
+            <LiveLine name={name} live={live} onZero={onZero} onPress={onPill} onOpenRoom={live.chatGroupId ? onOpenRoom : undefined} />
+          </View>
+        ) : null}
         {mode.kind === 'handoff' ? (
           <DockRow
             testID="venue-dock-row"
@@ -179,6 +185,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: RADIUS.sheet,
   },
   modes: { gap: SPACE.xs },
+  liveRow: { minHeight: SIZE.primary, justifyContent: 'center' },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   closed: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },

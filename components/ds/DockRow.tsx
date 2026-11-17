@@ -14,6 +14,8 @@ const STACK_GAP = 10
 export type DockRowAction = {
   label: string
   kind: 'primary' | 'lit'
+  /** The dock's own 52 (default), or md 48 where the board draws it (the venue's live line, beside a time). */
+  size?: 'dock' | 'md'
   icon?: IconName
   onPress?: () => void
   loading?: boolean
@@ -126,7 +128,7 @@ export function DockRow({
         <Button
           label={action.label}
           kind={action.kind}
-          size="dock"
+          size={action.size ?? 'dock'}
           icon={action.icon}
           onPress={action.onPress}
           loading={action.loading}

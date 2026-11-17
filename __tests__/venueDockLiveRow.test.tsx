@@ -13,7 +13,7 @@ import React from 'react'
 import { StyleSheet } from 'react-native'
 
 import { VenueDock } from '../components/venue/VenueDock'
-import { COLOR, FONT_FAMILY, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { atScale, AX_XXXL, resetScale } from './helpers/ax'
 
@@ -122,6 +122,16 @@ describe('the state line', () => {
     expect(screen.getByRole('button', { name: 'Open the room' })).toBeTruthy()
     await dock({ chatGroupId: null })
     expect(screen.queryByRole('button', { name: 'Open the room' })).toBeNull()
+  })
+})
+
+describe('the board’s geometry (B is drawn with md buttons in the standard dock)', () => {
+  it('Open the room is md (48), and the dock keeps 16 over and the 24 gutter both sides: at 360 the dock button left “Endin… 2:19” (drive, 2026-11-17)', async () => {
+    await atScale(1, 360)
+    await dock({ expiresAt: inMs(4 * MIN) })
+    expect(flat('venue-open-room').height).toBe(SIZE.control)
+    expect(flat('venue-dock')).toMatchObject({ paddingTop: SPACE.lg, paddingHorizontal: SPACE.gutter })
+    expect(flat('venue-dock').paddingRight).toBeUndefined()
   })
 })
 
