@@ -1,5 +1,5 @@
 import { isHandle } from './friendOffer'
-import { markSeed } from './pseudonymAvatar'
+import { markSeed } from './creatureSeed'
 
 /**
  * Who the attendee profile (`app/user/[id].tsx`) says this is, and what it may

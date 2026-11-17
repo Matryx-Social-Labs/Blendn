@@ -30,7 +30,7 @@ import {
 import { buildingHeights, CITY_BUILDINGS, cityColour, EMBER_MAP_STYLE, LABELS_FROM_LAYER_ID } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
 import { refreshPhoneZone } from '../lib/time'
-import { EMBER } from '../lib/theme'
+import { COLOR } from '../lib/design/tokens'
 
 /**
  * The lit look of the home map (step 2c; research §4.2, prototype v2): what a
@@ -388,11 +388,12 @@ describe("the map theme is the one place for the map’s look", () => {
     }
   )
 
-  it('takes the app tokens from lib/theme.ts instead of copying them (review M7)', () => {
+  it('takes the app tokens from lib/design/tokens instead of copying them (review M7)', () => {
     const theme = read('lib/mapTheme.ts')
-    const appColours = (Object.values(EMBER) as unknown[]).filter((v): v is string => typeof v === 'string' && v.startsWith('#'))
+    const appColours = (Object.values(COLOR) as unknown[]).filter((v): v is string => typeof v === 'string' && v.startsWith('#'))
     for (const hex of appColours) expect(theme.toUpperCase()).not.toContain(`'${hex.toUpperCase()}'`)
-    expect(MAP_THEME.event.crown).toBe(EMBER.accent)
+    // The retired Ember accent, the map's own value until the Pulse map board restyles the crown.
+    expect(MAP_THEME.event.crown).toBe('#FF906D')
   })
 
   const lum = (hex: string) => {

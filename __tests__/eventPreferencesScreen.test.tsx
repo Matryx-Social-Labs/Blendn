@@ -74,7 +74,7 @@ import { router } from 'expo-router'
 import EventPreferences from '../app/event-preferences/[eventId]'
 import { apiClient } from '../lib/apiClient'
 import { untilIntentAnswered } from '../lib/checkIn'
-import { markSeed } from '../lib/pseudonymAvatar'
+import { markSeed } from '../lib/creatureSeed'
 /* eslint-enable import/first */
 
 const api = apiClient as jest.Mocked<typeof apiClient>

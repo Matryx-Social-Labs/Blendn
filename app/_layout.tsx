@@ -35,7 +35,7 @@ import { handleAndroidBack } from '../lib/androidBack';
 import { CoachMarkHost } from '../components/ds/CoachMarkHost';
 import { initSentry, Sentry } from '../lib/sentry';
 import { useFonts } from 'expo-font';
-import { EMBER_FONT_MODULES } from '../lib/fonts';
+import { FONT_MODULES } from '../lib/fonts';
 import { ONBOARDING_IMAGES, prefetchOnboardingImages } from '../lib/onboardingAssets';
 
 initSentry();
@@ -111,14 +111,14 @@ function RootLayout() {
    *
    * Weight comes from the family name, not from `fontWeight` — a custom font
    * on Android ignores `fontWeight` and silently renders regular, so
-   * `Manrope_400Regular` at `fontWeight: '700'` is bold on iOS and not bold on
+   * `Satoshi_400Regular` at `fontWeight: '700'` is bold on iOS and not bold on
    * Android from identical code. Every weight `TYPE` names is loaded.
    *
    * `useFonts` returns `[loaded, error]`, and a font that fails to load is not
    * a reason to hold the app behind the splash forever — the system font is a
    * bad but working fallback, so a failure counts as done below.
    */
-  const [fontsLoaded, fontError] = useFonts(EMBER_FONT_MODULES);
+  const [fontsLoaded, fontError] = useFonts(FONT_MODULES);
   const fontsReady = fontsLoaded || !!fontError;
   const assetsReady = imagesReady && fontsReady;
 
@@ -155,7 +155,7 @@ function RootLayout() {
    *
    * Fonts join the gate rather than loading in the background because the
    * alternative is visible: the first screen paints in the system font and
-   * reflows to Plus Jakarta Sans a beat later, and at 56pt with -2.8 tracking
+   * reflows to Satoshi a beat later, and at 56pt with -2.8 tracking
    * that reflow moves the headline by most of a line.
    *
    * Hiding the paint is not enough on its own, which is why no route renders
@@ -531,7 +531,7 @@ function RootLayout() {
    *
    * Text is measured when it mounts, and React Native caches the measurement
    * by the family *name*, not by the font that name resolved to. A screen
-   * mounted under the splash before Plus Jakarta Sans registered was measured
+   * mounted under the splash before Satoshi registered was measured
    * in the system font, which is narrower, and every later text with the same
    * string and style was handed that cached box for the life of the process:
    * the wordmark drew as "Blend'r" and "I'm going" as "I'm goi…", on every

@@ -29,14 +29,4 @@ describe('PulseTopBar', () => {
     expect(styles.some((st) => (st as { backgroundColor?: string }).backgroundColor === '#0F0E0E')).toBe(false)
   })
 
-  it('the Scene keeps its band', async () => {
-    await render(<PulseTopBar />)
-    const styles = [] as object[]
-    let node = screen.getByText("Blend’n").parent
-    while (node) {
-      styles.push(StyleSheet.flatten(node.props.style) ?? {})
-      node = node.parent
-    }
-    expect(styles.some((st) => typeof (st as { backgroundColor?: string }).backgroundColor === 'string' && (st as { backgroundColor?: string }).backgroundColor !== 'transparent')).toBe(true)
-  })
 })

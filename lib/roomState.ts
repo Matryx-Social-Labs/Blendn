@@ -10,7 +10,7 @@
  */
 import type { Href } from 'expo-router'
 import type { Face } from '../components/ds/Facepile'
-import { markSeed } from './pseudonymAvatar'
+import { markSeed } from './creatureSeed'
 import type { EventChatData } from './apiClient'
 
 export type RoomState = 'muted' | null

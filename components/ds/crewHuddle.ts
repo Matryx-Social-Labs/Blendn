@@ -1,5 +1,5 @@
 import { CREATURE_ART, CREATURE_HUES } from '../../lib/design/tokens'
-import { fnv1a } from '../../lib/pseudonymAvatar'
+import { fnv1a } from '../../lib/creatureSeed'
 import { CREATURE_SPECIES, faceMarkup, type CreatureMood, type CreatureSpecies } from './Creature'
 
 /*
