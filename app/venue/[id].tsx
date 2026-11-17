@@ -91,8 +91,8 @@ const DIAL_GONE_FALLBACK_MS = 800
  *
  * The hero is tonight's cover, else the type's plate. The dock holds one slot:
  * Go live (a dial, then the hold), Go live again in one tap, live (the
- * checked-in line: its state opens the live sheet, and Open the room), the hand-off to an event's check-in, or the server's
- * sentence. The check-in area is never drawn, in any state. The room, Who's
+ * checked-in line: its state opens the live sheet, beside Open the room), the
+ * hand-off to an event's check-in, or the server's sentence. The check-in area is never drawn, in any state. The room, Who's
  * here and the people are for the people live here; the claim link is the
  * server's, quiet, and leaves the app.
  */

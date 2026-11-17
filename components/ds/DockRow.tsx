@@ -76,7 +76,11 @@ export function DockRow({
     <>
       {dot || clock ? (
         <View style={styles.head}>
-          {dot ? <PresenceDot kind={dot} testID={testID && `${testID}-dot`} /> : null}
+          {dot ? (
+            <View style={styles.dot}>
+              <PresenceDot kind={dot} testID={testID && `${testID}-dot`} />
+            </View>
+          ) : null}
           {stateText}
           {clock ? (
             <Text
@@ -137,7 +141,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   stack: { flexDirection: 'column', alignItems: 'stretch', gap: STACK_GAP },
   state: { flex: 1, minWidth: 0 },
-  head: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
+  /** The dot 8 before the words (`.s1` gap); the time follows the word's own " · ", no gap. */
+  head: { flexDirection: 'row', alignItems: 'center' },
+  dot: { marginRight: SPACE.sm },
   /** The state's word gives way to its time; the time keeps its whole width. */
   give: { flexShrink: 1 },
   keep: { flexShrink: 0, fontVariant: ['tabular-nums'] },
