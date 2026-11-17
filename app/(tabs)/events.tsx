@@ -1,6 +1,5 @@
 import { ScreenProfiler } from '../../lib/perf'
 import * as Location from 'expo-location'
-import { CHECK_OUT_CONSEQUENCE, STAY_LABEL, checkOutQuestion } from '../../lib/switchCopy'
 import { router, useLocalSearchParams, useScrollToTop } from 'expo-router'
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
@@ -40,6 +39,7 @@ import { PullIndicator } from '../../components/pulse/PullIndicator'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
 import { TAB_BAR_CLEARANCE, tabBarTop } from './_layout'
 import { FilterSheet, type CategoryOption } from '../../components/pulse/FilterControl'
+import { CheckOutSheet } from '../../components/chat/RoomSheets'
 import { HomeShell, type HomeBrowse, type PulseShell } from '../../components/home/HomeShell'
 import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
 import { pinsFor } from '../../lib/homeMap'
@@ -124,7 +124,6 @@ import { type PeekAction } from '../../lib/pulsePeek'
 import { putSceneSeed } from '../../lib/sceneSeed'
 import { shareEvent } from '../../lib/shareRow'
 import { PulseArrival } from '../../components/share/PulseArrival'
-import { checkOutOf } from '../../lib/checkIn'
 import { openBlendn } from '../../lib/blendnOverlay'
 import { apiClient } from '../../lib/apiClient'
 import { Logger } from '../../lib/logger'
@@ -308,16 +307,6 @@ const feedMaps = (list: Event[]) => {
   return { interests, counts, checkins }
 }
 
-/** Puts one event's check-in status back as it was, or removes it if there was none. */
-const restoreStatus =
-  (id: string, previous: any) =>
-  (prev: { [eventId: string]: any }) => {
-    const next = { ...prev }
-    if (previous) next[id] = previous
-    else delete next[id]
-    return next
-  }
-
 const proximityFor = (
   events: Event[],
   at: { latitude: number; longitude: number }
@@ -377,7 +366,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * `useLatest`, and it only recognises a ref by its name. Without the suffix
    * it reads `.current` as a dependency of every handler.
    */
-  const latestCheckinStatusesRef = useLatest(checkinStatuses)
   const latestInterestStatusesRef = useLatest(interestStatuses)
   const latestInterestCountsRef = useLatest(interestCounts)
 
@@ -573,11 +561,12 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const { showToast } = useToast()
   /** The long-press peek: which card lifts, where it is, and what kind of card it is. */
   const [peek, setPeek] = useState<Peek | null>(null)
+  /** The event the peek's Check out asked about; the room's own sheet (and its neutral hold) is open while set. */
+  const [checkingOut, setCheckingOut] = useState<Event | null>(null)
   // Location permission status: 'checking' | 'granted' | 'denied' | 'undetermined'
   const [locationStatus, setLocationStatus] = useState<'checking' | 'granted' | 'denied' | 'undetermined'>('checking')
   const locationRequestInFlight = useRef(false)
   const interestInFlightRef = useRef<Set<string>>(new Set())
-  const checkOutInFlightRef = useRef<Set<string>>(new Set())
   const lastFetchLocationRef = useRef<string>('none')
   const initialLoadedRef = useRef(false)
 
@@ -727,37 +716,12 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     }
   }, [user, showToast, latestInterestStatusesRef, latestInterestCountsRef])
 
-  const handleCheckOut = useCallback(async (event: Event) => {
-    if (checkOutInFlightRef.current.has(event.id)) return
-    checkOutInFlightRef.current.add(event.id)
-    // The confirm's destructive button just played `H.destructive` (the Button, §10.2). A refusal answers with the toast's
-    // `H.error`; a success with the server's own words in a toast (frame 26).
-
-    const previousStatus = latestCheckinStatusesRef.current[event.id]
-    const fail = () => {
-      setCheckinStatuses(restoreStatus(event.id, previousStatus))
-      showToast("Couldn’t check you out. Try again.", 'error', { haptic: 'error' })
-    }
-
-    // Optimistic removal from checked-in state
-    setCheckinStatuses((prev) => ({ ...prev, [event.id]: { status: 'not_checked_in' } }))
-
-    try {
-      const result = await checkOutOf(String(event.id))
-      if (result.success) {
-        const said = (result.data as { message?: unknown } | undefined)?.message
-        showToast(typeof said === 'string' && said ? said : 'You’ve checked out.', 'success')
-        loadCheckedInEvents()
-        loadCheckinStatusesBatch()
-      } else {
-        fail()
-      }
-    } catch {
-      fail()
-    } finally {
-      checkOutInFlightRef.current.delete(event.id)
-    }
-  }, [showToast, latestCheckinStatusesRef, loadCheckedInEvents, loadCheckinStatusesBatch])
+  /** The room's sheet said yes (it toasted the yes; `useCheckOut` toasts a refusal): out of the checked-in state, then refetch. */
+  const onCheckedOut = useCallback(() => {
+    if (checkingOut) setCheckinStatuses((prev) => ({ ...prev, [checkingOut.id]: { status: 'not_checked_in' } }))
+    loadCheckedInEvents()
+    loadCheckinStatusesBatch()
+  }, [checkingOut, loadCheckedInEvents, loadCheckinStatusesBatch])
 
   /** A card was held: lift it (its own `H.longPress` has played). The one-off coach mark is answered by the hold. */
   const openPeek = useCallback((event: Event, anchor: Peek['anchor'], kind: Peek['kind'], layout?: Peek['layout']) => {
@@ -777,20 +741,13 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       // Into the Blend'n pass: a check-in always goes through the hold (docs/redesign/SCREENS.md, Pulse).
       if (action === 'checkIn') return openBlendn()
       /*
-       * Asks first, with the Room's words. Checking out closes the room and coming back needs a fresh location fix, so a
-       * stray tap in a menu of five should not be able to do it on its own.
+       * Asks first, with the room's own sheet: its question, its consequence, and Check out as the neutral hold (buttons
+       * board C, owner 2026-11-17: one look for Check out at every door). Checking out closes the room and coming back
+       * needs a fresh location fix, so a stray tap in a menu of five should not be able to do it on its own.
        */
-      showSheet({
-        kind: 'actions',
-        title: checkOutQuestion(event.title),
-        message: CHECK_OUT_CONSEQUENCE,
-        actions: [
-          { label: STAY_LABEL, variant: 'secondary', then: () => {} },
-          { label: 'Check out', variant: 'destructive', then: () => void handleCheckOut(event) },
-        ],
-      })
+      setCheckingOut(event)
     },
-    [toggleInterest, handleEventPress, handleCheckOut]
+    [toggleInterest, handleEventPress]
   )
 
   const getCurrentLocationQuietly = useCallback(async () => {
@@ -2200,6 +2157,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       {pull.native ? null : <PullIndicator progress={pull.progress} />}
 
       {setSheets ? null : cityPicker}
+
+      <CheckOutSheet eventId={checkingOut ? String(checkingOut.id) : null} name={checkingOut?.title} onClose={() => setCheckingOut(null)} onCheckedOut={onCheckedOut} />
 
       <FilterSheet
         visible={filterSheetOpen}

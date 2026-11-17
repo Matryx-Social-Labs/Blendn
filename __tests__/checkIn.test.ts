@@ -264,10 +264,17 @@ describe('checkOutOf', () => {
 
 describe('every check-out goes through checkOutOf', () => {
   // The room checks out through `useRoomControls` (see the next test).
-  it.each(['lib/useRoomControls.ts', 'app/(tabs)/events.tsx', 'components/PresenceMonitor.tsx'])('%s', (file) => {
+  it.each(['lib/useRoomControls.ts', 'components/PresenceMonitor.tsx'])('%s', (file) => {
     const src = readFileSync(join(__dirname, '..', file), 'utf8')
     expect(src).toContain('checkOutOf(')
     expect(src).not.toContain('apiClient.checkOut(')
+  })
+
+  it('and the Events list’s ⋯ checks out through the room’s CheckOutSheet (useCheckOut), not around it', () => {
+    const src = readFileSync(join(__dirname, '..', 'app/(tabs)/events.tsx'), 'utf8')
+    expect(src).toMatch(/<CheckOutSheet\b/)
+    expect(src).not.toContain('apiClient.checkOut(')
+    expect(src).not.toContain('checkOutOf(')
   })
 
   it("and the Blend’n room checks out through useRoomControls, not around it", () => {
