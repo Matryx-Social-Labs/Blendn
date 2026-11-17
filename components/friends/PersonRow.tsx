@@ -4,6 +4,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { FriendPerson } from '../../lib/friends'
 import { Avatar } from '../ds/Avatar'
+import { FitText } from '../ds/Title'
 import { MonoRun } from '../ds/MonoFamily'
 import { font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
@@ -76,14 +77,17 @@ export function PersonRow({
           the line under it grows past it (D-M5). With no line under it the name may take that line's place. The row's height
           is a minimum, so nothing is cut (P5: the line truncated at 360 dp and 1.3).
         */}
-        <Text
+        {/* The DS word fit: a word too wide for its line shrinks rather than splitting (SCRUM-1041 A, names in rows). */}
+        <FitText
           testID="person-name"
+          variant="bodyStrong"
+          family={FONT_FAMILY.brand[500]}
           numberOfLines={line && !largeText ? 1 : NAME_LINES_ALONE}
           maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}
-          style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}
+          style={styles.ink}
         >
           {person.name}
-        </Text>
+        </FitText>
         {line ? (
           <Text testID="person-detail" numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
             {detail}

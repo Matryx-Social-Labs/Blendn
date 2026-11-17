@@ -4,6 +4,7 @@ import { Avatar } from '../ds/Avatar'
 import { Spinner } from '../ds/Loader'
 import { SegmentedControl } from '../ds/SegmentedControl'
 import { InviteQr } from './InviteQr'
+import { FitText } from '../ds/Title'
 import { CONTROL_FONT_CAP, font, useBoldText, useIncreaseContrast, useLargeText, useAnnounced } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
@@ -77,9 +78,9 @@ export function InviteLinkCard({
           <InviteQr url={url} size={QR_SIZE} face={{ name: who ?? '', photo: photo ?? null, size: QR_FACE }} />
           <View>
             {who ? (
-              <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink, styles.centre]}>
+              <FitText variant="heading" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[styles.ink, styles.centre]}>
                 {who}
-              </Text>
+              </FitText>
             ) : null}
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.muted, styles.centre]}>
               Scan to ask to be friends
@@ -97,9 +98,9 @@ export function InviteLinkCard({
           {photo ? <Avatar kind="photo" uri={photo} size={FACE} /> : <Avatar kind="creature" pseudonym={who} size={FACE} />}
           <View style={styles.whoText}>
             {/* Your name grows to the heading cap and takes two lines at the AX sizes; the line under it stops at meta's (D-LM10). */}
-            <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={[font('heading', bold), styles.ink]}>
+            <FitText variant="heading" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.heading} style={styles.ink}>
               {who}
-            </Text>
+            </FitText>
             <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.onBlendn]}>
               on Blend’n
             </Text>

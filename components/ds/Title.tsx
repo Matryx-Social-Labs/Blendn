@@ -186,6 +186,13 @@ export function Title({ variant = 'title', family, maxFontSizeMultiplier, style,
   )
 }
 
+/**
+ * The same measured word fit for text that is not a title but must never split a word either: a person's name in a row (SCRUM-1041
+ * ruling A, extended to names 2026-11-17: Android at font 2.0 drew "Marc-André Lefebv / re-Desrosiers"). Pass the row's role as
+ * `variant` (`bodyStrong`, `rowTitle`, `heading`) and its cap; nothing else about the text changes, and no header role is implied.
+ */
+export const FitText = Title
+
 /** Only what sets a glyph's width, at the role's 1× size. */
 const MEASURED = (flat: TextStyle): TextStyle => ({
   fontFamily: flat.fontFamily,

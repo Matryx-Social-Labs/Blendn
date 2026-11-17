@@ -8,6 +8,7 @@ import { Button } from '../ds/Button'
 import { inboxTimeLabel } from '../banter/inbox'
 import { monoCaption } from '../ds/MonoFamily'
 import { IconButton } from '../ds/IconButton'
+import { FitText } from '../ds/Title'
 import { font, useBoldText, useLargeText } from '../ds/shared'
 import { SkeletonCircle, SkeletonLine } from '../Skeleton'
 import { rowOut, rowReflow } from '../motion/presence'
@@ -73,9 +74,10 @@ export function IncomingRequestRow({
       <View style={styles.who}>
         <PersonAvatar person={person} size={LIST_FACE} />
         <View style={styles.text}>
-          <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('rowTitle', bold), styles.ink]}>
+          {/* The DS word fit: a word too wide for its line shrinks rather than splitting (SCRUM-1041 A, names in rows). */}
+          <FitText variant="rowTitle" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={styles.ink}>
             {person.name}
-          </Text>
+          </FitText>
           {source || age ? (
             <Text testID="request-line" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.muted]}>
               {source}
