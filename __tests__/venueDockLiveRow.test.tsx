@@ -13,7 +13,7 @@ import React from 'react'
 import { StyleSheet } from 'react-native'
 
 import { VenueDock } from '../components/venue/VenueDock'
-import { COLOR, FONT_FAMILY } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { atScale, AX_XXXL, resetScale } from './helpers/ax'
 
@@ -94,6 +94,10 @@ describe('the state line', () => {
     expect(flat('venue-live-clock').fontFamily).toBe(FONT_FAMILY.mono[700])
     expect(screen.getByTestId('venue-live-sub')).toHaveTextContent('Extend')
     expect(flat('venue-live-dot').backgroundColor).toBe(COLOR.warning)
+    // The space before the time is a margin, not a trailing space: Android drops a trailing space from a squeezed line
+    // and drew "Ending ·4:16" at 360 (drive, 2026-11-17).
+    expect(screen.getByTestId('venue-live-state').props.children).toBe('Ending ·')
+    expect(flat('venue-live-clock').marginLeft).toBe(SPACE.xs)
     // Never colour alone: the word changes with the dot.
     expect(screen.getByRole('button', { name: `Live at ${LONG}, 4:59 left, ending soon. Extend` })).toBeTruthy()
   })

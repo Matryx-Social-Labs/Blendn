@@ -72,7 +72,7 @@ export function DockRow({
   const lines = large ? undefined : 1
   const stateText = (
     <Text testID={testID && `${testID}-state`} numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('group', bold), styles.ink, (dot || clock) && styles.give]}>
-      {clock ? `${state} · ` : state}
+      {clock ? `${state} ·` : state}
     </Text>
   )
   const words = (
@@ -144,12 +144,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   stack: { flexDirection: 'column', alignItems: 'stretch', gap: STACK_GAP },
   state: { flex: 1, minWidth: 0 },
-  /** The dot 8 before the words (`.s1` gap); the time follows the word's own " · ", no gap. */
+  /** The dot 8 before the words (`.s1` gap). */
   head: { flexDirection: 'row', alignItems: 'center' },
   dot: { marginRight: SPACE.sm },
   /** The state's word gives way to its time; the time keeps its whole width. */
   give: { flexShrink: 1 },
-  keep: { flexShrink: 0, fontVariant: ['tabular-nums'] },
+  /** The space after "·" is a margin: Android drops a trailing space from a squeezed line ("Ending ·4:16"). */
+  keep: { flexShrink: 0, marginLeft: SPACE.xs, fontVariant: ['tabular-nums'] },
   full: { alignSelf: 'stretch' },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
