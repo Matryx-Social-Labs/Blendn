@@ -174,8 +174,9 @@ export function sessionTime(
   const extendUntil = clock24(now + extendMinutes() * MINUTE_MS)
   if (left <= ENDING_MS) return { kind: 'ending', clock: countdownLabel(left), extendUntil }
   const minutes = { kind: 'minutes' as const, left: Math.ceil(left / MINUTE_MS), until: clock24(Date.parse(live.expiresAt as string)) }
-  // Going live again never shortens: an Extend is offered only while it would move the end.
-  return left < extendMinutes() * MINUTE_MS ? { ...minutes, extendUntil } : minutes
+  // Going live again never shortens: an Extend is offered only while it would move the end by a whole minute (just
+  // extended, 44:59 reads 45 and another would add seconds).
+  return minutes.left < extendMinutes() ? { ...minutes, extendUntil } : minutes
 }
 
 function extendMinutes(): number {

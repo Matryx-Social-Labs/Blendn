@@ -219,6 +219,9 @@ describe('where your window stands', () => {
     expect(sessionTime({ expiresAt: iso(min(32)) }, NOW)).toEqual({ kind: 'minutes', left: 32, until: clock24(min(32)), extendUntil: clock24(min(45)) })
     // From 45 up it would not (going live again never shortens): no Extend to offer.
     expect(sessionTime({ expiresAt: iso(min(45)) }, NOW)).toEqual({ kind: 'minutes', left: 45, until: clock24(min(45)) })
+    // Just extended (44:59 left, read as 45): another Extend would add seconds, so none is offered (drive, 2026-11-17).
+    expect(sessionTime({ expiresAt: iso(min(45) - 1000) }, NOW)).not.toHaveProperty('extendUntil')
+    expect(sessionTime({ expiresAt: iso(min(44)) }, NOW)).toHaveProperty('extendUntil', clock24(min(45)))
     // Partial minutes round up: 31:01 left reads 32.
     expect(sessionTime({ expiresAt: iso(min(31) + 1000) }, NOW)).toMatchObject({ kind: 'minutes', left: 32 })
     expect(sessionTime({ expiresAt: iso(min(5)) }, NOW)).toEqual({ kind: 'ending', clock: '5:00', extendUntil: clock24(min(45)) })
