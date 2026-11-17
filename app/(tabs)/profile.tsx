@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { scheduleOnRN } from 'react-native-worklets'
 import { Button } from '../../components/ds/Button'
 import { Grain } from '../../components/ds/Grain'
-import { PresenceDot } from '../../components/ds/MonoFamily'
+import { Badge as CountBadge, PresenceDot } from '../../components/ds/MonoFamily'
 import { CONTROL_FONT_CAP, font, HueProvider, useBoldText } from '../../components/ds/shared'
 import { StateScreen } from '../../components/ds/StateScreen'
 import FadeInUp from '../../components/motion/FadeInUp'
@@ -22,7 +22,11 @@ import { NightsOut } from '../../components/profile/NightsOut'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
 import { ProfileBar } from '../../components/profile/ProfileBar'
-import { RequestsRow } from '../../components/friends/RequestsRow'
+import { FacesLead } from '../../components/friends/RequestsRow'
+import { compactCount } from '../../lib/format'
+import { groupedCount } from '../../lib/friendsHere'
+import { friendsPageFrom } from '../../lib/friendsPaging'
+import type { Friend } from '../../lib/friends'
 import { SettingsGroup, SettingsRow } from '../../components/ds/SettingsRow'
 import { ProfileBio, ProfileDetail, ProfileInterests, ProfileSection, SECTION_GAP } from '../../components/profile/ProfileSections'
 import { CrewEmblem } from '../../components/ds/CrewEmblem'
@@ -61,6 +65,15 @@ const PROFILE_CACHE_TTL = 2 * 60 * 1000
 const CREW_EMBLEM = 24
 const CREW_OVERLAP = 6
 /** The Crews row says its count in words for a screen reader. */
+/** The Friends row's faces: the newest three (Flow 7 6-A). */
+const ME_FACES = 3
+
+/** What a screen reader hears for the Friends row: the whole count (the eye gets "12k"), then the requests. */
+export const friendsLabel = (total: number, requests: number) =>
+  [`Friends${total > 0 ? `, ${groupedCount(total)}` : ''}`, requests > 0 ? `${groupedCount(requests)} friend request${requests === 1 ? '' : 's'}` : null]
+    .filter(Boolean)
+    .join(', ')
+
 const crewsLabel = (count: number, invites: number) => {
   const parts = [count ? `Crews, ${count}` : 'Crews', invites ? `${invites} invite${invites === 1 ? '' : 's'} waiting` : null]
   return parts.filter(Boolean).join(', ')
@@ -108,7 +121,8 @@ function ProfileInner() {
   const [nightsRetrying, setNightsRetrying] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   // Null until it loads, and on failure: the stat is left out rather than showing a wrong 0.
-  const [friendsCount, setFriendsCount] = useState<number | null>(null)
+  // How many friends and the newest three (Flow 7 6-A, the Friends row): from the first page, no request of its own.
+  const [friends, setFriends] = useState<{ total: number; faces: Friend[] } | null>(null)
   /*
    * Friend requests and crew invites waiting on you: the one shared list of each (requests placement A), so an answer in
    * Notifications, Friends or Crews is gone from here too. Zero until it loads, and on failure: the row is simply not drawn.
@@ -260,7 +274,8 @@ function ProfileInner() {
    */
   const loadFriendsCount = useCallback(() => {
     void apiClient.getFriends().then((result) => {
-      if (result.success && result.data) setFriendsCount(result.data.count)
+      const read = result.success ? friendsPageFrom(result.data) : null
+      if (read) setFriends({ total: read.total, faces: read.items.slice(0, ME_FACES) })
     })
     // Its own request, so a slow one never holds up the friend count; the server's count of everyone waiting.
     void loadFriendRequests()
@@ -447,7 +462,30 @@ function ProfileInner() {
         */}
         <FadeInUp {...next()}>
           <SettingsGroup>
-            {requestCount > 0 ? <RequestsRow count={requestCount} /> : null}
+            {/*
+              Flow 7 6-A: Friends is a row in the group, three faces and a compact count, the requests waiting as its line and
+              badge. It was a stat ("0 FRIENDS" for a new account) with Friend requests a row of its own.
+            */}
+            <SettingsRow
+              testID="friends-row"
+              icon={friends?.faces.length ? undefined : 'users'}
+              leading={friends?.faces.length ? <FacesLead people={friends.faces} /> : undefined}
+              title="Friends"
+              hint={requestCount > 0 ? `${groupedCount(requestCount)} friend request${requestCount === 1 ? '' : 's'}` : undefined}
+              label={friendsLabel(friends?.total ?? 0, requestCount)}
+              accessory={
+                <>
+                  {friends && friends.total > 0 ? (
+                    <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, 'GeistMono_500Medium'), styles.count]}>
+                      {compactCount(friends.total)}
+                    </Text>
+                  ) : null}
+                  {requestCount > 0 ? <CountBadge text={requestCount > 99 ? '99+' : requestCount} size={22} testID="requests-badge" /> : null}
+                </>
+              }
+              trail="chevron"
+              onPress={openFriends}
+            />
             <SettingsRow
               testID="crews-row"
               icon={crewStack.length ? undefined : 'users'}
@@ -509,10 +547,8 @@ function ProfileInner() {
             <StatsCard
               attended={nightCounts.total ?? stats.eventsAttended}
               saved={stats.savedCount ?? stats.eventsFavorited}
-              friends={friendsCount}
               hosted={stats.eventsOrganized}
               onGoing={openGoing}
-              onFriends={openFriends}
             />
           </FadeInUp>
         ) : null}

@@ -86,11 +86,13 @@ it('draws the frame: name, circles, requests, crews with its count and dot, stat
   await screen.findByLabelText('Sam, 28')
   expect(screen.getByLabelText('Settings')).toBeTruthy()
   expect(screen.getByLabelText('Add friends')).toBeTruthy()
-  await waitFor(() => expect(screen.getByLabelText('2 friend requests')).toBeTruthy())
+  // Flow 7 6-A: Friends is a row in the group, the whole count and the requests in its name; no Friends stat.
+  await waitFor(() => expect(screen.getByLabelText('Friends, 9, 2 friend requests')).toBeTruthy())
+  expect(screen.getByText('2 friend requests')).toBeTruthy()
   await waitFor(() => expect(screen.getByLabelText('Crews, 2, 1 invite waiting')).toBeTruthy())
   expect(screen.getByTestId('crews-invite-dot', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.getByLabelText('14 Nights')).toBeTruthy()
-  expect(screen.getByLabelText('9 Friends')).toBeTruthy()
+  expect(screen.queryByLabelText('9 Friends')).toBeNull()
   await screen.findByTestId('nights-grid')
   // What you entered stays visible on your own page: occupation under the name, education under About.
   expect(screen.getByText('Product designer')).toBeTruthy()
@@ -391,5 +393,32 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     expect(screen.queryByTestId('me-badges')).toBeNull()
     expect(screen.queryByTestId('me-photo-pulled')).toBeNull()
     expect(screen.getByLabelText('Sam, 28')).toBeTruthy()
+  })
+})
+
+/*
+ * Flow 7 6-A: the Friends row draws three faces and a compact count ("12k"), heard whole ("12,480"); with none it says no number
+ * at all, never "0 FRIENDS". Negative control: the old stat card's "0 Friends" fails the second.
+ */
+describe('the Friends row', () => {
+  const people = ['Aarav Menon', 'प्रियंका शर्मा', 'Marc-André Lefebvre-Desrosiers', 'Diya Thomas'].map((name, i) => ({ userId: `f${i}`, name, photo: null, since: '2026-11-01T00:00:00Z' }))
+
+  it('12,480 friends: three faces, 12k to the eye and 12,480 to a screen reader', async () => {
+    api.getPublicProfile.mockResolvedValue(PROFILE as never)
+    api.getFriends.mockResolvedValue({ success: true, data: { count: 100, friends: people, pagination: { limit: 100, hasMore: true, nextCursor: 'c', totalCount: 12480 } } } as never)
+    await render(<Profile />)
+    await waitFor(() => expect(screen.getByLabelText(/^Friends, 12,480/)).toBeTruthy())
+    expect(screen.getByText('12k', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.queryByText('12,480', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('no friends: the row says Friends and no number', async () => {
+    api.getPublicProfile.mockResolvedValue(PROFILE as never)
+    api.getFriends.mockResolvedValue({ success: true, data: { count: 0, friends: [] } } as never)
+    await render(<Profile />)
+    await waitFor(() => expect(screen.getByTestId('friends-row')).toBeTruthy())
+    await act(async () => {})
+    expect(screen.queryByText('0', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryByLabelText(/0 Friends|Friends, 0/)).toBeNull()
   })
 })

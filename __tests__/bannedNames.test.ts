@@ -44,7 +44,16 @@ const BANNED: readonly { name: string; pattern: RegExp; allowIn?: readonly strin
    * "Message requests", the Friends page "Friend requests". Add friends keeps its own "Requests" section above the people
    * asking you, inside a screen that is only about friends.
    */
-  { name: 'Requests, as a title (now Message requests or Friend requests)', pattern: /^Requests$/, allowIn: ['app/friends/add.tsx'] },
+  // Flow 7 naming (owner 2026-11-17, SCRUM-1061): Add friends' own "Requests" section is "Friend requests" too, so it goes everywhere.
+  { name: 'Requests, as a title (now Message requests or Friend requests)', pattern: /^Requests$/ },
+  { name: 'Send friend request (now Add friend)', pattern: /\bsend friend request\b/i },
+  { name: 'Share your link (now Share my link)', pattern: /\bshare your link\b/i },
+  { name: 'wants to blend with you (now invited you to be friends on Blend’n)', pattern: /\bwants to blend\b/i },
+  { name: 'Wants you as a friend (removed: it repeated the headline)', pattern: /\bwants you as a friend\b/i },
+  { name: 'Opened your link · asks… (now From your link / From a match)', pattern: /\bopened your link\b/i },
+  { name: 'not friends with this person any more (now You’re no longer friends)', pattern: /\bnot friends with this person\b/i },
+  // "Sent" alone could be a message; a chat receipt and the rating's confirmation keep it.
+  { name: 'Sent, the requests header (now Sent requests)', pattern: /^Sent$/, allowIn: ['components/ds/ReceiptMark.tsx', 'components/rate/RateParts.tsx', 'app/rate/[eventId].tsx'] },
   // Flow 5 C7 (owner 2026-11-10, SCRUM-1042): one room, "Show who you are" (the confirm says "Show them"), the host as the
   // org, Message for every ask to talk, Check out and Mute this room.
   { name: 'Room chat (one room)', pattern: /\broom chat\b/i },
@@ -112,6 +121,14 @@ describe('retired names stay retired (naming review 2026-11-05)', () => {
   it('catches each old name planted in copy', () => {
     const planted = [
       '<Text>The Board</Text>',
+      "label: 'Send friend request'",
+      "label: 'Share your link'",
+      'const h = `${name} wants to blend with you`',
+      "'Wants you as a friend on Blend’n.'",
+      "const LINE = 'Opened your link · asks to be your friend'",
+      'title="You’re not friends with this person any more."',
+      '<SectionHeader title="Sent" />',
+      '<SectionHeader title="Requests" />',
       "title: 'This board isn’t here'",
       "label: 'Hold to blend in'",
       'const t = `Blend with ${name}`',

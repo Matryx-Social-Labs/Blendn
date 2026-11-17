@@ -42,11 +42,12 @@ beforeEach(() => {
 })
 
 describe('Friends › Requests (rose)', () => {
-  it('Accept is lit with its glyph at 48, beside a quiet Not now', async () => {
+  // Flow 7 4-A: a 68 pt row, so Accept is the small lit button (36) beside the glass × of Not now.
+  it('Accept is lit with its glyph, small on the 68 pt row, beside a quiet Not now', async () => {
     const request = { id: 'r1', createdAt: '2026-10-22T10:00:00Z', person: { userId: 'u1', name: 'Priya Raman', photo: null } } as never
     await render(world('rose', <IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />))
     expect(isLit('Accept Priya Raman', 'rose')).toBe(true)
-    expect(button('Accept Priya Raman').height).toBe(SIZE.control)
+    expect(button('Accept Priya Raman').height).toBe(36)
     expect(isLit('Not now, Priya Raman', 'rose')).toBe(false)
     expect(JSON.stringify(screen.toJSON())).toContain(SELECTION.rose.glyph)
   })
