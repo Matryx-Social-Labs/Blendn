@@ -123,6 +123,11 @@ describe('no glyph stands in for a person', () => {
     expect(hits).toEqual([])
   })
 
+  it('the cat glyph is gone from the icon set, so no face can fall back to it', () => {
+    const icons = readFileSync(join(ROOT, 'components', 'ui', 'Icon.tsx'), 'utf8')
+    expect(icons).not.toMatch(/icons\/cat'|^\s*cat:/m)
+  })
+
   it('the guard reads real sources (the control)', () => {
     expect(sources.some((p) => p.endsWith(join('components', 'profile', 'PhotoStack.tsx')))).toBe(true)
   })
