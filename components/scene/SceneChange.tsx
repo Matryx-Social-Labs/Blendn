@@ -143,7 +143,11 @@ function DayChip({ chip, days, today, wide = false }: { chip: Chip; days: EventD
       <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.ink, chip.cancelled && styles.struck]}>
         {date}
       </Text>
-      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.sub]}>
+      {/*
+        A control's words: they stop at the 1.3× cap, and on one line. At that cap "Cancelled" is about as wide as the 72 pt chip,
+        and Android split it to "Cancelle/d" at font 2.0; it shrinks the last few points to fit instead (owner 2026-11-17).
+      */}
+      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={CHIP_TEXT_FLOOR} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold), styles.sub]}>
         {chip.cancelled ? 'Cancelled' : `Day ${chip.n}`}
       </Text>
     </View>
@@ -153,6 +157,8 @@ function DayChip({ chip, days, today, wide = false }: { chip: Chip; days: EventD
 const DAY_WIDTH = 72
 const DAY_HEIGHT = 44
 const CALLED_OPACITY = 0.6
+/** How far a chip's word may shrink to stay whole: 1.3× × 0.8 never draws under the caption's 1× size. */
+const CHIP_TEXT_FLOOR = 0.8
 const LINE_HEIGHT = 48
 
 const styles = StyleSheet.create({

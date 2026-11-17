@@ -11,7 +11,7 @@ import { CrewEmblem } from '../../../components/ds/CrewEmblem'
 import { Grain } from '../../../components/ds/Grain'
 import { Orbs } from '../../../components/ds/Orbs'
 import { Title } from '../../../components/ds/Title'
-import { font, HueProvider, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from '../../../components/ds/shared'
+import { font, HueProvider, IC_HAIRLINE, useBoldText, useIncreaseContrast, useLargeText, useSelection } from '../../../components/ds/shared'
 import { StateScreen } from '../../../components/ds/StateScreen'
 import { Toggle } from '../../../components/ds/Toggle'
 import { TopBar } from '../../../components/ds/TopBar'
@@ -49,6 +49,7 @@ function CrewInviteScreenContent() {
   const { crewId: param } = useLocalSearchParams<{ crewId: string }>()
   const crewId = String(param)
   const bold = useBoldText()
+  const largeText = useLargeText()
   const contrast = useIncreaseContrast()
   const sel = useSelection()
   const insets = useSafeAreaInsets()
@@ -193,14 +194,18 @@ function CrewInviteScreenContent() {
             ) : (
               <Avatar kind="creature" pseudonym={invite.invitedBy} size={INVITER_FACE} testID="invite-inviter-creature" />
             )}
-            <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.shrink]}>
+            {/* Two lines before an ellipsis: a long first name ("Venkatalakshmi") is never cut at the large sizes. */}
+            <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink, styles.shrink]}>
               {askedYouIn(invite.invitedBy)}
             </Text>
           </View>
           {/* "Priya asked you in": the crew waves hello, once. */}
           <CrewEmblem seed={invite.emblemSeed} size={EMBLEM} scene="wave" />
-          {/* Two lines at most: a 32-character name is never cut to one, nor left to run on. */}
-          <Title numberOfLines={2} accessibilityRole="header" style={[styles.centre, styles.ink, styles.name]}>
+          {/*
+            Two lines at most at the default sizes: a 32-character name is never cut to one, nor left to run on. At the AX sizes
+            the cap lifts, as the crew page's name does (CrewHead): two lines cut "Saint-Jean-sur-Richelieu Runners" to its first word.
+          */}
+          <Title numberOfLines={largeText ? undefined : 2} accessibilityRole="header" style={[styles.centre, styles.ink, styles.name]}>
             {invite.name}
           </Title>
           <View style={styles.about}>
