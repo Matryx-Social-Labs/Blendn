@@ -169,9 +169,9 @@ export function SceneLightbox({
  * One clip, mounted only while its page is the visible one.
  *
  * The poster is painted underneath rather than behind a spinner, so a clip
- * that is still buffering shows the organiser's own frame instead of black —
- * the same rule `FeedVideo` follows, and the reason `feedPlaylist` refuses to
- * emit a clip it cannot poster.
+ * that is still buffering shows its own first frame instead of black — the
+ * same rule `FeedVideo` follows. A clip with no poster of its own has none
+ * (`feedPlaylist` never borrows the cover, SCRUM-1066): the page's dark shows.
  */
 function LightboxVideo({
   source,
