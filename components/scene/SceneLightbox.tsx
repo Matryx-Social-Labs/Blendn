@@ -179,7 +179,8 @@ function LightboxVideo({
   active,
 }: {
   source: string
-  poster: string
+  /** The clip's own still, or null (it has none: the page's dark shows until it plays). */
+  poster: string | null
   active: boolean
 }) {
   const player = useVideoPlayer(source, (p) => {
@@ -220,7 +221,7 @@ function LightboxVideo({
 
   return (
     <View style={styles.media}>
-      {!ready || !active ? (
+      {poster && (!ready || !active) ? (
         <Image
           source={{ uri: poster }}
           style={StyleSheet.absoluteFill}

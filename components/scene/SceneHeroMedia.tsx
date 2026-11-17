@@ -150,6 +150,14 @@ export function SceneHeroMedia({
    * the poster, and the tap still opens the lightbox, whose player has its own controls (FeedMedia's rule).
    */
   const mountClip = !paused || started
+  /*
+   * The clip that has drawn its first frame, by its page key: its poster goes then (SCRUM-1066). The hero is `contain`, so
+   * a clip at another ratio letterboxes and the player is clear in the bars: a poster left under it showed there. A
+   * remounted clip is a new player at zero, so the key is cleared when it unmounts and the poster holds until its frame.
+   */
+  const [framed, setFramed] = useState<string | null>(null)
+  const stillOf = (item: FeedMediaItem, i: number) =>
+    item.kind === 'image' ? item.url : i === index && mountClip && framed === `${item.url}-${i}` ? null : item.posterUrl
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / width)
@@ -179,9 +187,10 @@ export function SceneHeroMedia({
           >
             {/*
               The poster is painted for every page, and the player mounts over
-              the visible one. So a clip that is buffering shows the organiser's
-              own frame rather than black, and off-screen pages cost an image
-              each instead of a decoder each.
+              the visible one. So a clip that is buffering shows its own first
+              frame rather than black, and off-screen pages cost an image each
+              instead of a decoder each. Gone once the clip has a frame (`framed`);
+              a clip with no poster shows the frame's dark surface until then.
 
               `transition={0}`, deliberately. A cross-fade here fought the
               pager: the slide *is* the transition, and fading a new image in on
@@ -190,14 +199,7 @@ export function SceneHeroMedia({
               recycled view still holding the previous page's picture and then
               dissolve out of it — which is the other half of the same flash.
             */}
-            <Image
-              source={{ uri: item.kind === 'image' ? item.url : item.posterUrl }}
-              style={StyleSheet.absoluteFill}
-              contentFit={fit}
-              cachePolicy="memory-disk"
-              recyclingKey={item.kind === 'image' ? item.url : item.posterUrl}
-              transition={0}
-            />
+            <Still uri={stillOf(item, i)} fit={fit} />
             {/*
               Mounted only while it is the page in view — the Pulse's rule.
 
@@ -256,6 +258,7 @@ export function SceneHeroMedia({
                  * that will never render anything.
                  */
                 onFailed={() => goToRef.current(i + 1)}
+                onFramed={(drawn) => setFramed((at) => (drawn ? `${item.url}-${i}` : at === `${item.url}-${i}` ? null : at))}
               />
             ) : null}
           </Pressable>
@@ -281,6 +284,12 @@ export function SceneHeroMedia({
       ) : null}
     </View>
   )
+}
+
+/** A page's picture: a still, or a clip's poster; none draws nothing, and the frame's dark surface shows. */
+function Still({ uri, fit }: { uri: string | null; fit: 'cover' | 'contain' }) {
+  if (!uri) return null
+  return <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit={fit} cachePolicy="memory-disk" recyclingKey={uri} transition={0} />
 }
 
 /** The empty band under the hero's caption: the pager dots live in it, so no title length can reach them. */
@@ -337,6 +346,7 @@ function HeroVideo({
   fit,
   onEnded,
   onFailed,
+  onFramed,
 }: {
   source: string
   fit: 'cover' | 'contain'
@@ -349,6 +359,8 @@ function HeroVideo({
    * moves on and the rest of the organiser's media is still seen.
    */
   onFailed: () => void
+  /** `true` once it has drawn its first frame (the poster under it can go), `false` when it unmounts. */
+  onFramed: (drawn: boolean) => void
 }) {
   const player = useVideoPlayer(source, (p) => {
     p.muted = true
@@ -375,10 +387,13 @@ function HeroVideo({
 
   const endedRef = useRef(onEnded)
   const failedRef = useRef(onFailed)
+  const framedRef = useRef(onFramed)
   useLayoutEffect(() => {
     endedRef.current = onEnded
     failedRef.current = onFailed
+    framedRef.current = onFramed
   })
+  useEffect(() => () => framedRef.current(false), [])
 
   useEffect(() => {
     // `playToEnd` rather than polling: the player already knows, and a poll has
@@ -432,6 +447,7 @@ function HeroVideo({
       nativeControls={false}
       allowsPictureInPicture={false}
       accessible={false}
+      onFirstFrameRender={() => framedRef.current(true)}
     />
   )
 }
