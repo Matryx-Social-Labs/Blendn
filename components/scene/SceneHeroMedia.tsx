@@ -146,10 +146,12 @@ export function SceneHeroMedia({
   const clipInView = current?.kind === 'video'
   useEffect(() => onClipInView?.(clipInView), [clipInView, onClipInView])
   /*
-   * A clip mounts (and so plays) unless it is paused before anybody chose to play it: under Reduce Motion the hero is
-   * the poster, and the tap still opens the lightbox, whose player has its own controls (FeedMedia's rule).
+   * A clip mounts unless it is paused before anybody chose to play it: under Reduce Motion the hero is the poster, and the
+   * tap still opens the lightbox, whose player has its own controls (FeedMedia's rule). A clip with no poster of its own
+   * mounts anyway, paused, so its own first frame is the picture: never a dark square, never the event cover (SCRUM-1066
+   * option B, owner 2026-11-17). Play then plays that same player from its frame.
    */
-  const mountClip = !paused || started
+  const mountsClip = (item: FeedMediaItem) => !paused || started || (item.kind === 'video' && !item.posterUrl)
   /*
    * The clip that has drawn its first frame, by its page key: its poster goes then (SCRUM-1066). The hero is `contain`, so
    * a clip at another ratio letterboxes and the player is clear in the bars: a poster left under it showed there. A
@@ -157,7 +159,7 @@ export function SceneHeroMedia({
    */
   const [framed, setFramed] = useState<string | null>(null)
   const stillOf = (item: FeedMediaItem, i: number) =>
-    item.kind === 'image' ? item.url : i === index && mountClip && framed === `${item.url}-${i}` ? null : item.posterUrl
+    item.kind === 'image' ? item.url : i === index && mountsClip(item) && framed === `${item.url}-${i}` ? null : item.posterUrl
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / width)
@@ -223,7 +225,7 @@ export function SceneHeroMedia({
               "it plays" stops depending on a prop transition that a two-item
               playlist never performs.
             */}
-            {item.kind === 'video' && i === index && mountClip ? (
+            {item.kind === 'video' && i === index && mountsClip(item) ? (
               <HeroVideo
                 key={`${item.url}-${i}`}
                 source={item.url}

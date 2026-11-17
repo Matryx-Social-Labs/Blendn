@@ -9,7 +9,7 @@
  * show the hero's own dark surface. Until that frame (a stall, Reduce Motion) the poster stays, or the surface if there
  * is none.
  */
-import { act, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
 
@@ -141,6 +141,47 @@ describe('under Reduce Motion', () => {
     )
     expect(screen.queryByTestId('hero-clip')).toBeNull()
     expect(stills()).toEqual([POSTER])
+  })
+
+  /*
+   * SCRUM-1066 option B (owner 2026-11-17): a clip with no poster of its own loads paused, so its own first frame is the
+   * picture: never a dark square, never the event cover. Play still plays it, from that frame.
+   */
+  const hero = (playlist: FeedMediaItem[]) => (
+    <View>
+      <SceneHero playlist={playlist} title="Rooftop Sundowner" stamp={null} venueLine="Bengaluru" />
+    </View>
+  )
+
+  it('a clip with no poster loads paused: its own first frame is the picture, and nothing plays', async () => {
+    await render(hero([{ kind: 'video', url: CLIP_URL, posterUrl: null }]))
+    expect(screen.getByTestId('hero-clip')).toBeTruthy()
+    expect(mockPlayer.play).not.toHaveBeenCalled()
+    expect(mockPlayer.pause).toHaveBeenCalled()
+  })
+
+  it('the clip’s page never draws the event cover, before or after its frame', async () => {
+    await render(hero([{ kind: 'video', url: CLIP_URL, posterUrl: null }]))
+    expect(stills()).toEqual([])
+    await firstFrame()
+    expect(stills()).toEqual([])
+  })
+
+  it('Play plays that same clip, from its frame (no new player)', async () => {
+    await render(hero([{ kind: 'video', url: CLIP_URL, posterUrl: null }]))
+    const clip = screen.getByTestId('hero-clip')
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('scene-hero-playback'))
+    })
+    expect(screen.getByLabelText('Pause video')).toBeTruthy()
+    expect(mockPlayer.play).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('hero-clip')).toBe(clip)
+  })
+
+  it('the control: a clip with its own poster still waits for Play, unmounted (no decoder until asked)', async () => {
+    await render(hero([{ kind: 'video', url: CLIP_URL, posterUrl: POSTER }]))
+    expect(screen.queryByTestId('hero-clip')).toBeNull()
+    expect(mockPlayer.play).not.toHaveBeenCalled()
   })
 
   it('a still page is its picture', async () => {
