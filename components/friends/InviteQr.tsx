@@ -58,7 +58,7 @@ export function InviteQr({ url, size, face }: { url: string; size: number; face:
         ))}
       </Svg>
       <View style={[styles.face, { borderRadius: face.size / 2 + FACE_RING, padding: FACE_RING, marginLeft: -(face.size / 2 + FACE_RING), marginTop: -(face.size / 2 + FACE_RING) }]}>
-        <Avatar {...personFace({ named: true, name: face.name, photo: face.photo })} size={face.size} />
+        <Avatar size={face.size} {...personFace({ named: true, name: face.name, photo: face.photo })} />
       </View>
     </View>
   )

@@ -50,6 +50,7 @@ export function uncapped(tree: Tree): string[] {
   const found: string[] = []
   const walk = (n: Node) => {
     if (n.type === 'Text') {
+      // `allowFontScaling={false}` never grows (an avatar's initial, drawn to the disc): capped at 1.
       if (!n.props.maxFontSizeMultiplier && n.props.allowFontScaling !== false) found.push(JSON.stringify(n.children))
       return
     }

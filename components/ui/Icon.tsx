@@ -46,7 +46,6 @@ import CalendarX from 'lucide-react-native/icons/calendar-x'
 import Camera from 'lucide-react-native/icons/camera'
 import CameraOff from 'lucide-react-native/icons/camera-off'
 import Car from 'lucide-react-native/icons/car'
-import Cat from 'lucide-react-native/icons/cat'
 import ChartColumn from 'lucide-react-native/icons/chart-column'
 import Check, { __iconData as checkData } from 'lucide-react-native/icons/check'
 import CheckCheck from 'lucide-react-native/icons/check-check'
@@ -217,7 +216,6 @@ const ICONS = {
   camera: Camera,
   'camera-off': CameraOff,
   car: Car,
-  cat: Cat,
   'chart-column': ChartColumn,
   check: Check,
   'check-check': CheckCheck,

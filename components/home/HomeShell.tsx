@@ -66,6 +66,12 @@ export interface PulseShell {
   lead: number
   openPlaces: () => void
   setMapBanners: (node: ReactNode) => void
+  /**
+   * The Pulse's sheets that either pane opens (the city picker: the City chip, Places' "Change city"). Drawn by the shell
+   * outside both panes: the pane not showing is `display: 'none'`, and a sheet inside it opened unseen from Places, then
+   * popped up on the way back to Events (SCRUM-1064).
+   */
+  setSheets: (node: ReactNode) => void
 }
 
 type Segment = 'events' | 'places'
@@ -169,6 +175,7 @@ export function HomeShell({
   const [searchOpen, setSearchOpen] = useState(false)
   const queryRef = useLatest(query)
   const [mapBanners, setMapBanners] = useState<ReactNode>(null)
+  const [sheets, setSheets] = useState<ReactNode>(null)
   // The banners' height on the map, and how far it lifts "my location": above the banner, its gap kept (board `.mbn`).
   const bannerHeight = useSharedValue(0)
   const locateLift = useDerivedValue(() => (bannerHeight.get() > 0 ? bannerReach(bannerHeight.get() - SPACE.sm) : 0))
@@ -226,7 +233,7 @@ export function HomeShell({
   const pulseVisible = focused && segment === 'events' && snap !== 'peek'
   const pulseFull = pulseVisible && snap === 'full' && !keyboardUp
   const shell = useMemo<PulseShell>(
-    () => ({ query, setQuery, searchOpen, lead: rest.lead, openPlaces, setMapBanners }),
+    () => ({ query, setQuery, searchOpen, lead: rest.lead, openPlaces, setMapBanners, setSheets }),
     [query, searchOpen, rest.lead, openPlaces]
   )
   const events = useMemo(() => renderEvents(setBrowse, pulseVisible, pulseFull, shell), [renderEvents, pulseVisible, pulseFull, shell])
@@ -321,6 +328,7 @@ export function HomeShell({
           </View>
         ) : null}
       </HomeDrawer>
+      {sheets}
     </View>
   )
 }

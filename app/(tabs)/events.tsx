@@ -1922,6 +1922,36 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, socketStatus, bannerActions]
   )
+  /*
+   * The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask.
+   * Either pane opens it, so the shell draws it outside both (`PulseShell.setSheets`, SCRUM-1064); with no shell, here.
+   */
+  const homeCountry = home?.country ?? null
+  const selectedSlug = selection?.slug ?? null
+  const cityPicker = useMemo(
+    () => (
+      <CityPicker
+        visible={cityPickerOpen}
+        onClose={() => setCityPickerOpen(false)}
+        cities={cityOptions}
+        countries={catalogue.countries ?? []}
+        homeCountry={homeCountry}
+        deviceCountry={sentCountry}
+        selectedCity={selectedCity}
+        selectedSlug={selectedSlug}
+        deviceCity={deviceCity}
+        onChoose={chooseCity}
+        onLocate={() => void requestLocationIfNeeded()}
+      />
+    ),
+    [cityPickerOpen, cityOptions, catalogue.countries, homeCountry, sentCountry, selectedCity, selectedSlug, deviceCity, chooseCity, requestLocationIfNeeded]
+  )
+  const setSheets = shell?.setSheets
+  useEffect(() => {
+    if (!setSheets) return
+    setSheets(cityPicker)
+    return () => setSheets(null)
+  }, [setSheets, cityPicker])
   const setMapBanners = shell?.setMapBanners
   useEffect(() => {
     if (!setMapBanners) return
@@ -2169,20 +2199,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       </PulseSlots.Provider>
       {pull.native ? null : <PullIndicator progress={pull.progress} />}
 
-      {/* The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask. */}
-      <CityPicker
-        visible={cityPickerOpen}
-        onClose={() => setCityPickerOpen(false)}
-        cities={cityOptions}
-        countries={catalogue.countries ?? []}
-        homeCountry={home?.country ?? null}
-        deviceCountry={sentCountry}
-        selectedCity={selectedCity}
-        selectedSlug={selection?.slug ?? null}
-        deviceCity={deviceCity}
-        onChoose={chooseCity}
-        onLocate={() => void requestLocationIfNeeded()}
-      />
+      {setSheets ? null : cityPicker}
 
       <FilterSheet
         visible={filterSheetOpen}

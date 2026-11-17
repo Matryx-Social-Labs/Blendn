@@ -20,6 +20,7 @@ import { useReducedMotion } from '../../lib/motion'
 import { tabBarShape } from '../../lib/tabBarSettle'
 import { tint } from '../../lib/theme'
 import { Avatar } from './Avatar'
+import { personFace } from '../../lib/personFace'
 import { Disc, type DiscProps } from './Disc'
 import { PresenceDot } from './MonoFamily'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useScreenReader } from './shared'
@@ -79,8 +80,10 @@ export type TabBarProps = {
   onSelect: (tab: Tab) => void
   /** The centre disc, exactly as `<Disc>` takes it; the bar only reserves its 56 pt slot. */
   disc: DiscProps
-  /** Your own face on Me; the outlined person until there is one. */
+  /** Your own face on Me: your photo, else your initial on your hue disc (`personFace`), the outlined person until either is known. */
   mePhoto?: string
+  /** Your name, for your initial when there is no photo. */
+  meName?: string
   /** Conversations with something unread from the other side: a dot on Banter's glyph, the count only in its spoken label ("Banter, 3 new"). */
   banterUnread?: number
   /** The disc's slot, for whoever points at it (the centre button's coach mark). */
@@ -137,6 +140,7 @@ export function TabBar({
   onSelect,
   disc,
   mePhoto,
+  meName,
   banterUnread = 0,
   discRef,
   settle,
@@ -226,6 +230,7 @@ export function TabBar({
       on={t.key === selected}
       unread={t.key === 'banter' ? banterUnread : 0}
       photo={t.key === 'me' && mePhoto && mePhoto !== deadPhoto ? mePhoto : undefined}
+      name={t.key === 'me' ? meName?.trim() || undefined : undefined}
       onPhotoError={() => setDeadPhoto(mePhoto ?? null)}
       onSelect={onSelect}
       motion={motion}
@@ -277,6 +282,7 @@ function TabCell({
   on,
   unread,
   photo,
+  name: who,
   onPhotoError,
   onSelect,
   motion,
@@ -286,6 +292,8 @@ function TabCell({
   on: boolean
   unread: number
   photo?: string
+  /** Me with no photo: your initial (`personFace`). */
+  name?: string
   onPhotoError: () => void
   onSelect: (tab: Tab) => void
   motion: CellMotion
@@ -327,6 +335,8 @@ function TabCell({
         <Animated.View style={[styles.column, drop]}>
           {photo ? (
             <Avatar kind="photo" uri={photo} size={ICON.nav} ring={on ? COLOR.textPrimary : undefined} onError={onPhotoError} testID={`${testID}-me-avatar`} />
+          ) : who ? (
+            <Avatar {...personFace({ named: true, name: who })} size={ICON.nav} ring={on ? COLOR.textPrimary : undefined} testID={`${testID}-me-initial`} />
           ) : (
             <View>
               <Icon name={icon} size={ICON.nav} color={ink} active={on} />
