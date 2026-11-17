@@ -111,7 +111,8 @@ export function SessionSheet({
         onClose={cancel}
         title={stopLiveQuestion(venue)}
         body={STOP_LIVE_CONSEQUENCE}
-        actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: cancel }]}
+        // Stay while the stop is on the wire would promise what the server is already undoing.
+        actions={[{ label: STAY_LABEL, kind: 'tertiary', onPress: cancel, disabled: ending }]}
       >
         <HoldToConfirm
           kind="neutral"

@@ -165,6 +165,7 @@ describe('<SessionSheet>', () => {
     await render(<SessionSheet {...base} visible startConfirming ending time={{ kind: 'minutes', left: 32, until: '21:50' }} />)
     expect(hold().props.accessibilityLabel).toBe('Stopping…')
     expect(hold().props.accessibilityState).toMatchObject({ busy: true })
+    expect(screen.getByRole('button', { name: 'Stay' }).props.accessibilityState).toMatchObject({ disabled: true })
   })
 
   it('with no end to count to (no expiry, not a stay) it says only that you are live, and End still confirms', async () => {
