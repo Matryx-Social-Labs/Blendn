@@ -1,4 +1,3 @@
-import { Image } from 'expo-image'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native'
 import Animated, { cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
@@ -11,6 +10,7 @@ import { tint } from '../../lib/theme'
 import { HoldToConfirm } from './HoldToConfirm'
 import { CONTROL_FONT_CAP, font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
 import { Title } from './Title'
+import { ContainedCover } from './LinkPreviewCard'
 
 const THUMB = SIZE.primary
 /** The tease's "?" discs: three at 32, overlapping by 8, ringed in 80% ink. */
@@ -96,7 +96,7 @@ export function VenuePass({
       <Material role="sheet" style={[StyleSheet.absoluteFill, styles.radius]} />
       <View accessible accessibilityLabel={`${where}. ${title}. ${inside}.`} style={styles.head}>
         <View testID={testID && `${testID}-thumb`} style={styles.thumb}>
-          {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+          {cover ? <ContainedCover uri={cover} auto /> : null}
         </View>
         <View style={styles.headText}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), styles.secondary]}>{where.toUpperCase()}</Text>

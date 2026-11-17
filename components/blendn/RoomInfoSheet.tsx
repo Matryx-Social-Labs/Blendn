@@ -1,4 +1,3 @@
-import { Image } from 'expo-image'
 import { Children, Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 
@@ -15,6 +14,7 @@ import { Logger } from '../../lib/logger'
 import { printable } from '../../lib/pulseSections'
 import { hereNowCount, roomHost, roomInfoLine } from '../../lib/roomInfo'
 import { showRoomReportOptions } from '../../lib/safetyUtils'
+import { ContainedCover } from '../ds/LinkPreviewCard'
 
 /** The board's row (`.xli`): 56 tall, 14 in from the card's edge, the glyph 12 from the words. */
 const ROW_INSET = SPACE.md + SPACE.xxs
@@ -68,7 +68,7 @@ export function RoomInfoSheet({ visible, onClose, eventId, title, chatGroupId, h
       <View style={styles.blocks}>
         <View testID="room-info-event" accessible accessibilityRole="header" accessibilityLabel={[event?.title ?? title, line].filter(Boolean).join(', ')} style={styles.event}>
           <View style={styles.cover}>
-            {cover ? <Image source={{ uri: cover }} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : <CategoryPlate />}
+            {cover ? <ContainedCover uri={cover} auto /> : <CategoryPlate />}
           </View>
           <View style={styles.words}>
             <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.rowTitle} style={[font('rowTitle', bold, FONT_FAMILY.brand[700]), styles.ink]}>

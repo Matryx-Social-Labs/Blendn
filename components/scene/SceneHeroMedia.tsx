@@ -1,9 +1,9 @@
-import { Image } from 'expo-image'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, View, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 
 import type { FeedMediaItem } from '../../lib/feedMedia'
 import { COLOR, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { ContainedCover } from '../ds/LinkPreviewCard'
 import { useReduceTransparency } from '../ds/shared'
 import { tint } from '../../lib/theme'
 import { useVideoPlayer, VideoView } from 'expo-video'
@@ -60,13 +60,10 @@ export function SceneHeroMedia({
   paused = false,
   started = false,
   onClipInView,
-  fit = 'cover',
   autoAdvance = true,
   pips = 'corner',
 }: {
   playlist: FeedMediaItem[]
-  /** `contain`: the organizer's flyer as they made it, uncropped (Flow 4 E-B's poster). */
-  fit?: 'cover' | 'contain'
   /** `false`: the pager moves only when swiped (Flow 4 M31: a gallery never advances on its own). */
   autoAdvance?: boolean
   /** `center`: the poster's pips, 6 pt, the page's 16, 5 apart, 12 above the foot, no capsule (board `.pips`). */
@@ -158,8 +155,14 @@ export function SceneHeroMedia({
    * remounted clip is a new player at zero, so the key is cleared when it unmounts and the poster holds until its frame.
    */
   const [framed, setFramed] = useState<string | null>(null)
-  const stillOf = (item: FeedMediaItem, i: number) =>
-    item.kind === 'image' ? item.url : i === index && mountsClip(item) && framed === `${item.url}-${i}` ? null : item.posterUrl
+  const isFramed = (item: FeedMediaItem, i: number) => item.kind === 'video' && i === index && mountsClip(item) && framed === `${item.url}-${i}`
+  /*
+   * Fit rule B (owner 2026-11-17): each page covers only within ±15% of the hero's ratio, else the whole upload over its
+   * own blurred copy (`ContainedCover auto`). A clip takes its poster's fit (the poster is its first frame), so the first
+   * frame lands on the same picture; a clip with no poster is contained.
+   */
+  const [fits, setFits] = useState<Record<string, 'cover' | 'contain'>>({})
+  const fitOf = (key: string) => fits[key] ?? 'contain'
 
   const onMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / width)
@@ -201,7 +204,11 @@ export function SceneHeroMedia({
               recycled view still holding the previous page's picture and then
               dissolve out of it — which is the other half of the same flash.
             */}
-            <Still uri={stillOf(item, i)} fit={fit} />
+            <Still
+              uri={item.kind === 'image' ? item.url : item.posterUrl}
+              fillOnly={isFramed(item, i)}
+              onFit={(f) => setFits((at) => (at[`${item.url}-${i}`] === f ? at : { ...at, [`${item.url}-${i}`]: f }))}
+            />
             {/*
               Mounted only while it is the page in view — the Pulse's rule.
 
@@ -240,7 +247,7 @@ export function SceneHeroMedia({
                  * looping never.
                  */
                 loop={!autoAdvances}
-                fit={fit}
+                fit={fitOf(`${item.url}-${i}`)}
                 /*
                  * A stable function, always — never `undefined`.
                  *
@@ -288,10 +295,13 @@ export function SceneHeroMedia({
   )
 }
 
-/** A page's picture: a still, or a clip's poster; none draws nothing, and the frame's dark surface shows. */
-function Still({ uri, fit }: { uri: string | null; fit: 'cover' | 'contain' }) {
+/**
+ * A page's picture under fit rule B: a still, or a clip's poster (only its blurred fill once the clip has drawn its first
+ * frame); none draws nothing, and the frame's dark surface shows.
+ */
+function Still({ uri, fillOnly, onFit }: { uri: string | null; fillOnly: boolean; onFit: (fit: 'cover' | 'contain') => void }) {
   if (!uri) return null
-  return <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit={fit} cachePolicy="memory-disk" recyclingKey={uri} transition={0} />
+  return <ContainedCover uri={uri} auto fillOnly={fillOnly} onFit={onFit} />
 }
 
 /** The empty band under the hero's caption: the pager dots live in it, so no title length can reach them. */
@@ -446,6 +456,8 @@ function HeroVideo({
       player={player}
       style={StyleSheet.absoluteFill}
       contentFit={fit}
+      // Android: a SurfaceView ignores the parent's rounded clip; a TextureView is clipped by it (pulse-media sheet 12).
+      surfaceType="textureView"
       nativeControls={false}
       allowsPictureInPicture={false}
       accessible={false}
