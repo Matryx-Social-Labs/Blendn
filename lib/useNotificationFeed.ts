@@ -6,13 +6,24 @@ import { apiClient } from './apiClient'
 import { iconBadgeAfterRead, iconBadgeFor, setAppIconBadge } from './appBadge'
 import { askFriendsSeeMe, useStillHere } from './friendsSeeMeAsk'
 import { readAnswered, rememberAnswered, type Outcome } from './answeredRequests'
-import { crewInviteAnswered, readMyCrews, useCrewInvites } from './crewInvites'
+import { crewInviteAnswered, moreCrewInvites, readMyCrews, useCrewInvites } from './crewInvites'
 import { crewsApi } from './crewsApi'
 import { REQUEST_TIMEOUT_MS, settleWithin } from './fetchTimeout'
 import { Logger } from './logger'
 import type { NotificationItem } from './notificationFormat'
-import { arrivedUnread, closeAnsweredElsewhere, groupFeed, isRequestKind, mergeFeed, type FeedGroups, type FeedRow, type RowAction } from './notificationRows'
-import { friendRequestLeft, loadFriendRequests, useFriendRequestsState } from './friendRequests'
+import {
+  arrivedUnread,
+  askItems,
+  closeAnsweredElsewhere,
+  groupFeed,
+  isRequestKind,
+  mergeFeed,
+  withAsks,
+  type FeedGroups,
+  type FeedRow,
+  type RowAction,
+} from './notificationRows'
+import { friendRequestLeft, loadFriendRequests, loadMoreFriendRequests, useFriendRequestsState } from './friendRequests'
 import { navigateFromNotificationData } from './notifications'
 import { subscribeToBell } from './socketClient'
 
@@ -64,6 +75,8 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const [answered, setAnswered] = useState<ReadonlyMap<string, Outcome>>(new Map())
   const [clearKeepsRequests, setClearKeepsRequests] = useState(false)
   const [clearedOpenRequests, setClearedOpenRequests] = useState(false)
+  /** The asks being answered here: one drawn from a shared list leaves it at the answer, and its row stays for the outcome's dwell. */
+  const [held, setHeld] = useState<ReadonlyMap<string, NotificationItem>>(new Map())
   /** When the page was read: "2 min ago" is measured from here, so a render never reads the clock. */
   const [readAt, setReadAt] = useState(0)
   /** The rows that landed while the screen was open: they fade in, the first page never does. */
@@ -140,9 +153,9 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
         setLoad('ready')
         if (arrived.length || page.some((n) => n.readAt === null)) markSeen(iconBadgeAfterRead(result.data))
         else void setAppIconBadge(iconBadgeFor(result.data))
-        // The list shows at once; whether its asks were answered elsewhere is the shared lists' to say, read again after.
-        if (page.some((n) => n.kind === 'friend_request' && n.open !== false)) void loadFriendRequests()
-        if (page.some((n) => n.kind === 'crew_invite' && n.open !== false)) void readMyCrews()
+        // The list shows at once; Waiting on you is the shared lists' (SCRUM-1062), read again after, whatever the page holds.
+        void loadFriendRequests()
+        void readMyCrews()
       } catch (error) {
         Logger.warn('notifications', 'load:failed', { error: error as never })
         // A list that loaded once stays through a failed refresh: "Quiet for now" over a failed request would be false.
@@ -204,17 +217,26 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const settle = useCallback(() => setSettled((prev) => new Set([...prev, ...freshIds])), [freshIds])
 
   /*
+   * Waiting on you lists what Friends and Crews do (SCRUM-1062): the feed, with a row for every ask on the shared lists that it
+   * has none for (one older than its first page, cleared, swept), and the ones being answered here until their dwell ends.
+   */
+  const combined = useMemo(
+    () => withAsks(items, [...askItems(friendRequests.incoming.items, crewInvites.invites), ...held.values()]),
+    [items, friendRequests.incoming.items, crewInvites.invites, held]
+  )
+
+  /*
    * A crew invite joined on its consent screen (Join here opens it) comes back saying so: "You’re in {crew}", for the dwell,
    * then it leaves (board 05, A · 1). By the row's id, to the crew's name.
    */
   const joined = useMemo(() => {
     const names = new Map<string, string>()
-    for (const n of items) {
+    for (const n of combined) {
       const said = n.kind === 'crew_invite' && n.data?.crewId ? crewInvites.outcomes.get(n.data.crewId) : undefined
       if (said?.outcome === 'joined' && !resolved.has(n.id) && answered.get(n.id) === undefined) names.set(n.id, said.name)
     }
     return names
-  }, [items, crewInvites.outcomes, resolved, answered])
+  }, [combined, crewInvites.outcomes, resolved, answered])
   const shownState = useMemo(() => {
     const done = Object.fromEntries([...joined.keys()].map((id) => [id, 'done' as const]))
     return { ...done, ...requestState }
@@ -223,7 +245,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const answeredItems = useMemo(() => {
     const friendsWhole = friendRequests.loaded && friendRequests.incoming.cursor === null
     const crewsWhole = crewInvites.loaded && crewInvites.cursor === null
-    const closed = closeAnsweredElsewhere(items, {
+    const closed = closeAnsweredElsewhere(combined, {
       friend_request: { open: friendsWhole ? new Set(friendRequests.incoming.items.map((r) => r.id)) : null, left: friendRequests.answered },
       crew_invite: { open: crewsWhole ? new Set(crewInvites.invites.map((i) => i.crewId)) : null, left: new Set(crewInvites.outcomes.keys()) },
     })
@@ -234,12 +256,28 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
       if (shownState[n.id] === 'done') return [n.open === false ? { ...n, open: true } : n]
       return [outcome === 'accepted' ? { ...n, open: false } : n]
     })
-  }, [items, answered, shownState, friendRequests, crewInvites])
+  }, [combined, answered, shownState, friendRequests, crewInvites])
   const fresh = useMemo(() => new Set([...freshIds].filter((id) => !settled.has(id))), [freshIds, settled])
   const groups: FeedGroups = useMemo(
     () => groupFeed(answeredItems, { fresh: freshIds, resolved, now: readAt }),
     [answeredItems, freshIds, resolved, readAt]
   )
+
+  /*
+   * Waiting on you's count is the shared lists' totals, the number Friends and Crews show; a kind whose list has not answered
+   * yet counts its rows. A row showing its outcome is not counted: the list has let it go already.
+   */
+  const waitingTotal = useMemo(() => {
+    const live = (kind: string) => groups.waiting.filter((r) => r.item.kind === kind && !shownState[r.id]).length
+    const friends = friendRequests.loaded ? friendRequests.incoming.total : live('friend_request')
+    const crews = crewInvites.loaded ? crewInvites.total : live('crew_invite')
+    return friends + crews
+  }, [groups.waiting, shownState, friendRequests.loaded, friendRequests.incoming.total, crewInvites.loaded, crewInvites.total])
+  /** See all: the next page of each shared list, past what is drawn (each no-ops at its end, and never runs twice at once). */
+  const moreWaiting = useCallback(() => {
+    void loadMoreFriendRequests('incoming')
+    void moreCrewInvites()
+  }, [])
 
   const setRequest = useCallback(
     (id: string, state: RequestState | null) =>
@@ -286,6 +324,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const answer = useCallback(
     async (row: FeedRow, action: RowAction['key']) => {
       const { item } = row
+      setHeld((prev) => (prev.has(item.id) ? prev : new Map(prev).set(item.id, item)))
       if (action === 'join') {
         touch(item.id)
         navigateFromNotificationData(item.data ?? undefined)
@@ -379,6 +418,8 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   return {
     load,
     groups,
+    waitingTotal,
+    moreWaiting,
     fresh,
     requestState: shownState,
     joined,
