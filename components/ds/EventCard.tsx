@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native'
 
 import { H } from '../../lib/haptics'
 import { tint } from '../../lib/theme'
@@ -162,6 +162,7 @@ export function EventCard(props: EventCardProps) {
   const { kind, title, time, venue, distance, lead, promoted, overline, corner, layout, cover, stamp, plate, category, saved, onPress, onPressIn, onLongPress, previewState, scrimFoot, testID, style } = props
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const { fontScale } = useWindowDimensions()
   const android = Platform.OS === 'android'
   const [focused, setFocused] = useState(false)
   const label = props.label ?? eventLabel(props)
@@ -324,7 +325,7 @@ export function EventCard(props: EventCardProps) {
         )}
         {layout === 'lead' ? (
           // Featured C shows frames nobody chose as the cover: the rotation scrim holds the words over any of them.
-          <RotationScrim testID={testID && `${testID}-scrim`} contrast={contrast} style={StyleSheet.absoluteFill} />
+          <RotationScrim testID={testID && `${testID}-scrim`} contrast={contrast} large={fontScale > CONTROL_FONT_CAP} style={StyleSheet.absoluteFill} />
         ) : (
           <PhotoScrim testID={testID && `${testID}-scrim`} contrast={contrast} foot={scrimFoot} style={styles.scrim} />
         )}

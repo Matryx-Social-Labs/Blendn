@@ -55,9 +55,18 @@ export const ROTATION_SCRIM = [
   { at: 0.7, alpha: 0.86 },
   { at: 1, alpha: 0.94 },
 ] as const
-export function RotationScrim({ contrast = false, ...rest }: ViewProps & { contrast?: boolean }) {
+/** At large text the words climb to about a quarter of the card (AX5 on iOS): the same curve, reached 15% sooner. */
+export const ROTATION_SCRIM_LARGE = [
+  { at: 0, alpha: 0 },
+  { at: 0.05, alpha: 0.3 },
+  { at: 0.2, alpha: 0.66 },
+  { at: 0.55, alpha: 0.86 },
+  { at: 1, alpha: 0.94 },
+] as const
+export function RotationScrim({ contrast = false, large = false, ...rest }: ViewProps & { contrast?: boolean; large?: boolean }) {
   const deeper = (a: number) => (a > 0 && contrast ? Math.min(1, a + PHOTO_SCRIM.contrast) : a)
-  return <LinearGradient {...rest} colors={ROTATION_SCRIM.map((s) => tint(COLOR.ink, deeper(s.alpha))) as [string, string, ...string[]]} locations={ROTATION_SCRIM.map((s) => s.at) as [number, number, ...number[]]} />
+  const stops = large ? ROTATION_SCRIM_LARGE : ROTATION_SCRIM
+  return <LinearGradient {...rest} colors={stops.map((s) => tint(COLOR.ink, deeper(s.alpha))) as [string, string, ...string[]]} locations={stops.map((s) => s.at) as [number, number, ...number[]]} />
 }
 
 /** A photo's head under the status bar (Flow 5 Room info hero: 45% → 0), so the clock reads over any cover. */

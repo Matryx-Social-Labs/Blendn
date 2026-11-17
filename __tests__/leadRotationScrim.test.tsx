@@ -5,9 +5,9 @@
  * line (24 pt bold: 3:1) from y 108. Today's scrim (0 → 88% ink over the lower 70%, overline 78% white) is the control:
  * it fails both, as the board measured on staging (1.2:1 and 1.6:1).
  */
-import { render, screen } from '@testing-library/react-native'
+import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Dimensions, StyleSheet, View } from 'react-native'
 
 import { EventCard } from '../components/ds/EventCard'
 import { PHOTO_SCRIM } from '../components/ui/GradientFill'
@@ -77,6 +77,17 @@ it('the lead: the overline holds 4.5:1 and the title 3:1 over a pure-white frame
   const { box, stops } = rendered('l')
   expect(worst(OVERLINE_TOP, box, stops, overlineAlpha())).toBeGreaterThanOrEqual(4.5)
   expect(worst(TITLE_TOP, box, stops, 1)).toBeGreaterThanOrEqual(3)
+})
+
+it('at the largest text the words climb to ~26% of the card (drive, AX5): the scrim rises earlier and still holds', async () => {
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 2 }, screen: { ...window, fontScale: 2 } }))
+  await render(<View><EventCard kind="hero" layout="lead" title="T" time="Sat · 7:30 PM" venue="V" overline="Featured · Market" testID="l" /></View>)
+  const { box, stops } = rendered('l')
+  // Measured on the iOS sim at AX5: the overline from y 66, the title's top line from y 86 of 256.
+  expect(worst(66, box, stops, overlineAlpha())).toBeGreaterThanOrEqual(4.5)
+  expect(worst(86, box, stops, 1)).toBeGreaterThanOrEqual(3)
+  await act(async () => Dimensions.set({ window, screen: window }))
 })
 
 it('control: today’s scrim (0 → 88% over the lower 70%, overline 78%) fails both, as the board measured', () => {
