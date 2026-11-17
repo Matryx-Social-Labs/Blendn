@@ -160,6 +160,18 @@ describe('the time is never cut (worst case: the long name, 2h 45m, 360 and the 
     timeWhole()
   })
 
+  it('from 1.2× (TWO_LINE_NAMES_FROM) it stacks already: at 1.3 on Android 360 the row kept the time but cut the word to “..” (drive, 2026-11-17)', async () => {
+    await atScale(1.3, 360)
+    await dock({ expiresAt: inMs(16 * MIN) })
+    expect(flat('venue-live')).toMatchObject({ flexDirection: 'column' })
+    expect(screen.getByTestId('venue-live-state').props.numberOfLines).toBeUndefined()
+    expect(screen.getByTestId('venue-live-sub').props.numberOfLines).toBeUndefined()
+    // Control: at 1× it is still the one row.
+    await atScale(1, 360)
+    await dock({ expiresAt: inMs(16 * MIN) })
+    expect(flat('venue-live').flexDirection).toBe('row')
+  })
+
   it('at the largest text the line stacks over a full-width Open the room (DockRow’s AX rule), the state on as many lines as it needs', async () => {
     await atScale(AX_XXXL, 360)
     await dock({ expiresAt: inMs(165 * MIN) })

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from './Button'
 import { PresenceDot } from './MonoFamily'
-import { font, useBoldText, useLargeText } from './shared'
+import { font, useBoldText, useLargeText, useTwoLineNames } from './shared'
 import type { IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 
@@ -32,7 +32,8 @@ export type DockRowAction = {
  * Inside a `<Dock line>`.
  *
  * A state with a time (the venue's "● Live · 2h 45m", "● Ending · 4:59") gives the time its own slot after the word:
- * it never shrinks and has no line limit, so the word gives way first and the time is never cut.
+ * it never shrinks and has no line limit, so the word gives way first and the time is never cut. Such a row stacks from
+ * `TWO_LINE_NAMES_FROM` rather than at the AX sizes: at 1.3 on a 360 phone the word was cut to "..".
  */
 export function DockRow({
   state,
@@ -65,7 +66,9 @@ export function DockRow({
   testID?: string
 }) {
   const bold = useBoldText()
-  const large = useLargeText()
+  const ax = useLargeText()
+  const twoLine = useTwoLineNames()
+  const large = ax || (clock !== undefined && twoLine)
   const lines = large ? undefined : 1
   const stateText = (
     <Text testID={testID && `${testID}-state`} numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('group', bold), styles.ink, (dot || clock) && styles.give]}>
