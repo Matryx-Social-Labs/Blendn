@@ -21,7 +21,6 @@ const SITES: ReadonlyArray<readonly [path: string, literal: RegExp, use: string]
   ['components/motion/SwipeToDismiss.tsx', /dampingRatio/, 'SPRING.fling'],
   ['components/motion/ZoomableImage.tsx', /dampingRatio/, 'SPRING.settle'],
   ['components/ds/CrewCard.tsx', /duration: 180\b/, 'DURATION.quick'],
-  ['components/notifications/NewPill.tsx', /FADE_IN_MS = 120\b/, 'DURATION.quick'],
   ['components/blendn/BlendnScreen.tsx', /reduceMotion \? FadeIn :/, 'FadeIn.duration(REDUCE_MOTION.duration.base)'],
   ['components/crews/stepMotion.ts', /reduceMotion \? 200\b/, 'REDUCE_MOTION.duration.base'],
   ['components/profile/ProfileHeroPager.tsx', /PIP_MS = 160\b/, 'DURATION.quick'],

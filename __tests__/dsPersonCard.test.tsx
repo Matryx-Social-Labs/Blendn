@@ -16,8 +16,9 @@ import { HueProvider } from '../components/ds/shared'
 
 import * as Reanimated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, MATERIAL, SIZE, SPRING, TYPE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, GRADIENT, MATERIAL, SIZE, SPRING, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { isLitControl } from './helpers/lit'
 
 // The chat glyph as something a query can find (lucide draws bare paths).
 jest.mock('lucide-react-native/icons/message-circle', () => {
@@ -98,10 +99,12 @@ describe('a · here now (P-A)', () => {
   it('Wave (lit) + Message, two-up; no Like; ⋯ in the head', async () => {
     await render(<HueProvider value="rose"><PersonCardContent person={PRIYA} variant="here" onWave={jest.fn()} onMessage={jest.fn()} testID="p" /></HueProvider>)
     expect(screen.getByRole('button', { name: 'Wave at Priya' })).toBeTruthy()
-    expect(JSON.stringify(screen.getByTestId('p-wave', { includeHiddenElements: true }).props.style)).toContain(COLOR.selectionRoseFill)
+    expect(isLitControl(screen.getByTestId('p-wave', { includeHiddenElements: true }))).toBe(true)
     expect(screen.getByRole('button', { name: 'Message' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^Like/ })).toBeNull()
-    expect(screen.queryAllByTestId('gradient', { includeHiddenElements: true })).toHaveLength(0)
+    // No hero on the card: every full gradient on it is a lit button's rim (board C), one per lit tint.
+    const colors = screen.queryAllByTestId('gradient', { includeHiddenElements: true }).map((g) => JSON.stringify(g.props.colors))
+    expect(colors.filter((c) => c === JSON.stringify(GRADIENT.fill.colors))).toHaveLength(colors.filter((c) => c === JSON.stringify(GRADIENT.lit.colors)).length)
     expect(screen.getByRole('button', { name: 'Block or report Priya' })).toBeTruthy()
     expect(text('View profile')).toBeNull()
   })

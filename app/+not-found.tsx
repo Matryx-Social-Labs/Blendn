@@ -36,8 +36,8 @@ export default function NotFoundScreen() {
       actions={[
         {
           label: 'Go to the Pulse',
-          kind: 'strong',
-          // Flow 15: "Go to the Pulse · strong-neutral · none".
+          // The screen's one way on is its hero (strong is retired, buttons board C).
+          kind: 'primary',
           pressHaptic: false,
           onPress: () => router.replace('/(tabs)/events'),
         },

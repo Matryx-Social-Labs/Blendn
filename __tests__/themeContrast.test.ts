@@ -138,6 +138,70 @@ describe('every DS label on its fill, in every state', () => {
  * over a white and a mid-grey backdrop — 4.5:1 for text, 3:1 for icons. This
  * reads the tints `<Material>` actually draws, per role and tier.
  */
+/*
+ * Buttons board C, "Lit gradient" (owner 2026-11-17, SCRUM-1063): every pair the positive look draws, per gradient stop, in
+ * every state. A stop moved without its pair fails here. The board's own table: white on the tint 9.26–9.52, pressed
+ * 7.26–7.54, the rim 4.06–4.31 on ink and 3.32–3.53 on a surface card.
+ */
+describe('the positive look (lit), every stop, every state', () => {
+  const stops = (g: readonly string[]) => g.map(rgb)
+  const white = rgb(COLOR.textPrimary)
+
+  it.each(GRADIENT.lit.colors)('rest: a white label is AA on the tint stop %s', (stop) => {
+    expect(contrast(COLOR.textPrimary, stop)).toBeGreaterThanOrEqual(9)
+  })
+
+  it.each(GRADIENT.litPressed.colors)('pressed (the pour): a white label is AA on the stop %s', (stop) => {
+    expect(contrast(COLOR.textPrimary, stop)).toBeGreaterThanOrEqual(7)
+  })
+
+  it('pressed on Android (the ripple wash over the tint): still AA at every stop', () => {
+    for (const stop of stops(GRADIENT.lit.colors)) expect(ratio(white, over(PRESSED_WASH.android, stop))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('the 1.5 pt gradient rim carries the boundary (SC 1.4.11): 3:1 on the page and on a surface card, every stop', () => {
+    for (const stop of GRADIENT.fill.colors) {
+      expect(contrast(stop, COLOR.ink)).toBeGreaterThanOrEqual(4)
+      expect(contrast(stop, COLOR.surface)).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it('advisory, measured so nobody drops the rim: the tint alone is under 3:1 on the page', () => {
+    for (const stop of GRADIENT.lit.colors) expect(contrast(stop, COLOR.ink)).toBeLessThan(3)
+  })
+
+  it('the tiers survive grayscale: hero › positive › neutral by luminance (board: L* 50 / 30 / 13)', () => {
+    const mean = (g: readonly string[]) => g.reduce((sum, c) => sum + luminance(rgb(c)), 0) / g.length
+    expect(mean(GRADIENT.fill.colors)).toBeGreaterThan(mean(GRADIENT.lit.colors))
+    expect(mean(GRADIENT.lit.colors)).toBeGreaterThan(luminance(rgb(COLOR.surface)))
+    expect(mean(GRADIENT.litPressed.colors)).toBeGreaterThan(mean(GRADIENT.lit.colors))
+  })
+
+  it('disabled (45% over the page, exempt by SC 1.4.3) stays legible: white over the dimmed tint ≥ 4:1', () => {
+    const dim = (c: Rgb, under: Rgb): Rgb => c.map((v, i) => v * 0.45 + under[i] * 0.55) as Rgb
+    for (const stop of stops(GRADIENT.lit.colors)) {
+      const ground = dim(stop, rgb(COLOR.ink))
+      expect(ratio(dim(white, ground), ground)).toBeGreaterThanOrEqual(4)
+    }
+  })
+
+  it('a hold out of reach (inactive, exempt): the secondary label on the tint is ≥ 4.2:1 (board `.hold.far`)', () => {
+    for (const stop of GRADIENT.lit.colors) expect(contrast(COLOR.textSecondary, stop)).toBeGreaterThanOrEqual(4.2)
+  })
+
+  it('the neutral hold (check-out): white on its surface, on its pour, and the pour is visible against the ground', () => {
+    const ground = rgb(COLOR.surface)
+    const pour = over(COLOR.hairlineStrong, ground)
+    expect(ratio(white, ground)).toBeGreaterThanOrEqual(4.5)
+    expect(ratio(white, pour)).toBeGreaterThanOrEqual(4.5)
+    expect(ratio(pour, ground)).toBeGreaterThan(1.5)
+  })
+
+  it('control: the measure itself fails a pair that should (white on flat brand orange)', () => {
+    expect(contrast(COLOR.textPrimary, COLOR.brandOrange)).toBeLessThan(4.5)
+  })
+})
+
 describe('on <Material>, over the worst backdrop', () => {
   const BACKDROPS: Record<string, Rgb> = { white: [255, 255, 255], grey: [128, 128, 128] }
   /** What sits on each role, and the ratio it needs. */

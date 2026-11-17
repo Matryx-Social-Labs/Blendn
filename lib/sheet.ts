@@ -47,7 +47,7 @@ export type SheetAction = {
    * ("Clear all", "Open Settings"): it is never tinted by the hue. `tertiary`: a quiet text action beside the sheet's
    * real choices ("What's kept"), drawn as Cancel is.
    */
-  variant?: 'primary' | 'strong' | 'secondary' | 'tertiary' | 'destructive'
+  variant?: 'primary' | 'secondary' | 'tertiary' | 'destructive'
   /** A row's glyph, in a `rows` sheet (the DM's options). */
   icon?: IconName
   /** In a `rows` sheet, a line under the label that says the consequence ("They won’t be told"). */

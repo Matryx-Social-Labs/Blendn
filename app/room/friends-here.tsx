@@ -61,7 +61,8 @@ function FriendsHereScreenContent() {
       person={item}
       trailing={
         <Button
-          kind="secondary"
+          // Message is a positive, the same on every screen (buttons board C): lit, as on a friend's page.
+          kind="lit"
           size="sm"
           icon="message-circle"
           label="Message"

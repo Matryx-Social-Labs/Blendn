@@ -20,6 +20,7 @@ import { COLOR } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { othersLine, toastTitle, waitingStrip, wavedAtYouLine } from '../lib/receivedWaves'
 import { FOLD_MS, ignoreWavesFrom, listenForWaves, useRoomWaves, waveShown } from '../lib/roomWaves'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 const mockWaveListeners = new Set<(d: { eventId: string; fromUserId: string; fromName: string }) => void>()
@@ -318,19 +319,18 @@ describe('B-A: the pile (owner 2026-11-13: the board’s three faces)', () => {
   })
 })
 
-describe('the filled rose pill (owner 2026-11-13: white on a deeper rose, AA)', () => {
-  it('Wave back is filled with brandRoseFill, white ink', async () => {
+describe('Wave back is the DS positive (buttons board C: WaveBackPill retired onto Button lit pill)', () => {
+  it('Wave back is lit, white ink, 40 pt', async () => {
     await render(<WaveBackPill name="Harbour Heron" state="ready" onPress={jest.fn()} testID="pill" />)
-    const ready = StyleSheet.flatten(screen.getByTestId('pill').props.style)
-    expect(ready).toMatchObject({ backgroundColor: COLOR.brandRoseFill, borderColor: COLOR.brandRoseFill })
+    expect(isLitControl(screen.getByTestId('pill'))).toBe(true)
+    expect(StyleSheet.flatten(screen.getByTestId('pill').props.style).height).toBe(40)
     expect(StyleSheet.flatten(screen.getByText('Wave back').props.style).color).toBe(COLOR.textPrimary)
   })
 
-  it('control: ✓ Waved stays the rose outline, never the fill', async () => {
+  it('control: ✓ Waved is the still neutral, disabled (no Wave again), never lit', async () => {
     await render(<WaveBackPill name="Harbour Heron" state="waved" testID="pill" />)
-    const waved = StyleSheet.flatten(screen.getByTestId('pill').props.style)
-    expect(waved.backgroundColor).toBeUndefined()
-    expect(waved.borderColor).not.toBe(COLOR.brandRoseFill)
+    expect(isLitControl(screen.getByTestId('pill'))).toBe(false)
+    expect(screen.getByTestId('pill').props.accessibilityState).toMatchObject({ disabled: true })
   })
 })
 

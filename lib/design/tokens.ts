@@ -91,6 +91,16 @@ export const GRADIENT = {
     colors: ['#F05423', '#BE5C71', '#A47BBF'],
     locations: [0, 0.5, 1],
   },
+  lit: {
+    angle: 135,
+    colors: ['#772F19', '#693943', '#573D60'],
+    locations: [0, 0.5, 1],
+  },
+  litPressed: {
+    angle: 135,
+    colors: ['#973415', '#854250', '#6A4778'],
+    locations: [0, 0.5, 1],
+  },
 } as const
 
 /** Material tiers (§5): glass (iOS 26+), blur (iOS 16.4–25), solid (Android Tier B, Reduce Transparency). Drawn only by `<Material>`. */
@@ -141,6 +151,14 @@ export const MATERIAL = {
       radius: 60,
       spread: -18,
       color: 'rgba(240,84,35,0.55)',
+    },
+  ],
+  glowHero: [
+    {
+      offsetY: 8,
+      radius: 22,
+      spread: -6,
+      color: 'rgba(187,85,107,0.55)',
     },
   ],
 } as const

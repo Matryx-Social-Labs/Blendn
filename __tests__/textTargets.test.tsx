@@ -5,7 +5,6 @@
  */
 import { readdirSync, readFileSync, statSync } from 'fs'
 import { join, relative } from 'path'
-import { StyleSheet } from 'react-native'
 import { render, screen } from '@testing-library/react-native'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
@@ -14,6 +13,7 @@ jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 
 import { NewAbovePill } from '../components/banter/BanterParts'
 import { minTarget } from '../components/ds/shared'
+import { SIZE, SPACE } from '../lib/design/tokens'
 
 const ROOT = join(__dirname, '..')
 const walk = (dir: string, out: string[] = []): string[] => {
@@ -40,8 +40,8 @@ it('no target slop is measured from a spacing step instead of the line it pads (
 it('the Banter "New" pill reaches a full target (M12)', async () => {
   await render(<NewAbovePill top={0} onPress={jest.fn()} />)
   const pill = screen.getByRole('button', { name: 'New messages above' })
-  const height = StyleSheet.flatten(screen.getByTestId('banter-new-above-pill').props.style).height as number
-  expect(height + 2 * (pill.props.hitSlop as number)).toBeGreaterThanOrEqual(minTarget())
+  // The DS NewPill: 36 pt (`SIZE.tag + SPACE.xs`), slop above and below.
+  expect(SIZE.tag + SPACE.xs + 2 * (pill.props.hitSlop as { top: number }).top).toBeGreaterThanOrEqual(minTarget())
 })
 
 // Motion audit M26: these Pressables gave no press feedback on iOS (Android has its ripple), or none at all. A row takes

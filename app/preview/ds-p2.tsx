@@ -384,6 +384,7 @@ function Holds() {
     ['refused', { refused: true }],
     ['busy', { busy: true, busyLabel: 'Checking you in…' }],
     ['confirmed', { confirmedLabel: 'You’re in' }],
+    ['neutral (check-out)', { kind: 'neutral', label: 'Hold to check out' }],
   ] as const
   return (
     <Section title="HoldToConfirm" note="#8: 900 ms · H.tick at 25 / 50 / 75 · H.commit at 100 · a release rewinds on M.settle · #10: refused is H.error and a drain · #9: You’re in · a screen reader gets one button">

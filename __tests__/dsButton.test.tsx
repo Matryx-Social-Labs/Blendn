@@ -11,7 +11,7 @@ import * as Reanimated from 'react-native-reanimated'
 
 import { Button } from '../components/ds/Button'
 import { HueProvider, SELECTION, type Hue } from '../components/ds/shared'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, GRADIENT, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 
@@ -82,14 +82,41 @@ describe('kinds and sizes', () => {
 
   it('primary is the fill gradient with a white label', async () => {
     await draw({ kind: 'primary' })
-    expect(screen.getByTestId('gradient')).toBeTruthy()
+    expect(screen.getByTestId('gradient').props.colors).toBe(GRADIENT.fill.colors)
     expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.textOnGradient)
   })
 
-  it('strong is white with an ink label; destructive is destructiveFill, never the text red', async () => {
-    await draw({ kind: 'strong' })
-    expect(flat('b').backgroundColor).toBe(COLOR.textPrimary)
-    expect(StyleSheet.flatten(screen.getByText('I’m going').props.style).color).toBe(COLOR.ink)
+  it('the hero glows (board C `0 8px 22px -6px` rose 55%): iOS casts it from an ink underlay', async () => {
+    await draw({ kind: 'primary' })
+    const glow = flat('b-glow')
+    expect(glow.backgroundColor).toBe(COLOR.ink)
+    // Inset 4 inside the button (its ink never shows as the button presses to 0.97), spread −2: the board's −6 overall.
+    expect(glow).toMatchObject({ top: 4, left: 4, right: 4, bottom: 4 })
+    expect(glow.boxShadow).toEqual([{ offsetX: 0, offsetY: 8, blurRadius: 22, spreadDistance: -2, color: 'rgba(187,85,107,0.55)' }])
+    expect(glow.opacity).toBe(1)
+  })
+
+  it('Android draws the glow as the gradient, blurred, at 35%; it dims with a disabled button', async () => {
+    on('android')
+    Object.defineProperty(Platform, 'Version', { value: 34, configurable: true })
+    await draw({ kind: 'primary', disabled: true })
+    const glow = flat('b-glow')
+    expect(glow.filter).toEqual([{ blur: 11 }])
+    expect(glow.opacity).toBeCloseTo(0.35 * OPACITY.disabled)
+    expect(glow.top).toBe(8 - 22)
+  })
+
+  it('no glow below Android 12 (no blur to draw it with), and none on any other kind', async () => {
+    on('android')
+    Object.defineProperty(Platform, 'Version', { value: 30, configurable: true })
+    await draw({ kind: 'primary' })
+    expect(screen.queryByTestId('b-glow')).toBeNull()
+    on('ios')
+    await draw({ kind: 'lit', size: 'md' })
+    expect(screen.queryByTestId('b-glow')).toBeNull()
+  })
+
+  it('destructive is destructiveFill, never the text red', async () => {
     await draw({ kind: 'destructive' })
     expect(flat('b').backgroundColor).toBe(COLOR.destructiveFill)
   })
@@ -125,7 +152,7 @@ describe('kinds and sizes', () => {
   })
 })
 
-describe('kind lit: a positive action inside a hue world', () => {
+describe('kind lit: every positive action, one look (buttons board C, owner 2026-11-17)', () => {
   const HUES: Hue[] = ['ember', 'rose', 'violet']
   const drawLit = (hue: Hue, props: Partial<React.ComponentProps<typeof Button>> = {}) =>
     render(
@@ -134,22 +161,27 @@ describe('kind lit: a positive action inside a hue world', () => {
       </HueProvider>
     )
   const transform = (id: string) => JSON.stringify(flat(id).transform ?? [])
+  const gradients = () => screen.getAllByTestId('gradient', { includeHiddenElements: true }).map((g) => g.props.colors)
 
-  it.each(HUES)('under %s: the fill, the 1 pt rim, a white label and the glyph in the hue are its own', async (hue) => {
+  it.each(HUES)('under %s: the gradient rim, the lit tint inside it 1.5 pt in, a white label and a white glyph (no hue)', async (hue) => {
     await drawLit(hue)
-    expect(flat('b').backgroundColor).toBe(SELECTION[hue].fill)
-    expect(flat('b-rim')).toMatchObject({ borderWidth: 1, borderColor: SELECTION[hue].edge })
+    // The rim is the full gradient; the tint is GRADIENT.lit; the pour is GRADIENT.litPressed. None is the hue.
+    expect(gradients()).toEqual([GRADIENT.fill.colors, GRADIENT.lit.colors, GRADIENT.litPressed.colors])
+    expect(flat('b-lit-inset')).toMatchObject({ top: 1.5, left: 1.5, right: 1.5, bottom: 1.5 })
+    expect(flat('b').backgroundColor).toBe('transparent')
     expect(StyleSheet.flatten(screen.getByText('Accept').props.style).color).toBe(COLOR.textPrimary)
-    expect(JSON.stringify(screen.toJSON())).toContain(SELECTION[hue].glyph)
+    const json = JSON.stringify(screen.toJSON())
+    // (The hue's edge is not checked: violet's is the gradient's own end stop.)
+    for (const tone of [SELECTION[hue].fill, SELECTION[hue].glyph, SELECTION[hue].flare]) expect(json).not.toContain(tone)
   })
 
-  it('uses the flare tokens, one per hue, and the rim is the brand colour', async () => {
-    await drawLit('rose')
-    expect(flat('b-flare').backgroundColor).toBe(COLOR.selectionRoseFlare)
-    expect(flat('b-rim').borderColor).toBe(COLOR.brandRose)
+  it('control: a secondary draws none of it', async () => {
+    await draw({ kind: 'secondary' })
+    expect(screen.queryByTestId('b-lit', { includeHiddenElements: true })).toBeNull()
+    expect(screen.queryAllByTestId('gradient', { includeHiddenElements: true })).toHaveLength(0)
   })
 
-  it('rests with the flare drained, pours it in on press-in over press, and drains it over quick on release', async () => {
+  it('rests with the pour drained, pours litPressed in on press-in over press, and drains it over quick on release', async () => {
     await drawLit('rose')
     expect(flat('b-flare').opacity).toBe(0)
     expect(transform('b-flare')).toContain('-101%')
@@ -164,18 +196,18 @@ describe('kind lit: a positive action inside a hue world', () => {
     expect(transition()).toBe('transform 160ms cubic-bezier(0.2, 0, 0, 1), opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
   })
 
-  it('busy holds the flare, and the spinner is the hue’s glyph tone after the 300 ms grace', async () => {
+  it('busy holds the pour, and the spinner is white after the 300 ms grace', async () => {
     jest.useFakeTimers()
     await drawLit('violet', { loading: true })
     expect(flat('b-flare').opacity).toBe(1)
     expect(screen.queryByTestId('b-spinner', { includeHiddenElements: true })).toBeNull()
     await act(async () => jest.advanceTimersByTime(300))
     const arc = StyleSheet.flatten(screen.getByTestId('b-spinner', { includeHiddenElements: true }).props.style)
-    expect(arc.borderTopColor).toBe(COLOR.selectionVioletGlyph)
+    expect(arc.borderTopColor).toBe(COLOR.textPrimary)
     expect(screen.getByTestId('b').props.accessibilityState).toMatchObject({ busy: true })
   })
 
-  it('Reduce Motion: the flare never translates, it crosses over opacity', async () => {
+  it('Reduce Motion: the pour never translates, it crosses over opacity', async () => {
     reduceMotion.mockReturnValue(true)
     await drawLit('rose')
     expect(transform('b-flare')).not.toContain('translateX')
@@ -183,6 +215,11 @@ describe('kind lit: a positive action inside a hue world', () => {
     expect(transform('b-flare')).not.toContain('translateX')
     expect(flat('b-flare').opacity).toBe(1)
     expect(String(StyleSheet.flatten(screen.getByTestId('b-flare').props.jestInlineStyle).transition)).toBe('opacity 160ms cubic-bezier(0.33, 1, 0.68, 1)')
+  })
+
+  it('disabled dims the whole pill to 45%, rim and all', async () => {
+    await drawLit('rose', { disabled: true })
+    expect(flat('b').opacity).toBe(OPACITY.disabled)
   })
 
   it('plays no press haptic unless a page names one', async () => {
@@ -194,10 +231,9 @@ describe('kind lit: a positive action inside a hue world', () => {
     expect(haptics.primary).toHaveBeenCalledTimes(1)
   })
 
-  it('the other kinds draw no flare and no rim', async () => {
+  it('the other kinds draw no pour', async () => {
     await draw({ kind: 'secondary' })
     expect(screen.queryByTestId('b-flare')).toBeNull()
-    expect(screen.queryByTestId('b-rim')).toBeNull()
   })
 
   it('warns once in development that lit is never lg', async () => {
@@ -235,8 +271,8 @@ describe('haptics: only where the page puts one', () => {
     expect(haptics.destructive).toHaveBeenCalledTimes(1)
   })
 
-  it('plays the cue a page names instead of its kind’s own (H.primary on a strong “Use at the door”)', async () => {
-    await draw({ kind: 'strong', pressHaptic: H.primary })
+  it('plays the cue a page names instead of its kind’s own (H.primary on “Use at the door”)', async () => {
+    await draw({ kind: 'secondary', pressHaptic: H.primary })
     await pressIn()
     expect(haptics.primary).toHaveBeenCalledTimes(1)
     await draw({ kind: 'primary', pressHaptic: H.select })
@@ -245,7 +281,7 @@ describe('haptics: only where the page puts one', () => {
     expect(haptics.primary).toHaveBeenCalledTimes(1)
   })
 
-  it.each(['strong', 'secondary', 'tertiary'] as const)('%s is silent', async (kind) => {
+  it.each(['secondary', 'tertiary'] as const)('%s is silent', async (kind) => {
     await draw({ kind })
     await pressIn()
     for (const spy of Object.values(haptics)) expect(spy).not.toHaveBeenCalled()

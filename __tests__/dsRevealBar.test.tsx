@@ -13,6 +13,7 @@ import { RevealBar } from '../components/ds/RevealBar'
 import { SELECTION } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
@@ -38,7 +39,7 @@ it('anonymous both ways: both sides read, then Show them (lit) and Ask them, sil
   await draw({ onShow, onAsk })
   expect(screen.getByLabelText('You, Night Cat, anonymous. Cosmic Panda, anonymous.')).toBeTruthy()
   const show = screen.getByRole('button', { name: 'Show who you are' })
-  expect(StyleSheet.flatten(show.props.style).backgroundColor).toBe(SELECTION.ember.fill)
+  expect(isLitControl(show)).toBe(true)
   const ask = screen.getByRole('button', { name: 'Ask them' })
   expect(StyleSheet.flatten(ask.props.style).backgroundColor).toBe(MATERIAL.fillOnGlass)
   await fireEvent(show, 'pressIn')
@@ -97,7 +98,8 @@ describe('both: the one thing left once you can see each other is to add them (S
     expect(screen.getByLabelText('You, Sam, seen. Priya, seen.')).toBeTruthy()
     expect(screen.getByText('You can both see each other')).toBeTruthy()
     const add = screen.getByRole('button', { name: 'Add friend' })
-    expect(StyleSheet.flatten(add.props.style)).toMatchObject({ backgroundColor: SELECTION.ember.fill, height: 36 })
+    expect(StyleSheet.flatten(add.props.style)).toMatchObject({ height: 36 })
+    expect(isLitControl(add)).toBe(true)
     expect(screen.queryByRole('button', { name: 'Show who you are' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Ask them' })).toBeNull()
     await fireEvent.press(add)

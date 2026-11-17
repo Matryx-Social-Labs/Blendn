@@ -93,14 +93,13 @@ function Cell({ label, testID, children, style }: { label: string; testID: strin
   )
 }
 
-const KINDS: ButtonKind[] = ['primary', 'lit', 'strong', 'secondary', 'tertiary', 'destructive']
+const KINDS: ButtonKind[] = ['primary', 'lit', 'secondary', 'tertiary', 'destructive']
 const SIZES: ButtonSize[] = ['lg', 'md', 'sm']
 /** A lit action is never 56 pt: that is the primary's. */
 const sizesOf = (kind: ButtonKind) => (kind === 'lit' ? SIZES.filter((size) => size !== 'lg') : SIZES)
 const LABEL: Record<ButtonKind, string> = {
   primary: 'I’m going',
   lit: 'Accept',
-  strong: 'Open Settings',
   secondary: 'Not now',
   tertiary: 'Skip',
   destructive: 'Delete account',
@@ -126,7 +125,7 @@ function Buttons() {
           </Cell>
         ))}
       </Section>
-      {(['primary', 'lit', 'strong', 'secondary'] as const).map((kind) => (
+      {(['primary', 'lit', 'secondary', 'destructive'] as const).map((kind) => (
         <Section key={kind} title={`Button · states · ${kind}`} note="refused plays H.error and shakes as it mounts">
           {STATES.map(([state, props]) => (
             <Cell key={state} label={state} testID={`ds-button-${kind}-state-${state}`}>
@@ -137,9 +136,9 @@ function Buttons() {
       ))}
       <Section title="Button · row actions">
         <Cell label="36 pt, wrapping at 360" testID="ds-button-row-actions" style={styles.row}>
-          <Button kind="strong" size="sm" label="Accept" onPress={() => {}} />
+          <Button kind="lit" size="sm" icon="check" label="Accept" onPress={() => {}} />
           <Button kind="secondary" size="sm" label="Decline" onPress={() => {}} />
-          <Button kind="strong" size="sm" label="Accept" loading onPress={() => {}} />
+          <Button kind="lit" size="sm" icon="check" label="Accept" loading onPress={() => {}} />
           <Button kind="secondary" size="sm" icon="user-plus" label="Add" onPress={() => {}} />
         </Cell>
       </Section>
@@ -218,7 +217,7 @@ function States() {
       </Cell>
       <Cell label="full screen · refusal" testID="ds-state-screen" style={styles.tall}>
         <SafeAreaInsetsContext.Provider value={NO_INSETS}>
-          <StateScreen variant="screen" icon="circle-slash" title="Not open to you" body="This event is 21+." actions={[{ label: 'OK', kind: 'strong', onPress: () => {} }]} />
+          <StateScreen variant="screen" icon="circle-slash" title="Not open to you" body="This event is 21+." actions={[{ label: 'OK', kind: 'primary', onPress: () => {} }]} />
         </SafeAreaInsetsContext.Provider>
       </Cell>
     </Section>
@@ -381,7 +380,7 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
     title: 'Share Vinyl Night',
     detents: ['short'],
     actions: [
-      { label: 'WhatsApp', kind: 'strong', onPress: close },
+      { label: 'WhatsApp', kind: 'lit', onPress: close },
       { label: 'Copy link', kind: 'secondary', onPress: close },
       { label: 'More…', kind: 'tertiary', onPress: close },
     ],
@@ -405,7 +404,7 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
       { label: 'Harassment', kind: 'secondary', onPress: noop },
       { label: 'Spam', kind: 'secondary', onPress: noop },
       { label: 'Something else', kind: 'secondary', onPress: noop },
-      { label: 'Send report', kind: 'strong', onPress: close },
+      { label: 'Send report', kind: 'lit', onPress: close },
       { label: 'Cancel', kind: 'tertiary', onPress: close },
     ],
   }),
@@ -413,7 +412,7 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
     icon: 'circle-slash',
     title: 'Not open to you',
     body: 'This event is 21+.',
-    actions: [{ label: 'OK', kind: 'strong', onPress: close }],
+    actions: [{ label: 'OK', kind: 'lit', onPress: close }],
   }),
   confirm: (close) => ({
     icon: 'trash',
@@ -438,7 +437,7 @@ const SHEETS: Record<string, (close: () => void) => Omit<SheetProps, 'visible' |
     title: 'Notifications are off',
     body: 'Turn them on in your phone’s Settings to get them from Blend’n.',
     actions: [
-      { label: 'Open Settings', kind: 'strong', onPress: close },
+      { label: 'Open Settings', kind: 'lit', onPress: close },
       { label: 'Not now', kind: 'tertiary', onPress: close },
     ],
   }),

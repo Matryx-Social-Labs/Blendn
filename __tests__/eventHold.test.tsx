@@ -16,6 +16,7 @@ import { H } from '../lib/haptics'
 import { tint } from '../lib/theme'
 import { CHECK_OUT_CONSEQUENCE } from '../lib/switchCopy'
 import { getLeftNotice, openRoomOf, setLeftNotice, setLiveHint, setRoomUp } from '../lib/blendnOverlay'
+import { isLitControl } from './helpers/lit'
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default)
 jest.mock('expo-glass-effect', () => {
@@ -212,11 +213,12 @@ describe('checked into this event already: "Check out" opens the sheet with the 
     }
   })
 
-  it('is the quiet hold, the lit kind with its hue pouring in, not the gradient', async () => {
+  it('is the neutral hold (board C: leaving is not a yes): surface, the grey rim, its tone pouring in; not lit', async () => {
     await render(<Page going />)
     await open()
-    expect(screen.getByTestId('scene-checkout-pill-rim', HIDDEN)).toBeTruthy()
-    expect(screen.getByTestId('scene-checkout-pill-fill-ground', HIDDEN)).toBeTruthy()
+    expect(StyleSheet.flatten(screen.getByTestId('scene-checkout-pill-track-inset', HIDDEN).props.style).backgroundColor).toBe(COLOR.surface)
+    expect(StyleSheet.flatten(screen.getByTestId('scene-checkout-pill-fill-ground', HIDDEN).props.style).backgroundColor).toBe(COLOR.hairlineStrong)
+    expect(isLitControl(screen.getByTestId('scene-checkout-pill', HIDDEN))).toBe(false)
   })
 
   it('the check-in hold keeps the gradient', async () => {
