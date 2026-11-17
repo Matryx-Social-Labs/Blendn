@@ -50,7 +50,8 @@ jest.mock('../components/OptimizedImage', () => {
 
 import { apiClient } from '../lib/apiClient'
 import FriendRequestsScreen, { requestsWaiting } from '../app/friends/requests'
-import { resetFriendRequests } from '../lib/friendRequests'
+import { resetFriendRequests, useFriendRequestsState } from '../lib/friendRequests'
+import { RequestsRow } from '../components/friends/RequestsRow'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const BEN = { id: 'req-ben', person: { userId: 'u_ben', name: 'Ben', photo: null }, createdAt: '2026-09-27T20:00:00Z' }
@@ -72,6 +73,35 @@ it('accepts from the list', async () => {
   expect(await screen.findByText('No friend requests')).toBeTruthy()
   expect(mockShowToast).toHaveBeenCalledWith('You and Ben are friends', 'success', { haptic: 'success' })
   expect(mockAsk).toHaveBeenCalledWith({ stillHere: expect.any(Function) })
+})
+
+/*
+ * An answer clears everywhere (#554, one shared list): the Friends list's requests row and the Me Friends row read the same store
+ * as this screen, so the faces and the count drop the person the moment they are answered, with no reload. Negative control: a
+ * screen-local list (the answer removed only from this screen's rows) leaves the probe at 2.
+ */
+it('an answer here clears the person from the row on Friends and Me, with no reload', async () => {
+  const ANA = { id: 'req-ana', person: { userId: 'u_ana', name: 'Ana', photo: null }, createdAt: '2026-09-27T21:00:00Z' }
+  api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [BEN, ANA], outgoing: [], pagination: { incoming: { totalCount: 2 }, outgoing: { totalCount: 0 } } } } as never)
+  api.respondToFriendRequest.mockResolvedValue({ success: true, data: { state: 'friends' } })
+  function Elsewhere() {
+    const { incoming } = useFriendRequestsState()
+    return <RequestsRow count={incoming.total} faces={incoming.items.map((r) => r.person)} />
+  }
+  await render(
+    <>
+      <Elsewhere />
+      <FriendRequestsScreen />
+    </>
+  )
+  await waitFor(() => expect(screen.getByLabelText('2 friend requests')).toBeTruthy())
+  fireEvent.press(await screen.findByLabelText('Accept Ben'))
+  await waitFor(() => expect(screen.getByLabelText('1 friend request')).toBeTruthy())
+  api.getFriendRequests.mockClear()
+  fireEvent.press(screen.getByLabelText('Not now, Ana'))
+  await waitFor(() => expect(screen.queryByTestId('requests-row')).toBeTruthy())
+  await waitFor(() => expect(screen.getByLabelText('0 friend requests')).toBeTruthy())
+  expect(api.getFriendRequests).not.toHaveBeenCalled()
 })
 
 // SCRUM-754: an answer that throws (the queue cleared under it, a client bug) ends the spinner with the line and can be sent again.

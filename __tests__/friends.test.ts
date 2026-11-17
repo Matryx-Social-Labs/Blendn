@@ -19,19 +19,19 @@ const STATES: FriendState[] = ['none', 'incoming', 'requested', 'friends', 'self
 describe('the invite screen', () => {
   it('offers the right action for each state', () => {
     expect(STATES.map((s) => [s, inviteCta(s)])).toEqual([
-      ['none', { label: 'Send friend request', action: 'ask' }],
+      ['none', { label: 'Add friend', action: 'ask' }],
       ['incoming', { label: 'Accept friend request', action: 'ask' }],
       // Nothing to press: asking again would not nag, but it would not do anything either.
       ['requested', { label: 'Requested', action: null }],
       ['friends', { label: 'View profile', action: 'open' }],
-      ['self', { label: 'Share your link', action: 'share' }],
+      ['self', { label: 'Share my link', action: 'share' }],
     ])
   })
 
   it('never tells the asker a request was declined', () => {
     // "Not now" is not a state the app can see: the sender stays "requested".
     for (const s of STATES) expect(inviteLine(s)).not.toMatch(/declin|reject|not now/i)
-    expect(inviteLine('requested')).toMatch(/waiting/)
+    expect(inviteLine('requested')).toBe('Request sent. You’ll hear when they accept.')
   })
 })
 

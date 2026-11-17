@@ -11,8 +11,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 
 const mockAsk = jest.fn()
 jest.mock('../lib/friendsSeeMeAsk', () => ({ askFriendsSeeMe: (...a: unknown[]) => mockAsk(...a), useStillHere: () => () => true }))
+const mockAddParams: { side?: string } = {}
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
+  useLocalSearchParams: () => mockAddParams,
   useFocusEffect: (effect: () => void) => {
     const { useEffect } = require('react')
     useEffect(effect, [effect])
@@ -50,6 +52,7 @@ jest.mock('../components/OptimizedImage', () => {
 
 import { apiClient } from '../lib/apiClient'
 import AddFriendsScreen from '../app/friends/add'
+import { resetFriendRequests } from '../lib/friendRequests'
 
 const api = apiClient as jest.Mocked<typeof apiClient>
 const person = (userId: string, name: string) => ({ userId, name, photo: null })

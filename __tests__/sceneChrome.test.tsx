@@ -11,6 +11,7 @@ import { SceneBar, sceneBarTitleSpan } from '../components/scene/SceneBar'
 import { SceneHero, posterSide } from '../components/scene/SceneHero'
 import { SceneDayStrip, dayStripOffset } from '../components/scene/SceneChange'
 import { H } from '../lib/haptics'
+import { CONTROL_FONT_CAP } from '../components/ds/shared'
 
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }) }))
 jest.mock('expo-linear-gradient', () => {
@@ -173,6 +174,18 @@ describe('the day strip opens on a whole chip, and fades at its edge', () => {
     expect(offset % SLOT).toBe(0)
     expect(offset).toBe(SLOT)
     expect(dayStripOffset(0, 6, 350)).toBe(0)
+  })
+
+  // Text fits (owner 2026-11-17): a chip's words stop at the 1.3× control size and stay on one line ("Cancelle/d" at Android 2.0).
+  it('a cancelled day says Cancelled on one line at the control cap, shrinking rather than breaking the word', async () => {
+    const days = [0, 1].map((i) => ({ date: `2026-10-1${i}`, cancelled: i === 1, startTime: '', endTime: '', cancelledAt: null }))
+    await render(<SceneDayStrip days={{ days, dayCount: 2, daysFrom: 1, dayNumber: 1 } as never} today />)
+    for (const word of ['Cancelled', 'Day 1']) {
+      const label = screen.getByText(word)
+      expect(label.props.maxFontSizeMultiplier).toBe(CONTROL_FONT_CAP)
+      expect(label.props.numberOfLines).toBe(1)
+      expect(label.props.adjustsFontSizeToFit).toBe(true)
+    }
   })
 
   it('snaps by chip and draws the edge fade over a scrolling strip', async () => {

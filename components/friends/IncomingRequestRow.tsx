@@ -2,31 +2,35 @@ import { useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import Reanimated from 'react-native-reanimated'
 
-import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
-import type { FriendRequest } from '../../lib/friends'
+import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
+import { requestSource, type FriendRequest } from '../../lib/friends'
 import { Button } from '../ds/Button'
 import { inboxTimeLabel } from '../banter/inbox'
 import { monoCaption } from '../ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, useBoldText, useLargeText } from '../ds/shared'
-import { SkeletonBlock } from '../Skeleton'
+import { IconButton } from '../ds/IconButton'
+import { FitText } from '../ds/Title'
+import { font, useBoldText, useLargeText } from '../ds/shared'
+import { SkeletonCircle, SkeletonLine } from '../Skeleton'
 import { rowOut, rowReflow } from '../motion/presence'
 import { useReducedMotion } from '../../lib/motion'
-import { PersonAvatar } from './PersonRow'
+import { LIST_FACE, PersonAvatar } from './PersonRow'
 
-/** What is under the name: they came through your link, and the link is the only way in. */
-export const REQUEST_LINE = 'Opened your link · asks to be your friend'
+/** A request row's height at the default size (Flow 7 4-A: 68 pt rows, about eleven a screen where the cards gave five). */
+// design-exception: the board's request row is 68 (fr.js `reqMini`)
+export const REQUEST_ROW_HEIGHT = 68
 
 /**
- * Somebody asking to be your friend (Flow 6 `requestCard`): a `surface` card at radius 24, the face, the name and the line, and the
- * two answers side by side under them, Not now beside Accept, 48 pt each (`Button size="md"`, the DS has no 44). Not now is the glass-ground secondary: a `surface` fill on a `surface` card would have no edge.
+ * Somebody asking to be your friend (Flow 7 4-A): a 68 pt row, the face, the name on one line, and under it where the request came
+ * from and how long it has waited ("From your link · 2m"). The source is said only when the server says it (`via`, ROADMAP §
+ * Backend later): until then the line is the age alone, never a guess ("Opened your link" was wrong for every match).
  *
- * Accept is the lit button (the screen's rose, the glyph before the label), not the gradient. On Add friends, "Share my link" is the
- * screen's one primary; a column of gradient Accepts under it made two. While this row's answer is in flight (`busy`), the answer
- * pressed carries the wait (`loading`: busy to a screen reader, a spinner after the grace) and the other dims, which is also what stops a
- * second tap sending a second answer. The haptic is the outcome's, when the server says yes (`useFriendRequests`), never the press.
+ * On the right, Not now (the glass ×) and Accept (the lit button). The board draws Accept as an icon-only lit disc, which no DS
+ * kind gives yet (the button audit is pending), so it is the board's small lit Accept. While this row's answer is in flight
+ * (`busy`) the answer pressed carries the wait and the other dims, which also stops a second tap sending a second answer. The
+ * haptic is the outcome's, when the server says yes (`useFriendRequests`), never the press. At the AX sizes the answers go under
+ * the name, so the name keeps the row's width.
  *
- * Answered, the row fades out and the rows below close the gap (DS #16); on Add friends the preview is a plain column, so the row carries
- * the reflow itself. Reduce Motion: it goes and the column updates at once.
+ * Answered, the row fades out and the rows below close the gap (DS #16); Reduce Motion: it goes and the column updates at once.
  */
 export function IncomingRequestRow({
   request,
@@ -47,76 +51,73 @@ export function IncomingRequestRow({
   }
   const waiting = (action: 'accept' | 'dismiss') => busy && answer === action
   const { person } = request
+  const source = requestSource(request)
   // How long they have waited (D-LM2), as Banter's request card says it: "3h", "Tue"; a count in mono, a day-word in the sans.
   const age = inboxTimeLabel(request.createdAt)
+  const answers = (
+    <View style={styles.answers}>
+      <IconButton icon="x" accessibilityLabel={`Not now, ${person.name}`} onPress={() => respond('dismiss')} disabled={busy} testID="request-not-now" />
+      <Button
+        kind="lit"
+        size="sm"
+        icon="user-check"
+        label="Accept"
+        accessibilityLabel={`Accept ${person.name}`}
+        onPress={() => respond('accept')}
+        loading={waiting('accept')}
+        disabled={busy && !waiting('accept')}
+      />
+    </View>
+  )
   return (
-    <Reanimated.View exiting={reduceMotion ? undefined : rowOut} layout={reduceMotion ? undefined : rowReflow} style={styles.card}>
+    <Reanimated.View exiting={reduceMotion ? undefined : rowOut} layout={reduceMotion ? undefined : rowReflow} style={styles.row} testID="request-row">
       <View style={styles.who}>
-        <PersonAvatar person={person} />
+        <PersonAvatar person={person} size={LIST_FACE} />
         <View style={styles.text}>
-          {/* fc5eb48's request card: the name and the line grow to their caps and double their lines at the AX sizes (D-M5). */}
-          <Text numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold, FONT_FAMILY.brand[500]), styles.ink]}>
+          {/* The DS word fit: a word too wide for its line shrinks rather than splitting (SCRUM-1041 A, names in rows). */}
+          <FitText variant="rowTitle" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={styles.ink}>
             {person.name}
-          </Text>
-          <Text numberOfLines={largeText ? 4 : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
-            {REQUEST_LINE}
-          </Text>
+          </FitText>
+          {source || age ? (
+            <Text testID="request-line" numberOfLines={largeText ? 2 : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.muted]}>
+              {source}
+              {source && age ? ' · ' : null}
+              {age ? <Text testID="request-age" style={/\d/.test(age) ? monoCaption(bold) : null}>{age}</Text> : null}
+            </Text>
+          ) : null}
         </View>
-        {age ? (
-          // A tag beside the row, as the Banter row's time: it stops where a control does.
-          <Text testID="request-age" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[/\d/.test(age) ? monoCaption(bold) : font('caption', bold), styles.tertiary]}>
-            {age}
-          </Text>
-        ) : null}
+        {largeText ? null : answers}
       </View>
-      <View style={styles.actions}>
-        <Button
-          kind="secondary"
-          size="md"
-          label="Not now"
-          onGlass
-          accessibilityLabel={`Not now, ${person.name}`}
-          onPress={() => respond('dismiss')}
-          loading={waiting('dismiss')}
-          disabled={busy && !waiting('dismiss')}
-          style={styles.action}
-        />
-        <Button
-          kind="lit"
-          size="md"
-          icon="user-check"
-          label="Accept"
-          accessibilityLabel={`Accept ${person.name}`}
-          onPress={() => respond('accept')}
-          loading={waiting('accept')}
-          disabled={busy && !waiting('accept')}
-          style={styles.action}
-        />
-      </View>
+      {largeText ? answers : null}
     </Reanimated.View>
   )
 }
 
-/** Requests while they load (Flow 6 requests 14): three cards at the card's own height, so the list does not jump when it lands. */
-const SKELETON_CARD = 140
+/** Requests while they load: rows at the row's own height, so the list does not jump when it lands. */
 export function RequestSkeleton() {
   return (
     <View accessible testID="request-skeleton" accessibilityLabel="Loading requests" accessibilityState={{ busy: true }} style={styles.skeleton}>
-      {[0, 1, 2].map((i) => (
-        <SkeletonBlock key={i} height={SKELETON_CARD} borderRadius={RADIUS.mediaInCard} />
+      {[60, 70, 50, 80, 65].map((width) => (
+        <View key={width} style={styles.skeletonRow}>
+          <SkeletonCircle width={LIST_FACE} />
+          <View style={styles.skeletonText}>
+            <SkeletonLine width={`${width}%`} />
+            <SkeletonLine width="30%" />
+          </View>
+        </View>
       ))}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  skeleton: { gap: SPACE.md, paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
-  card: { gap: SPACE.md, padding: SPACE.lg, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surface },
+  skeleton: { paddingHorizontal: SPACE.gutter, paddingVertical: SPACE.sm },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, height: REQUEST_ROW_HEIGHT },
+  skeletonText: { flex: 1, gap: SPACE.sm },
+  row: { minHeight: REQUEST_ROW_HEIGHT, justifyContent: 'center', gap: SPACE.sm, paddingVertical: SPACE.xs },
   who: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   text: { flex: 1, minWidth: 0 },
-  actions: { flexDirection: 'row', gap: SPACE.sm },
-  action: { flex: 1 },
+  answers: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },
-  tertiary: { color: COLOR.textTertiary, alignSelf: 'flex-start' },
 })
