@@ -24,7 +24,6 @@ import { VenueRegulars } from '../../components/venue/VenueRegulars'
 import {
   About,
   BoardRow,
-  ClaimLine,
   LiveCard,
   Section,
   TonightHere,
@@ -37,6 +36,7 @@ import { apiClient, type VenueDetail } from '../../lib/apiClient'
 import { openBlendn, useLiveEventId, useLiveTitle } from '../../lib/blendnOverlay'
 import { checkOutOf, subscribeCheckInChanged } from '../../lib/checkIn'
 import { claimUrlFrom } from '../../lib/claimLink'
+import { ClaimCard } from '../../components/scene/ClaimCard'
 import { COLOR, FONT_FAMILY, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { EXTEND_CHOICE, oneTapChoice, readLiveSession, venueAction, type GoLiveChoice } from '../../lib/goLive'
 import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locationFix'
@@ -509,6 +509,13 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
           ) : null}
         </View>
         <View style={styles.body}>
+          {/*
+           * "Nobody runs this place on Blend’n yet · Claim it" (going-lifecycle C1), under the name where an owner looks first.
+           * Leaves the app on purpose, through its sheet: the app refuses venue accounts, the claim page needs none (§7).
+           */}
+          {claimUrl ? (
+            <ClaimCard title="Nobody runs this place on Blend’n yet" before="Own it?" after="to post offers and see your nights." onPress={() => setSheet('claim')} testID="claim-venue-card" />
+          ) : null}
           {/* Reads stay (the cached place); the dock's writes say why they wait. Flow 15 #15 · #16. */}
           <OfflineBanner text="Offline. Showing what you had." testID="venue-offline" />
           {action.kind === 'live' ? <LiveCard live={live} name={venue.name} onZero={load} /> : null}
@@ -527,8 +534,6 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
           ) : null}
           {/* Flow 4 V-A: the map and its Directions are the hero; Where keeps the address and Copy. */}
           <Where venue={venue} km={km} onCopy={copyAddress} />
-          {/* Leaves the app on purpose: the app refuses venue accounts, the claim page needs none (§7). */}
-          {claimUrl ? <ClaimLine onPress={() => setSheet('claim')} /> : null}
         </View>
       </Animated.ScrollView>
       </Reanimated.View>

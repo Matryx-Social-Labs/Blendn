@@ -376,6 +376,7 @@ export function Icon({
   size = ICON.nav,
   color = COLOR.textPrimary,
   active = false,
+  filled = false,
   gradient,
   testID,
 }: {
@@ -383,6 +384,8 @@ export function Icon({
   size?: number
   color?: string
   active?: boolean
+  /** The glyph filled in its colour as well as stroked: a chosen bookmark ("Saved", going-lifecycle S1). */
+  filled?: boolean
   /** The stroke in a brand gradient (`GRADIENT`), 135° across the glyph's box, instead of `color`: an armed hold's glyph (SCRUM-1057 A). */
   gradient?: keyof typeof GRADIENT
   testID?: string
@@ -391,7 +394,9 @@ export function Icon({
   // An SVG id is document-wide on the web and per Svg here; a stable unique one either way (no ':' in a url()).
   const id = `icon${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   const strokeWidth = active ? ICON.strokeActive : ICON.stroke
-  if (!gradient) return <Glyph size={size} color={color} strokeWidth={strokeWidth} testID={testID} />
+  // Lucide draws `fill="none"` unless told otherwise; an undefined fill would draw black.
+  const fill = filled ? { fill: color } : null
+  if (!gradient) return <Glyph size={size} color={color} strokeWidth={strokeWidth} testID={testID} {...fill} />
   return (
     <Glyph size={size} color={`url(#${id})`} strokeWidth={strokeWidth} testID={testID}>
       <Defs>

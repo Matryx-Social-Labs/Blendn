@@ -191,12 +191,12 @@ export function DrawnGlyph({
   )
 }
 
-function MovingGlyph({ verb, name, size = ICON.nav, color, active, play }: GlyphProps & { verb: Exclude<GlyphVerb, 'draw'>; play: boolean }) {
+function MovingGlyph({ verb, name, size = ICON.nav, color, active, filled, play }: GlyphProps & { verb: Exclude<GlyphVerb, 'draw'>; play: boolean }) {
   const style = useGlyphPlay(play, verb)
   // A tilt turns about its foot, as a glass is clinked.
   return (
     <Animated.View style={[{ width: size, height: size }, verb === 'tilt' && { transformOrigin: 'bottom' }, style]}>
-      <Icon name={name} size={size} color={color} active={active} />
+      <Icon name={name} size={size} color={color} active={active} filled={filled} />
     </Animated.View>
   )
 }
@@ -207,6 +207,8 @@ export type GlyphProps = {
   color?: string
   /** The thicker stroke (`ICON.strokeActive`): a chosen glyph. */
   active?: boolean
+  /** Filled in its colour (`Icon`'s `filled`): a chosen bookmark. */
+  filled?: boolean
   /** Goes false → true: the glyph's verb runs once. Leave it out for a plain `Icon`. */
   play?: boolean
   testID?: string

@@ -11,7 +11,6 @@ import { OverflowMenu } from '../crews/OverflowMenu'
 import { AmenityGrid } from '../ds/AmenityTile'
 import { Banner } from '../ds/Banner'
 import { BannerPresence } from '../motion/BannerPresence'
-import { Button } from '../ds/Button'
 import { Dock } from '../ds/Dock'
 import { IconButton } from '../ds/IconButton'
 import { SectionHeader } from '../ds/SectionHeader'
@@ -77,6 +76,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useNow } from '../../lib/useNow'
 import { forgetEventDetailCache, getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache'
 import { claimUrlFrom } from '../../lib/claimLink'
+import { ClaimCard } from '../scene/ClaimCard'
 import { deferLeave, leaveKind, leavePending, leaveSheet, leaveToast, menuLabel, sendLeave, undoLeave, type LeaveKind } from '../../lib/goingLeave'
 import * as Location from 'expo-location'
 import { getDistanceKm } from '../../lib/geo'
@@ -532,7 +532,7 @@ export default function EventDetail() {
   /*
    * One save request at a time. A second tap while the first is in flight
    * flipped the optimistic state back and raced the two responses, so the
-   * heart could end on the opposite of what the server holds.
+   * bookmark could end on the opposite of what the server holds.
    */
   const interestInFlight = useRef(false)
   const handleToggleInterest = useCallback(async () => {
@@ -558,7 +558,7 @@ export default function EventDetail() {
       }
       setUserInterested(result.data.interested)
       setInterestCount(result.data.interestCount || 0)
-      // Saving is silent everywhere (the heart's fill is the cue); only a refusal buzzes (above).
+      // Saving is silent everywhere (the bookmark's lit rim is the cue); only a refusal buzzes (above).
     } catch {
       H.error()
       notice('Couldn’t save the event', 'Try again.')
@@ -948,8 +948,7 @@ export default function EventDetail() {
   }
   const changeRows = event?.change && heardOfIt ? changeLines(event.change, event, now) : []
 
-  // The ⋯: report, for anyone. An organiser edits, announces and deletes on the dashboard (Flow 15 #2, owner ruling D3): the Scene is the
-  // attendee's one surface, and shows no staff control to anybody.
+  // No staff control in the ⋯ for anybody: an organiser edits, announces and deletes on the dashboard (Flow 15 #2, owner ruling D3).
 
   /** The dock's state and its one action (`lib/eventFacts.ts`); null at the doors, where the hold is the dock. */
   const dock = eventDock({ cta: ctaState, when: dockWhen, roomOpen: roomLine?.open === true, canInvite: !!shareTarget, between: betweenLine, alone: checkInCount <= 1, leftTonight: leftTonight && rsvpStatus === null })
@@ -959,8 +958,10 @@ export default function EventDetail() {
     if (leaveNow === 'checkOut') return openCheckOut()
     if (leaveNow) confirmLeave(leaveNow, (event?.max_capacity ?? 0) > 0 && goingCount >= (event?.max_capacity ?? 0))
   }
-  // The ⋯: report, and the way out last in red while there is one (SCRUM-1074). A ticket's way out explains, never cancels (sendLeave).
+  // The ⋯: Claim this event first while the server offers it (going-lifecycle C3), then Report, and the way out last in red
+  // while there is one (SCRUM-1074). A ticket's way out explains, never cancels (sendLeave).
   const menu: MenuItem[] = [
+    ...(claimUrl ? [{ icon: 'external-link' as const, label: 'Claim this event', onPress: () => openClaimPage(claimUrl) }] : []),
     { icon: 'flag', label: 'Report this event', onPress: () => showEventReportOptions(event?.title || 'this event', String(id)) },
     ...(leaveNow && leaveNow !== 'checkOut' ? [{ icon: 'calendar-x' as const, label: menuLabel(leaveNow), onPress: openLeave, destructive: true }] : []),
   ]
@@ -1081,6 +1082,17 @@ export default function EventDetail() {
               </FadeInUp>
 
               <View style={styles.sections}>
+                {/*
+                  "Listed by Blend’n · Claim it" (going-lifecycle C1), first under the facts: only on a curated event nobody has
+                  claimed, which the server decides (never a host's own night). It leaves the app for the public claim page on the
+                  dashboard host: the app refuses host accounts by design, and that page needs no account.
+                */}
+                {claimUrl ? (
+                  <FadeInUp delay={SECTION_DELAY[1]}>
+                    <ClaimCard title="Listed by Blend’n" before="Running this event?" after="to post updates and see who came." onPress={() => openClaimPage(claimUrl)} testID="claim-event-card" />
+                  </FadeInUp>
+                ) : null}
+
                 {/* Going together (crews 4-A1): your crew only, before the night; draws nothing without a crew. */}
                 {event && !cancelled && !isEnded ? (
                   <FadeInUp delay={SECTION_DELAY[1]}>
@@ -1140,23 +1152,6 @@ export default function EventDetail() {
                   </FadeInUp>
                 ) : null}
 
-                {/*
-                  Only on a curated event nobody has claimed, which the server decides. It leaves the app for the public
-                  claim page on the dashboard host: the app refuses host accounts by design, and that page needs no account.
-                */}
-                {claimUrl ? (
-                  <FadeInUp delay={SECTION_DELAY[3]} style={styles.claim}>
-                    <Button
-                      kind="tertiary"
-                      size="md"
-                      icon="external-link"
-                      label="Running this event? Claim it"
-                      accessibilityHint="Opens the Blend’n dashboard in your browser"
-                      onPress={() => openClaimPage(claimUrl)}
-                      testID="claim-event-link"
-                    />
-                  </FadeInUp>
-                ) : null}
               </View>
             </>
           )}
@@ -1216,7 +1211,6 @@ const styles = StyleSheet.create({
   state: { gap: SPACE.lg, paddingTop: SPACE.lg },
   sections: { marginTop: SPACE.xxl, gap: SCENE_SECTION_GAP },
   section: { gap: SPACE.md },
-  claim: { alignSelf: 'flex-start' },
   skeleton: { gap: SPACE.lg },
   stateBar: { position: 'absolute', left: SPACE.lg, zIndex: 2 },
   stateBody: { flex: 1, paddingHorizontal: SPACE.gutter, paddingTop: SPACE.xxxl * 4 },

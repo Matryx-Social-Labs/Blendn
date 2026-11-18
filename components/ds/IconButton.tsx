@@ -1,16 +1,19 @@
 import { useState } from 'react'
-import { Platform, StyleSheet, View } from 'react-native'
+import { Platform, StyleSheet, Text, View } from 'react-native'
 
 import ScalePress from '../motion/ScalePress'
 import { Glyph } from '../ui/Glyph'
 import { type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
-import { COLOR, PRESS, RADIUS, SIZE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, PRESS, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { OPACITY } from '../../lib/theme'
 import { LitFill } from './LitFill'
-import { chipRest, focusRing, IC_HAIRLINE, PRESSED_WASH, useGround, useIncreaseContrast } from './shared'
+import { chipRest, CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useGround, useIncreaseContrast } from './shared'
 
+
+/** The pill's glyph, 18 pt (`.savepill svg`), as a dock button's. */
+const PILL_GLYPH = 18
 
 export type IconButtonProps = {
   icon: IconName
@@ -23,6 +26,11 @@ export type IconButtonProps = {
   size?: 'md' | 'sm'
   /** Set only on a toggle (save, mute): it then plays `H.select` and reads "selected". */
   selected?: boolean
+  /**
+   * A word after the glyph, making the circle a pill as tall as its circles (going-lifecycle S1: "Save" / "Saved"). Glass at
+   * rest; selected it is the lit rim even over a photo, with the glyph filled, because there it is a state, not a disc.
+   */
+  label?: string
   disabled?: boolean
   accessibilityHint?: string
   /** The design gallery only: draws a transient state with no finger or keyboard. */
@@ -52,11 +60,13 @@ export function IconButton({
   tier = 'control',
   size: sizeName = 'md',
   selected,
+  label,
   disabled = false,
   accessibilityHint,
   previewState,
   testID,
 }: IconButtonProps) {
+  const bold = useBoldText()
   const android = Platform.OS === 'android'
   const contrast = useIncreaseContrast()
   const [down, setDown] = useState(false)
@@ -65,17 +75,24 @@ export function IconButton({
 
   const full = android ? SIZE.circleButtonAndroid : SIZE.circleButton
   const size = sizeName === 'sm' ? SIZE.circleButtonSm : full
-  const round = sizeName === 'sm' ? SIZE.circleButtonSm / 2 : android ? RADIUS.circleButtonAndroid : RADIUS.circleButton
+  const round = label ? RADIUS.capsule : sizeName === 'sm' ? SIZE.circleButtonSm / 2 : android ? RADIUS.circleButtonAndroid : RADIUS.circleButton
   const slop = (full - size) / 2
   const radius = android && pressed ? RADIUS.pressedAndroid : round
-  const shape = { width: size, height: size, borderRadius: radius }
-  const white = tier === 'media'
+  const shape = label ? { height: size, borderRadius: radius } : { width: size, height: size, borderRadius: radius }
+  const white = tier === 'media' && !label
   // On a surface card (`GroundProvider value="surface"`) glass has nothing to refract and drew no disc (C20, the request
   // card's "…" on iOS): the circle is solid there, in the card's chip tone, on both platforms.
   const onCard = useGround() === 'surface' && tier === 'control'
   const glyphColor = selected && white ? COLOR.selectionInk : COLOR.textPrimary
 
-  const glyph = (
+  const glyph = label ? (
+    <View testID={testID && `${testID}-glyph`} style={[styles.labelled, disabled && { opacity: OPACITY.disabled }]}>
+      <Glyph name={icon} size={PILL_GLYPH} color={glyphColor} play={selected} filled={selected} />
+      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('control', bold, FONT_FAMILY.brand[700]), styles.word]}>
+        {label}
+      </Text>
+    </View>
+  ) : (
     <View testID={testID && `${testID}-glyph`} style={disabled && { opacity: OPACITY.disabled }}>
       <Glyph name={icon} color={glyphColor} play={selected} />
     </View>
@@ -116,9 +133,13 @@ export function IconButton({
         ) : (
           <Material role={tier} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
         )}
-        <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.center]}>
-          {glyph}
-        </View>
+        {label ? (
+          glyph
+        ) : (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.center]}>
+            {glyph}
+          </View>
+        )}
         {/* Android's live press is the ripple; the wash stands in for it only in the gallery. */}
         {previewState === 'pressed' && android ? <View style={[StyleSheet.absoluteFill, styles.wash]} /> : null}
         {contrast ? (
@@ -142,6 +163,9 @@ const styles = StyleSheet.create({
   pressedIos: { transform: [{ scale: PRESS.scale }] },
   clip: { overflow: 'hidden' },
   center: { alignItems: 'center', justifyContent: 'center' },
+  // design-exception: the board's `.savepill` is 12 in before the glyph, 14 after the word, 7 between (off the 4-pt scale).
+  labelled: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, paddingLeft: SPACE.md, paddingRight: 14 },
+  word: { color: COLOR.textPrimary },
   selected: { backgroundColor: COLOR.selectionFill },
   wash: { backgroundColor: PRESSED_WASH.android },
 })

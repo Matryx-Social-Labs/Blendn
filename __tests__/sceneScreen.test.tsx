@@ -853,3 +853,62 @@ describe('Blend in is the hold itself (SCRUM-966)', () => {
     expect(screen.queryByText('Blend’n')).toBeNull()
   })
 })
+
+describe('Save is a labelled bookmark (SCRUM-1074 S1, owner-approved)', () => {
+  it('reads "Save" at rest and "Saved" once saved, as one toggle with its state', async () => {
+    api.getEvent.mockResolvedValue(detail() as never)
+    api.toggleInterest.mockResolvedValue({ success: true, data: { interested: true, interestCount: 1 } } as never)
+    await open()
+    const rest = await screen.findByRole('button', { name: 'Save' })
+    expect(rest.props.accessibilityState).toMatchObject({ selected: false })
+    expect(within(screen.getByTestId('scene-save')).getByText('Save')).toBeTruthy()
+    await act(async () => {
+      fireEvent.press(rest)
+    })
+    expect(screen.getByRole('button', { name: 'Saved' }).props.accessibilityState).toMatchObject({ selected: true })
+    expect(within(screen.getByTestId('scene-save')).getByText('Saved')).toBeTruthy()
+  })
+})
+
+describe('Claim (SCRUM-1074 C1 + C3, owner-approved)', () => {
+  const url = 'https://staging-dashboard.blendn.app/claim/e1'
+  const openURL = jest.spyOn(require('react-native').Linking, 'openURL')
+  beforeEach(() => openURL.mockImplementation(() => Promise.resolve(true)))
+
+  it('a card under the facts, "Listed by Blend’n · Claim it", opens the page the server gave', async () => {
+    api.getEvent.mockResolvedValue(detail({ claim: { url } }) as never)
+    await open()
+    const card = await screen.findByTestId('claim-event-card')
+    expect(within(card).getByText('Listed by Blend’n')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('link', { name: /Listed by Blend’n.*Claim it/ }))
+    expect(openURL).toHaveBeenCalledWith(url)
+  })
+
+  it('and a ⋯ entry, "Claim this event", before Report', async () => {
+    api.getEvent.mockResolvedValue(detail({ claim: { url } }) as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'More options' }))
+    const names = within(screen.getByTestId('scene-menu')).getAllByRole('button').map((n) => n.props.accessibilityLabel)
+    expect(names).toEqual(['Claim this event', 'Report this event'])
+    await fireEvent.press(screen.getByRole('button', { name: 'Claim this event' }))
+    expect(openURL).toHaveBeenCalledWith(url)
+  })
+
+  it('going to a claimable night, the ⋯ is Claim, Report, then the way out last', async () => {
+    api.getEvent.mockResolvedValue(detail({ claim: { url } }, { rsvpStatus: 'going' }) as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'More options' }))
+    const names = within(screen.getByTestId('scene-menu')).getAllByRole('button').map((n) => n.props.accessibilityLabel)
+    expect(names).toEqual(['Claim this event', 'Report this event', 'Can’t go'])
+  })
+
+  it('nothing at all when the server sends no claim (a host’s own night, or a claimed one), and the old tertiary link is gone', async () => {
+    api.getEvent.mockResolvedValue(detail() as never)
+    await open()
+    await screen.findByTestId('scene-title')
+    expect(screen.queryByTestId('claim-event-card')).toBeNull()
+    expect(screen.queryByTestId('claim-event-link')).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'More options' }))
+    expect(screen.queryByRole('button', { name: 'Claim this event' })).toBeNull()
+  })
+})
