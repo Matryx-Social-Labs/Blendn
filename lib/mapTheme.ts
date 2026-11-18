@@ -213,6 +213,9 @@ export const MAP_THEME = {
     rim: TOKEN.brandOrange,
     rimPx: 1.5,
     text: TOKEN.white,
+    /** Opaque ink round the numerals: legible over the violet you-dot (white on violet alone is 2.5:1). */
+    halo: '#0D0C0C',
+    haloPx: 1.5,
     font: ['Noto Sans Bold'],
     textSize: 13,
   },

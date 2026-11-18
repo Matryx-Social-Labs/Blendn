@@ -119,6 +119,9 @@ it('numbers: ink with an ember rim, white numerals in the map’s own font, size
   expect(layer('pile-bubble')?.filter).toEqual(['has', 'point_count'])
   expect(JSON.stringify(layer('pile-bubble')?.paint)).toContain('"step"')
   expect((layer('pile-count')?.layout as Record<string, unknown>)['text-font']).toEqual(MAP_THEME.pile.font)
+  // Over the violet you-dot white is 2.5:1 (drive: a fix at the Church Street pile's centre); an ink halo keeps it ~19:1.
+  expect(layer('pile-count')?.paint).toMatchObject({ 'text-halo-color': MAP_THEME.pile.halo, 'text-halo-width': MAP_THEME.pile.haloPx })
+  expect(MAP_THEME.pile.halo).toBe('#0D0C0C')
 })
 
 it('a number tapped eases to its expansion zoom; a dot tapped opens its event', async () => {

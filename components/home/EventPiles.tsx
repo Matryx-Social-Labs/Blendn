@@ -143,7 +143,7 @@ export function EventPiles({
           'text-allow-overlap': true,
           'text-ignore-placement': true,
         }}
-        paint={{ 'text-color': MAP_THEME.pile.text }}
+        paint={{ 'text-color': MAP_THEME.pile.text, 'text-halo-color': MAP_THEME.pile.halo, 'text-halo-width': MAP_THEME.pile.haloPx }}
       />
       {focusData ? (
         <GeoJSONSource id="pins-focus" data={focusData} onPress={press}>
