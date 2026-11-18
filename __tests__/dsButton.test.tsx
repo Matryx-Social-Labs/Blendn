@@ -10,7 +10,7 @@ import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { Button } from '../components/ds/Button'
-import { HueProvider, SELECTION, type Hue } from '../components/ds/shared'
+import { GroundProvider, HueProvider, SELECTION, type Ground, type Hue } from '../components/ds/shared'
 import { COLOR, FONT_FAMILY, GRADIENT, MATERIAL, RADIUS, SIZE, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
@@ -149,6 +149,53 @@ describe('kinds and sizes', () => {
     expect(flat('b').backgroundColor).toBe(MATERIAL.fillOnGlass)
     await draw({ kind: 'secondary', size: 'sm' })
     expect(flat('b').backgroundColor).toBe(COLOR.surfaceRaised)
+  })
+})
+
+/*
+ * The neutral on a sheet (Me + settings A drive, 2026-11-18): Android's solid sheet is `surface`, and so was the secondary's
+ * fill, so Sign out and Done read as plain text there while iOS drew a pill. The fill now steps one tier up from the ground
+ * it sits on (the board's `.n9neu`: `surface-raised` on a `surface` sheet), and a rim carries the boundary at 3:1 on every
+ * ground (`themeContrast.test.ts`), as the lit rim does for a positive.
+ */
+describe('the neutral reads as a button on every ground', () => {
+  const onGround = (ground: Ground, props: Partial<React.ComponentProps<typeof Button>> = {}) =>
+    render(
+      <GroundProvider value={ground}>
+        <Button label="Sign out" kind="secondary" onPress={jest.fn()} testID="b" {...props} />
+      </GroundProvider>
+    )
+
+  it.each([
+    ['ink', COLOR.surface],
+    ['surface', COLOR.surfaceRaised],
+    ['glass', MATERIAL.fillOnGlass],
+  ] as const)('on %s its fill is %s, never the ground itself', async (ground, fill) => {
+    await onGround(ground)
+    expect(flat('b').backgroundColor).toBe(fill)
+  })
+
+  it('a surface card or an Android sheet: never the surface it sits on (the drive’s bug)', async () => {
+    await onGround('surface')
+    expect(flat('b').backgroundColor).not.toBe(COLOR.surface)
+  })
+
+  it.each(['ink', 'surface', 'glass'] as const)('on %s it carries the 1 pt rim at rest', async (ground) => {
+    await onGround(ground)
+    expect(flat('b-rim')).toMatchObject({ borderWidth: 1, borderColor: COLOR.inputBorder })
+  })
+
+  it('Increase Contrast swaps the rim for the 50% hairline, not a second one', async () => {
+    jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
+    await onGround('surface')
+    await act(async () => {})
+    expect(flat('b-contrast').borderColor).toBe(MATERIAL.hairlineIncreaseContrast)
+    expect(screen.queryByTestId('b-rim')).toBeNull()
+  })
+
+  it.each(['primary', 'lit', 'tertiary', 'destructive'] as const)('control: %s draws no neutral rim', async (kind) => {
+    await onGround('surface', { kind, size: 'md' })
+    expect(screen.queryByTestId('b-rim')).toBeNull()
   })
 })
 

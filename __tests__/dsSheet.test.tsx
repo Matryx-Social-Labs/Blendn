@@ -252,6 +252,18 @@ describe('<Sheet>', () => {
     expect(flat('s-handle')).toMatchObject({ width: 36, height: 5 })
   })
 
+  /* Me + settings A drive 2026-11-18: on Android the secondary's fill was the solid sheet's own `surface` (Sign out, Done). */
+  it.each([
+    ['ios', MATERIAL.fillOnGlass],
+    ['android', COLOR.surfaceRaised],
+  ] as const)('%s: a secondary action steps up off the sheet (%s) and keeps its rim', async (os, fill) => {
+    on(os)
+    await render(signOut({ actions: [{ label: 'Sign out', kind: 'secondary', onPress: jest.fn(), testID: 'out' }] }))
+    expect(flat('out').backgroundColor).toBe(fill)
+    expect(flat('out').backgroundColor).not.toBe(MATERIAL.solidSheet)
+    expect(flat('out-rim').borderColor).toBe(COLOR.inputBorder)
+  })
+
   it('Android: solid under a 50% scrim, a 32×4 handle', async () => {
     on('android')
     await render(signOut())
