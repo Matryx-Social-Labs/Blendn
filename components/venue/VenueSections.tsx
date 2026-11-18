@@ -15,9 +15,9 @@ import { OPACITY } from '../../lib/theme'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { liveNowWord } from '../../lib/home'
 import { DateStamp } from '../ds/DateStamp'
-import { Image } from 'expo-image'
 import { eventClock } from '../../lib/time'
 import { hasMoreThanShown, ringWords, UPCOMING_SHOWN, type UpcomingRow } from '../../lib/venuePage'
+import { ContainedCover } from '../ds/LinkPreviewCard'
 
 /** The ring around the live card (the design's 88, a 56 face inside). */
 const RING = 88
@@ -88,7 +88,7 @@ export function TonightHere({
           testID="venue-tonight"
         >
           <View style={styles.thumb}>
-            {tonight.coverImageUrl ? <Image source={{ uri: tonight.coverImageUrl }} contentFit="cover" style={StyleSheet.absoluteFill} accessible={false} /> : <DateStamp iso={tonight.startTime} timeZone={tonight.timezone} />}
+            {tonight.coverImageUrl ? <ContainedCover uri={tonight.coverImageUrl} auto /> : <DateStamp iso={tonight.startTime} timeZone={tonight.timezone} />}
           </View>
           <View style={styles.tonightWords}>
             <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold), on ? styles.live : styles.secondary]}>

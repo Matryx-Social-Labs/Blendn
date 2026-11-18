@@ -107,7 +107,6 @@ export function SceneHero({
               playlist={playlist}
               width={side}
               height={side}
-              fit="contain"
               autoAdvance={false}
               pips="center"
               onPress={onPressMedia}

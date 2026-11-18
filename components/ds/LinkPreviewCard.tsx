@@ -1,9 +1,11 @@
 import { Image } from 'expo-image'
+import { useEffect, useState } from 'react'
 import { StyleSheet, Text, View, type TextProps, type TextStyle } from 'react-native'
 
 import { COLOR, FONT_FAMILY, RADIUS, TYPE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
 import { DiscMark } from './DiscMark'
+import { useReduceTransparency } from './shared'
 
 /** An event as it may be shared: never counts, live data, who's going, or the sharer (Flow 16 rules). */
 export type ShareEvent = {
@@ -73,16 +75,83 @@ export const dateLine = (d: ShareEvent['date']) => `${d.day} ${d.num} ${d.month}
 export const joinParts = (parts: (string | null | undefined)[], separator: string) => parts.filter(Boolean).join(separator)
 export const placeLine = (e: Pick<ShareEvent, 'venue' | 'area' | 'unlisted'>) => (e.unlisted ? e.area : joinParts([e.venue, e.area], ' · '))
 
+type Size = { width: number; height: number }
+
+/** Fit rule B (pulse-media board 11–13, owner 2026-11-17): an upload crops only when its ratio is this close to the frame's. */
+export const FIT_TOLERANCE = 0.15
+/** Fit rule B's crop keeps the point 40% from the top in view: faces sit high. */
+const COVER_FOCUS = { top: '40%', left: '50%' } as const
+
+/** Fit rule B: `cover` within ±15% of the frame's ratio, else `contain`. An unknown size never crops. */
+export function fitFor(media: Size | null | undefined, frame: Size): 'cover' | 'contain' {
+  if (!media || media.width <= 0 || media.height <= 0 || frame.width <= 0 || frame.height <= 0) return 'contain'
+  const off = media.width / media.height / (frame.width / frame.height) - 1
+  // Rounded so a ratio exactly 15% off is inside, whatever the floating point makes of it.
+  return Math.round(Math.abs(off) * 1e6) <= FIT_TOLERANCE * 1e6 ? 'cover' : 'contain'
+}
+
 /**
  * A cover that is never cropped: contained on a blurred, darkened copy of
  * itself (Flow 16 · 16.2: DICE's card crops its own artist name).
+ *
+ * `auto` is fit rule B for every live media surface (owner 2026-11-17): it measures its frame and the picture, and covers
+ * when the two ratios are within ±15% (`fitFor`); otherwise the whole upload over the same picture blurred and dimmed,
+ * never another image. Under Reduce Transparency the fill is flat `surfaceSunken`, as other glass is. The share templates
+ * leave it off: they are pictures of the card, always contained, whatever the sharer's phone is set to.
  */
-export function ContainedCover({ uri, radius = 0, testID }: { uri: string; radius?: number; testID?: string }) {
+export function ContainedCover({
+  uri,
+  radius = 0,
+  auto = false,
+  onError,
+  onFit,
+  fillOnly = false,
+  testID,
+}: {
+  uri: string
+  radius?: number
+  auto?: boolean
+  /** The picture would not load (EventCover's retry). */
+  onError?: () => void
+  /** `auto`'s decision, as it changes: a clip over this poster takes the same fit, so its first frame lands on the same picture. */
+  onFit?: (fit: 'cover' | 'contain') => void
+  /** The fill only, no sharp picture: under a clip that has drawn its first frame (the poster goes; its blurred copy stays). */
+  fillOnly?: boolean
+  testID?: string
+}) {
+  const reduceTransparency = useReduceTransparency()
+  const [frame, setFrame] = useState<Size>({ width: 0, height: 0 })
+  const [media, setMedia] = useState<{ uri: string; size: Size } | null>(null)
+  const fit = auto ? fitFor(media?.uri === uri ? media.size : null, frame) : 'contain'
+  const flat = auto && reduceTransparency
+  useEffect(() => onFit?.(fit), [fit, onFit])
   return (
-    <View style={[StyleSheet.absoluteFill, styles.clip, { borderRadius: radius }]}>
-      <Image testID={testID && `${testID}-blur`} source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={COVER_BLUR} accessible={false} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: tint(COLOR.ink, COVER_DIM) }]} />
-      <Image testID={testID} source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" accessible={false} />
+    <View
+      testID={testID && `${testID}-frame`}
+      onLayout={auto ? (e) => setFrame({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height }) : undefined}
+      style={[StyleSheet.absoluteFill, styles.clip, { borderRadius: radius }]}
+    >
+      {fit === 'contain' ? (
+        <>
+          {flat ? null : (
+            <Image testID={testID && `${testID}-blur`} source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" blurRadius={COVER_BLUR} accessible={false} />
+          )}
+          <View testID={testID && `${testID}-dim`} style={[StyleSheet.absoluteFill, { backgroundColor: flat ? COLOR.surfaceSunken : tint(COLOR.ink, COVER_DIM) }]} />
+        </>
+      ) : null}
+      {fillOnly ? null : (
+        <Image
+          testID={testID}
+          source={{ uri }}
+          recyclingKey={uri}
+          style={StyleSheet.absoluteFill}
+          contentFit={fit}
+          contentPosition={fit === 'cover' ? COVER_FOCUS : undefined}
+          onLoad={auto ? (e) => setMedia({ uri, size: { width: e.source.width, height: e.source.height } }) : undefined}
+          onError={onError}
+          accessible={false}
+        />
+      )}
     </View>
   )
 }

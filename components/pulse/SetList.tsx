@@ -1,4 +1,3 @@
-import { Image } from 'expo-image'
 import { memo, useRef, type RefObject } from 'react'
 import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
@@ -15,6 +14,7 @@ import { eventClock } from '../../lib/time'
 import { H } from '../../lib/haptics'
 import { printable } from '../../lib/pulseSections'
 import { compactCount } from '../../lib/format'
+import { ContainedCover } from '../ds/LinkPreviewCard'
 
 /**
  * Tonight, as a running order (BUILD-SPEC A4; pulse.html `setlist`): a mono time
@@ -116,7 +116,7 @@ const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn
       </View>
       {stacked ? null : (
         <View style={styles.thumb} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-          {event.cover_image_url ? <Image source={{ uri: event.cover_image_url }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} /> : null}
+          {event.cover_image_url ? <ContainedCover uri={event.cover_image_url} auto /> : null}
         </View>
       )}
       <View style={styles.text}>

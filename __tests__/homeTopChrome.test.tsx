@@ -29,4 +29,19 @@ describe('PulseTopBar', () => {
     expect(styles.some((st) => (st as { backgroundColor?: string }).backgroundColor === '#0F0E0E')).toBe(false)
   })
 
+  // #570 dropped `top/left/right: 0`: the absolute bar shrank to its content, so the bell sat beside the wordmark, not at the edge.
+  it('spans the screen, so the bell sits at the right edge', async () => {
+    await render(<PulseTopBar floating actions={<></>} />)
+    const outermost = (() => {
+      let node = screen.getByText("Blend’n").parent
+      let last = node
+      while (node) {
+        if ((StyleSheet.flatten(node.props.style) as { position?: string } | undefined)?.position === 'absolute') last = node
+        node = node.parent
+      }
+      return last
+    })()
+    const bar = StyleSheet.flatten(outermost?.props.style) as { position?: string; top?: number; left?: number; right?: number }
+    expect(bar).toMatchObject({ position: 'absolute', top: 0, left: 0, right: 0 })
+  })
 })
