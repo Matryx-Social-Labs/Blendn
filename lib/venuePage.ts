@@ -224,14 +224,14 @@ export function ringWords(time: SessionTime | null): string {
  */
 export function liveDockLine(time: SessionTime | null, place: string) {
   const ending = time?.kind === 'ending'
-  const sub = ending ? 'Extend' : time?.kind === 'minutes' && time.extendUntil ? 'Extend or stop' : 'Stop'
+  const link = ending ? 'Extend' : time?.kind === 'minutes' && time.extendUntil ? 'Extend or stop' : 'Stop'
   const clock = !time || time.kind === 'stay' ? undefined : { text: time.kind === 'ending' ? time.clock : minutesWords(time.left), mono: ending }
   return {
     dot: ending ? ('ending' as const) : ('live' as const),
     state: ending ? 'Ending' : time?.kind === 'stay' ? 'Live · staying' : 'Live',
     clock,
-    sub,
-    label: `Live at ${place}${time ? `, ${spokenLeft(time)}` : ''}. ${sub}`,
+    link,
+    label: `Live at ${place}${time ? `, ${spokenLeft(time)}` : ''}. ${link}`,
   }
 }
 

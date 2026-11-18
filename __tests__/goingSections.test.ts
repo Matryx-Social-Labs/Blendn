@@ -2,7 +2,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 
 import { failedSections, goingSections, isLiveNow, newFailure } from '../lib/goingSections'
-import { pastEventRows, savedEventRows, type RsvpEventRow, type SavedEventRow } from '../lib/savedEvents'
+import { pastEventRows, rsvpEventRows, savedEventRows, type RsvpEventRow, type SavedEventRow } from '../lib/savedEvents'
 
 /** Local wall-clock times, so the day headings match the machine running the test. */
 const local = (d: number, h: number, m = 0) => new Date(2026, 8, d, h, m).toISOString()
@@ -130,7 +130,7 @@ describe('the Going tab after a partial failure', () => {
   it('keeps each section’s last good rows and toasts with a Try again', () => {
     // A section only updates when its own request succeeds.
     expect(GOING).toContain('if (saved.ok) setSavedPaged(saved.paged)')
-    expect(GOING).toContain('if (rsvps.ok) setGoingPaged(rsvps.paged)')
+    expect(GOING).toContain('if (rsvps.ok) setGoingPaged(pagedRows(rsvps.paged)')
     expect(GOING).toMatch(/if \(past\.ok\) \{\s*setPastPaged\(past\.paged\)/)
     expect(GOING).toMatch(/newFailure\(failedRef\.current, failed\)/)
     expect(GOING).toMatch(/say\("Couldn’t load all of your events\.", 'error', \{ label: 'Try again'/)
@@ -152,7 +152,7 @@ describe('Going’s Undo toast (drive 2: it came ~1 s late and covered the title
   })
 
   it('is the design’s Toast: a snackbar above the tab bar on Android', () => {
-    expect(GOING).toMatch(/<Toast key=\{toast\.key\}[^>]*aboveTabBar/)
+    expect(GOING).toMatch(/<Toast\s+key=\{toast\.key\}[^>]*aboveTabBar/)
   })
 })
 
@@ -260,5 +260,15 @@ describe('a row’s category, for the plate when it has no cover (GO-14, DS-12 h
   it('Past reads it under the same name', () => {
     const night = { id: 'p', title: 'P', cover_image_url: null, start_time: local(1, 20), end_time: local(1, 23), venue_name: null, city: null, attendedAt: local(1, 20), categories: [{ slug: 'comedy' }] }
     expect(pastEventRows([night], new Date(2026, 8, 29).getTime())[0].category).toBe('comedy')
+  })
+})
+
+describe('rsvpEventRows: the Lobby count a row may carry (L2, SCRUM-1074)', () => {
+  const ev = (lobby?: unknown) => ({ id: 'e1', title: 'T', startTime: '2026-11-20T12:00:00Z', endTime: '2026-11-20T15:00:00Z', rsvpStatus: 'going' as const, ...(lobby === undefined ? {} : { lobby }) })
+  it('keeps a positive count', () => {
+    expect(rsvpEventRows({ events: [ev({ newCount: 12480 })] } as never)[0].lobbyNew).toBe(12480)
+  })
+  it('drops none, zero, garbage and a server that sends nothing (today)', () => {
+    for (const l of [undefined, null, {}, { newCount: 0 }, { newCount: '3' }, { newCount: NaN }]) expect(rsvpEventRows({ events: [ev(l)] } as never)[0].lobbyNew).toBeUndefined()
   })
 })

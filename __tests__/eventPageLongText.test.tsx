@@ -6,7 +6,7 @@
  */
 import { render, screen } from '@testing-library/react-native'
 import { createRef } from 'react'
-import { Dimensions, type View } from 'react-native'
+import { Dimensions, StyleSheet, type View } from 'react-native'
 
 import { DockRow } from '../components/ds/DockRow'
 import { EventGuide } from '../components/scene/EventGuide'
@@ -87,13 +87,24 @@ describe('checked in: "You’re in" with its "Check out" link (option A, SCRUM-1
     atScale(1)
     const ref = createRef<View>()
     await render(
-      <DockRow testID="d" state="You’re in" sub="Check out" subIsLink onPressState={jest.fn()} stateHint="Opens check out" stateRef={ref} action={{ label: 'Open the room', kind: 'primary', icon: 'door-open', onPress: jest.fn() }} />,
+      <DockRow testID="d" state="You’re in" link="Check out" onPressState={jest.fn()} stateHint="Opens check out" stateRef={ref} action={{ label: 'Open the room', kind: 'primary', icon: 'door-open', onPress: jest.fn() }} />,
     )
     const link = screen.getByRole('button', { name: 'You’re in. Check out' })
     expect(link.props.accessibilityHint).toBe('Opens check out')
     expect(ref.current).not.toBeNull()
     // The link's style: white and bold, as "Change".
-    expect(screen.getByTestId('d-sub').props.style).toEqual(expect.arrayContaining([expect.objectContaining({ color: '#FFFFFF' })]))
+    expect(screen.getByTestId('d-link').props.style).toEqual(expect.arrayContaining([expect.objectContaining({ color: '#FFFFFF' })]))
+    expect(slotOf(screen.getByTestId('d-sub') as never).lines).toBe(1)
+  })
+})
+
+describe('"Change" stays drawn when the line has more to say (SCRUM-1074)', () => {
+  it('the link, then the line in its own colour, on one line, read in order', async () => {
+    atScale(1)
+    await render(<DockRow testID="d" state="You’re going" link="Change" sub="The room is open" onPressState={jest.fn()} />)
+    expect(screen.getByRole('button', { name: 'You’re going. Change. The room is open' })).toBeTruthy()
+    expect(screen.getByTestId('d-link').props.style).toEqual(expect.arrayContaining([expect.objectContaining({ color: '#FFFFFF' })]))
+    expect(StyleSheet.flatten(screen.getByTestId('d-rest').props.style)).toEqual(expect.objectContaining({ color: '#B3AEAD' }))
     expect(slotOf(screen.getByTestId('d-sub') as never).lines).toBe(1)
   })
 })

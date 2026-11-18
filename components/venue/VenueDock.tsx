@@ -36,7 +36,6 @@ function LiveLine({ name, live, onZero, onPress, onOpenRoom }: { name: string; l
     <DockRow
       testID="venue-live"
       {...liveDockLine(time, name)}
-      subIsLink
       onPressState={() => {
         // The Extend cue: the sheet it opens has Extend ready.
         if (ending) H.primary()

@@ -2218,12 +2218,13 @@ class ApiClientClass {
 
   /** An authed GET, stale-while-revalidate: a stale entry is served while it refreshes. */
   /** `headers` the answer depends on (the cities list on `X-Country`) are part of the key (`buildRequestKey`). */
-  async cachedRequest<T>(endpoint: string, ttl: number, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+  async cachedRequest<T>(endpoint: string, ttl: number, headers?: Record<string, string>, staleOk: boolean = true): Promise<ApiResponse<T>> {
     const key = this.buildRequestKey(endpoint, headers ? { headers } : {}, true)
     const cached = this.getCached<T>(key)
 
-    // Too old to show even for a moment: asked again and awaited, as if never cached (`SWR_STALE_LIMIT_MS`).
-    if (cached && !cached.tooOld) {
+    // Too old to show even for a moment: asked again and awaited, as if never cached (`SWR_STALE_LIMIT_MS`). `staleOk` false:
+    // past its ttl it is awaited too, for a caller that draws its own copy meanwhile and must see the answer (getEvent).
+    if (cached && !cached.tooOld && (cached.isFresh || staleOk)) {
       if (!cached.isFresh) this.refreshCacheInBackground<T>(endpoint, key, ttl, headers)
       return cached.data
     }
@@ -2700,10 +2701,12 @@ class ApiClientClass {
       }
     }
     const query = searchParams.toString()
-    return this.cachedRequest<EventApiItem>(
-      `/api/mobile/events/${pathSegment(eventId)}${query ? `?${query}` : ''}`,
-      30 * 1000
-    )
+    /*
+     * Fresh for 30 s, then awaited, never served stale (SCRUM-1074): the event page draws its own 2-minute copy at once, and
+     * a stale answer here hid an RSVP made on another phone ("Free · I'm going") until the page was opened again, because
+     * the background refresh landed only in the cache.
+     */
+    return this.cachedRequest<EventApiItem>(`/api/mobile/events/${pathSegment(eventId)}${query ? `?${query}` : ''}`, 30 * 1000, undefined, false)
   }
 
   async checkIn(

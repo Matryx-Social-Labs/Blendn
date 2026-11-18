@@ -271,11 +271,11 @@ describe('the live dock’s line (venue live pill B, owner 2026-11-17)', () => {
       dot: 'live',
       state: 'Live',
       clock: { text: '20 min', mono: false },
-      sub: 'Extend or stop',
+      link: 'Extend or stop',
       label: 'Live at Toit, 20 minutes left. Extend or stop',
     })
     // An Extend would not move a later end: the line offers what the sheet has, Stop.
-    expect(liveDockLine(at(165 * 60_000), 'Toit')).toMatchObject({ clock: { text: '2h 45m', mono: false }, sub: 'Stop' })
+    expect(liveDockLine(at(165 * 60_000), 'Toit')).toMatchObject({ clock: { text: '2h 45m', mono: false }, link: 'Stop' })
   })
 
   it('the last five minutes: the warning dot, “Ending ·” and the mono clock, over “Extend”', () => {
@@ -283,14 +283,14 @@ describe('the live dock’s line (venue live pill B, owner 2026-11-17)', () => {
       dot: 'ending',
       state: 'Ending',
       clock: { text: '4:59', mono: true },
-      sub: 'Extend',
+      link: 'Extend',
       label: 'Live at Toit, 4:59 left, ending soon. Extend',
     })
   })
 
   it('a stay, and a window with no end, have no clock and offer Stop', () => {
-    expect(liveDockLine(sessionTime({ expiresAt: null, stay: true }, NOW), 'Toit')).toEqual({ dot: 'live', state: 'Live · staying', clock: undefined, sub: 'Stop', label: 'Live at Toit, staying. Stop' })
-    expect(liveDockLine(null, 'Toit')).toEqual({ dot: 'live', state: 'Live', clock: undefined, sub: 'Stop', label: 'Live at Toit. Stop' })
+    expect(liveDockLine(sessionTime({ expiresAt: null, stay: true }, NOW), 'Toit')).toEqual({ dot: 'live', state: 'Live · staying', clock: undefined, link: 'Stop', label: 'Live at Toit, staying. Stop' })
+    expect(liveDockLine(null, 'Toit')).toEqual({ dot: 'live', state: 'Live', clock: undefined, link: 'Stop', label: 'Live at Toit. Stop' })
   })
 })
 

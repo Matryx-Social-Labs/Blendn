@@ -25,7 +25,7 @@ describe('the RSVP slot', () => {
   })
 
   it('draws a waitlisted RSVP as "On the waitlist"', async () => {
-    await render(<DockRow state="On the waitlist" sub="Change" onPressState={jest.fn()} />)
+    await render(<DockRow state="On the waitlist" link="Change" onPressState={jest.fn()} />)
     expect(screen.getByLabelText('On the waitlist. Change')).toBeTruthy()
     expect(screen.queryByText("You’re going")).toBeNull()
   })
@@ -45,9 +45,8 @@ describe('the RSVP slot', () => {
     expect(beforeAwait).toContain('setRsvpPending(true)')
     expect(beforeAwait).toMatch(/if \(rsvpInFlight\.current\) return/)
     expect(handler).toContain('setRsvpStatus(result.data.rsvpStatus)')
-    // The cancel holds the same guard, so its tray can't reopen mid-request.
-    const withdraw = src.slice(src.indexOf('const withdrawRsvp'), src.indexOf('const confirmWithdrawRsvp'))
-    expect(withdraw).toMatch(/if \(rsvpInFlight\.current\) return/)
+    // A cancel is held under its toast (SCRUM-1074), never a second request racing this one.
+    expect(src.slice(src.indexOf('const leave = useCallback'), src.indexOf('const confirmLeave'))).toContain('deferLeave(')
     expect(src).toContain("loading: dock.action.does === 'rsvp' ? rsvpPending")
   })
 })

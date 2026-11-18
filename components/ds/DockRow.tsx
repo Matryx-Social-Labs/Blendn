@@ -39,8 +39,8 @@ export type DockRowAction = {
  */
 export function DockRow({
   state,
+  link,
   sub,
-  subIsLink = false,
   onPressState,
   stateHint,
   stateRef,
@@ -51,15 +51,16 @@ export function DockRow({
   testID,
 }: {
   state: string
+  /** The state's own way out ("Change", "Check out"), first on the second line: white, bold. Always drawn (SCRUM-1074). */
+  link?: string
+  /** The rest of the second line; after a link it follows a " · " in its own colour. */
+  sub?: string
   /** A presence dot before the state: live green, or the warning amber of a window that is ending. */
   dot?: 'live' | 'ending'
   /** The state's time, in its own slot after "·"; Geist Mono 700 when it is a ticking clock. */
   clock?: { text: string; mono: boolean }
-  /** Read instead of "state. sub", where the words leave out what they are about (the venue's place). */
+  /** Read instead of "state. link. sub", where the words leave out what they are about (the venue's place). */
   label?: string
-  sub?: string
-  /** The second line is the state's own action ("Change"): white, bold. */
-  subIsLink?: boolean
   onPressState?: () => void
   stateHint?: string
   /** The state's control, for focus to come back to when what it opened closes (the check-out sheet). */
@@ -100,19 +101,23 @@ export function DockRow({
       ) : (
         stateText
       )}
-      {sub ? (
-        <Text
-          testID={testID && `${testID}-sub`}
-          numberOfLines={lines}
-          maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
-          style={subIsLink ? [font('note', bold, FONT_FAMILY.brand[700]), styles.ink] : [font('note', bold), styles.secondary]}
-        >
-          {sub}
+      {link || sub ? (
+        <Text testID={testID && `${testID}-sub`} numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.secondary]}>
+          {link ? (
+            <Text testID={testID && `${testID}-link`} style={[font('note', bold, FONT_FAMILY.brand[700]), styles.ink]}>
+              {link}
+            </Text>
+          ) : null}
+          {sub ? (
+            <Text testID={testID && `${testID}-rest`} style={styles.secondary}>
+              {link ? ` · ${sub}` : sub}
+            </Text>
+          ) : null}
         </Text>
       ) : null}
     </>
   )
-  const label = spoken ?? [state, sub].filter(Boolean).join('. ')
+  const label = spoken ?? [state, link, sub].filter(Boolean).join('. ')
   return (
     <View testID={testID} style={[styles.row, large && styles.stack]}>
       {onPressState ? (
