@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, NUMERIC, RADIUS, SIZE, SPACE, STAGGER } from '../../lib/design/tokens'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OfflineBanner } from '../OfflineBanner'
-import { timeSpentLabel } from '../../lib/roomRecap'
+import { spokenMinutes, timeSpentLabel } from '../../lib/roomRecap'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import { Grain } from './Grain'
@@ -19,13 +19,6 @@ import { Title } from './Title'
 
 /** flow4.js `recap`: your face at 80 (the Avatar scale's nearest is 72). */
 const FACE = 72
-
-/** "2 hours 15 minutes": what a screen reader says for the tile's "2h 15m". */
-export function spokenMinutes(total: number): string {
-  if (total < 1) return 'under a minute'
-  const part = (n: number, unit: string) => (n ? `${n} ${unit}${n === 1 ? '' : 's'}` : '')
-  return [part(Math.floor(total / 60), 'hour'), part(total % 60, 'minute')].filter(Boolean).join(' ')
-}
 
 export type MomentRecapProps = {
   /** Yours as the room knew you: your photo if you were named there, else your creature. Decorative. */

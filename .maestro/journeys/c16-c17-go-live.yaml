@@ -1,7 +1,8 @@
 # TQ-C16 (SCRUM-558) + TQ-C17 (SCRUM-559), plan v2 step 5: Go Live at a place from Places, open its
 # room and post, the expiry prompt, the window ending (the room's not-live
 # state, the room gone from the Banter), back to the place; then a second
-# place: Go Live, the prompt, "Extend 45 min · free".
+# place: Go Live, the prompt, "Extend 45 min · free", and Stop through the
+# dock's live sheet (venue live pill B: the state line opens it; no Leave button).
 #
 # Real windows: about an hour end to end. Nothing is faked.
 #
@@ -66,7 +67,7 @@ tags:
     timeout: 10000
 - tapOn: "20 minutes"
 - extendedWaitUntil:
-    visible: "Live here\\. .* left"
+    visible: "Live at .*left\\..*"
     timeout: 45000
 - assertNotVisible: "Go Live"
 - assertVisible: "You and .* others"
@@ -130,11 +131,11 @@ tags:
     visible: "Go live again.*20 minutes"
     timeout: 30000
 - assertVisible: ".*Only people live here.*"
-- assertNotVisible: "Live here.*"
+- assertNotVisible: "Live at .*left\\..*"
 - takeScreenshot: c16-a-after
 - tapOn: "Go live again.*20 minutes"
 - extendedWaitUntil:
-    visible: "Live here\\. .* left"
+    visible: "Live at .*left\\..*"
     timeout: 45000
 
 # --- The second window at A tonight: no second prompt (PL-M02, once a night) ---
@@ -175,17 +176,18 @@ tags:
 - tapOn: "Go Live"
 - tapOn: "20 minutes"
 - extendedWaitUntil:
-    visible: "Live here\\. .* left"
+    visible: "Live at .*left\\..*"
     timeout: 45000
 - extendedWaitUntil:
     visible: "Still at .*"
     timeout: 1080000
 - tapOn: "Extend 45 min · free"
 - extendedWaitUntil:
-    visible: "Live here\\. 4[0-9] minutes left"
+    visible: "Live at .*, 4[0-9] minutes left\\..*"
     timeout: 45000
 - takeScreenshot: c16-b-extended
-- tapOn: "Stop being live"
+# No Leave button: stopping is the live sheet's Stop and its hold.
+- runFlow: ../subflows/venue-stop-live.yaml
 # The last window chosen here was the extension's.
 - extendedWaitUntil:
     visible: "Go live again.*45 minutes"

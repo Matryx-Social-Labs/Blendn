@@ -30,8 +30,8 @@ tags:
 - tapOn: "Go Live"
 - tapOn: "20 minutes"
 - extendedWaitUntil:
-    visible: "Live here\\. .* left"
+    visible: "Live at .*left\\..*"
     timeout: 45000
-# The pill is one accessible element: Maestro reads its label ("Live here. 19 minutes left").
+# The dock's state line is one accessible element: Maestro reads its label ("Live at ‹place›, 19 minutes left. Extend or stop").
 - assertVisible: "You and 5–9 others"
 - takeScreenshot: c17-bucket-live
