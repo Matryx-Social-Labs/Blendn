@@ -300,7 +300,17 @@ export function LeadPager({
         // Sideways intent only: a vertical drag is the list's scroll.
         .activeOffsetX([-12, 12])
         .failOffsetY([-12, 12])
-        .enabled(count > 1)
+        // Always on, so a finger holds even a single card; one card only rubber-bands (settlePage keeps it on 0).
+        .enabled(true)
+        .withTestId('pulse-lead-pan')
+        // A finger on the card holds the lap; lifting it (or another gesture taking it) lets go. From the gesture, not the
+        // View's touch events: a state change from those mid-drag stopped the swipe paging (drive, 2026-11-18).
+        .onBegin(() => {
+          scheduleOnRN(setTouching, true)
+        })
+        .onFinalize(() => {
+          scheduleOnRN(setTouching, false)
+        })
         .onStart(() => {
           dragFrom.set(x.get())
         })
@@ -323,7 +333,7 @@ export function LeadPager({
             scheduleOnRN(go, next)
           }
         }),
-    [count, page, reduceMotion, x, dragFrom, go, sprung]
+    [count, page, reduceMotion, x, dragFrom, go, sprung, setTouching]
   )
 
   const track = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }], opacity: fade.get() }))
@@ -356,10 +366,6 @@ export function LeadPager({
         else if (name === 'decrement') go(shown - 1)
         else if (name === 'activate') onOpen(shown)
       }}
-      // A finger on the card holds the lap; lifting it (or a gesture taking it) lets go.
-      onTouchStart={() => setTouching(true)}
-      onTouchEnd={() => setTouching(false)}
-      onTouchCancel={() => setTouching(false)}
       style={[styles.frame, { width, height }]}
     >
       {/* The glow sits behind the frame, not on the sliding track: the track clips, and the light is the lead's, not a page's. */}

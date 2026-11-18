@@ -6,6 +6,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AppState } from 'react-native'
+import { getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
 import * as Reanimated from 'react-native-reanimated'
 
 let mockReduce = false
@@ -41,6 +42,21 @@ import { BARE_TURN_MS, STILL_MS } from '../lib/featuredLap'
 
 const card = (id: string, extra: Partial<LeadCard> = {}): LeadCard => ({ id, title: `Night ${id}`, time: '9 PM', venue: 'Pebble', ...extra })
 const THREE = [card('a'), card('b'), card('c')]
+
+/** A finger down on the lead, and up: the pan gesture's own begin and finalize (what the device fires on touch). */
+type Handlers = { handlers: { onBegin?: (e: object) => void; onFinalize?: (e: object, success: boolean) => void } }
+const pan = () => getByGestureTestId('pulse-lead-pan') as unknown as Handlers
+// `scheduleOnRN` reaches JS on the next tick: flush it, as the device would at once.
+const down = () =>
+  act(async () => {
+    pan().handlers.onBegin?.({})
+    jest.advanceTimersByTime(0)
+  })
+const up = () =>
+  act(async () => {
+    pan().handlers.onFinalize?.({}, false)
+    jest.advanceTimersByTime(0)
+  })
 
 /** The clock, in slices: each step commits (and arms its next timer) before the clock moves on. */
 async function wait(ms: number) {
@@ -114,14 +130,21 @@ it('Reduce Motion: nothing advances on its own; Play is offered', async () => {
   expect(screen.getByLabelText('Play featured')).toBeTruthy()
 })
 
-it('a finger on the card holds the lap; lifting it lets go', async () => {
+it('a finger on the card holds the lap; lifting it lets go (from the pan gesture, not View touch events)', async () => {
   const { onLight } = await draw()
-  await act(async () => fireEvent(screen.getByTestId('pulse-lead'), 'touchStart'))
+  await down()
   await wait(BARE_TURN_MS * 2)
   expect(onLight).not.toHaveBeenCalled()
-  await act(async () => fireEvent(screen.getByTestId('pulse-lead'), 'touchEnd'))
-  await wait(BARE_TURN_MS)
+  await up()
+  await wait(BARE_TURN_MS + 1000)
   expect(onLight).toHaveBeenLastCalledWith(1)
+})
+
+it('the frame carries no touch handlers of its own (they stopped the swipe paging on device)', async () => {
+  await draw()
+  const frame = screen.getByTestId('pulse-lead')
+  expect(frame.props.onTouchStart).toBeUndefined()
+  expect(frame.props.onTouchEnd).toBeUndefined()
 })
 
 it('the app in the background: nothing advances', async () => {
@@ -202,7 +225,7 @@ describe('the turn', () => {
   it('a finger on the card, or Pause, holds the clip on its frame: the player stays, paused', async () => {
     await draw({ cards: [media, card('b')] })
     await wait(STILL_MS * 2 + 1000)
-    await act(async () => fireEvent(screen.getByTestId('pulse-lead'), 'touchStart'))
+    await down()
     expect(screen.getAllByTestId('lead-clip', { includeHiddenElements: true })).toHaveLength(1)
     expect(mockPlayer.pause).toHaveBeenCalled()
   })
