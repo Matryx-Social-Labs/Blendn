@@ -119,6 +119,17 @@ describe('the bar is "Shown when you share one", whichever screen opened it (Me 
   })
 })
 
+describe('labels in sentence case (Me + settings A 04)', () => {
+  it('draws "Languages you speak" and "Home region" as written, not Geist Mono uppercase', async () => {
+    await open()
+    for (const name of ['Languages you speak', 'Home region']) {
+      const style = StyleSheet.flatten(screen.getByText(name).props.style)
+      expect(style.textTransform).toBeUndefined()
+      expect(style.fontFamily).not.toMatch(/Mono/)
+    }
+  })
+})
+
 describe('who sees each field (YOU-07, 14.0)', () => {
   it('names the tier under languages, home state and this-or-that, and under the sign once it is on', async () => {
     await open()

@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../components/ds/Button'
 import { ChipSet } from '../components/ds/ChipSet'
 import { WhoSees } from '../components/profile/WhoSees'
-import { FieldLabel, FieldNotes } from '../components/ds/TextField'
+import { FieldLabel, FieldLabelCase, FieldNotes } from '../components/ds/TextField'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
 import { font, GroundProvider, HueProvider, useBoldText } from '../components/ds/shared'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
@@ -507,7 +507,9 @@ const styles = StyleSheet.create({
 export default function EditAboutYouScreen() {
   return (
     <HueProvider value="violet">
+      <FieldLabelCase.Provider value="sentence">
       <EditAboutYouScreenContent />
+      </FieldLabelCase.Provider>
     </HueProvider>
   )
 }
