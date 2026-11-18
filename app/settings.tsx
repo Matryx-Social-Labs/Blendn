@@ -18,7 +18,6 @@ import { HomeCityRow } from '../components/settings/HomeCityRow'
 import { COLOR, FONT_FAMILY, SPACE as DS_SPACE, SPRING, MAX_FONT_SCALE } from '../lib/design/tokens'
 import type { IconName } from '../components/ui/Icon'
 import { H } from '../lib/haptics'
-import { PLUS_FREE_SHEET } from '../lib/plusFree'
 import { showSheet, type Sheet } from '../lib/sheet'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 import { apiClient } from '../lib/apiClient'
@@ -40,7 +39,7 @@ import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } f
 import { notificationsHint, useMutedRooms } from '../lib/mutedRooms'
 import { openPaywall } from '../lib/paywall'
 import { usePlusStatus, type PlusStatus } from '../lib/plus'
-import { plusRowLine } from '../lib/mePlus'
+import { plusRowLine, showsPlus } from '../lib/mePlus'
 import { useMonthlyPrice } from '../lib/useMonthlyPrice'
 import { manageSubscriptionUrl } from '../lib/purchases'
 import { useReducedMotion } from '../lib/motion'
@@ -509,12 +508,10 @@ function SettingsScreenContent() {
     )
   }
 
-  // The paywall, asked for: no cooldown (step 11, trigger `profile`). Free during launch where you go out: a row that says so and sells nothing (review H2).
+  // The paywall, asked for: no cooldown (step 11, trigger `profile`). Only where Blend'n+ is sold (`showsPlus`, owner 2026-11-18).
   // The same line as Me's row (D23, `plusRowLine`): one account, one sentence on both.
   const plusPrice = useMonthlyPrice(!!plus && !plus.active && plus.gated)
-  const plusLine = plusRowLine(plus, plusPrice, Platform.OS === 'android' ? 'android' : 'ios')
-  const plusIsFree = plusLine.free
-  const plusHint = plusLine.hint ?? undefined
+  const plusHint = plusRowLine(plus, plusPrice, Platform.OS === 'android' ? 'android' : 'ios') ?? undefined
 
   /** The Account card (R4.1 7.1): who is signed in, how, and the ways out. A Google or Apple account has no password to change. */
   const email = user?.email
@@ -577,17 +574,19 @@ function SettingsScreenContent() {
           ) : null}
         </SettingsGroup>
 
-        {/* Where you stand with Blend’n+, the same line as Me's row (D23, `plusRowLine`); free during launch sells nothing (review H2). */}
-        <SettingsGroup>
-          <SettingsRow
-            icon="sparkles"
-            title="Blend’n+"
-            hint={plusHint}
-            trail="chevron"
-            onPress={plusIsFree ? () => showSheet(PLUS_FREE_SHEET) : () => void openPaywall('profile', { userInitiated: true })}
-            testID="settings-plus"
-          />
-        </SettingsGroup>
+        {/* Where you stand with Blend’n+, the same line as Me's row (D23, `plusRowLine`); only where it is sold (owner 2026-11-18: the app is free). */}
+        {showsPlus(plus) ? (
+          <SettingsGroup>
+            <SettingsRow
+              icon="sparkles"
+              title="Blend’n+"
+              hint={plusHint}
+              trail="chevron"
+              onPress={() => void openPaywall('profile', { userInitiated: true })}
+              testID="settings-plus"
+            />
+          </SettingsGroup>
+        ) : null}
 
         {/* Push, what to hear about, offers and muted rooms live on their own screen (Flow 9); the row is named as that screen is. */}
         <SettingsGroup title="Notifications">
