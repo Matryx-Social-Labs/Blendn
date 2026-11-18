@@ -59,8 +59,9 @@ import { PosterLight, SceneHero, posterSide } from '../scene/SceneHero'
 import { EventGuide } from '../scene/EventGuide'
 import { DockRow } from '../ds/DockRow'
 import { Title } from '../ds/Title'
-import { PAGE_TITLE } from '../ds/shared'
-import { dateStamp, eventDock, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
+import { PAGE_TITLE, useScreenReader } from '../ds/shared'
+import { toastDwell } from '../ds/Toast'
+import { dateStamp, eventDock, holdUnder, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
 import { SceneLightbox } from '../scene/SceneLightbox'
 import { EventLobbyPreview } from '../board/LobbyPreview'
 import { BOARD_ENABLED } from '../../lib/board'
@@ -76,6 +77,7 @@ import { useAuth } from '../../lib/useAuth'
 import { useNow } from '../../lib/useNow'
 import { forgetEventDetailCache, getEventDetailCache, setEventDetailCache } from '../../lib/eventDetailCache'
 import { claimUrlFrom } from '../../lib/claimLink'
+import { deferLeave, leaveKind, leavePending, leaveSheet, leaveToast, menuLabel, sendLeave, undoLeave, type LeaveKind } from '../../lib/goingLeave'
 import * as Location from 'expo-location'
 import { getDistanceKm } from '../../lib/geo'
 import { ROUGH_FIX_MAX_AGE_MS } from '../../lib/locationFix'
@@ -374,7 +376,8 @@ export default function EventDetail() {
         checked_in: d.userStatus.isCheckedIn || false,
         status: d.userStatus.checkInStatus ?? null,
       })
-      setRsvpStatus((d.userStatus.rsvpStatus as RsvpStatus | null) || null)
+      // A cancel still held under its toast is not undone by a read that lands meanwhile (SCRUM-1074).
+      setRsvpStatus(leavePending(String(d.id ?? id)) ? null : (d.userStatus.rsvpStatus as RsvpStatus | null) || null)
     }
     if (d.stats) {
       setInterestCount(d.stats.favoriteCount || 0)
@@ -574,56 +577,52 @@ export default function EventDetail() {
   const rsvpInFlight = useRef(false)
   const [rsvpPending, setRsvpPending] = useState(false)
 
-  const withdrawRsvp = useCallback(async () => {
-    // Hoisted out of the `try` so the `catch` can put it back: a thrown
-    // request (timeout, no network) left the optimistic state on screen with
-    // no row behind it. Seen on the simulator when the RSVP call timed out.
-    const prevStatus = rsvpStatus
-    // One request at a time: a second confirm, or an RSVP, waits for this one.
-    if (rsvpInFlight.current) return
-    rsvpInFlight.current = true
-    try {
-      if (!id) return
-      // Its confirm's destructive button just played `H.destructive` (the Button, §10.2).
-      setRsvpStatus(null)
-      const result = await apiClient.cancelRsvp(String(id))
-      if (!result.success) {
-        setRsvpStatus(prevStatus)
-        H.error()
-        notice('Couldn’t cancel your RSVP', 'Try again.')
-      } else {
-        // The server's count after the change, as on the RSVP below.
-        if (typeof result.data?.rsvpCount === 'number') setGoingCount(result.data.rsvpCount)
-        /*
-         * Said, as "You’re going." is: the CTA now reads "I’m going", the invitation, which looked like the status just
-         * removed ("it still shows I’m going", SCRUM-881).
-         */
-        showToast(prevStatus === 'waitlisted' ? 'You’ve left the waitlist.' : 'RSVP cancelled.', 'success')
-      }
-    } catch {
-      setRsvpStatus(prevStatus)
-      H.error()
-      notice('Couldn’t update your RSVP', 'Try again.')
-    } finally {
-      rsvpInFlight.current = false
+  /*
+   * Leaving (SCRUM-1074, sheet 06): optimistic, and the DELETE is held until the toast closes (`lib/goingLeave.ts`), so
+   * Undo never loses the place. Refused, it comes back and says why (a ticket is never cancelled here).
+   */
+  const [leftTonight, setLeftTonight] = useState(false)
+  const screenReader = useScreenReader()
+  const leave = useCallback((kind: LeaveKind) => {
+    if (!id || !event) return
+    const eventId = String(id)
+    const title = event.title
+    const prev = rsvpStatus
+    setRsvpStatus(null)
+    if (prev === 'going') setGoingCount((n) => Math.max(0, n - 1))
+    if (kind === 'cantMakeIt') setLeftTonight(true)
+    const putBack = () => {
+      setRsvpStatus(prev)
+      setLeftTonight(false)
+      if (prev === 'going') setGoingCount((n) => n + 1)
     }
-  }, [id, rsvpStatus, showToast])
+    const text = leaveToast(kind, title)
+    deferLeave(eventId, () => void sendLeave(eventId, title, putBack), toastDwell(text, { action: true, screenReader }))
+    showToast(text, 'success', {
+      action: {
+        label: 'Undo',
+        onPress: () => {
+          if (undoLeave(eventId)) return putBack()
+          // Already sent (the toast was held past its time): RSVP again, and say what the server answered.
+          void apiClient.rsvpToEvent(eventId, 'going').then((r) => (r.success && r.data ? (setRsvpStatus(r.data.rsvpStatus), setLeftTonight(false)) : notice('Couldn’t RSVP', 'Try again.')))
+        },
+      },
+    })
+  }, [id, event, rsvpStatus, screenReader, showToast])
 
-  const confirmWithdrawRsvp = useCallback(() => {
-    const waitlisted = rsvpStatus === 'waitlisted'
+  /** The confirm for a way out; drawn in render scope below, where the phase is known (`openLeave`). */
+  const confirmLeave = useCallback((kind: LeaveKind, full: boolean) => {
+    const words = leaveSheet(kind, event?.title ?? 'this event', full)
     showSheet({
       kind: 'actions',
-      title: waitlisted ? 'Leave the waitlist?' : 'Cancel your RSVP?',
-      message: waitlisted
-        ? "You’ll lose your place in line. If you join again later, you go to the back."
-        : "You’ll come off the list of people going. If it fills up, your place goes to someone else.",
+      title: words.title,
+      message: words.message,
       actions: [
-        { label: waitlisted ? 'Stay on it' : 'Keep it', variant: 'secondary', then: () => {} },
-        { label: waitlisted ? 'Leave waitlist' : 'Cancel RSVP', variant: 'destructive', then: () => void withdrawRsvp() },
+        { label: words.keep, variant: 'secondary', then: () => {} },
+        { label: words.leave, variant: 'destructive', then: () => leave(kind) },
       ],
     })
-  }, [rsvpStatus, withdrawRsvp])
-
+  }, [event?.title, leave])
   const handleToggleRsvp = useCallback(async () => {
     const prevStatus = rsvpStatus
     if (rsvpInFlight.current) return
@@ -637,10 +636,8 @@ export default function EventDetail() {
       // Waitlisted counts as "already committed": tapping should offer to take
       // you off the list, not try to RSVP again. Treating it as not-going would
       // send a second RSVP and leave the user unable to withdraw.
-      if (rsvpStatus === 'going' || rsvpStatus === 'waitlisted') {
-        confirmWithdrawRsvp()
-        return
-      }
+      // Already on the list: the way off it is the dock's "Change" (openLeave), never a second RSVP.
+      if (rsvpStatus === 'going' || rsvpStatus === 'waitlisted') return
       /*
        * No press haptic on I'm going: the answer plays one (§10.2, ROUND3 #45).
        * Not optimistic: the label stays and the pill spins until the server
@@ -696,7 +693,7 @@ export default function EventDetail() {
         setRsvpPending(false)
       }
     }
-  }, [id, user, event, rsvpStatus, confirmWithdrawRsvp, showToast])
+  }, [id, user, event, rsvpStatus, showToast])
 
   /*
    * Checked in or out anywhere — this screen's CTA, the Pulse's tray, the
@@ -953,10 +950,21 @@ export default function EventDetail() {
 
   // The ⋯: report, for anyone. An organiser edits, announces and deletes on the dashboard (Flow 15 #2, owner ruling D3): the Scene is the
   // attendee's one surface, and shows no staff control to anybody.
-  const menu: MenuItem[] = [{ icon: 'flag', label: 'Report this event', onPress: () => showEventReportOptions(event?.title || 'this event', String(id)) }]
 
   /** The dock's state and its one action (`lib/eventFacts.ts`); null at the doors, where the hold is the dock. */
-  const dock = eventDock({ cta: ctaState, when: dockWhen, roomOpen: roomLine?.open === true, canInvite: !!shareTarget, between: betweenLine, alone: checkInCount <= 1 })
+  const dock = eventDock({ cta: ctaState, when: dockWhen, roomOpen: roomLine?.open === true, canInvite: !!shareTarget, between: betweenLine, alone: checkInCount <= 1, leftTonight: leftTonight && rsvpStatus === null })
+  // The way out in this state (SCRUM-1074): "Change" before the doors, "Can’t make it" under the hold, Check out once in.
+  const leaveNow = leaveKind({ phase: cancelled ? 'cancelled' : isEnded ? 'ended' : isLive ? 'live' : 'upcoming', rsvpStatus, checkedIn: isCheckedIn, roomOpen: roomLine?.open === true })
+  const openLeave = () => {
+    if (leaveNow === 'checkOut') return openCheckOut()
+    if (leaveNow) confirmLeave(leaveNow, (event?.max_capacity ?? 0) > 0 && goingCount >= (event?.max_capacity ?? 0))
+  }
+  // The ⋯: report, and the way out last in red while there is one (SCRUM-1074). A ticket's way out explains, never cancels (sendLeave).
+  const menu: MenuItem[] = [
+    { icon: 'flag', label: 'Report this event', onPress: () => showEventReportOptions(event?.title || 'this event', String(id)) },
+    ...(leaveNow && leaveNow !== 'checkOut' ? [{ icon: 'calendar-x' as const, label: menuLabel(leaveNow), onPress: openLeave, destructive: true }] : []),
+  ]
+  const under = ctaState === 'join' && leaveNow ? holdUnder({ rsvpStatus, hereNow: crowdCount }) : null
   const dockPress: Record<DockDoes, () => void> = {
     rsvp: () => void handleToggleRsvp(),
     invite: () => void (handleInvite && handleInvite()),
@@ -1161,9 +1169,9 @@ export default function EventDetail() {
           <DockRow
             testID="scene-cta"
             state={dock.state}
+            link={dock.link}
             sub={dock.sub}
-            subIsLink={(dock.change && dock.sub === 'Change') || dock.checkOut}
-            onPressState={dock.change ? () => void handleToggleRsvp() : dock.checkOut ? openCheckOut : undefined}
+            onPressState={dock.change ? openLeave : dock.checkOut ? openCheckOut : undefined}
             stateHint={dock.change ? 'Double-tap to change your RSVP' : dock.checkOut ? 'Opens check out' : undefined}
             stateRef={dock.checkOut ? checkOutLink : undefined}
             action={
@@ -1182,7 +1190,7 @@ export default function EventDetail() {
         </Dock>
       ) : (
         <Dock floating onHeight={setCtaDockHeight} testID="scene-dock">
-          <EventHold {...hold} />
+          <EventHold {...hold} under={under ? { ...under, onPress: openLeave } : null} />
         </Dock>
       )}
       {overlays}

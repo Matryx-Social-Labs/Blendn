@@ -121,16 +121,20 @@ export function changedTag(row: Pick<SavedEventRow, 'changed' | 'status'>): 'New
  * Only `going` and `waitlisted` come back.
  */
 export interface RsvpEventsPayload {
-  events: (SavedEventsPayload['events'][number] & { rsvpStatus: 'going' | 'waitlisted' })[]
+  /** `lobby.newCount`: posts since the caller last opened that Lobby, once the server sends it (ROADMAP § Backend later, Going 6). */
+  events: (SavedEventsPayload['events'][number] & { rsvpStatus: 'going' | 'waitlisted'; lobby?: { newCount?: unknown } | null })[]
   pagination?: { page: number; totalCount: number; hasMore: boolean; nextCursor?: string | null }
 }
 
-export type RsvpEventRow = SavedEventRow & { rsvpStatus: 'going' | 'waitlisted' }
+export type RsvpEventRow = SavedEventRow & { rsvpStatus: 'going' | 'waitlisted'; lobbyNew?: number }
 
 export function rsvpEventRows(data: RsvpEventsPayload | undefined | null): RsvpEventRow[] {
   if (!data || !Array.isArray(data.events)) return []
   const rows = savedEventRows({ events: data.events })
-  return rows.map((row, i) => ({ ...row, rsvpStatus: data.events[i].rsvpStatus }))
+  return rows.map((row, i) => {
+    const n = data.events[i].lobby?.newCount
+    return { ...row, rsvpStatus: data.events[i].rsvpStatus, ...(typeof n === 'number' && Number.isFinite(n) && n > 0 ? { lobbyNew: n } : {}) }
+  })
 }
 
 /** `GET /me/attendance` — snake_case, unlike the two above; it is its own route. */

@@ -1,6 +1,7 @@
 import type { SceneCTAState } from '../components/scene/SceneSections'
 import type { IconName } from '../components/ui/Icon'
 import { clockIn, dateIn, MONTHS, WEEKDAYS, WEEKDAYS_LONG, eventClock } from './time'
+import { compactCount } from './format'
 
 /**
  * The event page's words (Flow 4 E-B, `mockups/redesign-2026-11/flow-4/screens.js`): the date stamp the no-cover poster
@@ -84,6 +85,8 @@ function firstWords(count: number, word: string, viewer: 'here' | 'going' | null
 export type DockDoes = 'rsvp' | 'invite' | 'openRoom' | 'room' | 'tonight' | 'rate'
 export type EventDockModel = {
   state: string
+  /** The state's own way out, drawn first as a link: "Change" (the RSVP) or "Check out". Always drawn, never a hidden tap (SCRUM-1074). */
+  link?: string
   sub?: string
   /** The state is the RSVP's own off-switch (its "Change"). */
   change?: boolean
@@ -109,6 +112,8 @@ export function eventDock(s: {
   between: string | null
   /** Nobody else checked in: rate the night, not people. */
   alone: boolean
+  /** Live, and this person just said "Can’t make it" here: "Not going", with I’m going to take it back (sheet 05). */
+  leftTonight?: boolean
 }): EventDockModel | null {
   const invite = s.canInvite ? { action: { label: 'Invite', kind: 'lit' as const, icon: 'share' as const, does: 'invite' as const } } : {}
   switch (s.cta) {
@@ -116,13 +121,13 @@ export function eventDock(s: {
       return { state: 'Free', sub: s.when, action: { label: 'I’m going', kind: 'primary', does: 'rsvp' } }
     case 'rsvpd':
       return s.roomOpen
-        ? { state: 'You’re going', sub: s.between ?? 'The room is open', change: true, action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'openRoom' } }
-        : { state: 'You’re going', sub: s.between ?? 'Change', change: true, ...invite }
+        ? { state: 'You’re going', link: 'Change', sub: s.between ?? 'The room is open', change: true, action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'openRoom' } }
+        : { state: 'You’re going', link: 'Change', ...(s.between ? { sub: s.between } : {}), change: true, ...invite }
     case 'waitlisted':
       // A full night: nobody is asked to one somebody is still waiting for.
-      return { state: 'On the waitlist', sub: 'Change', change: true }
+      return { state: 'On the waitlist', link: 'Change', change: true }
     case 'going':
-      return { state: 'You’re in', sub: 'Check out', checkOut: true, action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'room' } }
+      return { state: 'You’re in', link: 'Check out', checkOut: true, action: { label: 'Open the room', kind: 'primary', icon: 'door-open', does: 'room' } }
     case 'rate':
       return { state: 'Ended', sub: s.when, action: { label: s.alone ? 'Rate the night' : 'Rate who you met', kind: 'primary', icon: 'star', does: 'rate' } }
     case 'ended':
@@ -130,6 +135,16 @@ export function eventDock(s: {
     case 'cancelled':
       return { state: 'Cancelled', sub: s.when }
     case 'join':
-      return null
+      return s.leftTonight ? { state: 'Not going', sub: s.when, action: { label: 'I’m going', kind: 'primary', does: 'rsvp' } } : null
   }
+}
+
+/**
+ * Under the hold once the doors are open (sheet 05): who is here on the left, and the way off the list on the right, as
+ * "Check out" sits under "You’re in". Nothing for somebody who is not on the list: the hold is theirs to take or leave.
+ */
+export function holdUnder(s: { rsvpStatus: string | null | undefined; hereNow: number }): { left: string | null; link: string } | null {
+  if (s.rsvpStatus === 'waitlisted') return { left: 'On the waitlist', link: 'Leave the waitlist' }
+  if (s.rsvpStatus !== 'going') return null
+  return { left: s.hereNow > 0 ? `${compactCount(s.hereNow)} here now` : null, link: 'Can’t make it' }
 }
