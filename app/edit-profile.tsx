@@ -688,17 +688,23 @@ function EditProfileContent() {
             ))}
           </EditCard>
 
-          <Sheet
-            visible={matchingSheet.open}
-            onClose={closeMatchingSheet}
-            title={MATCHING_ROWS.find((r) => r.kind === matchingSheet.kind)?.title}
-            headerNote={matchingSheet.kind === 'into' ? { text: `${interestIds.length} of ${MAX_INTERESTS}` } : undefined}
-            // The interests list is long and scrolls; the other two are as tall as their chips.
-            detents={matchingSheet.kind === 'into' ? ['tall'] : undefined}
-            actions={[{ label: 'Done', kind: 'secondary', onPress: closeMatchingSheet, testID: 'edit-profile-matching-done' }]}
-            testID="edit-profile-matching-sheet"
-          >
-            {matchingSheet.kind === 'into' ? (
+          {/*
+            One sheet per row, each with its own content and height: a single sheet whose content and detents swapped between
+            opens kept the last one's measured height, and on Android drew the next one off screen (drive 2026-11-18).
+          */}
+          {MATCHING_ROWS.map((row) => (
+            <Sheet
+              key={row.kind}
+              visible={matchingSheet.open && matchingSheet.kind === row.kind}
+              onClose={closeMatchingSheet}
+              title={row.title}
+              headerNote={row.kind === 'into' ? { text: `${interestIds.length} of ${MAX_INTERESTS}` } : undefined}
+              // The interests list is long and scrolls; the other two are as tall as their chips.
+              detents={row.kind === 'into' ? ['tall'] : undefined}
+              actions={[{ label: 'Done', kind: 'secondary', onPress: closeMatchingSheet, testID: `edit-profile-matching-${row.kind}-done` }]}
+              testID={`edit-profile-matching-${row.kind}-sheet`}
+            >
+            {row.kind === 'into' ? (
               <View style={styles.cardBody}>
                 {/* Under two, matching can't rank you and the board refuses a post (SCRUM-519): said, never refused. */}
                 {interestIds.length < MIN_INTERESTS ? (
@@ -716,7 +722,7 @@ function EditProfileContent() {
               </View>
             ) : (
               <MatchingFields
-                part={matchingSheet.kind === 'open' ? 'open' : 'work'}
+                part={row.kind === 'open' ? 'open' : 'work'}
                 intents={intents}
                 onToggleIntent={onToggleIntent}
                 workField={workField}
@@ -742,7 +748,8 @@ function EditProfileContent() {
                 showOrientation={showOrientation}
               />
             )}
-          </Sheet>
+            </Sheet>
+          ))}
 
           {/* One name for the about-you screen (A 04): what it holds is shown on cards only when you share one. */}
           <EditCard title="Shown when you share one">
