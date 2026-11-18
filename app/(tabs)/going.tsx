@@ -14,15 +14,18 @@ import FadeInUp from '../../components/motion/FadeInUp'
 import ScalePress from '../../components/motion/ScalePress'
 import { rowBack, rowOut, rowReflow } from '../../components/motion/presence'
 import { reflowsOnSpring } from '../../lib/resort'
-import { EventCard } from '../../components/ds/EventCard'
+import { EventCard, eventLabel } from '../../components/ds/EventCard'
 import { MonoRun, PresenceDot, TimeBadge } from '../../components/ds/MonoFamily'
 import { SectionHeader } from '../../components/ds/SectionHeader'
 import { StateScreen } from '../../components/ds/StateScreen'
 import { Button } from '../../components/ds/Button'
 import { Title } from '../../components/ds/Title'
-import { CONTROL_FONT_CAP, font, minTarget, useBoldText } from '../../components/ds/shared'
+import { CONTROL_FONT_CAP, font, minTarget, useBoldText, useScreenReader } from '../../components/ds/shared'
 import { Icon, type IconName } from '../../components/ui/Icon'
-import { Toast, type ToastKind } from '../../components/ds/Toast'
+import { Toast, toastDwell, type ToastKind } from '../../components/ds/Toast'
+import { IconButton } from '../../components/ds/IconButton'
+import { SwipeRow } from '../../components/ds/SwipeRow'
+import { deferLeave, flushLeave, leaveKind, leavePending, leaveSheet, leaveToast, menuLabel, sendLeave, swipeLabel, undoLeave, type LeaveKind } from '../../lib/goingLeave'
 import { apiClient } from '../../lib/apiClient'
 import { openPass, useLiveEventId } from '../../lib/blendnOverlay'
 import { attendancePhase, doorOf, goingCardAction } from '../../lib/attendanceState'
@@ -55,7 +58,7 @@ import {
   type RsvpEventRow,
   type SavedEventRow as EventRow,
 } from '../../lib/savedEvents'
-import { BOARD_ENABLED, boardOpen } from '../../lib/board'
+import { boardOpen } from '../../lib/board'
 import { HAPPENING_NOW, dayAndClock, featuredDateLabel, nextUpLabel, placeLabel, timeLabel } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import { COLOR, FONT_FAMILY, ICON, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
@@ -63,7 +66,7 @@ import { OPACITY } from '../../lib/theme'
 import { useAuth } from '../../lib/useAuth'
 import { useReducedMotion } from '../../lib/motion'
 import { openInMaps } from '../../lib/openInMaps'
-import { NewInLobbyRow } from '../../components/board/LobbyPreview'
+import { LobbyRowNews, NewInLobbyRow } from '../../components/board/LobbyPreview'
 import { addToCalendar } from '../../lib/calendar'
 import { openTonight } from '../../lib/paywall'
 import { shareEvent } from '../../lib/shareRow'
@@ -115,7 +118,8 @@ function GoingScreenInner() {
    * The design's Toast (components/ds/Toast): iOS a capsule at the top, Android
    * a snackbar at the bottom above the tab bar (drive 2: it covered "Going").
    */
-  const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string; action?: { label: string; onPress: () => void } } | null>(null)
+  // `leaveId`: a cancel held under this toast (`lib/goingLeave.ts`), sent when it closes.
+  const [toast, setToast] = useState<{ key: number; kind: ToastKind; text: string; action?: { label: string; onPress: () => void }; leaveId?: string } | null>(null)
   const say = useCallback((text: string, kind: ToastKind = 'info', action?: { label: string; onPress: () => void }) => {
     setToast({ key: Date.now(), kind, text, action })
   }, [])
@@ -240,7 +244,7 @@ function GoingScreenInner() {
       if (rowCount > 0) hadRowsRef.current = true
       if (saved.ok) setSavedPaged(saved.paged)
       else Logger.debug('interested', 'Failed to load favorites', { error: saved.failure.error })
-      if (rsvps.ok) setGoingPaged(rsvps.paged)
+      if (rsvps.ok) setGoingPaged(pagedRows(rsvps.paged).filter((r) => leavePending(r.id)).reduce((p, r) => withoutRow(p, r.id), rsvps.paged))
       else Logger.debug('interested', 'Failed to load RSVPs', { error: rsvps.failure.error })
       if (past.ok) {
         setPastPaged(past.paged)
@@ -417,10 +421,67 @@ function GoingScreenInner() {
   }, [])
 
   const shareRow = useCallback((event: EventRow) => void shareEvent(event), [])
+  // The event you are checked into (the disc's poll): its Next up card says "You’re in" (SCRUM-882).
+  const liveEventId = useLiveEventId()
+  const screenReader = useScreenReader()
+
+  /** The way off a Going card in its state (SCRUM-1074): Can’t go, Can’t make it, Leave waitlist; Check out once in. */
+  const rowLeave = useCallback(
+    (row: EventRow) => leaveKind({ phase: attendancePhase(row), rsvpStatus: 'rsvpStatus' in row ? (row as RsvpEventRow).rsvpStatus : null, checkedIn: liveEventId === row.id, roomOpen: false }),
+    [liveEventId]
+  )
+
+  /*
+   * Off the list, with an Undo (sheet 06). The row goes at once; the DELETE is held until the toast closes, so Undo only
+   * puts the row back and nothing reached the server. Refused, the row comes back and says why (`sendLeave`).
+   */
+  const leaveRow = useCallback((row: RsvpEventRow, kind: LeaveKind) => {
+    const index = Math.max(0, going.findIndex((r) => r.id === row.id))
+    setGoingPaged((prev) => withoutRow(prev, row.id))
+    const putBack = () => setGoingPaged((prev) => withRowAt(withoutRow(prev, row.id), row, index))
+    const text = leaveToast(kind, row.title)
+    deferLeave(row.id, () => void sendLeave(row.id, row.title, putBack), toastDwell(text, { action: true, screenReader }))
+    setToast({
+      key: Date.now(),
+      kind: 'success',
+      text,
+      leaveId: row.id,
+      action: {
+        label: 'Undo',
+        onPress: () => {
+          if (undoLeave(row.id)) return putBack()
+          // It already went (the toast was held past its time): going again, as the server answers it.
+          void apiClient.rsvpToEvent(row.id, 'going').finally(() => reloadRef.current())
+        },
+      },
+    })
+  }, [going, screenReader])
+
+  const confirmLeaveRow = useCallback((row: RsvpEventRow, kind: LeaveKind) => {
+    const words = leaveSheet(kind, row.title, false)
+    showSheet({
+      kind: 'actions',
+      title: words.title,
+      message: words.message,
+      actions: [
+        { label: words.keep, variant: 'secondary', then: () => {} },
+        { label: words.leave, variant: 'destructive', then: () => leaveRow(row, kind) },
+      ],
+    })
+  }, [leaveRow])
   /*
    * A row's ⋯ (Flow 4 · Going · share from a row, frame 02): the app's one Sheet with what a night you are going to or saved
    * can do from the list. No Remove on an RSVP: leaving it is a decision the event's own page explains (the waitlist).
    */
+  const leaveAction = useCallback(
+    (row: EventRow) => {
+      const kind = rowLeave(row)
+      if (!kind) return []
+      if (kind === 'checkOut') return [{ label: 'Check out', variant: 'secondary' as const, then: () => openPass(doorOf(row, { going: true })) }]
+      return [{ label: menuLabel(kind), variant: 'destructive' as const, then: () => confirmLeaveRow(row as RsvpEventRow, kind) }]
+    },
+    [rowLeave, confirmLeaveRow]
+  )
   const rowActions = useCallback(
     (row: EventRow) =>
       showSheet({
@@ -438,14 +499,14 @@ function GoingScreenInner() {
               ]),
           // The Board serves committed people, and this is their list: the Scene's gate, before doors and not called off.
           ...(boardOpen(row) ? [{ label: 'The Lobby', variant: 'secondary' as const, then: () => openBoard(row.id) }] : []),
+          // The way out last (SCRUM-1074): in red, to its confirm; checked in, Check out opens this night's pass and its hold.
+          ...leaveAction(row),
           { label: 'Cancel', cancel: true },
         ],
       }),
-    [shareRow, openBoard]
+    [shareRow, openBoard, leaveAction]
   )
 
-  // The event you are checked into (the disc's poll): its Next up card says "You’re in" (SCRUM-882).
-  const liveEventId = useLiveEventId()
 
   const openEvent = useCallback((id: string) => {
     router.push({ pathname: '/event/[id]', params: { id } as any })
@@ -531,10 +592,13 @@ function GoingScreenInner() {
             </View>
           </ScalePress>
 
-          {/* G-A's "New in the Lobby" (SCRUM-1026): only when others posted since you last opened it; not on a called-off night. */}
-          {BOARD_ENABLED && !cancelled ? (
-            <NewInLobbyRow eventId={row.id} style={styles.heroLobby} />
-          ) : null}
+          {/* The Next up ⋯ (SCRUM-1074): today's row actions, "Can’t go" (or Check out) last. A sibling of the card's button. */}
+          <View style={styles.heroMore}>
+            <IconButton icon="ellipsis" tier="media" size="sm" accessibilityLabel={`More about ${row.title}`} onPress={() => rowActions(row)} testID="going-next-more" />
+          </View>
+
+          {/* The Lobby line (L2, owner 2026-11-17): while the Lobby is open, news or quiet; gone at the doors (`boardOpen`). */}
+          {boardOpen(row) ? <NewInLobbyRow eventId={row.id} style={styles.heroLobby} /> : null}
 
           {/*
            * Directions (or Open Blend'n) keeps its word and is the card's one positive action, so it is the world's lit button
@@ -575,7 +639,7 @@ function GoingScreenInner() {
         </View>
       </View>
     )
-  }, [bold, openEvent, refreshCount, shareRow, liveEventId])
+  }, [bold, openEvent, refreshCount, shareRow, liveEventId, rowActions])
 
   /*
    * Every item carries its own space above it, because a FlatList has no `gap`:
@@ -609,11 +673,15 @@ function GoingScreenInner() {
     }
 
     if (item.kind === 'going') {
-      // No Remove here: leaving an RSVP is a decision about the event, and the
-      // event screen is where its consequences (the waitlist) are explained.
       const row = item.row
       const cancelled = row.status === 'cancelled'
-      return (
+      const when = rowWhen(liveWindow(row).start_time, row.timezone)
+      const place = placeLabel(row)
+      const kind = rowLeave(row)
+      // Swipe to say "Can’t go" (SCRUM-1074 option 1): More · the way out; a long swipe commits it, with Undo. Checked in or
+      // ended, there is nothing to swipe: leaving a room is Check out, in the ⋯.
+      const leave = kind && kind !== 'checkOut' ? kind : null
+      const drawn = (
         <GoingRow
           title={row.title}
           stamp={{ iso: liveWindow(row).start_time, timeZone: row.timezone }}
@@ -621,17 +689,35 @@ function GoingScreenInner() {
           testID={`going-row-${row.id}`}
           retry={refreshCount}
           // Today's day of a multi-day run. The headings are by week (D30), so a row past today names its own day.
-          time={rowWhen(liveWindow(row).start_time, row.timezone)}
-          venue={placeLabel(row)}
-          onPress={() => openEvent(row.id)}
-          onLongPress={() => rowActions(row)}
+          time={when}
+          venue={place}
+          inert={!!leave}
+          onPress={leave ? undefined : () => openEvent(row.id)}
+          onLongPress={leave ? undefined : () => rowActions(row)}
           trailing={
             <>
               {cancelled ? <RowNote text="Cancelled" bad /> : row.rsvpStatus === 'waitlisted' ? <RowNote text="Waitlist" /> : changedTag(row) ? <RowNote text={changedTag(row) as string} /> : null}
               <RowMore title={row.title} onPress={() => rowActions(row)} />
             </>
           }
+          // "Lobby · 3 new" (L2): only when the server sends the row's count; nothing until it does.
+          below={boardOpen(row) && row.lobbyNew ? <LobbyRowNews eventId={row.id} count={row.lobbyNew} /> : undefined}
         />
+      )
+      if (!leave) return drawn
+      return (
+        <SwipeRow
+          testID={`going-swipe-${row.id}`}
+          accessibilityLabel={[eventLabel({ title: row.title, time: when, venue: place ?? '' }), row.rsvpStatus === 'waitlisted' ? 'On the waitlist' : null].filter(Boolean).join(', ')}
+          onPress={() => openEvent(row.id)}
+          actions={[
+            { icon: 'ellipsis', label: 'More', onPress: () => rowActions(row) },
+            { icon: 'calendar-x', label: swipeLabel(leave), destructive: true, onPress: () => leaveRow(row, leave) },
+          ]}
+          onFullSwipe={() => leaveRow(row, leave)}
+        >
+          {drawn}
+        </SwipeRow>
       )
     }
 
@@ -835,7 +921,19 @@ function GoingScreenInner() {
         </FadeInUp>
       )}
       {toast ? (
-        <Toast key={toast.key} kind={toast.kind} text={toast.text} action={toast.action} aboveTabBar onDismiss={() => setToast(null)} testID="going-toast" />
+        <Toast
+          key={toast.key}
+          kind={toast.kind}
+          text={toast.text}
+          action={toast.action}
+          aboveTabBar
+          onDismiss={() => {
+            // The held cancel goes as its toast closes (Undo already dropped it, so this is then nothing).
+            if (toast.leaveId) flushLeave(toast.leaveId)
+            setToast(null)
+          }}
+          testID="going-toast"
+        />
       ) : null}
     </SafeAreaView>
   )
@@ -1096,6 +1194,8 @@ const END_THRESHOLD = 1.5
 
 /** The next-up card's photo. */
 const HERO_PHOTO = 180
+/** The Next up ⋯ (SCRUM-1074, board `.next .ph .ib`): 10 inside the photo, which sits `SPACE.sm` inside the card. */
+const HERO_MORE_INSET = SPACE.sm + 10
 /** Loading: the hero card and two rows (flow4.js going `loading`). */
 const SKELETON_HERO = 330
 const SKELETON_ROW = 72
@@ -1155,6 +1255,7 @@ const styles = StyleSheet.create({
   // The details' 6 gap plus the group's 4 above it; the details' 8 below.
   heroActions: { flexDirection: 'row', gap: SPACE.sm, marginTop: SPACE.sm + SPACE.xxs, paddingHorizontal: SPACE.md, paddingBottom: SPACE.sm },
   // `.nlb`: 16 from the place's glyphs (measured on going-new), and 16 over the buttons (their own 10, plus 6).
+  heroMore: { position: 'absolute', top: HERO_MORE_INSET, right: HERO_MORE_INSET },
   heroLobby: { marginHorizontal: SPACE.md, marginTop: SPACE.md + SPACE.xxs + 1, marginBottom: SPACE.xs + SPACE.xxs },
   heroAction: {
     height: SIZE.control,

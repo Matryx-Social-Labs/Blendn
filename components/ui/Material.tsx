@@ -179,6 +179,8 @@ export function Material({ role, style, animatedStyle, children, ...rest }: Mate
         style={[styles.clip, style, animatedStyle]}
       >
         {role === 'media' ? <View testID="material-media-floor" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: MEDIA_FLOOR }]} /> : null}
+        {/* A toast lands over the screen's title: liquid glass's tint alone left the title legible through it (SCRUM-1074). */}
+        {role === 'toast' ? <View testID="material-toast-floor" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: GLASS.toast }]} /> : null}
         {children}
       </Glass>
     )

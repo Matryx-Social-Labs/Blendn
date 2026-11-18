@@ -29,7 +29,8 @@ describe('the Going count follows an RSVP', () => {
   it('applies the rsvpCount the server returns, on RSVP and on cancel', () => {
     const src = read('components', 'screens', 'EventDetailScreen.tsx')
     expect(src).toContain('if (typeof result.data.rsvpCount === \'number\') setGoingCount(result.data.rsvpCount)')
-    expect(src).toMatch(/cancelRsvp[\s\S]{0,400}setGoingCount\(result\.data\.rsvpCount\)/)
+    // A cancel is held under its toast (SCRUM-1074): the count steps down at once and back on Undo or a refusal.
+    expect(src).toMatch(/if \(prev === 'going'\) setGoingCount\(\(n\) => Math\.max\(0, n - 1\)\)[\s\S]{0,400}if \(prev === 'going'\) setGoingCount\(\(n\) => n \+ 1\)/)
   })
 })
 

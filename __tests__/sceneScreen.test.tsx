@@ -271,10 +271,11 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
   it('between days, to somebody who is going, the pill says when the next day starts and is still the RSVP\'s off-switch (frame 06)', async () => {
     api.getEvent.mockResolvedValue(detail({ ...run(false), startTime: hours(-30), endTime: hours(60), session: { startTime: hours(3), endTime: hours(6) } }, { rsvpStatus: 'going' }) as never)
     await open()
-    const state = await screen.findByLabelText(/^You’re going\. Day 2 starts /)
-    expect(screen.queryByText('Change')).toBeNull()
+    // "Change" stays drawn before the next door (SCRUM-1074).
+    const state = await screen.findByLabelText(/^You’re going\. Change\. Day 2 starts /)
     await fireEvent.press(state)
-    expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: 'Cancel your RSVP?' }))
+    // Between days the room may be open already: then it is "Can’t make it?" (sheet 06).
+    expect(showSheet).toHaveBeenCalledWith(expect.objectContaining({ title: expect.stringMatching(/^Can’t (go to .+|make it)\?$/) }))
   })
 
   it('before the first day there is no "between": the pill is the RSVP\'s own words even when the next day is not today', async () => {
@@ -289,7 +290,7 @@ describe('the days of a run (Flow 3 · 3.2, #724 window)', () => {
   it('between days the state is still the RSVP\'s off-switch, and says so', async () => {
     api.getEvent.mockResolvedValue(detail({ ...run(false), startTime: hours(-30), endTime: hours(60), session: { startTime: hours(3), endTime: hours(6) } }, { rsvpStatus: 'going' }) as never)
     await open()
-    const state = await screen.findByLabelText(/^You’re going\. Day 2 starts /)
+    const state = await screen.findByLabelText(/^You’re going\. Change\. Day 2 starts /)
     expect(state.props.accessibilityHint).toBe('Double-tap to change your RSVP')
   })
 
@@ -466,6 +467,53 @@ it('says the age floor and the door in the Who row, each its own segment', async
   expect((await screen.findByTestId('scene-guide-who')).props.accessibilityLabel).toBe('42 going · 21+ · Guest list. By Toit')
 })
 
+describe('leaving once the doors are open, and from the ⋯ (SCRUM-1074, sheet 05)', () => {
+  const live = (status: Record<string, unknown>) => detail({ startTime: new Date(Date.now() - 3_600_000).toISOString(), endTime: new Date(Date.now() + 3_600_000).toISOString() }, status)
+  afterEach(async () => {
+    await act(async () => jest.runOnlyPendingTimers())
+    jest.useRealTimers()
+  })
+
+  it('live and going, not checked in: "Can’t make it" under the hold, its sheet, then "Not going" with I’m going', async () => {
+    api.getEvent.mockResolvedValue(live({ rsvpStatus: 'going' }) as never)
+    api.cancelRsvp.mockResolvedValue({ success: true, data: { rsvpStatus: null, rsvpCount: 3 } } as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'Can’t make it' }))
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0]
+    expect(sheet.title).toBe('Not going after all?')
+    expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['I’m still going', 'Can’t make it'])
+    jest.useFakeTimers()
+    await act(async () => sheet.actions[1].then())
+    expect(mockShowToast.mock.calls.at(-1)[0]).toBe('Removed from Going.')
+    expect(await screen.findByLabelText(/^Not going\./)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'I’m going' })).toBeTruthy()
+  })
+
+  it('live and not going: nothing under the hold (control)', async () => {
+    api.getEvent.mockResolvedValue(live({}) as never)
+    await open()
+    await screen.findByTestId('scene-hold')
+    expect(screen.queryByTestId('scene-hold-leave')).toBeNull()
+  })
+
+  it('checked in, the only way out is Check out: no "Can’t make it" anywhere, nothing in the ⋯ but Report', async () => {
+    api.getEvent.mockResolvedValue(live({ rsvpStatus: 'going', isCheckedIn: true }) as never)
+    await open()
+    expect(await screen.findByLabelText(/^You’re in\. Check out/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Can’t make it' })).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'More options' }))
+    expect(within(screen.getByTestId('scene-menu')).getAllByRole('button').map((n) => n.props.accessibilityLabel)).toEqual(['Report this event'])
+  })
+
+  it('going, the ⋯ ends with the way out in red, to the same sheet (the place a ticket explains itself)', async () => {
+    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'More options' }))
+    await fireEvent.press(within(screen.getByTestId('scene-menu')).getByRole('button', { name: 'Can’t go' }))
+    expect((showSheet as jest.Mock).mock.calls.at(-1)[0].title).toBe('Can’t go to Vinyl Night?')
+  })
+})
+
 describe('the ⋯ menu', () => {
   it('an attendee gets Report, which opens the event report', async () => {
     api.getEvent.mockResolvedValue(detail() as never)
@@ -529,53 +577,64 @@ describe('banners and the dock', () => {
 })
 
 describe('the RSVP answers are the app\'s Sheet, not a tray', () => {
-  it('"You’re going" asks before it lets go: Keep it, or the destructive Cancel RSVP (whose press plays the haptic)', async () => {
-    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
+  // Leaving (SCRUM-1074, sheet 06): the words, then a toast with Undo; the DELETE is held until the toast's time is up.
+  const leaveFromDock = async (status: 'going' | 'waitlisted', name: RegExp | string) => {
+    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: status }) as never)
     await open()
-    await fireEvent.press(await screen.findByRole('button', { name: /^You’re going\./ }))
-    const sheet = (showSheet as jest.Mock).mock.calls[0][0]
-    expect(sheet).toMatchObject({ kind: 'actions', title: 'Cancel your RSVP?' })
+    await fireEvent.press(await screen.findByRole('button', { name }))
+    return (showSheet as jest.Mock).mock.calls[0][0]
+  }
+  afterEach(async () => {
+    // A cancel still held (lib/goingLeave's module state) would blank the next test's "You’re going".
+    await act(async () => jest.runOnlyPendingTimers())
+    jest.useRealTimers()
+  })
+
+  it('"You’re going · Change" asks first: Keep my spot, or the destructive Can’t go; nothing is sent until the toast’s time is up', async () => {
+    const sheet = await leaveFromDock('going', /^You’re going\./)
+    expect(sheet).toMatchObject({ kind: 'actions', title: expect.stringMatching(/^Can’t go to .+\?$/) })
     expect(sheet.actions.map((a: { label: string; variant: string }) => [a.label, a.variant])).toEqual([
-      ['Keep it', 'secondary'],
-      ['Cancel RSVP', 'destructive'],
+      ['Keep my spot', 'secondary'],
+      ['Can’t go', 'destructive'],
     ])
-    // Nothing is cancelled until the destructive action runs.
-    expect(api.cancelRsvp).not.toHaveBeenCalled()
     api.cancelRsvp.mockResolvedValue({ success: true, data: { rsvpCount: 41 } } as never)
+    jest.useFakeTimers()
     await act(async () => sheet.actions[1].then())
+    expect(api.cancelRsvp).not.toHaveBeenCalled()
+    await act(async () => jest.advanceTimersByTime(30_000))
     expect(api.cancelRsvp).toHaveBeenCalledWith('e1')
   })
 
-  it('a cancel says it worked: the CTA is the RSVP again and a toast confirms it (SCRUM-881)', async () => {
-    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
-    await open()
-    await fireEvent.press(await screen.findByRole('button', { name: /^You’re going\./ }))
-    const sheet = (showSheet as jest.Mock).mock.calls[0][0]
-    api.cancelRsvp.mockResolvedValue({ success: true, data: { rsvpStatus: null, rsvpCount: 41 } } as never)
+  it('it says so at once, with Undo, and the CTA is the RSVP again; Undo puts it back and nothing was sent', async () => {
+    const sheet = await leaveFromDock('going', /^You’re going\./)
+    jest.useFakeTimers()
     await act(async () => sheet.actions[1].then())
-    expect(mockShowToast).toHaveBeenCalledWith('RSVP cancelled.', 'success')
+    const [text, variant, options] = mockShowToast.mock.calls.at(-1)
+    expect(text).toMatch(/^You’re off the list for .+\.$/)
+    expect(variant).toBe('success')
+    expect(options.action.label).toBe('Undo')
     expect(await screen.findByRole('button', { name: 'I’m going' })).toBeTruthy()
-    expect(screen.queryByText('You’re going')).toBeNull()
+    await act(async () => options.action.onPress())
+    await act(async () => jest.advanceTimersByTime(30_000))
+    expect(api.cancelRsvp).not.toHaveBeenCalled()
+    expect(await screen.findByRole('button', { name: /^You’re going\./ })).toBeTruthy()
   })
 
   it('leaving the waitlist says so', async () => {
-    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'waitlisted' }) as never)
-    await open()
-    await fireEvent.press(await screen.findByRole('button', { name: 'On the waitlist. Change' }))
-    const sheet = (showSheet as jest.Mock).mock.calls[0][0]
-    api.cancelRsvp.mockResolvedValue({ success: true, data: { rsvpStatus: null, rsvpCount: 42 } } as never)
+    const sheet = await leaveFromDock('waitlisted', 'On the waitlist. Change')
+    expect(sheet.title).toBe('Leave the waitlist?')
+    jest.useFakeTimers()
     await act(async () => sheet.actions[1].then())
-    expect(mockShowToast).toHaveBeenCalledWith('You’ve left the waitlist.', 'success')
+    expect(mockShowToast.mock.calls.at(-1)[0]).toBe('You’ve left the waitlist.')
   })
 
-  it('a refused cancel keeps "You’re going" and says nothing worked', async () => {
-    api.getEvent.mockResolvedValue(detail({}, { rsvpStatus: 'going' }) as never)
-    await open()
-    await fireEvent.press(await screen.findByRole('button', { name: /^You’re going\./ }))
-    const sheet = (showSheet as jest.Mock).mock.calls[0][0]
+  it('a refused cancel puts "You’re going" back', async () => {
+    const sheet = await leaveFromDock('going', /^You’re going\./)
     api.cancelRsvp.mockResolvedValue({ success: false, error: 'boom' } as never)
+    jest.useFakeTimers()
     await act(async () => sheet.actions[1].then())
-    expect(mockShowToast).not.toHaveBeenCalledWith('RSVP cancelled.', 'success')
+    await act(async () => jest.advanceTimersByTime(30_000))
+    jest.useRealTimers()
     expect(await screen.findByRole('button', { name: /^You’re going\./ })).toBeTruthy()
   })
 
@@ -713,7 +772,8 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
     await open()
     // The dock says it, and the room is its one action.
     const dock = await screen.findByTestId('scene-dock')
-    expect(await within(dock).findByText('The room is open')).toBeTruthy()
+    // "Change · The room is open": the way out stays drawn (SCRUM-1074).
+    expect(await within(dock).findByLabelText('You’re going. Change. The room is open')).toBeTruthy()
     await fireEvent.press(within(dock).getByRole('button', { name: 'Open the room' }))
     await waitFor(() =>
       expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'g1', roomName: 'Vinyl Night', eventTitle: 'Vinyl Night', eventId: 'e1', from: 'event' } })
@@ -732,7 +792,7 @@ describe('the room’s countdown is the Scene’s (R6-5)', () => {
       await act(async () => {
         jest.advanceTimersByTime(2 * 60_000)
       })
-      expect(within(screen.getByTestId('scene-dock')).getByText('The room is open')).toBeTruthy()
+      expect(within(screen.getByTestId('scene-dock')).getByLabelText('You’re going. Change. The room is open')).toBeTruthy()
       expect(screen.queryByTestId('scene-room-opens')).toBeNull()
     } finally {
       jest.useRealTimers()
@@ -832,6 +892,14 @@ describe('Claim (SCRUM-1074 C1 + C3, owner-approved)', () => {
     expect(names).toEqual(['Claim this event', 'Report this event'])
     await fireEvent.press(screen.getByRole('button', { name: 'Claim this event' }))
     expect(openURL).toHaveBeenCalledWith(url)
+  })
+
+  it('going to a claimable night, the ⋯ is Claim, Report, then the way out last', async () => {
+    api.getEvent.mockResolvedValue(detail({ claim: { url } }, { rsvpStatus: 'going' }) as never)
+    await open()
+    await fireEvent.press(await screen.findByRole('button', { name: 'More options' }))
+    const names = within(screen.getByTestId('scene-menu')).getAllByRole('button').map((n) => n.props.accessibilityLabel)
+    expect(names).toEqual(['Claim this event', 'Report this event', 'Can’t go'])
   })
 
   it('nothing at all when the server sends no claim (a host’s own night, or a claimed one), and the old tertiary link is gone', async () => {

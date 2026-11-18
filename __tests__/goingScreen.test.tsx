@@ -28,6 +28,7 @@ jest.mock('../components/board/LobbyPreview', () => {
     NewInLobbyRow: ({ eventId }: { eventId: string }) => (
       <Pressable testID="going-lobby-new" accessibilityLabel="New in the Lobby" onPress={() => r.push({ pathname: '/board/[eventId]', params: { eventId } })} />
     ),
+    LobbyRowNews: ({ eventId, count }: { eventId: string; count?: number }) => (count ? <Pressable testID={`going-row-lobby-${eventId}`} accessibilityLabel={`Lobby ${count}`} /> : null),
   }
 })
 jest.mock('../lib/apiClient', () => ({
@@ -38,6 +39,8 @@ jest.mock('../lib/apiClient', () => ({
     getMyEventRating: jest.fn(() => Promise.resolve({ success: true, data: {} })),
     removeFavorite: jest.fn(),
     addFavorite: jest.fn(),
+    cancelRsvp: jest.fn(() => Promise.resolve({ success: true, data: { rsvpStatus: null, rsvpCount: 1 } })),
+    rsvpToEvent: jest.fn(() => Promise.resolve({ success: true, data: { rsvpStatus: 'going' } })),
   },
 }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
@@ -216,8 +219,85 @@ describe('a night that moved, and the row\'s ⋯', () => {
     await fireEvent.press((await screen.findAllByLabelText(/^More about Event b/))[0])
     const sheet = (showSheet as jest.Mock).mock.calls[0][0]
     expect(sheet.title).toBe('Event b')
-    expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['Share', 'Directions', 'Add to calendar', 'The Lobby', 'Cancel'])
+    expect(sheet.actions.map((a: { label: string }) => a.label)).toEqual(['Share', 'Directions', 'Add to calendar', 'The Lobby', 'Can’t go', 'Cancel'])
     expect(router.push).not.toHaveBeenCalled()
+  })
+})
+
+describe('leaving Going (SCRUM-1074: ⋯ "Can’t go" on every card, the swipe, Undo before anything is sent)', () => {
+  const sheetAction = (label: string) => {
+    const sheet = (showSheet as jest.Mock).mock.calls.at(-1)[0]
+    return sheet.actions.find((a: { label: string }) => a.label === label)
+  }
+  beforeEach(() => {
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: [{ ...upcoming('a'), rsvpStatus: 'going' }, { ...upcoming('b'), rsvpStatus: 'going' }], pagination: page(1, 2, false) } } as never)
+  })
+  afterEach(async () => {
+    // A cancel still held (module state, lib/goingLeave) would hide its row from every later test's read.
+    await act(async () => jest.runOnlyPendingTimers())
+    jest.useRealTimers()
+    mockLiveEventId = null
+  })
+
+  it('Next up has a ⋯ with "Can’t go" last; its confirm takes the card off and holds the cancel; Undo puts it back and nothing is ever sent', async () => {
+    await open()
+    await fireEvent.press(await screen.findByTestId('going-next-more'))
+    await act(async () => sheetAction('Can’t go').then())
+    const confirm = (showSheet as jest.Mock).mock.calls.at(-1)[0]
+    expect(confirm.title).toBe('Can’t go to Event a?')
+    expect(confirm.actions.map((a: { label: string }) => a.label)).toEqual(['Keep my spot', 'Can’t go'])
+    jest.useFakeTimers()
+    await act(async () => sheetAction('Can’t go').then())
+    expect(screen.getByText('You’re off the list for Event a.')).toBeTruthy()
+    expect(screen.queryByText('Event a')).toBeNull()
+    expect(api.cancelRsvp).not.toHaveBeenCalled()
+    await fireEvent.press(screen.getByText('Undo'))
+    await act(async () => jest.advanceTimersByTime(30_000))
+    expect(api.cancelRsvp).not.toHaveBeenCalled()
+    expect(screen.getByText('Event a')).toBeTruthy()
+  })
+
+  it('without Undo the cancel goes once, when the toast’s time is up', async () => {
+    await open()
+    await fireEvent.press(await screen.findByTestId('going-next-more'))
+    await act(async () => sheetAction('Can’t go').then())
+    jest.useFakeTimers()
+    await act(async () => sheetAction('Can’t go').then())
+    expect(api.cancelRsvp).not.toHaveBeenCalled()
+    await act(async () => jest.advanceTimersByTime(30_000))
+    expect(api.cancelRsvp).toHaveBeenCalledTimes(1)
+    expect(api.cancelRsvp).toHaveBeenCalledWith('a')
+  })
+
+  it('a row’s swipe tray says "Can’t go" and leaves at once, with Undo (no confirm: Undo is the safety)', async () => {
+    await open()
+    jest.useFakeTimers()
+    await fireEvent.press(await screen.findByTestId('going-swipe-b-action-1', { includeHiddenElements: true }))
+    expect(showSheet).not.toHaveBeenCalled()
+    expect(screen.getByText('You’re off the list for Event b.')).toBeTruthy()
+    expect(api.cancelRsvp).not.toHaveBeenCalled()
+  })
+
+  it('checked in: the ⋯ says Check out, never Can’t go, and the row has no swipe (control: not checked in it has both)', async () => {
+    const now = Date.now()
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: [{ ...upcoming('a', { startTime: new Date(now - 3_600_000).toISOString(), endTime: new Date(now + 3_600_000).toISOString() }), rsvpStatus: 'going' }], pagination: page(1, 1, false) } } as never)
+    mockLiveEventId = 'a'
+    await open()
+    await fireEvent.press(await screen.findByTestId('going-next-more'))
+    const labels = (showSheet as jest.Mock).mock.calls.at(-1)[0].actions.map((a: { label: string }) => a.label)
+    expect(labels).toContain('Check out')
+    expect(labels).not.toContain('Can’t make it')
+    mockLiveEventId = null
+    await open()
+    await fireEvent.press((await screen.findAllByTestId('going-next-more')).at(-1)!)
+    expect((showSheet as jest.Mock).mock.calls.at(-1)[0].actions.map((a: { label: string }) => a.label)).toContain('Can’t make it')
+  })
+
+  it('"Lobby · N new" under a row only when the server sends the count (control: none without it)', async () => {
+    api.getMyRsvps.mockResolvedValue({ success: true, data: { events: [{ ...upcoming('a'), rsvpStatus: 'going' }, { ...upcoming('b'), rsvpStatus: 'going', lobby: { newCount: 3 } }, { ...upcoming('c'), rsvpStatus: 'going' }], pagination: page(1, 3, false) } } as never)
+    await open()
+    expect(await screen.findByTestId('going-row-lobby-b')).toBeTruthy()
+    expect(screen.queryByTestId('going-row-lobby-c')).toBeNull()
   })
 })
 
@@ -366,7 +446,7 @@ describe('Next up, the rows and the lock (GO-14, audit C11/C13/C14)', () => {
   it('a row past today carries its own day, since headings are by week now', async () => {
     api.getMyRsvps.mockResolvedValue({ success: true, data: { events: rows, pagination: page(1, 2, false) } } as never)
     await open()
-    const row = await screen.findByLabelText(/^Event b/)
+    const row = (await screen.findAllByLabelText(/^Event b/))[0]
     expect(row.props.accessibilityLabel).toMatch(/, \d+ [A-Z][a-z]{2} · /)
   })
 
@@ -424,11 +504,11 @@ describe('the Lobby from Going (OUT-02, decision E2)', () => {
     expect(labels(await trayOf(/^More about Event s/))).toContain('The Lobby')
   })
 
-  it('after doors: no tray action; the card’s row stays, for the server to say what is new in the read-only Lobby', async () => {
+  it('after doors: no tray action, and the Lobby line goes from the card (L2, owner 2026-11-17: the room takes over)', async () => {
     rsvps(two({ startTime: hours(-1), endTime: hours(2) }))
     await open()
     await screen.findByTestId('going-next')
-    expect(screen.getByTestId('going-lobby-new')).toBeTruthy()
+    expect(screen.queryByTestId('going-lobby-new')).toBeNull()
     expect(labels(await trayOf(/^More about Event b/))).not.toContain('The Lobby')
   })
 

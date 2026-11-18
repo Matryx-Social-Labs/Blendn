@@ -18,11 +18,13 @@ jest.mock('../lib/apiClient', () => ({
 }))
 jest.mock('../lib/lobbySeen', () => ({ lobbySeenAt: jest.fn(), rememberLobbySeen: jest.fn() }))
 
-import { EventLobbyPreview, NewInLobbyRow } from '../components/board/LobbyPreview'
+import { EventLobbyPreview, LobbyRowNews, NewInLobbyRow } from '../components/board/LobbyPreview'
 import { LobbyAlertsSheet } from '../components/board/LobbyAlertsSheet'
 import { apiClient } from '../lib/apiClient'
 import { lobbySeenAt } from '../lib/lobbySeen'
 import { WORST } from './helpers/longText'
+import { StyleSheet } from 'react-native'
+import { COLOR } from '../lib/design/tokens'
 
 /** The board's worst-case pseudonym and a body far past two lines. */
 const LONG_NAME = 'Midnight Butterfly'
@@ -147,6 +149,13 @@ describe('Going: New in the Lobby', () => {
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
   })
 
+  it('the count is ink on rose, 4.61:1 (white was 4.23:1, under AA for 13 pt text; going-lifecycle sheet 12)', async () => {
+    seenAt.mockResolvedValue(null)
+    api.getBoard.mockResolvedValue(page(3))
+    await render(<NewInLobbyRow eventId="ev1" />)
+    expect(StyleSheet.flatten(screen.getByText('3').props.style).color).toBe(COLOR.selectionInk)
+  })
+
   it('counts exactly under ten, never your own', async () => {
     seenAt.mockResolvedValue(new Date(Date.now() - 5.5 * 60_000).toISOString())
     api.getBoard.mockResolvedValue(page(8, true))
@@ -154,11 +163,15 @@ describe('Going: New in the Lobby', () => {
     expect(screen.getByRole('button', { name: 'New in the Lobby, 5 new posts' })).toBeTruthy()
   })
 
-  it('is not there when nothing is new, or the Lobby refuses (control: one new post shows it)', async () => {
+  it('nothing new: the quiet line, still the way in (L2, owner 2026-11-17); a refusal draws nothing (control: one new post is the news line)', async () => {
     seenAt.mockResolvedValue(new Date(Date.now() + 60_000).toISOString())
     api.getBoard.mockResolvedValue(page(3))
     await render(<NewInLobbyRow eventId="ev1" />)
-    expect(screen.toJSON()).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'The Lobby. Rides, plus-ones and hellos before the night' }))
+    expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
+    expect(screen.queryByText('New in the Lobby')).toBeNull()
+    // Sheet 14's `.nlb .sub`: 13/18, so the quiet line is the board's height (meta's 14/20 drew it 2 pt taller).
+    expect(StyleSheet.flatten(screen.getByText('Rides, plus-ones and hellos before the night', { includeHiddenElements: true }).props.style)).toMatchObject({ fontSize: 13, lineHeight: 18 })
     seenAt.mockResolvedValue(null)
     api.getBoard.mockResolvedValue({ success: false, error: 'closed' })
     await render(<NewInLobbyRow eventId="ev1" />)
@@ -166,6 +179,28 @@ describe('Going: New in the Lobby', () => {
     api.getBoard.mockResolvedValue(page(1))
     await render(<NewInLobbyRow eventId="ev1" />)
     expect(screen.getByRole('button', { name: 'New in the Lobby, 1 new post' })).toBeTruthy()
+    // The count grows with the text and its pill with it (sheet 14 [data-xl]: 30 tall, 16 pt): a fixed 24 clipped the "1" at AX XXXL.
+    const count = screen.getByText('1', { includeHiddenElements: true })
+    expect(count.props.maxFontSizeMultiplier).toBeCloseTo(16 / 13, 2)
+    expect(StyleSheet.flatten(screen.getByTestId('going-lobby-new-badge', { includeHiddenElements: true }).props.style)).toMatchObject({ minHeight: 24 })
+    expect(StyleSheet.flatten(screen.getByTestId('going-lobby-new-badge', { includeHiddenElements: true }).props.style).height).toBeUndefined()
+  })
+})
+
+describe('Going rows: Lobby · N new (L2), only when the server sends a count', () => {
+  it('says the count, compact past 999, the exact number in its label, and opens the Lobby', async () => {
+    await render(<LobbyRowNews eventId="ev1" count={12480} />)
+    expect(screen.getByText('Lobby · 12k new')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Lobby, 12,480 new posts' }))
+    expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
+  })
+  it('draws nothing with no count, or none new (control: 3 is drawn)', async () => {
+    await render(<LobbyRowNews eventId="ev1" count={undefined} />)
+    expect(screen.toJSON()).toBeNull()
+    await render(<LobbyRowNews eventId="ev1" count={0} />)
+    expect(screen.toJSON()).toBeNull()
+    await render(<LobbyRowNews eventId="ev1" count={3} />)
+    expect(screen.getByText('Lobby · 3 new')).toBeTruthy()
   })
 })
 

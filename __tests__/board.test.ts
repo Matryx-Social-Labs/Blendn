@@ -357,7 +357,8 @@ describe('the board is on, now its safety half has shipped', () => {
   it('reads one constant at every way in', () => {
     const src = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8')
     expect(src('components/screens/EventDetailScreen.tsx')).toContain('event && BOARD_ENABLED && !cancelled ?')
-    expect(src('app/(tabs)/going.tsx')).toContain('BOARD_ENABLED && !cancelled ?')
+    // Going's Lobby line is gated by boardOpen, which reads BOARD_ENABLED (L2, SCRUM-1074).
+    expect(src('app/(tabs)/going.tsx')).toContain('{boardOpen(row) ? <NewInLobbyRow')
     expect(src('lib/board.ts')).toContain('BOARD_ENABLED && event.status !== ')
     expect(src('app/(tabs)/chat.tsx')).toMatch(/\{BOARD_ENABLED && !trimmed \? <BoardRequestsSection/)
     expect(src('app/board/[eventId].tsx')).toContain('if (!BOARD_ENABLED) return <Redirect href="/(tabs)/events" />')
