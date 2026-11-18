@@ -55,7 +55,9 @@ it('clusters with MapLibre’s own clustering: radius 46, numbers up to z13, a l
   await render(<EventPiles pins={PINS} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
   const src = last('pins')
   expect(src).toMatchObject({ cluster: true, clusterRadius: CLUSTER.radius, clusterMaxZoom: CLUSTER.maxZoom })
-  expect(src?.clusterProperties).toHaveProperty('live')
+  // The explicit [reduce, map] form: MLRN's iOS side parses the first as an expression, so the bare operator '+' that
+  // Android accepts left iOS with no sum, and every number lost its rim (iOS drive, 2026-11-18).
+  expect(src?.clusterProperties).toEqual({ live: [['+', ['accumulated'], ['get', 'live']], ['get', 'live']] })
 })
 
 it('every event is a dot at every zoom: no dot layer has a maxzoom', async () => {

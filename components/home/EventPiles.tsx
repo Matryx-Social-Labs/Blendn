@@ -81,7 +81,7 @@ export function EventPiles({
         clusterRadius={CLUSTER.radius}
         clusterMaxZoom={CLUSTER.maxZoom}
         // A pile with anything live carries a live mark (its count of live events).
-        clusterProperties={{ live: ['+', ['get', 'live']] }}
+        clusterProperties={{ live: [['+', ['accumulated'], ['get', 'live']], ['get', 'live']] }}
         onPress={press}
       >
         {/*
