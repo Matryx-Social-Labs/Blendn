@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { passReachLine, type PassReach } from '../../lib/attendanceState'
 import { CHECKING_OUT_LABEL, CHECK_OUT_CONSEQUENCE, CHECK_OUT_LABEL, STAY_LABEL, SWITCH_LABEL, checkOutCaption, checkOutQuestion, switchCaption } from '../../lib/switchCopy'
 import { COLOR, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
+import { Button } from '../ds/Button'
 import { HoldToConfirm } from '../ds/HoldToConfirm'
 import { Sheet } from '../ds/Sheet'
 import { font, useAnnounced, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
@@ -20,13 +21,15 @@ export type EventHoldProps = {
   leaving?: string | null
   /** "With {crew}" under the hold (crews 4-A2), drawn by the caller. */
   chip?: ReactNode
+  /** Going or waitlisted, once the doors are open: who is here, and the way off the list (SCRUM-1074, sheet 05). */
+  under?: { left: string | null; link: string; onPress: () => void } | null
 }
 
 /**
  * The event page's "Blend in" (SCRUM-966): the hold itself, the VenuePass's own, in the dock. Dimmed with one short line when the
  * phone is plainly not at the door (`passReach`, the same rule as the docked pass); the server is the judge otherwise.
  */
-export function EventHold({ reach, onConfirm, busy, confirmed, switching = false, leaving = null, chip = null }: EventHoldProps) {
+export function EventHold({ reach, onConfirm, busy, confirmed, switching = false, leaving = null, chip = null, under = null }: EventHoldProps) {
   const bold = useBoldText()
   const line = passReachLine(reach) ?? (switching ? switchCaption(leaving) : null)
   return (
@@ -47,6 +50,14 @@ export function EventHold({ reach, onConfirm, busy, confirmed, switching = false
           {line}
         </Text>
       ) : null}
+      {under && !confirmed ? (
+        <View style={styles.under}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), styles.left]}>
+            {under.left ?? ''}
+          </Text>
+          <Button kind="tertiary" size="sm" label={under.link} onPress={under.onPress} testID="scene-hold-leave" />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -56,6 +67,8 @@ const noop = () => {}
 const styles = StyleSheet.create({
   wrap: { gap: SPACE.sm },
   line: { color: COLOR.textSecondary, textAlign: 'center' },
+  under: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm, paddingLeft: SPACE.sm },
+  left: { color: COLOR.textSecondary, flex: 1, minWidth: 0 },
   error: { color: COLOR.destructive },
 })
 
