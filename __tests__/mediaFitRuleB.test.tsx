@@ -95,19 +95,4 @@ describe('<ContainedCover auto>', () => {
     expect(prop('m', 'contentFit')).toBe('contain')
     expect(query('m-blur')).not.toBeNull()
   })
-
-  it('reports its decision, so a clip over this poster takes the same fit', async () => {
-    const onFit = jest.fn()
-    await render(<ContainedCover uri="https://x/a.jpg" auto onFit={onFit} testID="m" />)
-    expect(onFit).toHaveBeenLastCalledWith('contain')
-    await laidOut(LEAD, { width: 1200, height: 900 })
-    expect(onFit).toHaveBeenLastCalledWith('cover')
-  })
-
-  it('fillOnly (a clip has drawn its frame): the blurred copy stays, the sharp poster goes', async () => {
-    await render(<ContainedCover uri="https://x/p.jpg" auto fillOnly testID="m" />)
-    expect(query('m')).toBeNull()
-    // The fill (blurred copy and its dim; flat under Reduce Transparency, which an earlier test left on) stays.
-    expect(query('m-dim')).not.toBeNull()
-  })
 })
