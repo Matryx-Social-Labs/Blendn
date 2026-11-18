@@ -114,14 +114,14 @@ export async function ensureNotificationChannels(): Promise<void> {
     Notifications.setNotificationChannelAsync('messages', {
       ...base,
       name: 'Messages and people',
-      description: 'Direct messages, friend requests and matches',
+      description: 'Direct messages, friend requests and waves back',
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: PRIVATE,
     }),
     Notifications.setNotificationChannelAsync('matches', {
       ...base,
-      name: 'Matches and friends',
-      description: 'Friend requests, matches and reveals',
+      name: 'Waves and friends',
+      description: 'Waves back, friend requests and reveals',
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: PRIVATE,
     }),

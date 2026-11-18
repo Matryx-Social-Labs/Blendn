@@ -51,6 +51,7 @@ export type StateAction = {
   /** A counting figure after the label, in Geist Mono ("Try again in 0:48"). Give `accessibilityLabel` too: the figure is not part of the label. */
   price?: ButtonProps['price']
   accessibilityLabel?: string
+  testID?: string
 }
 
 /** An action's kind when the caller names none: the first is the lit recovery, the rest stay quiet (rc7 D4). */
@@ -80,6 +81,8 @@ export type StateScreenProps = {
   foot?: ReactNode
   /** The first action is in flight. */
   busy?: boolean
+  /** `inline` only: the actions at their own width, centred under the text, as a list's states draw them (Flow 9 A · 3). Absent, they span the column. */
+  fitActions?: boolean
   /** `inline` in a list or card; `screen` fills it, with the actions docked at the bottom. */
   variant?: 'inline' | 'screen'
   /**
@@ -117,7 +120,7 @@ export function useSaidOnArrival(said: string | null, screen = false) {
  * Text scales freely; the well never does. Increase Contrast: the well's
  * hairline, a white glyph, secondary text lifted to white.
  */
-export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono = false, actions = [], foot, busy = false, variant = 'inline', gutter = false, announce, testID }: StateScreenProps) {
+export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono = false, actions = [], fitActions = false, foot, busy = false, variant = 'inline', gutter = false, announce, testID }: StateScreenProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const insets = useSafeAreaInsets()
@@ -168,7 +171,7 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
     return (
       <View testID={testID} style={[styles.column, gutter && styles.gutter]}>
         {content}
-        {buttons.length ? <View style={styles.actions}>{buttons}</View> : null}
+        {buttons.length ? <View style={[styles.actions, fitActions && styles.fit]}>{buttons}</View> : null}
       </View>
     )
   }
@@ -207,6 +210,7 @@ const styles = StyleSheet.create({
   title: { color: COLOR.textPrimary, textAlign: 'center' },
   center: { textAlign: 'center' },
   actions: { alignSelf: 'stretch', gap: SPACE.sm, marginTop: SPACE.md },
+  fit: { alignItems: 'center' },
   gutter: { paddingHorizontal: SPACE.gutter },
   fill: { flex: 1 },
   foot: { alignItems: 'center', gap: SPACE.sm },

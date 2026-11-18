@@ -39,7 +39,7 @@ beforeEach(() => {
 
 it('a kind the account has off is a switch that turns it back on; the others open the phone’s channel page', async () => {
   await render(<Screen />)
-  const matches = await screen.findByRole('switch', { name: /^Matches and friends/ })
+  const matches = await screen.findByRole('switch', { name: /^Waves and friends/ })
   expect(matches.props.accessibilityState.checked).toBe(false)
   expect(screen.getByRole('link', { name: /^Your crew/ })).toBeTruthy()
   expect(screen.queryByRole('switch', { name: /^Your crew/ })).toBeNull()
@@ -51,10 +51,10 @@ it('a kind the account has off is a switch that turns it back on; the others ope
 
 it('the switch stays under the finger after a press: the row is not swapped for a channel link (M6)', async () => {
   await render(<Screen />)
-  const matches = await screen.findByRole('switch', { name: /^Matches and friends/ })
+  const matches = await screen.findByRole('switch', { name: /^Waves and friends/ })
   await act(async () => fireEvent.press(matches))
-  await waitFor(() => expect(screen.getByRole('switch', { name: /^Matches and friends/ }).props.accessibilityState.checked).toBe(true))
-  expect(screen.queryByRole('link', { name: /^Matches and friends/ })).toBeNull()
+  await waitFor(() => expect(screen.getByRole('switch', { name: /^Waves and friends/ }).props.accessibilityState.checked).toBe(true))
+  expect(screen.queryByRole('link', { name: /^Waves and friends/ })).toBeNull()
 })
 
 it('the Sounds row opens the phone’s settings', async () => {
