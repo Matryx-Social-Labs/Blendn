@@ -292,7 +292,6 @@ export function PagePicture({ item }: { item: FeedMediaItem }) {
   return <Image testID="media-poster" source={{ uri: item.posterUrl }} recyclingKey={item.posterUrl} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} />
 }
 
-
 /** The empty band under the hero's caption: the pager dots live in it, so no title length can reach them. */
 export const HERO_CAPTION_FOOT = SPACE.xxl + SPACE.sm
 
