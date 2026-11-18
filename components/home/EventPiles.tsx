@@ -81,8 +81,13 @@ export function EventPiles({
         clusterProperties={{ live: ['+', ['get', 'live']] }}
         onPress={press}
       >
+        {/*
+          Every layer keyed by its id: MLRN drops falsy children and re-maps the rest by index, so without keys the glow
+          leaving (a focus arriving) handed its slot, and a frozen id, to the next layer ("`id` cannot be changed").
+        */}
         {lit ? null : (
           <Layer
+            key="pin-glow"
             id="pin-glow"
             type="circle"
             filter={NOT_PILED as never}
@@ -95,6 +100,7 @@ export function EventPiles({
           />
         )}
         <Layer
+          key="pin-dot"
           id="pin-dot"
           type="circle"
           filter={NOT_PILED as never}
@@ -107,6 +113,7 @@ export function EventPiles({
           }}
         />
         <Layer
+          key="pile-bubble"
           id="pile-bubble"
           type="circle"
           filter={['has', 'point_count'] as never}
@@ -118,6 +125,7 @@ export function EventPiles({
           }}
         />
         <Layer
+          key="pile-count"
           id="pile-count"
           type="symbol"
           filter={['has', 'point_count'] as never}
@@ -134,6 +142,7 @@ export function EventPiles({
       {focusData ? (
         <GeoJSONSource id="pins-focus" data={focusData} onPress={press}>
           <Layer
+            key="pin-focus-halo"
             id="pin-focus-halo"
             type="circle"
             paint={{
@@ -144,6 +153,7 @@ export function EventPiles({
             }}
           />
           <Layer
+            key="pin-focus"
             id="pin-focus"
             type="circle"
             paint={{

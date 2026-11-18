@@ -17,9 +17,14 @@ jest.mock('@maplibre/maplibre-react-native', () => {
     GeoJSONSource: R.forwardRef((p: Props, ref: React.Ref<unknown>) => {
       R.useImperativeHandle(ref, () => ({ getClusterExpansionZoom: mockExpansion }))
       mockSources.push(p)
-      return p.children ?? null
+      // As MLRN does (cloneReactChildrenWithProps): its children are re-mapped, so unkeyed siblings shift.
+      const found = Array.isArray(p.children) ? p.children : [p.children]
+      return R.Children.map(found.filter((c: unknown) => !!c), (c: React.ReactElement) => R.cloneElement(c))
     }),
+    // Like the native side: a mounted layer whose `id` changes throws ("`id` cannot be changed", drive 2026-11-18).
     Layer: (p: Props) => {
+      const first = R.useRef(p.id)
+      if (first.current !== p.id) throw new Error('`id` cannot be changed')
       mockLayers.push(p)
       return null
     },
@@ -111,4 +116,11 @@ it('a number tapped eases to its expansion zoom; a dot tapped opens its event', 
     press({ nativeEvent: { features: [{ properties: { id: 'a', kind: 'event' }, geometry: { type: 'Point', coordinates: [77.6, 12.97] } }] } })
   })
   expect(onOpen).toHaveBeenCalledWith('event', 'a')
+})
+
+it('the focus coming and going never changes a mounted layer’s id (the native side throws)', async () => {
+  const view = await render(<EventPiles pins={PINS} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+  await view.rerender(<EventPiles pins={PINS} focusId="lit" onOpen={jest.fn()} onExpand={jest.fn()} />)
+  await view.rerender(<EventPiles pins={PINS} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+  expect(layer('pin-glow')).toBeDefined()
 })

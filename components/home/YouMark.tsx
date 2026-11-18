@@ -32,6 +32,7 @@ export function YouMark({ fix, sharing, now }: { fix: PreciseFix | null; sharing
   return (
     <GeoJSONSource id="you" data={data}>
       <Layer
+        key="you-halo"
         id="you-halo"
         type="circle"
         paint={{
@@ -44,6 +45,7 @@ export function YouMark({ fix, sharing, now }: { fix: PreciseFix | null; sharing
       />
       {approximate ? null : (
         <Layer
+          key="you-dot"
           id="you-dot"
           type="circle"
           paint={{
