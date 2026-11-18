@@ -188,6 +188,18 @@ it('counts the bio against its limit once, in the field’s own counter (not als
   expect(screen.queryByText('8 / 500')).toBeNull()
 })
 
+describe('labels in sentence case (Me + settings A 03, owner approved 2026-11-18)', () => {
+  it('draws the field labels as written in Satoshi, not Geist Mono uppercase', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    for (const name of ['Name', 'Where you are']) {
+      const style = StyleSheet.flatten(screen.getByText(name).props.style)
+      expect(style.textTransform).toBeUndefined()
+      expect(style.fontFamily).not.toMatch(/Mono/)
+    }
+  })
+})
+
 describe('no silent truncation: the server’s caps, with the count shown (SCRUM-745)', () => {
   const loadWith = (over: { name?: string; location?: string }) =>
     api.getProfile.mockResolvedValue({
