@@ -2,7 +2,7 @@
  * Edit profile on the design system (Flow 6 `edit`): the cards in the frame's order, the loading frame at its final geometry, Goals and
  * Looking for as DS chips with an Add sheet, and Save held while offline.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import { StyleSheet } from 'react-native'
 
 let mockOffline = false
@@ -69,7 +69,7 @@ it('draws the cards in Me + settings A order: you first, then About, matching, w
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
   const titles = screen.getAllByRole('header').map((h) => h.props.children)
-  const order = ['You', 'About', 'Matching · seen in rooms of 8+', 'Interests', 'Shown when you share one', 'Details', 'Goals', 'Looking for']
+  const order = ['You', 'About', 'Matching · seen in rooms of 8+', 'Shown when you share one', 'Details', 'Goals', 'Looking for']
   // Negative control: the old order (matching before your name) fails this.
   expect(titles.filter((t: string) => order.includes(t))).toEqual(order)
 })
@@ -80,11 +80,67 @@ it('says Phone is private, in the field (A 03)', async () => {
   expect(screen.getByText('Only for sign-in. Never shown.')).toBeTruthy()
 })
 
+/** Matching is three rows (A 03, sheet 2/2); each opens its picker in a sheet. */
+const openRow = async (row: 'into' | 'do' | 'open') => fireEvent.press(screen.getByTestId(`edit-profile-matching-${row}`))
+
+describe('matching as rows that open their pickers (Me + settings A 03)', () => {
+  it('draws three rows in board order, each saying what it holds', async () => {
+    api.getProfile.mockResolvedValue({
+      ...LOADED,
+      data: {
+        ...LOADED.data,
+        interests: ['Riso', 'Jazz', 'Poutine', 'Records', 'Chess'].map((name, i) => ({ id: `i${i}`, name, slug: name, icon: null })),
+        profile: { ...LOADED.data.profile, intent_default: ['friendship', 'networking'], work_field: 'design', expertise: ['design_ux'] },
+      },
+    } as never)
+    api.getWorkFields.mockResolvedValue({
+      success: true,
+      data: { workFields: [{ slug: 'design', label: 'Design' }], expertiseByField: { design: [{ slug: 'design_ux', label: 'UX research' }] } },
+    } as never)
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await screen.findByText('Design · UX research')
+    expect(screen.getByText('Riso, Jazz, Poutine +2')).toBeTruthy()
+    expect(screen.getByText('Friendship, Networking')).toBeTruthy()
+    const rows = ['into', 'do', 'open'].map((r) => screen.getByTestId(`edit-profile-matching-${r}`))
+    expect(rows).toHaveLength(3)
+    // The chips live in the sheets, not on the page (negative control: the old inline chips fail this).
+    expect(screen.queryByTestId('matching-intents')).toBeNull()
+  })
+
+  it('says a row is empty in words, and opens its own picker only', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    expect(screen.getAllByText('Not set')).toHaveLength(2)
+    await openRow('open')
+    expect(await screen.findByTestId('matching-intents')).toBeTruthy()
+    expect(screen.queryByTestId('matching-work-field')).toBeNull()
+    await fireEvent.press(screen.getByText('Done'))
+    await openRow('do')
+    expect(await screen.findByTestId('matching-work-field')).toBeTruthy()
+    expect(screen.queryByTestId('matching-intents')).toBeNull()
+  })
+
+  it('a pick in a sheet shows on its row and waits for Save', async () => {
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await openRow('open')
+    await fireEvent.press(await screen.findByText('Networking'))
+    await fireEvent.press(screen.getByText('Done'))
+    expect(within(screen.getByTestId('edit-profile-matching-open')).getByText('Networking')).toBeTruthy()
+    expect(api.updateProfile).not.toHaveBeenCalled()
+    await fireEvent.press(screen.getByText('Save'))
+    await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
+    expect(api.updateProfile.mock.calls[0][1]).toMatchObject({ intent_default: ['networking'] })
+  })
+})
+
 // DS-07: picked things count "n of max", the one format ChipSet uses; the spaced "0 / 10" goes. Negative control: the
 // old format fails.
 it('counts the interests picked as "n of max"', async () => {
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
+  await openRow('into')
   expect(screen.getByText('0 of 10')).toBeTruthy()
   expect(screen.queryByText(/\d+ \/ \d+/)).toBeNull()
 })
@@ -92,10 +148,13 @@ it('counts the interests picked as "n of max"', async () => {
 it('says one interest is not enough to be matched, and stops saying it at two (SCRUM-519)', async () => {
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
+  // On the row at rest, and in the sheet.
   expect(screen.getByText('Pick at least 2 so we can match you.')).toBeTruthy()
+  await openRow('into')
+  expect(screen.getAllByText('Pick at least 2 so we can match you.')).toHaveLength(2)
   await act(async () => mockPickInterests(['a']))
   expect(screen.getByText('1 of 10')).toBeTruthy()
-  expect(screen.getByText('Pick at least 2 so we can match you.')).toBeTruthy()
+  expect(screen.getAllByText('Pick at least 2 so we can match you.')).toHaveLength(2)
   await act(async () => mockPickInterests(['a', 'b']))
   expect(screen.getByText('2 of 10')).toBeTruthy()
   expect(screen.queryByText('Pick at least 2 so we can match you.')).toBeNull()
@@ -234,6 +293,8 @@ describe('expertise, step 2 of the field of work (14.3)', () => {
 
   it('offers the chips of the chosen field, with the saved ones on', async () => {
     await render(<EditProfile />)
+    await screen.findByText('Design · Product design')
+    await openRow('do')
     await screen.findByText('Product design')
     expect(screen.getByText('UX research')).toBeTruthy()
     expect(screen.queryByText('Banking')).toBeNull()
@@ -241,6 +302,8 @@ describe('expertise, step 2 of the field of work (14.3)', () => {
 
   it('sends the expertise only when it changed', async () => {
     await render(<EditProfile />)
+    await screen.findByText('Design · Product design')
+    await openRow('do')
     await screen.findByText('UX research')
     await fireEvent.press(screen.getByText('Save'))
     await waitFor(() => expect(api.updateProfile).toHaveBeenCalled())
@@ -255,6 +318,8 @@ describe('expertise, step 2 of the field of work (14.3)', () => {
 
   it('clears them silently when the field changes, and sends the empty list with the new field', async () => {
     await render(<EditProfile />)
+    await screen.findByText('Design · Product design')
+    await openRow('do')
     await screen.findByText('UX research')
     await fireEvent.press(screen.getByText('Finance'))
     await waitFor(() => expect(screen.queryByText('UX research')).toBeNull())
@@ -268,6 +333,8 @@ describe('fields of work that did not load (6-3, Edit profile · 04)', () => {
   it('the heading stands with the failure line under it, and the line reads them again', async () => {
     api.getWorkFields.mockResolvedValueOnce({ success: false, error: 'No internet connection.' } as never)
     await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await openRow('do')
     await screen.findByText('Couldn’t load fields of work. Try again.')
     expect(screen.getByText('WHAT DO YOU DO?')).toBeTruthy()
     api.getWorkFields.mockResolvedValueOnce({ success: true, data: { workFields: [{ slug: 'design', label: 'Design' }] } } as never)
@@ -279,6 +346,8 @@ describe('fields of work that did not load (6-3, Edit profile · 04)', () => {
   it('M8: the line is a full target tall, reaches up and down only, and holds still while it retries', async () => {
     api.getWorkFields.mockResolvedValueOnce({ success: false, error: 'No internet connection.' } as never)
     await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await openRow('do')
     const line = await screen.findByLabelText('Couldn’t load fields of work. Try again.')
     expect(StyleSheet.flatten(line.props.style).minHeight).toBeGreaterThanOrEqual(44)
     expect(line.props.hitSlop).toEqual({ top: 4, bottom: 4 })
@@ -294,6 +363,7 @@ describe('fields of work that did not load (6-3, Edit profile · 04)', () => {
   it('a list that loaded draws no failure line', async () => {
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
+    await openRow('do')
     expect(screen.queryByText('Couldn’t load fields of work. Try again.')).toBeNull()
   })
 })
@@ -325,7 +395,9 @@ it('names the job title and who sees it, with placeholders that fit here', async
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
   expect(screen.getByText(JOB_TITLE_LABEL)).toBeTruthy()
-  expect(screen.getByText(WORK_FIELD_HINT)).toBeTruthy()
+  // Who sees the field of work: in its sheet, beside the chips it is about.
+  await openRow('do')
+  expect(await screen.findByText(WORK_FIELD_HINT)).toBeTruthy()
   expect(screen.getByPlaceholderText('Area, city')).toBeTruthy()
   expect(screen.getByPlaceholderText('e.g. Christ University')).toBeTruthy()
   expect(screen.getByPlaceholderText('Tell people about yourself…')).toBeTruthy()
@@ -369,8 +441,12 @@ describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
   it('names the tier under intent, interests and the college', async () => {
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
-    expect(screen.getByTestId('who-sees-intent')).toBeTruthy()
-    expect(screen.getByTestId('who-sees-interests')).toBeTruthy()
+    await openRow('open')
+    expect(await screen.findByTestId('who-sees-intent')).toBeTruthy()
+    await fireEvent.press(screen.getByText('Done'))
+    await openRow('into')
+    expect(await screen.findByTestId('who-sees-interests')).toBeTruthy()
+    await fireEvent.press(screen.getByText('Done'))
     expect(screen.getByTestId('who-sees-college').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
   })
 
@@ -378,14 +454,16 @@ describe('who sees each field on Edit profile (YOU-07, 14.0)', () => {
     dating({ show_orientation: false })
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
-    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Nobody but you sees this.')
+    await openRow('open')
+    expect((await screen.findByTestId('who-sees-orientation')).props.accessibilityLabel).toBe('Nobody but you sees this.')
   })
 
   it('orientation reads the reveal tier when the profile says show_orientation is on', async () => {
     dating({ show_orientation: true })
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
-    expect(screen.getByTestId('who-sees-orientation').props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
+    await openRow('open')
+    expect((await screen.findByTestId('who-sees-orientation')).props.accessibilityLabel).toBe('Shown only after you reveal yourself.')
   })
 })
 
@@ -396,6 +474,7 @@ it('swaps an interest at the cap: removes before it adds, because the server che
   api.getProfile.mockResolvedValue({ ...LOADED, data: { ...LOADED.data, interests: [{ id: 'held' }] } } as never)
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
+  await openRow('into')
   await act(async () => mockPickInterests(['new']))
   await fireEvent.press(screen.getByText('Save'))
   await waitFor(() => expect(calls).toEqual(['remove', 'add']))
@@ -408,7 +487,8 @@ describe('the field of work at its daily limit (SCRUM-986)', () => {
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
     await fireEvent.changeText(screen.getByTestId('edit-profile-location'), 'Mysuru')
-    await fireEvent.press(screen.getByTestId('matching-work-field-software'))
+    await openRow('do')
+    await fireEvent.press(await screen.findByTestId('matching-work-field-software'))
     await fireEvent.press(screen.getByText('Save'))
   }
   beforeEach(() => {
@@ -433,7 +513,8 @@ describe('the field of work at its daily limit (SCRUM-986)', () => {
     api.updateProfile.mockResolvedValueOnce({ success: false, error: 'Three times a day.', errorCode: 'RATE_LIMITED' } as never)
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
-    await fireEvent.press(screen.getByTestId('matching-work-field-software'))
+    await openRow('do')
+    await fireEvent.press(await screen.findByTestId('matching-work-field-software'))
     await fireEvent.press(screen.getByText('Save'))
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Not saved. Three times a day.', 'error', expect.anything()))
     expect(api.updateProfile).toHaveBeenCalledTimes(1)

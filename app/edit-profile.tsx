@@ -9,7 +9,8 @@ import { TextArea, TextField } from '../components/ds/TextField'
 import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
 import { WhoSees } from '../components/profile/WhoSees'
-import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
+import { INTENTS, listLine, MatchingFields, type Intent } from '../components/profile/MatchingFields'
+import { Sheet } from '../components/ds/Sheet'
 import { RepositionHost } from '../components/profile/Reposition'
 import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
 import { TagsField } from '../components/profile/TagsField'
@@ -116,6 +117,10 @@ function EditProfileContent() {
    * the difference: the endpoints are add and remove, not replace.
    */
   const [interestIds, setInterestIds] = useState<string[]>([])
+  /** Each interest's name, for the row's summary: from the profile as it loads, then from the picker's list once it opens. */
+  const [interestNames, setInterestNames] = useState<Record<string, string>>({})
+  /** Which matching row's sheet is up (A 03). The kind outlives `open` so the sheet keeps its content while it slides away. */
+  const [matchingSheet, setMatchingSheet] = useState<{ kind: MatchingRow; open: boolean }>({ kind: 'into', open: false })
   const [interestsAtLoad, setInterestsAtLoad] = useState<string[]>([])
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
@@ -304,6 +309,10 @@ function EditProfileContent() {
           : []
         setInterestIds(structured)
         setInterestsAtLoad(structured)
+        if (Array.isArray(profileData.interests)) {
+          const loadedNames = Object.fromEntries(profileData.interests.map((i) => [String(i.id), i.name]))
+          setInterestNames((prev) => ({ ...prev, ...loadedNames }))
+        }
         setGoals(combinedProfile.goals || [])
         setLookingFor(combinedProfile.looking_for || [])
 
@@ -378,6 +387,22 @@ function EditProfileContent() {
     setWorkField(slug)
     const keep = new Set((slug ? expertiseByField[slug] : [])?.map((e) => e.slug))
     setExpertise((prev) => prev.filter((e) => keep.has(e)))
+  }
+
+  const closeMatchingSheet = () => setMatchingSheet((prev) => ({ ...prev, open: false }))
+  /** What each matching row says it holds (A 03): the picks by name, "Not set" for none; interests under two say why it matters. */
+  const fieldLabel = workFields.find((f) => f.slug === workField)?.label
+  const expertiseLabels = (workField ? expertiseByField[workField] ?? [] : []).filter((e) => expertise.includes(e.slug)).map((e) => e.label)
+  // In the order they were picked ("Friendship, Networking" on the board); dating only where it is offered.
+  const offeredIntents = intents
+    .filter((v) => v !== 'dating' || mayDate(liveAge))
+    .flatMap((v) => INTENTS.filter((i) => i.value === v))
+  const matchingHints: Record<MatchingRow, string> = {
+    into: interestIds.length < MIN_INTERESTS
+      ? INTERESTS_FLOOR
+      : listLine(interestIds.map((id) => interestNames[id]).filter((n): n is string => !!n)) ?? `${interestIds.length} picked`,
+    do: fieldLabel ? [fieldLabel, expertiseLabels.join(', ')].filter(Boolean).join(' · ') : MATCHING_UNSET,
+    open: listLine(offeredIntents.map((i) => i.label), INTENTS.length) ?? MATCHING_UNSET,
   }
 
   /** Never cut for the person: a value over the server's cap stays on screen with its count, and Save waits. */
@@ -644,58 +669,79 @@ function EditProfileContent() {
           </EditCard>
 
           {/*
-            You and matching, between Photos and Basics (R4.1 14.2). Its own card and not folded into ABOUT YOU, because these are
-            the only fields on this screen that nobody else ever reads as text -- they feed `rankMatches` and surface as a tag on a
-            card, never as the values behind it.
+            Matching as three rows (Me + settings A 03, sheet 2/2): the only fields here nobody reads as text -- they feed
+            `rankMatches` and surface as a tag on a card. Each row says what it holds and opens its picker in a sheet; a pick
+            waits for Save with the rest of the form.
           */}
           <EditCard title="Matching · seen in rooms of 8+">
-            <MatchingFields
-              intents={intents}
-              onToggleIntent={onToggleIntent}
-              workField={workField}
-              onChangeWorkField={changeWorkField}
-              expertiseOptions={workField ? expertiseByField[workField] : undefined}
-              expertise={expertise}
-              maxExpertise={maxExpertise}
-              onChangeExpertise={setExpertise}
-              workFields={workFields}
-              workFieldsFailed={workFieldsFailed}
-              onRetryWorkFields={() => {
-                setWorkFieldsRetrying(true)
-                void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
-              }}
-              workFieldsRetrying={workFieldsRetrying}
-              gender={gender}
-              onChangeGender={setGender}
-              orientations={orientations}
-              onChangeOrientations={setOrientations}
-              interestedIn={interestedIn}
-              onChangeInterestedIn={setInterestedIn}
-              offerDating={mayDate(liveAge)}
-              showOrientation={showOrientation}
-            />
+            {MATCHING_ROWS.map((row) => (
+              <SettingsRow
+                key={row.kind}
+                icon={row.icon}
+                title={row.title}
+                hint={matchingHints[row.kind]}
+                trail="chevron"
+                disabled={isLoading}
+                onPress={() => setMatchingSheet({ kind: row.kind, open: true })}
+                testID={`edit-profile-matching-${row.kind}`}
+              />
+            ))}
           </EditCard>
 
-          <EditCard title="Interests" sub={isLoading ? undefined : `${interestIds.length} of ${MAX_INTERESTS}`}>
-            {isLoading ? (
-              <View style={styles.chipsSkeleton}>
-                {[...Array(5)].map((_, i) => (
-                  <SkeletonBlock key={`sk-i-${i}`} width={CHIP_SKELETON} height={SIZE.tag} borderRadius={RADIUS.capsule} />
-                ))}
-              </View>
-            ) : (
-              <Animated.View entering={arrive} style={styles.cardBody}>
+          <Sheet
+            visible={matchingSheet.open}
+            onClose={closeMatchingSheet}
+            title={MATCHING_ROWS.find((r) => r.kind === matchingSheet.kind)?.title}
+            headerNote={matchingSheet.kind === 'into' ? { text: `${interestIds.length} of ${MAX_INTERESTS}` } : undefined}
+            detents={['tall']}
+            actions={[{ label: 'Done', kind: 'secondary', onPress: closeMatchingSheet, testID: 'edit-profile-matching-done' }]}
+            testID="edit-profile-matching-sheet"
+          >
+            {matchingSheet.kind === 'into' ? (
+              <View style={styles.cardBody}>
                 {/* Under two, matching can't rank you and the board refuses a post (SCRUM-519): said, never refused. */}
                 {interestIds.length < MIN_INTERESTS ? (
                   <Text testID="edit-profile-interests-floor" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.floor]}>
-                    {`Pick at least ${MIN_INTERESTS} so we can match you.`}
+                    {INTERESTS_FLOOR}
                   </Text>
                 ) : null}
-                <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
+                <InterestPicker
+                  selected={interestIds}
+                  onChange={setInterestIds}
+                  showCount={false}
+                  onNames={(names) => setInterestNames((prev) => ({ ...prev, ...names }))}
+                />
                 <WhoSees field="interests" />
-              </Animated.View>
+              </View>
+            ) : (
+              <MatchingFields
+                part={matchingSheet.kind === 'open' ? 'open' : 'work'}
+                intents={intents}
+                onToggleIntent={onToggleIntent}
+                workField={workField}
+                onChangeWorkField={changeWorkField}
+                expertiseOptions={workField ? expertiseByField[workField] : undefined}
+                expertise={expertise}
+                maxExpertise={maxExpertise}
+                onChangeExpertise={setExpertise}
+                workFields={workFields}
+                workFieldsFailed={workFieldsFailed}
+                onRetryWorkFields={() => {
+                  setWorkFieldsRetrying(true)
+                  void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
+                }}
+                workFieldsRetrying={workFieldsRetrying}
+                gender={gender}
+                onChangeGender={setGender}
+                orientations={orientations}
+                onChangeOrientations={setOrientations}
+                interestedIn={interestedIn}
+                onChangeInterestedIn={setInterestedIn}
+                offerDating={mayDate(liveAge)}
+                showOrientation={showOrientation}
+              />
             )}
-          </EditCard>
+          </Sheet>
 
           {/* One name for the about-you screen (A 04): what it holds is shown on cards only when you share one. */}
           <EditCard title="Shown when you share one">
@@ -787,6 +833,17 @@ function EditProfileContent() {
     </View>
   )
 }
+
+type MatchingRow = 'into' | 'do' | 'open'
+/** The three matching rows, in the board's order (A 03 2/2). */
+const MATCHING_ROWS: { kind: MatchingRow; title: string; icon: 'sparkles' | 'briefcase' | 'hand' }[] = [
+  { kind: 'into', title: 'What you’re into', icon: 'sparkles' },
+  { kind: 'do', title: 'What you do', icon: 'briefcase' },
+  { kind: 'open', title: 'What you’re open to', icon: 'hand' },
+]
+/** A matching row with nothing picked. */
+const MATCHING_UNSET = 'Not set'
+const INTERESTS_FLOOR = `Pick at least ${MIN_INTERESTS} so we can match you.`
 
 /** The You and Details cards while the profile loads: their fields at the final geometry (Flow 6 edit 11). */
 const BASIC_FIELDS = 4

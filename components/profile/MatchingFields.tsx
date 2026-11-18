@@ -114,6 +114,18 @@ export interface MatchingFieldsProps {
   onRetryWorkFields?: () => void
   /** The retry is on its way: the line says so and holds still. */
   workFieldsRetrying?: boolean
+  /**
+   * One half on its own, for Edit profile's rows (Me + settings A 03): `open` is intent and the dating chain under it, `work`
+   * the field of work and its expertise. Omitted, both (onboarding asks them on one page).
+   */
+  part?: 'open' | 'work'
+}
+
+/** A row's summary of what it holds: "Riso, Jazz, Poutine +2". Null for nothing. */
+export function listLine(labels: readonly string[], shown = 3): string | null {
+  if (!labels.length) return null
+  const rest = labels.length - shown
+  return `${labels.slice(0, shown).join(', ')}${rest > 0 ? ` +${rest}` : ''}`
 }
 
 /** D20 (D-M14, 14.0): the matching chip is Tier B (people you match with, in rooms of 8 or more); the free "Job title" field is seen after a reveal. */
@@ -168,13 +180,18 @@ export function MatchingFields({
   workFieldsFailed = false,
   onRetryWorkFields,
   workFieldsRetrying = false,
+  part,
 }: MatchingFieldsProps) {
+  const showOpen = part !== 'work'
+  const showWork = part !== 'open'
   const wantsDating = offerDating && intents.includes('dating')
   const offered = offerDating ? INTENTS : INTENTS.filter((intent) => intent.value !== 'dating')
   const askInterestedIn = needsInterestedInPicker(gender, orientations, intents)
 
   return (
     <>
+      {showOpen ? (
+        <>
       {/* The first set sits straight under the card's own label: the gap (`set`) is between sets, not above the first. */}
       <View testID="matching-first-set">
         <ChipSet
@@ -248,7 +265,12 @@ export function MatchingFields({
         ) : null}
       </Swap>
 
-      <View style={styles.set}>
+        </>
+      ) : null}
+
+      {showWork ? (
+        <>
+      <View style={showOpen ? styles.set : undefined}>
         {workFieldsFailed && workFields.length === 0 ? (
           <WorkFieldsFailed onRetry={onRetryWorkFields} retrying={workFieldsRetrying} />
         ) : (
@@ -282,6 +304,8 @@ export function MatchingFields({
           </View>
         ) : null}
       </Swap>
+        </>
+      ) : null}
     </>
   )
 }
