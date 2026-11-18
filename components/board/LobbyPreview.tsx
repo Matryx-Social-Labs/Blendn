@@ -32,6 +32,8 @@ const STACK_MARK = 24
 const STACK_RING = 2
 /** `.nbg`: the unread badge is a 24 pt capsule. */
 const BADGE = 24
+/** The count at the largest text: 16 pt in a 30 pt pill (sheet 14 `[data-xl] .nbg`), so the pill grows with it, never clips it. */
+const BADGE_TEXT_CAP = 16 / 13
 /** `.lpc.lroom`: the door glyph is 24, a step over the control's 20. */
 const DOOR_GLYPH = 24
 // design-exception: the board's room card glows rose from under it (`.lpc.lroom`: 0 18px 50px -24px, 70%), the 4b card's
@@ -245,8 +247,8 @@ export function NewInLobbyRow({ eventId, style }: { eventId: string; style?: Sty
       <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('control', bold), styles.ink, styles.shrink]}>
         New in the Lobby
       </Text>
-      <View style={styles.badge}>
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold, FONT_FAMILY.mono[700]), styles.badgeInk]}>{badge}</Text>
+      <View testID="going-lobby-new-badge" style={styles.badge}>
+        <Text maxFontSizeMultiplier={BADGE_TEXT_CAP} style={[font('note', bold, FONT_FAMILY.mono[700]), styles.badgeInk]}>{badge}</Text>
       </View>
       <Icon name="chevron-right" size={ICON.inline + 2} color={ROSE.glyph} />
     </Pressable>
@@ -328,5 +330,5 @@ const styles = StyleSheet.create({
   shrinkText: { flexShrink: 1 },
   // Ink on brand rose, 4.61:1: white was 4.23:1, under AA at 13 pt (going-lifecycle sheet 12, 2026-11-17).
   badgeInk: { color: COLOR.selectionInk },
-  badge: { minWidth: BADGE, height: BADGE, paddingHorizontal: SPACE.xs + 3, borderRadius: BADGE / 2, backgroundColor: ROSE.edge, alignItems: 'center', justifyContent: 'center' },
+  badge: { minWidth: BADGE, minHeight: BADGE, paddingHorizontal: SPACE.xs + 3, borderRadius: RADIUS.capsule, backgroundColor: ROSE.edge, alignItems: 'center', justifyContent: 'center' },
 })

@@ -179,6 +179,11 @@ describe('Going: New in the Lobby', () => {
     api.getBoard.mockResolvedValue(page(1))
     await render(<NewInLobbyRow eventId="ev1" />)
     expect(screen.getByRole('button', { name: 'New in the Lobby, 1 new post' })).toBeTruthy()
+    // The count grows with the text and its pill with it (sheet 14 [data-xl]: 30 tall, 16 pt): a fixed 24 clipped the "1" at AX XXXL.
+    const count = screen.getByText('1', { includeHiddenElements: true })
+    expect(count.props.maxFontSizeMultiplier).toBeCloseTo(16 / 13, 2)
+    expect(StyleSheet.flatten(screen.getByTestId('going-lobby-new-badge', { includeHiddenElements: true }).props.style)).toMatchObject({ minHeight: 24 })
+    expect(StyleSheet.flatten(screen.getByTestId('going-lobby-new-badge', { includeHiddenElements: true }).props.style).height).toBeUndefined()
   })
 })
 
