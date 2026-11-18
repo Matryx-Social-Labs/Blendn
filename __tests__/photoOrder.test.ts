@@ -1,23 +1,37 @@
-import { inSlotOrder, moveInto, moveItem, reordered, slotAt, slotXY } from '../lib/photoOrder'
+import { gridHeight, inSlotOrder, moveInto, moveItem, reordered, slotAt, slotRect, slotXY } from '../lib/photoOrder'
 
-const GRID = { itemSize: 100, gap: 8, columns: 3 }
+/* Board A 03 (Me + settings, owner approved 2026-11-18): the main photo 2fr wide over two rows, two slots 1fr beside it, gap 8; slots 4–6 under them. */
+const GRID = { width: 308, gap: 8 }
+// S = (308 − 8) / 3 = 100; the main is 2S = 200 wide and 2S + 8 = 208 tall.
 
 describe('slots', () => {
-  it('lays out row by row', () => {
-    expect(slotXY(0, GRID)).toEqual({ x: 0, y: 0 })
-    expect(slotXY(2, GRID)).toEqual({ x: 216, y: 0 })
-    expect(slotXY(3, GRID)).toEqual({ x: 0, y: 108 })
-    expect(slotXY(4, GRID)).toEqual({ x: 108, y: 108 })
+  it('the main spans two rows at 2fr, two slots stand beside it at 1fr', () => {
+    expect(slotRect(0, GRID)).toEqual({ x: 0, y: 0, w: 200, h: 208 })
+    expect(slotRect(1, GRID)).toEqual({ x: 208, y: 0, w: 100, h: 100 })
+    expect(slotRect(2, GRID)).toEqual({ x: 208, y: 108, w: 100, h: 100 })
+  })
+
+  it('slots 4–6 sit under them, the first two halving the main’s width so every edge lines up', () => {
+    expect(slotRect(3, GRID)).toEqual({ x: 0, y: 216, w: 96, h: 100 })
+    expect(slotRect(4, GRID)).toEqual({ x: 104, y: 216, w: 96, h: 100 })
+    expect(slotRect(5, GRID)).toEqual({ x: 208, y: 216, w: 100, h: 100 })
+    expect(slotXY(5, GRID)).toEqual({ x: 208, y: 216 })
+  })
+
+  it('is two rows tall until a fourth slot shows, then three', () => {
+    expect(gridHeight(3, GRID)).toBe(208)
+    expect(gridHeight(4, GRID)).toBe(316)
   })
 
   it('finds the slot under a dragged tile’s centre, inside the photos there are', () => {
-    expect(slotAt(50, 50, GRID, 5)).toBe(0)
-    expect(slotAt(160, 50, GRID, 5)).toBe(1)
-    expect(slotAt(160, 160, GRID, 5)).toBe(4)
-    // Off the end of the list or the grid: the last photo's slot, the first's.
-    expect(slotAt(300, 160, GRID, 4)).toBe(3)
+    expect(slotAt(100, 100, GRID, 5)).toBe(0)
+    expect(slotAt(250, 50, GRID, 5)).toBe(1)
+    expect(slotAt(250, 150, GRID, 5)).toBe(2)
+    expect(slotAt(150, 260, GRID, 5)).toBe(4)
+    // Over an empty slot or off the grid: the photo slot whose centre is nearest.
+    expect(slotAt(250, 260, GRID, 4)).toBe(2)
     expect(slotAt(-40, -40, GRID, 4)).toBe(0)
-    expect(slotAt(500, 500, GRID, 4)).toBe(3)
+    expect(slotAt(20, 400, GRID, 4)).toBe(3)
   })
 })
 

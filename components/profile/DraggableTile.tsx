@@ -7,7 +7,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 import { COLOR, RADIUS, SPRING } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { useReducedMotion } from '../../lib/motion'
-import { moveInto, slotAt, slotXY, type GridSpec } from '../../lib/photoOrder'
+import { moveInto, slotAt, slotRect, type GridSpec } from '../../lib/photoOrder'
 import { tint } from '../../lib/theme'
 import { fadeOutFast } from '../motion/presence'
 
@@ -55,9 +55,12 @@ export function DraggableTile({
   testID?: string
 }) {
   const reduceMotion = useReducedMotion()
-  const home = slotXY(index, grid)
+  const home = slotRect(index, grid)
   const x = useSharedValue(home.x)
   const y = useSharedValue(home.y)
+  // Slots differ in size (the main is 2fr over two rows): a tile takes its slot's size as it steps there.
+  const w = useSharedValue(home.w)
+  const h = useSharedValue(home.h)
   const startX = useSharedValue(0)
   const startY = useSharedValue(0)
   const lift = useSharedValue(0)
@@ -67,16 +70,20 @@ export function DraggableTile({
   useEffect(() => {
     x.set(home.x)
     y.set(home.y)
-  }, [home.x, home.y, x, y])
+    w.set(home.w)
+    h.set(home.h)
+  }, [home.x, home.y, home.w, home.h, x, y, w, h])
 
   // Another tile made room, or the order was saved or put back: this one steps to its slot.
   useAnimatedReaction(
     () => positions.get()[index] ?? index,
     (slot, was) => {
       if (slot === was || active.get() === index) return
-      const to = slotXY(slot, grid)
+      const to = slotRect(slot, grid)
       x.set(reduceMotion ? to.x : withSpring(to.x, SPRING.snap))
       y.set(reduceMotion ? to.y : withSpring(to.y, SPRING.snap))
+      w.set(reduceMotion ? to.w : withSpring(to.w, SPRING.snap))
+      h.set(reduceMotion ? to.h : withSpring(to.h, SPRING.snap))
     },
     [grid, index, reduceMotion]
   )
@@ -97,7 +104,7 @@ export function DraggableTile({
     .onUpdate((e) => {
       x.set(startX.get() + e.translationX)
       y.set(startY.get() + e.translationY)
-      const slot = slotAt(x.get() + grid.itemSize / 2, y.get() + grid.itemSize / 2, grid, count)
+      const slot = slotAt(x.get() + w.get() / 2, y.get() + h.get() / 2, grid, count)
       const now = positions.get()
       if (now[index] !== slot) positions.set(moveInto(now, index, slot))
     })
@@ -105,9 +112,11 @@ export function DraggableTile({
       // A press that never became a lift (let go early, or scrolled away) is nothing to settle.
       if (active.get() !== index) return
       const final = positions.get()
-      const to = slotXY(final[index], grid)
+      const to = slotRect(final[index], grid)
       x.set(reduceMotion ? to.x : withSpring(to.x, SPRING.snap))
       y.set(reduceMotion ? to.y : withSpring(to.y, SPRING.snap))
+      w.set(reduceMotion ? to.w : withSpring(to.w, SPRING.snap))
+      h.set(reduceMotion ? to.h : withSpring(to.h, SPRING.snap))
       lift.set(reduceMotion ? 0 : withSpring(0, SPRING.snap))
       active.set(-1)
       scheduleOnRN(liftChanged, false)
@@ -118,6 +127,8 @@ export function DraggableTile({
 
   const style = useAnimatedStyle(() => ({
     zIndex: active.get() === index ? 2 : 0,
+    width: w.get(),
+    height: h.get(),
     borderColor: interpolateColor(lift.get(), [0, 1], EDGE),
     transform: [
       { translateX: x.get() },
@@ -129,7 +140,7 @@ export function DraggableTile({
 
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View testID={testID} exiting={fadeOutFast} style={[styles.tile, { width: grid.itemSize, height: grid.itemSize }, style]}>
+      <Animated.View testID={testID} exiting={fadeOutFast} style={[styles.tile, style]}>
         {children}
       </Animated.View>
     </GestureDetector>
