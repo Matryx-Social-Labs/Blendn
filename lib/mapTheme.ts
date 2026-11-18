@@ -19,6 +19,7 @@ import { COLOR, SPACE } from './design/tokens'
 /** The brand colours from the tokens, and the one stop they do not carry by its `colors.css` name. */
 const TOKEN = {
   white: COLOR.textPrimary,
+  violet: COLOR.selectionVioletGlyph,
   brandOrange: COLOR.brandOrange,
   brandRose: COLOR.brandRose,
   emberEnd: '#FF6D8D', // the far end of --gradient-ember
@@ -190,6 +191,20 @@ export const MAP_THEME = {
     focus: { color: '#FF906D', radiusPx: 9, ring: TOKEN.white, ringPx: 2 },
     /** With a focus, the rest stay visible but quiet: glow off, 5 pt, 85% (55% failed contrast, sheet 09). */
     dimmed: { radiusPx: 5, opacity: 0.85 },
+  },
+
+  /**
+   * "You" (pulse-map 06; Foundations C: violet is you, never ember or rose). The halo is the fix's real accuracy. Stale is
+   * grey; approximate is a soft circle with this edge. The stale grey is not a token (contrast sheet 09: 5.28 on ground).
+   */
+  you: {
+    dot: TOKEN.violet,
+    ring: TOKEN.white,
+    ringPx: 2,
+    radiusPx: 7,
+    halo: 'rgba(186,150,211,0.18)',
+    approximateEdge: 'rgba(186,150,211,0.55)',
+    stale: '#8C8796',
   },
 
   /** A pile of events (pulse-map 08): ink 90% with an ember rim, white numerals in the style's own glyphs (Satoshi is never hosted). */

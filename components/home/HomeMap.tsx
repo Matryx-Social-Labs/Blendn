@@ -3,7 +3,6 @@ import {
   GeoJSONSource,
   Layer,
   Map,
-  NativeUserLocation,
   type CameraRef,
   type CameraStop,
   type LightSpecification,
@@ -65,6 +64,7 @@ import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
 import { EventPiles } from './EventPiles'
+import { YouMark } from './YouMark'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
 import { useMapLighting, type MapView, type Segment } from './useMapLighting'
@@ -670,11 +670,10 @@ export const HomeMap = memo(function HomeMap({
           }}
         />
         {/*
-         * `mode` passed explicitly: MLRN's Android component starts in COMPASS render mode and applies `mode`
-         * only when given, so the puck followed the compass and the map redrew about 7 times a second forever
-         * (measured on the emulator, step 2c drive). A plain puck redraws only when the fix moves.
+         * You (pulse-map 06): violet, the halo the fix's real accuracy; approximate a soft circle, stale grey; nothing with
+         * sharing off. Our own layers, not the native puck (blue, and on Android a compass mode that redrew the map ~7×/s).
          */}
-        {center ? <NativeUserLocation mode="default" /> : null}
+        <YouMark fix={center} sharing={sharing} now={now} />
         {/*
          * Remounted together when the building source switches: the glow goes under
          * the buildings and the lit copies over them, so they must be added after

@@ -214,8 +214,9 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).toMatch(/const padding = mapPadding\(\{ topChrome, mapHeight, drawerTop: drawerSnapTop \}\)/)
   })
 
-  it("draws the person’s dot as a plain puck, never one that follows the compass (Android redrew the map forever)", () => {
-    expect(component).toMatch(/<NativeUserLocation mode="default" \/>/)
+  it("draws the person as our own violet mark, never the native puck (blue; on Android its compass mode redrew the map forever)", () => {
+    expect(component).toMatch(/<YouMark fix=\{center\} sharing=\{sharing\} now=\{now\} \/>/)
+    expect(component).not.toMatch(/NativeUserLocation/)
   })
 
   it('is tilted between 45° and 60°', () => {
