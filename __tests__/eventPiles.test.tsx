@@ -35,11 +35,13 @@ jest.mock('@maplibre/maplibre-react-native', () => {
 import { EventPiles } from '../components/home/EventPiles'
 import type { Pin } from '../lib/homeMap'
 import { CLUSTER } from '../lib/mapPresence'
+import { litFade } from '../lib/mapLit'
 import { MAP_THEME } from '../lib/mapTheme'
 /* eslint-enable import/first */
 
 const pin = (id: string, live = false): Pin => ({ id, kind: 'event', title: id, latitude: 12.97, longitude: 77.6, glow: 1, live, startsAt: null, endsAt: null, bucket: null })
-const PINS = [pin('a'), pin('lit'), pin('b', true)]
+const spot = (p: Pin, k: number): Pin => ({ ...p, longitude: 77.6 + k * 0.001 })
+const PINS = [spot(pin('a'), 0), spot(pin('lit'), 1), spot(pin('b', true), 2)]
 
 const last = (id: string) => [...mockSources].reverse().find((s) => s.id === id)
 const layer = (id: string) => [...mockLayers].reverse().find((l) => l.id === id)
@@ -51,13 +53,19 @@ beforeEach(() => {
   mockExpansion.mockClear()
 })
 
+const props = (src: Props | undefined) => (src?.data as { features: { properties: Record<string, unknown> }[] }).features.map((f) => f.properties)
+const nextFrame = () => act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))) })
+
 it('clusters with MapLibre’s own clustering: radius 46, numbers up to z13, a live sum for the pile’s mark', async () => {
   await render(<EventPiles pins={PINS} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
   const src = last('pins')
   expect(src).toMatchObject({ cluster: true, clusterRadius: CLUSTER.radius, clusterMaxZoom: CLUSTER.maxZoom })
   // The explicit [reduce, map] form: MLRN's iOS side parses the first as an expression, so the bare operator '+' that
   // Android accepts left iOS with no sum, and every number lost its rim (iOS drive, 2026-11-18).
-  expect(src?.clusterProperties).toEqual({ live: [['+', ['accumulated'], ['get', 'live']], ['get', 'live']] })
+  expect(src?.clusterProperties).toEqual({
+    live: [['+', ['accumulated'], ['get', 'live']], ['get', 'live']],
+    n: [['+', ['accumulated'], ['get', 'n']], ['get', 'n']],
+  })
 })
 
 it('every event is a dot at every zoom: no dot layer has a maxzoom', async () => {
@@ -118,7 +126,7 @@ it('a live event carries a white rim (a shape cue, not a brighter ember)', async
 
 it('numbers: ink with an ember rim, white numerals in the map’s own font, sized 15 / 18 / 21', async () => {
   await render(<EventPiles pins={PINS} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
-  expect(layer('pile-bubble')?.filter).toEqual(['has', 'point_count'])
+  expect((layer('pile-bubble')?.filter as unknown[])[1]).toEqual(['has', 'point_count'])
   expect(JSON.stringify(layer('pile-bubble')?.paint)).toContain('"step"')
   expect((layer('pile-count')?.layout as Record<string, unknown>)['text-font']).toEqual(MAP_THEME.pile.font)
   // Over the violet you-dot white is 2.5:1 (drive: a fix at the Church Street pile's centre); an ink halo keeps it ~19:1.
@@ -146,4 +154,78 @@ it('the focus coming and going never changes a mounted layer’s id (the native 
   await view.rerender(<EventPiles pins={PINS} focusId="lit" onOpen={jest.fn()} onExpand={jest.fn()} />)
   await view.rerender(<EventPiles pins={PINS} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
   expect(layer('pin-glow')).toBeDefined()
+})
+
+/*
+ * The light is the mark (pulse-map 12 A, owner 2026-11-18). On the #582 drive a lit building wore its event's dot on its
+ * wall: the dot layer drew every pin at every zoom, over the lit copies. A lit place's dot now fades out over the lights'
+ * own fade as the light fades in; an unlit event keeps its dot.
+ */
+describe('a lit place is marked by its light, not a dot on it', () => {
+  it('a lit pin is drawn only by the handing-over layer, which goes to 0 over the lit fade once the light is in', async () => {
+    await render(<EventPiles pins={PINS} litIds={['lit']} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+    await nextFrame()
+    expect(props(last('pins')).map((p) => [p.id, p.lit])).toEqual([
+      ['a', 0],
+      ['lit', 1],
+      ['b', 0],
+    ])
+    expect(JSON.stringify(layer('pin-dot')?.filter)).toContain('["==",["get","lit"],0]')
+    expect(JSON.stringify(layer('pin-glow')?.filter)).toContain('["==",["get","lit"],0]')
+    expect(JSON.stringify(layer('pin-dot-lit')?.filter)).toContain('["==",["get","lit"],1]')
+    expect(layer('pin-dot-lit')?.paint).toMatchObject({ 'circle-opacity': 0, 'circle-stroke-opacity': 0, 'circle-opacity-transition': litFade(false) })
+  })
+
+  it('control: before the light has arrived the lit pin’s dot is still at full strength (no blank frame)', async () => {
+    await render(<EventPiles pins={PINS} litIds={['lit']} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+    expect(layer('pin-dot-lit')?.paint).toMatchObject({ 'circle-opacity': 1 })
+  })
+
+  it('control: nothing lit (below z14 the lights are cleared), every pin is a plain dot', async () => {
+    await render(<EventPiles pins={PINS} litIds={[]} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+    await nextFrame()
+    expect(props(last('pins')).every((p) => p.lit === 0)).toBe(true)
+  })
+
+  it('a lit focus hands its dot and halo over the same way; an unlit focus keeps them', async () => {
+    const lit = await render(<EventPiles pins={PINS} litIds={['lit']} focusId="lit" onOpen={jest.fn()} onExpand={jest.fn()} />)
+    await nextFrame()
+    expect(layer('pin-focus')?.paint).toMatchObject({ 'circle-opacity': 0, 'circle-stroke-opacity': 0 })
+    expect(layer('pin-focus-halo')?.paint).toMatchObject({ 'circle-opacity': 0 })
+    await lit.unmount()
+    mockLayers.length = 0
+    await render(<EventPiles pins={PINS} litIds={['a']} focusId="lit" onOpen={jest.fn()} onExpand={jest.fn()} />)
+    await nextFrame()
+    expect(layer('pin-focus')?.paint).toMatchObject({ 'circle-opacity': 1 })
+    expect(layer('pin-focus-halo')?.paint).toMatchObject({ 'circle-opacity': MAP_THEME.pin.glowOpacity })
+  })
+})
+
+/* Several events at one spot: one silent dot was three events. They are one feature that counts them, drawn as a number. */
+describe('events at one spot are counted, never one silent dot', () => {
+  const stacked = [pin('a'), pin('b', true), pin('c'), spot(pin('d'), 3)]
+
+  it('one feature per spot carrying its count (a live one first), and a pile sums counts, not spots', async () => {
+    await render(<EventPiles pins={stacked} litIds={[]} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+    expect(props(last('pins')).map((p) => [p.id, p.n, p.live])).toEqual([
+      ['b', 3, 1],
+      ['d', 1, 0],
+    ])
+    expect(last('pins')?.clusterProperties).toMatchObject({ n: [['+', ['accumulated'], ['get', 'n']], ['get', 'n']] })
+    expect(JSON.stringify((layer('pile-count')?.layout as Record<string, unknown>)['text-field'])).toContain('["get","n"]')
+  })
+
+  it('an unlit spot of several is drawn as a number, not a dot; one of one stays a dot', async () => {
+    await render(<EventPiles pins={stacked} litIds={[]} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+    expect(JSON.stringify(layer('pile-bubble')?.filter)).toContain('[">",["get","n"],1]')
+    expect(JSON.stringify(layer('pin-dot')?.filter)).toContain('["==",["get","n"],1]')
+  })
+
+  it('a spot is lit when any of its events is (its light carries the count on the chip)', async () => {
+    await render(<EventPiles pins={stacked} litIds={['c']} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+    expect(props(last('pins')).map((p) => [p.id, p.lit])).toEqual([
+      ['b', 1],
+      ['d', 0],
+    ])
+  })
 })

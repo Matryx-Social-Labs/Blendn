@@ -53,7 +53,12 @@ describe('a viewport becomes the lists\' own query (HM-CU02)', () => {
 })
 
 const at = (minutesFromNow: number) => new Date(Date.now() + minutesFromNow * 60_000).toISOString()
-const event = (id: string, startIn: number, endIn: number, coords = { latitude: 12.97, longitude: 77.59 }) => ({
+const event = (
+  id: string,
+  startIn: number,
+  endIn: number,
+  coords: { latitude: number; longitude: number; venue?: { name: string } | null; venue_name?: string } = { latitude: 12.97, longitude: 77.59 }
+) => ({
   id,
   title: id,
   ...coords,
@@ -85,6 +90,16 @@ describe('the pins follow the segment (HM-CU04)', () => {
       ['quiet', 'venue', false, 1],
       ['busy', 'venue', true, 4],
     ])
+  })
+
+  it('an event pin carries its venue’s name (the linked venue first), for a chip that holds several', () => {
+    const named = pinsFor('events', { events: [event('a', 10, 60, { latitude: 12.97, longitude: 77.59, venue: { name: ' Church Street Social ' }, venue_name: 'Old name' }), event('b', 10, 60, { latitude: 12.97, longitude: 77.59, venue_name: 'Lupa' })], venues: [] })
+    expect(named.map((p) => p.place)).toEqual(['Church Street Social', 'Lupa'])
+  })
+
+  it('control: no venue from the server, no name; a venue pin is its own place', () => {
+    expect(pinsFor('events', { events: [event('a', 10, 60)], venues: [] })[0].place).toBeNull()
+    expect(pinsFor('places', data)[0].place).toBeNull()
   })
 
   it('reads a venue with no bucket (an older server) as quiet, never live', () => {
@@ -240,8 +255,8 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
         'radius',
       ]).toContain(r)
     }
-    // A number's size reads its count and nothing a place carries.
-    expect(layers).toMatch(/const BUBBLE_RADIUS = \['step', \['get', 'point_count'\]/)
+    // A number's size reads its count of events (`n`, a pile's sum of its spots') and nothing a place carries.
+    expect(layers).toMatch(/const BUBBLE_RADIUS = \['step', \['get', 'n'\]/)
     // At the browsed city's latitude (SCRUM-998), and nothing a place carries.
     expect(layers).toMatch(/const radius = useMemo\(\(\) => glowRadius\(latitude\), \[latitude\]\)/)
     // The ground glow is the theme's metres at every zoom, read off nothing.

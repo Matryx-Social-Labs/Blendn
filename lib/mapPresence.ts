@@ -137,3 +137,16 @@ function fitZoom(pts: readonly { latitude: number; longitude: number }[], view: 
   const lat = (Math.atan(Math.sinh((s + n) / 2)) * 180) / Math.PI
   return { center: [(w + e) / 2, lat] as [number, number], zoom: Math.min(zx, zy) }
 }
+
+/** At most this many spoken markers for the numbers on screen (each is a native view): a dense view keeps the first. */
+export const PILE_SPEECH_MAX = 12
+
+/**
+ * What a number says to a screen reader (pulse-map 10: "Map and number labels are spoken"): how many, how many are on
+ * now, and what a double-tap does. A pile zooms in; several events at one place cannot be split by zooming, so it opens
+ * the first (a live one, else the server's first: EventPiles' top event).
+ */
+export function pileSpeech({ n, live, cluster }: { n: number; live: number; cluster: boolean }): string {
+  if (!cluster) return `${n} events at one place, double-tap to open the first`
+  return live > 0 ? `${n} events here, ${live} on now, double-tap to zoom in` : `${n} events here, double-tap to zoom in`
+}

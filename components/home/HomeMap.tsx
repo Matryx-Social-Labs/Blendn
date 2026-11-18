@@ -5,6 +5,7 @@ import {
   Map,
   type CameraRef,
   type CameraStop,
+  type GeoJSONSourceRef,
   type LightSpecification,
   type MapRef,
   type PressEventWithFeatures,
@@ -64,7 +65,9 @@ import { tint } from '../../lib/theme'
 import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
+import { useScreenReader } from '../ds/shared'
 import { EventPiles } from './EventPiles'
+import { PileSpeech } from './PileSpeech'
 import { YouMark } from './YouMark'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
@@ -226,6 +229,10 @@ export const HomeMap = memo(function HomeMap({
   const reachHere = sharing ? reach : null
   const map = useRef<MapRef>(null)
   const camera = useRef<CameraRef>(null)
+  const pileSource = useRef<GeoJSONSourceRef>(null)
+  const screenReader = useScreenReader()
+  /** Bumped each time the camera stops or the pins change: the spoken numbers are read again (`PileSpeech`). */
+  const [settled, setSettled] = useState(0)
   // The person has moved the map (a pan, or a city picked): a fix no longer takes it over.
   const touched = useRef(false)
   // The same, for the "my location" button to draw: filled while the map follows the fix.
@@ -435,6 +442,11 @@ export const HomeMap = memo(function HomeMap({
     userAt: center ? [center.longitude, center.latitude] : null,
   })
 
+  // New pins re-cluster the numbers: a screen reader hears them afresh.
+  useEffect(() => {
+    if (screenReader) setSettled((n) => n + 1)
+  }, [pins, screenReader])
+
   // The person's position — a cached one, then the live fix — until they move the map themselves.
   useEffect(() => {
     if (!center || !shouldFollowFix(followedFix.current, center, touched.current)) return
@@ -562,6 +574,7 @@ export const HomeMap = memo(function HomeMap({
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
     setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
+    if (screenReader) setSettled((n) => n + 1)
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => ask(bounds as Bounds), QUERY_DEBOUNCE_MS)
   }
@@ -708,11 +721,21 @@ export const HomeMap = memo(function HomeMap({
             </GeoJSONSource>
           </>
         ) : null}
-        {/* Every event a dot at every zoom, piles as numbers, the focus on its own on top (pulse-map 08). */}
-        <EventPiles pins={pins} focusId={focusPin?.id ?? null} onOpen={open} onExpand={expandPile}>
+        {/* Every unlit event a dot at every zoom, piles and stacked spots as numbers, the focus on top; a lit place is its light (pulse-map 08, 12 A). */}
+        <EventPiles sourceRef={pileSource} pins={pins} litIds={lit.pinIds} focusId={focusPin?.id ?? null} onOpen={open} onExpand={expandPile}>
           <YouMark part="dot" fix={center} sharing={sharing} now={now} />
         </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
+        {/* A screen reader hears the numbers (pulse-map 10): one spoken marker each, read when the camera stops. */}
+        <PileSpeech
+          on={screenReader}
+          map={map}
+          source={pileSource}
+          box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom }}
+          settled={settled}
+          onExpand={expandPile}
+          onOpen={open}
+        />
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>
