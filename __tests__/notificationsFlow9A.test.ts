@@ -169,6 +169,20 @@ describe('a named person with no photo is their initial (personFace)', () => {
     ])
     expect(merged.map((n) => n.id)).toEqual(['n1', 'n2'])
   })
+
+  it('a notification row for the same request says the whole name the list has (board 01 A), not the server’s first name', () => {
+    // Seen on the sim: the server titles the row "Marc-André wants to be friends"; the board draws the whole name.
+    const firstOnly = item({ id: 'n1', kind: 'friend_request', data: { requestId: 'r1' }, display: { title: 'Marc-André wants to be friends' } })
+    const [merged] = withAsks([firstOnly], askItems([request('r1', 'Marc-André Lefebvre-Desrosiers')], []))
+    expect(rowFor(merged, NOW).title).toBe('Marc-André Lefebvre-Desrosiers wants to be friends')
+    expect(merged.id).toBe('n1')
+  })
+
+  it('negative control: with no list row for the request, the server’s title stands', () => {
+    const firstOnly = item({ id: 'n1', kind: 'friend_request', data: { requestId: 'r1' }, display: { title: 'Marc-André wants to be friends' } })
+    const [merged] = withAsks([firstOnly], askItems([request('r9', 'Someone Else')], []))
+    expect(rowFor(merged, NOW).title).toBe('Marc-André wants to be friends')
+  })
 })
 
 describe('Waiting on you and the landing', () => {

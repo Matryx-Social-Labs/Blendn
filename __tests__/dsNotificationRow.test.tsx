@@ -341,13 +341,15 @@ describe('Flow 9 A: the title keeps its verb at the largest sizes; the context i
   const title = 'Marc-André Lefebvre-Desrosiers wants to be friends'
   afterEach(() => jest.restoreAllMocks())
 
-  it('two lines at the default size, unclamped at the accessibility sizes', async () => {
+  it('two lines at the default size, eight at the accessibility sizes (a cap, never unclamped)', async () => {
     dims(1)
     const view = await render(<NotificationRow visual={{ type: 'glyph', icon: 'user-plus' }} title={title} context="23 h ago" />)
     expect(screen.getByText(title).props.numberOfLines).toBe(2)
     dims(2)
     await view.rerender(<NotificationRow visual={{ type: 'glyph', icon: 'user-plus' }} title={title} context="23 h ago" />)
-    expect(screen.getByText(title).props.numberOfLines).toBeUndefined()
+    // Unclamped, iOS lays the text out with NSLineBreakByClipping: a word wider than the column ("Thiruvananthapuram" at AX)
+    // broke mid-word and the next line ran out of the row ("…Night Owls are her"), seen on the sim. A cap wraps it inside.
+    expect(screen.getByText(title).props.numberOfLines).toBe(8)
   })
 
   it('the context is clamped to one line, at every size', async () => {

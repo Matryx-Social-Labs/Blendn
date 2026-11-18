@@ -496,9 +496,12 @@ function faceVisual(name: string, photo: string | null | undefined): Notificatio
  */
 export function withAsks(items: readonly NotificationItem[], asks: readonly NotificationItem[]): NotificationItem[] {
   const askOf = new Map(asks.map((a) => [askKeyOf(a), a]))
+  // The list names the whole person (board 01 A) where the server's row title has the first name only.
   const faced = items.map((n) => {
-    const visual = askOf.get(askKeyOf(n))?.display?.visual
-    return visual && !parseVisual(n.display?.visual) ? { ...n, display: { ...n.display, visual } } : n
+    const shown = askOf.get(askKeyOf(n))?.display
+    const visual = shown?.visual && !parseVisual(n.display?.visual) ? shown.visual : undefined
+    const title = text(shown?.title)
+    return visual || title ? { ...n, display: { ...n.display, ...(title ? { title } : {}), ...(visual ? { visual } : {}) } } : n
   })
   const seen = new Set(items.map(askKeyOf).filter((k): k is string => k !== null))
   const added = asks.filter((a) => {

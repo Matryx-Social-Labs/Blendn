@@ -53,6 +53,12 @@ const DOT_TOP = SPACE.sm + SPACE.xxs
 const STALE_OPACITY = 0.5
 /** A title's lines below the accessibility sizes (board 01 A: two in a title, one in a context). */
 const TITLE_LINES = 2
+/**
+ * At the accessibility sizes the verb must never be cut (Flow 9 · 8), but a cap, not unclamped: iOS lays an unclamped Text out
+ * with NSLineBreakByClipping, and a word wider than the column ("Thiruvananthapuram" at AX) broke mid-word and pushed the next
+ * line out of the row ("…Night Owls are her", seen on the sim). Eight lines hold the 89-character title at the largest size.
+ */
+const AX_TITLE_LINES = 8
 /** A row's visual; the in-app banner draws it at 32. */
 const ROW_VISUAL = 40
 
@@ -215,7 +221,7 @@ function DoneLine({ text, answered, bold, reduceMotion, testID }: { text: string
 
 /**
  * One notification (guidelines/components/NotificationRow.html, Flow 9 · 9.3):
- * a 40 pt visual, the title (700 while new, with the dot; two lines at most, unclamped at the accessibility sizes),
+ * a 40 pt visual, the title (700 while new, with the dot; two lines at most, eight at the accessibility sizes),
  * one line of context; a request adds its pills; a stale row dims its visual to
  * 50% and says "This request is no longer open" (the flow's frame; the page's
  * intro says "This isn't available any more").
@@ -241,7 +247,7 @@ export function NotificationRow({
 }: NotificationRowProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
-  // At the accessibility sizes the title wraps as far as it needs: two lines cut the verb ("Marc-André wants to be frie…", Flow 9 · 8).
+  // At the accessibility sizes the title takes up to eight lines: two cut the verb ("Marc-André wants to be frie…", Flow 9 · 8).
   const large = useLargeText()
   const reduceMotion = useReducedMotion()
   const sel = useSelection()
@@ -272,7 +278,7 @@ export function NotificationRow({
         </View>
         <View style={styles.text}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}
-            numberOfLines={large ? undefined : TITLE_LINES}
+            numberOfLines={large ? AX_TITLE_LINES : TITLE_LINES}
             style={[font('bodyStrong', bold, fresh ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]), { color: stale ? COLOR.textSecondary : COLOR.textPrimary }]}
           >
             {title}

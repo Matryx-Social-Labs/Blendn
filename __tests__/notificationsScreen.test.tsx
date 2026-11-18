@@ -825,7 +825,7 @@ describe('one list per ask kind, every surface at once (requests placement A)', 
     ;(crewsApi.myCrews as jest.Mock).mockResolvedValue(crewsRead)
   })
   const settled = async () => {
-    await screen.findByText('New friend request')
+    await screen.findByText('Asha wants to be friends')
     await waitFor(() => expect(screen.getByTestId('friends-count').props.children).toBe('1'))
     await waitFor(() => expect(screen.getByTestId('crews-count').props.children).toBe('1:cr1'))
   }
@@ -850,7 +850,7 @@ describe('one list per ask kind, every surface at once (requests placement A)', 
     expect(screen.getByRole('button', { name: 'Accept' })).toBeTruthy()
     await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Friends accept r1' })))
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull()
-    expect(screen.queryByText('New friend request')).toBeNull()
+    expect(screen.queryByText('Asha wants to be friends')).toBeNull()
     expect(screen.getByTestId('friends-count').props.children).toBe('0')
     expect(api.respondToFriendRequest).toHaveBeenCalledTimes(1)
   })
