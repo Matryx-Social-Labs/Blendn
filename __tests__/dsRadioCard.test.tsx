@@ -268,3 +268,16 @@ describe('<RadioCard layout="row"> (Flow 4 `.jr`, SCRUM-1025)', () => {
     expect(screen.getByRole('checkbox', { name: 'Just here for the event, Not looking to meet anyone' })).toBeTruthy()
   })
 })
+
+describe('a start (kind="start"): the choice that acts at once, as the Lobby’s two starts (buttons board C leftovers)', () => {
+  it('is a button named by its title and consequence, with no checked state and no check disc, and it acts on every tap', async () => {
+    const onPress = jest.fn()
+    await render(<RadioCard kind="start" title="I’m looking" hint="Going alone? Find someone to go with." icon="search" onPress={onPress} testID="s" />)
+    const start = screen.getByRole('button', { name: 'I’m looking, Going alone? Find someone to go with.' })
+    expect(start.props.accessibilityState?.checked).toBeUndefined()
+    expect(screen.queryByRole('radio')).toBeNull()
+    await fireEvent.press(start)
+    await fireEvent.press(start)
+    expect(onPress).toHaveBeenCalledTimes(2)
+  })
+})

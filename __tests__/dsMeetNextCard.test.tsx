@@ -11,6 +11,7 @@ import { MeetNextCard } from '../components/ds/MeetNextCard'
 import { HueProvider } from '../components/ds/shared'
 import { COLOR, MATERIAL, RADIUS, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
+import { isLitControl } from './helpers/lit'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true })
@@ -56,7 +57,8 @@ it('they waved at you: the rim lights, the reason is “Waved at you” and how 
   expect(screen.getByText('4 min ago', { includeHiddenElements: true })).toBeTruthy()
   expect(screen.queryByText('Both open to dating', { includeHiddenElements: true })).toBeNull()
   expect(flat('m')).toMatchObject({ borderColor: COLOR.brandRose })
-  expect(flat('m-wave')).toMatchObject({ backgroundColor: COLOR.selectionRoseFill, borderColor: COLOR.brandRose })
+  // Wave back is a yes too: the lit look (board C), with the card's rim lit as well; no screen hue on the pill.
+  expect(isLitControl(screen.getByTestId('m-wave', { includeHiddenElements: true }))).toBe(true)
   expect(screen.getByRole('button', { name: 'Priya, Waved at you 4 min ago' }).props.accessibilityActions).toContainEqual({ name: 'wave', label: 'Wave back' })
 })
 
@@ -137,4 +139,20 @@ it('a hold opens the card with H.longPress (H1)', async () => {
   await fireEvent(screen.getByTestId('m'), 'longPress')
   expect(spy).toHaveBeenCalledTimes(1)
   expect(onPress).toHaveBeenCalledTimes(1)
+})
+
+describe('Wave is lit at rest (buttons board C leftovers, owner 2026-11-17 option b)', () => {
+  it('Wave and Wave back are the lit pill: the gradient rim around the tinted gradient', async () => {
+    await render(<MeetNextCard {...PRIYA} onWave={() => {}} testID="m" />)
+    expect(isLitControl(screen.getByTestId('m-wave', { includeHiddenElements: true }))).toBe(true)
+    expect(flat('m-wave').backgroundColor).toBeUndefined()
+  })
+
+  it('✓ Waved stays the still outline and Say hi the light pill: neither is a yes to press', async () => {
+    await render(<MeetNextCard {...PRIYA} wave="waved" testID="m" />)
+    expect(isLitControl(screen.getByTestId('m-wave', { includeHiddenElements: true }))).toBe(false)
+    await render(<MeetNextCard {...PRIYA} wave="mutual" onSayHi={() => {}} testID="m" />)
+    expect(isLitControl(screen.getByTestId('m-wave', { includeHiddenElements: true }))).toBe(false)
+    expect(flat('m-wave')).toMatchObject({ backgroundColor: COLOR.textPrimary })
+  })
 })

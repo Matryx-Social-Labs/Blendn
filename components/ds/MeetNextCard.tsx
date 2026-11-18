@@ -9,6 +9,7 @@ import { RadialWash } from '../ui/GradientFill'
 import { H } from '../../lib/haptics'
 import type { WaveStatus } from '../../lib/waves'
 import { Avatar } from './Avatar'
+import { LitFill } from './LitFill'
 import { WavingHand } from './PersonCard'
 import { type Face } from './Facepile'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
@@ -25,7 +26,7 @@ const WASH = [{ color: COLOR.brandRose, alpha: 0.28, at: [50, 0], size: [80, 60]
  * reason (two lines each) and a labelled 40 pt Wave pill (Wave B, SCRUM-1042). The three in a row share the tallest
  * one's height.
  *
- * The pill: Wave (quiet) → Wave back (lit, and the card's rim lights, "Waved at you · 4 min ago") → a still ✓ Waved
+ * The pill: Wave (lit, buttons board C) → Wave back (lit, and the card's rim lights, "Waved at you · 4 min ago") → a still ✓ Waved
  * (rose outline, does nothing: no Wave again) → Say hi (the light pill, "You both waved"). In flight the hand swings.
  * Tap opens the PersonCard, silently; a screen reader has the pill as the card's "Wave" or "Wave back" action, and the
  * card is read "{name}, {reason}", then "waved". Name and reason cap at 1.3×. Increase Contrast: the 50% hairline and
@@ -81,14 +82,10 @@ export function MeetNextCard({
   const sends = wave === 'none' || atYou
   const press = mutual ? onSayHi : sends ? onWave : undefined
   const actionLabel = mutual ? 'Say hi' : atYou ? 'Wave back' : 'Wave'
-  const pill =
-    wave === 'waved'
-      ? { backgroundColor: 'transparent', borderColor: sel.edge }
-      : atYou
-        ? { backgroundColor: sel.fill, borderColor: sel.edge }
-        : mutual
-          ? { backgroundColor: COLOR.textPrimary, borderColor: COLOR.textPrimary }
-          : { backgroundColor: COLOR.surfaceRaised, borderColor: tint(COLOR.textPrimary, PILL_EDGE_ALPHA) }
+  // Wave and Wave back are yeses, so they are the lit look (buttons board C; owner 2026-11-17: lit at rest): the LitFill
+  // draws its own rim. ✓ Waved is the still outline, Say hi the light pill.
+  const pill = wave === 'waved' ? styles.waved : mutual ? styles.sayHi : styles.lit
+  const waved = wave === 'waved' ? { borderColor: sel.edge } : null
   const ink = mutual ? COLOR.ink : wave === 'waved' ? sel.glyph : COLOR.textPrimary
   return (
     <View testID={testID && `${testID}-scale`} style={[styles.outer, { width }, previewState === 'pressed' && styles.pressed]}>
@@ -142,8 +139,9 @@ export function MeetNextCard({
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           testID={testID && `${testID}-wave`}
-          style={[styles.pill, pill]}
+          style={[styles.pill, pill, waved]}
         >
+          {sends ? <LitFill radius={PILL / 2} testID={testID && `${testID}-wave-lit`} /> : null}
           {mutual ? null : wave === 'sending' ? (
             <WavingHand testID={testID && `${testID}-hand-waving`} size={ICON.inline} />
           ) : (
@@ -166,8 +164,6 @@ export function MeetNextCard({
 
 /** The card's rim: the rose glyph at 35% (`.xmc` inset 0.5). */
 const CARD_EDGE_ALPHA = 0.35
-/** The quiet Wave pill's rim (Wave B `.wp`): white at 12%. */
-const PILL_EDGE_ALPHA = 0.12
 
 const styles = StyleSheet.create({
   outer: { alignSelf: 'stretch' },
@@ -201,5 +197,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACE.xs,
+    overflow: 'hidden',
   },
+  lit: { borderWidth: 0 },
+  waved: { backgroundColor: 'transparent' },
+  sayHi: { backgroundColor: COLOR.textPrimary, borderColor: COLOR.textPrimary },
 })

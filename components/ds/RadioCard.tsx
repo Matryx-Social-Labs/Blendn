@@ -51,6 +51,11 @@ export function CheckDisc({ selected, inset = CHECK_INSET, testID }: { selected:
 export type RadioCardProps = {
   title: string
   /**
+   * `start`: a choice that acts at once instead of being held (the Lobby's two starts, "I have spots" / "I'm looking"): read
+   * as a button with no checked state, never selected, and every tap acts. `radio` (the default): one of a group, held.
+   */
+  kind?: 'radio' | 'start'
+  /**
    * `lead`: the face, title, a value and the sentence down the left edge (Flow 4 `.rc`), for options that show what you
    * would look like. `row`: no face, the title and sentence left in a short row (Flow 4 `.jr`), for the plain answer under
    * a grid of pictures. `center` (the default): the RadioCard page's stack.
@@ -96,7 +101,7 @@ export type RadioCardProps = {
  * feedback, §13). The card grows with its text. Increase Contrast: the
  * unselected card takes the 50% hairline and the consequence goes white.
  */
-export function RadioCard({ title, layout = 'center', detail, hint, icon, avatar, selected = false, onPress, disabled = false, deselectable = false, action, previewState, testID }: RadioCardProps) {
+export function RadioCard({ title, kind = 'radio', layout = 'center', detail, hint, icon, avatar, selected = false, onPress, disabled = false, deselectable = false, action, previewState, testID }: RadioCardProps) {
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -108,10 +113,11 @@ export function RadioCard({ title, layout = 'center', detail, hint, icon, avatar
   // One ring layer, always drawn: the hue's 2 pt ring fades in with the fill; Increase Contrast keeps the 50% hairline when off.
   const ring = selected ? { borderWidth: SPACE.xxs, borderColor: sel.edge, opacity: 1 } : contrast ? { ...styles.contrast, opacity: 1 } : { borderWidth: SPACE.xxs, borderColor: sel.edge, opacity: 0 }
 
+  const start = kind === 'start'
   const choice = {
-    accessibilityRole: deselectable ? ('checkbox' as const) : ('radio' as const),
+    accessibilityRole: start ? ('button' as const) : deselectable ? ('checkbox' as const) : ('radio' as const),
     accessibilityLabel: [title, detail, hint].filter(Boolean).join(', '),
-    accessibilityState: { checked: selected, disabled },
+    accessibilityState: start ? { disabled } : { checked: selected, disabled },
   }
   const body = (
     <>
