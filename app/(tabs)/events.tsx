@@ -29,6 +29,8 @@ import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
 import { CONTROL_FONT_CAP } from '../../components/ds/shared'
 import { LeadPager, type LeadCard } from '../../components/pulse/LeadPager'
+import { applyOrder, FIX_WAIT_MS, lapOrder, leadOrderMode, type LeadOrder } from '../../lib/featuredLap'
+import { feedPlaylist } from '../../lib/feedMedia'
 import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
@@ -96,7 +98,7 @@ import { saveHomeCity, useHomeCitySlug } from '../../lib/homeCity'
 
 import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
-import { FIX_MAX_AGE_MS, fixOf, type PreciseFix } from '../../lib/roomButton'
+import { FIX_MAX_AGE_MS, fixAfterPermission, fixOf, type PreciseFix } from '../../lib/roomButton'
 import { homeCardProps, groupByDay } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import {
@@ -818,6 +820,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           }, 600)
         } else if (status === 'denied') {
           setLocationStatus('denied')
+          setUserLocation(null)
         } else {
           // 'undetermined' - permission not yet requested
           setLocationStatus('undetermined')
@@ -1238,9 +1241,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       Location.getForegroundPermissionsAsync()
         .then(({ status }) => {
           setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
+          // Location turned off in Settings while away: the fix from before goes, and every distance with it.
+          setUserLocation((current) => fixAfterPermission(status, current))
+          return status === 'granted' ? Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS }) : null
         })
-        .catch(() => {})
-      Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS })
         .then((position) => {
           if (!position) return
           // The state keeps its identity for a nearby fix (a new one would refetch the feed).
@@ -1563,9 +1567,34 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * narrowed page); under a search there is none (somebody who typed a name knows what they want).
    */
   const featuredSection = sections.find((x) => x.key === 'featured')
-  const leadEvents = useMemo(
+  const leadPicks = useMemo(
     () => (isSearching ? [] : isNarrowed ? featuredPick(events, now, seedDate) : (featuredSection?.events ?? [])),
     [isSearching, isNarrowed, events, now, seedDate, featuredSection]
+  )
+  /*
+   * Featured C's lap runs nearest first; the server's (sponsor's) order only breaks ties, and is the order with no fix.
+   * "No jumping around" (owner): while a fix is on its way the lead holds its first cover, the lap not started, for at
+   * most 3 s; the order is then decided once per visit (`leadOrderMode`) and frozen for each set of picks, so a later fix
+   * only updates distances.
+   */
+  const [leadOrder, setLeadOrder] = useState<LeadOrder>('pending')
+  const [fixWaitOver, setFixWaitOver] = useState(false)
+  const orderMode = leadOrderMode({ permission: locationStatus, sharing, hasFix: !!userLocation, timedOut: fixWaitOver, current: leadOrder })
+  if (orderMode !== leadOrder) setLeadOrder(orderMode)
+  const hasPicks = leadPicks.length > 0
+  useEffect(() => {
+    if (leadOrder !== 'pending' || !hasPicks) return
+    const id = setTimeout(() => setFixWaitOver(true), FIX_WAIT_MS)
+    return () => clearTimeout(id)
+  }, [leadOrder, hasPicks])
+  const picksKey = leadPicks.map((e) => e.id).sort().join('|')
+  const [frozenLead, setFrozenLead] = useState<{ key: string; ids: string[] } | null>(null)
+  if (orderMode !== 'pending' && hasPicks && frozenLead?.key !== picksKey) {
+    setFrozenLead({ key: picksKey, ids: lapOrder(leadPicks, orderMode === 'near' && hasFix).map((e) => e.id) })
+  }
+  const leadEvents = useMemo(
+    () => applyOrder(leadPicks, frozenLead?.key === picksKey ? frozenLead.ids : null),
+    [leadPicks, frozenLead, picksKey]
   )
   const leadCards = useMemo<LeadCard[]>(
     () =>
@@ -1577,6 +1606,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           promoted: featuredLabel(e) === PROMOTED_LABEL,
           category: e.category_group ?? undefined,
           overline: e.category ? `Featured · ${e.category}` : 'Featured',
+          playlist: feedPlaylist(e.media, e.cover_image_url),
         }
       }),
     [leadEvents, now, hasFix]
@@ -1586,6 +1616,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const [leadAt, setLeadAt] = useState({ key: '', page: 0, swipes: 0 })
   const leadPage = leadAt.key === leadKey ? Math.min(leadAt.page, Math.max(0, leadEvents.length - 1)) : 0
   const onLeadPage = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.swipes + 1 })), [leadKey])
+  // The lap moved on by itself: the venue lights where it stands, and the camera stays (no new swipe, so `focus.n` holds).
+  const onLeadLight = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.key === leadKey ? at.swipes : 0 })), [leadKey])
   const leadEvent = leadEvents[leadPage] ?? null
   const focusPin = useMemo(() => (leadEvent ? (pinsFor('events', { events: [leadEvent], venues: [] })[0] ?? null) : null), [leadEvent])
   const focus = useMemo(() => (focusPin ? { pin: focusPin, n: leadAt.key === leadKey ? leadAt.swipes : 0 } : null), [focusPin, leadAt, leadKey])
@@ -1978,6 +2010,11 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           onPressIn={(i) => warmEvent(leadEvents[i])}
           onLongPress={(i, anchor) => openPeek(leadEvents[i], anchor, 'hero')}
           onPage={onLeadPage}
+          onLight={onLeadLight}
+          // While the order waits on a fix: the first cover, the lap not started.
+          visible={visible && orderMode !== 'pending'}
+          screenReader={shell?.screenReader ?? false}
+          tookOver={shell?.mapTouched ?? false}
         />
       </View>
     ) : null

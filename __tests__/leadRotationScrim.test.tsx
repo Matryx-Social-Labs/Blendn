@@ -101,3 +101,17 @@ it('the DS hero elsewhere keeps its 62% scrim (no rotation there)', async () => 
   await render(<EventCard kind="hero" title="T" time="9 PM" venue="V" testID="h" />)
   expect(StyleSheet.flatten(screen.getByTestId('h-scrim', { includeHiddenElements: true }).props.style).height).toBe('62%')
 })
+
+it('the lead’s title takes three lines (pulse-media 07, the long-title case); two at large text; the DS hero keeps two', async () => {
+  const LONG = 'Thiruvananthapuram Indie Makers Night Market and Late Supper Club Takeover'
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
+  await render(<EventCard kind="hero" layout="lead" title={LONG} time="Sat · 7:30 PM" venue="V" testID="l" />)
+  expect(screen.getByText(LONG, { includeHiddenElements: true }).props.numberOfLines).toBe(3)
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 2 }, screen: { ...window, fontScale: 2 } }))
+  expect(screen.getByText(LONG, { includeHiddenElements: true }).props.numberOfLines).toBe(2)
+  await act(async () => Dimensions.set({ window, screen: window }))
+  // The control: a hero elsewhere.
+  await render(<EventCard kind="hero" title={LONG} time="9 PM" venue="V" testID="h" />)
+  expect(screen.getByText(LONG, { includeHiddenElements: true }).props.numberOfLines).toBe(2)
+})

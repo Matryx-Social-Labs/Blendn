@@ -72,6 +72,10 @@ export interface PulseShell {
    * popped up on the way back to Events (SCRUM-1064).
    */
   setSheets: (node: ReactNode) => void
+  /** A screen reader is on: Featured never runs on its own. */
+  screenReader: boolean
+  /** The map was touched this visit: Featured's lap is over (pulse-map, "your touch wins"). */
+  mapTouched: boolean
 }
 
 type Segment = 'events' | 'places'
@@ -151,6 +155,8 @@ export function HomeShell({
     setFitNear((n) => n + 1)
   }, [])
   const [screenReader, setScreenReader] = useState(false)
+  const [mapTouched, setMapTouched] = useState(false)
+  const onMapTouched = useCallback(() => setMapTouched(true), [])
   /*
    * With a screen reader the list is the screen: open it, and take the map out
    * of the reading order (it says nothing the list does not). Followed live,
@@ -233,8 +239,8 @@ export function HomeShell({
   const pulseVisible = focused && segment === 'events' && snap !== 'peek'
   const pulseFull = pulseVisible && snap === 'full' && !keyboardUp
   const shell = useMemo<PulseShell>(
-    () => ({ query, setQuery, searchOpen, lead: rest.lead, openPlaces, setMapBanners, setSheets }),
-    [query, searchOpen, rest.lead, openPlaces]
+    () => ({ query, setQuery, searchOpen, lead: rest.lead, openPlaces, setMapBanners, setSheets, screenReader, mapTouched }),
+    [query, searchOpen, rest.lead, openPlaces, screenReader, mapTouched]
   )
   const events = useMemo(() => renderEvents(setBrowse, pulseVisible, pulseFull, shell), [renderEvents, pulseVisible, pulseFull, shell])
   const searching = segment === 'events' && searchOpen
@@ -275,6 +281,7 @@ export function HomeShell({
             focus={segment === 'events' ? (browse.focus ?? null) : null}
             reach={segment === 'events' ? (browse.reach ?? null) : null}
             locateLift={locateLift}
+            onTouched={onMapTouched}
           />
         ) : null}
       </View>
