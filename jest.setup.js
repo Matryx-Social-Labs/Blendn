@@ -55,6 +55,14 @@ jest.mock('expo-video', () => ({
   VideoView: () => null,
 }))
 
+// Battery and network state are native (the Pulse lead's media saver): not in Low Power, on Wi-Fi. A test that cares mocks
+// `lib/mediaSaver` (or these) itself and wins.
+jest.mock('expo-battery', () => ({ useLowPowerMode: () => false, isLowPowerModeEnabledAsync: async () => false }))
+jest.mock('expo-network', () => ({
+  NetworkStateType: { CELLULAR: 'CELLULAR', WIFI: 'WIFI', NONE: 'NONE', UNKNOWN: 'UNKNOWN' },
+  useNetworkState: () => ({ type: 'WIFI', isConnected: true, isInternetReachable: true }),
+}))
+
 // AsyncStorage is native. Screens that only reach it through `lib/pushAsk` (a like, an RSVP) should load without each
 // test mocking it; a test that cares mocks it itself and wins.
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))

@@ -166,6 +166,7 @@ export const HomeMap = memo(function HomeMap({
   focus = null,
   locateLift,
   reach = null,
+  onTouched,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
@@ -205,6 +206,8 @@ export const HomeMap = memo(function HomeMap({
   locateLift?: SharedValue<number>
   /** Near me is on (Flow 3b · N1): where you stand. The map draws your reach and lights only what is inside it. */
   reach?: { latitude: number; longitude: number } | null
+  /** The person panned, pinched or tapped the map: Featured's lap is over for the visit (pulse-map, "your touch wins"). */
+  onTouched?: () => void
 }) {
   const { width, height } = useWindowDimensions()
   /*
@@ -533,6 +536,7 @@ export const HomeMap = memo(function HomeMap({
     if (userInteraction) {
       setTouched(true)
       setGestures((n) => n + 1)
+      onTouched?.()
     }
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
     setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
