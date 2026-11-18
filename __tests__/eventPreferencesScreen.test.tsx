@@ -8,7 +8,7 @@
  * "is it a button, and does it say what is chosen" is what a screen reader
  * gets, and a grep for the prop would pass on the wrong element.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { AX_XXXL, atScale, resetScale, textNodes } from './helpers/ax'
@@ -275,6 +275,14 @@ describe('the redesigned cards', () => {
     await act(async () => mockRefocus())
     await waitFor(() => expect(screen.getByRole('radio', { name: /^Named/ }).props.accessibilityState).toMatchObject({ disabled: false }))
     expect(screen.queryByRole('link', { name: 'Add a photo' })).toBeNull()
+  })
+
+  it('no photo: the blocked Named card draws your initial, as every named face without a photo does (SCRUM-1078, 06 A)', async () => {
+    Object.assign(mockParams, { askIntent: undefined })
+    api.getProfile.mockResolvedValue({ success: true, data: { name: 'Kid Vicious', profile: { age: 30, name: 'Kid Vicious', photos: [] } } } as never)
+    await render(<EventPreferences />)
+    const named = await screen.findByRole('radio', { name: /^Named, Kid/ })
+    expect(within(named).getByText('K', { includeHiddenElements: true })).toBeTruthy()
   })
 
   it('a photo already there: no link (control)', async () => {

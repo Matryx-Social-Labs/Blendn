@@ -196,6 +196,56 @@ describe('row', () => {
   })
 })
 
+describe('row at the largest text and under a date stamp (leftovers 06 A, SCRUM-1078)', () => {
+  const LONG_VENUE = 'Byg Brewski Brewing Company, Hennur'
+  const at = (fontScale: number) => jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 390, height: 844, scale: 3, fontScale })
+  /** The meta line the venue sits on: its host parent View. */
+  const lineOf = (node: { parent: unknown; type: unknown }) => {
+    let n = node.parent as typeof node | null
+    while (n && n.type !== 'View') n = n.parent as typeof node | null
+    return n
+  }
+  afterEach(() => jest.restoreAllMocks())
+
+  it('from the control cap the venue takes its own line and the time keeps its slot, so it is never cut to "B" (control: below the cap, one line)', async () => {
+    at(1.3)
+    await render(<EventCard kind="row" {...VINYL} distance={undefined} venue={LONG_VENUE} testID="e" />)
+    const venue = screen.getByTestId('e-venue', { includeHiddenElements: true })
+    const time = screen.getByText('9 PM', { includeHiddenElements: true })
+    expect(venue.props.numberOfLines).toBe(1)
+    expect(lineOf(venue)).not.toBe(lineOf(time))
+    // Alone on its line, the time needs no "·" before it.
+    expect(screen.queryByText('·', { includeHiddenElements: true })).toBeNull()
+
+    at(1.29)
+    await render(<EventCard kind="row" {...VINYL} distance={undefined} venue={LONG_VENUE} testID="e" />)
+    expect(lineOf(screen.getByTestId('e-venue', { includeHiddenElements: true }))).toBe(lineOf(screen.getByText('9 PM', { includeHiddenElements: true })))
+    expect(screen.getByText('·', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('stacked, the distance stays with its venue as its own slot, and the label still reads everything', async () => {
+    at(3.571)
+    await render(<EventCard kind="row" {...VINYL} venue={LONG_VENUE} testID="e" />)
+    const venue = screen.getByTestId('e-venue', { includeHiddenElements: true })
+    const distance = screen.getByTestId('e-distance', { includeHiddenElements: true })
+    expect(lineOf(distance)).toBe(lineOf(venue))
+    expect(StyleSheet.flatten(distance.props.style).flexShrink).toBe(0)
+    expect(lineOf(screen.getByText('9 PM', { includeHiddenElements: true }))).not.toBe(lineOf(venue))
+    expect(screen.getByRole('button', { name: `Vinyl Night, 9 PM, at ${LONG_VENUE}, 1.2 km, 42 going` })).toBeTruthy()
+  })
+
+  it('under a date stamp the meta says the clock alone, and the label keeps the day (control: no stamp, the time as given)', async () => {
+    const stamp = { iso: '2026-11-23T14:00:00Z', timeZone: 'Asia/Kolkata' }
+    await render(<EventCard kind="row" {...VINYL} distance={undefined} cover={undefined} stamp={stamp} time="23 Nov · 7:30 PM" venue={LONG_VENUE} testID="e" />)
+    expect(screen.queryByText(/23 Nov/, { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('7:30 PM', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByRole('button').props.accessibilityLabel).toContain('23 Nov · 7:30 PM')
+
+    await render(<EventCard kind="row" {...VINYL} distance={undefined} time="23 Nov · 7:30 PM" venue={LONG_VENUE} testID="e" />)
+    expect(screen.getByText(/23 Nov/, { includeHiddenElements: true })).toBeTruthy()
+  })
+})
+
 it('Increase Contrast: the 50% hairline on the card and the scrim 20% deeper', async () => {
   jest.spyOn(AccessibilityInfo, 'isDarkerSystemColorsEnabled').mockResolvedValue(true)
   await render(<EventCard kind="compact" {...VINYL} testID="e" />)
