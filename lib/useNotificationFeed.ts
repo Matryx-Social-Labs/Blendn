@@ -75,6 +75,8 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
   const [answered, setAnswered] = useState<ReadonlyMap<string, Outcome>>(new Map())
   const [clearKeepsRequests, setClearKeepsRequests] = useState(false)
   const [clearedOpenRequests, setClearedOpenRequests] = useState(false)
+  /** Clear all ran on this visit: the foot says so in one line rather than the retention footnote (Flow 9 A · 3). */
+  const [cleared, setCleared] = useState(false)
   /** The asks being answered here: one drawn from a shared list leaves it at the answer, and its row stays for the outcome's dwell. */
   const [held, setHeld] = useState<ReadonlyMap<string, NotificationItem>>(new Map())
   /** When the page was read: "2 min ago" is measured from here, so a render never reads the clock. */
@@ -394,9 +396,11 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
     setItems(clearKeepsRequests ? open : [])
     setPaging({ hasMore: false })
     setClearedOpenRequests(!clearKeepsRequests && open.length > 0)
+    setCleared(true)
     const restore = () => {
       setItems(before)
       setClearedOpenRequests(false)
+      setCleared(false)
       showToast('Couldn’t clear. Try again.', 'error', { haptic: 'error' })
     }
     try {
@@ -429,6 +433,7 @@ export function useNotificationFeed({ onArrive }: { onArrive?: (count: number) =
     refreshing,
     clearKeepsRequests,
     clearedOpenRequests,
+    cleared,
     liveIds,
     items,
     retry,

@@ -84,6 +84,21 @@ export interface CityOption {
   isDefault?: boolean
   /** `comingSoon`: listed, opens empty, says so. Absent (an older server) is `full`. */
   access?: 'full' | 'comingSoon'
+  /** The city's WhatsApp Channel (India, ruling 7). Not sent yet (ROADMAP § Backend later): absent, there is no row. */
+  whatsAppChannel?: string | null
+}
+
+/** WhatsApp's own channel links, and nothing else: the row opens what the server names, so the boundary checks it. */
+const WHATSAPP_CHANNEL = /^https:\/\/(?:www\.)?whatsapp\.com\/channel\/[A-Za-z0-9]+$/
+
+/**
+ * "Blend'n {city} on WhatsApp" in Notification settings: an Indian city with a channel only (owner ruling 7, 2026-11-17). Canada
+ * and every other country have none; a city whose channel the server has not sent yet has none either.
+ */
+export function cityChannel(city: CityOption | null | undefined): { city: string; url: string } | null {
+  const url = city?.whatsAppChannel?.trim()
+  if (!city || city.country !== 'IN' || !url || !WHATSAPP_CHANNEL.test(url)) return null
+  return { city: city.city, url }
 }
 
 export interface CatalogueCountry {

@@ -401,7 +401,7 @@ describe('askItems and withAsks', () => {
   it('draws a request older than 7 days from the list, with its pills, the person and the time', () => {
     const [row] = groupFeed(askItems([request('r8', 8)], []), { fresh: none, resolved: none, now: NOW }).waiting
     expect(row.item.data).toEqual({ type: 'friend_request', requestId: 'r8' })
-    expect(row.title).toBe('Asha wants to be friends')
+    expect(row.title).toBe('Asha Rao wants to be friends')
     expect(row.context).toBe(notificationWhen(ago(8 * DAY), NOW))
     expect(row.actions.map((a) => a.key)).toEqual(['accept', 'decline'])
   })
