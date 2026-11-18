@@ -1893,6 +1893,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           socketStatus={socketStatus}
           // While the travel banner is up, its "Back to {home}" is the way back: never two offers at once.
           switchTo={travel ? null : switchSuggestion}
+          browsing={selectedCity}
           onSwitch={(city) => bannerActions.current.chooseCity({ city }, true)}
           away={away}
           travel={travel}
@@ -1901,7 +1902,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
             if (back) choose(back, sameCity(back.city, here))
           }}
           onTravelDismiss={() => bannerActions.current.dismissTravel()}
-          locationDenied={false}
+          locationDenied={locationStatus === 'denied'}
           onOpenSettings={() => {}}
           refreshFailed={false}
           onRetry={() => {}}
@@ -1957,7 +1958,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         onSwitch={() => {}}
         away={null}
         // Not while the Nearby section is showing its own "Open Settings" prompt (unnarrowed, no location): one ask, not two.
-        locationDenied={locationStatus === 'denied' && (isNarrowed || !!userLocation)}
+        locationDenied={false}
         onOpenSettings={() => void Linking.openSettings().catch(() => {})}
         // Only over a list that is still on screen: with nothing loaded the whole page is the error (`PulseLoadFailed`).
         refreshFailed={!!netError && events.length > 0}
