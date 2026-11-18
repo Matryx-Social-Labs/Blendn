@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
 import { Chip } from '../ds/Chip'
+import { RadioCard } from '../ds/RadioCard'
 import { monoCaption } from '../ds/MonoFamily'
 import { font, SELECTION, useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
@@ -122,18 +123,11 @@ export function ClosedCard() {
 
 /** Nobody posted yet: the two ways to start, then what posting means. */
 export function LobbyStarts({ ticketsHidden, onStart }: { ticketsHidden?: boolean; onStart: (kind: 'offer' | 'seeking') => void }) {
+  // The DS choice card, as a start (buttons board C leftovers, owner 2026-11-17): it acts on the tap, never a held pick.
   const start = (kind: 'offer' | 'seeking', icon: 'car' | 'search', title: string, hint: string) => (
-    <Pressable
-      testID={`lobby-start-${kind}`}
-      onPress={() => onStart(kind)}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${hint}`}
-      style={({ pressed }) => [styles.card, styles.startCard, pressed && styles.pressed]}
-    >
-      <Icon name={icon} size={ICON.nav} color={ROSE.glyph} />
-      <Line strong="group">{title}</Line>
-      <Line>{hint}</Line>
-    </Pressable>
+    <View style={styles.startSlot}>
+      <RadioCard kind="start" icon={icon} title={title} hint={hint} onPress={() => onStart(kind)} testID={`lobby-start-${kind}`} />
+    </View>
   )
   return (
     <View style={styles.startsWrap}>
@@ -247,7 +241,7 @@ const styles = StyleSheet.create({
 
   startsWrap: { gap: SPACE.lg },
   starts: { flexDirection: 'row', gap: SPACE.md },
-  startCard: { flex: 1, padding: SPACE.lg - 1, gap: SPACE.xs, borderWidth: 1, borderColor: tint(ROSE.edge, 0.45) },
+  startSlot: { flex: 1 },
 
   // A 1 pt edge sits inside the box, so the padding gives that point back (`.lpin` draws it as an inset shadow).
   pinned: { padding: SPACE.lg - 1, paddingTop: SPACE.md - 1, gap: SPACE.sm + SPACE.xxs, borderWidth: 1, borderColor: tint(EMBER.edge, 0.45) },

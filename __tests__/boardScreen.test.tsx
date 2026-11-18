@@ -1214,12 +1214,19 @@ describe('L-A: new posts wait behind the pill (the list never jumps)', () => {
 describe('L-A: the starts never offer a ticket the event hides', () => {
   const none = { ...COUNTS, all: 0, offer: 0, seeking: 0, chat: 0, mine: 0, replies: 0 }
   it.each([
-    [true, 'I have spots. A ride or a table.'],
-    [false, 'I have spots. A ride, a table or a spare ticket.'],
+    [true, 'I have spots, A ride or a table.'],
+    [false, 'I have spots, A ride, a table or a spare ticket.'],
   ])('ticketsHidden %s', async (ticketsHidden, label) => {
     api.getBoard.mockResolvedValue(lobby([], { counts: none, ticketsHidden }) as never)
     await render(<BoardScreen />)
-    expect(await screen.findByLabelText(label)).toBeTruthy()
+    // The DS choice card, a start (buttons board C leftovers, owner 2026-11-17): a button, never a hand-rolled Pressable.
+    expect(await screen.findByRole('button', { name: label })).toBeTruthy()
+  })
+
+  it('the starts are the DS RadioCard, and the hand-rolled tile is gone', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'components', 'board', 'LobbyParts.tsx'), 'utf8') as string
+    expect(src).toMatch(/<RadioCard[^>]*kind="start"/)
+    expect(src).not.toMatch(/startCard/)
   })
 })
 
