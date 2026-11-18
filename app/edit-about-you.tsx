@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { Button } from '../components/ds/Button'
 import { ChipSet } from '../components/ds/ChipSet'
 import { WhoSees } from '../components/profile/WhoSees'
 import { FieldLabel, FieldNotes } from '../components/ds/TextField'
@@ -265,11 +266,6 @@ function EditAboutYouScreenContent() {
         title="Shown when you share one"
         state={scrolled ? 'scrolled' : 'rest'}
         onBack={() => router.back()}
-        save={{
-          onPress: () => void save(),
-          saving,
-          disabled: saving || !options,
-        }}
         testID="about-you-top"
       />
       {loadFailed ? (
@@ -286,7 +282,7 @@ function EditAboutYouScreenContent() {
         <ScrollView
           ref={scrollRef}
           testID="about-you-scroll"
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + SPACE.xxl + toastInset }]}
+          contentContainerStyle={[styles.content, { paddingBottom: SPACE.xxl + toastInset }]}
           onScroll={(e) => {
             const past = e.nativeEvent.contentOffset.y > 0
             if (past === scrolledRef.current) return
@@ -456,6 +452,12 @@ function EditAboutYouScreenContent() {
           ) : null}
         </ScrollView>
       )}
+      {loadFailed ? null : (
+        // Pinned at the foot (board A 04): the bar's one line keeps the screen's whole name, and Save is the one full gradient.
+        <View style={[styles.footer, { paddingBottom: insets.bottom + SPACE.sm }]}>
+          <Button kind="primary" size="lg" label="Save" loading={saving} disabled={saving || !options} onPress={() => void save()} testID="about-you-save" />
+        </View>
+      )}
     </View>
   )
 }
@@ -482,6 +484,7 @@ function BirthdaySign({ text, onPress }: { text: string; onPress: () => void }) 
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
+  footer: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, backgroundColor: COLOR.ink },
   content: {
     paddingHorizontal: SPACE.gutter,
     paddingTop: SPACE.sm,

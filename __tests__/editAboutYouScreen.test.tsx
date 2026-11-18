@@ -111,6 +111,9 @@ describe('the bar is "Shown when you share one", whichever screen opened it (Me 
     expect(screen.getByText('Shown when you share one')).toBeTruthy()
     // Negative control: the old title fails this.
     expect(screen.queryByText('About you')).toBeNull()
+    // Save is pinned at the foot (board A 04), so the one-line bar keeps the whole name (drive: "Shown when you share…").
+    expect(screen.getByTestId('about-you-save')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Save' })).toHaveLength(1)
     expect(screen.queryByText('Free money')).toBeNull()
     expect(screen.queryByText('How you match')).toBeNull()
   })
