@@ -282,7 +282,7 @@ describe('the redesigned cards', () => {
     api.getProfile.mockResolvedValue({ success: true, data: { name: 'Kid Vicious', profile: { age: 30, name: 'Kid Vicious', photos: [] } } } as never)
     await render(<EventPreferences />)
     const named = await screen.findByRole('radio', { name: /^Named, Kid/ })
-    expect(within(named).getByText('K', { includeHiddenElements: true })).toBeTruthy()
+    expect(within(named).getByTestId('avatar-initial', { includeHiddenElements: true }).props).toMatchObject({ kind: 'initial', name: 'Kid' })
   })
 
   it('a photo already there: no link (control)', async () => {

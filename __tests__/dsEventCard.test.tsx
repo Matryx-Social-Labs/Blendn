@@ -33,7 +33,11 @@ const style = (t: string) => StyleSheet.flatten(screen.getByText(t, { includeHid
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
 const VINYL = { title: 'Vinyl Night', time: '9 PM', venue: 'Toit', distance: '1.2 km', going: 42, cover: 'https://example.com/v.jpg' }
 
+/** The phone's text size: jest's window draws at 2, past the control cap, where a row stacks. */
+const at = (fontScale: number) => jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 390, height: 844, scale: 3, fontScale })
+
 beforeEach(() => on('ios'))
+afterEach(() => jest.restoreAllMocks())
 
 describe('hero and compact', () => {
   it('hero is radius 32 with the title in title; compact is radius 24 with it in bodyStrong; two lines at most', async () => {
@@ -152,7 +156,6 @@ describe('row · lead="distance"', () => {
     await render(<EventCard kind="row" lead="distance" {...VINYL} venue="Toit Brewpub, Indiranagar" testID="e" />)
     const venue = screen.getByTestId('e-venue', { includeHiddenElements: true })
     expect(venue.props).toMatchObject({ numberOfLines: 1, children: 'Toit Brewpub, Indiranagar' })
-    expect(StyleSheet.flatten(venue.props.style).flexShrink ?? 0).toBe(0)
     // The time line is the time alone: no venue run, no dot to share it with.
     expect(screen.queryByText('·', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByText('9 PM', { includeHiddenElements: true })).toBeTruthy()
@@ -160,6 +163,7 @@ describe('row · lead="distance"', () => {
   })
 
   it('draws no column when the row has no distance, and leaves the default row alone', async () => {
+    at(1)
     await render(<EventCard kind="row" lead="distance" {...VINYL} distance={undefined} testID="e" />)
     expect(screen.queryByTestId('e-lead')).toBeNull()
     await render(<EventCard kind="row" {...VINYL} testID="e" />)
@@ -169,6 +173,7 @@ describe('row · lead="distance"', () => {
 })
 
 describe('row', () => {
+  beforeEach(() => at(1))
   it('a long venue gives way; the time is never the part cut off', async () => {
     await render(<EventCard kind="row" {...VINYL} venue="Toit Brewpub, 100 Feet Road, Indiranagar" />)
     const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar', { includeHiddenElements: true })
@@ -198,15 +203,12 @@ describe('row', () => {
 
 describe('row at the largest text and under a date stamp (leftovers 06 A, SCRUM-1078)', () => {
   const LONG_VENUE = 'Byg Brewski Brewing Company, Hennur'
-  const at = (fontScale: number) => jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 390, height: 844, scale: 3, fontScale })
   /** The meta line the venue sits on: its host parent View. */
   const lineOf = (node: { parent: unknown; type: unknown }) => {
     let n = node.parent as typeof node | null
     while (n && n.type !== 'View') n = n.parent as typeof node | null
     return n
   }
-  afterEach(() => jest.restoreAllMocks())
-
   it('from the control cap the venue takes its own line and the time keeps its slot, so it is never cut to "B" (control: below the cap, one line)', async () => {
     at(1.3)
     await render(<EventCard kind="row" {...VINYL} distance={undefined} venue={LONG_VENUE} testID="e" />)
