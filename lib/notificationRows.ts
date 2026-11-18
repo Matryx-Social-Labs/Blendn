@@ -3,7 +3,8 @@ import type { IconName } from '../components/ui/Icon'
 import type { CrewInvite } from './crews'
 import type { FriendRequest } from './friends'
 import type { NotificationItem, NotificationKind } from './notificationFormat'
-import { calendarDate, weekdayIn, WEEKDAYS } from './time'
+import { personFace } from './personFace'
+import { calendarDate, dayKeyIn, weekdayIn, WEEKDAYS } from './time'
 
 /**
  * What a notification becomes on the Notifications screen (Flow 9 · 9.2, 9.3).
@@ -31,6 +32,8 @@ export type FeedRow = {
   waiting: boolean
   /** A talk-ask's history line: no pills, a chevron to where it is answered (Banter's Message requests, the chat). */
   chevron: boolean
+  /** Repeats folded into this row (`foldRepeats`), newest first: its own id is the newest's. Absent on a row of one. */
+  folded?: readonly string[]
 }
 
 export type FeedGroups = { waiting: FeedRow[]; fresh: FeedRow[]; earlier: FeedRow[] }
@@ -112,7 +115,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
 const MAX_STACK = 6
 
-/** Anything the server sends for a visual is checked here; a shape that is not exactly one of the six reads as absent. */
+/** Anything the server sends for a visual is checked here; a shape that is not exactly one of the seven reads as absent. */
 export function parseVisual(raw: unknown): NotificationVisualSpec | null {
   if (!isRecord(raw)) return null
   switch (raw.type) {
@@ -123,6 +126,10 @@ export function parseVisual(raw: unknown): NotificationVisualSpec | null {
     case 'creature': {
       const pseudonym = text(raw.pseudonym)
       return pseudonym ? { type: 'creature', pseudonym } : null
+    }
+    case 'initial': {
+      const name = text(raw.name)
+      return name ? { type: 'initial', name } : null
     }
     case 'emblem': {
       const seed = text(raw.seed)
@@ -196,10 +203,34 @@ function fallbackVisual(item: NotificationItem): NotificationVisualSpec {
   return { type: 'glyph', icon: GLYPH[item.kind] ?? 'bell' }
 }
 
+/**
+ * What an event change says (Flow 9 A): the new value, once the server sends `{field, from, to}` (ROADMAP § Backend later);
+ * until then the honest words for what moved (`changed`, the server's `time` / `venue`); null where neither is honest
+ * (cancelled, or nothing said), and the row keeps the push's own words.
+ */
+function changeTitle(data: NotificationItem['data']): string | null {
+  const to = text(data?.to)
+  if (to && data?.field === 'time') return text(data.from) ? `New time: ${to}, was ${text(data.from)}` : `New time: ${to}`
+  if (to && data?.field === 'venue') return `New place: ${to}`
+  const moved = new Set((data?.changed ?? '').split(',').map((f) => f.trim()).filter(Boolean))
+  if (!moved.size || [...moved].some((f) => f !== 'time' && f !== 'venue')) return null
+  return moved.size === 2 ? 'Time and place changed' : moved.has('time') ? 'Time changed' : 'Place changed'
+}
+
+/** A crewmate's "We're here" push says "Asha is in." (blendn-admin `crewInBody`); a plan's says "… wants to go together". */
+const isArrival = (item: NotificationItem) => item.kind === 'crew_here' && /\b(?:is|are) in\.(?:\s|$)/.test(item.body)
+
+/** The server's crew push is titled with the crew's name alone; the row adds the verb and names nobody (the push rule). */
+const crewHere = (crew: string, count: number) => (count > 1 ? `${count} from ${crew} are here` : `Someone from ${crew} is here`)
+
+/** No emoji in a title ("Message request accepted 🎉", research §0.7). */
+const withoutEmoji = (title: string) => title.replace(/\s*\p{Extended_Pictographic}[\p{Extended_Pictographic}\u{FE0F}\u{200D}]*\s*$/u, '')
+
 function fallbackCopy(item: NotificationItem, when: string): { title: string; context: string } {
   switch (item.kind) {
     case 'event_update':
     case 'event_changed':
+      return { title: changeTitle(item.data) ?? (item.body || item.title), context: joinLine(item.title, when) }
     case 'event_cancelled':
       return { title: item.body || item.title, context: joinLine(item.title, when) }
     case 'announcement':
@@ -208,8 +239,10 @@ function fallbackCopy(item: NotificationItem, when: string): { title: string; co
       return { title: 'You’re in: a place opened up', context: joinLine(WAITLIST_VENUE.exec(item.body)?.[1], when) }
     case 'rating_request':
       return { title: `How was ${item.title}?`, context: when }
+    case 'crew_here':
+      return { title: isArrival(item) ? crewHere(item.title, 1) : item.title, context: when }
     default:
-      return { title: item.title, context: when }
+      return { title: withoutEmoji(item.title), context: when }
   }
 }
 
@@ -283,7 +316,73 @@ export function groupFeed(
   }
   // Two lists meet here (friend requests, crew invites), each newest first: so is the one they make.
   const at = (r: FeedRow) => new Date(r.item.createdAt).getTime()
-  return { ...groups, waiting: [...groups.waiting].sort((a, b) => at(b) - at(a)) }
+  return {
+    waiting: [...groups.waiting].sort((a, b) => at(b) - at(a)),
+    fresh: foldRepeats(groups.fresh, now),
+    earlier: foldRepeats(groups.earlier, now),
+  }
+}
+
+/** A night runs until 6 AM: a wave at 2 AM is the night before's. */
+const NIGHT_ROLLOVER_MS = 6 * 60 * 60 * 1000
+const nightOf = (ms: number) => dayKeyIn(new Date(ms - NIGHT_ROLLOVER_MS))
+/** A folded wave row draws two faces and "+N" for the rest (board 01 A). */
+const FOLD_FACES = 2
+
+/**
+ * The repeats that fold into one row (research §8.3, Flow 9 A): waves per night, a crew's arrivals per night, an
+ * event's reminders (the latest only). Null for a row that stands alone: requests, changes, everything else.
+ */
+function foldKey(item: NotificationItem): string | null {
+  const ms = new Date(item.createdAt).getTime()
+  if (item.kind === 'match') return `match:${nightOf(ms)}`
+  if (isArrival(item) && item.data?.crewId) return `crew:${item.data.crewId}:${nightOf(ms)}`
+  // A reminder is the event update with no `reason` and no `changed` (blendn-admin `notifyEventUpdate`).
+  if (item.kind === 'event_update' && item.data?.eventId && !item.data.reason && !item.data.changed) return `reminder:${item.data.eventId}`
+  return null
+}
+
+/** "Tonight · latest 5 min ago" for a fold of this night or the last; otherwise the latest's time alone. */
+function nightContext(latest: NotificationItem, now: number): string {
+  const when = notificationWhen(latest.createdAt, now)
+  const night = nightOf(new Date(latest.createdAt).getTime())
+  if (night === nightOf(now)) return `Tonight · latest ${when}`
+  if (night === nightOf(now - DAY_MS)) return `Last night · latest ${when}`
+  return when
+}
+
+/** The newest of a fold, saying how many it holds. A title the server wrote for the reader is never replaced. */
+function foldedRow(rows: readonly FeedRow[], now: number): FeedRow {
+  const [latest] = rows
+  const base = { ...latest, folded: rows.map((r) => r.id) }
+  if (text(latest.item.display?.title)) return base
+  if (latest.item.kind === 'match') {
+    const people = rows.flatMap((r): StackPerson[] => (r.visual.type === 'creature' ? [{ pseudonym: r.visual.pseudonym }] : r.visual.type === 'photo' ? [{ uri: r.visual.uri }] : []))
+    const shown = people.slice(0, FOLD_FACES)
+    return {
+      ...base,
+      title: `${rows.length} people waved back`,
+      context: nightContext(latest.item, now),
+      visual: shown.length ? { type: 'stack', people: shown, extra: rows.length - shown.length || undefined } : latest.visual,
+    }
+  }
+  if (latest.item.kind === 'crew_here') return { ...base, title: crewHere(latest.item.title, rows.length) }
+  return base
+}
+
+/** Repeats as one row each, in the place of the newest; rows are newest first, and so is what comes back. */
+export function foldRepeats(rows: readonly FeedRow[], now: number = Date.now()): FeedRow[] {
+  const byKey = new Map<string, FeedRow[]>()
+  for (const row of rows) {
+    const key = foldKey(row.item)
+    if (key) byKey.set(key, [...(byKey.get(key) ?? []), row])
+  }
+  return rows.flatMap((row) => {
+    const key = foldKey(row.item)
+    const fold = key ? byKey.get(key)! : null
+    if (!fold || fold.length < 2) return [row]
+    return fold[0] === row ? [foldedRow(fold, now)] : []
+  })
 }
 
 /** The payload ids that say which thing a notification is about. */
@@ -357,7 +456,6 @@ const askKeyOf = (n: NotificationItem): string | null => {
 export function askItems(requests: readonly FriendRequest[], invites: readonly CrewInvite[]): NotificationItem[] {
   const friendRows = requests.map((r): NotificationItem => {
     const name = text(r.person?.name)
-    const photo = text(r.person?.photo)
     return {
       id: `friend_request:${r.id}`,
       kind: 'friend_request',
@@ -366,7 +464,7 @@ export function askItems(requests: readonly FriendRequest[], invites: readonly C
       data: { type: 'friend_request', requestId: r.id },
       readAt: r.createdAt,
       createdAt: r.createdAt,
-      display: { ...(name && { title: `${name.split(/\s+/)[0]} wants to be friends` }), ...(photo && { visual: { type: 'photo', uri: photo } }) },
+      display: name ? { title: `${name} wants to be friends`, visual: faceVisual(name, r.person?.photo) } : {},
       open: true,
     }
   })
@@ -386,8 +484,22 @@ export function askItems(requests: readonly FriendRequest[], invites: readonly C
   return [...friendRows, ...crewRows]
 }
 
-/** The feed with the asks it has no row for, each once: a notification for the same ask is kept (its id is what a push lands on). */
+/** A named person as `personFace` draws them: their photo, else their initial (Flow 5 C5, #570). */
+function faceVisual(name: string, photo: string | null | undefined): NotificationVisualSpec {
+  const face = personFace({ named: true, name, photo })
+  return face.kind === 'photo' ? { type: 'photo', uri: face.uri } : { type: 'initial', name }
+}
+
+/**
+ * The feed with the asks it has no row for, each once: a notification for the same ask is kept (its id is what a push lands on),
+ * and takes the list's face where the server sent it none (a named person with no photo is their initial, not a glyph).
+ */
 export function withAsks(items: readonly NotificationItem[], asks: readonly NotificationItem[]): NotificationItem[] {
+  const askOf = new Map(asks.map((a) => [askKeyOf(a), a]))
+  const faced = items.map((n) => {
+    const visual = askOf.get(askKeyOf(n))?.display?.visual
+    return visual && !parseVisual(n.display?.visual) ? { ...n, display: { ...n.display, visual } } : n
+  })
   const seen = new Set(items.map(askKeyOf).filter((k): k is string => k !== null))
   const added = asks.filter((a) => {
     const key = askKeyOf(a)
@@ -395,5 +507,5 @@ export function withAsks(items: readonly NotificationItem[], asks: readonly Noti
     seen.add(key)
     return true
   })
-  return [...items, ...added]
+  return [...faced, ...added]
 }

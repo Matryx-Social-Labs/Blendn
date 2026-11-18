@@ -12,7 +12,7 @@ jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({
 const mockUser = { user: { id: 'u_me' } }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockUser }))
 jest.mock('../lib/apiClient', () => ({
-  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), queuedRequest: jest.fn() },
+  apiClient: { getProfile: jest.fn(), updateProfile: jest.fn(), queuedRequest: jest.fn(), getEventCities: jest.fn() },
 }))
 jest.mock('../lib/notifications', () => ({
   initializePushNotifications: jest.fn(async () => null),
@@ -58,6 +58,7 @@ beforeEach(() => {
   kinds = { success: false, errorCode: 'NOT_FOUND' }
   api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true } } } as never)
   api.updateProfile.mockResolvedValue({ success: true } as never)
+  api.getEventCities.mockResolvedValue({ success: true, data: { cities: [] } } as never)
   permissions.mockResolvedValue({ status: 'granted', canAskAgain: true })
   ;(api.queuedRequest as jest.Mock).mockImplementation((url: string, init?: RequestInit) => {
     if (url.includes('notification-preferences')) {
@@ -151,20 +152,20 @@ describe('the kinds, until the server sends them', () => {
   it('hides the per-kind switches and keeps Offers, the one the server has', async () => {
     await render(<Screen />)
     expect(await screen.findByRole('switch', { name: /^Offers from places/ })).toBeTruthy()
-    for (const title of ['Matches and friends', 'Your crew', 'After the night']) expect(screen.queryByText(title)).toBeNull()
+    for (const title of ['Waves and friends', 'Your crew', 'After the night']) expect(screen.queryByText(title)).toBeNull()
   })
 
   it('shows them once the server sends all three, and a flip saves just that one', async () => {
     kinds = { success: true, data: { matches: true, crew: true, night: true } }
     await render(<Screen />)
-    const row = await screen.findByRole('switch', { name: 'Matches and friends' })
+    const row = await screen.findByRole('switch', { name: /^Waves and friends/ })
     fireEvent.press(row)
     await waitFor(() => {
       const put = (api.queuedRequest as jest.Mock).mock.calls.find(([, init]) => init?.method === 'PUT' && String(init.body).includes('matches'))
       expect(put?.[1].body).toBe(JSON.stringify({ matches: false }))
     })
-    expect(screen.getByRole('switch', { name: 'Your crew' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: 'After the night' })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: /^Your crew/ })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: /^After the night/ })).toBeTruthy()
   })
 
   it('puts a kind back with a toast when its save fails', async () => {
@@ -173,9 +174,9 @@ describe('the kinds, until the server sends them', () => {
       url.includes('notification-preferences') ? Promise.resolve(init?.method === 'PUT' ? { success: false } : kinds) : Promise.resolve({ success: true, data: { enabled: true } })
     )
     await render(<Screen />)
-    fireEvent.press(await screen.findByRole('switch', { name: 'Your crew' }))
+    fireEvent.press(await screen.findByRole('switch', { name: /^Your crew/ }))
     await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Couldn’t save “Your crew”. Try again.', 'error', { haptic: 'error' }))
-    expect(screen.getByRole('switch', { name: 'Your crew' }).props.accessibilityState.checked).toBe(true)
+    expect(screen.getByRole('switch', { name: /^Your crew/ }).props.accessibilityState.checked).toBe(true)
   })
 
   it('says what the switches do: they stop the push only', async () => {
@@ -227,5 +228,72 @@ describe('one offers row', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', 'notification-settings.tsx'), 'utf8') as string
     expect(src).not.toMatch(/Offers channel/)
     expect(src.match(/<OffersFromPlacesRow\b/g)).toHaveLength(1)
+  })
+})
+
+describe('Flow 9 A (SCRUM-1075)', () => {
+  const allOn = { success: true, data: { matches: true, crew: true, night: true } }
+
+  it('is titled “Notification settings”, not the feed’s name', async () => {
+    await render(<Screen />)
+    expect(await screen.findByRole('header', { name: 'Notification settings' })).toBeTruthy()
+    expect(screen.queryByRole('header', { name: 'Notifications' })).toBeNull()
+  })
+
+  it('each kind says what it covers, and “Matches” is gone', async () => {
+    kinds = allOn
+    await render(<Screen />)
+    expect(await screen.findByText('Someone waves back, a friend request, a reveal')).toBeTruthy()
+    expect(screen.getByText('Crewmates arriving, a crew invite, a Mix')).toBeTruthy()
+    expect(screen.getByText('Rate the night, your recap')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: /^Waves and friends/ })).toBeTruthy()
+    expect(screen.queryByText(/Matches/)).toBeNull()
+  })
+
+  it('the kinds dim while the phone blocks push, and the label says why', async () => {
+    kinds = allOn
+    permissions.mockResolvedValue({ status: 'denied', canAskAgain: false })
+    await render(<Screen />)
+    expect(await screen.findByText('Tell me about · off while push is off')).toBeTruthy()
+    const rows = await within(screen.getByTestId('notification-settings-kinds')).findAllByTestId(/^pref-[a-zA-Z_]+$/)
+    for (const row of rows) expect(row.props.accessibilityState.disabled).toBe(true)
+  })
+
+  it('negative control: with push on they are live and the label is plain', async () => {
+    kinds = allOn
+    await render(<Screen />)
+    const rows = await within(screen.getByTestId('notification-settings-kinds')).findAllByTestId(/^pref-[a-zA-Z_]+$/)
+    await waitFor(() => expect(rows[0].props.accessibilityState.disabled).toBe(false))
+    expect(screen.getByText('Tell me about')).toBeTruthy()
+  })
+
+  const home = (slug: string) => api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true, homeCitySlug: slug } } } as never)
+  const cities = [
+    { city: 'Thiruvananthapuram', eventCount: 3, slug: 'tvm', country: 'IN', whatsAppChannel: 'https://whatsapp.com/channel/0029Va' },
+    { city: 'Saint-Jean-sur-Richelieu', eventCount: 1, slug: 'sjr', country: 'CA', whatsAppChannel: 'https://whatsapp.com/channel/0029Vb' },
+  ]
+
+  it('an Indian home city with a channel has its WhatsApp row, which opens the channel', async () => {
+    home('tvm')
+    api.getEventCities.mockResolvedValue({ success: true, data: { cities } } as never)
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
+    await render(<Screen />)
+    fireEvent.press(await screen.findByRole('link', { name: /^Blend’n Thiruvananthapuram on WhatsApp/ }))
+    expect(openURL).toHaveBeenCalledWith('https://whatsapp.com/channel/0029Va')
+  })
+
+  it('negative controls: a Canadian city has none, and an Indian city with no channel yet has none', async () => {
+    home('sjr')
+    api.getEventCities.mockResolvedValue({ success: true, data: { cities } } as never)
+    const view = await render(<Screen />)
+    await waitFor(() => expect(api.getEventCities).toHaveBeenCalled())
+    await act(async () => {})
+    expect(screen.queryByTestId('notification-settings-city')).toBeNull()
+    view.unmount()
+    home('tvm')
+    api.getEventCities.mockResolvedValue({ success: true, data: { cities: [{ ...cities[0], whatsAppChannel: undefined }] } } as never)
+    await render(<Screen />)
+    await act(async () => {})
+    expect(screen.queryByTestId('notification-settings-city')).toBeNull()
   })
 })

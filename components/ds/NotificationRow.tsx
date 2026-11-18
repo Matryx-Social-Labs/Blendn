@@ -14,7 +14,7 @@ import { Creature, creatureFor } from './Creature'
 import { CrewEmblem } from './CrewEmblem'
 import { CategoryPlate } from './EventCard'
 import { Badge, PresenceDot } from './MonoFamily'
-import { announceOutcome, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { announceOutcome, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
 import { ContainedCover } from './LinkPreviewCard'
 
 /** Someone in a stack, as the server lets you see them: a photo only where the face is already yours to see. */
@@ -29,6 +29,8 @@ export type StackPerson = { pseudonym: string } | { uri: string }
 export type NotificationVisualSpec =
   | { type: 'photo'; uri: string }
   | { type: 'creature'; pseudonym: string }
+  /** A named person with no photo: their initial on their hue disc (`personFace`). */
+  | { type: 'initial'; name: string }
   | { type: 'glyph'; icon: IconName }
   | { type: 'emblem'; seed: string }
   | { type: 'event'; cover?: string | null; badge: IconName; cancelled?: boolean; category?: string }
@@ -49,6 +51,8 @@ const CHEVRON = 18
 /** The unread dot, and a history line's chevron, sit level with the title's first line. */
 const DOT_TOP = SPACE.sm + SPACE.xxs
 const STALE_OPACITY = 0.5
+/** A title's lines below the accessibility sizes (board 01 A: two in a title, one in a context). */
+const TITLE_LINES = 2
 /** A row's visual; the in-app banner draws it at 32. */
 const ROW_VISUAL = 40
 
@@ -86,6 +90,7 @@ export function NotificationVisual({
     <View testID={testID} style={box} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {visual.type === 'photo' ? <Avatar kind="photo" uri={visual.uri} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
       {visual.type === 'creature' ? <Avatar kind="creature" pseudonym={visual.pseudonym} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
+      {visual.type === 'initial' ? <Avatar kind="initial" name={visual.name} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
       {visual.type === 'emblem' ? <CrewEmblem seed={visual.seed} size={size} /> : null}
       {visual.type === 'glyph' ? (
         <View testID={testID && `${testID}-tile`} style={[box, styles.center, { borderRadius: corner, backgroundColor: lit ? sel.fill : COLOR.surfaceRaised }]}>
@@ -210,7 +215,7 @@ function DoneLine({ text, answered, bold, reduceMotion, testID }: { text: string
 
 /**
  * One notification (guidelines/components/NotificationRow.html, Flow 9 · 9.3):
- * a 40 pt visual, the title (700 while new, with the dot; two lines at most),
+ * a 40 pt visual, the title (700 while new, with the dot; two lines at most, unclamped at the accessibility sizes),
  * one line of context; a request adds its pills; a stale row dims its visual to
  * 50% and says "This request is no longer open" (the flow's frame; the page's
  * intro says "This isn't available any more").
@@ -236,6 +241,8 @@ export function NotificationRow({
 }: NotificationRowProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  // At the accessibility sizes the title wraps as far as it needs: two lines cut the verb ("Marc-André wants to be frie…", Flow 9 · 8).
+  const large = useLargeText()
   const reduceMotion = useReducedMotion()
   const sel = useSelection()
   const answered = useRecordedOutcome(state, doneText)
@@ -265,12 +272,12 @@ export function NotificationRow({
         </View>
         <View style={styles.text}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong}
-            numberOfLines={2}
+            numberOfLines={large ? undefined : TITLE_LINES}
             style={[font('bodyStrong', bold, fresh ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]), { color: stale ? COLOR.textSecondary : COLOR.textPrimary }]}
           >
             {title}
           </Text>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), { color: stale ? COLOR.textTertiary : detail }]}>{line}</Text>
         </View>
         {chevron ? (
           <View style={styles.dot} testID={testID && `${testID}-chevron`}>

@@ -17,16 +17,16 @@ import { CollapsingRow } from '../components/notifications/CollapsingRow'
 import { LandingHighlight } from '../components/notifications/LandingHighlight'
 import { NewPill } from '../components/ds/NewPill'
 import { NotificationsSkeleton } from '../components/notifications/NotificationsSkeleton'
-import type { IconName } from '../components/ui/Icon'
+import { Icon, type IconName } from '../components/ui/Icon'
 import { OfflineBanner, useOffline } from '../components/OfflineBanner'
 import { OverflowMenu } from '../components/crews/OverflowMenu'
 import { PullIndicator } from '../components/pulse/PullIndicator'
-import { COLOR, DURATION, EASING, RADIUS, RISE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { COLOR, DURATION, EASING, ICON, RADIUS, RISE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { Logger } from '../lib/logger'
 import { claimBannerHost } from '../lib/inAppBanners'
 import { useReducedMotion } from '../lib/motion'
-import { buildEntries, entryIndexOf, type NotificationEntry } from '../lib/notificationEntries'
+import { buildEntries, entryIndexOf, rowHolds, type NotificationEntry } from '../lib/notificationEntries'
 import { findLandingRow, type FeedRow } from '../lib/notificationRows'
 import { navigateFromNotificationData } from '../lib/notifications'
 import { showSheet } from '../lib/sheet'
@@ -36,11 +36,13 @@ import { usePushPreference } from '../lib/usePushPreference'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 
 /** What the screen says when it has nothing to show, and when it could not read (Flow 9 · 9.2 frames 02, 03). */
-const EMPTY_BODY = 'Friend requests, crew invites, matches and event changes land here. Messages and message requests are in Banter.'
+const EMPTY_BODY = 'Friend requests, crew invites, waves back and event changes land here. Messages are in Banter.'
 /** The server clears every row, requests too, but answers none of them: they stay open where they live. */
 const CLEAR_OVER_REQUESTS = 'This clears every notification here. Requests waiting on you stay open in Friends and Crews until you answer them. Nothing is sent to anyone.'
 const EMPTY_AFTER_CLEAR = 'Friend requests and crew invites you haven’t answered are still open in Friends and Crews.'
 const FOOTNOTE = 'That’s everything we keep: read notifications for 30 days, unread for 90.'
+/** After Clear all, the foot says what happened (Flow 9 A · 3), not the retention footnote, which read as the reason the list is short. */
+const CLEARED_LINE = 'Cleared. Requests waiting on you stay until you answer them.'
 const PUSH_OFF_TEXT = 'Push is off. These still land here, but your phone won’t tell you.'
 const DONE_TEXT: Record<string, string> = { friend_request: 'You’re friends now' }
 /** A glyph tile turns over with the answer: the request's `user-plus` becomes `user-check` (the tile pops, `Glyph`). */
@@ -92,7 +94,6 @@ function NotificationsScreenContent() {
   })
   const push = usePushPreference()
   const offline = useOffline()
-  const bannerShown = offline || (push.off && feed.load !== 'loading')
   const onRefresh = () => void feed.refresh()
   // iOS pulls with the monogram (motion #18) and plays H.threshold as it arms; Android keeps the platform's control.
   const pull = usePullToRefresh({ refreshing: feed.refreshing, onRefresh })
@@ -115,25 +116,38 @@ function NotificationsScreenContent() {
     }, [])
   )
 
-  const volatile = useMemo(
-    () => ({ fresh: feed.fresh, requests: feed.requestState, landing: landing?.run, live: feed.liveIds, bannerShown }),
-    [feed.fresh, feed.requestState, landing?.run, feed.liveIds, bannerShown]
-  )
   /** See all N: every row read, and the next page of the lists when N runs past them (SCRUM-1062). */
   const seeAllWaiting = () => {
     setAllWaiting(true)
     feed.moreWaiting()
   }
-  const entries = useMemo(
-    () => buildEntries(feed.groups, { allWaiting, hasMore: feed.hasMore, waitingTotal: feed.waitingTotal }),
-    [feed.groups, allWaiting, feed.hasMore, feed.waitingTotal]
-  )
 
-  // Landing from a push or a link: scroll to a third of the screen, then the highlight (motion #50). Once, and only for a row it can find.
+  /*
+   * Landing from a push or a link: the row it names, among what the screen draws. Waiting on you is the shared lists (SCRUM-1062),
+   * so a request with no row in the feed (cleared, older than its first page) is found there; a folded row by any it holds.
+   */
   const landingId = useMemo(() => {
     const { type, requestId, crewId, eventId, conversationId } = params
-    return findLandingRow(feed.items, { type, requestId, crewId, eventId, conversationId })?.id ?? null
-  }, [params, feed.items])
+    const { waiting, fresh, earlier } = feed.groups
+    const id = findLandingRow([...waiting.map((r) => r.item), ...feed.items], { type, requestId, crewId, eventId, conversationId })?.id
+    return id ? ([...waiting, ...fresh, ...earlier].find((r) => rowHolds(r, id))?.id ?? null) : null
+  }, [params, feed.items, feed.groups])
+  // A landed request is first in Waiting on you for this visit, from behind See all too (Flow 9 A · 2); the rest keep their order.
+  const entries = useMemo(
+    () => buildEntries(feed.groups, { allWaiting, hasMore: feed.hasMore, waitingTotal: feed.waitingTotal, lift: landingId, cleared: feed.cleared }),
+    [feed.groups, allWaiting, feed.hasMore, feed.waitingTotal, landingId, feed.cleared]
+  )
+  // Offline over nothing would claim to show what you had (Android stacked three messages): the banner only over rows.
+  const offlineShown = offline && entries.length > 0
+  // Failed is the one thing the screen says: no banner above it.
+  const pushOffShown = push.off && feed.load === 'ready'
+  const bannerShown = offlineShown || pushOffShown
+  const volatile = useMemo(
+    () => ({ fresh: feed.fresh, requests: feed.requestState, landing: landing?.run, live: feed.liveIds, bannerShown }),
+    [feed.fresh, feed.requestState, landing?.run, feed.liveIds, bannerShown]
+  )
+
+  // Scroll to a third of the screen, then the highlight (motion #50). Once, and only for a row it can find.
   useEffect(() => {
     const run = `${landingId}:${params.at ?? ''}`
     if (feed.load !== 'ready' || !landingId || landed.current === run) return
@@ -269,6 +283,11 @@ function NotificationsScreenContent() {
       <View style={styles.more}>
         <Spinner size={20} />
       </View>
+    ) : entry.cleared ? (
+      <View style={styles.cleared} testID="notifications-cleared">
+        <Icon name="check-check" size={ICON.inline} color={COLOR.textSecondary} />
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.clearedText]}>{CLEARED_LINE}</Text>
+      </View>
     ) : (
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.footnote]}>{FOOTNOTE}</Text>
     )
@@ -276,8 +295,8 @@ function NotificationsScreenContent() {
 
   const banners = (
     <View style={styles.banners}>
-      <OfflineBanner text="Offline. Showing what you had." testID="notifications-offline" />
-      {push.off && feed.load !== 'loading' ? (
+      {offlineShown ? <OfflineBanner text="Offline. Showing what you had." testID="notifications-offline" /> : null}
+      {pushOffShown ? (
         <BannerPresence><Banner kind="info" icon="bell-off" text={PUSH_OFF_TEXT} action={{ label: 'Turn on', icon: 'bell', onPress: () => void push.turnOn() }} busy={push.saving} testID="notifications-push-off" /></BannerPresence>
       ) : null}
     </View>
@@ -287,10 +306,12 @@ function NotificationsScreenContent() {
   if (feed.load === 'failed') {
     state = (
       <StateScreen
-        icon="cloud-off"
+        icon="bell-off"
         title="Couldn’t load notifications"
         body="Check your connection and try again."
-        actions={[{ label: 'Try again', onPress: () => void feed.retry(), pressHaptic: H.primary }]}
+        // The screen's one hero (Flow 9 A · 3, button direction C).
+        actions={[{ label: 'Try again', kind: 'primary', onPress: () => void feed.retry(), pressHaptic: H.primary, testID: 'notifications-retry' }]}
+        fitActions
         gutter
         testID="notifications-failed"
       />
@@ -298,7 +319,16 @@ function NotificationsScreenContent() {
   } else if (!entries.length) {
     state = (
       <Animated.View exiting={reduceMotion ? EMPTY_OUT_REDUCED : emptyOut}>
-        <StateScreen icon="bell" title="Quiet for now" body={feed.clearedOpenRequests ? EMPTY_AFTER_CLEAR : EMPTY_BODY} gutter testID="notifications-empty" />
+        <StateScreen
+          icon="bell"
+          title="Quiet for now"
+          body={feed.clearedOpenRequests ? EMPTY_AFTER_CLEAR : EMPTY_BODY}
+          // One way on (Flow 9 A · 3): the settings the copy implies, neutral.
+          actions={[{ label: 'Notification settings', icon: 'settings', kind: 'secondary', onPress: () => router.push('/notification-settings') }]}
+          fitActions
+          gutter
+          testID="notifications-empty"
+        />
       </Animated.View>
     )
   }
@@ -398,6 +428,9 @@ const styles = StyleSheet.create({
   state: { flexGrow: 1, justifyContent: 'center', paddingBottom: SPACE.xxxl },
   headerFill: { flexGrow: 1 },
   more: { alignItems: 'center', paddingTop: SPACE.sm, paddingBottom: SPACE.lg },
+  // Board 03 A: centred, 40 under the card, on the gutter. design-exception: 40 is not on the space scale; 32 + 8.
+  cleared: { alignItems: 'center', gap: SPACE.sm, paddingTop: SPACE.xxl + SPACE.sm, paddingHorizontal: SPACE.gutter, paddingBottom: SPACE.xxl },
+  clearedText: { color: COLOR.textSecondary, textAlign: 'center' },
   footnote: { color: COLOR.textTertiary, textAlign: 'center', paddingHorizontal: SPACE.gutter, paddingTop: SPACE.sm, paddingBottom: SPACE.xxl },
 })
 
