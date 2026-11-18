@@ -32,7 +32,6 @@ const WHITE_STAYS: Record<string, { count: number; why: string }> = {
   'components/ds/StoryCard.tsx': { count: 1, why: 'a rendered share image, not UI' },
   'components/ds/OfferCard.tsx': { count: 1, why: 'the “used” status mark' },
   'components/offer/OfferSections.tsx': { count: 1, why: 'the redeemed stamp, a status mark' },
-  'app/(tabs)/going.tsx': { count: 1, why: 'the saved heart: a status mark on a card' },
   'components/ds/ReactionBar.tsx': { count: 1, why: 'the reaction you picked, in a popover over glass: a state of the message, not a set' },
 }
 const WHITE = /COLOR\.selectionFill\b/g

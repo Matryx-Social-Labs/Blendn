@@ -194,6 +194,12 @@ export type PreciseFix = { latitude: number; longitude: number; accuracy?: numbe
 export const FIX_MAX_AGE_MS = 120_000
 export const FIX_REQUIRED_ACCURACY_M = 100
 
+/**
+ * The fix the app may keep once it has read the permission again: none unless it is granted. A fix from before location
+ * was turned off in Settings kept every distance printing ("7.3 km" on the Featured card with location denied).
+ */
+export const fixAfterPermission = (status: string, current: PreciseFix | null): PreciseFix | null => (status === 'granted' ? current : null)
+
 /** A fix as `expo-location` hands it over, kept with the accuracy and the time that make it usable against a fence. */
 export const fixOf = (position: { coords: { latitude: number; longitude: number; accuracy: number | null }; timestamp: number }): PreciseFix => ({
   latitude: position.coords.latitude,

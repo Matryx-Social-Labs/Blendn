@@ -110,6 +110,16 @@ describe('the small title\'s room', () => {
     expect(span.width).toBeGreaterThanOrEqual(100)
   })
 
+  it('stops at the right-hand controls as drawn: the Save pill is wider than a circle (going-lifecycle S1)', async () => {
+    expect(sceneBarTitleSpan(393, 44, 200).right).toBe(16 + 200 + 12)
+    jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 })
+    await render(bar())
+    await act(async () => {
+      fireEvent(screen.getByTestId('scene-bar-actions'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 200, height: 44 } } })
+    })
+    expect(StyleSheet.flatten(screen.getByTestId('scene-bar-title', { includeHiddenElements: true }).props.style)).toMatchObject({ right: 228 })
+  })
+
   it('is 145 pt on a 393 pt iPhone, not the 41 a symmetric inset left', () => {
     expect(sceneBarTitleSpan(393, 44).width).toBe(145)
   })
