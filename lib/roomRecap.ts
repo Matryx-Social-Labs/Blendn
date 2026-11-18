@@ -51,6 +51,13 @@ export function timeSpentLabel(ms: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
+/** "2 hours 15 minutes": what a screen reader says for `timeSpentLabel`'s "2h 15m" (a reader says "2h" as letters). */
+export function spokenMinutes(total: number): string {
+  if (total < 1) return 'under a minute'
+  const part = (n: number, unit: string) => (n ? `${n} ${unit}${n === 1 ? '' : 's'}` : '')
+  return [part(Math.floor(total / 60), 'hour'), part(total % 60, 'minute')].filter(Boolean).join(' ')
+}
+
 /**
  * The recap, or null while the night is still going.
  *

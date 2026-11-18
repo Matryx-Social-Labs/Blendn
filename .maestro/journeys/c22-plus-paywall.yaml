@@ -65,7 +65,7 @@ tags:
     timeout: 10000
 - tapOn: "20 minutes"
 - extendedWaitUntil:
-    visible: "Live here\\. .* left"
+    visible: "Live at .*left\\..*"
     timeout: 45000
 
 # --- The expiry prompt, five minutes before the end: stay → the paywall ---
@@ -90,13 +90,11 @@ tags:
     notVisible: "Restore purchases"
     timeout: 10000
 # Still live on the free window: the paywall changed nothing.
-- assertVisible: "Live here\\. .* left"
+- assertVisible: "Live at .*left\\..*"
 
 # --- A second refusal this session: the reason, never a second paywall ---
-- tapOn: "Stop being live"
-- extendedWaitUntil:
-    visible: "Go live again.*20 minutes|Go Live"
-    timeout: 30000
+# No Leave button: stopping is the live sheet's Stop and its hold.
+- runFlow: ../subflows/venue-stop-live.yaml
 - tapOn:
     text: "Pick another time"
     optional: true

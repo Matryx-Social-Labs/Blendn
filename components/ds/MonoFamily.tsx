@@ -125,8 +125,12 @@ export function Badge({
   )
 }
 
-/** 10 pt white beside something unread; the 8 pt live green beside what is live now. Never both on one row. */
-const DOT = { unread: 10, live: 8 } as const
+/**
+ * 10 pt white beside something unread; the 8 pt live green beside what is live now; the 8 pt warning amber beside a live
+ * window in its last five minutes (always with the word "Ending": never colour alone). Never two on one row.
+ */
+const DOT = { unread: 10, live: 8, ending: 8 } as const
+const DOT_COLOR = { live: COLOR.live, ending: COLOR.warning } as const
 
 /**
  * A dot. A trait of its row, not an element: the row's label says "unread" or
@@ -139,7 +143,7 @@ export function PresenceDot({
   color,
   testID,
 }: {
-  kind?: 'unread' | 'live'
+  kind?: keyof typeof DOT
   size?: number
   ring?: string
   /** The unread dot in a world's light tone (a notification row: `useSelection().glyph`), instead of white. */
@@ -152,7 +156,7 @@ export function PresenceDot({
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={[
-        { width: size, height: size, borderRadius: RADIUS.capsule, backgroundColor: kind === 'live' ? COLOR.live : (color ?? COLOR.textPrimary) },
+        { width: size, height: size, borderRadius: RADIUS.capsule, backgroundColor: kind === 'unread' ? (color ?? COLOR.textPrimary) : DOT_COLOR[kind] },
         ring ? { borderWidth: SPACE.xxs, borderColor: ring } : null,
       ]}
     />

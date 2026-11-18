@@ -1,0 +1,21 @@
+# Stop being live at the place on screen (venue live pill B, SCRUM-1063): the dock's
+# state line opens the live sheet; its Stop asks "Stop being live at ‹place›?" and
+# the neutral hold (900 ms; longPressOn holds longer) checks out. There is no Leave
+# button. Ends when the dock offers Go live again.
+appId: com.matryxsociallabs.blendn
+---
+- tapOn:
+    id: "venue-live-left"
+- extendedWaitUntil:
+    visible: "Stop"
+    timeout: 10000
+- tapOn: "Stop"
+- extendedWaitUntil:
+    visible: "Stop being live at .*\\?"
+    timeout: 10000
+- longPressOn:
+    id: "session-stop-hold"
+- extendedWaitUntil:
+    visible:
+      id: "venue-go-live"
+    timeout: 30000

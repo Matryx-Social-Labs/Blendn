@@ -2,7 +2,8 @@ import type { Ref } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { Button } from './Button'
-import { font, useBoldText, useLargeText } from './shared'
+import { PresenceDot } from './MonoFamily'
+import { font, useBoldText, useLargeText, useTwoLineNames } from './shared'
 import type { IconName } from '../ui/Icon'
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, SPACE } from '../../lib/design/tokens'
 
@@ -13,6 +14,8 @@ const STACK_GAP = 10
 export type DockRowAction = {
   label: string
   kind: 'primary' | 'lit'
+  /** The dock's own 52 (default), or md 48 where the board draws it (the venue's live line, beside a time). */
+  size?: 'dock' | 'md'
   icon?: IconName
   onPress?: () => void
   loading?: boolean
@@ -29,6 +32,10 @@ export type DockRowAction = {
  * it, and one action on the right. State is never glued to a variable value: each line ellipsizes in its own slot. With
  * `onPressState` the state is a control ("You’re going · Change"), read as one. At the largest text the two stack.
  * Inside a `<Dock line>`.
+ *
+ * A state with a time (the venue's "● Live · 2h 45m", "● Ending · 4:59") gives the time its own slot after the word:
+ * it never shrinks and has no line limit, so the word gives way first and the time is never cut. Such a row stacks from
+ * `TWO_LINE_NAMES_FROM` rather than at the AX sizes: at 1.3 on a 360 phone the word was cut to "..".
  */
 export function DockRow({
   state,
@@ -38,6 +45,9 @@ export function DockRow({
   stateHint,
   stateRef,
   action,
+  dot,
+  clock,
+  label: spoken,
   testID,
 }: {
   state: string
@@ -45,6 +55,12 @@ export function DockRow({
   link?: string
   /** The rest of the second line; after a link it follows a " · " in its own colour. */
   sub?: string
+  /** A presence dot before the state: live green, or the warning amber of a window that is ending. */
+  dot?: 'live' | 'ending'
+  /** The state's time, in its own slot after "·"; Geist Mono 700 when it is a ticking clock. */
+  clock?: { text: string; mono: boolean }
+  /** Read instead of "state. link. sub", where the words leave out what they are about (the venue's place). */
+  label?: string
   onPressState?: () => void
   stateHint?: string
   /** The state's control, for focus to come back to when what it opened closes (the check-out sheet). */
@@ -53,13 +69,38 @@ export function DockRow({
   testID?: string
 }) {
   const bold = useBoldText()
-  const large = useLargeText()
+  const ax = useLargeText()
+  const twoLine = useTwoLineNames()
+  const large = ax || (clock !== undefined && twoLine)
   const lines = large ? undefined : 1
+  const stateText = (
+    <Text testID={testID && `${testID}-state`} numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('group', bold), styles.ink, (dot || clock) && styles.give]}>
+      {clock ? `${state} ·` : state}
+    </Text>
+  )
   const words = (
     <>
-      <Text testID={testID && `${testID}-state`} numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('group', bold), styles.ink]}>
-        {state}
-      </Text>
+      {dot || clock ? (
+        <View style={styles.head}>
+          {dot ? (
+            <View style={styles.dot}>
+              <PresenceDot kind={dot} testID={testID && `${testID}-dot`} />
+            </View>
+          ) : null}
+          {stateText}
+          {clock ? (
+            <Text
+              testID={testID && `${testID}-clock`}
+              maxFontSizeMultiplier={MAX_FONT_SCALE.body}
+              style={[font('group', bold, clock.mono ? FONT_FAMILY.mono[700] : undefined), styles.ink, styles.keep]}
+            >
+              {clock.text}
+            </Text>
+          ) : null}
+        </View>
+      ) : (
+        stateText
+      )}
       {link || sub ? (
         <Text testID={testID && `${testID}-sub`} numberOfLines={lines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('note', bold), styles.secondary]}>
           {link ? (
@@ -76,7 +117,7 @@ export function DockRow({
       ) : null}
     </>
   )
-  const label = [state, link, sub].filter(Boolean).join('. ')
+  const label = spoken ?? [state, link, sub].filter(Boolean).join('. ')
   return (
     <View testID={testID} style={[styles.row, large && styles.stack]}>
       {onPressState ? (
@@ -92,7 +133,7 @@ export function DockRow({
         <Button
           label={action.label}
           kind={action.kind}
-          size="dock"
+          size={action.size ?? 'dock'}
           icon={action.icon}
           onPress={action.onPress}
           loading={action.loading}
@@ -110,6 +151,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md },
   stack: { flexDirection: 'column', alignItems: 'stretch', gap: STACK_GAP },
   state: { flex: 1, minWidth: 0 },
+  /** The dot 8 before the words (`.s1` gap). */
+  head: { flexDirection: 'row', alignItems: 'center' },
+  dot: { marginRight: SPACE.sm },
+  /** The state's word gives way to its time; the time keeps its whole width. */
+  give: { flexShrink: 1 },
+  /** The space after "·" is a margin: Android drops a trailing space from a squeezed line ("Ending ·4:16"). */
+  keep: { flexShrink: 0, marginLeft: SPACE.xs, fontVariant: ['tabular-nums'] },
   full: { alignSelf: 'stretch' },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
