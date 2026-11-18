@@ -170,6 +170,8 @@ describe('Going: New in the Lobby', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'The Lobby. Rides, plus-ones and hellos before the night' }))
     expect(mockPush).toHaveBeenLastCalledWith({ pathname: '/board/[eventId]', params: { eventId: 'ev1' } })
     expect(screen.queryByText('New in the Lobby')).toBeNull()
+    // Sheet 14's `.nlb .sub`: 13/18, so the quiet line is the board's height (meta's 14/20 drew it 2 pt taller).
+    expect(StyleSheet.flatten(screen.getByText('Rides, plus-ones and hellos before the night', { includeHiddenElements: true }).props.style)).toMatchObject({ fontSize: 13, lineHeight: 18 })
     seenAt.mockResolvedValue(null)
     api.getBoard.mockResolvedValue({ success: false, error: 'closed' })
     await render(<NewInLobbyRow eventId="ev1" />)

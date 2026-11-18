@@ -217,7 +217,8 @@ export function NewInLobbyRow({ eventId, style }: { eventId: string; style?: Sty
           <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('control', bold), styles.ink]}>
             The Lobby
           </Text>
-          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
+          {/* Sheet 14's `.nlb .sub`, 13/18. */}
+          <Text numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold), styles.secondary]}>
             {QUIET_LINE}
           </Text>
         </View>
