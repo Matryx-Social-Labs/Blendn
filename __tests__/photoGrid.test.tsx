@@ -4,6 +4,7 @@
  * `photoDrag.test.tsx`.
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { StyleSheet } from 'react-native'
 
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
 jest.mock('../lib/photoUtils', () => ({
@@ -46,12 +47,12 @@ const act1 = (label: string, actionName: string) =>
   fireEvent(screen.getByLabelText(label), 'accessibilityAction', { nativeEvent: { actionName } })
 
 describe('the grid at rest (edit 01)', () => {
-  it('says how many, marks the first Main, and draws a dashed slot for each one still to come', async () => {
+  it('marks the first Main and, from three photos, draws the row of three under them (board A 03: no count header)', async () => {
     await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Photo 3 of 3')
-    expect(screen.getByText('3 of 6 · saved as you go')).toBeTruthy()
+    expect(screen.queryByText(/saved as you go/)).toBeNull()
     expect(screen.getByText('Main')).toBeTruthy()
-    expect(screen.getByText(/Drag to reorder; the first is what people see/)).toBeTruthy()
+    expect(screen.getByText(/Hold and drag to reorder. Shown once you reveal./)).toBeTruthy()
     // One Add in the reading order; the other empty slots are for a finger.
     expect(screen.getAllByLabelText('Add photo')).toHaveLength(1)
   })
@@ -159,8 +160,8 @@ describe('a photo moderation took down (edit 05)', () => {
     pu.loadPulledPhotos.mockResolvedValue({ pulled: pulledPhotos(photoStates(false)), live: null })
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
-    // Two photos up and one removed: the count is of the photos on the profile.
-    expect(screen.getByText('2 of 6 · saved as you go')).toBeTruthy()
+    // Two photos up and one removed: the photos on the profile, then the removed one.
+    expect(screen.getAllByLabelText(/^Photo \d of 2/)).toHaveLength(2)
     await act(async () => {
       act1('Photo 2 of 2', 'earlier')
     })
@@ -173,7 +174,7 @@ describe('a photo moderation took down (edit 05)', () => {
     await render(<PhotoManager userId="u" />)
     await screen.findByLabelText('Photo 3 of 3')
     expect(screen.queryByTestId('tile-pulled')).toBeNull()
-    expect(screen.getByText(/Drag to reorder; the first is what people see/)).toBeTruthy()
+    expect(screen.getByText(/Hold and drag to reorder. Shown once you reveal./)).toBeTruthy()
   })
 
   it('lets the person replace it: the tile adds a different photo, and its notice goes once that photo is on the profile', async () => {
@@ -220,7 +221,7 @@ describe('a photo moderation took down (edit 05)', () => {
     await screen.findByTestId('photos-main-pulled')
     expect(screen.getByText('Your main photo was removed. The next one is your main photo now.')).toBeTruthy()
     expect(screen.getByText('Think we got it wrong? Write to support@blendn.app.')).toBeTruthy()
-    expect(screen.queryByText(/Drag to reorder/)).toBeNull()
+    expect(screen.queryByText(/Hold and drag to reorder/)).toBeNull()
   })
 
   const REPLACE = 'Removed. This photo didn’t meet the photo rules. Add a different photo'
@@ -295,6 +296,30 @@ describe('a photo moderation took down (edit 05)', () => {
     await render(<PhotoManager userId="u" />)
     await screen.findByTestId('tile-pulled')
     expect(screen.queryByTestId('photos-main-pulled')).toBeNull()
-    expect(screen.getByText(/Drag to reorder/)).toBeTruthy()
+    expect(screen.getByText(/Hold and drag to reorder/)).toBeTruthy()
+  })
+})
+
+/* Board A 03 (owner approved 2026-11-18): the main 2fr over two rows, two slots beside it; the row of three only from three photos. */
+describe('the board’s layout', () => {
+  const rect = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style)
+
+  it('one photo: the main and two slots beside it, nothing under them', async () => {
+    pu.loadUserPhotos.mockResolvedValue(list(1))
+    // An earlier test's removed photo would hold slot 1.
+    pu.loadPulledPhotos.mockResolvedValue({ pulled: [], live: null })
+    await render(<PhotoManager userId="u" />)
+    await screen.findByTestId('photo-tile-0')
+    expect(screen.getAllByTestId(/^photo-slot-/)).toHaveLength(2)
+    const main = rect('photo-tile-0')
+    const side = rect('photo-slot-1')
+    expect(main.width).toBeCloseTo(2 * side.width, 5)
+    expect(main.height).toBeCloseTo(2 * side.height + 8, 5)
+  })
+
+  it('control: three photos open the row under them, up to six slots', async () => {
+    await render(<PhotoManager userId="u" />)
+    await screen.findByLabelText('Photo 3 of 3')
+    expect(screen.getByTestId('photo-slot-5')).toBeTruthy()
   })
 })

@@ -584,8 +584,8 @@ function EditProfileContent() {
         >
           <OfflineStrip offline={offline} />
 
-          {/* Photos: the card heads itself (its count is the grid's). */}
-          <EditCard>{authUser ? <PhotoManager userId={authUser.id} maxPhotos={6} onDragging={setDragging} /> : null}</EditCard>
+          {/* Photos on the page, no card (board A 03): the main 2fr over two rows, two slots beside it. */}
+          {authUser ? <PhotoManager userId={authUser.id} maxPhotos={6} onDragging={setDragging} /> : null}
 
           <EditCard title="You" onLayout={(y) => (basicInfoY.current = y)}>
             {isLoading ? (
