@@ -42,8 +42,6 @@ const landsOnceEnded = (n: number) => `${n === 1 ? 'it lands' : 'they land'} her
 /** D-H1: a count above 0 with nothing the list may show yet. Never "your first night". */
 export const NIGHTS_HELD = {
   locked: (total: number) => `${nightsCount(total)} · the older ones are with Blend’n+`,
-  /** Under the tiles: the server's admin S-1 contract, the latest 3 ended nights shown and the rest counted. */
-  more: (locked: number) => `${locked.toLocaleString('en-US')} more ${locked === 1 ? 'night' : 'nights'} with Blend’n+`,
   pending: (total: number) => `${nightsCount(total)} · ${landsOnceEnded(total)}`,
   /** Beside the ended tiles: the count's nights the grid doesn't draw yet, so the stat and the section add up (RC 7). */
   running: (n: number) => `${nightsCount(n)} still running · ${landsOnceEnded(n)}`,
@@ -151,13 +149,6 @@ export function NightsOut({
             <Text testID="nights-running" style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
               {NIGHTS_HELD.running(view.running)}
             </Text>
-          ) : null}
-          {view.locked > 0 ? (
-            <View testID="nights-more" style={styles.held}>
-              <Text style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
-                {NIGHTS_HELD.more(view.locked)}
-              </Text>
-            </View>
           ) : null}
         </>
       ) : null}

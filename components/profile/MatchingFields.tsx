@@ -195,7 +195,8 @@ export function MatchingFields({
       {/* The first set sits straight under the card's own label: the gap (`set`) is between sets, not above the first. */}
       <View testID="matching-first-set">
         <ChipSet
-          label="WHAT ARE YOU OPEN TO?"
+          // In a sheet, its title heads the set (ChipSet: omit the label where a control above heads it).
+          label={part ? undefined : 'WHAT ARE YOU OPEN TO?'}
           items={offered.map((intent) => ({ key: intent.value, label: `${intent.label}${intent.hint ? ` · ${intent.hint}` : ''}` }))}
           selection="multi"
           selected={intents}
@@ -275,7 +276,7 @@ export function MatchingFields({
           <WorkFieldsFailed onRetry={onRetryWorkFields} retrying={workFieldsRetrying} />
         ) : (
           <ChipSet
-            label="WHAT DO YOU DO?"
+            label={part ? undefined : 'WHAT DO YOU DO?'}
             // D20: who sees it, beside the job title below, which shows only once you reveal.
             hint={WORK_FIELD_HINT}
             items={workFields.map((f) => ({ key: f.slug, label: f.label }))}

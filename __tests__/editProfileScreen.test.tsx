@@ -121,6 +121,19 @@ describe('matching as rows that open their pickers (Me + settings A 03)', () => 
     expect(screen.queryByTestId('matching-intents')).toBeNull()
   })
 
+  it('the sheet\'s title heads its chips: no shouted second label inside (drive 2026-11-18)', async () => {
+    api.getWorkFields.mockResolvedValue({ success: true, data: { workFields: [{ slug: 'design', label: 'Design' }] } } as never)
+    await render(<EditProfile />)
+    await screen.findByDisplayValue('Sam')
+    await openRow('open')
+    await screen.findByTestId('matching-intents')
+    expect(screen.queryByText('WHAT ARE YOU OPEN TO?')).toBeNull()
+    await fireEvent.press(screen.getByText('Done'))
+    await openRow('do')
+    await screen.findByText('Design')
+    expect(screen.queryByText('WHAT DO YOU DO?')).toBeNull()
+  })
+
   it('a pick in a sheet shows on its row and waits for Save', async () => {
     await render(<EditProfile />)
     await screen.findByDisplayValue('Sam')
