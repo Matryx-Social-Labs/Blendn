@@ -96,6 +96,23 @@ beforeEach(() => {
   )
 })
 
+/* Owner ruling 2026-11-18: the app is free to use. Blend'n+ in Settings only where it is sold (`gated`, staging). */
+describe('Blend’n+ only in a gated city', () => {
+  it('ungated (prod): no Blend’n+ row, no launch line', async () => {
+    api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
+    await render(<Screen />)
+    await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
+    await act(async () => {})
+    expect(screen.queryByTestId('settings-plus')).toBeNull()
+    expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
+  })
+
+  it('control: gated (staging), the row is there', async () => {
+    await render(<Screen />)
+    expect(await screen.findByTestId('settings-plus')).toBeTruthy()
+  })
+})
+
 describe('Sign out', () => {
   it('asks before signing out, and Cancel keeps you in', async () => {
     await render(<Screen />)
@@ -432,14 +449,6 @@ describe('Delete account', () => {
 })
 
 describe('Blendn+ row (review H2)', () => {
-  it('in a launch season says it is free and opens an info tray that sells nothing', async () => {
-    api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
-    await render(<Screen />)
-    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Free during launch in your city/ }))
-    expect(await screen.findByText('Blend’n+ is free here for now')).toBeTruthy()
-    expect(router.push).not.toHaveBeenCalled()
-  })
-
   it('where it is sold, opens the paywall', async () => {
     await render(<Screen />)
     await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())

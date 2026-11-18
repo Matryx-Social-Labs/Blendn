@@ -258,10 +258,23 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
       expect(mockOpenPaywall).toHaveBeenCalledWith('profile', { userInitiated: true })
     })
 
+    it('an ungated city (prod, owner ruling 2026-11-18: the app is free): no Blend’n+ row, no launch line, no way to the paywall', async () => {
+      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })
+      await mount({ success: true, data: { profile: { badges } } })
+      await screen.findByTestId('me-badges')
+      await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
+      expect(screen.queryByTestId('me-plus-row')).toBeNull()
+      expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
+      expect(mockOpenPaywall).not.toHaveBeenCalled()
+      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } })
+    })
+
     it('is the last thing on Me: Nights out, the badges, About, then Blend’n+', async () => {
       await mount({ success: true, data: { profile: { badges } } })
       await screen.findByTestId('me-badges')
       await screen.findByTestId('nights-first')
+      // The row waits for the Plus status (it shows only where Blend’n+ is sold).
+      await screen.findByTestId('me-plus-row')
       expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first|about)$/).map((n) => n.props.testID)).toEqual(['nights-first', 'me-badges', 'about', 'me-plus-row'])
     })
 
