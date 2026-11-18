@@ -21,6 +21,7 @@ import {
   answersWithin,
   withinOptions,
   NO_ABOUT_YOU,
+  optionsForCountry,
   signName,
   splitTierB,
   tierBNames,
@@ -38,6 +39,7 @@ import { Logger } from '../lib/logger'
 import { useReducedMotion } from '../lib/motion'
 import { queryCache } from '../lib/queryCache'
 import { refreshAuthUser, useAuth } from '../lib/useAuth'
+import { useHomeCountry } from '../lib/homeCity'
 
 /** Under Reduce Motion the sign card still fades: the change is explained, not moved. */
 const REDUCED_FADE_MS = 200
@@ -90,6 +92,9 @@ function EditAboutYouScreenContent() {
   /** The switch, apart from the pick: on with no sign chosen saves no sign. */
   const [signOn, setSignOn] = useState(false)
   const [system, setSystem] = useState<SignSystem>('western')
+  /** The lists as this account's country sees them (SCRUM-711): India's as served, a neutral view anywhere else. */
+  const country = useHomeCountry(authUser?.id)
+  const shown = options ? optionsForCountry(options, country, loaded, answersLoaded) : null
   const [attempt, setAttempt] = useState(0)
   const [scrolled, setScrolled] = useState(false)
   // The bar only needs to hear when the scroll crosses the top, not every frame of it.
@@ -257,7 +262,7 @@ function EditAboutYouScreenContent() {
   return (
     <View style={styles.screen}>
       <TopBar
-        title="About you"
+        title="Shown when you share one"
         state={scrolled ? 'scrolled' : 'rest'}
         onBack={() => router.back()}
         save={{
@@ -300,14 +305,14 @@ function EditAboutYouScreenContent() {
                     <ChipSet
                       label="Languages you speak"
                       hint={`Besides English, ${upTo(options.maxLanguages)}.`}
-                      items={options.languages.map((l) => ({
+                      items={(shown?.languages ?? []).map((l) => ({
                         key: l.slug,
                         label: l.label,
                       }))}
                       selection="multi"
                       selected={form.languages}
                       max={options.maxLanguages}
-                      // Folds like Home state (D-L9): 21 chips unfolded made a long page.
+                      // Folds like Home region (D-L9): 21 chips unfolded made a long page.
                       foldAfter={LANGUAGES_SHOWN}
                       foldNoun="languages"
                       // At the cap the rest dim and say why, instead of a tap that does nothing.
@@ -324,18 +329,20 @@ function EditAboutYouScreenContent() {
                     />
                     <WhoSees field="languages" />
                   </View>
+                  {/* Only where the server has the country's regions (India today); a held one always shows, to be cleared. */}
+                  {shown?.homeStates.length ? (
                   <View onLayout={(e) => (ys.current.homeState = e.nativeEvent.layout.y)}>
                     <ChipSet
-                      label="Home state"
+                      label="Home region"
                       hint="A state, never a town. Tap again to clear."
-                      items={options.homeStates.map((s) => ({
+                      items={shown.homeStates.map((s) => ({
                         key: s.slug,
                         label: s.label,
                       }))}
                       selection="single"
                       selected={form.homeState ? [form.homeState] : []}
                       foldAfter={HOME_STATES_SHOWN}
-                      foldNoun="home states"
+                      foldNoun="regions"
                       onToggle={(slug) => {
                         clearError('homeState')
                         setForm((f) => ({
@@ -348,10 +355,11 @@ function EditAboutYouScreenContent() {
                     />
                     <WhoSees field="homeState" />
                   </View>
-                  {options.thisOrThat.length ? (
+                  ) : null}
+                  {shown?.thisOrThat.length ? (
                     <View style={styles.field}>
                       <FieldLabel text="This or that" bold={bold} contrast={false} />
-                      {options.thisOrThat.map((q) => (
+                      {shown.thisOrThat.map((q) => (
                         <SegmentedControl
                           key={q.slug}
                           pair

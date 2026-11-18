@@ -38,6 +38,9 @@ const mockMe = { user: { id: 'me' } }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockMe, refreshAuthUser: jest.fn() }))
 const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
+// The account's country, from its home city (#584's `useHomeCountry`); India unless a test says otherwise.
+let mockCountry: string | null = 'IN'
+jest.mock('../lib/homeCity', () => ({ useHomeCountry: () => mockCountry }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
 import { router } from 'expo-router'
@@ -77,6 +80,7 @@ const profile = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   jest.clearAllMocks()
   mockParams = {}
+  mockCountry = 'IN'
   api.getProfileOptions.mockResolvedValue({ success: true, data: OPTIONS })
   api.getProfile.mockResolvedValue(profile())
   api.getThisOrThat.mockResolvedValue({ success: true, data: { answers: {} } })
@@ -100,11 +104,13 @@ const save = async () => {
   })
 }
 
-describe('the bar is "About you", whichever screen opened it (SYS-18: Settings\' row is titled the same)', () => {
-  it.each<Record<string, string>>([{}, { from: 'settings' }])('reads "About you" for %j, and prints nothing a link says', async (params) => {
+describe('the bar is "Shown when you share one", whichever screen opened it (Me + settings A 04: one name for one screen)', () => {
+  it.each<Record<string, string>>([{}, { from: 'settings' }])('reads the one name for %j, and prints nothing a link says', async (params) => {
     mockParams = { ...params, title: 'Free money' }
     await open()
-    expect(screen.getByText('About you')).toBeTruthy()
+    expect(screen.getByText('Shown when you share one')).toBeTruthy()
+    // Negative control: the old title fails this.
+    expect(screen.queryByText('About you')).toBeNull()
     expect(screen.queryByText('Free money')).toBeNull()
     expect(screen.queryByText('How you match')).toBeNull()
   })
@@ -459,7 +465,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     await tap('Chai')
     await save()
     expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'b' })
-    expect(mockToast).toHaveBeenCalledWith('Saved, except your home state.', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenCalledWith('Saved, except your home region.', 'error', { haptic: 'error' })
   })
 
   it('the person’s edits stay as chosen, and a second Save sends only what did not land', async () => {
@@ -565,7 +571,7 @@ describe('a partly saved profile (the sweep §4): the sentence goes under the fi
     expect(sentence.props.accessibilityLiveRegion).toBe('assertive')
     // Under Home state only: Languages was not sent, so it has none.
     expect(screen.getAllByText(LIMIT)).toHaveLength(1)
-    expect(mockToast).toHaveBeenCalledWith('Saved, except your home state.', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenCalledWith('Saved, except your home region.', 'error', { haptic: 'error' })
   })
 
   it('nothing landed: "Couldn’t save. Try again." and a retry line on any other refusal', async () => {
@@ -610,5 +616,50 @@ describe('Languages fold like Home state', () => {
     expect(screen.queryByText('Language 9')).toBeNull()
     expect(screen.getByLabelText(`${21 - LANGUAGES_SHOWN} more languages`)).toBeTruthy()
     expect(screen.getByText(/“Both Leos ♌”/)).toBeTruthy()
+  })
+})
+
+describe('lists follow the account’s country (SCRUM-711, Me + settings A 04)', () => {
+  const TORONTO_OPTIONS = {
+    ...OPTIONS,
+    languages: [
+      { slug: 'kannada', label: 'Kannada' },
+      { slug: 'kannada_learning', label: 'Learning Kannada' },
+      { slug: 'bengali', label: 'Bengali' },
+    ],
+    thisOrThat: [
+      { slug: 'coffee_or_chai', a: 'Filter coffee ☕', b: 'Chai 🫖' },
+      { slug: 'mountains_or_beaches', a: 'Mountains', b: 'Beaches' },
+    ],
+  }
+
+  it('India: Home region lists the states, Kannada leads, Filter coffee / Chai is asked', async () => {
+    api.getProfileOptions.mockResolvedValue({ success: true, data: TORONTO_OPTIONS })
+    await open()
+    expect(screen.getByText('Home region')).toBeTruthy()
+    expect(screen.getByText('Kerala')).toBeTruthy()
+    expect(screen.getByText('Learning Kannada')).toBeTruthy()
+    expect(screen.getByLabelText('Filter coffee ☕ or Chai 🫖')).toBeTruthy()
+  })
+
+  it('a Toronto account: no Indian states, no Kannada first, no "Learning Kannada", no Filter coffee / Chai', async () => {
+    mockCountry = 'CA'
+    api.getProfileOptions.mockResolvedValue({ success: true, data: TORONTO_OPTIONS })
+    await open()
+    expect(screen.queryByText('Kerala')).toBeNull()
+    expect(screen.queryByText('Home region')).toBeNull()
+    expect(screen.queryByText('Learning Kannada')).toBeNull()
+    const langs = ['Bengali', 'Kannada'].map((l) => screen.getByText(l))
+    expect(langs).toHaveLength(2)
+    expect(screen.queryByLabelText('Filter coffee ☕ or Chai 🫖')).toBeNull()
+    expect(screen.getByLabelText('Mountains or Beaches')).toBeTruthy()
+  })
+
+  it('a Toronto account that already holds an Indian state still sees it, so it can be cleared', async () => {
+    mockCountry = 'CA'
+    api.getProfile.mockResolvedValue(profile({ home_state: 'kerala' }))
+    await open()
+    expect(screen.getByText('Kerala')).toBeTruthy()
+    expect(screen.queryByText('Goa')).toBeNull()
   })
 })

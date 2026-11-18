@@ -13,9 +13,9 @@ describe('the Tier B split (the server refuses a whole request over the day’s 
 
   it('names what a body carries, in the person’s words', () => {
     expect(tierBNames({ languages: [] })).toBe('languages')
-    expect(tierBNames({ home_state: null })).toBe('home state')
+    expect(tierBNames({ home_state: null })).toBe('home region')
     expect(tierBNames({ sun_sign: null, sign_system: null })).toBe('sign')
-    expect(tierBNames({ languages: [], home_state: 'goa', sun_sign: 'leo', sign_system: 'western' })).toBe('languages, home state and sign')
+    expect(tierBNames({ languages: [], home_state: 'goa', sun_sign: 'leo', sign_system: 'western' })).toBe('languages, home region and sign')
     expect(tierBNames({ languages: [], sun_sign: 'leo', sign_system: 'western' })).toBe('languages and sign')
   })
 })
