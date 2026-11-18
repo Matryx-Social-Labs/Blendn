@@ -562,51 +562,7 @@ function EditProfileContent() {
           {/* Photos: the card heads itself (its count is the grid's). */}
           <EditCard>{authUser ? <PhotoManager userId={authUser.id} maxPhotos={6} onDragging={setDragging} /> : null}</EditCard>
 
-          {/*
-            You and matching, between Photos and Basics (R4.1 14.2). Its own card and not folded into ABOUT YOU, because these are
-            the only fields on this screen that nobody else ever reads as text -- they feed `rankMatches` and surface as a tag on a
-            card, never as the values behind it.
-          */}
-          <EditCard title="You and matching">
-            <MatchingFields
-              intents={intents}
-              onToggleIntent={onToggleIntent}
-              workField={workField}
-              onChangeWorkField={changeWorkField}
-              expertiseOptions={workField ? expertiseByField[workField] : undefined}
-              expertise={expertise}
-              maxExpertise={maxExpertise}
-              onChangeExpertise={setExpertise}
-              workFields={workFields}
-              workFieldsFailed={workFieldsFailed}
-              onRetryWorkFields={() => {
-                setWorkFieldsRetrying(true)
-                void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
-              }}
-              workFieldsRetrying={workFieldsRetrying}
-              gender={gender}
-              onChangeGender={setGender}
-              orientations={orientations}
-              onChangeOrientations={setOrientations}
-              interestedIn={interestedIn}
-              onChangeInterestedIn={setInterestedIn}
-              offerDating={mayDate(liveAge)}
-              showOrientation={showOrientation}
-            />
-            {/*
-              Languages, home state, sign and this-or-that: display only, saved on their own screen so this form's save stays what
-              it was.
-            */}
-            <SettingsRow
-              icon="sparkles"
-              title="Languages, home & more"
-              label="Languages, home state, sign and this or that. Shown on cards when you share one with someone. Never used to rank."
-              trail="chevron"
-              onPress={() => router.push('/edit-about-you')}
-            />
-          </EditCard>
-
-          <EditCard title="Basic information" onLayout={(y) => (basicInfoY.current = y)}>
+          <EditCard title="You" onLayout={(y) => (basicInfoY.current = y)}>
             {isLoading ? (
               <FieldsSkeleton fields={BASIC_FIELDS} />
             ) : (
@@ -644,7 +600,7 @@ function EditProfileContent() {
                   testID="edit-profile-age"
                 />
                 <TextField
-                  label="Location"
+                  label="Where you are"
                   value={location}
                   onChangeText={setLocation}
                   error={overCap.location}
@@ -664,35 +620,11 @@ function EditProfileContent() {
                   placeholder="e.g. Software Engineer"
                   testID="edit-profile-occupation"
                 />
-                <TextField
-                  label="Education"
-                  value={education}
-                  onChangeText={setEducation}
-                  error={overCap.education}
-                  limit={counterLimit(education, PROFILE_LIMITS.education)}
-                  measure={serverLength}
-                  placeholder="e.g. Christ University"
-                  testID="edit-profile-education"
-                />
-                <WhoSees field="college" />
-                <TextField
-                  label="Phone"
-                  value={phone}
-                  onChangeText={setPhone}
-                  error={overCap.phone}
-                  limit={counterLimit(phone, PROFILE_LIMITS.phone)}
-                  measure={serverLength}
-                  placeholder="Phone number"
-                  keyboardType="phone-pad"
-                  autoComplete="tel"
-                  textContentType="telephoneNumber"
-                  testID="edit-profile-phone"
-                />
               </Animated.View>
             )}
           </EditCard>
 
-          <EditCard title="About you">
+          <EditCard title="About">
             {isLoading ? (
               <SkeletonBlock width="100%" height={ABOUT_SKELETON} borderRadius={RADIUS.mediaInCard} />
             ) : (
@@ -709,6 +641,39 @@ function EditProfileContent() {
               />
               </Animated.View>
             )}
+          </EditCard>
+
+          {/*
+            You and matching, between Photos and Basics (R4.1 14.2). Its own card and not folded into ABOUT YOU, because these are
+            the only fields on this screen that nobody else ever reads as text -- they feed `rankMatches` and surface as a tag on a
+            card, never as the values behind it.
+          */}
+          <EditCard title="Matching · seen in rooms of 8+">
+            <MatchingFields
+              intents={intents}
+              onToggleIntent={onToggleIntent}
+              workField={workField}
+              onChangeWorkField={changeWorkField}
+              expertiseOptions={workField ? expertiseByField[workField] : undefined}
+              expertise={expertise}
+              maxExpertise={maxExpertise}
+              onChangeExpertise={setExpertise}
+              workFields={workFields}
+              workFieldsFailed={workFieldsFailed}
+              onRetryWorkFields={() => {
+                setWorkFieldsRetrying(true)
+                void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
+              }}
+              workFieldsRetrying={workFieldsRetrying}
+              gender={gender}
+              onChangeGender={setGender}
+              orientations={orientations}
+              onChangeOrientations={setOrientations}
+              interestedIn={interestedIn}
+              onChangeInterestedIn={setInterestedIn}
+              offerDating={mayDate(liveAge)}
+              showOrientation={showOrientation}
+            />
           </EditCard>
 
           <EditCard title="Interests" sub={isLoading ? undefined : `${interestIds.length} of ${MAX_INTERESTS}`}>
@@ -728,6 +693,56 @@ function EditProfileContent() {
                 ) : null}
                 <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
                 <WhoSees field="interests" />
+              </Animated.View>
+            )}
+          </EditCard>
+
+          {/* One name for the about-you screen (A 04): what it holds is shown on cards only when you share one. */}
+          <EditCard title="Shown when you share one">
+            {/*
+              Languages, home state, sign and this-or-that: display only, saved on their own screen so this form's save stays what
+              it was.
+            */}
+            <SettingsRow
+              icon="sparkles"
+              title="Languages, home & more"
+              label="Languages, home region, sign and this or that. Shown on cards only when you share one with someone. Never used to rank."
+              trail="chevron"
+              onPress={() => router.push('/edit-about-you')}
+            />
+          </EditCard>
+
+          {/* Details last (A 03): education, shown once you reveal; your phone, which nobody else ever sees. */}
+          <EditCard title="Details">
+            {isLoading ? (
+              <FieldsSkeleton fields={DETAIL_FIELDS} />
+            ) : (
+              <Animated.View entering={arrive} style={styles.fields}>
+                <TextField
+                  label="Education"
+                  value={education}
+                  onChangeText={setEducation}
+                  error={overCap.education}
+                  limit={counterLimit(education, PROFILE_LIMITS.education)}
+                  measure={serverLength}
+                  placeholder="e.g. Christ University"
+                  testID="edit-profile-education"
+                />
+                <WhoSees field="college" />
+                <TextField
+                  label="Phone"
+                  value={phone}
+                  onChangeText={setPhone}
+                  error={overCap.phone}
+                  limit={counterLimit(phone, PROFILE_LIMITS.phone)}
+                  measure={serverLength}
+                  placeholder="Phone number"
+                  hint={PHONE_PRIVATE}
+                  keyboardType="phone-pad"
+                  autoComplete="tel"
+                  textContentType="telephoneNumber"
+                  testID="edit-profile-phone"
+                />
               </Animated.View>
             )}
           </EditCard>
@@ -773,8 +788,11 @@ function EditProfileContent() {
   )
 }
 
-/** The Basic information card while the profile loads: its six fields at the final geometry (Flow 6 edit 11). */
-const BASIC_FIELDS = 6
+/** The You and Details cards while the profile loads: their fields at the final geometry (Flow 6 edit 11). */
+const BASIC_FIELDS = 4
+const DETAIL_FIELDS = 2
+/** Phone is never shown to anyone (A 03): said in the field, since it sits among fields others can see. */
+export const PHONE_PRIVATE = 'Only for sign-in. Never shown.'
 const ABOUT_SKELETON = 160
 const CHIP_SKELETON = 96
 
@@ -798,7 +816,7 @@ function EditCard({ title, sub, children, onLayout }: { title?: string; sub?: st
     <View style={styles.card} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
       {title ? (
         <View style={styles.cardHeader}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} accessibilityRole="header" style={[font('label', bold), styles.cardTitle]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} accessibilityRole="header" style={[font('note', bold), styles.cardTitle]}>
             {title}
           </Text>
           {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.cardSub]}>{sub}</Text> : null}

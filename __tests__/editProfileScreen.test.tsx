@@ -65,12 +65,19 @@ beforeEach(() => {
   api.getProfile.mockResolvedValue(LOADED as never)
 })
 
-it('draws the cards in the frame’s order, matching between Photos and Basics', async () => {
+it('draws the cards in Me + settings A order: you first, then About, matching, what is shown when shared, details last', async () => {
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
   const titles = screen.getAllByRole('header').map((h) => h.props.children)
-  const order = ['You and matching', 'Basic information', 'About you', 'Interests', 'Goals', 'Looking for']
+  const order = ['You', 'About', 'Matching · seen in rooms of 8+', 'Interests', 'Shown when you share one', 'Details', 'Goals', 'Looking for']
+  // Negative control: the old order (matching before your name) fails this.
   expect(titles.filter((t: string) => order.includes(t))).toEqual(order)
+})
+
+it('says Phone is private, in the field (A 03)', async () => {
+  await render(<EditProfile />)
+  await screen.findByDisplayValue('Sam')
+  expect(screen.getByText('Only for sign-in. Never shown.')).toBeTruthy()
 })
 
 // DS-07: picked things count "n of max", the one format ChipSet uses; the spaced "0 / 10" goes. Negative control: the
@@ -97,7 +104,8 @@ it('says one interest is not enough to be matched, and stops saying it at two (S
 it('is the six fields’ shape while it loads, then the fields', async () => {
   api.getProfile.mockReturnValue(new Promise(() => {}))
   await render(<EditProfile />)
-  expect(screen.getByTestId('fields-skeleton')).toBeTruthy()
+  // The You and Details cards each hold their fields' shape.
+  expect(screen.getAllByTestId('fields-skeleton')).toHaveLength(2)
   expect(screen.queryByTestId('edit-profile-name')).toBeNull()
 })
 
@@ -307,7 +315,7 @@ it('a card’s label starts on its sets’ labels’ edge, and the about-you row
   await render(<EditProfile />)
   await screen.findByDisplayValue('Sam')
   // FieldLabel's 4 pt inset, the one every set label inside the card has.
-  expect(StyleSheet.flatten(screen.getByRole('header', { name: 'You and matching' }).props.style).paddingLeft).toBe(SPACE.xs)
+  expect(StyleSheet.flatten(screen.getByRole('header', { name: 'Matching · seen in rooms of 8+' }).props.style).paddingLeft).toBe(SPACE.xs)
   expect(screen.getByText('Languages, home & more')).toBeTruthy()
 })
 

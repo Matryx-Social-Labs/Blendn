@@ -30,10 +30,11 @@ export const FIRST_NIGHT = {
 export const NIGHTS_FAILED = { withTiles: 'Your nights didn’t load. Showing what we had.', alone: 'Your nights didn’t load.' } as const
 
 /**
- * What the count counts, and over what: every ended night since you joined. With the nights still running (said under the
- * tiles) it is the NIGHTS stat; "in the last 12 weeks" counted the shown tiles only and read "3" under 46 (rc7).
+ * The lines under the tiles (Me + settings A 01): what the stats card said, without its zeros. Saved belongs to Going, so it is a
+ * line that says where they are; Hosted only for somebody who hosts. Null at zero: "0 SAVED" read as something you failed at.
  */
-export const nightsLine = (ended: number) => `${ended.toLocaleString('en-US')} ended ${ended === 1 ? 'night' : 'nights'} since you joined`
+export const savedLine = (n: number) => (n > 0 ? `${n.toLocaleString('en-US')} saved · in Going` : null)
+export const hostedLine = (n: number) => (n > 0 ? `${n.toLocaleString('en-US')} hosted` : null)
 
 const nightsCount = (n: number) => `${n.toLocaleString('en-US')} ${n === 1 ? 'night' : 'nights'}`
 const landsOnceEnded = (n: number) => `${n === 1 ? 'it lands' : 'they land'} here once ${n === 1 ? 'it ends' : 'they end'}`
@@ -46,7 +47,6 @@ export const NIGHTS_HELD = {
   pending: (total: number) => `${nightsCount(total)} · ${landsOnceEnded(total)}`,
   /** Beside the ended tiles: the count's nights the grid doesn't draw yet, so the stat and the section add up (RC 7). */
   running: (n: number) => `${nightsCount(n)} still running · ${landsOnceEnded(n)}`,
-  action: 'See Blend’n+',
 } as const
 
 /**
@@ -65,7 +65,8 @@ export function NightsOut({
   lockedCount = 0,
   total = null,
   runningCount = 0,
-  onUnlock,
+  saved = 0,
+  hosted = 0,
 }: {
   status: NightsStatus
   /** Past events you attended, newest first (`pastEventRows`). */
@@ -82,8 +83,10 @@ export function NightsOut({
   total?: number | null
   /** Nights in `total` that haven't ended, so aren't tiles yet (`nightsCounts().running`). */
   runningCount?: number
-  /** What "See Blend'n+" does when nights are locked. */
-  onUnlock?: () => void
+  /** Your Saved list's count, a line under the tiles (never a "0 SAVED"). */
+  saved?: number
+  /** Events you organised, a line only when you have. */
+  hosted?: number
 }) {
   const bold = useBoldText()
   const { width } = useWindowDimensions()
@@ -106,7 +109,7 @@ export function NightsOut({
   }
 
   return (
-    <ProfileSection title="Nights out" action={view.kind === 'tiles' ? { label: 'See all', onPress: onSeeAll } : undefined} testID="nights-out">
+    <ProfileSection title="Nights out" count={total && total > 0 ? total : undefined} countStyle="lit" action={view.kind === 'tiles' ? { label: 'See all', onPress: onSeeAll } : undefined} testID="nights-out">
       {view.kind === 'loading' ? (
         <View accessible testID="nights-loading" accessibilityLabel="Loading your nights" accessibilityState={{ busy: true }} style={styles.grid}>
           {Array.from({ length: COLUMNS }, (_, i) => (
@@ -132,13 +135,11 @@ export function NightsOut({
           <Text style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
             {view.kind === 'locked' ? NIGHTS_HELD.locked(view.total) : NIGHTS_HELD.pending(view.total)}
           </Text>
-          {view.kind === 'locked' && onUnlock ? <Button kind="lit" size="md" label={NIGHTS_HELD.action} onPress={onUnlock} /> : null}
         </View>
       ) : null}
 
       {view.kind === 'tiles' ? (
         <>
-          {view.ended > 0 ? <Text testID="nights-line" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{nightsLine(view.ended)}</Text> : null}
           <Animated.View testID="nights-grid" entering={arrive} style={styles.grid}>
             {events.slice(0, NIGHT_TILES).map((event) => (
               <View key={event.id} style={cell}>
@@ -156,11 +157,17 @@ export function NightsOut({
               <Text style={[font('meta', bold), styles.muted]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
                 {NIGHTS_HELD.more(view.locked)}
               </Text>
-              {onUnlock ? <Button kind="lit" size="md" label={NIGHTS_HELD.action} onPress={onUnlock} /> : null}
             </View>
           ) : null}
         </>
       ) : null}
+
+      {/* Blend'n+ is sold once on Me, by its own row at the foot: the held nights above are said, never sold again here. */}
+      {[savedLine(saved), hostedLine(hosted)].filter(Boolean).map((line) => (
+        <Text key={line} testID="nights-foot" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
+          {line}
+        </Text>
+      ))}
     </ProfileSection>
   )
 }
