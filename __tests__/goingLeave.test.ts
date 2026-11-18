@@ -6,16 +6,18 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { cancelRsvp: jest.fn() } }))
 jest.mock('../lib/sheet', () => ({ showSheet: jest.fn() }))
 jest.mock('../lib/toast', () => ({ toast: jest.fn() }))
 const appState: { listener?: (s: string) => void } = {}
-jest.mock('react-native', () => ({ AppState: { addEventListener: (_: string, fn: (s: string) => void) => ((appState.listener = fn), { remove: jest.fn() }) } }))
 
 /* eslint-disable import/first */
 import { apiClient } from '../lib/apiClient'
 import { showSheet } from '../lib/sheet'
 import { toast } from '../lib/toast'
+import { AppState } from 'react-native'
 import { deferLeave, flushLeave, leaveKind, leavePending, leaveSheet, leaveToast, sendLeave, swipeLabel, undoLeave } from '../lib/goingLeave'
 /* eslint-enable import/first */
 
 const cancel = apiClient.cancelRsvp as jest.Mock
+// Only AppState is faked (a module mock of react-native broke jest-expo's lazy fetch global in CI).
+jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: (s: string) => void) => ((appState.listener = fn), { remove: jest.fn() })) as never)
 
 describe('leaveKind: the way out, by state', () => {
   const base = { phase: 'upcoming' as const, rsvpStatus: 'going', checkedIn: false, roomOpen: false }
