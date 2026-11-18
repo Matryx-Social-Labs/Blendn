@@ -140,6 +140,25 @@ describe('frameOnYou: you and the six nearest, in the map you can see', () => {
     expect(frameOnYou(you, [at('a', 0.05, 0.05)], view)!.zoom).toBe(14.6)
   })
 
+  /*
+   * The drive (Android, Church Street): the six nearest were 0.7–3 km out, the box was clamped at z14.6 and centred on
+   * them, so you sat on the screen's edge with one event in view. You stay in frame: the farthest drop out (they are the
+   * edge markers' job), and with none close enough the map is on you at the widest zoom the frame allows.
+   */
+  it('six too spread for z14.6: you stay in frame, framed with the nearest that fit', () => {
+    const close = [at('c1', 0.001, 0.001), at('c2', -0.0015, 0.001)]
+    // All off to one side, as on the drive, so a box centred on them would leave you behind.
+    const spread = [at('s1', 0.02, -0.02), at('s2', 0.025, -0.02), at('s3', 0.03, -0.03), at('s4', 0.03, -0.025)]
+    const f = frameOnYou(you, [...spread, ...close], view)!
+    expect(f.zoom).toBeGreaterThanOrEqual(14.6)
+    expect(Math.abs(f.center[1] - you.latitude)).toBeLessThan(0.002)
+    expect(Math.abs(f.center[0] - you.longitude)).toBeLessThan(0.002)
+  })
+
+  it('none close enough for z14.6: on you at z14.6, not at the street zoom', () => {
+    expect(frameOnYou(you, [at('far1', 0.03, 0.03), at('far2', -0.04, 0.02)], view)).toEqual({ center: [you.longitude, you.latitude], zoom: 14.6 })
+  })
+
   it('no fix: no frame (the map opens on the city, as today)', () => {
     expect(frameOnYou(null, [at('a', 0.001, 0.001)], view)).toBeNull()
   })

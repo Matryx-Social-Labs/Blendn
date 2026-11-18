@@ -1885,9 +1885,11 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * the list instead. The system ones (offline, location, a refused or failed read) stay over the list they are about.
    */
   const bannerActions = useLatest({ chooseCity, home, deviceCity, dismissTravel })
+  // Denied (pulse-map 06): one quiet line on the map, on its own if nothing else is up there.
+  const locationDenied = locationStatus === 'denied'
   const placeBanners = useMemo(
     () =>
-      switchSuggestion || travel || away ? (
+      switchSuggestion || travel || away || locationDenied ? (
         <PulseBanners
           only="place"
           socketStatus={socketStatus}
@@ -1902,15 +1904,15 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
             if (back) choose(back, sameCity(back.city, here))
           }}
           onTravelDismiss={() => bannerActions.current.dismissTravel()}
-          locationDenied={locationStatus === 'denied'}
-          onOpenSettings={() => {}}
+          locationDenied={locationDenied}
+          onOpenSettings={() => void Linking.openSettings().catch(() => {})}
           refreshFailed={false}
           onRetry={() => {}}
         />
       ) : null,
     // `travel` is a new object every render: its words are what change it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, socketStatus, bannerActions]
+    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, locationDenied, socketStatus, bannerActions]
   )
   /*
    * The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask.

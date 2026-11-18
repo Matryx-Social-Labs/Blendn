@@ -107,15 +107,22 @@ export function frameOnYou(
   const d = (p: { latitude: number; longitude: number }) => (p.latitude - you.latitude) ** 2 + ((p.longitude - you.longitude) * Math.cos((you.latitude * Math.PI) / 180)) ** 2
   const near = [...pins].sort((a, b) => d(a) - d(b)).slice(0, FRAME_NEAREST)
   if (!near.length) return { center: [you.longitude, you.latitude], zoom: FRAME_ZOOM.max }
-  const pts = [you, ...near]
+  // You stay in frame: the farthest drop out until the rest fit at the widest zoom allowed (they get edge markers).
+  for (let k = near.length; k > 0; k -= 1) {
+    const fit = fitZoom([you, ...near.slice(0, k)], view)
+    if (fit.zoom >= FRAME_ZOOM.min) return { center: fit.center, zoom: Math.round(Math.min(FRAME_ZOOM.max, fit.zoom) * 100) / 100 }
+  }
+  return { center: [you.longitude, you.latitude], zoom: FRAME_ZOOM.min }
+}
+
+/** The box round `pts` (with slack) and the zoom at which it fills `view`, each way: 360° of longitude, 2π of Mercator y. */
+function fitZoom(pts: readonly { latitude: number; longitude: number }[], view: { width: number; height: number }) {
   const lons = pts.map((p) => p.longitude)
   const ys = pts.map((p) => mercY(p.latitude))
   const [w, e] = [Math.min(...lons), Math.max(...lons)]
   const [s, n] = [Math.min(...ys), Math.max(...ys)]
-  // The zoom at which the box (with slack) fills the view, each way: 360° of longitude, 2π of Mercator y per world.
   const zx = Math.log2((view.width * 360) / (TILE * Math.max((e - w) * FRAME_SLACK, 1e-9)))
   const zy = Math.log2((view.height * 2 * Math.PI) / (TILE * Math.max((n - s) * FRAME_SLACK, 1e-12)))
-  const zoom = Math.min(FRAME_ZOOM.max, Math.max(FRAME_ZOOM.min, Math.min(zx, zy)))
   const lat = (Math.atan(Math.sinh((s + n) / 2)) * 180) / Math.PI
-  return { center: [(w + e) / 2, lat], zoom: Math.round(zoom * 100) / 100 }
+  return { center: [(w + e) / 2, lat] as [number, number], zoom: Math.min(zx, zy) }
 }

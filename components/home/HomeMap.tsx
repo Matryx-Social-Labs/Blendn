@@ -24,6 +24,7 @@ import {
   insideLastCircle,
   liveAt,
   loadPins,
+  pinsFor,
   locateTarget,
   mapPadding,
   roundQuery,
@@ -55,7 +56,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { frameOnYou } from '../../lib/mapPresence'
+import { FRAME_NEAREST, frameOnYou } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -105,6 +106,12 @@ export const pinApiFor = (viewport: boolean) => ({
   getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport }),
 })
 const pinApi = pinApiFor(true)
+
+/** The events nearest the person's own fix (sharing-gated, never a viewport), for the open frame; none on a failed read. */
+async function nearestEvents(fix: { latitude: number; longitude: number }): Promise<Pin[]> {
+  const res = await apiClient.getEvents({ lat: fix.latitude, lon: fix.longitude, sortBy: 'distance', limit: FRAME_NEAREST }, { force: true }).catch(() => null)
+  return res?.success && res.data ? pinsFor('events', { events: res.data.events.map(eventFromApi), venues: [] }) : []
+}
 
 /**
  * The map behind the home drawer (plan v2 §4, step 2 PR B; restyled step 2c):
@@ -440,14 +447,16 @@ export const HomeMap = memo(function HomeMap({
    * is a fix and the events for this view are in. Never after the person has moved the map: their touch wins.
    */
   const framed = useRef(false)
-  const eventPinsIn = loaded.segment === 'events' && segment === 'events'
   useEffect(() => {
-    if (framed.current || touched.current || !center || !eventPinsIn || reachHere) return
-    const frame = frameOnYou(center, loaded.pins, { width, height: Math.max(1, mapHeight - padding.top - padding.bottom) })
-    if (!frame) return
+    if (framed.current || touched.current || !center || segment !== 'events' || reachHere) return
     framed.current = true
-    moveTo({ to: frame.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: frame.zoom, pitch: MAP_THEME.camera.pitch } })
-  }, [center, eventPinsIn, loaded]) // eslint-disable-line react-hooks/exhaustive-deps -- the first fix with this view's events frames it, once
+    // The six nearest are their own read, by distance from the fix: the first street-zoom view rarely holds any.
+    void nearestEvents(center).then((near) => {
+      if (touched.current) return
+      const frame = frameOnYou(center, near, { width, height: Math.max(1, mapHeight - padding.top - padding.bottom) })
+      if (frame) moveTo({ to: frame.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: frame.zoom, pitch: MAP_THEME.camera.pitch } })
+    })
+  }, [center, segment]) // eslint-disable-line react-hooks/exhaustive-deps -- the first fix on Events frames it, once per visit
 
   // "My location": back to the fix and following it again, or ask for one (dimmed until the ask settles).
   const locate = () => {
