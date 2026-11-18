@@ -1,5 +1,5 @@
 import { Image } from 'expo-image'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { StyleSheet, Text, View, type TextProps, type TextStyle } from 'react-native'
 
 import { COLOR, FONT_FAMILY, RADIUS, TYPE } from '../../lib/design/tokens'
@@ -104,8 +104,6 @@ export function ContainedCover({
   radius = 0,
   auto = false,
   onError,
-  onFit,
-  fillOnly = false,
   testID,
 }: {
   uri: string
@@ -113,10 +111,6 @@ export function ContainedCover({
   auto?: boolean
   /** The picture would not load (EventCover's retry). */
   onError?: () => void
-  /** `auto`'s decision, as it changes: a clip over this poster takes the same fit, so its first frame lands on the same picture. */
-  onFit?: (fit: 'cover' | 'contain') => void
-  /** The fill only, no sharp picture: under a clip that has drawn its first frame (the poster goes; its blurred copy stays). */
-  fillOnly?: boolean
   testID?: string
 }) {
   const reduceTransparency = useReduceTransparency()
@@ -124,7 +118,6 @@ export function ContainedCover({
   const [media, setMedia] = useState<{ uri: string; size: Size } | null>(null)
   const fit = auto ? fitFor(media?.uri === uri ? media.size : null, frame) : 'contain'
   const flat = auto && reduceTransparency
-  useEffect(() => onFit?.(fit), [fit, onFit])
   return (
     <View
       testID={testID && `${testID}-frame`}
@@ -139,19 +132,17 @@ export function ContainedCover({
           <View testID={testID && `${testID}-dim`} style={[StyleSheet.absoluteFill, { backgroundColor: flat ? COLOR.surfaceSunken : tint(COLOR.ink, COVER_DIM) }]} />
         </>
       ) : null}
-      {fillOnly ? null : (
-        <Image
-          testID={testID}
-          source={{ uri }}
-          recyclingKey={uri}
-          style={StyleSheet.absoluteFill}
-          contentFit={fit}
-          contentPosition={fit === 'cover' ? COVER_FOCUS : undefined}
-          onLoad={auto ? (e) => setMedia({ uri, size: { width: e.source.width, height: e.source.height } }) : undefined}
-          onError={onError}
-          accessible={false}
-        />
-      )}
+      <Image
+        testID={testID}
+        source={{ uri }}
+        recyclingKey={uri}
+        style={StyleSheet.absoluteFill}
+        contentFit={fit}
+        contentPosition={fit === 'cover' ? COVER_FOCUS : undefined}
+        onLoad={auto ? (e) => setMedia({ uri, size: { width: e.source.width, height: e.source.height } }) : undefined}
+        onError={onError}
+        accessible={false}
+      />
     </View>
   )
 }

@@ -7,8 +7,7 @@ import { scheduleOnRN } from 'react-native-worklets'
 
 import type { Rect } from '../ds/chatShared'
 import { EventCard, eventLabel } from '../ds/EventCard'
-import { ContainedCover } from '../ds/LinkPreviewCard'
-import { HeroVideo } from '../scene/SceneHeroMedia'
+import { HeroVideo, PagePicture } from '../scene/SceneHeroMedia'
 import { Icon } from '../ui/Icon'
 import { BARE_TURN_MS, lapPolicy, nextStep, pipModel, playLabel, STILL_MS, turnOf, type LapStep } from '../../lib/featuredLap'
 import type { FeedMediaItem } from '../../lib/feedMedia'
@@ -76,7 +75,7 @@ export function leadLabel(card: LeadCard, index: number, count: number, paused =
  * The active card's media for its turn (FeedMedia's rules, restored): the cover is always mounted underneath, so a clip
  * that stalls shows a photograph, never black; each item dissolves in over the one before; a clip is muted and plays to
  * its own end over its poster (SceneHero's `HeroVideo`: the 15 s watchdog skips one that never loads). Only this card has
- * a player. Every surface is fit rule B (`ContainedCover auto`).
+ * a player. A still is fit rule B; a clip and its poster cover the card (`PagePicture`, owner 2026-11-18).
  */
 function TurnMedia({
   items,
@@ -94,25 +93,21 @@ function TurnMedia({
   /** The clip on screen is ready, with its length in seconds. */
   onClipReady: (durationSec: number) => void
 }) {
-  const [framed, setFramed] = useState<string | null>(null)
-  const [fit, setFit] = useState<'cover' | 'contain'>('contain')
   const floor = items[0]
   const current = items[at]
-  const still = (item: FeedMediaItem) => (item.kind === 'image' ? item.url : item.posterUrl)
-  const floorUri = floor ? still(floor) : null
   const key = current ? `${current.url}-${at}` : ''
   const playing = current?.kind === 'video' && clips
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {floorUri ? <ContainedCover uri={floorUri} auto /> : null}
+      {floor ? <PagePicture item={floor} /> : null}
       {current && at > 0 ? (
         <Animated.View key={key} entering={ITEM_IN} style={StyleSheet.absoluteFill}>
-          {still(current) ? (
-            <ContainedCover uri={still(current) as string} auto fillOnly={playing && framed === key} onFit={setFit} />
-          ) : (
-            // A clip with no poster of its own: the cover underneath must not show in its bars (never another picture,
-            // SCRUM-1066); the card's dark surface does, as the event hero's.
+          {current.kind === 'video' && !current.posterUrl ? (
+            // A clip with no poster of its own: until its first frame, the card's dark surface, never the cover under it
+            // (another picture, SCRUM-1066), as the event hero's.
             <View testID="pulse-lead-clip-ground" style={[StyleSheet.absoluteFill, styles.clipGround]} />
+          ) : (
+            <PagePicture item={current} />
           )}
         </Animated.View>
       ) : null}
@@ -122,11 +117,9 @@ function TurnMedia({
           source={current.url}
           paused={paused}
           loop={false}
-          fit={fit}
           onEnded={onClipDone}
           onFailed={onClipDone}
           onReady={onClipReady}
-          onFramed={(drawn) => setFramed((was) => (drawn ? key : was === key ? null : was))}
         />
       ) : null}
     </View>
