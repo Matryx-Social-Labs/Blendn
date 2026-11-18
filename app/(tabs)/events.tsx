@@ -29,7 +29,7 @@ import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
 import { CONTROL_FONT_CAP } from '../../components/ds/shared'
 import { LeadPager, type LeadCard } from '../../components/pulse/LeadPager'
-import { lapOrder } from '../../lib/featuredLap'
+import { applyOrder, FIX_WAIT_MS, lapOrder, leadOrderMode, type LeadOrder } from '../../lib/featuredLap'
 import { feedPlaylist } from '../../lib/feedMedia'
 import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
@@ -1567,10 +1567,34 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * narrowed page); under a search there is none (somebody who typed a name knows what they want).
    */
   const featuredSection = sections.find((x) => x.key === 'featured')
-  // Featured C's lap runs nearest first; the server's (sponsor's) order only breaks ties, and is the order with no fix.
+  const leadPicks = useMemo(
+    () => (isSearching ? [] : isNarrowed ? featuredPick(events, now, seedDate) : (featuredSection?.events ?? [])),
+    [isSearching, isNarrowed, events, now, seedDate, featuredSection]
+  )
+  /*
+   * Featured C's lap runs nearest first; the server's (sponsor's) order only breaks ties, and is the order with no fix.
+   * "No jumping around" (owner): while a fix is on its way the lead holds its first cover, the lap not started, for at
+   * most 3 s; the order is then decided once per visit (`leadOrderMode`) and frozen for each set of picks, so a later fix
+   * only updates distances.
+   */
+  const [leadOrder, setLeadOrder] = useState<LeadOrder>('pending')
+  const [fixWaitOver, setFixWaitOver] = useState(false)
+  const orderMode = leadOrderMode({ permission: locationStatus, sharing, hasFix: !!userLocation, timedOut: fixWaitOver, current: leadOrder })
+  if (orderMode !== leadOrder) setLeadOrder(orderMode)
+  const hasPicks = leadPicks.length > 0
+  useEffect(() => {
+    if (leadOrder !== 'pending' || !hasPicks) return
+    const id = setTimeout(() => setFixWaitOver(true), FIX_WAIT_MS)
+    return () => clearTimeout(id)
+  }, [leadOrder, hasPicks])
+  const picksKey = leadPicks.map((e) => e.id).sort().join('|')
+  const [frozenLead, setFrozenLead] = useState<{ key: string; ids: string[] } | null>(null)
+  if (orderMode !== 'pending' && hasPicks && frozenLead?.key !== picksKey) {
+    setFrozenLead({ key: picksKey, ids: lapOrder(leadPicks, orderMode === 'near' && hasFix).map((e) => e.id) })
+  }
   const leadEvents = useMemo(
-    () => lapOrder(isSearching ? [] : isNarrowed ? featuredPick(events, now, seedDate) : (featuredSection?.events ?? []), hasFix),
-    [isSearching, isNarrowed, events, now, seedDate, featuredSection, hasFix]
+    () => applyOrder(leadPicks, frozenLead?.key === picksKey ? frozenLead.ids : null),
+    [leadPicks, frozenLead, picksKey]
   )
   const leadCards = useMemo<LeadCard[]>(
     () =>
@@ -1987,7 +2011,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           onLongPress={(i, anchor) => openPeek(leadEvents[i], anchor, 'hero')}
           onPage={onLeadPage}
           onLight={onLeadLight}
-          visible={visible}
+          // While the order waits on a fix: the first cover, the lap not started.
+          visible={visible && orderMode !== 'pending'}
           screenReader={shell?.screenReader ?? false}
           tookOver={shell?.mapTouched ?? false}
         />

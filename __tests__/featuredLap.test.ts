@@ -147,3 +147,62 @@ describe('the dots pill', () => {
     expect(playLabel({ advances: false, lapDone: true })).toBe('Play featured again')
   })
 })
+
+/*
+ * "No jumping around" (owner; coordinator ruling 2026-11-18 inside the approved design): the lead holds its first cover
+ * while a fix is pending, at most 3 s; the fix orders it nearest first; a timeout, no permission or sharing off means the
+ * server's order. Once decided, the order is frozen for the visit: a later fix only updates distances.
+ */
+import { applyOrder, FIX_WAIT_MS, leadOrderMode } from '../lib/featuredLap'
+
+describe('leadOrderMode: when the lap may start, and in which order', () => {
+  const base = { permission: 'granted' as const, sharing: true, hasFix: false, timedOut: false, current: 'pending' as const }
+
+  it('granted and no fix yet: pending (the cover, the lap not started), for at most 3 s', () => {
+    expect(FIX_WAIT_MS).toBe(3000)
+    expect(leadOrderMode(base)).toBe('pending')
+  })
+
+  it('the permission still being read: pending too, under the same 3 s', () => {
+    expect(leadOrderMode({ ...base, permission: 'checking' })).toBe('pending')
+    expect(leadOrderMode({ ...base, permission: 'checking', timedOut: true })).toBe('server')
+  })
+
+  it('the fix lands: nearest first', () => {
+    expect(leadOrderMode({ ...base, hasFix: true })).toBe('near')
+  })
+
+  it('no fix by the timeout: the server’s order', () => {
+    expect(leadOrderMode({ ...base, timedOut: true })).toBe('server')
+  })
+
+  it.each([
+    ['denied', { permission: 'denied' as const }],
+    ['not asked yet', { permission: 'undetermined' as const }],
+    ['sharing off in Blend’n', { sharing: false }],
+  ])('%s: the server’s order at once', (_, over) => {
+    expect(leadOrderMode({ ...base, ...over })).toBe('server')
+  })
+
+  it('once decided, it never changes for the visit: a fix after the timeout does not re-order', () => {
+    expect(leadOrderMode({ ...base, hasFix: true, current: 'server' })).toBe('server')
+    expect(leadOrderMode({ ...base, hasFix: false, current: 'near' })).toBe('near')
+  })
+})
+
+describe('applyOrder: the frozen order', () => {
+  const evs = [ev('far', 7.3), ev('a', 0.21), ev('new', 0.1)]
+
+  it('keeps the frozen ids’ order, whatever the distances say now; anything new goes after, in server order', () => {
+    expect(applyOrder(evs, ['a', 'far']).map((e) => e.id)).toEqual(['a', 'far', 'new'])
+  })
+
+  it('control: the old behaviour (sorting again on every fix) re-orders when a closer fix arrives', () => {
+    expect(lapOrder(evs, true).map((e) => e.id)).toEqual(['new', 'a', 'far'])
+    expect(applyOrder(evs, ['a', 'far']).map((e) => e.id)).not.toEqual(lapOrder(evs, true).map((e) => e.id))
+  })
+
+  it('nothing frozen yet: the server’s order', () => {
+    expect(applyOrder(evs, null).map((e) => e.id)).toEqual(['far', 'a', 'new'])
+  })
+})

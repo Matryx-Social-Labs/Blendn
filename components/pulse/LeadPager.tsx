@@ -409,7 +409,7 @@ export function LeadPager({
             ) : null}
             {Array.from({ length: pips.pips }, (_, i) => (
               <View key={i} testID={`pulse-lead-pip-${i}`} style={[styles.pip, i === pips.active ? styles.pipOn : styles.pipOff]}>
-                {i === pips.active ? <Animated.View testID="pulse-lead-pip-fill" style={[styles.pipFill, filled]} /> : null}
+                {i === pips.active ? <Animated.View testID="pulse-lead-fill" style={[styles.pipFill, filled]} /> : null}
               </View>
             ))}
           </View>

@@ -189,7 +189,7 @@ describe('the turn', () => {
   it('the pip keeps filling while the clip plays, over the clip’s own length', async () => {
     await draw({ cards: [media, card('b')] })
     await wait(STILL_MS * 2 + 1000)
-    const pip = () => Reanimated.getAnimatedStyle(screen.getByTestId('pulse-lead-pip-fill', { includeHiddenElements: true })) as { width: string }
+    const pip = () => Reanimated.getAnimatedStyle(screen.getByTestId('pulse-lead-fill', { includeHiddenElements: true })) as { width: string }
     const at = () => parseFloat(pip().width)
     const start = at()
     await act(async () => (mockListeners.statusChange ?? []).forEach((fn) => fn({ status: 'readyToPlay' })))

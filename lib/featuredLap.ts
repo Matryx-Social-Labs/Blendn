@@ -81,3 +81,41 @@ export function playLabel({ advances, lapDone }: { advances: boolean; lapDone: b
   if (advances) return 'Pause featured'
   return lapDone ? 'Play featured again' : 'Play featured'
 }
+
+/** How long the lead holds its first cover for a pending fix before it settles on the server's order. */
+export const FIX_WAIT_MS = 3000
+
+export type LeadOrder = 'pending' | 'near' | 'server'
+
+/**
+ * Which order the lap runs in, decided once per visit ("no jumping around", owner): pending while a fix is on its way
+ * (granted, none yet), nearest first when it lands, the server's order at the timeout or with no permission or sharing
+ * off. Once decided it never changes: a later fix only updates distances.
+ */
+export function leadOrderMode({
+  permission,
+  sharing,
+  hasFix,
+  timedOut,
+  current,
+}: {
+  /** `checking`: the permission is still being read. */
+  permission: 'checking' | 'granted' | 'denied' | 'undetermined'
+  sharing: boolean
+  hasFix: boolean
+  timedOut: boolean
+  current: LeadOrder
+}): LeadOrder {
+  if (current !== 'pending') return current
+  if (!sharing || permission === 'denied' || permission === 'undetermined') return 'server'
+  if (hasFix) return 'near'
+  return timedOut ? 'server' : 'pending'
+}
+
+/** The events in a frozen order (by id); any not in it follow in the order given. Nothing frozen: the order given. */
+export function applyOrder<T extends { id: string }>(events: readonly T[], frozen: readonly string[] | null): T[] {
+  if (!frozen) return [...events]
+  const at = new Map(frozen.map((id, i) => [id, i]))
+  const known = events.filter((e) => at.has(e.id)).sort((a, b) => (at.get(a.id) ?? 0) - (at.get(b.id) ?? 0))
+  return [...known, ...events.filter((e) => !at.has(e.id))]
+}
