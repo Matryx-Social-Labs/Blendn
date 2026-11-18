@@ -166,11 +166,12 @@ describe('Nights out chooses its state (Me 04 · 05 · 06)', () => {
     expect(screen.getByText('1 night · it lands here once it ends')).toBeTruthy()
     expect(screen.queryByText('See Blend’n+')).toBeNull()
   })
-  it('says the locked nights under the tiles, with no second sell of Blend\'n+', async () => {
+  it('names Blend\'n+ nowhere under the tiles: Me sells it once, by its own row (A 01; drive 2026-11-18 found it twice)', async () => {
     await render(<NightsOut status="ready" events={[night(1), night(2), night(3)]} lockedCount={43} total={48} onOpenEvent={jest.fn()} onSeeAll={jest.fn()} onRetry={jest.fn()} onFirstNight={jest.fn()} />)
     expect(screen.getByTestId('nights-grid')).toBeTruthy()
-    expect(screen.getByText('43 more nights with Blend’n+')).toBeTruthy()
-    expect(screen.queryByText('See Blend’n+')).toBeNull()
+    // The header counts all 48 and See all leads to Going, where the locked nights' row lives. Negative control: the old line fails.
+    expect(screen.queryByText(/Blend’n\+/)).toBeNull()
+    expect(screen.queryByTestId('nights-more')).toBeNull()
   })
   it('says the nights still running beside the ended tiles, so the section adds up to the stat (RC 7)', async () => {
     await render(

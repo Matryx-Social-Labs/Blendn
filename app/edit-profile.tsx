@@ -693,7 +693,8 @@ function EditProfileContent() {
             onClose={closeMatchingSheet}
             title={MATCHING_ROWS.find((r) => r.kind === matchingSheet.kind)?.title}
             headerNote={matchingSheet.kind === 'into' ? { text: `${interestIds.length} of ${MAX_INTERESTS}` } : undefined}
-            detents={['tall']}
+            // The interests list is long and scrolls; the other two are as tall as their chips.
+            detents={matchingSheet.kind === 'into' ? ['tall'] : undefined}
             actions={[{ label: 'Done', kind: 'secondary', onPress: closeMatchingSheet, testID: 'edit-profile-matching-done' }]}
             testID="edit-profile-matching-sheet"
           >
