@@ -268,7 +268,7 @@ function Playing({ uri, onEnd, onError }: { uri: string; onEnd: () => void; onEr
 
   return (
     <>
-      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} allowsPictureInPicture={false} accessible={false} />
+      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" surfaceType="textureView" nativeControls={false} allowsPictureInPicture={false} accessible={false} />
       <View style={styles.sound}>
         <IconButton icon={muted ? 'volume-x' : 'volume-2'} tier="media" accessibilityLabel={muted ? 'Turn sound on' : 'Turn sound off'} onPress={() => setMuted(!muted)} />
       </View>

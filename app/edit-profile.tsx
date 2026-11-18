@@ -5,7 +5,7 @@ import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, TextInput, View } f
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
-import { TextArea, TextField } from '../components/ds/TextField'
+import { FieldLabelCase, TextArea, TextField } from '../components/ds/TextField'
 import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
 import { WhoSees } from '../components/profile/WhoSees'
@@ -913,11 +913,13 @@ const styles = StyleSheet.create({
   chipsSkeleton: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
 })
 
-/** Violet world: one hue on this screen (`HueProvider`). */
+/** Violet world: one hue on this screen (`HueProvider`). Labels in sentence case, as board A 03 draws them. */
 export default function EditProfile() {
   return (
     <HueProvider value="violet">
-      <EditProfileContent />
+      <FieldLabelCase.Provider value="sentence">
+        <EditProfileContent />
+      </FieldLabelCase.Provider>
     </HueProvider>
   )
 }

@@ -5,10 +5,10 @@
  * painted under every clip and stayed mounted while it played, and when the clip had no poster of its own the poster was
  * the event's cover. So the cover (another picture, at another ratio) filled the bars above and below the clip.
  *
- * Now the poster is the clip's own `thumbnail_url` or nothing, and it goes once the clip draws its first frame. Under fit
- * rule B (owner 2026-11-17) the bars show the poster's own blurred copy, the same picture (`ContainedCover`'s fill), which
- * stays under the clip; with no poster, the hero's dark surface. Until that frame (a stall, Reduce Motion) the poster
- * stays.
+ * Now the poster is the clip's own `thumbnail_url` or nothing. Since 2026-11-18 (owner, "video fills the card") the clip
+ * covers the hero at any ratio, so there are no bars: the poster, cropped exactly as the clip is, stays under it and is
+ * hidden by it; with no poster, the hero's dark surface until the clip's own first frame. `videoCoverFill.test.tsx` pins
+ * the fit on every surface.
  */
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
@@ -44,11 +44,6 @@ const POSTER = 'https://cdn.example/first-frame.jpg'
 const stills = () => screen.queryAllByTestId('hero-still').map((n) => n.props.accessibilityLabel as string)
 /** Fit rule B's blurred copies: only ever of the picture on that page. */
 const fills = () => screen.queryAllByTestId('hero-fill').map((n) => n.props.accessibilityLabel as string)
-const firstFrame = async () => {
-  await act(async () => {
-    screen.getByTestId('hero-clip').props.onFirstFrameRender()
-  })
-}
 const media = (playlist: FeedMediaItem[], over: Partial<React.ComponentProps<typeof SceneHeroMedia>> = {}) => (
   <SceneHeroMedia playlist={playlist} width={345} height={345} autoAdvance={false} pips="center" {...over} />
 )
@@ -81,19 +76,16 @@ describe('the poster is the clip’s own, never the event cover', () => {
 })
 
 describe('the poster under a playing clip', () => {
-  it('is on screen until the clip draws its first frame, then unmounted; its blurred copy stays in the bars', async () => {
+  it('is the clip’s own, under it, with no blurred copy (there are no bars to fill)', async () => {
     await render(media([{ kind: 'video', url: CLIP_URL, posterUrl: POSTER }]))
     expect(screen.getByTestId('hero-clip')).toBeTruthy()
     expect(stills()).toEqual([POSTER])
-    await firstFrame()
-    expect(stills()).toEqual([])
-    expect(fills()).toEqual([POSTER])
-    expect(screen.getByTestId('hero-clip')).toBeTruthy()
+    expect(fills()).toEqual([])
   })
 
-  it('the clip takes its poster’s fit: contained until the poster is known to be within ±15% of the square', async () => {
+  it('the clip covers the square on a TextureView, before anything about the poster is known', async () => {
     await render(media([{ kind: 'video', url: CLIP_URL, posterUrl: POSTER }]))
-    expect(screen.getByTestId('hero-clip').props.contentFit).toBe('contain')
+    expect(screen.getByTestId('hero-clip').props.contentFit).toBe('cover')
     expect(screen.getByTestId('hero-clip').props.surfaceType).toBe('textureView')
   })
 
@@ -120,21 +112,17 @@ describe('the poster under a playing clip', () => {
     expect(frames[0]).toBe(COLOR.surfaceSunken)
   })
 
-  it('comes back when the clip is taken down and mounted again, until its new first frame', async () => {
+  it('is the hero when the clip is taken down, and still under it when it is mounted again', async () => {
     const clip: FeedMediaItem[] = [{ kind: 'video', url: CLIP_URL, posterUrl: POSTER }]
     const view = await render(media(clip))
-    await firstFrame()
-    expect(stills()).toEqual([])
     // Paused before anybody chose to play it: the clip unmounts (the Reduce Motion rule) and the poster is the hero.
     await view.rerender(media(clip, { paused: true }))
     expect(screen.queryByTestId('hero-clip')).toBeNull()
     expect(stills()).toEqual([POSTER])
-    // Mounted again: a new player at zero, so the poster holds until it has a frame.
+    // Mounted again: a new player at zero, over the same poster until it has a frame.
     await view.rerender(media(clip, { paused: false }))
     expect(screen.getByTestId('hero-clip')).toBeTruthy()
     expect(stills()).toEqual([POSTER])
-    await firstFrame()
-    expect(stills()).toEqual([])
   })
 })
 
@@ -170,10 +158,8 @@ describe('under Reduce Motion', () => {
     expect(mockPlayer.pause).toHaveBeenCalled()
   })
 
-  it('the clip’s page never draws the event cover, before or after its frame', async () => {
+  it('the clip’s page never draws the event cover', async () => {
     await render(hero([{ kind: 'video', url: CLIP_URL, posterUrl: null }]))
-    expect(stills()).toEqual([])
-    await firstFrame()
     expect(stills()).toEqual([])
   })
 
