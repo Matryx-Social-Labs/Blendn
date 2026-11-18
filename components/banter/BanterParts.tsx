@@ -3,7 +3,7 @@ import { useBanterPress } from './pressGuard'
 import { Image } from 'expo-image'
 import type { ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeOut, withTiming } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, FadeOut, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { COLOR, DURATION, EASING, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
@@ -67,11 +67,19 @@ export function BanterHeader({
       <View style={styles.actions}>
         {bell}
         <IconButton icon="search" accessibilityLabel="Search conversations" selected={searching} onPress={onSearch} testID="banter-search-toggle" />
-        <IconButton icon="check-check" accessibilityLabel="Mark all read" disabled={!canMarkAll} onPress={onMarkAll} testID="banter-mark-all" />
+        {/* Only when something is unread (Flow 9 A · 4): an action that does nothing is not drawn. It fades in with the first unread. */}
+        {canMarkAll ? (
+          <Animated.View entering={MARK_ALL_IN} exiting={MARK_ALL_OUT}>
+            <IconButton icon="check-check" accessibilityLabel="Mark all read" onPress={onMarkAll} testID="banter-mark-all" />
+          </Animated.View>
+        ) : null}
       </View>
     </Material>
   )
 }
+
+const MARK_ALL_IN = FadeIn.duration(DURATION.quick).easing(Easing.bezier(...EASING.entrance))
+const MARK_ALL_OUT = FadeOut.duration(DURATION.quick).easing(Easing.bezier(...EASING.exit))
 
 /** The header's height under the status bar: the frames' 116 on a 402 pt iPhone, 120 on Android's 48 dp circles. */
 export const banterHeaderHeight = (insetTop: number, android: boolean) => barHeight(insetTop, android)

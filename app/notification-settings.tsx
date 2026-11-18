@@ -8,11 +8,13 @@ import { BannerPresence } from '../components/motion/BannerPresence'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
+import { CityChannelRow } from '../components/notifications/CityChannelRow'
 import { OffersFromPlacesRow } from '../components/notifications/OffersFromPlacesRow'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { openChannelSettings } from '../lib/channelSettings'
 import { muteEnds, mutedRoomRoute, useMutedRooms } from '../lib/mutedRooms'
 import { PREF_ROWS, PREFS_FOOT } from '../lib/notificationPrefs'
+import { useAuth } from '../lib/useAuth'
 import { useNotificationPrefs } from '../lib/useNotificationPrefs'
 import { usePushPreference } from '../lib/usePushPreference'
 import { useTopBarOverlay } from '../lib/useTopBarState'
@@ -27,7 +29,8 @@ const ANDROID_FOOT = 'Each row opens that channel in your phone’s settings. '
  * Notification settings (Flow 9 · 9.6), reached from Settings and from the Notifications screen's ⋯.
  *
  * The master switch is the account's `push_enabled`, which the server already honours. Under "Tell me about"
- * the kinds dim when it is off. iOS shows a switch per kind only once the server sends them
+ * each kind says what it covers, and they dim when push cannot arrive (the master off, or the phone blocking it).
+ * "Your city" is the home city's WhatsApp Channel, India only (`CityChannelRow`). iOS shows a switch per kind only once the server sends them
  * (`useNotificationPrefs`: none until then, never a switch that cannot save); Android's rows open that
  * channel in the phone's settings, which needs no server. Offers are the server's already. The switches stop
  * the push only: the bell still fills.
@@ -43,8 +46,11 @@ function NotificationSettingsContent() {
   // row for a channel link under the finger (M6). Taken once, in state: a ref cannot be read while rendering.
   const [offAtLoad, setOffAtLoad] = useState<ReadonlySet<string> | null>(null)
   if (kinds.prefs && offAtLoad === null) setOffAtLoad(new Set(PREF_ROWS.filter((r) => !kinds.prefs![r.key]).map((r) => r.key)))
+  const { user } = useAuth()
   const masterOff = push.enabled === false
   const phoneBlocks = push.off && push.enabled !== false
+  // The kinds dim whenever push cannot arrive, the phone's block included: on-looking switches over a block were a lie (Flow 9 A · 6).
+  const kindsOff = masterOff || phoneBlocks
   const muted = useMutedRooms()
   const mutedMore = muted.rooms.length - MUTED_PREVIEW
 
@@ -90,7 +96,7 @@ function NotificationSettingsContent() {
 
         {/* Off: each row says dimmed and refuses, which a screen reader honours (pointerEvents never stopped it), and fades (M10). */}
         <View testID="notification-settings-kinds">
-          <SettingsGroup title="Tell me about">
+          <SettingsGroup title={kindsOff ? 'Tell me about · off while push is off' : 'Tell me about'}>
             {PREF_ROWS.map((row) =>
               // Android's rows open the phone's channel page, except one the account turned off elsewhere (iOS): the phone's channel is still on, so only a switch can turn it back on (SYS-08).
               kinds.prefs && (!ANDROID || offAtLoad?.has(row.key)) ? (
@@ -98,21 +104,23 @@ function NotificationSettingsContent() {
                   key={row.key}
                   icon={row.icon}
                   title={row.title}
+                  hint={row.hint}
                   trail="switch"
                   value={kinds.prefs[row.key]}
                   onValueChange={() => void kinds.toggle(row.key)}
                   busy={kinds.saving.has(row.key)}
-                  disabled={masterOff}
+                  disabled={kindsOff}
                   testID={`pref-${row.key}`}
                 />
               ) : ANDROID ? (
-                <SettingsRow key={row.key} icon={row.icon} title={row.title} trail="external" opens="opens your phone’s settings" disabled={masterOff} onPress={() => void openChannelSettings(row.channel)} testID={`pref-${row.key}`} />
+                <SettingsRow key={row.key} icon={row.icon} title={row.title} hint={row.hint} trail="external" opens="opens your phone’s settings" disabled={kindsOff} onPress={() => void openChannelSettings(row.channel)} testID={`pref-${row.key}`} />
               ) : null
             )}
             {/* One offers row on both platforms, once a place has regulars on (D21): the account's switch, held while push can't arrive. */}
-            <OffersFromPlacesRow key="offers" pushOff={masterOff || phoneBlocks} />
+            <OffersFromPlacesRow key="offers" pushOff={kindsOff} />
           </SettingsGroup>
         </View>
+        {user ? <CityChannelRow userId={user.id} /> : null}
         {/* Frame 04: the rooms you silenced, each opening its info. A few here; the rest on their own screen. */}
         {muted.rooms.length > 0 ? (
           <SettingsGroup title="Muted rooms" testID="notification-settings-muted">
@@ -153,7 +161,7 @@ function NotificationSettingsContent() {
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.foot]}>{(ANDROID ? ANDROID_FOOT : '') + PREFS_FOOT}</Text>
       </ScrollView>
       <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
-        <TopBar title="Notifications" state={bar.state} onBack={() => router.back()} testID="notification-settings-top" />
+        <TopBar title="Notification settings" state={bar.state} onBack={() => router.back()} testID="notification-settings-top" />
       </View>
     </View>
   )

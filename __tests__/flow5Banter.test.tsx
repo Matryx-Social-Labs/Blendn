@@ -469,6 +469,18 @@ describe('the app icon follows what the Banter reads (badgeCount counts unread c
     expect(mockRefreshBadge).toHaveBeenCalledTimes(1)
   })
 
+  it('Mark all read is drawn only while something is unread (Flow 9 A · 4)', async () => {
+    serve({ dms: [{ ...dm, unreadCount: 0 }] })
+    await open()
+    expect(screen.getByText('Banter')).toBeTruthy()
+    expect(screen.queryByTestId('banter-mark-all')).toBeNull()
+  })
+
+  it('negative control: with an unread conversation it is there', async () => {
+    await open()
+    expect(screen.getByTestId('banter-mark-all')).toBeTruthy()
+  })
+
   it('and not when the server refused: the count did not change', async () => {
     api.markAllConversationsRead.mockResolvedValue({ success: false, error: 'no' } as never)
     await open()
