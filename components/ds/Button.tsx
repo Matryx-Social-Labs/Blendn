@@ -29,7 +29,7 @@ import {
 } from './shared'
 
 /** `strong` (white) is retired (buttons board C, owner 2026-11-17): a screen's one CTA is `primary`, a sheet's yes is `lit`. */
-export type ButtonKind = 'primary' | 'lit' | 'secondary' | 'tertiary' | 'destructive'
+export type ButtonKind = 'primary' | 'lit' | 'secondary' | 'tertiary' | 'destructive' | 'danger'
 export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised' | 'dock' | 'pill'
 
 /**
@@ -69,7 +69,7 @@ function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean) {
 }
 
 /** Kinds that play a haptic on press-in (§10.2): the screen's one primary, and the destructive button in a confirm. `lit` is silent: a caller that wants one names it (`pressHaptic`). */
-const PRESS_HAPTIC: Partial<Record<ButtonKind, () => void>> = { primary: () => H.primary(), destructive: () => H.destructive() }
+const PRESS_HAPTIC: Partial<Record<ButtonKind, () => void>> = { primary: () => H.primary(), destructive: () => H.destructive(), danger: () => H.destructive() }
 
 /** A value once it has stopped changing for `DURATION.medium`: what a screen reader is told of a count that is still rolling. */
 function useSettled(value: number | undefined) {
@@ -169,6 +169,8 @@ export type ButtonProps = {
  *   it (chips, segments and toggles keep theirs). Never `lg`.
  * - `secondary`: `surface`, 8% white on glass. `tertiary`: text.
  * - `destructive`: `destructiveFill`, never the text red.
+ * - `danger`: the one irreversible act on a sheet that also offers a way back (Delete account, Me + settings A, owner
+ *   2026-11-18): no fill, a 1.5 pt `destructive` rim and a `destructive` label, so it is never the loudest thing there.
  *
  * Press: iOS scales to 0.97 on `M.press`; Android ripples and squares off to a
  * 12 dp corner on the same spring, without scaling (the page). Disabled dims to
@@ -230,7 +232,8 @@ export function Button({
   const flareIn = down || loading || pressed
   const flare = reduceMotion ? (flareIn ? FLARE.pourReduced : FLARE.drainReduced) : flareIn ? FLARE.pour : FLARE.drain
 
-  const ink = muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : COLOR.textOnGradient
+  const danger = kind === 'danger'
+  const ink = muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : danger ? COLOR.destructive : COLOR.textOnGradient
   // The lit tint's inner corner follows the pill's as Android squares it off.
   const litInset = useAnimatedStyle(() => ({ borderRadius: Math.max(radius.get() - LIT_RIM, 0) }))
   const sm = size === 'sm'
@@ -348,11 +351,11 @@ export function Button({
             <Spinner testID={testID && `${testID}-spinner`} size={compact ? 16 : 20} />
           </View>
         ) : null}
-        {outlined || (refused && kind !== 'tertiary') ? (
+        {outlined || danger || (refused && kind !== 'tertiary') ? (
           <Animated.View
-            testID={testID && `${testID}-${refused ? 'refused' : 'contrast'}`}
+            testID={testID && `${testID}-${refused ? 'refused' : danger ? 'rim' : 'contrast'}`}
             pointerEvents="none"
-            style={[StyleSheet.absoluteFill, refused ? styles.refused : IC_HAIRLINE, shape]}
+            style={[StyleSheet.absoluteFill, refused ? styles.refused : danger ? styles.dangerRim : IC_HAIRLINE, shape]}
           />
         ) : null}
       </ScalePress>
@@ -383,4 +386,5 @@ const styles = StyleSheet.create({
   hidden: { opacity: 0 },
   center: { alignItems: 'center', justifyContent: 'center' },
   refused: { borderWidth: SPACE.xxs, borderColor: COLOR.destructive },
+  dangerRim: { borderWidth: LIT_RIM, borderColor: COLOR.destructive },
 })

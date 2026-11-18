@@ -522,3 +522,22 @@ describe('the press state is the lit flare’s alone (L3)', () => {
     expect(await commits('lit')).toBeGreaterThan(0)
   })
 })
+
+describe('danger (Me + settings A 07): Delete account outlined in red, never filled', () => {
+  it('draws a 1.5 pt destructive rim and a destructive label on no fill', async () => {
+    await render(<Button kind="danger" label="Delete account" onPress={() => {}} testID="del" />)
+    const rim = StyleSheet.flatten(screen.getByTestId('del-rim', { includeHiddenElements: true }).props.style)
+    expect(rim.borderColor).toBe(COLOR.destructive)
+    expect(rim.borderWidth).toBe(1.5)
+    const tree = JSON.stringify(screen.toJSON())
+    // Negative control: kind="destructive" puts destructiveFill in the tree and draws no rim.
+    expect(tree).not.toContain(COLOR.destructiveFill)
+    expect(StyleSheet.flatten(screen.getByText('Delete account').props.style).color).toBe(COLOR.destructive)
+  })
+
+  it('destructive is still the fill, for every other irreversible confirm', async () => {
+    await render(<Button kind="destructive" label="Leave" onPress={() => {}} testID="leave" />)
+    expect(JSON.stringify(screen.toJSON())).toContain(COLOR.destructiveFill)
+    expect(screen.queryByTestId('leave-rim', { includeHiddenElements: true })).toBeNull()
+  })
+})

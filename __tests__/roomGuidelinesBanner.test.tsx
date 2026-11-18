@@ -48,7 +48,7 @@ jest.mock('../lib/notifications', () => ({
   removePushTokenFromProfile: jest.fn(),
 }))
 
-import SettingsScreen from '../app/settings'
+import AboutScreen from '../app/about'
 import { RoomGuidelinesBanner } from '../components/chat/RoomGuidelinesBanner'
 import { AI_MODERATION_NOTICE, COMMUNITY_GUIDELINES_URL, roomGuidelinesKey } from '../lib/communityGuidelines'
 import { BLENDN_LINKS } from '../lib/links'
@@ -164,8 +164,9 @@ it('the link opens the guidelines', async () => {
 })
 
 // A link: it opens a web page, and says so with its role and its open-outline mark.
-it('the Settings row opens the same page', async () => {
-  await render(<SettingsScreen />)
+// Settings' row moved to About Blend’n (Me + settings A 05: one door to each legal page).
+it('About Blend’n opens the same page', async () => {
+  await render(<AboutScreen />)
   await fireEvent.press(await screen.findByRole('link', { name: /^Community guidelines/ }))
   await waitFor(() => expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(COMMUNITY_GUIDELINES_URL, expect.any(Object)))
 })
