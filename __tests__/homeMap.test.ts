@@ -189,7 +189,7 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     // A pile's numerals are text (`symbol`, the `pile-count` layer), not an area.
     const areas = types.filter((t) => t !== 'fill-extrusion' && t !== 'circle' && t !== 'symbol')
     expect(types.filter((t) => t === 'symbol')).toHaveLength(1)
-    expect(layers).toMatch(/id="pile-count"\s+type="symbol"/)
+    expect(layers).toMatch(/id="pile-count"\s+source="pins"\s+type="symbol"/)
     const reach = [...layers.matchAll(/<Layer id="reach-[a-z-]+" type="([a-z-]+)"/g)].map((m) => m[1])
     expect(reach).toEqual(['fill', 'line', 'fill', 'line'])
     expect(areas).toEqual(reach)

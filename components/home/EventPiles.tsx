@@ -127,23 +127,24 @@ export function EventPiles({
             'circle-stroke-width': MAP_THEME.pile.rimPx,
           }}
         />
-        <Layer
-          key="pile-count"
-          id="pile-count"
-          type="symbol"
-          filter={['has', 'point_count'] as never}
-          layout={{
-            'text-field': ['get', 'point_count_abbreviated'],
-            'text-font': MAP_THEME.pile.font as never,
-            'text-size': MAP_THEME.pile.textSize,
-            'text-allow-overlap': true,
-            'text-ignore-placement': true,
-          }}
-          paint={{ 'text-color': MAP_THEME.pile.text }}
-        />
       </GeoJSONSource>
-      {/* Above the piles, under the focus: you (pulse-map 08). */}
+      {/* Above the piles' bubbles, under their numerals and the focus: you (pulse-map 08). */}
       {children}
+      <Layer
+        key="pile-count"
+        id="pile-count"
+        source="pins"
+        type="symbol"
+        filter={['has', 'point_count'] as never}
+        layout={{
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': MAP_THEME.pile.font as never,
+          'text-size': MAP_THEME.pile.textSize,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        }}
+        paint={{ 'text-color': MAP_THEME.pile.text }}
+      />
       {focusData ? (
         <GeoJSONSource id="pins-focus" data={focusData} onPress={press}>
           <Layer

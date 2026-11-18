@@ -84,8 +84,11 @@ it('draws what it is given above the piles and under the focus (you, between the
     </EventPiles>
   )
   const order = mockLayers.map((l) => l.id)
-  expect(order.indexOf('between')).toBeGreaterThan(order.indexOf('pile-count'))
+  expect(order.indexOf('between')).toBeGreaterThan(order.indexOf('pile-bubble'))
   expect(order.indexOf('between')).toBeLessThan(order.indexOf('pin-focus-halo'))
+  // …but under the numerals: a fix at a pile's centre covered the "13" (drive). The count reads the piles' own source.
+  expect(order.indexOf('between')).toBeLessThan(order.indexOf('pile-count'))
+  expect(layer('pile-count')?.source).toBe('pins')
 })
 
 it('control: no focus, every pin can pile, and no focus source is drawn', async () => {
