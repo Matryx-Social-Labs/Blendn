@@ -40,10 +40,6 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   'components/profile/PhotoGridTile.tsx': { count: 2, why: 'remove badges on a photo tile: overlay controls' },
   'components/scene/EventGuide.tsx': { count: 1, why: ICON_CIRCLE },
   'components/venue/VenueSections.tsx': { count: 1, why: ICON_CIRCLE },
-  'components/venue/VenueDock.tsx': {
-    count: 1,
-    why: 'the live pill (live dot, ticking time, Ending + Extend chips): the board names it but draws no look for it; waits on a mockup',
-  },
 }
 
 type Finding = { file: string; line: number; tag: string }

@@ -20,6 +20,7 @@ import { countdownLabel, EXTEND_CHOICE, remainingMs, type GoLiveChoice, type GoL
 import { venueDayState } from './venueHours'
 
 import { clockTime } from './roomMoments'
+import { spokenMinutes, timeSpentLabel } from './roomRecap'
 import { calendarDate, clockIn, eventClock, weekdayIn } from './time'
 
 const MINUTE_MS = 60_000
@@ -170,8 +171,12 @@ export function sessionTime(
   }
   const left = remainingMs(live.expiresAt, now)
   if (left === null) return null
-  if (left <= ENDING_MS) return { kind: 'ending', clock: countdownLabel(left), extendUntil: clock24(now + extendMinutes() * MINUTE_MS) }
-  return { kind: 'minutes', left: Math.ceil(left / MINUTE_MS), until: clock24(Date.parse(live.expiresAt as string)) }
+  const extendUntil = clock24(now + extendMinutes() * MINUTE_MS)
+  if (left <= ENDING_MS) return { kind: 'ending', clock: countdownLabel(left), extendUntil }
+  const minutes = { kind: 'minutes' as const, left: Math.ceil(left / MINUTE_MS), until: clock24(Date.parse(live.expiresAt as string)) }
+  // Going live again never shortens: an Extend is offered only while it would move the end by a whole minute (just
+  // extended, 44:59 reads 45 and another would add seconds).
+  return minutes.left < extendMinutes() ? { ...minutes, extendUntil } : minutes
 }
 
 function extendMinutes(): number {
@@ -195,26 +200,39 @@ export function nextTickMs(live: Pick<VenueDetail['live'], 'expiresAt' | 'stay'>
   return Math.max(1, turn)
 }
 
-/** The time on a live pill, as it is spoken and drawn: "42 min", "staying", "4:59". */
-export function timeWords(time: SessionTime): string {
-  if (time.kind === 'stay') return 'staying'
-  return time.kind === 'minutes' ? `${time.left} min` : time.clock
-}
+/** Minutes left as drawn, the recap's one formatter: "42 min" under an hour, "2h 45m" over, "1h" on the hour. */
+const minutesWords = (minutes: number) => timeSpentLabel(minutes * MINUTE_MS)
 
 /** The window as it is read aloud: "32 minutes left", "4:59 left, ending soon", "staying". */
 export function spokenLeft(time: SessionTime): string {
   if (time.kind === 'stay') return 'staying'
-  return time.kind === 'minutes' ? `${time.left} minutes left` : `${time.clock} left, ending soon`
+  return time.kind === 'minutes' ? `${spokenMinutes(time.left)} left` : `${time.clock} left, ending soon`
 }
-
-/** The hero pill and the dock pill: "You’re live · 42 min", "· staying", "· 4:59". */
-export const liveWords = (time: SessionTime | null) => (time ? `You’re live · ${timeWords(time)}` : 'You’re live')
 
 /** The ring around the live card: "Live · 42 min left". */
 export function ringWords(time: SessionTime | null): string {
   if (!time) return 'Live'
   if (time.kind === 'stay') return 'Live · staying'
-  return `Live · ${time.kind === 'minutes' ? `${time.left} min` : time.clock} left`
+  return `Live · ${time.kind === 'minutes' ? minutesWords(time.left) : time.clock} left`
+}
+
+/**
+ * The venue dock while you are live (venue live pill B, owner 2026-11-17): the event page's checked-in line. The state
+ * and its time in their own slots ("Live ·" | "2h 45m"; "Ending ·" | "4:59" in Geist Mono under the warning dot), and
+ * under them what the sheet it opens holds: "Extend or stop" while an Extend would move the end, "Extend" in the last
+ * five minutes, else "Stop". The place is the page's title, so it is only in the spoken label.
+ */
+export function liveDockLine(time: SessionTime | null, place: string) {
+  const ending = time?.kind === 'ending'
+  const link = ending ? 'Extend' : time?.kind === 'minutes' && time.extendUntil ? 'Extend or stop' : 'Stop'
+  const clock = !time || time.kind === 'stay' ? undefined : { text: time.kind === 'ending' ? time.clock : minutesWords(time.left), mono: ending }
+  return {
+    dot: ending ? ('ending' as const) : ('live' as const),
+    state: ending ? 'Ending' : time?.kind === 'stay' ? 'Live · staying' : 'Live',
+    clock,
+    link,
+    label: `Live at ${place}${time ? `, ${spokenLeft(time)}` : ''}. ${link}`,
+  }
 }
 
 /** The distance the list handed over in the route (kilometres), or null when it is not a plain positive number. */

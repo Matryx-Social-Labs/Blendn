@@ -34,8 +34,12 @@ of the event that has the place. Tonight here, Coming up here, Who's here,
 Regulars, the Lobby, About, Good to know, Where, and last the claim line.
 
 The dock holds one slot: **Go live** (a dial, then the hold), **Go live again**
-in one tap with *Pick another time*, the **live pill** with *Open the room* and
-*Leave*, the hand-off **Check in to the event**, or the server's sentence. The
+in one tap with *Pick another time*, **live** (the event page's checked-in
+line: "● Live · 2h 45m" over *Extend or stop*, or "● Ending · 4:59" over
+*Extend* in the last five minutes, beside *Open the room*), the hand-off
+**Check in to the event**, or the server's sentence. The live state opens the
+live sheet: the time, *Extend* while it would move the end, and *Stop* with the
+neutral hold. There is no Leave button (owner, 2026-11-17, SCRUM-1063). The
 client never draws a check-in boundary: it asks the server.
 
 ## Where the build departs from the design, and why
