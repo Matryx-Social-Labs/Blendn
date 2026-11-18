@@ -56,6 +56,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
+import { frameOnYou } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -433,6 +434,20 @@ export const HomeMap = memo(function HomeMap({
     followedFix.current = center
     moveTo({ to: [center.longitude, center.latitude], easeMs: 400 })
   }, [center]) // eslint-disable-line react-hooks/exhaustive-deps -- only a new fix moves the camera here
+
+  /*
+   * Option 3 opens framed on you and the six nearest events (pulse-map 05, `frameOnYou`), once per visit, as soon as there
+   * is a fix and the events for this view are in. Never after the person has moved the map: their touch wins.
+   */
+  const framed = useRef(false)
+  const eventPinsIn = loaded.segment === 'events' && segment === 'events'
+  useEffect(() => {
+    if (framed.current || touched.current || !center || !eventPinsIn || reachHere) return
+    const frame = frameOnYou(center, loaded.pins, { width, height: Math.max(1, mapHeight - padding.top - padding.bottom) })
+    if (!frame) return
+    framed.current = true
+    moveTo({ to: frame.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: frame.zoom, pitch: MAP_THEME.camera.pitch } })
+  }, [center, eventPinsIn, loaded]) // eslint-disable-line react-hooks/exhaustive-deps -- the first fix with this view's events frames it, once
 
   // "My location": back to the fix and following it again, or ask for one (dimmed until the ask settles).
   const locate = () => {

@@ -83,3 +83,39 @@ export function moreLine(total: number | null, loaded: number): string | null {
   if (total === null || total <= loaded) return null
   return `+${total - loaded} more · zoom in`
 }
+
+/** Option 3 opens on you and this many nearest events (pulse-map 05). */
+export const FRAME_NEAREST = 6
+/** …at a zoom between these: never wider than a district, never tighter than the street. */
+export const FRAME_ZOOM = { min: 14.6, max: 16 } as const
+/** Web Mercator's tile size in points, and the slack kept round the framed points. */
+const TILE = 512
+const FRAME_SLACK = 1.25
+
+const mercY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
+
+/**
+ * Where the map opens (Option 3, "You and what's near"): you and the six nearest events, fitted to the map you can see
+ * (`view`, already less the top bar and the drawer), between z14.6 and z16. No fix: none (the map opens on the city).
+ */
+export function frameOnYou(
+  you: { latitude: number; longitude: number } | null,
+  pins: readonly { latitude: number; longitude: number }[],
+  view: { width: number; height: number }
+): { center: [number, number]; zoom: number } | null {
+  if (!you) return null
+  const d = (p: { latitude: number; longitude: number }) => (p.latitude - you.latitude) ** 2 + ((p.longitude - you.longitude) * Math.cos((you.latitude * Math.PI) / 180)) ** 2
+  const near = [...pins].sort((a, b) => d(a) - d(b)).slice(0, FRAME_NEAREST)
+  if (!near.length) return { center: [you.longitude, you.latitude], zoom: FRAME_ZOOM.max }
+  const pts = [you, ...near]
+  const lons = pts.map((p) => p.longitude)
+  const ys = pts.map((p) => mercY(p.latitude))
+  const [w, e] = [Math.min(...lons), Math.max(...lons)]
+  const [s, n] = [Math.min(...ys), Math.max(...ys)]
+  // The zoom at which the box (with slack) fills the view, each way: 360° of longitude, 2π of Mercator y per world.
+  const zx = Math.log2((view.width * 360) / (TILE * Math.max((e - w) * FRAME_SLACK, 1e-9)))
+  const zy = Math.log2((view.height * 2 * Math.PI) / (TILE * Math.max((n - s) * FRAME_SLACK, 1e-12)))
+  const zoom = Math.min(FRAME_ZOOM.max, Math.max(FRAME_ZOOM.min, Math.min(zx, zy)))
+  const lat = (Math.atan(Math.sinh((s + n) / 2)) * 180) / Math.PI
+  return { center: [(w + e) / 2, lat], zoom: Math.round(zoom * 100) / 100 }
+}

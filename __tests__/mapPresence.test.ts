@@ -113,3 +113,38 @@ describe('the piles, and the focus never inside one', () => {
     expect(moreLine(180, 50)).toBe('+130 more · zoom in')
   })
 })
+
+/* Option 3 opens framed on you and the six nearest events (pulse-map 05: zoom 14.6–16). */
+import { FRAME_NEAREST, FRAME_ZOOM, frameOnYou } from '../lib/mapPresence'
+
+describe('frameOnYou: you and the six nearest, in the map you can see', () => {
+  const you = { latitude: 12.9719, longitude: 77.6087 }
+  const view = { width: 393, height: 300 }
+  const at = (id: string, dLat: number, dLon: number) => ({ id, latitude: you.latitude + dLat, longitude: you.longitude + dLon })
+
+  it('frames the six nearest (not the far ones) with you in it, between z14.6 and z16', () => {
+    expect(FRAME_NEAREST).toBe(6)
+    expect(FRAME_ZOOM).toEqual({ min: 14.6, max: 16 })
+    const near = [1, 2, 3, 4, 5, 6].map((i) => at(`n${i}`, 0.001 * i, 0.001 * i))
+    const far = at('far', 0.3, 0.3)
+    const f = frameOnYou(you, [far, ...near], view)
+    expect(f).not.toBeNull()
+    expect(f!.zoom).toBeGreaterThanOrEqual(14.6)
+    expect(f!.zoom).toBeLessThanOrEqual(16)
+    // The far one did not pull the frame out to it.
+    expect(Math.abs(f!.center[1] - you.latitude)).toBeLessThan(0.01)
+  })
+
+  it('a tight cluster stops at z16; a spread one at z14.6', () => {
+    expect(frameOnYou(you, [at('a', 0.00005, 0.00005)], view)!.zoom).toBe(16)
+    expect(frameOnYou(you, [at('a', 0.05, 0.05)], view)!.zoom).toBe(14.6)
+  })
+
+  it('no fix: no frame (the map opens on the city, as today)', () => {
+    expect(frameOnYou(null, [at('a', 0.001, 0.001)], view)).toBeNull()
+  })
+
+  it('no events near: on you, at the street zoom', () => {
+    expect(frameOnYou(you, [], view)).toEqual({ center: [you.longitude, you.latitude], zoom: 16 })
+  })
+})
