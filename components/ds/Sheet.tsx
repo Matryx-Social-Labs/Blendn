@@ -973,6 +973,8 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
               ) : null}
               {sorted.length ? (
                 <Animated.View style={[styles.actions, fixedHeight && styles.pinned, contentFade.actions]}>
+                  {/* The actions sit on the sheet too: a secondary steps up off it on both platforms (`neutralFill`). */}
+                  <GroundProvider value={android ? 'surface' : 'glass'}>
                   {sorted.map(({ kind = 'secondary', disabled, loading, ...action }) => (
                     <Button
                       // Keyed by testID when there is one, so a label that changes in place ("Show 1 place" → "Show 2 places") keeps its Button.
@@ -980,11 +982,11 @@ export function Sheet({ visible: wanted, onClose, title, headerAction, headerNot
                       kind={kind}
                       loading={loading}
                       disabled={disabled || (busy && !loading)}
-                      onGlass={!android && kind === 'secondary'}
                       size={actionSize}
                       {...action}
                     />
                   ))}
+                  </GroundProvider>
                 </Animated.View>
               ) : null}
             </Material>

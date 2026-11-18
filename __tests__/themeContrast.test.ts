@@ -7,6 +7,7 @@
  * white on `GRADIENT.fill`, and ink on flat `brandOrange`, because white on
  * `#F05423` is 3.50:1. `EMBER` itself was deleted (`retiredDesign.test.ts`).
  */
+import { NEUTRAL_RIM, neutralFill } from '../components/ds/Button'
 import { PRESSED_WASH, SELECTION } from '../components/ds/shared'
 import { BLUR, GLASS, SOLID, type MaterialRole } from '../components/ui/Material'
 import { COLOR, GRADIENT, MAX_FONT_SCALE as DESIGN_MAX_FONT_SCALE, TYPE as DESIGN_TYPE } from '../lib/design/tokens'
@@ -193,6 +194,49 @@ describe('the positive look (lit), every stop, every state', () => {
 
   it('control: the measure itself fails a pair that should (white on flat brand orange)', () => {
     expect(contrast(COLOR.textPrimary, COLOR.brandOrange)).toBeLessThan(4.5)
+  })
+})
+
+/*
+ * The neutral (`secondary`) on every ground it sits on (Me + settings A drive, 2026-11-18): on Android's solid sheet its
+ * fill was the sheet's own `surface`, 1:1, and Sign out read as plain text. Its fill steps a tier up from the ground, and
+ * the 1 pt rim carries the boundary (SC 1.4.11) at 3:1 against the ground outside it, as the lit rim does for a positive.
+ */
+describe('the neutral reads as a button on every ground', () => {
+  const white: Rgb = [255, 255, 255]
+  const grey: Rgb = [128, 128, 128]
+  /** Each ground as painted, and the Button's ground for it. iOS glass is measured over the worst (brightest) backdrop. */
+  const GROUNDS: [string, Rgb, 'ink' | 'surface' | 'glass'][] = [
+    ['the page (ink)', rgb(COLOR.ink), 'ink'],
+    ['a surface card', rgb(COLOR.surface), 'surface'],
+    ['the Android sheet (solid)', rgb(SOLID.sheet), 'surface'],
+    ['the iOS sheet (glass over white)', over(GLASS.sheet, white), 'glass'],
+    ['the iOS sheet (glass over grey)', over(GLASS.sheet, grey), 'glass'],
+    ['the iOS sheet (blur over white)', over(BLUR.sheet.tint, white), 'glass'],
+  ]
+
+  for (const [name, ground, kind] of GROUNDS) {
+    for (const size of ['lg', 'sm'] as const) {
+      it(`${size} on ${name}: the rim is 3:1 against the ground, the white label AA on the fill`, () => {
+        const fill = over(neutralFill(size, kind), ground)
+        expect(ratio(over(NEUTRAL_RIM, fill), ground)).toBeGreaterThanOrEqual(3)
+        expect(ratio(white, fill)).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+
+  it('the fill is never the ground: it steps up on a surface card and on the Android sheet', () => {
+    expect(neutralFill('lg', 'surface')).not.toBe(SOLID.sheet)
+    expect(luminance(rgb(neutralFill('lg', 'surface')))).toBeGreaterThan(luminance(rgb(SOLID.sheet)))
+  })
+
+  it('advisory, measured so nobody drops the rim: the fill alone is under 3:1 on every ground', () => {
+    for (const [, ground, kind] of GROUNDS) expect(ratio(over(neutralFill('lg', kind), ground), ground)).toBeLessThan(3)
+  })
+
+  it('control: the drive’s bug fails the measure (a `surface` fill on the solid sheet is 1:1, no rim)', () => {
+    expect(ratio(rgb(COLOR.surface), rgb(SOLID.sheet))).toBeLessThan(3)
+    expect(ratio(over(COLOR.hairline, rgb(COLOR.surface)), rgb(SOLID.sheet))).toBeLessThan(3)
   })
 })
 
