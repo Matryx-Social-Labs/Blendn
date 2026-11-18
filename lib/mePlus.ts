@@ -8,19 +8,22 @@ import { calendarDate } from './time'
  *
  *  - something to manage (a subscription, a pass, a hold): Manage's own sentence, "Renews 3 Nov · App Store";
  *  - a gift of ours (a trial, a grant): "Active until 23 Oct 2027", the row's title already says Blend'n+ (D-L25);
- *  - a launch season, sold nowhere: "Free during launch in your city" (`free`: the row opens the sheet that says so);
  *  - never subscribed: "from ₹199 a month" once the store has answered (never a price written here), "See plans" until then;
  *  - not loaded: nothing.
  */
-export type PlusRowLine = { hint: string | null; free: boolean }
-
-export function plusRowLine(status: PlusStatus | null | undefined, monthlyPrice: string | null, device: PlusStore): PlusRowLine {
-  if (!status) return { hint: null, free: false }
+export function plusRowLine(status: PlusStatus | null | undefined, monthlyPrice: string | null, device: PlusStore): string | null {
+  if (!status) return null
   const card = manageCard(status, device)
-  if (card?.status === 'launch') return { hint: 'Free during launch in your city', free: true }
   if (status.active && status.source === 'grant' && status.grant !== 'referral') {
-    return { hint: `Active ${status.expiresAt ? `until ${calendarDate(status.expiresAt)}` : 'for now'}`, free: false }
+    return `Active ${status.expiresAt ? `until ${calendarDate(status.expiresAt)}` : 'for now'}`
   }
-  if (card) return { hint: card.sentence, free: false }
-  return { hint: monthlyPrice ? `from ${monthlyPrice} a month` : 'See plans', free: false }
+  if (card) return card.sentence
+  return monthlyPrice ? `from ${monthlyPrice} a month` : 'See plans'
 }
+
+/**
+ * Whether Blend'n+ shows on Me and in Settings at all (owner ruling 2026-11-18: "keep the app completely free to use"): only
+ * where the server says it is sold (`gated`, staging). Prod's PLUS_GATING is unset, so there it never shows, and with it the
+ * "Free during launch" row and its sheet are gone. Not loaded is not shown either: a row never flashes in and out.
+ */
+export const showsPlus = (status: PlusStatus | null | undefined) => status?.gated === true
