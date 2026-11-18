@@ -360,6 +360,7 @@ export function HeroVideo({
   onEnded,
   onFailed,
   onFramed,
+  onReady,
 }: {
   source: string
   fit: 'cover' | 'contain'
@@ -374,6 +375,8 @@ export function HeroVideo({
   onFailed: () => void
   /** `true` once it has drawn its first frame (the poster under it can go), `false` when it unmounts. */
   onFramed: (drawn: boolean) => void
+  /** Ready to play, with the clip's length in seconds (the Pulse lead fills its pip over it). */
+  onReady?: (durationSec: number) => void
 }) {
   const player = useVideoPlayer(source, (p) => {
     p.muted = true
@@ -401,7 +404,9 @@ export function HeroVideo({
   const endedRef = useRef(onEnded)
   const failedRef = useRef(onFailed)
   const framedRef = useRef(onFramed)
+  const readyRef = useRef(onReady)
   useLayoutEffect(() => {
+    readyRef.current = onReady
     endedRef.current = onEnded
     failedRef.current = onFailed
     framedRef.current = onFramed
@@ -443,6 +448,7 @@ export function HeroVideo({
       if (status === 'readyToPlay') {
         settled = true
         clearTimeout(timer)
+        readyRef.current?.(player.duration)
       }
     })
 

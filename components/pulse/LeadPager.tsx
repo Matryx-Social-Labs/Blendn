@@ -84,12 +84,15 @@ function TurnMedia({
   clips,
   paused,
   onClipDone,
+  onClipReady,
 }: {
   items: FeedMediaItem[]
   at: number
   clips: boolean
   paused: boolean
   onClipDone: () => void
+  /** The clip on screen is ready, with its length in seconds. */
+  onClipReady: (durationSec: number) => void
 }) {
   const [framed, setFramed] = useState<string | null>(null)
   const [fit, setFit] = useState<'cover' | 'contain'>('contain')
@@ -122,6 +125,7 @@ function TurnMedia({
           fit={fit}
           onEnded={onClipDone}
           onFailed={onClipDone}
+          onReady={onClipReady}
           onFramed={(drawn) => setFramed((was) => (drawn ? key : was === key ? null : was))}
         />
       ) : null}
@@ -237,6 +241,14 @@ export function LeadPager({
     if (ahead.length) Image.prefetch(ahead).catch(() => {})
   }, [turn, item, cards, shown])
   const dwell = turn.length <= 1 ? BARE_TURN_MS : STILL_MS
+  // A playing clip's length, once it says: its share of the pip fills over it (the clip's end, not a timer, moves on).
+  const [clip, setClip] = useState<{ key: string; ms: number } | null>(null)
+  const clipKey = `${shown}-${item}`
+  const clipMs = clip?.key === clipKey ? clip.ms : null
+  useEffect(() => {
+    if (!policy.advances || !clipPlays || !clipMs) return
+    fill.set(withTiming((item + 1) / items, { duration: clipMs, easing: Easing.linear }))
+  }, [policy.advances, clipPlays, clipMs, item, items, fill])
   useEffect(() => {
     if (!policy.advances || clipPlays) {
       cancelAnimation(fill)
@@ -363,7 +375,14 @@ export function LeadPager({
                   {...c}
                   media={
                     i === shown && turn.length > 1 ? (
-                      <TurnMedia items={turn} at={item} clips={clipMounts} paused={!policy.advances} onClipDone={step_} />
+                      <TurnMedia
+                        items={turn}
+                        at={item}
+                        clips={clipMounts}
+                        paused={!policy.advances}
+                        onClipDone={step_}
+                        onClipReady={(sec) => setClip({ key: clipKey, ms: Math.max(0, sec) * 1000 })}
+                      />
                     ) : undefined
                   }
                   corner={<View style={styles.pillRoom} />}
@@ -390,7 +409,7 @@ export function LeadPager({
             ) : null}
             {Array.from({ length: pips.pips }, (_, i) => (
               <View key={i} testID={`pulse-lead-pip-${i}`} style={[styles.pip, i === pips.active ? styles.pipOn : styles.pipOff]}>
-                {i === pips.active ? <Animated.View style={[styles.pipFill, filled]} /> : null}
+                {i === pips.active ? <Animated.View testID="pulse-lead-pip-fill" style={[styles.pipFill, filled]} /> : null}
               </View>
             ))}
           </View>

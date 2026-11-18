@@ -6,6 +6,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { AppState } from 'react-native'
+import * as Reanimated from 'react-native-reanimated'
 
 let mockReduce = false
 jest.mock('../lib/motion', () => ({ ...jest.requireActual('../lib/motion'), useReducedMotion: () => mockReduce }))
@@ -13,7 +14,18 @@ let mockSaver = { lowPower: false, expensiveNetwork: false }
 jest.mock('../lib/mediaSaver', () => ({ useMediaSaver: () => mockSaver }))
 jest.mock('../lib/haptics', () => ({ H: new Proxy({}, { get: () => jest.fn() }) }))
 jest.mock('expo-image', () => ({ Image: Object.assign(() => null, { prefetch: jest.fn(async () => true) }) }))
-const mockPlayer = { play: jest.fn(), pause: jest.fn(), addListener: () => ({ remove: () => {} }), loop: false, muted: false }
+const mockListeners: Record<string, ((e: { status?: string }) => void)[]> = {}
+const mockPlayer = {
+  play: jest.fn(),
+  pause: jest.fn(),
+  addListener: (name: string, fn: (e: { status?: string }) => void) => {
+    ;(mockListeners[name] ??= []).push(fn)
+    return { remove: () => {} }
+  },
+  loop: false,
+  muted: false,
+  duration: 12,
+}
 jest.mock('expo-video', () => ({
   useVideoPlayer: () => mockPlayer,
   VideoView: (props: object) => {
@@ -172,6 +184,19 @@ describe('the turn', () => {
     await wait(STILL_MS + 1000)
     expect(screen.getAllByTestId('lead-clip', { includeHiddenElements: true })).toHaveLength(1)
     expect(screen.getByTestId('pulse-lead-clip-ground', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('the pip keeps filling while the clip plays, over the clip’s own length', async () => {
+    await draw({ cards: [media, card('b')] })
+    await wait(STILL_MS * 2 + 1000)
+    const pip = () => Reanimated.getAnimatedStyle(screen.getByTestId('pulse-lead-pip-fill', { includeHiddenElements: true })) as { width: string }
+    const at = () => parseFloat(pip().width)
+    const start = at()
+    await act(async () => (mockListeners.statusChange ?? []).forEach((fn) => fn({ status: 'readyToPlay' })))
+    await wait(6000)
+    // Half of a 12 s clip: about half of the clip's third of the turn.
+    expect(at()).toBeGreaterThan(start + 10)
+    expect(at()).toBeLessThan(100)
   })
 
   it('a finger on the card, or Pause, holds the clip on its frame: the player stays, paused', async () => {
