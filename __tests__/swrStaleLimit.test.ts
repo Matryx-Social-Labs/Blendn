@@ -57,3 +57,23 @@ it('past the limit: the read waits for the server, so an hours-old roster is nev
   now += SWR_STALE_LIMIT_MS + 1
   expect(await names(room)).toEqual(['Organizer', 'Stellar Wave', 'Silent Parrot'])
 })
+
+it('an event read past its 30 s waits for the server: an RSVP made elsewhere is on the page the first time it opens (SCRUM-1074)', async () => {
+  // The event page draws its own 2-minute copy at once, so a stale answer here bought nothing and hid the status: an RSVP
+  // made on another phone showed "Free · I'm going" until the page was opened a second time (the refresh landed only in
+  // the cache).
+  let status: string | null = null
+  global.fetch = jest.fn(async () =>
+    new Response(JSON.stringify({ success: true, data: { id: 'e1', title: 'Vinyl Night', userStatus: { rsvpStatus: status } } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  ) as typeof fetch
+  const rsvp = async () => (await apiClient.getEvent('e1')).data?.userStatus?.rsvpStatus ?? null
+  expect(await rsvp()).toBeNull()
+  status = 'going'
+  now += 10_000
+  expect(await rsvp()).toBeNull() // within 30 s: the same answer, no request
+  now += 25_000
+  expect(await rsvp()).toBe('going')
+})
