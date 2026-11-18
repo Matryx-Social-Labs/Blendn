@@ -40,9 +40,12 @@ export function youMark({
   const haloM = fix.accuracy ?? null
   const age = fix.timestamp ? now - fix.timestamp : 0
   if (age > STALE_AFTER_MS) return { kind: 'stale', haloM, line: `Last seen here ${Math.round(age / 60_000)} min ago · updating` }
-  if (fix.approximate || (haloM ?? 0) > APPROXIMATE_M) return { kind: 'approximate', haloM, line: 'Approximate · Use precise' }
+  if (isApproximate(fix)) return { kind: 'approximate', haloM, line: 'Approximate · Use precise' }
   return { kind: 'precise', haloM, line: null }
 }
+
+/** iOS Precise off says so; elsewhere a radius over a kilometre is a guess at the district, not where you stand. */
+const isApproximate = (fix: Pick<PreciseFix, 'accuracy' | 'approximate'>) => !!fix.approximate || (fix.accuracy ?? 0) > APPROXIMATE_M
 
 export type PlaceLine = { text: string; back: string } | { text: string; switch: [string, string] }
 
@@ -90,6 +93,8 @@ export const FRAME_NEAREST = 6
 export const FRAME_ZOOM = { min: 14.6, max: 16 } as const
 /** Web Mercator's tile size in points, and the slack kept round the framed points. */
 const TILE = 512
+/** The Earth's circumference (m), for metres to points at a zoom. */
+const EARTH_M = 40_075_016.686
 const FRAME_SLACK = 1.25
 
 const mercY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
@@ -99,11 +104,17 @@ const mercY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) /
  * (`view`, already less the top bar and the drawer), between z14.6 and z16. No fix: none (the map opens on the city).
  */
 export function frameOnYou(
-  you: { latitude: number; longitude: number } | null,
+  you: { latitude: number; longitude: number; accuracy?: number | null; approximate?: boolean } | null,
   pins: readonly { latitude: number; longitude: number }[],
   view: { width: number; height: number }
 ): { center: [number, number]; zoom: number } | null {
   if (!you) return null
+  // Approximate (board 06): the circle itself at city-district zoom; "the six nearest" a guess would be invented.
+  if (isApproximate(you)) {
+    const metresPerPoint = (2 * Math.max(you.accuracy ?? APPROXIMATE_M, APPROXIMATE_M) * FRAME_SLACK) / Math.max(1, Math.min(view.width, view.height))
+    const zoom = Math.log2((EARTH_M * Math.cos((you.latitude * Math.PI) / 180)) / (TILE * metresPerPoint))
+    return { center: [you.longitude, you.latitude], zoom: Math.round(Math.min(FRAME_ZOOM.min, zoom) * 100) / 100 }
+  }
   const d = (p: { latitude: number; longitude: number }) => (p.latitude - you.latitude) ** 2 + ((p.longitude - you.longitude) * Math.cos((you.latitude * Math.PI) / 180)) ** 2
   const near = [...pins].sort((a, b) => d(a) - d(b)).slice(0, FRAME_NEAREST)
   if (!near.length) return { center: [you.longitude, you.latitude], zoom: FRAME_ZOOM.max }

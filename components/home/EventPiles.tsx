@@ -1,5 +1,5 @@
 import { GeoJSONSource, Layer, type GeoJSONSourceRef, type PressEventWithFeatures } from '@maplibre/maplibre-react-native'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef, type ReactNode } from 'react'
 import type { NativeSyntheticEvent } from 'react-native'
 
 import { shadeOf, type Pin } from '../../lib/homeMap'
@@ -37,12 +37,15 @@ export function EventPiles({
   focusId,
   onOpen,
   onExpand,
+  children,
 }: {
   pins: readonly Pin[]
   focusId: string | null
   onOpen: (kind: string, id: string) => void
   /** A number was tapped: the camera eases there (the person's own move). */
   onExpand: (to: { center: [number, number]; zoom: number }) => void
+  /** Drawn above the piles and under the focus: the you-dot. */
+  children?: ReactNode
 }) {
   const source = useRef<GeoJSONSourceRef>(null)
   const { piled, focus } = useMemo(() => splitFocus(pins, focusId), [pins, focusId])
@@ -139,6 +142,8 @@ export function EventPiles({
           paint={{ 'text-color': MAP_THEME.pile.text }}
         />
       </GeoJSONSource>
+      {/* Above the piles, under the focus: you (pulse-map 08). */}
+      {children}
       {focusData ? (
         <GeoJSONSource id="pins-focus" data={focusData} onPress={press}>
           <Layer

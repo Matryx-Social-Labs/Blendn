@@ -36,20 +36,32 @@ beforeEach(() => {
 })
 
 it('precise: the violet dot with a white ring, and the real accuracy as its halo', async () => {
-  await render(<YouMark fix={fix()} sharing now={NOW} />)
+  await render(
+    <>
+      <YouMark part="halo" fix={fix()} sharing now={NOW} />
+      <YouMark part="dot" fix={fix()} sharing now={NOW} />
+    </>
+  )
   expect(ids()).toEqual(['you-halo', 'you-dot'])
+  // Two sources, so the dot can be drawn above the piles while the halo stays under them (drive: you hid under a "13").
+  expect(mockSources.map((s) => s.id)).toEqual(['you', 'you-dot'])
   expect(paint('you-dot')).toMatchObject({ 'circle-color': MAP_THEME.you.dot, 'circle-stroke-color': MAP_THEME.you.ring })
   expect(paint('you-halo')?.['circle-radius']).toEqual(haloRadius(18, 12.97))
 })
 
 it('approximate: a soft circle, no dot', async () => {
-  await render(<YouMark fix={fix({ accuracy: 3000, approximate: true })} sharing now={NOW} />)
+  await render(
+    <>
+      <YouMark part="halo" fix={fix({ accuracy: 3000, approximate: true })} sharing now={NOW} />
+      <YouMark part="dot" fix={fix({ accuracy: 3000, approximate: true })} sharing now={NOW} />
+    </>
+  )
   expect(ids()).toEqual(['you-halo'])
   expect(paint('you-halo')).toMatchObject({ 'circle-stroke-color': MAP_THEME.you.approximateEdge })
 })
 
 it('stale past 10 minutes: grey, never violet', async () => {
-  await render(<YouMark fix={fix({ timestamp: NOW - 25 * 60_000 })} sharing now={NOW} />)
+  await render(<YouMark part="dot" fix={fix({ timestamp: NOW - 25 * 60_000 })} sharing now={NOW} />)
   expect(paint('you-dot')).toMatchObject({ 'circle-color': MAP_THEME.you.stale })
 })
 
@@ -57,7 +69,7 @@ it.each([
   ['sharing off in Blend’n', { fix: fix(), sharing: false }],
   ['no fix (denied, or not yet)', { fix: null, sharing: true }],
 ])('%s: nothing is drawn', async (_, p) => {
-  await render(<YouMark {...p} now={NOW} />)
+  await render(<YouMark part="dot" {...p} now={NOW} />)
   expect(mockSources).toHaveLength(0)
 })
 

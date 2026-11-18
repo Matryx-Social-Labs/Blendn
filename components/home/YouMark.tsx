@@ -18,9 +18,10 @@ export function haloRadius(metres: number, latitude: number) {
 /**
  * "You" on the Pulse map (pulse-map 06, Option 3): violet, the halo the fix's real accuracy. Precise: dot, white ring,
  * halo. Approximate: the soft circle only. Stale (> 10 min): a grey dot. Off in Blend'n, or no fix: nothing at all.
- * Drawn under the events, so the one bright thing on the map stays the focus.
+ * Two parts, drawn apart: the halo under the events (numbers stay crisp over the approximate circle, board 06) and the
+ * dot over the piles but under the focus (board 08), so you are never hidden in a number and the focus stays the bright thing.
  */
-export function YouMark({ fix, sharing, now }: { fix: PreciseFix | null; sharing: boolean; now: number }) {
+export function YouMark({ part, fix, sharing, now }: { part: 'halo' | 'dot'; fix: PreciseFix | null; sharing: boolean; now: number }) {
   const mark = youMark({ sharing, permission: 'granted', fix, now })
   const data = useMemo(
     () => (fix ? { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'Point' as const, coordinates: [fix.longitude, fix.latitude] } }] } : null),
@@ -28,34 +29,37 @@ export function YouMark({ fix, sharing, now }: { fix: PreciseFix | null; sharing
   )
   if (!data || !fix || mark.kind === 'off' || mark.kind === 'none' || mark.kind === 'denied') return null
   const approximate = mark.kind === 'approximate'
-  const stale = mark.kind === 'stale'
-  return (
-    <GeoJSONSource id="you" data={data}>
-      <Layer
-        key="you-halo"
-        id="you-halo"
-        type="circle"
-        paint={{
-          'circle-color': MAP_THEME.you.halo,
-          'circle-radius': haloRadius(mark.haloM ?? 0, fix.latitude) as never,
-          'circle-stroke-color': approximate ? MAP_THEME.you.approximateEdge : MAP_THEME.you.halo,
-          'circle-stroke-width': approximate ? 1 : 0,
-          'circle-pitch-alignment': 'map',
-        }}
-      />
-      {approximate ? null : (
+  if (part === 'halo')
+    return (
+      <GeoJSONSource id="you" data={data}>
         <Layer
-          key="you-dot"
-          id="you-dot"
+          key="you-halo"
+          id="you-halo"
           type="circle"
           paint={{
-            'circle-color': stale ? MAP_THEME.you.stale : MAP_THEME.you.dot,
-            'circle-radius': MAP_THEME.you.radiusPx,
-            'circle-stroke-color': MAP_THEME.you.ring,
-            'circle-stroke-width': MAP_THEME.you.ringPx,
+            'circle-color': MAP_THEME.you.halo,
+            'circle-radius': haloRadius(mark.haloM ?? 0, fix.latitude) as never,
+            'circle-stroke-color': approximate ? MAP_THEME.you.approximateEdge : MAP_THEME.you.halo,
+            'circle-stroke-width': approximate ? 1 : 0,
+            'circle-pitch-alignment': 'map',
           }}
         />
-      )}
+      </GeoJSONSource>
+    )
+  if (approximate) return null
+  return (
+    <GeoJSONSource id="you-dot" data={data}>
+      <Layer
+        key="you-dot"
+        id="you-dot"
+        type="circle"
+        paint={{
+          'circle-color': mark.kind === 'stale' ? MAP_THEME.you.stale : MAP_THEME.you.dot,
+          'circle-radius': MAP_THEME.you.radiusPx,
+          'circle-stroke-color': MAP_THEME.you.ring,
+          'circle-stroke-width': MAP_THEME.you.ringPx,
+        }}
+      />
     </GeoJSONSource>
   )
 }

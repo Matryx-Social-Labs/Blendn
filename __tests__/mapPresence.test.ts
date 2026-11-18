@@ -159,6 +159,25 @@ describe('frameOnYou: you and the six nearest, in the map you can see', () => {
     expect(frameOnYou(you, [at('far1', 0.03, 0.03), at('far2', -0.04, 0.02)], view)).toEqual({ center: [you.longitude, you.latitude], zoom: 14.6 })
   })
 
+  /*
+   * Approximate (pulse-map 06, "iOS Precise off"): the map frames the ~3 km circle at city-district zoom. The Android drive
+   * opened a 3 km fix at street zoom framed on "the six nearest" of a guess, the whole view one violet wash.
+   */
+  it('approximate: frames its own circle, on you, at city-district zoom (whatever is near)', () => {
+    const near = [1, 2].map((i) => at(`n${i}`, 0.001 * i, 0.001 * i))
+    const f = frameOnYou({ ...you, accuracy: 3000 }, near, view)!
+    expect(f.center).toEqual([you.longitude, you.latitude])
+    expect(f.zoom).toBeGreaterThan(11)
+    expect(f.zoom).toBeLessThan(12.5)
+  })
+
+  it('a precise accuracy (the control) frames the nearest as before', () => {
+    const near = [1, 2].map((i) => at(`n${i}`, 0.001 * i, 0.001 * i))
+    expect(frameOnYou({ ...you, accuracy: 12 }, near, view)).toEqual(frameOnYou(you, near, view))
+    // iOS says so itself (Precise off) even when the radius reads small.
+    expect(frameOnYou({ ...you, accuracy: 400, approximate: true }, near, view)!.center).toEqual([you.longitude, you.latitude])
+  })
+
   it('no fix: no frame (the map opens on the city, as today)', () => {
     expect(frameOnYou(null, [at('a', 0.001, 0.001)], view)).toBeNull()
   })

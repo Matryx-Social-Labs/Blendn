@@ -215,7 +215,8 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   })
 
   it("draws the person as our own violet mark, never the native puck (blue; on Android its compass mode redrew the map forever)", () => {
-    expect(component).toMatch(/<YouMark fix=\{center\} sharing=\{sharing\} now=\{now\} \/>/)
+    expect(component).toMatch(/<YouMark part="halo" fix=\{center\} sharing=\{sharing\} now=\{now\} \/>/)
+    expect(component).toMatch(/<YouMark part="dot" fix=\{center\} sharing=\{sharing\} now=\{now\} \/>/)
     expect(component).not.toMatch(/NativeUserLocation/)
   })
 

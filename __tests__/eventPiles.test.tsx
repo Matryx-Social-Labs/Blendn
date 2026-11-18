@@ -72,6 +72,22 @@ it('the focus comes out of the piles into its own source, drawn last (top)', asy
   expect(layer('pin-focus')?.paint).toMatchObject({ 'circle-radius': MAP_THEME.pin.focus.radiusPx, 'circle-stroke-color': MAP_THEME.pin.focus.ring })
 })
 
+/*
+ * You stay visible over a pile (pulse-map 08, city zoom: the violet dot sits on the "16"'s edge). The Android drive found
+ * you hidden under a "13": the you-mark was drawn before the piles. What EventPiles is given goes between them and the focus.
+ */
+it('draws what it is given above the piles and under the focus (you, between them)', async () => {
+  const { Layer } = require('@maplibre/maplibre-react-native')
+  await render(
+    <EventPiles pins={PINS} focusId="lit" onOpen={jest.fn()} onExpand={jest.fn()}>
+      <Layer id="between" />
+    </EventPiles>
+  )
+  const order = mockLayers.map((l) => l.id)
+  expect(order.indexOf('between')).toBeGreaterThan(order.indexOf('pile-count'))
+  expect(order.indexOf('between')).toBeLessThan(order.indexOf('pin-focus-halo'))
+})
+
 it('control: no focus, every pin can pile, and no focus source is drawn', async () => {
   await render(<EventPiles pins={PINS} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
   expect(ids(last('pins'))).toEqual(['a', 'lit', 'b'])

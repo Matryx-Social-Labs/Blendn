@@ -682,7 +682,7 @@ export const HomeMap = memo(function HomeMap({
          * You (pulse-map 06): violet, the halo the fix's real accuracy; approximate a soft circle, stale grey; nothing with
          * sharing off. Our own layers, not the native puck (blue, and on Android a compass mode that redrew the map ~7×/s).
          */}
-        <YouMark fix={center} sharing={sharing} now={now} />
+        <YouMark part="halo" fix={center} sharing={sharing} now={now} />
         {/*
          * Remounted together when the building source switches: the glow goes under
          * the buildings and the lit copies over them, so they must be added after
@@ -709,7 +709,9 @@ export const HomeMap = memo(function HomeMap({
           </>
         ) : null}
         {/* Every event a dot at every zoom, piles as numbers, the focus on its own on top (pulse-map 08). */}
-        <EventPiles pins={pins} focusId={focusPin?.id ?? null} onOpen={open} onExpand={expandPile} />
+        <EventPiles pins={pins} focusId={focusPin?.id ?? null} onOpen={open} onExpand={expandPile}>
+          <YouMark part="dot" fix={center} sharing={sharing} now={now} />
+        </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
