@@ -166,7 +166,7 @@ const component = code('components/home/HomeMap.tsx')
 
 describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   // The map's own layers live in two files: the component and its lit layers.
-  const layers = component + code('components/home/MapLitLayers.tsx')
+  const layers = component + code('components/home/MapLitLayers.tsx') + code('components/home/EventPiles.tsx')
   // Everything that decides what the map draws: the component, its layers, its lighting, its pure parts, its style and its theme.
   const drawing = [
     'components/home/HomeMap.tsx',
@@ -186,7 +186,10 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     // Near me's reach (N1) is the one exception: fixed rings round the person (a 20-minute walk, a short ride), never an event's.
     const types = [...layers.matchAll(/type="([a-z-]+)"/g)].map((m) => m[1])
     expect(types.length).toBeGreaterThan(0)
-    const areas = types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')
+    // A pile's numerals are text (`symbol`, the `pile-count` layer), not an area.
+    const areas = types.filter((t) => t !== 'fill-extrusion' && t !== 'circle' && t !== 'symbol')
+    expect(types.filter((t) => t === 'symbol')).toHaveLength(1)
+    expect(layers).toMatch(/id="pile-count"\s+type="symbol"/)
     const reach = [...layers.matchAll(/<Layer id="reach-[a-z-]+" type="([a-z-]+)"/g)].map((m) => m[1])
     expect(reach).toEqual(['fill', 'line', 'fill', 'line'])
     expect(areas).toEqual(reach)
@@ -223,10 +226,20 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 
   it("sizes circles only by the theme: the bucket’s glow, the fixed dot, the fixed ground glow — never anything a place carries", () => {
     const radii = [...layers.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
-    expect(radii.length).toBe(3)
+    // The piles (pulse-map 08): the glow, the dot (dimmed beside a focus), a number by its count, the focus and its halo.
+    expect(radii.length).toBe(6)
     for (const r of radii) {
-      expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'radius']).toContain(r)
+      expect([
+        "['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]",
+        'lit ? MAP_THEME.pin.dimmed.radiusPx : MAP_THEME.pin.dotRadiusPx',
+        'BUBBLE_RADIUS as never',
+        'MAP_THEME.pin.glowPxPerStep * 2',
+        'MAP_THEME.pin.focus.radiusPx',
+        'radius',
+      ]).toContain(r)
     }
+    // A number's size reads its count and nothing a place carries.
+    expect(layers).toMatch(/const BUBBLE_RADIUS = \['step', \['get', 'point_count'\]/)
     // At the browsed city's latitude (SCRUM-998), and nothing a place carries.
     expect(layers).toMatch(/const radius = useMemo\(\(\) => glowRadius\(latitude\), \[latitude\]\)/)
     // The ground glow is the theme's metres at every zoom, read off nothing.

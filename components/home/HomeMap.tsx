@@ -23,13 +23,11 @@ import {
   cameraMove,
   cityPickAction,
   insideLastCircle,
-  LIGHT_MIN_ZOOM,
   liveAt,
   loadPins,
   locateTarget,
   mapPadding,
   roundQuery,
-  shadeOf,
   shouldFollowFix,
   snapRecentre,
   tiltedZoom,
@@ -65,9 +63,10 @@ import { tint } from '../../lib/theme'
 import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
+import { EventPiles } from './EventPiles'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
-import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
+import { useMapLighting, type MapView, type Segment } from './useMapLighting'
 
 /** A pan settles before the server is asked; the lists allow 60 reads a minute. */
 const QUERY_DEBOUNCE_MS = 600
@@ -76,10 +75,8 @@ const PIN_LIMIT = 50
 /** An event's pin is re-read against its window this often, so it lights up when its doors open. */
 const LIVE_TICK_MS = 60_000
 
-type Point = { type: 'Point'; coordinates: [number, number] }
 /** A camera move: where to, how long an ease within a city takes, and a zoom and tilt to arrive at. */
 type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: number } }
-type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { id: string; kind: string; glow: number; color: string } }
 
 const NO_PINS: Pin[] = []
 /** A held move this close to the fix is a move to the person (the reach's frame sits about a kilometre off them). */
@@ -613,17 +610,14 @@ export const HomeMap = memo(function HomeMap({
     [open]
   )
 
-  const pinData = useMemo<Collection<PinFeature>>(
-    () => ({
-      type: 'FeatureCollection',
-      features: pins.map((p) => ({
-        type: 'Feature',
-        id: p.id,
-        geometry: { type: 'Point', coordinates: [p.longitude, p.latitude] },
-        properties: { id: p.id, kind: p.kind, glow: p.glow, color: shadeOf(p.kind, p.live) },
-      })),
-    }),
-    [pins]
+  // A number tapped: the camera eases to the zoom that opens it, the person's own move (a fix no longer takes the map).
+  const expandPile = useCallback(
+    ({ center: to, zoom }: { center: [number, number]; zoom: number }) => {
+      setTouched(true)
+      onTouched?.()
+      stop({ center: to, zoom, padding: shown.current.padding, duration: reduceMotion ? 0 : MAP_THEME.camera.easeMs })
+    },
+    [onTouched, reduceMotion]
   )
 
   const style = useMemo(() => homeMapStyle(), [])
@@ -691,30 +685,8 @@ export const HomeMap = memo(function HomeMap({
             </GeoJSONSource>
           </>
         ) : null}
-        <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
-          <Layer
-            id="pin-glow"
-            type="circle"
-            maxzoom={LIGHT_MIN_ZOOM}
-            paint={{
-              'circle-color': ['get', 'color'],
-              'circle-radius': ['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep],
-              'circle-blur': 1,
-              'circle-opacity': MAP_THEME.pin.glowOpacity,
-            }}
-          />
-          <Layer
-            id="pin-dot"
-            type="circle"
-            maxzoom={LIGHT_MIN_ZOOM}
-            paint={{
-              'circle-color': ['get', 'color'],
-              'circle-radius': MAP_THEME.pin.dotRadiusPx,
-              'circle-stroke-color': MAP_THEME.pin.dotStroke,
-              'circle-stroke-width': MAP_THEME.pin.dotStrokePx,
-            }}
-          />
-        </GeoJSONSource>
+        {/* Every event a dot at every zoom, piles as numbers, the focus on its own on top (pulse-map 08). */}
+        <EventPiles pins={pins} focusId={focusPin?.id ?? null} onOpen={open} onExpand={expandPile} />
         <Chips chips={lit.chips} onOpen={open} />
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />

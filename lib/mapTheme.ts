@@ -18,6 +18,7 @@ import { COLOR, SPACE } from './design/tokens'
 
 /** The brand colours from the tokens, and the one stop they do not carry by its `colors.css` name. */
 const TOKEN = {
+  white: COLOR.textPrimary,
   brandOrange: COLOR.brandOrange,
   brandRose: COLOR.brandRose,
   emberEnd: '#FF6D8D', // the far end of --gradient-ember
@@ -182,6 +183,23 @@ export const MAP_THEME = {
     glowOpacity: 0.5,
     event: { live: EMBER_GLOW, later: TOKEN.brandOrange },
     venue: { live: ORCHID, later: TOKEN.brandRose },
+    /** A live event's rim (pulse-map 08): a shape cue; ember alone is only ΔE 7–12 from a later one. Not a token. */
+    liveRim: TOKEN.white,
+    liveRimPx: 1.5,
+    /** The one bright thing (pulse-map 08): 9 pt, warmer and lighter than the rest, a white ring. Not a token. */
+    focus: { color: '#FF906D', radiusPx: 9, ring: TOKEN.white, ringPx: 2 },
+    /** With a focus, the rest stay visible but quiet: glow off, 5 pt, 85% (55% failed contrast, sheet 09). */
+    dimmed: { radiusPx: 5, opacity: 0.85 },
+  },
+
+  /** A pile of events (pulse-map 08): ink 90% with an ember rim, white numerals in the style's own glyphs (Satoshi is never hosted). */
+  pile: {
+    fill: 'rgba(13,12,12,0.9)',
+    rim: TOKEN.brandOrange,
+    rimPx: 1.5,
+    text: TOKEN.white,
+    font: ['Noto Sans Bold'],
+    textSize: 13,
   },
 
   /** The name above a lit roof. Only the nearest few on screen get one. */
