@@ -20,6 +20,7 @@ import { NearbyRow, nearbyRowLabel } from '../components/pulse/NearbyRow'
 import { SetList, setRowLabel } from '../components/pulse/SetList'
 import { Where } from '../components/venue/VenueSections'
 import { homeCardProps } from '../lib/pulse'
+import { subtree } from './helpers/ax'
 /* eslint-enable import/first */
 
 const HIDDEN = { includeHiddenElements: true }
@@ -66,6 +67,10 @@ describe('the Nearby section’s distance column (EventCard lead)', () => {
   it('"about 2 km" may take two lines ("about" over "2 km") rather than clip to "about…" at large text (iOS drive, AX)', async () => {
     await render(<EventCard kind="row" lead="distance" title="Sunday Jazz Brunch" time="Tue · 12 PM" venue="Olive Beach" distance="about 2 km" testID="e" />)
     expect(screen.getByTestId('e-lead', HIDDEN).props.numberOfLines).toBe(2)
+    // The number keeps its unit, so the break falls after "about" (the drive wrapped it "about 2" over "km").
+    const lead = subtree(screen.toJSON() as never, 'e-lead')
+    expect(JSON.stringify(lead?.children)).toContain('"\u00A0"')
+    expect(JSON.stringify(lead?.children)).not.toContain('"2"," ","km"')
   })
 })
 

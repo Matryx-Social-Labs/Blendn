@@ -240,7 +240,8 @@ export function EventCard(props: EventCardProps) {
         >
           {leading ? (
             <Text testID={testID && `${testID}-lead`} numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.lead]}>
-              <MonoRun text={distance} />
+              {/* The number keeps its unit, so a second line takes "2 km" whole under "about". */}
+              <MonoRun text={distance.replace(/ (?=\S+$)/, '\u00A0')} />
             </Text>
           ) : null}
           {result ? null : thumb}
