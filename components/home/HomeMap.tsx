@@ -455,6 +455,8 @@ export const HomeMap = memo(function HomeMap({
     edge: edgeTarget ? { at: edgeTarget.at, box: edgeBox } : null,
     // No name under the stale callout either (map-finish drive: a chip sat 3 pt off it).
     stale: you.kind === 'stale' ? STALE_CALLOUT : null,
+    // The lead's chip says its card's distance (Android drive: 800 m over a card reading 850 m), as the edge marker does.
+    knownDistance: focus?.pin && typeof focus.km === 'number' ? { id: focus.pin.id, km: focus.km } : null,
   })
   // The dot going grey (or violet again) moves no camera: the names are placed again around the callout.
   const isStale = you.kind === 'stale'

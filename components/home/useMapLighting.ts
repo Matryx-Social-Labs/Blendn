@@ -91,6 +91,7 @@ export function useMapLighting({
   userAt = null,
   edge = null,
   stale = null,
+  knownDistance = null,
 }: {
   map: RefObject<MapRef | null>
   view: RefObject<MapView>
@@ -115,6 +116,8 @@ export function useMapLighting({
   edge?: { at: LngLat; box: Box } | null
   /** The stale callout's room while your dot is grey (`StaleCallout`): no name is drawn under it, on whichever side it hangs. */
   stale?: { width: number; height: number; gap: number } | null
+  /** A distance the screen already shows for one event (the lead card's): its chip says the same number. */
+  knownDistance?: { id: string; km: number } | null
 }): { lit: Lit; onFrame: () => void; relight: () => void; passes: number } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
   const needsLight = useRef(false)
@@ -153,7 +156,7 @@ export function useMapLighting({
     const tiles = featureIds ? 'own' : 'openfreemap'
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
-    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? 'stale' : ''}`
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? 'stale' : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}`
     if (signature === lastLit.current) {
       setPasses((n) => n + 1)
       return
@@ -215,16 +218,17 @@ export function useMapLighting({
     const kept = dedupeLit(places)
     const byId = new Map(candidates.map((c) => [c.id, c]))
     // An event's line says when and how far from you (pulse-map 05, 12 A): "3 tonight · 200 m"; a venue's stays its bucket.
+    const knownKm = (p: { ids: string[] }) => (knownDistance && p.ids.includes(knownDistance.id) ? knownDistance.km : null)
     const lineFor = (p: LitPlace & { pin: Pin; count: number; ids: string[] }) => {
       if (p.kind !== 'event') return chipLine(p.pin)
       const when = p.count > 1 ? stackLine(p.ids.map((id) => byId.get(id) ?? p.pin)) : chipLine(p.pin)
-      return withDistance(when, p.at, userAt)
+      return withDistance(when, p.at, userAt, knownKm(p))
     }
     const chipFor = (p: LitPlace & { pin: Pin; count: number; ids: string[] }): Chip => ({
       id: p.id,
       kind: p.kind,
       live: p.live,
-      ...spokenWithDistance(stackedChip(p.pin, p.count), p, userAt),
+      ...spokenWithDistance(stackedChip(p.pin, p.count), p, userAt, knownKm(p)),
       line: lineFor(p),
       at: p.at,
       lift: chipLiftPx(topOfM(p), { zoom: v.zoom, pitch: v.pitch, latitude: p.at[1] }),
@@ -279,7 +283,7 @@ export function useMapLighting({
 }
 
 /** A screen reader hears the same distance the chip shows ("…, 200 m away"); none without a fix. */
-function spokenWithDistance<T extends { speech: string }>(chip: T, p: { kind: string; at: LngLat }, from: LngLat | null | undefined): T {
-  const far = p.kind === 'event' && from ? withDistance('', p.at, from) : ''
+function spokenWithDistance<T extends { speech: string }>(chip: T, p: { kind: string; at: LngLat }, from: LngLat | null | undefined, knownKm: number | null): T {
+  const far = p.kind === 'event' && from ? withDistance('', p.at, from, knownKm) : ''
   return far ? { ...chip, speech: `${chip.speech}, ${far} away` } : chip
 }

@@ -289,6 +289,13 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(lighting).toMatch(/\$\{stale \? 'stale' : ''\}/)
   })
 
+  it('the lead’s chip says the lead card’s own distance too (Android drive: 800 m over a card reading 850 m)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    expect(component).toMatch(/knownDistance: focus\?\.pin && typeof focus\.km === 'number' \? \{ id: focus\.pin\.id, km: focus\.km \} : null/)
+    expect(lighting).toMatch(/withDistance\(when, p\.at, userAt, knownKm\(p\)\)/)
+    expect(lighting).toMatch(/\$\{knownDistance \? `\$\{knownDistance\.id\}=\$\{knownDistance\.km\}` : ''\}/)
+  })
+
   it('the edge marker says the lead card’s own distance (drive: the marker read 800 m over a card reading 850 m)', () => {
     expect(component).toMatch(/const edgeKm = focus\?\.km \?\? /)
     expect(code('app/(tabs)/events.tsx')).toMatch(/km: focusKm/)

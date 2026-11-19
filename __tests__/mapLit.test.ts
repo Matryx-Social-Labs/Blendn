@@ -627,6 +627,14 @@ describe('the chip line (pulse-map 05, 12 A): when, then how far from you, in mo
     expect(withDistance('', north(180), at)).toBe('200 m')
   })
 
+  it('says the card’s own distance when the screen already shows one (Android drive: the chip read 800 m over a card reading 850 m)', () => {
+    expect(withDistance('Tue · 12 PM', north(816), at, 0.85)).toBe('Tue · 12 PM · 850 m')
+    // Still never without a fix, whatever is known.
+    expect(withDistance('Tue · 12 PM', north(816), null, 0.85)).toBe('Tue · 12 PM')
+    // Nothing known: measured, as before.
+    expect(withDistance('Tue · 12 PM', north(816), at, null)).toBe('Tue · 12 PM · 800 m')
+  })
+
   it('says how many and when for several events at one venue: "3 tonight", "3 events" across days', () => {
     const tonight = (h: number) => ({ kind: 'event' as const, live: false, startsAt: `2026-10-09T${h}:30:00Z`, bucket: null, timeZone: 'Asia/Kolkata' })
     expect(stackLine([tonight(13), tonight(14), tonight(15)], now)).toBe('3 tonight')

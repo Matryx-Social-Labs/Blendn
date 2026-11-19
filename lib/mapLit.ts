@@ -406,8 +406,9 @@ export function chipLine(p: ChipSource, now: number = Date.now()): string {
 }
 
 /** A chip's line and how far it is from your fix ("Tonight · 8 PM · 200 m", pulse-map 05, 12 A); no fix, no distance. */
-export function withDistance(line: string, at: readonly [number, number], from: readonly [number, number] | null): string {
-  const far = from ? distanceText(getDistanceKm(from[1], from[0], at[1], at[0])) : null
+export function withDistance(line: string, at: readonly [number, number], from: readonly [number, number] | null, knownKm?: number | null): string {
+  // `knownKm`: the distance the screen already shows for it (the lead card's), so one place never reads two numbers.
+  const far = from ? distanceText(typeof knownKm === 'number' ? knownKm : getDistanceKm(from[1], from[0], at[1], at[0])) : null
   if (!far) return line
   return line ? `${line} · ${far}` : far
 }
