@@ -37,9 +37,10 @@ const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
 jest.mock('../components/scene/SceneHeroMedia', () => ({ SceneHeroMedia: () => null, HERO_CAPTION_FOOT: 40 }))
 jest.mock('../components/scene/SceneLightbox', () => ({ SceneLightbox: () => null }))
+const mockLobbyProps = jest.fn()
 jest.mock('../components/board/LobbyPreview', () => {
   const { View } = jest.requireActual('react-native')
-  return { EventLobbyPreview: () => <View testID="lobby-preview" /> }
+  return { EventLobbyPreview: (p: object) => (mockLobbyProps(p), <View testID="lobby-preview" />) }
 })
 jest.mock('../lib/blendnOverlay', () => ({ openBlendn: jest.fn(), openPass: jest.fn(), openRoomOf: jest.fn(), useRoomUp: () => false, useLiveEventId: () => null, useLiveTitle: () => null }))
 jest.mock('../lib/calendar', () => ({ addToCalendar: jest.fn() }))
@@ -823,6 +824,24 @@ describe('the Lobby card (P-A, SCRUM-1026)', () => {
     await open()
     await screen.findByTestId('scene-cancelled')
     expect(screen.queryByTestId('lobby-preview')).toBeNull()
+  })
+
+  it('is told your standing only once the server holds it, so a Save reads it again (SCRUM-1078; control: not the optimistic flip)', async () => {
+    api.getEvent.mockResolvedValue(detail() as never)
+    let answer: (v: unknown) => void = () => {}
+    api.toggleInterest.mockReturnValue(new Promise((resolve) => (answer = resolve)) as never)
+    await open()
+    await screen.findByTestId('lobby-preview')
+    const last = () => mockLobbyProps.mock.calls[mockLobbyProps.mock.calls.length - 1][0]
+    expect(last()).toMatchObject({ saved: false, rsvp: null })
+    await act(async () => {
+      fireEvent.press(screen.getByRole('button', { name: 'Save' }))
+    })
+    // The bookmark is already lit; the Lobby is not asked until the write lands.
+    expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy()
+    expect(last()).toMatchObject({ saved: false })
+    await act(async () => answer({ success: true, data: { interested: true, interestCount: 1 } }))
+    expect(last()).toMatchObject({ saved: true })
   })
 
   it('stays after the doors: read-only until the close, or the room once live, as the server says (control: not the phone)', async () => {
