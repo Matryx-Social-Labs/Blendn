@@ -29,7 +29,7 @@ import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
 import { CONTROL_FONT_CAP } from '../../components/ds/shared'
 import { LeadPager, type LeadCard } from '../../components/pulse/LeadPager'
-import { applyOrder, FIX_WAIT_MS, lapOrder, leadOrderMode, type LeadOrder } from '../../lib/featuredLap'
+import { applyOrder, FIX_WAIT_MS, LAP_SEED, lapOrder, lapSeedOf, leadOrderMode, type LeadOrder } from '../../lib/featuredLap'
 import { feedPlaylist } from '../../lib/feedMedia'
 import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
@@ -340,6 +340,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   // Pull-to-refresh count: a failed Upcoming thumb tries its cover again (SCRUM-480).
   const [pulls, setPulls] = useState(0)
   const [userLocation, setUserLocation] = useState<PreciseFix | null>(null)
+  /** A recent last-known position that only orders the Featured lap on a cold start (SCRUM-1077); never shown or sent. */
+  const [lapSeed, setLapSeed] = useState<{ latitude: number; longitude: number } | null>(null)
   const proximityData = useMemo(
     () => (userLocation ? proximityFor(events, userLocation) : {}),
     [events, userLocation]
@@ -809,6 +811,11 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
               setUserLocation(fixOf(lastKnown))
             }
           } catch {}
+          // A cold start's first fix often takes longer than the lead's 3 s hold: a recent last-known position orders the
+          // lap meanwhile, never shown as you (SCRUM-1077). None good enough: the server's order, as before.
+          Location.getLastKnownPositionAsync({ maxAge: LAP_SEED.maxAgeMs, requiredAccuracy: LAP_SEED.accuracyM })
+            .then((seed) => setLapSeed(lapSeedOf(seed, Date.now())))
+            .catch(() => {})
           // Defer live GPS to avoid blocking startup render
           setTimeout(async () => {
             try {
@@ -1579,7 +1586,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const [leadOrder, setLeadOrder] = useState<LeadOrder>('pending')
   const [fixWaitOver, setFixWaitOver] = useState(false)
-  const orderMode = leadOrderMode({ permission: locationStatus, sharing, hasFix: !!userLocation, timedOut: fixWaitOver, current: leadOrder })
+  // Where the lap is ordered from: the fix, else a recent last-known position (SCRUM-1077).
+  const orderFrom = userLocation ?? lapSeed
+  const orderMode = leadOrderMode({ permission: locationStatus, sharing, hasFix: !!orderFrom, timedOut: fixWaitOver, current: leadOrder })
   if (orderMode !== leadOrder) setLeadOrder(orderMode)
   const hasPicks = leadPicks.length > 0
   useEffect(() => {
@@ -1590,7 +1599,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const picksKey = leadPicks.map((e) => e.id).sort().join('|')
   const [frozenLead, setFrozenLead] = useState<{ key: string; ids: string[] } | null>(null)
   if (orderMode !== 'pending' && hasPicks && frozenLead?.key !== picksKey) {
-    setFrozenLead({ key: picksKey, ids: lapOrder(leadPicks, orderMode === 'near' && hasFix).map((e) => e.id) })
+    setFrozenLead({ key: picksKey, ids: lapOrder(leadPicks, orderMode === 'near' ? orderFrom : null).map((e) => e.id) })
   }
   const leadEvents = useMemo(
     () => applyOrder(leadPicks, frozenLead?.key === picksKey ? frozenLead.ids : null),

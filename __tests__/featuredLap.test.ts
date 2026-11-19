@@ -5,6 +5,8 @@
 import {
   BARE_TURN_MS,
   lapOrder,
+  LAP_SEED,
+  lapSeedOf,
   lapPolicy,
   nextStep,
   PIP_CAP,
@@ -18,27 +20,58 @@ import {
 import type { FeedMediaItem } from '../lib/feedMedia'
 
 const ev = (id: string, distance?: number | null) => ({ id, distance })
+// A fix: events with no coordinates of their own are ordered by the server's distance.
+const here = { latitude: 12.97, longitude: 77.59 }
 const img = (n: number): FeedMediaItem => ({ kind: 'image', url: `i${n}` })
 const clip = (n: number): FeedMediaItem => ({ kind: 'video', url: `v${n}`, posterUrl: null })
 
 describe('lapOrder: nearest first; the server (sponsor) order only breaks ties', () => {
   it('sorts by distance with a fix, and keeps the server order between equals', () => {
-    const order = lapOrder([ev('far', 7.3), ev('a', 0.21), ev('b', 0.21), ev('mid', 3.1)], true).map((e) => e.id)
+    const order = lapOrder([ev('far', 7.3), ev('a', 0.21), ev('b', 0.21), ev('mid', 3.1)], here).map((e) => e.id)
     expect(order).toEqual(['a', 'b', 'mid', 'far'])
   })
 
   it('an event with no distance goes after every one that has one, in server order', () => {
-    expect(lapOrder([ev('x', null), ev('n', 1), ev('y')], true).map((e) => e.id)).toEqual(['n', 'x', 'y'])
+    expect(lapOrder([ev('x', null), ev('n', 1), ev('y')], here).map((e) => e.id)).toEqual(['n', 'x', 'y'])
   })
 
   it('no fix: the server order, untouched (no invented distances)', () => {
-    expect(lapOrder([ev('far', 7.3), ev('a', 0.21)], false).map((e) => e.id)).toEqual(['far', 'a'])
+    expect(lapOrder([ev('far', 7.3), ev('a', 0.21)], null).map((e) => e.id)).toEqual(['far', 'a'])
+  })
+
+  /*
+   * SCRUM-1077: on a cold start the featured list is read before any fix, so it carries no distances. Ordered from a
+   * last-known position, each event's own coordinates give its distance: the 750 m event opens ahead of the 6.8 km one.
+   */
+  it('orders by each event’s own coordinates from the position given, when the list carries no distance', () => {
+    const at = (id: string, dLat: number) => ({ id, distance: null, latitude: here.latitude + dLat, longitude: here.longitude })
+    const order = lapOrder([at('rooftop', 0.061), at('near', 0.0067), at('mid', 0.03)], here).map((e) => e.id)
+    expect(order).toEqual(['near', 'mid', 'rooftop'])
+    // Control: no position, the server's order untouched.
+    expect(lapOrder([at('rooftop', 0.061), at('near', 0.0067)], null).map((e) => e.id)).toEqual(['rooftop', 'near'])
   })
 
   it('control: never reorders the input array in place', () => {
     const input = [ev('far', 7.3), ev('a', 0.21)]
-    lapOrder(input, true)
+    lapOrder(input, here)
     expect(input.map((e) => e.id)).toEqual(['far', 'a'])
+  })
+})
+
+describe('lapSeedOf: a last-known position recent and accurate enough to order the lap (SCRUM-1077)', () => {
+  const now = Date.UTC(2026, 10, 19, 12)
+  const pos = (ageMs: number, accuracy: number | null) => ({ coords: { latitude: 12.97, longitude: 77.59, accuracy }, timestamp: now - ageMs })
+
+  it('takes a position up to 30 min old and good to 1 km', () => {
+    expect(LAP_SEED).toEqual({ maxAgeMs: 30 * 60_000, accuracyM: 1000 })
+    expect(lapSeedOf(pos(25 * 60_000, 65), now)).toEqual({ latitude: 12.97, longitude: 77.59 })
+  })
+
+  it('refuses an old one, a rough one, one with no accuracy, and none at all (the server order then)', () => {
+    expect(lapSeedOf(pos(31 * 60_000, 65), now)).toBeNull()
+    expect(lapSeedOf(pos(60_000, 3000), now)).toBeNull()
+    expect(lapSeedOf(pos(60_000, null), now)).toBeNull()
+    expect(lapSeedOf(null, now)).toBeNull()
   })
 })
 
@@ -198,8 +231,8 @@ describe('applyOrder: the frozen order', () => {
   })
 
   it('control: the old behaviour (sorting again on every fix) re-orders when a closer fix arrives', () => {
-    expect(lapOrder(evs, true).map((e) => e.id)).toEqual(['new', 'a', 'far'])
-    expect(applyOrder(evs, ['a', 'far']).map((e) => e.id)).not.toEqual(lapOrder(evs, true).map((e) => e.id))
+    expect(lapOrder(evs, here).map((e) => e.id)).toEqual(['new', 'a', 'far'])
+    expect(applyOrder(evs, ['a', 'far']).map((e) => e.id)).not.toEqual(lapOrder(evs, here).map((e) => e.id))
   })
 
   it('nothing frozen yet: the server’s order', () => {
