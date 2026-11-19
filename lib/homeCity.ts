@@ -1,7 +1,8 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
 
 import { apiClient } from './apiClient'
+import { cityBySlug, type CityOption } from './city'
 import { Logger } from './logger'
 
 /**
@@ -100,4 +101,28 @@ export async function saveHomeCity(userId: string, slug: string | null): Promise
   }
   if (saves[userId] === mine) set(userId, slug)
   return true
+}
+
+/**
+ * The country of your home city (ISO code, `CityOption.country`): what the copy that differs by country reads (the Delete
+ * sheet's retention line, About you's lists). Null until home and the catalogue are both known, with no home, or from an
+ * older server that sends no country; every reader treats null as "not India" and falls back to its neutral line.
+ * The catalogue is `getEventCities`' own cached read, so this costs no request the Pulse has not already made.
+ */
+export function useHomeCountry(userId: string | null | undefined): string | null {
+  const slug = useHomeCitySlug(userId)
+  const [cities, setCities] = useState<readonly CityOption[]>([])
+  useEffect(() => {
+    let live = true
+    Promise.resolve()
+      .then(() => apiClient.getEventCities())
+      .then((response) => {
+        if (live && response.success && response.data) setCities(response.data.cities)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+  return cityBySlug(cities, slug)?.country ?? null
 }

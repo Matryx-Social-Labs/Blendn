@@ -55,7 +55,6 @@ const SITES: [string, number][] = [
   ['app/offer/[id].tsx', 1], // the regular ask, on and off
   ['components/plus/PlusSections.tsx', 2], // the dock's line, the dock's button
   ['components/profile/MatchingFields.tsx', 3], // dating, interested in, what kind
-  ['components/profile/MeBadges.tsx', 1], // shows up
   ['components/board/BoardSections.tsx', 2], // the footer's answer, the refusal
   ['components/venue/VenueDock.tsx', 1], // the dock's modes
   ['components/venue/VenueRegulars.tsx', 1], // offer, on, done

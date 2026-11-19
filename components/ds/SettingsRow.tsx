@@ -29,6 +29,8 @@ export type SettingsRowProps = {
   title: string
   /** A line under the title; on a rollback, the sentence that names it. */
   hint?: string
+  /** Clamp the hint (an email on the account card); default: it wraps to whatever it needs. */
+  hintLines?: number
   /** What a screen reader says in place of "{title}, {hint}": the whole sentence, when a count is part of it ("3 friend requests"). */
   label?: string
   /** What the row reports before its chevron: a count (the DS `Badge`, Geist Mono), a dot. Decorative; `label` carries it for a screen reader. */
@@ -104,6 +106,7 @@ export function SettingsRow({
   leading,
   title,
   hint,
+  hintLines,
   label,
   accessory,
   trail = 'none',
@@ -144,7 +147,7 @@ export function SettingsRow({
         {title}
       </Text>
       {hint ? (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>
+        <Text numberOfLines={hintLines} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: error ? COLOR.destructive : COLOR.textSecondary }]}>
           {hint}
         </Text>
       ) : null}

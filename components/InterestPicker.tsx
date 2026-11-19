@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { apiClient } from '../lib/apiClient'
@@ -55,15 +55,23 @@ export function InterestPicker({
   selected,
   onChange,
   showCount = true,
+  onNames,
 }: {
   selected: string[]
   onChange: (next: string[]) => void
+  /** Every pickable id's name once the list loads: a host that names the picks elsewhere (Edit profile's row) reads them here. */
+  onNames?: (names: Record<string, string>) => void
   /** The "Selected: n/10" line; off where the host's card already says it (Edit profile: "5 / 10"). */
   showCount?: boolean
 }) {
   const [groups, setGroups] = useState<CategoryGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
+  // Read at load only; a ref, so a host's new closure each render does not reload the list.
+  const namesTo = useRef(onNames)
+  useEffect(() => {
+    namesTo.current = onNames
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -72,7 +80,9 @@ export function InterestPicker({
       .then((res) => {
         if (cancelled) return
         if (res.success && Array.isArray(res.data)) {
-          setGroups(toPickerTree(res.data as unknown as CategoryNode[]))
+          const tree = toPickerTree(res.data as unknown as CategoryNode[])
+          setGroups(tree)
+          namesTo.current?.(Object.fromEntries(pickableItems(tree).map((c) => [String(c.id), c.name])))
         } else {
           setFailed(true)
         }

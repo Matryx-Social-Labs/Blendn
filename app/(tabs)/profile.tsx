@@ -16,8 +16,7 @@ import FadeInUp from '../../components/motion/FadeInUp'
 import { Banner } from '../../components/ds/Banner'
 import { MeBadges } from '../../components/profile/MeBadges'
 import { MePlusRow } from '../../components/profile/MePlusRow'
-import { aboutYouFrom } from '../../lib/aboutYou'
-import { MeIdentity, MeSkeleton, StatsCard } from '../../components/profile/MeSections'
+import { MeIdentity, MeSkeleton } from '../../components/profile/MeSections'
 import { NightsOut } from '../../components/profile/NightsOut'
 import { OfflineStrip, useOffline } from '../../components/profile/OfflineStrip'
 import { PhotoViewer } from '../../components/profile/PhotoViewer'
@@ -39,7 +38,6 @@ import { COLOR, SPACE, STAGGER } from '../../lib/design/tokens'
 import type { Badge } from '../../lib/aboutYou'
 import { Logger } from '../../lib/logger'
 import { interestNames, nightsCounts, profileGaps, type NightsCounts, type NightsStatus } from '../../lib/meProfile'
-import { openTonight } from '../../lib/paywall'
 import { mainWasPulled, pulledPhotos, type PulledPhoto } from '../../lib/photoStates'
 import { parseBadges } from '../../lib/profileBadges'
 import { unseenPulled } from '../../lib/pulledNotices'
@@ -135,10 +133,8 @@ function ProfileInner() {
   // What `GET /profiles/:you` adds (blendn-admin #716): your badges (null: none sent) and the photos moderation took down. Empty until it loads.
   const [badges, setBadges] = useState<Badge[] | null>(null)
   const [pulled, setPulled] = useState<PulledPhoto[]>([])
-  // The "Shows up" opt-in on the badges card; null until the profile says (then the card draws no switch).
-  const [showsUp, setShowsUp] = useState<boolean | null>(null)
-  // "Show my badges": null until the profile says (then the card draws no master switch).
-  const [showBadges, setShowBadges] = useState<boolean | null>(null)
+  // "Show my badges" off: the card says they are shown to nobody (its switch is in Edit about you).
+  const [badgesHidden, setBadgesHidden] = useState(false)
   const lastBackgroundRefreshRef = React.useRef(0)
   // Tapping Me while already on it goes back to the top (the bar emits `tabPress`).
   const scrollRef = React.useRef<Animated.ScrollView>(null)
@@ -259,9 +255,6 @@ function ProfileInner() {
     setNightsStatus('failed')
   }, [user])
 
-  // The nights kept behind Blend'n+: the same Tonight sheet Going's locked row opens (trigger `recap`); bought, they're read again.
-  const unlockNights = () => void openTonight({ trigger: 'night', venue: '', onUnlocked: () => void loadRecent() }, { userInitiated: true })
-
   const retryNights = () => {
     setNightsRetrying(true)
     void loadRecent().finally(() => setNightsRetrying(false))
@@ -298,42 +291,12 @@ function ProfileInner() {
       const ownRecord = own as Record<string, unknown> | undefined
       // An older server with badges off sends neither key: `show_badges: false` alone keeps the card (an empty list) and its switch.
       setBadges(parseBadges(own?.badges) ?? parseBadges(ownRecord?.earned_badges) ?? (ownRecord?.show_badges === false ? [] : null))
-      setShowBadges(typeof ownRecord?.show_badges === 'boolean' ? ownRecord.show_badges : null)
-      // Only a server that sends the field has the switch to show: an older one sends none, and the row is not drawn.
-      const sent = (own as Record<string, unknown> | undefined)?.shows_up_badge
-      setShowsUp(typeof sent === 'boolean' ? aboutYouFrom(own as Record<string, unknown>).showsUpBadge : null)
+      setBadgesHidden(ownRecord?.show_badges === false)
       setPulled(await unseenPulled(user.id, pulledPhotos(own?.photo_states)))
     } catch (error) {
       Logger.debug('profile', 'Failed to load badges and photo states', { error })
     }
   }, [user])
-
-  /** The "Show my badges" switch on the badges card: written at once; true when the server kept it. The card already holds what you earned (`earned_badges`), so no re-read is needed. */
-  const saveShowBadges = useCallback(
-    async (next: boolean) => {
-      if (!user) return false
-      const result = await apiClient.updateProfile(user.id, { show_badges: next })
-      if (!result.success) return false
-      setShowBadges(next)
-      queryCache.invalidate(`profile_${user.id}`)
-      return true
-    },
-    [user]
-  )
-
-  /** The "Shows up" switch on the badges card: written at once; true when the server kept it. */
-  const saveShowsUp = useCallback(
-    async (next: boolean) => {
-      if (!user) return false
-      const result = await apiClient.updateProfile(user.id, { shows_up_badge: next })
-      if (!result.success) return false
-      setShowsUp(next)
-      // The profile read for this screen is cached: a changed switch must not read back as the old one.
-      queryCache.invalidate(`profile_${user.id}`)
-      return true
-    },
-    [user]
-  )
 
   /*
    * On FOCUS, not on mount. A tab stays mounted, so a mount-only effect ran
@@ -449,10 +412,9 @@ function ProfileInner() {
             age={profile?.age}
             location={profile?.location}
             memberSince={profile?.memberSince}
-            occupation={profile?.occupation}
-            photos={photoList}
+            photo={photoList[0]}
             onEdit={openEdit}
-            onPhotos={openPhoto}
+            onPhoto={(from) => openPhoto(0, from)}
           />
         </FadeInUp>
 
@@ -471,7 +433,8 @@ function ProfileInner() {
               icon={friends?.faces.length ? undefined : 'users'}
               leading={friends?.faces.length ? <FacesLead people={friends.faces} /> : undefined}
               title="Friends"
-              hint={requestCount > 0 ? `${groupedCount(requestCount)} friend request${requestCount === 1 ? '' : 's'}` : undefined}
+              // 02 A: what to do instead of a "0" when there is nobody yet.
+              hint={requestCount > 0 ? `${groupedCount(requestCount)} friend request${requestCount === 1 ? '' : 's'}` : friends && friends.total === 0 ? FRIENDS_EMPTY : undefined}
               label={friendsLabel(friends?.total ?? 0, requestCount)}
               accessory={
                 <>
@@ -501,6 +464,7 @@ function ProfileInner() {
                 ) : undefined
               }
               title="Crews"
+              hint={crews.length === 0 && crewInvites === 0 ? CREWS_EMPTY : undefined}
               label={crewsLabel(crews.length, crewInvites)}
               accessory={
                 <>
@@ -538,26 +502,6 @@ function ProfileInner() {
           </FadeInUp>
         ) : null}
 
-        {/*
-          `eventsOrganized` is hidden at zero because almost nobody organises, and a permanent "0 Hosted" reads as a thing you
-          failed to do rather than a role you do not have.
-        */}
-        {stats ? (
-          <FadeInUp {...next()}>
-            <StatsCard
-              attended={nightCounts.total ?? stats.eventsAttended}
-              saved={stats.savedCount ?? stats.eventsFavorited}
-              hosted={stats.eventsOrganized}
-              onGoing={openGoing}
-            />
-          </FadeInUp>
-        ) : null}
-
-        {/* Where you stand with Blend'n+ above Nights out, and your badges under it (Flow 14 R4.1 · Me 01 to 03). No badges card at all when the server sent none. */}
-        <FadeInUp {...next()}>
-          <MePlusRow />
-        </FadeInUp>
-
         <FadeInUp {...next()}>
           <NightsOut
             status={nightsStatus}
@@ -570,27 +514,36 @@ function ProfileInner() {
             lockedCount={nightCounts.locked}
             total={nightCounts.total}
             runningCount={nightCounts.running ?? 0}
-            onUnlock={unlockNights}
+            saved={stats ? (stats.savedCount ?? stats.eventsFavorited) : 0}
+            hosted={stats?.eventsOrganized ?? 0}
           />
         </FadeInUp>
 
         {badges !== null ? (
           <FadeInUp {...next()}>
-            <MeBadges badges={badges} showBadges={showBadges === null ? undefined : { value: showBadges, onChange: saveShowBadges }} showsUp={showsUp === null ? undefined : { value: showsUp, onChange: saveShowsUp }} />
+            <MeBadges badges={badges} hidden={badgesHidden} />
           </FadeInUp>
         ) : null}
 
-        {profile?.bio || interests.length > 0 || profile?.education ? (
+        {/* Your own bio, the thing others read first, above Blend'n+ (A 01): four lines, then More; Edit goes to change it. */}
+        {profile?.bio || interests.length > 0 || profile?.education || profile?.occupation ? (
           <FadeInUp {...next()}>
-            <ProfileSection title="About" testID="about">
-              {profile?.bio ? <ProfileBio text={profile.bio} /> : null}
+            <ProfileSection title="About" action={{ label: 'Edit', onPress: openEdit }} testID="about">
+              {profile?.bio ? <ProfileBio text={profile.bio} clamp={BIO_LINES} /> : null}
               {/* Your own chips, so nothing is "shared" -- plain chips only. */}
               {interests.length > 0 ? <ProfileInterests interests={interests} /> : null}
               {/* Not in the frame, but entered by you and shown to others: it stays visible on your own page, under About (owner decides). */}
+              {/* Your job title moved here from under your name (A 01): entered by you, shown to others once you reveal. */}
+              {profile?.occupation ? <ProfileDetail label="WORK" value={profile.occupation} variant="ruled" /> : null}
               {profile?.education ? <ProfileDetail label="EDUCATION" value={profile.education} variant="ruled" /> : null}
             </ProfileSection>
           </FadeInUp>
         ) : null}
+
+        {/* Where you stand with Blend'n+, last (A 01): the one place Me sells it (Nights out says what is held, never sells it again). */}
+        <FadeInUp {...next()}>
+          <MePlusRow />
+        </FadeInUp>
       </>
     )
   }
@@ -642,6 +595,12 @@ function ProfileInner() {
     </View>
   )
 }
+
+/** Your bio on Me: four lines, then More (A 01). */
+const BIO_LINES = 4
+/** Friends and Crews with nobody yet say what to do (A 02), never a "0". */
+const FRIENDS_EMPTY = 'Add people you go out with'
+const CREWS_EMPTY = 'Make one from your friends'
 
 const GAP_ICON = {
   photo: 'camera',

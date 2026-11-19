@@ -3,22 +3,59 @@
  * Plain functions marked as worklets so the gesture reads them on the UI thread and a test reads them as functions.
  */
 
-export type GridSpec = { itemSize: number; gap: number; columns: number }
+/** The grid's inside width and its gap: board A 03's layout is derived from them (`slotRect`). */
+export type GridSpec = { width: number; gap: number }
 
-/** The top-left of slot `slot`, row by row, left to right. */
-export function slotXY(slot: number, grid: GridSpec) {
+/** Board A 03's top block: the main photo and the two slots beside it are 240 pt tall at any width. */
+export const PHOTO_TOP = 240
+
+/**
+ * Slot `slot`'s box (Me + settings A 03, owner approved 2026-11-18): the main photo 2fr wide over two rows, slots 2 and 3
+ * at 1fr beside it, and 4–6 under them, the first two halving the main's width so every edge lines up. S = (width − gap) / 3
+ * wide; a row is (PHOTO_TOP − gap) / 2 tall.
+ */
+export function slotRect(slot: number, grid: GridSpec) {
   'worklet'
-  const pitch = grid.itemSize + grid.gap
-  return { x: (slot % grid.columns) * pitch, y: Math.floor(slot / grid.columns) * pitch }
+  const { gap } = grid
+  const s = (grid.width - gap) / 3
+  const row = (PHOTO_TOP - gap) / 2
+  const main = 2 * s
+  const half = (main - gap) / 2
+  if (slot === 0) return { x: 0, y: 0, w: main, h: PHOTO_TOP }
+  if (slot <= 2) return { x: main + gap, y: (slot - 1) * (row + gap), w: s, h: row }
+  const y = PHOTO_TOP + gap
+  if (slot === 5) return { x: main + gap, y, w: s, h: row }
+  return { x: (slot - 3) * (half + gap), y, w: half, h: row }
 }
 
-/** The slot under the point (cx, cy) of the tile being dragged, held inside the `count` slots that hold a photo. */
+/** The top-left of slot `slot`. */
+export function slotXY(slot: number, grid: GridSpec) {
+  'worklet'
+  const r = slotRect(slot, grid)
+  return { x: r.x, y: r.y }
+}
+
+/** How tall the grid is with `slots` slots showing: the top block, plus a row once a fourth shows. */
+export function gridHeight(slots: number, grid: GridSpec) {
+  'worklet'
+  return slots > 3 ? PHOTO_TOP + grid.gap + (PHOTO_TOP - grid.gap) / 2 : PHOTO_TOP
+}
+
+/** The slot under the point (cx, cy) of the tile being dragged: the photo slot holding it, else the one whose centre is nearest. */
 export function slotAt(cx: number, cy: number, grid: GridSpec, count: number) {
   'worklet'
-  const pitch = grid.itemSize + grid.gap
-  const col = Math.max(0, Math.min(grid.columns - 1, Math.floor(cx / pitch)))
-  const row = Math.max(0, Math.floor(cy / pitch))
-  return Math.max(0, Math.min(count - 1, row * grid.columns + col))
+  let best = 0
+  let bestDistance = Infinity
+  for (let slot = 0; slot < Math.max(count, 1); slot++) {
+    const r = slotRect(slot, grid)
+    if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) return slot
+    const distance = (cx - (r.x + r.w / 2)) ** 2 + (cy - (r.y + r.h / 2)) ** 2
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = slot
+    }
+  }
+  return best
 }
 
 /**

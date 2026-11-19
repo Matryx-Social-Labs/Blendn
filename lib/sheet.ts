@@ -45,9 +45,10 @@ export type SheetAction = {
   /**
    * `primary`: the affirmative, lit in the sheet's `hue`. `strong`: the DS's white button, for a frame that draws one
    * ("Clear all", "Open Settings"): it is never tinted by the hue. `tertiary`: a quiet text action beside the sheet's
-   * real choices ("What's kept"), drawn as Cancel is.
+   * real choices ("What's kept"), drawn as Cancel is. `danger`: the irreversible act outlined in red, not filled, on a sheet
+   * that also offers a way back (Delete account).
    */
-  variant?: 'primary' | 'secondary' | 'tertiary' | 'destructive'
+  variant?: 'primary' | 'secondary' | 'tertiary' | 'destructive' | 'danger'
   /** A row's glyph, in a `rows` sheet (the DM's options). */
   icon?: IconName
   /** In a `rows` sheet, a line under the label that says the consequence ("They won’t be told"). */
