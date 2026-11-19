@@ -71,6 +71,16 @@ it('the Unblock sheet promises only what unblocking does (SCRUM-909)', async () 
   expect(sheet.message).not.toMatch(/message you again/)
 })
 
+it('Unblock is the neutral, not red: it gives access back, it does not take anything (Me + settings A, NOTES: red is Delete only)', async () => {
+  mockFetch.mockResolvedValue(ok([user(1)]))
+  await render(<BlockedUsers />)
+  await screen.findByText('Person 1')
+  await act(async () => fireEvent.press(screen.getByLabelText('Unblock Person 1')))
+  const [unblock] = mockShowSheet.mock.calls[0][0].actions
+  expect(unblock.label).toBe('Unblock')
+  expect(unblock.variant).toBe('secondary')
+})
+
 it('asks for the next page when the end comes into view, once, and adds it without repeats', async () => {
   mockFetch.mockResolvedValueOnce(ok(users(0, 3), 'c2')).mockResolvedValueOnce(ok([user(2), ...users(3, 2)]))
   await render(<BlockedUsers />)
