@@ -1,151 +1,110 @@
+import { useRef } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { COLOR, FONT_FAMILY, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { joinedDate } from '../../lib/meProfile'
+import { personFace } from '../../lib/personFace'
+import { Avatar } from '../ds/Avatar'
 import { Button } from '../ds/Button'
-import { RollingNumber } from '../ds/RollingNumber'
 import { Title } from '../ds/Title'
-import { CONTROL_FONT_CAP, font, useBoldText } from '../ds/shared'
+import { font, SELECTION, useBoldText, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
 import { SkeletonBlock } from '../Skeleton'
-import { PhotoStack, STACK_HEIGHT, STACK_WIDTH } from './PhotoStack'
+import { Icon } from '../ui/Icon'
 import type { Rect } from '../ds/chatShared'
-import { compactCount } from '../../lib/format'
 
-/** Flow 6 `me`: the header's text column sits 6 pt apart, between the 4 and 8 steps. */
-// design-exception: the frame's name block gap is 6
-const IDENTITY_GAP = 6
-/** A stat draws at most four digits: past that it is compact ("12k", "1.2M"), or five would outgrow a column of the card. The spoken label keeps the true number. */
-export const STAT_MAX = 9999
-
-/** The skeleton's blocks, at the final geometry (Flow 6 `me` 07). */
-const SKELETON = { name: 36, line: 16, button: 44, buttonWidth: 140, stats: 96, nights: 220 } as const
+/** Me + settings A 01: the round main photo, 88 pt (64 at the accessibility sizes, above the name), and its viewer badge. */
+// design-exception: the board's 88 / 64 pt photo and 28 pt badge, between the Avatar steps
+export const ME_PHOTO = 88
+export const ME_PHOTO_LARGE = 64
+const PHOTO_BADGE = 28
+const PHOTO_BADGE_GLYPH = 15
+/** The skeleton's blocks, at the final geometry. */
+const SKELETON = { name: 30, line: 16, button: 44, buttonWidth: 140, nights: 220 } as const
 
 /**
- * The top of Me (Flow 6 `me` 01): your name with your age in Geist Mono, where you are and since when (the date in mono), what you
- * do, the Edit profile button, and your photos as a pile beside them. The name takes two lines before it truncates.
+ * The top of Me (Me + settings A 01, owner 2026-11-18): your main photo in a violet ring beside your name, with your age in
+ * Geist Mono, where you are and since when on one line, then Edit profile. The name is never cut and never broken inside a
+ * word: it wraps to the lines it needs, and a word too wide for the line shrinks (`Title`). At the accessibility sizes the
+ * photo sits above the name and the button spans the column (02 A, largest text).
+ *
+ * "See as others do" (the board's second button) is not drawn: what a room sees depends on the server's reveal rules, and a
+ * preview guessed on the phone could show something others never see. It waits for the self-preview read (ROADMAP § Backend
+ * later). Your job title is under About now, beside education.
  */
 export function MeIdentity({
   name,
   age,
   location,
   memberSince,
-  occupation,
-  photos,
+  photo,
   onEdit,
-  onPhotos,
+  onPhoto,
 }: {
   name: string
   age?: number | null
   location?: string | null
   memberSince?: string | null
-  occupation?: string | null
-  photos: string[]
+  /** Your main photo; none draws your initial on your disc, and a tap goes to add one. */
+  photo?: string | null
   onEdit: () => void
-  onPhotos: (index: number, from: Rect | null) => void
+  onPhoto: (from: Rect | null) => void
 }) {
   const bold = useBoldText()
+  const large = useLargeText()
   const joined = joinedDate(memberSince)
   const where = location?.trim()
+  const box = useRef<View>(null)
+  const size = large ? ME_PHOTO_LARGE : ME_PHOTO
+  const press = () => {
+    if (!box.current) return onPhoto(null)
+    box.current.measureInWindow((x, y, width, height) => onPhoto({ x, y, width, height }))
+  }
   return (
-    <View style={styles.identity}>
-      <View style={styles.text}>
-        <Text
-          accessibilityRole="header"
-          accessibilityLabel={age ? `${name}, ${age}` : name}
-          numberOfLines={2}
-          maxFontSizeMultiplier={CONTROL_FONT_CAP}
-          style={[font('display', bold), styles.ink]}
+    <View testID="me-identity" style={styles.identityColumn}>
+      <View style={large ? styles.stacked : styles.identity}>
+        <ScalePress
+          testID="me-photo"
+          onPress={press}
+          haptic={false}
+          accessibilityRole="button"
+          accessibilityLabel={photo ? 'Your photos' : 'Add a photo'}
+          accessibilityHint={photo ? 'Opens your photos' : undefined}
         >
-          {name}
-          {age ? (
-            <>
-              {', '}
-              <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('display', bold, FONT_FAMILY.mono[700])]}>{age}</Text>
-            </>
-          ) : null}
-        </Text>
-        {where || joined ? (
-          <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.muted]}>
-            {where ?? ''}
-            {where && joined ? ' · ' : ''}
-            {joined ? (
+          <View ref={box} collapsable={false}>
+            <Avatar size={size} ring={COLOR.ink} halo={SELECTION.violet.glyph} {...personFace({ named: true, name, photo })} />
+            {photo ? (
+              <View style={styles.photoBadge}>
+                <Icon name="images" size={PHOTO_BADGE_GLYPH} color={COLOR.textPrimary} />
+              </View>
+            ) : null}
+          </View>
+        </ScalePress>
+        <View style={styles.text}>
+          <Title testID="me-name" accessibilityRole="header" accessibilityLabel={age ? `${name}, ${age}` : name} style={styles.ink}>
+            {name}
+            {age ? (
               <>
-                {'Joined '}
-                <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{joined}</Text>
+                {', '}
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.title} style={styles.age}>{age}</Text>
               </>
             ) : null}
-          </Text>
-        ) : null}
-        {occupation ? (
-          <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.muted]}>
-            {occupation}
-          </Text>
-        ) : null}
-        <Button kind="lit" size="md" icon="pencil" label="Edit profile" onPress={onEdit} style={styles.edit} />
-      </View>
-      <PhotoStack photos={photos} name={name} onPress={onPhotos} />
-    </View>
-  )
-}
-
-/** One number and what it counts, a way through to the list behind it when there is one. */
-function Stat({ value, label, onPress, hint = 'Opens Going' }: { value: number; label: string; onPress?: () => void; hint?: string }) {
-  const bold = useBoldText()
-  const body = (
-    <>
-      {value > STAT_MAX ? (
-        <Title family={FONT_FAMILY.mono[700]} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={styles.ink}>
-          {compactCount(value)}
-        </Title>
-      ) : (
-        // Grouped (D-L2): "1,002" reads at a glance where "1002" ran to the card's edge.
-        <RollingNumber value={value} role="title" grouping />
-      )}
-      <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.muted]}>
-        {label}
-      </Text>
-    </>
-  )
-  // One element, read as "3 Nights" rather than "3" and then "Nights".
-  return onPress ? (
-    <ScalePress onPress={onPress} haptic={false} accessibilityRole="button" accessibilityLabel={`${value} ${label}`} accessibilityHint={hint} style={styles.stat}>
-      {body}
-    </ScalePress>
-  ) : (
-    <View accessible accessibilityLabel={`${value} ${label}`} style={styles.stat}>
-      {body}
-    </View>
-  )
-}
-
-/**
- * Your numbers (Flow 6 `statsCard`): one `surfaceSunken` card at radius 24, the columns split by hairlines. Friends is left out
- * until it loads rather than showing a wrong 0; Hosted only for someone who hosts.
- */
-export function StatsCard({
-  attended,
-  saved,
-  hosted,
-  onGoing,
-}: {
-  attended: number
-  saved: number
-  hosted: number
-  onGoing: () => void
-}) {
-  const columns = [
-    { key: 'attended', node: <Stat value={attended} label="Nights" onPress={onGoing} /> },
-    { key: 'saved', node: <Stat value={saved} label="Saved" onPress={onGoing} /> },
-    ...(hosted > 0 ? [{ key: 'hosted', node: <Stat value={hosted} label="Hosted" /> }] : []),
-  ]
-  return (
-    <View testID="stats-card" style={styles.stats}>
-      {columns.map((c, i) => (
-        <View key={c.key} style={[styles.statColumn, i > 0 && styles.statRule]}>
-          {c.node}
+          </Title>
+          {where || joined ? (
+            <Text testID="me-where" numberOfLines={large ? undefined : 1} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>
+              {where ?? ''}
+              {where && joined ? ' · ' : ''}
+              {joined ? (
+                <>
+                  {'Joined '}
+                  <Text style={font('meta', bold, FONT_FAMILY.mono[500])}>{joined}</Text>
+                </>
+              ) : null}
+            </Text>
+          ) : null}
         </View>
-      ))}
+      </View>
+      <Button kind="lit" size="md" icon="pencil" label="Edit profile" onPress={onEdit} style={large ? styles.editWide : styles.edit} testID="me-edit" />
     </View>
   )
 }
@@ -155,30 +114,42 @@ export function MeSkeleton() {
   return (
     <View accessible testID="me-skeleton" accessibilityLabel="Loading your profile" accessibilityState={{ busy: true }} style={styles.skeleton}>
       <View style={styles.identity}>
+        <SkeletonBlock width={ME_PHOTO} height={ME_PHOTO} borderRadius={ME_PHOTO / 2} />
         <View style={styles.skeletonText}>
           <SkeletonBlock width="60%" height={SKELETON.name} borderRadius={RADIUS.thumb} />
           <SkeletonBlock width="80%" height={SKELETON.line} borderRadius={RADIUS.capsule} />
           <SkeletonBlock width="50%" height={SKELETON.line} borderRadius={RADIUS.capsule} />
-          <SkeletonBlock width={SKELETON.buttonWidth} height={SKELETON.button} borderRadius={RADIUS.capsule} style={styles.edit} />
         </View>
-        <SkeletonBlock width={STACK_WIDTH} height={STACK_HEIGHT} borderRadius={RADIUS.rowInCard} />
       </View>
-      <SkeletonBlock height={SKELETON.stats} borderRadius={RADIUS.mediaInCard} />
+      <SkeletonBlock width={SKELETON.buttonWidth} height={SKELETON.button} borderRadius={RADIUS.capsule} />
       <SkeletonBlock height={SKELETON.nights} borderRadius={RADIUS.mediaInCard} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  identity: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: SPACE.lg },
-  text: { flex: 1, minWidth: 0, gap: IDENTITY_GAP },
+  identityColumn: { gap: SPACE.md },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: SPACE.lg },
+  stacked: { gap: SPACE.md },
+  text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
   ink: { color: COLOR.textPrimary },
+  age: { fontFamily: FONT_FAMILY.mono[700] },
   muted: { color: COLOR.textSecondary },
-  edit: { alignSelf: 'flex-start', marginTop: SPACE.sm },
-  stats: { flexDirection: 'row', paddingVertical: SPACE.lg, borderRadius: RADIUS.mediaInCard, backgroundColor: COLOR.surfaceSunken },
-  statColumn: { flex: 1 },
-  statRule: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: COLOR.hairline },
-  stat: { alignItems: 'center', gap: SPACE.xxs },
+  edit: { alignSelf: 'flex-start' },
+  editWide: { alignSelf: 'stretch' },
+  photoBadge: {
+    position: 'absolute',
+    right: -SPACE.xxs,
+    bottom: -SPACE.xxs,
+    width: PHOTO_BADGE,
+    height: PHOTO_BADGE,
+    borderRadius: PHOTO_BADGE / 2,
+    backgroundColor: COLOR.surfaceRaised,
+    borderWidth: SPACE.xxs,
+    borderColor: COLOR.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   skeleton: { gap: SPACE.lg },
   skeletonText: { flex: 1, gap: SPACE.sm },
 })

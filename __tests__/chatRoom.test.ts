@@ -192,9 +192,9 @@ describe('the Me tab is your profile, with no separate preview', () => {
     expect(src).toContain("label: 'Settings'")
   })
 
-  it('puts the header flat on the page: one display line, and Edit profile as the DS lit button', () => {
+  it('puts the header flat on the page: the name as the DS title (word fit, never clamped), and Edit profile as the DS lit button', () => {
     const me = codeOnly(read('components/profile/MeSections.tsx'))
-    expect(me.match(/font\('display'/g)).toHaveLength(2)
+    expect(me).toContain('<Title testID="me-name"')
     expect(me).toContain('<Button kind="lit" size="md" icon="pencil" label="Edit profile"')
     expect(OWN()).not.toContain('surfaceMedia')
   })
@@ -212,16 +212,16 @@ describe('the Me tab is your profile, with no separate preview', () => {
     expect(src).not.toContain('EMBER.accent')
   })
 
-  it('shows counts in one container, opens Going from them, and hides a role you do not have', () => {
+  it('folds the counts into Nights out (A 01): the heading counts, Saved and Hosted are lines only above zero', () => {
     /*
      * `eventsOrganized` is hidden at zero: a permanent "0 Hosted" reads as
-     * something you failed to do rather than a role you do not have.
+     * something you failed to do rather than a role you do not have. Saved too ("0 SAVED", device 2026-11-18).
      */
     const src = OWN()
-    const me = codeOnly(read('components/profile/MeSections.tsx'))
-    expect(me).toContain('hosted > 0')
-    expect(me).toContain('label="Nights" onPress={onGoing}')
-    expect(me).toContain('label="Saved" onPress={onGoing}')
+    const nights = codeOnly(read('components/profile/NightsOut.tsx'))
+    expect(nights).toContain('(n > 0 ? `${n.toLocaleString(\'en-US\')} hosted` : null)')
+    expect(nights).toContain('countStyle="lit"')
+    expect(src).not.toContain('StatsCard')
     expect(src).toContain("router.navigate('/going')")
   })
 

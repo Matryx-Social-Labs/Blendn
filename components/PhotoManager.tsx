@@ -3,28 +3,26 @@ import { AccessibilityInfo, StyleSheet, Text, useWindowDimensions, View, type La
 import { useSharedValue } from 'react-native-reanimated'
 
 import { Banner } from './ds/Banner'
-import { MonoRun } from './ds/MonoFamily'
-import { CONTROL_FONT_CAP, font, useBoldText } from './ds/shared'
-import { FieldHeader } from './ds/TextField'
+import { font, useBoldText } from './ds/shared'
 import { DraggableTile } from './profile/DraggableTile'
 import { AddFace, FailedFace, PhotoFace, PulledFace, UploadingFace } from './profile/PhotoGridTile'
 import { SkeletonBlock } from './Skeleton'
 import { useToast } from './Toast'
-import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { ProfileCache } from '../lib/apiClient'
 import { Logger } from '../lib/logger'
-import { inSlotOrder, moveItem, reordered, type GridSpec } from '../lib/photoOrder'
+import { gridHeight, inSlotOrder, moveItem, reordered, slotRect, type GridSpec } from '../lib/photoOrder'
 import { cachePhoto, deletePhoto, loadPulledPhotos, loadUserPhotos, ProfilePhoto, reorderPhotos, selectAndUploadPhoto, uploadPhoto } from '../lib/photoUtils'
 import { mainWasPulled, type PulledPhoto } from '../lib/photoStates'
 import { markPulledSeen } from '../lib/pulledNotices'
 import { SUPPORT_EMAIL } from '../lib/support'
 import { showSheet } from '../lib/sheet'
 
-const COLUMNS = 3
 const GAP = SPACE.sm
 /** The three skeleton tiles of the loading frame (Flow 6 edit 11). */
-const SKELETON_TILES = 3
+/** The slots shown before a third photo: the main and the two beside it (board A 03). */
+const FIRST_SLOTS = 3
 
 interface PhotoManagerProps {
   userId: string
@@ -96,12 +94,9 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
   const bold = useBoldText()
   const { width: windowWidth } = useWindowDimensions()
   const [cachedUrls, setCachedUrls] = useState<Record<string, string>>({})
-  // The grid's width is the card's inside: measured, with the screen's gutters and the card's padding as the first guess.
-  const [containerWidth, setContainerWidth] = useState<number>(windowWidth - SPACE.gutter * 2 - SPACE.xl * 2)
-  const itemSize = Math.max(1, Math.floor((containerWidth - GAP * (COLUMNS - 1)) / COLUMNS))
-  const grid: GridSpec = useMemo(() => ({ itemSize, gap: GAP, columns: COLUMNS }), [itemSize])
-  const rows = Math.ceil(maxPhotos / COLUMNS)
-  const gridHeight = rows * itemSize + (rows - 1) * GAP
+  // The grid's width is the page's inside: measured, with the screen's gutters as the first guess.
+  const [containerWidth, setContainerWidth] = useState<number>(windowWidth - SPACE.gutter * 2)
+  const grid: GridSpec = useMemo(() => ({ width: Math.max(1, containerWidth), gap: GAP }), [containerWidth])
 
   // Where each tile sits while one is being dragged, and which one that is (-1: none).
   const positions = useSharedValue<number[]>([])
@@ -367,32 +362,19 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
 
   const onLayout = (e: LayoutChangeEvent) => setContainerWidth(e.nativeEvent.layout.width)
 
-  // The shared field header (DS-07): a gap, a wrapping row and a shrinking label, the counter stacked under it at AX sizes.
-  const header = (
-    <FieldHeader
-      testID="photos-header"
-      label={
-        <Text accessibilityRole="header" maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('label', bold), styles.label]}>
-          Photos
-        </Text>
-      }
-      counter={
-        loading || loadFailed ? null : (
-          <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.sub]}>
-            <MonoRun text={`${photos.length} of ${maxPhotos} · saved as you go`} />
-          </Text>
-        )
-      }
-    />
-  )
+  const box = (slot: number) => {
+    const r = slotRect(slot, grid)
+    return { position: 'absolute' as const, left: r.x, top: r.y, width: r.w, height: r.h }
+  }
 
   if (loading) {
     return (
       <View style={styles.container}>
-        {header}
-        <View accessible testID="photos-loading" accessibilityLabel="Loading photos" accessibilityState={{ busy: true }} style={styles.skeleton} onLayout={onLayout}>
-          {Array.from({ length: SKELETON_TILES }, (_, i) => (
-            <SkeletonBlock key={i} width={itemSize} height={itemSize} borderRadius={RADIUS.rowInCard} />
+        <View accessible testID="photos-loading" accessibilityLabel="Loading photos" accessibilityState={{ busy: true }} style={{ height: gridHeight(FIRST_SLOTS, grid) }} onLayout={onLayout}>
+          {Array.from({ length: FIRST_SLOTS }, (_, i) => (
+            <View key={i} style={box(i)}>
+              <SkeletonBlock width={slotRect(i, grid).w} height={slotRect(i, grid).h} borderRadius={RADIUS.rowInCard} />
+            </View>
           ))}
         </View>
       </View>
@@ -403,7 +385,6 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
     // Never an empty grid for a read that failed: "Add photo" there would write a one-photo list over the ones the server has.
     return (
       <View style={styles.container}>
-        {header}
         <Banner
           kind="error"
           text="Your photos didn’t open."
@@ -423,19 +404,13 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
   const taken = photos.length + (pending ? 1 : 0)
   // The pulled notices fill the slots after the photos, and give way to a photo added: they never push the grid past its six.
   const pulledShown = pulled.slice(0, Math.max(0, maxPhotos - taken))
-  const emptySlots = Array.from({ length: Math.max(0, maxPhotos - taken - pulledShown.length) }, (_, k) => taken + pulledShown.length + k)
-  const slotRect = (slot: number) => ({
-    position: 'absolute' as const,
-    left: (slot % COLUMNS) * (itemSize + GAP),
-    top: Math.floor(slot / COLUMNS) * (itemSize + GAP),
-    width: itemSize,
-    height: itemSize,
-  })
+  // The main and the two beside it until a third photo is in; then the row of three under them (board A 03).
+  const shown = taken + pulledShown.length >= FIRST_SLOTS ? maxPhotos : Math.min(FIRST_SLOTS, maxPhotos)
+  const emptySlots = Array.from({ length: Math.max(0, shown - taken - pulledShown.length) }, (_, k) => taken + pulledShown.length + k)
 
   return (
     <View style={styles.container}>
-      {header}
-      <View onLayout={onLayout} style={{ height: gridHeight }}>
+      <View onLayout={onLayout} style={{ height: gridHeight(shown, grid) }}>
         {photos.map((item, index) => {
           const uri = cachedUrls[item.url] || item.url
           const n = photos.length
@@ -476,13 +451,13 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
         })}
 
         {pending ? (
-          <View style={slotRect(photos.length)}>
+          <View style={box(photos.length)}>
             {pending.state === 'uploading' ? <UploadingFace progress={pending.progress} /> : <FailedFace onRetry={() => void handleRetry()} disabled={busy} />}
           </View>
         ) : null}
 
         {pulledShown.map((notice, k) => (
-          <View key={`pulled-${notice.pulledAt ?? k}`} style={slotRect(taken + k)}>
+          <View key={`pulled-${notice.pulledAt ?? k}`} style={box(taken + k)}>
             <PulledFace
               onReplace={() => {
                 if (photoWriteOpen(userId)) return
@@ -500,7 +475,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
         ))}
 
         {emptySlots.map((slot, k) => (
-          <View key={slot} style={slotRect(slot)}>
+          <View key={slot} testID={`photo-slot-${slot}`} style={box(slot)}>
             {/* One Add in the reading order; every empty slot is still a tap target for a finger. */}
             <AddFace
               onPress={() => {
@@ -525,7 +500,7 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>Think we got it wrong? Write to {SUPPORT_EMAIL}.</Text>
         </View>
       ) : (
-        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>Photos save on their own. Drag to reorder; the first is what people see.</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.note]}>Hold and drag to reorder. Shown once you reveal.</Text>
       )}
     </View>
   )
@@ -533,9 +508,6 @@ export default function PhotoManager({ userId, maxPhotos = 6, onDragging }: Phot
 
 const styles = StyleSheet.create({
   container: { gap: SPACE.md },
-  label: { color: COLOR.textSecondary, flexShrink: 1 },
-  sub: { color: COLOR.textTertiary },
-  skeleton: { flexDirection: 'row', gap: GAP },
   note: { color: COLOR.textTertiary },
   noteStrong: { color: COLOR.textPrimary },
   mainPulled: { gap: SPACE.xs },

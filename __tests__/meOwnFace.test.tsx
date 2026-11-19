@@ -11,7 +11,7 @@ import { join } from 'path'
 import { render, screen } from '@testing-library/react-native'
 import React from 'react'
 
-import { PhotoStack } from '../components/profile/PhotoStack'
+import { MeIdentity } from '../components/profile/MeSections'
 import { TabBar } from '../components/ds/TabBar'
 import { InviteLinkCard } from '../components/friends/InviteLinkCard'
 import { InviteQr } from '../components/friends/InviteQr'
@@ -44,18 +44,16 @@ jest.mock('../components/ui/Icon', () => {
 const all = { includeHiddenElements: true }
 const drew = (text: string) => screen.queryByText(text, all) !== null
 
-describe('the empty card on Me', () => {
-  it('is your initial on your hue disc, never the cat', async () => {
-    await render(<PhotoStack photos={[]} name="Audit Host 06" onPress={jest.fn()} />)
+describe('the main photo on Me with none (Me + settings A 01)', () => {
+  it('is your initial on your hue disc, never the cat, and a tap adds a photo', async () => {
+    await render(<MeIdentity name="Audit Host 06" onEdit={jest.fn()} onPhoto={jest.fn()} />)
     expect(drew('initial:Audit Host 06')).toBe(true)
     expect(screen.queryByTestId('icon-cat', all)).toBeNull()
-    // Still the add-a-photo card: one tilted card, one tap.
-    expect(screen.getByTestId('photo-stack-empty', all).props.accessibilityLabel).toBe('Add a photo')
+    expect(screen.getByTestId('me-photo', all).props.accessibilityLabel).toBe('Add a photo')
   })
 
-  it('with photos it is the pile (the control)', async () => {
-    await render(<PhotoStack photos={['a']} name="Audit Host 06" onPress={jest.fn()} />)
-    expect(screen.queryByTestId('photo-stack-empty', all)).toBeNull()
+  it('with a photo it is the photo (the control)', async () => {
+    await render(<MeIdentity name="Audit Host 06" photo="https://cdn/a.jpg" onEdit={jest.fn()} onPhoto={jest.fn()} />)
     expect(drew('initial:Audit Host 06')).toBe(false)
   })
 })
@@ -129,6 +127,6 @@ describe('no glyph stands in for a person', () => {
   })
 
   it('the guard reads real sources (the control)', () => {
-    expect(sources.some((p) => p.endsWith(join('components', 'profile', 'PhotoStack.tsx')))).toBe(true)
+    expect(sources.some((p) => p.endsWith(join('components', 'profile', 'MeSections.tsx')))).toBe(true)
   })
 })
