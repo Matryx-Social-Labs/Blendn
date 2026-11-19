@@ -1,16 +1,16 @@
 import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import Animated, { Easing, FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Button } from '../components/ds/Button'
 import { ChipSet } from '../components/ds/ChipSet'
 import { WhoSees } from '../components/profile/WhoSees'
-import { FieldLabel, FieldLabelCase, FieldNotes } from '../components/ds/TextField'
+import { FieldLabelCase, FieldNotes } from '../components/ds/TextField'
 import { SegmentedControl } from '../components/ds/SegmentedControl'
-import { font, GroundProvider, HueProvider, useBoldText } from '../components/ds/shared'
+import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
+import { Sheet } from '../components/ds/Sheet'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { useToast } from '../components/Toast'
@@ -35,15 +35,13 @@ import {
   type SignSystem,
 } from '../lib/aboutYou'
 import { apiClient, ProfileCache } from '../lib/apiClient'
-import { COLOR, DURATION, EASING, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { COLOR, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
 import { useReducedMotion } from '../lib/motion'
 import { queryCache } from '../lib/queryCache'
 import { refreshAuthUser, useAuth } from '../lib/useAuth'
 import { useHomeCountry } from '../lib/homeCity'
 
-/** Under Reduce Motion the sign card still fades: the change is explained, not moved. */
-const REDUCED_FADE_MS = 200
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 /** "up to five" from the server's cap (the design wrote "up to three"; the server's number is the true one). */
 const upTo = (n: number) => `up to ${NUMBER_WORDS[n] ?? n}`
@@ -51,10 +49,27 @@ const upTo = (n: number) => `up to ${NUMBER_WORDS[n] ?? n}`
 /** The two calendars, in the order the control draws them: `SIGN_SYSTEMS[index]`. */
 const SIGN_SYSTEMS: readonly SignSystem[] = ['western', 'rashi']
 const SIGN_SYSTEM_LABELS = ['Western', 'My rashi instead'] as const
+/** The calendar as the Sign row names it: "Leo ♌ · Western". */
+const SIGN_SYSTEM_NAME: Record<SignSystem, string> = { western: 'Western', rashi: 'Rashi' }
 /** Home states drawn before "+n more"; a chosen one beyond them stays drawn. */
 const HOME_STATES_SHOWN = 9
 /** Languages fold like Home state, after the same nine (D-L9); a picked one is always shown (`foldedItems`). */
 export const LANGUAGES_SHOWN = HOME_STATES_SHOWN
+
+/** The four fields, each a row that opens its picker in a sheet (board A 04). */
+type AboutRow = 'languages' | 'home-state' | 'sign' | 'this-or-that'
+const ROW_TITLE: Record<AboutRow, string> = {
+  languages: 'Languages you speak',
+  'home-state': 'Home region',
+  sign: 'Sign',
+  'this-or-that': 'This or that',
+}
+const ROW_ICON = { languages: 'message-circle', 'home-state': 'map-pin', sign: 'star', 'this-or-that': 'sparkles' } as const
+/** The Tier B field each row saves, for its refusal. */
+const ROW_FIELD = { languages: 'languages', 'home-state': 'homeState', sign: 'sign' } as const
+/** A row with nothing picked. */
+const UNSET = 'Not set'
+const SIGN_LINE = 'Your sign shows next to your age. A fun line on cards — “Both Leos ♌” — never used to match you.'
 
 /**
  * Languages, home state, your sign and this-or-that — matching v2's "about
@@ -104,8 +119,11 @@ function EditAboutYouScreenContent() {
   const [tierBError, setTierBError] = useState<Partial<Record<TierBField, string>>>({})
   const clearError = (field: TierBField) => setTierBError((e) => (e[field] ? { ...e, [field]: undefined } : e))
   const scrollRef = useRef<ScrollView>(null)
-  /** Where each card and field sat when laid out, to scroll the first refused one into view. */
-  const ys = useRef<Record<string, number>>({})
+  /** Where the rows sat when laid out, to bring a refused one into view. */
+  const rowsY = useRef<number | undefined>(undefined)
+  /** One sheet per row, each with its own content and height (Android drew a reused sheet off screen, #585). */
+  const [sheet, setSheet] = useState<{ row: AboutRow; open: boolean }>({ row: 'languages', open: false })
+  const openSheet = (row: AboutRow) => setSheet({ row, open: true })
   const toastInset = useToastInset()
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
@@ -147,10 +165,17 @@ function EditAboutYouScreenContent() {
   }, [authUser, attempt])
 
   // Off clears the pick; on picks nothing until they tap a sign (M4).
+  // On with no sign yet opens the Sign sheet, where the twelve are; off clears the pick (M4).
   const toggleSign = (on: boolean) => {
     clearError('sign')
     setSignOn(on)
     if (!on) setForm((f) => ({ ...f, sign: null }))
+    else if (!form.sign) openSheet('sign')
+  }
+  // Closed with no sign picked, the switch goes back off: it never claims a sign that is not there.
+  const closeSheet = () => {
+    setSheet((prev) => ({ ...prev, open: false }))
+    if (sheet.row === 'sign' && !form.sign) setSignOn(false)
   }
   const chooseSystem = (next: SignSystem) => {
     clearError('sign')
@@ -159,6 +184,7 @@ function EditAboutYouScreenContent() {
   }
   const pickSign = (slug: string) => {
     clearError('sign')
+    setSignOn(true)
     setForm((f) => ({ ...f, sign: { slug, system } }))
   }
   const hint = suggestedSign ? (options?.signs.find((x) => x.slug === suggestedSign) ?? null) : null
@@ -245,12 +271,10 @@ function EditAboutYouScreenContent() {
     }
   }
 
-  /** The first refused field, in the order they are drawn, scrolled to just under the bar. */
+  /** The rows, where a refusal is said, scrolled to just under the bar. */
   const scrollToFirstRefused = (refused: Partial<Record<TierBField, string>>) => {
-    const first = (['languages', 'homeState', 'sign'] as const).find((f) => refused[f])
-    if (!first) return
-    const y = first === 'sign' ? ys.current.signCard : ys.current.card + (ys.current[first] ?? 0)
-    if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - SPACE.lg), animated: !reduceMotion })
+    if (!Object.values(refused).some(Boolean)) return
+    scrollRef.current?.scrollTo({ y: Math.max(0, (rowsY.current ?? 0) - SPACE.lg), animated: !reduceMotion })
   }
 
   const invalidate = (userId: string) => {
@@ -260,6 +284,29 @@ function EditAboutYouScreenContent() {
   }
 
   const sign = form.sign
+  /** Home region and This or that only where this country has them; a held region always shows, to be cleared. */
+  const rows: AboutRow[] = (['languages', 'home-state', 'sign', 'this-or-that'] as const).filter(
+    (r) => (r !== 'home-state' || !!shown?.homeStates.length) && (r !== 'this-or-that' || !!shown?.thisOrThat.length)
+  )
+  const labelOf = (list: readonly { slug: string; label: string }[] | undefined, slug: string) => list?.find((x) => x.slug === slug)?.label
+  const signOption = sign ? options?.signs.find((x) => x.slug === sign.slug) : undefined
+  const answered = (shown?.thisOrThat ?? []).flatMap((q) => (answers[q.slug] === 'a' ? [q.a] : answers[q.slug] === 'b' ? [q.b] : []))
+  /** What each row holds, as board A 04 writes it: "French, Tamil · besides English, up to 3". */
+  const rowHints: Record<AboutRow, string> = {
+    languages: `${form.languages.map((l) => labelOf(shown?.languages, l)).filter(Boolean).join(', ') || UNSET} · besides English, ${upTo(options?.maxLanguages ?? 0)}`,
+    'home-state': `${(form.homeState && labelOf(shown?.homeStates, form.homeState)) || UNSET} · a state, never a town`,
+    sign: signOption && sign ? `${signName(signOption, sign.system)} · ${SIGN_SYSTEM_NAME[sign.system]}` : UNSET,
+    'this-or-that': answered.join(' · ') || UNSET,
+  }
+  /** The server's sentence for a refused field, said on its row (and under its picker in the sheet). */
+  const rowError = (row: AboutRow) => (row === 'this-or-that' ? undefined : tierBError[ROW_FIELD[row]])
+  const sheetFor = (row: AboutRow) => ({
+    visible: sheet.open && sheet.row === row,
+    onClose: closeSheet,
+    title: ROW_TITLE[row],
+    actions: [{ label: 'Done', kind: 'secondary' as const, onPress: closeSheet, testID: `about-you-${row}-done` }],
+    testID: `about-you-${row}-sheet`,
+  })
   return (
     <View style={styles.screen}>
       <TopBar
@@ -295,159 +342,41 @@ function EditAboutYouScreenContent() {
           <Intro />
           {options ? (
             <>
-              <GroundProvider value="surface">
-                <View style={styles.card} onLayout={(e) => (ys.current.card = e.nativeEvent.layout.y)}>
-                  <View onLayout={(e) => (ys.current.languages = e.nativeEvent.layout.y)}>
-                    <ChipSet
-                      label="Languages you speak"
-                      hint={`Besides English, ${upTo(options.maxLanguages)}.`}
-                      items={(shown?.languages ?? []).map((l) => ({
-                        key: l.slug,
-                        label: l.label,
-                      }))}
-                      selection="multi"
-                      selected={form.languages}
-                      max={options.maxLanguages}
-                      // Folds like Home region (D-L9): 21 chips unfolded made a long page.
-                      foldAfter={LANGUAGES_SHOWN}
-                      foldNoun="languages"
-                      // At the cap the rest dim and say why, instead of a tap that does nothing.
-                      capHint={`Up to ${NUMBER_WORDS[options.maxLanguages] ?? options.maxLanguages}`}
-                      onToggle={(slug) => {
-                        clearError('languages')
-                        setForm((f) => ({
-                          ...f,
-                          languages: toggleLanguage(f.languages, slug, options.maxLanguages),
-                        }))
-                      }}
-                      error={tierBError.languages}
-                      testID="about-you-languages"
+              <View onLayout={(e) => (rowsY.current = e.nativeEvent.layout.y)}>
+                <SettingsGroup>
+                  {rows.map((row) => (
+                    <SettingsRow
+                      key={row}
+                      icon={ROW_ICON[row]}
+                      title={ROW_TITLE[row]}
+                      hint={rowError(row) ?? rowHints[row]}
+                      error={!!rowError(row)}
+                      trail="chevron"
+                      onPress={() => openSheet(row)}
+                      testID={`about-you-row-${row}`}
                     />
-                    <WhoSees field="languages" />
-                  </View>
-                  {/* Only where the server has the country's regions (India today); a held one always shows, to be cleared. */}
-                  {shown?.homeStates.length ? (
-                  <View onLayout={(e) => (ys.current.homeState = e.nativeEvent.layout.y)}>
-                    <ChipSet
-                      label="Home region"
-                      hint="A state, never a town. Tap again to clear."
-                      items={shown.homeStates.map((s) => ({
-                        key: s.slug,
-                        label: s.label,
-                      }))}
-                      selection="single"
-                      selected={form.homeState ? [form.homeState] : []}
-                      foldAfter={HOME_STATES_SHOWN}
-                      foldNoun="regions"
-                      onToggle={(slug) => {
-                        clearError('homeState')
-                        setForm((f) => ({
-                          ...f,
-                          homeState: f.homeState === slug ? null : slug,
-                        }))
-                      }}
-                      error={tierBError.homeState}
-                      testID="about-you-home-state"
-                    />
-                    <WhoSees field="homeState" />
-                  </View>
-                  ) : null}
-                  {shown?.thisOrThat.length ? (
-                    <View style={styles.field}>
-                      <FieldLabel text="This or that" bold={bold} contrast={false} />
-                      {shown.thisOrThat.map((q) => (
-                        <SegmentedControl
-                          key={q.slug}
-                          pair
-                          items={[q.a, q.b]}
-                          selected={answers[q.slug] === 'a' ? 0 : answers[q.slug] === 'b' ? 1 : null}
-                          onChange={(i) => setAnswer(q.slug, i)}
-                          testID={`about-you-pair-${q.slug}`}
-                        />
-                      ))}
-                      <FieldNotes hint="Pick one, or leave it. Tap again to take it back." bold={bold} />
-                      <WhoSees field="thisOrThat" />
-                    </View>
-                  ) : null}
-                </View>
-              </GroundProvider>
-
-              <SettingsGroup>
+                  ))}
+                </SettingsGroup>
+              </View>
+              <SettingsGroup title="On your card" testID="about-you-on-card">
+                <SettingsRow icon="eye" title="Show my sign" trail="switch" value={signOn} onValueChange={toggleSign} />
                 <SettingsRow
-                  icon="sparkles"
-                  title="Show my sign"
-                  hint="Your sign shows next to your age. A fun line on cards — “Both Leos ♌” — never used to match you."
+                  icon="badge-check"
+                  title="Show my badges"
+                  hint="Never shown in rooms under 8"
                   trail="switch"
-                  value={signOn}
-                  onValueChange={toggleSign}
+                  value={form.showBadges}
+                  onValueChange={(v) => setForm((f) => ({ ...f, showBadges: v }))}
+                />
+                <SettingsRow
+                  icon="calendar-check"
+                  title="Show “Shows up”"
+                  hint="80%+ of your RSVPs became nights, 3 or more"
+                  trail="switch"
+                  value={form.showsUpBadge}
+                  onValueChange={(v) => setForm((f) => ({ ...f, showsUpBadge: v }))}
                 />
               </SettingsGroup>
-              {signOn ? (
-                // The calendar and the twelve signs arrive and leave over base, not with a cut; what is below glides.
-                <GroundProvider value="surface">
-                  <Animated.View
-                    testID="about-you-sign-card"
-                    entering={reduceMotion ? FadeIn.duration(REDUCED_FADE_MS) : FadeIn.duration(DURATION.base)}
-                    exiting={FadeOut.duration(DURATION.quick)}
-                    style={styles.card}
-                    onLayout={(e) => (ys.current.signCard = e.nativeEvent.layout.y)}
-                  >
-                    <SegmentedControl
-                      semantics="radio"
-                      items={SIGN_SYSTEM_LABELS}
-                      selected={SIGN_SYSTEMS.indexOf(system)}
-                      onChange={(i) => chooseSystem(SIGN_SYSTEMS[i])}
-                      testID="about-you-system"
-                    />
-                    {hint && !sign ? (
-                      <BirthdaySign
-                        text={`From your birthday: ${signName(hint, 'western')} — tap to use`}
-                        onPress={() => {
-                          clearError('sign')
-                          setSystem('western')
-                          setForm((f) => ({
-                            ...f,
-                            sign: { slug: hint.slug, system: 'western' },
-                          }))
-                        }}
-                      />
-                    ) : null}
-                    <ChipSet
-                      items={options.signs.map((s) => ({
-                        key: s.slug,
-                        label: signName(s, system),
-                      }))}
-                      selection="single"
-                      selected={sign ? [sign.slug] : []}
-                      onToggle={pickSign}
-                      error={tierBError.sign}
-                      testID="about-you-signs"
-                    />
-                    <WhoSees field="sign" />
-                  </Animated.View>
-                </GroundProvider>
-              ) : null}
-
-              <Animated.View layout={reduceMotion ? undefined : LinearTransition.duration(DURATION.base).easing(Easing.bezier(...EASING.standard))}>
-                <SettingsGroup>
-                  <SettingsRow
-                    icon="badge-check"
-                    title="Show my badges"
-                    hint="Earned by checking in — like “Regular here”. Off hides every badge on your card."
-                    trail="switch"
-                    value={form.showBadges}
-                    onValueChange={(v) => setForm((f) => ({ ...f, showBadges: v }))}
-                  />
-                  <SettingsRow
-                    icon="calendar-check"
-                    title="Show “Shows up” on my card"
-                    hint="Once you’ve checked in to 80% of the events you said you’d go to (at least 3)."
-                    trail="switch"
-                    value={form.showsUpBadge}
-                    onValueChange={(v) => setForm((f) => ({ ...f, showsUpBadge: v }))}
-                  />
-                </SettingsGroup>
-              </Animated.View>
             </>
           ) : null}
         </ScrollView>
@@ -458,6 +387,104 @@ function EditAboutYouScreenContent() {
           <Button kind="primary" size="lg" label="Save" loading={saving} disabled={saving || !options} onPress={() => void save()} testID="about-you-save" />
         </View>
       )}
+      {options ? (
+        <>
+          <Sheet {...sheetFor('languages')}>
+            <View style={styles.sheetBody}>
+              <ChipSet
+                hint={`Besides English, ${upTo(options.maxLanguages)}.`}
+                items={(shown?.languages ?? []).map((l) => ({ key: l.slug, label: l.label }))}
+                selection="multi"
+                selected={form.languages}
+                max={options.maxLanguages}
+                // Folds like Home region (D-L9): 21 chips unfolded made a long sheet.
+                foldAfter={LANGUAGES_SHOWN}
+                foldNoun="languages"
+                // At the cap the rest dim and say why, instead of a tap that does nothing.
+                capHint={`Up to ${NUMBER_WORDS[options.maxLanguages] ?? options.maxLanguages}`}
+                onToggle={(slug) => {
+                  clearError('languages')
+                  setForm((f) => ({ ...f, languages: toggleLanguage(f.languages, slug, options.maxLanguages) }))
+                }}
+                error={tierBError.languages}
+                testID="about-you-languages"
+              />
+              <WhoSees field="languages" />
+            </View>
+          </Sheet>
+          {shown?.homeStates.length ? (
+            <Sheet {...sheetFor('home-state')}>
+              <View style={styles.sheetBody}>
+                <ChipSet
+                  hint="A state, never a town. Tap again to clear."
+                  items={shown.homeStates.map((x) => ({ key: x.slug, label: x.label }))}
+                  selection="single"
+                  selected={form.homeState ? [form.homeState] : []}
+                  foldAfter={HOME_STATES_SHOWN}
+                  foldNoun="regions"
+                  onToggle={(slug) => {
+                    clearError('homeState')
+                    setForm((f) => ({ ...f, homeState: f.homeState === slug ? null : slug }))
+                  }}
+                  error={tierBError.homeState}
+                  testID="about-you-home-state"
+                />
+                <WhoSees field="homeState" />
+              </View>
+            </Sheet>
+          ) : null}
+          <Sheet {...sheetFor('sign')}>
+            <View style={styles.sheetBody}>
+              <FieldNotes hint={SIGN_LINE} bold={bold} />
+              <SegmentedControl
+                semantics="radio"
+                items={SIGN_SYSTEM_LABELS}
+                selected={SIGN_SYSTEMS.indexOf(system)}
+                onChange={(i) => chooseSystem(SIGN_SYSTEMS[i])}
+                testID="about-you-system"
+              />
+              {hint && !sign ? (
+                <BirthdaySign
+                  text={`From your birthday: ${signName(hint, 'western')} — tap to use`}
+                  onPress={() => {
+                    clearError('sign')
+                    setSystem('western')
+                    setSignOn(true)
+                    setForm((f) => ({ ...f, sign: { slug: hint.slug, system: 'western' } }))
+                  }}
+                />
+              ) : null}
+              <ChipSet
+                items={options.signs.map((x) => ({ key: x.slug, label: signName(x, system) }))}
+                selection="single"
+                selected={sign ? [sign.slug] : []}
+                onToggle={pickSign}
+                error={tierBError.sign}
+                testID="about-you-signs"
+              />
+              <WhoSees field="sign" />
+            </View>
+          </Sheet>
+          {shown?.thisOrThat.length ? (
+            <Sheet {...sheetFor('this-or-that')}>
+              <View style={styles.sheetBody}>
+                {shown.thisOrThat.map((q) => (
+                  <SegmentedControl
+                    key={q.slug}
+                    pair
+                    items={[q.a, q.b]}
+                    selected={answers[q.slug] === 'a' ? 0 : answers[q.slug] === 'b' ? 1 : null}
+                    onChange={(i) => setAnswer(q.slug, i)}
+                    testID={`about-you-pair-${q.slug}`}
+                  />
+                ))}
+                <FieldNotes hint="Pick one, or leave it. Tap again to take it back." bold={bold} />
+                <WhoSees field="thisOrThat" />
+              </View>
+            </Sheet>
+          ) : null}
+        </>
+      ) : null}
     </View>
   )
 }
@@ -467,7 +494,7 @@ function Intro() {
   const bold = useBoldText()
   return (
     <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.intro]}>
-      Where you’re from, what you speak, your sign. Each shows only to people who may already see who you are.
+      On cards only when you and someone share one. Never used to rank.
     </Text>
   )
 }
@@ -494,13 +521,7 @@ const styles = StyleSheet.create({
   intro: { color: COLOR.textSecondary },
   ink: { color: COLOR.textPrimary },
   birthday: { minHeight: SIZE.targetAndroid, justifyContent: 'center' },
-  card: {
-    borderRadius: RADIUS.card,
-    backgroundColor: COLOR.surface,
-    padding: SPACE.lg,
-    gap: SPACE.lg,
-  },
-  field: { gap: SPACE.sm },
+  sheetBody: { gap: SPACE.md },
 })
 
 /** Violet world: one hue on this screen (`HueProvider`). */
