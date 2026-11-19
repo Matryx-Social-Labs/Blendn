@@ -12,7 +12,7 @@ import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { openStoreSubscriptions } from '../components/plus/storeActions'
 import { StoreErrorSheet, type StoreError } from '../components/plus/StoreErrorSheet'
-import { disclosureLine, NeverForSaleRow, PlusActions, PlusHeader, PlusHero, PlusNote, useHeaderHeight, WhatYouGet } from '../components/plus/PlusSections'
+import { disclosureLine, NeverForSaleRow, PlusActions, PlusTerms, PlusHeader, PlusHero, PlusNote, useHeaderHeight, WhatYouGet } from '../components/plus/PlusSections'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../lib/design/tokens'
@@ -282,6 +282,8 @@ function PlusScreenContent() {
   const locked = !sellable || busy !== null || finished
   const action = failed ? 'none' : has ? 'manage' : launch ? 'launch' : !forSale || offers === null ? 'none' : empty ? 'restore' : 'buy'
   const platform = Platform.OS === 'android' ? 'android' : 'ios'
+  const disclosure = disclosureLine(platform, offers?.some(isNightPass) === true, taxLine(offers))
+  const storeBusy = busy === 'buy' || phase === 'confirming'
 
   const plans = (list: PlusOffer[]) => (
     <PlanList testID="plus-plans" cards>
@@ -356,6 +358,15 @@ function PlusScreenContent() {
             <NeverForSaleRow />
           </>
         )}
+        <PlusTerms
+          disclosure={action === 'buy' ? disclosure : null}
+          restore={action !== 'restore'}
+          restoring={busy === 'restore'}
+          storeBusy={storeBusy}
+          onRestore={() => void restoreAll()}
+          onTerms={() => void open(BLENDN_LINKS.terms)}
+          onPrivacy={() => void open(BLENDN_LINKS.privacy)}
+        />
       </ScrollView>
       {/* Restore, Terms and Privacy stay even when the status could not be read: they do not depend on it. */}
       <PlusActions
@@ -368,8 +379,8 @@ function PlusScreenContent() {
         disabled={locked || !pick}
         // While the store prices load the button holds with a spinner (after the grace), never a bare dead button.
         buying={busy === 'buy' || (forSale && offers === undefined)}
-        storeBusy={busy === 'buy' || (phase === 'confirming')}
-        disclosure={disclosureLine(platform, offers?.some(isNightPass) === true, taxLine(offers))}
+        storeBusy={storeBusy}
+        disclosure={disclosure}
         onBuy={() => pick && void buy(pick)}
         onManage={toManage}
         onRestore={() => void restoreAll()}

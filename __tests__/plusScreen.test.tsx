@@ -426,6 +426,38 @@ it('the back circle is a way out too', async () => {
   expect(router.back).toHaveBeenCalled()
 })
 
+// remaining-screens 02 A (AX): the dock keeps the button and the board's short renew line; the full disclosure and Restore ·
+// Terms · Privacy move to the end of the page, so the plans keep the screen. Negative control: the full dock at AX (drive
+// 2026-11-19: it covered the plans) fails the first half; the short line at 1x fails the second.
+describe('the dock at the largest text sizes', () => {
+  const RN = jest.requireActual('react-native') as typeof import('react-native')
+  const at = (fontScale: number) => jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({ width: 402, height: 874, scale: 3, fontScale })
+  it('AX: the short line in the dock; the full disclosure and the links at the end of the page', async () => {
+    const spy = at(2)
+    try {
+      await mount()
+      expect(within(screen.getByTestId('plus-dock')).getByText('Renews automatically. Cancel in Settings › Apple Account.')).toBeTruthy()
+      expect(within(screen.getByTestId('plus-dock')).queryByText(/^Charged to your Apple Account/)).toBeNull()
+      expect(within(screen.getByTestId('plus-scroll')).getByText(/^Charged to your Apple Account/)).toBeTruthy()
+      expect(within(screen.getByTestId('plus-scroll')).getByRole('button', { name: 'Restore purchases' })).toBeTruthy()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('1x: the full disclosure and the links in the dock, beside the button', async () => {
+    const spy = at(1)
+    try {
+      await mount()
+      expect(within(screen.getByTestId('plus-dock')).getByText(/^Charged to your Apple Account/)).toBeTruthy()
+      expect(within(screen.getByTestId('plus-dock')).getByRole('button', { name: 'Restore purchases' })).toBeTruthy()
+      expect(screen.queryByText('Renews automatically. Cancel in Settings › Apple Account.')).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
 describe('never sells what is free (review H2)', () => {
   it('opened from the profile in a launch season: says Plus is free here, lists no plans, the dock has nothing to buy', async () => {
     mockTrigger.value = 'profile'
@@ -470,7 +502,7 @@ describe('prices and the server, honestly', () => {
     await screen.unmount()
     ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, nightPass].map((o) => ({ ...o, pkg: { ...o.pkg, product: { ...o.pkg.product, currencyCode: 'USD' } } })))
     await mount()
-    expect(screen.getByText(/Renews automatically/)).toBeTruthy()
+    expect(screen.getAllByText(/Renews automatically/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/GST/)).toBeNull()
   })
 

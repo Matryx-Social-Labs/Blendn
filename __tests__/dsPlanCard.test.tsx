@@ -46,6 +46,23 @@ describe('<PlanCard>', () => {
     expect(onPress).toHaveBeenCalledTimes(2)
   })
 
+  // remaining-screens 02 A (AX): the plans stack and the price takes its own line under the name. Negative control: the
+  // side-by-side row, whose price column squeezed "Monthly" to "M / on" at AX XXXL (drive 2026-11-19), fails it.
+  it('at the largest text sizes the price drops under the name instead of beside it', async () => {
+    const RN = jest.requireActual('react-native') as typeof import('react-native')
+    const spy = jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({ width: 402, height: 874, scale: 3, fontScale: 2 })
+    try {
+      await render(<PlanCard name="Monthly" price="₹199" per="/ month" sub="Renews every month" onPress={jest.fn()} testID="p" />)
+      expect(screen.getByTestId('p-text').props.children).toEqual(expect.arrayContaining([expect.objectContaining({ props: expect.objectContaining({ testID: 'p-price' }) })]))
+    } finally {
+      spy.mockRestore()
+    }
+    const at1 = jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({ width: 402, height: 874, scale: 3, fontScale: 1 })
+    await render(<PlanCard name="Monthly" price="₹199" per="/ month" onPress={jest.fn()} testID="q" />)
+    expect(screen.getByTestId('q-text').props.children).not.toEqual(expect.arrayContaining([expect.objectContaining({ props: expect.objectContaining({ testID: 'q-price' }) })]))
+    at1.mockRestore()
+  })
+
   // remaining-screens 01 A. Negative control: the one-list rows (no card per plan) fail it.
   it('as cards: each plan its own card, 8 apart, the picked one edged 2 pt in the hue, the rest 1 pt', async () => {
     await render(

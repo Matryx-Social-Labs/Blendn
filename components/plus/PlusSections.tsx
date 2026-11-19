@@ -151,6 +151,8 @@ export function PlusActions({
   onPrivacy: () => void
 }) {
   const bold = useBoldText()
+  // At the accessibility sizes the dock keeps the button and one short line; the rest is at the page's end (`PlusTerms`).
+  const large = useLargeText()
   const onGlass = Platform.OS === 'ios'
   const line = restoring ? (
     <DockLine text="Restoring…" spinning />
@@ -186,14 +188,10 @@ export function PlusActions({
       </Swap>
       {idle && action === 'buy' && disclosure ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="plus-disclosure" style={[font('meta', bold), styles.tertiary]}>
-          {disclosure}
+          {large ? SHORT_LEGAL[Platform.OS === 'android' ? 'android' : 'ios'] : disclosure}
         </Text>
       ) : null}
-      <View style={styles.links}>
-        {restoreLink ? <DockLink label="Restore purchases" role="button" busy={restoring} disabled={storeBusy} onPress={onRestore} /> : null}
-        <DockLink label="Terms" role="link" onPress={onTerms} />
-        <DockLink label="Privacy" role="link" onPress={onPrivacy} />
-      </View>
+      {large ? null : <DockLinks restore={restoreLink} restoring={restoring} storeBusy={storeBusy} onRestore={onRestore} onTerms={onTerms} onPrivacy={onPrivacy} />}
     </PlusDock>
   )
 }
@@ -258,6 +256,34 @@ export function NeverForSaleRow() {
   )
 }
 
+type LinksProps = { restore: boolean; restoring: boolean; storeBusy: boolean; onRestore: () => void; onTerms: () => void; onPrivacy: () => void }
+
+/** Restore · Terms · Privacy, never greyed (Restore waits while the store is being asked). */
+function DockLinks({ restore, restoring, storeBusy, onRestore, onTerms, onPrivacy }: LinksProps) {
+  return (
+    <View style={styles.links}>
+      {restore ? <DockLink label="Restore purchases" role="button" busy={restoring} disabled={storeBusy} onPress={onRestore} /> : null}
+      <DockLink label="Terms" role="link" onPress={onTerms} />
+      <DockLink label="Privacy" role="link" onPress={onPrivacy} />
+    </View>
+  )
+}
+
+/**
+ * At the accessibility sizes only (remaining-screens 02 A, AX): the store's full renew line and Restore · Terms · Privacy
+ * at the end of the page, since the dock keeps just the button and `SHORT_LEGAL`. Nothing at other sizes.
+ */
+export function PlusTerms({ disclosure, ...links }: LinksProps & { disclosure: string | null }) {
+  const bold = useBoldText()
+  if (!useLargeText()) return null
+  return (
+    <View testID="plus-terms" style={styles.terms}>
+      {disclosure ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>{disclosure}</Text> : null}
+      <DockLinks {...links} />
+    </View>
+  )
+}
+
 /** One dock link: meta text on a 44 / 48 target. `link` opens a page; `button` does something. Greyed only while the store is already being asked. */
 function DockLink({ label, role, onPress, busy = false, disabled = false }: { label: string; role: 'link' | 'button'; onPress: () => void; busy?: boolean; disabled?: boolean }) {
   const bold = useBoldText()
@@ -286,6 +312,12 @@ export function disclosureLine(platform: 'ios' | 'android', nightPass: boolean, 
   return [LEGAL[platform], nightPass ? 'Night Pass is a one-off.' : null, tax].filter(Boolean).join(' ')
 }
 
+/** The dock's renew line at the accessibility sizes (the board's AX frame); the full line is at the page's end. */
+const SHORT_LEGAL = {
+  ios: 'Renews automatically. Cancel in Settings › Apple Account.',
+  android: 'Renews automatically. Cancel in Google Play › Payments & subscriptions.',
+} as const
+
 const LEGAL = {
   ios: 'Charged to your Apple Account. Renews automatically unless cancelled at least 24 hours before the period ends; cancel in Settings › Apple Account › Subscriptions.',
   android: 'Charged to your Google Play account. Renews automatically until you cancel in Google Play › Payments & subscriptions.',
@@ -302,6 +334,7 @@ const styles = StyleSheet.create({
   heroLarge: { alignItems: 'flex-start' },
   note: { paddingHorizontal: SPACE.xs },
   fill: { flex: 1 },
+  terms: { gap: SPACE.md },
   // design-exception: the board spaces the dock's links 14 apart (`gap:14px`), between SPACE.md and SPACE.lg.
   links: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 14 },
   ink: { color: COLOR.textPrimary },

@@ -5,7 +5,7 @@ import { COLOR, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/
 import { H } from '../../lib/haptics'
 import { OPACITY, tint } from '../../lib/theme'
 import { Price, spokenPrice } from './MonoFamily'
-import { focusRing, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
+import { focusRing, font, PRESSED_WASH, useBoldText, useIncreaseContrast, useLargeText, useSelection } from './shared'
 
 /** The page's 64 pt row and its 22 pt ring: the hue's 6 pt when picked, 35% at 1.5 pt when not. */
 const ROW_MIN_HEIGHT = SIZE.primary + SPACE.sm
@@ -56,6 +56,14 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const [focused, setFocused] = useState(false)
+  // At the accessibility sizes the price takes its own line under the name (remaining-screens 02 A): beside it, its
+  // column squeezed the name to a letter a line.
+  const large = useLargeText()
+  const priceRun = (
+    <View testID={testID && `${testID}-price`} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Price amount={price} per={per} />
+    </View>
+  )
   return (
     <View>
       <Pressable
@@ -79,13 +87,12 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
         ]}
       >
         <RadioRing selected={selected} testID={testID && `${testID}-ring`} />
-        <View style={styles.text}>
+        <View testID={testID && `${testID}-text`} style={styles.text}>
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{name}</Text>
           {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>{sub}</Text> : null}
+          {large ? priceRun : null}
         </View>
-        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Price amount={price} per={per} />
-        </View>
+        {large ? null : priceRun}
       </Pressable>
       {focused || previewState === 'focused'
         ? focusRing(RADIUS.rowInCard).map((r, i) => <View key={i} testID={i ? undefined : testID && `${testID}-focus`} pointerEvents="none" style={r} />)
