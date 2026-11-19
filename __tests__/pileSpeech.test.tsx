@@ -3,6 +3,8 @@
  * screen reader cannot reach: with VoiceOver or TalkBack on, each number on screen gets an invisible marker that says
  * "13 events here, double-tap to zoom in" and does what a tap on the number does. Placed when the camera stops.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
 
@@ -108,7 +110,7 @@ describe('PileSpeech', () => {
  * drawer covers it; the reader still opens on the full list, and lowering the drawer (it is adjustable) brings the map back.
  */
 describe('HomeShell keeps the map readable', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '../components/home/HomeShell.tsx'), 'utf8') as string
+  const src = readFileSync(join(__dirname, '../components/home/HomeShell.tsx'), 'utf8')
   it('hides the map from a screen reader only while the full drawer covers it', () => {
     expect(src).toMatch(/accessibilityElementsHidden={snap === 'full'}/)
     expect(src).toMatch(/importantForAccessibility={snap === 'full' \? 'no-hide-descendants' : 'auto'}/)
