@@ -1,17 +1,19 @@
-import { Marker, type GeoJSONSourceRef, type MapRef } from '@maplibre/maplibre-react-native'
+import { type GeoJSONSourceRef, type MapRef } from '@maplibre/maplibre-react-native'
 import { useEffect, useState, type RefObject } from 'react'
-import { Platform, StyleSheet, View } from 'react-native'
+import { Platform, Pressable, StyleSheet } from 'react-native'
 
 import { SIZE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { pileSpeech, PILE_SPEECH_MAX } from '../../lib/mapPresence'
-import { annotationTitle } from './MapLitLayers'
 
-type Target = { key: string; at: [number, number]; speech: string; clusterId: number | null; id: string | null; kind: string }
+type Target = { key: string; at: [number, number]; xy: [number, number]; speech: string; clusterId: number | null; id: string | null; kind: string }
 type Found = { geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> | null }
 
-/** After the camera stops, the piles are re-clustered for the new view before they are read. */
-const SETTLE_MS = 250
+/**
+ * After the camera stops, the piles are re-clustered for the new view before they are read: past MapLibre's 300 ms
+ * symbol cross-fade, during which the outgoing zoom's pile is still rendered (drives: the old "16" read beside a "14").
+ */
+const SETTLE_MS = 400
 /** A target's size: the platform's minimum (44 pt iOS, 48 dp Android), as the bubble's own hit area. */
 const TARGET_PT = Platform.OS === 'ios' ? SIZE.targetIos : SIZE.targetAndroid
 
@@ -23,6 +25,7 @@ const targetOf = (f: Found): Target | null => {
   return {
     key: cluster ? `pile-${p.cluster_id}` : `spot-${String(p.id)}`,
     at: [Number(at[0]), Number(at[1])],
+    xy: [0, 0],
     speech: pileSpeech({ n: p.n, live: typeof p.live === 'number' ? p.live : 0, cluster }),
     clusterId: cluster ? (p.cluster_id as number) : null,
     id: typeof p.id === 'string' ? p.id : null,
@@ -33,8 +36,9 @@ const targetOf = (f: Found): Target | null => {
 /**
  * The map's numbers for a screen reader (pulse-map 10). A pile is a MapLibre layer, which VoiceOver and TalkBack cannot
  * reach: with one on, each number in the visible map (`box`, under the top bar and over the drawer) gets an invisible
- * marker that says it ("13 events here, double-tap to zoom in") and does what a tap on it does. Read again each time the
- * camera stops (`settled`). Off, it reads and draws nothing.
+ * target that says it ("13 events here, double-tap to zoom in") and does what a tap on it does. Read again each time the
+ * camera stops (`settled`). Off, it reads and draws nothing. Drawn over the map, not inside it: MapLibre's Android view
+ * keeps its child views (Markers) from TalkBack, so each target is a plain view at its number's screen point.
  */
 export function PileSpeech({
   on,
@@ -61,11 +65,15 @@ export function PileSpeech({
     const timer = setTimeout(() => {
       map.current
         ?.queryRenderedFeatures([[left, top], [right, bottom]], { layers: ['pile-bubble'] })
-        .then((found) => {
-          if (stale) return
+        .then(async (found) => {
           const seen = new Set<string>()
-          const next = (found as Found[]).map(targetOf).filter((t): t is Target => !!t && !seen.has(t.key) && !!seen.add(t.key))
-          setTargets(next.slice(0, PILE_SPEECH_MAX))
+          const next = (found as Found[])
+            .map(targetOf)
+            .filter((t): t is Target => !!t && !seen.has(t.key) && !!seen.add(t.key))
+            .slice(0, PILE_SPEECH_MAX)
+          // Each number's point on the screen: the targets are drawn over the map, not inside it.
+          const placed = await Promise.all(next.map(async (t) => ({ ...t, xy: (await map.current?.project(t.at)) ?? t.xy })))
+          if (!stale) setTargets(placed)
         })
         .catch((error) => Logger.warn('events', 'Could not read the map’s numbers for a screen reader', { error: String(error) }))
     }, SETTLE_MS)
@@ -89,12 +97,17 @@ export function PileSpeech({
   return (
     <>
       {(on ? targets : []).map((t) => (
-        <Marker key={t.key} id={`speech-${t.key}`} lngLat={t.at} anchor="center" onPress={() => act(t)} {...annotationTitle(t.speech)}>
-          <View style={styles.target} accessible accessibilityRole="button" accessibilityLabel={t.speech} onAccessibilityTap={() => act(t)} />
-        </Marker>
+        <Pressable
+          key={t.key}
+          style={[styles.target, { left: t.xy[0] - TARGET_PT / 2, top: t.xy[1] - TARGET_PT / 2 }]}
+          accessibilityRole="button"
+          accessibilityLabel={t.speech}
+          onPress={() => act(t)}
+          onAccessibilityTap={() => act(t)}
+        />
       ))}
     </>
   )
 }
 
-const styles = StyleSheet.create({ target: { width: TARGET_PT, height: TARGET_PT } })
+const styles = StyleSheet.create({ target: { position: 'absolute', width: TARGET_PT, height: TARGET_PT } })

@@ -13,7 +13,7 @@ import {
 } from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, Platform, StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
+import { AppState, Platform, StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
@@ -726,19 +726,21 @@ export const HomeMap = memo(function HomeMap({
           <YouMark part="dot" fix={center} sharing={sharing} now={now} />
         </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
-        {/* A screen reader hears the numbers (pulse-map 10): one spoken marker each, read when the camera stops. */}
-        <PileSpeech
-          on={screenReader}
-          map={map}
-          source={pileSource}
-          box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom }}
-          settled={settled}
-          onExpand={expandPile}
-          onOpen={open}
-        />
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* A screen reader hears the numbers (pulse-map 10): one spoken target each, over the map (Android keeps the map's own children from TalkBack). */}
+          <PileSpeech
+            on={screenReader}
+            map={map}
+            source={pileSource}
+            box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom }}
+            settled={settled}
+            onExpand={expandPile}
+            onOpen={open}
+          />
+      </View>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}

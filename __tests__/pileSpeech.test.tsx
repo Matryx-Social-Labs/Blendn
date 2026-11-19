@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
+import { Platform, StyleSheet } from 'react-native'
 
 type Props = Record<string, unknown> & { id?: string; children?: React.ReactNode }
 jest.mock('@maplibre/maplibre-react-native', () => {
@@ -22,6 +23,7 @@ jest.mock('@maplibre/maplibre-react-native', () => {
 
 /* eslint-disable import/first */
 import { PileSpeech } from '../components/home/PileSpeech'
+import { SIZE } from '../lib/design/tokens'
 import { pileSpeech, PILE_SPEECH_MAX } from '../lib/mapPresence'
 /* eslint-enable import/first */
 
@@ -33,11 +35,11 @@ const cluster = (id: number, n: number, live = 0) => ({
 const spot = (id: string, n: number) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [77.61, 12.98] }, properties: { id, kind: 'event', n, live: 0 } })
 
 const setup = (features: unknown[]) => {
-  const map = { current: { queryRenderedFeatures: jest.fn(async () => features) } }
+  const map = { current: { queryRenderedFeatures: jest.fn(async () => features), project: jest.fn(async ([lng]: [number, number]) => [Math.round((lng - 77.6) * 10000), 250]) } }
   const source = { current: { getClusterExpansionZoom: jest.fn(async () => 15) } }
   return { map, source }
 }
-const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 400)) })
+const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 600)) })
 
 describe('what a number says', () => {
   it('a pile: its count and what a double-tap does; a live share when there is one', () => {
@@ -61,6 +63,21 @@ describe('PileSpeech', () => {
     expect(screen.getByLabelText('3 events at one place, double-tap to open the first')).toBeTruthy()
   })
 
+  /*
+   * Android drive with TalkBack: MapLibre's Android view keeps every child view (Markers, the lit chips) out of the
+   * accessibility tree, so a marker inside the map was never read. The targets are plain views over the map instead, each
+   * centred on its number's screen point (map.project), which both platforms read.
+   */
+  it('draws each target over the map at its number\'s screen point, not as a Marker inside the map', async () => {
+    const { map, source } = setup([cluster(7, 13)])
+    await render(<PileSpeech on map={map as never} source={source as never} box={box} settled={1} onExpand={jest.fn()} onOpen={jest.fn()} />)
+    await flush()
+    expect(screen.queryByTestId('marker-speech-pile-7')).toBeNull()
+    const target = screen.getByLabelText('13 events here, double-tap to zoom in')
+    const half = (Platform.OS === 'ios' ? SIZE.targetIos : SIZE.targetAndroid) / 2
+    expect(StyleSheet.flatten(target.props.style)).toMatchObject({ position: 'absolute', left: 70 - half, top: 250 - half })
+  })
+
   it('a double-tap on a pile eases to its expansion zoom; on a stacked place, opens its first event', async () => {
     const onExpand = jest.fn()
     const onOpen = jest.fn()
@@ -76,6 +93,19 @@ describe('PileSpeech', () => {
       screen.getByLabelText('3 events at one place, double-tap to open the first').props.onAccessibilityTap()
     })
     expect(onOpen).toHaveBeenCalledWith('event', 'e9')
+  })
+
+  /*
+   * Drives (iOS and Android): after a number's double-tap the old "16" was read beside the new "14". The read ran 250 ms
+   * after the stop, inside MapLibre's 300 ms symbol cross-fade, so the outgoing zoom's pile was still rendered.
+   */
+  it('waits out the map\'s 300 ms cross-fade before reading, so an old pile is not read beside its parts', async () => {
+    const { map, source } = setup([cluster(1, 13)])
+    await render(<PileSpeech on map={map as never} source={source as never} box={box} settled={1} onExpand={jest.fn()} onOpen={jest.fn()} />)
+    await act(async () => { await new Promise((r) => setTimeout(r, 320)) })
+    expect(map.current.queryRenderedFeatures).not.toHaveBeenCalled()
+    await flush()
+    expect(map.current.queryRenderedFeatures).toHaveBeenCalledTimes(1)
   })
 
   it('reads again when the camera stops somewhere new', async () => {
