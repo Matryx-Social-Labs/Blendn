@@ -30,6 +30,7 @@ export function EdgeMarker({
   settled,
   moving,
   onPress,
+  onPlaced,
 }: {
   map: RefObject<MapRef | null>
   target: { id: string; name: string; at: [number, number] } | null
@@ -39,6 +40,8 @@ export function EdgeMarker({
   settled: number
   moving: boolean
   onPress: () => void
+  /** Where it is drawn (its laid-out size), or null when it is not: the stale callout keeps off it. */
+  onPlaced?: (rect: { left: number; top: number; width: number; height: number } | null) => void
 }) {
   const bold = useBoldText()
   // Where its venue projected, and for which venue: a new lap venue never borrows the last one's point.
@@ -63,6 +66,10 @@ export function EdgeMarker({
   }, [map, lng, lat, settled])
   const xy = placed && placed.key === `${lng},${lat}` ? placed.xy : null
   const spot = target && xy && !moving ? edgeMarker(xy, box, size) : null
+  const shown = target && spot ? spot : null
+  useEffect(() => {
+    onPlaced?.(shown ? { left: shown.left, top: shown.top, width: size.width, height: size.height } : null)
+  }, [shown?.left, shown?.top, size.width, size.height, !!shown]) // eslint-disable-line react-hooks/exhaustive-deps -- by value
   if (!target || !spot) return null
   return (
     <ScalePress

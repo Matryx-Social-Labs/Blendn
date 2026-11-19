@@ -60,6 +60,16 @@ describe('EdgeMarker', () => {
   })
 })
 
+describe('EdgeMarker onPlaced', () => {
+  it('says where it is drawn, and null when it is not (the stale callout keeps off it)', async () => {
+    const onPlaced = jest.fn()
+    await draw({ onPlaced })
+    expect(onPlaced).toHaveBeenLastCalledWith(expect.objectContaining({ left: expect.any(Number), top: expect.any(Number), width: 132, height: 28 }))
+    await draw({ onPlaced, moving: true })
+    expect(onPlaced).toHaveBeenLastCalledWith(null)
+  })
+})
+
 describe('EdgeMarker while the map is not there', () => {
   /*
    * Sim drive at AX5: a text-size change remounts the map, and MapLibre's `project` throws synchronously ("NativeComponent

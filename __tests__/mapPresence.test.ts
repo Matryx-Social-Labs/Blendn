@@ -262,6 +262,19 @@ describe('staleCalloutBelow (pulse-map 06 "STALE": the callout over the grey dot
   })
 })
 
+describe('staleCalloutBelow with the marker beside the dot (Android re-drive: below, it ran under "Olive Beach 850 m")', () => {
+  const callout = { width: 200, height: 40, gap: 17 }
+  it('stays over the dot when the marker, as drawn, is level with the dot and clear of the box over it', () => {
+    expect(staleCalloutBelow([202, 250], callout, { left: 258, top: 244, width: 138, height: 28 })).toBe(false)
+  })
+  it('takes the side it meets least when it would meet the marker on both', () => {
+    expect(staleCalloutBelow([202, 250], callout, { left: 250, top: 225, width: 150, height: 44 })).toBe(true)
+    expect(staleCalloutBelow([202, 250], callout, { left: 250, top: 240, width: 150, height: 44 })).toBe(false)
+    // Over the dot it meets the marker less than under it: it stays over.
+    expect(staleCalloutBelow([202, 250], callout, { left: 250, top: 215, width: 150, height: 110 })).toBe(false)
+  })
+})
+
 describe('staleCalloutBox (the room the stale callout takes, so names keep out of it)', () => {
   const callout = { width: 200, height: 40, gap: 17 }
   it('is centred over the dot, its bottom the gap above, or hangs the gap below', () => {

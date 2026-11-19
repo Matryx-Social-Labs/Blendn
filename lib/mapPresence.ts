@@ -194,10 +194,17 @@ export function staleCalloutBox(dot: readonly [number, number], callout: Callout
   return { left: x - callout.width / 2, right: x + callout.width / 2, top, bottom: top + callout.height }
 }
 
+/** How much of `box` lies on `marker` grown by the air (pt², 0 when they are clear). */
+function overlapOn(box: ReturnType<typeof staleCalloutBox>, marker: { left: number; top: number; width: number; height: number }): number {
+  const w = Math.min(box.right, marker.left + marker.width + CALLOUT_AIR) - Math.max(box.left, marker.left - CALLOUT_AIR)
+  const h = Math.min(box.bottom, marker.top + marker.height + CALLOUT_AIR) - Math.max(box.top, marker.top - CALLOUT_AIR)
+  return w > 0 && h > 0 ? w * h : 0
+}
+
 /**
  * Whether the stale callout hangs under your dot rather than over it. Over it is the board's place (pulse-map 06, "STALE");
- * under it only when that box would meet the edge marker's (iOS drive 2026-11-19: it ran 3 pt under the marker at the top
- * of the map). `callout.gap` is the room between the callout and the dot's centre.
+ * under it only when over it would meet the edge marker (iOS drive 2026-11-19: it ran 3 pt under the marker at the top of
+ * the map), and under it meets it less (Android re-drive: a marker level with the dot). `marker`: the marker as drawn.
  */
 export function staleCalloutBelow(
   dot: readonly [number, number],
@@ -205,13 +212,8 @@ export function staleCalloutBelow(
   marker: { left: number; top: number; width: number; height: number } | null
 ): boolean {
   if (!marker) return false
-  const over = staleCalloutBox(dot, callout, false)
-  return (
-    over.left < marker.left + marker.width + CALLOUT_AIR &&
-    over.right > marker.left - CALLOUT_AIR &&
-    over.top < marker.top + marker.height + CALLOUT_AIR &&
-    over.bottom > marker.top - CALLOUT_AIR
-  )
+  const over = overlapOn(staleCalloutBox(dot, callout, false), marker)
+  return over > 0 && overlapOn(staleCalloutBox(dot, callout, true), marker) < over
 }
 
 /**

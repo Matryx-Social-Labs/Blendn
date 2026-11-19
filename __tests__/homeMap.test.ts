@@ -283,10 +283,12 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 
   it('keeps every name out from under the stale callout, on the side it is drawn (map-finish drive: a chip sat 3 pt off it)', () => {
     const lighting = code('components/home/useMapLighting.ts')
-    expect(lighting).toMatch(/if \(stale && dot\) blocked\.push\(staleCalloutBox\(dot, stale, staleCalloutBelow\(dot, stale, /)
-    // Asked again when the dot goes grey (no camera move does it).
-    expect(component).toMatch(/stale: you\.kind === 'stale' \? STALE_CALLOUT : null/)
-    expect(lighting).toMatch(/\$\{stale \? 'stale' : ''\}/)
+    // The side is the screen's one decision (from the marker as drawn, `onPlaced`); the names keep out of that side.
+    expect(lighting).toMatch(/if \(stale && dot\) blocked\.push\(staleCalloutBox\(dot, stale\.room, stale\.below\)\)/)
+    expect(component).toMatch(/stale: you\.kind === 'stale' \? \{ room: STALE_CALLOUT, below: staleBelow \} : null/)
+    expect(component).toMatch(/onPlaced=\{setEdgeRect\}/)
+    // Asked again when the dot goes grey, or the side changes (no camera move does either).
+    expect(lighting).toMatch(/\$\{stale \? `stale:\$\{stale\.below\}` : ''\}/)
   })
 
   it('the lead’s chip says the lead card’s own distance too (Android drive: 800 m over a card reading 850 m)', () => {

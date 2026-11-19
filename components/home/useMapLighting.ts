@@ -25,7 +25,7 @@ import {
   type LngLat,
 } from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, OWN_BUILDINGS_LAYER_ID } from '../../lib/mapStyleEmber'
-import { edgeMarker, staleCalloutBelow, staleCalloutBox } from '../../lib/mapPresence'
+import { edgeMarker, staleCalloutBox } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SIZE, SPACE } from '../../lib/design/tokens'
 
@@ -34,7 +34,7 @@ export type Collection<F> = { type: 'FeatureCollection'; features: F[] }
 /** A name above a lit roof. */
 /** `count`: the events the lit place stands for (several at one venue: its name and the count, pulse-map 12 A). */
 /** The room an edge marker may take (its widest, and its height with air): names keep out of it. */
-export const EDGE_BLOCK = { width: MAP_THEME.chip.maxWidthPx, height: SIZE.targetIos }
+const EDGE_BLOCK = { width: MAP_THEME.chip.maxWidthPx, height: SIZE.targetIos }
 
 export type Chip = { id: string; kind: Pin['kind']; live: boolean; title: string; line: string; speech: string; at: LngLat; lift: number; count: number }
 /** A building in our tiles lit through feature-state: its id, and the pin it stands for (a tap on it opens that). */
@@ -114,8 +114,8 @@ export function useMapLighting({
   userAt?: LngLat | null
   /** The lap's venue and the box its edge marker keeps to (`EdgeMarker`): no name is drawn under the marker. */
   edge?: { at: LngLat; box: Box } | null
-  /** The stale callout's room while your dot is grey (`StaleCallout`): no name is drawn under it, on whichever side it hangs. */
-  stale?: { width: number; height: number; gap: number } | null
+  /** The stale callout while your dot is grey (`StaleCallout`), its room and the side it hangs: no name is drawn under it. */
+  stale?: { room: { width: number; height: number; gap: number }; below: boolean } | null
   /** A distance the screen already shows for one event (the lead card's): its chip says the same number. */
   knownDistance?: { id: string; km: number } | null
 }): { lit: Lit; onFrame: () => void; relight: () => void; passes: number } {
@@ -156,7 +156,7 @@ export function useMapLighting({
     const tiles = featureIds ? 'own' : 'openfreemap'
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
-    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? 'stale' : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}`
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? `stale:${stale.below}` : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}`
     if (signature === lastLit.current) {
       setPasses((n) => n + 1)
       return
@@ -245,7 +245,7 @@ export function useMapLighting({
         const blocked = dot ? [{ left: dot[0] - USER_DOT_HALF_PX, right: dot[0] + USER_DOT_HALF_PX, top: dot[1] - USER_DOT_HALF_PX, bottom: dot[1] + USER_DOT_HALF_PX }] : []
         const marker = edgeAt ? edgeMarker(edgeAt, edge?.box ?? zone, EDGE_BLOCK) : null
         if (marker) blocked.push({ left: marker.left, right: marker.left + EDGE_BLOCK.width, top: marker.top, bottom: marker.top + EDGE_BLOCK.height })
-        if (stale && dot) blocked.push(staleCalloutBox(dot, stale, staleCalloutBelow(dot, stale, marker && { ...marker, ...EDGE_BLOCK })))
+        if (stale && dot) blocked.push(staleCalloutBox(dot, stale.room, stale.below))
         chips = pickChips(
           nearest.map((c, i) => ({ item: c, box: chipBox(projected[i] as [number, number], c.lift, chipSizePx(c)) })),
           zone,
