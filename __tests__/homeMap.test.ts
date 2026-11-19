@@ -281,6 +281,11 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).toMatch(/box=\{edgeBox\}/)
   })
 
+  it('the edge marker says the lead card’s own distance (drive: the marker read 800 m over a card reading 850 m)', () => {
+    expect(component).toMatch(/const edgeKm = focus\?\.km \?\? /)
+    expect(code('app/(tabs)/events.tsx')).toMatch(/km: focusKm/)
+  })
+
   it("keeps OpenFreeMap’s buildings extrudable, credited by our own corner credit (the native one is off)", () => {
     expect(CITY_BUILDINGS).toMatchObject({ id: 'blendn-buildings', source: 'openmaptiles', sourceLayer: 'building' })
     expect(layers).toMatch(/<CityBuildings \/>/)

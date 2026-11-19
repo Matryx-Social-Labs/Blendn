@@ -1620,7 +1620,12 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const onLeadLight = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.key === leadKey ? at.swipes : 0 })), [leadKey])
   const leadEvent = leadEvents[leadPage] ?? null
   const focusPin = useMemo(() => (leadEvent ? (pinsFor('events', { events: [leadEvent], venues: [] })[0] ?? null) : null), [leadEvent])
-  const focus = useMemo(() => (focusPin ? { pin: focusPin, n: leadAt.key === leadKey ? leadAt.swipes : 0 } : null), [focusPin, leadAt, leadKey])
+  // `km`: the card's own distance, so the map's edge marker says the same number as the card under it.
+  const focusKm = typeof leadEvent?.distance === 'number' ? leadEvent.distance : null
+  const focus = useMemo(
+    () => (focusPin ? { pin: focusPin, n: leadAt.key === leadKey ? leadAt.swipes : 0, km: focusKm } : null),
+    [focusPin, leadAt, leadKey, focusKm]
+  )
   const peekLine = isSearching ? null : leadPeekLine(leadCards[leadPage] ?? null)
 
   /*

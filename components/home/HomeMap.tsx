@@ -211,7 +211,7 @@ export const HomeMap = memo(function HomeMap({
   /** Bumped by "Show on map": fit the camera to the pins and you, in the map the half drawer leaves. */
   fitNear: number
   /** The Pulse's lead card's venue: lit at the brightest step; each new `n` (a swipe) eases the camera there (Option C). */
-  focus?: { pin: Pin; n: number } | null
+  focus?: { pin: Pin; n: number; km?: number | null } | null
   /** How far the Pulse's banners on the map lift "my location" (0 with none). */
   locateLift?: SharedValue<number>
   /** Near me is on (Flow 3b · N1): where you stand. The map draws your reach and lights only what is inside it. */
@@ -675,7 +675,9 @@ export const HomeMap = memo(function HomeMap({
   // What the map says about you (pulse-map 06): approximate and stale each get their one line.
   const you = youMark({ sharing, permission: 'granted', fix: center, now })
 
-  const edgeDistance = edgeTarget && center ? distanceText(getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0])) : null
+  // The lead card's own distance when it has one (the same number as the card), else measured from the fix; none without one.
+  const edgeKm = focus?.km ?? (edgeTarget && center ? getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0]) : null)
+  const edgeDistance = center ? distanceText(edgeKm) : null
   // The map as a whole, for a screen reader (pulse-map 10): read when the camera stops (`settled` re-renders this).
   const bounds = view.current.bounds
   const edgeOff = edgeTarget && bounds ? !(edgeTarget.at[0] >= bounds[0] && edgeTarget.at[0] <= bounds[2] && edgeTarget.at[1] >= bounds[1] && edgeTarget.at[1] <= bounds[3]) : false
