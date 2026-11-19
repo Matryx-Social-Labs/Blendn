@@ -8,7 +8,7 @@
  * sign until one is picked. "Show my badges" saves off. A refused Tier B change
  * shows the server's own sentence.
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native'
 import { ScrollView, StyleSheet } from 'react-native'
 
 let mockParams: Record<string, string> = {}
@@ -38,12 +38,15 @@ const mockMe = { user: { id: 'me' } }
 jest.mock('../lib/useAuth', () => ({ useAuth: () => mockMe, refreshAuthUser: jest.fn() }))
 const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
+// The account's country, from its home city (#584's `useHomeCountry`); India unless a test says otherwise.
+let mockCountry: string | null = 'IN'
+jest.mock('../lib/homeCity', () => ({ useHomeCountry: () => mockCountry }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
 import { router } from 'expo-router'
 import EditAboutYouScreen, { LANGUAGES_SHOWN } from '../app/edit-about-you'
 import { apiClient, ProfileCache } from '../lib/apiClient'
-import { COLOR } from '../lib/design/tokens'
+import { resetModalTurns } from '../lib/modalTurn'
 
 const api = apiClient as unknown as Record<string, jest.Mock>
 
@@ -76,7 +79,9 @@ const profile = (over: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   jest.clearAllMocks()
+  resetModalTurns()
   mockParams = {}
+  mockCountry = 'IN'
   api.getProfileOptions.mockResolvedValue({ success: true, data: OPTIONS })
   api.getProfile.mockResolvedValue(profile())
   api.getThisOrThat.mockResolvedValue({ success: true, data: { answers: {} } })
@@ -89,36 +94,162 @@ const open = async () => {
   await waitFor(() => expect(screen.getByText('Show my sign')).toBeTruthy())
 }
 const tap = async (text: string) => {
+  // The card switches are on the page: a person closes the sheet over them first.
+  if (text.startsWith('Show ')) await closeOpen()
   await act(async () => {
     fireEvent.press(screen.getByText(text))
   })
 }
 
+/** As a person does: an open sheet is closed (Done) before anything behind it is touched. */
+const closeOpen = async () => {
+  for (const b of screen.queryAllByTestId(/^about-you-.*-done$/)) {
+    await act(async () => {
+      fireEvent.press(b)
+    })
+  }
+  // jest has no iOS `onDismiss`: stand in for it, so the next sheet gets the screen (lib/modalTurn).
+  await act(async () => resetModalTurns())
+}
 const save = async () => {
+  await closeOpen()
   await act(async () => {
     fireEvent.press(screen.getByText('Save'))
   })
 }
+type Row = 'languages' | 'home-state' | 'sign' | 'this-or-that'
+/** Board A 04: each field is a row that opens its picker in a sheet. */
+const openRow = async (row: Row) => {
+  await closeOpen()
+  await act(async () => {
+    fireEvent.press(screen.getByTestId(`about-you-row-${row}`))
+  })
+}
+const done = async (row: Row) => {
+  await act(async () => {
+    fireEvent.press(screen.getByTestId(`about-you-${row}-done`))
+  })
+  await act(async () => resetModalTurns())
+}
+const rowHint = (row: Row, text: string) => within(screen.getByTestId(`about-you-row-${row}`)).getByText(text)
+/** The rows saying `text` (a closed sheet's content stays mounted in jest: rows are what the page shows). */
+const rowsSaying = (text: string) => screen.getAllByTestId(/^about-you-row-(languages|home-state|sign|this-or-that)$/).filter((r) => within(r).queryByText(text))
 
-describe('the bar is "About you", whichever screen opened it (SYS-18: Settings\' row is titled the same)', () => {
-  it.each<Record<string, string>>([{}, { from: 'settings' }])('reads "About you" for %j, and prints nothing a link says', async (params) => {
+describe('fields as rows that open sheets (Me + settings A 04)', () => {
+  it('four rows in the board’s order, each saying what it holds, "Not set" when nothing is', async () => {
+    await open()
+    expect(rowHint('languages', 'Languages you speak')).toBeTruthy()
+    expect(rowHint('languages', 'Not set · besides English, up to two')).toBeTruthy()
+    expect(rowHint('home-state', 'Home region')).toBeTruthy()
+    expect(rowHint('home-state', 'Not set · a state, never a town')).toBeTruthy()
+    expect(rowHint('sign', 'Sign')).toBeTruthy()
+    expect(rowHint('sign', 'Not set')).toBeTruthy()
+    expect(rowHint('this-or-that', 'This or that')).toBeTruthy()
+    expect(rowHint('this-or-that', 'Not set')).toBeTruthy()
+    expect(screen.getAllByTestId(/^about-you-row-(languages|home-state|sign|this-or-that)$/).map((n) => n.props.testID)).toEqual(
+      ['languages', 'home-state', 'sign', 'this-or-that'].map((r) => `about-you-row-${r}`)
+    )
+  })
+
+  it('a held value is named on its row: the picks, the region, the sign with its calendar, the answers', async () => {
+    api.getProfile.mockResolvedValue(profile({ languages: ['tulu', 'kannada'], home_state: 'kerala', sun_sign: 'leo', sign_system: 'western' }))
+    api.getThisOrThat.mockResolvedValue({ success: true, data: { answers: { chai: 'b', beach: 'a' } } })
+    await open()
+    expect(rowHint('languages', 'Tulu, Kannada · besides English, up to two')).toBeTruthy()
+    expect(rowHint('home-state', 'Kerala · a state, never a town')).toBeTruthy()
+    expect(rowHint('sign', 'Leo ♌ · Western')).toBeTruthy()
+    expect(rowHint('this-or-that', 'Chai · Beach')).toBeTruthy()
+  })
+
+  it('the pickers are not on the page until their row opens; the sheet is titled with the row; Done closes it', async () => {
+    await open()
+    expect(screen.queryByText('Tulu')).toBeNull()
+    expect(screen.queryByText('Kerala')).toBeNull()
+    expect(screen.queryByLabelText('Beach or Hills')).toBeNull()
+    await openRow('languages')
+    expect(within(screen.getByTestId('about-you-languages-sheet')).getByText('Languages you speak')).toBeTruthy()
+    await tap('Tulu')
+    await done('languages')
+    // The row says the pick at once; it waits for Save with the rest.
+    expect(rowHint('languages', 'Tulu · besides English, up to two')).toBeTruthy()
+    expect(api.updateProfile).not.toHaveBeenCalled()
+  })
+
+  it('"On your card": the three switches live under it, as the board draws them', async () => {
+    await open()
+    const group = screen.getByTestId('about-you-on-card')
+    expect(within(group).getByRole('header', { name: 'On your card' })).toBeTruthy()
+    for (const t of ['Show my sign', 'Show my badges', 'Show “Shows up”']) expect(within(group).getByText(t)).toBeTruthy()
+    expect(within(group).getByText('Never shown in rooms under 8')).toBeTruthy()
+    expect(within(group).getByText('80%+ of your RSVPs became nights, 3 or more')).toBeTruthy()
+  })
+
+  it('the sign switch on with no sign opens the Sign sheet; closed with none picked, the switch goes back off', async () => {
+    await open()
+    await tap('Show my sign')
+    expect(screen.getByTestId('about-you-sign-sheet')).toBeTruthy()
+    await done('sign')
+    expect(screen.getByRole('switch', { name: /Show my sign/ }).props.accessibilityState).toMatchObject({ checked: false })
+    await save()
+    expect(api.updateProfile).not.toHaveBeenCalled()
+  })
+
+  it('a sign picked from its row turns the switch on', async () => {
+    await open()
+    await openRow('sign')
+    await tap('Virgo ♍')
+    await done('sign')
+    expect(screen.getByRole('switch', { name: /Show my sign/ }).props.accessibilityState).toMatchObject({ checked: true })
+    expect(rowHint('sign', 'Virgo ♍ · Western')).toBeTruthy()
+  })
+
+  it('a refused field says so on its row, in the server’s sentence', async () => {
+    api.updateProfile.mockResolvedValue({ success: false, error: 'x', errorCode: 'RATE_LIMITED' })
+    await open()
+    await openRow('home-state')
+    await tap('Goa')
+    await done('home-state')
+    await save()
+    expect(rowHint('home-state', 'Not saved: you’ve changed this three times today. Try again tomorrow.')).toBeTruthy()
+  })
+})
+
+describe('the bar is "Shown when you share one", whichever screen opened it (Me + settings A 04: one name for one screen)', () => {
+  it.each<Record<string, string>>([{}, { from: 'settings' }])('reads the one name for %j, and prints nothing a link says', async (params) => {
     mockParams = { ...params, title: 'Free money' }
     await open()
-    expect(screen.getByText('About you')).toBeTruthy()
+    expect(screen.getByText('Shown when you share one')).toBeTruthy()
+    // Negative control: the old title fails this.
+    expect(screen.queryByText('About you')).toBeNull()
+    // Save is pinned at the foot (board A 04), so the one-line bar keeps the whole name (drive: "Shown when you share…").
+    expect(screen.getByTestId('about-you-save')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Save' })).toHaveLength(1)
     expect(screen.queryByText('Free money')).toBeNull()
     expect(screen.queryByText('How you match')).toBeNull()
+  })
+})
+
+describe('labels in sentence case (Me + settings A 04)', () => {
+  it('draws "Languages you speak" and "Home region" as written, not Geist Mono uppercase', async () => {
+    await open()
+    for (const name of ['Languages you speak', 'Home region']) {
+      const style = StyleSheet.flatten(screen.getByText(name).props.style)
+      expect(style.textTransform).toBeUndefined()
+      expect(style.fontFamily).not.toMatch(/Mono/)
+    }
   })
 })
 
 describe('who sees each field (YOU-07, 14.0)', () => {
   it('names the tier under languages, home state and this-or-that, and under the sign once it is on', async () => {
     await open()
+    await openRow('languages')
     expect(screen.getByTestId('who-sees-languages')).toBeTruthy()
+    await openRow('home-state')
     expect(screen.getByTestId('who-sees-homeState')).toBeTruthy()
-    expect(screen.getAllByLabelText('Shown to people you match with, in rooms of 8 or more.').length).toBe(2)
-    await act(async () => {
-      fireEvent.press(screen.getByText('Show my sign'))
-    })
+    await openRow('this-or-that')
+    expect(screen.getByTestId('who-sees-thisOrThat')).toBeTruthy()
+    await openRow('sign')
     expect(screen.getByTestId('who-sees-sign')).toBeTruthy()
   })
 })
@@ -135,6 +266,7 @@ describe('the sign is never preselected (M4)', () => {
     await save()
     expect(api.updateProfile).not.toHaveBeenCalled()
 
+    await openRow('sign')
     await act(async () => {
       fireEvent.press(screen.getByText('From your birthday: Leo ♌ — tap to use'))
     })
@@ -157,6 +289,7 @@ describe('"Show my badges" (M3) and the Tier B refusal (H1)', () => {
     const sentence = 'You can change your languages, home state, sign or field of work three times a day. Try again tomorrow.'
     api.updateProfile.mockResolvedValue({ success: false, error: sentence, errorCode: 'RATE_LIMITED' })
     await open()
+    await openRow('languages')
     await act(async () => {
       fireEvent.press(screen.getByText('Tulu'))
     })
@@ -168,6 +301,7 @@ describe('"Show my badges" (M3) and the Tier B refusal (H1)', () => {
 describe('every field saves what the person chose', () => {
   it('languages: the pick, in the order picked; a pick taken back; nothing past the cap', async () => {
     await open()
+    await openRow('languages')
     await tap('Kannada')
     await tap('Tulu')
     await tap('Tamil') // the cap is two: this one is not taken
@@ -180,6 +314,7 @@ describe('every field saves what the person chose', () => {
   it('languages: taking the only one back saves an empty list, not the old one', async () => {
     api.getProfile.mockResolvedValue(profile({ languages: ['tulu'] }))
     await open()
+    await openRow('languages')
     expect(screen.getByLabelText('Tulu').props.accessibilityState).toMatchObject({ selected: true })
     await tap('Tulu')
     await save()
@@ -188,12 +323,14 @@ describe('every field saves what the person chose', () => {
 
   it('home state: the pick; tapping it again saves null', async () => {
     await open()
+    await openRow('home-state')
     await tap('Goa')
     await save()
     expect(api.updateProfile).toHaveBeenLastCalledWith('me', { home_state: 'goa' })
 
     api.getProfile.mockResolvedValue(profile({ home_state: 'kerala' }))
     await open()
+    await openRow('home-state')
     await tap('Kerala')
     await save()
     expect(api.updateProfile).toHaveBeenLastCalledWith('me', { home_state: null })
@@ -228,6 +365,7 @@ describe('every field saves what the person chose', () => {
   it('this or that: a is a, b is b, the same again takes it back (null), and each question is its own', async () => {
     api.getThisOrThat.mockResolvedValue({ success: true, data: { answers: { beach: 'a' } } })
     await open()
+    await openRow('this-or-that')
     await tap('Chai')
     await tap('Beach') // already a: taken back
     await save()
@@ -238,6 +376,7 @@ describe('every field saves what the person chose', () => {
   it('this or that: a switch from a to b saves b', async () => {
     api.getThisOrThat.mockResolvedValue({ success: true, data: { answers: { chai: 'a' } } })
     await open()
+    await openRow('this-or-that')
     await tap('Chai')
     await save()
     expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'b' })
@@ -258,13 +397,13 @@ describe('every field saves what the person chose', () => {
 
   it('"Shows up": off to on saves true; on to off saves false — and never touches the badges', async () => {
     await open()
-    await tap('Show “Shows up” on my card')
+    await tap('Show “Shows up”')
     await save()
     expect(api.updateProfile).toHaveBeenLastCalledWith('me', { shows_up_badge: true })
 
     api.getProfile.mockResolvedValue(profile({ shows_up_badge: true }))
     await open()
-    await tap('Show “Shows up” on my card')
+    await tap('Show “Shows up”')
     await save()
     expect(api.updateProfile).toHaveBeenLastCalledWith('me', { shows_up_badge: false })
   })
@@ -279,13 +418,16 @@ describe('every field saves what the person chose', () => {
 
   it('every field at once is one profile write and one this-or-that write, each with only its own fields', async () => {
     await open()
+    await openRow('languages')
     await tap('Tulu')
+    await openRow('home-state')
     await tap('Goa')
     await tap('Show my sign')
     await tap('Leo ♌')
+    await openRow('this-or-that')
     await tap('Filter coffee')
     await tap('Show my badges')
-    await tap('Show “Shows up” on my card')
+    await tap('Show “Shows up”')
     await save()
     // The badge switches, then the Tier B facts: two writes, each with only its own fields.
     expect(api.updateProfile.mock.calls).toEqual([
@@ -298,6 +440,7 @@ describe('every field saves what the person chose', () => {
   it('a slug the server no longer offers is dropped from the form: the save never carries it, and a retired home state is no change', async () => {
     api.getProfile.mockResolvedValue(profile({ languages: ['tulu', 'klingon'], home_state: 'atlantis' }))
     await open()
+    await openRow('languages')
     await tap('Kannada')
     await save()
     expect(api.updateProfile).toHaveBeenCalledWith('me', { languages: ['tulu', 'kannada'] })
@@ -305,27 +448,6 @@ describe('every field saves what the person chose', () => {
 })
 
 describe('motion', () => {
-  it('the sign card arrives with an entering animation, and has an exit', async () => {
-    await open()
-    expect(screen.queryByTestId('about-you-sign-card')).toBeNull()
-    await tap('Show my sign')
-    const card = screen.getByTestId('about-you-sign-card')
-    expect(card.props.entering).toBeDefined()
-    expect(card.props.exiting).toBeDefined()
-  })
-
-  it('the badge rows below glide when the card comes and goes (a layout transition)', async () => {
-    await open()
-    const rows = screen.getByText('Show my badges').parent!
-    let node: typeof rows | null = rows
-    let layout: unknown
-    while (node && !layout) {
-      layout = node.props.layout
-      node = node.parent
-    }
-    expect(layout).toBeDefined()
-  })
-
   it('the top bar hears the scroll only when it crosses the top, however many frames it scrolls', async () => {
     await open()
     const scroll = screen.getByTestId('about-you-scroll')
@@ -340,8 +462,12 @@ describe('motion', () => {
 describe('the words and the grouping', () => {
   it('the design’s intro, the cap in words from the server’s number, and each pair named for a screen reader', async () => {
     await open()
-    expect(screen.getByText('Where you’re from, what you speak, your sign. Each shows only to people who may already see who you are.')).toBeTruthy()
+    expect(screen.getByText('On cards only when you and someone share one. Never used to rank.')).toBeTruthy()
+    // Negative control: the old intro fails this.
+    expect(screen.queryByText(/Where you’re from, what you speak/)).toBeNull()
+    await openRow('languages')
     expect(screen.getByText('Besides English, up to two.')).toBeTruthy()
+    await openRow('this-or-that')
     expect(screen.getByLabelText('Filter coffee or Chai')).toBeTruthy()
     expect(screen.getByLabelText('Beach or Hills')).toBeTruthy()
   })
@@ -376,7 +502,7 @@ describe('the states', () => {
   it('loading: the intro only, and Save is off', async () => {
     api.getProfileOptions.mockReturnValue(new Promise(() => {}))
     await render(<EditAboutYouScreen />)
-    expect(screen.getByText(/Where you’re from, what you speak, your sign/)).toBeTruthy()
+    expect(screen.getByText('On cards only when you and someone share one. Never used to rank.')).toBeTruthy()
     expect(screen.queryByText('Languages you speak', { exact: false })).toBeNull()
     expect(screen.getByRole('button', { name: 'Save' }).props.accessibilityState.disabled).toBe(true)
     await save()
@@ -398,6 +524,7 @@ describe('the states', () => {
   it('couldn’t save: a toast, and the screen stays with the form as it was', async () => {
     api.updateProfile.mockResolvedValue({ success: false, error: 'boom' })
     await open()
+    await openRow('home-state')
     await tap('Goa')
     await save()
     expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error', { haptic: 'error' })
@@ -408,6 +535,7 @@ describe('the states', () => {
   it('couldn’t save the answers: the same toast, and it stays', async () => {
     api.putThisOrThat.mockResolvedValue({ success: false, error: 'boom' })
     await open()
+    await openRow('this-or-that')
     await tap('Chai')
     await save()
     expect(mockToast).toHaveBeenCalledWith('Couldn’t save the rest. Try again.', 'error', { haptic: 'error' })
@@ -416,6 +544,7 @@ describe('the states', () => {
 
   it('saved: a toast, the caches dropped, and back', async () => {
     await open()
+    await openRow('home-state')
     await tap('Goa')
     await save()
     expect(mockToast).toHaveBeenCalledWith('Saved', 'success', { haptic: 'success' })
@@ -436,11 +565,12 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
   it('the badge switches are their own write: refused languages and a sign do not take them down', async () => {
     refuseTierB()
     await open()
+    await openRow('languages')
     await tap('Tulu')
     await tap('Show my sign')
     await tap('Leo ♌')
     await tap('Show my badges')
-    await tap('Show “Shows up” on my card')
+    await tap('Show “Shows up”')
     await save()
     expect(api.updateProfile.mock.calls).toEqual([
       ['me', { show_badges: false, shows_up_badge: true }],
@@ -455,16 +585,19 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
   it('the this-or-that answers are their own write too, and land before the Tier B facts', async () => {
     refuseTierB()
     await open()
+    await openRow('home-state')
     await tap('Goa')
+    await openRow('this-or-that')
     await tap('Chai')
     await save()
     expect(api.putThisOrThat).toHaveBeenCalledWith({ chai: 'b' })
-    expect(mockToast).toHaveBeenCalledWith('Saved, except your home state.', 'error', { haptic: 'error' })
+    expect(mockToast).toHaveBeenCalledWith('Saved, except your home region.', 'error', { haptic: 'error' })
   })
 
   it('the person’s edits stay as chosen, and a second Save sends only what did not land', async () => {
     refuseTierB()
     await open()
+    await openRow('languages')
     await tap('Kannada')
     await tap('Show my badges')
     await save()
@@ -480,6 +613,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
   it('a refusal with nothing else changed says only what was not saved', async () => {
     refuseTierB()
     await open()
+    await openRow('home-state')
     await tap('Goa')
     await save()
     expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error', { haptic: 'error' })
@@ -489,6 +623,7 @@ describe('the Tier B limit (three a day) costs only what it covers', () => {
     api.updateProfile.mockResolvedValue({ success: false, error: 'boom' })
     await open()
     await tap('Show my badges')
+    await openRow('home-state')
     await tap('Goa')
     await save()
     expect(api.updateProfile).toHaveBeenCalledTimes(1)
@@ -500,9 +635,11 @@ describe('the language cap says so', () => {
   it('at the cap the rest are dimmed with the reason, and a tap on one changes nothing', async () => {
     api.getProfile.mockResolvedValue(profile({ languages: ['tulu', 'kannada'] }))
     await open()
+    await openRow('languages')
     const tamil = screen.getByLabelText('Tamil')
     expect(tamil.props.accessibilityState).toMatchObject({ disabled: true })
     expect(tamil.props.accessibilityHint).toBe('Up to two')
+    await openRow('languages')
     await tap('Tamil')
     await save()
     expect(api.updateProfile).not.toHaveBeenCalled()
@@ -511,9 +648,10 @@ describe('the language cap says so', () => {
   })
 })
 
-describe('the sweep: ChipSet, the this-or-that pair and the card ground', () => {
+describe('the sweep: ChipSet and the this-or-that pair', () => {
   it('Languages counts "n of max" and dims the rest at the cap, saying why', async () => {
     await open()
+    await openRow('languages')
     expect(screen.getByLabelText('0 of 2')).toBeTruthy()
     await tap('Tulu')
     await tap('Kannada')
@@ -525,6 +663,7 @@ describe('the sweep: ChipSet, the this-or-that pair and the card ground', () => 
 
   it('a language chip is pick-any: its slot is a plus off and a check on', async () => {
     await open()
+    await openRow('languages')
     expect(screen.getByTestId('about-you-languages-tulu-slot')).toBeTruthy()
     await tap('Tulu')
     expect(screen.getByTestId('about-you-languages-tulu-check', { includeHiddenElements: true }).props.jestInlineStyle).toBeDefined()
@@ -532,6 +671,7 @@ describe('the sweep: ChipSet, the this-or-that pair and the card ground', () => 
 
   it('Home state is a single pick with no slot and no counter', async () => {
     await open()
+    await openRow('home-state')
     expect(screen.queryByTestId('about-you-home-state-kerala-slot')).toBeNull()
     await tap('Kerala')
     expect(screen.getByTestId('about-you-home-state-kerala').props.accessibilityState).toMatchObject({ selected: true })
@@ -539,15 +679,10 @@ describe('the sweep: ChipSet, the this-or-that pair and the card ground', () => 
 
   it('each this-or-that is a radio pair named by both sides; the chosen side says how to clear it', async () => {
     await open()
+    await openRow('this-or-that')
     expect(screen.getByLabelText('Beach or Hills').props.accessibilityRole).toBe('radiogroup')
     await tap('Beach')
     expect(screen.getByRole('radio', { name: 'Beach' }).props.accessibilityHint).toBe('Double-tap to clear')
-  })
-
-  it('the cards are on the surface ground: a chip off is the sunken surface', async () => {
-    await open()
-    const chip = StyleSheet.flatten(screen.getByTestId('about-you-languages-tulu').props.style)
-    expect(chip.backgroundColor).toBe(COLOR.surfaceSunken)
   })
 })
 
@@ -555,37 +690,50 @@ describe('a partly saved profile (the sweep §4): the sentence goes under the fi
   const LIMIT = 'Not saved: you’ve changed this three times today. Try again tomorrow.'
   const refuse = (errorCode?: string) => api.updateProfile.mockResolvedValue({ success: false, error: 'x', errorCode })
 
-  it('a 429 on the Tier B write: the owner’s sentence under Home state, assertive, and "Saved, except your home state."', async () => {
+  it('a 429 on the Tier B write: the owner’s sentence on Home region’s row and, assertive, in its sheet; "Saved, except your home region."', async () => {
     refuse('RATE_LIMITED')
     await open()
-    await tap('Goa')
+    await openRow('this-or-that')
     await tap('Chai')
+    await done('this-or-that')
+    await openRow('home-state')
+    await tap('Goa')
+    await done('home-state')
     await save()
-    const sentence = screen.getByText(LIMIT)
-    expect(sentence.props.accessibilityLiveRegion).toBe('assertive')
-    // Under Home state only: Languages was not sent, so it has none.
-    expect(screen.getAllByText(LIMIT)).toHaveLength(1)
-    expect(mockToast).toHaveBeenCalledWith('Saved, except your home state.', 'error', { haptic: 'error' })
+    // On Home region's row only: Languages was not sent, so it has none.
+    expect(rowsSaying(LIMIT).map((r) => r.props.testID)).toEqual(['about-you-row-home-state'])
+    await openRow('home-state')
+    const inSheet = within(screen.getByTestId('about-you-home-state-sheet')).getByText(LIMIT)
+    expect(inSheet.props.accessibilityLiveRegion).toBe('assertive')
+    expect(mockToast).toHaveBeenCalledWith('Saved, except your home region.', 'error', { haptic: 'error' })
   })
 
   it('nothing landed: "Couldn’t save. Try again." and a retry line on any other refusal', async () => {
     refuse('SERVER_ERROR')
     await open()
+    await openRow('languages')
     await tap('Tulu')
+    await done('languages')
     await save()
-    expect(screen.getByText('Not saved. Try again.')).toBeTruthy()
+    expect(rowHint('languages', 'Not saved. Try again.')).toBeTruthy()
     expect(mockToast).toHaveBeenCalledWith('Couldn’t save. Try again.', 'error', { haptic: 'error' })
   })
 
   it('changing the refused field clears its sentence; saving again clears the rest', async () => {
     refuse('RATE_LIMITED')
     await open()
+    await openRow('languages')
     await tap('Tulu')
+    await done('languages')
+    await openRow('home-state')
     await tap('Goa')
+    await done('home-state')
     await save()
-    expect(screen.getAllByText(LIMIT)).toHaveLength(2)
+    expect(rowsSaying(LIMIT)).toHaveLength(2)
+    await openRow('languages')
     await tap('Kannada')
-    expect(screen.getAllByText(LIMIT)).toHaveLength(1)
+    await done('languages')
+    expect(rowsSaying(LIMIT)).toHaveLength(1)
     api.updateProfile.mockResolvedValue({ success: true, data: {} })
     await save()
     expect(screen.queryByText(LIMIT)).toBeNull()
@@ -595,6 +743,7 @@ describe('a partly saved profile (the sweep §4): the sentence goes under the fi
     refuse('RATE_LIMITED')
     await open()
     const scrollTo = jest.spyOn(ScrollView.prototype as unknown as { scrollTo: () => void }, 'scrollTo').mockImplementation(() => {})
+    await openRow('home-state')
     await tap('Goa')
     await save()
     expect(scrollTo).toHaveBeenCalledTimes(1)
@@ -607,8 +756,61 @@ describe('Languages fold like Home state', () => {
     const many = Array.from({ length: 21 }, (_, i) => ({ slug: `l${i}`, label: `Language ${i}` }))
     api.getProfileOptions.mockResolvedValue({ success: true, data: { ...OPTIONS, languages: many } })
     await open()
+    await openRow('languages')
     expect(screen.queryByText('Language 9')).toBeNull()
     expect(screen.getByLabelText(`${21 - LANGUAGES_SHOWN} more languages`)).toBeTruthy()
+    await openRow('sign')
     expect(screen.getByText(/“Both Leos ♌”/)).toBeTruthy()
+  })
+})
+
+describe('lists follow the account’s country (SCRUM-711, Me + settings A 04)', () => {
+  const TORONTO_OPTIONS = {
+    ...OPTIONS,
+    languages: [
+      { slug: 'kannada', label: 'Kannada' },
+      { slug: 'kannada_learning', label: 'Learning Kannada' },
+      { slug: 'bengali', label: 'Bengali' },
+    ],
+    thisOrThat: [
+      { slug: 'coffee_or_chai', a: 'Filter coffee ☕', b: 'Chai 🫖' },
+      { slug: 'mountains_or_beaches', a: 'Mountains', b: 'Beaches' },
+    ],
+  }
+
+  it('India: Home region lists the states, Kannada leads, Filter coffee / Chai is asked', async () => {
+    api.getProfileOptions.mockResolvedValue({ success: true, data: TORONTO_OPTIONS })
+    await open()
+    expect(screen.getByText('Home region')).toBeTruthy()
+    await openRow('home-state')
+    expect(screen.getByText('Kerala')).toBeTruthy()
+    await openRow('languages')
+    expect(screen.getByText('Learning Kannada')).toBeTruthy()
+    await openRow('this-or-that')
+    expect(screen.getByLabelText('Filter coffee ☕ or Chai 🫖')).toBeTruthy()
+  })
+
+  it('a Toronto account: no Indian states, no Kannada first, no "Learning Kannada", no Filter coffee / Chai', async () => {
+    mockCountry = 'CA'
+    api.getProfileOptions.mockResolvedValue({ success: true, data: TORONTO_OPTIONS })
+    await open()
+    expect(screen.queryByText('Home region')).toBeNull()
+    expect(screen.queryByTestId('about-you-row-home-state')).toBeNull()
+    await openRow('languages')
+    expect(screen.queryByText('Learning Kannada')).toBeNull()
+    const langs = ['Bengali', 'Kannada'].map((l) => screen.getByText(l))
+    expect(langs).toHaveLength(2)
+    await openRow('this-or-that')
+    expect(screen.queryByLabelText('Filter coffee ☕ or Chai 🫖')).toBeNull()
+    expect(screen.getByLabelText('Mountains or Beaches')).toBeTruthy()
+  })
+
+  it('a Toronto account that already holds an Indian state still sees it, so it can be cleared', async () => {
+    mockCountry = 'CA'
+    api.getProfile.mockResolvedValue(profile({ home_state: 'kerala' }))
+    await open()
+    await openRow('home-state')
+    expect(screen.getByText('Kerala')).toBeTruthy()
+    expect(screen.queryByText('Goa')).toBeNull()
   })
 })

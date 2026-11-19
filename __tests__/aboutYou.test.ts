@@ -6,6 +6,7 @@ import {
   answersUpdate,
   answersWithin,
   NO_ABOUT_YOU,
+  optionsForCountry,
   toggleLanguage,
   withinOptions,
   type AboutYou,
@@ -121,5 +122,45 @@ describe('a profile says where someone is from only once you may know who they a
     expect(aboutLine({})).toBeNull()
     expect(withheldUnlessVisible({ about, identityVisible: false }).about).toBeUndefined()
     expect(withheldUnlessVisible({ about, identityVisible: true }).about).toBe(about)
+  })
+})
+
+describe('optionsForCountry (SCRUM-711): the server’s India lists, shown only to India', () => {
+  const OPTS: ProfileOptions = {
+    languages: [
+      { slug: 'kannada', label: 'Kannada' },
+      { slug: 'kannada_learning', label: 'Learning Kannada' },
+      { slug: 'bengali', label: 'Bengali' },
+    ],
+    maxLanguages: 5,
+    homeStates: [
+      { slug: 'karnataka', label: 'Karnataka' },
+      { slug: 'kerala', label: 'Kerala' },
+    ],
+    signs: [],
+    thisOrThat: [
+      { slug: 'coffee_or_chai', a: 'Filter coffee', b: 'Chai' },
+      { slug: 'sunrise_or_late_walk', a: 'Nandi Hills sunrise', b: '2am city walk' },
+      { slug: 'mountains_or_beaches', a: 'Mountains', b: 'Beaches' },
+    ],
+  }
+
+  it('India keeps the server’s lists and order', () => {
+    expect(optionsForCountry(OPTS, 'IN', NO_ABOUT_YOU, {})).toBe(OPTS)
+  })
+
+  it.each([['CA'], [null], ['US']])('%s: languages by name, no learning-a-local-language, no states, no India-only questions', (country) => {
+    const out = optionsForCountry(OPTS, country, NO_ABOUT_YOU, {})
+    expect(out.languages.map((l) => l.label)).toEqual(['Bengali', 'Kannada'])
+    expect(out.homeStates).toEqual([])
+    expect(out.thisOrThat.map((q) => q.slug)).toEqual(['mountains_or_beaches'])
+  })
+
+  it('keeps what the person already holds, so it shows and can be cleared', () => {
+    const held = { ...NO_ABOUT_YOU, languages: ['kannada_learning'], homeState: 'kerala' }
+    const out = optionsForCountry(OPTS, 'CA', held, { coffee_or_chai: 'b' })
+    expect(out.languages.map((l) => l.slug)).toContain('kannada_learning')
+    expect(out.homeStates.map((s) => s.slug)).toEqual(['kerala'])
+    expect(out.thisOrThat.map((q) => q.slug)).toEqual(['coffee_or_chai', 'mountains_or_beaches'])
   })
 })
