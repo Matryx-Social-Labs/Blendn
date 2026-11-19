@@ -30,9 +30,9 @@ it('chips: "This weekend 12k", heard as 12,480 events; under five, nothing', () 
 })
 
 it('a Near me row: "1.2k going" on screen, "1,240 going" read', async () => {
-  await render(<NearbyRow event={row} now={NOW} withDistance onPress={jest.fn()} />)
+  await render(<NearbyRow event={row} now={NOW} withDistance="exact" onPress={jest.fn()} />)
   expect(screen.getByText('1.2k', { includeHiddenElements: true })).toBeTruthy()
-  expect(nearbyRowLabel(row, NOW, true)).toMatch(/1,240 going$/)
+  expect(nearbyRowLabel(row, NOW, 'exact')).toMatch(/1,240 going$/)
 })
 
 it('a time heading: "· 12k", read as 12,480 events', async () => {

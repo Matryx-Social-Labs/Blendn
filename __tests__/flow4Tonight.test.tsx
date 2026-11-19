@@ -87,16 +87,18 @@ describe('the head', () => {
 
 describe('the deck (#02–#05)', () => {
   it('the card reads the design’s one date grammar and "N going"', () => {
-    const card = deckEvent(event('a', { startsAt: at(25) }), Date.now())
+    const card = deckEvent(event('a', { startsAt: at(25) }), Date.now(), 'exact')
     expect(card).toMatchObject({ time: 'In 25 min', going: 9, venue: 'That Comedy Club', distance: '2.1 km' })
+    // Precise Location off: the deck says what the Pulse card says (SCRUM-1080).
+    expect(deckEvent(event('a', { startsAt: at(25) }), Date.now(), 'approximate').distance).toBe('about 2 km')
   })
 
   it('saved today: "You’re going · 9 PM" (the ribbon), and only for tonight', () => {
     const nine = new Date()
     nine.setHours(21, 0, 0, 0)
-    expect(deckEvent(event('a', { going: true, startsAt: nine.toISOString() }), nine.getTime() - 3600_000).saved).toBe('9 PM')
-    expect(deckEvent(event('a', { going: true, startsAt: new Date(nine.getTime() + 86_400_000).toISOString() }), nine.getTime()).saved).toBeUndefined()
-    expect(deckEvent(event('a', { going: false }), Date.now()).saved).toBeUndefined()
+    expect(deckEvent(event('a', { going: true, startsAt: nine.toISOString() }), nine.getTime() - 3600_000, 'exact').saved).toBe('9 PM')
+    expect(deckEvent(event('a', { going: true, startsAt: new Date(nine.getTime() + 86_400_000).toISOString() }), nine.getTime(), 'exact').saved).toBeUndefined()
+    expect(deckEvent(event('a', { going: false }), Date.now(), 'exact').saved).toBeUndefined()
   })
 
   it('one card: no pips; three: three pips', async () => {
@@ -231,6 +233,6 @@ describe('the pass (#06, #07)', () => {
 
 describe('a Tonight event with no cover (rc7 ruling 5)', () => {
   it('hands its category to the card, so the plate carries the category glyph', () => {
-    expect(deckEvent(event('a', { photo: null, category: 'music' }), Date.now())).toMatchObject({ cover: null, category: 'music' })
+    expect(deckEvent(event('a', { photo: null, category: 'music' }), Date.now(), 'exact')).toMatchObject({ cover: null, category: 'music' })
   })
 })

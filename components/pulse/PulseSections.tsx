@@ -12,6 +12,7 @@ import { SetList } from './SetList'
 import type { BlendnEvent } from '../../lib/api'
 import { RADIUS, SPACE } from '../../lib/design/tokens'
 import { categoryGlyph } from '../../lib/categoryGlyph'
+import type { DistanceShown } from '../../lib/placesPane'
 import { homeCardProps } from '../../lib/pulse'
 import type { SeeAllKind } from '../../lib/nearby'
 import { SECTION_ORDER, weekendWindow, type PulseSection, type PulseSectionKey } from '../../lib/pulseSections'
@@ -40,7 +41,7 @@ export const COMPACT_HEIGHT = 170
 
 type SectionProps = CardHandlers & {
   now: number
-  withDistance: boolean
+  withDistance: DistanceShown
   /** The first card of the page's first section: the coach mark's hole. */
   coachRef?: RefObject<View | null>
 }
@@ -97,7 +98,7 @@ export const TonightSection = memo(function TonightSection({
   onPress,
   onPressIn,
   onLongPress,
-}: CardHandlers & { section: PulseSection<BlendnEvent>; now: number; withDistance: boolean; onSeeAll: () => void; coachRef?: RefObject<View | null> }) {
+}: CardHandlers & { section: PulseSection<BlendnEvent>; now: number; withDistance: DistanceShown; onSeeAll: () => void; coachRef?: RefObject<View | null> }) {
   return (
     <View style={styles.section}>
       <View style={styles.gutter}>
@@ -115,19 +116,21 @@ export const TonightSection = memo(function TonightSection({
 export const NearbySection = memo(function NearbySection({
   section,
   now,
+  withDistance,
   onSeeAll,
   coachRef,
   onPress,
   onPressIn,
   onLongPress,
-}: CardHandlers & { section: PulseSection<BlendnEvent>; now: number; onSeeAll: () => void; coachRef?: RefObject<View | null> }) {
+}: CardHandlers & { section: PulseSection<BlendnEvent>; now: number; withDistance: DistanceShown; onSeeAll: () => void; coachRef?: RefObject<View | null> }) {
   return (
     <View style={styles.section}>
       <View style={styles.gutter}>
         <SectionHeader title="Nearby" action={{ label: 'See all', onPress: onSeeAll }} testID="pulse-nearby-header" />
       </View>
       {section.events.map((event, i) => {
-        const card = homeCardProps(event, now, true)
+        // Only ever with a fix in this city (`buildSections`), so `withDistance` is a reading here.
+        const card = homeCardProps(event, now, withDistance)
         return (
           <View key={event.id} ref={i === 0 ? coachRef : undefined} collapsable={false} style={styles.nearRow}>
             <EventCard
@@ -264,7 +267,7 @@ export const SectionStack = memo(function SectionStack({
 }: {
   sections: PulseSection<BlendnEvent>[]
   now: number
-  withDistance: boolean
+  withDistance: DistanceShown
   handlers: CardHandlers
   coachRef: RefObject<View | null>
   pending: RefObject<boolean>
@@ -292,7 +295,7 @@ export const SectionStack = memo(function SectionStack({
     } else if (key === 'tonight' && section) {
       push(key, <TonightSection section={section} now={now} withDistance={withDistance} coachRef={at('tonight')} {...handlers} onSeeAll={() => onSeeAll('tonight')} />)
     } else if (key === 'nearby') {
-      if (section) push(key, <NearbySection section={section} now={now} coachRef={at('nearby')} {...handlers} onSeeAll={() => onSeeAll('nearby')} />)
+      if (section) push(key, <NearbySection section={section} now={now} withDistance={withDistance} coachRef={at('nearby')} {...handlers} onSeeAll={() => onSeeAll('nearby')} />)
       // Only in a feed that has something on: with nothing loaded the page's own state (failed, empty) is the answer, and
       // "Turn on location" under "Couldn't load events" was the wrong way back from offline (audit A24).
       else if (askForLocation && sections.length > 0) push(key, <NearbyLocationCard denied={askForLocation.denied} onAsk={askForLocation.onAsk} />)

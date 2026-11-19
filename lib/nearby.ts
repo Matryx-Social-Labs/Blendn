@@ -125,14 +125,14 @@ export const nearSpan = (when: When): string => SPAN[when]
  * Nothing within a short ride (board N1none): what exists and how far, never a bare radius. No count under five (a few),
  * no closest past 100 km; nothing at all in the city says that; not read yet is the title alone.
  */
-export function nothingNearCopy(city: string, beyond: Beyond | null, when: When): { title: string; message: string } {
+export function nothingNearCopy(city: string, beyond: Beyond | null, when: When, reading: DistanceReading): { title: string; message: string } {
   const span = SPAN[when]
   const title = `Nothing within a short ride ${span}`
   if (!beyond) return { title, message: '' }
   if (beyond.count === 0) return { title, message: `Nothing is on in ${city} ${span}.` }
   const n = printable(beyond.count)
   const has = `${city} has ${n ? `${n.toLocaleString('en-US')} events` : 'a few events'} ${span}.`
-  const far = beyond.closest ? reachLabel(beyond.closest.km) : null
+  const far = beyond.closest ? reachLabel(beyond.closest.km, reading) : null
   const closest = far ? ` The closest is ${far.kind === 'walk' ? far.text : `${far.text} away`}${beyond.closest?.venue ? `, at ${beyond.closest.venue}` : ''}.` : ''
   return { title, message: has + closest }
 }

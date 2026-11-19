@@ -49,7 +49,7 @@ export function youMark({
 const isApproximate = (fix: Pick<PreciseFix, 'accuracy' | 'approximate'>) => !!fix.approximate || (fix.accuracy ?? 0) > APPROXIMATE_M
 
 /** How every distance measured from this fix is said: "about 1 km" from an approximate one (`distanceText`, SCRUM-1080). */
-export const readingOf = (fix: Pick<PreciseFix, 'accuracy' | 'approximate'> | null | undefined): DistanceReading =>
+export const readingOf = (fix: PreciseFix | null | undefined): DistanceReading =>
   fix && isApproximate(fix) ? 'approximate' : 'exact'
 
 export type PlaceLine = { text: string; back: string } | { text: string; switch: [string, string] }

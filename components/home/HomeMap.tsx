@@ -57,7 +57,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { FRAME_NEAREST, frameOnYou, mapSummary, staleCalloutBelow, youMark } from '../../lib/mapPresence'
+import { FRAME_NEAREST, frameOnYou, mapSummary, readingOf, staleCalloutBelow, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -440,6 +440,8 @@ export const HomeMap = memo(function HomeMap({
   const edgeBox = { left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }
   // What the map says about you (pulse-map 06): approximate and stale each get their one line.
   const you = youMark({ sharing, permission: 'granted', fix: center, now })
+  // Every distance the map says from that fix: "about 1 km" from an approximate one, the card's words (SCRUM-1080).
+  const reading = readingOf(center)
   // Which side of the grey dot the stale callout hangs (below), from the edge marker as drawn (`onPlaced`).
   const [staleBelow, setStaleBelow] = useState(false)
   const [edgeRect, setEdgeRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
@@ -460,10 +462,11 @@ export const HomeMap = memo(function HomeMap({
     stale: you.kind === 'stale' ? { room: STALE_CALLOUT, below: staleBelow } : null,
     // The lead's chip says its card's distance (Android drive: 800 m over a card reading 850 m), as the edge marker does.
     knownDistance: focus?.pin && typeof focus.km === 'number' ? { id: focus.pin.id, km: focus.km } : null,
+    reading,
   })
   // The dot going grey (or violet again) moves no camera: the names are placed again around the callout.
   const isStale = you.kind === 'stale'
-  useEffect(() => relight(), [isStale, staleBelow]) // eslint-disable-line react-hooks/exhaustive-deps -- only the stale flip or its side
+  useEffect(() => relight(), [isStale, staleBelow, reading]) // eslint-disable-line react-hooks/exhaustive-deps -- only the stale flip or its side, or the fix turning precise
 
   // New pins re-cluster the numbers: a screen reader hears them afresh.
   useEffect(() => {
@@ -708,7 +711,7 @@ export const HomeMap = memo(function HomeMap({
 
   // The lead card's own distance when it has one (the same number as the card), else measured from the fix; none without one.
   const edgeKm = focus?.km ?? (edgeTarget && center ? getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0]) : null)
-  const edgeDistance = center ? distanceText(edgeKm) : null
+  const edgeDistance = center ? distanceText(edgeKm, reading) : null
   // The map as a whole, for a screen reader (pulse-map 10): read when the camera stops (`settled` re-renders this).
   const bounds = view.current.bounds
   const edgeOff = edgeTarget && bounds ? !(edgeTarget.at[0] >= bounds[0] && edgeTarget.at[0] <= bounds[2] && edgeTarget.at[1] >= bounds[1] && edgeTarget.at[1] <= bounds[3]) : false

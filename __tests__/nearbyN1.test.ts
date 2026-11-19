@@ -115,22 +115,27 @@ describe('the reach on the map (N1: a lit 20-minute walk, a short-ride ring, dar
 describe('nothing within reach says what exists and how far (board N1none)', () => {
   const { nothingNearCopy } = jest.requireActual('../lib/nearby') as typeof import('../lib/nearby')
   it('the city’s count this week and the closest, by its venue', () => {
-    expect(nothingNearCopy('Toronto', { count: 6, closest: { km: 14.2, venue: 'Liberty Village' } }, 'any')).toEqual({
+    expect(nothingNearCopy('Toronto', { count: 6, closest: { km: 14.2, venue: 'Liberty Village' } }, 'any', 'exact')).toEqual({
       title: 'Nothing within a short ride this week',
       message: 'Toronto has 6 events this week. The closest is 14 km away, at Liberty Village.',
     })
   })
   it('tonight under Tonight; no count under five; no closest past 100 km', () => {
-    expect(nothingNearCopy('Toronto', { count: 3, closest: { km: 140, venue: 'X' } }, 'today')).toEqual({
+    expect(nothingNearCopy('Toronto', { count: 3, closest: { km: 140, venue: 'X' } }, 'today', 'exact')).toEqual({
       title: 'Nothing within a short ride tonight',
       message: 'Toronto has a few events tonight.',
     })
   })
+  it('from an approximate fix the closest is "about 14 km away" (SCRUM-1080)', () => {
+    expect(nothingNearCopy('Toronto', { count: 6, closest: { km: 14.2, venue: 'Liberty Village' } }, 'any', 'approximate').message).toBe(
+      'Toronto has 6 events this week. The closest is about 14 km away, at Liberty Village.'
+    )
+  })
   it('nothing anywhere in the city: says so', () => {
-    expect(nothingNearCopy('Toronto', { count: 0, closest: null }, 'weekend').message).toBe('Nothing is on in Toronto this weekend.')
+    expect(nothingNearCopy('Toronto', { count: 0, closest: null }, 'weekend', 'exact').message).toBe('Nothing is on in Toronto this weekend.')
   })
   it('not read yet (or failed): the title alone', () => {
-    expect(nothingNearCopy('Toronto', null, 'any').message).toBe('')
+    expect(nothingNearCopy('Toronto', null, 'any', 'exact').message).toBe('')
   })
 })
 

@@ -88,6 +88,9 @@ const WHOLE_KM_FROM = 10
  */
 export type DistanceReading = 'exact' | 'approximate'
 
+/** Whether a list shows distances and how they are said; false without a fix in the city you are in. */
+export type DistanceShown = DistanceReading | false
+
 /** The word that says a distance is a guess at the district ("about 1 km"). */
 export const ABOUT = 'about '
 

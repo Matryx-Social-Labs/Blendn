@@ -43,7 +43,7 @@ import { type ShowTray, type TrayButton, type TrayExtra } from '../../lib/locati
 import { Logger } from '../../lib/logger'
 import { openInMaps } from '../../lib/openInMaps'
 import { openTonight } from '../../lib/paywall'
-import { guestTypeLabel, placeArea, plateFor } from '../../lib/placesPane'
+import { guestTypeLabel, placeArea, plateFor, type DistanceReading } from '../../lib/placesPane'
 import { usePlusStatus } from '../../lib/plus'
 import { idParam } from '../../lib/routeParams'
 import { serverNow } from '../../lib/serverClock'
@@ -97,10 +97,11 @@ const DIAL_GONE_FALLBACK_MS = 800
  * server's, quiet, and leaves the app.
  */
 export default function VenueRoute() {
-  const params = useLocalSearchParams<{ id?: string; km?: string }>()
+  const params = useLocalSearchParams<{ id?: string; km?: string; reading?: string }>()
   const id = idParam(params.id)
   if (!id) return <MissingPlace />
-  return <VenueScreen id={id} km={kmParam(params.km)} />
+  // The list's own words for it: "about 1 km" when it was measured from an approximate fix (`openPlace`).
+  return <VenueScreen id={id} km={kmParam(params.km)} reading={params.reading === 'approximate' ? 'approximate' : 'exact'} />
 }
 
 /** The platform's own back glyph, as every bar draws it (Material: the arrow; iOS: the chevron). */
@@ -153,7 +154,7 @@ function directionsTo(detail: VenueDetail) {
   openInMaps({ latitude: detail.venue.latitude, longitude: detail.venue.longitude, address: detail.venue.address, venue_name: detail.venue.name }).catch(() => {})
 }
 
-function VenueScreen({ id, km }: { id: string; km: number | null }) {
+function VenueScreen({ id, km, reading }: { id: string; km: number | null; reading: DistanceReading }) {
   const insets = useSafeAreaInsets()
   const bold = useBoldText()
   const { showToast } = useToast()
@@ -533,7 +534,7 @@ function VenueScreen({ id, km }: { id: string; km: number | null }) {
             </Section>
           ) : null}
           {/* Flow 4 V-A: the map and its Directions are the hero; Where keeps the address and Copy. */}
-          <Where venue={venue} km={km} onCopy={copyAddress} />
+          <Where venue={venue} km={km} reading={reading} onCopy={copyAddress} />
         </View>
       </Animated.ScrollView>
       </Reanimated.View>

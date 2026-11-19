@@ -8,7 +8,7 @@ import { font, PRESSED_WASH, useBoldText } from '../ds/shared'
 import type { BlendnEvent } from '../../lib/api'
 import { COLOR, FONT_FAMILY, RADIUS, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { liveWindow } from '../../lib/eventSession'
-import { distanceText } from '../../lib/placesPane'
+import { distanceText, type DistanceShown } from '../../lib/placesPane'
 import { clockTime } from '../../lib/roomMoments'
 import { eventClock } from '../../lib/time'
 import { H } from '../../lib/haptics'
@@ -46,12 +46,12 @@ export function splitClock(ms: number, timeZone?: string | null): { time: string
 }
 
 /** What a row is read as: "10 PM. Techno in the Tunnel, at Kitty Ko, 2.9 km, 64 going". */
-export function setRowLabel(event: BlendnEvent, withDistance: boolean): string {
+export function setRowLabel(event: BlendnEvent, withDistance: DistanceShown): string {
   const start = Date.parse(liveWindow(event).start_time)
   const going = printable(event.going_count)
   return [
     eventClock(start, event.timezone),
-    [event.title, event.venue_name ? `at ${event.venue_name}` : null, withDistance ? distanceText(event.distance) : null, going ? `${going.toLocaleString('en-US')} going` : null]
+    [event.title, event.venue_name ? `at ${event.venue_name}` : null, withDistance ? distanceText(event.distance, withDistance) : null, going ? `${going.toLocaleString('en-US')} going` : null]
       .filter(Boolean)
       .join(', '),
   ].join('. ')
@@ -62,7 +62,7 @@ const QUICK_ACTIONS = [{ name: 'quickActions', label: 'Quick actions' }]
 type RowProps = {
   event: BlendnEvent
   /** Distances mean something (a fix, in the city you are in). */
-  withDistance: boolean
+  withDistance: DistanceShown
   stacked: boolean
   onPress: (event: BlendnEvent) => void
   onPressIn?: (event: BlendnEvent) => void
@@ -74,7 +74,7 @@ const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn
   const start = Date.parse(liveWindow(event).start_time)
   // The event's own zone (RC drive 5 D-4).
   const { time, meridiem } = splitClock(start, event.timezone)
-  const distance = withDistance ? distanceText(event.distance) : null
+  const distance = withDistance ? distanceText(event.distance, withDistance) : null
   const going = printable(event.going_count)
   const box = useRef<View>(null)
   return (
@@ -179,7 +179,7 @@ export const SetList = memo(function SetList({
 }: {
   events: BlendnEvent[]
   now: number
-  withDistance: boolean
+  withDistance: DistanceShown
   /** The first row, when it is the first card the page draws: the coach mark's hole. */
   coachRef?: RefObject<View | null>
   onPress: (event: BlendnEvent) => void

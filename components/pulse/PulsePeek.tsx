@@ -2,6 +2,7 @@ import { EventCard, type EventCardKind } from '../ds/EventCard'
 import { LongPressMenu, type MenuItem } from '../ds/ContextMenu'
 import type { Rect } from '../ds/chatShared'
 import type { BlendnEvent } from '../../lib/api'
+import type { DistanceShown } from '../../lib/placesPane'
 import { homeCardProps } from '../../lib/pulse'
 import { peekActions, type PeekAction } from '../../lib/pulsePeek'
 
@@ -37,7 +38,7 @@ export function PulsePeek({
 }: {
   peek: Peek | null
   now: number
-  withDistance: boolean
+  withDistance: DistanceShown
   interested: boolean
   checkedIn: boolean
   withinFence: boolean

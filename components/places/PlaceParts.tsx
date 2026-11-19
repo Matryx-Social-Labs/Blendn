@@ -10,7 +10,7 @@ import { Icon } from '../ui/Icon'
 import type { VenueListItem } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type PlaceTypeFilter } from '../../lib/placesPane'
+import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type DistanceReading, type PlaceTypeFilter } from '../../lib/placesPane'
 import { openPlace } from './openPlace'
 
 /** The quiet row: 56 tall, a 40 thumb. */
@@ -20,9 +20,9 @@ const QUIET_THUMB = 40
 const QUIET_THUMB_RADIUS = 10
 
 /** "Brewery · 350 m": the type, and the distance in Geist Mono. */
-function TypeLine({ venue, area = false, small = false }: { venue: VenueListItem; area?: boolean; small?: boolean }) {
+function TypeLine({ venue, reading, area = false, small = false }: { venue: VenueListItem; reading: DistanceReading; area?: boolean; small?: boolean }) {
   const bold = useBoldText()
-  const distance = distanceText(venue.distance)
+  const distance = distanceText(venue.distance, reading)
   // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
   const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
   return (
@@ -91,16 +91,29 @@ export function QuietFold({
 }
 
 /** A quiet place (and, with `n`, one of Near you's five: the design system's Badge numbers it, as it numbers the map's pin): a small type plate (no photo), the name, the type and area, and a live count at the end only when it shows one (never under 5). */
-export const QuietRow = memo(function QuietRow({ venue, n, label, testID }: { venue: VenueListItem; n?: number; label?: string; testID?: string }) {
+export const QuietRow = memo(function QuietRow({
+  venue,
+  reading,
+  n,
+  label,
+  testID,
+}: {
+  venue: VenueListItem
+  /** How its distance is said: from the fix the list was read from. */
+  reading: DistanceReading
+  n?: number
+  label?: string
+  testID?: string
+}) {
   const bold = useBoldText()
   const words = bucketLabel(venue.liveNow)
   return (
     <Pressable
       testID={testID ?? `place-quiet-${venue.id}`}
-      onPress={() => openPlace(venue)}
+      onPress={() => openPlace(venue, reading)}
       android_ripple={{ color: PRESSED_WASH.android }}
       accessibilityRole="button"
-      accessibilityLabel={label ?? placeLabel(venue)}
+      accessibilityLabel={label ?? placeLabel(venue, reading)}
       style={({ pressed }) => [styles.quietRow, styles.gutter, pressed && Platform.OS === 'ios' && styles.pressed]}
     >
       {n !== undefined ? <Badge text={n} size={22} /> : null}
@@ -109,7 +122,7 @@ export const QuietRow = memo(function QuietRow({ venue, n, label, testID }: { ve
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('meta', bold, TYPE.bodyStrong.fontFamily), styles.ink]}>
           {venue.name}
         </Text>
-        <TypeLine venue={venue} area small />
+        <TypeLine venue={venue} reading={reading} area small />
       </View>
       {words ? (
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.tertiary]}>
