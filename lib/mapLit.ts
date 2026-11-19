@@ -23,6 +23,8 @@ import { DURATION, REDUCE_MOTION } from './design/tokens'
 import { liveNowLabel, type LiveNow } from './home'
 import { featureIdOf } from './mapStyleEmber'
 import { MAP_THEME } from './mapTheme'
+import { getDistanceKm } from './geo'
+import { distanceText } from './placesPane'
 import { dayWord } from './pulse'
 import { calendarDate, eventClock } from './time'
 
@@ -401,6 +403,23 @@ export function chipLine(p: ChipSource, now: number = Date.now()): string {
   if (p.kind === 'venue') return liveNowLabel(p.bucket) ?? ''
   if (p.live) return 'LIVE ●'
   return startLabel(p.startsAt, now, false, p.timeZone) ?? ''
+}
+
+/** A chip's line and how far it is from your fix ("Tonight · 8 PM · 200 m", pulse-map 05, 12 A); no fix, no distance. */
+export function withDistance(line: string, at: readonly [number, number], from: readonly [number, number] | null): string {
+  const far = from ? distanceText(getDistanceKm(from[1], from[0], at[1], at[0])) : null
+  if (!far) return line
+  return line ? `${line} · ${far}` : far
+}
+
+/** Several events at one venue (pulse-map 12 A): how many and when, "3 tonight"; "3 events" when they are not one day. */
+export function stackLine(starts: readonly ChipSource[], now: number = Date.now()): string {
+  const words = starts.map((p) => {
+    const start = p.startsAt ? new Date(p.startsAt) : null
+    return start && !Number.isNaN(start.getTime()) ? dayWord(start, new Date(now), p.timeZone) : null
+  })
+  const one = words[0]
+  return one && words.every((w) => w === one) ? `${starts.length} ${one.toLowerCase()}` : `${starts.length} events`
 }
 
 /**

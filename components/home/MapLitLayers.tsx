@@ -8,7 +8,7 @@ import {
   type VectorSourceRef,
 } from '@maplibre/maplibre-react-native'
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { Platform, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
+import { Platform, Text as RNText, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
 import { glowRadius, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
@@ -20,9 +20,10 @@ import {
   type OwnBuildingState,
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
-import { Badge } from '../ds/MonoFamily'
+import { Badge, monoCaption, MonoRun } from '../ds/MonoFamily'
+import { useBoldText } from '../ds/shared'
 import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
 import type { Chip, Collection, LitState } from './useMapLighting'
@@ -260,6 +261,7 @@ export const annotationTitle = (label: string): object => (Platform.OS === 'ios'
  */
 function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id: string) => void }) {
   const look = MAP_THEME[chip.kind]
+  const bold = useBoldText()
   return (
     <View
       style={styles.chipWrap}
@@ -278,10 +280,16 @@ function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id
             {/* Several events at one venue (pulse-map 12 A): the count beside its name, ink on the brand orange. */}
             {chip.count > 1 ? <Badge text={chip.count} tone="orange" testID={`map-chip-count-${chip.id}`} /> : null}
           </View>
+          {/* When and how far, in mono (pulse-map 05, 12 A: "3 tonight · 200 m"). */}
           {chip.line ? (
-            <Text variant="caption" color={chip.live && chip.kind === 'event' ? look.crown : COLOR.textSecondary} numberOfLines={1}>
-              {chip.line}
-            </Text>
+            <RNText
+              maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
+              numberOfLines={1}
+              style={[monoCaption(bold), { color: chip.live && chip.kind === 'event' ? look.crown : COLOR.textSecondary }]}
+              testID={`map-chip-line-${chip.id}`}
+            >
+              <MonoRun text={chip.line} />
+            </RNText>
           ) : null}
         </View>
       </View>

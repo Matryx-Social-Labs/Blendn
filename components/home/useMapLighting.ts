@@ -9,6 +9,8 @@ import {
   chipLiftPx,
   chipLine,
   stackedChip,
+  stackLine,
+  withDistance,
   dedupeLit,
   glowFor,
   nearestTo,
@@ -200,12 +202,19 @@ export function useMapLighting({
       places.push({ id: p.id, kind: p.kind, live: p.live, at: [p.longitude, p.latitude], building, pin: p })
     }
     const kept = dedupeLit(places)
-    const chipFor = (p: LitPlace & { pin: Pin; count: number }): Chip => ({
+    const byId = new Map(candidates.map((c) => [c.id, c]))
+    // An event's line says when and how far from you (pulse-map 05, 12 A): "3 tonight · 200 m"; a venue's stays its bucket.
+    const lineFor = (p: LitPlace & { pin: Pin; count: number; ids: string[] }) => {
+      if (p.kind !== 'event') return chipLine(p.pin)
+      const when = p.count > 1 ? stackLine(p.ids.map((id) => byId.get(id) ?? p.pin)) : chipLine(p.pin)
+      return withDistance(when, p.at, userAt)
+    }
+    const chipFor = (p: LitPlace & { pin: Pin; count: number; ids: string[] }): Chip => ({
       id: p.id,
       kind: p.kind,
       live: p.live,
-      ...stackedChip(p.pin, p.count),
-      line: chipLine(p.pin),
+      ...spokenWithDistance(stackedChip(p.pin, p.count), p, userAt),
+      line: lineFor(p),
       at: p.at,
       lift: chipLiftPx(topOfM(p), { zoom: v.zoom, pitch: v.pitch, latitude: p.at[1] }),
     })
@@ -252,4 +261,10 @@ export function useMapLighting({
   }
 
   return { lit: litFor.segment === segment ? litFor.lit : NO_LIT, onFrame, relight, passes }
+}
+
+/** A screen reader hears the same distance the chip shows ("…, 200 m away"); none without a fix. */
+function spokenWithDistance<T extends { speech: string }>(chip: T, p: { kind: string; at: LngLat }, from: LngLat | null | undefined): T {
+  const far = p.kind === 'event' && from ? withDistance('', p.at, from) : ''
+  return far ? { ...chip, speech: `${chip.speech}, ${far} away` } : chip
 }
