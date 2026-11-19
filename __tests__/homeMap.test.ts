@@ -272,6 +272,15 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).not.toMatch(/queryRenderedFeatures/)
   })
 
+  it('keeps every name out from under the edge marker (part 2 drive: it covered a chip)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    expect(lighting).toMatch(/const marker = edgeAt \? edgeMarker\(edgeAt, edge\?\.box \?\? zone, EDGE_BLOCK\) : null/)
+    expect(lighting).toMatch(/if \(marker\) blocked\.push\(/)
+    // The same box the marker itself keeps to.
+    expect(component).toMatch(/edge: edgeTarget \? \{ at: edgeTarget\.at, box: edgeBox \} : null/)
+    expect(component).toMatch(/box=\{edgeBox\}/)
+  })
+
   it("keeps OpenFreeMap’s buildings extrudable, credited by our own corner credit (the native one is off)", () => {
     expect(CITY_BUILDINGS).toMatchObject({ id: 'blendn-buildings', source: 'openmaptiles', sourceLayer: 'building' })
     expect(layers).toMatch(/<CityBuildings \/>/)

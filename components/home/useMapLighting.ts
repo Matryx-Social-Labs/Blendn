@@ -21,16 +21,21 @@ import {
   type GlowFeature,
   type LitBuilding,
   type LitPlace,
+  type Box,
   type LngLat,
 } from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, OWN_BUILDINGS_LAYER_ID } from '../../lib/mapStyleEmber'
+import { edgeMarker } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { SPACE } from '../../lib/design/tokens'
+import { SIZE, SPACE } from '../../lib/design/tokens'
 
 export type Segment = 'events' | 'places'
 export type Collection<F> = { type: 'FeatureCollection'; features: F[] }
 /** A name above a lit roof. */
 /** `count`: the events the lit place stands for (several at one venue: its name and the count, pulse-map 12 A). */
+/** The room an edge marker may take (its widest, and its height with air): names keep out of it. */
+const EDGE_BLOCK = { width: MAP_THEME.chip.maxWidthPx, height: SIZE.targetIos }
+
 export type Chip = { id: string; kind: Pin['kind']; live: boolean; title: string; line: string; speech: string; at: LngLat; lift: number; count: number }
 /** A building in our tiles lit through feature-state: its id, and the pin it stands for (a tap on it opens that). */
 export type LitState = { featureId: number; pinId: string; kind: Pin['kind']; live: boolean }
@@ -84,6 +89,7 @@ export function useMapLighting({
   litBy = 'copy',
   visible,
   userAt = null,
+  edge = null,
 }: {
   map: RefObject<MapRef | null>
   view: RefObject<MapView>
@@ -104,6 +110,8 @@ export function useMapLighting({
   visible?: { top: number; bottom: number }
   /** Where the person is, so no name covers their dot. */
   userAt?: LngLat | null
+  /** The lap's venue and the box its edge marker keeps to (`EdgeMarker`): no name is drawn under the marker. */
+  edge?: { at: LngLat; box: Box } | null
 }): { lit: Lit; onFrame: () => void; relight: () => void; passes: number } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
   const needsLight = useRef(false)
@@ -142,7 +150,7 @@ export function useMapLighting({
     const tiles = featureIds ? 'own' : 'openfreemap'
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
-    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}`
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}`
     if (signature === lastLit.current) {
       setPasses((n) => n + 1)
       return
@@ -223,10 +231,13 @@ export function useMapLighting({
     if (visible) {
       const projected = await Promise.all(nearest.map((c) => m.project(c.at).then((s) => s as [number, number]).catch(() => null)))
       const dot = userAt ? await m.project(userAt).then((s) => s as [number, number]).catch(() => null) : null
+      const edgeAt = edge ? await m.project(edge.at).then((s) => s as [number, number]).catch(() => null) : null
       if (token !== pass.current) return
       if (projected.every((s) => s !== null)) {
         const zone = { left: SIDE_GUTTER, right: size.width - SIDE_GUTTER, top: visible.top, bottom: visible.bottom }
         const blocked = dot ? [{ left: dot[0] - USER_DOT_HALF_PX, right: dot[0] + USER_DOT_HALF_PX, top: dot[1] - USER_DOT_HALF_PX, bottom: dot[1] + USER_DOT_HALF_PX }] : []
+        const marker = edgeAt ? edgeMarker(edgeAt, edge?.box ?? zone, EDGE_BLOCK) : null
+        if (marker) blocked.push({ left: marker.left, right: marker.left + EDGE_BLOCK.width, top: marker.top, bottom: marker.top + EDGE_BLOCK.height })
         chips = pickChips(
           nearest.map((c, i) => ({ item: c, box: chipBox(projected[i] as [number, number], c.lift, chipSizePx(c)) })),
           zone,

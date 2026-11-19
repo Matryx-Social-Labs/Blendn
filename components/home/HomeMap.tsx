@@ -431,6 +431,13 @@ export const HomeMap = memo(function HomeMap({
   useEffect(() => {
     if (OWN_BUILDINGS_ENV.problem) Logger.warn('events', 'EXPO_PUBLIC_BUILDINGS_TILES_URL ignored', { problem: OWN_BUILDINGS_ENV.problem })
   }, [])
+  // The lap's venue, for its edge marker: an event focus on Events only (a venue's name when the server sends one).
+  const edgeTarget = useMemo(
+    () => (focusPin && segment === 'events' ? { id: focusPin.id, name: focusPin.place || focusPin.title, at: [focusPin.longitude, focusPin.latitude] as [number, number] } : null),
+    [focusPin, segment]
+  )
+  // Where the edge marker may sit: the map you can see, above "my location" (pulse-map 05 frame 6).
+  const edgeBox = { left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }
   const { lit, onFrame, relight } = useMapLighting({
     map,
     view,
@@ -442,6 +449,8 @@ export const HomeMap = memo(function HomeMap({
     // What the person can see: under the capsule and the bell, over the drawer (a name outside it, or on their dot, is not drawn).
     visible: { top: padding.top, bottom: height - padding.bottom },
     userAt: center ? [center.longitude, center.latitude] : null,
+    // No name under the edge marker (drive 2026-11-19: it covered a chip).
+    edge: edgeTarget ? { at: edgeTarget.at, box: edgeBox } : null,
   })
 
   // New pins re-cluster the numbers: a screen reader hears them afresh.
@@ -666,11 +675,6 @@ export const HomeMap = memo(function HomeMap({
   // What the map says about you (pulse-map 06): approximate and stale each get their one line.
   const you = youMark({ sharing, permission: 'granted', fix: center, now })
 
-  // The lap's venue, for its edge marker: an event focus on Events only (a venue's name when the server sends one).
-  const edgeTarget = useMemo(
-    () => (focusPin && segment === 'events' ? { id: focusPin.id, name: focusPin.place || focusPin.title, at: [focusPin.longitude, focusPin.latitude] as [number, number] } : null),
-    [focusPin, segment]
-  )
   const edgeDistance = edgeTarget && center ? distanceText(getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0])) : null
   // The map as a whole, for a screen reader (pulse-map 10): read when the camera stops (`settled` re-renders this).
   const bounds = view.current.bounds
@@ -781,7 +785,7 @@ export const HomeMap = memo(function HomeMap({
             map={map}
             target={edgeTarget}
             distance={edgeDistance}
-            box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }}
+            box={edgeBox}
             settled={settled}
             moving={moving}
             onPress={goToFocus}
