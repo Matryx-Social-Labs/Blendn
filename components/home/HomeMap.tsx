@@ -748,6 +748,7 @@ export const HomeMap = memo(function HomeMap({
         <LocateButton
           visible={locateVisible}
           following={hasFix && !moved}
+          back={hasFix && moved}
           pending={asking}
           drawerTop={drawerTop}
           drawer={drawer}
