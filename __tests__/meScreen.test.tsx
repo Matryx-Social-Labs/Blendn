@@ -2,7 +2,7 @@
  * The Me tab on the design system (Flow 6 `me`): its states render, its circles go where the frame puts them, and the entrance
  * is the DS list-enter (28 ms apart, capped), not the old 70 ms × 9.
  */
-import { SHOWS_UP_TITLE } from '../components/profile/MeBadges'
+import { SHOWN_TO_NOBODY } from '../components/profile/MeBadges'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native'
 import { AccessibilityInfo, Platform, StyleSheet } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -91,29 +91,43 @@ it('draws the frame: name, circles, requests, crews with its count and dot, stat
   expect(screen.getByText('2 friend requests')).toBeTruthy()
   await waitFor(() => expect(screen.getByLabelText('Crews, 2, 1 invite waiting')).toBeTruthy())
   expect(screen.getByTestId('crews-invite-dot', { includeHiddenElements: true })).toBeTruthy()
-  expect(screen.getByLabelText('14 Nights')).toBeTruthy()
+  // A 01: no stats card; the count is Nights out's heading.
+  expect(screen.queryByTestId('stats-card')).toBeNull()
   expect(screen.queryByLabelText('9 Friends')).toBeNull()
   await screen.findByTestId('nights-grid')
-  // What you entered stays visible on your own page: occupation under the name, education under About.
-  expect(screen.getByText('Product designer')).toBeTruthy()
+  // What you entered stays visible on your own page: your job and education under About.
+  expect(screen.getByLabelText('work, Product designer')).toBeTruthy()
   expect(screen.getByLabelText('education, NID Ahmedabad')).toBeTruthy()
   // Hosted is left out at zero.
   expect(screen.queryByLabelText(/Hosted/)).toBeNull()
 })
 
-it('SAVED is the Saved list: the server savedCount (upcoming, not deleted), not the lifetime favourites', async () => {
+const ONE_NIGHT = { success: true, data: { events: [{ id: 'e1', title: 'Vinyl Night', start_time: '2020-01-01T20:00:00Z', end_time: '2020-01-01T23:00:00Z', cover_image_url: null }] } }
+
+it('Saved is a line under Nights out: the server savedCount (upcoming, not deleted), not the lifetime favourites', async () => {
   api.getPublicProfile.mockResolvedValue({ ...PROFILE, data: { ...PROFILE.data, stats: { eventsAttended: 14, eventsFavorited: 6, savedCount: 2, eventsOrganized: 0 } } } as never)
-  api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
+  api.getMyAttendance.mockResolvedValue(ONE_NIGHT as never)
   await render(<Profile />)
-  expect(await screen.findByLabelText('2 Saved')).toBeTruthy()
-  expect(screen.queryByLabelText('6 Saved')).toBeNull()
+  expect(await screen.findByText('2 saved · in Going')).toBeTruthy()
+  expect(screen.queryByText('6 saved · in Going')).toBeNull()
 })
 
-it('SAVED falls back to eventsFavorited from a server that sends no savedCount', async () => {
+it('Saved falls back to eventsFavorited from a server that sends no savedCount', async () => {
   api.getPublicProfile.mockResolvedValue(PROFILE as never)
-  api.getMyAttendance.mockResolvedValue({ success: true, data: { events: [] } } as never)
+  api.getMyAttendance.mockResolvedValue(ONE_NIGHT as never)
   await render(<Profile />)
-  expect(await screen.findByLabelText('6 Saved')).toBeTruthy()
+  expect(await screen.findByText('6 saved · in Going')).toBeTruthy()
+})
+
+it('no "0 SAVED" (device bug, A 01): nothing saved and nothing hosted say nothing', async () => {
+  api.getPublicProfile.mockResolvedValue({ ...PROFILE, data: { ...PROFILE.data, stats: { eventsAttended: 14, eventsFavorited: 0, savedCount: 0, eventsOrganized: 0 } } } as never)
+  api.getMyAttendance.mockResolvedValue(ONE_NIGHT as never)
+  await render(<Profile />)
+  await screen.findByTestId('nights-grid')
+  // Negative control: the old StatsCard drew "0" over "Saved" here.
+  expect(screen.queryByText(/^0\b/)).toBeNull()
+  expect(screen.queryByText(/saved/i)).toBeNull()
+  expect(screen.queryByText(/hosted/i)).toBeNull()
 })
 
 it('says the first night is not written yet when there is none, never an empty grid', async () => {
@@ -235,7 +249,7 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
   })
 
-  describe('Blend’n+ on Me and the "Shows up" switch (Flow 14 R4.1 · Me 01 to 03)', () => {
+  describe('Blend’n+ on Me, sold once and last (Me + settings A 01)', () => {
     it('says Blend’n+ with the store’s price when you have not got it; one tap goes to the paywall as asked for', async () => {
       await mount({ success: true, data: { profile: { badges } } })
       await screen.findByTestId('me-plus-row')
@@ -244,43 +258,42 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
       expect(mockOpenPaywall).toHaveBeenCalledWith('profile', { userInitiated: true })
     })
 
-    it('sits under the stats and above Nights out, with the badges under Nights out', async () => {
+    it('an ungated city (prod, owner ruling 2026-11-18: the app is free): no Blend’n+ row, no launch line, no way to the paywall', async () => {
+      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: false, product: null, source: null, expiresAt: null } })
+      await mount({ success: true, data: { profile: { badges } } })
+      await screen.findByTestId('me-badges')
+      await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
+      expect(screen.queryByTestId('me-plus-row')).toBeNull()
+      expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
+      expect(mockOpenPaywall).not.toHaveBeenCalled()
+      ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: false, gated: true, product: null, source: null, expiresAt: null } })
+    })
+
+    it('is the last thing on Me: Nights out, the badges, About, then Blend’n+', async () => {
       await mount({ success: true, data: { profile: { badges } } })
       await screen.findByTestId('me-badges')
       await screen.findByTestId('nights-first')
-      // In the order they are drawn (R4.1 · Me 01 to 03): the Blend’n+ row, Nights out, then the badges under them.
-      expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first)$/).map((n) => n.props.testID)).toEqual(['me-plus-row', 'nights-first', 'me-badges'])
+      // The row waits for the Plus status (it shows only where Blend’n+ is sold).
+      await screen.findByTestId('me-plus-row')
+      expect(screen.getAllByTestId(/^(me-plus-row|me-badges|nights-first|about)$/).map((n) => n.props.testID)).toEqual(['nights-first', 'me-badges', 'about', 'me-plus-row'])
+    })
+
+    it('a free account with nights held is sold Blend’n+ once: the row, never again inside Nights out (device bug)', async () => {
+      api.getPublicProfile.mockResolvedValue(PROFILE as never)
+      api.getMyAttendance.mockResolvedValue({ success: true, data: { ...ONE_NIGHT.data, lockedCount: 4, total: 5 } } as never)
+      api.getProfile.mockResolvedValue({ success: true, data: { profile: { badges } } } as never)
+      await render(<Profile />)
+      await screen.findByTestId('nights-grid')
+      await screen.findByTestId('me-plus-row')
+      // Negative control: Nights out's old "See Blend’n+" button is a second sell and fails this.
+      expect(screen.queryByText('See Blend’n+')).toBeNull()
+      expect(screen.getAllByTestId('me-plus-row')).toHaveLength(1)
     })
 
     it('with Plus on, the line is the renewal', async () => {
       ;(api.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: true, gated: true, product: 'plus', source: 'apple', state: 'active', expiresAt: '2027-01-03T00:00:00Z' } })
       await mount({ success: true, data: { profile: { badges } } })
       expect(await screen.findByText(/^Renews 3 Jan 2027 · App Store$/)).toBeTruthy()
-    })
-
-    it('draws the switch on the card, on by what the profile says, and a tap writes it at once', async () => {
-      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: true })
-      await mount({ success: true, data: { profile: { badges, shows_up_badge: true } } })
-      const row = await screen.findByTestId('me-shows-up')
-      expect(screen.getByText('When 80%+ of your RSVPs turn into nights, 3 or more')).toBeTruthy()
-      // D-L31. Negative control: the old "Show “Shows up”" title fails this.
-      expect(screen.getByText(SHOWS_UP_TITLE)).toBeTruthy()
-      await fireEvent.press(row)
-      await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('me', { shows_up_badge: false }))
-      expect(await screen.findByText('Off · earned, not shown')).toBeTruthy()
-    })
-
-    it('a refused write puts the switch back and says so under it', async () => {
-      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: false, error: 'no' })
-      await mount({ success: true, data: { profile: { badges, shows_up_badge: true } } })
-      await fireEvent.press(await screen.findByTestId('me-shows-up'))
-      expect(await screen.findByText('Couldn’t save that. Try again.')).toBeTruthy()
-    })
-
-    it('no switch when the profile did not say (an older server)', async () => {
-      await mount({ success: true, data: { profile: { badges } } })
-      await screen.findByTestId('me-badges')
-      expect(screen.queryByTestId('me-shows-up')).toBeNull()
     })
   })
 
@@ -290,49 +303,20 @@ describe('what GET /profiles/:you adds (blendn-admin #716): badges and photos ta
     expect(screen.queryByLabelText(/^Badge:/)).toBeNull()
   })
 
-  describe('Show my badges off (SV-8 earned_badges): the card stays, says earned and shown to nobody, and carries the switch', () => {
-    const off = { show_badges: false, earned_badges: badges }
-
-    it('draws the earned badges and says they are shown to nobody', async () => {
-      await mount({ success: true, data: { profile: off } })
+  describe('the badge switches live in Edit about you only (A 04): Me draws chips and says where to change them', () => {
+    it('badges off: the earned chips, "shown to nobody" and where to change it, and no switch on Me', async () => {
+      await mount({ success: true, data: { profile: { show_badges: false, earned_badges: badges } } })
       expect(await screen.findByTestId('me-badges')).toBeTruthy()
       expect(screen.getByLabelText('Badge: Shows up')).toBeTruthy()
-      expect(screen.getByText('Earned, shown to nobody')).toBeTruthy()
+      expect(screen.getByText(SHOWN_TO_NOBODY)).toBeTruthy()
+      expect(screen.queryByTestId('me-show-badges')).toBeNull()
       expect(screen.queryByTestId('me-shows-up')).toBeNull()
     })
 
-    it('the switch turns them back on from Me: PUT show_badges, and the line goes back to the meaning', async () => {
-      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: true })
-      await mount({ success: true, data: { profile: off } })
-      await fireEvent.press(await screen.findByTestId('me-show-badges'))
-      await waitFor(() => expect(api.updateProfile).toHaveBeenCalledWith('me', { show_badges: true }))
-      expect(await screen.findByText('From your check-ins. They can’t be bought, and they come and go on their own.')).toBeTruthy()
+    it('an older server with badges off sends neither badges nor earned_badges: the card still says so', async () => {
+      await mount({ success: true, data: { profile: { show_badges: false } } })
+      expect(await screen.findByText(SHOWN_TO_NOBODY)).toBeTruthy()
     })
-
-    it('a refused write puts the switch back', async () => {
-      ;(api.updateProfile as jest.Mock).mockResolvedValue({ success: false, error: 'no' })
-      await mount({ success: true, data: { profile: off } })
-      await fireEvent.press(await screen.findByTestId('me-show-badges'))
-      expect(await screen.findByText('Couldn’t save that. Try again.')).toBeTruthy()
-      expect(screen.getByText('Earned, shown to nobody')).toBeTruthy()
-    })
-
-    it('nothing earned and badges off still draws the card, so the way back exists', async () => {
-      await mount({ success: true, data: { profile: { show_badges: false, earned_badges: [] } } })
-      expect(await screen.findByTestId('me-show-badges')).toBeTruthy()
-    })
-
-    it('with badges on, the switch is there too and says what it does', async () => {
-      await mount({ success: true, data: { profile: { badges, show_badges: true, earned_badges: badges } } })
-      expect(await screen.findByTestId('me-show-badges')).toBeTruthy()
-      expect(screen.getByText('Never shown in rooms under 8')).toBeTruthy()
-    })
-  })
-
-  it('an older server with badges off sends neither badges nor earned_badges: the card and its switch still stand', async () => {
-    await mount({ success: true, data: { profile: { show_badges: false } } })
-    expect(await screen.findByTestId('me-show-badges')).toBeTruthy()
-    expect(screen.getByText('Off · hidden on every card')).toBeTruthy()
   })
 
   it('draws no Badges card when the server sent none (badges off, or an older server)', async () => {

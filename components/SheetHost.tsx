@@ -23,6 +23,7 @@ const KIND: Record<NonNullable<SheetAction['variant']>, ButtonKind> = {
   secondary: 'secondary',
   tertiary: 'tertiary',
   destructive: 'destructive',
+  danger: 'danger',
 }
 const kindOf = (action: SheetAction): ButtonKind => ('cancel' in action ? 'tertiary' : KIND[action.variant ?? 'secondary'])
 
@@ -136,7 +137,7 @@ export function SheetHost() {
                       accessibilityLabel: a.accessibilityLabel,
                       icon: a.icon,
                       detail: a.detail,
-                      destructive: a.variant === 'destructive',
+                      destructive: a.variant === 'destructive' || a.variant === 'danger',
                       apart: !!a.apart,
                       lit: a.variant === 'primary',
                       chevron: a.chevron ?? 'next' in a,

@@ -17,6 +17,7 @@ import { MonoRun, ScrimPill, TimeBadge } from './MonoFamily'
 import { CONTROL_FONT_CAP, focusRing, font, IC_HAIRLINE, PRESSED_WASH, useBoldText, useIncreaseContrast, useSelection } from './shared'
 import { compactCount } from '../../lib/format'
 import { DateStamp } from './DateStamp'
+import { eventClock } from '../../lib/time'
 import { Title } from './Title'
 import { ContainedCover } from './LinkPreviewCard'
 
@@ -193,6 +194,22 @@ export function EventCard(props: EventCardProps) {
   if (kind === 'row') {
     const result = layout === 'result'
     const leading = !result && lead === 'distance' && !!distance
+    // From the control cap the row's words stop growing and the time would take the venue's width: the venue moves down.
+    const stacked = leading || fontScale >= CONTROL_FONT_CAP
+    // A date stamp already says the day, so the meta says the clock alone; the label keeps the caller's whole time.
+    const clock = stamp ? eventClock(stamp.iso, stamp.timeZone) : time
+    // The venue gives way; its distance is its own slot and never does (owner 2026-11-05: no variable glued in a tight slot).
+    const venueRun = venue ? (
+      <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
+        {venue}
+      </Text>
+    ) : null
+    const where =
+      distance && !leading ? (
+        <Text testID={testID && `${testID}-distance`} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.fixed]}>
+          {`· ${distance}`}
+        </Text>
+      ) : null
     const thumb = (
       <View testID={testID && `${testID}-thumb`} style={[styles.thumb, result && styles.resultThumb]}>
             {stamp ? (
@@ -261,25 +278,20 @@ export function EventCard(props: EventCardProps) {
               </Text>
               {/*
                 The venue gives way to a long name; the time, the thing the row is for, never does. Beside the distance
-                column (Nearby) the venue has its own line: sharing one with the time at 360 dp and 1.3 left it "…" (R6-6).
+                column (Nearby), and anywhere from the control cap, the venue has its own line: sharing one with the time at
+                360 dp and 1.3 left it "…" (R6-6), and at the largest text "B" (leftovers 06 A).
               */}
-              {leading && venue ? (
-                <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
-                  {venue}
-                </Text>
+              {stacked && (venue || where) ? (
+                <View style={styles.rowMeta}>
+                  {venueRun}
+                  {where}
+                </View>
               ) : null}
               <View style={styles.rowMeta}>
-                {leading ? null : (
+                {stacked ? null : (
                   <>
-                    {/* The venue gives way; its distance is its own slot and never does (owner 2026-11-05: no variable glued in a tight slot). */}
-                    <Text testID={testID && `${testID}-venue`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.shrink]}>
-                      {venue}
-                    </Text>
-                    {distance ? (
-                      <Text testID={testID && `${testID}-distance`} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary, styles.fixed]}>
-                        {`· ${distance}`}
-                      </Text>
-                    ) : null}
+                    {venueRun}
+                    {where}
                     {/* Outside the run that truncates, so a long venue keeps its "·" before the time (r7 L12). */}
                     <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold), styles.secondary]}>
                       ·
@@ -287,7 +299,7 @@ export function EventCard(props: EventCardProps) {
                   </>
                 )}
                 <Text maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.secondary, styles.tabular]}>
-                  <MonoRun text={time} />
+                  <MonoRun text={clock} />
                 </Text>
               </View>
             </View>

@@ -25,11 +25,13 @@ import {
   quickTransition,
   SPINNER_GRACE_MS,
   useBoldText,
+  useGround,
   useIncreaseContrast,
+  type Ground,
 } from './shared'
 
 /** `strong` (white) is retired (buttons board C, owner 2026-11-17): a screen's one CTA is `primary`, a sheet's yes is `lit`. */
-export type ButtonKind = 'primary' | 'lit' | 'secondary' | 'tertiary' | 'destructive'
+export type ButtonKind = 'primary' | 'lit' | 'secondary' | 'tertiary' | 'destructive' | 'danger'
 export type ButtonSize = 'lg' | 'md' | 'sm' | 'raised' | 'dock' | 'pill'
 
 /**
@@ -62,14 +64,28 @@ const FLARE = pourStyles(DURATION.press, DURATION.press, EASING.snapOut)
 const LIT_LG_WARNING = 'Button kind="lit" is never size="lg": 56 pt is the primary’s'
 let warnedLitLg = false
 
-function fill(kind: ButtonKind, size: ButtonSize, onGlass: boolean) {
+/**
+ * The neutral's fill, one tier up from the ground it sits on (the boards' `.b.neutral` / `.n9neu`): `surface` on the page
+ * (`surfaceRaised` at 36 and 44), `surfaceRaised` on a surface card or Android's solid sheet, 8% white on glass. On the
+ * solid sheet it was `surface`, the sheet's own colour, and Sign out read as plain text (Me + settings A drive, 2026-11-18).
+ */
+export function neutralFill(size: ButtonSize, ground: Ground) {
+  if (ground === 'glass') return MATERIAL.fillOnGlass
+  if (ground === 'surface' || size === 'sm' || size === 'raised') return COLOR.surfaceRaised
+  return COLOR.surface
+}
+
+/** The neutral's 1 pt rim: no fill a tier off its ground reaches 3:1, so the rim carries the boundary (SC 1.4.11), as the lit rim does. */
+export const NEUTRAL_RIM = COLOR.inputBorder
+
+function fill(kind: ButtonKind, size: ButtonSize, ground: Ground) {
   if (kind === 'destructive') return COLOR.destructiveFill
-  if (kind === 'secondary') return onGlass ? MATERIAL.fillOnGlass : size === 'sm' || size === 'raised' ? COLOR.surfaceRaised : COLOR.surface
+  if (kind === 'secondary') return neutralFill(size, ground)
   return 'transparent'
 }
 
 /** Kinds that play a haptic on press-in (§10.2): the screen's one primary, and the destructive button in a confirm. `lit` is silent: a caller that wants one names it (`pressHaptic`). */
-const PRESS_HAPTIC: Partial<Record<ButtonKind, () => void>> = { primary: () => H.primary(), destructive: () => H.destructive() }
+const PRESS_HAPTIC: Partial<Record<ButtonKind, () => void>> = { primary: () => H.primary(), destructive: () => H.destructive(), danger: () => H.destructive() }
 
 /** A value once it has stopped changing for `DURATION.medium`: what a screen reader is told of a count that is still rolling. */
 function useSettled(value: number | undefined) {
@@ -138,7 +154,7 @@ export type ButtonProps = {
   refused?: boolean
   /** A tertiary that is not the page's own voice (Remove friend, Reset link): its label in `textSecondary`, as the frames draw it. */
   muted?: boolean
-  /** A secondary sitting on glass (a sheet, a dock): 8% white instead of `surface` (no glass on glass). */
+  /** A secondary sitting on glass outside a `GroundProvider value="glass"` (a dock): 8% white (no glass on glass). */
   onGlass?: boolean
   /**
    * `false` when the action's own outcome haptic follows within ~1 s (I'm going, §10.2);
@@ -167,8 +183,10 @@ export type ButtonProps = {
  *   owner 2026-11-17): the tinted gradient (`GRADIENT.lit`) inside the hold's 1.5 pt gradient rim, a white label and glyph.
  *   Press-in pours `GRADIENT.litPressed` in from the leading edge, and a busy button holds it. The screen's hue no longer tints
  *   it (chips, segments and toggles keep theirs). Never `lg`.
- * - `secondary`: `surface`, 8% white on glass. `tertiary`: text.
+ * - `secondary`: one tier up from its ground (`neutralFill`) inside a 1 pt `inputBorder` rim. `tertiary`: text.
  * - `destructive`: `destructiveFill`, never the text red.
+ * - `danger`: the one irreversible act on a sheet that also offers a way back (Delete account, Me + settings A, owner
+ *   2026-11-18): no fill, a 1.5 pt `destructive` rim and a `destructive` label, so it is never the loudest thing there.
  *
  * Press: iOS scales to 0.97 on `M.press`; Android ripples and squares off to a
  * 12 dp corner on the same spring, without scaling (the page). Disabled dims to
@@ -200,6 +218,8 @@ export function Button({
   const android = Platform.OS === 'android'
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
+  const contextGround = useGround()
+  const ground: Ground = onGlass ? 'glass' : contextGround
   const spinner = useGrace(loading)
   const reduceMotion = useReducedMotion()
   const [down, setDown] = useState(false)
@@ -230,7 +250,8 @@ export function Button({
   const flareIn = down || loading || pressed
   const flare = reduceMotion ? (flareIn ? FLARE.pourReduced : FLARE.drainReduced) : flareIn ? FLARE.pour : FLARE.drain
 
-  const ink = muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : COLOR.textOnGradient
+  const danger = kind === 'danger'
+  const ink = muted && kind === 'tertiary' ? COLOR.textSecondary : lit ? COLOR.textPrimary : danger ? COLOR.destructive : COLOR.textOnGradient
   // The lit tint's inner corner follows the pill's as Android squares it off.
   const litInset = useAnimatedStyle(() => ({ borderRadius: Math.max(radius.get() - LIT_RIM, 0) }))
   const sm = size === 'sm'
@@ -242,6 +263,7 @@ export function Button({
   const textOnly = sm && kind === 'tertiary'
   const labelFont = sm ? font('meta', bold, FONT_FAMILY.brand[700]) : pill ? font('control', bold, FONT_FAMILY.brand[700]) : font('button', bold)
   const outlined = contrast && (kind === 'secondary' || kind === 'tertiary')
+  const neutral = kind === 'secondary'
   const settled = useSettled(count)
   const [sentenceWidth, setSentenceWidth] = useState(0)
   const swap = useLabelSwap(label, count === undefined)
@@ -280,7 +302,7 @@ export function Button({
         style={[
           styles.body,
           textOnly ? styles.bodyText : sm ? styles.bodySm : size === 'dock' ? styles.bodyDock : styles.bodyLg,
-          { height, backgroundColor: fill(kind, size, onGlass) },
+          { height, backgroundColor: fill(kind, size, ground) },
           // Enabled ↔ disabled crosses over `quick` (a count arriving, a field becoming valid), never snaps.
           { opacity: disabled ? OPACITY.disabled : 1 },
           DISABLE_FADE,
@@ -348,11 +370,11 @@ export function Button({
             <Spinner testID={testID && `${testID}-spinner`} size={compact ? 16 : 20} />
           </View>
         ) : null}
-        {outlined || (refused && kind !== 'tertiary') ? (
+        {outlined || danger || neutral || (refused && kind !== 'tertiary') ? (
           <Animated.View
-            testID={testID && `${testID}-${refused ? 'refused' : 'contrast'}`}
+            testID={testID && `${testID}-${refused ? 'refused' : outlined ? 'contrast' : 'rim'}`}
             pointerEvents="none"
-            style={[StyleSheet.absoluteFill, refused ? styles.refused : IC_HAIRLINE, shape]}
+            style={[StyleSheet.absoluteFill, refused ? styles.refused : outlined ? IC_HAIRLINE : danger ? styles.dangerRim : styles.neutralRim, shape]}
           />
         ) : null}
       </ScalePress>
@@ -383,4 +405,6 @@ const styles = StyleSheet.create({
   hidden: { opacity: 0 },
   center: { alignItems: 'center', justifyContent: 'center' },
   refused: { borderWidth: SPACE.xxs, borderColor: COLOR.destructive },
+  dangerRim: { borderWidth: LIT_RIM, borderColor: COLOR.destructive },
+  neutralRim: { borderWidth: 1, borderColor: NEUTRAL_RIM },
 })

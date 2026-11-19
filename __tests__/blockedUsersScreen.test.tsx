@@ -9,7 +9,7 @@ jest.mock('expo-router', () => ({ router: { back: jest.fn(), push: jest.fn() } }
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 const mockFetch = jest.fn()
-jest.mock('../lib/blockedUsersPage', () => ({ fetchBlockedPage: (...a: unknown[]) => mockFetch(...a) }))
+jest.mock('../lib/blockedUsersPage', () => ({ ...jest.requireActual('../lib/blockedUsersPage'), fetchBlockedPage: (...a: unknown[]) => mockFetch(...a) }))
 jest.mock('../lib/safetyUtils', () => ({ unblockUser: jest.fn() }))
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 const mockShowSheet = jest.fn()
@@ -29,7 +29,9 @@ beforeEach(() => {
 it('nobody blocked says so, top-aligned as Muted rooms is (D-L11)', async () => {
   mockFetch.mockResolvedValue(ok([]))
   await render(<BlockedUsers />)
-  expect(await screen.findByText('No blocked users')).toBeTruthy()
+  // Me + settings A 06: says where blocking happens, not a generic line.
+  expect(await screen.findByText('Nobody blocked')).toBeTruthy()
+  expect(screen.getByText('Block someone from their profile or a chat. They aren’t told, and you can unblock here any time.')).toBeTruthy()
   // Negative control: the centred empty list (`justifyContent: 'center'`) fails this.
   const list = screen.getByTestId('blocked-users-list')
   expect(StyleSheet.flatten(list.props.contentContainerStyle).justifyContent).toBeUndefined()
@@ -38,8 +40,8 @@ it('nobody blocked says so, top-aligned as Muted rooms is (D-L11)', async () => 
 it('a failed read says it did not load, never "no blocked users"', async () => {
   mockFetch.mockResolvedValue({ ok: false, error: 'offline' })
   await render(<BlockedUsers />)
-  expect(await screen.findByText("Blocked users didn’t load")).toBeTruthy()
-  expect(screen.queryByText('No blocked users')).toBeNull()
+  expect(await screen.findByText("Blocked didn’t load")).toBeTruthy()
+  expect(screen.queryByText('Nobody blocked')).toBeNull()
 })
 
 it('draws a creature, never a face, even if a photo slips through (YOU-10, E10)', async () => {
@@ -67,6 +69,16 @@ it('the Unblock sheet promises only what unblocking does (SCRUM-909)', async () 
   expect(sheet.title).toBe('Unblock Person 1?')
   expect(sheet.message).toBe('They can see your profile again. A conversation you ended stays closed. They are not told.')
   expect(sheet.message).not.toMatch(/message you again/)
+})
+
+it('Unblock is the neutral, not red: it gives access back, it does not take anything (Me + settings A, NOTES: red is Delete only)', async () => {
+  mockFetch.mockResolvedValue(ok([user(1)]))
+  await render(<BlockedUsers />)
+  await screen.findByText('Person 1')
+  await act(async () => fireEvent.press(screen.getByLabelText('Unblock Person 1')))
+  const [unblock] = mockShowSheet.mock.calls[0][0].actions
+  expect(unblock.label).toBe('Unblock')
+  expect(unblock.variant).toBe('secondary')
 })
 
 it('asks for the next page when the end comes into view, once, and adds it without repeats', async () => {
@@ -130,4 +142,46 @@ it('an empty page with a cursor after it is followed on at once', async () => {
   await act(async () => fireEvent(screen.getByTestId('blocked-users-list'), 'endReached'))
   expect(await screen.findByText('Person 7')).toBeTruthy()
   expect(mockFetch.mock.calls.map((c) => c[0])).toEqual([undefined, 'c2', 'c3', 'c4'])
+})
+
+describe('at scale (Me + settings A 06): a count and a search past 20, over the loaded rows', () => {
+  // A test above leaves fake timers on.
+  beforeEach(() => jest.useRealTimers())
+  it('20 people: no search', async () => {
+    mockFetch.mockResolvedValue(ok(users(0, 20)))
+    await render(<BlockedUsers />)
+    await screen.findByText('Person 0')
+    // Negative control: BLOCKED_SEARCH_FROM at 19 draws a search here.
+    expect(screen.queryByTestId('blocked-search')).toBeNull()
+  })
+
+  it('21: a search that says how many, "+" while more are to come', async () => {
+    mockFetch.mockResolvedValue(ok(users(0, 21), 'c2'))
+    await render(<BlockedUsers />)
+    await screen.findByText('Person 0')
+    expect(screen.getByPlaceholderText('Search 21+ people')).toBeTruthy()
+    expect(screen.getByText('They can’t see you or message you. They aren’t told.')).toBeTruthy()
+  })
+
+  it('finds a name case- and accent-blind, and stops paging while searching', async () => {
+    const list = [...users(0, 24), { ...user(99), blocked_user_name: 'Hélène Côté' }]
+    mockFetch.mockResolvedValue(ok(list, 'c2'))
+    await render(<BlockedUsers />)
+    await screen.findByText('Person 0', {}, { timeout: 3000 })
+    await act(async () => fireEvent.changeText(screen.getByTestId('blocked-search-input'), 'helene'))
+    expect(screen.getByText('Hélène Côté')).toBeTruthy()
+    expect(screen.queryByText('Person 0')).toBeNull()
+    await act(async () => fireEvent(screen.getByTestId('blocked-users-list'), 'onEndReached'))
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    await act(async () => fireEvent.changeText(screen.getByTestId('blocked-search-input'), 'zzz'))
+    expect(screen.getByText('Nobody called “zzz”')).toBeTruthy()
+  })
+})
+
+it('blockedCountLine: a person, people, and "+" while the server has more', () => {
+  const { blockedCountLine } = jest.requireActual('../lib/blockedUsersPage')
+  expect(blockedCountLine(0, false)).toBeNull()
+  expect(blockedCountLine(1, false)).toBe('1 person')
+  expect(blockedCountLine(3, false)).toBe('3 people')
+  expect(blockedCountLine(50, true)).toBe('50+ people')
 })

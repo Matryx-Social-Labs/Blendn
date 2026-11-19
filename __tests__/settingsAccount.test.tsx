@@ -68,6 +68,8 @@ const plusStatus = (o: Partial<{ active: boolean; gated: boolean; source: 'apple
   ...o,
 })
 const permissions = Notifications.getPermissionsAsync as jest.Mock
+let mockCountry: string | null = null
+jest.mock('../lib/homeCity', () => ({ ...jest.requireActual('../lib/homeCity'), useHomeCountry: () => mockCountry }))
 jest.mock('../lib/haptics', () => ({ H: { destructive: jest.fn(), toggle: jest.fn(), error: jest.fn(), primary: jest.fn(), success: jest.fn() } }))
 
 /** The screen with the app's one sheet host beside it, as the root layout mounts them. */
@@ -92,6 +94,23 @@ beforeEach(() => {
   ;(api.queuedRequest as jest.Mock).mockImplementation((_url: string, init?: RequestInit) =>
     Promise.resolve({ success: true, data: { enabled: init?.method === 'PUT' ? JSON.parse(String(init.body)).enabled : true } })
   )
+})
+
+/* Owner ruling 2026-11-18: the app is free to use. Blend'n+ in Settings only where it is sold (`gated`, staging). */
+describe('Blend’n+ only in a gated city', () => {
+  it('ungated (prod): no Blend’n+ row, no launch line', async () => {
+    api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
+    await render(<Screen />)
+    await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
+    await act(async () => {})
+    expect(screen.queryByTestId('settings-plus')).toBeNull()
+    expect(screen.queryByText(/Blend’n\+|Free during launch/)).toBeNull()
+  })
+
+  it('control: gated (staging), the row is there', async () => {
+    await render(<Screen />)
+    expect(await screen.findByTestId('settings-plus')).toBeTruthy()
+  })
 })
 
 describe('Sign out', () => {
@@ -139,14 +158,14 @@ it('plays H.primary once, on the Sign out confirm and not when the sheet opens (
 describe('Notifications row', () => {
   it('opens Notification settings, where the push switch now lives (the Settings screen has no switch of its own)', async () => {
     await render(<Screen />)
-    fireEvent.press(await screen.findByRole('button', { name: /^Notifications/ }))
+    fireEvent.press(await screen.findByRole('button', { name: /^Notification settings/ }))
     expect(router.push).toHaveBeenCalledWith('/notification-settings')
     expect(screen.queryByRole('switch', { name: /^Push notifications/ })).toBeNull()
   })
 
   it('says On when nothing is muted (frame 01)', async () => {
     await render(<Screen />)
-    expect(await screen.findByRole('button', { name: 'Notifications, On' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Notification settings, On' })).toBeTruthy()
   })
 
   it('says how many rooms are muted (frame 02)', async () => {
@@ -156,7 +175,7 @@ describe('Notifications row', () => {
       data: { groups: [{ id: 'a', event: { title: 'A' }, mute }, { id: 'b', event: { title: 'B' }, mute }, { id: 'c', event: { title: 'C' } }] },
     })
     await render(<Screen />)
-    expect(await screen.findByRole('button', { name: 'Notifications, 2 rooms muted' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Notification settings, 2 rooms muted' })).toBeTruthy()
   })
 })
 
@@ -174,7 +193,7 @@ describe('the muted count is the truth, or says it is not all of it', () => {
     )
     ;(api.getChatGroups as jest.Mock).mockResolvedValue({ success: true, data: { groups: [{ id: 'a', event: { title: 'A' }, mute }] } })
     await render(<Screen />)
-    expect(await screen.findByRole('button', { name: 'Notifications, 41 rooms muted' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Notification settings, 41 rooms muted' })).toBeTruthy()
   })
 
   it('a scan that lost a page says "N+", never a quietly short count', async () => {
@@ -184,17 +203,14 @@ describe('the muted count is the truth, or says it is not all of it', () => {
       data: { groups: [{ id: 'a', event: { title: 'A' }, mute }], pagination: { hasMore: true } },
     })
     await render(<Screen />)
-    expect(await screen.findByRole('button', { name: 'Notifications, 1+ rooms muted' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Notification settings, 1+ rooms muted' })).toBeTruthy()
   })
 })
 
-describe('About you row (E7: titled for the screen it opens until 14.4 "How you match" is built)', () => {
-  it('sits beside Notifications and opens the about-you fields', async () => {
-    await render(<Screen />)
-    fireEvent.press(await screen.findByRole('button', { name: 'About you, What matching reads' }))
-    expect(router.push).toHaveBeenCalledWith('/edit-about-you')
-    expect(screen.getByText('Notifications & matching')).toBeTruthy()
-  })
+it('has no About you row: those fields are profile data, reached from Edit profile (Me + settings A 04)', async () => {
+  await render(<Screen />)
+  await screen.findByRole('button', { name: /^Notification settings/ })
+  expect(screen.queryByRole('button', { name: /^About you/ })).toBeNull()
 })
 
 it('offers Try again when the settings did not load, and it works', async () => {
@@ -383,10 +399,24 @@ describe('Delete account', () => {
     })
   })
 
-  it('Cancel deletes nothing', async () => {
+  it.each([
+    ['CA', 'as the law requires where you live'],
+    [null, 'as the law requires where you live'],
+    ['IN', 'as Indian law requires'],
+  ] as const)('a %s home says why details are kept by its own law: never India’s for Toronto (SCRUM-1076)', async (country, line) => {
+    mockCountry = country
     await render(<Screen />)
     await openTray()
-    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText(new RegExp(`Registration details are kept 180 days, ${line}\\.$`))).toBeTruthy()
+    // Negative control: a Canadian account told India's law fails here.
+    if (country !== 'IN') expect(screen.queryByText(/Indian law/)).toBeNull()
+    mockCountry = null
+  })
+
+  it('Keep my account deletes nothing', async () => {
+    await render(<Screen />)
+    await openTray()
+    fireEvent.press(screen.getByRole('button', { name: 'Keep my account' }))
     expect(deleteAccount).not.toHaveBeenCalled()
   })
 
@@ -399,7 +429,7 @@ describe('Delete account', () => {
     api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ active: true, source }) } as never)
     await openTray()
     expect(
-      await screen.findByText(`Cancel Blend’n+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`)
+      await screen.findByText(`Blend’n+ renews through ${store === 'App Store' ? 'the App Store' : store}. Deleting doesn’t cancel it.`)
     ).toBeTruthy()
     fireEvent.press(screen.getByRole('button', { name: 'Manage subscription' }))
     await waitFor(() => expect(opened).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/(apps\.apple\.com|play\.google\.com)\//)))
@@ -412,21 +442,13 @@ describe('Delete account', () => {
       api.getMyPlus.mockResolvedValue({ success: true, data } as never)
       await openTray()
       await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
-      expect(screen.queryByText(/Deleting your account doesn’t cancel it/)).toBeNull()
-      fireEvent.press(screen.getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByText(/Deleting doesn’t cancel it/)).toBeNull()
+      fireEvent.press(screen.getByRole('button', { name: 'Keep my account' }))
     }
   })
 })
 
 describe('Blendn+ row (review H2)', () => {
-  it('in a launch season says it is free and opens an info tray that sells nothing', async () => {
-    api.getMyPlus.mockResolvedValue({ success: true, data: plusStatus({ gated: false }) } as never)
-    await render(<Screen />)
-    fireEvent.press(await screen.findByRole('button', { name: /^Blend’n\+, Free during launch in your city/ }))
-    expect(await screen.findByText('Blend’n+ is free here for now')).toBeTruthy()
-    expect(router.push).not.toHaveBeenCalled()
-  })
-
   it('where it is sold, opens the paywall', async () => {
     await render(<Screen />)
     await waitFor(() => expect(api.getMyPlus).toHaveBeenCalled())
@@ -491,7 +513,7 @@ it('"Show online status" says what On means while it is on', async () => {
 
 it('opens About and Contact support', async () => {
   await render(<Screen />)
-  fireEvent.press(await screen.findByRole('button', { name: 'About Blend’n' }))
+  fireEvent.press(await screen.findByRole('button', { name: 'About Blend’n, Terms, privacy, guidelines, grievances' }))
   expect(router.push).toHaveBeenCalledWith('/about')
   fireEvent.press(screen.getByRole('button', { name: 'Contact support' }))
   expect(router.push).toHaveBeenCalledWith('/support')

@@ -84,7 +84,7 @@ beforeEach(() => {
 describe('the Account card', () => {
   it('an email account: signed in as, Password, Sign out, Sign out of every device', async () => {
     await render(<Screen />)
-    expect(await screen.findByLabelText('Signed in as, sam@example.com')).toBeTruthy()
+    expect(await screen.findByLabelText('sam@example.com, Signed in with email')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Password' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign out of every device' })).toBeTruthy()
@@ -93,23 +93,31 @@ describe('the Account card', () => {
   it('a Google account says so and has no Password row', async () => {
     mockMethod.mockReturnValue('google')
     await render(<Screen />)
-    expect(await screen.findByLabelText('Signed in with Google, sam@example.com')).toBeTruthy()
+    expect(await screen.findByLabelText('sam@example.com, Signed in with Google')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
   })
 
   it('a session that predates the record names the email and offers no password it cannot be sure of', async () => {
     mockMethod.mockReturnValue(null)
     await render(<Screen />)
-    expect(await screen.findByLabelText('Signed in as, sam@example.com')).toBeTruthy()
+    expect(await screen.findByLabelText('sam@example.com, Signed in with email')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Password' })).toBeNull()
   })
 
   it("hands the session's signInMethod to the card and reads the session on opening, so an upgrader's Password row follows the server (SCRUM-742)", async () => {
     mockAuth.user = { id: 'u_me', email: 'sam@example.com', signInMethod: 'password' } as never
     await render(<Screen />)
-    await screen.findByLabelText('Signed in as, sam@example.com')
+    await screen.findByLabelText('sam@example.com, Signed in with email')
     expect(mockMethod).toHaveBeenCalledWith('password')
     expect(refreshAuthUser).toHaveBeenCalled()
+    mockAuth.user = { id: 'u_me', email: 'sam@example.com' } as never
+  })
+
+  it('with a name, the card leads with it and says how you sign in, the email after it (Me + settings A 05)', async () => {
+    mockAuth.user = { id: 'u_me', email: 'sam@example.com', name: 'Marc-André Lefebvre-Desrosiers' } as never
+    mockMethod.mockReturnValue('google')
+    await render(<Screen />)
+    expect(await screen.findByLabelText('Marc-André Lefebvre-Desrosiers, Signed in with Google · sam@example.com')).toBeTruthy()
     mockAuth.user = { id: 'u_me', email: 'sam@example.com' } as never
   })
 

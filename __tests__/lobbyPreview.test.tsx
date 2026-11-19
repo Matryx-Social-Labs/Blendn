@@ -47,7 +47,7 @@ const preview = (over: object = {}) => ({
 })
 const drawPreview = async (props: Partial<React.ComponentProps<typeof EventLobbyPreview>> = {}) => {
   const onOpenRoom = jest.fn()
-  await render(<EventLobbyPreview eventId="ev1" timeZone="Asia/Kolkata" here={214} onOpenRoom={onOpenRoom} {...props} />)
+  await render(<EventLobbyPreview eventId="ev1" timeZone="Asia/Kolkata" here={214} onOpenRoom={onOpenRoom} saved={false} rsvp={null} {...props} />)
   return onOpenRoom
 }
 
@@ -84,6 +84,28 @@ describe('P-A, the event page’s Lobby card', () => {
     await drawPreview()
     expect(screen.getByText('Save it or say you’re going to read the Lobby.')).toBeTruthy()
     expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('reads again when you save or say you’re going on the page, with no focus change (SCRUM-1078; control: other props do not re-read)', async () => {
+    api.getBoardPreview.mockResolvedValue(preview({ canRead: false, latest: [] }))
+    const onOpenRoom = jest.fn()
+    const card = (p: { saved: boolean; rsvp: string | null; here?: number }) => (
+      <EventLobbyPreview eventId="ev1" timeZone="Asia/Kolkata" here={p.here ?? 214} onOpenRoom={onOpenRoom} saved={p.saved} rsvp={p.rsvp} />
+    )
+    const r = await render(card({ saved: false, rsvp: null }))
+    expect(screen.getByText('Save it or say you’re going to read the Lobby.')).toBeTruthy()
+    // Control: a prop that is not your standing does not read the Lobby again.
+    await r.rerender(card({ saved: false, rsvp: null, here: 215 }))
+    expect(api.getBoardPreview).toHaveBeenCalledTimes(1)
+
+    api.getBoardPreview.mockResolvedValue(preview())
+    await r.rerender(card({ saved: true, rsvp: null }))
+    expect(api.getBoardPreview).toHaveBeenCalledTimes(2)
+    expect(await screen.findByText('Lunar Fox')).toBeTruthy()
+    expect(screen.queryByText('Save it or say you’re going to read the Lobby.')).toBeNull()
+
+    await r.rerender(card({ saved: true, rsvp: 'going' }))
+    expect(api.getBoardPreview).toHaveBeenCalledTimes(3)
   })
 
   it('says nobody has posted yet, with Post something and no See all', async () => {

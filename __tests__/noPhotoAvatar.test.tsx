@@ -48,6 +48,12 @@ describe('every Banter face goes through personFace (F1 B: a creature means anon
     expect(src).not.toMatch(/source=\{\{ uri: [^}]*\?\? ''/)
   })
 
+  it('the Named card in event preferences is your initial with no photo, never the outline user glyph (SCRUM-1078)', () => {
+    const src = read('app', 'event-preferences', '[eventId].tsx')
+    expect(src).toContain('personFace({ named: true')
+    expect(src).not.toMatch(/icon=\{[^}]*'user'/)
+  })
+
   it('the DM screen draws the header and your own face from the same rule', () => {
     const src = read('app', 'private-chat', '[conversationId].tsx')
     expect(src).toContain('directHeaderAvatar(reveal, otherImage, name)')
