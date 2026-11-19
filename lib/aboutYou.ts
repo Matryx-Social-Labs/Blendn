@@ -106,6 +106,37 @@ export function answersWithin(answers: Readonly<Record<string, Choice>>, options
   return Object.fromEntries(Object.entries(answers).filter(([q, c]) => asked.has(q) && (c === 'a' || c === 'b')))
 }
 
+/**
+ * This-or-that questions that only make sense in India (Filter coffee / Chai, a Nandi Hills sunrise, an auto, RCB, a
+ * Bollywood night). ponytail: a client list of server slugs until `/profile-options` answers per country (ROADMAP § Backend
+ * later); a new India-only question added server-side shows everywhere until it is added here.
+ */
+const INDIA_ONLY_QUESTIONS = new Set(['coffee_or_chai', 'sunrise_or_late_walk', 'metro_or_auto', 'cup_namdu_or_no_cricket', 'bollywood_or_techno'])
+
+/**
+ * The lists as one account sees them (SCRUM-711). The server's are India's (Indian languages Kannada first, Indian states,
+ * Bengaluru questions); outside India — or with no known country — they degrade to a neutral view until the server sends a
+ * country's own: languages by name with no "Learning <local language>", no home regions, no India-only questions. What the
+ * person already holds is always kept, so it shows and can be cleared. Display only: loads and saves use the server's lists.
+ */
+export function optionsForCountry(
+  options: ProfileOptions,
+  country: string | null | undefined,
+  held: AboutYou,
+  answers: Readonly<Record<string, Choice>>
+): ProfileOptions {
+  if (country === 'IN') return options
+  const languages = options.languages
+    .filter((l) => !l.slug.endsWith('_learning') || held.languages.includes(l.slug))
+    .sort((a, b) => a.label.localeCompare(b.label))
+  return {
+    ...options,
+    languages,
+    homeStates: options.homeStates.filter((s) => s.slug === held.homeState),
+    thisOrThat: options.thisOrThat.filter((q) => !INDIA_ONLY_QUESTIONS.has(q.slug) || q.slug in answers),
+  }
+}
+
 /** Add or remove one language, never past the cap. */
 export function toggleLanguage(current: readonly string[], slug: string, max: number): string[] {
   if (current.includes(slug)) return current.filter((l) => l !== slug)
@@ -196,7 +227,7 @@ export function tierBRefusals(body: Record<string, unknown>, errorCode?: string)
 export function tierBNames(body: Record<string, unknown>): string {
   const names = [
     'languages' in body ? 'languages' : null,
-    'home_state' in body ? 'home state' : null,
+    'home_state' in body ? 'home region' : null,
     'sun_sign' in body || 'sign_system' in body ? 'sign' : null,
   ].filter((n): n is string => n !== null)
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '')
