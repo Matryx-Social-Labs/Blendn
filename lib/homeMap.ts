@@ -60,6 +60,8 @@ export interface Pin {
   timeZone?: string | null
   /** A venue's live bucket, for its chip; null for an event. */
   bucket: LiveNow | null
+  /** An event's venue name (the linked venue's first), for a chip that holds several events; null for a venue pin. */
+  place?: string | null
 }
 
 const VENUE_GLOW: Record<LiveNow, number> = { quiet: 1, '5-9': 2, '10-19': 3, '20+': 4 }
@@ -73,6 +75,8 @@ type EventLike = {
   end_time: string | null
   session?: { start_time: string; end_time: string } | null
   timezone?: string | null
+  venue?: { name: string } | null
+  venue_name?: string | null
 }
 
 type VenueLike = { id: string; name: string; latitude: number | null; longitude: number | null; liveNow?: LiveNow | null }
@@ -106,6 +110,7 @@ export function pinsFor(
         startsAt: null,
         endsAt: null,
         bucket,
+        place: null,
       }
     })
   }
@@ -123,6 +128,7 @@ export function pinsFor(
       endsAt: w.end_time ?? null,
       timeZone: e.timezone ?? null,
       bucket: null,
+      place: e.venue?.name?.trim() || e.venue_name?.trim() || null,
     }
     return liveAt(pin, now)
   })

@@ -53,7 +53,12 @@ describe('a viewport becomes the lists\' own query (HM-CU02)', () => {
 })
 
 const at = (minutesFromNow: number) => new Date(Date.now() + minutesFromNow * 60_000).toISOString()
-const event = (id: string, startIn: number, endIn: number, coords = { latitude: 12.97, longitude: 77.59 }) => ({
+const event = (
+  id: string,
+  startIn: number,
+  endIn: number,
+  coords: { latitude: number; longitude: number; venue?: { name: string } | null; venue_name?: string } = { latitude: 12.97, longitude: 77.59 }
+) => ({
   id,
   title: id,
   ...coords,
@@ -85,6 +90,16 @@ describe('the pins follow the segment (HM-CU04)', () => {
       ['quiet', 'venue', false, 1],
       ['busy', 'venue', true, 4],
     ])
+  })
+
+  it('an event pin carries its venue’s name (the linked venue first), for a chip that holds several', () => {
+    const named = pinsFor('events', { events: [event('a', 10, 60, { latitude: 12.97, longitude: 77.59, venue: { name: ' Church Street Social ' }, venue_name: 'Old name' }), event('b', 10, 60, { latitude: 12.97, longitude: 77.59, venue_name: 'Lupa' })], venues: [] })
+    expect(named.map((p) => p.place)).toEqual(['Church Street Social', 'Lupa'])
+  })
+
+  it('control: no venue from the server, no name; a venue pin is its own place', () => {
+    expect(pinsFor('events', { events: [event('a', 10, 60)], venues: [] })[0].place).toBeNull()
+    expect(pinsFor('places', data)[0].place).toBeNull()
   })
 
   it('reads a venue with no bucket (an older server) as quiet, never live', () => {
@@ -166,7 +181,7 @@ const component = code('components/home/HomeMap.tsx')
 
 describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
   // The map's own layers live in two files: the component and its lit layers.
-  const layers = component + code('components/home/MapLitLayers.tsx')
+  const layers = component + code('components/home/MapLitLayers.tsx') + code('components/home/EventPiles.tsx')
   // Everything that decides what the map draws: the component, its layers, its lighting, its pure parts, its style and its theme.
   const drawing = [
     'components/home/HomeMap.tsx',
@@ -186,7 +201,10 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     // Near me's reach (N1) is the one exception: fixed rings round the person (a 20-minute walk, a short ride), never an event's.
     const types = [...layers.matchAll(/type="([a-z-]+)"/g)].map((m) => m[1])
     expect(types.length).toBeGreaterThan(0)
-    const areas = types.filter((t) => t !== 'fill-extrusion' && t !== 'circle')
+    // A pile's numerals are text (`symbol`, the `pile-count` layer), not an area.
+    const areas = types.filter((t) => t !== 'fill-extrusion' && t !== 'circle' && t !== 'symbol')
+    expect(types.filter((t) => t === 'symbol')).toHaveLength(1)
+    expect(layers).toMatch(/id="pile-count"\s+source="pins"\s+type="symbol"/)
     const reach = [...layers.matchAll(/<Layer id="reach-[a-z-]+" type="([a-z-]+)"/g)].map((m) => m[1])
     expect(reach).toEqual(['fill', 'line', 'fill', 'line'])
     expect(areas).toEqual(reach)
@@ -211,8 +229,10 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).toMatch(/const padding = mapPadding\(\{ topChrome, mapHeight, drawerTop: drawerSnapTop \}\)/)
   })
 
-  it("draws the person’s dot as a plain puck, never one that follows the compass (Android redrew the map forever)", () => {
-    expect(component).toMatch(/<NativeUserLocation mode="default" \/>/)
+  it("draws the person as our own violet mark, never the native puck (blue; on Android its compass mode redrew the map forever)", () => {
+    expect(component).toMatch(/<YouMark part="halo" fix=\{center\} sharing=\{sharing\} now=\{now\} \/>/)
+    expect(component).toMatch(/<YouMark part="dot" fix=\{center\} sharing=\{sharing\} now=\{now\} \/>/)
+    expect(component).not.toMatch(/NativeUserLocation/)
   })
 
   it('is tilted between 45° and 60°', () => {
@@ -223,10 +243,20 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 
   it("sizes circles only by the theme: the bucket’s glow, the fixed dot, the fixed ground glow — never anything a place carries", () => {
     const radii = [...layers.matchAll(/'circle-radius':\s*([^,\n]+(?:,[^\n]*?\])?)\s*,?\s*\n/g)].map((m) => m[1].trim().replace(/,$/, ''))
-    expect(radii.length).toBe(3)
+    // The piles (pulse-map 08): the glow, the dot (dimmed beside a focus), a number by its count, the focus and its halo.
+    expect(radii.length).toBe(6)
     for (const r of radii) {
-      expect(["['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]", 'MAP_THEME.pin.dotRadiusPx', 'radius']).toContain(r)
+      expect([
+        "['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep]",
+        'lit ? MAP_THEME.pin.dimmed.radiusPx : MAP_THEME.pin.dotRadiusPx',
+        'BUBBLE_RADIUS as never',
+        'MAP_THEME.pin.glowPxPerStep * 2',
+        'MAP_THEME.pin.focus.radiusPx',
+        'radius',
+      ]).toContain(r)
     }
+    // A number's size reads its count of events (`n`, a pile's sum of its spots') and nothing a place carries.
+    expect(layers).toMatch(/const BUBBLE_RADIUS = \['step', \['get', 'n'\]/)
     // At the browsed city's latitude (SCRUM-998), and nothing a place carries.
     expect(layers).toMatch(/const radius = useMemo\(\(\) => glowRadius\(latitude\), \[latitude\]\)/)
     // The ground glow is the theme's metres at every zoom, read off nothing.
