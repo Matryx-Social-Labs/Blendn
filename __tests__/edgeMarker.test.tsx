@@ -57,3 +57,22 @@ describe('EdgeMarker', () => {
     expect(screen.getByRole('button', { name: 'Kitty Ko, off the map. Double-tap to show it' })).toBeTruthy()
   })
 })
+
+describe('EdgeMarker while the map is not there', () => {
+  /*
+   * Sim drive at AX5: a text-size change remounts the map, and MapLibre's `project` throws synchronously ("NativeComponent
+   * ref is null, wait for the map being initialized") rather than rejecting. Thrown from the effect it took the whole Pulse
+   * down to its error boundary.
+   */
+  it('draws nothing, and never throws, when the map refuses to project', async () => {
+    const map = {
+      current: {
+        project: () => {
+          throw new Error('NativeComponent ref is null, wait for the map being initialized')
+        },
+      },
+    } as never
+    await draw({ map })
+    expect(screen.queryByTestId('map-edge-marker')).toBeNull()
+  })
+})

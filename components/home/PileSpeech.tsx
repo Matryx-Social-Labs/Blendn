@@ -71,8 +71,9 @@ export function PileSpeech({
     if (!on) return
     let stale = false
     const timer = setTimeout(() => {
-      map.current
-        ?.queryRenderedFeatures([[left, top], [right, bottom]], { layers: ['pile-bubble'] })
+      // Through a promise: MapLibre throws synchronously while the map remounts (a text-size change), not rejects.
+      Promise.resolve()
+        .then(() => map.current?.queryRenderedFeatures([[left, top], [right, bottom]], { layers: ['pile-bubble'] }) ?? [])
         .then(async (found) => {
           const seen = new Set<string>()
           const next = (found as Found[])

@@ -50,7 +50,9 @@ export function EdgeMarker({
     const m = map.current
     if (!m || lng === undefined || lat === undefined) return
     let stale = false
-    m.project([lng, lat])
+    // Through a promise: MapLibre's `project` throws synchronously while the map remounts (a text-size change), not rejects.
+    Promise.resolve()
+      .then(() => m.project([lng, lat]))
       .then((s) => {
         if (!stale) setPlaced({ key: `${lng},${lat}`, xy: s as [number, number] })
       })
