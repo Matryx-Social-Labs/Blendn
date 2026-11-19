@@ -14,7 +14,7 @@ import { buyPackage, canBuyAs, loadPlusOffers, restore, type PlusOffer, type Res
 import { afterSheetDismissed } from '../../lib/sheetDismissed'
 import { useAuth } from '../../lib/useAuth'
 import { useLatest } from '../../lib/useLatest'
-import { LEGAL } from './PlusSections'
+import { disclosureLine } from './PlusSections'
 import { openStoreSubscriptions, showStoreError } from './storeActions'
 
 /** In a launch season nothing is for sale, so the sheet never opens: this says why, once (Flow 12 · 12.1 #11). */
@@ -241,7 +241,7 @@ export function TonightHost() {
         onRestore={() => void restoreAll()}
         status={status}
         store={STORE}
-        legal={LEGAL[STORE]}
+        legal={disclosureLine(STORE, true, null)}
         restoring={restoring}
       />
     </HueProvider>

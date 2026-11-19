@@ -238,7 +238,7 @@ describe('the store’s terms (App Store 3.1.2 / Play)', () => {
       fireEvent.press(screen.getAllByRole('radio')[1])
     })
     const terms = String(screen.getByTestId('tonight-legal').props.children)
-    expect(terms).toMatch(/renew automatically/)
+    expect(terms).toMatch(/Renews automatically/)
     expect(terms).toMatch(/cancel/i)
     expect(terms).not.toMatch(/GST/)
   })

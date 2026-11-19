@@ -13,7 +13,6 @@ import { InAppBanner, type InAppBannerProps } from '../../components/ds/InAppBan
 import { LikingAsChip } from '../../components/ds/LikingAsChip'
 import { LinkPreviewCard, type LinkPreview, type ShareEvent } from '../../components/ds/LinkPreviewCard'
 import { ManageStatusRow, type PlusStatus } from '../../components/ds/ManageStatusRow'
-import { NeverForSalePanel } from '../../components/ds/NeverForSalePanel'
 import { NotificationRow, type NotificationRowProps } from '../../components/ds/NotificationRow'
 import { OfferCard } from '../../components/ds/OfferCard'
 import { NightPassRow, PlanCard, PlanList } from '../../components/ds/PlanCard'
@@ -63,7 +62,6 @@ export default function DsP4Preview() {
         <Badges />
         <Tonight />
         <Plans />
-        <NeverForSale />
         <Manage />
         <Offers />
         <Share />
@@ -632,16 +630,6 @@ function Plans() {
           ))}
           <NightPassRow price="₹49" selected={picked === 'night'} onPress={() => setPicked('night')} />
         </PlanList>
-      </Cell>
-    </Section>
-  )
-}
-
-function NeverForSale() {
-  return (
-    <Section title="NeverForSalePanel" note="Before the plans · a heading and a list">
-      <Cell label="default" testID="ds-neverforsale">
-        <NeverForSalePanel />
       </Cell>
     </Section>
   )

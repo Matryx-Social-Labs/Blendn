@@ -1,5 +1,5 @@
 import { barHeight, barTop } from '../../lib/barGeometry'
-import { Fragment, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
@@ -7,24 +7,16 @@ import { Button } from '../ds/Button'
 import { IconButton } from '../ds/IconButton'
 import { Spinner } from '../ds/Loader'
 import { PlusMark } from '../ds/ManageStatusRow'
-import { font, IC_HAIRLINE, useAnnounced, useBoldText, useIncreaseContrast } from '../ds/shared'
-import { Icon } from '../ui/Icon'
+import { SettingsGroup, SettingsRow } from '../ds/SettingsRow'
+import { font, useAnnounced, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
-import { COLOR, MATERIAL, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, MAX_FONT_SCALE, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
 import { OPACITY } from '../../lib/theme'
 import { Swap } from '../motion/Swap'
-import type { ctaParts, PlusFeature } from '../../lib/plus'
+import { NEVER_FOR_SALE, type ctaParts, type PlusFeature } from '../../lib/plus'
 
-/** The hero's mark (Flow 12 `plusMark(hero, 64)`). */
-const HERO_MARK = SIZE.primary + SPACE.sm
-/** A feature row is at least 60 pt (the page's `min-height:60px`). */
-const FEATURE_MIN_HEIGHT = SIZE.primary + SPACE.xs
-// design-exception: the page draws its feature glyphs at 22 and gaps them 14 (flow12.js `GETS`); neither is on the scale.
-const FEATURE_ICON = 22
-// design-exception: see FEATURE_ICON.
-const FEATURE_GAP = 14
-/** The footer links are one line of meta text; slop takes each to the 44 / 48 target. */
+/** The dock's links are one line of meta text; slop takes each to the 44 / 48 target. */
 const LINK_SLOP = (SIZE.targetAndroid - TYPE.meta.lineHeight) / 2
 
 /** The bar under the header: the top inset, the circle, and the 10 pt the glass reaches under it. */
@@ -109,14 +101,17 @@ export function DockLine({ text, spinning = false, strong = false }: { text: str
 const PENDING_LINE =
   "Your payment is pending. Blend’n+ unlocks once your bank or the store confirms it — that can take a while. You can close this; we’ll pick it up when it does."
 
-export type DockAction = 'buy' | 'manage' | 'launch' | 'none'
+export type DockAction = 'buy' | 'manage' | 'launch' | 'restore' | 'none'
 
 /**
- * What the dock says and does. While the store is answered the wait is a line
- * (restoring, confirming, taking longer, pending, "You're in.") and the button
- * steps away — the header reads Done; otherwise the one button: Start (carrying
- * the price), Manage for a subscription the store runs, or nothing to buy in a
- * launch season.
+ * What the dock says and does (remaining-screens 01 A / 02 A). While the store
+ * is answered the wait is a line (restoring, confirming, taking longer,
+ * pending, "You're in.") and the button steps away — the header reads Done;
+ * otherwise the one button: "Start Yearly · {store price} / year", Manage
+ * Blend'n+ for somebody who already has it, Restore purchases where the store
+ * has nothing to sell, or nothing to buy in a launch season. Under it the
+ * store's renew line where something is sold, then Restore · Terms · Privacy,
+ * never greyed.
  */
 export function PlusActions({
   onHeight,
@@ -127,8 +122,13 @@ export function PlusActions({
   cta,
   disabled,
   buying,
+  disclosure,
+  storeBusy = false,
   onBuy,
   onManage,
+  onRestore,
+  onTerms,
+  onPrivacy,
 }: {
   onHeight: (height: number) => void
   phase: 'idle' | 'confirming' | 'pending' | 'slow' | 'done'
@@ -139,9 +139,17 @@ export function PlusActions({
   cta: ReturnType<typeof ctaParts>
   disabled: boolean
   buying: boolean
+  /** The store's renew line (`disclosureLine`), drawn only under a buy button. */
+  disclosure?: string | null
+  /** A purchase is with the store: Restore waits for it. */
+  storeBusy?: boolean
   onBuy: () => void
   onManage: () => void
+  onRestore: () => void
+  onTerms: () => void
+  onPrivacy: () => void
 }) {
+  const bold = useBoldText()
   const onGlass = Platform.OS === 'ios'
   const line = restoring ? (
     <DockLine text="Restoring…" spinning />
@@ -158,33 +166,52 @@ export function PlusActions({
   ) : null
   // Each line is its own part, so one answer fades into the next (motion audit M27).
   const lineId = restoring ? 'restoring' : phase !== 'idle' ? phase : 'notice'
+  const idle = phase === 'idle'
+  // Where Restore is the button it is not a link as well.
+  const restoreLink = !(idle && action === 'restore')
   return (
     <PlusDock onHeight={onHeight}>
       <Swap id={lineId}>{line}</Swap>
       <Swap id={action}>
-        {phase !== 'idle' ? null : action === 'launch' ? (
+        {!idle ? null : action === 'launch' ? (
           <Button kind="secondary" label="Unlocked during launch · nothing to buy" disabled onGlass={onGlass} />
         ) : action === 'manage' ? (
-          <Button kind="lit" size="md" label="Manage Blend’n+" onPress={onManage} />
+          <Button kind="secondary" label="Manage Blend’n+" onGlass={onGlass} onPress={onManage} />
+        ) : action === 'restore' ? (
+          <Button kind="lit" size="md" icon="rotate-ccw" label="Restore purchases" loading={restoring} onPress={onRestore} />
         ) : action === 'buy' ? (
           <Button label={cta.lead} price={cta.price} accessibilityLabel={cta.spoken} disabled={disabled} loading={buying} onPress={onBuy} />
         ) : null}
       </Swap>
+      {idle && action === 'buy' && disclosure ? (
+        <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} testID="plus-disclosure" style={[font('meta', bold), styles.tertiary]}>
+          {disclosure}
+        </Text>
+      ) : null}
+      <View style={styles.links}>
+        {restoreLink ? <DockLink label="Restore purchases" role="button" busy={restoring} disabled={storeBusy} onPress={onRestore} /> : null}
+        <DockLink label="Terms" role="link" onPress={onTerms} />
+        <DockLink label="Privacy" role="link" onPress={onPrivacy} />
+      </View>
     </PlusDock>
   )
 }
 
-/** The mark, "Blend’n+" and the one line (Flow 12 `page` hero). */
+/**
+ * The compact hero (remaining-screens 01 A): the mark, “Blend’n+” and the one line, so the plans sit above the fold.
+ * At the largest text sizes only the wordmark stays (02 A, AX): the plans come first.
+ */
 export function PlusHero() {
   const bold = useBoldText()
+  const large = useLargeText()
   return (
-    <View style={styles.hero}>
-      <PlusMark size={HERO_MARK} />
+    <View style={[styles.hero, large && styles.heroLarge]}>
+      {large ? null : <PlusMark />}
       {/* One line, shrunk to fit: a wordmark never breaks "Blend’ / n+" (D-M10). */}
-      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.display} numberOfLines={1} adjustsFontSizeToFit style={[font('display', bold), styles.ink, styles.centre]} testID="plus-wordmark">
+      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={1} adjustsFontSizeToFit style={[font('title', bold), styles.ink, !large && styles.centre]} testID="plus-wordmark">
         Blend’n+
       </Text>
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary, styles.centre]}>More of the night, none of the creepy stuff.</Text>
+      {large ? null : <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary, styles.centre]}>More of the night, none of the creepy stuff.</Text>}
     </View>
   )
 }
@@ -195,118 +222,72 @@ export function PlusNote({ text }: { text: string }) {
   return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary, styles.note]}>{text}</Text>
 }
 
-/** A section's heading (`heading`, 20/26). */
-export function PlusHeading({ children }: { children: string }) {
-  const bold = useBoldText()
+/**
+ * "What you get" (Flow 12 `GETS`, R3-G, D22; remaining-screens 01 A): settings rows, what the server serves today and
+ * nothing else (App Review 3.1.2: sell what exists). What is promised but not built is not named at all, not even as
+ * "on the way" (2.1).
+ */
+export function WhatYouGet({ features }: { features: readonly PlusFeature[] }) {
   return (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.heading} accessibilityRole="header" style={[font('heading', bold), styles.ink]}>
-      {children}
-    </Text>
+    <SettingsGroup title="What you get" sentence testID="plus-gets">
+      {features.map((row) => (
+        <SettingsRow key={row.title} icon={row.icon} title={row.title} hint={row.detail} trail="none" />
+      ))}
+    </SettingsGroup>
   )
 }
 
 /**
- * "What you get" (Flow 12 `GETS`, R3-G, D22): outlined rows on `surface`, what the server serves today and nothing else (App
- * Review 3.1.2: sell what exists). What is promised but not built is not named at all, not even as "on the way" (2.1).
+ * What no plan buys, as one row that opens its list in place (remaining-screens 01 A; it was a five-line card above
+ * the plans). The product's promise, one tap from the first screen.
  */
-export function WhatYouGet({ features }: { features: readonly PlusFeature[] }) {
-  const bold = useBoldText()
-  const contrast = useIncreaseContrast()
+export function NeverForSaleRow() {
+  const [open, setOpen] = useState(false)
   return (
-    <View style={styles.section}>
-      <PlusHeading>What you get</PlusHeading>
-      <View testID="plus-gets" style={[styles.list, contrast && IC_HAIRLINE]}>
-        {features.map((row, i) => (
-          <Fragment key={row.title}>
-            {i ? <View style={styles.hairline} /> : null}
-            <View accessible accessibilityLabel={`${row.title}. ${row.detail}`} style={styles.feature}>
-              <Icon name={row.icon} size={FEATURE_ICON} color={COLOR.textPrimary} />
-              <View style={styles.fill}>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>{row.title}</Text>
-                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>{row.detail}</Text>
-              </View>
-            </View>
-          </Fragment>
-        ))}
-      </View>
-    </View>
+    <SettingsGroup testID="plus-never">
+      <SettingsRow
+        icon="eye-off"
+        title="Never for sale, on any plan"
+        hint={open ? NEVER_FOR_SALE.join(' · ') : `${NEVER_FOR_SALE.length} things no plan buys. See the list`}
+        trail={open ? 'none' : 'chevron'}
+        onPress={open ? undefined : () => setOpen(true)}
+        testID="plus-never-row"
+      />
+    </SettingsGroup>
   )
 }
 
-/** One footer link: meta text on a 44 / 48 target. `link` opens a page; `button` does something. */
-function FooterLink({ label, role, onPress, disabled = false, busy = false }: { label: string; role: 'link' | 'button'; onPress: () => void; disabled?: boolean; busy?: boolean }) {
+/** One dock link: meta text on a 44 / 48 target. `link` opens a page; `button` does something. Greyed only while the store is already being asked. */
+function DockLink({ label, role, onPress, busy = false, disabled = false }: { label: string; role: 'link' | 'button'; onPress: () => void; busy?: boolean; disabled?: boolean }) {
   const bold = useBoldText()
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
+      disabled={busy || disabled}
       hitSlop={LINK_SLOP}
       accessibilityRole={role}
       accessibilityLabel={label}
-      accessibilityState={{ disabled, busy }}
+      accessibilityState={{ busy, disabled: busy || disabled }}
       style={({ pressed }) => (disabled ? styles.dimmed : pressed && styles.pressed)}
     >
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold, FONT_FAMILY.brand[700]), styles.secondary]}>
+        {label}
+      </Text>
     </Pressable>
   )
 }
 
 /**
- * The store's legal wording (App Store 3.1.2 / Play: what renews, how to
- * cancel) beside the buttons, then Terms · Privacy · Restore purchases ·
- * Manage subscription. The wording is the platform's own (Flow 12 `legal`); it
- * is shown only where something is for sale.
+ * The store's renew line beside the buy button (App Store 3.1.2 / Play, remaining-screens 01 A): in the platform's
+ * own words, the Night Pass sentence only where a Night Pass is sold, and GST only when every price is in rupees.
  */
-export function PlusFooter({
-  forSale,
-  tax = null,
-  restoreDisabled,
-  restoring,
-  onTerms,
-  onPrivacy,
-  onRestore,
-  onManage,
-}: {
-  forSale: boolean
-  /** "Prices include GST." when every price is in rupees (`taxLine`, D2); null states no tax. */
-  tax?: string | null
-  restoreDisabled: boolean
-  restoring: boolean
-  onTerms: () => void
-  onPrivacy: () => void
-  onRestore: () => void
-  onManage: () => void
-}) {
-  const bold = useBoldText()
-  const links = [
-    { label: 'Terms', role: 'link', onPress: onTerms },
-    { label: 'Privacy', role: 'link', onPress: onPrivacy },
-    { label: 'Restore purchases', role: 'button', onPress: onRestore, disabled: restoreDisabled, busy: restoring },
-    { label: 'Manage subscription', role: 'button', onPress: onManage },
-  ] as const
-  return (
-    <View style={styles.footer}>
-      {forSale ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.tertiary]}>{[LEGAL[Platform.OS === 'android' ? 'android' : 'ios'], tax].filter(Boolean).join(' ')}</Text> : null}
-      <View style={styles.links}>
-        {links.map((link, i) => (
-          <Fragment key={link.label}>
-            {i ? (
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[font('meta', bold), styles.tertiary]}>
-                ·
-              </Text>
-            ) : null}
-            <FooterLink {...link} />
-          </Fragment>
-        ))}
-      </View>
-    </View>
-  )
+export function disclosureLine(platform: 'ios' | 'android', nightPass: boolean, tax: string | null): string {
+  return [LEGAL[platform], nightPass ? 'Night Pass is a one-off.' : null, tax].filter(Boolean).join(' ')
 }
 
-export const LEGAL = {
-  ios: 'Payment is charged to your Apple Account at confirmation. Subscriptions renew automatically unless cancelled at least 24 hours before the end of the current period; manage or cancel in Settings › Apple Account › Subscriptions. Night Pass is a one-off.',
-  android:
-    'Payment is charged to your Google Play account at confirmation. Subscriptions renew automatically unless cancelled before the end of the current period; cancel anytime in Google Play › Payments & subscriptions. Night Pass is a one-off.',
+const LEGAL = {
+  ios: 'Charged to your Apple Account. Renews automatically unless cancelled at least 24 hours before the period ends; cancel in Settings › Apple Account › Subscriptions.',
+  android: 'Charged to your Google Play account. Renews automatically until you cancel in Google Play › Payments & subscriptions.',
 } as const
 
 const styles = StyleSheet.create({
@@ -316,19 +297,16 @@ const styles = StyleSheet.create({
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 2, paddingTop: SPACE.lg, paddingHorizontal: SPACE.xl, gap: SPACE.md },
   dockContrast: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   dockLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm },
-  hero: { alignItems: 'center', gap: SPACE.sm, paddingTop: SPACE.sm },
-  section: { gap: SPACE.md },
+  hero: { alignItems: 'center', gap: SPACE.xs },
+  heroLarge: { alignItems: 'flex-start' },
   note: { paddingHorizontal: SPACE.xs },
-  list: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, overflow: 'hidden' },
-  feature: { flexDirection: 'row', alignItems: 'center', gap: FEATURE_GAP, minHeight: FEATURE_MIN_HEIGHT, paddingVertical: SPACE.md, paddingHorizontal: SPACE.lg },
-  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: COLOR.hairline },
   fill: { flex: 1 },
-  footer: { gap: SPACE.md },
-  links: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: SPACE.sm },
+  // design-exception: the board spaces the dock's links 14 apart (`gap:14px`), between SPACE.md and SPACE.lg.
+  links: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 14 },
   ink: { color: COLOR.textPrimary },
   secondary: { color: COLOR.textSecondary },
   tertiary: { color: COLOR.textTertiary },
   centre: { textAlign: 'center' },
-  dimmed: { opacity: OPACITY.disabled },
   pressed: { opacity: OPACITY.pressed },
+  dimmed: { opacity: OPACITY.disabled },
 })

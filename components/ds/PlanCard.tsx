@@ -16,6 +16,9 @@ const RING_OFF = 1.5
 const RING_OFF_ALPHA = 0.35
 /** The hairline between rows starts past the ring (the page's 50 pt inset). */
 const HAIRLINE_INSET = SPACE.lg + RING + SPACE.md
+/** A plan card's edge (remaining-screens 01 A): 1 pt hairline, 2 pt in the hue when picked. */
+const CARD_EDGE_OFF = 1
+const CARD_EDGE_ON = 2
 /** The rule that sets the Night Pass apart: 22% white (Flow 12 `page`). */
 const APART_ALPHA = 0.22
 
@@ -58,8 +61,8 @@ export function PlanCard({ name, price, per, sub, selected = false, onPress, dis
       <Pressable
         testID={testID}
         onPress={() => {
-          if (selected) return
-          H.select()
+          // A pick plays the cue; a re-tap is passed on silently (Manage's plans open the paywall on any tap).
+          if (!selected) H.select()
           onPress?.()
         }}
         disabled={disabled}
@@ -115,19 +118,41 @@ export function NightPassRow(props: Omit<PlanCardProps, 'name' | 'sub' | 'per'>)
  * on Android's solid one (the Tonight sheet). `apartFrom`: the index of the
  * row the page sets apart (the Night Pass, a one-off among subscriptions): the
  * rule before it is the 22% white one, inset 8 pt, not the row hairline.
+ * `cards`: each row its own `surface` card, 8 pt apart, radius 20, a 1 pt
+ * hairline edge, 2 pt in the hue when picked (the paywall and Manage,
+ * remaining-screens 01 A / 03 A); `apartFrom` does not apply.
  */
 export function PlanList({
   children,
   onSheet = false,
   apartFrom,
+  cards = false,
   testID,
 }: {
   children: ReactNode
   onSheet?: boolean
   apartFrom?: number
+  cards?: boolean
   testID?: string
 }) {
   const rows = Children.toArray(children).filter(isValidElement)
+  const sel = useSelection()
+  const contrast = useIncreaseContrast()
+  if (cards) {
+    return (
+      <View testID={testID} accessibilityRole="radiogroup" style={styles.cards}>
+        {rows.map((row, i) => {
+          const picked = (row.props as { selected?: boolean }).selected === true
+          const edge = picked ? { borderWidth: CARD_EDGE_ON, borderColor: sel.edge } : { borderWidth: CARD_EDGE_OFF, borderColor: contrast ? MATERIAL.hairlineIncreaseContrast : COLOR.hairline }
+          return (
+            <View key={row.key ?? i} testID={testID && `${testID}-card-${i}`} style={[styles.card, edge]}>
+              {row}
+            </View>
+          )
+        })}
+      </View>
+    )
+  }
   const fill = !onSheet ? COLOR.surface : Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass
   return (
     <View testID={testID} accessibilityRole="radiogroup" style={[styles.list, { backgroundColor: fill }]}>
@@ -155,6 +180,8 @@ const styles = StyleSheet.create({
   text: { flex: 1 },
   ink: { color: COLOR.textPrimary },
   list: { borderRadius: RADIUS.sheet, overflow: 'hidden' },
+  cards: { gap: SPACE.sm },
+  card: { borderRadius: RADIUS.tile, backgroundColor: COLOR.surface, overflow: 'hidden' },
   hairline: { height: StyleSheet.hairlineWidth, marginLeft: HAIRLINE_INSET, backgroundColor: COLOR.hairline },
   apart: { height: StyleSheet.hairlineWidth, marginVertical: SPACE.xs, marginHorizontal: SPACE.sm, backgroundColor: tint(COLOR.textPrimary, APART_ALPHA) },
 })

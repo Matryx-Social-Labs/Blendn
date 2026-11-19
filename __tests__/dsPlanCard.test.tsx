@@ -9,7 +9,7 @@ import React from 'react'
 import { Platform, StyleSheet } from 'react-native'
 
 import { NightPassRow, PlanCard, PlanList } from '../components/ds/PlanCard'
-import { COLOR, MATERIAL } from '../lib/design/tokens'
+import { COLOR, MATERIAL, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
@@ -42,6 +42,22 @@ describe('<PlanCard>', () => {
     await render(<PlanCard name="Monthly" price="₹199" per="/ month" selected onPress={onPress} testID="p" />)
     await fireEvent.press(screen.getByTestId('p'))
     expect(select).toHaveBeenCalledTimes(1)
+    // The re-tap itself is passed on (Manage's plans open the paywall on any tap). Negative control: the old early return.
+    expect(onPress).toHaveBeenCalledTimes(2)
+  })
+
+  // remaining-screens 01 A. Negative control: the one-list rows (no card per plan) fail it.
+  it('as cards: each plan its own card, 8 apart, the picked one edged 2 pt in the hue, the rest 1 pt', async () => {
+    await render(
+      <PlanList cards testID="l">
+        <PlanCard key="m" name="Monthly" price="₹199" onPress={jest.fn()} />
+        <PlanCard key="y" name="Yearly" price="₹1,499" selected onPress={jest.fn()} />
+      </PlanList>
+    )
+    expect(StyleSheet.flatten(screen.getByTestId('l').props.style).gap).toBe(SPACE.sm)
+    expect(StyleSheet.flatten(screen.getByTestId('l-card-0').props.style).borderWidth).toBe(1)
+    expect(StyleSheet.flatten(screen.getByTestId('l-card-1').props.style).borderWidth).toBe(2)
+    expect(screen.queryByTestId('l-hairline')).toBeNull()
   })
 
   it('no “most popular”, no strike-through: just the row', async () => {

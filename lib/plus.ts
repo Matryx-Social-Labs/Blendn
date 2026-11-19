@@ -35,6 +35,18 @@ export type PlusStatus = {
   grant?: PlusGrant | null
 }
 
+/**
+ * What no plan buys (Flow 12 `NEVER`): the product's promise, the paywall's one row opened (remaining-screens 01 A,
+ * the board's words).
+ */
+export const NEVER_FOR_SALE = [
+  'Seeing who liked you',
+  'more asks than the caps',
+  'a venue’s room without going',
+  'a way round the reveal',
+  'boosting yourself',
+] as const
+
 export type PlusFeature = { icon: IconName; title: string; detail: string }
 
 /**
@@ -166,16 +178,6 @@ export async function waitForPlus(
   return null
 }
 
-/**
- * What the dock does. A subscription the stores run is managed there: the dock
- * reads "Manage Blend’n+". Everything else keeps the buy button — a Night Pass
- * stacks (another adds 24 hours), and a granted account (App Review's) must
- * still be able to buy every product (guideline 2.1(b)).
- */
-export function dockMode(status: PlusStatus | null | undefined): 'buy' | 'manage' {
-  return status?.active && status.product === 'plus' && (status.source === 'apple' || status.source === 'google') ? 'manage' : 'buy'
-}
-
 /** A subscription's row: the short name and the unit beside the store's price string. */
 const PLAN_ROWS: Record<string, { name: string; per: string }> = {
   $rc_monthly: { name: 'Monthly', per: '/ month' },
@@ -191,12 +193,13 @@ const MONTHS: Record<string, number> = { $rc_monthly: 1, $rc_three_month: 3, $rc
 /**
  * The sub line under a subscription row, from the store's own numbers (never a
  * price written here): "About ₹166 a month · Save 16%" against the monthly
- * package. Monthly itself has none; no "Save" when the store's prices do not
+ * package. Monthly says "Renews every month"; no "Save" when the store's prices do not
  * say it saves; null when the store gave no monthly figure.
  */
 export function planSubline(offer: PlusOffer, offers: readonly PlusOffer[]): string | null {
   const months = MONTHS[offer.pkg.identifier]
-  if (!months || months === 1) return null
+  if (months === 1) return 'Renews every month'
+  if (!months) return null
   const { pricePerMonthString: each, pricePerMonth: perMonth } = offer.pkg.product
   if (!each) return null
   const monthly = offers.find((o) => o.pkg.identifier === '$rc_monthly')?.pkg.product.price
@@ -213,13 +216,13 @@ export function taxLine(offers: readonly PlusOffer[] | null | undefined): string
   return offers.every((o) => o.pkg.product.currencyCode === 'INR') ? GST_LINE : null
 }
 
-/** D4: what the store's subscriptions page can do. The App Store has no pause; Google Play does. */
-export const storeManageHint = (store: 'ios' | 'android'): string =>
-  store === 'android' ? 'Change plan, pause or cancel · one tap' : 'Change plan or cancel · one tap'
-
-/** D4: a granted Blend'n+ has no store row, only this. */
-export function grantManageLine(expiresAt: string | null | undefined): string {
-  return `Free ${expiresAt ? `until ${dateOf(expiresAt)}` : 'for now'} · nothing to manage`
+/**
+ * Manage's store row (remaining-screens 03 A): named for the store, and what cancelling costs — you keep it to the date.
+ * A grant has no store row at all.
+ */
+export function storeRow(store: 'ios' | 'android', expiresAt: string | null | undefined): { title: string; hint: string } {
+  const until = expiresAt ? `until ${dateOf(expiresAt)}` : 'to the end of the period'
+  return { title: `Change or cancel in ${store === 'android' ? 'Google Play' : 'the App Store'}`, hint: `You keep Blend’n+ ${until} if you cancel` }
 }
 
 /** The row for a subscription package; null for the Night Pass (its own row) or a package we do not name. */
@@ -227,22 +230,21 @@ export function planRowFor(offer: PlusOffer): { name: string; per: string } | nu
   return PLAN_ROWS[offer.pkg.identifier] ?? null
 }
 
-/** Monthly is picked first (the first subscription we sell); the Night Pass only when it is all there is. */
+/** Yearly is picked first where it is sold (remaining-screens 01 A), else the first subscription; the Night Pass only when it is all there is. */
 export function defaultPick(offers: readonly PlusOffer[]): string | null {
-  const first = offers.find((o) => !isNightPass(o)) ?? offers[0]
+  const first = offers.find((o) => o.pkg.identifier === '$rc_annual') ?? offers.find((o) => !isNightPass(o)) ?? offers[0]
   return first?.pkg.identifier ?? null
 }
 
 /**
- * The dock's button carries the price the person is about to pay, the store's
- * string: the words, the price (set in Geist Mono by the button), and the whole
- * as it is read.
+ * The dock's button restates the pick by name and carries the price the person is about to pay, the store's string
+ * ("Start Yearly · ₹1,499 / year", remaining-screens 01 A): the words, the price (set in Geist Mono by the button), and
+ * the whole as it is read.
  */
 export function ctaParts(offer: PlusOffer | undefined): { lead: string; price?: { amount: string; per?: string }; spoken: string } {
   if (!offer) return { lead: 'Start Blend’n+', spoken: 'Start Blend’n+' }
-  const lead = isNightPass(offer) ? 'Get the Night Pass —' : 'Start Blend’n+ —'
+  const lead = isNightPass(offer) ? 'Get the Night Pass ·' : `Start ${planRowFor(offer)?.name ?? 'Blend’n+'} ·`
   const per = isNightPass(offer) ? undefined : planRowFor(offer)?.per
   return { lead, price: { amount: offer.price, per }, spoken: `${lead} ${offer.price}${per ? ` ${per}` : ''}` }
 }
 
-export const ctaLabel = (offer: PlusOffer | undefined): string => ctaParts(offer).spoken

@@ -52,7 +52,6 @@ const CELLS = [
   'ds-badge-all',
   'ds-open-tonight-pending',
   'ds-plan-list',
-  'ds-neverforsale',
   'ds-manage-night',
   'ds-offer-why',
   'ds-open-share-unlisted',
