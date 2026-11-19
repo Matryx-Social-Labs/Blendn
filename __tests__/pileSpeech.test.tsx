@@ -5,7 +5,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { act, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import React from 'react'
 import { Platform, StyleSheet } from 'react-native'
 
@@ -148,5 +148,42 @@ describe('HomeShell keeps the map readable', () => {
   })
   it('draws the on-map lines with a screen reader on too', () => {
     expect(src).not.toMatch(/segment === 'events' && !screenReader \? \(\s*<MapBanners/)
+  })
+})
+
+/*
+ * Part 2 (pulse-map 10, map agent 2026-11-19): the map as a whole is spoken first, and the lit names (chips) get targets
+ * over the map too, since TalkBack cannot reach a Marker inside MapLibre's Android view (the same cause as the numbers).
+ */
+describe('PileSpeech: the summary and the chips', () => {
+  const box = { left: 0, top: 100, right: 390, bottom: 400 }
+  const chip = { id: 'v1', kind: 'event', at: [77.62, 12.97] as [number, number], speech: 'Church Street Social, 3 events. Tonight 8 PM, 200 m away' }
+
+  it('speaks the map summary along the top of the visible map, first, without taking its touches', async () => {
+    const { map, source } = setup([])
+    await render(<PileSpeech on map={map as never} source={source as never} box={box} settled={1} summary="Map. 2 events here." onExpand={jest.fn()} onOpen={jest.fn()} />)
+    await flush()
+    const summary = screen.getByLabelText('Map. 2 events here.')
+    expect(summary.props.pointerEvents).toBe('none')
+    expect(StyleSheet.flatten(summary.props.style)).toMatchObject({ position: 'absolute', left: 0, top: 100, width: 390, height: Platform.OS === 'ios' ? SIZE.targetIos : SIZE.targetAndroid })
+  })
+
+  it('gives each lit name a target at its point that opens it', async () => {
+    const { map, source } = setup([])
+    const onOpen = jest.fn()
+    await render(<PileSpeech on map={map as never} source={source as never} box={box} settled={1} chips={[chip]} onExpand={jest.fn()} onOpen={onOpen} />)
+    await flush()
+    const target = screen.getByLabelText(chip.speech)
+    expect(StyleSheet.flatten(target.props.style)).toMatchObject({ position: 'absolute' })
+    await fireEvent.press(target)
+    expect(onOpen).toHaveBeenCalledWith('event', 'v1')
+  })
+
+  it('says and draws nothing with the screen reader off', async () => {
+    const { map, source } = setup([])
+    await render(<PileSpeech on={false} map={map as never} source={source as never} box={box} settled={1} summary="Map." chips={[chip]} onExpand={jest.fn()} onOpen={jest.fn()} />)
+    await flush()
+    expect(screen.queryByLabelText('Map.')).toBeNull()
+    expect(screen.queryByLabelText(chip.speech)).toBeNull()
   })
 })

@@ -62,9 +62,9 @@ export type BannerProps = {
  * 50% hairline.
  */
 /** The floating controls' glass under a banner on the map, with the map's ink where glass cannot show (`useMapInk`). */
-function MapGlass({ testID }: { testID?: string }) {
+export function MapGlass({ testID, radius = RADIUS.rowInCard }: { testID?: string; radius?: number }) {
   const mapInk = useMapInk()
-  return <Material role="control" testID={testID} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.glass, mapInk]} />
+  return <Material role="control" testID={testID} pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius }, mapInk]} />
 }
 
 export function Banner({ kind, text, mono, icon, action, busy = false, onDismiss, onMap = false, testID }: BannerProps) {
@@ -207,7 +207,6 @@ export function VisibilityBanner({
 }
 
 const styles = StyleSheet.create({
-  glass: { borderRadius: RADIUS.rowInCard },
   banner: {
     borderRadius: RADIUS.rowInCard,
     paddingVertical: SPACE.md,

@@ -150,3 +150,101 @@ export function pileSpeech({ n, live, cluster }: { n: number; live: number; clus
   if (!cluster) return `${n} events at one place, double-tap to open the first`
   return live > 0 ? `${n} events here, ${live} on now, double-tap to zoom in` : `${n} events here, double-tap to zoom in`
 }
+
+/** An edge marker's distance from the map's edge (pt). */
+const EDGE_INSET = 8
+
+/**
+ * Where an off-frame venue's marker sits (pulse-map 05, "out of frame an edge marker points; it never flies"): inside the
+ * edge of the map you can see (`box`), on the line from its centre to the venue, the arrow turned to it (degrees
+ * clockwise from up). Null while the venue is in frame.
+ */
+export function edgeMarker(
+  xy: readonly [number, number],
+  box: { left: number; top: number; right: number; bottom: number },
+  size: { width: number; height: number }
+): { left: number; top: number; angle: number } | null {
+  const [x, y] = xy
+  // No room for it (the drawer full, say): nothing, rather than a marker squeezed over the chrome.
+  if (box.bottom - box.top < size.height + 2 * EDGE_INSET || box.right - box.left < size.width + 2 * EDGE_INSET) return null
+  if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) return null
+  const cx = (box.left + box.right) / 2
+  const cy = (box.top + box.bottom) / 2
+  const dx = x - cx
+  const dy = y - cy
+  const roomX = Math.max(0, (box.right - box.left) / 2 - size.width / 2 - EDGE_INSET)
+  const roomY = Math.max(0, (box.bottom - box.top) / 2 - size.height / 2 - EDGE_INSET)
+  const t = Math.min(dx ? roomX / Math.abs(dx) : Infinity, dy ? roomY / Math.abs(dy) : Infinity)
+  return {
+    left: Math.round(cx + dx * t - size.width / 2),
+    top: Math.round(cy + dy * t - size.height / 2),
+    angle: Math.round((Math.atan2(dx, -dy) * 180) / Math.PI),
+  }
+}
+
+/** Air kept between the stale callout and the edge marker (pt). */
+const CALLOUT_AIR = 6
+
+type CalloutRoom = { width: number; height: number; gap: number }
+
+/** The box the stale callout takes: centred on your dot, `gap` over it, or under it when `below`. */
+export function staleCalloutBox(dot: readonly [number, number], callout: CalloutRoom, below: boolean) {
+  const [x, y] = dot
+  const top = below ? y + callout.gap : y - callout.gap - callout.height
+  return { left: x - callout.width / 2, right: x + callout.width / 2, top, bottom: top + callout.height }
+}
+
+/** How much of `box` lies on `marker` grown by the air (pt², 0 when they are clear). */
+function overlapOn(box: ReturnType<typeof staleCalloutBox>, marker: { left: number; top: number; width: number; height: number }): number {
+  const w = Math.min(box.right, marker.left + marker.width + CALLOUT_AIR) - Math.max(box.left, marker.left - CALLOUT_AIR)
+  const h = Math.min(box.bottom, marker.top + marker.height + CALLOUT_AIR) - Math.max(box.top, marker.top - CALLOUT_AIR)
+  return w > 0 && h > 0 ? w * h : 0
+}
+
+/**
+ * Whether the stale callout hangs under your dot rather than over it. Over it is the board's place (pulse-map 06, "STALE");
+ * under it only when over it would meet the edge marker (iOS drive 2026-11-19: it ran 3 pt under the marker at the top of
+ * the map), and under it meets it less (Android re-drive: a marker level with the dot). `marker`: the marker as drawn.
+ */
+export function staleCalloutBelow(
+  dot: readonly [number, number],
+  callout: CalloutRoom,
+  marker: { left: number; top: number; width: number; height: number } | null
+): boolean {
+  if (!marker) return false
+  const over = overlapOn(staleCalloutBox(dot, callout, false), marker)
+  return over > 0 && overlapOn(staleCalloutBox(dot, callout, true), marker) < over
+}
+
+/**
+ * What the map says as a whole to a screen reader (pulse-map 10, "Map and number labels are spoken"): how many events are
+ * on the map you see and how many are on now, where you are, and the lap's venue when it is off the map. Plain words: the
+ * " · " of a line is read as a comma. No bounds yet (before the first stop): nothing about the events.
+ */
+export function mapSummary({
+  bounds,
+  pins,
+  you,
+  youLine,
+  edge,
+}: {
+  bounds: readonly [number, number, number, number] | null
+  pins: readonly { longitude: number; latitude: number; live: boolean }[]
+  you: YouMark['kind']
+  youLine: string | null
+  edge: { name: string; distance: string | null } | null
+}): string {
+  const parts = ['Map.']
+  if (bounds) {
+    const [west, south, east, north] = bounds
+    const here = pins.filter((p) => p.longitude >= west && p.longitude <= east && p.latitude >= south && p.latitude <= north)
+    const live = here.filter((p) => p.live).length
+    if (!here.length) parts.push('No events here.')
+    else parts.push(`${here.length} ${here.length === 1 ? 'event' : 'events'} here${live ? `, ${live} on now` : ''}.`)
+  }
+  if (you === 'precise') parts.push('You are on the map.')
+  if (you === 'approximate') parts.push('Your location is approximate.')
+  if (you === 'stale' && youLine) parts.push(`${youLine.replace(' · ', ', ')}.`)
+  if (edge) parts.push(`${edge.name} is off the map${edge.distance ? `, ${edge.distance} away` : ''}.`)
+  return parts.join(' ')
+}

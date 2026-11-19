@@ -175,6 +175,13 @@ describe('the banners', () => {
     expect(screen.queryByTestId('pulse-denied')).toBeNull()
   })
 
+  it('location denied can be put away (pulse-map 06: "dismissible")', async () => {
+    const onDeniedDismiss = jest.fn()
+    await render(<PulseBanners {...base} only="place" locationDenied onDeniedDismiss={onDeniedDismiss} />)
+    await fireEvent.press(within(screen.getByTestId('pulse-denied')).getByRole('button', { name: 'Dismiss' }))
+    expect(onDeniedDismiss).toHaveBeenCalledTimes(1)
+  })
+
   it('a coming-soon city the phone is in is said to be coming, not near', async () => {
     await render(<PulseBanners {...base} away={{ kind: 'comingSoon', deviceCity: 'Toronto', selected: 'Bengaluru' }} />)
     expect(screen.getByText('Toronto is coming soon. You’re browsing Bengaluru.')).toBeTruthy()
