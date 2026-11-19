@@ -53,7 +53,6 @@ describe('the preset is a fade on the tokens, kept under Reduce Motion', () => {
 const SITES: [string, number][] = [
   ['app/onboarding/basics.tsx', 1], // the under-age sign-out
   ['app/offer/[id].tsx', 1], // the regular ask, on and off
-  ['app/plus-manage.tsx', 1], // the grant line
   ['components/plus/PlusSections.tsx', 2], // the dock's line, the dock's button
   ['components/profile/MatchingFields.tsx', 3], // dating, interested in, what kind
   ['components/board/BoardSections.tsx', 2], // the footer's answer, the refusal

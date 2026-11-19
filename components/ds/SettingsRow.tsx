@@ -229,10 +229,13 @@ export function SettingsGroup({
   title,
   children,
   danger = false,
+  sentence = false,
   testID,
 }: {
   title?: string
   children: ReactNode
+  /** The title in sentence case (Satoshi 13/18) where it names a moment, not a setting: Tips (remaining-screens 04 A). Default: the mono label. */
+  sentence?: boolean
   /** The Danger zone (Flow 7): no fill, a 1 pt outline in the destructive colour at 38%, and 24 pt more room above it. */
   danger?: boolean
   testID?: string
@@ -243,7 +246,7 @@ export function SettingsGroup({
   return (
     <View testID={testID} style={[styles.group, danger && styles.dangerRoom]}>
       {title ? (
-        <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[font('label', bold, FONT_FAMILY.brand[700]), styles.label, contrast && styles.labelContrast]}>
+        <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.label} style={[sentence ? font('note', bold, FONT_FAMILY.brand[500]) : font('label', bold, FONT_FAMILY.brand[700]), styles.label, contrast && styles.labelContrast]}>
           {title}
         </Text>
       ) : null}

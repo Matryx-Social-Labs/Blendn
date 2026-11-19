@@ -8,14 +8,11 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getMyPlus: jest.fn() } }))
 /* eslint-disable import/first */
 import { apiClient } from '../lib/apiClient'
 import {
-  ctaLabel,
   ctaParts,
   planSubline,
   defaultPick,
-  dockMode,
   GST_LINE,
-  grantManageLine,
-  storeManageHint,
+  storeRow,
   taxLine,
   PLUS_FEATURES,
   PLUS_POLL_EVERY_MS,
@@ -111,6 +108,7 @@ describe('the page\'s own rules', () => {
   const offer = (id: string, price: string) => ({ pkg: { identifier: id }, title: id, length: '', price }) as never
   const monthly = offer('$rc_monthly', '₹199.00')
   const night = offer('night_pass', '₹49.00')
+  const yearly = offer('$rc_annual', '₹1,499.00')
 
   it('what is promised but not served is never named, not even as "on the way" (App Review 2.1 / 3.1.2)', () => {
     expect(PLUS_FEATURES.map((f) => f.title).join(' ')).not.toMatch(/perks|crew|cosmetic/i)
@@ -126,10 +124,11 @@ describe('the page\'s own rules', () => {
     expect(taxLine(null)).toBeNull()
   })
 
-  it('says what each store can do, and that a grant has nothing to manage (D4)', () => {
-    expect(storeManageHint('ios')).toBe('Change plan or cancel · one tap')
-    expect(storeManageHint('android')).toBe('Change plan, pause or cancel · one tap')
-    expect(grantManageLine(null)).toBe('Free for now · nothing to manage')
+  // remaining-screens 03 A: the store row is named for the store and says what cancelling costs. Negative control: the old
+  // "Manage in the App Store" / "Change plan or cancel · one tap" pair fails both.
+  it('the store row: change or cancel in that store, and you keep Blend’n+ to the date', () => {
+    expect(storeRow('ios', '2027-10-25T10:00:00.000Z')).toEqual({ title: 'Change or cancel in the App Store', hint: 'You keep Blend’n+ until 25 Oct 2027 if you cancel' })
+    expect(storeRow('android', null)).toEqual({ title: 'Change or cancel in Google Play', hint: 'You keep Blend’n+ to the end of the period if you cancel' })
   })
 
   it('savings are the store’s own numbers: the monthly equivalent and the percent against Monthly; none for Monthly', () => {
@@ -139,7 +138,7 @@ describe('the page\'s own rules', () => {
     const q = sub('$rc_three_month', 499, 166.33, '₹166')
     const y = sub('$rc_annual', 1499, 124.92, '₹125')
     const all = [m, q, y]
-    expect(planSubline(m, all)).toBeNull()
+    expect(planSubline(m, all)).toBe('Renews every month')
     expect(planSubline(q, all)).toBe('About ₹166 a month · Save\u00A016%')
     expect(planSubline(y, all)).toBe('About ₹125 a month · Save\u00A037%')
     // The store does not say it saves: no "Save".
@@ -149,32 +148,20 @@ describe('the page\'s own rules', () => {
     expect(planSubline(sub('night_pass', 49, 49, '₹49'), all)).toBeNull()
   })
 
-  it('the dock’s price is split out for Geist Mono, and the whole is still what is read', () => {
-    expect(ctaParts(monthly)).toEqual({ lead: 'Start Blend’n+ —', price: { amount: '₹199.00', per: '/ month' }, spoken: 'Start Blend’n+ — ₹199.00 / month' })
-    expect(ctaParts(night)).toEqual({ lead: 'Get the Night Pass —', price: { amount: '₹49.00', per: undefined }, spoken: 'Get the Night Pass — ₹49.00' })
+  // remaining-screens 01 A: "Start Yearly · {store price} / year". Negative control: the old "Start Blend’n+ —" lead fails it.
+  it('the dock restates the pick by name, then the store’s price split out for Geist Mono; the whole is what is read', () => {
+    expect(ctaParts(monthly)).toEqual({ lead: 'Start Monthly ·', price: { amount: '₹199.00', per: '/ month' }, spoken: 'Start Monthly · ₹199.00 / month' })
+    expect(ctaParts(yearly)).toEqual({ lead: 'Start Yearly ·', price: { amount: '₹1,499.00', per: '/ year' }, spoken: 'Start Yearly · ₹1,499.00 / year' })
+    expect(ctaParts(night)).toEqual({ lead: 'Get the Night Pass ·', price: { amount: '₹49.00', per: undefined }, spoken: 'Get the Night Pass · ₹49.00' })
+    expect(ctaParts(undefined)).toEqual({ lead: 'Start Blend’n+', spoken: 'Start Blend’n+' })
   })
 
-  it('Monthly is picked first; the Night Pass only when it is all there is; nothing, when nothing is sold', () => {
+  // The board draws Yearly picked. Negative control: today's "first subscription" pick returns Monthly for the first case.
+  it('Yearly is picked first where it is sold, else the first subscription; the Night Pass only when it is all there is', () => {
+    expect(defaultPick([night, monthly, yearly])).toBe('$rc_annual')
     expect(defaultPick([night, monthly])).toBe('$rc_monthly')
     expect(defaultPick([night])).toBe('night_pass')
     expect(defaultPick([])).toBeNull()
-  })
-
-  it('the dock button carries the price of what is picked, in the store\'s string', () => {
-    expect(ctaLabel(monthly)).toBe('Start Blend’n+ — ₹199.00 / month')
-    expect(ctaLabel(night)).toBe('Get the Night Pass — ₹49.00')
-    expect(ctaLabel(undefined)).toBe('Start Blend’n+')
-  })
-
-  it('only a subscription the stores run is managed in the store; a grant and a pass keep the buy button', () => {
-    const at = (product: 'plus' | 'night_pass' | null, source: 'apple' | 'google' | 'grant' | null, active = true) =>
-      dockMode({ active, gated: true, product, source, expiresAt: null })
-    expect(at('plus', 'apple')).toBe('manage')
-    expect(at('plus', 'google')).toBe('manage')
-    expect(at('plus', 'grant')).toBe('buy')
-    expect(at('night_pass', 'google')).toBe('buy')
-    expect(at('plus', 'apple', false)).toBe('buy')
-    expect(dockMode(null)).toBe('buy')
   })
 })
 

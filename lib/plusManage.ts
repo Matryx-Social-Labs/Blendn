@@ -81,8 +81,9 @@ export function manageCard(status: PlusStatus | null | undefined, device: PlusSt
 
   if (status.source === 'grant') {
     if (status.grant === 'referral') return card('referral', `Your referral month runs ${date ? `to ${date}` : 'for now'}. Nothing renews unless you choose a plan.`)
-    // A trial or a gift we cannot tell apart: both end on their date and renew nothing.
-    return card(status.grant === 'trial' ? 'trial' : 'active', `Blend’n+ ${through(date, 'for now')} · nothing renews`)
+    if (status.grant === 'trial') return card('trial', `Blend’n+ ${through(date, 'for now')} · nothing renews`)
+    // A gift we cannot tell apart from any other: it ends on its date and costs nothing (remaining-screens 03 A).
+    return card('gift', `${date ? `Until ${date}` : 'For now'} · nothing renews, nothing to pay`)
   }
 
   // Bought outside the app (Razorpay): no store holds it, so no store is named and nothing points anywhere (OD-5, App Store 3.1.1).

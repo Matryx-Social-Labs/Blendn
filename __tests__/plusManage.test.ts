@@ -41,10 +41,12 @@ describe('what the server says today', () => {
     expect(c?.sentence).toBe('Until 9:42 PM tomorrow. It doesn’t renew; another one adds 24 hours.')
   })
 
-  it('a gift we cannot tell apart is not called a trial: until its date, nothing renews', () => {
+  // remaining-screens 03 A: "a gift from Blend’n", once (the duplicated grant line is gone). Negative control: the old 'active' card fails it.
+  it('a gift we cannot tell apart is not called a trial: a gift, until its date, nothing renews, nothing to pay', () => {
     const c = card({ source: 'grant', expiresAt: '2026-10-29T12:00:00' })
-    expect(c?.status).toBe('active')
-    expect(c?.sentence).toMatch(/^Blend’n\+ until .*29.* · nothing renews$/)
+    expect(c?.status).toBe('gift')
+    expect(c?.sentence).toMatch(/^Until .*29.* · nothing renews, nothing to pay$/)
+    expect(card({ source: 'grant', expiresAt: null })?.sentence).toBe('For now · nothing renews, nothing to pay')
   })
 
   it('a launch season: free for everybody, nothing renews', () => {

@@ -5,11 +5,13 @@
  */
 import React from 'react'
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
-import { AccessibilityInfo, Linking } from 'react-native'
+import { AccessibilityInfo, Linking, StyleSheet } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 
 const mockTrigger = { value: 'go_live_expiry' }
+const mockPlan: { value?: string } = {}
 const mockToast = jest.fn()
+const mockInsets = { top: 0, bottom: 0, left: 0, right: 0 }
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
@@ -19,11 +21,11 @@ jest.mock('expo-router', () => ({
   useNavigation: () => undefined,
   useFocusEffect: (effect: () => void | (() => void)) => require('react').useEffect(effect, [effect]),
   router: { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true },
-  useLocalSearchParams: () => ({ trigger: mockTrigger.value }),
+  useLocalSearchParams: () => ({ trigger: mockTrigger.value, plan: mockPlan.value }),
 }))
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => mockInsets,
 }))
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
@@ -55,6 +57,8 @@ import { subscribePaywallClosed } from '../lib/paywall'
 import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore } from '../lib/purchases'
 import { showSheet } from '../lib/sheet'
 import { dismissModals, LINK_HOLD_MAX_MS } from '../lib/pendingRoute'
+import { barHeight, barTop } from '../lib/barGeometry'
+import { SPACE } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
 const monthly = { pkg: { identifier: '$rc_monthly', product: { price: 199, pricePerMonth: 199, pricePerMonthString: '₹199' } }, title: 'Blendn+ · Monthly', length: '1 month, renews monthly', price: '₹199.00' }
@@ -70,8 +74,8 @@ const logged = () => (apiClient.logPaywallEvent as jest.Mock).mock.calls.map((c)
 /** The clock walk is ~1 s alone and several on a loaded machine (a full parallel run): it gets room, and a timeout cannot leave fake timers on for the tests after it. */
 const CLOCK_WALK_TIMEOUT_MS = 30_000
 
-const MONTHLY_CTA = 'Start Blend’n+ — ₹199.00 / month'
-const NIGHT_CTA = 'Get the Night Pass — ₹49.00'
+const MONTHLY_CTA = 'Start Monthly · ₹199.00 / month'
+const NIGHT_CTA = 'Get the Night Pass · ₹49.00'
 const button = (name: string) => screen.getByRole('button', { name })
 const plan = (id: string) => screen.getByTestId(`plan-${id}`)
 
@@ -85,6 +89,7 @@ afterEach(() => jest.useRealTimers())
 
 beforeEach(() => {
   mockTrigger.value = 'go_live_expiry'
+  mockPlan.value = undefined
   mockToast.mockClear()
   ;(apiClient.getMyPlus as jest.Mock).mockReset().mockResolvedValue(none)
   ;(buyPackage as jest.Mock).mockReset()
@@ -97,9 +102,9 @@ beforeEach(() => {
 
 it('lists the store\'s packages at the store\'s prices, says what Plus is, and logs "shown"', async () => {
   await mount()
-  expect(plan('$rc_monthly').props.accessibilityLabel).toBe('Monthly, 199.00 rupees a month')
+  expect(plan('$rc_monthly').props.accessibilityLabel).toBe('Monthly, 199.00 rupees a month, Renews every month')
   expect(screen.getAllByText('₹199.00', { includeHiddenElements: true }).length).toBeGreaterThanOrEqual(1)
-  expect(plan('night_pass').props.accessibilityLabel).toBe('Night Pass, 49.00 rupees, 24 hours · doesn’t renew')
+  expect(plan('night_pass').props.accessibilityLabel).toBe('Night Pass, 49.00 rupees, One night, 24 hours · doesn’t renew')
   expect(screen.getAllByText('₹49.00', { includeHiddenElements: true }).length).toBeGreaterThanOrEqual(1)
   expect(screen.getByText('Stay live while you’re there')).toBeTruthy()
   expect(screen.getByText('Never for sale, on any plan')).toBeTruthy()
@@ -115,29 +120,43 @@ it('a yearly row carries the store-computed savings under its name', async () =>
   expect(plan('$rc_annual').props.accessibilityLabel).toBe('Yearly, 1,499.00 rupees a year, About ₹125 a month · Save\u00A037%')
 })
 
-it('Monthly is picked first, the Night Pass is set apart, and the dock carries the picked price', async () => {
+// remaining-screens 01 A. Negative controls: today's Monthly-first pick, the "Start Blend’n+ —" lead and the one-list
+// rows (no `plus-plans-card-*`) each fail it.
+it('Yearly is picked first, each plan is its own card, and the dock restates the pick by name with its price', async () => {
   ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly, nightPass])
   await mount()
-  expect(plan('$rc_monthly').props.accessibilityState.checked).toBe(true)
-  expect(plan('night_pass').props.accessibilityState.checked).toBe(false)
-  expect(screen.getByTestId('plus-plans-apart')).toBeTruthy()
-  expect(button(MONTHLY_CTA)).toBeTruthy()
+  expect(plan('$rc_annual').props.accessibilityState.checked).toBe(true)
+  expect(plan('$rc_monthly').props.accessibilityState.checked).toBe(false)
+  expect(screen.getByTestId('plus-plans-card-2')).toBeTruthy()
+  expect(button('Start Yearly · ₹1,499.00 / year')).toBeTruthy()
   await act(async () => { fireEvent.press(plan('night_pass')) })
   expect(plan('night_pass').props.accessibilityState.checked).toBe(true)
   expect(button(NIGHT_CTA)).toBeTruthy()
-  await act(async () => { fireEvent.press(plan('$rc_annual')) })
-  expect(button('Start Blend’n+ — ₹1,499.00 / year')).toBeTruthy()
+  await act(async () => { fireEvent.press(plan('$rc_monthly')) })
+  expect(button(MONTHLY_CTA)).toBeTruthy()
+})
+
+// remaining-screens 01 A: the plans come before What you get and the never-sold row. Negative control: today's order
+// (features, the never-sold card, then the plans) fails it.
+it('the plans come first, then what you get, then the never-sold promise as one row that opens its list', async () => {
+  await mount()
+  const order = ['plan-$rc_monthly', 'plus-gets', 'plus-never-row'].map((id) => JSON.stringify(screen.toJSON()).indexOf(`"testID":"${id}"`))
+  expect(order.every((at) => at >= 0)).toBe(true)
+  expect([...order].sort((a, b) => a - b)).toEqual(order)
+  expect(screen.getByText('5 things no plan buys. See the list')).toBeTruthy()
+  await act(async () => { fireEvent.press(screen.getByTestId('plus-never-row')) })
+  expect(screen.getByText(/^Seeing who liked you · more asks than the caps · /)).toBeTruthy()
 })
 
 // D22 (App Review 2.1 / 3.1.2): sell what exists, and name nothing else. Negative control: the old "Coming soon" rows and
 // the "On the way: partner perks, cosmetics and crew extras." line both fail it.
 it('lists the shipped features only, and names nothing unbuilt, not even as on the way', async () => {
   await mount()
-  expect(screen.getByLabelText(/^Stay live while you’re there\./)).toBeTruthy()
+  expect(screen.getByText('Stay live while you’re there')).toBeTruthy()
   expect(screen.queryByText('Coming soon')).toBeNull()
   expect(screen.queryByText(/on the way/i)).toBeNull()
   expect(screen.queryByText(/partner perks|cosmetics|crew extras/i)).toBeNull()
-  expect(screen.queryByLabelText(/^Partner perks\./)).toBeNull()
+  expect(screen.queryByText(/^Partner perks/)).toBeNull()
 })
 
 it('never buys while RevenueCat is not this account: the plans and the button are off and say so', async () => {
@@ -160,7 +179,7 @@ it('a purchase is logged, then the SERVER is asked until it says active', async 
   expect(buyPackage).toHaveBeenCalledWith(monthly.pkg, 'u1')
   expect(logged()).toEqual(['shown', 'purchase_started', 'purchased'])
   expect(screen.getByText("You’re in.")).toBeTruthy()
-  expect(screen.getByText(/^Blend’n\+ until /)).toBeTruthy()
+  expect(screen.getByText(/^Until .* · nothing renews, nothing to pay$/)).toBeTruthy()
 })
 
 it('buys the package that is picked, not the first', async () => {
@@ -333,55 +352,58 @@ describe('restore always ends in a visible result', () => {
   })
 })
 
+// remaining-screens 02 A: somebody who already has Blend’n+ gets no plans and no Start; the dock opens Manage, whose plans
+// bring them back here with one picked. Negative control: today's plans + Start under the status card fail the first four.
 describe('what is already active', () => {
-  it('a granted account still sees the plans and can buy every product (App Review buys with a granted account)', async () => {
+  it('a granted account: the gift card, no plans, no Start; Done, and the dock opens Manage', async () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(granted)
-    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'cancelled' })
     await mount()
-    expect(screen.getByText(/^Blend’n\+ until /)).toBeTruthy()
-    expect(screen.getByText('Blend’n+ · active')).toBeTruthy()
-    await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
-    expect(buyPackage).toHaveBeenCalled()
+    expect(screen.getByText('Blend’n+ · a gift from Blend’n')).toBeTruthy()
+    expect(screen.queryByTestId('plan-$rc_monthly')).toBeNull()
+    expect(screen.queryByRole('button', { name: MONTHLY_CTA })).toBeNull()
+    expect(screen.queryByTestId('plus-disclosure')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy()
+    await act(async () => { fireEvent.press(button('Manage Blend’n+')) })
+    expect(router.push).toHaveBeenCalledWith('/plus-manage')
   })
 
-  it('a Night Pass says until when, that it does not renew, and the dock still sells another', async () => {
+  it('a plan picked on Manage is sold here with it picked, granted or not (App Review buys from a granted account)', async () => {
+    mockPlan.value = '$rc_annual'
+    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(granted)
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly, nightPass])
+    ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'cancelled' })
+    await mount()
+    expect(plan('$rc_annual').props.accessibilityState.checked).toBe(true)
+    await act(async () => { fireEvent.press(button('Start Yearly · ₹1,499.00 / year')) })
+    expect(buyPackage).toHaveBeenCalledWith(yearly.pkg, 'u1')
+  })
+
+  it('a Night Pass says until when and that it does not renew; another is bought from Manage', async () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(pass)
     await mount()
     expect(screen.getByText(/^Until .*\d:\d{2}.*\. It doesn’t renew; another one adds 24 hours\.$/)).toBeTruthy()
     expect(screen.getByText('Night Pass · 24 hours')).toBeTruthy()
-    expect(button(MONTHLY_CTA)).toBeTruthy()
+    expect(screen.queryByTestId('plan-night_pass')).toBeNull()
+    expect(button('Manage Blend’n+')).toBeTruthy()
   })
 
-  it('a subscriber gets Manage and no purchase: the plans are drawn but locked, and a tap picks nothing', async () => {
+  it('a store subscription: what it is, no plans, and the dock opens Manage', async () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(subscribed)
-    ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly, nightPass])
     await mount()
-    for (const id of ['$rc_monthly', '$rc_annual', 'night_pass']) expect(plan(id).props.accessibilityState.disabled).toBe(true)
-    await act(async () => { fireEvent.press(plan('night_pass')) })
-    expect(plan('night_pass').props.accessibilityState.checked).toBe(false)
-    expect(buyPackage).not.toHaveBeenCalled()
+    expect(screen.getByText(/^Blend’n\+ until .* · App Store$/)).toBeTruthy()
+    expect(screen.queryByTestId('plan-$rc_monthly')).toBeNull()
+    await act(async () => { fireEvent.press(button('Manage Blend’n+')) })
+    expect(router.push).toHaveBeenCalledWith('/plus-manage')
   })
 
-  // OD-5 default (M5): Plus bought outside the app is not bought again here (a double charge). Negative control: dropping `outside` from `locked` or the dock action fails both.
-  it('a Razorpay-sourced Plus gets no buy dock and no pickable plan', async () => {
+  // OD-5 default (M5): Plus bought outside the app is not bought again here (a double charge).
+  it('a Razorpay-sourced Plus gets no plans and no buy; it says it is managed outside the app', async () => {
     ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue({ success: true, data: { active: true, gated: true, product: 'plus', source: 'razorpay', expiresAt: '2027-10-23T12:00:00.000Z' } })
     ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly, nightPass])
     await mount()
-    expect(screen.queryByRole('button', { name: MONTHLY_CTA })).toBeNull()
-    expect(screen.queryByRole('button', { name: /^Manage Blend’n\+/ })).toBeNull()
-    for (const id of ['$rc_monthly', '$rc_annual', 'night_pass']) expect(plan(id).props.accessibilityState.disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
+    expect(screen.queryByTestId('plan-$rc_monthly')).toBeNull()
     expect(screen.getByText(/Managed outside the app/)).toBeTruthy()
-  })
-
-  it('a store subscription is managed in the store: the dock reads Manage, and opens the store', async () => {
-    ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(subscribed)
-    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
-    await mount()
-    expect(screen.getByText(/^Blend’n\+ until .* · App Store$/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: MONTHLY_CTA })).toBeNull()
-    await act(async () => { fireEvent.press(button('Manage Blend’n+')) })
-    expect(open).toHaveBeenCalledWith('https://apps.apple.com/account/subscriptions')
-    open.mockRestore()
   })
 })
 
@@ -394,7 +416,7 @@ it('"Not now" closes, and leaving without buying is logged as dismissed; after a
 
   ;(apiClient.logPaywallEvent as jest.Mock).mockClear()
   ;(buyPackage as jest.Mock).mockResolvedValue({ kind: 'purchased' })
-  ;(apiClient.getMyPlus as jest.Mock).mockResolvedValue(granted)
+  ;(apiClient.getMyPlus as jest.Mock).mockResolvedValueOnce(none).mockResolvedValue(granted)
   const second = await mount()
   await act(async () => { fireEvent.press(button(MONTHLY_CTA)) })
   await act(async () => { second.unmount() })
@@ -405,6 +427,87 @@ it('the back circle is a way out too', async () => {
   await mount()
   await act(async () => { fireEvent.press(button('Back')) })
   expect(router.back).toHaveBeenCalled()
+})
+
+// remaining-screens 02 A (AX): the dock keeps the button and the board's short renew line; the full disclosure and Restore ·
+// Terms · Privacy move to the end of the page, so the plans keep the screen. Negative control: the full dock at AX (drive
+// 2026-11-19: it covered the plans) fails the first half; the short line at 1x fails the second.
+describe('the dock at the largest text sizes', () => {
+  const RN = jest.requireActual('react-native') as typeof import('react-native')
+  const at = (fontScale: number) => jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({ width: 402, height: 874, scale: 3, fontScale })
+  it('AX: the short line in the dock; the full disclosure and the links at the end of the page', async () => {
+    const spy = at(2)
+    try {
+      await mount()
+      expect(within(screen.getByTestId('plus-dock')).getByText('Renews automatically. Cancel in Settings › Apple Account.')).toBeTruthy()
+      expect(within(screen.getByTestId('plus-dock')).queryByText(/^Charged to your Apple Account/)).toBeNull()
+      expect(within(screen.getByTestId('plus-scroll')).getByText(/^Charged to your Apple Account/)).toBeTruthy()
+      expect(within(screen.getByTestId('plus-scroll')).getByRole('button', { name: 'Restore purchases' })).toBeTruthy()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('1x: the full disclosure and the links in the dock, beside the button', async () => {
+    const spy = at(1)
+    try {
+      await mount()
+      expect(within(screen.getByTestId('plus-dock')).getByText(/^Charged to your Apple Account/)).toBeTruthy()
+      expect(within(screen.getByTestId('plus-dock')).getByRole('button', { name: 'Restore purchases' })).toBeTruthy()
+      expect(screen.queryByText('Renews automatically. Cancel in Settings › Apple Account.')).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
+// remaining-screens 01 A, the ±1 pt overlays (2026-11-19): the board starts the hero 32–34 pt under the circle row (in the
+// bar's band: the mark is centred between the circle and "Not now"), spaces the sections 14 apart (SPACE.md, the nearest of
+// 12 / 16 to a page whose DS rows already run taller), and the dock 12 in with 8 between (`padding:12px 20px 30px; gap:8px`),
+// its last line on the home-indicator inset. Negative control: the old `headerHeight + SPACE.sm`, `SPACE.lg` gaps and the
+// dock's `SPACE.lg` / `SPACE.md` / inset + 16 fail every expectation of the first test.
+describe('spaced as the board', () => {
+  const RN = jest.requireActual('react-native') as typeof import('react-native')
+  const at = (fontScale: number) => jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({ width: 402, height: 874, scale: 3, fontScale })
+  const content = () => StyleSheet.flatten(screen.getByTestId('plus-scroll').props.contentContainerStyle)
+  const dock = () => StyleSheet.flatten(screen.getByTestId('plus-dock').props.style)
+  afterEach(() => Object.assign(mockInsets, { top: 0, bottom: 0 }))
+
+  it('1x: the hero 32 under the circle row, sections 12 apart, the dock 12 in, 8 between, down to the inset', async () => {
+    Object.assign(mockInsets, { top: 62, bottom: 34 })
+    const spy = at(1)
+    try {
+      await mount()
+      expect(content().paddingTop).toBe(barTop(62) + SPACE.xxl)
+      expect(content().gap).toBe(SPACE.md)
+      expect(dock().paddingTop).toBe(SPACE.md)
+      expect(dock().gap).toBe(SPACE.sm)
+      expect(dock().paddingBottom).toBe(34)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('a phone with no bottom inset still keeps the links 16 off the edge', async () => {
+    const spy = at(1)
+    try {
+      await mount()
+      expect(dock().paddingBottom).toBe(SPACE.lg)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('AX: the wordmark sits at the left edge, where the back circle is, so the page starts under the bar', async () => {
+    Object.assign(mockInsets, { top: 62, bottom: 34 })
+    const spy = at(2)
+    try {
+      await mount()
+      expect(content().paddingTop).toBe(barHeight(62, false) + SPACE.sm)
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
 
 describe('never sells what is free (review H2)', () => {
@@ -422,7 +525,7 @@ describe('never sells what is free (review H2)', () => {
     mockTrigger.value = 'profile'
     await mount()
     expect(plan('$rc_monthly')).toBeTruthy()
-    expect(screen.getByText(/Subscriptions renew automatically/)).toBeTruthy()
+    expect(screen.getByText(/^Charged to your Apple Account\. Renews automatically unless cancelled /)).toBeTruthy()
   })
 
   it('a gated moment (a PLUS_REQUIRED) always lists them', async () => {
@@ -451,7 +554,7 @@ describe('prices and the server, honestly', () => {
     await screen.unmount()
     ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, nightPass].map((o) => ({ ...o, pkg: { ...o.pkg, product: { ...o.pkg.product, currencyCode: 'USD' } } })))
     await mount()
-    expect(screen.getByText(/renew automatically/)).toBeTruthy()
+    expect(screen.getAllByText(/Renews automatically/).length).toBeGreaterThan(0)
     expect(screen.queryByText(/GST/)).toBeNull()
   })
 
@@ -459,20 +562,39 @@ describe('prices and the server, honestly', () => {
     ;(loadPlusOffers as jest.Mock).mockResolvedValueOnce(null).mockResolvedValue([monthly])
     await mount()
     expect(screen.getByText('Couldn’t load prices')).toBeTruthy()
-    // Nothing to buy: no dock offering a disabled button over the page.
-    expect(screen.queryByTestId('plus-dock')).toBeNull()
+    // Nothing to buy: the dock keeps its links and offers no disabled button over the page.
+    expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
+    expect(button('Restore purchases')).toBeTruthy()
     await act(async () => { fireEvent.press(button('Try again')) })
     expect(plan('$rc_monthly')).toBeTruthy()
-    expect(screen.getByTestId('plus-dock')).toBeTruthy()
+    expect(button(MONTHLY_CTA)).toBeTruthy()
   })
 
-  it('"Purchases aren\'t available yet" when the store keys are off: the plans are dimmed and Restore is off', async () => {
-    ;(purchasesAvailable as jest.Mock).mockReturnValue(false)
+  // remaining-screens 02 A. Negative control: today's "Plans" heading over "Purchases aren’t available yet" and a dead
+  // gradient button fails it.
+  it.each([
+    ['the store keys are off', () => (purchasesAvailable as jest.Mock).mockReturnValue(false)],
+    ['the store has no products', () => (loadPlusOffers as jest.Mock).mockResolvedValue([])],
+  ])('%s: says so once, no plans, and Restore is the one action', async (_, arrange) => {
+    arrange()
+    ;(restore as jest.Mock).mockResolvedValue({ kind: 'nothing' })
+    await mount()
+    expect(screen.getByText('Plans aren’t on sale here yet')).toBeTruthy()
+    expect(screen.queryByTestId('plan-$rc_monthly')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Restore purchases' })).toHaveLength(1)
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    expect(restore).toHaveBeenCalled()
+  })
+
+  // Restore is never greyed: where the store is not this account it says so. Negative control: the old silent return.
+  it('Restore where the store is not this account says so, and asks the store nothing', async () => {
     ;(canBuyAs as jest.Mock).mockResolvedValue(false)
     await mount()
-    expect(screen.getByText('Purchases aren’t available yet.')).toBeTruthy()
-    expect(plan('$rc_monthly').props.accessibilityState.disabled).toBe(true)
-    expect(button('Restore purchases').props.accessibilityState.disabled).toBe(true)
+    expect(button('Restore purchases').props.accessibilityState.disabled).toBe(false)
+    await act(async () => { fireEvent.press(button('Restore purchases')) })
+    expect(restore).not.toHaveBeenCalled()
+    expect(screen.getByText('We couldn’t connect your account to the store. Close this and try again.')).toBeTruthy()
   })
 
   it('when GET /me/plus fails and nothing else says Plus is for sale: one state with Try again, which asks again', async () => {
@@ -487,7 +609,7 @@ describe('prices and the server, honestly', () => {
     expect(screen.queryByText('Couldn’t load Blend’n+')).toBeNull()
   })
 
-  it('the failed state keeps Restore and Manage (they do not depend on the status)', async () => {
+  it('the failed state keeps Restore, Terms and Privacy (they do not depend on the status)', async () => {
     mockTrigger.value = 'profile'
     ;(apiClient.getMyPlus as jest.Mock).mockRejectedValue(new Error('offline'))
     ;(restore as jest.Mock).mockResolvedValue({ kind: 'nothing' })
@@ -495,7 +617,8 @@ describe('prices and the server, honestly', () => {
     expect(screen.getByText('Couldn’t load Blend’n+')).toBeTruthy()
     await act(async () => { fireEvent.press(button('Restore purchases')) })
     expect(restore).toHaveBeenCalled()
-    expect(button('Manage subscription')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Terms' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Manage subscription' })).toBeNull()
   })
 
   it('a gated moment still sells when the status ask failed', async () => {
