@@ -119,6 +119,7 @@ export function HomeDrawer({
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        .withTestId('home-drawer-pan')
         // Vertical intent only, so a tap on a segment stays a tap.
         .activeOffsetY([-8, 8])
         .onStart(() => {
