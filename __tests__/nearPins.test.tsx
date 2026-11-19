@@ -71,8 +71,17 @@ describe('VoiceOver names each map annotation', () => {
   })
 
   it('a chip: its own spoken line', async () => {
-    const chip = { id: 'v1', kind: 'venue' as const, live: true, title: 'Toit', line: '10+ live', speech: 'Toit, live now. Opens it.', at: [77.6, 12.9] as [number, number], lift: 0 }
+    const chip = { id: 'v1', kind: 'venue' as const, live: true, title: 'Toit', line: '10+ live', speech: 'Toit, live now. Opens it.', at: [77.6, 12.9] as [number, number], lift: 0, count: 1 }
     await render(<Chips chips={[chip]} onOpen={jest.fn()} />)
     expect(screen.getByTestId('marker-chip-v1').props.title).toBe('Toit, live now. Opens it.')
+  })
+
+  // Several events at one venue (pulse-map 12 A): the chip carries the count, ink on the brand orange.
+  it('a chip for several events shows their count beside the name; one event shows none', async () => {
+    const base = { id: 'e1', kind: 'event' as const, live: false, title: 'Church Street Social', line: 'Sun · 8 PM', speech: 'x', at: [77.6, 12.9] as [number, number], lift: 0 }
+    await render(<Chips chips={[{ ...base, count: 3 }]} onOpen={jest.fn()} />)
+    expect(screen.getByTestId('map-chip-count-e1', { includeHiddenElements: true })).toBeTruthy()
+    await render(<Chips chips={[{ ...base, id: 'e2', count: 1 }]} onOpen={jest.fn()} />)
+    expect(screen.queryByTestId('map-chip-count-e2', { includeHiddenElements: true })).toBeNull()
   })
 })

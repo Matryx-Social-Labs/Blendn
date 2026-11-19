@@ -8,7 +8,7 @@ import {
   chipBox,
   chipLiftPx,
   chipLine,
-  chipSpeech,
+  stackedChip,
   dedupeLit,
   glowFor,
   nearestTo,
@@ -28,10 +28,12 @@ import { SPACE } from '../../lib/design/tokens'
 export type Segment = 'events' | 'places'
 export type Collection<F> = { type: 'FeatureCollection'; features: F[] }
 /** A name above a lit roof. */
-export type Chip = { id: string; kind: Pin['kind']; live: boolean; title: string; line: string; speech: string; at: LngLat; lift: number }
+/** `count`: the events the lit place stands for (several at one venue: its name and the count, pulse-map 12 A). */
+export type Chip = { id: string; kind: Pin['kind']; live: boolean; title: string; line: string; speech: string; at: LngLat; lift: number; count: number }
 /** A building in our tiles lit through feature-state: its id, and the pin it stands for (a tap on it opens that). */
 export type LitState = { featureId: number; pinId: string; kind: Pin['kind']; live: boolean }
-export type Lit = { bands: Collection<BandFeature>; glow: Collection<GlowFeature>; chips: Chip[]; states: LitState[] }
+/** `pinIds`: every pin a light stands for. The light is their mark, so their dots hand over to it (pulse-map 12 A). */
+export type Lit = { bands: Collection<BandFeature>; glow: Collection<GlowFeature>; chips: Chip[]; states: LitState[]; pinIds: string[] }
 /** The settled camera, as the last region change reported it. */
 export type MapView = { bounds: Bounds | null; centre: LngLat | null; zoom: number; pitch: number }
 
@@ -45,7 +47,7 @@ const CHIP_POOL = 3
 /** The person's dot, and the ring around it, as a box either side of the fix. */
 const USER_DOT_HALF_PX = 22
 const SIDE_GUTTER = SPACE.lg
-export const NO_LIT: Lit = { bands: collection([]), glow: collection([]), chips: [], states: [] }
+export const NO_LIT: Lit = { bands: collection([]), glow: collection([]), chips: [], states: [], pinIds: [] }
 
 /**
  * Lighting the pins on the home map (step 2c): which building each one stands
@@ -198,13 +200,12 @@ export function useMapLighting({
       places.push({ id: p.id, kind: p.kind, live: p.live, at: [p.longitude, p.latitude], building, pin: p })
     }
     const kept = dedupeLit(places)
-    const chipFor = (p: LitPlace & { pin: Pin }): Chip => ({
+    const chipFor = (p: LitPlace & { pin: Pin; count: number }): Chip => ({
       id: p.id,
       kind: p.kind,
       live: p.live,
-      title: p.pin.title,
+      ...stackedChip(p.pin, p.count),
       line: chipLine(p.pin),
-      speech: chipSpeech(p.pin),
       at: p.at,
       lift: chipLiftPx(topOfM(p), { zoom: v.zoom, pitch: v.pitch, latitude: p.at[1] }),
     })
@@ -232,6 +233,7 @@ export function useMapLighting({
       states: kept.filter(byState).map((p) => ({ featureId: p.building?.featureId as number, pinId: p.id, kind: p.kind, live: p.live })),
       glow: collection(kept.map(glowFor)),
       chips,
+      pinIds: kept.flatMap((p) => p.ids),
     })
     // Unclean: not marked done, so the next settle asks again (not the next frame: frames keep coming while a glow fades).
     if (clean) lastLit.current = signature

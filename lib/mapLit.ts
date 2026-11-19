@@ -176,16 +176,19 @@ export function litRank(p: Pick<LitPlace, 'kind' | 'live'>): number {
 /**
  * One lit copy per building, one beacon per spot. Two pins in one building
  * would draw two extrusions in one place and flicker; the higher `litRank`
- * keeps it (a live event's look wins at its venue), else the first.
+ * keeps it (a live event's look wins at its venue), else the first. The place
+ * kept carries every pin it stands for (`count`, `ids`): the light is their one
+ * mark, so none of them keeps a dot, and its chip says how many (pulse-map 12 A).
  */
-export function dedupeLit<T extends LitPlace>(places: T[]): T[] {
-  const kept = new Map<string, T>()
+export function dedupeLit<T extends LitPlace>(places: T[]): (T & { count: number; ids: string[] })[] {
+  const kept = new Map<string, { place: T; ids: string[] }>()
   for (const p of places) {
     const key = p.building ? p.building.key : `p:${p.at.map((n) => n.toFixed(5)).join(',')}`
     const held = kept.get(key)
-    if (!held || litRank(p) > litRank(held)) kept.set(key, p)
+    const ids = [...(held?.ids ?? []), p.id]
+    kept.set(key, { place: !held || litRank(p) > litRank(held.place) ? p : held.place, ids })
   }
-  return [...kept.values()]
+  return [...kept.values()].map(({ place, ids }) => ({ ...place, count: ids.length, ids }))
 }
 
 /** The `max` places nearest a point on the map (metres, flat-earth: a phone's view is a few km). */
@@ -207,6 +210,8 @@ const CHIP_CHAR_PX = 7
 /** The chip's own padding and border, the venue glyph and its gap. */
 const CHIP_PAD_PX = 2 * 8 + 2
 const CHIP_GLYPH_PX = 16 + 4
+/** A count badge (several events at one venue) and its gap: `CountBadge`'s 18 pt minimum plus 6. */
+const CHIP_COUNT_PX = 18 + 6
 /** Two caption lines and the 4 pt padding above and below; the stem under it is `STEM_PX`. */
 const CHIP_BODY_PX = 2 * 16 + 2 * 4
 const CHIP_STEM_PX = 12
@@ -214,8 +219,9 @@ const CHIP_STEM_PX = 12
 export const CHIP_AIR_PX = 6
 
 /** The size a chip will draw at, from its words: the name and the line, the glyph a venue has, never past `maxWidthPx`. */
-export function chipSizePx(chip: { title: string; line: string; kind: string }): { width: number; height: number } {
-  const text = Math.max(chip.title.length, chip.line.length) * CHIP_CHAR_PX
+export function chipSizePx(chip: { title: string; line: string; kind: string; count?: number }): { width: number; height: number } {
+  const title = chip.title.length * CHIP_CHAR_PX + ((chip.count ?? 1) > 1 ? CHIP_COUNT_PX : 0)
+  const text = Math.max(title, chip.line.length * CHIP_CHAR_PX)
   const width = Math.min(MAP_THEME.chip.maxWidthPx, text + CHIP_PAD_PX + (chip.kind === 'venue' ? CHIP_GLYPH_PX : 0))
   return { width: Math.ceil(width), height: CHIP_BODY_PX + CHIP_STEM_PX }
 }
@@ -395,6 +401,17 @@ export function chipLine(p: ChipSource, now: number = Date.now()): string {
   if (p.kind === 'venue') return liveNowLabel(p.bucket) ?? ''
   if (p.live) return 'LIVE ●'
   return startLabel(p.startsAt, now, false, p.timeZone) ?? ''
+}
+
+/**
+ * A chip standing for several events at one venue (pulse-map 12 A): the venue's name with the count beside it, the line
+ * still the kept event's. With no venue name from the server it keeps the event's title; the count is never dropped.
+ */
+export function stackedChip(p: ChipSource & { title: string; place?: string | null }, count: number, now: number = Date.now()): { title: string; count: number; speech: string } {
+  if (count <= 1) return { title: p.title, count: 1, speech: chipSpeech(p, now) }
+  const title = p.place || p.title
+  const next = chipSpeech(p, now)
+  return { title, count, speech: p.place ? `${title}, ${count} events. ${next}` : `${next}, ${count} events` }
 }
 
 /** What a screen reader says for a chip: plain words, no symbols. */

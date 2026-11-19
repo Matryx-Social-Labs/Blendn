@@ -98,7 +98,14 @@ jest.mock('../components/RealtimeStatusBanner', () => () => null)
 jest.mock('../components/Skeleton', () => ({ Skeleton: () => null, SkeletonBlock: () => null, SkeletonLine: () => null }))
 const mockShowToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockShowToast }) }))
-jest.mock('../components/pulse/PulseBanners', () => ({ PulseBanners: () => null }))
+// What each banner block was told (the place block rides the map; the system block stays over the list).
+const mockBanners: { only?: string; locationDenied: boolean; onOpenSettings: () => void }[] = []
+jest.mock('../components/pulse/PulseBanners', () => ({
+  PulseBanners: (p: { only?: string; locationDenied: boolean; onOpenSettings: () => void }) => {
+    mockBanners.push(p)
+    return null
+  },
+}))
 jest.mock('../components/motion/FadeInUp', () => ({ children }: { children: React.ReactNode }) => children)
 // The city picker's sheet, with a way to close it (the Sheet needs a modal host).
 // The country the picker ranks second is kept (SCRUM-1037).
@@ -259,6 +266,37 @@ describe('no fix: the phone’s clock and region say where it is (SCRUM-1037)', 
     await settle()
     expect(stored()).not.toContain('Toronto')
     expect(apiClient.recordCityDemand).not.toHaveBeenCalled()
+  })
+
+  /*
+   * Denied (pulse-map 06): one quiet line on the map, "See what’s near you" · Settings, whether or not any other place
+   * line is up, and its Settings opens Settings. The drive found it never showed (the place block waited for a switch,
+   * travel or away notice) and its Settings did nothing.
+   */
+  it('denied: the map line shows on its own, and its Settings opens the phone’s Settings', async () => {
+    const { Linking } = require('react-native')
+    const open = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined as never)
+    mockBanners.length = 0
+    inZone('Asia/Kolkata')
+    await render(<Events />)
+    await settle()
+    const place = mockBanners.filter((b) => b.only === 'place').at(-1)
+    expect(place?.locationDenied).toBe(true)
+    place?.onOpenSettings()
+    expect(open).toHaveBeenCalledTimes(1)
+    // One ask, not two: the system block over the list never says it too.
+    expect(mockBanners.filter((b) => b.only === 'system').some((b) => b.locationDenied)).toBe(false)
+    open.mockRestore()
+  })
+
+  it('granted (the control): no denied line anywhere', async () => {
+    jest.mocked(Location.getForegroundPermissionsAsync).mockResolvedValue({ status: 'granted' } as never)
+    jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.59, accuracy: 10 }, timestamp: Date.now() } as never)
+    mockBanners.length = 0
+    inZone('Asia/Kolkata')
+    await render(<Events />)
+    await settle()
+    expect(mockBanners.some((b) => b.locationDenied)).toBe(false)
   })
 
   it('a stored guess that was only the default moves to where the phone points', async () => {
