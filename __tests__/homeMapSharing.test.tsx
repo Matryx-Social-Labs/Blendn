@@ -171,7 +171,8 @@ describe('with sharing off and a GPS fix', () => {
       await act(async () => mockRegion?.({ nativeEvent: { bounds: [lon - 0.02, lat - 0.04, lon + 0.02, lat + 0.04], center: [lon, lat], zoom: 15, pitch: 45, userInteraction: false } }))
       await act(async () => setLocationSharing(false))
       await act(async () => void (await jest.advanceTimersByTimeAsync(5_000)))
-      expect(mockGetEvents.mock.calls.filter(readOnFix)).toHaveLength(0)
+      // The open frame's nearest read went at mount, while sharing was on (and through the client's own sharing gate).
+      expect(mockGetEvents.mock.calls.filter((c) => readOnFix(c) && ((c as unknown[])[0] as { sortBy?: string }).sortBy !== 'distance')).toHaveLength(0)
     } finally {
       jest.useRealTimers()
     }
@@ -233,5 +234,48 @@ describe('Near me and the switch (security review, 2026-11-05): after an opt-out
     expect(mockStops.filter(stopOnFix)).toHaveLength(0)
     expect(mockStops.filter((st) => st.pitch === 0 && typeof st.zoom === 'number' && (st.zoom as number) < 14)).toHaveLength(0)
     expect(mockGetEvents.mock.calls.filter(readOnFix)).toHaveLength(0)
+  })
+})
+
+/*
+ * Option 3 opens framed on you and the six events nearest you (pulse-map 05). The drive found it framed only what the
+ * first street-zoom view had read, which near you is usually nothing: it stayed on you at z16 with no event in sight.
+ * The six nearest are one read of their own, sorted by distance from the fix (sharing-gated: it is your position).
+ */
+describe('the open frame: you and the six nearest', () => {
+  const near = [1, 2, 3, 4, 5, 6].map((i) => ({ id: `n${i}`, title: `N${i}`, latitude: FIX.latitude + 0.0012 * i, longitude: FIX.longitude + 0.0009 * i, startTime: '2099-01-01T10:00:00Z', endTime: '2099-01-01T12:00:00Z' }))
+  const nearestRead = (call: unknown[]) => (call[0] as { sortBy?: string }).sortBy === 'distance'
+  beforeEach(() => {
+    mockGetEvents.mockImplementation((async (q: { sortBy?: string }) => ({ success: true, data: { events: q.sortBy === 'distance' ? near : [] } })) as never)
+  })
+  afterEach(() => mockGetEvents.mockImplementation(async () => ({ success: true, data: { events: [] } })))
+
+  it('asks for the six nearest around the fix, and frames them with you (z14.6–16), though the first view held none', async () => {
+    await render(map(FIX))
+    await settle()
+    const read = mockGetEvents.mock.calls.find(nearestRead) as unknown as [{ lat: number; lon: number; limit: number; radius?: number }] | undefined
+    expect(read?.[0]).toMatchObject({ limit: 6 })
+    expect(onFix(read![0].lat, read![0].lon)).toBe(true)
+    expect(read![0].radius).toBeUndefined()
+    const frame = mockStops.find((s) => typeof s.zoom === 'number' && (s.zoom as number) < 16 && (s.zoom as number) >= 14.6) as { center: [number, number] } | undefined
+    expect(frame).toBeTruthy()
+    // Pulled towards the six, not left on you.
+    expect(frame!.center[1]).toBeGreaterThan(FIX.latitude + 0.001)
+  })
+
+  it('once per visit: a second fix does not read or frame again', async () => {
+    const view = await render(map(FIX))
+    await settle()
+    const reads = mockGetEvents.mock.calls.filter(nearestRead).length
+    await view.rerender(map({ latitude: FIX.latitude + 0.0001, longitude: FIX.longitude }))
+    await settle()
+    expect(mockGetEvents.mock.calls.filter(nearestRead)).toHaveLength(reads)
+  })
+
+  it('sharing off (the control): no nearest read at all', async () => {
+    setLocationSharing(false)
+    await render(map(FIX))
+    await settle()
+    expect(mockGetEvents.mock.calls.filter(nearestRead)).toHaveLength(0)
   })
 })

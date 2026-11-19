@@ -24,6 +24,7 @@ import { COLOR, MAX_FONT_SCALE, SPACE, SPRING } from '../../lib/design/tokens'
 import { toggleIntent } from '../../lib/intents'
 import { Logger } from '../../lib/logger'
 import { firstNameOf } from '../../lib/profileIdentity'
+import { personFace } from '../../lib/personFace'
 import { requestTextRefusal } from '../../lib/requestRefusal'
 import { revealReadiness, type RevealReadiness } from '../../lib/reveal'
 import { answerLength, normalizeAnswer, parseLens, parseWorkIntent, TONIGHT_ANSWER_MAX, WORK_INTENTS, type RoomLens, type WorkIntent } from '../../lib/roomLens'
@@ -338,8 +339,8 @@ function EventPreferencesContent() {
           title="Named"
           detail={firstName ?? undefined}
           hint={namedHint}
-          avatar={photo ? <Avatar kind="photo" uri={photo} size={AVATAR} ring={COLOR.surface} /> : undefined}
-          icon={photo ? undefined : 'user'}
+          // The named face rule (lib/personFace): your photo, or your initial on your disc; the card's dimming takes it when blocked.
+          avatar={<Avatar {...personFace({ named: true, name: firstName ?? '', photo })} size={AVATAR} ring={COLOR.surface} />}
           selected={revealed}
           disabled={blocked}
           // The way to what is missing: Edit profile opens on the photos, and coming back reads the profile again.

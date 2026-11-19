@@ -33,7 +33,11 @@ const style = (t: string) => StyleSheet.flatten(screen.getByText(t, { includeHid
 const on = (os: 'ios' | 'android') => Object.defineProperty(Platform, 'OS', { value: os, configurable: true })
 const VINYL = { title: 'Vinyl Night', time: '9 PM', venue: 'Toit', distance: '1.2 km', going: 42, cover: 'https://example.com/v.jpg' }
 
+/** The phone's text size: jest's window draws at 2, past the control cap, where a row stacks. */
+const at = (fontScale: number) => jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 390, height: 844, scale: 3, fontScale })
+
 beforeEach(() => on('ios'))
+afterEach(() => jest.restoreAllMocks())
 
 describe('hero and compact', () => {
   it('hero is radius 32 with the title in title; compact is radius 24 with it in bodyStrong; two lines at most', async () => {
@@ -152,7 +156,6 @@ describe('row · lead="distance"', () => {
     await render(<EventCard kind="row" lead="distance" {...VINYL} venue="Toit Brewpub, Indiranagar" testID="e" />)
     const venue = screen.getByTestId('e-venue', { includeHiddenElements: true })
     expect(venue.props).toMatchObject({ numberOfLines: 1, children: 'Toit Brewpub, Indiranagar' })
-    expect(StyleSheet.flatten(venue.props.style).flexShrink ?? 0).toBe(0)
     // The time line is the time alone: no venue run, no dot to share it with.
     expect(screen.queryByText('·', { includeHiddenElements: true })).toBeNull()
     expect(screen.getByText('9 PM', { includeHiddenElements: true })).toBeTruthy()
@@ -160,6 +163,7 @@ describe('row · lead="distance"', () => {
   })
 
   it('draws no column when the row has no distance, and leaves the default row alone', async () => {
+    at(1)
     await render(<EventCard kind="row" lead="distance" {...VINYL} distance={undefined} testID="e" />)
     expect(screen.queryByTestId('e-lead')).toBeNull()
     await render(<EventCard kind="row" {...VINYL} testID="e" />)
@@ -169,6 +173,7 @@ describe('row · lead="distance"', () => {
 })
 
 describe('row', () => {
+  beforeEach(() => at(1))
   it('a long venue gives way; the time is never the part cut off', async () => {
     await render(<EventCard kind="row" {...VINYL} venue="Toit Brewpub, 100 Feet Road, Indiranagar" />)
     const venue = screen.getByText('Toit Brewpub, 100 Feet Road, Indiranagar', { includeHiddenElements: true })
@@ -193,6 +198,53 @@ describe('row', () => {
     expect(title.props).toMatchObject({ numberOfLines: 2, maxFontSizeMultiplier: 1.3 })
     expect(style('9 PM')).toMatchObject({ fontFamily: FONT_FAMILY.mono[500], fontVariant: ['tabular-nums'] })
     expect(screen.getByRole('button', { name: 'Vinyl Night, 9 PM, at Toit, 1.2 km, 42 going' })).toBeTruthy()
+  })
+})
+
+describe('row at the largest text and under a date stamp (leftovers 06 A, SCRUM-1078)', () => {
+  const LONG_VENUE = 'Byg Brewski Brewing Company, Hennur'
+  /** The meta line the venue sits on: its host parent View. */
+  const lineOf = (node: { parent: unknown; type: unknown }) => {
+    let n = node.parent as typeof node | null
+    while (n && n.type !== 'View') n = n.parent as typeof node | null
+    return n
+  }
+  it('from the control cap the venue takes its own line and the time keeps its slot, so it is never cut to "B" (control: below the cap, one line)', async () => {
+    at(1.3)
+    await render(<EventCard kind="row" {...VINYL} distance={undefined} venue={LONG_VENUE} testID="e" />)
+    const venue = screen.getByTestId('e-venue', { includeHiddenElements: true })
+    const time = screen.getByText('9 PM', { includeHiddenElements: true })
+    expect(venue.props.numberOfLines).toBe(1)
+    expect(lineOf(venue)).not.toBe(lineOf(time))
+    // Alone on its line, the time needs no "·" before it.
+    expect(screen.queryByText('·', { includeHiddenElements: true })).toBeNull()
+
+    at(1.29)
+    await render(<EventCard kind="row" {...VINYL} distance={undefined} venue={LONG_VENUE} testID="e" />)
+    expect(lineOf(screen.getByTestId('e-venue', { includeHiddenElements: true }))).toBe(lineOf(screen.getByText('9 PM', { includeHiddenElements: true })))
+    expect(screen.getByText('·', { includeHiddenElements: true })).toBeTruthy()
+  })
+
+  it('stacked, the distance stays with its venue as its own slot, and the label still reads everything', async () => {
+    at(3.571)
+    await render(<EventCard kind="row" {...VINYL} venue={LONG_VENUE} testID="e" />)
+    const venue = screen.getByTestId('e-venue', { includeHiddenElements: true })
+    const distance = screen.getByTestId('e-distance', { includeHiddenElements: true })
+    expect(lineOf(distance)).toBe(lineOf(venue))
+    expect(StyleSheet.flatten(distance.props.style).flexShrink).toBe(0)
+    expect(lineOf(screen.getByText('9 PM', { includeHiddenElements: true }))).not.toBe(lineOf(venue))
+    expect(screen.getByRole('button', { name: `Vinyl Night, 9 PM, at ${LONG_VENUE}, 1.2 km, 42 going` })).toBeTruthy()
+  })
+
+  it('under a date stamp the meta says the clock alone, and the label keeps the day (control: no stamp, the time as given)', async () => {
+    const stamp = { iso: '2026-11-23T14:00:00Z', timeZone: 'Asia/Kolkata' }
+    await render(<EventCard kind="row" {...VINYL} distance={undefined} cover={undefined} stamp={stamp} time="23 Nov · 7:30 PM" venue={LONG_VENUE} testID="e" />)
+    expect(screen.queryByText(/23 Nov/, { includeHiddenElements: true })).toBeNull()
+    expect(screen.getByText('7:30 PM', { includeHiddenElements: true })).toBeTruthy()
+    expect(screen.getByRole('button').props.accessibilityLabel).toContain('23 Nov · 7:30 PM')
+
+    await render(<EventCard kind="row" {...VINYL} distance={undefined} time="23 Nov · 7:30 PM" venue={LONG_VENUE} testID="e" />)
+    expect(screen.getByText(/23 Nov/, { includeHiddenElements: true })).toBeTruthy()
   })
 })
 

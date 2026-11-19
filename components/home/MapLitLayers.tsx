@@ -7,11 +7,11 @@ import {
   type PressEventWithFeatures,
   type VectorSourceRef,
 } from '@maplibre/maplibre-react-native'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import { Platform, StyleSheet, View, type NativeSyntheticEvent } from 'react-native'
 
 import { Logger } from '../../lib/logger'
-import { glowRadius, litFade, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
+import { glowRadius, litStateTapped, type BandFeature, type GlowFeature } from '../../lib/mapLit'
 import {
   CITY_BUILDINGS,
   LABELS_FROM_LAYER_ID,
@@ -20,12 +20,13 @@ import {
   type OwnBuildingState,
 } from '../../lib/mapStyleEmber'
 import { MAP_THEME } from '../../lib/mapTheme'
-import { useReducedMotion } from '../../lib/motion'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
+import { Badge } from '../ds/MonoFamily'
 import { Icon } from '../ui/Icon'
 import { Text } from '../ui/Text'
 import type { Chip, Collection, LitState } from './useMapLighting'
+import { useLitFade } from './useLitFade'
 
 /**
  * The home map's layers that are ours, not the basemap's (step 2c): the city's
@@ -173,23 +174,6 @@ export const LitBuildings = memo(function LitBuildings({
 })
 
 /**
- * The lit layers' one fade-in (motion #42): 0 until there is something to light, then 1 for good, so the layer arrives
- * over `long` (200 ms under Reduce Motion) the first time and is never faded again. `opacity` is a constant a paint
- * transition can carry; a data-driven one is not transitioned by the map.
- */
-function useLitFade(hasData: boolean) {
-  const reduceMotion = useReducedMotion()
-  const [arrived, setArrived] = useState(false)
-  // A frame after the first data is drawn at 0, so the transition has a start to run from.
-  useEffect(() => {
-    if (!hasData) return
-    const frame = requestAnimationFrame(() => setArrived(true))
-    return () => cancelAnimationFrame(frame)
-  }, [hasData])
-  return { opacity: arrived ? 1 : 0, transition: litFade(reduceMotion) }
-}
-
-/**
  * The glow on the ground under every lit place, under the buildings. It does not pulse (motion #42: "No pulse"): each
  * glow arrives with the layers' one fade and holds still, so the map redraws nothing while it is looked at (WCAG 2.2.2).
  * Two layers, a building's and a beacon's, because a paint transition needs a constant opacity.
@@ -287,9 +271,13 @@ function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id
       <View style={[styles.chip, { borderColor: look.crown }]}>
         {chip.kind === 'venue' ? <Icon name="map-pin" size={ICON.inline} color={look.crown} /> : null}
         <View style={styles.chipText}>
-          <Text variant="caption" color={COLOR.textPrimary} numberOfLines={1}>
-            {chip.title}
-          </Text>
+          <View style={styles.chipTitle}>
+            <Text variant="caption" color={COLOR.textPrimary} numberOfLines={1} style={styles.chipName}>
+              {chip.title}
+            </Text>
+            {/* Several events at one venue (pulse-map 12 A): the count beside its name, ink on the brand orange. */}
+            {chip.count > 1 ? <Badge text={chip.count} tone="orange" testID={`map-chip-count-${chip.id}`} /> : null}
+          </View>
           {chip.line ? (
             <Text variant="caption" color={chip.live && chip.kind === 'event' ? look.crown : COLOR.textSecondary} numberOfLines={1}>
               {chip.line}
@@ -348,5 +336,7 @@ const styles = StyleSheet.create({
   },
   // Lets a long name shrink to the chip's width and end in an ellipsis.
   chipText: { flexShrink: 1 },
+  chipTitle: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs + SPACE.xxs },
+  chipName: { flexShrink: 1 },
   stem: { width: SPACE.xxs, height: SPACE.md },
 })

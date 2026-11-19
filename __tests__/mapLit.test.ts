@@ -26,6 +26,7 @@ import {
   type LitBuilding,
   type LitPlace,
   type Ring,
+  stackedChip,
 } from '../lib/mapLit'
 import { buildingHeights, CITY_BUILDINGS, cityColour, EMBER_MAP_STYLE, LABELS_FROM_LAYER_ID } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
@@ -566,5 +567,44 @@ describe('the home map hands the lighting pass what the person can see', () => {
     const hook = readFileSync(join(__dirname, '..', 'components', 'home', 'useMapLighting.ts'), 'utf8')
     expect(hook).toContain('pickChips(')
     expect(hook).toContain('m.project(c.at)')
+  })
+})
+
+/*
+ * Several events at one venue (pulse-map 12 A, owner 2026-11-18): the light is the one mark, and its chip says how many.
+ * Before, dedupeLit kept one and dropped the rest without a word: three events at Church Street Social read as one.
+ */
+describe('one lit place carries every event in it', () => {
+  it('counts the pins a building or a spot holds, and keeps all their ids (so none keeps a dot)', () => {
+    const [kept] = dedupeLit([place({ id: 'a' }), place({ id: 'b', live: true }), place({ id: 'c' })])
+    expect(kept).toMatchObject({ id: 'b', count: 3 })
+    expect([...kept.ids].sort()).toEqual(['a', 'b', 'c'])
+  })
+
+  it('control: different buildings are one event each', () => {
+    const next = [square(10, 30)]
+    const two = dedupeLit([place({ id: 'a' }), place({ id: 'b', building: building({ footprint: next, key: footprintKey(next) }) })])
+    expect(two.map((p) => [p.id, p.count, p.ids])).toEqual([
+      ['a', 1, ['a']],
+      ['b', 1, ['b']],
+    ])
+  })
+
+  it('a chip for several names the venue and says how many; the line stays the next one’s', () => {
+    const pin = { kind: 'event' as const, live: false, startsAt: null, timeZone: null, bucket: null, title: 'Chef’s Table', place: 'Church Street Social' }
+    expect(stackedChip(pin, 3)).toEqual({ title: 'Church Street Social', count: 3, speech: 'Church Street Social, 3 events. Chef’s Table' })
+    // No venue name from the server: the event's own title, still with its count (nothing invented).
+    expect(stackedChip({ ...pin, place: null }, 2)).toEqual({ title: 'Chef’s Table', count: 2, speech: 'Chef’s Table, 2 events' })
+  })
+
+  it('control: one event is its own chip, no count', () => {
+    const pin = { kind: 'event' as const, live: true, startsAt: null, timeZone: null, bucket: null, title: 'Chef’s Table', place: 'Church Street Social' }
+    expect(stackedChip(pin, 1)).toEqual({ title: 'Chef’s Table', count: 1, speech: 'Chef’s Table, live now' })
+  })
+
+  it('a chip with a count is wider by its badge', () => {
+    const one = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' })
+    const three = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event', count: 3 })
+    expect(three.width).toBeGreaterThan(one.width)
   })
 })

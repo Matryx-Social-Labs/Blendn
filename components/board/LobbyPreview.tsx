@@ -53,8 +53,11 @@ const openLobby = (eventId: string, compose = false) =>
 
 const exact = (n: number) => n.toLocaleString('en-US')
 
-/** Read on every focus, so a post written in the Lobby is on the card when you come back. A refusal draws nothing. */
-function usePreview(eventId: string): LobbyPreview | null {
+/**
+ * Read on every focus, so a post written in the Lobby is on the card when you come back, and again whenever your standing
+ * changes on the page: Save or I'm going opens the Lobby with no focus change (SCRUM-1078). A refusal draws nothing.
+ */
+function usePreview(eventId: string, saved: boolean, rsvp: string | null): LobbyPreview | null {
   const [preview, setPreview] = useState<LobbyPreview | null>(null)
   useFocusEffect(
     useCallback(() => {
@@ -62,11 +65,12 @@ function usePreview(eventId: string): LobbyPreview | null {
       apiClient
         .getBoardPreview(eventId)
         .then((r) => !gone && setPreview(r.success && r.data ? r.data : null))
-        .catch((error) => Logger.warn('board', 'preview failed', { eventId, error }))
+        // The standing it was read for, in the warning: a refusal after a Save reads differently from one before it.
+        .catch((error) => Logger.warn('board', 'preview failed', { eventId, saved, rsvp, error }))
       return () => {
         gone = true
       }
-    }, [eventId])
+    }, [eventId, saved, rsvp])
   )
   return preview
 }
@@ -76,9 +80,24 @@ function usePreview(eventId: string): LobbyPreview | null {
  * it for somebody who has neither saved nor gone; Post something alone before anybody posted; after doors, read-only until
  * the close with Read the Lobby. Live and nobody posted, it is the room's card instead (4b).
  */
-export function EventLobbyPreview({ eventId, timeZone, here, onOpenRoom }: { eventId: string; timeZone?: string | null; here: number | null; onOpenRoom: () => void }) {
+export function EventLobbyPreview({
+  eventId,
+  timeZone,
+  here,
+  saved,
+  rsvp,
+  onOpenRoom,
+}: {
+  eventId: string
+  timeZone?: string | null
+  here: number | null
+  /** Your standing as the server holds it (never an optimistic flip, or the re-read races the write): a change reads again. */
+  saved: boolean
+  rsvp: string | null
+  onOpenRoom: () => void
+}) {
   const bold = useBoldText()
-  const preview = usePreview(eventId)
+  const preview = usePreview(eventId, saved, rsvp)
   if (!preview) return null
   const view = previewView(preview)
   if (view === 'roomOpen') return <RoomOpenCard here={here} onPress={onOpenRoom} />
