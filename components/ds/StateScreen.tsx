@@ -9,7 +9,7 @@ import { Icon, type IconName } from '../ui/Icon'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Button, type ButtonKind, type ButtonProps } from './Button'
 import { monoCaption } from './MonoFamily'
-import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast } from './shared'
+import { font, IC_HAIRLINE, useBoldText, useIncreaseContrast, useSelection } from './shared'
 import { Title } from './Title'
 
 /** One component, two well sizes (the R3 ruling): 56 inline (a list, a card), 80 for a whole screen. */
@@ -19,20 +19,21 @@ const GLYPH_FRACTION = { inline: 0.5, screen: 0.45 } as const
 const WELL_TOP = 0.22
 
 /** The circle a state's glyph sits in. Decorative: the title says what happened. */
-export function GlyphWell({ icon, size = 'inline', testID }: { icon: IconName; size?: 'inline' | 'screen'; testID?: string }) {
+export function GlyphWell({ icon, size = 'inline', lit = false, testID }: { icon: IconName; size?: 'inline' | 'screen'; lit?: boolean; testID?: string }) {
   const contrast = useIncreaseContrast()
+  const sel = useSelection()
   const side = WELL[size]
   return (
     <View
       testID={testID}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.well, { width: side, height: side }, contrast && IC_HAIRLINE]}
+      style={[styles.well, { width: side, height: side }, lit && { backgroundColor: sel.fill }, contrast && IC_HAIRLINE]}
     >
       <Icon
         name={icon}
         size={Math.round(side * GLYPH_FRACTION[size])}
-        color={size === 'screen' || contrast ? COLOR.textPrimary : COLOR.textSecondary}
+        color={lit ? sel.glyph : size === 'screen' || contrast ? COLOR.textPrimary : COLOR.textSecondary}
       />
     </View>
   )
@@ -59,6 +60,8 @@ export const stateActionKind = (index: number): ButtonKind => (index === 0 ? 'li
 
 export type StateScreenProps = {
   icon: IconName
+  /** The well lit in the screen's hue (fill + glyph): an empty state that is calm, not a failure (Muted rooms, remaining-screens 05 A). */
+  litWell?: boolean
   title: string
   /** One paragraph; the server's sentence verbatim where there is one. */
   body?: string
@@ -120,7 +123,7 @@ export function useSaidOnArrival(said: string | null, screen = false) {
  * Text scales freely; the well never does. Increase Contrast: the well's
  * hairline, a white glyph, secondary text lifted to white.
  */
-export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono = false, actions = [], fitActions = false, foot, busy = false, variant = 'inline', gutter = false, announce, testID }: StateScreenProps) {
+export function StateScreen({ icon, litWell = false, title, body, bodyLink, lead, note, noteMono = false, actions = [], fitActions = false, foot, busy = false, variant = 'inline', gutter = false, announce, testID }: StateScreenProps) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const insets = useSafeAreaInsets()
@@ -136,7 +139,7 @@ export function StateScreen({ icon, title, body, bodyLink, lead, note, noteMono 
           {lead}
         </View>
       ) : (
-        <GlyphWell icon={icon} size={variant} testID={testID && `${testID}-well`} />
+        <GlyphWell icon={icon} size={variant} lit={litWell} testID={testID && `${testID}-well`} />
       )}
       {/* Inline, the state sits in a list or under a section heading, so its title is a step below both (r7 M5: 24 pt bold read louder than the page). */}
       {/* Every line stops at its role's cap, so at AX XXXL the actions under it stay on the screen (A21, A25). */}

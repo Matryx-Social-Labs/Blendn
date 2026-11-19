@@ -80,12 +80,18 @@ function MutedRoomsContent() {
       testID="muted-rooms-partial-empty"
     />
   ) : (
-    <StateScreen
-      icon="bell"
-      title="No muted rooms"
-      body="A room you mute shows up here, and you can turn it back on from its info."
-      testID="muted-rooms-empty"
-    />
+    // Centred on the page (remaining-screens 05 A): both ways to mute, and one neutral way on to where they are.
+    <View style={styles.centred}>
+      <StateScreen
+        icon="bell-off"
+        litWell
+        title="No muted rooms"
+        body="Mute a room from its info, or swipe a chat left in the Banter. It lands here, so you can turn it back on."
+        actions={[{ label: 'Go to the Banter', kind: 'secondary', onPress: () => router.navigate('/(tabs)/chat') }]}
+        fitActions
+        testID="muted-rooms-empty"
+      />
+    </View>
   )
 
   // Never a quietly short list: a page that did not come says so, with a way to read again.
@@ -128,6 +134,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   emptyContent: { flexGrow: 1 },
+  centred: { flex: 1, justifyContent: 'center' },
   foot: { color: COLOR.textTertiary, textAlign: 'center', paddingVertical: SPACE.lg },
   partial: { alignItems: 'center' },
   skeletons: { gap: SPACE.lg },
