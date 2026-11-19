@@ -165,6 +165,8 @@ export function edgeMarker(
   size: { width: number; height: number }
 ): { left: number; top: number; angle: number } | null {
   const [x, y] = xy
+  // No room for it (the drawer full, say): nothing, rather than a marker squeezed over the chrome.
+  if (box.bottom - box.top < size.height + 2 * EDGE_INSET || box.right - box.left < size.width + 2 * EDGE_INSET) return null
   if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) return null
   const cx = (box.left + box.right) / 2
   const cy = (box.top + box.bottom) / 2

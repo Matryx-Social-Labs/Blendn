@@ -194,6 +194,11 @@ describe('edgeMarker (pulse-map 05: an off-frame lap venue gets a marker at the 
   const box = { left: 0, top: 100, right: 400, bottom: 500 } // centre (200, 300)
   const size = { width: 120, height: 32 }
 
+  it('is nothing when the map you can see has no room for it (TalkBack drive: the full drawer left a strip, and it sat over the top bar)', () => {
+    expect(edgeMarker([200, -400], { left: 0, top: 100, right: 400, bottom: 130 }, size)).toBeNull()
+    expect(edgeMarker([200, -400], { left: 0, top: 100, right: 400, bottom: 40 }, size)).toBeNull()
+  })
+
   it('is nothing while the venue is in the map you can see', () => {
     expect(edgeMarker([200, 300], box, size)).toBeNull()
     expect(edgeMarker([5, 105], box, size)).toBeNull()
