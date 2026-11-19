@@ -13,7 +13,7 @@ import {
 } from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, Platform, StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
+import { AppState, Linking, Platform, StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
@@ -57,17 +57,19 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { FRAME_NEAREST, frameOnYou } from '../../lib/mapPresence'
+import { FRAME_NEAREST, frameOnYou, mapSummary, staleCalloutBelow, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
-import { fitBounds, type NearPin } from '../../lib/placesPane'
+import { distanceText, fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
 import { useScreenReader } from '../ds/shared'
 import { EventPiles } from './EventPiles'
 import { PileSpeech } from './PileSpeech'
+import { EdgeMarker } from './EdgeMarker'
+import { ApproximateLine, STALE_CALLOUT, StaleCallout } from './YouLines'
 import { YouMark } from './YouMark'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
@@ -209,7 +211,7 @@ export const HomeMap = memo(function HomeMap({
   /** Bumped by "Show on map": fit the camera to the pins and you, in the map the half drawer leaves. */
   fitNear: number
   /** The Pulse's lead card's venue: lit at the brightest step; each new `n` (a swipe) eases the camera there (Option C). */
-  focus?: { pin: Pin; n: number } | null
+  focus?: { pin: Pin; n: number; km?: number | null } | null
   /** How far the Pulse's banners on the map lift "my location" (0 with none). */
   locateLift?: SharedValue<number>
   /** Near me is on (Flow 3b · N1): where you stand. The map draws your reach and lights only what is inside it. */
@@ -429,6 +431,18 @@ export const HomeMap = memo(function HomeMap({
   useEffect(() => {
     if (OWN_BUILDINGS_ENV.problem) Logger.warn('events', 'EXPO_PUBLIC_BUILDINGS_TILES_URL ignored', { problem: OWN_BUILDINGS_ENV.problem })
   }, [])
+  // The lap's venue, for its edge marker: an event focus on Events only (a venue's name when the server sends one).
+  const edgeTarget = useMemo(
+    () => (focusPin && segment === 'events' ? { id: focusPin.id, name: focusPin.place || focusPin.title, at: [focusPin.longitude, focusPin.latitude] as [number, number] } : null),
+    [focusPin, segment]
+  )
+  // Where the edge marker may sit: the map you can see, above "my location" (pulse-map 05 frame 6).
+  const edgeBox = { left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }
+  // What the map says about you (pulse-map 06): approximate and stale each get their one line.
+  const you = youMark({ sharing, permission: 'granted', fix: center, now })
+  // Which side of the grey dot the stale callout hangs (below), from the edge marker as drawn (`onPlaced`).
+  const [staleBelow, setStaleBelow] = useState(false)
+  const [edgeRect, setEdgeRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
   const { lit, onFrame, relight } = useMapLighting({
     map,
     view,
@@ -440,7 +454,16 @@ export const HomeMap = memo(function HomeMap({
     // What the person can see: under the capsule and the bell, over the drawer (a name outside it, or on their dot, is not drawn).
     visible: { top: padding.top, bottom: height - padding.bottom },
     userAt: center ? [center.longitude, center.latitude] : null,
+    // No name under the edge marker (drive 2026-11-19: it covered a chip).
+    edge: edgeTarget ? { at: edgeTarget.at, box: edgeBox } : null,
+    // No name under the stale callout either (map-finish drive: a chip sat 3 pt off it).
+    stale: you.kind === 'stale' ? { room: STALE_CALLOUT, below: staleBelow } : null,
+    // The lead's chip says its card's distance (Android drive: 800 m over a card reading 850 m), as the edge marker does.
+    knownDistance: focus?.pin && typeof focus.km === 'number' ? { id: focus.pin.id, km: focus.km } : null,
   })
+  // The dot going grey (or violet again) moves no camera: the names are placed again around the callout.
+  const isStale = you.kind === 'stale'
+  useEffect(() => relight(), [isStale, staleBelow]) // eslint-disable-line react-hooks/exhaustive-deps -- only the stale flip or its side
 
   // New pins re-cluster the numbers: a screen reader hears them afresh.
   useEffect(() => {
@@ -564,7 +587,10 @@ export const HomeMap = memo(function HomeMap({
     setQuery(next)
   }
 
+  // The camera is moving: the edge marker waits for it to stop, so it is never left pointing from the old view.
+  const [moving, setMoving] = useState(false)
   const onRegionDidChange = (e: NativeSyntheticEvent<ViewStateChangeEvent>) => {
+    setMoving(false)
     const { bounds, center: centre, zoom, pitch, userInteraction } = e.nativeEvent
     if (userInteraction) {
       setTouched(true)
@@ -574,7 +600,7 @@ export const HomeMap = memo(function HomeMap({
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
     setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
-    if (screenReader) setSettled((n) => n + 1)
+    setSettled((n) => n + 1)
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => ask(bounds as Bounds), QUERY_DEBOUNCE_MS)
   }
@@ -658,6 +684,49 @@ export const HomeMap = memo(function HomeMap({
   )
 
   const style = useMemo(() => homeMapStyle(), [])
+  // The stale callout goes under the dot when, over it, it would meet the edge marker as drawn (iOS drive 2026-11-19), and
+  // under it meets it less (Android re-drive). Asked again when the camera stops or the marker moves.
+  const staleAt = you.kind === 'stale' && center ? ([center.longitude, center.latitude] as [number, number]) : null
+  useEffect(() => {
+    const m = map.current
+    if (!m || !staleAt || !edgeRect) {
+      setStaleBelow(false)
+      return
+    }
+    let gone = false
+    // Through a promise: `project` throws synchronously while the map remounts (fix 3).
+    Promise.resolve()
+      .then(() => m.project(staleAt))
+      .then((dot) => {
+        if (!gone) setStaleBelow(staleCalloutBelow(dot as [number, number], STALE_CALLOUT, edgeRect))
+      })
+      .catch((error) => Logger.warn('events', 'Stale callout could not place itself', { error: String(error) }))
+    return () => {
+      gone = true
+    }
+  }, [staleAt?.[0], staleAt?.[1], settled, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the arrays are new each render
+
+  // The lead card's own distance when it has one (the same number as the card), else measured from the fix; none without one.
+  const edgeKm = focus?.km ?? (edgeTarget && center ? getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0]) : null)
+  const edgeDistance = center ? distanceText(edgeKm) : null
+  // The map as a whole, for a screen reader (pulse-map 10): read when the camera stops (`settled` re-renders this).
+  const bounds = view.current.bounds
+  const edgeOff = edgeTarget && bounds ? !(edgeTarget.at[0] >= bounds[0] && edgeTarget.at[0] <= bounds[2] && edgeTarget.at[1] >= bounds[1] && edgeTarget.at[1] <= bounds[3]) : false
+  const summary = screenReader
+    ? mapSummary({ bounds, pins, you: you.kind, youLine: you.line, edge: edgeTarget && edgeOff ? { name: edgeTarget.name, distance: edgeDistance } : null })
+    : null
+  // TalkBack cannot reach a Marker inside MapLibre's Android view: the lit names get targets over the map too. iOS reads them.
+  const spokenChips = useMemo(
+    () => (Platform.OS === 'android' && screenReader ? lit.chips.map((c) => ({ id: c.id, kind: c.kind, at: c.at, speech: c.speech })) : []),
+    [lit.chips, screenReader]
+  )
+  // The edge marker tapped: the person asked, so the camera goes there (and the lap is over, their touch).
+  const goToFocus = () => {
+    if (!focusPin) return
+    setTouched(true)
+    onTouched?.()
+    moveTo({ to: [focusPin.longitude, focusPin.latitude], easeMs: MAP_THEME.camera.easeMs })
+  }
 
   return (
     <>
@@ -672,6 +741,7 @@ export const HomeMap = memo(function HomeMap({
         compass={false}
         // Its default corner is the bell's (R6-7): under the top bar instead.
         compassPosition={compassBelow(topChrome)}
+        onRegionWillChange={() => setMoving(true)}
         onRegionDidChange={onRegionDidChange}
         onDidFinishLoadingMap={onLoaded}
         // Each frame drawn with every tile loaded; the hook makes it one pass per new view or new pins.
@@ -726,6 +796,7 @@ export const HomeMap = memo(function HomeMap({
           <YouMark part="dot" fix={center} sharing={sharing} now={now} />
         </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
+        {you.kind === 'stale' && center && you.line ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} below={staleBelow} /> : null}
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>
@@ -737,17 +808,41 @@ export const HomeMap = memo(function HomeMap({
             source={pileSource}
             box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom }}
             settled={settled}
+            summary={summary}
+            chips={spokenChips}
             onExpand={expandPile}
             onOpen={open}
+          />
+          {/* The lap's venue off the map you can see: a marker at the edge pointing at it (pulse-map 05); a tap goes there. */}
+          <EdgeMarker
+            map={map}
+            target={edgeTarget}
+            distance={edgeDistance}
+            box={edgeBox}
+            settled={settled}
+            moving={moving}
+            onPress={goToFocus}
+            onPlaced={setEdgeRect}
           />
       </View>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}
+      {you.kind === 'approximate' ? (
+        <ApproximateLine
+          visible={locateVisible}
+          drawerTop={drawerTop}
+          drawer={drawer}
+          lift={locateLift}
+          // expo-location cannot ask iOS for temporary full accuracy: Settings is where Precise is turned on (as Tonight's line).
+          onPress={() => void Linking.openSettings().catch(() => {})}
+        />
+      ) : null}
       {sharing ? (
         <LocateButton
           visible={locateVisible}
           following={hasFix && !moved}
+          back={hasFix && moved}
           pending={asking}
           drawerTop={drawerTop}
           drawer={drawer}

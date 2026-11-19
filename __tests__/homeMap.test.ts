@@ -272,6 +272,37 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).not.toMatch(/queryRenderedFeatures/)
   })
 
+  it('keeps every name out from under the edge marker (part 2 drive: it covered a chip)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    expect(lighting).toMatch(/const marker = edgeAt \? edgeMarker\(edgeAt, edge\?\.box \?\? zone, EDGE_BLOCK\) : null/)
+    expect(lighting).toMatch(/if \(marker\) blocked\.push\(/)
+    // The same box the marker itself keeps to.
+    expect(component).toMatch(/edge: edgeTarget \? \{ at: edgeTarget\.at, box: edgeBox \} : null/)
+    expect(component).toMatch(/box=\{edgeBox\}/)
+  })
+
+  it('keeps every name out from under the stale callout, on the side it is drawn (map-finish drive: a chip sat 3 pt off it)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    // The side is the screen's one decision (from the marker as drawn, `onPlaced`); the names keep out of that side.
+    expect(lighting).toMatch(/if \(stale && dot\) blocked\.push\(staleCalloutBox\(dot, stale\.room, stale\.below\)\)/)
+    expect(component).toMatch(/stale: you\.kind === 'stale' \? \{ room: STALE_CALLOUT, below: staleBelow \} : null/)
+    expect(component).toMatch(/onPlaced=\{setEdgeRect\}/)
+    // Asked again when the dot goes grey, or the side changes (no camera move does either).
+    expect(lighting).toMatch(/\$\{stale \? `stale:\$\{stale\.below\}` : ''\}/)
+  })
+
+  it('the lead’s chip says the lead card’s own distance too (Android drive: 800 m over a card reading 850 m)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    expect(component).toMatch(/knownDistance: focus\?\.pin && typeof focus\.km === 'number' \? \{ id: focus\.pin\.id, km: focus\.km \} : null/)
+    expect(lighting).toMatch(/withDistance\(when, p\.at, userAt, knownKm\(p\)\)/)
+    expect(lighting).toMatch(/\$\{knownDistance \? `\$\{knownDistance\.id\}=\$\{knownDistance\.km\}` : ''\}/)
+  })
+
+  it('the edge marker says the lead card’s own distance (drive: the marker read 800 m over a card reading 850 m)', () => {
+    expect(component).toMatch(/const edgeKm = focus\?\.km \?\? /)
+    expect(code('app/(tabs)/events.tsx')).toMatch(/km: focusKm/)
+  })
+
   it("keeps OpenFreeMap’s buildings extrudable, credited by our own corner credit (the native one is off)", () => {
     expect(CITY_BUILDINGS).toMatchObject({ id: 'blendn-buildings', source: 'openmaptiles', sourceLayer: 'building' })
     expect(layers).toMatch(/<CityBuildings \/>/)

@@ -186,3 +186,99 @@ describe('frameOnYou: you and the six nearest, in the map you can see', () => {
     expect(frameOnYou(you, [], view)).toEqual({ center: [you.longitude, you.latitude], zoom: 16 })
   })
 })
+
+// eslint-disable-next-line import/first
+import { edgeMarker, staleCalloutBelow, staleCalloutBox } from '../lib/mapPresence'
+
+describe('edgeMarker (pulse-map 05: an off-frame lap venue gets a marker at the edge, pointing at it)', () => {
+  const box = { left: 0, top: 100, right: 400, bottom: 500 } // centre (200, 300)
+  const size = { width: 120, height: 32 }
+
+  it('is nothing when the map you can see has no room for it (TalkBack drive: the full drawer left a strip, and it sat over the top bar)', () => {
+    expect(edgeMarker([200, -400], { left: 0, top: 100, right: 400, bottom: 130 }, size)).toBeNull()
+    expect(edgeMarker([200, -400], { left: 0, top: 100, right: 400, bottom: 40 }, size)).toBeNull()
+  })
+
+  it('is nothing while the venue is in the map you can see', () => {
+    expect(edgeMarker([200, 300], box, size)).toBeNull()
+    expect(edgeMarker([5, 105], box, size)).toBeNull()
+  })
+
+  it('sits inside the edge on the line from the centre, the arrow turned to the venue', () => {
+    // Straight up, off the top: centred, under the top edge, arrow 0°.
+    const up = edgeMarker([200, -400], box, size)
+    expect(up).toEqual({ left: 140, top: 108, angle: 0 })
+    // Off to the left and up (Kitty Ko, board 05 frame 3): pinned to the left edge, arrow up-left.
+    const upLeft = edgeMarker([-800, -700], box, size)
+    expect(upLeft?.left).toBe(8)
+    expect(upLeft?.angle).toBeCloseTo(-45, 0)
+    // Off the bottom right (Olive Beach, frame 6): arrow down-right, never past the box.
+    const downRight = edgeMarker([900, 1000], box, size)
+    expect(downRight?.angle).toBeCloseTo(135, 0)
+    expect((downRight?.left ?? 0) + size.width).toBeLessThanOrEqual(box.right - 8)
+    expect((downRight?.top ?? 0) + size.height).toBeLessThanOrEqual(box.bottom - 8)
+  })
+})
+
+// eslint-disable-next-line import/first
+import { mapSummary } from '../lib/mapPresence'
+
+describe('mapSummary (pulse-map 10: the map is spoken, not only its numbers)', () => {
+  const bounds: [number, number, number, number] = [77.5, 12.9, 77.7, 13.0]
+  const pin = (lng: number, live = false) => ({ longitude: lng, latitude: 12.95, live })
+
+  it('says how many events are on the map you see, how many are on now, where you are and what is off it', () => {
+    expect(
+      mapSummary({ bounds, pins: [pin(77.6, true), pin(77.61), pin(77.9)], you: 'precise', youLine: null, edge: { name: 'Kitty Ko', distance: '3.1 km' } })
+    ).toBe('Map. 2 events here, 1 on now. You are on the map. Kitty Ko is off the map, 3.1 km away.')
+  })
+
+  it('says one event, none, and each state of you in its own words; never a distance it does not have', () => {
+    expect(mapSummary({ bounds, pins: [pin(77.6)], you: 'none', youLine: null, edge: null })).toBe('Map. 1 event here.')
+    expect(mapSummary({ bounds, pins: [], you: 'approximate', youLine: null, edge: null })).toBe('Map. No events here. Your location is approximate.')
+    expect(mapSummary({ bounds, pins: [], you: 'stale', youLine: 'Last seen here 25 min ago · updating', edge: { name: 'Lupa', distance: null } })).toBe(
+      'Map. No events here. Last seen here 25 min ago, updating. Lupa is off the map.'
+    )
+    expect(mapSummary({ bounds: null, pins: [pin(77.6)], you: 'precise', youLine: null, edge: null })).toBe('Map. You are on the map.')
+  })
+})
+
+describe('staleCalloutBelow (pulse-map 06 "STALE": the callout over the grey dot, never under the edge marker)', () => {
+  // The iOS drive, 2026-11-19: dot (206, 242), the callout 200 × 40 with 17 pt to the dot, the marker at the top-left edge.
+  const callout = { width: 200, height: 40, gap: 17 }
+  const topLeft = { left: 8, top: 156, width: 200, height: 44 }
+
+  it('goes under the dot when, over it, it would meet the edge marker (it ran 3 pt under "High Ultra Lounge 6.7 km")', () => {
+    expect(staleCalloutBelow([206, 242], callout, topLeft)).toBe(true)
+  })
+
+  it('stays over the dot, as the board draws it, with no marker or one clear of it', () => {
+    expect(staleCalloutBelow([206, 242], callout, null)).toBe(false)
+    // The marker at the bottom edge, and one at the top but past the callout's side.
+    expect(staleCalloutBelow([206, 242], callout, { left: 100, top: 300, width: 200, height: 44 })).toBe(false)
+    expect(staleCalloutBelow([360, 242], callout, topLeft)).toBe(false)
+    // The marker well above the callout's top (185 − air).
+    expect(staleCalloutBelow([206, 320], callout, topLeft)).toBe(false)
+  })
+})
+
+describe('staleCalloutBelow with the marker beside the dot (Android re-drive: below, it ran under "Olive Beach 850 m")', () => {
+  const callout = { width: 200, height: 40, gap: 17 }
+  it('stays over the dot when the marker, as drawn, is level with the dot and clear of the box over it', () => {
+    expect(staleCalloutBelow([202, 250], callout, { left: 258, top: 244, width: 138, height: 28 })).toBe(false)
+  })
+  it('takes the side it meets least when it would meet the marker on both', () => {
+    expect(staleCalloutBelow([202, 250], callout, { left: 250, top: 225, width: 150, height: 44 })).toBe(true)
+    expect(staleCalloutBelow([202, 250], callout, { left: 250, top: 240, width: 150, height: 44 })).toBe(false)
+    // Over the dot it meets the marker less than under it: it stays over.
+    expect(staleCalloutBelow([202, 250], callout, { left: 250, top: 215, width: 150, height: 110 })).toBe(false)
+  })
+})
+
+describe('staleCalloutBox (the room the stale callout takes, so names keep out of it)', () => {
+  const callout = { width: 200, height: 40, gap: 17 }
+  it('is centred over the dot, its bottom the gap above, or hangs the gap below', () => {
+    expect(staleCalloutBox([206, 242], callout, false)).toEqual({ left: 106, right: 306, top: 185, bottom: 225 })
+    expect(staleCalloutBox([206, 242], callout, true)).toEqual({ left: 106, right: 306, top: 259, bottom: 299 })
+  })
+})

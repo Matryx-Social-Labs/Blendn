@@ -25,6 +25,8 @@ type BannersProps = {
   onTravelDismiss?: () => void
   /** Location is denied and Nearby is not already asking. */
   locationDenied: boolean
+  /** Puts the denied line away (pulse-map 06, "dismissible"). */
+  onDeniedDismiss?: () => void
   onOpenSettings: () => void
   /** A refresh failed over a list that is still on screen. */
   refreshFailed: boolean
@@ -51,7 +53,7 @@ type BannersProps = {
  * The first-run tip is not a banner any more (it is the one-off coach mark), and a switch offer and the away notice
  * are never both: `lib/city.ts` pins that across every combination.
  */
-export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch, away, travel = null, onTravelBack = () => {}, onTravelDismiss, locationDenied, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout, only }: BannersProps) {
+export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch, away, travel = null, onTravelBack = () => {}, onTravelDismiss, locationDenied, onDeniedDismiss, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout, only }: BannersProps) {
   const reduceMotion = useReducedMotion()
   const place = only !== 'system'
   // The place banners ride on the map (`MapBanners`): there they are glass, as the board's `.mbn`.
@@ -80,7 +82,10 @@ export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch
       {place && locationDenied ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
           {/* Location denied (pulse-map 06): the city, and one quiet line on the map; no distances are guessed. */}
-          <Banner kind="info" onMap={onMap} icon="navigation" text="See what’s near you" action={{ label: 'Settings', onPress: onOpenSettings }} testID="pulse-denied" />
+          <Banner kind="info" onMap={onMap} icon="navigation" text="See what’s near you" action={{ label: 'Settings', onPress: onOpenSettings }}
+            onDismiss={onDeniedDismiss}
+            testID="pulse-denied"
+          />
         </Animated.View>
       ) : null}
       {system && rateLimit !== null ? (
