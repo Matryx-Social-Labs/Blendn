@@ -6,21 +6,26 @@
 /** The grid's inside width and its gap: board A 03's layout is derived from them (`slotRect`). */
 export type GridSpec = { width: number; gap: number }
 
+/** Board A 03's top block: the main photo and the two slots beside it are 240 pt tall at any width. */
+export const PHOTO_TOP = 240
+
 /**
  * Slot `slot`'s box (Me + settings A 03, owner approved 2026-11-18): the main photo 2fr wide over two rows, slots 2 and 3
- * at 1fr beside it, and 4–6 under them, the first two halving the main's width so every edge lines up. S = (width − gap) / 3.
+ * at 1fr beside it, and 4–6 under them, the first two halving the main's width so every edge lines up. S = (width − gap) / 3
+ * wide; a row is (PHOTO_TOP − gap) / 2 tall.
  */
 export function slotRect(slot: number, grid: GridSpec) {
   'worklet'
   const { gap } = grid
   const s = (grid.width - gap) / 3
+  const row = (PHOTO_TOP - gap) / 2
   const main = 2 * s
   const half = (main - gap) / 2
-  if (slot === 0) return { x: 0, y: 0, w: main, h: 2 * s + gap }
-  if (slot <= 2) return { x: main + gap, y: (slot - 1) * (s + gap), w: s, h: s }
-  const y = 2 * (s + gap)
-  if (slot === 5) return { x: main + gap, y, w: s, h: s }
-  return { x: (slot - 3) * (half + gap), y, w: half, h: s }
+  if (slot === 0) return { x: 0, y: 0, w: main, h: PHOTO_TOP }
+  if (slot <= 2) return { x: main + gap, y: (slot - 1) * (row + gap), w: s, h: row }
+  const y = PHOTO_TOP + gap
+  if (slot === 5) return { x: main + gap, y, w: s, h: row }
+  return { x: (slot - 3) * (half + gap), y, w: half, h: row }
 }
 
 /** The top-left of slot `slot`. */
@@ -30,11 +35,10 @@ export function slotXY(slot: number, grid: GridSpec) {
   return { x: r.x, y: r.y }
 }
 
-/** How tall the grid is with `slots` slots showing: two rows of small slots beside the main, three once a fourth shows. */
+/** How tall the grid is with `slots` slots showing: the top block, plus a row once a fourth shows. */
 export function gridHeight(slots: number, grid: GridSpec) {
   'worklet'
-  const s = (grid.width - grid.gap) / 3
-  return slots > 3 ? 3 * s + 2 * grid.gap : 2 * s + grid.gap
+  return slots > 3 ? PHOTO_TOP + grid.gap + (PHOTO_TOP - grid.gap) / 2 : PHOTO_TOP
 }
 
 /** The slot under the point (cx, cy) of the tile being dragged: the photo slot holding it, else the one whose centre is nearest. */

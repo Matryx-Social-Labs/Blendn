@@ -315,6 +315,8 @@ describe('the board’s layout', () => {
     const side = rect('photo-slot-1')
     expect(main.width).toBeCloseTo(2 * side.width, 5)
     expect(main.height).toBeCloseTo(2 * side.height + 8, 5)
+    // The board's 240 pt, whatever the width (square slots made it 231 on a 390 pt phone).
+    expect(main.height).toBe(240)
   })
 
   it('control: three photos open the row under them, up to six slots', async () => {
