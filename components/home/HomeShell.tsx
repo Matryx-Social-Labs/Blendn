@@ -50,7 +50,7 @@ export interface HomeBrowse {
   /** Open the Pulse's city picker: Places' empty city offers it ("Change city"). */
   openCityPicker: () => void
   /** The lead card's venue, lit on the map; `n` is bumped by each swipe, which also moves the map there (Option C). */
-  focus?: { pin: Pin; n: number } | null
+  focus?: { pin: Pin; n: number; km?: number | null } | null
   /** Near me is on with a fix in the city (N1): the map draws the reach around it. */
   reach?: { latitude: number; longitude: number } | null
 }

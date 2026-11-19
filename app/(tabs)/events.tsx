@@ -1620,7 +1620,12 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const onLeadLight = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.key === leadKey ? at.swipes : 0 })), [leadKey])
   const leadEvent = leadEvents[leadPage] ?? null
   const focusPin = useMemo(() => (leadEvent ? (pinsFor('events', { events: [leadEvent], venues: [] })[0] ?? null) : null), [leadEvent])
-  const focus = useMemo(() => (focusPin ? { pin: focusPin, n: leadAt.key === leadKey ? leadAt.swipes : 0 } : null), [focusPin, leadAt, leadKey])
+  // `km`: the card's own distance, so the map's edge marker says the same number as the card under it.
+  const focusKm = typeof leadEvent?.distance === 'number' ? leadEvent.distance : null
+  const focus = useMemo(
+    () => (focusPin ? { pin: focusPin, n: leadAt.key === leadKey ? leadAt.swipes : 0, km: focusKm } : null),
+    [focusPin, leadAt, leadKey, focusKm]
+  )
   const peekLine = isSearching ? null : leadPeekLine(leadCards[leadPage] ?? null)
 
   /*
@@ -1886,7 +1891,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const bannerActions = useLatest({ chooseCity, home, deviceCity, dismissTravel })
   // Denied (pulse-map 06): one quiet line on the map, on its own if nothing else is up there.
-  const locationDenied = locationStatus === 'denied'
+  // Put away for this visit: the city is still shown, distances still never guessed (pulse-map 06, "dismissible").
+  const [deniedDismissed, setDeniedDismissed] = useState(false)
+  const locationDenied = locationStatus === 'denied' && !deniedDismissed
   const placeBanners = useMemo(
     () =>
       switchSuggestion || travel || away || locationDenied ? (
@@ -1905,6 +1912,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           }}
           onTravelDismiss={() => bannerActions.current.dismissTravel()}
           locationDenied={locationDenied}
+          onDeniedDismiss={() => setDeniedDismissed(true)}
           onOpenSettings={() => void Linking.openSettings().catch(() => {})}
           refreshFailed={false}
           onRetry={() => {}}

@@ -36,6 +36,7 @@ const ALLOWED: Record<string, { count: number; why: string }> = {
   'components/board/LobbyParts.tsx': { count: 1, why: 'the composer prompt ("Post something"): a field stand-in' },
   'components/crews/CrewMembers.tsx': { count: 1, why: ICON_CIRCLE },
   'components/home/LocateButton.tsx': { count: 1, why: 'the map’s locate control: map chrome' },
+  'components/home/EdgeMarker.tsx': { count: 1, why: 'the map’s edge marker for an off-frame lap venue (pulse-map 05): map chrome' },
   'components/onboarding/PhotoTile.tsx': { count: 2, why: 'remove badges on a photo tile: overlay controls' },
   'components/profile/PhotoGridTile.tsx': { count: 2, why: 'remove badges on a photo tile: overlay controls' },
   'components/scene/EventGuide.tsx': { count: 1, why: ICON_CIRCLE },

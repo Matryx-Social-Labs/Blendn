@@ -27,6 +27,8 @@ import {
   type LitPlace,
   type Ring,
   stackedChip,
+  stackLine,
+  withDistance,
 } from '../lib/mapLit'
 import { buildingHeights, CITY_BUILDINGS, cityColour, EMBER_MAP_STYLE, LABELS_FROM_LAYER_ID } from '../lib/mapStyleEmber'
 import { MAP_THEME } from '../lib/mapTheme'
@@ -606,5 +608,37 @@ describe('one lit place carries every event in it', () => {
     const one = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event' })
     const three = chipSizePx({ title: 'Toit', line: 'Live', kind: 'event', count: 3 })
     expect(three.width).toBeGreaterThan(one.width)
+  })
+})
+
+describe('the chip line (pulse-map 05, 12 A): when, then how far from you, in mono', () => {
+  const now = Date.UTC(2026, 9, 9, 6, 0) // Fri 9 Oct, 11:30 IST
+  const at: [number, number] = [77.6, 12.97]
+  // ~180 m due north (1° of latitude is ~111.2 km).
+  const north = (m: number): [number, number] => [77.6, 12.97 + m / 111_195]
+
+  it('adds the distance from your fix: "Tonight · 8 PM · 180 m", "3.1 km" past a kilometre', () => {
+    expect(withDistance('Tonight · 8 PM', north(180), at)).toBe('Tonight · 8 PM · 200 m')
+    expect(withDistance('Sun · 12 PM', north(3100), at)).toBe('Sun · 12 PM · 3.1 km')
+  })
+
+  it('never guesses a distance without a fix, and a line with no words is the distance alone', () => {
+    expect(withDistance('Tonight · 8 PM', north(180), null)).toBe('Tonight · 8 PM')
+    expect(withDistance('', north(180), at)).toBe('200 m')
+  })
+
+  it('says the card’s own distance when the screen already shows one (Android drive: the chip read 800 m over a card reading 850 m)', () => {
+    expect(withDistance('Tue · 12 PM', north(816), at, 0.85)).toBe('Tue · 12 PM · 850 m')
+    // Still never without a fix, whatever is known.
+    expect(withDistance('Tue · 12 PM', north(816), null, 0.85)).toBe('Tue · 12 PM')
+    // Nothing known: measured, as before.
+    expect(withDistance('Tue · 12 PM', north(816), at, null)).toBe('Tue · 12 PM · 800 m')
+  })
+
+  it('says how many and when for several events at one venue: "3 tonight", "3 events" across days', () => {
+    const tonight = (h: number) => ({ kind: 'event' as const, live: false, startsAt: `2026-10-09T${h}:30:00Z`, bucket: null, timeZone: 'Asia/Kolkata' })
+    expect(stackLine([tonight(13), tonight(14), tonight(15)], now)).toBe('3 tonight')
+    expect(stackLine([tonight(13), { ...tonight(13), startsAt: '2026-10-10T14:30:00Z' }], now)).toBe('2 events')
+    expect(stackLine([tonight(13), { ...tonight(13), startsAt: 'garbage' }], now)).toBe('2 events')
   })
 })
