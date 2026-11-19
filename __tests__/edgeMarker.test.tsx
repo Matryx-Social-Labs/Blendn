@@ -17,7 +17,18 @@ const mapAt = (xy: [number, number]) => ({ current: { project: jest.fn(async () 
 
 const draw = async (over: Partial<React.ComponentProps<typeof EdgeMarker>> = {}) => {
   const onPress = jest.fn()
-  await render(<EdgeMarker map={mapAt([-300, -200])} target={kittyKo} distance="3.1 km" box={box} settled={1} moving={false} onPress={onPress} {...over} />)
+  await render(
+    <EdgeMarker
+      map={mapAt([-300, -200])}
+      target={kittyKo}
+      distance="3.1 km"
+      box={box}
+      settled={1}
+      moving={false}
+      onPress={onPress}
+      {...over}
+    />
+  )
   await act(async () => {})
   return onPress
 }

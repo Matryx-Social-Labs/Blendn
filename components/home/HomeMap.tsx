@@ -13,7 +13,7 @@ import {
 } from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, Platform, StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
+import { AppState, Linking, Platform, StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
@@ -57,7 +57,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { FRAME_NEAREST, frameOnYou } from '../../lib/mapPresence'
+import { FRAME_NEAREST, frameOnYou, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -69,6 +69,7 @@ import { useScreenReader } from '../ds/shared'
 import { EventPiles } from './EventPiles'
 import { PileSpeech } from './PileSpeech'
 import { EdgeMarker } from './EdgeMarker'
+import { ApproximateLine, StaleCallout } from './YouLines'
 import { YouMark } from './YouMark'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
@@ -662,6 +663,8 @@ export const HomeMap = memo(function HomeMap({
   )
 
   const style = useMemo(() => homeMapStyle(), [])
+  // What the map says about you (pulse-map 06): approximate and stale each get their one line.
+  const you = youMark({ sharing, permission: 'granted', fix: center, now })
 
   // The lap's venue, for its edge marker: an event focus on Events only (a venue's name when the server sends one).
   const edgeTarget = useMemo(
@@ -744,6 +747,7 @@ export const HomeMap = memo(function HomeMap({
           <YouMark part="dot" fix={center} sharing={sharing} now={now} />
         </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
+        {you.kind === 'stale' && center && you.line ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} /> : null}
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>
@@ -772,6 +776,16 @@ export const HomeMap = memo(function HomeMap({
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}
+      {you.kind === 'approximate' ? (
+        <ApproximateLine
+          visible={locateVisible}
+          drawerTop={drawerTop}
+          drawer={drawer}
+          lift={locateLift}
+          // expo-location cannot ask iOS for temporary full accuracy: Settings is where Precise is turned on (as Tonight's line).
+          onPress={() => void Linking.openSettings().catch(() => {})}
+        />
+      ) : null}
       {sharing ? (
         <LocateButton
           visible={locateVisible}
