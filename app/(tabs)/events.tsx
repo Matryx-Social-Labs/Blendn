@@ -1886,7 +1886,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const bannerActions = useLatest({ chooseCity, home, deviceCity, dismissTravel })
   // Denied (pulse-map 06): one quiet line on the map, on its own if nothing else is up there.
-  const locationDenied = locationStatus === 'denied'
+  // Put away for this visit: the city is still shown, distances still never guessed (pulse-map 06, "dismissible").
+  const [deniedDismissed, setDeniedDismissed] = useState(false)
+  const locationDenied = locationStatus === 'denied' && !deniedDismissed
   const placeBanners = useMemo(
     () =>
       switchSuggestion || travel || away || locationDenied ? (
@@ -1905,6 +1907,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           }}
           onTravelDismiss={() => bannerActions.current.dismissTravel()}
           locationDenied={locationDenied}
+          onDeniedDismiss={() => setDeniedDismissed(true)}
           onOpenSettings={() => void Linking.openSettings().catch(() => {})}
           refreshFailed={false}
           onRetry={() => {}}
