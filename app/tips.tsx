@@ -5,15 +5,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { SettingsGroup } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
-import { COACH_TIPS } from '../lib/coachMarks'
+import { COACH_TIPS, TIP_NIGHT } from '../lib/coachMarks'
 import { COLOR, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 
-const INTRO = 'Each tip shows once, on its own screen, the first time it applies. They’re all here to read again.'
+const INTRO = 'Each tip shows once, the first time it applies. They’re all here to read again.'
+
+/** "At the door" → "at-the-door", for a group's testID. */
+const slug = (night: string) => night.toLowerCase().replace(/ /g, '-')
 
 /**
- * Settings › Help › Tips (R4-2): every coach-mark sentence, grouped by the screen it shows on, and when. Reading only:
- * nothing here replays a tip, and a row does nothing when pressed.
+ * Settings › Help › Tips (R4-2; board remaining-screens 04 A): every coach-mark sentence, one card per moment of the night
+ * (Before you go · At the door · Inside · After), where and when as one quiet line under each. Reading only: nothing here
+ * replays a tip, and a row does nothing when pressed.
  */
 function TipsContent() {
   const bold = useBoldText()
@@ -28,13 +32,15 @@ function TipsContent() {
         {...bar.scrollProps}
       >
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.intro]}>{INTRO}</Text>
-        {COACH_TIPS.map((tip) => (
-          <SettingsGroup key={tip.id} title={tip.screen} testID={`tip-${tip.id}`}>
+        {TIP_NIGHT.map((night) => (
+          <SettingsGroup key={night} title={night} sentence testID={`tips-${slug(night)}`}>
             {/* Plain text in the card: a tip is read, never pressed, so no glyph and no row to ripple. */}
-            <View style={styles.tip}>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.text]}>{tip.text}</Text>
-              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.when]}>{tip.when}</Text>
-            </View>
+            {COACH_TIPS.filter((tip) => tip.night === night).map((tip) => (
+              <View key={tip.id} style={styles.tip}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.text]}>{tip.text}</Text>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.when]}>{`${tip.screen} · ${tip.when}`}</Text>
+              </View>
+            ))}
           </SettingsGroup>
         ))}
       </ScrollView>
