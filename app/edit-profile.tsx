@@ -5,11 +5,12 @@ import { KeyboardAvoidingView, ScrollView, StyleSheet, Text, TextInput, View } f
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
-import { TextArea, TextField } from '../components/ds/TextField'
+import { FieldLabelCase, TextArea, TextField } from '../components/ds/TextField'
 import { TopBar } from '../components/ds/TopBar'
 import PhotoManager from '../components/PhotoManager'
 import { WhoSees } from '../components/profile/WhoSees'
-import { MatchingFields, type Intent } from '../components/profile/MatchingFields'
+import { INTENTS, listLine, MatchingFields, type Intent } from '../components/profile/MatchingFields'
+import { Sheet } from '../components/ds/Sheet'
 import { RepositionHost } from '../components/profile/Reposition'
 import { OfflineStrip, useOffline } from '../components/profile/OfflineStrip'
 import { TagsField } from '../components/profile/TagsField'
@@ -116,6 +117,10 @@ function EditProfileContent() {
    * the difference: the endpoints are add and remove, not replace.
    */
   const [interestIds, setInterestIds] = useState<string[]>([])
+  /** Each interest's name, for the row's summary: from the profile as it loads, then from the picker's list once it opens. */
+  const [interestNames, setInterestNames] = useState<Record<string, string>>({})
+  /** Which matching row's sheet is up (A 03). The kind outlives `open` so the sheet keeps its content while it slides away. */
+  const [matchingSheet, setMatchingSheet] = useState<{ kind: MatchingRow; open: boolean }>({ kind: 'into', open: false })
   const [interestsAtLoad, setInterestsAtLoad] = useState<string[]>([])
   const [goals, setGoals] = useState<string[]>([])
   const [lookingFor, setLookingFor] = useState<string[]>([])
@@ -304,6 +309,10 @@ function EditProfileContent() {
           : []
         setInterestIds(structured)
         setInterestsAtLoad(structured)
+        if (Array.isArray(profileData.interests)) {
+          const loadedNames = Object.fromEntries(profileData.interests.map((i) => [String(i.id), i.name]))
+          setInterestNames((prev) => ({ ...prev, ...loadedNames }))
+        }
         setGoals(combinedProfile.goals || [])
         setLookingFor(combinedProfile.looking_for || [])
 
@@ -378,6 +387,22 @@ function EditProfileContent() {
     setWorkField(slug)
     const keep = new Set((slug ? expertiseByField[slug] : [])?.map((e) => e.slug))
     setExpertise((prev) => prev.filter((e) => keep.has(e)))
+  }
+
+  const closeMatchingSheet = () => setMatchingSheet((prev) => ({ ...prev, open: false }))
+  /** What each matching row says it holds (A 03): the picks by name, "Not set" for none; interests under two say why it matters. */
+  const fieldLabel = workFields.find((f) => f.slug === workField)?.label
+  const expertiseLabels = (workField ? expertiseByField[workField] ?? [] : []).filter((e) => expertise.includes(e.slug)).map((e) => e.label)
+  // In the order they were picked ("Friendship, Networking" on the board); dating only where it is offered.
+  const offeredIntents = intents
+    .filter((v) => v !== 'dating' || mayDate(liveAge))
+    .flatMap((v) => INTENTS.filter((i) => i.value === v))
+  const matchingHints: Record<MatchingRow, string> = {
+    into: interestIds.length < MIN_INTERESTS
+      ? INTERESTS_FLOOR
+      : listLine(interestIds.map((id) => interestNames[id]).filter((n): n is string => !!n)) ?? `${interestIds.length} picked`,
+    do: fieldLabel ? [fieldLabel, expertiseLabels.join(', ')].filter(Boolean).join(' · ') : MATCHING_UNSET,
+    open: listLine(offeredIntents.map((i) => i.label), INTENTS.length) ?? MATCHING_UNSET,
   }
 
   /** Never cut for the person: a value over the server's cap stays on screen with its count, and Save waits. */
@@ -559,54 +584,10 @@ function EditProfileContent() {
         >
           <OfflineStrip offline={offline} />
 
-          {/* Photos: the card heads itself (its count is the grid's). */}
-          <EditCard>{authUser ? <PhotoManager userId={authUser.id} maxPhotos={6} onDragging={setDragging} /> : null}</EditCard>
+          {/* Photos on the page, no card (board A 03): the main 2fr over two rows, two slots beside it. */}
+          {authUser ? <PhotoManager userId={authUser.id} maxPhotos={6} onDragging={setDragging} /> : null}
 
-          {/*
-            You and matching, between Photos and Basics (R4.1 14.2). Its own card and not folded into ABOUT YOU, because these are
-            the only fields on this screen that nobody else ever reads as text -- they feed `rankMatches` and surface as a tag on a
-            card, never as the values behind it.
-          */}
-          <EditCard title="You and matching">
-            <MatchingFields
-              intents={intents}
-              onToggleIntent={onToggleIntent}
-              workField={workField}
-              onChangeWorkField={changeWorkField}
-              expertiseOptions={workField ? expertiseByField[workField] : undefined}
-              expertise={expertise}
-              maxExpertise={maxExpertise}
-              onChangeExpertise={setExpertise}
-              workFields={workFields}
-              workFieldsFailed={workFieldsFailed}
-              onRetryWorkFields={() => {
-                setWorkFieldsRetrying(true)
-                void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
-              }}
-              workFieldsRetrying={workFieldsRetrying}
-              gender={gender}
-              onChangeGender={setGender}
-              orientations={orientations}
-              onChangeOrientations={setOrientations}
-              interestedIn={interestedIn}
-              onChangeInterestedIn={setInterestedIn}
-              offerDating={mayDate(liveAge)}
-              showOrientation={showOrientation}
-            />
-            {/*
-              Languages, home state, sign and this-or-that: display only, saved on their own screen so this form's save stays what
-              it was.
-            */}
-            <SettingsRow
-              icon="sparkles"
-              title="Languages, home & more"
-              label="Languages, home state, sign and this or that. Shown on cards when you share one with someone. Never used to rank."
-              trail="chevron"
-              onPress={() => router.push('/edit-about-you')}
-            />
-          </EditCard>
-
-          <EditCard title="Basic information" onLayout={(y) => (basicInfoY.current = y)}>
+          <EditCard title="You" onLayout={(y) => (basicInfoY.current = y)}>
             {isLoading ? (
               <FieldsSkeleton fields={BASIC_FIELDS} />
             ) : (
@@ -644,7 +625,7 @@ function EditProfileContent() {
                   testID="edit-profile-age"
                 />
                 <TextField
-                  label="Location"
+                  label="Where you are"
                   value={location}
                   onChangeText={setLocation}
                   error={overCap.location}
@@ -664,6 +645,133 @@ function EditProfileContent() {
                   placeholder="e.g. Software Engineer"
                   testID="edit-profile-occupation"
                 />
+              </Animated.View>
+            )}
+          </EditCard>
+
+          <EditCard title="About">
+            {isLoading ? (
+              <SkeletonBlock width="100%" height={ABOUT_SKELETON} borderRadius={RADIUS.mediaInCard} />
+            ) : (
+              <Animated.View entering={arrive}>
+              <TextArea
+                label="Bio"
+                value={bio}
+                onChangeText={setBio}
+                limit={PROFILE_LIMITS.bio}
+                measure={serverLength}
+                error={overCap.bio}
+                placeholder="Tell people about yourself…"
+                testID="edit-profile-bio"
+              />
+              </Animated.View>
+            )}
+          </EditCard>
+
+          {/*
+            Matching as three rows (Me + settings A 03, sheet 2/2): the only fields here nobody reads as text -- they feed
+            `rankMatches` and surface as a tag on a card. Each row says what it holds and opens its picker in a sheet; a pick
+            waits for Save with the rest of the form.
+          */}
+          <EditCard title="Matching · seen in rooms of 8+">
+            {MATCHING_ROWS.map((row) => (
+              <SettingsRow
+                key={row.kind}
+                icon={row.icon}
+                title={row.title}
+                hint={matchingHints[row.kind]}
+                trail="chevron"
+                disabled={isLoading}
+                onPress={() => setMatchingSheet({ kind: row.kind, open: true })}
+                testID={`edit-profile-matching-${row.kind}`}
+              />
+            ))}
+          </EditCard>
+
+          {/*
+            One sheet per row, each with its own content and height: a single sheet whose content and detents swapped between
+            opens kept the last one's measured height, and on Android drew the next one off screen (drive 2026-11-18).
+          */}
+          {MATCHING_ROWS.map((row) => (
+            <Sheet
+              key={row.kind}
+              visible={matchingSheet.open && matchingSheet.kind === row.kind}
+              onClose={closeMatchingSheet}
+              title={row.title}
+              headerNote={row.kind === 'into' ? { text: `${interestIds.length} of ${MAX_INTERESTS}` } : undefined}
+              // The interests list is long and scrolls; the other two are as tall as their chips.
+              detents={row.kind === 'into' ? ['tall'] : undefined}
+              actions={[{ label: 'Done', kind: 'secondary', onPress: closeMatchingSheet, testID: `edit-profile-matching-${row.kind}-done` }]}
+              testID={`edit-profile-matching-${row.kind}-sheet`}
+            >
+            {row.kind === 'into' ? (
+              <View style={styles.cardBody}>
+                {/* Under two, matching can't rank you and the board refuses a post (SCRUM-519): said, never refused. */}
+                {interestIds.length < MIN_INTERESTS ? (
+                  <Text testID="edit-profile-interests-floor" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.floor]}>
+                    {INTERESTS_FLOOR}
+                  </Text>
+                ) : null}
+                <InterestPicker
+                  selected={interestIds}
+                  onChange={setInterestIds}
+                  showCount={false}
+                  onNames={(names) => setInterestNames((prev) => ({ ...prev, ...names }))}
+                />
+                <WhoSees field="interests" />
+              </View>
+            ) : (
+              <MatchingFields
+                part={row.kind === 'open' ? 'open' : 'work'}
+                intents={intents}
+                onToggleIntent={onToggleIntent}
+                workField={workField}
+                onChangeWorkField={changeWorkField}
+                expertiseOptions={workField ? expertiseByField[workField] : undefined}
+                expertise={expertise}
+                maxExpertise={maxExpertise}
+                onChangeExpertise={setExpertise}
+                workFields={workFields}
+                workFieldsFailed={workFieldsFailed}
+                onRetryWorkFields={() => {
+                  setWorkFieldsRetrying(true)
+                  void loadWorkFields().finally(() => setWorkFieldsRetrying(false))
+                }}
+                workFieldsRetrying={workFieldsRetrying}
+                gender={gender}
+                onChangeGender={setGender}
+                orientations={orientations}
+                onChangeOrientations={setOrientations}
+                interestedIn={interestedIn}
+                onChangeInterestedIn={setInterestedIn}
+                offerDating={mayDate(liveAge)}
+                showOrientation={showOrientation}
+              />
+            )}
+            </Sheet>
+          ))}
+
+          {/* One name for the about-you screen (A 04): what it holds is shown on cards only when you share one. */}
+          <EditCard title="Shown when you share one">
+            {/*
+              Languages, home state, sign and this-or-that: display only, saved on their own screen so this form's save stays what
+              it was.
+            */}
+            <SettingsRow
+              icon="sparkles"
+              title="Languages, home & more"
+              label="Languages, home region, sign and this or that. Shown on cards only when you share one with someone. Never used to rank."
+              trail="chevron"
+              onPress={() => router.push('/edit-about-you')}
+            />
+          </EditCard>
+
+          {/* Details last (A 03): education, shown once you reveal; your phone, which nobody else ever sees. */}
+          <EditCard title="Details">
+            {isLoading ? (
+              <FieldsSkeleton fields={DETAIL_FIELDS} />
+            ) : (
+              <Animated.View entering={arrive} style={styles.fields}>
                 <TextField
                   label="Education"
                   value={education}
@@ -683,51 +791,12 @@ function EditProfileContent() {
                   limit={counterLimit(phone, PROFILE_LIMITS.phone)}
                   measure={serverLength}
                   placeholder="Phone number"
+                  hint={PHONE_PRIVATE}
                   keyboardType="phone-pad"
                   autoComplete="tel"
                   textContentType="telephoneNumber"
                   testID="edit-profile-phone"
                 />
-              </Animated.View>
-            )}
-          </EditCard>
-
-          <EditCard title="About you">
-            {isLoading ? (
-              <SkeletonBlock width="100%" height={ABOUT_SKELETON} borderRadius={RADIUS.mediaInCard} />
-            ) : (
-              <Animated.View entering={arrive}>
-              <TextArea
-                label="Bio"
-                value={bio}
-                onChangeText={setBio}
-                limit={PROFILE_LIMITS.bio}
-                measure={serverLength}
-                error={overCap.bio}
-                placeholder="Tell people about yourself…"
-                testID="edit-profile-bio"
-              />
-              </Animated.View>
-            )}
-          </EditCard>
-
-          <EditCard title="Interests" sub={isLoading ? undefined : `${interestIds.length} of ${MAX_INTERESTS}`}>
-            {isLoading ? (
-              <View style={styles.chipsSkeleton}>
-                {[...Array(5)].map((_, i) => (
-                  <SkeletonBlock key={`sk-i-${i}`} width={CHIP_SKELETON} height={SIZE.tag} borderRadius={RADIUS.capsule} />
-                ))}
-              </View>
-            ) : (
-              <Animated.View entering={arrive} style={styles.cardBody}>
-                {/* Under two, matching can't rank you and the board refuses a post (SCRUM-519): said, never refused. */}
-                {interestIds.length < MIN_INTERESTS ? (
-                  <Text testID="edit-profile-interests-floor" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.floor]}>
-                    {`Pick at least ${MIN_INTERESTS} so we can match you.`}
-                  </Text>
-                ) : null}
-                <InterestPicker selected={interestIds} onChange={setInterestIds} showCount={false} />
-                <WhoSees field="interests" />
               </Animated.View>
             )}
           </EditCard>
@@ -773,8 +842,22 @@ function EditProfileContent() {
   )
 }
 
-/** The Basic information card while the profile loads: its six fields at the final geometry (Flow 6 edit 11). */
-const BASIC_FIELDS = 6
+type MatchingRow = 'into' | 'do' | 'open'
+/** The three matching rows, in the board's order (A 03 2/2). */
+const MATCHING_ROWS: { kind: MatchingRow; title: string; icon: 'sparkles' | 'briefcase' | 'hand' }[] = [
+  { kind: 'into', title: 'What you’re into', icon: 'sparkles' },
+  { kind: 'do', title: 'What you do', icon: 'briefcase' },
+  { kind: 'open', title: 'What you’re open to', icon: 'hand' },
+]
+/** A matching row with nothing picked. */
+const MATCHING_UNSET = 'Not set'
+const INTERESTS_FLOOR = `Pick at least ${MIN_INTERESTS} so we can match you.`
+
+/** The You and Details cards while the profile loads: their fields at the final geometry (Flow 6 edit 11). */
+const BASIC_FIELDS = 4
+const DETAIL_FIELDS = 2
+/** Phone is never shown to anyone (A 03): said in the field, since it sits among fields others can see. */
+export const PHONE_PRIVATE = 'Only for sign-in. Never shown.'
 const ABOUT_SKELETON = 160
 const CHIP_SKELETON = 96
 
@@ -798,7 +881,7 @@ function EditCard({ title, sub, children, onLayout }: { title?: string; sub?: st
     <View style={styles.card} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
       {title ? (
         <View style={styles.cardHeader}>
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.label} accessibilityRole="header" style={[font('label', bold), styles.cardTitle]}>
+          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.note} accessibilityRole="header" style={[font('note', bold), styles.cardTitle]}>
             {title}
           </Text>
           {sub ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.cardSub]}>{sub}</Text> : null}
@@ -830,11 +913,13 @@ const styles = StyleSheet.create({
   chipsSkeleton: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.sm },
 })
 
-/** Violet world: one hue on this screen (`HueProvider`). */
+/** Violet world: one hue on this screen (`HueProvider`). Labels in sentence case, as board A 03 draws them. */
 export default function EditProfile() {
   return (
     <HueProvider value="violet">
-      <EditProfileContent />
+      <FieldLabelCase.Provider value="sentence">
+        <EditProfileContent />
+      </FieldLabelCase.Provider>
     </HueProvider>
   )
 }

@@ -313,6 +313,8 @@ export default function EventDetail() {
   const [goingCount, setGoingCount] = useState(0)
   const [interestCount, setInterestCount] = useState<number>(() => seed?.interestCount ?? 0)
   const [userInterested, setUserInterested] = useState<boolean>(false)
+  /** The save as the server holds it: the Lobby card re-reads on it, never on the optimistic flip, which would race the write. */
+  const [savedHeld, setSavedHeld] = useState(false)
   /*
    * `waitlisted` is included because the server can return it.
    *
@@ -371,6 +373,7 @@ export default function EventDetail() {
     // Interest, check-in and RSVP from userStatus - no separate API call needed
     if (d.userStatus) {
       setUserInterested(d.userStatus.isFavorited || false)
+      setSavedHeld(d.userStatus.isFavorited || false)
       setCheckInStatus({
         success: true,
         checked_in: d.userStatus.isCheckedIn || false,
@@ -510,6 +513,7 @@ export default function EventDetail() {
       setInterestCount(data.interestCount)
       if (user && data.userId === user.id) {
         setUserInterested(data.interested)
+        setSavedHeld(data.interested)
       }
       // Refresh interested avatars from API payload
       fetchEventDetails()
@@ -557,6 +561,7 @@ export default function EventDetail() {
         return
       }
       setUserInterested(result.data.interested)
+      setSavedHeld(result.data.interested)
       setInterestCount(result.data.interestCount || 0)
       // Saving is silent everywhere (the bookmark's lit rim is the cue); only a refusal buzzes (above).
     } catch {
@@ -1114,7 +1119,7 @@ export default function EventDetail() {
                 */}
                 {event && BOARD_ENABLED && !cancelled ? (
                   <FadeInUp delay={SECTION_DELAY[1]}>
-                    <EventLobbyPreview eventId={event.id} timeZone={tz} here={hereNow ?? detailHere} onOpenRoom={() => void openRoom()} />
+                    <EventLobbyPreview eventId={event.id} timeZone={tz} here={hereNow ?? detailHere} saved={savedHeld} rsvp={rsvpStatus} onOpenRoom={() => void openRoom()} />
                   </FadeInUp>
                 ) : null}
 

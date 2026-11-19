@@ -4,19 +4,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Avatar } from '../components/ds/Avatar'
 import { Banner } from '../components/ds/Banner'
 import { TextField } from '../components/ds/TextField'
 import { SettingsGroup, SettingsRow } from '../components/ds/SettingsRow'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { TopBar } from '../components/ds/TopBar'
+import { BannerPresence } from '../components/motion/BannerPresence'
 import { bannerFadeIn, bannerIn, bannerOut } from '../components/motion/presence'
 import { OfflineBanner } from '../components/OfflineBanner'
 import { useToast } from '../components/Toast'
 import { HomeCityRow } from '../components/settings/HomeCityRow'
-import { COLOR, SPACE as DS_SPACE, SPRING, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, SPACE as DS_SPACE, SPRING, MAX_FONT_SCALE } from '../lib/design/tokens'
 import type { IconName } from '../components/ui/Icon'
 import { H } from '../lib/haptics'
-import { PLUS_FREE_SHEET } from '../lib/plusFree'
 import { showSheet, type Sheet } from '../lib/sheet'
 import { useTopBarOverlay } from '../lib/useTopBarState'
 import { apiClient } from '../lib/apiClient'
@@ -24,9 +25,12 @@ import { useAuthMethod } from '../lib/authMethod'
 import { appleProofForDeletion, DELETION_REFUSED, googleProofForDeletion } from '../lib/deletionProof'
 import type { AuthMethod } from '../lib/authMethod'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
-import { dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
+import { appVersionLabel, dataCopyMailto, SUPPORT_EMAIL } from '../lib/support'
+import { blockedCountLine, fetchBlockedPage } from '../lib/blockedUsersPage'
+import { useHomeCountry } from '../lib/homeCity'
+import { personFace } from '../lib/personFace'
 import { settleWithin } from '../lib/fetchTimeout'
-import { NOT_SIGNED_OUT_EVERYWHERE, passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
+import { deleteExplainMessage, NOT_SIGNED_OUT_EVERYWHERE, passwordLinkSheet, signOutEverywhereSheet, signOutSheet } from '../lib/settingsSheets'
 import { useLatest } from '../lib/useLatest'
 import { usePullToRefresh } from '../lib/usePullToRefresh'
 import { usePushPreference } from '../lib/usePushPreference'
@@ -35,7 +39,7 @@ import { useAuth, refreshAuthUser, signOut, signOutEverywhere, deleteAccount } f
 import { notificationsHint, useMutedRooms } from '../lib/mutedRooms'
 import { openPaywall } from '../lib/paywall'
 import { usePlusStatus, type PlusStatus } from '../lib/plus'
-import { plusRowLine } from '../lib/mePlus'
+import { plusRowLine, showsPlus } from '../lib/mePlus'
 import { useMonthlyPrice } from '../lib/useMonthlyPrice'
 import { manageSubscriptionUrl } from '../lib/purchases'
 import { useReducedMotion } from '../lib/motion'
@@ -43,6 +47,9 @@ import { useReducedMotion } from '../lib/motion'
 /** The banner's sentence when the profile could not be read (Flow 7 frame 06). */
 /** How long "Sign out of every device" keeps its spinner: past one request deadline (15 s), so a slow answer still lands. */
 const SIGN_OUT_EVERYWHERE_CAP_MS = 20_000
+
+/** The account card's face: the DS 40 step, as the friends rows draw a person. */
+const ACCOUNT_FACE = 40
 
 const SETTINGS_NOT_LOADED = 'Your settings didn’t load. Pull down or try again.'
 
@@ -60,7 +67,7 @@ const PREFERENCE_COLUMN: Record<PreferenceKey, string> = {
 const PREFERENCE_TITLES: Record<PreferenceKey, string> = {
   showOnlineStatus: 'Show online status',
   shareReadReceipts: 'Read receipts',
-  locationSharing: 'Share location for nearby events',
+  locationSharing: 'Location for nearby events',
   friendsSeeMe: "Friends can see I’m here",
 }
 
@@ -115,6 +122,23 @@ function SettingsScreenContent() {
   const bold = useBoldText()
   const reduceMotion = useReducedMotion()
   const authMethod = useAuthMethod(user?.signInMethod)
+  // The retention line on the Delete sheet follows the account's country (Me + settings A 07): never India's law for Toronto.
+  const homeCountry = useHomeCountry(user?.id)
+  // How many you blocked, on the Blocked row: the first page's count, "+" when there is more (a server total is Backend later).
+  const [blocked, setBlocked] = useState<{ count: number; more: boolean } | null>(null)
+  useFocusEffect(
+    useCallback(() => {
+      let live = true
+      fetchBlockedPage()
+        .then((result) => {
+          if (live && result.ok) setBlocked({ count: result.page.users.length, more: !!result.page.nextCursor })
+        })
+        .catch(() => {})
+      return () => {
+        live = false
+      }
+    }, [])
+  )
   // The Password row follows the server's `signInMethod`, which a password added elsewhere changes: read the session on opening.
   useEffect(() => {
     void refreshAuthUser()
@@ -315,7 +339,7 @@ function SettingsScreenContent() {
       actions: [
         {
           label: 'Delete my account',
-          variant: 'destructive',
+          variant: 'danger',
           // On failure the sheet stays, says why, and the button becomes Try again.
           run: async () => {
             const proof =
@@ -357,34 +381,24 @@ function SettingsScreenContent() {
 
   const explainDeleteSheet = useCallback(
     (storePlus: PlusStatus['source'] | null): Sheet => {
-      const store = storePlus === 'apple' ? 'App Store' : 'Google Play'
+      const store = storePlus === 'apple' ? 'the App Store' : 'Google Play'
       return {
         kind: 'actions',
         hue: 'violet',
         icon: 'trash-2',
         title: 'Delete your account?',
-        message:
-          'Your profile, photos, friends and sign-in are deleted now. Messages you sent stay in their conversations under a deleted account, and we keep your registration details for 180 days, as Indian law requires.',
-        // A running store subscription keeps billing after the account is gone: say so first (review H1).
+        message: deleteExplainMessage(homeCountry),
+        // A running store subscription keeps billing after the account is gone: said first, as a banner (review H1).
+        // In presence: a late store answer redraws the sheet with it, and it must not pop.
         content: storePlus ? (
-          <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} accessibilityLiveRegion="polite" style={[font('bodyStrong', bold), { color: COLOR.textPrimary }]}>
-            {`Cancel Blend’n+ in your ${store} subscriptions first. Deleting your account doesn’t cancel it.`}
-          </Text>
+          <BannerPresence>
+            <Banner kind="info" icon="sparkles" text={`Blend’n+ renews through ${store}. Deleting doesn’t cancel it.`} testID="delete-renews" />
+          </BannerPresence>
         ) : undefined,
         onDismiss: () => {
           deleteExplainOpen.current = false
         },
         actions: [
-          {
-            label: 'Delete account',
-            variant: 'destructive',
-            // Each destructive press plays the tick (Flow 7 frame 13), the one that only leads to "for good?" included.
-            pressHaptic: () => H.destructive(),
-            next: () => {
-              deleteExplainOpen.current = false
-              return confirmDeleteSheet()
-            },
-          },
           ...(storePlus
             ? [
                 {
@@ -398,18 +412,30 @@ function SettingsScreenContent() {
               ]
             : []),
           {
+            label: 'Delete account',
+            // Outlined, not filled (Me + settings A 07): the way back, not the delete, is the easy thing on this sheet.
+            variant: 'danger',
+            // Each destructive press plays the tick (Flow 7 frame 13), the one that only leads to "for good?" included.
+            pressHaptic: () => H.destructive(),
+            next: () => {
+              deleteExplainOpen.current = false
+              return confirmDeleteSheet()
+            },
+          },
+          // The page that lists everything kept, quiet beside the way back (kept from Flow 7; the board drew three buttons).
+          {
             label: 'What’s kept',
-            variant: 'secondary',
+            variant: 'tertiary',
             then: () => {
               deleteExplainOpen.current = false
               openPage(BLENDN_LINKS.deleteAccount)
             },
           },
-          { label: 'Cancel', cancel: true },
+          { label: 'Keep my account', cancel: true },
         ],
       }
     },
-    [bold, confirmDeleteSheet, openPage, openStore]
+    [confirmDeleteSheet, homeCountry, openPage, openStore]
   )
 
   const handleDeleteAccount = useCallback(() => {
@@ -482,12 +508,10 @@ function SettingsScreenContent() {
     )
   }
 
-  // The paywall, asked for: no cooldown (step 11, trigger `profile`). Free during launch where you go out: a row that says so and sells nothing (review H2).
+  // The paywall, asked for: no cooldown (step 11, trigger `profile`). Only where Blend'n+ is sold (`showsPlus`, owner 2026-11-18).
   // The same line as Me's row (D23, `plusRowLine`): one account, one sentence on both.
   const plusPrice = useMonthlyPrice(!!plus && !plus.active && plus.gated)
-  const plusLine = plusRowLine(plus, plusPrice, Platform.OS === 'android' ? 'android' : 'ios')
-  const plusIsFree = plusLine.free
-  const plusHint = plusLine.hint ?? undefined
+  const plusHint = plusRowLine(plus, plusPrice, Platform.OS === 'android' ? 'android' : 'ios') ?? undefined
 
   /** The Account card (R4.1 7.1): who is signed in, how, and the ways out. A Google or Apple account has no password to change. */
   const email = user?.email
@@ -531,19 +555,82 @@ function SettingsScreenContent() {
           )}
         </Animated.View>
 
+        {/*
+          Me + settings A (owner 2026-11-18): who you are first, then the ways the app reaches you, what others can see and who
+          you blocked, where you are, help and the legal pages in one group, the ways out, Delete alone, and the version.
+        */}
+        <SettingsGroup>
+          {email ? (
+            <SettingsRow
+              leading={<Avatar size={ACCOUNT_FACE} {...personFace({ named: true, name: user?.name || email, photo: user?.image })} />}
+              title={user?.name || email}
+              hint={user?.name ? (viaProvider ? `${accountRow.title} · ${email}` : `Signed in as ${email}`) : viaProvider ? accountRow.title : 'Signed in with email'}
+              hintLines={1}
+              testID="settings-account"
+            />
+          ) : null}
+          {email && authMethod === 'password' ? (
+            <SettingsRow icon="key-round" title="Password" trail="chevron" onPress={() => askPasswordLink(email)} testID="settings-password" />
+          ) : null}
+        </SettingsGroup>
+
+        {/* Where you stand with Blend’n+, the same line as Me's row (D23, `plusRowLine`); only where it is sold (owner 2026-11-18: the app is free). */}
+        {showsPlus(plus) ? (
+          <SettingsGroup>
+            <SettingsRow
+              icon="sparkles"
+              title="Blend’n+"
+              hint={plusHint}
+              trail="chevron"
+              onPress={() => void openPaywall('profile', { userInitiated: true })}
+              testID="settings-plus"
+            />
+          </SettingsGroup>
+        ) : null}
+
+        {/* Push, what to hear about, offers and muted rooms live on their own screen (Flow 9); the row is named as that screen is. */}
+        <SettingsGroup title="Notifications">
+          <SettingsRow
+            icon="bell"
+            title="Notification settings"
+            hint={notificationsHint(muted.count, push.enabled === null ? null : push.enabled && !push.off, muted.atLeast)}
+            trail="chevron"
+            onPress={() => router.push('/notification-settings')}
+            testID="settings-notifications"
+          />
+        </SettingsGroup>
+
+        {/* What others see of you, and who you keep out: blocking is the most consequential safety action, beside the switches. */}
+        <SettingsGroup title="Privacy & safety">
+          {/* D-L24: the sub names what the switch does now, on or off. */}
+          {preferenceRow('showOnlineStatus', 'eye', 'Show online status', ONLINE_STATUS_HINT[preferences.showOnlineStatus ? 'on' : 'off'])}
+          {preferenceRow('shareReadReceipts', 'check-check', 'Read receipts')}
+          {preferenceRow('friendsSeeMe', 'users', PREFERENCE_TITLES.friendsSeeMe, FRIENDS_SEE_ME_HINT[preferences.friendsSeeMe ? 'on' : 'off'])}
+          {preferenceRow('locationSharing', 'navigation', PREFERENCE_TITLES.locationSharing)}
+          <SettingsRow
+            icon="ban"
+            title="Blocked"
+            hint={blocked ? blockedCountLine(blocked.count, blocked.more) ?? undefined : undefined}
+            trail="chevron"
+            onPress={() => router.push('/blocked-users')}
+            testID="settings-blocked"
+          />
+        </SettingsGroup>
+
         {user?.id ? (
-          <SettingsGroup title="Location">
+          <SettingsGroup title="Where you are">
             <HomeCityRow userId={user.id} />
           </SettingsGroup>
         ) : null}
 
-        <SettingsGroup title="Privacy">
-          {/* What it does, in the row: the switch was a promise for a year (SCRUM-141). */}
-          {/* D-L24: the sub names what the switch does now, on or off. */}
-          {preferenceRow('showOnlineStatus', 'eye', 'Show online status', ONLINE_STATUS_HINT[preferences.showOnlineStatus ? 'on' : 'off'])}
-          {preferenceRow('shareReadReceipts', 'check-check', 'Read receipts')}
-          {preferenceRow('locationSharing', 'navigation', 'Share location for nearby events')}
-          {preferenceRow('friendsSeeMe', 'users', "Friends can see I’m here", "On: friends at the same event see you under Friends here, with your name and photo, and can message you. Off: you don’t show up for friends at events at all.")}
+        {/* Community guidelines, Terms, Privacy and Grievances are on About Blend’n: one door to each (they were here twice). */}
+        <SettingsGroup title="Help & legal">
+          <SettingsRow icon="circle-question-mark" title="Help center" trail="external" onPress={() => openPage(BLENDN_LINKS.help)} />
+          <SettingsRow icon="mail" title="Contact support" trail="chevron" onPress={() => router.push('/support')} />
+          {/* R4-2: every coach-mark sentence, to read again. Nothing replays from there. */}
+          <SettingsRow icon="zap" title="Tips" trail="chevron" onPress={() => router.push('/tips')} testID="settings-tips" />
+          <SettingsRow icon="shield-check" title="Safety tips" trail="external" onPress={() => openPage(BLENDN_LINKS.safety)} />
+          <SettingsRow icon="info" title="About Blend’n" hint="Terms, privacy, guidelines, grievances" trail="chevron" onPress={() => router.push('/about')} testID="settings-about" />
           {/* R4.1 7.2: a prefilled email to support; nothing is sent until they press Send in their mail app. */}
           <SettingsRow
             icon="download"
@@ -556,68 +643,16 @@ function SettingsScreenContent() {
           />
         </SettingsGroup>
 
-        {/*
-          Push, what to hear about, offers and the rooms you muted live on their own screen (Flow 9 · 9.6); what matching
-          reads about you is Edit profile's about-you fields, reached from here too (Flow 14 · 14.4, R4.1 7.1 frame 01).
-        */}
-        <SettingsGroup title="Notifications & matching">
-          <SettingsRow
-            icon="bell"
-            title="Notifications"
-            hint={notificationsHint(muted.count, push.enabled === null ? null : push.enabled && !push.off, muted.atLeast)}
-            trail="chevron"
-            onPress={() => router.push('/notification-settings')}
-            testID="settings-notifications"
-          />
-          <SettingsRow icon="sparkles" title="About you" hint="What matching reads" trail="chevron" onPress={() => router.push('/edit-about-you')} testID="settings-how-you-match" />
-        </SettingsGroup>
-
-        {/* Blocked users leads Safety: blocking is the most consequential safety action in the product. */}
-        <SettingsGroup title="Safety">
-          <SettingsRow icon="ban" title="Blocked users" trail="chevron" onPress={() => router.push('/blocked-users')} />
-          <SettingsRow icon="shield-check" title="Safety tips" trail="external" onPress={() => openPage(BLENDN_LINKS.safety)} />
-          <SettingsRow icon="flag" title="Community guidelines" trail="external" onPress={() => openPage(BLENDN_LINKS.guidelines)} />
-        </SettingsGroup>
-
-        <SettingsGroup title="Help">
-          <SettingsRow icon="circle-question-mark" title="Help center" trail="external" onPress={() => openPage(BLENDN_LINKS.help)} />
-          <SettingsRow icon="mail" title="Contact support" trail="chevron" onPress={() => router.push('/support')} />
-          {/* R4-2: every coach-mark sentence, to read again. Nothing replays from there. */}
-          <SettingsRow icon="zap" title="Tips" trail="chevron" onPress={() => router.push('/tips')} testID="settings-tips" />
-        </SettingsGroup>
-
-        {/* Terms and Privacy are on About, beside the version: two doors to each page, one screen apart. */}
-        <SettingsGroup title="About">
-          <SettingsRow icon="info" title="About Blend’n" trail="chevron" onPress={() => router.push('/about')} />
-        </SettingsGroup>
-
-        {/* R2-D7: Blend’n+ is its own group above Account, one row that says where you stand. */}
-        <SettingsGroup title="Blend’n+">
-          <SettingsRow
-            icon="sparkles"
-            title="Blend’n+"
-            hint={plusHint}
-            trail="chevron"
-            onPress={plusIsFree ? () => showSheet(PLUS_FREE_SHEET) : () => void openPaywall('profile', { userInitiated: true })}
-            testID="settings-plus"
-          />
-        </SettingsGroup>
-
-        <SettingsGroup title="Account">
-          {email ? <SettingsRow icon={accountRow.icon} title={accountRow.title} hint={email} testID="settings-account" /> : null}
-          {email && authMethod === 'password' ? (
-            <SettingsRow icon="key-round" title="Password" trail="chevron" onPress={() => askPasswordLink(email)} testID="settings-password" />
-          ) : null}
-          <SettingsRow icon="log-out" title="Sign out" trail="chevron" onPress={askSignOut} />
+        <SettingsGroup>
+          <SettingsRow icon="log-out" title="Sign out" trail="chevron" onPress={askSignOut} testID="settings-sign-out" />
           <SettingsRow icon="smartphone" title="Sign out of every device" trail="chevron" onPress={askSignOutEverywhere} testID="settings-sign-out-everywhere" />
         </SettingsGroup>
 
         {/*
-          Alone, at the bottom, outlined, under its own label. Sign out is routine and
-          reversible and Delete destroys the account: reserving the red for the
-          one irreversible row is what makes it mean anything.
+          Alone, at the bottom, outlined. Sign out is routine and reversible and Delete destroys the account: reserving the red
+          for the one irreversible row is what makes it mean anything. No "Danger zone" label (naming review): the red says it.
         */}
-        <SettingsGroup title="Danger zone" danger>
+        <SettingsGroup danger>
           <SettingsRow
             icon="trash-2"
             title={deleting ? 'Deleting account…' : 'Delete account'}
@@ -628,6 +663,11 @@ function SettingsScreenContent() {
             testID="settings-delete"
           />
         </SettingsGroup>
+
+        {/* The first thing support asks for; About Blend’n has it as a tap-to-copy chip. */}
+        <Text testID="settings-version" maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.version]}>
+          {`Blend’n ${appVersionLabel()}`}
+        </Text>
       </ScrollView>
       {pull.indicator}
       <View style={bar.barPin} onLayout={bar.onBarLayout} pointerEvents="box-none">
@@ -686,6 +726,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: DS_SPACE.gutter, paddingBottom: DS_SPACE.xl, gap: DS_SPACE.xl },
   // The banner and the groups share the column's gap; an empty slot takes none.
   banners: { gap: DS_SPACE.sm },
+  version: { color: COLOR.textTertiary, textAlign: 'center' },
 })
 
 /** Violet world: one hue on this screen (`HueProvider`). */
@@ -694,6 +735,12 @@ const styles = StyleSheet.create({
 export const ONLINE_STATUS_HINT = {
   on: 'On: people at the same event see you listed there.',
   off: 'Off: you’re counted at events but not listed to other people there.',
+} as const
+
+/** "Friends can see I’m here" in the state it is in, the D-L24 pattern: it was one 5-line hint for both. */
+export const FRIENDS_SEE_ME_HINT = {
+  on: 'On · friends at your event see you, with your name and photo, and can message you',
+  off: 'Off · friends at your event don’t see you',
 } as const
 
 export default function SettingsScreen() {

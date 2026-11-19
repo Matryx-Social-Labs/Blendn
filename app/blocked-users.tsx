@@ -1,9 +1,10 @@
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshControl, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '../components/ds/Button'
+import { SearchField } from '../components/ds/SearchField'
 import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
@@ -12,7 +13,7 @@ import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
 import { COLOR, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
 import { blockedLine } from '../lib/blockedLine'
-import { fetchBlockedPage } from '../lib/blockedUsersPage'
+import { BLOCKED_LOAD_CAP, BLOCKED_SEARCH_FROM, blockedCountLine, fetchBlockedPage, searchBlocked } from '../lib/blockedUsersPage'
 import { unblockUser, type BlockedUser } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { useTopBarState } from '../lib/useTopBarState'
@@ -45,6 +46,8 @@ function BlockedUsersContent() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
+  const [query, setQuery] = useState('')
+  const shown = useMemo(() => searchBlocked(blockedUsers, query), [blockedUsers, query])
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
@@ -91,7 +94,8 @@ function BlockedUsersContent() {
    * stall on an empty page.
    */
   const loadMore = useCallback((retry = false) => {
-    if (!nextCursor || loadingMore || (moreFailed && !retry)) return
+    // Never past the cap, and not while searching: the search runs over what is loaded (Backend later lifts both).
+    if (!nextCursor || loadingMore || (moreFailed && !retry) || blockedUsers.length >= BLOCKED_LOAD_CAP || query.trim()) return
     setMoreFailed(false)
     const mine = read.current
     setLoadingMore(true)
@@ -116,7 +120,7 @@ function BlockedUsersContent() {
         if (read.current === mine) setMoreFailed(true)
       })
       .finally(() => setLoadingMore(false))
-  }, [nextCursor, loadingMore, moreFailed])
+  }, [nextCursor, loadingMore, moreFailed, blockedUsers.length, query])
   const onEndReached = useCallback(() => loadMore(), [loadMore])
 
   useEffect(() => {
@@ -133,7 +137,8 @@ function BlockedUsersContent() {
       actions: [
         {
           label: 'Unblock',
-          variant: 'destructive',
+          // Neutral, as the board's button language has it: unblocking gives access back; red is for Delete only.
+          variant: 'secondary',
           run: async () => {
             const result = await unblockUser(user.blocked_id)
             if (!result.success) return { ok: false, error: "Couldn’t unblock them. Try again." }
@@ -177,17 +182,21 @@ function BlockedUsersContent() {
     failed ? (
       <StateScreen
         icon="cloud-off"
-        title="Blocked users didn’t load"
+        title="Blocked didn’t load"
         body="Check your connection and try again."
         actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
       />
     ) : (
-      <StateScreen
-        testID="blocked-empty"
-        icon="shield-check"
-        title="No blocked users"
-        body="People you block show up here, and you can unblock them any time."
-      />
+      query.trim() ? (
+        <StateScreen testID="blocked-no-match" icon="search" title={`Nobody called “${query.trim()}”`} body="Only the people loaded here are searched." />
+      ) : (
+        <StateScreen
+          testID="blocked-empty"
+          icon="ban"
+          title="Nobody blocked"
+          body="Block someone from their profile or a chat. They aren’t told, and you can unblock here any time."
+        />
+      )
     )
 
   /** The foot of a long list: the next page on its way, or the one that did not come. */
@@ -208,7 +217,7 @@ function BlockedUsersContent() {
 
   return (
     <View style={styles.container}>
-      <TopBar title="Blocked users" state={bar.state} onBack={() => router.back()} />
+      <TopBar title="Blocked" state={bar.state} onBack={() => router.back()} />
 
       {loading ? (
         <View accessible style={styles.listContent} accessibilityLabel="Loading">
@@ -227,11 +236,30 @@ function BlockedUsersContent() {
         <Animated.FlatList
           testID="blocked-users-list"
           itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
-          data={blockedUsers}
+          data={shown}
+          ListHeaderComponent={
+            blockedUsers.length > 0 ? (
+              <View style={styles.head}>
+                <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.lede]}>
+                  They can’t see you or message you. They aren’t told.
+                </Text>
+                {blockedUsers.length > BLOCKED_SEARCH_FROM ? (
+                  <SearchField
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder={`Search ${blockedCountLine(blockedUsers.length, !!nextCursor)}`}
+                    resultsLabel={query.trim() ? `${shown.length} found` : undefined}
+                    testID="blocked-search"
+                  />
+                ) : null}
+              </View>
+            ) : null
+          }
+          keyboardShouldPersistTaps="handled"
           keyExtractor={(item) => item.blocked_id}
           renderItem={renderBlockedUser}
           // The foot is the list's own padding: a wrapper that insets the screen cuts the scroll on a line above the home indicator.
-          contentContainerStyle={[blockedUsers.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
+          contentContainerStyle={[shown.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
           // After the last unblock it waits for the row's fade (emptyAfterRowOut).
           ListEmptyComponent={<Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{renderEmptyState()}</Animated.View>}
           onEndReached={onEndReached}
@@ -257,6 +285,8 @@ const styles = StyleSheet.create({
   // Top-aligned, as Muted rooms' (D-L11): one empty state, one placement.
   emptyList: { flexGrow: 1, paddingHorizontal: SPACE.gutter },
   moreFailed: { alignItems: 'center', paddingVertical: SPACE.lg },
+  head: { gap: SPACE.md, paddingBottom: SPACE.sm },
+  lede: { color: COLOR.textSecondary },
   moreFailedText: { color: COLOR.textTertiary },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.md, paddingVertical: SPACE.md },
   skeletonText: { flex: 1, gap: SPACE.sm },

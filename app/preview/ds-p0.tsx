@@ -94,7 +94,7 @@ function Cell({ label, testID, children, style }: { label: string; testID: strin
   )
 }
 
-const KINDS: ButtonKind[] = ['primary', 'lit', 'secondary', 'tertiary', 'destructive']
+const KINDS: ButtonKind[] = ['primary', 'lit', 'secondary', 'tertiary', 'destructive', 'danger']
 const SIZES: ButtonSize[] = ['lg', 'md', 'sm']
 /** A lit action is never 56 pt: that is the primary's. */
 const sizesOf = (kind: ButtonKind) => (kind === 'lit' ? SIZES.filter((size) => size !== 'lg') : SIZES)
@@ -103,7 +103,8 @@ const LABEL: Record<ButtonKind, string> = {
   lit: 'Accept',
   secondary: 'Not now',
   tertiary: 'Skip',
-  destructive: 'Delete account',
+  destructive: 'Delete my account',
+  danger: 'Delete account',
 }
 const STATES = [
   ['default', {}],

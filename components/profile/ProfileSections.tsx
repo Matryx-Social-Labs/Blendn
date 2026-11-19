@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useRef, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import type { Rect } from '../ds/chatShared'
+import { Button } from '../ds/Button'
 import { InterestChip } from '../ds/Chip'
 import { SectionHeader, type SectionAction } from '../ds/SectionHeader'
 import { font, useBoldText } from '../ds/shared'
@@ -37,6 +38,7 @@ const GALLERY_HEIGHT = 163
 export function ProfileSection({
   title,
   count,
+  countStyle,
   trailing,
   action,
   children,
@@ -44,6 +46,8 @@ export function ProfileSection({
 }: {
   title: string
   count?: number
+  /** `lit`: the count as the world's capsule (Nights out on Me, A 01). */
+  countStyle?: 'plain' | 'lit'
   /** A plain note at the heading's right ("3 photos", "3 shared"): not an action. */
   trailing?: string | null
   /** A text action at the right ("See all"). */
@@ -57,6 +61,7 @@ export function ProfileSection({
       <SectionHeader
         title={title}
         count={count}
+        countStyle={countStyle}
         action={action}
         right={trailing ? <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.muted]}>{trailing}</Text> : undefined}
       />
@@ -66,9 +71,30 @@ export function ProfileSection({
 }
 
 /** The bio, in `body` on the page (Flow 6 draws it white, 17/24). */
-export function ProfileBio({ text }: { text: string }) {
+export function ProfileBio({ text, clamp }: { text: string; /** Lines shown until More (your own bio on Me: 4). */ clamp?: number }) {
   const bold = useBoldText()
-  return <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>{text}</Text>
+  const [open, setOpen] = useState(false)
+  const [long, setLong] = useState(false)
+  // Laid out once unclamped, hidden, to learn whether the clamp cuts anything; More only when it does.
+  return (
+    <View style={styles.bio}>
+      <Text testID="profile-bio" numberOfLines={clamp && !open ? clamp : undefined} maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.ink]}>
+        {text}
+      </Text>
+      {clamp && !open ? (
+        <Text
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          maxFontSizeMultiplier={MAX_FONT_SCALE.body}
+          style={[font('body', bold), styles.measure]}
+          onTextLayout={(e) => setLong(e.nativeEvent.lines.length > clamp)}
+        >
+          {text}
+        </Text>
+      ) : null}
+      {clamp && long && !open ? <Button kind="tertiary" size="sm" label="More" onPress={() => setOpen(true)} style={styles.more} testID="profile-bio-more" /> : null}
+    </View>
+  )
 }
 
 /**
@@ -249,6 +275,9 @@ export function ProfileBody({
 }
 
 const styles = StyleSheet.create({
+  bio: { gap: SPACE.xxs },
+  measure: { position: 'absolute', left: 0, right: 0, opacity: 0 },
+  more: { alignSelf: 'flex-start' },
   section: { gap: SPACE.md },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },

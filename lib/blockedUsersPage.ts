@@ -39,3 +39,28 @@ export async function fetchBlockedPage(cursor: string | null = null): Promise<Bl
   const page = result.success ? blockedPageFrom(result.data) : null
   return page ? { ok: true, page } : { ok: false, error: result.error }
 }
+
+/**
+ * The count on Settings' Blocked row and the search's placeholder: "3 people", "50+ people" when a page is still to come (the
+ * server sends no total yet: ROADMAP § Backend later). Null for nobody, which the row leaves unsaid.
+ */
+export function blockedCountLine(count: number, more: boolean): string | null {
+  if (count <= 0) return null
+  return `${count.toLocaleString('en-US')}${more ? '+' : ''} ${count === 1 && !more ? 'person' : 'people'}`
+}
+
+/** Past this many loaded, Blocked offers a search (Me + settings A 06). */
+export const BLOCKED_SEARCH_FROM = 20
+/**
+ * How many rows Blocked loads at most. ponytail: the search runs over the loaded rows only, so past the cap a name further back
+ * is not found; a server-side search (ROADMAP § Backend later) lifts it.
+ */
+export const BLOCKED_LOAD_CAP = 1000
+
+/** The loaded rows whose name holds the query, case- and accent-blind; an empty query is everyone. */
+export function searchBlocked<T extends { blocked_user_name?: string | null }>(users: readonly T[], query: string): readonly T[] {
+  const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase()
+  const q = fold(query.trim())
+  if (!q) return users
+  return users.filter((u) => fold(u.blocked_user_name ?? '').includes(q))
+}
