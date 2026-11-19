@@ -81,13 +81,14 @@ export type PlaceAreaSummary = { slug: string; name: string; count: number; live
 /** Ten kilometres and over the decimal is noise ("11 km", not "11.2 km"), and it is what clipped Nearby's column (drive 4 D-4). */
 const WHOLE_KM_FROM = 10
 
-/** "350 m" under a kilometre (to the nearest 50), "4.8 km" up to ten, "11 km" from there; null with no fix. */
+/** "350 m" under a kilometre (to the nearest 50), "4.8 km" up to ten, "11 km" from there ("7,510 km"); null with no fix. */
 export function distanceText(km: number | null | undefined): string | null {
   if (km == null || !Number.isFinite(km) || km < 0) return null
   if (km < 1) return `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m`
   // Judged on the shown tenth, so 9.96 is "10 km", never "10.0 km".
   const tenths = Math.round(km * 10) / 10
-  return tenths < WHOLE_KM_FROM ? `${tenths.toFixed(1)} km` : `${Math.round(km)} km`
+  // Grouped past a thousand ("7,510 km"): the edge marker can point at a city a continent away.
+  return tenths < WHOLE_KM_FROM ? `${tenths.toFixed(1)} km` : `${Math.round(km).toLocaleString('en-US')} km`
 }
 
 /** Tonight's event at a place, in the one date grammar: "Live", "In 25 min", "9 PM". Null when it is another day. */
