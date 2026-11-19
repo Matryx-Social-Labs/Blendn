@@ -5,7 +5,7 @@
  *
  * The screen renders for real; what it stands on is stubbed, as in `pulseCoachMark`.
  */
-import { act, render } from '@testing-library/react-native'
+import { act, render, screen } from '@testing-library/react-native'
 import React from 'react'
 
 const mockUser: { id: string } | null = { id: 'u-a' }
@@ -305,5 +305,63 @@ describe('no fix: the phone’s clock and region say where it is (SCRUM-1037)', 
     await render(<Events />)
     await settle()
     expect(stored()).toContain('Toronto')
+  })
+})
+
+/*
+ * SCRUM-1077: on a cold start the first fix usually lands after the lead's 3 s hold, and the lap froze in the server's
+ * order (Rooftop Sundowner, 6.8 km, ahead of a 750 m event). A recent last-known position now orders it meanwhile.
+ */
+describe('the Featured lap on a cold start (SCRUM-1077)', () => {
+  const { getEvents } = require('../lib/api') as { getEvents: jest.Mock }
+  const soon = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString()
+  const featured = (id: string, dLat: number, rank: number) => ({
+    id,
+    title: id,
+    start_time: soon(2),
+    end_time: soon(5),
+    is_featured: true,
+    featured: { kind: 'promoted' as const, rank },
+    latitude: 12.97 + dLat,
+    longitude: 77.59,
+  })
+  // The server's order: the far rooftop first.
+  const picks = [featured('rooftop', 0.061, 1), featured('near', 0.0067, 2)]
+  const order = () => screen.getAllByTestId(/^card-/).map((c) => c.props.testID)
+
+  beforeEach(() => {
+    getEvents.mockImplementation(async (q: { featured?: boolean }) => ({ data: q?.featured ? picks : [], error: null }))
+    // Cold start: GPS still warming up, nothing cached inside the fix's 2 min.
+    jest.mocked(Location.getCurrentPositionAsync).mockImplementation(() => new Promise(() => {}))
+    jest.mocked(Location.reverseGeocodeAsync).mockResolvedValue([{ city: 'Bengaluru' }] as never)
+  })
+  afterEach(() => getEvents.mockImplementation(async () => ({ data: [], error: null })))
+
+  it('opens nearest first from a last-known position up to 30 min old', async () => {
+    const seed = { coords: { latitude: 12.97, longitude: 77.59, accuracy: 65 }, timestamp: Date.now() - 20 * 60_000 }
+    jest.mocked(Location.getLastKnownPositionAsync).mockImplementation(async (o?: { maxAge?: number }) => ((o?.maxAge ?? 0) > 120_000 ? seed : null) as never)
+    await render(<Events />)
+    await settle()
+    expect(order()).toEqual(['card-near', 'card-rooftop'])
+  })
+
+  it('never reorders in view: the live fix landing later, even beside the rooftop, keeps the order it opened in', async () => {
+    const seed = { coords: { latitude: 12.97, longitude: 77.59, accuracy: 65 }, timestamp: Date.now() - 20 * 60_000 }
+    jest.mocked(Location.getLastKnownPositionAsync).mockImplementation(async (o?: { maxAge?: number }) => ((o?.maxAge ?? 0) > 120_000 ? seed : null) as never)
+    let land: (p: unknown) => void = () => {}
+    jest.mocked(Location.getCurrentPositionAsync).mockImplementation(() => new Promise((resolve) => (land = resolve as never)) as never)
+    await render(<Events />)
+    await settle()
+    expect(order()).toEqual(['card-near', 'card-rooftop'])
+    await act(async () => land({ coords: { latitude: 13.031, longitude: 77.59, accuracy: 10 }, timestamp: Date.now() }))
+    await settle()
+    expect(order()).toEqual(['card-near', 'card-rooftop'])
+  })
+
+  it('control: with no recent last-known position, the server’s order', async () => {
+    jest.mocked(Location.getLastKnownPositionAsync).mockResolvedValue(null)
+    await render(<Events />)
+    await settle()
+    expect(order()).toEqual(['card-rooftop', 'card-near'])
   })
 })
