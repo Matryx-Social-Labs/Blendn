@@ -7,7 +7,7 @@ import { passReachLine, type PassReach } from '../../lib/attendanceState'
 import { useFocusWhen } from '../../lib/focusReturn'
 import { SWITCH_LABEL, switchCaption } from '../../lib/switchCopy'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
-import { distanceText } from '../../lib/placesPane'
+import { distanceText, type DistanceReading } from '../../lib/placesPane'
 import { startsLabel } from '../../lib/roomMoments'
 import { calendarDaysBetween, eventClock } from '../../lib/time'
 import type { TonightEvent, TonightLocation } from '../../lib/useTonight'
@@ -42,13 +42,13 @@ function startsToday(iso: string, now: number, timeZone?: string | null) {
   return calendarDaysBetween(new Date(now), new Date(iso), timeZone ?? undefined) === 0
 }
 
-/** A Tonight event as the deck's hero card: "In 25 min", "9 going", "at {venue} · 1.2 km", the saved ribbon. */
-export function deckEvent(e: TonightEvent, now: number): DeckEvent {
+/** A Tonight event as the deck's hero card: "In 25 min", "9 going", "at {venue} · 1.2 km" ("about 1 km" from an approximate fix), the saved ribbon. */
+export function deckEvent(e: TonightEvent, now: number, reading: DistanceReading): DeckEvent {
   return {
     title: e.title,
     time: startsLabel(e, now).text,
     venue: e.venue,
-    distance: distanceText(e.distanceKm) ?? undefined,
+    distance: distanceText(e.distanceKm, reading) ?? undefined,
     going: e.goingCount ?? undefined,
     cover: e.photo,
     category: e.category,
@@ -58,7 +58,21 @@ export function deckEvent(e: TonightEvent, now: number): DeckEvent {
 }
 
 /** The deck, sized to the room it has (`maxHeight`, 0 while unmeasured). Flicks are the TonightCard's. */
-function EventDeck({ events, now, onOpen, onFront, maxHeight }: { events: TonightEvent[]; now: number; onOpen: (id: string) => void; onFront?: (index: number) => void; maxHeight: number }) {
+function EventDeck({
+  events,
+  now,
+  reading,
+  onOpen,
+  onFront,
+  maxHeight,
+}: {
+  events: TonightEvent[]
+  now: number
+  reading: DistanceReading
+  onOpen: (id: string) => void
+  onFront?: (index: number) => void
+  maxHeight: number
+}) {
   const { width: screen } = useWindowDimensions()
   const deck = events.slice(0, DECK_MAX)
   const width = screen - DECK_INSET * 2
@@ -67,7 +81,7 @@ function EventDeck({ events, now, onOpen, onFront, maxHeight }: { events: Tonigh
   return (
     <View style={styles.deck}>
       <TonightCard
-        events={deck.map((e) => deckEvent(e, now))}
+        events={deck.map((e) => deckEvent(e, now, reading))}
         onOpen={(i) => deck[i] && onOpen(deck[i].id)}
         onIndexChange={onFront}
         width={width}
@@ -258,7 +272,7 @@ export function TonightView({
               />
             </View>
           ) : list.length > 0 ? (
-            <EventDeck key={deckKey ?? undefined} events={list} now={now} onOpen={onOpenEvent} onFront={onFront} maxHeight={deckRoom} />
+            <EventDeck key={deckKey ?? undefined} events={list} now={now} reading={location === 'approximate' ? 'approximate' : 'exact'} onOpen={onOpenEvent} onFront={onFront} maxHeight={deckRoom} />
           ) : null}
         </Animated.ScrollView>
       </GestureDetector>

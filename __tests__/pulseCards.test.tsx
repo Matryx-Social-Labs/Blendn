@@ -40,8 +40,8 @@ describe('the time on a card', () => {
 
 describe('what a compact card draws', () => {
   it('live: the here-now pill at five and up, never "going"; under five says nothing', () => {
-    expect(homeCardProps(ev(), NOW, true)).toMatchObject({ time: 'Live', here: 23, going: undefined, distance: '350 m', venue: 'Toit' })
-    expect(homeCardProps(ev({ here_count: 4 }), NOW, true)).toMatchObject({ here: undefined, going: undefined })
+    expect(homeCardProps(ev(), NOW, 'exact')).toMatchObject({ time: 'Live', here: 23, going: undefined, distance: '350 m', venue: 'Toit' })
+    expect(homeCardProps(ev({ here_count: 4 }), NOW, 'exact')).toMatchObject({ here: undefined, going: undefined })
   })
 
   it('not yet on: the going count at five and up, nothing under; no distance without a fix', () => {
@@ -51,8 +51,8 @@ describe('what a compact card draws', () => {
   })
 
   it('the venue falls back to the linked venue, then the city', () => {
-    expect(homeCardProps(ev({ venue: { id: 'v', name: 'Linked' } as never }), NOW, true).venue).toBe('Linked')
-    expect(homeCardProps(ev({ venue_name: '', venue: null }), NOW, true).venue).toBe('Bengaluru')
+    expect(homeCardProps(ev({ venue: { id: 'v', name: 'Linked' } as never }), NOW, 'exact').venue).toBe('Linked')
+    expect(homeCardProps(ev({ venue_name: '', venue: null }), NOW, 'exact').venue).toBe('Bengaluru')
   })
 })
 
@@ -93,13 +93,13 @@ describe('Tonight’s set list', () => {
 
   it('a row is read “10 PM. Title, at Venue, 2.9 km, 64 going”; a count under five and no fix say nothing', () => {
     const e = ev({ start_time: at(22), end_time: at(23, 30), going_count: 64, distance: 2.9 })
-    expect(setRowLabel(e, true)).toBe('10 PM. Vinyl Night, at Toit, 2.9 km, 64 going')
+    expect(setRowLabel(e, 'exact')).toBe('10 PM. Vinyl Night, at Toit, 2.9 km, 64 going')
     expect(setRowLabel({ ...e, going_count: 4 } as BlendnEvent, false)).toBe('10 PM. Vinyl Night, at Toit')
   })
 
   it('draws the NOW tick (hidden from a screen reader) and one pressable row per event', async () => {
     const list = [ev({ id: 'a', start_time: at(22), end_time: at(23) }), ev({ id: 'b', start_time: at(23), end_time: at(23, 59) })]
-    await render(<SetList events={list} now={NOW} withDistance onPress={jest.fn()} />)
+    await render(<SetList events={list} now={NOW} withDistance="exact" onPress={jest.fn()} />)
     expect(screen.getByTestId('set-now', { includeHiddenElements: true }).props.importantForAccessibility).toBe('no-hide-descendants')
     expect(screen.getAllByRole('button')).toHaveLength(2)
   })

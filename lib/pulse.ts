@@ -8,7 +8,7 @@
 
 import { liveWindow, type SessionSource } from './eventSession'
 import { isLiveNow, printable } from './pulseSections'
-import { distanceText } from './placesPane'
+import { distanceText, type DistanceShown } from './placesPane'
 import { calendarDate, calendarDaysBetween, dayKeyIn, eventClock, hourIn, weekdayIn, WEEKDAYS, WEEKDAYS_LONG } from './time'
 
 /**
@@ -253,7 +253,7 @@ export function homeCardProps(
     cover_image_url?: string | null
   } & SessionSource,
   now: number,
-  withDistance: boolean
+  withDistance: DistanceShown
 ) {
   const live = isLiveNow(event, now)
   const here = live ? printable(event.here_count) : null
@@ -262,7 +262,7 @@ export function homeCardProps(
     title: event.title,
     time: cardTime(event, now),
     venue: event.venue?.name?.trim() || event.venue_name?.trim() || event.city?.trim() || '',
-    distance: withDistance ? (distanceText(event.distance) ?? undefined) : undefined,
+    distance: distanceText(event.distance, withDistance) ?? undefined,
     here: here ?? undefined,
     going: going ?? undefined,
     cover: event.cover_image_url ?? null,

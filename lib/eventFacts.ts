@@ -2,6 +2,7 @@ import type { SceneCTAState } from '../components/scene/SceneSections'
 import type { IconName } from '../components/ui/Icon'
 import { clockIn, dateIn, MONTHS, WEEKDAYS, WEEKDAYS_LONG, eventClock } from './time'
 import { compactCount } from './format'
+import { distanceText, type DistanceReading } from './placesPane'
 
 /**
  * The event page's words (Flow 4 E-B, `mockups/redesign-2026-11/flow-4/screens.js`): the date stamp the no-cover poster
@@ -31,9 +32,10 @@ export function untilWords(end: string | null | undefined, timeZone?: string | n
   return h === 0 && min === 0 ? 'Till midnight' : `Till ${eventClock(d, timeZone)}`
 }
 
-/** The Where row's distance: "420 m", "4.3 km", "12 km". Null with no fix (the row then says the area alone). */
-export function shortDistance(km: number | null | undefined): string | null {
+/** The Where row's distance: "420 m", "4.3 km", "12 km"; "about 4 km" from an approximate fix. Null with no fix (the row then says the area alone). */
+export function shortDistance(km: number | null | undefined, reading: DistanceReading): string | null {
   if (km == null || !Number.isFinite(km) || km < 0) return null
+  if (reading === 'approximate') return distanceText(km, reading)
   if (km < 1) return `${Math.round(km * 1000)} m`
   return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`
 }

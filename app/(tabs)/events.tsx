@@ -99,6 +99,8 @@ import { saveHomeCity, useHomeCitySlug } from '../../lib/homeCity'
 import { getDistanceMetres, roundCoord } from '../../lib/geo'
 import { EVENT_DETAIL_QUERY } from '../../lib/eventDetailQuery'
 import { FIX_MAX_AGE_MS, fixAfterPermission, fixOf, type PreciseFix } from '../../lib/roomButton'
+import { readingOf } from '../../lib/mapPresence'
+import type { DistanceShown } from '../../lib/placesPane'
 import { homeCardProps, groupByDay } from '../../lib/pulse'
 import { liveWindow, sessionOver } from '../../lib/eventSession'
 import {
@@ -1454,6 +1456,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const seedDate = seedDateOf(now, cityZone)
   /** Distances mean something only in the city you are in, with a fix. */
   const hasFix = !!userLocation && browsingHere
+  /** And how they are said: "about 1 km" from an approximate fix, the server's too (it measures from the one we send). */
+  const withDistance: DistanceShown = hasFix && readingOf(userLocation)
 
   /*
    * Requests B, C and D (BUILD-SPEC §A, C1): "This weekend", "Because you like" and the featured five, in
@@ -1608,7 +1612,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const leadCards = useMemo<LeadCard[]>(
     () =>
       leadEvents.map((e) => {
-        const card = homeCardProps(e, now, hasFix)
+        const card = homeCardProps(e, now, withDistance)
         return {
           id: e.id,
           ...card,
@@ -1618,7 +1622,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           playlist: feedPlaylist(e.media, e.cover_image_url),
         }
       }),
-    [leadEvents, now, hasFix]
+    [leadEvents, now, withDistance]
   )
   const leadKey = leadEvents.map((e) => e.id).join('|')
   // The page on screen, and a count of swipes: each one moves the map to that venue (`focus.n`).
@@ -1691,6 +1695,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       onBrowse({
         city: selectedCity,
         location: userLocation,
+        withDistance,
         ready: cityResolved,
         // The stored city's own centre until the catalogue answers (or when it fails): the map is never left blank.
         cityCentre: browseOption?.centre ?? selection?.centre ?? null,
@@ -1703,7 +1708,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         focus,
         reach,
       }),
-    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
+    [onBrowse, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
   )
 
   const firstSection = sections[0]?.key ?? null
@@ -1770,10 +1775,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     }
     const event = item.event
     if (isNarrowed && !isSearching) {
-      return <NearbyRow event={event} now={now} withDistance={hasFix} onPress={handleEventPress} onPressIn={warmEvent} />
+      return <NearbyRow event={event} now={now} withDistance={withDistance} onPress={handleEventPress} onPressIn={warmEvent} />
     }
     if (isNarrowed) {
-      const card = homeCardProps(event, now, hasFix)
+      const card = homeCardProps(event, now, withDistance)
       return (
         <View style={isSearching ? styles.resultWrap : styles.mainRow}>
           <EventCard
@@ -1796,7 +1801,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     const isCheckedIn = checkinStatuses[event.id]?.status === 'checked_in'
     const live = liveWindow(event)
     const note = isCheckedIn ? 'Checked in' : sessionOver(event) ? 'Ended' : null
-    const card = homeCardProps(event, now, hasFix)
+    const card = homeCardProps(event, now, withDistance)
     return (
       <RevealRow index={Math.max(0, index - LEAD_ROWS)} pending={mainRowsRevealPending}>
         <MoreRow
@@ -1817,7 +1822,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         />
       </RevealRow>
     )
-  }, [isNarrowed, isSearching, sections.length, firstRowId, now, hasFix, checkinStatuses, interestStatuses, handleEventPress, openPeek, peekRow, warmEvent, toggleInterest])
+  }, [isNarrowed, isSearching, sections.length, firstRowId, now, withDistance, checkinStatuses, interestStatuses, handleEventPress, openPeek, peekRow, warmEvent, toggleInterest])
   const keyExtractor = useCallback((item: PulseRow) => item.key, [])
 
   const askForLocation = useCallback(() => {
@@ -2070,7 +2075,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       {/* A refused read is the banner above, and neither "couldn’t load" nor "nothing here". */}
       {nothingNear && rateLimit === null && selectedCity ? (
         <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
-          <NothingNear copy={nothingNearCopy(selectedCity, beyond, filters.when)} city={selectedCity} onSeeCity={seeCity} onPlaces={() => shell?.openPlaces()} />
+          <NothingNear copy={nothingNearCopy(selectedCity, beyond, filters.when, readingOf(userLocation))} city={selectedCity} onSeeCity={seeCity} onPlaces={() => shell?.openPlaces()} />
         </FadeInUp>
       ) : events.length === 0 && !netError && rateLimit === null ? (
         <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
@@ -2114,7 +2119,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         <SectionStack
           sections={stackSections}
           now={now}
-          withDistance={hasFix}
+          withDistance={withDistance}
           handlers={cardHandlers}
           coachRef={leadNode ? NO_COACH : coachTarget}
           pending={mainRowsRevealPending}
@@ -2234,7 +2239,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       <PulsePeek
         peek={peek}
         now={now}
-        withDistance={hasFix}
+        withDistance={withDistance}
         interested={!!(peek && interestStatuses[peek.event.id])}
         checkedIn={checkinStatuses[peek?.event.id ?? '']?.status === 'checked_in'}
         withinFence={!!proximityData[peek?.event.id ?? '']?.within_radius}

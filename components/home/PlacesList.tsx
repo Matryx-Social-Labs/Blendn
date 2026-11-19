@@ -115,6 +115,8 @@ export function PlacesList({
   const lat = location ? roundCoordinate(location.latitude) : undefined
   const lon = location ? roundCoordinate(location.longitude) : undefined
   const hasFix = lat !== undefined
+  // The Pulse's own rule: none in another city; "about 1 km" from an approximate fix, which the server measures from (SCRUM-1080).
+  const reading = browse.withDistance
   const key = placesKey(city, location, venueType, term, radiusKm)
   const [state, dispatch] = useReducer(placesReducer, key, initialPlaces)
   const [refreshing, setRefreshing] = useState(false)
@@ -315,19 +317,19 @@ export function PlacesList({
         case 'live':
           return (
             <SectionReveal index={0} pending={revealPending}>
-              <LiveSection venues={item.venues} total={item.total} focused={item.focused} now={now} onSeeAll={seeAllLive} />
+              <LiveSection venues={item.venues} total={item.total} focused={item.focused} now={now} reading={reading} onSeeAll={seeAllLive} />
             </SectionReveal>
           )
         case 'open':
           return (
             <SectionReveal index={1} pending={revealPending}>
-              <OpenSection venues={item.venues} total={item.total} focused={item.focused} now={now} onSeeAll={seeAllOpen} />
+              <OpenSection venues={item.venues} total={item.total} focused={item.focused} now={now} reading={reading} onSeeAll={seeAllOpen} />
             </SectionReveal>
           )
         case 'near':
           return (
             <SectionReveal index={2} pending={revealPending}>
-              <NearSection venues={item.venues} hasFix={item.hasFix} onAsk={() => void requestLocation()} onShowOnMap={onShowNearOnMap} />
+              <NearSection venues={item.venues} hasFix={item.hasFix} reading={reading} onAsk={() => void requestLocation()} onShowOnMap={onShowNearOnMap} />
             </SectionReveal>
           )
         case 'areas':
@@ -346,7 +348,7 @@ export function PlacesList({
             </View>
           )
         case 'quiet':
-          return <QuietRow venue={item.venue} />
+          return <QuietRow venue={item.venue} reading={reading} />
         case 'label':
           return (
             <View style={styles.label}>
@@ -391,7 +393,7 @@ export function PlacesList({
       }
     },
     [
-      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, state.rateLimit, rateLimitDone, filters, offline, now, term, whatsOn, typeLabel,
+      city, openCityPicker, stat, searching, state.status, state.readAt, state.refreshFailed, state.rateLimit, rateLimitDone, filters, offline, now, reading, term, whatsOn, typeLabel,
       chooseKind, refresh, requestLocation, onShowNearOnMap, toggleFold, seeAllLive, seeAllOpen, openFilters, clearFilter,
     ]
   )

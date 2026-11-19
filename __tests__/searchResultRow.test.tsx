@@ -51,7 +51,7 @@ describe('held, a result lifts as itself (the peek redraws the row it came from)
   } as never
   const anchor = { x: 24, y: 300, width: 354, height: 88 }
   it('a search result: the 72 pt photo, the time over the title', async () => {
-    await render(<PulsePeek peek={{ event, anchor, kind: 'row', layout: 'result' }} now={Date.parse('2026-11-04T14:10:00Z')} withDistance interested={false} checkedIn={false} withinFence={false} onAction={jest.fn()} onClose={jest.fn()} />)
+    await render(<PulsePeek peek={{ event, anchor, kind: 'row', layout: 'result' }} now={Date.parse('2026-11-04T14:10:00Z')} withDistance="exact" interested={false} checkedIn={false} withinFence={false} onAction={jest.fn()} onClose={jest.fn()} />)
     const tree = JSON.stringify(screen.toJSON())
     expect(tree).toMatch(/"width":72,"height":72,"borderRadius":16/)
     expect(tree.indexOf('["Jazz brunch on the lawn"]')).toBeGreaterThan(tree.indexOf('["Sun · 12 PM"]'))

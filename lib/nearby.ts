@@ -5,6 +5,7 @@
  */
 
 import { NO_FILTERS, type EventFilters, type When } from './eventFilters'
+import { distanceText, type DistanceShown } from './placesPane'
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
 import { isLiveNow, nextDayReset, printable } from './pulseSections'
 import { calendarDaysBetween, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
@@ -27,9 +28,10 @@ export const walkMinutes = (km: number): number => Math.ceil(((km * STREET_FACTO
 
 export type Reach = { kind: 'walk' | 'distance'; text: string }
 
-/** "10 min walk" up to 25 minutes, then "2.9 km"; nothing over 100 km or without a distance. */
-export function reachLabel(km: number | null | undefined): Reach | null {
-  if (km == null || !Number.isFinite(km) || km > MAX_REACH_KM) return null
+/** "10 min walk" up to 25 minutes, then "2.9 km"; nothing over 100 km or without a distance. From an approximate fix no walk is timed: "about 1 km". */
+export function reachLabel(km: number | null | undefined, reading: DistanceShown): Reach | null {
+  if (!reading || km == null || !Number.isFinite(km) || km > MAX_REACH_KM) return null
+  if (reading === 'approximate') return { kind: 'distance', text: distanceText(km, reading) as string }
   const walk = walkMinutes(km)
   if (walk <= WALK_MAX_MIN) return { kind: 'walk', text: `${walk} min walk` }
   return { kind: 'distance', text: `${km < 10 ? km.toFixed(1) : Math.round(km)} km` }
@@ -123,14 +125,14 @@ export const nearSpan = (when: When): string => SPAN[when]
  * Nothing within a short ride (board N1none): what exists and how far, never a bare radius. No count under five (a few),
  * no closest past 100 km; nothing at all in the city says that; not read yet is the title alone.
  */
-export function nothingNearCopy(city: string, beyond: Beyond | null, when: When): { title: string; message: string } {
+export function nothingNearCopy(city: string, beyond: Beyond | null, when: When, reading: DistanceShown): { title: string; message: string } {
   const span = SPAN[when]
   const title = `Nothing within a short ride ${span}`
   if (!beyond) return { title, message: '' }
   if (beyond.count === 0) return { title, message: `Nothing is on in ${city} ${span}.` }
   const n = printable(beyond.count)
   const has = `${city} has ${n ? `${n.toLocaleString('en-US')} events` : 'a few events'} ${span}.`
-  const far = beyond.closest ? reachLabel(beyond.closest.km) : null
+  const far = beyond.closest ? reachLabel(beyond.closest.km, reading) : null
   const closest = far ? ` The closest is ${far.kind === 'walk' ? far.text : `${far.text} away`}${beyond.closest?.venue ? `, at ${beyond.closest.venue}` : ''}.` : ''
   return { title, message: has + closest }
 }

@@ -109,7 +109,8 @@ const RESULT_THUMB = SIZE.primary + SPACE.lg
 /**
  * The distance column: 64 at least, so the rows' thumbs line up at the default size, and sized to its words past that
  * (a larger font scale, "9.9 km") up to 96, which holds six Geist Mono characters at the 1.3 cap. A fixed 64 clipped
- * "11.2 km" to "11.2…" (RC drive 4 D-4).
+ * "11.2 km" to "11.2…" (RC drive 4 D-4). Past that it takes a second line: "about 2 km" from an approximate fix reads
+ * "about" over "2 km" at large text, never "about…" (SCRUM-1080).
  */
 const LEAD_WIDTH = 64
 const LEAD_MAX = 96
@@ -238,8 +239,9 @@ export function EventCard(props: EventCardProps) {
           style={({ pressed }) => [styles.row, result && styles.resultRow, (pressed || previewState === 'pressed') && !android && styles.rowPressed]}
         >
           {leading ? (
-            <Text testID={testID && `${testID}-lead`} numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.lead]}>
-              <MonoRun text={distance} />
+            <Text testID={testID && `${testID}-lead`} numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('bodyStrong', bold, FONT_FAMILY.mono[700]), styles.lead]}>
+              {/* The number keeps its unit, so a second line takes "2 km" whole under "about". */}
+              <MonoRun text={distance.replace(/ (?=\S+$)/, '\u00A0')} />
             </Text>
           ) : null}
           {result ? null : thumb}

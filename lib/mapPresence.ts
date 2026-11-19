@@ -1,3 +1,4 @@
+import type { DistanceReading } from './placesPane'
 import type { PreciseFix } from './roomButton'
 
 /**
@@ -46,6 +47,10 @@ export function youMark({
 
 /** iOS Precise off says so; elsewhere a radius over a kilometre is a guess at the district, not where you stand. */
 const isApproximate = (fix: Pick<PreciseFix, 'accuracy' | 'approximate'>) => !!fix.approximate || (fix.accuracy ?? 0) > APPROXIMATE_M
+
+/** How every distance measured from this fix is said: "about 1 km" from an approximate one (`distanceText`, SCRUM-1080). */
+export const readingOf = (fix: PreciseFix | null | undefined): DistanceReading =>
+  fix && isApproximate(fix) ? 'approximate' : 'exact'
 
 export type PlaceLine = { text: string; back: string } | { text: string; switch: [string, string] }
 

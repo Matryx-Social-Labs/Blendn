@@ -10,7 +10,7 @@ import { Icon } from '../ui/Icon'
 import ScalePress from '../motion/ScalePress'
 import type { VenueDetail } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, PRESS, RADIUS, SIZE, SPACE, TYPE } from '../../lib/design/tokens'
-import { distanceText } from '../../lib/placesPane'
+import { distanceText, type DistanceReading } from '../../lib/placesPane'
 import { OPACITY } from '../../lib/theme'
 import { useSessionTime } from '../../lib/useSessionTime'
 import { liveNowWord } from '../../lib/home'
@@ -249,14 +249,17 @@ export function About({ text }: { text: string }) {
 export function Where({
   venue,
   km,
+  reading,
   onCopy,
 }: {
   venue: VenueDetail['venue']
   km: number | null
+  /** How the list said it: "about 1 km" from an approximate fix. */
+  reading: DistanceReading
   onCopy: () => void
 }) {
   const bold = useBoldText()
-  const distance = distanceText(km)
+  const distance = distanceText(km, reading)
   // The city once: an address that already names it ("…, Bengaluru 560001") does not get it again underneath (r7 L4).
   const city = venue.city && !venue.address?.toLowerCase().includes(venue.city.toLowerCase()) ? venue.city : null
   return (

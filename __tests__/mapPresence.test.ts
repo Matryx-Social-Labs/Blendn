@@ -7,6 +7,7 @@ import {
   CLUSTER,
   moreLine,
   placeLine,
+  readingOf,
   STALE_AFTER_MS,
   splitFocus,
   youMark,
@@ -14,6 +15,19 @@ import {
 
 const NOW = Date.parse('2026-11-17T20:00:00Z')
 const fix = (over: object = {}) => ({ latitude: 12.97, longitude: 77.64, accuracy: 18, timestamp: NOW - 5_000, ...over })
+
+describe('readingOf: whether a distance from this fix is said exactly or "about" (SCRUM-1080)', () => {
+  it('iOS Precise off or Android coarse says so; a radius over a kilometre is a guess at the district either way', () => {
+    expect(readingOf(fix({ approximate: true }))).toBe('approximate')
+    expect(readingOf(fix({ accuracy: 3000 }))).toBe('approximate')
+  })
+  it('a precise fix, or one with no accuracy given, is exact; no fix has no distance to read (the negative control)', () => {
+    expect(readingOf(fix())).toBe('exact')
+    expect(readingOf(fix({ accuracy: 1000 }))).toBe('exact')
+    expect(readingOf(fix({ accuracy: null }))).toBe('exact')
+    expect(readingOf(null)).toBe('exact')
+  })
+})
 
 describe('youMark: where you are, and what the map says about it', () => {
   it('precise: the dot, its halo the real accuracy', () => {

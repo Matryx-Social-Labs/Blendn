@@ -104,9 +104,9 @@ describe('Tonight’s deck and set list say the event’s zone (R6-4)', () => {
 
   it('the deck’s “You’re going” ribbon is the event’s clock, named, on the event’s day', () => {
     // 01:30 Saturday in Bengaluru: the night is today there, though it is still Friday in Berlin.
-    expect(deckEvent(tonight({ timeZone: IST }), NOW).saved).toBe('9 AM')
+    expect(deckEvent(tonight({ timeZone: IST }), NOW, 'exact').saved).toBe('9 AM')
     // The badge too (more than an hour out: the clock).
-    expect(deckEvent(tonight({ timeZone: IST }), NOW).time).toBe('9 AM')
+    expect(deckEvent(tonight({ timeZone: IST }), NOW, 'exact').time).toBe('9 AM')
   })
 
   it('the set list’s rail and its spoken row', () => {

@@ -8,6 +8,7 @@ import type { BlendnEvent } from '../../lib/api'
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import { liveWindow } from '../../lib/eventSession'
 import { reachLabel, type Reach } from '../../lib/nearby'
+import { ABOUT, type DistanceShown } from '../../lib/placesPane'
 import { isLiveNow, printable, PROMOTED_LABEL } from '../../lib/pulseSections'
 import { eventClock } from '../../lib/time'
 import { splitClock } from './SetList'
@@ -36,18 +37,18 @@ const people = (e: RowEvent, live: boolean): string | null => {
 }
 
 /** The row as one element (board: Promoted, Live, name, time, venue, reach, price, people). */
-export function nearbyRowLabel(e: RowEvent, now: number, withDistance: boolean): string {
+export function nearbyRowLabel(e: RowEvent, now: number, withDistance: DistanceShown): string {
   const live = isLiveNow(e, now)
   const w = liveWindow(e)
   const when = live ? (w.end_time ? `till ${eventClock(w.end_time, e.timezone)}` : null) : eventClock(w.start_time, e.timezone)
-  const parts = [e.title, when, e.venue_name ? `at ${e.venue_name}` : null, withDistance ? reachLabel(e.distance)?.text : null, e.from_price ? priceText(e.from_price) : null, people(e, live)]
+  const parts = [e.title, when, e.venue_name ? `at ${e.venue_name}` : null, reachLabel(e.distance, withDistance)?.text, e.from_price ? priceText(e.from_price) : null, people(e, live)]
   return [e.promoted ? PROMOTED_LABEL : null, live ? 'Live' : null, parts.filter(Boolean).join(', ')].filter(Boolean).join('. ')
 }
 
 type TagLook = 'plain' | 'walk' | 'price'
 
 /** Board `.tg`: a number in Geist Mono, then its words; the walk an ember pill, a price outlined with a ticket. */
-function Tag({ icon, n, text, look = 'plain', testID }: { icon?: IconName; n?: string; text: string; look?: TagLook; testID?: string }) {
+function Tag({ icon, before, n, text, look = 'plain', testID }: { icon?: IconName; before?: string; n?: string; text: string; look?: TagLook; testID?: string }) {
   const bold = useBoldText()
   const walk = look === 'walk'
   const ink = look === 'price' ? styles.secondary : styles.ink
@@ -57,6 +58,7 @@ function Tag({ icon, n, text, look = 'plain', testID }: { icon?: IconName; n?: s
         <Icon name={icon} size={walk ? TAG_ICON_WALK : TAG_ICON} color={walk ? COLOR.selectionEmberGlyph : COLOR.textSecondary} />
       ) : null}
       <Text maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[font('caption', bold), ink]}>
+        {before}
         {n ? <Text style={[font('caption', bold, FONT_FAMILY.mono[500]), styles.tabular]}>{n}</Text> : null}
         {text}
       </Text>
@@ -78,7 +80,7 @@ function NearbyRowImpl<E extends RowEvent>({
 }: {
   event: E
   now: number
-  withDistance: boolean
+  withDistance: DistanceShown
   onPress: (event: E) => void
   onPressIn?: (event: E) => void
 }) {
@@ -88,7 +90,7 @@ function NearbyRowImpl<E extends RowEvent>({
   const live = isLiveNow(event, now)
   const w = liveWindow(event)
   const { time, meridiem } = splitClock(Date.parse(w.start_time), event.timezone)
-  const reach = withDistance ? reachLabel(event.distance) : null
+  const reach = reachLabel(event.distance, withDistance)
   const who = peopleParts(event, live)
   const where = [live && w.end_time ? `till ${eventClock(w.end_time, event.timezone)}` : null, event.venue_name].filter(Boolean).join(' · ')
   return (
@@ -158,11 +160,21 @@ function NearbyRowImpl<E extends RowEvent>({
 }
 export const NearbyRow = memo(NearbyRowImpl) as typeof NearbyRowImpl
 
-/** "10 min walk" (the minutes in mono, an ember pill) or "2.9 km" (the number in mono). */
+/** "10 min walk" (the minutes in mono, an ember pill), "2.9 km" (the number in mono) or "about 1 km" (the word in the brand face). */
 function ReachTag({ reach }: { reach: Reach }) {
-  const [n, ...rest] = reach.text.split(' ')
+  const about = reach.text.startsWith(ABOUT)
+  const [n, ...rest] = (about ? reach.text.slice(ABOUT.length) : reach.text).split(' ')
   const walk = reach.kind === 'walk'
-  return <Tag icon={walk ? 'footprints' : 'navigation'} look={walk ? 'walk' : 'plain'} n={n} text={` ${rest.join(' ')}`} testID={walk ? 'nearby-tag-walk' : 'nearby-tag-km'} />
+  return (
+    <Tag
+      icon={walk ? 'footprints' : 'navigation'}
+      look={walk ? 'walk' : 'plain'}
+      before={about ? ABOUT : undefined}
+      n={n}
+      text={` ${rest.join(' ')}`}
+      testID={walk ? 'nearby-tag-walk' : 'nearby-tag-km'}
+    />
+  )
 }
 
 /** A time group's heading (board `.gh`): the words, the count in Geist Mono, and its end on the right ("by 9:10 PM"). */

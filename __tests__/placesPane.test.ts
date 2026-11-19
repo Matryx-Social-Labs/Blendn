@@ -2,6 +2,7 @@ import type { VenueListItem } from '../lib/apiClient'
 import {
   activeFilterCount,
   distanceText,
+  spokenDistance,
   EAGER_PAGES,
   emptyReason,
   fitBounds,
@@ -34,6 +35,9 @@ import {
   type PlaceFilters,
   type PlaceView,
 } from '../lib/placesPane'
+
+const EXACT = 'exact' as const
+const ABOUT = 'approximate' as const
 
 const NOW = new Date(2026, 9, 17, 18, 0).getTime()
 const at = (h: number, m = 0, day = 0) => new Date(2026, 9, 17 + day, h, m).toISOString()
@@ -107,19 +111,46 @@ describe('the plates', () => {
 
 describe('words', () => {
   it('distance: metres to the nearest 50 under a kilometre, kilometres above, nothing without a fix', () => {
-    expect(distanceText(0.35)).toBe('350 m')
-    expect(distanceText(0.02)).toBe('50 m')
-    expect(distanceText(4.84)).toBe('4.8 km')
+    expect(distanceText(0.35, EXACT)).toBe('350 m')
+    expect(distanceText(0.02, EXACT)).toBe('50 m')
+    expect(distanceText(4.84, EXACT)).toBe('4.8 km')
     // Ten and over, whole kilometres: the decimal is noise, and it clipped Nearby's distance column (drive 4 D-4).
-    expect(distanceText(9.94)).toBe('9.9 km')
-    expect(distanceText(9.96)).toBe('10 km')
+    expect(distanceText(9.94, EXACT)).toBe('9.9 km')
+    expect(distanceText(9.96, EXACT)).toBe('10 km')
     // A far one is grouped (the map's edge marker read "7510 km" from a phone abroad, map drive 2026-11-19).
-    expect(distanceText(7510.4)).toBe('7,510 km')
-    expect(distanceText(12480)).toBe('12,480 km')
-    expect(distanceText(11.2)).toBe('11 km')
-    expect(distanceText(15.6)).toBe('16 km')
-    expect(distanceText(null)).toBeNull()
-    expect(distanceText(-1)).toBeNull()
+    expect(distanceText(7510.4, EXACT)).toBe('7,510 km')
+    expect(distanceText(12480, EXACT)).toBe('12,480 km')
+    expect(distanceText(11.2, EXACT)).toBe('11 km')
+    expect(distanceText(15.6, EXACT)).toBe('16 km')
+    expect(distanceText(null, EXACT)).toBeNull()
+    expect(distanceText(-1, EXACT)).toBeNull()
+  })
+
+  it('distance from an approximate fix: "about N km", whole kilometres, never metres, grouped past a thousand (pulse-map 06 frame 2)', () => {
+    // iOS Precise off reports a ~3 km circle: "350 m" or "5.4 km" from it reads as a measurement it is not (SCRUM-1080).
+    expect(distanceText(0.21, ABOUT)).toBe('about 1 km')
+    expect(distanceText(0, ABOUT)).toBe('about 1 km')
+    expect(distanceText(5.4, ABOUT)).toBe('about 5 km')
+    expect(distanceText(6.7, ABOUT)).toBe('about 7 km')
+    expect(distanceText(9.96, ABOUT)).toBe('about 10 km')
+    expect(distanceText(7510.4, ABOUT)).toBe('about 7,510 km')
+    expect(distanceText(12480, ABOUT)).toBe('about 12,480 km')
+    expect(distanceText(null, ABOUT)).toBeNull()
+    expect(distanceText(-1, ABOUT)).toBeNull()
+    // Read aloud the same: one kilometre is singular.
+    expect(spokenDistance(0.21, ABOUT)).toBe('about 1 kilometre')
+    expect(spokenDistance(5.4, ABOUT)).toBe('about 5 kilometres')
+  })
+
+  it('an exact fix keeps its exact words, read aloud too (the negative control)', () => {
+    expect(distanceText(0.21, EXACT)).toBe('200 m')
+    // Judged on the shown metres, as on the shown tenth: 0.99 km is "1.0 km", never "1000 m" (Places' Near you, iOS drive).
+    expect(distanceText(0.99, EXACT)).toBe('1.0 km')
+    expect(distanceText(0.974, EXACT)).toBe('950 m')
+    expect(spokenDistance(0.99, EXACT)).toBe('1.0 kilometres')
+    expect(distanceText(5.4, EXACT)).toBe('5.4 km')
+    expect(spokenDistance(0.35, EXACT)).toBe('350 metres')
+    expect(spokenDistance(1, EXACT)).toBe('1.0 kilometres')
   })
 
   it('counts and the fold line', () => {
@@ -284,7 +315,7 @@ describe('the area (BUILD-SPEC B5, C4)', () => {
     expect(placeArea({ area: null, address: '298, 100 Feet Road', city: 'Bengaluru' })).toBe('298, 100 Feet Road')
     expect(placeArea({ address: null, city: 'Bengaluru' })).toBe('Bengaluru')
     expect(placeArea({ area: '', address: ' ', city: null })).toBeNull()
-    expect(tileLabel(venue({ area: 'Indiranagar' }))).toContain('Brewery, Indiranagar, 350 metres')
+    expect(tileLabel(venue({ area: 'Indiranagar' }), EXACT)).toContain('Brewery, Indiranagar, 350 metres')
   })
 
   it('the By area section stays hidden behind its constant, even with areas to show', () => {
@@ -362,18 +393,22 @@ describe('the filters', () => {
 
 describe('what a card is read as', () => {
   it('a tile: name, type, area, distance spoken, and the bucket in words', () => {
-    expect(tileLabel(venue({ liveNow: '10-19', distance: 0.35 }))).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres. 10 to 19 people live')
-    expect(tileLabel(venue({ liveNow: '20+', distance: 4.8 }))).toContain('4.8 kilometres. 20 or more people live')
+    expect(tileLabel(venue({ liveNow: '10-19', distance: 0.35 }), EXACT)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres. 10 to 19 people live')
+    expect(tileLabel(venue({ liveNow: '20+', distance: 4.8 }), EXACT)).toContain('4.8 kilometres. 20 or more people live')
+    // From an approximate fix the tile says what the card shows (SCRUM-1080).
+    expect(tileLabel(venue({ liveNow: '20+', distance: 4.8 }), ABOUT)).toContain('about 5 kilometres. 20 or more people live')
   })
 
   it('an open card: tonight’s event, or hours when the item carries them, or just where it is', () => {
-    expect(openLabel(venue({ nextEvent: event(21, 23) }), NOW)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres. Tonight 9 PM, Vinyl Night.')
-    expect(openLabel(venue({ tonight: { opensAt: '12:00', closesAt: '23:30' } }), NOW)).toContain('Open till 11:30 PM.')
-    expect(openLabel(venue(), NOW)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres')
+    expect(openLabel(venue({ nextEvent: event(21, 23) }), NOW, EXACT)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres. Tonight 9 PM, Vinyl Night.')
+    expect(openLabel(venue({ tonight: { opensAt: '12:00', closesAt: '23:30' } }), NOW, EXACT)).toContain('Open till 11:30 PM.')
+    expect(openLabel(venue(), NOW, EXACT)).toBe('Toit. Brewery, 298, 100 Feet Road, 350 metres')
+    expect(openLabel(venue(), NOW, ABOUT)).toBe('Toit. Brewery, 298, 100 Feet Road, about 1 kilometre')
   })
 
   it('a near row: its place in the five', () => {
-    expect(nearLabel(venue({ distance: 0.35 }), 2)).toBe('2 of 5 nearest. Toit, Brewery, 298, 100 Feet Road, 350 metres')
+    expect(nearLabel(venue({ distance: 0.35 }), 2, EXACT)).toBe('2 of 5 nearest. Toit, Brewery, 298, 100 Feet Road, 350 metres')
+    expect(nearLabel(venue({ distance: 0.35 }), 2, ABOUT)).toBe('2 of 5 nearest. Toit, Brewery, 298, 100 Feet Road, about 1 kilometre')
   })
 
   it('the hours line: wall-clock strings, Opens before opening, Open till while open, nothing once it is over', () => {
@@ -490,10 +525,11 @@ describe('the peek line (Places.html 04)', () => {
 
 describe('what a tile is read as', () => {
   it('name, type, distance, live bucket and tonight’s event — the people line, never who', () => {
-    const label = placeLabel(venue({ liveNow: '10-19', nextEvent: event(21, 23) }), NOW)
+    const label = placeLabel(venue({ liveNow: '10-19', nextEvent: event(21, 23) }), EXACT, NOW)
     expect(label).toBe('Toit. Brewery. 350 m. 10–19 live. 9 PM, Vinyl Night')
-    expect(placeLabel(venue({ liveNow: null, distance: null }), NOW)).toBe('Toit. Brewery')
+    expect(placeLabel(venue({ liveNow: null, distance: null }), EXACT, NOW)).toBe('Toit. Brewery')
     // A quiet row passes no clock, so its label (and its memo) does not move with it.
-    expect(placeLabel(venue({ liveNow: 'quiet', nextEvent: event(21, 23) }))).toBe('Toit. Brewery. 350 m')
+    expect(placeLabel(venue({ liveNow: 'quiet', nextEvent: event(21, 23) }), EXACT)).toBe('Toit. Brewery. 350 m')
+    expect(placeLabel(venue({ liveNow: 'quiet', nextEvent: event(21, 23) }), ABOUT)).toBe('Toit. Brewery. about 1 km')
   })
 })

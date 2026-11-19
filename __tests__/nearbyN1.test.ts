@@ -14,14 +14,20 @@ const at = (iso: string, extra: object = {}) => ({ id: iso, start_time: iso, end
 describe('reach', () => {
   it('a walk in minutes (straight line × 1.3 at 4.8 km/h, rounded up) up to 25 minutes', () => {
     expect(walkMinutes(0.6)).toBe(10)
-    expect(reachLabel(0.6)).toEqual({ kind: 'walk', text: '10 min walk' })
+    expect(reachLabel(0.6, 'exact')).toEqual({ kind: 'walk', text: '10 min walk' })
     expect(walkMinutes(1.5)).toBeLessThanOrEqual(WALK_MAX_MIN)
   })
   it('past a 25-minute walk, the distance; never over 100 km; nothing without one', () => {
-    expect(reachLabel(2.9)).toEqual({ kind: 'distance', text: '2.9 km' })
-    expect(reachLabel(14)).toEqual({ kind: 'distance', text: '14 km' })
-    expect(reachLabel(13293)).toBeNull()
-    expect(reachLabel(null)).toBeNull()
+    expect(reachLabel(2.9, 'exact')).toEqual({ kind: 'distance', text: '2.9 km' })
+    expect(reachLabel(14, 'exact')).toEqual({ kind: 'distance', text: '14 km' })
+    expect(reachLabel(13293, 'exact')).toBeNull()
+    expect(reachLabel(null, 'exact')).toBeNull()
+  })
+  it('from an approximate fix, never a walk in minutes: "about 1 km", the card’s words (SCRUM-1080)', () => {
+    expect(reachLabel(0.6, 'approximate')).toEqual({ kind: 'distance', text: 'about 1 km' })
+    expect(reachLabel(2.9, 'approximate')).toEqual({ kind: 'distance', text: 'about 3 km' })
+    expect(reachLabel(13293, 'approximate')).toBeNull()
+    expect(reachLabel(null, 'approximate')).toBeNull()
   })
   it('a short ride is 8 km', () => expect(RIDE_KM).toBe(8))
 })
@@ -109,22 +115,27 @@ describe('the reach on the map (N1: a lit 20-minute walk, a short-ride ring, dar
 describe('nothing within reach says what exists and how far (board N1none)', () => {
   const { nothingNearCopy } = jest.requireActual('../lib/nearby') as typeof import('../lib/nearby')
   it('the city’s count this week and the closest, by its venue', () => {
-    expect(nothingNearCopy('Toronto', { count: 6, closest: { km: 14.2, venue: 'Liberty Village' } }, 'any')).toEqual({
+    expect(nothingNearCopy('Toronto', { count: 6, closest: { km: 14.2, venue: 'Liberty Village' } }, 'any', 'exact')).toEqual({
       title: 'Nothing within a short ride this week',
       message: 'Toronto has 6 events this week. The closest is 14 km away, at Liberty Village.',
     })
   })
   it('tonight under Tonight; no count under five; no closest past 100 km', () => {
-    expect(nothingNearCopy('Toronto', { count: 3, closest: { km: 140, venue: 'X' } }, 'today')).toEqual({
+    expect(nothingNearCopy('Toronto', { count: 3, closest: { km: 140, venue: 'X' } }, 'today', 'exact')).toEqual({
       title: 'Nothing within a short ride tonight',
       message: 'Toronto has a few events tonight.',
     })
   })
+  it('from an approximate fix the closest is "about 14 km away" (SCRUM-1080)', () => {
+    expect(nothingNearCopy('Toronto', { count: 6, closest: { km: 14.2, venue: 'Liberty Village' } }, 'any', 'approximate').message).toBe(
+      'Toronto has 6 events this week. The closest is about 14 km away, at Liberty Village.'
+    )
+  })
   it('nothing anywhere in the city: says so', () => {
-    expect(nothingNearCopy('Toronto', { count: 0, closest: null }, 'weekend').message).toBe('Nothing is on in Toronto this weekend.')
+    expect(nothingNearCopy('Toronto', { count: 0, closest: null }, 'weekend', 'exact').message).toBe('Nothing is on in Toronto this weekend.')
   })
   it('not read yet (or failed): the title alone', () => {
-    expect(nothingNearCopy('Toronto', null, 'any').message).toBe('')
+    expect(nothingNearCopy('Toronto', null, 'any', 'exact').message).toBe('')
   })
 })
 

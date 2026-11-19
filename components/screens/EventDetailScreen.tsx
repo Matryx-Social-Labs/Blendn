@@ -61,6 +61,8 @@ import { Title } from '../ds/Title'
 import { PAGE_TITLE, useScreenReader } from '../ds/shared'
 import { toastDwell } from '../ds/Toast'
 import { dateStamp, eventDock, holdUnder, shortDistance, untilWords, whoLine, type DockDoes } from '../../lib/eventFacts'
+import { readingOf } from '../../lib/mapPresence'
+import type { DistanceReading } from '../../lib/placesPane'
 import { SceneLightbox } from '../scene/SceneLightbox'
 import { EventLobbyPreview } from '../board/LobbyPreview'
 import { BOARD_ENABLED } from '../../lib/board'
@@ -120,22 +122,23 @@ function useClockPassed(ms: number | null, inclusive = false): boolean {
  * How far the event is from the phone's last fix ("2.4km away"), when one is recent and location is already allowed. It
  * never asks: a Scene is read in bed as often as on the street, and no fix is simply no WHERE tile.
  */
-function useDistanceAway(latitude?: number, longitude?: number): number | null {
-  const [km, setKm] = useState<number | null>(null)
+function useDistanceAway(latitude?: number, longitude?: number): { km: number; reading: DistanceReading } | null {
+  const [away, setAway] = useState<{ km: number; reading: DistanceReading } | null>(null)
   useEffect(() => {
     // 0,0 is an unset coordinate in this schema, not the Gulf of Guinea.
     if (!latitude || !longitude) return
     let live = true
     Location.getLastKnownPositionAsync({ maxAge: ROUGH_FIX_MAX_AGE_MS })
       .then((fix) => {
-        if (live && fix) setKm(getDistanceKm(fix.coords.latitude, fix.coords.longitude, latitude, longitude))
+        // A fix good only to kilometres (Precise off, Android coarse) says "about 4 km" (SCRUM-1080).
+        if (live && fix) setAway({ km: getDistanceKm(fix.coords.latitude, fix.coords.longitude, latitude, longitude), reading: readingOf(fix.coords) })
       })
       .catch(() => {})
     return () => {
       live = false
     }
   }, [latitude, longitude])
-  return km
+  return away
 }
 
 interface EventDetailData {
@@ -1079,7 +1082,7 @@ export default function EventDetail() {
                   }}
                   where={
                     event?.venue_name
-                      ? { venue: event.venue_name, area: area || null, distance: shortDistance(away), directions: { label: 'Directions', icon: 'navigation', onPress: openInMaps, testID: 'scene-directions' } }
+                      ? { venue: event.venue_name, area: area || null, distance: away ? shortDistance(away.km, away.reading) : null, directions: { label: 'Directions', icon: 'navigation', onPress: openInMaps, testID: 'scene-directions' } }
                       : null
                   }
                   who={{ ...whoLine({ count: crowdCount, word: crowdWord, minAge, door, spots, viewer: crowdViewer, ended: isEnded }), host: event?.organizer || null }}

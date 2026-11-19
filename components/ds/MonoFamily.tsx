@@ -48,7 +48,8 @@ export function MonoRun({ text, struck = false }: { text: string; struck?: boole
   )
 }
 const DIVIDER = /( · )/
-const SPACE_RUN = /( )/
+// A no-break space too: it keeps a number with its unit ("2 km") and is still a brand-face space.
+const SPACE_RUN = /([ \u00A0])/
 
 /** A run's plain spaces in the brand face, the words between them left as they are. */
 function spaced(run: string) {

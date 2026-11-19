@@ -102,6 +102,7 @@ export function monoRunSpaces(tree: Tree, needle: string, mono: string): string[
   const run = textNodes(tree).find((n) => faceOf(n) === mono && JSON.stringify(n.children).includes(needle.split(' ')[0]))
   if (!run) return null
   return kids(run)
-    .filter((c) => JSON.stringify(c.children) === '[" "]')
+    // A no-break space too (a number kept with its unit, EventCard's lead column).
+    .filter((c) => ['[" "]', '["\u00a0"]'].includes(JSON.stringify(c.children)))
     .map((c) => faceOf(c) ?? '')
 }

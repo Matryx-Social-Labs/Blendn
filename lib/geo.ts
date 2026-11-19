@@ -50,29 +50,6 @@ export function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: nu
 }
 
 /**
- * How far away, phrased for a card.
- *
- * Distance is a **label** now, not a filter: nothing is hidden for being far,
- * so this is the only thing standing between "that's across town" and someone
- * tapping into an event they cannot reach. It has to be legible at a glance and
- * honest at every magnitude.
- *
- * Metres under a kilometre, because "0.4km" reads as precision that walking
- * distance does not need. One decimal up to 10km, none beyond — nobody plans
- * around the difference between 41.2km and 41.3km, and the extra digit only
- * makes the number harder to scan.
- *
- * `null` for an unknown distance rather than a placeholder, so callers fall
- * back to the venue name instead of rendering "— away".
- */
-export function formatDistance(km: number | null | undefined): string | null {
-  if (km == null || !Number.isFinite(km) || km < 0) return null
-  if (km < 1) return `${Math.round(km * 1000)}m away`
-  if (km < 10) return `${km.toFixed(1)}km away`
-  return `${Math.round(km)}km away`
-}
-
-/**
  * A coordinate to ~100 m (3 decimals), for anything that is both sent to the
  * server and used in a cache key. The last-known fix and the live fix a few
  * metres apart differ in the sixth decimal, which made them two cache keys and

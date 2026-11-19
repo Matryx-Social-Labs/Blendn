@@ -27,7 +27,7 @@ it('a search result’s distance (13 pt, as N1)', async () => {
 it('a set list row’s distance', async () => {
   const start = new Date(Date.now() + 3_600_000).toISOString()
   const event = { id: 'a', title: 'Vinyl Night', venue_name: 'Toit', start_time: start, end_time: start, distance: 2.9, going_count: 0 } as unknown as BlendnEvent
-  await render(<SetList events={[event]} now={Date.now()} withDistance onPress={jest.fn()} />)
+  await render(<SetList events={[event]} now={Date.now()} withDistance="exact" onPress={jest.fn()} />)
   expect(monoRunSpaces(screen.toJSON() as never, '2.9 km', FONT_FAMILY.mono[500])).toEqual(BRAND_SPACE)
 })
 

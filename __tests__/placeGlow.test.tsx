@@ -43,14 +43,14 @@ afterEach(() => jest.useRealTimers())
 
 describe('the glow', () => {
   it('a tile that scrolls in draws its bucket’s glow once, with nothing fading out', async () => {
-    await render(<LiveTile venue={venue('5-9')} now={Date.now()} />)
+    await render(<LiveTile venue={venue('5-9')} now={Date.now()} reading="exact" />)
     expect(screen.getByTestId('place-glow-5-9-now', HIDDEN)).toBeTruthy()
     expect(screen.queryByTestId(/place-glow-.*-old/, HIDDEN)).toBeNull()
   })
 
   it('a bucket that moves keeps the old glow under the new one, then drops it after DURATION.medium', async () => {
-    const view = await render(<LiveTile venue={venue('5-9')} now={Date.now()} />)
-    await view.rerender(<LiveTile venue={venue('10-19')} now={Date.now()} />)
+    const view = await render(<LiveTile venue={venue('5-9')} now={Date.now()} reading="exact" />)
+    await view.rerender(<LiveTile venue={venue('10-19')} now={Date.now()} reading="exact" />)
     expect(screen.getByTestId('place-glow-5-9-old', HIDDEN)).toBeTruthy()
     expect(screen.getByTestId('place-glow-10-19-now', HIDDEN)).toBeTruthy()
     await act(async () => {
@@ -62,15 +62,15 @@ describe('the glow', () => {
 
   it('under Reduce Motion the swap is instant: no old layer at all', async () => {
     mockReduce = true
-    const view = await render(<LiveTile venue={venue('5-9')} now={Date.now()} />)
-    await view.rerender(<LiveTile venue={venue('20+')} now={Date.now()} />)
+    const view = await render(<LiveTile venue={venue('5-9')} now={Date.now()} reading="exact" />)
+    await view.rerender(<LiveTile venue={venue('20+')} now={Date.now()} reading="exact" />)
     expect(screen.queryByTestId('place-glow-5-9-old', HIDDEN)).toBeNull()
     expect(screen.getByTestId('place-glow-20+-now', HIDDEN)).toBeTruthy()
   })
 
   it('a bucket that falls to quiet fades the glow out and leaves none', async () => {
-    const view = await render(<LiveTile venue={venue('10-19')} now={Date.now()} />)
-    await view.rerender(<LiveTile venue={venue('quiet')} now={Date.now()} />)
+    const view = await render(<LiveTile venue={venue('10-19')} now={Date.now()} reading="exact" />)
+    await view.rerender(<LiveTile venue={venue('quiet')} now={Date.now()} reading="exact" />)
     expect(screen.getByTestId('place-glow-10-19-old', HIDDEN)).toBeTruthy()
     await act(async () => {
       jest.advanceTimersByTime(DURATION.medium + 1)
@@ -88,7 +88,7 @@ it('an Open tonight card sets its time in Geist Mono with the space in the brand
   const now = new Date(2026, 9, 24, 18, 0).getTime()
   const start = new Date(2026, 9, 24, 21, 0).toISOString()
   const end = new Date(2026, 9, 24, 23, 59).toISOString()
-  await render(<OpenCard venue={{ ...venue(null as never), nextEvent: { id: 'e1', title: 'Vinyl Night', startTime: start, endTime: end, coverImageUrl: null } as never }} now={now} />)
+  await render(<OpenCard venue={{ ...venue(null as never), nextEvent: { id: 'e1', title: 'Vinyl Night', startTime: start, endTime: end, coverImageUrl: null } as never }} now={now} reading="exact" />)
   const face = (n: { props: { style?: unknown } }) => (StyleSheet.flatten(n.props.style as never) as { fontFamily?: string } | undefined)?.fontFamily
   const nodes = textNodes(screen.toJSON() as never)
   const time = nodes.find((n) => face(n) === FONT_FAMILY.mono[500] && JSON.stringify(n.children).includes('PM'))

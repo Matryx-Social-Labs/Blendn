@@ -26,6 +26,7 @@ import {
 } from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, OWN_BUILDINGS_LAYER_ID } from '../../lib/mapStyleEmber'
 import { edgeMarker, staleCalloutBox } from '../../lib/mapPresence'
+import type { DistanceReading } from '../../lib/placesPane'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SIZE, SPACE } from '../../lib/design/tokens'
 
@@ -92,6 +93,7 @@ export function useMapLighting({
   edge = null,
   stale = null,
   knownDistance = null,
+  reading = 'exact',
 }: {
   map: RefObject<MapRef | null>
   view: RefObject<MapView>
@@ -118,6 +120,8 @@ export function useMapLighting({
   stale?: { room: { width: number; height: number; gap: number }; below: boolean } | null
   /** A distance the screen already shows for one event (the lead card's): its chip says the same number. */
   knownDistance?: { id: string; km: number } | null
+  /** How a chip says its distance from `userAt` ("about 1 km" from an approximate fix, SCRUM-1080); without `userAt` there is none to say. */
+  reading?: DistanceReading
 }): { lit: Lit; onFrame: () => void; relight: () => void; passes: number } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
   const needsLight = useRef(false)
@@ -156,7 +160,7 @@ export function useMapLighting({
     const tiles = featureIds ? 'own' : 'openfreemap'
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
-    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? `stale:${stale.below}` : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}`
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? `stale:${stale.below}` : ''}|${knownDistance ? `${knownDistance.id}=${knownDistance.km}` : ''}|${reading}`
     if (signature === lastLit.current) {
       setPasses((n) => n + 1)
       return
@@ -222,13 +226,13 @@ export function useMapLighting({
     const lineFor = (p: LitPlace & { pin: Pin; count: number; ids: string[] }) => {
       if (p.kind !== 'event') return chipLine(p.pin)
       const when = p.count > 1 ? stackLine(p.ids.map((id) => byId.get(id) ?? p.pin)) : chipLine(p.pin)
-      return withDistance(when, p.at, userAt, knownKm(p))
+      return withDistance(when, p.at, userAt, reading, knownKm(p))
     }
     const chipFor = (p: LitPlace & { pin: Pin; count: number; ids: string[] }): Chip => ({
       id: p.id,
       kind: p.kind,
       live: p.live,
-      ...spokenWithDistance(stackedChip(p.pin, p.count), p, userAt, knownKm(p)),
+      ...spokenWithDistance(stackedChip(p.pin, p.count), p, userAt, reading, knownKm(p)),
       line: lineFor(p),
       at: p.at,
       lift: chipLiftPx(topOfM(p), { zoom: v.zoom, pitch: v.pitch, latitude: p.at[1] }),
@@ -283,7 +287,13 @@ export function useMapLighting({
 }
 
 /** A screen reader hears the same distance the chip shows ("…, 200 m away"); none without a fix. */
-function spokenWithDistance<T extends { speech: string }>(chip: T, p: { kind: string; at: LngLat }, from: LngLat | null | undefined, knownKm: number | null): T {
-  const far = p.kind === 'event' && from ? withDistance('', p.at, from, knownKm) : ''
+function spokenWithDistance<T extends { speech: string }>(
+  chip: T,
+  p: { kind: string; at: LngLat },
+  from: LngLat | null | undefined,
+  reading: DistanceReading,
+  knownKm: number | null
+): T {
+  const far = p.kind === 'event' && from ? withDistance('', p.at, from, reading, knownKm) : ''
   return far ? { ...chip, speech: `${chip.speech}, ${far} away` } : chip
 }

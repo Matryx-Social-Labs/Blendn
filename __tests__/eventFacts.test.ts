@@ -38,13 +38,18 @@ describe('untilWords: when it ends, in the event city’s clock, never a zone la
 
 describe('shortDistance: the Where row’s "4.3 km"', () => {
   it('metres under one kilometre, one decimal under ten, whole above', () => {
-    expect(shortDistance(0.42)).toBe('420 m')
-    expect(shortDistance(4.31)).toBe('4.3 km')
-    expect(shortDistance(12.4)).toBe('12 km')
+    expect(shortDistance(0.42, 'exact')).toBe('420 m')
+    expect(shortDistance(4.31, 'exact')).toBe('4.3 km')
+    expect(shortDistance(12.4, 'exact')).toBe('12 km')
+  })
+  it('from an approximate fix, "about 4 km": the one rule every distance follows (SCRUM-1080)', () => {
+    expect(shortDistance(0.42, 'approximate')).toBe('about 1 km')
+    expect(shortDistance(4.31, 'approximate')).toBe('about 4 km')
+    expect(shortDistance(null, 'approximate')).toBeNull()
   })
   it('is null with no fix', () => {
-    expect(shortDistance(null)).toBeNull()
-    expect(shortDistance(Number.NaN)).toBeNull()
+    expect(shortDistance(null, 'exact')).toBeNull()
+    expect(shortDistance(Number.NaN, 'exact')).toBeNull()
   })
 })
 

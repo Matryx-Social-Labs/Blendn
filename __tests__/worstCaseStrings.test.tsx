@@ -50,7 +50,7 @@ it('the travel banner with a long city: the sentence and the way back both hold 
 })
 
 it('nothing within reach with a long city and venue: every word kept (the card wraps)', async () => {
-  const copy = nothingNearCopy(WORST.city, { count: 6, closest: { km: 14.2, venue: WORST.venue } }, 'any')
+  const copy = nothingNearCopy(WORST.city, { count: 6, closest: { km: 14.2, venue: WORST.venue } }, 'any', 'exact')
   await render(<NothingNear copy={copy} city={WORST.city} onSeeCity={jest.fn()} onPlaces={jest.fn()} />)
   const message = screen.getByTestId('pulse-nothing-near-message')
   expect(message).toHaveTextContent(`${WORST.city} has 6 events this week. The closest is 14 km away, at ${WORST.venue}.`)
