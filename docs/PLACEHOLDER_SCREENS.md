@@ -397,7 +397,7 @@ The behaviour above is **shipped**. The look of it is not.
 | *"You're in Munich. Switch?"* | Built, styled as an ordinary info banner |
 | *"You're in Saarbrücken — nothing here yet. Showing Bengaluru."* | Built, neutral style, no action |
 | Section-level empty states | Built |
-| Distance labels on cards | Built. `formatDistance` in `lib/geo.ts`, rendered in the card's `locationLabel` slot **in place of** the venue name |
+| Distance labels on cards | Built. `distanceText` in `lib/placesPane.ts` ("about 1 km" from an approximate fix), rendered in the card's `locationLabel` slot **in place of** the venue name |
 
 **The distance label needs a decision it has not had.** The card has one
 metadata slot, so *"2.4km away"* currently **replaces** the venue name rather

@@ -618,21 +618,28 @@ describe('the chip line (pulse-map 05, 12 A): when, then how far from you, in mo
   const north = (m: number): [number, number] => [77.6, 12.97 + m / 111_195]
 
   it('adds the distance from your fix: "Tonight · 8 PM · 180 m", "3.1 km" past a kilometre', () => {
-    expect(withDistance('Tonight · 8 PM', north(180), at)).toBe('Tonight · 8 PM · 200 m')
-    expect(withDistance('Sun · 12 PM', north(3100), at)).toBe('Sun · 12 PM · 3.1 km')
+    expect(withDistance('Tonight · 8 PM', north(180), at, 'exact')).toBe('Tonight · 8 PM · 200 m')
+    expect(withDistance('Sun · 12 PM', north(3100), at, 'exact')).toBe('Sun · 12 PM · 3.1 km')
   })
 
   it('never guesses a distance without a fix, and a line with no words is the distance alone', () => {
-    expect(withDistance('Tonight · 8 PM', north(180), null)).toBe('Tonight · 8 PM')
-    expect(withDistance('', north(180), at)).toBe('200 m')
+    expect(withDistance('Tonight · 8 PM', north(180), null, 'exact')).toBe('Tonight · 8 PM')
+    expect(withDistance('', north(180), at, 'exact')).toBe('200 m')
   })
 
   it('says the card’s own distance when the screen already shows one (Android drive: the chip read 800 m over a card reading 850 m)', () => {
-    expect(withDistance('Tue · 12 PM', north(816), at, 0.85)).toBe('Tue · 12 PM · 850 m')
+    expect(withDistance('Tue · 12 PM', north(816), at, 'exact', 0.85)).toBe('Tue · 12 PM · 850 m')
     // Still never without a fix, whatever is known.
-    expect(withDistance('Tue · 12 PM', north(816), null, 0.85)).toBe('Tue · 12 PM')
+    expect(withDistance('Tue · 12 PM', north(816), null, 'exact', 0.85)).toBe('Tue · 12 PM')
     // Nothing known: measured, as before.
-    expect(withDistance('Tue · 12 PM', north(816), at, null)).toBe('Tue · 12 PM · 800 m')
+    expect(withDistance('Tue · 12 PM', north(816), at, 'exact', null)).toBe('Tue · 12 PM · 800 m')
+  })
+
+  it('from an approximate fix, the chip says "about 3 km" like the card under it, never "200 m" (SCRUM-1080)', () => {
+    expect(withDistance('Sun · 12 PM', north(3100), at, 'approximate')).toBe('Sun · 12 PM · about 3 km')
+    expect(withDistance('Tonight · 8 PM', north(180), at, 'approximate')).toBe('Tonight · 8 PM · about 1 km')
+    expect(withDistance('Tue · 12 PM', north(816), at, 'approximate', 5.4)).toBe('Tue · 12 PM · about 5 km')
+    expect(withDistance('Tonight · 8 PM', north(180), null, 'approximate')).toBe('Tonight · 8 PM')
   })
 
   it('says how many and when for several events at one venue: "3 tonight", "3 events" across days', () => {

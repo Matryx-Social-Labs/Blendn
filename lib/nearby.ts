@@ -5,6 +5,7 @@
  */
 
 import { NO_FILTERS, type EventFilters, type When } from './eventFilters'
+import { distanceText, type DistanceReading } from './placesPane'
 import { liveWindow, sessionOver, type SessionSource } from './eventSession'
 import { isLiveNow, nextDayReset, printable } from './pulseSections'
 import { calendarDaysBetween, clockTime, weekdayIn, WEEKDAYS_LONG } from './time'
@@ -27,9 +28,10 @@ export const walkMinutes = (km: number): number => Math.ceil(((km * STREET_FACTO
 
 export type Reach = { kind: 'walk' | 'distance'; text: string }
 
-/** "10 min walk" up to 25 minutes, then "2.9 km"; nothing over 100 km or without a distance. */
-export function reachLabel(km: number | null | undefined): Reach | null {
+/** "10 min walk" up to 25 minutes, then "2.9 km"; nothing over 100 km or without a distance. From an approximate fix no walk is timed: "about 1 km". */
+export function reachLabel(km: number | null | undefined, reading: DistanceReading): Reach | null {
   if (km == null || !Number.isFinite(km) || km > MAX_REACH_KM) return null
+  if (reading === 'approximate') return { kind: 'distance', text: distanceText(km, reading) as string }
   const walk = walkMinutes(km)
   if (walk <= WALK_MAX_MIN) return { kind: 'walk', text: `${walk} min walk` }
   return { kind: 'distance', text: `${km < 10 ? km.toFixed(1) : Math.round(km)} km` }

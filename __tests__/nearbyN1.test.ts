@@ -14,14 +14,20 @@ const at = (iso: string, extra: object = {}) => ({ id: iso, start_time: iso, end
 describe('reach', () => {
   it('a walk in minutes (straight line × 1.3 at 4.8 km/h, rounded up) up to 25 minutes', () => {
     expect(walkMinutes(0.6)).toBe(10)
-    expect(reachLabel(0.6)).toEqual({ kind: 'walk', text: '10 min walk' })
+    expect(reachLabel(0.6, 'exact')).toEqual({ kind: 'walk', text: '10 min walk' })
     expect(walkMinutes(1.5)).toBeLessThanOrEqual(WALK_MAX_MIN)
   })
   it('past a 25-minute walk, the distance; never over 100 km; nothing without one', () => {
-    expect(reachLabel(2.9)).toEqual({ kind: 'distance', text: '2.9 km' })
-    expect(reachLabel(14)).toEqual({ kind: 'distance', text: '14 km' })
-    expect(reachLabel(13293)).toBeNull()
-    expect(reachLabel(null)).toBeNull()
+    expect(reachLabel(2.9, 'exact')).toEqual({ kind: 'distance', text: '2.9 km' })
+    expect(reachLabel(14, 'exact')).toEqual({ kind: 'distance', text: '14 km' })
+    expect(reachLabel(13293, 'exact')).toBeNull()
+    expect(reachLabel(null, 'exact')).toBeNull()
+  })
+  it('from an approximate fix, never a walk in minutes: "about 1 km", the card’s words (SCRUM-1080)', () => {
+    expect(reachLabel(0.6, 'approximate')).toEqual({ kind: 'distance', text: 'about 1 km' })
+    expect(reachLabel(2.9, 'approximate')).toEqual({ kind: 'distance', text: 'about 3 km' })
+    expect(reachLabel(13293, 'approximate')).toBeNull()
+    expect(reachLabel(null, 'approximate')).toBeNull()
   })
   it('a short ride is 8 km', () => expect(RIDE_KM).toBe(8))
 })
