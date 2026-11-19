@@ -186,3 +186,31 @@ describe('frameOnYou: you and the six nearest, in the map you can see', () => {
     expect(frameOnYou(you, [], view)).toEqual({ center: [you.longitude, you.latitude], zoom: 16 })
   })
 })
+
+// eslint-disable-next-line import/first
+import { edgeMarker } from '../lib/mapPresence'
+
+describe('edgeMarker (pulse-map 05: an off-frame lap venue gets a marker at the edge, pointing at it)', () => {
+  const box = { left: 0, top: 100, right: 400, bottom: 500 } // centre (200, 300)
+  const size = { width: 120, height: 32 }
+
+  it('is nothing while the venue is in the map you can see', () => {
+    expect(edgeMarker([200, 300], box, size)).toBeNull()
+    expect(edgeMarker([5, 105], box, size)).toBeNull()
+  })
+
+  it('sits inside the edge on the line from the centre, the arrow turned to the venue', () => {
+    // Straight up, off the top: centred, under the top edge, arrow 0°.
+    const up = edgeMarker([200, -400], box, size)
+    expect(up).toEqual({ left: 140, top: 108, angle: 0 })
+    // Off to the left and up (Kitty Ko, board 05 frame 3): pinned to the left edge, arrow up-left.
+    const upLeft = edgeMarker([-800, -700], box, size)
+    expect(upLeft?.left).toBe(8)
+    expect(upLeft?.angle).toBeCloseTo(-45, 0)
+    // Off the bottom right (Olive Beach, frame 6): arrow down-right, never past the box.
+    const downRight = edgeMarker([900, 1000], box, size)
+    expect(downRight?.angle).toBeCloseTo(135, 0)
+    expect((downRight?.left ?? 0) + size.width).toBeLessThanOrEqual(box.right - 8)
+    expect((downRight?.top ?? 0) + size.height).toBeLessThanOrEqual(box.bottom - 8)
+  })
+})

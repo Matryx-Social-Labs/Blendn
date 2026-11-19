@@ -1,17 +1,14 @@
-import { StyleSheet, View } from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  type SharedValue,
-} from "react-native-reanimated";
+import { StyleSheet, View } from 'react-native'
+import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
 
-import { COLOR, ICON as GLYPH, RADIUS, SPACE } from "../../lib/design/tokens";
-import { locateRide } from "../../lib/homeMap";
-import { MAP_THEME } from "../../lib/mapTheme";
-import { OPACITY } from "../../lib/theme";
-import ScalePress from "../motion/ScalePress";
-import { MapGlass } from "../ds/Banner";
-import { Icon } from "../ui/Icon";
-import { Text } from "../ui/Text";
+import { COLOR, ICON as GLYPH, RADIUS, SPACE } from '../../lib/design/tokens'
+import { locateRide } from '../../lib/homeMap'
+import { MAP_THEME } from '../../lib/mapTheme'
+import { OPACITY } from '../../lib/theme'
+import ScalePress from '../motion/ScalePress'
+import { MapGlass } from '../ds/Banner'
+import { Icon } from '../ui/Icon'
+import { Text } from '../ui/Text'
 
 /**
  * "My location", riding a gap above the drawer as it moves (`locateRide`):
@@ -33,34 +30,30 @@ export function LocateButton({
   onPress,
 }: {
   /** False at full: still drawn while its fade finishes, but neither tapped nor read. */
-  visible: boolean;
-  following: boolean;
+  visible: boolean
+  following: boolean
   /** The map has left a fix you have: the pill "Back to you" instead of the glyph. */
-  back?: boolean;
+  back?: boolean
   /** Asking the phone for a fix. */
-  pending: boolean;
+  pending: boolean
   /** The drawer's top edge, as it animates. */
-  drawerTop: SharedValue<number>;
+  drawerTop: SharedValue<number>
   /** The drawer's top edge at half and at full. */
-  drawer: { half: number; full: number };
+  drawer: { half: number; full: number }
   /** How far a banner on the map pushes it up (the banner's height and its gap; 0 with none). */
-  lift?: SharedValue<number>;
-  onPress: () => void;
+  lift?: SharedValue<number>
+  onPress: () => void
 }) {
   const ride = useAnimatedStyle(() => {
-    const { translateY, opacity } = locateRide(
-      drawerTop.get(),
-      drawer,
-      lift ? lift.get() : 0,
-    );
-    return { transform: [{ translateY }], opacity };
-  });
+    const { translateY, opacity } = locateRide(drawerTop.get(), drawer, lift ? lift.get() : 0)
+    return { transform: [{ translateY }], opacity }
+  })
   return (
     <Animated.View
       style={[styles.rider, ride]}
-      pointerEvents={visible ? "box-none" : "none"}
+      pointerEvents={visible ? 'box-none' : 'none'}
       accessibilityElementsHidden={!visible}
-      importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
+      importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
     >
       {back && !pending ? (
         <ScalePress
@@ -89,26 +82,21 @@ export function LocateButton({
             disabled: pending,
           }}
         >
-          <Icon
-            name="navigation"
-            size={GLYPH.control}
-            color={following ? COLOR.textPrimary : COLOR.textSecondary}
-            active={following}
-          />
+          <Icon name="navigation" size={GLYPH.control} color={following ? COLOR.textPrimary : COLOR.textSecondary} active={following} />
         </ScalePress>
       )}
     </Animated.View>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
-  rider: { position: "absolute", top: 0, right: SPACE.lg },
+  rider: { position: 'absolute', top: 0, right: SPACE.lg },
   // The weight of the app's other floating controls: the page colour at 60%, no border.
   button: {
     width: MAP_THEME.locate.sizePx,
     height: MAP_THEME.locate.sizePx,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: RADIUS.capsule,
     backgroundColor: COLOR.scrim,
   },
@@ -116,8 +104,8 @@ const styles = StyleSheet.create({
   // Board 05/07: content-wide glass, the target kept at the button's 44 pt.
   pill: {
     minHeight: MAP_THEME.locate.sizePx,
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: SPACE.xs + SPACE.xxs,
     paddingHorizontal: SPACE.md,
     borderRadius: RADIUS.capsule,
@@ -130,4 +118,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: MAP_THEME.you.ring,
   },
-});
+})

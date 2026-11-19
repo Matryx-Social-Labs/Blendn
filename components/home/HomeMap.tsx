@@ -62,12 +62,13 @@ import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
 import { tint } from '../../lib/theme'
-import { fitBounds, type NearPin } from '../../lib/placesPane'
+import { distanceText, fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
 import { useScreenReader } from '../ds/shared'
 import { EventPiles } from './EventPiles'
 import { PileSpeech } from './PileSpeech'
+import { EdgeMarker } from './EdgeMarker'
 import { YouMark } from './YouMark'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
@@ -564,7 +565,10 @@ export const HomeMap = memo(function HomeMap({
     setQuery(next)
   }
 
+  // The camera is moving: the edge marker waits for it to stop, so it is never left pointing from the old view.
+  const [moving, setMoving] = useState(false)
   const onRegionDidChange = (e: NativeSyntheticEvent<ViewStateChangeEvent>) => {
+    setMoving(false)
     const { bounds, center: centre, zoom, pitch, userInteraction } = e.nativeEvent
     if (userInteraction) {
       setTouched(true)
@@ -574,7 +578,7 @@ export const HomeMap = memo(function HomeMap({
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
     setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
-    if (screenReader) setSettled((n) => n + 1)
+    setSettled((n) => n + 1)
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => ask(bounds as Bounds), QUERY_DEBOUNCE_MS)
   }
@@ -659,6 +663,19 @@ export const HomeMap = memo(function HomeMap({
 
   const style = useMemo(() => homeMapStyle(), [])
 
+  // The lap's venue, for its edge marker: an event focus on Events only (a venue's name when the server sends one).
+  const edgeTarget = useMemo(
+    () => (focusPin && segment === 'events' ? { id: focusPin.id, name: focusPin.place || focusPin.title, at: [focusPin.longitude, focusPin.latitude] as [number, number] } : null),
+    [focusPin, segment]
+  )
+  // The edge marker tapped: the person asked, so the camera goes there (and the lap is over, their touch).
+  const goToFocus = () => {
+    if (!focusPin) return
+    setTouched(true)
+    onTouched?.()
+    moveTo({ to: [focusPin.longitude, focusPin.latitude], easeMs: MAP_THEME.camera.easeMs })
+  }
+
   return (
     <>
       <Map
@@ -672,6 +689,7 @@ export const HomeMap = memo(function HomeMap({
         compass={false}
         // Its default corner is the bell's (R6-7): under the top bar instead.
         compassPosition={compassBelow(topChrome)}
+        onRegionWillChange={() => setMoving(true)}
         onRegionDidChange={onRegionDidChange}
         onDidFinishLoadingMap={onLoaded}
         // Each frame drawn with every tile loaded; the hook makes it one pass per new view or new pins.
@@ -739,6 +757,16 @@ export const HomeMap = memo(function HomeMap({
             settled={settled}
             onExpand={expandPile}
             onOpen={open}
+          />
+          {/* The lap's venue off the map you can see: a marker at the edge pointing at it (pulse-map 05); a tap goes there. */}
+          <EdgeMarker
+            map={map}
+            target={edgeTarget}
+            distance={edgeTarget && center ? distanceText(getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0])) : null}
+            box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }}
+            settled={settled}
+            moving={moving}
+            onPress={goToFocus}
           />
       </View>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}

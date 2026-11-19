@@ -150,3 +150,32 @@ export function pileSpeech({ n, live, cluster }: { n: number; live: number; clus
   if (!cluster) return `${n} events at one place, double-tap to open the first`
   return live > 0 ? `${n} events here, ${live} on now, double-tap to zoom in` : `${n} events here, double-tap to zoom in`
 }
+
+/** An edge marker's distance from the map's edge (pt). */
+const EDGE_INSET = 8
+
+/**
+ * Where an off-frame venue's marker sits (pulse-map 05, "out of frame an edge marker points; it never flies"): inside the
+ * edge of the map you can see (`box`), on the line from its centre to the venue, the arrow turned to it (degrees
+ * clockwise from up). Null while the venue is in frame.
+ */
+export function edgeMarker(
+  xy: readonly [number, number],
+  box: { left: number; top: number; right: number; bottom: number },
+  size: { width: number; height: number }
+): { left: number; top: number; angle: number } | null {
+  const [x, y] = xy
+  if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) return null
+  const cx = (box.left + box.right) / 2
+  const cy = (box.top + box.bottom) / 2
+  const dx = x - cx
+  const dy = y - cy
+  const roomX = Math.max(0, (box.right - box.left) / 2 - size.width / 2 - EDGE_INSET)
+  const roomY = Math.max(0, (box.bottom - box.top) / 2 - size.height / 2 - EDGE_INSET)
+  const t = Math.min(dx ? roomX / Math.abs(dx) : Infinity, dy ? roomY / Math.abs(dy) : Infinity)
+  return {
+    left: Math.round(cx + dx * t - size.width / 2),
+    top: Math.round(cy + dy * t - size.height / 2),
+    angle: Math.round((Math.atan2(dx, -dy) * 180) / Math.PI),
+  }
+}
