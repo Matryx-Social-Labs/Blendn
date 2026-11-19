@@ -9,6 +9,7 @@ jest.mock('@maplibre/maplibre-react-native', () => ({}))
 
 /* eslint-disable import/first */
 import { EdgeMarker } from '../components/home/EdgeMarker'
+import { MAX_FONT_SCALE } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
 const box = { left: 0, top: 100, right: 400, bottom: 500 }
@@ -38,7 +39,8 @@ describe('EdgeMarker', () => {
     const onPress = await draw()
     const marker = screen.getByRole('button', { name: 'Kitty Ko, 3.1 km away, off the map. Double-tap to show it' })
     expect(screen.getByText('Kitty Ko')).toBeTruthy()
-    expect(screen.getByText('3.1 km')).toBeTruthy()
+    // The distance grows no further than the name beside it (sim drive at AX5: the mono line outgrew it).
+    expect(screen.getByText('3.1 km').parent?.props.maxFontSizeMultiplier ?? screen.getByText('3.1 km').props.maxFontSizeMultiplier).toBe(MAX_FONT_SCALE.caption)
     await fireEvent.press(marker)
     expect(onPress).toHaveBeenCalledTimes(1)
   })

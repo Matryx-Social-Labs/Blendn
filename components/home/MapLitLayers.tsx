@@ -283,7 +283,7 @@ function MapChip({ chip, onOpen }: { chip: Chip; onOpen: (kind: Chip['kind'], id
           {/* When and how far, in mono (pulse-map 05, 12 A: "3 tonight · 200 m"). */}
           {chip.line ? (
             <RNText
-              maxFontSizeMultiplier={MAX_FONT_SCALE.meta}
+              maxFontSizeMultiplier={MAX_FONT_SCALE.caption}
               numberOfLines={1}
               style={[monoCaption(bold), { color: chip.live && chip.kind === 'event' ? look.crown : COLOR.textSecondary }]}
               testID={`map-chip-line-${chip.id}`}

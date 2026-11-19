@@ -85,7 +85,7 @@ export function EdgeMarker({
         {target.name}
       </Text>
       {distance ? (
-        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[monoCaption(bold), styles.distance]}>
+        <RNText maxFontSizeMultiplier={MAX_FONT_SCALE.caption} style={[monoCaption(bold), styles.distance]}>
           <MonoRun text={distance} />
         </RNText>
       ) : null}
