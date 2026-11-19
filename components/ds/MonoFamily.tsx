@@ -87,11 +87,14 @@ export function Badge({
   size = 18,
   ring,
   arrive = false,
+  tone = 'white',
   testID,
 }: {
   text: string | number
   size?: 18 | 22
   ring?: string
+  /** `orange`: the brand orange with ink digits (`textOnOrangeFlat`, 5.6:1), for a count on the map's lit chips (pulse-map 12 A). */
+  tone?: 'white' | 'orange'
   /** A count that appears while you watch (the bell, a filter count, "n new" in a dock): it arrives and leaves over `quick`. Off for a row that is simply drawn, so scrolling never pops. */
   arrive?: boolean
   testID?: string
@@ -110,7 +113,7 @@ export function Badge({
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           // `minHeight`: at a large text size the digit's line grows past 18 and the pill grows with it, never clipping it.
-          style={[styles.badge, { minHeight: size, minWidth: size, paddingHorizontal: BADGE_PAD[size] }]}
+          style={[styles.badge, tone === 'orange' && styles.badgeOrange, { minHeight: size, minWidth: size, paddingHorizontal: BADGE_PAD[size] }]}
         >
           {rolls ? (
             <RollingNumber value={text} role="badge" color={COLOR.ink} testID={testID && `${testID}-count`} />
@@ -265,6 +268,7 @@ const styles = StyleSheet.create({
   struck: { textDecorationLine: 'line-through', textDecorationColor: COLOR.textSecondary },
   ring: { padding: SPACE.badgeRing, borderRadius: RADIUS.capsule },
   badge: { borderRadius: RADIUS.capsule, backgroundColor: COLOR.textPrimary, alignItems: 'center', justifyContent: 'center' },
+  badgeOrange: { backgroundColor: COLOR.brandOrange },
   badgeText: { color: COLOR.ink, fontVariant: ['tabular-nums'] },
   pill: {
     height: PILL_HEIGHT,

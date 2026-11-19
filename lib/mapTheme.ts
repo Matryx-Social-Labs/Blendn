@@ -18,6 +18,8 @@ import { COLOR, SPACE } from './design/tokens'
 
 /** The brand colours from the tokens, and the one stop they do not carry by its `colors.css` name. */
 const TOKEN = {
+  white: COLOR.textPrimary,
+  violet: COLOR.selectionVioletGlyph,
   brandOrange: COLOR.brandOrange,
   brandRose: COLOR.brandRose,
   emberEnd: '#FF6D8D', // the far end of --gradient-ember
@@ -182,6 +184,40 @@ export const MAP_THEME = {
     glowOpacity: 0.5,
     event: { live: EMBER_GLOW, later: TOKEN.brandOrange },
     venue: { live: ORCHID, later: TOKEN.brandRose },
+    /** A live event's rim (pulse-map 08): a shape cue; ember alone is only ΔE 7–12 from a later one. Not a token. */
+    liveRim: TOKEN.white,
+    liveRimPx: 1.5,
+    /** The one bright thing (pulse-map 08): 9 pt, warmer and lighter than the rest, a white ring. Not a token. */
+    focus: { color: '#FF906D', radiusPx: 9, ring: TOKEN.white, ringPx: 2 },
+    /** With a focus, the rest stay visible but quiet: glow off, 5 pt, 85% (55% failed contrast, sheet 09). */
+    dimmed: { radiusPx: 5, opacity: 0.85 },
+  },
+
+  /**
+   * "You" (pulse-map 06; Foundations C: violet is you, never ember or rose). The halo is the fix's real accuracy. Stale is
+   * grey; approximate is a soft circle with this edge. The stale grey is not a token (contrast sheet 09: 5.28 on ground).
+   */
+  you: {
+    dot: TOKEN.violet,
+    ring: TOKEN.white,
+    ringPx: 2,
+    radiusPx: 7,
+    halo: 'rgba(186,150,211,0.18)',
+    approximateEdge: 'rgba(186,150,211,0.55)',
+    stale: '#8C8796',
+  },
+
+  /** A pile of events (pulse-map 08): ink 90% with an ember rim, white numerals in the style's own glyphs (Satoshi is never hosted). */
+  pile: {
+    fill: 'rgba(13,12,12,0.9)',
+    rim: TOKEN.brandOrange,
+    rimPx: 1.5,
+    text: TOKEN.white,
+    /** Opaque ink round the numerals: legible over the violet you-dot (white on violet alone is 2.5:1). */
+    halo: COLOR.ink,
+    haloPx: 1.5,
+    font: ['Noto Sans Bold'],
+    textSize: 13,
   },
 
   /** The name above a lit roof. Only the nearest few on screen get one. */

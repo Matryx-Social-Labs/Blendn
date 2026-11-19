@@ -14,6 +14,8 @@ type BannersProps = {
   socketStatus: SocketConnectionStatus
   /** The phone is in a city we serve that is not the one browsed: "You're in Mumbai. Browse events here?" */
   switchTo: string | null
+  /** The city being browsed while the phone is in `switchTo` (pulse-map 07: "Browsing {city} · Back to you"). */
+  browsing?: string | null
   onSwitch: (city: string) => void
   /** The phone is somewhere we do not serve, or whose city is coming soon: passive, no action. */
   away: AwayNotice | null
@@ -49,7 +51,7 @@ type BannersProps = {
  * The first-run tip is not a banner any more (it is the one-off coach mark), and a switch offer and the away notice
  * are never both: `lib/city.ts` pins that across every combination.
  */
-export function PulseBanners({ socketStatus, switchTo, onSwitch, away, travel = null, onTravelBack = () => {}, onTravelDismiss, locationDenied, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout, only }: BannersProps) {
+export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch, away, travel = null, onTravelBack = () => {}, onTravelDismiss, locationDenied, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout, only }: BannersProps) {
   const reduceMotion = useReducedMotion()
   const place = only !== 'system'
   // The place banners ride on the map (`MapBanners`): there they are glass, as the board's `.mbn`.
@@ -60,9 +62,9 @@ export function PulseBanners({ socketStatus, switchTo, onSwitch, away, travel = 
   return (
     <Animated.View layout={glide} style={styles.bar} onLayout={(e) => onLayout?.(Math.round(e.nativeEvent.layout.height))} testID="pulse-banners">
       {system ? <RealtimeStatusBanner status={socketStatus} style={styles.item} showSocketIssues={false} /> : null}
-      {place && switchTo ? (
+      {place && switchTo && browsing ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
-          <Banner kind="info" onMap={onMap} text={`You’re in ${switchTo}. Browse events here?`} action={{ label: 'Switch', onPress: () => onSwitch(switchTo) }} testID="pulse-switch" />
+          <Banner kind="info" onMap={onMap} text={`Browsing ${browsing}`} action={{ label: 'Back to you', onPress: () => onSwitch(switchTo) }} testID="pulse-switch" />
         </Animated.View>
       ) : null}
       {place && travel ? (
@@ -75,9 +77,10 @@ export function PulseBanners({ socketStatus, switchTo, onSwitch, away, travel = 
           <Banner kind="info" onMap={onMap} icon="map-pin" text={awayText(away)} testID="pulse-away" />
         </Animated.View>
       ) : null}
-      {system && locationDenied ? (
+      {place && locationDenied ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
-          <Banner kind="paused" text="Turn on location to see nearby events and check in." action={{ label: 'Settings', onPress: onOpenSettings }} testID="pulse-denied" />
+          {/* Location denied (pulse-map 06): the city, and one quiet line on the map; no distances are guessed. */}
+          <Banner kind="info" onMap={onMap} icon="navigation" text="See what’s near you" action={{ label: 'Settings', onPress: onOpenSettings }} testID="pulse-denied" />
         </Animated.View>
       ) : null}
       {system && rateLimit !== null ? (

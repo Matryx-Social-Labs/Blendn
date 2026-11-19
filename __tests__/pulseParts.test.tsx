@@ -154,15 +154,27 @@ describe('the banners', () => {
     expect(screen.queryByTestId('pulse-switch')).toBeNull()
     expect(screen.queryByTestId('pulse-away')).toBeNull()
   })
-  it('the switch offer has its one action; the away notice has none', async () => {
+  it('browsing a city other than where you are: one line, "Browsing {city}", and the way back (pulse-map 07)', async () => {
     const onSwitch = jest.fn()
-    await render(<PulseBanners {...base} switchTo="Mumbai" onSwitch={onSwitch} away={{ kind: 'notThere', deviceCity: 'Saarbrücken', selected: 'Bengaluru' }} />)
-    expect(screen.getByText('You’re in Mumbai. Browse events here?')).toBeTruthy()
-    await fireEvent.press(screen.getByRole('button', { name: 'Switch' }))
+    await render(<PulseBanners {...base} switchTo="Mumbai" browsing="Pune" onSwitch={onSwitch} away={{ kind: 'notThere', deviceCity: 'Saarbrücken', selected: 'Bengaluru' }} />)
+    expect(screen.getByText('Browsing Pune')).toBeTruthy()
+    expect(screen.queryByText(/Browse events here/)).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Back to you' }))
     expect(onSwitch).toHaveBeenCalledWith('Mumbai')
     expect(screen.getByText('We’re not in Saarbrücken yet. You’re browsing Bengaluru.')).toBeTruthy()
     expect(within(screen.getByTestId('pulse-away')).queryByRole('button')).toBeNull()
   })
+  it('location denied: one quiet line on the map, "See what’s near you", and Settings (pulse-map 06)', async () => {
+    const onOpenSettings = jest.fn()
+    await render(<PulseBanners {...base} only="place" locationDenied onOpenSettings={onOpenSettings} />)
+    expect(screen.getByText('See what’s near you')).toBeTruthy()
+    await fireEvent.press(screen.getByRole('button', { name: 'Settings' }))
+    expect(onOpenSettings).toHaveBeenCalled()
+    // The control: not with the system banners above the list any more.
+    await render(<PulseBanners {...base} only="system" locationDenied onOpenSettings={onOpenSettings} />)
+    expect(screen.queryByTestId('pulse-denied')).toBeNull()
+  })
+
   it('a coming-soon city the phone is in is said to be coming, not near', async () => {
     await render(<PulseBanners {...base} away={{ kind: 'comingSoon', deviceCity: 'Toronto', selected: 'Bengaluru' }} />)
     expect(screen.getByText('Toronto is coming soon. You’re browsing Bengaluru.')).toBeTruthy()

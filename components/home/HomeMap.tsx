@@ -3,9 +3,9 @@ import {
   GeoJSONSource,
   Layer,
   Map,
-  NativeUserLocation,
   type CameraRef,
   type CameraStop,
+  type GeoJSONSourceRef,
   type LightSpecification,
   type MapRef,
   type PressEventWithFeatures,
@@ -13,7 +13,7 @@ import {
 } from '@maplibre/maplibre-react-native'
 import { router } from 'expo-router'
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppState, Platform, StyleSheet, useWindowDimensions, type NativeSyntheticEvent } from 'react-native'
+import { AppState, Platform, StyleSheet, useWindowDimensions, View, type NativeSyntheticEvent } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
 
 import { eventFromApi } from '../../lib/api'
@@ -23,13 +23,12 @@ import {
   cameraMove,
   cityPickAction,
   insideLastCircle,
-  LIGHT_MIN_ZOOM,
   liveAt,
   loadPins,
+  pinsFor,
   locateTarget,
   mapPadding,
   roundQuery,
-  shadeOf,
   shouldFollowFix,
   snapRecentre,
   tiltedZoom,
@@ -58,6 +57,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
+import { FRAME_NEAREST, frameOnYou } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -65,9 +65,13 @@ import { tint } from '../../lib/theme'
 import { fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
+import { useScreenReader } from '../ds/shared'
+import { EventPiles } from './EventPiles'
+import { PileSpeech } from './PileSpeech'
+import { YouMark } from './YouMark'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
-import { useMapLighting, type Collection, type MapView, type Segment } from './useMapLighting'
+import { useMapLighting, type MapView, type Segment } from './useMapLighting'
 
 /** A pan settles before the server is asked; the lists allow 60 reads a minute. */
 const QUERY_DEBOUNCE_MS = 600
@@ -76,10 +80,8 @@ const PIN_LIMIT = 50
 /** An event's pin is re-read against its window this often, so it lights up when its doors open. */
 const LIVE_TICK_MS = 60_000
 
-type Point = { type: 'Point'; coordinates: [number, number] }
 /** A camera move: where to, how long an ease within a city takes, and a zoom and tilt to arrive at. */
 type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: number } }
-type PinFeature = { type: 'Feature'; id: string; geometry: Point; properties: { id: string; kind: string; glow: number; color: string } }
 
 const NO_PINS: Pin[] = []
 /** A held move this close to the fix is a move to the person (the reach's frame sits about a kilometre off them). */
@@ -107,6 +109,12 @@ export const pinApiFor = (viewport: boolean) => ({
   getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport }),
 })
 const pinApi = pinApiFor(true)
+
+/** The events nearest the person's own fix (sharing-gated, never a viewport), for the open frame; none on a failed read. */
+async function nearestEvents(fix: { latitude: number; longitude: number }): Promise<Pin[]> {
+  const res = await apiClient.getEvents({ lat: fix.latitude, lon: fix.longitude, sortBy: 'distance', limit: FRAME_NEAREST }, { force: true }).catch(() => null)
+  return res?.success && res.data ? pinsFor('events', { events: res.data.events.map(eventFromApi), venues: [] }) : []
+}
 
 /**
  * The map behind the home drawer (plan v2 §4, step 2 PR B; restyled step 2c):
@@ -221,6 +229,10 @@ export const HomeMap = memo(function HomeMap({
   const reachHere = sharing ? reach : null
   const map = useRef<MapRef>(null)
   const camera = useRef<CameraRef>(null)
+  const pileSource = useRef<GeoJSONSourceRef>(null)
+  const screenReader = useScreenReader()
+  /** Bumped each time the camera stops or the pins change: the spoken numbers are read again (`PileSpeech`). */
+  const [settled, setSettled] = useState(0)
   // The person has moved the map (a pan, or a city picked): a fix no longer takes it over.
   const touched = useRef(false)
   // The same, for the "my location" button to draw: filled while the map follows the fix.
@@ -430,12 +442,33 @@ export const HomeMap = memo(function HomeMap({
     userAt: center ? [center.longitude, center.latitude] : null,
   })
 
+  // New pins re-cluster the numbers: a screen reader hears them afresh.
+  useEffect(() => {
+    if (screenReader) setSettled((n) => n + 1)
+  }, [pins, screenReader])
+
   // The person's position — a cached one, then the live fix — until they move the map themselves.
   useEffect(() => {
     if (!center || !shouldFollowFix(followedFix.current, center, touched.current)) return
     followedFix.current = center
     moveTo({ to: [center.longitude, center.latitude], easeMs: 400 })
   }, [center]) // eslint-disable-line react-hooks/exhaustive-deps -- only a new fix moves the camera here
+
+  /*
+   * Option 3 opens framed on you and the six nearest events (pulse-map 05, `frameOnYou`), once per visit, as soon as there
+   * is a fix and the events for this view are in. Never after the person has moved the map: their touch wins.
+   */
+  const framed = useRef(false)
+  useEffect(() => {
+    if (framed.current || touched.current || !center || segment !== 'events' || reachHere) return
+    framed.current = true
+    // The six nearest are their own read, by distance from the fix: the first street-zoom view rarely holds any.
+    void nearestEvents(center).then((near) => {
+      if (touched.current) return
+      const frame = frameOnYou(center, near, { width, height: Math.max(1, mapHeight - padding.top - padding.bottom) })
+      if (frame) moveTo({ to: frame.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: frame.zoom, pitch: MAP_THEME.camera.pitch } })
+    })
+  }, [center, segment]) // eslint-disable-line react-hooks/exhaustive-deps -- the first fix on Events frames it, once per visit
 
   // "My location": back to the fix and following it again, or ask for one (dimmed until the ask settles).
   const locate = () => {
@@ -541,6 +574,7 @@ export const HomeMap = memo(function HomeMap({
     view.current = { bounds: bounds as Bounds, centre: centre as [number, number], zoom, pitch }
     setOwnTiles((drawing) => drawsOwnBuildings(OWN_BUILDINGS_URL, bounds as Bounds, drawing))
     relight()
+    if (screenReader) setSettled((n) => n + 1)
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = setTimeout(() => ask(bounds as Bounds), QUERY_DEBOUNCE_MS)
   }
@@ -613,17 +647,14 @@ export const HomeMap = memo(function HomeMap({
     [open]
   )
 
-  const pinData = useMemo<Collection<PinFeature>>(
-    () => ({
-      type: 'FeatureCollection',
-      features: pins.map((p) => ({
-        type: 'Feature',
-        id: p.id,
-        geometry: { type: 'Point', coordinates: [p.longitude, p.latitude] },
-        properties: { id: p.id, kind: p.kind, glow: p.glow, color: shadeOf(p.kind, p.live) },
-      })),
-    }),
-    [pins]
+  // A number tapped: the camera eases to the zoom that opens it, the person's own move (a fix no longer takes the map).
+  const expandPile = useCallback(
+    ({ center: to, zoom }: { center: [number, number]; zoom: number }) => {
+      setTouched(true)
+      onTouched?.()
+      stop({ center: to, zoom, padding: shown.current.padding, duration: reduceMotion ? 0 : MAP_THEME.camera.easeMs })
+    },
+    [onTouched, reduceMotion]
   )
 
   const style = useMemo(() => homeMapStyle(), [])
@@ -661,11 +692,10 @@ export const HomeMap = memo(function HomeMap({
           }}
         />
         {/*
-         * `mode` passed explicitly: MLRN's Android component starts in COMPASS render mode and applies `mode`
-         * only when given, so the puck followed the compass and the map redrew about 7 times a second forever
-         * (measured on the emulator, step 2c drive). A plain puck redraws only when the fix moves.
+         * You (pulse-map 06): violet, the halo the fix's real accuracy; approximate a soft circle, stale grey; nothing with
+         * sharing off. Our own layers, not the native puck (blue, and on Android a compass mode that redrew the map ~7×/s).
          */}
-        {center ? <NativeUserLocation mode="default" /> : null}
+        <YouMark part="halo" fix={center} sharing={sharing} now={now} />
         {/*
          * Remounted together when the building source switches: the glow goes under
          * the buildings and the lit copies over them, so they must be added after
@@ -691,34 +721,26 @@ export const HomeMap = memo(function HomeMap({
             </GeoJSONSource>
           </>
         ) : null}
-        <GeoJSONSource id="pins" data={pinData} onPress={openPlace}>
-          <Layer
-            id="pin-glow"
-            type="circle"
-            maxzoom={LIGHT_MIN_ZOOM}
-            paint={{
-              'circle-color': ['get', 'color'],
-              'circle-radius': ['*', ['get', 'glow'], MAP_THEME.pin.glowPxPerStep],
-              'circle-blur': 1,
-              'circle-opacity': MAP_THEME.pin.glowOpacity,
-            }}
-          />
-          <Layer
-            id="pin-dot"
-            type="circle"
-            maxzoom={LIGHT_MIN_ZOOM}
-            paint={{
-              'circle-color': ['get', 'color'],
-              'circle-radius': MAP_THEME.pin.dotRadiusPx,
-              'circle-stroke-color': MAP_THEME.pin.dotStroke,
-              'circle-stroke-width': MAP_THEME.pin.dotStrokePx,
-            }}
-          />
-        </GeoJSONSource>
+        {/* Every unlit event a dot at every zoom, piles and stacked spots as numbers, the focus on top; a lit place is its light (pulse-map 08, 12 A). */}
+        <EventPiles sourceRef={pileSource} pins={pins} litIds={lit.pinIds} focusId={focusPin?.id ?? null} onOpen={open} onExpand={expandPile}>
+          <YouMark part="dot" fix={center} sharing={sharing} now={now} />
+        </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* A screen reader hears the numbers (pulse-map 10): one spoken target each, over the map (Android keeps the map's own children from TalkBack). */}
+          <PileSpeech
+            on={screenReader}
+            map={map}
+            source={pileSource}
+            box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom }}
+            settled={settled}
+            onExpand={expandPile}
+            onOpen={open}
+          />
+      </View>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}
