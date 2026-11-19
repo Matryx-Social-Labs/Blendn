@@ -8,6 +8,7 @@ import { IconButton } from '../ds/IconButton'
 import { Spinner } from '../ds/Loader'
 import { PlusMark } from '../ds/ManageStatusRow'
 import { SettingsGroup, SettingsRow } from '../ds/SettingsRow'
+import { Title } from '../ds/Title'
 import { font, useAnnounced, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import { Material } from '../ui/Material'
 import { useToastDock } from '../toastDock'
@@ -208,9 +209,9 @@ export function PlusHero() {
     <View style={[styles.hero, large && styles.heroLarge]}>
       {large ? null : <PlusMark />}
       {/* One line, shrunk to fit: a wordmark never breaks "Blend’ / n+" (D-M10). */}
-      <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.title} numberOfLines={1} adjustsFontSizeToFit style={[font('title', bold), styles.ink, !large && styles.centre]} testID="plus-wordmark">
+      <Title accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit style={[styles.ink, !large && styles.centre]} testID="plus-wordmark">
         Blend’n+
-      </Text>
+      </Title>
       {large ? null : <Text maxFontSizeMultiplier={MAX_FONT_SCALE.body} style={[font('body', bold), styles.secondary, styles.centre]}>More of the night, none of the creepy stuff.</Text>}
     </View>
   )
