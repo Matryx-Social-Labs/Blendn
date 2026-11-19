@@ -34,7 +34,7 @@ export type Collection<F> = { type: 'FeatureCollection'; features: F[] }
 /** A name above a lit roof. */
 /** `count`: the events the lit place stands for (several at one venue: its name and the count, pulse-map 12 A). */
 /** The room an edge marker may take (its widest, and its height with air): names keep out of it. */
-const EDGE_BLOCK = { width: MAP_THEME.chip.maxWidthPx, height: SIZE.targetIos }
+export const EDGE_BLOCK = { width: MAP_THEME.chip.maxWidthPx, height: SIZE.targetIos }
 
 export type Chip = { id: string; kind: Pin['kind']; live: boolean; title: string; line: string; speech: string; at: LngLat; lift: number; count: number }
 /** A building in our tiles lit through feature-state: its id, and the pin it stands for (a tap on it opens that). */

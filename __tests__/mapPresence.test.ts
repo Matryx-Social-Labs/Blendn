@@ -188,7 +188,7 @@ describe('frameOnYou: you and the six nearest, in the map you can see', () => {
 })
 
 // eslint-disable-next-line import/first
-import { edgeMarker } from '../lib/mapPresence'
+import { edgeMarker, staleCalloutBelow } from '../lib/mapPresence'
 
 describe('edgeMarker (pulse-map 05: an off-frame lap venue gets a marker at the edge, pointing at it)', () => {
   const box = { left: 0, top: 100, right: 400, bottom: 500 } // centre (200, 300)
@@ -240,5 +240,24 @@ describe('mapSummary (pulse-map 10: the map is spoken, not only its numbers)', (
       'Map. No events here. Last seen here 25 min ago, updating. Lupa is off the map.'
     )
     expect(mapSummary({ bounds: null, pins: [pin(77.6)], you: 'precise', youLine: null, edge: null })).toBe('Map. You are on the map.')
+  })
+})
+
+describe('staleCalloutBelow (pulse-map 06 "STALE": the callout over the grey dot, never under the edge marker)', () => {
+  // The iOS drive, 2026-11-19: dot (206, 242), the callout 200 × 40 with 17 pt to the dot, the marker at the top-left edge.
+  const callout = { width: 200, height: 40, gap: 17 }
+  const topLeft = { left: 8, top: 156, width: 200, height: 44 }
+
+  it('goes under the dot when, over it, it would meet the edge marker (it ran 3 pt under "High Ultra Lounge 6.7 km")', () => {
+    expect(staleCalloutBelow([206, 242], callout, topLeft)).toBe(true)
+  })
+
+  it('stays over the dot, as the board draws it, with no marker or one clear of it', () => {
+    expect(staleCalloutBelow([206, 242], callout, null)).toBe(false)
+    // The marker at the bottom edge, and one at the top but past the callout's side.
+    expect(staleCalloutBelow([206, 242], callout, { left: 100, top: 300, width: 200, height: 44 })).toBe(false)
+    expect(staleCalloutBelow([360, 242], callout, topLeft)).toBe(false)
+    // The marker well above the callout's top (185 − air).
+    expect(staleCalloutBelow([206, 320], callout, topLeft)).toBe(false)
   })
 })

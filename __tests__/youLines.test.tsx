@@ -10,8 +10,8 @@ type Props = Record<string, unknown> & { id?: string; children?: React.ReactNode
 jest.mock('@maplibre/maplibre-react-native', () => {
   const { View } = require('react-native')
   return {
-    Marker: ({ id, children, lngLat }: Props) => (
-      <View testID={`marker-${id}`} lngLat={lngLat}>
+    Marker: ({ id, children, lngLat, anchor, offset }: Props) => (
+      <View testID={`marker-${id}`} lngLat={lngLat} anchor={anchor} offset={offset}>
         {children}
       </View>
     ),
@@ -45,5 +45,21 @@ describe('StaleCallout', () => {
     await render(<StaleCallout at={[77.6, 12.97]} text="Last seen here 25 min ago · updating" />)
     expect(screen.getByTestId('marker-you-stale').props.lngLat).toEqual([77.6, 12.97])
     expect(screen.getByText('Last seen here 25 min ago · updating')).toBeTruthy()
+  })
+})
+
+describe('StaleCallout below', () => {
+  it('hangs under the dot instead of over it when told to (an edge marker is over it)', async () => {
+    await render(<StaleCallout at={[77.6, 12.97]} text="Last seen here 25 min ago · updating" below />)
+    const marker = screen.getByTestId('marker-you-stale')
+    expect(marker.props.anchor).toBe('top')
+    expect(marker.props.offset[1]).toBeGreaterThan(0)
+  })
+
+  it('is over the dot by default (pulse-map 06)', async () => {
+    await render(<StaleCallout at={[77.6, 12.97]} text="Last seen here 25 min ago · updating" />)
+    const marker = screen.getByTestId('marker-you-stale')
+    expect(marker.props.anchor).toBe('bottom')
+    expect(marker.props.offset[1]).toBeLessThan(0)
   })
 })

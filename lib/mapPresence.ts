@@ -182,6 +182,30 @@ export function edgeMarker(
   }
 }
 
+/** Air kept between the stale callout and the edge marker (pt). */
+const CALLOUT_AIR = 6
+
+/**
+ * Whether the stale callout hangs under your dot rather than over it. Over it is the board's place (pulse-map 06, "STALE");
+ * under it only when that box would meet the edge marker's (iOS drive 2026-11-19: it ran 3 pt under the marker at the top
+ * of the map). `callout.gap` is the room between the callout and the dot's centre.
+ */
+export function staleCalloutBelow(
+  dot: readonly [number, number],
+  callout: { width: number; height: number; gap: number },
+  marker: { left: number; top: number; width: number; height: number } | null
+): boolean {
+  if (!marker) return false
+  const [x, y] = dot
+  const bottom = y - callout.gap
+  return (
+    x - callout.width / 2 < marker.left + marker.width + CALLOUT_AIR &&
+    x + callout.width / 2 > marker.left - CALLOUT_AIR &&
+    bottom - callout.height < marker.top + marker.height + CALLOUT_AIR &&
+    bottom > marker.top - CALLOUT_AIR
+  )
+}
+
 /**
  * What the map says as a whole to a screen reader (pulse-map 10, "Map and number labels are spoken"): how many events are
  * on the map you see and how many are on now, where you are, and the lap's venue when it is off the map. Plain words: the

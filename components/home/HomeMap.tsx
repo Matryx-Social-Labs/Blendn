@@ -57,7 +57,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { FRAME_NEAREST, frameOnYou, mapSummary, youMark } from '../../lib/mapPresence'
+import { edgeMarker, FRAME_NEAREST, frameOnYou, mapSummary, staleCalloutBelow, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -69,11 +69,11 @@ import { useScreenReader } from '../ds/shared'
 import { EventPiles } from './EventPiles'
 import { PileSpeech } from './PileSpeech'
 import { EdgeMarker } from './EdgeMarker'
-import { ApproximateLine, StaleCallout } from './YouLines'
+import { ApproximateLine, STALE_CALLOUT, StaleCallout } from './YouLines'
 import { YouMark } from './YouMark'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
-import { useMapLighting, type MapView, type Segment } from './useMapLighting'
+import { EDGE_BLOCK, useMapLighting, type MapView, type Segment } from './useMapLighting'
 
 /** A pan settles before the server is asked; the lists allow 60 reads a minute. */
 const QUERY_DEBOUNCE_MS = 600
@@ -674,6 +674,31 @@ export const HomeMap = memo(function HomeMap({
   const style = useMemo(() => homeMapStyle(), [])
   // What the map says about you (pulse-map 06): approximate and stale each get their one line.
   const you = youMark({ sharing, permission: 'granted', fix: center, now })
+  // The stale callout goes under the dot when, over it, it would meet the edge marker (iOS drive 2026-11-19). Asked again
+  // when the camera stops, with the marker's widest room (`EDGE_BLOCK`, as the chips keep out of it).
+  const [staleBelow, setStaleBelow] = useState(false)
+  const staleAt = you.kind === 'stale' && center ? ([center.longitude, center.latitude] as [number, number]) : null
+  const edgeAt = edgeTarget?.at ?? null
+  useEffect(() => {
+    const m = map.current
+    if (!m || !staleAt || !edgeAt) {
+      setStaleBelow(false)
+      return
+    }
+    let gone = false
+    // Through a promise: `project` throws synchronously while the map remounts (fix 3).
+    Promise.resolve()
+      .then(() => Promise.all([m.project(staleAt), m.project(edgeAt)]))
+      .then(([dot, venue]) => {
+        if (gone) return
+        const spot = edgeMarker(venue as [number, number], edgeBox, EDGE_BLOCK)
+        setStaleBelow(staleCalloutBelow(dot as [number, number], STALE_CALLOUT, spot && { ...spot, ...EDGE_BLOCK }))
+      })
+      .catch((error) => Logger.warn('events', 'Stale callout could not place itself', { error: String(error) }))
+    return () => {
+      gone = true
+    }
+  }, [staleAt?.[0], staleAt?.[1], edgeAt?.[0], edgeAt?.[1], settled, edgeBox.top, edgeBox.bottom]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the arrays are new each render
 
   // The lead card's own distance when it has one (the same number as the card), else measured from the fix; none without one.
   const edgeKm = focus?.km ?? (edgeTarget && center ? getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0]) : null)
@@ -765,7 +790,7 @@ export const HomeMap = memo(function HomeMap({
           <YouMark part="dot" fix={center} sharing={sharing} now={now} />
         </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
-        {you.kind === 'stale' && center && you.line ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} /> : null}
+        {you.kind === 'stale' && center && you.line ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} below={staleBelow} /> : null}
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>

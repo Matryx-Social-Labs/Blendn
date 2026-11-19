@@ -2,7 +2,7 @@ import { Marker } from '@maplibre/maplibre-react-native'
 import { StyleSheet, View } from 'react-native'
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
 
-import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
 import { locateRide } from '../../lib/homeMap'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { MapGlass } from '../ds/Banner'
@@ -11,8 +11,11 @@ import ScalePress from '../motion/ScalePress'
 import { Text } from '../ui/Text'
 import { annotationTitle } from './MapLitLayers'
 
-/** The callout's bottom above your dot's centre: the dot, its ring and a gap (board 06, "STALE"). */
+/** The callout's edge from your dot's centre: the dot, its ring and a gap (board 06, "STALE"). */
 const ABOVE_DOT_PX = MAP_THEME.you.radiusPx + MAP_THEME.you.ringPx + SPACE.sm
+
+/** The room the callout may take (its widest, two caption lines and its padding) and its gap to the dot: `staleCalloutBelow`. */
+export const STALE_CALLOUT = { width: MAP_THEME.chip.maxWidthPx, height: 2 * TYPE.caption.lineHeight + 2 * SPACE.xs, gap: ABOVE_DOT_PX }
 
 /**
  * iOS Precise off, or Android's approximate grant (pulse-map 06, frame 2): one quiet glass line centred over the drawer,
@@ -64,11 +67,12 @@ export function ApproximateLine({
 
 /**
  * A fix older than ten minutes (pulse-map 06, frame 3): the grey dot says "Last seen here 25 min ago · updating" in glass
- * just above it. It turns violet, and this goes, when a live fix lands; the camera does not chase it.
+ * just above it. It turns violet, and this goes, when a live fix lands; the camera does not chase it. `below`: under the dot
+ * instead, when over it would meet the edge marker (`staleCalloutBelow`).
  */
-export function StaleCallout({ at, text }: { at: [number, number]; text: string }) {
+export function StaleCallout({ at, text, below = false }: { at: [number, number]; text: string; below?: boolean }) {
   return (
-    <Marker id="you-stale" lngLat={at} anchor="bottom" offset={[0, -ABOVE_DOT_PX]} {...annotationTitle(text)}>
+    <Marker id="you-stale" lngLat={at} anchor={below ? 'top' : 'bottom'} offset={[0, below ? ABOVE_DOT_PX : -ABOVE_DOT_PX]} {...annotationTitle(text)}>
       <View style={styles.callout} accessible accessibilityLabel={text} testID="map-stale">
         <MapGlass radius={RADIUS.rowInCard} />
         <Text variant="caption" color={COLOR.textPrimary} numberOfLines={2} style={styles.calloutText}>
