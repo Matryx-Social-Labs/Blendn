@@ -1885,14 +1885,17 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * the list instead. The system ones (offline, location, a refused or failed read) stay over the list they are about.
    */
   const bannerActions = useLatest({ chooseCity, home, deviceCity, dismissTravel })
+  // Denied (pulse-map 06): one quiet line on the map, on its own if nothing else is up there.
+  const locationDenied = locationStatus === 'denied'
   const placeBanners = useMemo(
     () =>
-      switchSuggestion || travel || away ? (
+      switchSuggestion || travel || away || locationDenied ? (
         <PulseBanners
           only="place"
           socketStatus={socketStatus}
           // While the travel banner is up, its "Back to {home}" is the way back: never two offers at once.
           switchTo={travel ? null : switchSuggestion}
+          browsing={selectedCity}
           onSwitch={(city) => bannerActions.current.chooseCity({ city }, true)}
           away={away}
           travel={travel}
@@ -1901,15 +1904,15 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
             if (back) choose(back, sameCity(back.city, here))
           }}
           onTravelDismiss={() => bannerActions.current.dismissTravel()}
-          locationDenied={false}
-          onOpenSettings={() => {}}
+          locationDenied={locationDenied}
+          onOpenSettings={() => void Linking.openSettings().catch(() => {})}
           refreshFailed={false}
           onRetry={() => {}}
         />
       ) : null,
     // `travel` is a new object every render: its words are what change it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, socketStatus, bannerActions]
+    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, locationDenied, socketStatus, bannerActions]
   )
   /*
    * The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask.
@@ -1957,7 +1960,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         onSwitch={() => {}}
         away={null}
         // Not while the Nearby section is showing its own "Open Settings" prompt (unnarrowed, no location): one ask, not two.
-        locationDenied={locationStatus === 'denied' && (isNarrowed || !!userLocation)}
+        locationDenied={false}
         onOpenSettings={() => void Linking.openSettings().catch(() => {})}
         // Only over a list that is still on screen: with nothing loaded the whole page is the error (`PulseLoadFailed`).
         refreshFailed={!!netError && events.length > 0}
