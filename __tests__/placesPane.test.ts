@@ -144,6 +144,10 @@ describe('words', () => {
 
   it('an exact fix keeps its exact words, read aloud too (the negative control)', () => {
     expect(distanceText(0.21, EXACT)).toBe('200 m')
+    // Judged on the shown metres, as on the shown tenth: 0.99 km is "1.0 km", never "1000 m" (Places' Near you, iOS drive).
+    expect(distanceText(0.99, EXACT)).toBe('1.0 km')
+    expect(distanceText(0.974, EXACT)).toBe('950 m')
+    expect(spokenDistance(0.99, EXACT)).toBe('1.0 kilometres')
     expect(distanceText(5.4, EXACT)).toBe('5.4 km')
     expect(spokenDistance(0.35, EXACT)).toBe('350 metres')
     expect(spokenDistance(1, EXACT)).toBe('1.0 kilometres')

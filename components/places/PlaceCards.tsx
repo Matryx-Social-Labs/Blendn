@@ -30,7 +30,7 @@ import {
   type DistanceReading,
   type PlaceTypeFilter,
 } from '../../lib/placesPane'
-import { QuietRow } from './PlaceParts'
+import { PlaceMeta, QuietRow } from './PlaceParts'
 import { openPlace } from './openPlace'
 import { ContainedCover } from '../ds/LinkPreviewCard'
 
@@ -110,25 +110,6 @@ function Glow({ bucket, size }: { bucket: Bucket; size: number }) {
   )
 }
 
-/** "{area} · {distance mono}" or the type line; one line. */
-function MetaLine({ parts, distance }: { parts: (string | null)[]; distance: string | null }) {
-  const bold = useBoldText()
-  const lead = parts.filter(Boolean).join(' · ')
-  return (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
-      {lead}
-      {distance ? (
-        <>
-          {lead ? ' · ' : ''}
-          <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
-            <MonoRun text={distance} />
-          </Text>
-        </>
-      ) : null}
-    </Text>
-  )
-}
-
 const pressProps = {
   haptic: false,
   pressedScale: Platform.OS === 'android' ? 1 : PRESS.scale,
@@ -154,7 +135,7 @@ export const LiveTile = memo(function LiveTile({ venue, now, reading }: { venue:
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
           {venue.name}
         </Text>
-        <MetaLine parts={[placeArea(venue)]} distance={distanceText(venue.distance, reading)} />
+        <PlaceMeta lead={[placeArea(venue)].filter(Boolean).join(' · ')} distance={distanceText(venue.distance, reading)} />
       </View>
     </ScalePress>
   )
@@ -174,7 +155,7 @@ export const OpenCard = memo(function OpenCard({ venue, now, reading }: { venue:
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} numberOfLines={1} style={[font('bodyStrong', bold), styles.ink]}>
           {venue.name}
         </Text>
-        <MetaLine parts={[guestTypeLabel(venue), placeArea(venue)]} distance={distanceText(venue.distance, reading)} />
+        <PlaceMeta lead={[guestTypeLabel(venue), placeArea(venue)].filter(Boolean).join(' · ')} distance={distanceText(venue.distance, reading)} />
         {tonight ? (
           <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.ink]}>
             <Text style={[font('meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>

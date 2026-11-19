@@ -101,7 +101,9 @@ export const ABOUT = 'about '
 export function distanceText(km: number | null | undefined, reading: DistanceReading): string | null {
   if (km == null || !Number.isFinite(km) || km < 0) return null
   if (reading === 'approximate') return `${ABOUT}${Math.max(1, Math.round(km)).toLocaleString('en-US')} km`
-  if (km < 1) return `${Math.max(50, Math.round((km * 1000) / 50) * 50)} m`
+  // Judged on the shown metres, so 0.99 is "1.0 km", never "1000 m".
+  const metres = Math.max(50, Math.round((km * 1000) / 50) * 50)
+  if (metres < 1000) return `${metres} m`
   // Judged on the shown tenth, so 9.96 is "10 km", never "10.0 km".
   const tenths = Math.round(km * 10) / 10
   // Grouped past a thousand ("7,510 km"): the edge marker can point at a city a continent away.

@@ -19,25 +19,34 @@ const QUIET_THUMB = 40
 // design-exception: places.js quiet rows draw the thumb at radius 10 (RADIUS.thumb is 8, rowInCard 16)
 const QUIET_THUMB_RADIUS = 10
 
-/** "Brewery · 350 m": the type, and the distance in Geist Mono. */
-function TypeLine({ venue, reading, area = false, small = false }: { venue: VenueListItem; reading: DistanceReading; area?: boolean; small?: boolean }) {
+/**
+ * "Café · 80 Feet Road · 350 m": the words give way to a long address, the distance in Geist Mono is its own slot and never
+ * does (owner 2026-11-05: no variable glued in a tight slot; "about 1 km" read "abo…" glued on, SCRUM-1080 drive).
+ */
+export function PlaceMeta({ lead, distance, small = false }: { lead: string; distance: string | null; small?: boolean }) {
   const bold = useBoldText()
-  const distance = distanceText(venue.distance, reading)
-  // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
-  const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
   return (
-    <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary]}>
-      {lead}
+    <View style={styles.meta}>
+      <Text testID="place-meta" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} style={[font('meta', bold), styles.secondary, styles.metaWords]}>
+        {lead}
+      </Text>
       {distance ? (
-        <>
+        <Text testID="place-distance" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.secondary]}>
           {lead ? ' · ' : ''}
           <Text style={[font(small ? 'caption' : 'meta', bold, FONT_FAMILY.mono[500]), styles.tabular]}>
             <MonoRun text={distance} />
           </Text>
-        </>
+        </Text>
       ) : null}
-    </Text>
+    </View>
   )
+}
+
+/** "Brewery · 350 m": the type (the area first on a row), and the distance. */
+function TypeLine({ venue, reading, area = false, small = false }: { venue: VenueListItem; reading: DistanceReading; area?: boolean; small?: boolean }) {
+  // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
+  const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
+  return <PlaceMeta lead={lead} distance={distanceText(venue.distance, reading)} small={small} />
 }
 
 /** The quiet places, folded behind one line with a count; it unfolds in place. */
@@ -149,7 +158,8 @@ const styles = StyleSheet.create({
   foldGap: { paddingVertical: SPACE.sm },
   foldEnd: { flexDirection: 'row', alignItems: 'center', gap: SPACE.sm },
   rowText: { flex: 1, minWidth: 0 },
-  quietRow: { height: QUIET_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.xs },
+  // A minimum: at the largest text the name and its line grow past 56 rather than draw over the next row (SCRUM-1080 drive).
+  quietRow: { minHeight: QUIET_ROW, flexDirection: 'row', alignItems: 'center', gap: SPACE.md, marginBottom: SPACE.xs },
   pressed: { backgroundColor: PRESSED_WASH.ios },
   foldLine: { flexShrink: 1 },
   fold: {
@@ -167,4 +177,6 @@ const styles = StyleSheet.create({
   secondary: { color: COLOR.textSecondary },
   tertiary: { color: COLOR.textTertiary },
   tabular: { fontVariant: ['tabular-nums'] },
+  meta: { flexDirection: 'row', alignItems: 'baseline' },
+  metaWords: { flexShrink: 1 },
 })
