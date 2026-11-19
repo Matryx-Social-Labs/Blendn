@@ -187,6 +187,7 @@ export function EventPiles({
           <Layer
             key="pin-focus-halo"
             id="pin-focus-halo"
+            beforeId="pile-count"
             type="circle"
             paint={{
               'circle-color': MAP_THEME.pin.focus.color,
@@ -200,6 +201,7 @@ export function EventPiles({
           <Layer
             key="pin-focus"
             id="pin-focus"
+            beforeId="pile-count"
             type="circle"
             paint={{
               'circle-color': MAP_THEME.pin.focus.color,

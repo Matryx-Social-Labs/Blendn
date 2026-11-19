@@ -111,6 +111,9 @@ it('draws the numerals over the focus, so a focus at a pile never hides its coun
   const order = mockLayers.map((l) => l.id)
   expect(order.indexOf('pin-focus')).toBeGreaterThan(order.indexOf('pile-bubble'))
   expect(order.indexOf('pile-count')).toBeGreaterThan(order.indexOf('pin-focus'))
+  // React order is not the map's on Android: a focus arriving after the numerals was appended over them (drive, z10 "1…").
+  expect(layer('pin-focus-halo')?.beforeId).toBe('pile-count')
+  expect(layer('pin-focus')?.beforeId).toBe('pile-count')
 })
 
 it('control: no focus, every pin can pile, and no focus source is drawn', async () => {
