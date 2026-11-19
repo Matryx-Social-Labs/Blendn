@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
@@ -111,14 +111,30 @@ export function HomeDrawer({
   const reduceMotion = useReducedMotion()
   const dragStart = useSharedValue(0)
 
+  /*
+   * Every settle the drawer asks for (a release, a tap, a screen reader's step) is counted, so the drawer is moved to the
+   * snap that was committed even when the snap did not change (SCRUM-1079). A release's spring and a step taken from the
+   * snap before that release rendered could net to no change: the effect never re-ran and the release's spring stood,
+   * drawn at half while it read "Collapsed". A spring re-aimed at its own target carries on unchanged.
+   */
+  const [settles, setSettles] = useState(0)
+  const settle = useCallback(
+    (next: DrawerSnap) => {
+      setSettles((n) => n + 1)
+      onSnap(next)
+    },
+    [onSnap]
+  )
+
   useEffect(() => {
     y.set(reduceMotion ? withTiming(points[snap], REDUCED_SETTLE) : withSpring(points[snap], SPRING.settle))
-  }, [snap, points, reduceMotion, y])
+  }, [snap, points, reduceMotion, y, settles])
 
   // Built once per set of snap points, not on every render.
   const pan = useMemo(
     () =>
       Gesture.Pan()
+        .withTestId('home-drawer-pan')
         // Vertical intent only, so a tap on a segment stays a tap.
         .activeOffsetY([-8, 8])
         .onStart(() => {
@@ -131,14 +147,14 @@ export function HomeDrawer({
           const next = settleSnap(y.get(), e.velocityY, points)
           // The release's own speed carries into the settle, so a flick does not stall and restart.
           y.set(reduceMotion ? withTiming(points[next], REDUCED_SETTLE) : withSpring(points[next], { ...SPRING.settle, velocity: e.velocityY }))
-          scheduleOnRN(onSnap, next)
+          scheduleOnRN(settle, next)
         }),
-    [points, onSnap, y, dragStart, reduceMotion]
+    [points, settle, y, dragStart, reduceMotion]
   )
 
   const moved = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() - points.full }] }))
   const surface = useMemo<Surface>(() => ({ y, points, orbsHeight: height - points.half }), [y, points, height])
-  const tapStep = () => onSnap(snap === 'full' ? 'half' : stepSnap(snap, 'up'))
+  const tapStep = () => settle(snap === 'full' ? 'half' : stepSnap(snap, 'up'))
 
   return (
     <GroundProvider value="glass">
@@ -155,7 +171,7 @@ export function HomeDrawer({
               accessibilityHint="Swipe up or down to show more or less of the list"
               accessibilityValue={{ text: DRAWER_SNAP_LABEL[snap] }}
               accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
-              onAccessibilityAction={(e) => onSnap(stepSnap(snap, e.nativeEvent.actionName === 'increment' ? 'up' : 'down'))}
+              onAccessibilityAction={(e) => settle(stepSnap(snap, e.nativeEvent.actionName === 'increment' ? 'up' : 'down'))}
             >
               <Grabber />
             </Pressable>

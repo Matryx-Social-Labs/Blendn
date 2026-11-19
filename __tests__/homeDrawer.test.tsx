@@ -3,16 +3,18 @@
  * and under Reduce Motion a short timing on the standard curve rather than an
  * instant jump.
  */
-import { render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils'
+import { State } from 'react-native-gesture-handler'
 import { StyleSheet } from 'react-native'
-import React from 'react'
+import React, { useState } from 'react'
 import { Text } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
 import { HomeDrawer } from '../components/home/HomeDrawer'
 import { SHEET_ORBS } from '../components/ds/Orbs'
 import { COLOR, EASING, MATERIAL, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
-import { DRAWER_HEADER_HEIGHT } from '../lib/home'
+import { DRAWER_HEADER_HEIGHT, DRAWER_SNAP_LABEL, type DrawerSnap } from '../lib/home'
 
 jest.mock('react-native-reanimated', () => {
   const actual = jest.requireActual('react-native-reanimated')
@@ -156,5 +158,80 @@ describe('a pinned row inside the drawer is the drawer: plain ink, never a bar (
     )
     expect(screen.getByTestId('sticky-search-bar', { includeHiddenElements: true })).toBeTruthy()
     expect(screen.queryByTestId('sticky-search-ground', { includeHiddenElements: true })).toBeNull()
+  })
+})
+
+/*
+ * SCRUM-1079 (TalkBack, 2026-11-19): the drawer stayed drawn at half while it read "Collapsed". At peek, a two-finger drag
+ * let go near half; TalkBack's swipe-down reached the handle before that release had rendered, so it stepped down from
+ * the stale "peek" (to peek again). The two updates netted to no change, the effect that moves the drawer never re-ran,
+ * and the release's own spring to half stood. Reproduced on the emulator with the JS thread held busy at the release.
+ * The drawer is moved to the committed snap after every settle, whether or not the snap changed.
+ */
+describe('the drawer drawn and the drawer spoken never disagree', () => {
+  function Shell({ start }: { start: DrawerSnap }) {
+    const [snap, setSnap] = useState<DrawerSnap>(start)
+    const y = Reanimated.useSharedValue(points[start])
+    return (
+      <HomeDrawer y={y} points={points} snap={snap} onSnap={setSnap} header={<Text>header</Text>}>
+        <Text>pane</Text>
+      </HomeDrawer>
+    )
+  }
+  const handle = () => screen.getByLabelText('Events and places')
+  const spoken = () => handle().props.accessibilityValue.text
+  const drawnTo = () => {
+    const calls = jest.mocked(Reanimated.withSpring).mock.calls
+    return calls[calls.length - 1]?.[0]
+  }
+  const release = (to: number) =>
+    fireGestureHandler(getByGestureTestId('home-drawer-pan'), [
+      { state: State.BEGAN, translationY: 0 },
+      { state: State.ACTIVE, translationY: 0 },
+      { state: State.ACTIVE, translationY: to },
+      { state: State.END, translationY: to, velocityY: 0 },
+    ])
+  const step = (actionName: 'increment' | 'decrement') => fireEvent(handle(), 'accessibilityAction', { nativeEvent: { actionName } })
+
+  beforeEach(() => reduceMotion.mockReturnValue(false))
+
+  it('a drag let go near half from peek, then a screen reader step down before it rendered: drawn where it is read', async () => {
+    await render(<Shell start="peek" />)
+    await act(async () => {
+      release(points.half - points.peek + 60)
+      await Promise.resolve()
+      await Promise.resolve()
+      step('decrement')
+    })
+    expect(spoken()).toBe(DRAWER_SNAP_LABEL.peek)
+    expect(drawnTo()).toBe(points.peek)
+  })
+
+  it('the same at the top: let go near half from full, then a step up before it rendered', async () => {
+    await render(<Shell start="full" />)
+    await act(async () => {
+      release(points.half - points.full - 60)
+      await Promise.resolve()
+      await Promise.resolve()
+      step('increment')
+    })
+    expect(spoken()).toBe(DRAWER_SNAP_LABEL.full)
+    expect(drawnTo()).toBe(points.full)
+  })
+
+  it('control: a drag on its own settles where it is let go, and reads it', async () => {
+    await render(<Shell start="peek" />)
+    await act(async () => {
+      release(points.half - points.peek + 60)
+    })
+    expect(spoken()).toBe(DRAWER_SNAP_LABEL.half)
+    expect(drawnTo()).toBe(points.half)
+  })
+
+  it('control: a screen reader step on its own moves it one snap, and reads it', async () => {
+    await render(<Shell start="half" />)
+    await act(async () => step('decrement'))
+    expect(spoken()).toBe(DRAWER_SNAP_LABEL.peek)
+    expect(drawnTo()).toBe(points.peek)
   })
 })
