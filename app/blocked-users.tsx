@@ -137,7 +137,8 @@ function BlockedUsersContent() {
       actions: [
         {
           label: 'Unblock',
-          variant: 'destructive',
+          // Neutral, as the board's button language has it: unblocking gives access back; red is for Delete only.
+          variant: 'secondary',
           run: async () => {
             const result = await unblockUser(user.blocked_id)
             if (!result.success) return { ok: false, error: "Couldn’t unblock them. Try again." }
