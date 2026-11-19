@@ -188,7 +188,7 @@ describe('frameOnYou: you and the six nearest, in the map you can see', () => {
 })
 
 // eslint-disable-next-line import/first
-import { edgeMarker, staleCalloutBelow } from '../lib/mapPresence'
+import { edgeMarker, staleCalloutBelow, staleCalloutBox } from '../lib/mapPresence'
 
 describe('edgeMarker (pulse-map 05: an off-frame lap venue gets a marker at the edge, pointing at it)', () => {
   const box = { left: 0, top: 100, right: 400, bottom: 500 } // centre (200, 300)
@@ -259,5 +259,13 @@ describe('staleCalloutBelow (pulse-map 06 "STALE": the callout over the grey dot
     expect(staleCalloutBelow([360, 242], callout, topLeft)).toBe(false)
     // The marker well above the callout's top (185 − air).
     expect(staleCalloutBelow([206, 320], callout, topLeft)).toBe(false)
+  })
+})
+
+describe('staleCalloutBox (the room the stale callout takes, so names keep out of it)', () => {
+  const callout = { width: 200, height: 40, gap: 17 }
+  it('is centred over the dot, its bottom the gap above, or hangs the gap below', () => {
+    expect(staleCalloutBox([206, 242], callout, false)).toEqual({ left: 106, right: 306, top: 185, bottom: 225 })
+    expect(staleCalloutBox([206, 242], callout, true)).toEqual({ left: 106, right: 306, top: 259, bottom: 299 })
   })
 })

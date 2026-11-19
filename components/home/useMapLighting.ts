@@ -25,7 +25,7 @@ import {
   type LngLat,
 } from '../../lib/mapLit'
 import { BUILDING_LAYER_ID, OWN_BUILDINGS_LAYER_ID } from '../../lib/mapStyleEmber'
-import { edgeMarker } from '../../lib/mapPresence'
+import { edgeMarker, staleCalloutBelow, staleCalloutBox } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { SIZE, SPACE } from '../../lib/design/tokens'
 
@@ -90,6 +90,7 @@ export function useMapLighting({
   visible,
   userAt = null,
   edge = null,
+  stale = null,
 }: {
   map: RefObject<MapRef | null>
   view: RefObject<MapView>
@@ -112,6 +113,8 @@ export function useMapLighting({
   userAt?: LngLat | null
   /** The lap's venue and the box its edge marker keeps to (`EdgeMarker`): no name is drawn under the marker. */
   edge?: { at: LngLat; box: Box } | null
+  /** The stale callout's room while your dot is grey (`StaleCallout`): no name is drawn under it, on whichever side it hangs. */
+  stale?: { width: number; height: number; gap: number } | null
 }): { lit: Lit; onFrame: () => void; relight: () => void; passes: number } {
   const [litFor, setLitFor] = useState<{ segment: Segment; lit: Lit; key: string }>({ segment, lit: NO_LIT, key: '' })
   const needsLight = useRef(false)
@@ -150,7 +153,7 @@ export function useMapLighting({
     const tiles = featureIds ? 'own' : 'openfreemap'
     // The lookup reads the layer the buildings are drawn in: ours has its own id, so OpenFreeMap's merged ids never come back here.
     const layer = featureIds ? OWN_BUILDINGS_LAYER_ID : BUILDING_LAYER_ID
-    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}`
+    const signature = `${tiles}|${lightSignature(candidates, { centre: v.centre, zoom: v.zoom, pitch: v.pitch })}|${visible ? `${visible.top}:${visible.bottom}` : ''}|${userAt ? userAt.join(',') : ''}|${edge ? `${edge.at.join(',')}@${Object.values(edge.box).join(',')}` : ''}|${stale ? 'stale' : ''}`
     if (signature === lastLit.current) {
       setPasses((n) => n + 1)
       return
@@ -238,6 +241,7 @@ export function useMapLighting({
         const blocked = dot ? [{ left: dot[0] - USER_DOT_HALF_PX, right: dot[0] + USER_DOT_HALF_PX, top: dot[1] - USER_DOT_HALF_PX, bottom: dot[1] + USER_DOT_HALF_PX }] : []
         const marker = edgeAt ? edgeMarker(edgeAt, edge?.box ?? zone, EDGE_BLOCK) : null
         if (marker) blocked.push({ left: marker.left, right: marker.left + EDGE_BLOCK.width, top: marker.top, bottom: marker.top + EDGE_BLOCK.height })
+        if (stale && dot) blocked.push(staleCalloutBox(dot, stale, staleCalloutBelow(dot, stale, marker && { ...marker, ...EDGE_BLOCK })))
         chips = pickChips(
           nearest.map((c, i) => ({ item: c, box: chipBox(projected[i] as [number, number], c.lift, chipSizePx(c)) })),
           zone,

@@ -185,6 +185,15 @@ export function edgeMarker(
 /** Air kept between the stale callout and the edge marker (pt). */
 const CALLOUT_AIR = 6
 
+type CalloutRoom = { width: number; height: number; gap: number }
+
+/** The box the stale callout takes: centred on your dot, `gap` over it, or under it when `below`. */
+export function staleCalloutBox(dot: readonly [number, number], callout: CalloutRoom, below: boolean) {
+  const [x, y] = dot
+  const top = below ? y + callout.gap : y - callout.gap - callout.height
+  return { left: x - callout.width / 2, right: x + callout.width / 2, top, bottom: top + callout.height }
+}
+
 /**
  * Whether the stale callout hangs under your dot rather than over it. Over it is the board's place (pulse-map 06, "STALE");
  * under it only when that box would meet the edge marker's (iOS drive 2026-11-19: it ran 3 pt under the marker at the top
@@ -192,17 +201,16 @@ const CALLOUT_AIR = 6
  */
 export function staleCalloutBelow(
   dot: readonly [number, number],
-  callout: { width: number; height: number; gap: number },
+  callout: CalloutRoom,
   marker: { left: number; top: number; width: number; height: number } | null
 ): boolean {
   if (!marker) return false
-  const [x, y] = dot
-  const bottom = y - callout.gap
+  const over = staleCalloutBox(dot, callout, false)
   return (
-    x - callout.width / 2 < marker.left + marker.width + CALLOUT_AIR &&
-    x + callout.width / 2 > marker.left - CALLOUT_AIR &&
-    bottom - callout.height < marker.top + marker.height + CALLOUT_AIR &&
-    bottom > marker.top - CALLOUT_AIR
+    over.left < marker.left + marker.width + CALLOUT_AIR &&
+    over.right > marker.left - CALLOUT_AIR &&
+    over.top < marker.top + marker.height + CALLOUT_AIR &&
+    over.bottom > marker.top - CALLOUT_AIR
   )
 }
 

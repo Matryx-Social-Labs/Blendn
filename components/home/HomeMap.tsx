@@ -438,6 +438,8 @@ export const HomeMap = memo(function HomeMap({
   )
   // Where the edge marker may sit: the map you can see, above "my location" (pulse-map 05 frame 6).
   const edgeBox = { left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }
+  // What the map says about you (pulse-map 06): approximate and stale each get their one line.
+  const you = youMark({ sharing, permission: 'granted', fix: center, now })
   const { lit, onFrame, relight } = useMapLighting({
     map,
     view,
@@ -451,7 +453,12 @@ export const HomeMap = memo(function HomeMap({
     userAt: center ? [center.longitude, center.latitude] : null,
     // No name under the edge marker (drive 2026-11-19: it covered a chip).
     edge: edgeTarget ? { at: edgeTarget.at, box: edgeBox } : null,
+    // No name under the stale callout either (map-finish drive: a chip sat 3 pt off it).
+    stale: you.kind === 'stale' ? STALE_CALLOUT : null,
   })
+  // The dot going grey (or violet again) moves no camera: the names are placed again around the callout.
+  const isStale = you.kind === 'stale'
+  useEffect(() => relight(), [isStale]) // eslint-disable-line react-hooks/exhaustive-deps -- only the stale flip
 
   // New pins re-cluster the numbers: a screen reader hears them afresh.
   useEffect(() => {
@@ -672,8 +679,6 @@ export const HomeMap = memo(function HomeMap({
   )
 
   const style = useMemo(() => homeMapStyle(), [])
-  // What the map says about you (pulse-map 06): approximate and stale each get their one line.
-  const you = youMark({ sharing, permission: 'granted', fix: center, now })
   // The stale callout goes under the dot when, over it, it would meet the edge marker (iOS drive 2026-11-19). Asked again
   // when the camera stops, with the marker's widest room (`EDGE_BLOCK`, as the chips keep out of it).
   const [staleBelow, setStaleBelow] = useState(false)

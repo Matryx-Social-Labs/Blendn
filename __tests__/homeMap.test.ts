@@ -281,6 +281,14 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
     expect(component).toMatch(/box=\{edgeBox\}/)
   })
 
+  it('keeps every name out from under the stale callout, on the side it is drawn (map-finish drive: a chip sat 3 pt off it)', () => {
+    const lighting = code('components/home/useMapLighting.ts')
+    expect(lighting).toMatch(/if \(stale && dot\) blocked\.push\(staleCalloutBox\(dot, stale, staleCalloutBelow\(dot, stale, /)
+    // Asked again when the dot goes grey (no camera move does it).
+    expect(component).toMatch(/stale: you\.kind === 'stale' \? STALE_CALLOUT : null/)
+    expect(lighting).toMatch(/\$\{stale \? 'stale' : ''\}/)
+  })
+
   it('the edge marker says the lead card’s own distance (drive: the marker read 800 m over a card reading 850 m)', () => {
     expect(component).toMatch(/const edgeKm = focus\?\.km \?\? /)
     expect(code('app/(tabs)/events.tsx')).toMatch(/km: focusKm/)
