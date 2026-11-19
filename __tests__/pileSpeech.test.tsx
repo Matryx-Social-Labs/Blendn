@@ -100,3 +100,21 @@ describe('PileSpeech', () => {
     expect(screen.queryByLabelText('13 events here, double-tap to zoom in')).toBeNull()
   })
 })
+
+/*
+ * The spoken numbers must be reachable (pulse-map 10: "a number: '12 events near Church Street. Double-tap to zoom in.'
+ * Back to you is a button"). The iOS drive with VoiceOver found the whole map, and the on-map lines, taken out of the
+ * reading order whenever a screen reader was on, so no marker was ever read. The map leaves the order only while the full
+ * drawer covers it; the reader still opens on the full list, and lowering the drawer (it is adjustable) brings the map back.
+ */
+describe('HomeShell keeps the map readable', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../components/home/HomeShell.tsx'), 'utf8') as string
+  it('hides the map from a screen reader only while the full drawer covers it', () => {
+    expect(src).toMatch(/accessibilityElementsHidden={snap === 'full'}/)
+    expect(src).toMatch(/importantForAccessibility={snap === 'full' \? 'no-hide-descendants' : 'auto'}/)
+    expect(src).not.toMatch(/accessibilityElementsHidden={screenReader}/)
+  })
+  it('draws the on-map lines with a screen reader on too', () => {
+    expect(src).not.toMatch(/segment === 'events' && !screenReader \? \(\s*<MapBanners/)
+  })
+})

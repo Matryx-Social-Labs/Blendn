@@ -158,9 +158,10 @@ export function HomeShell({
   const [mapTouched, setMapTouched] = useState(false)
   const onMapTouched = useCallback(() => setMapTouched(true), [])
   /*
-   * With a screen reader the list is the screen: open it, and take the map out
-   * of the reading order (it says nothing the list does not). Followed live,
-   * not read once at mount: VoiceOver is switched on and off mid-session.
+   * With a screen reader the list comes first: open it full (the map under it
+   * leaves the reading order while covered). Lowered, the map is read: its
+   * numbers and lines are spoken (pulse-map 10). Followed live, not read once
+   * at mount: VoiceOver is switched on and off mid-session.
    */
   useEffect(() => {
     const apply = (on: boolean) => {
@@ -255,8 +256,8 @@ export function HomeShell({
         collapsable={false}
         style={StyleSheet.absoluteFill}
         onTouchStart={dismissKeyboard}
-        importantForAccessibility={screenReader ? 'no-hide-descendants' : 'auto'}
-        accessibilityElementsHidden={screenReader}
+        importantForAccessibility={snap === 'full' ? 'no-hide-descendants' : 'auto'}
+        accessibilityElementsHidden={snap === 'full'}
       >
         {mapHeight !== null && mapPainted && fallbackCentre ? (
           <HomeMap
@@ -273,7 +274,7 @@ export function HomeShell({
             mapHeight={mapHeight}
             drawerSnapTop={points[snap]}
             focused={focused}
-            // Nothing breathes where nobody can see it: the drawer full over the map, or a screen reader (which hides the map).
+            // Nothing breathes where nobody can see it (the drawer full over the map), nor under a screen reader.
             glowVisible={focused && snap !== 'full' && !screenReader}
             // Places' five pins, at peek and half only: the full drawer covers the map.
             nearPins={segment === 'places' && snap !== 'full' ? nearPinList : NO_PINS}
@@ -285,7 +286,7 @@ export function HomeShell({
           />
         ) : null}
       </View>
-      {segment === 'events' && !screenReader ? (
+      {segment === 'events' ? (
         <MapBanners drawerTop={drawerTop} drawer={points} visible={snap !== 'full'} height={bannerHeight}>
           {mapBanners}
         </MapBanners>

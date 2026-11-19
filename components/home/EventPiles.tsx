@@ -180,23 +180,8 @@ export function EventPiles({
           }}
         />
       </GeoJSONSource>
-      {/* Above the piles' bubbles, under their numerals and the focus: you (pulse-map 08). */}
+      {/* Above the piles' bubbles, under the focus and the numerals: you (pulse-map 08). */}
       {children}
-      <Layer
-        key="pile-count"
-        id="pile-count"
-        source="pins"
-        type="symbol"
-        filter={A_NUMBER as never}
-        layout={{
-          'text-field': COUNT_TEXT as never,
-          'text-font': MAP_THEME.pile.font as never,
-          'text-size': MAP_THEME.pile.textSize,
-          'text-allow-overlap': true,
-          'text-ignore-placement': true,
-        }}
-        paint={{ 'text-color': MAP_THEME.pile.text, 'text-halo-color': MAP_THEME.pile.halo, 'text-halo-width': MAP_THEME.pile.haloPx }}
-      />
       {focusData ? (
         <GeoJSONSource id="pins-focus" data={focusData} onPress={press}>
           <Layer
@@ -229,6 +214,22 @@ export function EventPiles({
           />
         </GeoJSONSource>
       ) : null}
+      {/* Last: a count is never hidden, not by you and not by a focus landing on its pile (pulse-map 08, iOS drive z10). */}
+      <Layer
+        key="pile-count"
+        id="pile-count"
+        source="pins"
+        type="symbol"
+        filter={A_NUMBER as never}
+        layout={{
+          'text-field': COUNT_TEXT as never,
+          'text-font': MAP_THEME.pile.font as never,
+          'text-size': MAP_THEME.pile.textSize,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        }}
+        paint={{ 'text-color': MAP_THEME.pile.text, 'text-halo-color': MAP_THEME.pile.halo, 'text-halo-width': MAP_THEME.pile.haloPx }}
+      />
     </>
   )
 }

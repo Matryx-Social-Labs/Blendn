@@ -101,6 +101,18 @@ it('draws what it is given above the piles and under the focus (you, between the
   expect(layer('pile-count')?.source).toBe('pins')
 })
 
+/*
+ * A count is never hidden (pulse-map 08, "nothing disappears"). The iOS drive at z10 found the focus's 9 pt dot and halo
+ * square over the city's "22": the focus was drawn over the numerals. The focus stays over every dot and bubble; the
+ * numerals, with their ink halo, read over it.
+ */
+it('draws the numerals over the focus, so a focus at a pile never hides its count', async () => {
+  await render(<EventPiles pins={PINS} focusId="lit" onOpen={jest.fn()} onExpand={jest.fn()} />)
+  const order = mockLayers.map((l) => l.id)
+  expect(order.indexOf('pin-focus')).toBeGreaterThan(order.indexOf('pile-bubble'))
+  expect(order.indexOf('pile-count')).toBeGreaterThan(order.indexOf('pin-focus'))
+})
+
 it('control: no focus, every pin can pile, and no focus source is drawn', async () => {
   await render(<EventPiles pins={PINS} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
   expect(ids(last('pins'))).toEqual(['a', 'lit', 'b'])
