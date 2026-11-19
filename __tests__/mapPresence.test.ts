@@ -214,3 +214,26 @@ describe('edgeMarker (pulse-map 05: an off-frame lap venue gets a marker at the 
     expect((downRight?.top ?? 0) + size.height).toBeLessThanOrEqual(box.bottom - 8)
   })
 })
+
+// eslint-disable-next-line import/first
+import { mapSummary } from '../lib/mapPresence'
+
+describe('mapSummary (pulse-map 10: the map is spoken, not only its numbers)', () => {
+  const bounds: [number, number, number, number] = [77.5, 12.9, 77.7, 13.0]
+  const pin = (lng: number, live = false) => ({ longitude: lng, latitude: 12.95, live })
+
+  it('says how many events are on the map you see, how many are on now, where you are and what is off it', () => {
+    expect(
+      mapSummary({ bounds, pins: [pin(77.6, true), pin(77.61), pin(77.9)], you: 'precise', youLine: null, edge: { name: 'Kitty Ko', distance: '3.1 km' } })
+    ).toBe('Map. 2 events here, 1 on now. You are on the map. Kitty Ko is off the map, 3.1 km away.')
+  })
+
+  it('says one event, none, and each state of you in its own words; never a distance it does not have', () => {
+    expect(mapSummary({ bounds, pins: [pin(77.6)], you: 'none', youLine: null, edge: null })).toBe('Map. 1 event here.')
+    expect(mapSummary({ bounds, pins: [], you: 'approximate', youLine: null, edge: null })).toBe('Map. No events here. Your location is approximate.')
+    expect(mapSummary({ bounds, pins: [], you: 'stale', youLine: 'Last seen here 25 min ago · updating', edge: { name: 'Lupa', distance: null } })).toBe(
+      'Map. No events here. Last seen here 25 min ago, updating. Lupa is off the map.'
+    )
+    expect(mapSummary({ bounds: null, pins: [pin(77.6)], you: 'precise', youLine: null, edge: null })).toBe('Map. You are on the map.')
+  })
+})

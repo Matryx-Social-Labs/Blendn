@@ -1,12 +1,14 @@
 import { type GeoJSONSourceRef, type MapRef } from '@maplibre/maplibre-react-native'
 import { useEffect, useState, type RefObject } from 'react'
-import { Platform, Pressable, StyleSheet } from 'react-native'
+import { Platform, Pressable, StyleSheet, View } from 'react-native'
 
 import { SIZE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { pileSpeech, PILE_SPEECH_MAX } from '../../lib/mapPresence'
 
 type Target = { key: string; at: [number, number]; xy: [number, number]; speech: string; clusterId: number | null; id: string | null; kind: string }
+export type SpokenChip = { id: string; kind: string; at: [number, number]; speech: string }
+const NO_CHIPS: readonly SpokenChip[] = []
 type Found = { geometry?: { coordinates?: unknown }; properties?: Record<string, unknown> | null }
 
 /**
@@ -46,6 +48,8 @@ export function PileSpeech({
   source,
   box,
   settled,
+  summary = null,
+  chips = NO_CHIPS,
   onExpand,
   onOpen,
 }: {
@@ -54,6 +58,10 @@ export function PileSpeech({
   source: RefObject<GeoJSONSourceRef | null>
   box: { left: number; top: number; right: number; bottom: number }
   settled: number
+  /** The map as a whole (`mapSummary`), spoken first: a strip along the top of the visible map, its touches passed through. */
+  summary?: string | null
+  /** The lit names, for TalkBack (MapLibre's Android view keeps its Markers from it); iOS reads the chips themselves. */
+  chips?: readonly SpokenChip[]
   onExpand: (to: { center: [number, number]; zoom: number }) => void
   onOpen: (kind: string, id: string) => void
 }) {
@@ -72,7 +80,8 @@ export function PileSpeech({
             .filter((t): t is Target => !!t && !seen.has(t.key) && !!seen.add(t.key))
             .slice(0, PILE_SPEECH_MAX)
           // Each number's point on the screen: the targets are drawn over the map, not inside it.
-          const placed = await Promise.all(next.map(async (t) => ({ ...t, xy: (await map.current?.project(t.at)) ?? t.xy })))
+          const named = chips.map((c): Target => ({ key: `chip-${c.id}`, at: c.at, xy: [0, 0], speech: c.speech, clusterId: null, id: c.id, kind: c.kind }))
+          const placed = await Promise.all([...next, ...named].map(async (t) => ({ ...t, xy: (await map.current?.project(t.at)) ?? t.xy })))
           if (!stale) setTargets(placed)
         })
         .catch((error) => Logger.warn('events', 'Could not read the map’s numbers for a screen reader', { error: String(error) }))
@@ -81,7 +90,7 @@ export function PileSpeech({
       stale = true
       clearTimeout(timer)
     }
-  }, [on, map, settled, left, top, right, bottom])
+  }, [on, map, settled, left, top, right, bottom, chips])
 
   const act = (t: Target) => {
     if (t.clusterId === null) {
@@ -96,6 +105,16 @@ export function PileSpeech({
 
   return (
     <>
+      {on && summary ? (
+        <View
+          accessible
+          accessibilityLabel={summary}
+          pointerEvents="none"
+          // A strip along the top of the visible map: first in reading order, and never over a chip or a number below it.
+          style={[styles.summary, { left, top, width: right - left, height: TARGET_PT }]}
+          testID="map-summary"
+        />
+      ) : null}
       {(on ? targets : []).map((t) => (
         <Pressable
           key={t.key}
@@ -110,4 +129,4 @@ export function PileSpeech({
   )
 }
 
-const styles = StyleSheet.create({ target: { position: 'absolute', width: TARGET_PT, height: TARGET_PT } })
+const styles = StyleSheet.create({ target: { position: 'absolute', width: TARGET_PT, height: TARGET_PT }, summary: { position: 'absolute' } })

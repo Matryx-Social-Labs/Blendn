@@ -57,7 +57,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { FRAME_NEAREST, frameOnYou, youMark } from '../../lib/mapPresence'
+import { FRAME_NEAREST, frameOnYou, mapSummary, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -671,6 +671,18 @@ export const HomeMap = memo(function HomeMap({
     () => (focusPin && segment === 'events' ? { id: focusPin.id, name: focusPin.place || focusPin.title, at: [focusPin.longitude, focusPin.latitude] as [number, number] } : null),
     [focusPin, segment]
   )
+  const edgeDistance = edgeTarget && center ? distanceText(getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0])) : null
+  // The map as a whole, for a screen reader (pulse-map 10): read when the camera stops (`settled` re-renders this).
+  const bounds = view.current.bounds
+  const edgeOff = edgeTarget && bounds ? !(edgeTarget.at[0] >= bounds[0] && edgeTarget.at[0] <= bounds[2] && edgeTarget.at[1] >= bounds[1] && edgeTarget.at[1] <= bounds[3]) : false
+  const summary = screenReader
+    ? mapSummary({ bounds, pins, you: you.kind, youLine: you.line, edge: edgeTarget && edgeOff ? { name: edgeTarget.name, distance: edgeDistance } : null })
+    : null
+  // TalkBack cannot reach a Marker inside MapLibre's Android view: the lit names get targets over the map too. iOS reads them.
+  const spokenChips = useMemo(
+    () => (Platform.OS === 'android' && screenReader ? lit.chips.map((c) => ({ id: c.id, kind: c.kind, at: c.at, speech: c.speech })) : []),
+    [lit.chips, screenReader]
+  )
   // The edge marker tapped: the person asked, so the camera goes there (and the lap is over, their touch).
   const goToFocus = () => {
     if (!focusPin) return
@@ -759,6 +771,8 @@ export const HomeMap = memo(function HomeMap({
             source={pileSource}
             box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom }}
             settled={settled}
+            summary={summary}
+            chips={spokenChips}
             onExpand={expandPile}
             onOpen={open}
           />
@@ -766,7 +780,7 @@ export const HomeMap = memo(function HomeMap({
           <EdgeMarker
             map={map}
             target={edgeTarget}
-            distance={edgeTarget && center ? distanceText(getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0])) : null}
+            distance={edgeDistance}
             box={{ left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }}
             settled={settled}
             moving={moving}

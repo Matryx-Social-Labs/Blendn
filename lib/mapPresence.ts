@@ -179,3 +179,36 @@ export function edgeMarker(
     angle: Math.round((Math.atan2(dx, -dy) * 180) / Math.PI),
   }
 }
+
+/**
+ * What the map says as a whole to a screen reader (pulse-map 10, "Map and number labels are spoken"): how many events are
+ * on the map you see and how many are on now, where you are, and the lap's venue when it is off the map. Plain words: the
+ * " · " of a line is read as a comma. No bounds yet (before the first stop): nothing about the events.
+ */
+export function mapSummary({
+  bounds,
+  pins,
+  you,
+  youLine,
+  edge,
+}: {
+  bounds: readonly [number, number, number, number] | null
+  pins: readonly { longitude: number; latitude: number; live: boolean }[]
+  you: YouMark['kind']
+  youLine: string | null
+  edge: { name: string; distance: string | null } | null
+}): string {
+  const parts = ['Map.']
+  if (bounds) {
+    const [west, south, east, north] = bounds
+    const here = pins.filter((p) => p.longitude >= west && p.longitude <= east && p.latitude >= south && p.latitude <= north)
+    const live = here.filter((p) => p.live).length
+    if (!here.length) parts.push('No events here.')
+    else parts.push(`${here.length} ${here.length === 1 ? 'event' : 'events'} here${live ? `, ${live} on now` : ''}.`)
+  }
+  if (you === 'precise') parts.push('You are on the map.')
+  if (you === 'approximate') parts.push('Your location is approximate.')
+  if (you === 'stale' && youLine) parts.push(`${youLine.replace(' · ', ', ')}.`)
+  if (edge) parts.push(`${edge.name} is off the map${edge.distance ? `, ${edge.distance} away` : ''}.`)
+  return parts.join(' ')
+}
