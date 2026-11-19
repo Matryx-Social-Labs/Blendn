@@ -76,7 +76,8 @@ export function PlusDock({ onHeight, children }: { onHeight: (height: number) =>
         onHeight(e.nativeEvent.layout.height)
         setHeight(e.nativeEvent.layout.height)
       }}
-      style={[styles.dock, { paddingBottom: insets.bottom + SPACE.lg }]}
+      // The board's dock ends on the home indicator (`padding:12px 20px 30px`): the inset, never inside it, and 16 where there is none.
+      style={[styles.dock, { paddingBottom: Math.max(insets.bottom, SPACE.lg) }]}
     >
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <Material role="bar" style={StyleSheet.absoluteFill} />
@@ -327,7 +328,8 @@ const styles = StyleSheet.create({
   header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, paddingHorizontal: SPACE.lg },
   barContrast: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 2, paddingTop: SPACE.lg, paddingHorizontal: SPACE.xl, gap: SPACE.md },
+  // 12 in and 8 between, as the board; the sides stay on the page's 24 gutter (the board's 20 would set the button wider than the plans).
+  dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 2, paddingTop: SPACE.md, paddingHorizontal: SPACE.xl, gap: SPACE.sm },
   dockContrast: { position: 'absolute', left: 0, right: 0, top: 0, height: 1, backgroundColor: MATERIAL.hairlineIncreaseContrast },
   dockLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.sm },
   hero: { alignItems: 'center', gap: SPACE.xs },

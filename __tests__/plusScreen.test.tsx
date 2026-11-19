@@ -5,12 +5,13 @@
  */
 import React from 'react'
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native'
-import { AccessibilityInfo, Linking } from 'react-native'
+import { AccessibilityInfo, Linking, StyleSheet } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 
 const mockTrigger = { value: 'go_live_expiry' }
 const mockPlan: { value?: string } = {}
 const mockToast = jest.fn()
+const mockInsets = { top: 0, bottom: 0, left: 0, right: 0 }
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 )
@@ -24,7 +25,7 @@ jest.mock('expo-router', () => ({
 }))
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => mockInsets,
 }))
 jest.mock('expo-linear-gradient', () => {
   const { View } = jest.requireActual('react-native')
@@ -56,6 +57,8 @@ import { subscribePaywallClosed } from '../lib/paywall'
 import { buyPackage, canBuyAs, loadPlusOffers, purchasesAvailable, restore } from '../lib/purchases'
 import { showSheet } from '../lib/sheet'
 import { dismissModals, LINK_HOLD_MAX_MS } from '../lib/pendingRoute'
+import { barHeight, barTop } from '../lib/barGeometry'
+import { SPACE } from '../lib/design/tokens'
 /* eslint-enable import/first */
 
 const monthly = { pkg: { identifier: '$rc_monthly', product: { price: 199, pricePerMonth: 199, pricePerMonthString: '₹199' } }, title: 'Blendn+ · Monthly', length: '1 month, renews monthly', price: '₹199.00' }
@@ -452,6 +455,55 @@ describe('the dock at the largest text sizes', () => {
       expect(within(screen.getByTestId('plus-dock')).getByText(/^Charged to your Apple Account/)).toBeTruthy()
       expect(within(screen.getByTestId('plus-dock')).getByRole('button', { name: 'Restore purchases' })).toBeTruthy()
       expect(screen.queryByText('Renews automatically. Cancel in Settings › Apple Account.')).toBeNull()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
+// remaining-screens 01 A, the ±1 pt overlays (2026-11-19): the board starts the hero 32–34 pt under the circle row (in the
+// bar's band: the mark is centred between the circle and "Not now"), spaces the sections 14 apart (SPACE.md, the nearest of
+// 12 / 16 to a page whose DS rows already run taller), and the dock 12 in with 8 between (`padding:12px 20px 30px; gap:8px`),
+// its last line on the home-indicator inset. Negative control: the old `headerHeight + SPACE.sm`, `SPACE.lg` gaps and the
+// dock's `SPACE.lg` / `SPACE.md` / inset + 16 fail every expectation of the first test.
+describe('spaced as the board', () => {
+  const RN = jest.requireActual('react-native') as typeof import('react-native')
+  const at = (fontScale: number) => jest.spyOn(RN, 'useWindowDimensions').mockReturnValue({ width: 402, height: 874, scale: 3, fontScale })
+  const content = () => StyleSheet.flatten(screen.getByTestId('plus-scroll').props.contentContainerStyle)
+  const dock = () => StyleSheet.flatten(screen.getByTestId('plus-dock').props.style)
+  afterEach(() => Object.assign(mockInsets, { top: 0, bottom: 0 }))
+
+  it('1x: the hero 32 under the circle row, sections 12 apart, the dock 12 in, 8 between, down to the inset', async () => {
+    Object.assign(mockInsets, { top: 62, bottom: 34 })
+    const spy = at(1)
+    try {
+      await mount()
+      expect(content().paddingTop).toBe(barTop(62) + SPACE.xxl)
+      expect(content().gap).toBe(SPACE.md)
+      expect(dock().paddingTop).toBe(SPACE.md)
+      expect(dock().gap).toBe(SPACE.sm)
+      expect(dock().paddingBottom).toBe(34)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('a phone with no bottom inset still keeps the links 16 off the edge', async () => {
+    const spy = at(1)
+    try {
+      await mount()
+      expect(dock().paddingBottom).toBe(SPACE.lg)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('AX: the wordmark sits at the left edge, where the back circle is, so the page starts under the bar', async () => {
+    Object.assign(mockInsets, { top: 62, bottom: 34 })
+    const spy = at(2)
+    try {
+      await mount()
+      expect(content().paddingTop).toBe(barHeight(62, false) + SPACE.sm)
     } finally {
       spy.mockRestore()
     }

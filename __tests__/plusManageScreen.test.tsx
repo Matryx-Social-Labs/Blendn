@@ -11,7 +11,7 @@
  */
 import React from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
-import { Linking } from 'react-native'
+import { Linking, StyleSheet } from 'react-native'
 
 const mockToast = jest.fn()
 jest.mock('@react-native-async-storage/async-storage', () => require('@react-native-async-storage/async-storage/jest/async-storage-mock'))
@@ -51,6 +51,7 @@ import { router } from 'expo-router'
 import PlusManageScreen from '../app/plus-manage'
 import { apiClient } from '../lib/apiClient'
 import { waitForPlus } from '../lib/plus'
+import { SPACE } from '../lib/design/tokens'
 import { canBuyAs, loadPlusOffers, restore } from '../lib/purchases'
 /* eslint-enable import/first */
 
@@ -134,6 +135,16 @@ describe('a granted Blend’n+', () => {
     // The picked one opens it too: a re-tap is passed on.
     await act(async () => { fireEvent.press(screen.getByTestId('manage-plan-$rc_annual')) })
     expect(router.push).toHaveBeenCalledWith({ pathname: '/plus', params: { trigger: 'profile', plan: '$rc_annual' } })
+  })
+
+  // remaining-screens 03 A, the ±1 pt overlay (2026-11-19): 12 from the card to Restore, 18 to "Keep it after" (12 + 4: no
+  // token is 18; 16 and 20 are both 2 off, and the card above already runs taller than the board's). Negative control: the
+  // old SPACE.xl gap with no margin fails both.
+  it('is spaced as the board: 12 between the card and Restore, 16 before the plans', async () => {
+    ;(loadPlusOffers as jest.Mock).mockResolvedValue([monthly, yearly])
+    await mount(status({ source: 'grant', expiresAt: '2027-10-23T12:00:00' }))
+    expect(StyleSheet.flatten(screen.getByTestId('plus-manage-body').props.style).gap).toBe(SPACE.md)
+    expect(StyleSheet.flatten(screen.getByTestId('plus-manage-keep').props.style).marginTop).toBe(SPACE.xs)
   })
 
   it('a Night Pass keeps the plans too; where Blend’n+ is not sold there are none', async () => {

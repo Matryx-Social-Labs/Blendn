@@ -152,7 +152,7 @@ function ManageContent() {
             testID="plus-manage-failed"
           />
         ) : card ? (
-          <Animated.View entering={arrive} style={styles.body}>
+          <Animated.View entering={arrive} style={styles.body} testID="plus-manage-body">
             <ManageStatusRow
               status={card.status}
               sentence={card.sentence}
@@ -185,7 +185,7 @@ function ManageContent() {
               />
             </SettingsGroup>
             {keeps && offers?.length ? (
-              <View style={styles.keep}>
+              <View style={styles.keep} testID="plus-manage-keep">
                 <Text accessibilityRole="header" maxFontSizeMultiplier={MAX_FONT_SCALE.note} style={[font('note', bold, FONT_FAMILY.brand[500]), styles.label]}>
                   {until ? `Keep it after ${until}` : 'Keep it going'}
                 </Text>
@@ -240,9 +240,10 @@ export default function PlusManageScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { paddingHorizontal: SPACE.gutter, gap: SPACE.xl },
-  body: { gap: SPACE.xl },
+  // The board's 12 from the card to Restore; 18 to "Keep it after" is 12 + 4 (no token is 18; 16 and 20 are both 2 off).
+  body: { gap: SPACE.md },
   loading: { height: SPACE.xxxl + SPACE.xl, alignItems: 'center', justifyContent: 'center' },
   foot: { color: COLOR.textTertiary, paddingHorizontal: SPACE.md },
-  keep: { gap: SPACE.sm },
+  keep: { gap: SPACE.sm, marginTop: SPACE.xs },
   label: { color: COLOR.textSecondary, paddingHorizontal: SPACE.xs },
 })

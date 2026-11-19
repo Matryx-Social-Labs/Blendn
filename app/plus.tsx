@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Platform, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { Banner } from '../components/ds/Banner'
 import { BannerPresence } from '../components/motion/BannerPresence'
@@ -8,13 +9,14 @@ import { Spinner } from '../components/ds/Loader'
 import { ManageStatusRow } from '../components/ds/ManageStatusRow'
 import { Grain } from '../components/ds/Grain'
 import { PlanCard, PlanList } from '../components/ds/PlanCard'
-import { font, HueProvider, useBoldText } from '../components/ds/shared'
+import { font, HueProvider, useBoldText, useLargeText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { openStoreSubscriptions } from '../components/plus/storeActions'
 import { StoreErrorSheet, type StoreError } from '../components/plus/StoreErrorSheet'
 import { disclosureLine, NeverForSaleRow, PlusActions, PlusTerms, PlusHeader, PlusHero, PlusNote, useHeaderHeight, WhatYouGet } from '../components/plus/PlusSections'
 import { useToast } from '../components/Toast'
 import { apiClient } from '../lib/apiClient'
+import { barTop } from '../lib/barGeometry'
 import { COLOR, MAX_FONT_SCALE, RADIUS, SPACE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { BLENDN_LINKS, openInApp } from '../lib/links'
@@ -89,6 +91,11 @@ function PlusScreenContent() {
   const userId = user?.id ?? null
   const { showToast } = useToast()
   const headerHeight = useHeaderHeight()
+  const insets = useSafeAreaInsets()
+  // The board starts the compact hero 32 under the circle row, in the bar's band: the mark is centred between the circle
+  // and "Not now" (remaining-screens 01 A). At AX only the wordmark stays, at the left edge under the circle, so the page
+  // starts under the bar.
+  const contentTop = useLargeText() ? headerHeight + SPACE.sm : barTop(insets.top) + SPACE.xxl
   const bar = useTopBarState()
 
   const [status, setStatus] = useState<PlusStatus | null>(null)
@@ -336,7 +343,7 @@ function PlusScreenContent() {
       <PlusHeader done={finished || has} onClose={close} state={bar.state === 'rest' ? 'rest' : 'scrolled'} />
       <ScrollView
         testID="plus-scroll"
-        contentContainerStyle={[styles.content, { paddingTop: headerHeight + SPACE.sm, paddingBottom: dockHeight + SPACE.xl }]}
+        contentContainerStyle={[styles.content, { paddingTop: contentTop, paddingBottom: dockHeight + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
         {...bar.scrollProps}
       >
@@ -415,7 +422,8 @@ function PricesLoading() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLOR.ink },
-  content: { paddingHorizontal: SPACE.gutter, gap: SPACE.lg },
+  // The board's 14 between sections: SPACE.md, the nearer of 12 / 16 on a page whose DS rows already run taller.
+  content: { paddingHorizontal: SPACE.gutter, gap: SPACE.md },
   section: { gap: SPACE.sm },
   nothing: { borderRadius: RADIUS.sheet, backgroundColor: COLOR.surface, padding: SPACE.lg, gap: SPACE.xs },
   ink: { color: COLOR.textPrimary, textAlign: 'center' },
