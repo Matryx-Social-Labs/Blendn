@@ -1695,6 +1695,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       onBrowse({
         city: selectedCity,
         location: userLocation,
+        withDistance,
         ready: cityResolved,
         // The stored city's own centre until the catalogue answers (or when it fails): the map is never left blank.
         cityCentre: browseOption?.centre ?? selection?.centre ?? null,
@@ -1707,7 +1708,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         focus,
         reach,
       }),
-    [onBrowse, selectedCity, selection?.centre, userLocation, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
+    [onBrowse, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
   )
 
   const firstSection = sections[0]?.key ?? null

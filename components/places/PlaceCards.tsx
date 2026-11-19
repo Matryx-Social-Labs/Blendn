@@ -27,7 +27,7 @@ import {
   plateFor,
   tileLabel,
   tonightEvent,
-  type DistanceReading,
+  type DistanceShown,
   type PlaceTypeFilter,
 } from '../../lib/placesPane'
 import { PlaceMeta, QuietRow } from './PlaceParts'
@@ -117,7 +117,7 @@ const pressProps = {
 } as const
 
 /** A live tile: the plate (or tonight's cover) at 156 square, the bucket's glow, the pill. */
-export const LiveTile = memo(function LiveTile({ venue, now, reading }: { venue: VenueListItem; now: number; reading: DistanceReading }) {
+export const LiveTile = memo(function LiveTile({ venue, now, reading }: { venue: VenueListItem; now: number; reading: DistanceShown }) {
   const bold = useBoldText()
   const liveText = bucketLabel(venue.liveNow)
   return (
@@ -142,7 +142,7 @@ export const LiveTile = memo(function LiveTile({ venue, now, reading }: { venue:
 })
 
 /** An Open tonight card: 200 × 132 art, then the name, the type line and one line about tonight. */
-export const OpenCard = memo(function OpenCard({ venue, now, reading }: { venue: VenueListItem; now: number; reading: DistanceReading }) {
+export const OpenCard = memo(function OpenCard({ venue, now, reading }: { venue: VenueListItem; now: number; reading: DistanceShown }) {
   const bold = useBoldText()
   const tonight = tonightEvent(venue.nextEvent, now)
   const hours = tonight ? null : hoursLine(venue.tonight, now)
@@ -188,7 +188,7 @@ export const LiveSection = memo(function LiveSection({
   venues: VenueListItem[]
   total: number
   now: number
-  reading: DistanceReading
+  reading: DistanceShown
   onSeeAll: () => void
   focused: boolean
 }) {
@@ -214,7 +214,7 @@ export const OpenSection = memo(function OpenSection({
   venues: VenueListItem[]
   total: number
   now: number
-  reading: DistanceReading
+  reading: DistanceShown
   onSeeAll: () => void
   focused: boolean
 }) {
@@ -238,7 +238,7 @@ export const NearSection = memo(function NearSection({
 }: {
   venues: VenueListItem[]
   hasFix: boolean
-  reading: DistanceReading
+  reading: DistanceShown
   onAsk: () => void
   onShowOnMap?: () => void
 }) {

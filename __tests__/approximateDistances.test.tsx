@@ -19,6 +19,7 @@ import { openPlace } from '../components/places/openPlace'
 import { NearbyRow, nearbyRowLabel } from '../components/pulse/NearbyRow'
 import { SetList, setRowLabel } from '../components/pulse/SetList'
 import { Where } from '../components/venue/VenueSections'
+import { distanceText } from '../lib/placesPane'
 import { homeCardProps } from '../lib/pulse'
 import { subtree } from './helpers/ax'
 /* eslint-enable import/first */
@@ -100,6 +101,19 @@ describe('a place’s type line: the distance is its own slot and never gives wa
     const far = screen.getByTestId('place-distance', HIDDEN)
     expect(far.props.numberOfLines).toBeUndefined()
     expect(within(far).getByText(/about 1 km/, HIDDEN)).toBeTruthy()
+  })
+})
+
+describe('Places browsing a city the phone is not in: no distance, as the Pulse (SCRUM-1000; Toronto drive: "about 13,297 km" on every card)', () => {
+  it('a tile, a row and the link say none', async () => {
+    expect(distanceText(13297, false)).toBeNull()
+    await render(<LiveTile venue={venue(13297)} now={NOW} reading={false} />)
+    expect(screen.queryByText(/km/, HIDDEN)).toBeNull()
+    expect(screen.getByTestId('place-tile-v1').props.accessibilityLabel).not.toMatch(/kilometre/)
+    await render(<QuietRow venue={venue(13297)} reading={false} />)
+    expect(screen.queryByTestId('place-distance', HIDDEN)).toBeNull()
+    openPlace(venue(13297), false)
+    expect(mockPush.mock.calls[0][0].params).toEqual({ id: 'v1' })
   })
 })
 

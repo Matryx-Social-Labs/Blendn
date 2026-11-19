@@ -41,7 +41,7 @@ export function nearbyRowLabel(e: RowEvent, now: number, withDistance: DistanceS
   const live = isLiveNow(e, now)
   const w = liveWindow(e)
   const when = live ? (w.end_time ? `till ${eventClock(w.end_time, e.timezone)}` : null) : eventClock(w.start_time, e.timezone)
-  const parts = [e.title, when, e.venue_name ? `at ${e.venue_name}` : null, withDistance ? reachLabel(e.distance, withDistance)?.text : null, e.from_price ? priceText(e.from_price) : null, people(e, live)]
+  const parts = [e.title, when, e.venue_name ? `at ${e.venue_name}` : null, reachLabel(e.distance, withDistance)?.text, e.from_price ? priceText(e.from_price) : null, people(e, live)]
   return [e.promoted ? PROMOTED_LABEL : null, live ? 'Live' : null, parts.filter(Boolean).join(', ')].filter(Boolean).join('. ')
 }
 
@@ -90,7 +90,7 @@ function NearbyRowImpl<E extends RowEvent>({
   const live = isLiveNow(event, now)
   const w = liveWindow(event)
   const { time, meridiem } = splitClock(Date.parse(w.start_time), event.timezone)
-  const reach = withDistance ? reachLabel(event.distance, withDistance) : null
+  const reach = reachLabel(event.distance, withDistance)
   const who = peopleParts(event, live)
   const where = [live && w.end_time ? `till ${eventClock(w.end_time, event.timezone)}` : null, event.venue_name].filter(Boolean).join(' · ')
   return (

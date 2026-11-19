@@ -18,7 +18,7 @@ import { Logger } from '../../lib/logger'
 import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
 import { useLatest } from '../../lib/useLatest'
 import { TAB_BAR_SETTLE } from '../../lib/tabBarSettle'
-import type { NearPin } from '../../lib/placesPane'
+import type { DistanceShown, NearPin } from '../../lib/placesPane'
 import type { PreciseFix } from '../../lib/roomButton'
 import { HomeDrawer } from './HomeDrawer'
 import { CityChip } from './CityChip'
@@ -31,6 +31,8 @@ export interface HomeBrowse {
   city: string | null
   /** The Pulse's fix, its accuracy with it: an approximate one is said "about 1 km" (`readingOf`). */
   location: PreciseFix | null
+  /** How Places says distances: as the Pulse does, none in a city the phone is not in, "about 1 km" from an approximate fix. */
+  withDistance: DistanceShown
   /** The city has been decided (stored, inferred or none at all): Places may ask now. */
   ready: boolean
   /** Where the selected city is (`/events/cities` `centre`). */
@@ -118,6 +120,7 @@ export function HomeShell({
   const [browse, setBrowse] = useState<HomeBrowse>({
     city: null,
     location: null,
+    withDistance: false,
     ready: false,
     cityCentre: null,
     travelling: false,

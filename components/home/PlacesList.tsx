@@ -20,7 +20,6 @@ import { searchTermOf } from '../../lib/searchTerm'
 import { SPACE, SPRING } from '../../lib/design/tokens'
 import { roundCoordinate } from '../../lib/coordinates'
 import { Logger } from '../../lib/logger'
-import { readingOf } from '../../lib/mapPresence'
 import { getNetworkState, subscribeNetworkState } from '../../lib/networkStatus'
 import { initialPlaces, mayLoadMore, placesKey, placesReducer, readStamp } from '../../lib/places'
 import {
@@ -116,8 +115,8 @@ export function PlacesList({
   const lat = location ? roundCoordinate(location.latitude) : undefined
   const lon = location ? roundCoordinate(location.longitude) : undefined
   const hasFix = lat !== undefined
-  // The server measures each place's distance from the fix we send: from an approximate one, "about 1 km" (SCRUM-1080).
-  const reading = readingOf(location)
+  // The Pulse's own rule: none in another city; "about 1 km" from an approximate fix, which the server measures from (SCRUM-1080).
+  const reading = browse.withDistance
   const key = placesKey(city, location, venueType, term, radiusKm)
   const [state, dispatch] = useReducer(placesReducer, key, initialPlaces)
   const [refreshing, setRefreshing] = useState(false)

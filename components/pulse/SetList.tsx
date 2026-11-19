@@ -51,7 +51,7 @@ export function setRowLabel(event: BlendnEvent, withDistance: DistanceShown): st
   const going = printable(event.going_count)
   return [
     eventClock(start, event.timezone),
-    [event.title, event.venue_name ? `at ${event.venue_name}` : null, withDistance ? distanceText(event.distance, withDistance) : null, going ? `${going.toLocaleString('en-US')} going` : null]
+    [event.title, event.venue_name ? `at ${event.venue_name}` : null, distanceText(event.distance, withDistance), going ? `${going.toLocaleString('en-US')} going` : null]
       .filter(Boolean)
       .join(', '),
   ].join('. ')
@@ -74,7 +74,7 @@ const Row = memo(function Row({ event, withDistance, stacked, onPress, onPressIn
   const start = Date.parse(liveWindow(event).start_time)
   // The event's own zone (RC drive 5 D-4).
   const { time, meridiem } = splitClock(start, event.timezone)
-  const distance = withDistance ? distanceText(event.distance, withDistance) : null
+  const distance = distanceText(event.distance, withDistance)
   const going = printable(event.going_count)
   const box = useRef<View>(null)
   return (

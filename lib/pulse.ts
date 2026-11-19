@@ -262,7 +262,7 @@ export function homeCardProps(
     title: event.title,
     time: cardTime(event, now),
     venue: event.venue?.name?.trim() || event.venue_name?.trim() || event.city?.trim() || '',
-    distance: withDistance ? (distanceText(event.distance, withDistance) ?? undefined) : undefined,
+    distance: distanceText(event.distance, withDistance) ?? undefined,
     here: here ?? undefined,
     going: going ?? undefined,
     cover: event.cover_image_url ?? null,

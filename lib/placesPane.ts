@@ -95,11 +95,12 @@ export type DistanceShown = DistanceReading | false
 export const ABOUT = 'about '
 
 /**
- * "350 m" under a kilometre (to the nearest 50), "4.8 km" up to ten, "11 km" from there ("7,510 km"); null with no fix.
- * From an approximate fix, "about 1 km": whole kilometres and never under one, never metres (pulse-map 06 frame 2).
+ * "350 m" under a kilometre (to the nearest 50), "4.8 km" up to ten, "11 km" from there ("7,510 km"); null with no fix, or
+ * `false` (browsing a city the phone is not in). From an approximate fix, "about 1 km": whole kilometres and never under one,
+ * never metres (pulse-map 06 frame 2).
  */
-export function distanceText(km: number | null | undefined, reading: DistanceReading): string | null {
-  if (km == null || !Number.isFinite(km) || km < 0) return null
+export function distanceText(km: number | null | undefined, reading: DistanceShown): string | null {
+  if (!reading || km == null || !Number.isFinite(km) || km < 0) return null
   if (reading === 'approximate') return `${ABOUT}${Math.max(1, Math.round(km)).toLocaleString('en-US')} km`
   // Judged on the shown metres, so 0.99 is "1.0 km", never "1000 m".
   const metres = Math.max(50, Math.round((km * 1000) / 50) * 50)
@@ -156,7 +157,7 @@ export function splitPlaces(venues: readonly VenueListItem[], now: number): Plac
 }
 
 /** "350 m" read aloud: "350 metres", "4.8 kilometres", "about 1 kilometre". */
-export function spokenDistance(km: number | null | undefined, reading: DistanceReading): string | null {
+export function spokenDistance(km: number | null | undefined, reading: DistanceShown): string | null {
   const text = distanceText(km, reading)
   return text && text.replace(/ m$/, ' metres').replace(/ km$/, text === `${ABOUT}1 km` ? ' kilometre' : ' kilometres')
 }
@@ -180,13 +181,13 @@ export function hoursLine(tonight: VenueListItem['tonight'], now: number): { lea
 }
 
 /** What a live tile is read as: "{name}. {type}, {area}, {distance}. 10 to 19 people live." */
-export function tileLabel(venue: VenueListItem, reading: DistanceReading): string {
+export function tileLabel(venue: VenueListItem, reading: DistanceShown): string {
   const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance, reading)].filter(Boolean).join(', ')
   return [venue.name, where, spokenBucket(venue.liveNow)].filter(Boolean).join('. ')
 }
 
 /** What an Open tonight card is read as: "{name}. {type}, {area}, {distance}. Tonight 9 PM, {title}." or "Open till 1 AM." */
-export function openLabel(venue: VenueListItem, now: number, reading: DistanceReading): string {
+export function openLabel(venue: VenueListItem, now: number, reading: DistanceShown): string {
   const where = [guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance, reading)].filter(Boolean).join(', ')
   const tonight = tonightEvent(venue.nextEvent, now)
   const hours = hoursLine(venue.tonight, now)
@@ -195,7 +196,7 @@ export function openLabel(venue: VenueListItem, now: number, reading: DistanceRe
 }
 
 /** What a Near you row is read as: "2 of 5 nearest. {name}, {type}, {area}, {distance}". */
-export function nearLabel(venue: VenueListItem, n: number, reading: DistanceReading): string {
+export function nearLabel(venue: VenueListItem, n: number, reading: DistanceShown): string {
   const where = [venue.name, guestTypeLabel(venue), placeArea(venue), spokenDistance(venue.distance, reading)].filter(Boolean).join(', ')
   return `${n} of ${NEAR_COUNT} nearest. ${where}`
 }
@@ -458,7 +459,7 @@ export function placeRows(view: PlaceView): PlaceRow[] {
 
 /** What a tile, a row or a quiet row is read as: name, type, distance, live bucket, tonight's event. */
 /** `now` only for a row whose words change with the clock (a tile, an open row); a quiet row passes none, so its memo holds. */
-export function placeLabel(venue: VenueListItem, reading: DistanceReading, now?: number): string {
+export function placeLabel(venue: VenueListItem, reading: DistanceShown, now?: number): string {
   const tonight = now === undefined ? null : tonightEvent(venue.nextEvent, now)
   return [
     venue.name,

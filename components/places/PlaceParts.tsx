@@ -10,7 +10,7 @@ import { Icon } from '../ui/Icon'
 import type { VenueListItem } from '../../lib/apiClient'
 import { COLOR, FONT_FAMILY, ICON, RADIUS, SIZE, SPACE, MAX_FONT_SCALE, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
-import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type DistanceReading, type PlaceTypeFilter } from '../../lib/placesPane'
+import { bucketLabel, distanceText, foldNoun, guestTypeLabel, moreLine, placeArea, placeLabel, plateFor, type DistanceShown, type PlaceTypeFilter } from '../../lib/placesPane'
 import { openPlace } from './openPlace'
 
 /** The quiet row: 56 tall, a 40 thumb. */
@@ -43,7 +43,7 @@ export function PlaceMeta({ lead, distance, small = false }: { lead: string; dis
 }
 
 /** "Brewery · 350 m": the type (the area first on a row), and the distance. */
-function TypeLine({ venue, reading, area = false, small = false }: { venue: VenueListItem; reading: DistanceReading; area?: boolean; small?: boolean }) {
+function TypeLine({ venue, reading, area = false, small = false }: { venue: VenueListItem; reading: DistanceShown; area?: boolean; small?: boolean }) {
   // A row that carries the area leads with it: five "The Pub" rows are told apart by where they are (audit A40).
   const lead = (area ? [placeArea(venue), guestTypeLabel(venue)] : [guestTypeLabel(venue)]).filter(Boolean).join(' · ')
   return <PlaceMeta lead={lead} distance={distanceText(venue.distance, reading)} small={small} />
@@ -108,8 +108,8 @@ export const QuietRow = memo(function QuietRow({
   testID,
 }: {
   venue: VenueListItem
-  /** How its distance is said: from the fix the list was read from. */
-  reading: DistanceReading
+  /** How its distance is said, from the fix the list was read from; false in a city the phone is not in. */
+  reading: DistanceShown
   n?: number
   label?: string
   testID?: string
