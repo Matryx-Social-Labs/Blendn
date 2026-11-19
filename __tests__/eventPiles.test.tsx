@@ -191,9 +191,24 @@ describe('a lit place is marked by its light, not a dot on it', () => {
     expect(layer('pin-dot-lit')?.paint).toMatchObject({ 'circle-opacity': 0, 'circle-stroke-opacity': 0, 'circle-opacity-transition': litFade(false) })
   })
 
+  /*
+   * The light arrives a frame after the first draw (`useLitFade`: a requestAnimationFrame, which jest runs as a 0 ms
+   * timeout). On real timers that frame raced React's own setImmediate at the end of `render`: on a busy CI runner the
+   * timer phase came first and the test read the handed-over 0 (SCRUM-1081). The frame is held on fake timers instead,
+   * so the first draw is read before it, and the frame is then let through so the hand-over is read too.
+   */
   it('control: before the light has arrived the lit pin’s dot is still at full strength (no blank frame)', async () => {
-    await render(<EventPiles pins={PINS} litIds={['lit']} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
-    expect(layer('pin-dot-lit')?.paint).toMatchObject({ 'circle-opacity': 1 })
+    jest.useFakeTimers()
+    try {
+      await render(<EventPiles pins={PINS} litIds={['lit']} focusId={null} onOpen={jest.fn()} onExpand={jest.fn()} />)
+      expect(layer('pin-dot-lit')?.paint).toMatchObject({ 'circle-opacity': 1, 'circle-stroke-opacity': 1 })
+      await act(async () => {
+        jest.runOnlyPendingTimers()
+      })
+      expect(layer('pin-dot-lit')?.paint).toMatchObject({ 'circle-opacity': 0, 'circle-stroke-opacity': 0 })
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('control: nothing lit (below z14 the lights are cleared), every pin is a plain dot', async () => {
