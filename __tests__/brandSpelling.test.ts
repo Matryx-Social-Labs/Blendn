@@ -42,6 +42,6 @@ describe('the brand is spelled Blend’n+', () => {
   })
 
   it('reads strings, not comments', () => {
-    expect(stringsIn('lib/plusFree.ts').some((s) => WRONG.test(s))).toBe(false)
+    expect(stringsIn('lib/mePlus.ts').some((s) => WRONG.test(s))).toBe(false)
   })
 })

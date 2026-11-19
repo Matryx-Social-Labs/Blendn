@@ -68,15 +68,13 @@ describe('there is one profile editor', () => {
 
   it('leaves no second door in Settings', () => {
     const src = codeOnly(read('app/settings.tsx'))
-    // The one door: "About you" (E7; the row is not "How you match" until Flow 14 · 14.4 is built), to the about-you fields' own screen.
-    // The old `/about-you` route, a second profile editor, stays gone.
-    expect(src.replace("'/edit-about-you'", '')).not.toContain('about-you')
-    expect(src).toContain("router.push('/edit-about-you')")
+    // Me + settings A 04: the about-you fields are profile data, reached from Edit profile only ("Shown when you share one");
+    // Settings has no row to them. The old `/about-you` route, a second profile editor, stays gone.
+    expect(src).not.toContain('about-you')
     expect(src).not.toContain('/edit-profile')
     // And no profile card above the list, whose outer press went to the Me tab.
     expect(src).not.toContain('profileCard')
-    expect(src).toContain('title="About you"')
-    expect(src).not.toContain('title="How you match"')
+    expect(src).not.toContain('title="About you"')
   })
 
   it('pulls to refresh with the shared hook, which plays H.threshold (SYS-12)', () => {
@@ -90,19 +88,19 @@ describe('there is one profile editor', () => {
 describe('every Settings heading describes what is under it', () => {
   const SETTINGS = () => codeOnly(read('app/settings.tsx'))
 
-  it('files blocked users under Safety, not Account', () => {
+  it('files Blocked with the privacy switches, under Privacy & safety (Me + settings A 05)', () => {
     /*
      * Blocking somebody is the most consequential safety action in the product,
      * and it used to sit under "Account" — further from Safety than two links
      * to a web page.
      */
     const src = SETTINGS()
-    const safetyAt = src.indexOf('title="Safety"')
-    const blockedAt = src.indexOf('title="Blocked users"')
-    const aboutAt = src.indexOf('title="About"')
+    const safetyAt = src.indexOf('title="Privacy & safety"')
+    const blockedAt = src.indexOf('title="Blocked"')
+    const nextAt = src.indexOf('<SettingsGroup', safetyAt + 1)
     expect(safetyAt).toBeGreaterThan(-1)
     expect(blockedAt).toBeGreaterThan(safetyAt)
-    expect(blockedAt).toBeLessThan(aboutAt)
+    expect(blockedAt).toBeLessThan(nextAt)
   })
 
   it('has no section called Discovery', () => {
@@ -138,9 +136,10 @@ describe('the irreversible row is hard to hit by accident', () => {
      * and reversible; the other destroys the account.
      */
     const src = SETTINGS()
-    expect(src).toContain('<SettingsGroup title="Danger zone" danger>')
-    // The row's title is `Deleting account…` while it runs, so it is found by its test id.
-    expect(src.indexOf('testID="settings-delete"')).toBeGreaterThan(src.indexOf('<SettingsGroup title="Account">'))
+    // No "Danger zone" label (naming review): the outline says it.
+    expect(src).toContain('<SettingsGroup danger>')
+    // The row's title is `Deleting account…` while it runs, so it is found by its test id; Sign out comes before it.
+    expect(src.indexOf('testID="settings-delete"')).toBeGreaterThan(src.indexOf('testID="settings-sign-out-everywhere"'))
     // Nothing follows it but the end of the list.
     expect(src.slice(src.indexOf('testID="settings-delete"'))).not.toContain('<SettingsGroup')
   })
@@ -154,7 +153,7 @@ describe('the irreversible row is hard to hit by accident', () => {
   it('separates every group from the next by a gap, not one card', () => {
     // Six groups in one bordered card read as one block; each is its own SettingsGroup in a gapped column.
     const src = SETTINGS()
-    expect(src.match(/<SettingsGroup title=/g)?.length).toBeGreaterThanOrEqual(7)
+    expect(src.match(/<SettingsGroup\b/g)?.length).toBeGreaterThanOrEqual(8)
     expect(src).toMatch(/content: \{[^}]*gap: DS_SPACE\.xl/)
   })
 })
@@ -182,5 +181,37 @@ describe('the editor is on the app’s palette', () => {
     // The design system's chip (white fill, ink type) through ChipSet: the editor draws none of its own.
     expect(src).toContain('<ChipSet')
     expect(src).not.toMatch(/chipOn|EMBER\./)
+  })
+})
+
+describe('Settings in Me + settings A order (owner 2026-11-18, SCRUM-1076)', () => {
+  const SETTINGS = () => codeOnly(read('app/settings.tsx'))
+  it('account, Blend’n+, Notification settings, Privacy & safety, Where you are, Help & legal, the ways out, Delete, the version', () => {
+    const src = SETTINGS()
+    const at = [
+      'testID="settings-account"',
+      'testID="settings-plus"',
+      'title="Notification settings"',
+      'title="Privacy & safety"',
+      'testID="settings-blocked"',
+      'title="Where you are"',
+      'title="Help & legal"',
+      'testID="settings-about"',
+      'testID="settings-sign-out"',
+      'testID="settings-delete"',
+      'testID="settings-version"',
+    ].map((needle) => src.indexOf(needle))
+    // Negative control: Blocked moved back under its own Safety group after Help & legal breaks the order.
+    expect(at.every((i) => i > -1)).toBe(true)
+    expect([...at].sort((a, b) => a - b)).toEqual(at)
+    // Help & legal is one group: no separate Help, About or Safety heading, and Community guidelines only on About.
+    expect(src).not.toMatch(/title="(Help|About|Safety|Account|Location|Danger zone)"/)
+    expect(src).not.toContain('BLENDN_LINKS.guidelines')
+  })
+
+  it('the Delete account step that leads to "for good?" and the final delete are both outlined (`danger`), never filled', () => {
+    const src = SETTINGS()
+    expect(src.match(/variant: 'danger'/g)).toHaveLength(2)
+    expect(src).not.toMatch(/variant: 'destructive'/)
   })
 })
