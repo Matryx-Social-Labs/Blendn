@@ -52,7 +52,8 @@ describe('PersonRow', () => {
    * Owner pick a, 2026-11-20 (backend round 1, Blocked at AX): beside its action the text column was a third of the row, so
    * "Thiruvananthapuram" broke mid-word and names wrapped a word a line. From the AX sizes (`useLargeText`, AX_FONT_SCALE) the
    * action goes under the text, at the text's leading edge, and the text takes the row; below them it stays beside the text.
-   * Negative control: on the old row (the action always a sibling of the text column) the two AX cases fail and the rest pass.
+   * Negative controls (2026-11-20): the action always beside the text (the old row) fails the three AX cases only; the action
+   * always under it fails the three below-AX cases only.
    */
   const unblock = <Text testID="trail">Unblock</Text>
   const blocked = (

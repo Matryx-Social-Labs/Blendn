@@ -86,10 +86,14 @@ it('a friend with a long name and no photo keeps its name to one line below the 
   Dimensions.set({ window, screen: window })
 })
 
+// Below the AX sizes (the jest window's own fontScale is 2, an AX size, where the action goes under the text: personRowLargeText).
 it('a small button in a row is centred on it, not pinned to its top', async () => {
+  const window = Dimensions.get('window')
+  await act(async () => Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...window, fontScale: 1 } }))
   await render(<PersonRow person={{ userId: 'u', name: 'Ana', photo: null }} detail="Requested" trailing={<Text testID="trail">Withdraw</Text>} />)
   const holder = screen.getByTestId('trail').parent
   expect(StyleSheet.flatten(holder?.props.style).alignSelf).toBe('center')
+  Dimensions.set({ window, screen: window })
 })
 
 it('M6, as DS-05 amends it: a person row is one row tall at least, never a fixed box; lists window it by index only at the default size (usePersonRowsFixed)', async () => {
