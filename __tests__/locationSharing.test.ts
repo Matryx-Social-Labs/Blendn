@@ -103,6 +103,19 @@ describe('with sharing off', () => {
     expect(urls[0]).toContain('radius=3')
   })
 
+  it('a box is a position too: one around you is held back with the switch off, the camera\'s still goes (and as the box only)', async () => {
+    setLocationSharing(false)
+    const urls = server()
+    const bbox: [number, number, number, number] = [77.58, 12.96, 77.6, 12.98]
+    await apiClient.getEvents({ bbox }, { force: true })
+    await apiClient.getEvents({ bbox }, { force: true, viewport: true })
+    await apiClient.getVenues({ bbox }, { force: true, viewport: true })
+    expect(urls[0]).not.toContain('bbox=')
+    expect(urls[1]).toContain('bbox=77.58%2C12.96%2C77.6%2C12.98')
+    expect(urls[2]).toContain('bbox=77.58%2C12.96%2C77.6%2C12.98')
+    for (const url of urls) expect(url).not.toMatch(/lat=|lon=/)
+  })
+
   it('saving the switch in Settings is what turns it off and on', async () => {
     server()
     await apiClient.updateProfile('u1', { share_location: false })

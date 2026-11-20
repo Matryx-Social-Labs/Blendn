@@ -8,7 +8,6 @@
  * and the map never draws one (`__tests__/homeMap.test.ts`).
  */
 
-import { roundCoordinate } from './coordinates'
 import { getDistanceKm } from './geo'
 import { liveWindow } from './eventSession'
 import type { LiveNow } from './home'
@@ -17,25 +16,31 @@ import { buildingHeights, featureIdOf } from './mapStyleEmber'
 import { SPACE } from './design/tokens'
 import { MAP_THEME } from './mapTheme'
 
-/** The server's bound on `radius` for `/events` and `/venues`, in km. */
-export const MAX_QUERY_RADIUS_KM = 100
-/** And its floor. */
-const MIN_QUERY_RADIUS_KM = 0.1
-
 /** `[west, south, east, north]`, as the map reports its bounds. */
 export type Bounds = [number, number, number, number]
 
+/** What a map asks the server for: the box it shows (`bbox`, backend round 3). A box is no position: no distance comes back. */
+export type PinQuery = { bbox: Bounds }
+
+/** ~110 m, the step every position leaving the phone is rounded to (`lib/coordinates.ts`). */
+const BOX_STEP = 1000
+const down = (v: number) => Math.floor(v * BOX_STEP) / BOX_STEP
+const up = (v: number) => Math.ceil(v * BOX_STEP) / BOX_STEP
+
 /**
- * What a viewport asks the server for: its centre, and a radius that reaches
- * its corners (half the diagonal), clamped to what the server accepts (HM-CU02).
- * The server's bounding box then covers the whole screen.
+ * The view as a box, rounded outward so it still covers the whole screen and a nudge is the same question, and kept on
+ * the globe (the server refuses anything past it).
+ * ponytail: a view across the antimeridian (west > east) is refused by the server; nobody is served there yet.
  */
-export function viewportQuery([west, south, east, north]: Bounds): { lat: number; lon: number; radius: number } {
-  const lat = (south + north) / 2
-  const lon = (west + east) / 2
-  const half = getDistanceKm(south, west, north, east) / 2
-  const radius = Math.min(MAX_QUERY_RADIUS_KM, Math.max(MIN_QUERY_RADIUS_KM, Math.round(half * 100) / 100))
-  return { lat, lon, radius }
+export function viewportBox([west, south, east, north]: Bounds): PinQuery {
+  return { bbox: [Math.max(-180, down(west)), Math.max(-90, down(south)), Math.min(180, up(east)), Math.min(90, up(north))] }
+}
+
+/** A box reaching `km` each way from a point (an equirectangular step: true to a few metres at this size). */
+export function boxAround([lon, lat]: readonly [number, number], km: number): PinQuery {
+  const dLat = km / 110.574
+  const dLon = km / (111.32 * Math.cos((lat * Math.PI) / 180))
+  return viewportBox([lon - dLon, lat - dLat, lon + dLon, lat + dLat])
 }
 
 export type PinKind = 'event' | 'venue'
@@ -266,21 +271,15 @@ export function lightCandidates(pins: Pin[], bounds: Bounds, centre: [number, nu
 /* Asking for pins (step 2 review)                                             */
 /* -------------------------------------------------------------------------- */
 
-export type PinQuery = { lat: number; lon: number; radius: number }
-
-/** To ~100 m and 10 m of radius: a pan of a few metres is the same question. */
-export function roundQuery(q: PinQuery): PinQuery {
-  return { lat: roundCoordinate(q.lat), lon: roundCoordinate(q.lon), radius: Math.round(q.radius * 100) / 100 }
-}
-
 /**
- * Whether `next` asks for nothing `last` did not: its whole circle inside the
- * last one asked for. Panning about inside what is loaded costs no request —
- * the lists and the map share one person's 60 reads a minute.
+ * Whether `next` asks for nothing `last` did not: its whole box inside the last one asked for. Panning about inside what
+ * is loaded costs no request — the lists and the map share one person's 60 reads a minute.
  */
-export function insideLastCircle(last: PinQuery | null, next: PinQuery): boolean {
+export function insideLastBox(last: PinQuery | null, next: PinQuery): boolean {
   if (!last) return false
-  return getDistanceKm(last.lat, last.lon, next.lat, next.lon) + next.radius <= last.radius
+  const [w, s, e, n] = last.bbox
+  const [w2, s2, e2, n2] = next.bbox
+  return w2 >= w && s2 >= s && e2 <= e && n2 <= n
 }
 
 /** How long to wait after `failures` refusals in a row: 2 s, 4 s, 8 s … at most a minute. */
@@ -291,34 +290,39 @@ export function backoffMs(failures: number, retryAfterS?: number): number {
 }
 
 type Answer<T> = { success: boolean; data?: T; errorCode?: string; retryAfter?: number }
+type Counted = { pagination?: { totalCount?: number } }
 
 /**
- * `truncated`: the server sent as many as were asked for, so there may be more
- * in the circle — it does not count as covering it.
+ * `total`: how many the server has in the box (`pagination.totalCount`), so a capped page can say how many it left out.
+ * `truncated`: there are more than were sent, so the page does not count as covering the box. Without a total (an older
+ * server), a full page may not be all there is.
  */
-export type PinsResult = { kind: 'pins'; pins: Pin[]; truncated: boolean } | { kind: 'rate_limited'; retryAfter?: number } | { kind: 'failed' }
+export type PinsResult = { kind: 'pins'; pins: Pin[]; total: number; truncated: boolean } | { kind: 'rate_limited'; retryAfter?: number } | { kind: 'failed' }
 
 /**
- * The pins for one viewport and segment: the lists' own query, read fresh (a
- * venue an event has taken over must not linger), as the server answered.
+ * The pins for one box and segment, read fresh (a venue an event has taken over must not linger), as the server answered.
+ * The box alone: no position goes, so no distance comes back measured from wherever the camera happens to look.
  */
 export async function loadPins(
   segment: 'events' | 'places',
   q: PinQuery,
   api: {
-    getEvents: (q: PinQuery & { limit: number }) => Promise<Answer<{ events: EventLike[] }>>
-    getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => Promise<Answer<{ venues: VenueLike[] }>>
+    getEvents: (q: PinQuery & { limit: number }) => Promise<Answer<{ events: EventLike[] } & Counted>>
+    getVenues: (q: PinQuery & { limit: number }) => Promise<Answer<{ venues: VenueLike[] } & Counted>>
   },
   limit: number,
   now: number = Date.now()
 ): Promise<PinsResult> {
   try {
-    const res = segment === 'places' ? await api.getVenues({ ...q, limit, sortBy: 'distance' }) : await api.getEvents({ ...q, limit })
+    const res = segment === 'places' ? await api.getVenues({ ...q, limit }) : await api.getEvents({ ...q, limit })
     if (res.errorCode === 'RATE_LIMITED') return { kind: 'rate_limited', retryAfter: res.retryAfter }
     if (!res.success || !res.data) return { kind: 'failed' }
-    const data = res.data as { events?: EventLike[]; venues?: VenueLike[] }
+    const data = res.data as { events?: EventLike[]; venues?: VenueLike[] } & Counted
     const sent = segment === 'places' ? (data.venues ?? []).length : (data.events ?? []).length
-    return { kind: 'pins', pins: pinsFor(segment, { events: data.events ?? [], venues: data.venues ?? [] }, now), truncated: sent >= limit }
+    const counted = data.pagination?.totalCount
+    const total = typeof counted === 'number' ? counted : sent
+    const truncated = typeof counted === 'number' ? counted > sent : sent >= limit
+    return { kind: 'pins', pins: pinsFor(segment, { events: data.events ?? [], venues: data.venues ?? [] }, now), total, truncated }
   } catch {
     return { kind: 'failed' }
   }

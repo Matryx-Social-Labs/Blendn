@@ -100,7 +100,9 @@ const map = (center: typeof FIX | null, reach: typeof FIX | null = null) => (
 const onFix = (lat: number, lon: number) => Math.abs(lat - FIX.latitude) < 0.002 && Math.abs(lon - FIX.longitude) < 0.002
 const stopOnFix = (s: { center?: [number, number] }) => !!s.center && onFix(s.center[1], s.center[0])
 const readOnFix = (call: unknown[]) => {
-  const q = call[0] as { lat?: number; lon?: number }
+  const q = call[0] as { lat?: number; lon?: number; bbox?: [number, number, number, number] }
+  // A box on the fix is the fix under another name: its centre is checked like a point.
+  if (q.bbox) return onFix((q.bbox[1] + q.bbox[3]) / 2, (q.bbox[0] + q.bbox[2]) / 2)
   return typeof q.lat === 'number' && typeof q.lon === 'number' && onFix(q.lat, q.lon)
 }
 const settle = async () => {

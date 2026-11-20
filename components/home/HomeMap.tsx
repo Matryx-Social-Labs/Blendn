@@ -22,17 +22,16 @@ import {
   backoffMs,
   cameraMove,
   cityPickAction,
-  insideLastCircle,
+  insideLastBox,
   liveAt,
   loadPins,
   pinsFor,
   locateTarget,
   mapPadding,
-  roundQuery,
   shouldFollowFix,
   snapRecentre,
   tiltedZoom,
-  viewportQuery,
+  viewportBox,
   visibleCentreY,
   type Bounds,
   type InFlight,
@@ -100,15 +99,15 @@ const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.
 
 /**
  * The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger.
- * `viewport`: the point is where a camera looks, so it goes even with sharing off. A person's own position is never a
+ * `viewport`: the box is where a camera looks, so it goes even with sharing off. A person's own position is never a
  * viewport: it goes through the sharing gate (`toQuery`).
  */
 export const pinApiFor = (viewport: boolean) => ({
   getEvents: async (q: PinQuery & { limit: number }) => {
     const res = await apiClient.getEvents(q, { force: true, viewport })
-    return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi) } : undefined }
+    return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi), pagination: res.data.pagination } : undefined }
   },
-  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport }),
+  getVenues: (q: PinQuery & { limit: number }) => apiClient.getVenues(q, { force: true, viewport }),
 })
 const pinApi = pinApiFor(true)
 
@@ -123,9 +122,9 @@ async function nearestEvents(fix: { latitude: number; longitude: number }): Prom
  * MapLibre over OpenFreeMap, dark, tilted, one map-anchored light.
  *
  * - **Pins follow the segment**: events on Events, venues on Places, for the
- *   part of the map on screen (its centre and a radius reaching its corners,
- *   the same `lat`/`lon`/`radius` the lists take). No request while the view
- *   stays inside a circle fully answered; a refusal backs off, a segment switch
+ *   part of the map on screen (its box, `bbox`: no position, so no distance
+ *   measured from the camera). No request while the view
+ *   stays inside a box fully answered; a refusal backs off, a segment switch
  *   included; read again when the screen or the app comes back. Which venues
  *   exist is the server's rule; the map draws what it is sent.
  * - **Below the buildings' zoom a pin is a dot**, a venue's glow stepping with
@@ -253,7 +252,7 @@ export const HomeMap = memo(function HomeMap({
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.get() }))
   const followedFix = useRef<{ latitude: number; longitude: number } | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The last circle fully answered, and for which segment: a switch asks again.
+  // The last box fully answered, and for which segment: a switch asks again.
   const lastQuery = useRef<{ segment: Segment; q: PinQuery } | null>(null)
   const failures = useRef(0)
   const blockedUntil = useRef(0)
@@ -552,7 +551,7 @@ export const HomeMap = memo(function HomeMap({
     if (near(lastMove.current?.to)) lastMove.current = null
     if (near(pendingMove.current?.to)) pendingMove.current = null
     if (touched.current) return
-    // A read pending on a fix-centred view, the circle already answered around it, and the fix followed: none survives the switch.
+    // A read pending on a fix-centred view, the box already answered around it, and the fix followed: none survives the switch.
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = null
     setQuery(null)
@@ -582,11 +581,11 @@ export const HomeMap = memo(function HomeMap({
     return () => sub.remove()
   }, [])
 
-  /** Ask for this view's pins, unless a fully answered circle holds it or a refusal is still cooling off. */
+  /** Ask for this view's pins, unless a fully answered box holds it or a refusal is still cooling off. */
   const ask = (bounds: Bounds) => {
-    const next = roundQuery(viewportQuery(bounds))
+    const next = viewportBox(bounds)
     const last = lastQuery.current?.segment === segment ? lastQuery.current.q : null
-    if (insideLastCircle(last, next) || Date.now() < blockedUntil.current) return
+    if (insideLastBox(last, next) || Date.now() < blockedUntil.current) return
     setQuery(next)
   }
 
@@ -642,7 +641,7 @@ export const HomeMap = memo(function HomeMap({
           if (stale) return
           if (result.kind === 'pins') {
             failures.current = 0
-            // A full page may not be all there is: it does not count as covering the circle (review M2).
+            // More in the box than were sent: it does not count as covering it (review M2).
             lastQuery.current = result.truncated ? null : { segment, q: query }
             setLoaded({ segment, pins: result.pins })
           } else if (result.kind === 'rate_limited') {

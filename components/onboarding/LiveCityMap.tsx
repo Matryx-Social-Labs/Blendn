@@ -4,7 +4,7 @@ import { Platform, StyleSheet, View, type LayoutChangeEvent, type NativeSyntheti
 
 import { apiClient } from '../../lib/apiClient'
 import { getDistanceKm } from '../../lib/geo'
-import { cameraMove, LIGHT_MIN_ZOOM, loadPins, tiltedZoom, type Bounds, type Pin } from '../../lib/homeMap'
+import { boxAround, cameraMove, LIGHT_MIN_ZOOM, loadPins, tiltedZoom, type Bounds, type Pin } from '../../lib/homeMap'
 import { Logger } from '../../lib/logger'
 import { locationSharingOn } from '../../lib/shareLocation'
 import type { LngLat } from '../../lib/mapLit'
@@ -84,7 +84,7 @@ export function LiveCityMap({ you, onShown, onLive }: { you: LngLat | null; onSh
     if (!target) return
     if (you && !locationSharingOn()) return
     let alive = true
-    const q = { lat: target[1], lon: target[0], radius: PIN_RADIUS_KM }
+    const q = boxAround(target, PIN_RADIUS_KM)
     const api = pinApiFor(!you)
     Promise.all([loadPins('events', q, api, PIN_LIMIT), loadPins('places', q, api, PIN_LIMIT)])
       .then((answers) => {
