@@ -11,7 +11,7 @@ import { IconButton } from '../ds/IconButton'
 import { TitleTabs } from '../ds/TitleTabs'
 import { Text } from '../ui/Text'
 import { PulseSearchRow } from '../pulse/PulseHeader'
-import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, pulseRest, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
+import { drawerPeekLine, drawerSnapPoints, keyboardLeft, pulseRest, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { bannerReach, type Pin } from '../../lib/homeMap'
 import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
@@ -114,7 +114,7 @@ export function HomeShell({
   renderEvents: (onBrowse: (browse: HomeBrowse) => void, visible: boolean, full: boolean, shell: PulseShell) => ReactNode
 }) {
   const insets = useSafeAreaInsets()
-  const { height } = useWindowDimensions()
+  const { height, fontScale } = useWindowDimensions()
   const focused = useIsFocused()
   const [segment, setSegment] = useState<Segment>('events')
   const [browse, setBrowse] = useState<HomeBrowse>({
@@ -133,7 +133,7 @@ export function HomeShell({
   /** Places' one-line summary, kept at peek (null while nothing is known: no room is made for a line that is not there). */
   const [placesLine, setPlacesLine] = useState<string | null>(null)
   const peekText = segment === 'places' ? placesLine : (browse.peekLine ?? null)
-  const peekExtra = peekText ? DRAWER_PEEK_LINE : 0
+  const peekExtra = peekText ? drawerPeekLine(fontScale) : 0
   // Option C's rest: one whole lead card above the tab bar under the header and the chips (`pulseRest`), on every screen size.
   const rest = useMemo(() => pulseRest({ height, topChrome: insets.top + TOP_BAR_HEIGHT, tabBarTop: tabBarTop(height, insets.bottom) }), [height, insets.top, insets.bottom])
   const points = useMemo(

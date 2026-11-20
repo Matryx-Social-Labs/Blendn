@@ -10,7 +10,6 @@ import { GroundProvider } from '../ds/shared'
 import {
   DRAWER_HANDLE_HEIGHT,
   DRAWER_HEADER_HEIGHT,
-  DRAWER_PEEK_LINE,
   DRAWER_SNAP_LABEL,
   drawerContentHeight,
   settleSnap,
@@ -273,7 +272,7 @@ const styles = StyleSheet.create({
     borderColor: COLOR.hairline,
     borderTopColor: MATERIAL.glassSpecular,
   },
-  peek: { position: 'absolute', left: 0, right: 0, top: DRAWER_HEADER_HEIGHT, height: DRAWER_PEEK_LINE, paddingHorizontal: SPACE.xl, backgroundColor: COLOR.ink },
+  peek: { position: 'absolute', left: 0, right: 0, top: DRAWER_HEADER_HEIGHT, paddingHorizontal: SPACE.xl, backgroundColor: COLOR.ink },
   // The board's `.ttab`: 24 from the left, 16 from the right, so the search circle sits 16 in, as the bell does above it.
   header: { height: DRAWER_HEADER_HEIGHT, paddingLeft: SPACE.xl, paddingRight: SPACE.lg },
   // The whole width and 44pt tall: the grabber is the drawing (8 pt from the edge, kit.css `.grab`), this is the target.
