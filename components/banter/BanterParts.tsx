@@ -276,7 +276,7 @@ export function RequestCard({
             onPress={onOpen}
             disabled={!onOpen}
             accessibilityRole={onOpen ? 'button' : 'text'}
-            accessibilityLabel={[name, met, note].filter(Boolean).join('. ')}
+            accessibilityLabel={[name, met, note, time].filter(Boolean).join('. ')}
             accessibilityHint={onOpen ? 'Opens their profile' : undefined}
             style={styles.requestWho}
           >
@@ -299,8 +299,10 @@ export function RequestCard({
               </Text>
             </View>
           </Pressable>
-          {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. */}
-          <TimeTag time={time} />
+          {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. Read in the card's label, not a stop alone. */}
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <TimeTag time={time} />
+          </View>
           {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
         </View>
         <View style={styles.requestActions}>
