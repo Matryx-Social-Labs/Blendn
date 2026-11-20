@@ -18,7 +18,7 @@ import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, GroundProvider, useAnnounced, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, SELECTION, useAnnounced, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { PhotoScrim } from '../ui/GradientFill'
@@ -276,7 +276,7 @@ export function RequestCard({
             onPress={onOpen}
             disabled={!onOpen}
             accessibilityRole={onOpen ? 'button' : 'text'}
-            accessibilityLabel={[name, met, note].filter(Boolean).join('. ')}
+            accessibilityLabel={[name, met, note, time].filter(Boolean).join('. ')}
             accessibilityHint={onOpen ? 'Opens their profile' : undefined}
             style={styles.requestWho}
           >
@@ -299,8 +299,10 @@ export function RequestCard({
               </Text>
             </View>
           </Pressable>
-          {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. */}
-          <TimeTag time={time} />
+          {/* The time is a tag beside the row's control, as the Banter row's: it stops where a control does. Read in the card's label, not a stop alone. */}
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <TimeTag time={time} />
+          </View>
           {onMore ? <IconButton icon="ellipsis" accessibilityLabel={`More options for the request from ${name}`} onPress={onMore} testID={testID && `${testID}-more`} /> : null}
         </View>
         <View style={styles.requestActions}>
@@ -353,6 +355,8 @@ export type RowFace =
   | { kind: 'room'; cover?: string | null }
   | { kind: 'crew'; seed: string | null }
   | { kind: 'pair'; seeds: [string | null, string | null] }
+  /** A Lobby room (Flow 5 C5 B-A): what its post is about, on the rose tile, as the Lobby's own kind pill draws it. */
+  | { kind: 'glyph'; icon: IconName }
 
 /** What line 2 says (precedence: a status chip, then not sent, then a draft, then the last message). */
 export type RowLine =
@@ -403,7 +407,10 @@ export function BanterRow({
       testID={testID}
       onPress={onPress}
       disabled={!onPress}
+      // Unlabelled, a SwipeRow around it is the element: no stop of its own (Android focuses a bare Pressable, so TalkBack stopped twice).
       accessible={!!accessibilityLabel}
+      focusable={!!accessibilityLabel}
+      importantForAccessibility={accessibilityLabel ? 'auto' : 'no'}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -544,6 +551,12 @@ function RowAvatar({ face }: { face: RowFace }) {
       )
     case 'pair':
       return <PairEmblem seeds={face.seeds} ring={COLOR.ink} />
+    case 'glyph':
+      return (
+        <View style={[styles.squareFace, styles.centre, styles.glyphFace]}>
+          <Icon name={face.icon} size={ICON.control} color={SELECTION.rose.glyph} />
+        </View>
+      )
   }
 }
 
@@ -649,6 +662,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.surface,
   },
   chipWarn: { backgroundColor: COLOR.warningTint },
+  glyphFace: { backgroundColor: SELECTION.rose.fill },
   squareFace: { width: ROW_AVATAR, height: ROW_AVATAR, borderRadius: SQUARE_RADIUS, overflow: 'hidden', backgroundColor: COLOR.surface },
   pair: { width: ROW_AVATAR, height: ROW_AVATAR },
   pairTile: {

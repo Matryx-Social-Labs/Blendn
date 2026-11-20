@@ -54,7 +54,7 @@ describe('metInLine: where you met, from the server (admin #935)', () => {
   test('no origin, an unknown kind or a blank name says nothing', () => {
     expect(metInLine(null)).toBeNull()
     expect(metInLine(undefined)).toBeNull()
-    expect(metInLine({ kind: 'board_post' as never, name: 'Your ride' })).toBeNull()
+    expect(metInLine({ kind: 'crew' as never, name: 'Your ride' })).toBeNull()
     expect(metInLine({ kind: 'event', name: '   ' })).toBeNull()
   })
 })
@@ -66,6 +66,21 @@ describe("requestFrom carries the server's metIn, validated at the boundary", ()
 
   test('an event origin is kept', () => {
     expect(requestFrom({ ...base, metIn: { kind: 'event', name: 'Bengaluru Design Festival 2026' } }).met_in).toEqual({ kind: 'event', name: 'Bengaluru Design Festival 2026' })
+  })
+
+  test('a Lobby origin is kept, with what the post is about (admin #991)', () => {
+    expect(requestFrom({ ...base, metIn: { kind: 'board_post', name: 'Rooftop Sundowner', subKind: 'ride', yours: true } }).met_in).toEqual({
+      kind: 'board_post',
+      name: 'Rooftop Sundowner',
+      subKind: 'ride',
+      yours: true,
+    })
+    expect(requestFrom({ ...base, metIn: { kind: 'board_post', name: 'X', subKind: 'yacht', yours: 'yes' } }).met_in).toEqual({
+      kind: 'board_post',
+      name: 'X',
+      subKind: null,
+      yours: false,
+    })
   })
 
   test('absent, null or malformed is null (an older server, a raw id, a gone room)', () => {

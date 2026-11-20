@@ -1,3 +1,5 @@
+import { joinedTitle, type LobbySubKind } from './lobby'
+
 /**
  * Who a person is, as a face, in one place (Flow 5 C5; owner F1 B, 2026-11-12). Every Banter face (rows, requests,
  * facepiles, the DM header) asks this, so the rule cannot drift between surfaces:
@@ -25,11 +27,17 @@ export function initialOf(name: string): string {
   return letter ? letter.toLocaleUpperCase() : '?'
 }
 
-/** Where a message request's two people met, as the server says it (admin #935): `null` when it does not know. */
-export type MetIn = { kind: 'event' | 'venue_day'; name: string }
+/**
+ * Where a message request's two people met, as the server says it (admin #935): `null` when it does not know. A Lobby
+ * room (admin #991) says what its post is about and whether it is the reader's.
+ */
+export type MetIn =
+  | { kind: 'event' | 'venue_day'; name: string }
+  | { kind: 'board_post'; name: string; subKind: LobbySubKind | null; yours: boolean }
 
-/** "Met in the room at {name}" on the Requests card, or nothing. A venue day's name is already the venue's. */
+/** "Met in the room at {name}", or "Met in the Lobby · Your ride" (Flow 5 C5), on the Requests card; or nothing. */
 export function metInLine(metIn: MetIn | null | undefined): string | null {
+  if (metIn?.kind === 'board_post') return `Met in the Lobby · ${joinedTitle({ subKind: metIn.subKind })}`
   if (!metIn || (metIn.kind !== 'event' && metIn.kind !== 'venue_day')) return null
   const name = metIn.name?.trim()
   return name ? `Met in the room at ${name}` : null
