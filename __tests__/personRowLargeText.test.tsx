@@ -3,7 +3,7 @@
  * the name grows to its role's cap and takes two lines at the accessibility sizes; the line under it grows to the meta cap
  * and takes four; the row's height is a minimum. Never a name held to one line at the control cap over a meta that grows.
  */
-import { act, render, screen } from '@testing-library/react-native'
+import { act, render, screen, within } from '@testing-library/react-native'
 import React from 'react'
 import { Dimensions, StyleSheet, Text } from 'react-native'
 
@@ -14,9 +14,10 @@ jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 import { IncomingRequestRow } from '../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../components/friends/InviteLinkCard'
 import { PersonRow, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../components/friends/PersonRow'
+import { ROW_ACTION_HEIGHT } from '../components/ds/Button'
 import { RevealBar } from '../components/ds/RevealBar'
-import { CONTROL_FONT_CAP } from '../components/ds/shared'
-import { FONT_FAMILY, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { AX_FONT_SCALE, CONTROL_FONT_CAP } from '../components/ds/shared'
+import { FONT_FAMILY, MAX_FONT_SCALE, SIZE } from '../lib/design/tokens'
 import { AX_XXXL, clipped, uncapped } from './helpers/ax'
 /* eslint-enable import/first */
 
@@ -46,6 +47,46 @@ describe('PersonRow', () => {
     await render(<PersonRow person={person} detail="Blocked " detailMono="12 Sep" detailTail=" · Harassment and repeated messages" />)
     expect(screen.getByTestId('person-detail', hidden).props.numberOfLines).toBe(2)
     expect(screen.getByTestId('person-name', hidden).props.numberOfLines).toBe(1)
+  })
+
+  /*
+   * Owner pick a, 2026-11-20 (backend round 1, Blocked at AX): beside its action the text column was a third of the row, so
+   * "Thiruvananthapuram" broke mid-word and names wrapped a word a line. From the AX sizes (`useLargeText`, AX_FONT_SCALE) the
+   * action goes under the text, at the text's leading edge, and the text takes the row; below them it stays beside the text.
+   * Negative controls (2026-11-20): the action always beside the text (the old row) fails the three AX cases only; the action
+   * always under it fails the three below-AX cases only.
+   */
+  const unblock = <Text testID="trail">Unblock</Text>
+  const blocked = (
+    <PersonRow person={{ userId: 'u2', name: 'Marc-André Lefebvre-Desrosiers', photo: null }} named={false} detail="Blocked " detailMono="20 Nov" detailTail=" · Thiruvananthapuram Tech Week" trailing={unblock} />
+  )
+  const underText = () => within(screen.getByTestId('person-text', hidden)).queryByTestId('trail', hidden)
+
+  it.each([AX_FONT_SCALE, 2, AX_XXXL])('at %s the action goes under the text, at its leading edge, and the text takes the row', async (scale) => {
+    await at(402, scale)
+    await render(blocked)
+    expect(underText()).not.toBeNull()
+    expect(screen.getAllByTestId('trail', hidden)).toHaveLength(1)
+    const under = StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style)
+    expect(under.alignSelf).toBe('flex-start')
+    // A small button's slop to the larger target (Android's 48) stays inside the row, not over the next row's name.
+    const slop = (Math.max(SIZE.targetIos, SIZE.targetAndroid) - ROW_ACTION_HEIGHT) / 2
+    expect(under.marginVertical).toBeGreaterThanOrEqual(slop)
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it.each([1, 1.3, AX_FONT_SCALE - 0.01])('at %s the action stays beside the text, centred on the row', async (scale) => {
+    await at(402, scale)
+    await render(blocked)
+    expect(underText()).toBeNull()
+    expect(screen.getAllByTestId('trail', hidden)).toHaveLength(1)
+    expect(StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style).alignSelf).toBe('center')
+  })
+
+  it('a row with no action draws no action slot at any size', async () => {
+    await at(402, AX_XXXL)
+    await render(<PersonRow person={person} detail="Friends since " detailMono="Oct 2026" />)
+    expect(screen.queryByTestId('person-trailing', hidden)).toBeNull()
   })
 
   it('a list may window the rows at PERSON_ROW_HEIGHT only at the default text size: past it a row can grow', async () => {
