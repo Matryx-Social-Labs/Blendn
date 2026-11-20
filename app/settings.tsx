@@ -124,14 +124,14 @@ function SettingsScreenContent() {
   const authMethod = useAuthMethod(user?.signInMethod)
   // The retention line on the Delete sheet follows the account's country (Me + settings A 07): never India's law for Toronto.
   const homeCountry = useHomeCountry(user?.id)
-  // How many you blocked, on the Blocked row: the first page's count, "+" when there is more (a server total is Backend later).
-  const [blocked, setBlocked] = useState<{ count: number; more: boolean } | null>(null)
+  // How many you blocked, on the Blocked row: the server's total (SCRUM-1082).
+  const [blocked, setBlocked] = useState<number | null>(null)
   useFocusEffect(
     useCallback(() => {
       let live = true
       fetchBlockedPage()
         .then((result) => {
-          if (live && result.ok) setBlocked({ count: result.page.users.length, more: !!result.page.nextCursor })
+          if (live && result.ok) setBlocked(result.page.total)
         })
         .catch(() => {})
       return () => {
@@ -610,7 +610,7 @@ function SettingsScreenContent() {
           <SettingsRow
             icon="ban"
             title="Blocked"
-            hint={blocked ? blockedCountLine(blocked.count, blocked.more) ?? undefined : undefined}
+            hint={blocked ? blockedCountLine(blocked) ?? undefined : undefined}
             trail="chevron"
             onPress={() => router.push('/blocked-users')}
             testID="settings-blocked"

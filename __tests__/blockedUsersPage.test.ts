@@ -7,7 +7,10 @@ const user = (id: string) => ({ blocked_id: id, blocked_user_name: id, blocked_u
 
 describe('blockedPageFrom', () => {
   it('an old server: everyone in users, no cursor, so one page that is the whole list', () => {
-    expect(blockedPageFrom({ users: [user('a')] })).toEqual({ users: [user('a')], nextCursor: null })
+    expect(blockedPageFrom({ users: [user('a')] })).toEqual({ users: [user('a')], nextCursor: null, total: 1 })
+  })
+  it('the total is the server\'s, the whole list (or the whole search) and not the page', () => {
+    expect(blockedPageFrom({ users: [user('a')], pagination: { nextCursor: 'c2', totalCount: 214 } })?.total).toBe(214)
   })
   it('a cursor, flat or under pagination', () => {
     expect(blockedPageFrom({ users: [], nextCursor: 'c2' })).toMatchObject({ nextCursor: 'c2' })
@@ -28,6 +31,17 @@ describe('fetchBlockedPage', () => {
     await fetchBlockedPage()
     await fetchBlockedPage('c 2')
     expect(mockQueued.mock.calls.map((c) => c[0])).toEqual([`/api/mobile/users/blocked?limit=${BLOCKED_PAGE_SIZE}`, `/api/mobile/users/blocked?limit=${BLOCKED_PAGE_SIZE}&cursor=c%202`])
+  })
+  it('a search goes to the server, trimmed, on every page; a blank one is no search', async () => {
+    mockQueued.mockResolvedValue({ success: true, data: { users: [], nextCursor: null } })
+    await fetchBlockedPage(null, '  Cosmic Panda ')
+    await fetchBlockedPage('c2', 'Saint-Jean & co')
+    await fetchBlockedPage(null, '   ')
+    expect(mockQueued.mock.calls.map((c) => c[0])).toEqual([
+      `/api/mobile/users/blocked?limit=${BLOCKED_PAGE_SIZE}&q=Cosmic%20Panda`,
+      `/api/mobile/users/blocked?limit=${BLOCKED_PAGE_SIZE}&cursor=c2&q=Saint-Jean%20%26%20co`,
+      `/api/mobile/users/blocked?limit=${BLOCKED_PAGE_SIZE}`,
+    ])
   })
   it('a failed read is a failure, not an empty list', async () => {
     mockQueued.mockResolvedValue({ success: false, error: 'offline' })

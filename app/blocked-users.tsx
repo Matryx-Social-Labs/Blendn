@@ -1,5 +1,5 @@
 import { router } from 'expo-router'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { RefreshControl, StyleSheet, Text, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -12,8 +12,8 @@ import { PersonRow } from '../components/friends/PersonRow'
 import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
 import { COLOR, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
-import { blockedLine } from '../lib/blockedLine'
-import { BLOCKED_LOAD_CAP, BLOCKED_SEARCH_FROM, blockedCountLine, fetchBlockedPage, searchBlocked } from '../lib/blockedUsersPage'
+import { blockedLine, blockedName } from '../lib/blockedLine'
+import { BLOCKED_SEARCH_FROM, BLOCKED_SEARCH_MAX, blockedCountLine, fetchBlockedPage } from '../lib/blockedUsersPage'
 import { unblockUser, type BlockedUser } from '../lib/safetyUtils'
 import { showSheet } from '../lib/sheet'
 import { useTopBarState } from '../lib/useTopBarState'
@@ -23,6 +23,8 @@ import { useSkeletonCrossfade } from '../components/motion/useSkeletonCrossfade'
 
 /** Empty pages with a cursor after them, followed on in one go before the foot waits for the next end-reach. */
 const MAX_EMPTY_HOPS = 5
+/** A search asks the server once typing pauses this long. */
+const SEARCH_DEBOUNCE_MS = 300
 
 /**
  * The people you blocked, and a way to undo each.
@@ -34,7 +36,8 @@ const MAX_EMPTY_HOPS = 5
  *
  * Read a page at a time (`fetchBlockedPage`) and drawn by a FlatList that mounts only the rows near the screen, so a
  * long list costs the same as a short one. The next page is asked for as the end comes into view; a server that has no
- * cursors yet answers everyone at once, which is one page with no next.
+ * cursors yet answers everyone at once, which is one page with no next. A search is the server's (`?q=`), paged the same
+ * way, so a name further back than anything loaded is still found; the count is the server's total.
  */
 function BlockedUsersContent() {
   const bold = useBoldText()
@@ -47,7 +50,11 @@ function BlockedUsersContent() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [moreFailed, setMoreFailed] = useState(false)
   const [query, setQuery] = useState('')
-  const shown = useMemo(() => searchBlocked(blockedUsers, query), [blockedUsers, query])
+  /** The search the list on screen answers: `query` once typing pauses. */
+  const [searched, setSearched] = useState('')
+  /** The server's count: of everybody (for the Search placeholder), and of what the search found. */
+  const [total, setTotal] = useState(0)
+  const [found, setFound] = useState(0)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
@@ -62,13 +69,15 @@ function BlockedUsersContent() {
    *
    * State is set only in the callbacks, once the request has settled.
    */
-  const loadBlockedUsers = () => {
+  const loadBlockedUsers = (search = searched) => {
     const mine = ++read.current
-    return fetchBlockedPage()
+    return fetchBlockedPage(null, search)
       .then((result) => {
         if (read.current !== mine) return
         if (result.ok) {
           setBlockedUsers(result.page.users)
+          if (search.trim()) setFound(result.page.total)
+          else setTotal(result.page.total)
           setNextCursor(result.page.nextCursor)
           setLoadingMore(false)
           setMoreFailed(false)
@@ -94,15 +103,14 @@ function BlockedUsersContent() {
    * stall on an empty page.
    */
   const loadMore = useCallback((retry = false) => {
-    // Never past the cap, and not while searching: the search runs over what is loaded (Backend later lifts both).
-    if (!nextCursor || loadingMore || (moreFailed && !retry) || blockedUsers.length >= BLOCKED_LOAD_CAP || query.trim()) return
+    if (!nextCursor || loadingMore || (moreFailed && !retry)) return
     setMoreFailed(false)
     const mine = read.current
     setLoadingMore(true)
     const run = async () => {
       let cursor: string | null = nextCursor
       for (let hops = 0; cursor && hops < MAX_EMPTY_HOPS; hops += 1) {
-        const result = await fetchBlockedPage(cursor)
+        const result = await fetchBlockedPage(cursor, searched)
         if (read.current !== mine) return
         if (!result.ok) return setMoreFailed(true)
         setBlockedUsers((prev) => {
@@ -120,15 +128,24 @@ function BlockedUsersContent() {
         if (read.current === mine) setMoreFailed(true)
       })
       .finally(() => setLoadingMore(false))
-  }, [nextCursor, loadingMore, moreFailed, blockedUsers.length, query])
+  }, [nextCursor, loadingMore, moreFailed, searched])
   const onEndReached = useCallback(() => loadMore(), [loadMore])
 
   useEffect(() => {
-    loadBlockedUsers()
-  }, [])
+    const next = query.trim()
+    if (next === searched) return
+    const timer = setTimeout(() => setSearched(next), next ? SEARCH_DEBOUNCE_MS : 0)
+    return () => clearTimeout(timer)
+  }, [query, searched])
+
+  // The first read, and again for every search (the rows on screen stay until the answer lands).
+  useEffect(() => {
+    loadBlockedUsers(searched)
+  }, [searched])
 
   const handleUnblock = (user: BlockedUser) => {
-    const name = user.blocked_user_name || 'this person'
+    const known = blockedName(user)
+    const name = known === 'Someone' ? 'this person' : known
     showSheet({
       kind: 'actions',
       hue: 'violet',
@@ -143,7 +160,8 @@ function BlockedUsersContent() {
             const result = await unblockUser(user.blocked_id)
             if (!result.success) return { ok: false, error: "Couldn’t unblock them. Try again." }
             setBlockedUsers((prev) => prev.filter((u) => u.blocked_id !== user.blocked_id))
-            return { ok: true, toast: user.blocked_user_name ? `${user.blocked_user_name} is unblocked` : 'Unblocked' }
+            setTotal((n) => Math.max(0, n - 1))
+            return { ok: true, toast: known === 'Someone' ? 'Unblocked' : `${known} is unblocked` }
           },
         },
         { label: 'Cancel', cancel: true },
@@ -158,7 +176,7 @@ function BlockedUsersContent() {
   }
 
   const renderBlockedUser = ({ item }: { item: BlockedUser }) => {
-    const name = item.blocked_user_name || 'Someone'
+    const name = blockedName(item)
     const line = blockedLine(item)
     return (
       // Unblocked, the row fades and the rest close the gap (DS #16, audit M13).
@@ -187,8 +205,8 @@ function BlockedUsersContent() {
         actions={[{ label: 'Try again', onPress: () => void onRefresh(), loading: refreshing }]}
       />
     ) : (
-      query.trim() ? (
-        <StateScreen testID="blocked-no-match" icon="search" title={`Nobody called “${query.trim()}”`} body="Only the people loaded here are searched." />
+      searched ? (
+        <StateScreen testID="blocked-no-match" icon="search" title={`Nobody called “${searched}”`} body="Search by the name you saw them as, or where you blocked them." />
       ) : (
         <StateScreen
           testID="blocked-empty"
@@ -236,19 +254,19 @@ function BlockedUsersContent() {
         <Animated.FlatList
           testID="blocked-users-list"
           itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
-          data={shown}
+          data={blockedUsers}
           ListHeaderComponent={
-            blockedUsers.length > 0 ? (
+            total > 0 ? (
               <View style={styles.head}>
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.lede]}>
                   They can’t see you or message you. They aren’t told.
                 </Text>
-                {blockedUsers.length > BLOCKED_SEARCH_FROM ? (
+                {total > BLOCKED_SEARCH_FROM ? (
                   <SearchField
                     value={query}
-                    onChangeText={setQuery}
-                    placeholder={`Search ${blockedCountLine(blockedUsers.length, !!nextCursor)}`}
-                    resultsLabel={query.trim() ? `${shown.length} found` : undefined}
+                    onChangeText={(text) => setQuery(text.slice(0, BLOCKED_SEARCH_MAX))}
+                    placeholder={`Search ${blockedCountLine(total)}`}
+                    resultsLabel={searched ? `${found.toLocaleString('en-US')} found` : undefined}
                     testID="blocked-search"
                   />
                 ) : null}
@@ -259,7 +277,7 @@ function BlockedUsersContent() {
           keyExtractor={(item) => item.blocked_id}
           renderItem={renderBlockedUser}
           // The foot is the list's own padding: a wrapper that insets the screen cuts the scroll on a line above the home indicator.
-          contentContainerStyle={[shown.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
+          contentContainerStyle={[blockedUsers.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
           // After the last unblock it waits for the row's fade (emptyAfterRowOut).
           ListEmptyComponent={<Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{renderEmptyState()}</Animated.View>}
           onEndReached={onEndReached}

@@ -15,11 +15,14 @@ jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 const mockShowSheet = jest.fn()
 jest.mock('../lib/sheet', () => ({ ...jest.requireActual('../lib/sheet'), showSheet: (...a: unknown[]) => mockShowSheet(...a) }))
 
+import { AccessibilityInfo } from 'react-native'
 import BlockedUsers from '../app/blocked-users'
+
+const mockAnnounce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {})
 
 const user = (i: number) => ({ blocked_id: `u${i}`, blocked_user_name: `Person ${i}`, blocked_user_photo: null, reason: null, blocked_at: '2026-09-12T10:00:00Z' })
 const users = (from: number, n: number) => Array.from({ length: n }, (_, i) => user(from + i))
-const ok = (list: unknown[], nextCursor: string | null = null) => ({ ok: true, page: { users: list, nextCursor } })
+const ok = (list: unknown[], nextCursor: string | null = null, total: number = list.length) => ({ ok: true, page: { users: list, nextCursor, total } })
 
 beforeEach(() => {
   mockFetch.mockReset()
@@ -88,7 +91,7 @@ it('asks for the next page when the end comes into view, once, and adds it witho
   const list = screen.getByTestId('blocked-users-list')
   await act(async () => fireEvent(list, 'endReached'))
   expect(await screen.findByText('Person 4')).toBeTruthy()
-  expect(mockFetch).toHaveBeenLastCalledWith('c2')
+  expect(mockFetch).toHaveBeenLastCalledWith('c2', '')
   expect(screen.getAllByText('Person 2')).toHaveLength(1)
   // No cursor now: reaching the end again asks nothing.
   await act(async () => fireEvent(list, 'endReached'))
@@ -141,10 +144,10 @@ it('an empty page with a cursor after it is followed on at once', async () => {
   await screen.findByText('Person 0')
   await act(async () => fireEvent(screen.getByTestId('blocked-users-list'), 'endReached'))
   expect(await screen.findByText('Person 7')).toBeTruthy()
-  expect(mockFetch.mock.calls.map((c) => c[0])).toEqual([undefined, 'c2', 'c3', 'c4'])
+  expect(mockFetch.mock.calls.map((c) => c[0])).toEqual([null, 'c2', 'c3', 'c4'])
 })
 
-describe('at scale (Me + settings A 06): a count and a search past 20, over the loaded rows', () => {
+describe('at scale (Me + settings A 06): the server\'s count, and a search past 20 that asks the server', () => {
   // A test above leaves fake timers on.
   beforeEach(() => jest.useRealTimers())
   it('20 people: no search', async () => {
@@ -155,33 +158,78 @@ describe('at scale (Me + settings A 06): a count and a search past 20, over the 
     expect(screen.queryByTestId('blocked-search')).toBeNull()
   })
 
-  it('21: a search that says how many, "+" while more are to come', async () => {
-    mockFetch.mockResolvedValue(ok(users(0, 21), 'c2'))
+  it('a long list says the server\'s total, not the page\'s', async () => {
+    mockFetch.mockResolvedValue(ok(users(0, 50), 'c2', 12480))
     await render(<BlockedUsers />)
     await screen.findByText('Person 0')
-    expect(screen.getByPlaceholderText('Search 21+ people')).toBeTruthy()
+    expect(screen.getByPlaceholderText('Search 12,480 people')).toBeTruthy()
     expect(screen.getByText('They can’t see you or message you. They aren’t told.')).toBeTruthy()
   })
 
-  it('finds a name case- and accent-blind, and stops paging while searching', async () => {
-    const list = [...users(0, 24), { ...user(99), blocked_user_name: 'Hélène Côté' }]
-    mockFetch.mockResolvedValue(ok(list, 'c2'))
+  it('a search asks the server, pages its own results, and comes back to the whole list when cleared', async () => {
+    mockFetch.mockResolvedValueOnce(ok(users(0, 50), 'c2', 1200))
     await render(<BlockedUsers />)
     await screen.findByText('Person 0', {}, { timeout: 3000 })
-    await act(async () => fireEvent.changeText(screen.getByTestId('blocked-search-input'), 'helene'))
-    expect(screen.getByText('Hélène Côté')).toBeTruthy()
+    mockFetch.mockResolvedValueOnce(ok([{ ...user(900), blocked_user_name: null, seen_as: 'Cosmic Panda' }], 's2', 3))
+    await act(async () => fireEvent.changeText(screen.getByTestId('blocked-search-input'), 'cosmic'))
+    expect(await screen.findByText('Cosmic Panda', {}, { timeout: 3000 })).toBeTruthy()
+    expect(mockFetch).toHaveBeenLastCalledWith(null, 'cosmic')
     expect(screen.queryByText('Person 0')).toBeNull()
-    await act(async () => fireEvent(screen.getByTestId('blocked-users-list'), 'onEndReached'))
-    expect(mockFetch).toHaveBeenCalledTimes(1)
+    // The count stays the whole list's; what the search found is announced (SearchField's resultsLabel).
+    expect(screen.getByPlaceholderText('Search 1,200 people')).toBeTruthy()
+    expect(mockAnnounce).toHaveBeenCalledWith('3 found')
+
+    mockFetch.mockResolvedValueOnce(ok([user(901)], null, 3))
+    await act(async () => fireEvent(screen.getByTestId('blocked-users-list'), 'endReached'))
+    expect(await screen.findByText('Person 901')).toBeTruthy()
+    expect(mockFetch).toHaveBeenLastCalledWith('s2', 'cosmic')
+
+    mockFetch.mockResolvedValueOnce(ok([], null, 0))
     await act(async () => fireEvent.changeText(screen.getByTestId('blocked-search-input'), 'zzz'))
-    expect(screen.getByText('Nobody called “zzz”')).toBeTruthy()
+    expect(await screen.findByText('Nobody called “zzz”', {}, { timeout: 3000 })).toBeTruthy()
+
+    mockFetch.mockResolvedValueOnce(ok(users(0, 50), 'c2', 1200))
+    await act(async () => fireEvent.changeText(screen.getByTestId('blocked-search-input'), ''))
+    expect(await screen.findByText('Person 0', {}, { timeout: 3000 })).toBeTruthy()
   })
 })
 
-it('blockedCountLine: a person, people, and "+" while the server has more', () => {
+describe('telling one "Someone" from another (SCRUM-1082)', () => {
+  it('a person never named shows the pseudonym you saw, its creature, and where you blocked them', async () => {
+    mockFetch.mockResolvedValue(
+      ok([
+        { ...user(1), blocked_user_name: null, seen_as: 'Velvet Otter', seen_in: 'Saint-Jean-sur-Richelieu Social Club' },
+        { ...user(2), blocked_user_name: null, seen_as: 'Amber Heron', seen_in: 'Tech Week' },
+      ])
+    )
+    await render(<BlockedUsers />)
+    expect(await screen.findByText('Velvet Otter')).toBeTruthy()
+    expect(screen.getByText('Amber Heron')).toBeTruthy()
+    expect(screen.getByText(/Saint-Jean-sur-Richelieu Social Club/)).toBeTruthy()
+    expect(screen.getAllByTestId('person-creature', { includeHiddenElements: true })).toHaveLength(2)
+    expect(screen.queryByText('Someone')).toBeNull()
+    expect(screen.getByLabelText('Unblock Velvet Otter')).toBeTruthy()
+  })
+
+  it('a name you were allowed to see still wins over the pseudonym', async () => {
+    mockFetch.mockResolvedValue(ok([{ ...user(1), blocked_user_name: 'Marc-André Lefebvre-Desrosiers', seen_as: 'Velvet Otter' }]))
+    await render(<BlockedUsers />)
+    expect(await screen.findByText('Marc-André Lefebvre-Desrosiers')).toBeTruthy()
+    expect(screen.queryByText('Velvet Otter')).toBeNull()
+  })
+
+  it('nothing known is "Someone"; a deleted account says so', async () => {
+    mockFetch.mockResolvedValue(ok([{ ...user(1), blocked_user_name: null }, { ...user(2), blocked_user_name: null, account_deleted: true }]))
+    await render(<BlockedUsers />)
+    expect(await screen.findAllByText('Someone')).toHaveLength(2)
+    expect(screen.getByText('Deleted account')).toBeTruthy()
+  })
+})
+
+it('blockedCountLine: a person, people, in thousands', () => {
   const { blockedCountLine } = jest.requireActual('../lib/blockedUsersPage')
-  expect(blockedCountLine(0, false)).toBeNull()
-  expect(blockedCountLine(1, false)).toBe('1 person')
-  expect(blockedCountLine(3, false)).toBe('3 people')
-  expect(blockedCountLine(50, true)).toBe('50+ people')
+  expect(blockedCountLine(0)).toBeNull()
+  expect(blockedCountLine(1)).toBe('1 person')
+  expect(blockedCountLine(3)).toBe('3 people')
+  expect(blockedCountLine(12480)).toBe('12,480 people')
 })
