@@ -57,7 +57,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { edgeGate, FRAME_NEAREST, frameOnYou, mapSummary, readingOf, staleCalloutBelow, youMark } from '../../lib/mapPresence'
+import { edgeGate, FRAME_NEAREST, frameOnYou, mapSummary, MORE_ZOOM_MAX, moreLine, readingOf, staleCalloutBelow, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -65,6 +65,7 @@ import { tint } from '../../lib/theme'
 import { distanceText, fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
+import { MoreLine } from './MoreLine'
 import { useScreenReader } from '../ds/shared'
 import { EventPiles } from './EventPiles'
 import { PileSpeech } from './PileSpeech'
@@ -378,7 +379,8 @@ export const HomeMap = memo(function HomeMap({
    * switch shows the other segment's at once, never the old ones, and the
    * query effect below asks again for the same view.
    */
-  const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[] }>({ segment, pins: NO_PINS })
+  // `total`: the server's count in the box the pins were read for (`loadPins`), for "+N more" (sheet 16).
+  const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[]; total: number | null }>({ segment, pins: NO_PINS, total: null })
   const [now, setNow] = useState(() => Date.now())
   const focusPin = focus?.pin ?? null
   const pins = useMemo(() => {
@@ -656,7 +658,7 @@ export const HomeMap = memo(function HomeMap({
             failures.current = 0
             // More in the box than were sent: it does not count as covering it (review M2).
             lastQuery.current = result.truncated ? null : { segment, q: query }
-            setLoaded({ segment, pins: result.pins })
+            setLoaded({ segment, pins: result.pins, total: result.total })
           } else if (result.kind === 'rate_limited') {
             failures.current += 1
             blockedUntil.current = Date.now() + backoffMs(failures.current, result.retryAfter)
@@ -741,6 +743,20 @@ export const HomeMap = memo(function HomeMap({
     setTouched(true)
     onTouched?.()
     moveTo({ to: [focusPin.longitude, focusPin.latitude], easeMs: MAP_THEME.camera.easeMs })
+  }
+  /*
+   * "+N more · Zoom in" (sheet 16, PICKED A): the box's total over the pins drawn, from the last settled read (so it holds
+   * while you pan). Not under Near me: there the map draws only your reach, and the box's total counts past it.
+   */
+  const zoomNow = view.current.zoom
+  const more = loaded.segment === segment && !reachHere ? moreLine(loaded.total, loaded.pins.length, zoomNow < MORE_ZOOM_MAX, segment === 'places' ? 'place' : 'event') : null
+  // One step in where you are looking: your ask, so the lap is over (as the edge marker).
+  const zoomIn = () => {
+    const centre = view.current.centre
+    if (!centre) return
+    setTouched(true)
+    onTouched?.()
+    moveTo({ to: centre, easeMs: MAP_THEME.camera.easeMs, at: { zoom: Math.min(MORE_ZOOM_MAX, zoomNow + 1), pitch: view.current.pitch } })
   }
 
   return (
@@ -841,6 +857,7 @@ export const HomeMap = memo(function HomeMap({
           />
       </View>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
+      <MoreLine line={more} top={topChrome + SPACE.md} onZoomIn={zoomIn} />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}
       {you.kind === 'approximate' ? (
