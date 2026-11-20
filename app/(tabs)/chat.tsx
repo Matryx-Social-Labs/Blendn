@@ -47,6 +47,7 @@ import { refreshAppIconBadge } from '../../lib/appBadge'
 import { BOARD_ENABLED } from '../../lib/board'
 import { dmThread, outboxLine, roomThread, useOutbox, type Thread } from '../../lib/chatOutbox'
 import { blendWith, crewRoomTitle, systemPreview, type CrewRoomRow } from '../../lib/crews'
+import { joinedTitle, kindGlyph, lobbyRoomLine, type LobbyRoomRow } from '../../lib/lobby'
 import { COLOR, DURATION, EASING, RADIUS, SPACE, SPRING, STAGGER, MAX_FONT_SCALE } from '../../lib/design/tokens'
 import { matchRowPreview } from '../../lib/matchOpener'
 import { ScreenProfiler } from '../../lib/perf'
@@ -114,7 +115,7 @@ function ChatInner() {
   const reduceMotion = useReducedMotion()
   const { showToast } = useToast()
   const inbox = useBanterInbox()
-  const { groupChats, setGroupChats, crewRooms, setCrewRooms, personalChats, setPersonalChats, incomingRequests, user } = inbox
+  const { groupChats, setGroupChats, crewRooms, setCrewRooms, lobbyRooms, personalChats, setPersonalChats, incomingRequests, user } = inbox
   const crews = useCrewInbox()
   const outbox = useOutbox()
   const membership = useRoomMembership()
@@ -184,6 +185,15 @@ function ChatInner() {
     [noteOpened]
   )
 
+  // A Lobby room opens as the room it is (the server's kind); the From the Lobby card opens it the same way.
+  const openLobbyRoom = useCallback(
+    (r: LobbyRoomRow) => {
+      noteOpened(r.id)
+      router.push({ pathname: '/chat/[id]', params: { id: r.id, roomName: joinedTitle(r) } as never })
+    },
+    [noteOpened]
+  )
+
   /* "Mark read" on one DM: the thread's first page is what opens it on the server (no per-thread route exists). */
   const markRead = useCallback(
     async (chat: PersonalChat) => {
@@ -222,9 +232,31 @@ function ChatInner() {
     [outbox]
   )
 
-  const { crewRows, peopleRows, pastRows } = useMemo(() => {
+  const { lobbyRows, crewRows, peopleRows, pastRows } = useMemo(() => {
     const now = new Date()
     const byRecent = (a: Row, b: Row) => b.sortTime - a.sortTime
+    // B-A Rooms: the Lobby's ride and group rooms. Line 2 is who with and the post's words (owner pick A, 2026-11-20).
+    const lobbyRows: Row[] = lobbyRooms
+      .filter((r) => !membership.left.has(r.id))
+      .map((r): Row => {
+        const title = joinedTitle(r)
+        const text = lobbyRoomLine(r.others, r.name)
+        return {
+          key: `l:${r.id}`,
+          title,
+          face: { kind: 'glyph', icon: kindGlyph(r.kind, r.subKind) },
+          line: lineFor(roomThread(r.id, user?.id), { kind: 'text', text }),
+          time: inboxTimeLabel(r.lastMessageAt ?? undefined, now),
+          unread: r.unreadCount > 0,
+          muted: roomMuted(r.id),
+          sortTime: r.lastMessageAt ? Date.parse(r.lastMessageAt) : 0,
+          searchText: `${title} ${text}`.toLowerCase(),
+          open: () => openLobbyRoom(r),
+          swipe: [{ icon: 'bell-off', label: 'Mute', onPress: () => setMuteFor(r.id) }],
+          canMute: true,
+        }
+      })
+      .sort(byRecent)
     const crewRows: Row[] = crewRooms
       .filter((r) => r.kind === 'crew' && !membership.left.has(r.id))
       .map((r): Row => {
@@ -299,8 +331,8 @@ function ChatInner() {
         }
       })
       .sort(byRecent)
-    return { crewRows, peopleRows, pastRows }
-  }, [crewRooms, personalChats, rooms, membership.left, user?.id, crews, lineFor, roomMuted, revealSeen, openCrewRoom, openDm, openRoom, markRead])
+    return { lobbyRows, crewRows, peopleRows, pastRows }
+  }, [lobbyRooms, openLobbyRoom, crewRooms, personalChats, rooms, membership.left, user?.id, crews, lineFor, roomMuted, revealSeen, openCrewRoom, openDm, openRoom, markRead])
 
   const trimmed = query.trim().toLowerCase()
   const match = useCallback((rows: Row[]) => (trimmed ? rows.filter((r) => r.searchText.includes(trimmed)) : rows), [trimmed])
@@ -318,6 +350,7 @@ function ChatInner() {
   const items = useMemo<Item[]>(() => {
     // Mark all read is the header's control only, as the Flow 5 frame draws it (D29): the People link said it twice.
     const sections: [string, Row[]][] = [
+      ['Rooms', match(lobbyRows)],
       ['Crews', match(crewRows)],
       ['People', match(peopleRows)],
       ['Past rooms', match(pastRows)],
@@ -331,7 +364,7 @@ function ChatInner() {
       if (title === 'People' && morePeople) out.push({ type: 'more', key: 'more:people' })
     }
     return out
-  }, [crewRows, peopleRows, pastRows, match, morePeople])
+  }, [lobbyRows, crewRows, peopleRows, pastRows, match, morePeople])
   const liveOrder = useLatest(() => items.map((i) => i.key))
   // The touch's state and its timers (`holdController`): driven only by the list's event handlers.
   const [hold] = useState(() => holdController((held) => setHeldOrder(held ? liveOrder.current() : null)))

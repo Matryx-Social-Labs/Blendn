@@ -217,8 +217,8 @@ describe('the clock', () => {
 
 describe('From the Lobby', () => {
   it('names what you are in, and who with, by pseudonym', () => {
-    expect(joinedTitle({ kind: 'offer', subKind: 'ride' })).toBe('Your ride')
-    expect(joinedTitle({ kind: 'offer', subKind: 'spots' })).toBe('Your group')
+    expect(joinedTitle({ subKind: 'ride' })).toBe('Your ride')
+    expect(joinedTitle({ subKind: 'spots' })).toBe('Your group')
     expect(joinedLine({ mine: false, author: 'Lunar Fox', others: 3, body: 'From Indiranagar at 5:30' })).toBe('With Lunar Fox and 2 others: From Indiranagar at 5:30')
     expect(joinedLine({ mine: false, author: 'Lunar Fox', others: 1, body: 'x' })).toBe('With Lunar Fox: x')
     expect(joinedLine({ mine: true, author: 'Me', others: 1, body: 'x' })).toBe('1 other with you: x')

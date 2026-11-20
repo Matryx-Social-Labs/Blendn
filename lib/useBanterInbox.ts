@@ -11,6 +11,7 @@ import { blockEpoch, subscribeBlocks } from './blockEpoch'
 import { laidOver, nextGroupsPage } from './chatPaging'
 import { subscribeChatListUpdates } from './chatListUpdates'
 import { crewRoomsFrom, type CrewRoomRow } from './crews'
+import { lobbyRoomsFrom, type LobbyRoomRow } from './lobby'
 import { H } from './haptics'
 import { hasDirtyDomain } from './liveSyncState'
 import { Logger } from './logger'
@@ -208,8 +209,13 @@ const roomsFrom = (data: unknown): unknown =>
   Array.isArray(data) ? data : (data as any).groups || (data as any).rooms || (data as any).data || []
 
 /** A pending message request as `GET /message-requests` sends it. */
-const metInFrom = (m: any): MetIn | null =>
-  m && (m.kind === 'event' || m.kind === 'venue_day') && typeof m.name === 'string' ? { kind: m.kind, name: m.name } : null
+const LOBBY_SUB_KINDS = ['ride', 'spots', 'ticket', 'buddy'] as const
+const metInFrom = (m: any): MetIn | null => {
+  if (!m || typeof m.name !== 'string') return null
+  if (m.kind === 'event' || m.kind === 'venue_day') return { kind: m.kind, name: m.name }
+  if (m.kind !== 'board_post') return null
+  return { kind: 'board_post', name: m.name, subKind: LOBBY_SUB_KINDS.includes(m.subKind) ? m.subKind : null, yours: m.yours === true }
+}
 
 export const requestFrom = (r: any): MessageRequest => ({
   request_id: r.id,
@@ -246,6 +252,8 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
   const [groupChats, setGroupChats] = useState<GroupChat[]>([])
   /** Crew chats and open Blend rooms (`rooms` on `GET /chat/groups`, step 9). */
   const [crewRooms, setCrewRooms] = useState<CrewRoomRow[]>([])
+  /** Lobby rooms you are seated in (`rooms`, `kind: "board_post"`, Flow 5 C5 B-A): the Banter's Rooms section. */
+  const [lobbyRooms, setLobbyRooms] = useState<LobbyRoomRow[]>([])
   const [personalChats, setPersonalChats] = useState<PersonalChat[]>([])
   const [loading, setLoading] = useState(true)
   const [listFailed, setListFailed] = useState(false)
@@ -409,7 +417,8 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
 
       // Crew chats and open Blends come with page 1 (`rooms`); each carries your mute of it too.
       const others = crewRoomsFrom(result.data)
-      for (const r of others) rememberRoomMute(r.id, r.mute)
+      const lobby = lobbyRoomsFrom(result.data)
+      for (const r of [...others, ...lobby]) rememberRoomMute(r.id, r.mute)
       if (loadId === undefined || latestLoadIdRef.current === loadId) {
         // A forced load starts over (and so drops the older pages); a quiet one lays the newest page over them.
         if (reset || !olderGroupIds.current.size) {
@@ -423,10 +432,12 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
         setHasMore(groupsNextRef.current !== null)
         setHasMorePeople(conversationsNextRef.current !== null)
         setCrewRooms(others)
+        setLobbyRooms(lobby)
       }
       if (cacheKey) {
         queryCache.set(cacheKey, groupChatData, GROUP_CHAT_CACHE_TTL)
         queryCache.set(`${cacheKey}_rooms`, others, GROUP_CHAT_CACHE_TTL)
+        queryCache.set(`${cacheKey}_lobby`, lobby, GROUP_CHAT_CACHE_TTL)
       }
       Logger.info('chat', `Loaded ${groupChatData.length} group chats`)
       return true
@@ -511,6 +522,8 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
     if (cachedGroupChats) setGroupChats((prev) => laidOver(cachedGroupChats, prev, (c) => c.chat_room_id, olderGroupIds.current))
     const cachedCrewRooms = force ? null : queryCache.get<CrewRoomRow[]>(`${groupCacheKey}_rooms`)
     if (cachedCrewRooms) setCrewRooms(cachedCrewRooms)
+    const cachedLobby = force ? null : queryCache.get<LobbyRoomRow[]>(`${groupCacheKey}_lobby`)
+    if (cachedLobby) setLobbyRooms(cachedLobby)
     if (cachedPersonalChats) setPersonalChats((prev) => laidOver(cachedPersonalChats, prev, (c) => c.conversation_id, olderPersonalIds.current))
     if (cachedRequests) {
       setIncomingRequests((prev) => laidOver(cachedRequests.incoming, prev, (r) => r.request_id, olderRequestIds.current))
@@ -539,7 +552,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
     const loadId = ++latestLoadIdRef.current
     try {
       isLoadingRef.current = true
-      const hasRenderedData = groupChats.length + personalChats.length + crewRooms.length > 0 || incomingRequests.length > 0 || hasCachedList || hasCachedRequests
+      const hasRenderedData = groupChats.length + personalChats.length + crewRooms.length + lobbyRooms.length > 0 || incomingRequests.length > 0 || hasCachedList || hasCachedRequests
       if (!hasRenderedData && (force || (!hasCachedList && shouldFetchList))) {
         setLoading(true)
       }
@@ -966,6 +979,7 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
     setGroupChats,
     crewRooms,
     setCrewRooms,
+    lobbyRooms,
     personalChats,
     setPersonalChats,
     incomingRequests,

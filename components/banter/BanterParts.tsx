@@ -18,7 +18,7 @@ import { IconButton } from '../ds/IconButton'
 import { CategoryPlate } from '../ds/EventCard'
 import { Badge, monoCaption, MonoRun, PresenceDot, ScrimPill, TimeBadge } from '../ds/MonoFamily'
 import { RollingNumber } from '../ds/RollingNumber'
-import { CONTROL_FONT_CAP, font, GroundProvider, useAnnounced, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
+import { CONTROL_FONT_CAP, font, GroundProvider, SELECTION, useAnnounced, useBoldText, useLargeText, useSelection, useTwoLineNames } from '../ds/shared'
 import { Icon, type IconName } from '../ui/Icon'
 import { Material } from '../ui/Material'
 import { PhotoScrim } from '../ui/GradientFill'
@@ -353,6 +353,8 @@ export type RowFace =
   | { kind: 'room'; cover?: string | null }
   | { kind: 'crew'; seed: string | null }
   | { kind: 'pair'; seeds: [string | null, string | null] }
+  /** A Lobby room (Flow 5 C5 B-A): what its post is about, on the rose tile, as the Lobby's own kind pill draws it. */
+  | { kind: 'glyph'; icon: IconName }
 
 /** What line 2 says (precedence: a status chip, then not sent, then a draft, then the last message). */
 export type RowLine =
@@ -544,6 +546,12 @@ function RowAvatar({ face }: { face: RowFace }) {
       )
     case 'pair':
       return <PairEmblem seeds={face.seeds} ring={COLOR.ink} />
+    case 'glyph':
+      return (
+        <View style={[styles.squareFace, styles.centre, styles.glyphFace]}>
+          <Icon name={face.icon} size={ICON.control} color={SELECTION.rose.glyph} />
+        </View>
+      )
   }
 }
 
@@ -649,6 +657,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.surface,
   },
   chipWarn: { backgroundColor: COLOR.warningTint },
+  glyphFace: { backgroundColor: SELECTION.rose.fill },
   squareFace: { width: ROW_AVATAR, height: ROW_AVATAR, borderRadius: SQUARE_RADIUS, overflow: 'hidden', backgroundColor: COLOR.surface },
   pair: { width: ROW_AVATAR, height: ROW_AVATAR },
   pairTile: {
