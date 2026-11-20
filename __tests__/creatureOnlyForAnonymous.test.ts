@@ -26,8 +26,6 @@ const ANONYMOUS_BY_DESIGN: Readonly<Record<string, string>> = {
   'components/blendn/WavedAtYouList.tsx': 'waves are between pseudonyms',
   'components/blendn/WavedAtYouStrip.tsx': 'waves are between pseudonyms',
   'components/ds/NotificationRow.tsx': 'a wave notification names nobody',
-  'components/blendn/BlendnScreen.tsx': 'the room’s people and match, as the room shows them: a photo only once revealed',
-  'components/blendn/RoomSections.tsx': 'the room’s people: a photo only once revealed, and no identity flag otherwise',
   'components/board/BoardSections.tsx': 'Lobby posts are pseudonymous',
   'components/board/LobbyCompose.tsx': 'Lobby posts are pseudonymous',
   'components/board/LobbyParts.tsx': 'Lobby posts are pseudonymous',
