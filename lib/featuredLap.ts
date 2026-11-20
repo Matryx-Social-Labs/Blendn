@@ -1,4 +1,3 @@
-import { getDistanceKm } from './geo'
 import type { FeedMediaItem } from './feedMedia'
 
 /**
@@ -21,28 +20,19 @@ export const PIP_CAP = 5
 
 type Point = { latitude: number; longitude: number }
 
-/**
- * Nearest first from `from` (the fix, or on a cold start a recent last-known position: `lapSeedOf`); the server's (and so
- * the sponsor's) order breaks ties, and orders all of it with no position. An event's own coordinates give its distance
- * from `from`: a list read before any fix carries none of the server's (SCRUM-1077). Without coordinates, the server's.
+/*
+ * The lap's order is the server's (backend round 3): with a position, Featured comes nearest first, the day's rotation
+ * breaking ties; without one, the rotation. The client sorts nothing.
  */
-export function lapOrder<T extends { distance?: number | null; latitude?: number | null; longitude?: number | null }>(events: readonly T[], from: Point | null): T[] {
-  if (!from) return [...events]
-  const far = (e: T) => {
-    if (typeof e.latitude === 'number' && typeof e.longitude === 'number') return getDistanceKm(from.latitude, from.longitude, e.latitude, e.longitude)
-    return typeof e.distance === 'number' && Number.isFinite(e.distance) ? e.distance : Number.POSITIVE_INFINITY
-  }
-  // Array.prototype.sort is stable: equal distances keep the server's order.
-  return [...events].sort((a, b) => far(a) - far(b))
-}
 
 /** How recent and how accurate a last-known position must be to order the lap on a cold start (SCRUM-1077). */
 export const LAP_SEED = { maxAgeMs: 30 * 60_000, accuracyM: 1000 } as const
 
 /**
  * A last-known position good enough to order the lap while the live fix is on its way (a cold start's first fix often
- * takes longer than the lead's 3 s hold): at most 30 min old, good to 1 km. Only ever an order: it is never shown as you,
- * nor sent anywhere. Null otherwise, and the lap keeps the server's order.
+ * takes longer than the lead's 3 s hold): at most 30 min old, good to 1 km. It is the Featured read's position until the
+ * fix lands (through the sharing gate, rounded like any other), so the server answers nearest first; it is never shown
+ * as you. Null otherwise, and the lap keeps the server's rotation.
  */
 export function lapSeedOf(position: { coords: { latitude: number; longitude: number; accuracy: number | null }; timestamp: number } | null, now: number): Point | null {
   if (!position) return null

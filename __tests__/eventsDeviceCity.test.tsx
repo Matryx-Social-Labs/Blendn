@@ -330,7 +330,13 @@ describe('the Featured lap on a cold start (SCRUM-1077)', () => {
   const order = () => screen.getAllByTestId(/^card-/).map((c) => c.props.testID)
 
   beforeEach(() => {
-    getEvents.mockImplementation(async (q: { featured?: boolean }) => ({ data: q?.featured ? picks : [], error: null }))
+    // As the server answers (backend round 3): asked with a position, Featured comes nearest first; without one, by rank.
+    getEvents.mockImplementation(async (q: { featured?: boolean; lat?: number; lon?: number }) => {
+      if (!q?.featured) return { data: [], error: null }
+      if (q.lat === undefined || q.lon === undefined) return { data: picks, error: null }
+      const far = (e: (typeof picks)[number]) => Math.abs(e.latitude - (q.lat as number)) * 111
+      return { data: [...picks].sort((a, b) => far(a) - far(b)).map((e) => ({ ...e, distance: far(e) })), error: null }
+    })
     // Cold start: GPS still warming up, nothing cached inside the fix's 2 min.
     jest.mocked(Location.getCurrentPositionAsync).mockImplementation(() => new Promise(() => {}))
     jest.mocked(Location.reverseGeocodeAsync).mockResolvedValue([{ city: 'Bengaluru' }] as never)
@@ -343,6 +349,8 @@ describe('the Featured lap on a cold start (SCRUM-1077)', () => {
     await render(<Events />)
     await settle()
     expect(order()).toEqual(['card-near', 'card-rooftop'])
+    // The server ordered it: Featured was asked from the seed (the client sorts nothing).
+    expect(getEvents.mock.calls.some(([q]) => (q as { featured?: boolean; lat?: number })?.featured && (q as { lat?: number }).lat === 12.97)).toBe(true)
   })
 
   it('never reorders in view: the live fix landing later, even beside the rooftop, keeps the order it opened in', async () => {

@@ -29,7 +29,7 @@ import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
 import { CONTROL_FONT_CAP } from '../../components/ds/shared'
 import { LeadPager, type LeadCard } from '../../components/pulse/LeadPager'
-import { applyOrder, FIX_WAIT_MS, LAP_SEED, lapOrder, lapSeedOf, leadOrderMode, type LeadOrder } from '../../lib/featuredLap'
+import { applyOrder, FIX_WAIT_MS, LAP_SEED, lapSeedOf, leadOrderMode, type LeadOrder } from '../../lib/featuredLap'
 import { feedPlaylist } from '../../lib/feedMedia'
 import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
@@ -1468,7 +1468,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const placeKey = feedKey(selectedCity, userLocation)
   // The zone too: a stored city draws before the catalogue names its zone, and the weekend asked for then was the phone's.
-  const sectionsKey = `${placeKey}|${cityZone ?? '-'}|${seedDate}|${pulls}`
+  // Where the lap is ordered from: the fix, else a recent last-known position (SCRUM-1077); Featured is asked from it.
+  const orderFrom = userLocation ?? lapSeed
+  // A seed landing before the fix asks Featured again from it (the fix itself already moves `placeKey`).
+  const sectionsKey = `${placeKey}|${userLocation ? '' : feedKey(null, lapSeed)}|${cityZone ?? '-'}|${seedDate}|${pulls}`
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
@@ -1514,8 +1517,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     void Promise.all([countFor('today'), countFor('weekend')]).then(([tonight, weekendCount]) => {
       if (!cancelled) setChipCountState({ key: sectionsKey, tonight, weekend: weekendCount })
     })
-    // Request D: the city's featured events, in the server's rank order, whatever page they would be on.
-    fetchEventsApi({ page: 0, limit: FEATURED_CAP, ...where, include: 'checkins', featured: true })
+    // Request D: the city's featured events, whatever page they would be on: nearest first from the fix, else from a recent
+    // last-known position (SCRUM-1077), else in the server's rotation. The lap runs in this order; the client sorts nothing.
+    const featuredAt = { lat: roundCoord(orderFrom?.latitude), lon: roundCoord(orderFrom?.longitude) }
+    fetchEventsApi({ page: 0, limit: FEATURED_CAP, ...where, ...featuredAt, include: 'checkins', featured: true })
       .then(({ data, error }) => {
         if (cancelled) return
         if (error || !data) Logger.warn('events', 'Featured did not load', { error: error?.message })
@@ -1590,8 +1595,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const [leadOrder, setLeadOrder] = useState<LeadOrder>('pending')
   const [fixWaitOver, setFixWaitOver] = useState(false)
-  // Where the lap is ordered from: the fix, else a recent last-known position (SCRUM-1077).
-  const orderFrom = userLocation ?? lapSeed
   const orderMode = leadOrderMode({ permission: locationStatus, sharing, hasFix: !!orderFrom, timedOut: fixWaitOver, current: leadOrder })
   if (orderMode !== leadOrder) setLeadOrder(orderMode)
   const hasPicks = leadPicks.length > 0
@@ -1602,8 +1605,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   }, [leadOrder, hasPicks])
   const picksKey = leadPicks.map((e) => e.id).sort().join('|')
   const [frozenLead, setFrozenLead] = useState<{ key: string; ids: string[] } | null>(null)
-  if (orderMode !== 'pending' && hasPicks && frozenLead?.key !== picksKey) {
-    setFrozenLead({ key: picksKey, ids: lapOrder(leadPicks, orderMode === 'near' ? orderFrom : null).map((e) => e.id) })
+  // Nearest first is the server's answer to a read with a position, which carries distances: never frozen from one before it.
+  const picksOrdered = orderMode === 'server' || leadPicks.some((e) => typeof e.distance === 'number')
+  if (orderMode !== 'pending' && hasPicks && picksOrdered && frozenLead?.key !== picksKey) {
+    setFrozenLead({ key: picksKey, ids: leadPicks.map((e) => e.id) })
   }
   const leadEvents = useMemo(
     () => applyOrder(leadPicks, frozenLead?.key === picksKey ? frozenLead.ids : null),

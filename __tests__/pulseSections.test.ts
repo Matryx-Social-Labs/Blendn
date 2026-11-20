@@ -114,6 +114,13 @@ describe('Featured', () => {
     expect(featured.events.map((e) => e.id)).toEqual(['x', 'y', 'a'])
   })
 
+  it('keeps the order the featured request came in: asked with a position the server sends it nearest first, whatever the ranks', () => {
+    const requested = [flagged('near', { featured: { kind: 'editorial', rank: 3 } }), flagged('far', { featured: { kind: 'promoted', rank: 1 } })]
+    const page = [flagged('a', { featured: { kind: 'editorial', rank: 2 } })]
+    const featured = pulseSections<E>({ page, featured: requested, ...empty }).find((s) => s.key === 'featured')!
+    expect(featured.events.map((e) => e.id)).toEqual(['near', 'far', 'a'])
+  })
+
   it('an unflagged event from that request is not featured (a server that ignores featured=true)', () => {
     const featured = pulseSections<E>({ page: [], featured: [ev('plain', 20)], ...empty }).find((s) => s.key === 'featured')
     expect(featured).toBeUndefined()
