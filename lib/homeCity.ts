@@ -105,24 +105,28 @@ export async function saveHomeCity(userId: string, slug: string | null): Promise
 
 /**
  * The country of your home city (ISO code, `CityOption.country`): what the copy that differs by country reads (the Delete
- * sheet's retention line, About you's lists). Null until home and the catalogue are both known, with no home, or from an
- * older server that sends no country; every reader treats null as "not India" and falls back to its neutral line.
+ * sheet's retention line, About you's lists). Undefined while home or the catalogue is still on its way, so a reader that
+ * asks the server by country (About you) can wait; null with no home, a catalogue that did not load, or an older server
+ * that sends no country, which every reader treats as "not India" and answers with its neutral line.
  * The catalogue is `getEventCities`' own cached read, so this costs no request the Pulse has not already made.
  */
-export function useHomeCountry(userId: string | null | undefined): string | null {
+export function useHomeCountry(userId: string | null | undefined): string | null | undefined {
   const slug = useHomeCitySlug(userId)
-  const [cities, setCities] = useState<readonly CityOption[]>([])
+  const [cities, setCities] = useState<readonly CityOption[] | null>(null)
   useEffect(() => {
     let live = true
     Promise.resolve()
       .then(() => apiClient.getEventCities())
       .then((response) => {
-        if (live && response.success && response.data) setCities(response.data.cities)
+        if (live) setCities(response.success && response.data ? response.data.cities : [])
       })
-      .catch(() => {})
+      .catch(() => {
+        if (live) setCities([])
+      })
     return () => {
       live = false
     }
   }, [])
-  return cityBySlug(cities, slug)?.country ?? null
+  if (slug === undefined || (slug !== null && cities === null)) return undefined
+  return cityBySlug(cities ?? [], slug)?.country ?? null
 }

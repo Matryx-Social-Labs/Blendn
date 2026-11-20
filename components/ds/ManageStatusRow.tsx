@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
+import type { PlusPlan } from '../../lib/plusManage'
 import { GradientFill } from '../ui/GradientFill'
 import { Icon } from '../ui/Icon'
 import { COLOR, ICON, MATERIAL, RADIUS, SIZE, SPACE, MAX_FONT_SCALE } from '../../lib/design/tokens'
@@ -23,6 +24,9 @@ const STATUS: Record<PlusStatus, { title: string; fix?: true }> = {
   night: { title: 'Night Pass · 24 hours' },
   referral: { title: 'A month on us' },
 }
+/** "Blend’n+ Yearly" for an active subscription whose plan the server names (remaining-screens 03 A). */
+const PLAN_TITLE: Record<PlusPlan, string> = { monthly: 'Blend’n+ Monthly', quarterly: 'Blend’n+ Quarterly', yearly: 'Blend’n+ Yearly' }
+
 /** The Plus mark: the monogram in white on the brand gradient, 40 pt, the mark at half. */
 const MARK = SIZE.control - SPACE.sm
 
@@ -50,6 +54,7 @@ export function PlusMark({ size = MARK }: { size?: number }) {
  */
 export function ManageStatusRow({
   status,
+  plan,
   sentence,
   store,
   features,
@@ -57,6 +62,8 @@ export function ManageStatusRow({
   testID,
 }: {
   status: PlusStatus
+  /** The store plan, named in the title of an active subscription; without one it reads "Blend’n+ · active". */
+  plan?: PlusPlan | null
   /** One sentence with the date and the store, from the entitlement. */
   sentence: string
   store: 'ios' | 'android'
@@ -68,7 +75,8 @@ export function ManageStatusRow({
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const sel = useSelection()
-  const { title, fix } = STATUS[status]
+  const { fix } = STATUS[status]
+  const title = status === 'active' && plan ? PLAN_TITLE[plan] : STATUS[status].title
   return (
     <View testID={testID} style={[styles.card, contrast && IC_HAIRLINE]}>
       <View accessible accessibilityLabel={`${title}. ${sentence}`} style={styles.gap}>

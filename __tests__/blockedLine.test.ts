@@ -13,25 +13,30 @@ import { blockedLine } from '../lib/blockedLine'
 const NOW = new Date('2026-10-21T12:00:00Z')
 
 describe('blockedLine', () => {
-  it('splits the words, the date and the reason, so the date can be set in mono', () => {
-    expect(blockedLine({ blocked_at: '2026-09-12T10:00:00Z', reason: 'harassment' }, NOW)).toEqual({
+  it('splits the words, the date and where you blocked them, so the date can be set in mono', () => {
+    expect(blockedLine({ blocked_at: '2026-09-12T10:00:00Z', seen_in: 'Rooftop Mixer' }, NOW)).toEqual({
       detail: 'Blocked ',
       mono: '12 Sep',
-      tail: ' · Harassment',
+      tail: ' · Rooftop Mixer',
     })
   })
 
-  it('has no reason when there is none, or it is not one we can name', () => {
-    expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z', reason: null }, NOW)).toEqual({ detail: 'Blocked ', mono: '3 Aug' })
-    expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z', reason: 'made_up' }, NOW)).not.toHaveProperty('tail')
+  it('has no place when the server kept none (an older block, or one from a profile)', () => {
+    expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z', seen_in: null }, NOW)).toEqual({ detail: 'Blocked ', mono: '3 Aug' })
+    expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z', seen_in: '  ' }, NOW)).not.toHaveProperty('tail')
+    expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z' }, NOW)).not.toHaveProperty('tail')
+  })
+
+  it('a deleted account says so, and nothing else (Me + settings A 06)', () => {
+    expect(blockedLine({ blocked_at: '2026-08-03T10:00:00Z', seen_in: 'Rooftop Mixer', account_deleted: true }, NOW)).toEqual({ detail: 'Deleted account' })
   })
 
   it('shows the year only for another year', () => {
-    expect(blockedLine({ blocked_at: '2025-12-30T10:00:00Z', reason: null }, NOW).mono).toBe('30 Dec 2025')
+    expect(blockedLine({ blocked_at: '2025-12-30T10:00:00Z' }, NOW).mono).toBe('30 Dec 2025')
   })
 
   it('is just "Blocked" when the date cannot be read', () => {
-    expect(blockedLine({ blocked_at: 'not a date', reason: null }, NOW)).toEqual({ detail: 'Blocked' })
+    expect(blockedLine({ blocked_at: 'not a date' }, NOW)).toEqual({ detail: 'Blocked' })
   })
 })
 

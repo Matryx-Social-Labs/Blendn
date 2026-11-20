@@ -22,7 +22,6 @@ import {
   answersWithin,
   withinOptions,
   NO_ABOUT_YOU,
-  optionsForCountry,
   signName,
   splitTierB,
   tierBNames,
@@ -108,9 +107,9 @@ function EditAboutYouScreenContent() {
   /** The switch, apart from the pick: on with no sign chosen saves no sign. */
   const [signOn, setSignOn] = useState(false)
   const [system, setSystem] = useState<SignSystem>('western')
-  /** The lists as this account's country sees them (SCRUM-711): India's as served, a neutral view anywhere else. */
+  /** The account's country (undefined while it is still known): the server serves that country's lists (SCRUM-711). */
   const country = useHomeCountry(authUser?.id)
-  const shown = options ? optionsForCountry(options, country, loaded, answersLoaded) : null
+  const shown = options
   const [attempt, setAttempt] = useState(0)
   const [scrolled, setScrolled] = useState(false)
   // The bar only needs to hear when the scroll crosses the top, not every frame of it.
@@ -129,11 +128,11 @@ function EditAboutYouScreenContent() {
   const bold = useBoldText()
 
   useEffect(() => {
-    if (!authUser) return
+    if (!authUser || country === undefined) return
     let cancelled = false
     void (async () => {
       setLoadFailed(false)
-      const [opts, profile, tot] = await Promise.all([apiClient.getProfileOptions(), apiClient.getProfile(authUser.id), apiClient.getThisOrThat()])
+      const [opts, profile, tot] = await Promise.all([apiClient.getProfileOptions(country), apiClient.getProfile(authUser.id), apiClient.getThisOrThat()])
       if (cancelled) return
       if (!opts.success || !opts.data || !profile.success || !tot.success) {
         Logger.warn('profile', 'EditAboutYou: load failed', {
@@ -162,7 +161,7 @@ function EditAboutYouScreenContent() {
     return () => {
       cancelled = true
     }
-  }, [authUser, attempt])
+  }, [authUser, attempt, country])
 
   // Off clears the pick; on picks nothing until they tap a sign (M4).
   // On with no sign yet opens the Sign sheet, where the twelve are; off clears the pick (M4).
@@ -288,13 +287,17 @@ function EditAboutYouScreenContent() {
   const rows: AboutRow[] = (['languages', 'home-state', 'sign', 'this-or-that'] as const).filter(
     (r) => (r !== 'home-state' || !!shown?.homeStates.length) && (r !== 'this-or-that' || !!shown?.thisOrThat.length)
   )
+  /** "Besides English" only where English is not on the list (India's leaves it out; Canada's lists it first). */
+  const besidesEnglish = !!shown && !shown.languages.some((l) => l.slug === 'english')
+  /** The country's own word for a region, from the server; "region" for an older server that sends none. */
+  const regionWord = shown?.regionWord ?? 'region'
   const labelOf = (list: readonly { slug: string; label: string }[] | undefined, slug: string) => list?.find((x) => x.slug === slug)?.label
   const signOption = sign ? options?.signs.find((x) => x.slug === sign.slug) : undefined
   const answered = (shown?.thisOrThat ?? []).flatMap((q) => (answers[q.slug] === 'a' ? [q.a] : answers[q.slug] === 'b' ? [q.b] : []))
   /** What each row holds, as board A 04 writes it: "French, Tamil · besides English, up to 3". */
   const rowHints: Record<AboutRow, string> = {
-    languages: `${form.languages.map((l) => labelOf(shown?.languages, l)).filter(Boolean).join(', ') || UNSET} · besides English, ${upTo(options?.maxLanguages ?? 0)}`,
-    'home-state': `${(form.homeState && labelOf(shown?.homeStates, form.homeState)) || UNSET} · a state, never a town`,
+    languages: `${form.languages.map((l) => labelOf(shown?.languages, l)).filter(Boolean).join(', ') || UNSET} · ${besidesEnglish ? 'besides English, ' : ''}${upTo(options?.maxLanguages ?? 0)}`,
+    'home-state': `${(form.homeState && labelOf(shown?.homeStates, form.homeState)) || UNSET} · a ${regionWord}, never a town`,
     sign: signOption && sign ? `${signName(signOption, sign.system)} · ${SIGN_SYSTEM_NAME[sign.system]}` : UNSET,
     'this-or-that': answered.join(' · ') || UNSET,
   }
@@ -392,7 +395,7 @@ function EditAboutYouScreenContent() {
           <Sheet {...sheetFor('languages')}>
             <View style={styles.sheetBody}>
               <ChipSet
-                hint={`Besides English, ${upTo(options.maxLanguages)}.`}
+                hint={besidesEnglish ? `Besides English, ${upTo(options.maxLanguages)}.` : `${upTo(options.maxLanguages).replace(/^u/, 'U')}.`}
                 items={(shown?.languages ?? []).map((l) => ({ key: l.slug, label: l.label }))}
                 selection="multi"
                 selected={form.languages}
@@ -416,7 +419,7 @@ function EditAboutYouScreenContent() {
             <Sheet {...sheetFor('home-state')}>
               <View style={styles.sheetBody}>
                 <ChipSet
-                  hint="A state, never a town. Tap again to clear."
+                  hint={`A ${regionWord}, never a town. Tap again to clear.`}
                   items={shown.homeStates.map((x) => ({ key: x.slug, label: x.label }))}
                   selection="single"
                   selected={form.homeState ? [form.homeState] : []}

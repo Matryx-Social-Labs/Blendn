@@ -87,6 +87,11 @@ describe('an active subscription', () => {
     expect(loadPlusOffers).not.toHaveBeenCalled()
   })
 
+  it('names the plan the server sends ("Blend’n+ Yearly"), and keeps "· active" without one (SCRUM-1082)', async () => {
+    await mount(status({ state: 'active', plan: 'yearly' }))
+    expect(screen.getByLabelText(/^Blend’n\+ Yearly\. Renews .* · App Store$/)).toBeTruthy()
+  })
+
   it('Google Play is named for Google Play', async () => {
     await mount(status({ source: 'google' }))
     expect(screen.getByRole('link', { name: /^Change or cancel in Google Play/ })).toBeTruthy()

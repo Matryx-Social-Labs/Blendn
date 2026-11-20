@@ -3523,9 +3523,12 @@ class ApiClientClass {
    * differently and never match on. Same cache treatment as categories — it is
    * eighteen strings, identical for everybody, and changes about once a year.
    */
-  /** Matching v2's vocabulary: languages, home states, signs, this-or-that. Static; cached like work fields. */
-  async getProfileOptions(): Promise<ApiResponse<ProfileOptions>> {
-    return this.cachedRequest<ProfileOptions>('/api/mobile/profile-options', CATEGORIES_SWR_TTL)
+  /**
+   * Matching v2's vocabulary as one country has it (languages, its regions and their word, signs, this-or-that): the account's
+   * home-city country, or null for the neutral lists, never India's by default (SCRUM-711). Static per country; cached like work fields.
+   */
+  async getProfileOptions(country: string | null): Promise<ApiResponse<ProfileOptions>> {
+    return this.cachedRequest<ProfileOptions>(`/api/mobile/profile-options?country=${encodeURIComponent(country ?? '')}`, CATEGORIES_SWR_TTL)
   }
 
   /** Your this-or-that answers, question slug → "a" | "b". */

@@ -113,6 +113,21 @@ describe('Blend’n+ only in a gated city', () => {
   })
 })
 
+describe('Blocked row (SCRUM-1082)', () => {
+  it('says the server\'s total, not the first page\'s', async () => {
+    ;(api.queuedRequest as jest.Mock).mockImplementation((url: string) =>
+      Promise.resolve(
+        url.startsWith('/api/mobile/users/blocked')
+          ? { success: true, data: { users: Array.from({ length: 50 }, (_, i) => ({ blocked_id: `b${i}` })), pagination: { nextCursor: 'c2', totalCount: 12480 } } }
+          : { success: true, data: { enabled: true } }
+      )
+    )
+    await render(<Screen />)
+    expect(await screen.findByText('12,480 people')).toBeTruthy()
+    expect(screen.queryByText(/50\+/)).toBeNull()
+  })
+})
+
 describe('Sign out', () => {
   it('asks before signing out, and Cancel keeps you in', async () => {
     await render(<Screen />)

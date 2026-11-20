@@ -21,6 +21,16 @@ describe('<ManageStatusRow>', () => {
     expect(screen.getByLabelText('Blend’n+ · active. Renews 3 Nov · ₹199 · Google Play')).toBeTruthy()
   })
 
+  // remaining-screens 03 A: "Blend’n+ Yearly" when the server names the plan; today's title when it does not (SCRUM-1082).
+  it('names the store plan in the title, and falls back to "· active" without one', async () => {
+    const { rerender } = await render(<ManageStatusRow status="active" plan="yearly" sentence="Renews 25 Oct 2027 · App Store" store="ios" />)
+    expect(screen.getByLabelText('Blend’n+ Yearly. Renews 25 Oct 2027 · App Store')).toBeTruthy()
+    await rerender(<ManageStatusRow status="active" plan="quarterly" sentence="Renews 3 Nov" store="ios" />)
+    expect(screen.getByText('Blend’n+ Quarterly')).toBeTruthy()
+    await rerender(<ManageStatusRow status="active" plan={null} sentence="Renews 3 Nov" store="ios" />)
+    expect(screen.getByText('Blend’n+ · active')).toBeTruthy()
+  })
+
   // remaining-screens 03 A draws no dot. Negative control: today's coloured dot fails it.
   it('no status dot: the words say how it stands', async () => {
     await render(<ManageStatusRow status="grace" sentence="…" store="ios" testID="m" />)

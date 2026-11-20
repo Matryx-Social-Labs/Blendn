@@ -15,6 +15,12 @@ export interface BlockedUser {
   blocked_user_photo: string | null
   reason: string | null
   blocked_at: string
+  /** The pseudonym you were shown for them when you blocked; never a real name. Null when none, or an older server. */
+  seen_as?: string | null
+  /** Where you blocked them from: an event, a venue, a room. */
+  seen_in?: string | null
+  /** Their account has since been deleted. */
+  account_deleted?: boolean
 }
 
 export type ReportType = 
