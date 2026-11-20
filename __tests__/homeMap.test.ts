@@ -549,12 +549,31 @@ describe('your position sits in the middle of the map you can see (owner, TestFl
 })
 
 describe('"my location"', () => {
-  it('goes to the fix at the map\'s own zoom and tilt', () => {
+  it('goes back to the default view: the fix, north up, at the map\'s own zoom and tilt (owner 2026-11-20)', () => {
     expect(locateTarget({ latitude: 49.2354, longitude: 6.9965 })).toEqual({
       center: [6.9965, 49.2354],
       zoom: MAP_THEME.camera.zoom,
       pitch: MAP_THEME.camera.pitch,
+      bearing: 0,
     })
+    expect(MAP_THEME.camera.bearing).toBe(0)
+  })
+
+  it('turns the map north up on every move that carries a heading: the ease, the jump and a drawer snap re-issuing it', () => {
+    // A rotated map stayed rotated after "my location" (owner, phone): no stop carried a heading.
+    expect(component).toMatch(/lastMove\.current = \{ to: move\.to, zoom: move\.at\?\.zoom, pitch: move\.at\?\.pitch, bearing: move\.at\?\.bearing, until/)
+    expect(component).toMatch(/const at = move\.at && \{ pitch: move\.at\.pitch, zoom: tiltedZoom\([^)]*\), \.\.\.bearingOf\(move\.at\.bearing\) \}/)
+    expect(component).toMatch(/stop\(\{ zoom: view\.current\.zoom, pitch: 0, \.\.\.bearingOf\(bearing\), padding: pad, duration: 0 \}\)/)
+    expect(component).toMatch(/\.\.\.bearingOf\(plan\.move\.bearing\)/)
+  })
+
+  it('has one way back: the round glyph always, and the "Browsing … · Back to you" banner goes through the same locate', () => {
+    // The pill (#589) is gone (owner 2026-11-20): it did not bring the map back on the phone.
+    expect(code('components/home/LocateButton.tsx')).not.toMatch(/Back to you|back\?: boolean|map-back-to-you/)
+    expect(component).not.toMatch(/back=\{/)
+    // The banner's action picks the phone's own city with `here`, which HomeMap turns into `locate()` (`cityPickAction`).
+    expect(code('app/(tabs)/events.tsx')).toMatch(/onSwitch=\{\(city\) => bannerActions\.current\.chooseCity\(\{ city \}, true\)\}/)
+    expect(component).toMatch(/if \(action === 'locate'\) \{\s*seenPick\.current = cityPick\.n\s*locate\(\)/)
   })
 
   it('has nowhere to go without a fix: the button asks for one instead', () => {
@@ -605,7 +624,7 @@ describe('"my location"', () => {
     // MapLibre iOS jumps (drive, 2026-10-15): flat first, or a tilted camera put Bengaluru a kilometre from
     // Saarbrücken; the zoom last, once tilted, or it lands a step out. And the opening zoom set again once tilted.
     expect(component).toMatch(
-      /const \{ zoom, pitch \} = move\.at \?\? MAP_THEME\.camera\s*stop\(\{ zoom: view\.current\.zoom, pitch: 0, [^}]*\}\)\s*stop\(\{ center: move\.to, pitch, padding: pad, duration: 0 \}\)\s*stop\(\{ center: move\.to, zoom, padding: pad, duration: 0 \}\)/
+      /const \{ zoom, pitch \} = move\.at \?\? MAP_THEME\.camera\s*const bearing = move\.at\?\.bearing\s*stop\(\{ zoom: view\.current\.zoom, pitch: 0, [^}]*\}\)\s*stop\(\{ center: move\.to, pitch, padding: pad, duration: 0 \}\)\s*stop\(\{ center: move\.to, zoom, padding: pad, duration: 0 \}\)/
     )
     // Once: a style that loads again does not send the camera back to where it opened (review L2).
     expect(component).toMatch(/if \(!ready\.current\) \{\s*ready\.current = true[\s\S]{0,300}stop\(\{ center: opening, zoom: MAP_THEME\.camera\.zoom, padding: shown\.current\.padding, duration: 0 \}\)/)

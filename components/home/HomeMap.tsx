@@ -27,6 +27,7 @@ import {
   loadPins,
   pinsFor,
   locateTarget,
+  bearingOf,
   mapPadding,
   roundQuery,
   shouldFollowFix,
@@ -57,7 +58,7 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { FRAME_NEAREST, frameOnYou, mapSummary, readingOf, staleCalloutBelow, youMark } from '../../lib/mapPresence'
+import { edgeGate, FRAME_NEAREST, frameOnYou, mapSummary, readingOf, staleCalloutBelow, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
@@ -83,7 +84,7 @@ const PIN_LIMIT = 50
 const LIVE_TICK_MS = 60_000
 
 /** A camera move: where to, how long an ease within a city takes, and a zoom and tilt to arrive at. */
-type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: number } }
+type Move = { to: [number, number]; easeMs: number; at?: { zoom: number; pitch: number; bearing?: number } }
 
 const NO_PINS: Pin[] = []
 /** A held move this close to the fix is a move to the person (the reach's frame sits about a kilometre off them). */
@@ -294,14 +295,14 @@ export const HomeMap = memo(function HomeMap({
     moves.current += 1
     const pad = shown.current.padding
     const { duration, fade: fades } = cameraMove(view.current.centre, move.to, { easeMs: move.easeMs, reduceMotion })
-    lastMove.current = { to: move.to, zoom: move.at?.zoom, pitch: move.at?.pitch, until: Date.now() + duration }
+    lastMove.current = { to: move.to, zoom: move.at?.zoom, pitch: move.at?.pitch, bearing: move.at?.bearing, until: Date.now() + duration }
     if (fades) {
       fade.set(1)
       fade.set(withTiming(0, { duration: MAP_THEME.camera.fadeMs }))
     }
     if (duration > 0) {
       // An ease that also tilts asks for the zoom MapLibre iOS will land on (review M2).
-      const at = move.at && { pitch: move.at.pitch, zoom: tiltedZoom(move.at.zoom, view.current.pitch, move.at.pitch, Platform.OS) }
+      const at = move.at && { pitch: move.at.pitch, zoom: tiltedZoom(move.at.zoom, view.current.pitch, move.at.pitch, Platform.OS), ...bearingOf(move.at.bearing) }
       stop({ center: move.to, ...at, padding: pad, duration })
       return
     }
@@ -315,8 +316,10 @@ export const HomeMap = memo(function HomeMap({
      * zoom goes last, once the camera is there and tilted, with the centre again.
      */
     // It lands at the map's own zoom and tilt: the last zoom the map reported can be the one it opened at, before its fix (drive, review round).
+    // North up only when the move asks for it ("my location"): the opening jump keeps the map's own heading.
     const { zoom, pitch } = move.at ?? MAP_THEME.camera
-    stop({ zoom: view.current.zoom, pitch: 0, padding: pad, duration: 0 })
+    const bearing = move.at?.bearing
+    stop({ zoom: view.current.zoom, pitch: 0, ...bearingOf(bearing), padding: pad, duration: 0 })
     stop({ center: move.to, pitch, padding: pad, duration: 0 })
     stop({ center: move.to, zoom, padding: pad, duration: 0 })
   }
@@ -340,7 +343,7 @@ export const HomeMap = memo(function HomeMap({
       const plan = snapRecentre({ now: Date.now(), inFlight: lastMove.current, following: !touched.current, fix })
       if (plan.kind === 'reissue') {
         const { to, zoom, pitch } = plan.move
-        stop({ center: to, ...(zoom !== undefined && { zoom }), ...(pitch !== undefined && { pitch }), padding: shown.current.padding, duration: plan.durationMs })
+        stop({ center: to, ...(zoom !== undefined && { zoom }), ...(pitch !== undefined && { pitch }), ...bearingOf(plan.move.bearing), padding: shown.current.padding, duration: plan.durationMs })
         return
       }
       if (plan.kind === 'centre') {
@@ -431,11 +434,19 @@ export const HomeMap = memo(function HomeMap({
   useEffect(() => {
     if (OWN_BUILDINGS_ENV.problem) Logger.warn('events', 'EXPO_PUBLIC_BUILDINGS_TILES_URL ignored', { problem: OWN_BUILDINGS_ENV.problem })
   }, [])
-  // The lap's venue, for its edge marker: an event focus on Events only (a venue's name when the server sends one).
-  const edgeTarget = useMemo(
-    () => (focusPin && segment === 'events' ? { id: focusPin.id, name: focusPin.place || focusPin.title, at: [focusPin.longitude, focusPin.latitude] as [number, number] } : null),
-    [focusPin, segment]
-  )
+  /*
+   * The lap's venue, for its edge marker: an event focus on Events only (a venue's name when the server sends one), and
+   * only in the city the map shows, near where it looks (`edgeGate`: from Saarbrücken it read "Olive Beach · 7,500 km").
+   * Read again as the camera settles (`settled`).
+   */
+  const mapCentre = view.current.centre
+  const edge = useMemo(() => {
+    if (!focusPin || segment !== 'events') return null
+    const at: [number, number] = [focusPin.longitude, focusPin.latitude]
+    const gate = edgeGate({ at, cityCentre: cityCentre ?? null, mapCentre, fix: center })
+    return gate ? { target: { id: focusPin.id, name: focusPin.place || focusPin.title, at }, distance: gate.distance } : null
+  }, [focusPin, segment, cityCentre, mapCentre?.[0], mapCentre?.[1], center, settled]) // eslint-disable-line react-hooks/exhaustive-deps -- by value; `settled` re-reads the camera
+  const edgeTarget = edge?.target ?? null
   // Where the edge marker may sit: the map you can see, above "my location" (pulse-map 05 frame 6).
   const edgeBox = { left: 0, top: padding.top, right: width, bottom: height - padding.bottom - MAP_THEME.locate.sizePx - SPACE.sm }
   // What the map says about you (pulse-map 06): approximate and stale each get their one line.
@@ -508,7 +519,7 @@ export const HomeMap = memo(function HomeMap({
       return
     }
     followedFix.current = center
-    moveTo({ to: target.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: target.pitch } })
+    moveTo({ to: target.center, easeMs: MAP_THEME.camera.easeMs, at: { zoom: target.zoom, pitch: target.pitch, bearing: target.bearing } })
   }
 
   // The lead card swiped to another venue: the camera eases there within the city (jumps under Reduce Motion, `cameraMove`).
@@ -594,7 +605,9 @@ export const HomeMap = memo(function HomeMap({
   const [moving, setMoving] = useState(false)
   const onRegionDidChange = (e: NativeSyntheticEvent<ViewStateChangeEvent>) => {
     setMoving(false)
-    const { bounds, center: centre, zoom, pitch, userInteraction } = e.nativeEvent
+    const { bounds, center: centre, zoom, pitch, bearing, userInteraction } = e.nativeEvent
+    // The camera read back (no position: heading, tilt and zoom only), so a drive checks "north up" from the log, not by eye.
+    Logger.info('events', 'map:settled', { bearing: Math.round(bearing), pitch: Math.round(pitch), zoom: Math.round(zoom * 10) / 10, user: userInteraction })
     if (userInteraction) {
       setTouched(true)
       setGestures((n) => n + 1)
@@ -711,7 +724,7 @@ export const HomeMap = memo(function HomeMap({
 
   // The lead card's own distance when it has one (the same number as the card), else measured from the fix; none without one.
   const edgeKm = focus?.km ?? (edgeTarget && center ? getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0]) : null)
-  const edgeDistance = center ? distanceText(edgeKm, reading) : null
+  const edgeDistance = center && edge?.distance ? distanceText(edgeKm, reading) : null
   // The map as a whole, for a screen reader (pulse-map 10): read when the camera stops (`settled` re-renders this).
   const bounds = view.current.bounds
   const edgeOff = edgeTarget && bounds ? !(edgeTarget.at[0] >= bounds[0] && edgeTarget.at[0] <= bounds[2] && edgeTarget.at[1] >= bounds[1] && edgeTarget.at[1] <= bounds[3]) : false
@@ -845,7 +858,6 @@ export const HomeMap = memo(function HomeMap({
         <LocateButton
           visible={locateVisible}
           following={hasFix && !moved}
-          back={hasFix && moved}
           pending={asking}
           drawerTop={drawerTop}
           drawer={drawer}
