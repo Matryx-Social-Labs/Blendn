@@ -15,7 +15,7 @@ import { isLitControl } from './helpers/lit'
 
 const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { includeHiddenElements: true }).props.style)
 const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true })
-const PRIYA = { face: { kind: 'photo', uri: 'https://example.com/priya.jpg' } as const, name: 'Priya', reason: 'Both open to dating', width: 110 }
+const PRIYA = { face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' } as const, name: 'Priya', reason: 'Both open to dating', width: 110 }
 
 it('is a surface card at radius 20 (RADIUS.tile), 110 wide, with a 64 pt face and a 40 pt Wave pill; name and reason take two lines', async () => {
   await render(<MeetNextCard {...PRIYA} testID="m" />)

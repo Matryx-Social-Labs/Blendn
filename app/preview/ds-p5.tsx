@@ -30,11 +30,11 @@ import { COLOR, RADIUS, SPACE, TYPE } from '../../lib/design/tokens'
  */
 const PHOTO = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256'
 const PHOTO_THEM = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=256'
-const ME: MomentFace = { kind: 'photo', uri: PHOTO }
+const ME: MomentFace = { kind: 'photo', uri: PHOTO, name: 'Asha' }
 const NO_INSETS = { top: 0, bottom: 0, left: 0, right: 0 }
 
 const MATCHES: Record<string, { you: MomentFace; them: MomentFace; name: string }> = {
-  'photo-photo': { you: ME, them: { kind: 'photo', uri: PHOTO_THEM }, name: 'Priya' },
+  'photo-photo': { you: ME, them: { kind: 'photo', uri: PHOTO_THEM, name: 'Priya' }, name: 'Priya' },
   'photo-creature': { you: ME, them: { kind: 'creature', pseudonym: 'Velvet Heron' }, name: 'Velvet Heron' },
   'creature-creature': { you: { kind: 'creature', pseudonym: 'Cosmic Panda' }, them: { kind: 'creature', pseudonym: 'Velvet Heron' }, name: 'Velvet Heron' },
 }

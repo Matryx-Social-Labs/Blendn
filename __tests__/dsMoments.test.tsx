@@ -75,7 +75,7 @@ const PHOTO = 'https://example.com/me.jpg'
 
 function match(props: Partial<MomentMatchProps> = {}) {
   const p: MomentMatchProps = {
-    you: { kind: 'photo', uri: PHOTO },
+    you: { kind: 'photo', uri: PHOTO, name: 'Asha' },
     them: { kind: 'creature', pseudonym: 'Velvet Heron' },
     name: 'Velvet Heron',
     tonight: { question: 'What are you hoping to find tonight?', answer: 'Someone to split a cab back to Koramangala' },
@@ -140,8 +140,8 @@ describe('<MomentMatch> · You both waved (Wave M-A, SCRUM-1042)', () => {
   })
 
   it.each([
-    ['photo · photo', { kind: 'photo', uri: PHOTO }, { kind: 'photo', uri: PHOTO }, true],
-    ['photo · creature', { kind: 'photo', uri: PHOTO }, { kind: 'creature', pseudonym: 'Velvet Heron' }, false],
+    ['photo · photo', { kind: 'photo', uri: PHOTO, name: 'Asha' }, { kind: 'photo', uri: PHOTO, name: 'Asha' }, true],
+    ['photo · creature', { kind: 'photo', uri: PHOTO, name: 'Asha' }, { kind: 'creature', pseudonym: 'Velvet Heron' }, false],
     ['creature · creature', { kind: 'creature', pseudonym: 'Cosmic Panda' }, { kind: 'creature', pseudonym: 'Velvet Heron' }, false],
   ] as const)('%s: never shows a face either person hid', async (_, you, them, theirPhoto) => {
     await render(match({ you, them }).el)
@@ -517,7 +517,7 @@ describe('<MomentPour> · the check-in success (motion #9)', () => {
 
 function recap(props: Partial<MomentRecapProps> = {}) {
   const p: MomentRecapProps = {
-    face: { kind: 'photo', uri: PHOTO },
+    face: { kind: 'photo', uri: PHOTO, name: 'Asha' },
     title: 'Vinyl Night',
     venue: 'Toit',
     minutes: 135,

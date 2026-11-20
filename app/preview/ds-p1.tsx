@@ -330,7 +330,7 @@ function RadioCards() {
   const pair = (a: object, b: object) => (
     <>
       <RadioCard title="Anonymous" hint="Nobody here sees your name or photo." avatar={<Avatar kind="creature" pseudonym="Night Cat" size={56} />} onPress={noop} {...a} />
-      <RadioCard title="Named" hint="People here see your name and photo." avatar={<Avatar kind="photo" uri={PHOTO} size={56} />} onPress={noop} {...b} />
+      <RadioCard title="Named" hint="People here see your name and photo." avatar={<Avatar kind="photo" uri={PHOTO} name="Asha" size={56} />} onPress={noop} {...b} />
     </>
   )
   return (
@@ -535,7 +535,7 @@ function Mono() {
         <PresenceDot />
         <PresenceDot kind="live" />
         <View>
-          <Avatar kind="photo" uri={PHOTO} size={56} />
+          <Avatar kind="photo" uri={PHOTO} name="Asha" size={56} />
           <View style={styles.faceDot}>
             <PresenceDot kind="live" size={12} ring={COLOR.ink} />
           </View>

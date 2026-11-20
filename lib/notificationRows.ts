@@ -120,8 +120,10 @@ export function parseVisual(raw: unknown): NotificationVisualSpec | null {
   if (!isRecord(raw)) return null
   switch (raw.type) {
     case 'photo': {
+      // The name, when the server sends it, is drawn under the photo while it loads (SCRUM-1088).
       const uri = text(raw.uri)
-      return uri ? { type: 'photo', uri } : null
+      const name = text(raw.name)
+      return uri ? { type: 'photo', uri, ...(name && { name }) } : null
     }
     case 'creature': {
       const pseudonym = text(raw.pseudonym)
@@ -487,7 +489,7 @@ export function askItems(requests: readonly FriendRequest[], invites: readonly C
 /** A named person as `personFace` draws them: their photo, else their initial (Flow 5 C5, #570). */
 function faceVisual(name: string, photo: string | null | undefined): NotificationVisualSpec {
   const face = personFace({ named: true, name, photo })
-  return face.kind === 'photo' ? { type: 'photo', uri: face.uri } : { type: 'initial', name }
+  return face.kind === 'photo' ? { type: 'photo', uri: face.uri, name } : { type: 'initial', name }
 }
 
 /**

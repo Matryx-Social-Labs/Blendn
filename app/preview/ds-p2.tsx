@@ -88,7 +88,7 @@ const COVER_2 = 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=
 const PHOTO = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=256'
 const PHOTO_2 = 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=256'
 
-const photo = (uri: string): Face => ({ kind: 'photo', uri })
+const photo = (uri: string, name = 'Asha'): Face => ({ kind: 'photo', uri, name })
 const creature = (pseudonym: string): Face => ({ kind: 'creature', pseudonym })
 const FACES: Face[] = [photo(PHOTO_2), creature('Cosmic Panda'), creature('Quiet Heron'), photo(PHOTO), creature('Night Cat'), creature('Velvet Otter')]
 
@@ -628,12 +628,12 @@ function TimeRings() {
     <Section title="TimeRing" note="Satoshi 500 at the 12 pt floor, 0.8 tracking, on the circle · fixed size · Bold 700, Increase Contrast white">
       <Cell label="the Room" testID="ds-timering-room" style={styles.centre}>
         <TimeRing text="In the room · 1h 12m">
-          <Avatar kind="photo" uri={PHOTO} size={72} />
+          <Avatar kind="photo" uri={PHOTO} name="Asha" size={72} />
         </TimeRing>
       </Cell>
       <Cell label="a venue room · countdown" testID="ds-timering-venue" style={styles.centre}>
         <TimeRing text="Live · 42 min left">
-          <Avatar kind="photo" uri={PHOTO} size={72} />
+          <Avatar kind="photo" uri={PHOTO} name="Asha" size={72} />
         </TimeRing>
       </Cell>
       <Cell label="anonymous · the creature" testID="ds-timering-anon" style={styles.centre}>

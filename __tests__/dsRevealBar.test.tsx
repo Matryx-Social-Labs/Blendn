@@ -51,14 +51,14 @@ it('anonymous both ways: both sides read, then Show them (lit) and Ask them, sil
 })
 
 it('you revealed: your side is seen, and it waits with no action', async () => {
-  await draw({ state: 'youOnly', you: { face: { kind: 'photo', uri: 'https://example.com/sam.jpg' }, name: 'Sam' } })
+  await draw({ state: 'youOnly', you: { face: { kind: 'photo', uri: 'https://example.com/sam.jpg', name: 'Sam' }, name: 'Sam' } })
   expect(screen.getByLabelText('You, Sam, seen. Cosmic Panda, anonymous.')).toBeTruthy()
   expect(screen.queryByRole('button')).toBeNull()
   expect(screen.getByText('They can see you. They’ll decide in their own time.')).toBeTruthy()
 })
 
 it('they revealed: their side is seen, and Show them is the one action', async () => {
-  await draw({ state: 'theyOnly', them: { face: { kind: 'photo', uri: 'https://example.com/priya.jpg' }, name: 'Priya' } })
+  await draw({ state: 'theyOnly', them: { face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' }, name: 'Priya' } })
   expect(screen.getByLabelText('You, Night Cat, anonymous. Priya, seen.')).toBeTruthy()
   expect(screen.getAllByRole('button')).toHaveLength(1)
 })
@@ -88,8 +88,8 @@ it('Increase Contrast: the 50% hairline, the eye line in white', async () => {
 
 describe('both: the one thing left once you can see each other is to add them (SCRUM-750)', () => {
   const PHOTOS = {
-    you: { face: { kind: 'photo', uri: 'https://example.com/sam.jpg' } as const, name: 'Sam' },
-    them: { face: { kind: 'photo', uri: 'https://example.com/priya.jpg' } as const, name: 'Priya' },
+    you: { face: { kind: 'photo', uri: 'https://example.com/sam.jpg', name: 'Sam' } as const, name: 'Sam' },
+    them: { face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' } as const, name: 'Priya' },
   }
 
   it('reads both sides as seen, says so, and has a lit small Add friend', async () => {

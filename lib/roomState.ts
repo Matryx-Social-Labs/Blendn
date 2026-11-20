@@ -36,7 +36,8 @@ export function roomStateLine(state: RoomState): string | null {
 export function myRoomFace(input: { revealed: boolean; name: string | null; photo: string | null; pseudonym: string | null; eventId: string | null }): Face {
   const name = input.name?.trim()
   if (input.revealed && name) return personFace({ named: true, name, photo: input.photo })
-  if (input.revealed && input.photo) return { kind: 'photo', uri: input.photo }
+  // Named with no name yet: the photo loads over your hue disc alone.
+  if (input.revealed && input.photo) return { kind: 'photo', uri: input.photo, name: '' }
   return { kind: 'creature', pseudonym: input.pseudonym ?? markSeed('You', input.eventId ?? 'room') }
 }
 

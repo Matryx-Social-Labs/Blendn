@@ -146,14 +146,14 @@ describe('the you-card (R-A youCard merged with the old hero: you, your time in,
   const T0 = Date.parse('2026-11-11T18:00:00Z')
   const others = [
     { kind: 'creature', pseudonym: 'Lunar Fox' },
-    { kind: 'photo', uri: 'https://x/p2.jpg' },
+    { kind: 'photo', uri: 'https://x/p2.jpg', name: 'Asha' },
   ] as const
   const you = (state: Visibility, extra: Partial<React.ComponentProps<typeof RoomYouCard>> = {}, onChange = jest.fn()) =>
     render(
       <RoomYouCard
         face={{ kind: 'creature', pseudonym: 'Quiet Lynx' }}
         name="Quiet Lynx"
-        self={{ name: 'Venkatalakshmi Subramaniam', face: { kind: 'photo', uri: 'https://x/me.jpg' } }}
+        self={{ name: 'Venkatalakshmi Subramaniam', face: { kind: 'photo', uri: 'https://x/me.jpg', name: 'Asha' } }}
         checkedInAt={new Date(T0 - 80 * 60_000).toISOString()}
         hereCount={12_480}
         others={[...others]}

@@ -297,7 +297,7 @@ function Avatars() {
   return (
     <Section title="Avatar" note="photo (earned) · creature · crew square; the ring is a cut-out in the colour behind">
       <Cell label="photo" testID="ds-avatar-photo" style={styles.rowEnd}>
-        {SIZES_AVATAR.map((s) => <Avatar key={s} kind="photo" uri={PHOTO} size={s} />)}
+        {SIZES_AVATAR.map((s) => <Avatar key={s} kind="photo" uri={PHOTO} name="Asha" size={s} />)}
       </Cell>
       <Cell label="creature" testID="ds-avatar-creature" style={styles.rowEnd}>
         {SIZES_AVATAR.map((s) => <Avatar key={s} kind="creature" pseudonym="Night Cat" size={s} />)}
@@ -306,9 +306,9 @@ function Avatars() {
         {SIZES_AVATAR.map((s) => <CrewEmblem key={s} seed="nebula" size={s} />)}
       </Cell>
       <Cell label="ring on ink · white ring" testID="ds-avatar-ring" style={styles.row}>
-        <Avatar kind="photo" uri={PHOTO} size={32} ring={COLOR.ink} />
+        <Avatar kind="photo" uri={PHOTO} name="Asha" size={32} ring={COLOR.ink} />
         <Avatar kind="creature" pseudonym="Night Cat" size={32} ring={COLOR.ink} />
-        <Avatar kind="photo" uri={PHOTO} size={24} ring={COLOR.textPrimary} />
+        <Avatar kind="photo" uri={PHOTO} name="Asha" size={24} ring={COLOR.textPrimary} />
       </Cell>
       <Cell label="a stack of six at 32, −8" testID="ds-avatar-stack" style={styles.stack}>
         {PSEUDONYMS.slice(0, 6).map((name, i) => (

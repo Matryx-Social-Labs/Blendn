@@ -47,7 +47,7 @@ const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: 
 const text = (t: string | RegExp) => screen.queryByText(t, { includeHiddenElements: true })
 
 const PRIYA: PersonCardPerson = {
-  face: { kind: 'photo', uri: 'https://example.com/priya.jpg' },
+  face: { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' },
   name: 'Priya',
   age: 27,
   meta: 'Anonymous · 27',

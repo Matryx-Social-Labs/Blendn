@@ -468,7 +468,7 @@ const MemberCell = memo(function MemberCell({
     >
       <View>
         {photos && member.avatar ? (
-          <Avatar size={face} kind="photo" uri={member.avatar} />
+          <Avatar size={face} kind="photo" uri={member.avatar} name={member.name ?? ''} />
         ) : (
           <Avatar size={face} kind="creature" pseudonym={markSeed(member.name, `${chatGroupId}:${member.userId}`)} />
         )}
