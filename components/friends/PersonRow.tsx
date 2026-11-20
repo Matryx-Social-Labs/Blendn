@@ -35,7 +35,7 @@ export function usePersonRowsFixed(): boolean {
 
 /**
  * One person on a friend surface (Flow 6 `personRow`): a 48 pt photo, the name in 500 17/24, a line under it, and whatever the screen
- * needs on the right (a chevron, Withdraw). A date in the line is `detailMono`, drawn in Geist Mono right after `detail`.
+ * needs on the right (a chevron, Withdraw; at the AX sizes the action goes under the text). A date in the line is `detailMono`, drawn in Geist Mono right after `detail`.
  *
  * Real name and photo, because every place this is drawn is one both people agreed to: the friends list, requests, a link someone
  * handed out, and Friends here in a Room (a friend who turned on "Friends can see I'm here", which is their consent to be named
@@ -71,10 +71,16 @@ export function PersonRow({
   const contrast = useIncreaseContrast()
   const largeText = useLargeText()
   const line = [detail, detailMono, detailTail].filter(Boolean).join('')
+  // At the AX sizes the action goes under the text, at its leading edge, so the text keeps the row (owner pick a, 2026-11-20).
+  const action = trailing ? (
+    <View testID="person-trailing" style={largeText ? styles.under : styles.trailing}>
+      {trailing}
+    </View>
+  ) : null
   const body = (
     <>
       <PersonAvatar person={person} size={avatar} named={named} />
-      <View style={styles.text}>
+      <View testID="person-text" style={styles.text}>
         {/*
           Reading text, as Banter's request card (fc5eb48): the name grows to its role's cap and the line under it to meta's,
           and at the accessibility sizes each doubles its lines, so the name never stops at the control cap on one line while
@@ -103,8 +109,9 @@ export function PersonRow({
             {detailTail}
           </Text>
         ) : null}
+        {largeText ? action : null}
       </View>
-      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+      {largeText ? null : action}
       {/* SettingsRow's chevron on SettingsRow's right edge, so the Friend requests card above and these rows share one (r7 M9). */}
       {chevron ? (
         <View style={styles.chevron}>
@@ -177,6 +184,7 @@ const styles = StyleSheet.create({
   text: { flex: 1, minWidth: 0 },
   // Centred on the row: a small button inside hugs its label, and without this it would sit at the row's top.
   trailing: { alignSelf: 'center' },
+  under: { alignSelf: 'flex-start', marginTop: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },
 })
