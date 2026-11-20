@@ -431,6 +431,15 @@ export function mapPadding(s: { topChrome: number; mapHeight: number; drawerTop:
   return { top: s.topChrome, bottom: Math.max(0, s.mapHeight - s.drawerTop) }
 }
 
+/**
+ * Where to read the camera's next centre so a point on screen moves from `from` to `to` by a pan alone: the camera's
+ * centre sits at `camera` on screen and takes whatever is now at `camera - (to - from)`. No padding changes: MapLibre
+ * iOS eases a move whose padding changes and then lands the rest in one frame (SCRUM-1090, a ~70 pt cut on pull-down).
+ */
+export function panSource(camera: [number, number], from: [number, number], to: [number, number]): [number, number] {
+  return [camera[0] - (to[0] - from[0]), camera[1] - (to[1] - from[1])]
+}
+
 /** The middle of the map you can see, from the top of the map view. */
 export function visibleCentreY(padding: { top: number; bottom: number }, mapHeight: number): number {
   return (padding.top + mapHeight - padding.bottom) / 2
