@@ -34,6 +34,7 @@ import {
   snapRecentre,
   tiltedZoom,
   viewportQuery,
+  panSource,
   visibleCentreY,
   type Bounds,
   type InFlight,
@@ -268,8 +269,12 @@ export const HomeMap = memo(function HomeMap({
    * reckoning), and the first frame has it too (`initialViewState`).
    */
   const padding = mapPadding({ topChrome, mapHeight, drawerTop: drawerSnapTop })
+  // Any map left between the top bar and the drawer: none with the drawer full, and nothing of ours is drawn on it then.
+  const mapShown = mapHeight - padding.top - padding.bottom > 0
   // The map you can see as the camera last used it: its padding and the map's height, together (review M3).
   const shown = useRef({ padding, mapHeight })
+  // The padding the camera really has (its last stop's, or the first frame's): a settled snap pans in it (`panSource`).
+  const camPad = useRef(padding)
   // The move in flight, and a count of moves: a settled snap must not undo a newer move (review M1).
   const lastMove = useRef<InFlight | null>(null)
   const moves = useRef(0)
@@ -283,6 +288,7 @@ export const HomeMap = memo(function HomeMap({
   const stop = (to: CameraStop) => {
     const cam = camera.current
     if (!cam) return
+    if (to.padding) camPad.current = { top: to.padding.top ?? 0, bottom: to.padding.bottom ?? 0 }
     Promise.resolve()
       .then(() => cam.setStop({ easing: 'ease', ...to }))
       .catch((error) => Logger.warn('events', 'Home map camera stop failed', { error: String(error) }))
@@ -334,6 +340,9 @@ export const HomeMap = memo(function HomeMap({
    * started meanwhile (review M1).
    */
   useEffect(() => {
+    // The drawer full covers the map: nothing to centre in, and the map stays as it was for when it comes back down
+    // (SCRUM-1090: centred into the top bar's foot, the fix and its callout sat behind the Blend'n mark).
+    if (!mapShown) return
     const before = shown.current
     shown.current = { padding, mapHeight }
     if (!ready.current || (before.padding.top === padding.top && before.padding.bottom === padding.bottom)) return
@@ -348,15 +357,20 @@ export const HomeMap = memo(function HomeMap({
         stop({ center: to, ...(zoom !== undefined && { zoom }), ...(pitch !== undefined && { pitch }), ...bearingOf(plan.move.bearing), padding: shown.current.padding, duration: plan.durationMs })
         return
       }
-      if (plan.kind === 'centre') {
-        stop({ center: plan.to, padding: shown.current.padding, duration: settle })
-        return
-      }
-      map.current
-        ?.unproject([width / 2, visibleCentreY(before.padding, before.mapHeight)])
+      /*
+       * A pan, in the padding the camera already has: what was centred (the fix while following, else the old middle,
+       * read with the padding AND the map height it was drawn with: review M3) moves to the new middle. A stop that
+       * changed the padding eased part of the way and cut the rest in one frame on iOS (SCRUM-1090 drive, dev too).
+       */
+      const ref = map.current
+      if (!ref) return
+      const to: [number, number] = [width / 2, visibleCentreY(padding, mapHeight)]
+      const from = plan.kind === 'centre' ? ref.project(plan.to) : Promise.resolve<[number, number]>([width / 2, visibleCentreY(before.padding, before.mapHeight)])
+      from
+        .then((at) => ref.unproject(panSource([width / 2, visibleCentreY(camPad.current, mapHeight)], at as [number, number], to)))
         .then((centred) => {
           if (moves.current !== startedAt) return
-          stop({ center: centred as [number, number], padding: shown.current.padding, duration: settle })
+          stop({ center: centred as [number, number], padding: camPad.current, duration: settle })
         })
         .catch((error) => Logger.warn('events', 'Home map could not re-center on the drawer', { error: String(error) }))
     }, 0)
@@ -707,7 +721,7 @@ export const HomeMap = memo(function HomeMap({
   const staleAt = you.kind === 'stale' && center ? ([center.longitude, center.latitude] as [number, number]) : null
   useEffect(() => {
     const m = map.current
-    if (!m || !staleAt || !edgeRect) {
+    if (!m || !staleAt) {
       setStaleBelow(false)
       return
     }
@@ -716,13 +730,13 @@ export const HomeMap = memo(function HomeMap({
     Promise.resolve()
       .then(() => m.project(staleAt))
       .then((dot) => {
-        if (!gone) setStaleBelow(staleCalloutBelow(dot as [number, number], STALE_CALLOUT, edgeRect))
+        if (!gone) setStaleBelow(staleCalloutBelow(dot as [number, number], STALE_CALLOUT, edgeRect, padding.top))
       })
       .catch((error) => Logger.warn('events', 'Stale callout could not place itself', { error: String(error) }))
     return () => {
       gone = true
     }
-  }, [staleAt?.[0], staleAt?.[1], settled, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the arrays are new each render
+  }, [staleAt?.[0], staleAt?.[1], settled, padding.top, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the arrays are new each render
 
   // The lead card's own distance when it has one (the same number as the card), else measured from the fix; none without one.
   const edgeKm = focus?.km ?? (edgeTarget && center ? getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0]) : null)
@@ -816,7 +830,7 @@ export const HomeMap = memo(function HomeMap({
           <YouMark part="dot" fix={center} sharing={sharing} now={now} />
         </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
-        {you.kind === 'stale' && center && you.line ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} below={staleBelow} /> : null}
+        {you.kind === 'stale' && center && you.line && mapShown ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} below={staleBelow} /> : null}
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>

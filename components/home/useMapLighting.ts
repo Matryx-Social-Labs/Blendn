@@ -268,7 +268,9 @@ export function useMapLighting({
       pinIds: kept.flatMap((p) => p.ids),
     })
     // Unclean: not marked done, so the next settle asks again (not the next frame: frames keep coming while a glow fades).
-    if (clean) lastLit.current = signature
+    // Nor is the clean pass before it still what shows: a later view equal to that one must be placed again (SCRUM-1090:
+    // half, peek unclean, half again kept peek's chip, under the Blend'n mark).
+    lastLit.current = clean ? signature : ''
     setPasses((n) => n + 1)
   }
 

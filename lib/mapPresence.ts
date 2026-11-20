@@ -215,8 +215,11 @@ function overlapOn(box: ReturnType<typeof staleCalloutBox>, marker: { left: numb
 export function staleCalloutBelow(
   dot: readonly [number, number],
   callout: CalloutRoom,
-  marker: { left: number; top: number; width: number; height: number } | null
+  marker: { left: number; top: number; width: number; height: number } | null,
+  /** The top chrome's foot (the map's top padding): over the dot, the callout must not reach under it (SCRUM-1090). */
+  visibleTop = Number.NEGATIVE_INFINITY
 ): boolean {
+  if (staleCalloutBox(dot, callout, false).top < visibleTop) return true
   if (!marker) return false
   const over = overlapOn(staleCalloutBox(dot, callout, false), marker)
   return over > 0 && overlapOn(staleCalloutBox(dot, callout, true), marker) < over
