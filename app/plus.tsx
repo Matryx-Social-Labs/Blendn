@@ -358,7 +358,7 @@ function PlusScreenContent() {
           />
         ) : (
           <>
-            {card ? <ManageStatusRow status={card.status} sentence={card.sentence} store={card.store} testID="plus-status" /> : null}
+            {card ? <ManageStatusRow status={card.status} plan={card.plan} sentence={card.sentence} store={card.store} testID="plus-status" /> : null}
             {launch && !has ? <BannerPresence><Banner kind="info" text={LAUNCH_LINE} testID="plus-launch" /></BannerPresence> : null}
             {plansSection()}
             <WhatYouGet features={PLUS_FEATURES} />

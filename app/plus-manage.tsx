@@ -155,6 +155,7 @@ function ManageContent() {
           <Animated.View entering={arrive} style={styles.body} testID="plus-manage-body">
             <ManageStatusRow
               status={card.status}
+              plan={card.plan}
               sentence={card.sentence}
               store={card.store}
               features={subscription && status?.active ? PLUS_FEATURES.map((f) => f.title) : undefined}

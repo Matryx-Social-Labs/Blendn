@@ -3,7 +3,7 @@ import { AppState } from 'react-native'
 
 import type { IconName } from '../components/ui/Icon'
 import { apiClient } from './apiClient'
-import type { PlusGrant, PlusState } from './plusManage'
+import type { PlusGrant, PlusPlan, PlusState } from './plusManage'
 import { NIGHT_PASS_ID, type PlusOffer } from './purchases'
 import { calendarDate, clockTime } from './time'
 
@@ -33,6 +33,8 @@ export type PlusStatus = {
    */
   state?: PlusState | null
   grant?: PlusGrant | null
+  /** The store plan of a subscription (the server's, from the product the store billed); null or absent when not known. */
+  plan?: PlusPlan | null
 }
 
 /**

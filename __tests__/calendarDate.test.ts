@@ -129,7 +129,7 @@ describe('on an en_DE phone (its locale writes "23. Okt. 2027")', () => {
     const later = new Date(2026, 10, 3, 12)
     expect(muteLabel({ muted: true, until: later.toISOString() }, new Date(NOW))).toBe('Muted until Tue 3 Nov')
     expect(validUntil(later.toISOString())).toBe('until Tue 3 Nov')
-    expect(blockedLine({ blocked_at: new Date(2026, 8, 12, 12).toISOString(), reason: null }, new Date(NOW)).mono).toBe('12 Sep')
+    expect(blockedLine({ blocked_at: new Date(2026, 8, 12, 12).toISOString() }, new Date(NOW)).mono).toBe('12 Sep')
   })
 })
 

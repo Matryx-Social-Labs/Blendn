@@ -31,6 +31,18 @@ describe('what the server says today', () => {
     expect(card({ state: 'active' })?.sentence).toMatch(/^Renews .*Nov.* · Google Play$/)
   })
 
+  it('a store subscription carries its plan when the server names one (SCRUM-1082), and only then', () => {
+    expect(card({ state: 'active', plan: 'yearly' })).toMatchObject({ status: 'active', plan: 'yearly' })
+    expect(card({ plan: 'monthly' })).toMatchObject({ status: 'active', plan: 'monthly' })
+    expect(card({ plan: null })).not.toHaveProperty('plan')
+    expect(card({})).not.toHaveProperty('plan')
+    // A plan says nothing about a state that is not "on": a cancelled card keeps its own title.
+    expect(card({ state: 'cancelled', plan: 'yearly' })).not.toHaveProperty('plan')
+    // Not a store subscription: a grant and a Night Pass have no plan, whatever arrives.
+    expect(card({ source: 'grant', plan: 'yearly' })).not.toHaveProperty('plan')
+    expect(card({ product: 'night_pass', plan: 'yearly' })).not.toHaveProperty('plan')
+  })
+
   it('a subscription with no date still says it is on', () => {
     expect(card({ expiresAt: null, source: null })).toEqual({ status: 'active', sentence: 'Blend’n+ is on', store: 'android' })
   })
