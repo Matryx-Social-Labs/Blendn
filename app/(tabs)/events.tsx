@@ -1255,6 +1255,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
           // Location turned off in Settings while away: the fix from before goes, and every distance with it.
           setUserLocation((current) => fixAfterPermission(status, current))
+          // …and the last-known position that orders the lap: it is a position too, sent with the Featured read.
+          setLapSeed((seed) => (status === 'granted' ? seed : null))
           return status === 'granted' ? Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS }) : null
         })
         .then((position) => {

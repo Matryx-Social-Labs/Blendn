@@ -189,3 +189,29 @@ it('something near (the control): no far line, the lap runs', async () => {
   expect(mockPlace?.far ?? null).toBeNull()
   expect(mockLapVisible).toBe(true)
 })
+
+/*
+ * Location turned off in Settings while away: the fix goes (`fixAfterPermission`, the 7.3 km bug), and so must the
+ * last-known position that orders the lap (SCRUM-1077). It stayed, so a denied phone kept sending a position with the
+ * Featured read and the server measured every card from it.
+ */
+it('denied on the way back: no position goes with the Featured read, the lap seed’s included', async () => {
+  const { AppState } = require('react-native') as typeof import('react-native')
+  const Location = require('expo-location') as { getForegroundPermissionsAsync: jest.Mock }
+  const { getEvents } = require('../lib/api') as { getEvents: jest.Mock }
+  const onChange: ((s: string) => void)[] = []
+  const sub = jest.spyOn(AppState, 'addEventListener').mockImplementation(((kind: string, fn: (s: string) => void) => {
+    if (kind === 'change') onChange.push(fn)
+    return { remove: () => {} }
+  }) as never)
+  await render(<Events />)
+  await settle()
+  const featuredAt = () => getEvents.mock.calls.filter(([q]) => q?.featured).map(([q]) => [q.lat ?? null, q.lon ?? null])
+  expect(featuredAt().at(-1)).not.toEqual([null, null])
+  Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'denied' })
+  await act(async () => onChange.forEach((fn) => fn('active')))
+  await settle()
+  expect(featuredAt().at(-1)).toEqual([null, null])
+  Location.getForegroundPermissionsAsync.mockResolvedValue({ status: 'granted' })
+  sub.mockRestore()
+})
