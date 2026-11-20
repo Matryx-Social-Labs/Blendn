@@ -1,3 +1,4 @@
+import { getDistanceKm } from './geo'
 import type { DistanceReading } from './placesPane'
 import type { PreciseFix } from './roomButton'
 
@@ -255,4 +256,23 @@ export function mapSummary({
   if (you === 'stale' && youLine) parts.push(`${youLine.replace(' · ', ', ')}.`)
   if (edge) parts.push(`${edge.name} is off the map${edge.distance ? `, ${edge.distance} away` : ''}.`)
   return parts.join(' ')
+}
+
+/** The farthest an edge-marked venue may be from where the map looks, and from the shown city's centre. */
+export const EDGE_MAX_KM = 50
+
+type LatLon = { latitude: number; longitude: number }
+
+/**
+ * Whether the lap's venue gets an edge marker, and whether it may say how far it is (owner bug 2026-11-20: from
+ * Saarbrücken the marker read "Olive Beach · 7,500 km"). Only a venue in the city the map shows, within `EDGE_MAX_KM` of
+ * where the map looks; the marker itself still needs the venue off screen (`edgeMarker`). Its distance is from the
+ * person, so it is said only while the person is in that city. Null: no marker.
+ */
+export function edgeGate(s: { at: readonly [number, number]; cityCentre: LatLon | null; mapCentre: readonly [number, number] | null; fix: LatLon | null }): { distance: boolean } | null {
+  const { at, cityCentre, mapCentre, fix } = s
+  if (!cityCentre || !mapCentre) return null
+  const inCity = (lat: number, lon: number) => getDistanceKm(cityCentre.latitude, cityCentre.longitude, lat, lon) <= EDGE_MAX_KM
+  if (!inCity(at[1], at[0]) || getDistanceKm(mapCentre[1], mapCentre[0], at[1], at[0]) > EDGE_MAX_KM) return null
+  return { distance: !!fix && inCity(fix.latitude, fix.longitude) }
 }

@@ -43,6 +43,8 @@ export const MAP_THEME = {
     /** Where the map opens (and where "my location" goes back to): close enough that a lit building and a beacon read as 3D, tilted so they stand up. */
     zoom: 16,
     pitch: 55,
+    /** North up: "my location" takes a rotated map back to it (owner 2026-11-20). */
+    bearing: 0,
     /** Farther than this from where the map is, a move is to another city: no flight, a jump under a fade (design kit motion #41). */
     acrossCityKm: 30,
     /** Within a city, the camera eases this long. */
