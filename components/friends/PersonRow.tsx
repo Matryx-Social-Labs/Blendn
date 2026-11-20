@@ -184,7 +184,8 @@ const styles = StyleSheet.create({
   text: { flex: 1, minWidth: 0 },
   // Centred on the row: a small button inside hugs its label, and without this it would sit at the row's top.
   trailing: { alignSelf: 'center' },
-  under: { alignSelf: 'flex-start', marginTop: SPACE.sm },
+  // Under the text: room above and below for a small button's slop to its 44/48 target, inside the row, clear of the next row.
+  under: { alignSelf: 'flex-start', marginVertical: SPACE.sm },
   ink: { color: COLOR.textPrimary },
   muted: { color: COLOR.textSecondary },
 })

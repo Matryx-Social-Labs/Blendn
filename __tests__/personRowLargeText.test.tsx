@@ -14,9 +14,10 @@ jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
 import { IncomingRequestRow } from '../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../components/friends/InviteLinkCard'
 import { PersonRow, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../components/friends/PersonRow'
+import { ROW_ACTION_HEIGHT } from '../components/ds/Button'
 import { RevealBar } from '../components/ds/RevealBar'
 import { AX_FONT_SCALE, CONTROL_FONT_CAP } from '../components/ds/shared'
-import { FONT_FAMILY, MAX_FONT_SCALE } from '../lib/design/tokens'
+import { FONT_FAMILY, MAX_FONT_SCALE, SIZE } from '../lib/design/tokens'
 import { AX_XXXL, clipped, uncapped } from './helpers/ax'
 /* eslint-enable import/first */
 
@@ -68,6 +69,9 @@ describe('PersonRow', () => {
     expect(screen.getAllByTestId('trail', hidden)).toHaveLength(1)
     const under = StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style)
     expect(under.alignSelf).toBe('flex-start')
+    // A small button's slop to the larger target (Android's 48) stays inside the row, not over the next row's name.
+    const slop = (Math.max(SIZE.targetIos, SIZE.targetAndroid) - ROW_ACTION_HEIGHT) / 2
+    expect(under.marginVertical).toBeGreaterThanOrEqual(slop)
     expect(clipped(screen.toJSON())).toEqual([])
   })
 
