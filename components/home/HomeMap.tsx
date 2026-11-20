@@ -34,6 +34,7 @@ import {
   snapRecentre,
   tiltedZoom,
   viewportQuery,
+  panSource,
   visibleCentreY,
   type Bounds,
   type InFlight,
@@ -272,6 +273,8 @@ export const HomeMap = memo(function HomeMap({
   const mapShown = mapHeight - padding.top - padding.bottom > 0
   // The map you can see as the camera last used it: its padding and the map's height, together (review M3).
   const shown = useRef({ padding, mapHeight })
+  // The padding the camera really has (its last stop's, or the first frame's): a settled snap pans in it (`panSource`).
+  const camPad = useRef(padding)
   // The move in flight, and a count of moves: a settled snap must not undo a newer move (review M1).
   const lastMove = useRef<InFlight | null>(null)
   const moves = useRef(0)
@@ -285,6 +288,7 @@ export const HomeMap = memo(function HomeMap({
   const stop = (to: CameraStop) => {
     const cam = camera.current
     if (!cam) return
+    if (to.padding) camPad.current = { top: to.padding.top ?? 0, bottom: to.padding.bottom ?? 0 }
     Promise.resolve()
       .then(() => cam.setStop({ easing: 'ease', ...to }))
       .catch((error) => Logger.warn('events', 'Home map camera stop failed', { error: String(error) }))
@@ -353,15 +357,20 @@ export const HomeMap = memo(function HomeMap({
         stop({ center: to, ...(zoom !== undefined && { zoom }), ...(pitch !== undefined && { pitch }), ...bearingOf(plan.move.bearing), padding: shown.current.padding, duration: plan.durationMs })
         return
       }
-      if (plan.kind === 'centre') {
-        stop({ center: plan.to, padding: shown.current.padding, duration: settle })
-        return
-      }
-      map.current
-        ?.unproject([width / 2, visibleCentreY(before.padding, before.mapHeight)])
+      /*
+       * A pan, in the padding the camera already has: what was centred (the fix while following, else the old middle,
+       * read with the padding AND the map height it was drawn with: review M3) moves to the new middle. A stop that
+       * changed the padding eased part of the way and cut the rest in one frame on iOS (SCRUM-1090 drive, dev too).
+       */
+      const ref = map.current
+      if (!ref) return
+      const to: [number, number] = [width / 2, visibleCentreY(padding, mapHeight)]
+      const from = plan.kind === 'centre' ? ref.project(plan.to) : Promise.resolve<[number, number]>([width / 2, visibleCentreY(before.padding, before.mapHeight)])
+      from
+        .then((at) => ref.unproject(panSource([width / 2, visibleCentreY(camPad.current, mapHeight)], at as [number, number], to)))
         .then((centred) => {
           if (moves.current !== startedAt) return
-          stop({ center: centred as [number, number], padding: shown.current.padding, duration: settle })
+          stop({ center: centred as [number, number], padding: camPad.current, duration: settle })
         })
         .catch((error) => Logger.warn('events', 'Home map could not re-center on the drawer', { error: String(error) }))
     }, 0)

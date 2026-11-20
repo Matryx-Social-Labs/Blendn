@@ -9,8 +9,8 @@ import React from 'react'
 import { act, render } from '@testing-library/react-native'
 import { makeMutable } from 'react-native-reanimated'
 
-const mockStops: Array<Record<string, unknown>> = []
-const mockCamera: { initial?: { center: [number, number] }; centre: [number, number] } = { centre: [0, 0] }
+const mockStops: Array<{ center?: [number, number]; padding?: unknown; [k: string]: unknown }> = []
+const mockCamera: { initial?: { center: [number, number]; padding?: unknown }; centre: [number, number] } = { centre: [0, 0] }
 let mockRegion: ((e: unknown) => void) | undefined
 let mockLoaded: (() => void) | undefined
 jest.mock('@maplibre/maplibre-react-native', () => {
@@ -24,7 +24,9 @@ jest.mock('@maplibre/maplibre-react-native', () => {
       React.useImperativeHandle(ref, () => ({
         queryRenderedFeatures: async () => [],
         getBounds: async () => [0, 0, 0, 0],
-        project: async () => [0, 0],
+        // A flat linear projection around the fix, so a pan can be checked by direction.
+        project: async ([lon, lat]: [number, number]) => [200 + (lon - 77.6408) * 1e5, 300 - (lat - 12.9784) * 1e5],
+        unproject: async ([x, y]: [number, number]) => [77.6408 + (x - 200) / 1e5, 12.9784 - (y - 300) / 1e5],
         getViewState: async () => {
           const [lon, lat] = mockCamera.centre
           return { bounds: [lon - 0.02, lat - 0.04, lon + 0.02, lat + 0.04], center: mockCamera.centre, zoom: 15, pitch: 45 }
@@ -311,6 +313,24 @@ describe('the drawer full covers the map (SCRUM-1090)', () => {
     await view.rerender(map(FIX, null, 600))
     await settle()
     expect(mockStops.length).toBeGreaterThan(0)
+  })
+
+  /*
+   * Owner, 2026-11-20: "the map snaps or flickers when the drawer is pulled down". MapLibre iOS eases a move whose padding
+   * changes, then lands the rest in one frame (drive: a ~70 pt cut on every half → peek, on dev too). The re-centre on a
+   * settled snap is a pan in the padding the camera already has, so no move ever changes it there.
+   */
+  it('a settled snap pans: every stop keeps the padding the camera already had, and the map moves down with the drawer', async () => {
+    const view = await render(map(FIX))
+    await settle()
+    const had = [...mockStops].reverse().find((s) => s.padding)?.padding ?? mockCamera.initial?.padding
+    mockStops.length = 0
+    await view.rerender(map(FIX, null, 600))
+    await settle()
+    expect(mockStops.length).toBeGreaterThan(0)
+    for (const s of mockStops) expect(s.padding).toEqual(had)
+    // The visible middle moved down: the camera's centre goes north of the fix, so the fix rides down into it.
+    expect(mockStops.at(-1)?.center?.[1]).toBeGreaterThan(FIX.latitude)
   })
 
   it('the stale callout is not drawn at full, where it could only sit under the top bar', async () => {
