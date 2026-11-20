@@ -188,7 +188,16 @@ const commitment = (e: Pick<RoomButtonEvent, 'is_favorited' | 'rsvp_status'>): n
  * The phone's own fix, never rounded: it stays on the phone. `accuracy` is the radius in metres the OS gives it, and
  * `approximate` is iOS's reduced or Android's coarse grant (a fix good to kilometres): either makes it useless against a fence.
  */
-export type PreciseFix = { latitude: number; longitude: number; accuracy?: number | null; approximate?: boolean; timestamp?: number | null }
+export type PreciseFix = {
+  latitude: number
+  longitude: number
+  accuracy?: number | null
+  approximate?: boolean
+  timestamp?: number | null
+  /** Ground speed (m/s) and course over ground (° from true north), when the OS has them: the heading beam's source when moving. */
+  speed?: number | null
+  course?: number | null
+}
 
 /** The oldest a fix may be and still say where somebody is now (ms), and the coarsest the last-known read may return (m). */
 export const FIX_MAX_AGE_MS = 120_000
@@ -201,11 +210,17 @@ export const FIX_REQUIRED_ACCURACY_M = 100
 export const fixAfterPermission = (status: string, current: PreciseFix | null): PreciseFix | null => (status === 'granted' ? current : null)
 
 /** A fix as `expo-location` hands it over, kept with the accuracy and the time that make it usable against a fence. */
-export const fixOf = (position: { coords: { latitude: number; longitude: number; accuracy: number | null }; timestamp: number }): PreciseFix => ({
+export const fixOf = (position: {
+  coords: { latitude: number; longitude: number; accuracy: number | null; speed?: number | null; heading?: number | null }
+  timestamp: number
+}): PreciseFix => ({
   latitude: position.coords.latitude,
   longitude: position.coords.longitude,
   accuracy: validAccuracy(position.coords.accuracy),
   timestamp: position.timestamp,
+  // The OS says -1 for "not known"; the same rule as accuracy keeps it from reading as a number.
+  ...(validAccuracy(position.coords.speed) !== null && { speed: validAccuracy(position.coords.speed) }),
+  ...(validAccuracy(position.coords.heading) !== null && { course: validAccuracy(position.coords.heading) }),
 })
 
 /**

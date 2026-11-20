@@ -292,6 +292,13 @@ describe('pickInsideEvent', () => {
       expect(fixOf({ coords: { latitude: 1, longitude: 2, accuracy: -1 }, timestamp: 99 }).accuracy).toBeNull()
     })
 
+    it('fixOf carries the speed and the course over ground when the OS has them, never its -1 (the heading beam, SCRUM-1089)', () => {
+      expect(fixOf({ coords: { latitude: 1, longitude: 2, accuracy: 7, speed: 3.2, heading: 271 }, timestamp: 99 })).toMatchObject({ speed: 3.2, course: 271 })
+      const still = fixOf({ coords: { latitude: 1, longitude: 2, accuracy: 7, speed: -1, heading: -1 }, timestamp: 99 })
+      expect(still.speed ?? null).toBeNull()
+      expect(still.course ?? null).toBeNull()
+    })
+
     it('fixOf carries the accuracy and the time of a position', () => {
       expect(fixOf({ coords: { latitude: 1, longitude: 2, accuracy: 7 }, timestamp: 99 })).toEqual({ latitude: 1, longitude: 2, accuracy: 7, timestamp: 99 })
     })

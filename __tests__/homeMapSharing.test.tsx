@@ -45,6 +45,7 @@ jest.mock('@maplibre/maplibre-react-native', () => {
     }),
     GeoJSONSource: ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children),
     Layer: () => null,
+    Images: () => null,
     NativeUserLocation: () => React.createElement(View, { testID: 'user-puck' }),
   }
 })

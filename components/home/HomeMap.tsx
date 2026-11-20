@@ -71,7 +71,7 @@ import { EventPiles } from './EventPiles'
 import { PileSpeech } from './PileSpeech'
 import { EdgeMarker } from './EdgeMarker'
 import { ApproximateLine, STALE_CALLOUT, StaleCallout } from './YouLines'
-import { YouMark } from './YouMark'
+import { YouBeam, YouMark } from './YouMark'
 import { NearPins } from './NearPins'
 import { Chips, CityBuildings, GroundGlow, LitBuildings, OwnBuildings, ReachLabels } from './MapLitLayers'
 import { useMapLighting, type MapView, type Segment } from './useMapLighting'
@@ -234,6 +234,8 @@ export const HomeMap = memo(function HomeMap({
   const camera = useRef<CameraRef>(null)
   const pileSource = useRef<GeoJSONSourceRef>(null)
   const screenReader = useScreenReader()
+  // Which way you face, for the spoken summary only (YouBeam): changes at most eight times a turn.
+  const [facing, setFacing] = useState<string | null>(null)
   /** Bumped each time the camera stops or the pins change: the spoken numbers are read again (`PileSpeech`). */
   const [settled, setSettled] = useState(0)
   // The person has moved the map (a pan, or a city picked): a fix no longer takes it over.
@@ -729,7 +731,7 @@ export const HomeMap = memo(function HomeMap({
   const bounds = view.current.bounds
   const edgeOff = edgeTarget && bounds ? !(edgeTarget.at[0] >= bounds[0] && edgeTarget.at[0] <= bounds[2] && edgeTarget.at[1] >= bounds[1] && edgeTarget.at[1] <= bounds[3]) : false
   const summary = screenReader
-    ? mapSummary({ bounds, pins, you: you.kind, youLine: you.line, edge: edgeTarget && edgeOff ? { name: edgeTarget.name, distance: edgeDistance } : null })
+    ? mapSummary({ bounds, pins, you: you.kind, youLine: you.line, facing, edge: edgeTarget && edgeOff ? { name: edgeTarget.name, distance: edgeDistance } : null })
     : null
   // TalkBack cannot reach a Marker inside MapLibre's Android view: the lit names get targets over the map too. iOS reads them.
   const spokenChips = useMemo(
@@ -807,6 +809,8 @@ export const HomeMap = memo(function HomeMap({
             </GeoJSONSource>
           </>
         ) : null}
+        {/* Which way you face (pulse-map 14 A): under every pin, so it never covers a tap. */}
+        <YouBeam fix={center} sharing={sharing} now={now} focused={focused} onFacing={screenReader ? setFacing : undefined} />
         {/* Every unlit event a dot at every zoom, piles and stacked spots as numbers, the focus on top; a lit place is its light (pulse-map 08, 12 A). */}
         <EventPiles sourceRef={pileSource} pins={pins} litIds={lit.pinIds} focusId={focusPin?.id ?? null} onOpen={open} onExpand={expandPile}>
           <YouMark part="dot" fix={center} sharing={sharing} now={now} />

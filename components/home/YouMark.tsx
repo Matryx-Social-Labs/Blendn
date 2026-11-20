@@ -1,9 +1,13 @@
-import { GeoJSONSource, Layer } from '@maplibre/maplibre-react-native'
-import { useMemo } from 'react'
+import { GeoJSONSource, Images, Layer } from '@maplibre/maplibre-react-native'
+import { useEffect, useMemo, useState } from 'react'
 
+import { DURATION } from '../../lib/design/tokens'
+import { beamShows, compassName, type Facing } from '../../lib/heading'
 import { youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
+import { useReducedMotion } from '../../lib/motion'
 import type { PreciseFix } from '../../lib/roomButton'
+import { useHeading } from '../../lib/useHeading'
 
 /** The Earth's circumference (m) and MapLibre's tile size: metres to points at zoom z is m · 512 · 2^z / (C · cos φ). */
 const EARTH_M = 40_075_016.686
@@ -61,5 +65,79 @@ export function YouMark({ part, fix, sharing, now }: { part: 'halo' | 'dot'; fix
         }}
       />
     </GeoJSONSource>
+  )
+}
+
+/**
+ * The beam's images, one per width (pulse-map 14 A): violet `#BA96D3` fading out over 70 pt from the dot, apex at the
+ * centre. Made by `heading-beam-png.mjs` on the pulse-map board from the same wedge as the sheet.
+ */
+const BEAM_IMAGES = {
+  'you-beam-40': require('../../assets/map/you-beam-40.png'),
+  'you-beam-70': require('../../assets/map/you-beam-70.png'),
+  'you-beam-100': require('../../assets/map/you-beam-100.png'),
+} as const
+const WIDTHS = [40, 70, 100] as const
+
+/**
+ * Which way you face (pulse-map 14 A, picked 2026-11-20): a violet beam from the dot, as wide as the compass is unsure.
+ * - **Under the pins**: HomeMap draws it before `EventPiles`, and its source takes no touches, so it never covers a tap.
+ * - **True to the world**: rotated against north (`icon-rotation-alignment: map`), so turning the map by hand, or any
+ *   camera move, leaves it pointing where you face.
+ * - **Only on a precise, fresh fix**, and the compass is watched only then (`useHeading`). Approximate or stale: it
+ *   fades out over `DURATION.base`. A width change cross-fades over `DURATION.medium`, at once under Reduce Motion.
+ * - **Spoken** through `onFacing` into the map's label, never announced while you turn.
+ */
+export function YouBeam({
+  fix,
+  sharing,
+  now,
+  focused,
+  onFacing,
+}: {
+  fix: PreciseFix | null
+  sharing: boolean
+  now: number
+  /** The map is on screen: only then is the compass read. */
+  focused: boolean
+  onFacing?: (name: string | null) => void
+}) {
+  const mark = youMark({ sharing, permission: 'granted', fix, now })
+  const reduceMotion = useReducedMotion()
+  const facing = useHeading({ on: focused && beamShows(mark.kind), fix, reduceMotion })
+  // Gone, it fades out as it was drawn: the last direction and width are kept.
+  const [last, setLast] = useState<Facing | null>(facing)
+  if (facing && (facing.deg !== last?.deg || facing.width !== last?.width)) setLast(facing)
+  const name = facing ? compassName(facing.deg) : null
+  useEffect(() => onFacing?.(name), [name, onFacing])
+  const data = useMemo(
+    () => (fix ? { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: {}, geometry: { type: 'Point' as const, coordinates: [fix.longitude, fix.latitude] } }] } : null),
+    [fix]
+  )
+  if (!data || mark.kind === 'off' || mark.kind === 'none' || mark.kind === 'denied') return null
+  const shown = facing ?? last
+  const transition = { duration: !facing ? DURATION.base : reduceMotion ? 0 : DURATION.medium, delay: 0 }
+  return (
+    <>
+      <Images images={BEAM_IMAGES} />
+      <GeoJSONSource id="you-beam" data={data}>
+        {WIDTHS.map((w) => (
+          <Layer
+            key={`you-beam-${w}`}
+            id={`you-beam-${w}`}
+            type="symbol"
+            layout={{
+              'icon-image': `you-beam-${w}`,
+              'icon-rotate': shown?.deg ?? 0,
+              'icon-rotation-alignment': 'map',
+              'icon-pitch-alignment': 'viewport',
+              'icon-allow-overlap': true,
+              'icon-ignore-placement': true,
+            }}
+            paint={{ 'icon-opacity': facing && facing.width === w ? 1 : 0, 'icon-opacity-transition': transition }}
+          />
+        ))}
+      </GeoJSONSource>
+    </>
   )
 }

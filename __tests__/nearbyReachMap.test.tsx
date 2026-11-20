@@ -45,6 +45,7 @@ jest.mock('@maplibre/maplibre-react-native', () => {
       return React.createElement(View, null, children)
     },
     Layer: () => null,
+    Images: () => null,
     NativeUserLocation: () => React.createElement(View, { testID: 'user-puck' }),
   }
 })
