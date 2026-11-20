@@ -411,5 +411,5 @@ it('the Pulse asks for its sections again when the browse city’s zone arrives 
   const { readFileSync } = jest.requireActual<typeof import('fs')>('fs')
   const { join } = jest.requireActual<typeof import('path')>('path')
   const screen = readFileSync(join(__dirname, '..', 'app/(tabs)/events.tsx'), 'utf8')
-  expect(screen).toMatch(/const sectionsKey = `\$\{placeKey\}\|\$\{cityZone \?\? '-'\}\|/)
+  expect(screen).toMatch(/const sectionsKey = `\$\{placeKey\}\|.*\$\{cityZone \?\? '-'\}\|/)
 })

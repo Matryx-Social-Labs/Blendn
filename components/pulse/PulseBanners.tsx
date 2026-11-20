@@ -83,13 +83,14 @@ export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch
           <Banner kind="info" onMap={onMap} icon="plane" text={travel.text} action={{ label: `Back to ${travel.back}`, onPress: onTravelBack }} onDismiss={onTravelDismiss} testID="pulse-travel" />
         </Animated.View>
       ) : null}
-      {place && far ? (
+      {place && far?.through ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
-          {far.through ? (
-            <Banner kind="info" onMap={onMap} text={`Browsing ${far.city}`} action={{ label: 'Back to you', onPress: onBackToYou }} testID="pulse-far-browsing" />
-          ) : (
-            <NothingNearLine city={far.city} side={far.side} onSide={onFarSide} onMap={onMap} />
-          )}
+          <Banner kind="info" onMap={onMap} text={`Browsing ${far.city}`} action={{ label: 'Back to you', onPress: onBackToYou }} testID="pulse-far-browsing" />
+        </Animated.View>
+      ) : null}
+      {place && far && !far.through ? (
+        <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
+          <NothingNearLine city={far.city} side={far.side} onSide={onFarSide} onMap={onMap} />
         </Animated.View>
       ) : null}
       {place && away ? (
