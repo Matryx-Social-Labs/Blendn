@@ -1113,6 +1113,15 @@ export interface EventApiItem {
 export interface EventsListResponse {
   events: EventApiItem[]
   pagination: PaginationMeta
+  /**
+   * `include=near` with a fix (backend round 3): is anything you could go to within `reachKm`, and if not, the nearest
+   * open city with something on and how far its centre is. Absent without the include or a fix, or from an older server.
+   */
+  near?: {
+    reachKm: number
+    empty: boolean
+    nearestCity: { slug: string; name: string; country: string; distanceKm: number; centre: { latitude: number; longitude: number } } | null
+  }
   activeCheckins?: Array<{ id: string; eventId: string; status: string; [key: string]: unknown }>
   profile?: OwnProfileEnvelope
 }

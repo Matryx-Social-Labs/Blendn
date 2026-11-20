@@ -178,6 +178,7 @@ export const HomeMap = memo(function HomeMap({
   locateLift,
   reach = null,
   onTouched,
+  onLocate,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
@@ -219,6 +220,8 @@ export const HomeMap = memo(function HomeMap({
   reach?: { latitude: number; longitude: number } | null
   /** The person panned, pinched or tapped the map: Featured's lap is over for the visit (pulse-map, "your touch wins"). */
   onTouched?: () => void
+  /** "My location" (the glyph, or a "Back to you" routed through `cityPick` here): the map is back on you. */
+  onLocate?: () => void
 }) {
   const { width, height } = useWindowDimensions()
   /*
@@ -511,6 +514,7 @@ export const HomeMap = memo(function HomeMap({
   // "My location": back to the fix and following it again, or ask for one (dimmed until the ask settles).
   const locate = () => {
     setTouched(false)
+    onLocate?.()
     const target = locateTarget(center)
     if (!target) {
       setAsking(true)

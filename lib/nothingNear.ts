@@ -1,0 +1,61 @@
+import type { EventsListResponse } from './apiClient'
+import { cityBySlug, sameCity, type CityOption, type StoredCity } from './city'
+import { getDistanceKm } from './geo'
+
+/**
+ * "Nothing near you yet" (pulse-map sheet 07, frames 3–4; the advisor's rules on SCRUM-1087). The server answers
+ * `include=near` with a fix (backend round 3): nothing anybody could go to within `reachKm`, and the nearest open city
+ * that has something on. Then the map stays on you, the drawer shows that city ("In {city}", the default) or the honest
+ * empty ("Near you"), the lap waits, and the city's distance is said once, never per row.
+ */
+
+export type NearSignal = NonNullable<EventsListResponse['near']>
+
+/**
+ * The city to show from far away, and how far it is. None when something is near, the server names nothing, the city is
+ * not in the list, or somebody chose another city: a choice is never overridden (`lib/city.ts`).
+ */
+export function farCity({
+  near,
+  available,
+  selection,
+}: {
+  near: NearSignal | null | undefined
+  available: readonly CityOption[]
+  selection: Pick<StoredCity, 'city' | 'source'> | null
+}): { option: CityOption; km: number } | null {
+  if (!near?.empty || !near.nearestCity) return null
+  const option = cityBySlug(available, near.nearestCity.slug)
+  if (!option) return null
+  if (selection?.source === 'chosen' && !sameCity(selection.city, option.city)) return null
+  return { option, km: near.nearestCity.distanceKm }
+}
+
+/** Rounded as a person says it: to the kilometre under 100, to ten under 1,000, to a hundred past it. */
+const roughKm = (km: number) => {
+  const step = km < 100 ? 1 : km < 1000 ? 10 : 100
+  return (Math.round(km / step) * step).toLocaleString('en-US')
+}
+
+/** The one place the city's distance is said (the rows say none: it would be the same number on every one). */
+export const farDistanceLine = (city: string, km: number) => `${city} is about ${roughKm(km)} km away`
+
+/** Open cities with something on, nearest first from `point`: where "Blend’n is on". */
+export function openCitiesNearest(available: readonly CityOption[], point: { latitude: number; longitude: number }): string[] {
+  return available
+    .filter((c) => c.access !== 'comingSoon' && c.eventCount > 0 && c.centre)
+    .map((c) => ({ name: c.city, km: getDistanceKm(point.latitude, point.longitude, c.centre!.latitude, c.centre!.longitude) }))
+    .sort((a, b) => a.km - b.km)
+    .map((c) => c.name)
+}
+
+/** Frame 4: "Nothing within 25 km yet", where Blend’n is on (two names and "more"), and the promise. No borrowed events. */
+export function nearYouCopy(reachKm: number, cities: readonly string[]): { title: string; message: string } {
+  const promise = 'We’ll tell you the day it opens near you.'
+  const [a, b] = cities
+  const where = !a ? null : !b ? a : cities.length === 2 ? `${a} and ${b}` : `${a}, ${b} and more`
+  return {
+    title: `Nothing within ${reachKm} km yet`,
+    message: where ? `Blend’n is on in ${where}. ${promise}` : 'We’ll tell you the day Blend’n opens near you.',
+  }
+}

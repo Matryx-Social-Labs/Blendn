@@ -57,6 +57,8 @@ export interface HomeBrowse {
   focus?: { pin: Pin; n: number; km?: number | null } | null
   /** Near me is on with a fix in the city (N1): the map draws the reach around it. */
   reach?: { latitude: number; longitude: number } | null
+  /** The map went back to you ("my location"): the Pulse leaves a city it was taken to from far away (SCRUM-1087). */
+  onLocate?: () => void
 }
 
 /**
@@ -288,6 +290,7 @@ export function HomeShell({
             reach={segment === 'events' ? (browse.reach ?? null) : null}
             locateLift={locateLift}
             onTouched={onMapTouched}
+            onLocate={browse.onLocate}
           />
         ) : null}
       </View>

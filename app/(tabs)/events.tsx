@@ -35,7 +35,9 @@ import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
-import { NearEnd, NothingNear, PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
+import { NearEnd, NearYouEmpty, NothingNear, PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
+import ScalePress from '../../components/motion/ScalePress'
+import { Text as TypeText } from '../../components/ui/Text'
 import { PulsePeek, type Peek } from '../../components/pulse/PulsePeek'
 import { PullIndicator } from '../../components/pulse/PullIndicator'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
@@ -47,6 +49,7 @@ import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
 import { pinsFor } from '../../lib/homeMap'
 import { NEAR_KM, vibeOf, type Vibe } from '../../lib/pulseChips'
 import { groupByWhen, nearSpan, nothingNearCopy, SEE_ALL_KINDS, seeAllFilters, type Beyond, type SeeAllKind } from '../../lib/nearby'
+import { farCity, farDistanceLine, nearYouCopy, openCitiesNearest, type NearSignal } from '../../lib/nothingNear'
 import { NearbyRow, WhenHeading } from '../../components/pulse/NearbyRow'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useLocationSharing } from '../../lib/shareLocation'
@@ -1353,6 +1356,51 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
 
   const browsingHere = isBrowsingHere(selectedCity, deviceCity)
 
+  /*
+   * "Nothing near you yet" (pulse-map sheet 07 f3–4; the advisor's rules on SCRUM-1087). The server's near signal for the
+   * fix (`include=near`, backend round 3), read once per ~1 km. Nothing within its reach: the drawer shows the nearest open
+   * city it names (a guess, so a choice is never overridden), the map stays on you and the lap waits. "Near you" is the
+   * honest empty. Taking the map there (a lead swipe, or the distance line) is browsing it: "Back to you" (the locate) ends
+   * it. All of it is this visit's: nothing here is stored, so the next launch asks again.
+   */
+  const nearKey = sharing && userLocation ? feedKey(null, userLocation) : null
+  const [nearState, setNearState] = useState<{ key: string; near: NearSignal | null } | null>(null)
+  useEffect(() => {
+    if (!nearKey || !user || authLoading || !userLocation) return
+    let cancelled = false
+    const at = { lat: roundCoord(userLocation.latitude), lon: roundCoord(userLocation.longitude) }
+    Promise.resolve()
+      .then(() => apiClient.getEvents({ page: 1, limit: 1, ...at, include: 'near' }))
+      .then((r) => {
+        if (!cancelled) setNearState({ key: nearKey, near: r.success ? (r.data?.near ?? null) : null })
+      })
+      .catch((error) => Logger.warn('events', 'Near signal did not load', { error: String(error) }))
+    return () => {
+      cancelled = true
+    }
+    // The fix only moves the key (~1 km); the read takes the live one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearKey, user, authLoading])
+  const near = nearState?.key === nearKey ? nearState.near : null
+  const far = useMemo(() => farCity({ near, available: cityOptions, selection }), [near, cityOptions, selection])
+  // The far city is the guess: an inferred (or no) selection moves to it during render, as the other guesses do.
+  if (far && selection?.source !== 'chosen' && selection?.slug !== far.option.slug) setSelection(storedAt(far.option, 'inferred'))
+  const [farSide, setFarSide] = useState<'near' | 'city'>('city')
+  const [farThrough, setFarThrough] = useState(false)
+  /** On you, far from everything: the lap waits and nothing moves the map but the person. */
+  const farHere = !!far && !farThrough
+  const nearSide = farHere && farSide === 'near'
+  // Every city pick takes the map there (`cityPickAction`): from far away that is browsing it, the picker's too.
+  const [pickSeen, setPickSeen] = useState(cityPick.n)
+  if (pickSeen !== cityPick.n) {
+    setPickSeen(cityPick.n)
+    if (!cityPick.here) setFarThrough(true)
+  }
+  const goToFarCity = useCallback(() => {
+    setFarSide('city')
+    setCityPick((p) => ({ n: p.n + 1, here: false }))
+  }, [])
+
   /**
    * The selected city is somewhere we have no events at all.
    *
@@ -1633,7 +1681,14 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   // The page on screen, and a count of swipes: each one moves the map to that venue (`focus.n`).
   const [leadAt, setLeadAt] = useState({ key: '', page: 0, swipes: 0 })
   const leadPage = leadAt.key === leadKey ? Math.min(leadAt.page, Math.max(0, leadEvents.length - 1)) : 0
-  const onLeadPage = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.swipes + 1 })), [leadKey])
+  const onLeadPage = useCallback(
+    (page: number) => {
+      // A swipe takes the map to that venue: from far away, that is browsing the city (SCRUM-1087).
+      if (farHere) setFarThrough(true)
+      setLeadAt((at) => ({ key: leadKey, page, swipes: at.swipes + 1 }))
+    },
+    [leadKey, farHere]
+  )
   // The lap moved on by itself: the venue lights where it stands, and the camera stays (no new swipe, so `focus.n` holds).
   const onLeadLight = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.key === leadKey ? at.swipes : 0 })), [leadKey])
   const leadEvent = leadEvents[leadPage] ?? null
@@ -1694,6 +1749,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const beyond = beyondState?.key === beyondKey ? beyondState.value : null
   const seeCity = useCallback(() => setFilters((f) => ({ ...f, radiusKm: undefined })), [])
 
+  // Back on you: a city taken to from far away is left (the map's own locate, or "Back to you" through it).
+  const leaveFarCity = useCallback(() => setFarThrough(false), [])
   // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
   useEffect(
     () =>
@@ -1712,8 +1769,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         peekLine,
         focus,
         reach,
+        onLocate: leaveFarCity,
       }),
-    [onBrowse, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
+    [leaveFarCity, onBrowse, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
   )
 
   const firstSection = sections[0]?.key ?? null
@@ -1915,7 +1973,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const locationDenied = locationStatus === 'denied' && !deniedDismissed
   const placeBanners = useMemo(
     () =>
-      switchSuggestion || travel || away || locationDenied ? (
+      switchSuggestion || travel || away || far || locationDenied ? (
         <PulseBanners
           only="place"
           socketStatus={socketStatus}
@@ -1923,8 +1981,12 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           switchTo={travel ? null : switchSuggestion}
           browsing={selectedCity}
           onSwitch={(city) => bannerActions.current.chooseCity({ city }, true)}
-          away={away}
-          travel={travel}
+          // From far away the far line says it all: never "We're not in X yet" under it (SCRUM-1087).
+          away={far ? null : away}
+          travel={far ? null : travel}
+          far={far ? { city: far.option.city, side: farSide, through: farThrough } : null}
+          onFarSide={setFarSide}
+          onBackToYou={() => setCityPick((p) => ({ n: p.n + 1, here: true }))}
           onTravelBack={() => {
             const { chooseCity: choose, home: back, deviceCity: here } = bannerActions.current
             if (back) choose(back, sameCity(back.city, here))
@@ -1939,7 +2001,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       ) : null,
     // `travel` is a new object every render: its words are what change it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, locationDenied, socketStatus, bannerActions]
+    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, far?.option.city, farSide, farThrough, locationDenied, socketStatus, bannerActions]
   )
   /*
    * The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask.
@@ -2042,7 +2104,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           onPage={onLeadPage}
           onLight={onLeadLight}
           // While the order waits on a fix: the first cover, the lap not started.
-          visible={visible && orderMode !== 'pending'}
+          // …and from far away, until the map is taken to the city (SCRUM-1087).
+          visible={visible && orderMode !== 'pending' && !farHere}
           screenReader={shell?.screenReader ?? false}
           tookOver={shell?.mapTouched ?? false}
         />
@@ -2053,7 +2116,17 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * Under the chips, as a row of the list: the loading skeleton, the empty and failed states, the results count, the
    * lead card, Bring your friends, the sections and the "Everything else" header.
    */
-  const bodyNode = showLoadingSkeleton ? (
+  // From far away (SCRUM-1087): the city's distance said once, over its content; never on a row.
+  const farLine = far && !nearSide ? (
+    <ScalePress onPress={goToFarCity} accessibilityRole="button" accessibilityHint={`Shows ${far.option.city} on the map`} style={styles.farLine} testID="pulse-far-distance">
+      <TypeText variant="meta">{farDistanceLine(far.option.city, far.km)}</TypeText>
+    </ScalePress>
+  ) : null
+  const bodyNode = nearSide && far ? (
+    <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
+      <NearYouEmpty copy={nearYouCopy(near?.reachKm ?? 25, userLocation ? openCitiesNearest(cityOptions, userLocation) : [])} />
+    </FadeInUp>
+  ) : showLoadingSkeleton ? (
     <View>
       {/*
         Shaped like the screen it stands in for, and static: the lead card and a rail (`PulseSkeleton`); a search or filter
@@ -2117,6 +2190,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           </Text>
         </View>
       ) : null}
+      {farLine}
       {leadNode}
       {/* Bring your friends: one card after the lead, gone once shared or dismissed (ledger row 14). */}
       {!isNarrowed && user && events.length > 0 ? <FriendsCard userId={user.id} /> : null}
@@ -2143,9 +2217,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     </View>
   )
 
-  const listData = useMemo(() => (showLoadingSkeleton ? LEAD : [...LEAD, ...rows]), [showLoadingSkeleton, rows])
+  // "Near you" from far away borrows nothing: no rows under its empty.
+  const listData = useMemo(() => (showLoadingSkeleton || nearSide ? LEAD : [...LEAD, ...rows]), [showLoadingSkeleton, nearSide, rows])
   // Not memoised: the two nodes are new elements every render, so a memo here would never hold.
-  const slots = { chips: chipsNode, body: bodyNode, scrolled: searchBarOn }
+  const slots = { chips: nearSide ? null : chipsNode, body: bodyNode, scrolled: searchBarOn }
   // A quiet week's honest end, with a way on (Canada frame): only when it is true (`quietWeekEnd`).
   const quietEnd = !isNarrowed && !!selectedCity && quietWeekEnd(events, { hasMore, now })
 
@@ -2263,6 +2338,7 @@ const styles = StyleSheet.create({
   rateLimitFoot: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md },
   /** The lead card under the chips: Option C's 16 pt (`LEAD_GAP`), centred in the gutter. */
   lead: { marginTop: LEAD_GAP },
+  farLine: { marginTop: LEAD_GAP, paddingHorizontal: SPACE.gutter },
   container: { flex: 1 },
   /**
    * No horizontal padding of its own: every row carries its gutter (the rails and the Set list bleed to the edge), so a

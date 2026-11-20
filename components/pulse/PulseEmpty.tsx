@@ -217,6 +217,24 @@ export function NearEnd({ span, ...ways }: NearWaysProps & { span: string }) {
   )
 }
 
+/**
+ * Sheet 07 frame 4, "Near you" from far away (SCRUM-1087): nothing within the reach, where Blend'n is on, the promise.
+ * No borrowed events and no button: the switch on the map is the way to the city.
+ */
+export function NearYouEmpty({ copy }: { copy: { title: string; message: string } }) {
+  const bold = useBoldText()
+  return (
+    <View style={[styles.notHere, styles.words]} testID="pulse-near-you">
+      <Title style={styles.ink} accessibilityRole="header">
+        {copy.title}
+      </Title>
+      <Text style={[font('body', bold), styles.secondary]} maxFontSizeMultiplier={MAX_FONT_SCALE.body}>
+        {copy.message}
+      </Text>
+    </View>
+  )
+}
+
 /** The first load failed: nothing on screen, and the page says why with one way forward (not a thin banner over a blank page). */
 export function PulseLoadFailed({ onRetry }: { onRetry: () => void }) {
   return (
