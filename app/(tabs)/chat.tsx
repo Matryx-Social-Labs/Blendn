@@ -232,6 +232,8 @@ function ChatInner() {
     [outbox]
   )
 
+  // An accepted ask whose post's room you are seated in is that Rooms row: the Lobby section drops it.
+  const seatedPosts = useMemo(() => new Set(lobbyRooms.flatMap((r) => (r.postId && !membership.left.has(r.id) ? [r.postId] : []))), [lobbyRooms, membership.left])
   const { lobbyRows, crewRows, peopleRows, pastRows } = useMemo(() => {
     const now = new Date()
     const byRecent = (a: Row, b: Row) => b.sortTime - a.sortTime
@@ -547,7 +549,7 @@ function ChatInner() {
       ) : null}
 
       {/* Beside message requests: somebody asking to start talking. Behind BOARD_ENABLED until the board's safety half ships. */}
-      {BOARD_ENABLED && !trimmed ? <BoardRequestsSection refreshKey={inbox.boardRefreshKey} onCount={setBoardCount} /> : null}
+      {BOARD_ENABLED && !trimmed ? <BoardRequestsSection refreshKey={inbox.boardRefreshKey} onCount={setBoardCount} seatedPosts={seatedPosts} /> : null}
     </View>
   )
 

@@ -274,6 +274,23 @@ describe('what the Banter shows', () => {
     )
     expect(shown.outgoing.map((r) => r.id)).toEqual(['waiting', 'declined-soon'])
   })
+
+  it('drops an accepted ask whose post’s room you are seated in: the Rooms row is that ride (C5 B-A)', () => {
+    const soon = { id: 'e1', title: 'Soon', startTime: '2026-10-03T20:00:00Z' }
+    const shown = inboxRequests(
+      {
+        incoming: [],
+        outgoing: [
+          request({ id: 'seated', live: false, status: 'accepted', event: soon, post: { id: 'p1', kind: 'offer', body: 'Car' } }),
+          request({ id: 'no-room-yet', live: false, status: 'accepted', event: soon, post: { id: 'p2', kind: 'offer', body: 'Car' } }),
+          request({ id: 'waiting', post: { id: 'p1', kind: 'offer', body: 'Car' } }),
+        ],
+      },
+      now,
+      new Set(['p1'])
+    )
+    expect(shown.outgoing.map((r) => r.id)).toEqual(['no-room-yet', 'waiting'])
+  })
 })
 
 describe('BD-CU03: a mark is seeded on the handle, never on a person', () => {

@@ -26,6 +26,7 @@ describe('lobbyRoomsFrom: the Lobby rooms in a chat list answer', () => {
     expect(rooms).toEqual([
       {
         id: 'g1',
+        postId: 'p1',
         name: 'Car from Indiranagar at 5:30',
         kind: 'offer',
         subKind: 'ride',
@@ -43,7 +44,7 @@ describe('lobbyRoomsFrom: the Lobby rooms in a chat list answer', () => {
     expect(lobbyRoomsFrom(null)).toEqual([])
     expect(lobbyRoomsFrom({ rooms: [row({ id: 7 })] })).toEqual([])
     // No others block (a malformed row): nobody named, nothing invented.
-    expect(lobbyRoomsFrom({ rooms: [row({ others: undefined, boardPost: undefined })] })[0]).toMatchObject({ others: { names: [], count: 0 }, kind: 'offer', subKind: null })
+    expect(lobbyRoomsFrom({ rooms: [row({ others: undefined, boardPost: undefined })] })[0]).toMatchObject({ postId: null, others: { names: [], count: 0 }, kind: 'offer', subKind: null })
   })
 })
 

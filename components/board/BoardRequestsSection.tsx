@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
 import Reanimated from 'react-native-reanimated'
 
@@ -58,9 +58,12 @@ type Answer = 'accept' | 'decline' | 'withdraw'
 export function BoardRequestsSection({
   refreshKey,
   onCount,
+  seatedPosts,
 }: {
   refreshKey: number
   onCount: (count: number) => void
+  /** The posts whose Lobby rooms you are seated in: their Rooms rows stand for your accepted asks on them. */
+  seatedPosts: ReadonlySet<string>
 }) {
   const { showToast } = useToast()
   const [requests, setRequests] = useState<BoardRequests>({ incoming: [], outgoing: [] })
@@ -108,7 +111,8 @@ export function BoardRequestsSection({
     if (refreshKey > 0) void load()
   }, [refreshKey, load])
 
-  const shown = requests.incoming.length + requests.outgoing.length
+  const outgoing = useMemo(() => inboxRequests(requests, Date.now(), seatedPosts).outgoing, [requests, seatedPosts])
+  const shown = requests.incoming.length + outgoing.length
   useEffect(() => onCount(shown), [shown, onCount])
 
   const setBusyFor = (id: string, on: boolean) => {
@@ -227,12 +231,12 @@ export function BoardRequestsSection({
           />
         </Reanimated.View>
       ))}
-      {requests.outgoing.length > 0 ? (
+      {outgoing.length > 0 ? (
         <Reanimated.View style={styles.outgoing} exiting={reduceMotion ? undefined : rowOut} layout={reduceMotion ? undefined : rowReflow}>
           <Text variant="label" accessibilityRole="header">
             YOU ASKED
           </Text>
-          {requests.outgoing.map((r) => (
+          {outgoing.map((r) => (
             <Reanimated.View
               key={r.id}
               exiting={reduceMotion ? undefined : rowOut}

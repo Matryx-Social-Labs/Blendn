@@ -447,6 +447,8 @@ export type LobbyOthers = { names: string[]; count: number }
 /** A Lobby post's room, as `GET /chat/groups` lists it in `rooms` (admin #991, `kind: "board_post"`). */
 export interface LobbyRoomRow {
   id: string
+  /** The post the room is for: an accepted ask on it leaves the Banter's Lobby section once you are seated here. */
+  postId: string | null
   /** The post's own words, clipped by the server: the ride's place and time live here, not in fields. */
   name: string
   kind: BoardPostKind
@@ -473,6 +475,7 @@ export function lobbyRoomsFrom(payload: unknown): LobbyRoomRow[] {
     return [
       {
         id: r.id,
+        postId: typeof post.id === 'string' ? post.id : null,
         name: typeof r.name === 'string' ? r.name : '',
         kind: POST_KINDS.includes(post.kind) ? post.kind : 'offer',
         subKind: SUB_KINDS.includes(post.subKind) ? post.subKind : null,
