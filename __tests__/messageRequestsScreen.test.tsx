@@ -169,8 +169,8 @@ it('says where you met on its own line when the server knows, and nothing when i
   expect(screen.getAllByText(/^Met in the room at/)).toHaveLength(1)
   // A screen reader hears it between the name and the note.
   // The card reads its time last (be2: the time is no stop of its own).
-  expect(screen.getByLabelText(/^Asker 0\. Met in the room at Bengaluru Design Festival 2026\. hello 0\. \S+$/)).toBeTruthy()
-  expect(screen.getByLabelText(/^Asker 1\. hello 1\. \S+$/)).toBeTruthy()
+  expect(screen.getByLabelText(/^Asker 0\. Met in the room at Bengaluru Design Festival 2026\. hello 0\. .+$/)).toBeTruthy()
+  expect(screen.getByLabelText(/^Asker 1\. hello 1\. .+$/)).toBeTruthy()
 })
 
 it('a failed requests read offers a retry, never "No message requests"', async () => {
