@@ -405,7 +405,10 @@ export function BanterRow({
       testID={testID}
       onPress={onPress}
       disabled={!onPress}
+      // Unlabelled, a SwipeRow around it is the element: no stop of its own (Android focuses a bare Pressable, so TalkBack stopped twice).
       accessible={!!accessibilityLabel}
+      focusable={!!accessibilityLabel}
+      importantForAccessibility={accessibilityLabel ? 'auto' : 'no'}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
