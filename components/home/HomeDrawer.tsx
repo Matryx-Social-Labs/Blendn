@@ -68,6 +68,17 @@ export function useInDrawer(): boolean {
   return useContext(InDrawer) !== null
 }
 
+/**
+ * The board's FULL (sheet 17 pick A, SCRUM-1090): the strip of map left under the top bar fades to the drawer's ink as
+ * the drawer rises from half to full, so at full the top bar sits on ink and nothing of the map (the you-dot, its stale
+ * callout, the edge marker, banners, the beam) can show under the Blend'n mark. Bound to the drawer's edge on the UI
+ * thread: it has no timing of its own, so it follows the finger, the spring, and Reduce Motion's short timing alike.
+ */
+export function DrawerCover({ y, points, height }: { y: SharedValue<number>; points: Record<DrawerSnap, number>; height: number }) {
+  const shown = useAnimatedStyle(() => ({ opacity: interpolate(y.get(), [points.full, points.half], [1, 0], 'clamp') }))
+  return <Animated.View testID="drawer-cover" pointerEvents="none" style={[styles.cover, { height }, shown]} />
+}
+
 /** Under Reduce Motion the drawer still travels, gently: a short timing on the standard curve, not an instant jump (BUILD-SPEC §0, `drawer`). */
 const REDUCED_SETTLE = { duration: REDUCE_MOTION.duration.base, easing: Easing.bezier(...EASING.standard) } as const
 
@@ -131,10 +142,15 @@ export function HomeDrawer({
   /*
    * Travelling (a drag, or a move toward a snap): the pane is as tall as at full, so what rises into view is the list,
    * not bare ink that fills in once the drawer stops (SCRUM-1090). At rest it is the snap's again (`drawerContentHeight`).
+   * Derived, not set in an effect: a finger on the drawer, or a snap the drawer has not come to rest at yet.
    */
-  const [travelling, setTravelling] = useState(false)
-  const arrive = useCallback((finished?: boolean) => {
-    if (finished) setTravelling(false)
+  const [dragging, setDragging] = useState(false)
+  const [rested, setRested] = useState<DrawerSnap>(snap)
+  const travelling = dragging || rested !== snap
+  const arrive = useCallback((finished: boolean | undefined, at: DrawerSnap) => {
+    if (!finished) return
+    setRested(at)
+    setDragging(false)
   }, [])
 
   useEffect(() => {
@@ -143,10 +159,9 @@ export function HomeDrawer({
     aim.set(to)
     // Already there (the first frame, the shell's `y` starts at the snap): nothing to travel.
     if (y.get() === to) return
-    setTravelling(true)
     const done = (finished?: boolean) => {
       'worklet'
-      scheduleOnRN(arrive, finished)
+      scheduleOnRN(arrive, finished, snap)
     }
     y.set(reduceMotion ? withTiming(to, REDUCED_SETTLE, done) : withSpring(to, SPRING.settle, done))
   }, [snap, points, reduceMotion, y, settles, aim, arrive])
@@ -161,7 +176,7 @@ export function HomeDrawer({
         .onStart(() => {
           dragStart.set(y.get())
           aim.set(Number.NaN)
-          scheduleOnRN(setTravelling, true)
+          scheduleOnRN(setDragging, true)
         })
         .onUpdate((e) => {
           y.set(Math.min(points.peek, Math.max(points.full, dragStart.get() + e.translationY)))
@@ -171,7 +186,7 @@ export function HomeDrawer({
           const to = points[next]
           const done = (finished?: boolean) => {
             'worklet'
-            scheduleOnRN(arrive, finished)
+            scheduleOnRN(arrive, finished, next)
           }
           // The release's own speed carries into the settle, so a flick does not stall and restart. The one animation: the
           // settle that follows sees it already aimed there (`aim`).
@@ -184,12 +199,18 @@ export function HomeDrawer({
 
   const moved = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() - points.full }] }))
   const surface = useMemo<Surface>(() => ({ y, points, orbsHeight: height - points.half }), [y, points, height])
+  const restingAtPeek = snap === 'peek' && !travelling
   const tapStep = () => settle(snap === 'full' ? 'half' : stepSnap(snap, 'up'))
 
   return (
     <GroundProvider value="glass">
       {/* Solid ink at every snap, on every tier (owner, 2026-11-03): glass is for the floating controls, not the drawer. */}
-      <Animated.View testID="home-drawer" style={[styles.drawer, { top: points.full }, moved]}>
+      <Animated.View
+        testID="home-drawer"
+        style={[styles.drawer, { top: points.full }, moved]}
+        // A screen reader's escape (the two-finger scrub) at full is "back to the map": one step down to half.
+        onAccessibilityEscape={snap === 'full' ? () => settle('half') : undefined}
+      >
         <Orbs surface={surface} offsetTop={0} testID="drawer-orbs" />
         <GestureDetector gesture={pan}>
           <View style={styles.header} onTouchStart={onChromeTouch}>
@@ -208,11 +229,18 @@ export function HomeDrawer({
             {header}
           </View>
         </GestureDetector>
-        <View testID="home-drawer-pane" style={{ height: drawerContentHeight(points, travelling ? 'full' : snap, height) }}>
+        {/* At rest at peek only the header and its line show (the board's PEEK): the pane stays mounted, unseen and unread. */}
+        <View
+          testID="home-drawer-pane"
+          pointerEvents={restingAtPeek ? 'none' : 'auto'}
+          importantForAccessibility={restingAtPeek ? 'no-hide-descendants' : 'auto'}
+          accessibilityElementsHidden={restingAtPeek}
+          style={{ height: drawerContentHeight(points, travelling ? 'full' : snap, height), opacity: restingAtPeek ? 0 : 1 }}
+        >
           <InDrawer.Provider value={surface}>{children}</InDrawer.Provider>
         </View>
-        {/* Over the chips at peek only: gone the moment the drawer moves, back once it rests at peek. */}
-        {snap === 'peek' && !travelling && peek ? (
+        {/* Under the header at peek only, where the pane was: gone the moment the drawer moves, back once it rests at peek. */}
+        {restingAtPeek && peek ? (
           <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(DURATION.quick)} style={styles.peek}>
             {peek}
           </Animated.View>
@@ -235,6 +263,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.ink,
   },
   ink: { backgroundColor: COLOR.ink },
+  cover: { position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: COLOR.ink },
   clip: { overflow: 'hidden' },
   orbs: { position: 'absolute', left: 0, right: 0 },
   rim: {

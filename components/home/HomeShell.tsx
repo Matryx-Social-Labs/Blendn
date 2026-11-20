@@ -13,14 +13,14 @@ import { Text } from '../ui/Text'
 import { PulseSearchRow } from '../pulse/PulseHeader'
 import { DRAWER_PEEK_LINE, drawerSnapPoints, keyboardLeft, pulseRest, snapOnKeyboard, type DrawerSnap } from '../../lib/home'
 import { bannerReach, type Pin } from '../../lib/homeMap'
-import { COLOR, SPACE } from '../../lib/design/tokens'
+import { COLOR, RADIUS, SPACE } from '../../lib/design/tokens'
 import { Logger } from '../../lib/logger'
 import { useAfterFirstPaint } from '../../lib/useAfterFirstPaint'
 import { useLatest } from '../../lib/useLatest'
 import { TAB_BAR_SETTLE } from '../../lib/tabBarSettle'
 import type { DistanceShown, NearPin } from '../../lib/placesPane'
 import type { PreciseFix } from '../../lib/roomButton'
-import { HomeDrawer } from './HomeDrawer'
+import { DrawerCover, HomeDrawer } from './HomeDrawer'
 import { CityChip } from './CityChip'
 import { HomeMap } from './HomeMap'
 import { MapBanners } from './MapBanners'
@@ -261,6 +261,8 @@ export function HomeShell({
         collapsable={false}
         style={StyleSheet.absoluteFill}
         onTouchStart={dismissKeyboard}
+        // Covered at full (sheet 17 A): a map nobody can see is not panned from under the top bar.
+        pointerEvents={snap === 'full' ? 'none' : 'auto'}
         importantForAccessibility={snap === 'full' ? 'no-hide-descendants' : 'auto'}
         accessibilityElementsHidden={snap === 'full'}
       >
@@ -296,6 +298,9 @@ export function HomeShell({
           {mapBanners}
         </MapBanners>
       ) : null}
+      {/* The board's FULL: the strip under the top bar fades to ink as the drawer rises (sheet 17 A, SCRUM-1090). Past the
+          drawer's top edge by its corner radius, so no map shows beside its rounded corners. */}
+      <DrawerCover y={drawerTop} points={points} height={points.full + RADIUS.sheet} />
       <PulseTopBar floating actions={<NotificationBell onMap />} />
       <HomeDrawer
         y={drawerTop}

@@ -11,7 +11,7 @@ import React, { useState } from 'react'
 import { Text } from 'react-native'
 import * as Reanimated from 'react-native-reanimated'
 
-import { HomeDrawer } from '../components/home/HomeDrawer'
+import { DrawerCover, HomeDrawer } from '../components/home/HomeDrawer'
 import { SHEET_ORBS } from '../components/ds/Orbs'
 import { COLOR, EASING, MATERIAL, REDUCE_MOTION, SPRING } from '../lib/design/tokens'
 import { DRAWER_HEADER_HEIGHT, DRAWER_SNAP_LABEL, type DrawerSnap } from '../lib/home'
@@ -257,7 +257,7 @@ describe('the drawer moves once, and its pane is there all the way', () => {
       </HomeDrawer>
     )
   }
-  const paneHeight = () => StyleSheet.flatten(screen.getByTestId('home-drawer-pane').props.style)?.height
+  const paneHeight = () => StyleSheet.flatten(screen.getByTestId('home-drawer-pane', { includeHiddenElements: true }).props.style)?.height
   const content = (snap: DrawerSnap) => 800 - points[snap] - DRAWER_HEADER_HEIGHT
   const pan = () => getByGestureTestId('home-drawer-pan')
   const animations = () => jest.mocked(Reanimated.withSpring).mock.calls.length + jest.mocked(Reanimated.withTiming).mock.calls.length
@@ -364,5 +364,96 @@ describe('the drawer moves once, and its pane is there all the way', () => {
     })
     expect(screen.getByText('peek line')).toBeTruthy()
     jest.useRealTimers()
+  })
+})
+
+/*
+ * SCRUM-1090, sheet 17 pick A (advisor, 2026-11-20): the board's FULL draws the top bar on ink. The strip of map left
+ * under the top bar fades to the drawer's ink as the drawer rises past half, so nothing of the map can sit under the
+ * Blend'n mark at full. At rest at peek only the header and its one line show (the board's PEEK).
+ */
+describe('the drawer at full covers the map, and at peek shows only its line', () => {
+  const cover = (at: number) => {
+    const y = Reanimated.makeMutable(at)
+    return <DrawerCover y={y} points={points} height={140} />
+  }
+  const coverOpacity = () => StyleSheet.flatten(screen.getByTestId('drawer-cover', { includeHiddenElements: true }).props.style).opacity
+  const coverStyle = () => StyleSheet.flatten(screen.getByTestId('drawer-cover', { includeHiddenElements: true }).props.style)
+
+  it('the cover is the drawer’s ink, as tall as it is told, and never takes a touch', async () => {
+    await render(cover(points.full))
+    expect(coverStyle()).toMatchObject({ backgroundColor: COLOR.ink, height: 140, top: 0 })
+    expect(screen.getByTestId('drawer-cover', { includeHiddenElements: true }).props.pointerEvents).toBe('none')
+  })
+
+  it('opaque at full, clear at half and below, halfway between halfway up', async () => {
+    await render(cover(points.full))
+    expect(coverOpacity()).toBe(1)
+    await render(cover((points.full + points.half) / 2))
+    expect(coverOpacity()).toBeCloseTo(0.5)
+    await render(cover(points.half))
+    expect(coverOpacity()).toBe(0)
+    // Control: below half it stays clear (clamped), never negative.
+    await render(cover(points.peek))
+    expect(coverOpacity()).toBe(0)
+  })
+
+  function Shell({ start, peek }: { start: DrawerSnap; peek?: boolean }) {
+    const [snap, setSnap] = useState<DrawerSnap>(start)
+    const y = Reanimated.useSharedValue(points[start])
+    return (
+      <HomeDrawer y={y} points={points} snap={snap} onSnap={setSnap} header={<Text>header</Text>} peek={peek ? <Text>peek line</Text> : undefined}>
+        <Text testID="pane">pane</Text>
+      </HomeDrawer>
+    )
+  }
+  const pane = () => screen.getByTestId('home-drawer-pane', { includeHiddenElements: true })
+  const flush = async () => {
+    for (let i = 0; i < 4; i++) await Promise.resolve()
+  }
+  const paneHidden = () => {
+    const p = pane()
+    return StyleSheet.flatten(p.props.style).opacity === 0 && p.props.importantForAccessibility === 'no-hide-descendants' && p.props.pointerEvents === 'none'
+  }
+
+  it('at rest at peek the pane is hidden under the line: not drawn, not read, not touched', async () => {
+    reduceMotion.mockReturnValue(false)
+    await render(<Shell start="peek" peek />)
+    expect(paneHidden()).toBe(true)
+    expect(screen.getByText('peek line')).toBeTruthy()
+  })
+
+  it('the pane is back the moment the drawer moves off peek', async () => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] })
+    await render(<Shell start="peek" peek />)
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId('home-drawer-pan'), [
+        { state: State.BEGAN, translationY: 0 },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: -40 },
+      ])
+      await flush()
+    })
+    expect(paneHidden()).toBe(false)
+    jest.useRealTimers()
+  })
+
+  it.each(['half', 'full'] as const)('control: at %s the pane is shown and read', async (snap) => {
+    await render(<Shell start={snap} peek />)
+    expect(paneHidden()).toBe(false)
+  })
+
+  it('a screen reader’s escape at full steps the drawer down to half', async () => {
+    await render(<Shell start="full" />)
+    await act(async () => {
+      fireEvent(screen.getByTestId('home-drawer', { includeHiddenElements: true }), 'accessibilityEscape')
+      await flush()
+    })
+    expect(screen.getByLabelText('Events and places').props.accessibilityValue).toEqual({ text: DRAWER_SNAP_LABEL.half })
+  })
+
+  it('control: below full the escape does nothing (it is not the drawer’s to take)', async () => {
+    await render(<Shell start="half" />)
+    expect(screen.getByTestId('home-drawer', { includeHiddenElements: true }).props.onAccessibilityEscape).toBeUndefined()
   })
 })
