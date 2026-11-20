@@ -9,6 +9,8 @@ import type { Badge, Overlap } from './aboutYou'
 export interface AttendeeProfile {
   user_id: string
   name?: string
+  /** `name` is theirs, not the room pseudonym (admin SCRUM-1067): the face is their photo or initial, never a creature. */
+  revealed?: boolean
   /**
    * Whole years, derived server-side. Never a birth date.
    *

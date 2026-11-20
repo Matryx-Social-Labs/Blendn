@@ -44,6 +44,8 @@ export interface ServerToClientEvents {
     eventId: string
     userId: string
     userName: string
+    /** `userName` is their name, not the pseudonym (admin SCRUM-1067). Absent from an older server. */
+    revealed?: boolean
     userImage?: string
     checkInTime: string
     /** See `event:checkin`. */

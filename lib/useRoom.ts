@@ -70,6 +70,8 @@ import { parseLens, type RoomLens } from './roomLens'
 export interface RoomPerson {
   id: string
   name: string
+  /** `name` is theirs (the server's `revealed`, SCRUM-1067): `personFace` draws their photo or initial, never a creature. */
+  named: boolean
   age?: number
   photo: string | null
   interests: string[]
@@ -671,6 +673,7 @@ export function useRoom(): RoomState & RoomActions {
       const person: Omit<RoomPerson, 'reason'> = {
         id: a.user_id,
         name: displayName(a.name),
+        named: a.revealed === true,
         age: a.age,
         photo: a.profile_photos?.[0] ?? null,
         interests: a.interests ?? [],

@@ -73,6 +73,7 @@ import { Material } from '../ui/Material'
 import { CheckInTray, useCheckInTray } from './CheckInTray'
 import { CrewsFoot, CrewsHead, PeopleCrewStrip, RoomCrewCard } from './RoomCrews'
 import { useWithCrew, WithCrewChip } from '../crews/WithCrewChip'
+import { personFace } from '../../lib/personFace'
 import { faceOf, RoomSkeleton, RoomYouCard, useNow } from './RoomSections'
 import { RoomInfoSheet } from './RoomInfoSheet'
 import { contextLine, lensView } from '../../lib/roomLens'
@@ -1172,7 +1173,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
         onDismissed={cardGone}
         variant={cardVariant}
         person={{
-          face: cardPerson ? faceOf(cardPerson) : { kind: 'creature', pseudonym: card?.name ?? '' },
+          face: cardPerson ? faceOf(cardPerson) : personFace({ named: false, name: card?.name ?? '' }),
           name: cardPerson?.name ?? card?.name ?? '',
           age: cardPerson?.age,
           // P-A: their deck card through the room's lens; a photo arrives only once they have shown you who they are.
@@ -1278,7 +1279,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
           // A new match is a new moment: it plays, buzzes and is said again.
           key={room.match.conversationId}
           you={myRoomFace({ revealed: controls.revealed, name: user?.name ?? null, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}
-          them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}
+          them={matchPerson ? faceOf(matchPerson) : personFace({ named: false, name: room.match.name })}
           name={room.match.name}
           // M-A: tonight's question and their answer, else a line to try.
           tonight={room.lens?.question ? { question: room.lens.question, answer: matchPerson?.tonightAnswer ?? null } : null}

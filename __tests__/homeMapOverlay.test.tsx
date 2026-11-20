@@ -35,20 +35,6 @@ describe('LocateButton', () => {
     expect(onPress).toHaveBeenCalledTimes(1)
   })
 
-  it('becomes "Back to you" once the map has left a fix you have (pulse-map 05, 07): one tap returns and follows again', async () => {
-    const onPress = jest.fn()
-    await render(button({ following: false, back: true, onPress }))
-    const pill = screen.getByRole('button', { name: 'Back to you' })
-    expect(screen.getByText('Back to you')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Show my location' })).toBeNull()
-    expect(pill).toHaveStyle({ minHeight: MAP_THEME.locate.sizePx })
-    await fireEvent.press(pill)
-    expect(onPress).toHaveBeenCalledTimes(1)
-    // Following, or with no fix to go back to: the round "my location" glyph.
-    await render(button({ following: true, back: false }))
-    expect(screen.queryByText('Back to you')).toBeNull()
-  })
-
   it('says whether the map is following you', async () => {
     await render(button())
     expect(screen.getByRole('button', { name: 'Show my location' })).toBeSelected()

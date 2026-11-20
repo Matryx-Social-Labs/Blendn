@@ -296,3 +296,38 @@ describe('staleCalloutBox (the room the stale callout takes, so names keep out o
     expect(staleCalloutBox([206, 242], callout, true)).toEqual({ left: 106, right: 306, top: 259, bottom: 299 })
   })
 })
+
+import { EDGE_MAX_KM, edgeGate } from '../lib/mapPresence'
+
+/**
+ * Owner bug 2026-11-20: in Saarbrücken (no served city) the map opened on the person and the edge marker read
+ * "Olive Beach · 7,500 km". The marker is for a venue in the city the map shows, near where it looks.
+ */
+describe('edgeGate: when the lap venue gets an edge marker, and whether it says a distance', () => {
+  const bengaluru = { latitude: 12.9716, longitude: 77.5946 }
+  const oliveBeach: [number, number] = [77.6408, 12.9719]
+  const saarbruecken = { latitude: 49.2354, longitude: 6.9965 }
+
+  it('is none from Saarbrücken: the venue is on another continent from the map and the person', () => {
+    expect(edgeGate({ at: oliveBeach, cityCentre: bengaluru, mapCentre: [saarbruecken.longitude, saarbruecken.latitude], fix: saarbruecken })).toBeNull()
+  })
+
+  it('browsing Bengaluru from Saarbrücken: the marker, but no distance (it would be from somewhere else entirely)', () => {
+    expect(edgeGate({ at: oliveBeach, cityCentre: bengaluru, mapCentre: [77.59, 12.97], fix: saarbruecken })).toEqual({ distance: false })
+  })
+
+  it('in Bengaluru, looking at Bengaluru: the marker with the distance from you', () => {
+    expect(edgeGate({ at: oliveBeach, cityCentre: bengaluru, mapCentre: [77.59, 12.97], fix: { latitude: 12.98, longitude: 77.6 } })).toEqual({ distance: true })
+  })
+
+  it('no fix: the marker, no distance', () => {
+    expect(edgeGate({ at: oliveBeach, cityCentre: bengaluru, mapCentre: [77.59, 12.97], fix: null })).toEqual({ distance: false })
+  })
+
+  it(`is none for a venue past ${EDGE_MAX_KM} km of the map centre or outside the city shown, and none before either is known`, () => {
+    expect(edgeGate({ at: [76.6394, 12.2958], cityCentre: bengaluru, mapCentre: [77.59, 12.97], fix: null })).toBeNull() // Mysuru, ~130 km
+    expect(edgeGate({ at: oliveBeach, cityCentre: { latitude: 43.65, longitude: -79.38 }, mapCentre: [77.59, 12.97], fix: null })).toBeNull()
+    expect(edgeGate({ at: oliveBeach, cityCentre: null, mapCentre: [77.59, 12.97], fix: null })).toBeNull()
+    expect(edgeGate({ at: oliveBeach, cityCentre: bengaluru, mapCentre: null, fix: null })).toBeNull()
+  })
+})

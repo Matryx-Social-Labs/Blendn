@@ -389,7 +389,7 @@ export function tiltedZoom(zoom: number, pitchFrom: number, pitchTo: number, os:
 }
 
 /** A camera move in flight: where it is going, and until when. */
-export type InFlight = { to: [number, number]; zoom?: number; pitch?: number; until: number }
+export type InFlight = { to: [number, number]; zoom?: number; pitch?: number; bearing?: number; until: number }
 
 /**
  * What the map does when the drawer settles at a new snap (review M1):
@@ -410,15 +410,19 @@ export function snapRecentre(s: {
 }
 
 /**
- * Where "my location" takes the camera: the fix, at the map's own zoom and
- * tilt. Null without a fix: the button asks for one instead.
+ * Where "my location" takes the camera: the default view, on the fix, north up, at the map's own zoom and tilt (owner
+ * 2026-11-20: a rotated map stayed rotated). Null without a fix: the button asks for one instead.
  */
 export function locateTarget(
   fix: { latitude: number; longitude: number } | null
-): { center: [number, number]; zoom: number; pitch: number } | null {
+): { center: [number, number]; zoom: number; pitch: number; bearing: number } | null {
   if (!fix) return null
-  return { center: [fix.longitude, fix.latitude], zoom: MAP_THEME.camera.zoom, pitch: MAP_THEME.camera.pitch }
+  const { zoom, pitch, bearing } = MAP_THEME.camera
+  return { center: [fix.longitude, fix.latitude], zoom, pitch, bearing }
 }
+
+/** A camera stop's heading only when a move asks for one: every other move keeps the person's rotation. */
+export const bearingOf = (bearing: number | undefined) => (bearing === undefined ? {} : { bearing })
 
 /**
  * The camera's padding: the top bar above and the drawer below, so what is

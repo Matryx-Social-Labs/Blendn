@@ -149,7 +149,8 @@ describe('the fourth tip: "Swipe a chat left to mute it." (ROOM-18)', () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'app', '(tabs)', 'chat.tsx'), 'utf8')
     expect(src).toContain('i.row.canMute === true')
     expect(src).not.toMatch(/label === 'Mute'/)
-    expect(src.match(/canMute: true/g)).toHaveLength(2)
+    // Crews, Lobby rooms (Flow 5 C5) and past rooms: the rooms that can be muted.
+    expect(src.match(/canMute: true/g)).toHaveLength(3)
   })
 
   it('a swipe-open counts as use, so it never shows to somebody who already knows', async () => {
@@ -810,4 +811,31 @@ describe('one exit (I-A): a room row swipes to Mute only', () => {
     expect(screen.getByTestId('banter-live-g-live')).toBeTruthy()
     expect(screen.queryByTestId('banter-swipe-g:g-live', { includeHiddenElements: true })).toBeNull()
   })
+})
+
+// Flow 5 C5 · B-A (owner 2026-11-10; line 2 pick A 2026-11-20): the Lobby rooms you are seated in, as Rooms, above Crews.
+it('draws Rooms for the Lobby rooms you are in: the post’s kind, who with and its words, and opens the room', async () => {
+  const ride = {
+    id: 'g-ride',
+    kind: 'board_post',
+    name: 'Car from Saint-Jean-sur-Richelieu via the Gardiner at 5:30',
+    boardPost: { id: 'p1', eventId: 'e1', kind: 'offer', subKind: 'ride', yours: false },
+    others: { names: ['Lunar Fox', 'Velvet Owl', 'Amber Lynx'], count: 12 },
+    unreadCount: 1,
+    lastMessageAt: at,
+    lastMessage: { content: 'Leaving in 10', createdAt: at, user: { id: 'rh_x', name: 'Velvet Owl' } },
+    mute: { muted: false, until: null },
+  }
+  api.getChatGroups.mockResolvedValue({ success: true, data: { groups: [liveRoom, pastRoom], rooms: [ride] } } as never)
+  await open()
+  expect(screen.getAllByText('Rooms').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Your ride').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('With Lunar Fox and 11 others · Car from Saint-Jean-sur-Richelieu via the Gardiner at 5:30').length).toBeGreaterThan(0)
+  fireEvent.press(screen.getAllByText('Your ride')[0])
+  expect(jest.requireMock('expo-router').router.push).toHaveBeenCalledWith({ pathname: '/chat/[id]', params: { id: 'g-ride', roomName: 'Your ride' } })
+})
+
+it('draws no Rooms section when you are in no Lobby room (an older server lists none)', async () => {
+  await open()
+  expect(screen.queryByText('Rooms')).toBeNull()
 })

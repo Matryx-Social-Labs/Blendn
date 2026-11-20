@@ -79,7 +79,7 @@ describe('answering an ask', () => {
   it('accepts, then opens the conversation the accept made', async () => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     api.answerBoardRequest.mockResolvedValue({ success: true, data: { id: 'r-in', status: 'accepted', conversationId: 'conv-1' } })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
@@ -102,7 +102,7 @@ describe('answering an ask', () => {
   ])('an accept refused with "%s" leaves "%s" quietly on the ask', async (error, line) => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     api.answerBoardRequest.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
@@ -117,7 +117,7 @@ describe('answering an ask', () => {
   it('an ask the reload no longer lists goes, note and all', async () => {
     api.getBoardRequests.mockResolvedValueOnce(listing([INCOMING])).mockResolvedValue(listing([]))
     api.answerBoardRequest.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error: 'That event has ended' })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
     await waitFor(() => expect(screen.queryByText('Arctic Falcon')).toBeNull())
@@ -130,7 +130,7 @@ describe('answering an ask', () => {
       errorCode: 'FORBIDDEN',
       error: 'Only the person who was asked can answer',
     })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Accept the request from Arctic Falcon'))
 
@@ -142,7 +142,7 @@ describe('answering an ask', () => {
   it('declines quietly: the row leaves, and nothing is said', async () => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     api.answerBoardRequest.mockResolvedValue({ success: true, data: { id: 'r-in', status: 'declined' } })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Decline the request from Arctic Falcon'))
 
@@ -154,7 +154,7 @@ describe('answering an ask', () => {
   it('a decline already overtaken (409) goes quietly too', async () => {
     api.getBoardRequests.mockResolvedValueOnce(listing([INCOMING])).mockResolvedValue(listing([]))
     api.answerBoardRequest.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error: 'That request has already been answered' })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Decline the request from Arctic Falcon'))
     await waitFor(() => expect(api.getBoardRequests).toHaveBeenCalledTimes(2))
@@ -165,7 +165,7 @@ describe('answering an ask', () => {
   it('a decline that did not go out puts the row back and says so', async () => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     api.answerBoardRequest.mockResolvedValue({ success: false, error: 'No internet connection. Check your network and try again.' })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Decline the request from Arctic Falcon'))
     expect(await screen.findByText('Arctic Falcon')).toBeTruthy()
@@ -176,7 +176,7 @@ describe('answering an ask', () => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     let settle: (v: unknown) => void = () => {}
     api.answerBoardRequest.mockReturnValue(new Promise((r) => (settle = r)) as never)
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     const accept = await screen.findByLabelText('Accept the request from Arctic Falcon')
     await fireEvent.press(accept)
@@ -192,7 +192,7 @@ describe('asks you sent', () => {
   it('reads a declined ask, as its asker is sent it, exactly as a waiting one', async () => {
     api.getBoardRequests.mockResolvedValue(listing([], [WAITING, DECLINED]))
     const onCount = jest.fn()
-    await render(<BoardRequestsSection refreshKey={0} onCount={onCount} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={onCount} seatedPosts={new Set()} />)
 
     expect(await screen.findAllByText('Waiting on them')).toHaveLength(2)
     expect(screen.getByLabelText('Withdraw your ask to Velvet Heron')).toBeTruthy()
@@ -202,16 +202,30 @@ describe('asks you sent', () => {
     await waitFor(() => expect(onCount).toHaveBeenLastCalledWith(2))
   })
 
+  it('an accepted ask whose ride room you are seated in goes: the Rooms row is that ride (C5 B-A)', async () => {
+    const ACCEPTED: BoardRequest = { ...base, id: 'r-yes', status: 'accepted', live: false, counterpart: 'Lunar Fox', decidedAt: new Date().toISOString() }
+    api.getBoardRequests.mockResolvedValue(listing([], [ACCEPTED, WAITING]))
+    const onCount = jest.fn()
+    const view = await render(<BoardRequestsSection refreshKey={0} onCount={onCount} seatedPosts={new Set()} />)
+    expect(await screen.findByText(/You asked Lunar Fox/)).toBeTruthy()
+
+    // The rooms arrive after the asks: the row goes then, and the count follows.
+    await view.rerender(<BoardRequestsSection refreshKey={0} onCount={onCount} seatedPosts={new Set(['p1'])} />)
+    await waitFor(() => expect(screen.queryByText(/You asked Lunar Fox/)).toBeNull())
+    expect(screen.getByText(/You asked Velvet Heron/)).toBeTruthy()
+    await waitFor(() => expect(onCount).toHaveBeenLastCalledWith(1))
+  })
+
   it('reads an ask to somebody blocked as closed, with nothing to withdraw', async () => {
     api.getBoardRequests.mockResolvedValue(listing([], [BLOCKED]))
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
     expect(await screen.findByText('Closed')).toBeTruthy()
     expect(screen.queryByLabelText('Withdraw your ask to Amber Lynx')).toBeNull()
   })
 
   it('a lapsed ask is closed, with nothing left to withdraw', async () => {
     api.getBoardRequests.mockResolvedValue(listing([], [LAPSED]))
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
     expect(await screen.findByText('Closed')).toBeTruthy()
     expect(screen.queryByLabelText('Withdraw your ask to Lunar Fox')).toBeNull()
   })
@@ -219,7 +233,7 @@ describe('asks you sent', () => {
   it('withdraws: the row leaves, and nothing is said', async () => {
     api.getBoardRequests.mockResolvedValue(listing([], [WAITING]))
     api.answerBoardRequest.mockResolvedValue({ success: true, data: { id: 'r-wait', status: 'withdrawn' } })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Withdraw your ask to Velvet Heron'))
     await waitFor(() => expect(screen.queryByText(/Velvet Heron/)).toBeNull())
@@ -231,7 +245,7 @@ describe('asks you sent', () => {
     const accepted = { ...WAITING, status: 'accepted' as const, live: false }
     api.getBoardRequests.mockResolvedValueOnce(listing([], [WAITING])).mockResolvedValue(listing([], [accepted]))
     api.answerBoardRequest.mockResolvedValue({ success: false, errorCode: 'CONFLICT', error: 'That request has already been answered' })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Withdraw your ask to Velvet Heron'))
     expect(await screen.findByText(/They said yes/)).toBeTruthy()
@@ -245,7 +259,7 @@ describe('asks you sent', () => {
     api.getBoardRequests.mockResolvedValue(listing([], [WAITING]))
     if (outcome === 'throw') api.answerBoardRequest.mockRejectedValue(new Error('queue cleared'))
     else api.answerBoardRequest.mockResolvedValue(outcome as never)
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     await fireEvent.press(await screen.findByLabelText('Withdraw your ask to Velvet Heron'))
     expect(await screen.findByLabelText('Withdraw your ask to Velvet Heron')).toBeTruthy()
@@ -266,7 +280,7 @@ describe('report and block, by the ask', () => {
   it('blocks the asker by the ask, after asking, and the row goes', async () => {
     api.getBoardRequests.mockResolvedValueOnce(listing([INCOMING])).mockResolvedValue(listing([]))
     api.blockBoardRequest.mockResolvedValue({ success: true, data: { blocked: true } })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     const step = await menu()
     const confirm = step('Block').next!() as { title: string; actions: Steps }
@@ -279,7 +293,7 @@ describe('report and block, by the ask', () => {
   it('a block that fails stays open and says so', async () => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     api.blockBoardRequest.mockResolvedValue({ success: false, errorCode: 'SERVER_ERROR', error: 'Failed to block user' })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     const step = await menu()
     const confirm = step('Block').next!() as { actions: Steps }
@@ -293,7 +307,7 @@ describe('report and block, by the ask', () => {
   it('reports the ask with a reason', async () => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     api.reportBoardRequest.mockResolvedValue({ success: true, data: { reported: true } })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     const step = await menu()
     const reasons = step('Report').next!() as { title: string; run: (r: string, d?: string) => Promise<unknown> }
@@ -305,7 +319,7 @@ describe('report and block, by the ask', () => {
   it('a rate-limited report says so', async () => {
     api.getBoardRequests.mockResolvedValue(listing([INCOMING]))
     api.reportBoardRequest.mockResolvedValue({ success: false, errorCode: 'RATE_LIMITED', error: 'Too many requests' })
-    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={jest.fn()} seatedPosts={new Set()} />)
 
     const step = await menu()
     const reasons = step('Report').next!() as { run: (r: string) => Promise<unknown> }
@@ -317,7 +331,7 @@ describe('what the Banter counts', () => {
   it('draws nothing, and says so, when there is nothing', async () => {
     api.getBoardRequests.mockResolvedValue(listing([]))
     const onCount = jest.fn()
-    await render(<BoardRequestsSection refreshKey={0} onCount={onCount} />)
+    await render(<BoardRequestsSection refreshKey={0} onCount={onCount} seatedPosts={new Set()} />)
 
     await waitFor(() => expect(api.getBoardRequests).toHaveBeenCalled())
     expect(screen.queryByText('The Board')).toBeNull()
@@ -327,10 +341,10 @@ describe('what the Banter counts', () => {
   it('reads again when the Banter refreshes', async () => {
     api.getBoardRequests.mockResolvedValueOnce(listing([])).mockResolvedValue(listing([INCOMING]))
     const onCount = jest.fn()
-    const view = await render(<BoardRequestsSection refreshKey={0} onCount={onCount} />)
+    const view = await render(<BoardRequestsSection refreshKey={0} onCount={onCount} seatedPosts={new Set()} />)
     await waitFor(() => expect(api.getBoardRequests).toHaveBeenCalledTimes(1))
 
-    await view.rerender(<BoardRequestsSection refreshKey={1} onCount={onCount} />)
+    await view.rerender(<BoardRequestsSection refreshKey={1} onCount={onCount} seatedPosts={new Set()} />)
     expect(await screen.findByText('Arctic Falcon')).toBeTruthy()
     await waitFor(() => expect(onCount).toHaveBeenLastCalledWith(1))
   })
