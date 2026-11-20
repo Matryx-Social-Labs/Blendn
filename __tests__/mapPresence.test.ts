@@ -257,6 +257,15 @@ describe('mapSummary (pulse-map 10: the map is spoken, not only its numbers)', (
   })
 })
 
+describe('mapSummary: which way you face (SCRUM-1089, picked A tweak 6)', () => {
+  it('says it once, in the label read when the map is focused; never for a fix that is not precise', () => {
+    const base = { bounds: null, pins: [], youLine: null, edge: null }
+    expect(mapSummary({ ...base, you: 'precise', facing: 'north-east' })).toBe('Map. You are on the map, facing north-east.')
+    expect(mapSummary({ ...base, you: 'precise', facing: null })).toBe('Map. You are on the map.')
+    expect(mapSummary({ ...base, you: 'approximate', facing: 'north-east' })).toBe('Map. Your location is approximate.')
+  })
+})
+
 describe('staleCalloutBelow (pulse-map 06 "STALE": the callout over the grey dot, never under the edge marker)', () => {
   // The iOS drive, 2026-11-19: dot (206, 242), the callout 200 × 40 with 17 pt to the dot, the marker at the top-left edge.
   const callout = { width: 200, height: 40, gap: 17 }

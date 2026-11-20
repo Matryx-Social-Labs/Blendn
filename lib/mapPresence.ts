@@ -232,12 +232,15 @@ export function mapSummary({
   you,
   youLine,
   edge,
+  facing = null,
 }: {
   bounds: readonly [number, number, number, number] | null
   pins: readonly { longitude: number; latitude: number; live: boolean }[]
   you: YouMark['kind']
   youLine: string | null
   edge: { name: string; distance: string | null } | null
+  /** Which way you face (`compassName`), read with the label when the map is focused: never announced while turning. */
+  facing?: string | null
 }): string {
   const parts = ['Map.']
   if (bounds) {
@@ -247,7 +250,7 @@ export function mapSummary({
     if (!here.length) parts.push('No events here.')
     else parts.push(`${here.length} ${here.length === 1 ? 'event' : 'events'} here${live ? `, ${live} on now` : ''}.`)
   }
-  if (you === 'precise') parts.push('You are on the map.')
+  if (you === 'precise') parts.push(facing ? `You are on the map, facing ${facing}.` : 'You are on the map.')
   if (you === 'approximate') parts.push('Your location is approximate.')
   if (you === 'stale' && youLine) parts.push(`${youLine.replace(' · ', ', ')}.`)
   if (edge) parts.push(`${edge.name} is off the map${edge.distance ? `, ${edge.distance} away` : ''}.`)
