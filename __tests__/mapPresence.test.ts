@@ -285,6 +285,18 @@ describe('staleCalloutBelow (pulse-map 06 "STALE": the callout over the grey dot
   })
 })
 
+describe('staleCalloutBelow and the top bar (SCRUM-1090: "Last seen here" sat behind the Blend’n mark)', () => {
+  const callout = { width: 200, height: 40, gap: 17 }
+  it('goes under the dot when over it the callout would reach under the top chrome', () => {
+    // The dot 60 pt under a 103 pt top chrome: over it, the callout's top is at 106 (fits); 40 pt under, at 86 (does not).
+    expect(staleCalloutBelow([206, 163], callout, null, 103)).toBe(false)
+    expect(staleCalloutBelow([206, 143], callout, null, 103)).toBe(true)
+  })
+  it('control: with no chrome given it keeps the board’s side', () => {
+    expect(staleCalloutBelow([206, 143], callout, null)).toBe(false)
+  })
+})
+
 describe('staleCalloutBelow with the marker beside the dot (Android re-drive: below, it ran under "Olive Beach 850 m")', () => {
   const callout = { width: 200, height: 40, gap: 17 }
   it('stays over the dot when the marker, as drawn, is level with the dot and clear of the box over it', () => {

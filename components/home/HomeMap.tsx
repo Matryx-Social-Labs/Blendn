@@ -268,6 +268,8 @@ export const HomeMap = memo(function HomeMap({
    * reckoning), and the first frame has it too (`initialViewState`).
    */
   const padding = mapPadding({ topChrome, mapHeight, drawerTop: drawerSnapTop })
+  // Any map left between the top bar and the drawer: none with the drawer full, and nothing of ours is drawn on it then.
+  const mapShown = mapHeight - padding.top - padding.bottom > 0
   // The map you can see as the camera last used it: its padding and the map's height, together (review M3).
   const shown = useRef({ padding, mapHeight })
   // The move in flight, and a count of moves: a settled snap must not undo a newer move (review M1).
@@ -334,6 +336,9 @@ export const HomeMap = memo(function HomeMap({
    * started meanwhile (review M1).
    */
   useEffect(() => {
+    // The drawer full covers the map: nothing to centre in, and the map stays as it was for when it comes back down
+    // (SCRUM-1090: centred into the top bar's foot, the fix and its callout sat behind the Blend'n mark).
+    if (!mapShown) return
     const before = shown.current
     shown.current = { padding, mapHeight }
     if (!ready.current || (before.padding.top === padding.top && before.padding.bottom === padding.bottom)) return
@@ -707,7 +712,7 @@ export const HomeMap = memo(function HomeMap({
   const staleAt = you.kind === 'stale' && center ? ([center.longitude, center.latitude] as [number, number]) : null
   useEffect(() => {
     const m = map.current
-    if (!m || !staleAt || !edgeRect) {
+    if (!m || !staleAt) {
       setStaleBelow(false)
       return
     }
@@ -716,13 +721,13 @@ export const HomeMap = memo(function HomeMap({
     Promise.resolve()
       .then(() => m.project(staleAt))
       .then((dot) => {
-        if (!gone) setStaleBelow(staleCalloutBelow(dot as [number, number], STALE_CALLOUT, edgeRect))
+        if (!gone) setStaleBelow(staleCalloutBelow(dot as [number, number], STALE_CALLOUT, edgeRect, padding.top))
       })
       .catch((error) => Logger.warn('events', 'Stale callout could not place itself', { error: String(error) }))
     return () => {
       gone = true
     }
-  }, [staleAt?.[0], staleAt?.[1], settled, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the arrays are new each render
+  }, [staleAt?.[0], staleAt?.[1], settled, padding.top, edgeRect?.left, edgeRect?.top, edgeRect?.width, edgeRect?.height]) // eslint-disable-line react-hooks/exhaustive-deps -- by value: the arrays are new each render
 
   // The lead card's own distance when it has one (the same number as the card), else measured from the fix; none without one.
   const edgeKm = focus?.km ?? (edgeTarget && center ? getDistanceKm(center.latitude, center.longitude, edgeTarget.at[1], edgeTarget.at[0]) : null)
@@ -816,7 +821,7 @@ export const HomeMap = memo(function HomeMap({
           <YouMark part="dot" fix={center} sharing={sharing} now={now} />
         </EventPiles>
         <Chips chips={lit.chips} onOpen={open} />
-        {you.kind === 'stale' && center && you.line ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} below={staleBelow} /> : null}
+        {you.kind === 'stale' && center && you.line && mapShown ? <StaleCallout at={[center.longitude, center.latitude]} text={you.line} below={staleBelow} /> : null}
         {reachData ? <ReachLabels walk={reachData.labels.walk} ride={reachData.labels.ride} /> : null}
         <NearPins pins={nearPins} you={center} />
       </Map>

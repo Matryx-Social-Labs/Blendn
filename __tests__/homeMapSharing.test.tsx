@@ -47,6 +47,7 @@ jest.mock('@maplibre/maplibre-react-native', () => {
     Layer: () => null,
     Images: () => null,
     NativeUserLocation: () => React.createElement(View, { testID: 'user-puck' }),
+    Marker: ({ children }: { children?: React.ReactNode }) => React.createElement(View, null, children),
   }
 })
 jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: () => {} }))
@@ -58,7 +59,7 @@ jest.mock('../lib/apiClient', () => ({ apiClient: { getEvents: (...a: unknown[])
 jest.mock('../components/home/useMapLighting', () => ({
   useMapLighting: () => ({ lit: { states: [], glow: { type: 'FeatureCollection', features: [] }, bands: { type: 'FeatureCollection', features: [] }, chips: [] }, onFrame: jest.fn(), relight: jest.fn() }),
 }))
-jest.mock('../components/home/MapLitLayers', () => ({ Chips: () => null, CityBuildings: () => null, GroundGlow: () => null, LitBuildings: () => null, OwnBuildings: () => null, ReachLabels: () => null }))
+jest.mock('../components/home/MapLitLayers', () => ({ annotationTitle: () => ({}), Chips: () => null, CityBuildings: () => null, GroundGlow: () => null, LitBuildings: () => null, OwnBuildings: () => null, ReachLabels: () => null }))
 jest.mock('../components/home/NearPins', () => ({ NearPins: () => null }))
 
 /* eslint-disable import/first */
@@ -76,7 +77,7 @@ const CITY_PICK = { n: 0, here: false }
 const NO_PINS: never[] = []
 const ASK = jest.fn()
 const DRAWER_TOP = makeMutable(SHEET.half)
-const map = (center: typeof FIX | null, reach: typeof FIX | null = null) => (
+const map = (center: (typeof FIX & { timestamp?: number }) | null, reach: typeof FIX | null = null, drawerSnapTop = SHEET.half) => (
   <HomeMap
     center={center}
     cityCentre={CITY}
@@ -89,7 +90,7 @@ const map = (center: typeof FIX | null, reach: typeof FIX | null = null) => (
     segment="events"
     topChrome={90}
     mapHeight={700}
-    drawerSnapTop={SHEET.half}
+    drawerSnapTop={drawerSnapTop}
     focused
     glowVisible={false}
     nearPins={NO_PINS}
@@ -278,5 +279,47 @@ describe('the open frame: you and the six nearest', () => {
     await render(map(FIX))
     await settle()
     expect(mockGetEvents.mock.calls.filter(nearestRead)).toHaveLength(0)
+  })
+})
+
+/*
+ * SCRUM-1090 (owner, 2026-11-20): with the drawer full, "the last seen here on the map is behind the blendn top left".
+ * At full the map you can see is nothing (the drawer's top is the top bar's foot), yet the camera re-centred into it: the
+ * fix and its callout landed on the top bar's edge, and pulled back down the map slid back. Full covers the map; the map
+ * stays as it was, and nothing of ours is drawn on it.
+ */
+describe('the drawer full covers the map (SCRUM-1090)', () => {
+  const TOP = 90 // topChrome above: where `full` rests
+  const STALE = { ...FIX, timestamp: Date.now() - 25 * 60_000 }
+
+  it('rising to full moves no camera, and coming back to half moves none either', async () => {
+    const view = await render(map(FIX))
+    await settle()
+    mockStops.length = 0
+    await view.rerender(map(FIX, null, TOP))
+    await settle()
+    expect(mockStops).toEqual([])
+    await view.rerender(map(FIX, null, SHEET.half))
+    await settle()
+    expect(mockStops).toEqual([])
+  })
+
+  it('control: half to a lower snap still keeps what was centred centred', async () => {
+    const view = await render(map(FIX))
+    await settle()
+    mockStops.length = 0
+    await view.rerender(map(FIX, null, 600))
+    await settle()
+    expect(mockStops.length).toBeGreaterThan(0)
+  })
+
+  it('the stale callout is not drawn at full, where it could only sit under the top bar', async () => {
+    const view = await render(map(STALE, null, TOP))
+    expect(view.queryByTestId('map-stale', { includeHiddenElements: true })).toBeNull()
+  })
+
+  it('control: at half it is', async () => {
+    const view = await render(map(STALE))
+    expect(view.getByTestId('map-stale', { includeHiddenElements: true })).toBeTruthy()
   })
 })
