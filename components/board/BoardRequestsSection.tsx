@@ -15,6 +15,7 @@ import {
   boardMessage,
   inboxRequests,
   isSettled,
+  notSeated,
   outgoingLine,
   type BoardRequest,
   type BoardRequests,
@@ -111,7 +112,7 @@ export function BoardRequestsSection({
     if (refreshKey > 0) void load()
   }, [refreshKey, load])
 
-  const outgoing = useMemo(() => inboxRequests(requests, Date.now(), seatedPosts).outgoing, [requests, seatedPosts])
+  const outgoing = useMemo(() => requests.outgoing.filter((r) => notSeated(r, seatedPosts)), [requests, seatedPosts])
   const shown = requests.incoming.length + outgoing.length
   useEffect(() => onCount(shown), [shown, onCount])
 
