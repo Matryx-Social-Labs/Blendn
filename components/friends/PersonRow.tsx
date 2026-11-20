@@ -1,9 +1,10 @@
-import { ReactNode } from 'react'
+import { isValidElement, ReactNode } from 'react'
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, ICON, MAX_FONT_SCALE, RADIUS, SIZE, SPACE } from '../../lib/design/tokens'
 import type { FriendPerson } from '../../lib/friends'
 import { Avatar } from '../ds/Avatar'
+import { IconButton } from '../ds/IconButton'
 import { FitText } from '../ds/Title'
 import { MonoRun } from '../ds/MonoFamily'
 import { font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
@@ -35,7 +36,7 @@ export function usePersonRowsFixed(): boolean {
 
 /**
  * One person on a friend surface (Flow 6 `personRow`): a 48 pt photo, the name in 500 17/24, a line under it, and whatever the screen
- * needs on the right (a chevron, Withdraw; at the AX sizes the action goes under the text). A date in the line is `detailMono`, drawn in Geist Mono right after `detail`.
+ * needs on the right (a chevron, Withdraw; at the AX sizes a labelled action goes under the text, an icon-only one stays). A date in the line is `detailMono`, drawn in Geist Mono right after `detail`.
  *
  * Real name and photo, because every place this is drawn is one both people agreed to: the friends list, requests, a link someone
  * handed out, and Friends here in a Room (a friend who turned on "Friends can see I'm here", which is their consent to be named
@@ -71,9 +72,12 @@ export function PersonRow({
   const contrast = useIncreaseContrast()
   const largeText = useLargeText()
   const line = [detail, detailMono, detailTail].filter(Boolean).join('')
-  // At the AX sizes the action goes under the text, at its leading edge, so the text keeps the row (owner pick a, 2026-11-20).
+  // At the AX sizes a labelled action goes under the text, at its leading edge, so the text keeps the row (owner pick a,
+  // 2026-11-20). An icon-only one (an IconButton with no label) stays beside it, centred: alone under the line it read
+  // detached from its row (decided per advisor, 2026-11-20).
+  const stack = largeText && !isIconOnly(trailing)
   const action = trailing ? (
-    <View testID="person-trailing" style={largeText ? styles.under : styles.trailing}>
+    <View testID="person-trailing" style={stack ? styles.under : styles.trailing}>
       {trailing}
     </View>
   ) : null
@@ -109,9 +113,9 @@ export function PersonRow({
             {detailTail}
           </Text>
         ) : null}
-        {largeText ? action : null}
+        {stack ? action : null}
       </View>
-      {largeText ? null : action}
+      {stack ? null : action}
       {/* SettingsRow's chevron on SettingsRow's right edge, so the Friend requests card above and these rows share one (r7 M9). */}
       {chevron ? (
         <View style={styles.chevron}>
@@ -156,6 +160,9 @@ export function PersonAvatar({ person, size = AVATAR, named = true }: { person: 
     </View>
   )
 }
+
+/** A disc with no words: a DS IconButton without a label. */
+const isIconOnly = (node: ReactNode): boolean => isValidElement<{ label?: string }>(node) && node.type === IconButton && !node.props.label
 
 /** Rows at `PersonRow`'s geometry while a list loads (Flow 6 friends 02), so it does not jump when it lands. Still: nothing loops. */
 export function PersonRowSkeleton() {

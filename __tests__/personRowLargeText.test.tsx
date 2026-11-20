@@ -15,6 +15,7 @@ import { IncomingRequestRow } from '../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../components/friends/InviteLinkCard'
 import { PersonRow, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../components/friends/PersonRow'
 import { ROW_ACTION_HEIGHT } from '../components/ds/Button'
+import { IconButton } from '../components/ds/IconButton'
 import { RevealBar } from '../components/ds/RevealBar'
 import { AX_FONT_SCALE, CONTROL_FONT_CAP } from '../components/ds/shared'
 import { FONT_FAMILY, MAX_FONT_SCALE, SIZE } from '../lib/design/tokens'
@@ -81,6 +82,31 @@ describe('PersonRow', () => {
     expect(underText()).toBeNull()
     expect(screen.getAllByTestId('trail', hidden)).toHaveLength(1)
     expect(StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style).alignSelf).toBe('center')
+  })
+
+  /*
+   * Friends list at AX (decided per advisor, 2026-11-20, option A): a lone icon-only action (an IconButton with no label,
+   * the friends list's Message disc) stacked under "Friends since …" read detached from its row. At every size it stays at
+   * the trailing edge, centred on the row as the avatar is; only labelled actions stack. Negative controls (2026-11-20):
+   * stacking every action (#595's row) fails the first; keeping every action beside the text fails the second.
+   */
+  const message = <IconButton size="sm" icon="message-circle" accessibilityLabel="Message Marc-André" onPress={jest.fn()} testID="trail" />
+  const friend = (trailing: React.ReactNode) => (
+    <PersonRow person={{ userId: 'u3', name: 'Marc-André Lefebvre-Desrosiers', photo: null }} detail="Friends since " detailMono="Nov 2026" trailing={trailing} />
+  )
+
+  it.each([AX_FONT_SCALE, AX_XXXL])('at %s an icon-only action stays beside the text, centred on the row', async (scale) => {
+    await at(402, scale)
+    await render(friend(message))
+    expect(underText()).toBeNull()
+    expect(StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style).alignSelf).toBe('center')
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it('at AX an IconButton with a label is a labelled action, so it goes under the text', async () => {
+    await at(402, AX_XXXL)
+    await render(friend(<IconButton size="sm" icon="message-circle" label="Message" accessibilityLabel="Message Marc-André" onPress={jest.fn()} testID="trail" />))
+    expect(underText()).not.toBeNull()
   })
 
   it('a row with no action draws no action slot at any size', async () => {
