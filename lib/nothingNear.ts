@@ -1,5 +1,5 @@
 import type { EventsListResponse } from './apiClient'
-import { cityBySlug, sameCity, type CityOption, type StoredCity } from './city'
+import { cityBySlug, cityNamed, type CityOption, type StoredCity } from './city'
 import { getDistanceKm } from './geo'
 
 /**
@@ -12,23 +12,26 @@ import { getDistanceKm } from './geo'
 export type NearSignal = NonNullable<EventsListResponse['near']>
 
 /**
- * The city to show from far away, and how far it is. None when something is near, the server names nothing, the city is
- * not in the list, or somebody chose another city: a choice is never overridden (`lib/city.ts`).
+ * The city to show from far away, and how far it is. "Nothing near you" is about where the person stands, not the city:
+ * a city they chose stays (a choice is never overridden, `lib/city.ts`), measured from the fix; otherwise the server's
+ * nearest open city. None when something is near, or the server names nothing the list has.
  */
 export function farCity({
   near,
   available,
   selection,
+  from,
 }: {
   near: NearSignal | null | undefined
   available: readonly CityOption[]
   selection: Pick<StoredCity, 'city' | 'source'> | null
+  from: { latitude: number; longitude: number }
 }): { option: CityOption; km: number } | null {
-  if (!near?.empty || !near.nearestCity) return null
-  const option = cityBySlug(available, near.nearestCity.slug)
-  if (!option) return null
-  if (selection?.source === 'chosen' && !sameCity(selection.city, option.city)) return null
-  return { option, km: near.nearestCity.distanceKm }
+  if (!near?.empty) return null
+  const chosen = selection?.source === 'chosen' ? cityNamed(available, selection.city) : null
+  if (chosen?.centre) return { option: chosen, km: getDistanceKm(from.latitude, from.longitude, chosen.centre.latitude, chosen.centre.longitude) }
+  const option = near.nearestCity ? cityBySlug(available, near.nearestCity.slug) : null
+  return option && near.nearestCity ? { option, km: near.nearestCity.distanceKm } : null
 }
 
 /** Rounded as a person says it: to the kilometre under 100, to ten under 1,000, to a hundred past it. */

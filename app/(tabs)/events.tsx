@@ -1384,7 +1384,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nearKey, user, authLoading])
   const near = nearState?.key === nearKey ? nearState.near : null
-  const far = useMemo(() => farCity({ near, available: cityOptions, selection }), [near, cityOptions, selection])
+  const far = useMemo(() => (userLocation ? farCity({ near, available: cityOptions, selection, from: userLocation }) : null), [near, cityOptions, selection, userLocation])
   // The far city is the guess: an inferred (or no) selection moves to it during render, as the other guesses do.
   if (far && selection?.source !== 'chosen' && selection?.slug !== far.option.slug) setSelection(storedAt(far.option, 'inferred'))
   const [farSide, setFarSide] = useState<'near' | 'city'>('city')

@@ -14,20 +14,23 @@ const near = (over: object = {}) => ({ reachKm: 25, empty: true, nearestCity: { 
 
 describe('farCity', () => {
   it('is the city the server names, with its distance, when nothing is within the reach', () => {
-    expect(farCity({ near: near(), available: [BLR, MYS], selection: null })).toEqual({ option: BLR, km: 7518.4 })
+    expect(farCity({ near: near(), available: [BLR, MYS], selection: null, from: SAAR })).toEqual({ option: BLR, km: 7518.4 })
   })
 
   it('is none when something is near, the server sent no signal or names no city, or the city is not in the list', () => {
-    expect(farCity({ near: near({ empty: false, nearestCity: null }), available: [BLR], selection: null })).toBeNull()
-    expect(farCity({ near: undefined, available: [BLR], selection: null })).toBeNull()
-    expect(farCity({ near: near({ nearestCity: null }), available: [BLR], selection: null })).toBeNull()
-    expect(farCity({ near: near(), available: [MYS], selection: null })).toBeNull()
+    expect(farCity({ near: near({ empty: false, nearestCity: null }), available: [BLR], selection: null, from: SAAR })).toBeNull()
+    expect(farCity({ near: undefined, available: [BLR], selection: null, from: SAAR })).toBeNull()
+    expect(farCity({ near: near({ nearestCity: null }), available: [BLR], selection: null, from: SAAR })).toBeNull()
+    expect(farCity({ near: near(), available: [MYS], selection: null, from: SAAR })).toBeNull()
   })
 
-  it('never overrides a city somebody chose; a guess, or the same city chosen, is still far', () => {
-    expect(farCity({ near: near(), available: [BLR, MYS], selection: { city: 'Mysuru', source: 'chosen' } })).toBeNull()
-    expect(farCity({ near: near(), available: [BLR, MYS], selection: { city: 'Mysuru', source: 'inferred' } })?.option).toBe(BLR)
-    expect(farCity({ near: near(), available: [BLR, MYS], selection: { city: 'Bengaluru', source: 'chosen' } })?.option).toBe(BLR)
+  it('never overrides a city somebody chose: far is about the person, so their city stays, measured from the fix', () => {
+    const chosen = farCity({ near: near(), available: [BLR, MYS], selection: { city: 'Mysuru', source: 'chosen' }, from: SAAR })
+    expect(chosen?.option).toBe(MYS)
+    expect(Math.round(chosen!.km / 100)).toBe(75)
+    expect(farCity({ near: near(), available: [BLR, MYS], selection: { city: 'Mysuru', source: 'inferred' }, from: SAAR })?.option).toBe(BLR)
+    // A chosen city the list does not have (or has no centre for): the server's city, as for a guess.
+    expect(farCity({ near: near(), available: [BLR], selection: { city: 'Goa', source: 'chosen' }, from: SAAR })?.option).toBe(BLR)
   })
 })
 
