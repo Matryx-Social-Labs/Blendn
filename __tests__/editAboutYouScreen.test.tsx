@@ -39,7 +39,7 @@ jest.mock('../lib/useAuth', () => ({ useAuth: () => mockMe, refreshAuthUser: jes
 const mockToast = jest.fn()
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: mockToast }) }))
 // The account's country, from its home city (#584's `useHomeCountry`); India unless a test says otherwise.
-let mockCountry: string | null = 'IN'
+let mockCountry: string | null | undefined = 'IN'
 jest.mock('../lib/homeCity', () => ({ useHomeCountry: () => mockCountry }))
 jest.mock('../lib/logger', () => ({ Logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 
@@ -69,6 +69,9 @@ const OPTIONS = {
     { slug: 'chai', a: 'Filter coffee', b: 'Chai' },
     { slug: 'beach', a: 'Beach', b: 'Hills' },
   ],
+  // As `?country=IN` answers (SCRUM-1082).
+  country: 'IN',
+  regionWord: 'state',
 }
 
 /** The profile as the server sends it; a test overrides only what it is about. */
@@ -764,53 +767,61 @@ describe('Languages fold like Home state', () => {
   })
 })
 
-describe('lists follow the account’s country (SCRUM-711, Me + settings A 04)', () => {
-  const TORONTO_OPTIONS = {
+describe('lists follow the account’s country, as the server serves them (SCRUM-711, SCRUM-1082, Me + settings A 04)', () => {
+  const CANADA = {
     ...OPTIONS,
     languages: [
-      { slug: 'kannada', label: 'Kannada' },
-      { slug: 'kannada_learning', label: 'Learning Kannada' },
-      { slug: 'bengali', label: 'Bengali' },
+      { slug: 'english', label: 'English' },
+      { slug: 'french', label: 'French' },
+      { slug: 'punjabi', label: 'Punjabi' },
     ],
-    thisOrThat: [
-      { slug: 'coffee_or_chai', a: 'Filter coffee ☕', b: 'Chai 🫖' },
-      { slug: 'mountains_or_beaches', a: 'Mountains', b: 'Beaches' },
+    homeStates: [
+      { slug: 'ontario', label: 'Ontario' },
+      { slug: 'quebec', label: 'Quebec' },
+      { slug: 'abroad', label: 'Grew up abroad' },
     ],
+    thisOrThat: [{ slug: 'hockey_or_no_hockey', a: 'Hockey night 🏒', b: 'I don’t watch hockey' }],
+    country: 'CA',
+    regionWord: 'province',
   }
 
-  it('India: Home region lists the states, Kannada leads, Filter coffee / Chai is asked', async () => {
-    api.getProfileOptions.mockResolvedValue({ success: true, data: TORONTO_OPTIONS })
-    await open()
-    expect(screen.getByText('Home region')).toBeTruthy()
-    await openRow('home-state')
-    expect(screen.getByText('Kerala')).toBeTruthy()
-    await openRow('languages')
-    expect(screen.getByText('Learning Kannada')).toBeTruthy()
-    await openRow('this-or-that')
-    expect(screen.getByLabelText('Filter coffee ☕ or Chai 🫖')).toBeTruthy()
+  it('asks for the account’s own country, and waits until it is known', async () => {
+    mockCountry = undefined
+    const { rerender } = await render(<EditAboutYouScreen />)
+    await act(async () => {})
+    expect(api.getProfileOptions).not.toHaveBeenCalled()
+    mockCountry = 'CA'
+    await rerender(<EditAboutYouScreen />)
+    await waitFor(() => expect(api.getProfileOptions).toHaveBeenCalledWith('CA'))
   })
 
-  it('a Toronto account: no Indian states, no Kannada first, no "Learning Kannada", no Filter coffee / Chai', async () => {
-    mockCountry = 'CA'
-    api.getProfileOptions.mockResolvedValue({ success: true, data: TORONTO_OPTIONS })
+  it('no known country asks for the neutral lists, never India’s', async () => {
+    mockCountry = null
+    api.getProfileOptions.mockResolvedValue({ success: true, data: { ...OPTIONS, homeStates: [], country: null, regionWord: null } })
     await open()
-    expect(screen.queryByText('Home region')).toBeNull()
+    expect(api.getProfileOptions).toHaveBeenCalledWith(null)
+    // A country with no regions: no Home region row.
     expect(screen.queryByTestId('about-you-row-home-state')).toBeNull()
-    await openRow('languages')
-    expect(screen.queryByText('Learning Kannada')).toBeNull()
-    const langs = ['Bengali', 'Kannada'].map((l) => screen.getByText(l))
-    expect(langs).toHaveLength(2)
-    await openRow('this-or-that')
-    expect(screen.queryByLabelText('Filter coffee ☕ or Chai 🫖')).toBeNull()
-    expect(screen.getByLabelText('Mountains or Beaches')).toBeTruthy()
   })
 
-  it('a Toronto account that already holds an Indian state still sees it, so it can be cleared', async () => {
+  it('a Toronto account picks a province, in its own word, and English is a language like the others', async () => {
     mockCountry = 'CA'
-    api.getProfile.mockResolvedValue(profile({ home_state: 'kerala' }))
+    api.getProfileOptions.mockResolvedValue({ success: true, data: CANADA })
     await open()
+    expect(rowHint('home-state', 'Not set · a province, never a town')).toBeTruthy()
+    expect(rowHint('languages', 'Not set · up to two')).toBeTruthy()
     await openRow('home-state')
-    expect(screen.getByText('Kerala')).toBeTruthy()
-    expect(screen.queryByText('Goa')).toBeNull()
+    expect(screen.getByText('A province, never a town. Tap again to clear.')).toBeTruthy()
+    await tap('Ontario')
+    await save()
+    expect(api.updateProfile).toHaveBeenCalledWith('me', expect.objectContaining({ home_state: 'ontario' }))
+  })
+
+  it('India keeps "a state" and "besides English"', async () => {
+    api.getProfileOptions.mockResolvedValue({ success: true, data: { ...OPTIONS, country: 'IN', regionWord: 'state' } })
+    await open()
+    expect(api.getProfileOptions).toHaveBeenCalledWith('IN')
+    expect(rowHint('home-state', 'Not set · a state, never a town')).toBeTruthy()
+    expect(rowHint('languages', 'Not set · besides English, up to two')).toBeTruthy()
   })
 })
