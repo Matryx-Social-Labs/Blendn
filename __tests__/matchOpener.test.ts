@@ -125,7 +125,7 @@ describe('the match moment shows only faces that were earned', () => {
       "you={myRoomFace({ revealed: controls.revealed, name: user?.name ?? null, photo: myPhoto, pseudonym: room.match.you ?? myPseudonym, eventId })}"
     )
     // ...and that function is the gate: a photo only when named (ROOM-01), else the creature.
-    expect(readFileSync(join(__dirname, '..', 'lib', 'roomState.ts'), 'utf8')).toContain('if (input.revealed && input.photo) return { kind: \'photo\', uri: input.photo }')
+    expect(readFileSync(join(__dirname, '..', 'lib', 'roomState.ts'), 'utf8')).toContain('if (input.revealed && input.photo) return { kind: \'photo\', uri: input.photo, name: \'\' }')
   })
 
   it('draws the creature for anybody without a photo', () => {

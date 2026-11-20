@@ -155,7 +155,7 @@ describe('a named person with no photo is their initial (personFace)', () => {
 
   it('negative control: a photo is the photo, and no name is the glyph, never an invented initial', () => {
     const [photo, nameless] = askItems([request('a', 'Ravi', 'https://x/p.jpg'), request('b', '')], [])
-    expect(rowFor(photo, NOW).visual).toEqual({ type: 'photo', uri: 'https://x/p.jpg' })
+    expect(rowFor(photo, NOW).visual).toEqual({ type: 'photo', uri: 'https://x/p.jpg', name: 'Ravi' })
     expect(rowFor(nameless, NOW).visual).toEqual({ type: 'glyph', icon: 'user-plus' })
   })
 

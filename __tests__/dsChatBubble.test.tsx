@@ -147,7 +147,7 @@ describe('the rules', () => {
   })
 
   it('a person is their photo where the room shows it, else their creature', () => {
-    expect(avatarOf({ name: 'Priya', photoUri: 'https://x/p.jpg' }, 32)).toEqual({ kind: 'photo', uri: 'https://x/p.jpg', size: 32 })
+    expect(avatarOf({ name: 'Priya', photoUri: 'https://x/p.jpg' }, 32)).toEqual({ kind: 'photo', uri: 'https://x/p.jpg', name: 'Priya', size: 32 })
     expect(avatarOf({ name: 'Attendee', pseudonym: 'Quiet Heron' }, 32)).toEqual({ kind: 'creature', pseudonym: 'Quiet Heron', size: 32 })
   })
 })
