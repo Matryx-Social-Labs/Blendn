@@ -41,6 +41,8 @@ import { roomDisplayTitle } from './placeRoom'
 
 export interface RoomAttendee {
   userId: string
+  /** `displayName` is their name, not the pseudonym (admin SCRUM-1067): a face, never a creature. Absent from an older server. */
+  revealed?: boolean
   /** Flow 5 P-A: their answer to tonight's question, for this page only (`MatchCard.tonightAnswer`). */
   tonightAnswer?: string | null
   /** Flow 5 P-A: why they are here (work lens), for this page only (`MatchCard.workIntent`). */

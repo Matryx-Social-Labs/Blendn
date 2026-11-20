@@ -110,7 +110,8 @@ describe('the match moment shows only faces that were earned', () => {
     expect(src).not.toContain('profile_photos')
     expect(src).not.toContain('OptimizedImage')
     expect(src).not.toContain('avatarUrl')
-    expect(SCREEN()).toContain("them={matchPerson?.photo ? { kind: 'photo', uri: matchPerson.photo } : { kind: 'creature', pseudonym: room.match.name }}")
+    // Through `personFace` on the server's `revealed` (SCRUM-1067): the roster's photo only for somebody named.
+    expect(SCREEN()).toContain("them={matchPerson ? faceOf(matchPerson) : personFace({ named: false, name: room.match.name })}")
     // …and the roster's photo is exactly what the server sent, never fetched.
     expect(ROOM()).toContain('photo: a.profile_photos?.[0] ?? null')
   })

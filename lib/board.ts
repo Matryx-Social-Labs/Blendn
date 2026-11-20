@@ -222,6 +222,9 @@ export function acceptConflictLine(result: Refusal): string {
   return CLOSED_LINE
 }
 
+/** False for an accepted ask on a post whose room you are seated in: its Rooms row is that ride (C5 B-A). */
+export const notSeated = (r: BoardRequest, seatedPosts: ReadonlySet<string>): boolean => !(r.status === 'accepted' && seatedPosts.has(r.post.id))
+
 /** How long a closed ask stays in the Banter after its event's doors. */
 const OUTGOING_KEEP_MS = 24 * 60 * 60 * 1000
 
@@ -231,13 +234,15 @@ const OUTGOING_KEEP_MS = 24 * 60 * 60 * 1000
  * Incoming: only what can still be answered. Outgoing: anything still live,
  * plus closed ones until a day after their doors — long enough to see it
  * resolved, short enough that the Banter does not become an archive. Your own
- * withdrawals are not shown: you know.
+ * withdrawals are not shown: you know. Nor is an accepted ask whose post's room
+ * you are seated in (`seatedPosts`): its Rooms row is that ride (C5 B-A).
  */
-export function inboxRequests(requests: BoardRequests, now: number = Date.now()): BoardRequests {
+export function inboxRequests(requests: BoardRequests, now: number = Date.now(), seatedPosts: ReadonlySet<string> = new Set()): BoardRequests {
   return {
     incoming: requests.incoming.filter((r) => r.live),
     outgoing: requests.outgoing.filter((r) => {
       if (r.status === 'withdrawn') return false
+      if (!notSeated(r, seatedPosts)) return false
       if (r.live) return true
       const start = new Date(r.event.startTime).getTime()
       return Number.isFinite(start) && start > now - OUTGOING_KEEP_MS

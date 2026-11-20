@@ -48,6 +48,7 @@ export function attendeeFromMatch(m: RoomAttendee): AttendeeProfile {
   return {
     user_id: m.userId,
     name: m.displayName,
+    revealed: m.revealed === true,
     profile_photos: m.photo ? [m.photo] : undefined,
     interests: m.sharedInterests,
     sharedIntents: m.sharedIntents,
@@ -127,6 +128,8 @@ export function withRoster(
 export interface ArrivalPayload {
   userId: string
   userName: string
+  /** `userName` is theirs (SCRUM-1067); absent from an older server, read as not. */
+  revealed?: boolean
   userImage?: string
   checkInTime: string
   hereCount?: number
@@ -157,6 +160,7 @@ export function applyArrival(
     ...listed,
     user_id: data.userId,
     name: data.userName,
+    revealed: data.revealed === true,
     profile_photos: data.userImage ? [data.userImage] : listed?.profile_photos,
     last_seen: data.checkInTime,
     // Somebody who just checked in is, by definition, in the room.

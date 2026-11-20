@@ -13,6 +13,7 @@ import { groupedCount } from '../../lib/friendsHere'
 import type { Visibility } from '../ds/Banner'
 import { tint } from '../../lib/theme'
 import { RadialWash } from '../ui/GradientFill'
+import { personFace } from '../../lib/personFace'
 import type { RoomPerson } from '../../lib/useRoom'
 import { pickReason, type RoomLens } from '../../lib/roomLens'
 import { Avatar } from '../ds/Avatar'
@@ -43,10 +44,8 @@ export function useGridCell() {
   return Math.floor((width - SPACE.gutter * 2 - GRID_GAP * 2) / 3)
 }
 
-/** A person's face as the room shows it: their photo only if they revealed, else their pseudonym's creature. */
-export function faceOf(p: { name: string; photo: string | null }): Face {
-  return p.photo ? { kind: 'photo', uri: p.photo } : { kind: 'creature', pseudonym: p.name }
-}
+/** A person's face as the room shows it: the server says who is named (`revealed`), `personFace` draws it. */
+export const faceOf = (p: Pick<RoomPerson, 'named' | 'name' | 'photo'>): Face => personFace({ named: p.named, name: p.name, photo: p.photo })
 
 /** The R-A you-card's light: violet from the top-left corner (`.xme`). */
 const YOU_WASH = [{ color: COLOR.brandViolet, alpha: 0.22, at: [0, 0], size: [90, 120], reach: 0.7 }] as const

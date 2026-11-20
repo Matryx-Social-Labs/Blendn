@@ -268,7 +268,7 @@ export type LobbyJoined = {
 export const FROM_LOBBY_ROWS = 3
 
 /** A joined row's title: what you are in. A spot at somebody's table and a search for company are both a group. */
-export function joinedTitle(j: Pick<LobbyJoined, 'kind' | 'subKind'>): string {
+export function joinedTitle(j: Pick<LobbyJoined, 'subKind'>): string {
   if (j.subKind === 'ride') return 'Your ride'
   if (j.subKind === 'ticket') return 'Your ticket'
   return 'Your group'
@@ -435,4 +435,65 @@ export function photoView(photo: LobbyPhoto | undefined, mine: boolean): PhotoVi
   if (!photo.url || !/^https:\/\//i.test(photo.url)) return { kind: 'none' }
   if (photo.status === 'pending') return mine ? { kind: 'pending', url: photo.url, alt: photo.alt || 'Your photo' } : { kind: 'none' }
   return { kind: 'shown', url: photo.url, alt: photo.alt || 'A photo with the post' }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Lobby rooms in the Banter (Flow 5 C5 · B-A "Rooms · Your ride")            */
+/* -------------------------------------------------------------------------- */
+
+/** Who else is seated in a Lobby room: up to three room pseudonyms (the post's author first) and how many in all. */
+export type LobbyOthers = { names: string[]; count: number }
+
+/** A Lobby post's room, as `GET /chat/groups` lists it in `rooms` (admin #991, `kind: "board_post"`). */
+export interface LobbyRoomRow {
+  id: string
+  /** The post the room is for: an accepted ask on it leaves the Banter's Lobby section once you are seated here. */
+  postId: string | null
+  /** The post's own words, clipped by the server: the ride's place and time live here, not in fields. */
+  name: string
+  kind: BoardPostKind
+  subKind: LobbySubKind | null
+  /** You wrote the post. */
+  yours: boolean
+  others: LobbyOthers
+  unreadCount: number
+  lastMessageAt: string | null
+  mute: unknown
+}
+
+const POST_KINDS: readonly BoardPostKind[] = ['offer', 'seeking', 'chat']
+const SUB_KINDS: readonly LobbySubKind[] = ['ride', 'spots', 'ticket', 'buddy']
+
+/** The Lobby rooms out of a `GET /chat/groups` answer; crews' and Mixes' rows are `crewRoomsFrom`'s. An older server lists none. */
+export function lobbyRoomsFrom(payload: unknown): LobbyRoomRow[] {
+  const rooms = (payload as { rooms?: unknown } | null)?.rooms
+  if (!Array.isArray(rooms)) return []
+  return rooms.flatMap((r: Record<string, any>) => {
+    if (r?.kind !== 'board_post' || typeof r.id !== 'string') return []
+    const post = r.boardPost ?? {}
+    const names: string[] = Array.isArray(r.others?.names) ? r.others.names.filter((n: unknown): n is string => typeof n === 'string') : []
+    return [
+      {
+        id: r.id,
+        postId: typeof post.id === 'string' ? post.id : null,
+        name: typeof r.name === 'string' ? r.name : '',
+        kind: POST_KINDS.includes(post.kind) ? post.kind : 'offer',
+        subKind: SUB_KINDS.includes(post.subKind) ? post.subKind : null,
+        yours: post.yours === true,
+        others: { names, count: Math.max(Number(r.others?.count) || 0, names.length) },
+        unreadCount: Number(r.unreadCount) || 0,
+        lastMessageAt: typeof r.lastMessageAt === 'string' ? r.lastMessageAt : null,
+        mute: r.mute,
+      },
+    ]
+  })
+}
+
+/** Line 2 of a Lobby room's row (owner pick A, 2026-11-20): "With Lunar Fox and 2 others · Car from Indiranagar at 5:30". */
+export function lobbyRoomLine(others: LobbyOthers, words: string): string {
+  const [first] = others.names
+  const rest = others.count - 1
+  const who = first ? `With ${first}${rest > 0 ? ` and ${rest === 1 ? '1 other' : `${compactCount(rest)} others`}` : ''}` : null
+  const said = words.trim()
+  return [who, said].filter(Boolean).join(' · ')
 }
