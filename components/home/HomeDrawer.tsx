@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
+import Animated, { Easing, FadeIn, interpolate, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
 import { Grabber } from '../ui/Grabber'
@@ -17,7 +17,7 @@ import {
   stepSnap,
   type DrawerSnap,
 } from '../../lib/home'
-import { COLOR, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, MATERIAL, RADIUS, REDUCE_MOTION, SPACE, SPRING } from '../../lib/design/tokens'
 import { useReducedMotion } from '../../lib/motion'
 
 /** The board's orbs below full (`<div class="orbs" style="opacity:.6">`); the `.full` drawer has none. */
@@ -113,9 +113,10 @@ export function HomeDrawer({
 
   /*
    * Every settle the drawer asks for (a release, a tap, a screen reader's step) is counted, so the drawer is moved to the
-   * snap that was committed even when the snap did not change (SCRUM-1079). A release's spring and a step taken from the
-   * snap before that release rendered could net to no change: the effect never re-ran and the release's spring stood,
-   * drawn at half while it read "Collapsed". A spring re-aimed at its own target carries on unchanged.
+   * snap that was committed even when the snap did not change (SCRUM-1079): a release's spring and a step taken from the
+   * snap before that release rendered could net to no change, and the release's spring stood, drawn at half while it read
+   * "Collapsed". But only a move toward somewhere else starts an animation: `aim` is where the one in flight is going, and
+   * a settle toward that same point leaves it be (SCRUM-1090: re-issued after every release, it restarted the motion).
    */
   const [settles, setSettles] = useState(0)
   const settle = useCallback(
@@ -125,10 +126,30 @@ export function HomeDrawer({
     },
     [onSnap]
   )
+  // NaN: nothing in flight yet, so the first commit always draws the drawer at its snap.
+  const aim = useSharedValue(Number.NaN)
+  /*
+   * Travelling (a drag, or a move toward a snap): the pane is as tall as at full, so what rises into view is the list,
+   * not bare ink that fills in once the drawer stops (SCRUM-1090). At rest it is the snap's again (`drawerContentHeight`).
+   */
+  const [travelling, setTravelling] = useState(false)
+  const arrive = useCallback((finished?: boolean) => {
+    if (finished) setTravelling(false)
+  }, [])
 
   useEffect(() => {
-    y.set(reduceMotion ? withTiming(points[snap], REDUCED_SETTLE) : withSpring(points[snap], SPRING.settle))
-  }, [snap, points, reduceMotion, y, settles])
+    const to = points[snap]
+    if (aim.get() === to) return
+    aim.set(to)
+    // Already there (the first frame, the shell's `y` starts at the snap): nothing to travel.
+    if (y.get() === to) return
+    setTravelling(true)
+    const done = (finished?: boolean) => {
+      'worklet'
+      scheduleOnRN(arrive, finished)
+    }
+    y.set(reduceMotion ? withTiming(to, REDUCED_SETTLE, done) : withSpring(to, SPRING.settle, done))
+  }, [snap, points, reduceMotion, y, settles, aim, arrive])
 
   // Built once per set of snap points, not on every render.
   const pan = useMemo(
@@ -139,17 +160,26 @@ export function HomeDrawer({
         .activeOffsetY([-8, 8])
         .onStart(() => {
           dragStart.set(y.get())
+          aim.set(Number.NaN)
+          scheduleOnRN(setTravelling, true)
         })
         .onUpdate((e) => {
           y.set(Math.min(points.peek, Math.max(points.full, dragStart.get() + e.translationY)))
         })
         .onEnd((e) => {
           const next = settleSnap(y.get(), e.velocityY, points)
-          // The release's own speed carries into the settle, so a flick does not stall and restart.
-          y.set(reduceMotion ? withTiming(points[next], REDUCED_SETTLE) : withSpring(points[next], { ...SPRING.settle, velocity: e.velocityY }))
+          const to = points[next]
+          const done = (finished?: boolean) => {
+            'worklet'
+            scheduleOnRN(arrive, finished)
+          }
+          // The release's own speed carries into the settle, so a flick does not stall and restart. The one animation: the
+          // settle that follows sees it already aimed there (`aim`).
+          aim.set(to)
+          y.set(reduceMotion ? withTiming(to, REDUCED_SETTLE, done) : withSpring(to, { ...SPRING.settle, velocity: e.velocityY }, done))
           scheduleOnRN(settle, next)
         }),
-    [points, settle, y, dragStart, reduceMotion]
+    [points, settle, y, dragStart, reduceMotion, aim, arrive]
   )
 
   const moved = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() - points.full }] }))
@@ -178,10 +208,15 @@ export function HomeDrawer({
             {header}
           </View>
         </GestureDetector>
-        <View style={{ height: drawerContentHeight(points, snap, height) }}>
+        <View testID="home-drawer-pane" style={{ height: drawerContentHeight(points, travelling ? 'full' : snap, height) }}>
           <InDrawer.Provider value={surface}>{children}</InDrawer.Provider>
         </View>
-        {snap === 'peek' && peek ? <View style={styles.peek}>{peek}</View> : null}
+        {/* Over the chips at peek only: gone the moment the drawer moves, back once it rests at peek. */}
+        {snap === 'peek' && !travelling && peek ? (
+          <Animated.View entering={reduceMotion ? undefined : FadeIn.duration(DURATION.quick)} style={styles.peek}>
+            {peek}
+          </Animated.View>
+        ) : null}
         <View testID="drawer-rim" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.rim]} />
       </Animated.View>
     </GroundProvider>

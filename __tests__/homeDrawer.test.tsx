@@ -48,7 +48,11 @@ describe('the drawer travels', () => {
   it('on M.settle, from the token', async () => {
     reduceMotion.mockReturnValue(false)
     await render(drawer('full'))
-    expect(Reanimated.withSpring).toHaveBeenCalledWith(points.full, expect.objectContaining({ stiffness: SPRING.settle.stiffness, damping: SPRING.settle.damping, mass: SPRING.settle.mass }))
+    expect(Reanimated.withSpring).toHaveBeenCalledWith(
+      points.full,
+      expect.objectContaining({ stiffness: SPRING.settle.stiffness, damping: SPRING.settle.damping, mass: SPRING.settle.mass }),
+      expect.any(Function)
+    )
     expect(Reanimated.withTiming).not.toHaveBeenCalled()
   })
 
@@ -56,7 +60,7 @@ describe('the drawer travels', () => {
     reduceMotion.mockReturnValue(true)
     await render(drawer('full'))
     expect(Reanimated.withSpring).not.toHaveBeenCalled()
-    expect(Reanimated.withTiming).toHaveBeenCalledWith(points.full, expect.objectContaining({ duration: REDUCE_MOTION.duration.base }))
+    expect(Reanimated.withTiming).toHaveBeenCalledWith(points.full, expect.objectContaining({ duration: REDUCE_MOTION.duration.base }), expect.any(Function))
     expect(REDUCE_MOTION.duration.base).toBe(200)
     expect(EASING.standard).toHaveLength(4)
   })
@@ -233,5 +237,132 @@ describe('the drawer drawn and the drawer spoken never disagree', () => {
     await act(async () => step('decrement'))
     expect(spoken()).toBe(DRAWER_SNAP_LABEL.peek)
     expect(drawnTo()).toBe(points.peek)
+  })
+})
+
+/*
+ * SCRUM-1090 (owner, 2026-11-20: "when you pull the drawer on the pulse screen back up now its messed up, it flickers").
+ * Measured on the iOS sim (slit scans of the drawer's edge, before/after frame strips): pulled up from peek, the drawer
+ * rose as bare ink, its pane cut to peek's height, and the list popped in only once it had settled; the peek line sat over
+ * the chips the whole way up. And every settle issued a second animation toward the target the release was already
+ * springing to (#592). One animation per move; the pane as tall as full while the drawer travels; the line off the chips.
+ */
+describe('the drawer moves once, and its pane is there all the way', () => {
+  function Shell({ start, peek }: { start: DrawerSnap; peek?: boolean }) {
+    const [snap, setSnap] = useState<DrawerSnap>(start)
+    const y = Reanimated.useSharedValue(points[start])
+    return (
+      <HomeDrawer y={y} points={points} snap={snap} onSnap={setSnap} header={<Text>header</Text>} peek={peek ? <Text>peek line</Text> : undefined}>
+        <Text testID="pane">pane</Text>
+      </HomeDrawer>
+    )
+  }
+  const paneHeight = () => StyleSheet.flatten(screen.getByTestId('home-drawer-pane').props.style)?.height
+  const content = (snap: DrawerSnap) => 800 - points[snap] - DRAWER_HEADER_HEIGHT
+  const pan = () => getByGestureTestId('home-drawer-pan')
+  const animations = () => jest.mocked(Reanimated.withSpring).mock.calls.length + jest.mocked(Reanimated.withTiming).mock.calls.length
+  // What the UI thread hands back (`scheduleOnRN`) lands on a microtask under Jest.
+  const flush = async () => {
+    for (let i = 0; i < 4; i++) await Promise.resolve()
+  }
+
+  beforeEach(() => {
+    reduceMotion.mockReturnValue(false)
+    jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 400, height: 800, scale: 3, fontScale: 1 })
+  })
+  afterEach(() => jest.restoreAllMocks())
+
+  it('a release starts one animation, and the settle that follows never starts a second toward the same snap', async () => {
+    await render(<Shell start="peek" />)
+    jest.mocked(Reanimated.withSpring).mockClear()
+    await act(async () => {
+      fireGestureHandler(pan(), [
+        { state: State.BEGAN, translationY: 0 },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: points.full - points.peek },
+        { state: State.END, translationY: points.full - points.peek, velocityY: 0 },
+      ])
+      await flush()
+    })
+    expect(jest.mocked(Reanimated.withSpring).mock.calls.map((c) => c[0])).toEqual([points.full])
+  })
+
+  it('the same under Reduce Motion: one timing, never restarted', async () => {
+    reduceMotion.mockReturnValue(true)
+    await render(<Shell start="half" />)
+    jest.mocked(Reanimated.withTiming).mockClear()
+    await act(async () => {
+      fireGestureHandler(pan(), [
+        { state: State.BEGAN, translationY: 0 },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: points.full - points.half },
+        { state: State.END, translationY: points.full - points.half, velocityY: 0 },
+      ])
+      await flush()
+    })
+    expect(jest.mocked(Reanimated.withTiming).mock.calls.map((c) => c[0])).toEqual([points.full])
+  })
+
+  it('control: a tap on the handle is one animation too', async () => {
+    await render(<Shell start="peek" />)
+    jest.mocked(Reanimated.withSpring).mockClear()
+    jest.mocked(Reanimated.withTiming).mockClear()
+    await act(async () => fireEvent.press(screen.getByLabelText('Events and places')))
+    expect(animations()).toBe(1)
+    expect(jest.mocked(Reanimated.withSpring).mock.calls[0][0]).toBe(points.half)
+  })
+
+  // Fake timers hold the drawer mid-travel: Jest's gesture helper always ends the gesture, and its spring then runs on.
+  it('pulled up from peek, the pane is as tall as full from the first frame of the drag, not once it settles', async () => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] })
+    await render(<Shell start="peek" />)
+    expect(paneHeight()).toBe(content('peek'))
+    await act(async () => {
+      fireGestureHandler(pan(), [
+        { state: State.BEGAN, translationY: 0 },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: -40 },
+      ])
+      await flush()
+    })
+    expect(paneHeight()).toBe(content('full'))
+    jest.useRealTimers()
+  })
+
+  it('at rest the pane is the snap’s again, so the last row is reachable at half', async () => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] })
+    await render(<Shell start="peek" />)
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('Events and places'))
+      await flush()
+    })
+    expect(paneHeight()).toBe(content('full'))
+    await act(async () => {
+      jest.advanceTimersByTime(2000)
+      await flush()
+    })
+    expect(paneHeight()).toBe(content('half'))
+    jest.useRealTimers()
+  })
+
+  it('the peek line leaves the chips as soon as the drawer moves, and is back once it rests at peek', async () => {
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] })
+    await render(<Shell start="peek" peek />)
+    expect(screen.getByText('peek line')).toBeTruthy()
+    await act(async () => {
+      fireGestureHandler(pan(), [
+        { state: State.BEGAN, translationY: 0 },
+        { state: State.ACTIVE, translationY: 0 },
+        { state: State.ACTIVE, translationY: -40 },
+      ])
+      await flush()
+    })
+    expect(screen.queryByText('peek line')).toBeNull()
+    await act(async () => {
+      jest.advanceTimersByTime(2000)
+      await flush()
+    })
+    expect(screen.getByText('peek line')).toBeTruthy()
+    jest.useRealTimers()
   })
 })
