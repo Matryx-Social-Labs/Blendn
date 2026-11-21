@@ -15,7 +15,7 @@ describe('personFace: one identity rule for every Banter face (F1 B, owner 2026-
   })
 
   test('a named person with a photo is that photo', () => {
-    expect(personFace({ named: true, name: 'Aditi Verma', photo: 'https://x/a.jpg' })).toEqual({ kind: 'photo', uri: 'https://x/a.jpg' })
+    expect(personFace({ named: true, name: 'Aditi Verma', photo: 'https://x/a.jpg' })).toEqual({ kind: 'photo', uri: 'https://x/a.jpg', name: 'Aditi Verma' })
   })
 
   test('a host is never drawn as a person: the creature, whatever else is known', () => {

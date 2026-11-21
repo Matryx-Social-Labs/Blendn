@@ -1,7 +1,8 @@
 import { Image } from 'expo-image'
 import { StyleSheet, View } from 'react-native'
 
-import { MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { DURATION, MATERIAL, RADIUS, SPACE } from '../../lib/design/tokens'
+import { useReducedMotion } from '../../lib/motion'
 import { Creature, creatureFor, Initial } from './Creature'
 import { useIncreaseContrast } from './shared'
 
@@ -23,7 +24,17 @@ export type AvatarProps = {
   blink?: boolean
   testID?: string
 } & (
-  | { kind: 'photo'; uri: string; /** The picture failed to load (a dead URL): the caller draws its own fallback. */ onError?: () => void }
+  | {
+      kind: 'photo'
+      uri: string
+      /**
+       * Whose photo: their initial on their hue disc is drawn under it, so a loading or dead photo still reads as them.
+       * `''` only where nothing names them yet (a server visual with no name): the disc alone, never a "?".
+       */
+      name: string
+      /** The picture failed to load (a dead URL): the initial stays; a caller may still swap in its own fallback. */
+      onError?: () => void
+    }
   /** The pseudonym (the `markSeed`, never a user id): it picks the creature and its palette (`creatureFor`). */
   | { kind: 'creature'; pseudonym: string }
   /** A named person with no photo: their initial on their hue disc (`personFace`, owner F1 B). Never for the anonymous. */
@@ -33,7 +44,8 @@ export type AvatarProps = {
 /**
  * Who someone is, as a picture (DESIGN-BRIEF §12, guidelines/components/Avatar.html).
  *
- * - `photo`: earned; only where the room names someone to you.
+ * - `photo`: earned; only where the room names someone to you. It loads over their initial on their hue disc (the face a
+ *   named person with no photo has), fading in, so a slow or dead photo is never an empty hole (SCRUM-1088 A).
  * - `creature`: everyone else, as `<Creature>` draws them: an animal face
  *   on a disc in one of eight hues, its expression the pseudonym's adjective;
  *   the same pseudonym draws the same one everywhere in one event.
@@ -48,6 +60,7 @@ export type AvatarProps = {
 export function Avatar(props: AvatarProps) {
   const { size, ring, halo, label, testID, blink } = props
   const contrast = useIncreaseContrast()
+  const reduceMotion = useReducedMotion()
   const ringColor = contrast ? MATERIAL.hairlineIncreaseContrast : ring
 
   const a11y = label
@@ -94,7 +107,17 @@ export function Avatar(props: AvatarProps) {
         />
       ) : null}
       <View testID={testID && `${testID}-body`} style={[styles.body, { width: size, height: size, borderRadius: radius }]}>
-        <Image source={{ uri: props.uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessible={false} onError={props.onError} />
+        <Initial name={props.name} size={size} letter={props.name.trim() !== ''} testID={testID && `${testID}-initial`} />
+        {/* expo-image cross-fades a network load only; a memory-cache hit paints at once, so a warm list never shimmers. */}
+        <Image
+          testID={testID && `${testID}-photo`}
+          source={{ uri: props.uri }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={reduceMotion ? 0 : DURATION.quick}
+          accessible={false}
+          onError={props.onError}
+        />
       </View>
     </View>
   )

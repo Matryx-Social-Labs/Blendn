@@ -46,6 +46,7 @@ describe('Requests', () => {
     ]
     await render(<BanterRequestsRow requests={requests} total={2} />)
     expect(screen.getByText('K', hidden)).toBeTruthy()
-    expect(screen.queryByText('A', hidden)).toBeNull()
+    // The photo loads over Aditi's own initial (SCRUM-1088), never a creature.
+    expect(screen.getByText('A', hidden)).toBeTruthy()
   })
 })

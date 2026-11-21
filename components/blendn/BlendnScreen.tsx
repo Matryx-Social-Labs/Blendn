@@ -1037,7 +1037,7 @@ function BlendnContent({ onClose, backGuardRef }: { onClose: () => void; backGua
                 <RoomYouCard
                   face={myFace}
                   name={controls.revealed ? myName : (myPseudonym ?? 'Your room name')}
-                  self={{ name: user?.name?.trim() || myName, face: myPhoto ? { kind: 'photo', uri: myPhoto } : myFace }}
+                  self={{ name: user?.name?.trim() || myName, face: myPhoto ? { kind: 'photo', uri: myPhoto, name: user?.name?.trim() || myName } : myFace }}
                   checkedInAt={room.checkedInAt}
                   hereCount={room.hereCount}
                   others={youPile}

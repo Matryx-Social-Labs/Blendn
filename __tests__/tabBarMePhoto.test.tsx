@@ -17,7 +17,7 @@ jest.mock('expo-glass-effect', () => {
 })
 jest.mock('expo-image', () => {
   const { View } = jest.requireActual('react-native')
-  return { Image: (props: object) => <View testID="face" {...props} /> }
+  return { Image: (props: object) => <View {...props} testID="face" /> }
 })
 jest.mock('expo-blur', () => {
   const { View } = jest.requireActual('react-native')

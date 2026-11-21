@@ -31,7 +31,7 @@ jest.mock('../components/ds/Avatar', () => {
   return {
     Avatar: (p: { kind: string; name?: string; pseudonym?: string; uri?: string; testID?: string }) => (
       <View testID={p.testID ?? `avatar-${p.kind}`}>
-        <Text>{`${p.kind}:${p.name ?? p.pseudonym ?? p.uri}`}</Text>
+        <Text>{`${p.kind}:${p.uri ?? p.name ?? p.pseudonym}`}</Text>
       </View>
     ),
   }
