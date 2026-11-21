@@ -171,6 +171,10 @@ describe('the banners', () => {
     expect(screen.getByRole('header', { name: 'Nothing near you yet · Thiruvananthapuram, about 8,012 km away' })).toBeTruthy()
     expect(screen.getByText('Nothing near you yet ·')).toBeTruthy()
     expect(screen.getByText('Thiruvananthapuram, about 8,012\u00a0km away')).toBeTruthy()
+    // Each piece is one line that shrinks to fit, never wraps inside (AX5 drive: "\u20267,515 km / away" made three lines).
+    for (const piece of ['Nothing near you yet \u00b7', 'Thiruvananthapuram, about 8,012\u00a0km away']) {
+      expect(screen.getByText(piece).props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true })
+    }
     expect(screen.getByRole('tab', { name: /In Thiruvananthapuram/, selected: true })).toBeTruthy()
     await fireEvent.press(screen.getByRole('tab', { name: /Near you/ }))
     expect(onFarSide).toHaveBeenCalledWith('near')

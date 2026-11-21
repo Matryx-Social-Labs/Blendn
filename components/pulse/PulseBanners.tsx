@@ -135,10 +135,11 @@ function NothingNearLine({ city, km, side, onSide, onMap }: { city: string; km: 
     <View style={[styles.far, !onMap && styles.farSolid]} testID="pulse-far">
       {onMap ? <MapGlass /> : null}
       <View style={styles.farWords} accessible accessibilityRole="header" accessibilityLabel={`${line.status} ${line.where}`.replace(/\u00a0/g, ' ')}>
-        <Text style={words} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+        {/* One line each, shrinking to fit: the row breaks between them, never inside one (at AX5 "km away" wrapped). */}
+        <Text style={words} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} adjustsFontSizeToFit>
           {line.status}
         </Text>
-        <Text style={words} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+        <Text style={words} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} adjustsFontSizeToFit>
           {line.where}
         </Text>
       </View>

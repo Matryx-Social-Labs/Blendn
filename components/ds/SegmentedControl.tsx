@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
@@ -79,14 +79,18 @@ const LABEL_MIN_SCALE = 0.8
  * fit (to 80%) rather than wrapping: a second line in the fixed 48 capsule was sliced (A2, D-L10), and the capsule cannot
  * grow (the thumb and the ink row are laid out against it).
  */
-function SegmentLabel({ item, badge, ink, pair, bold }: { item: string; badge: SegmentBadge; ink: boolean; pair: boolean; bold: boolean }) {
+function SegmentLabel({ item, badge, ink, pair, bold, segment }: { item: string; badge: SegmentBadge; ink: boolean; pair: boolean; bold: boolean; segment: number }) {
   const family = ink ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]
+  const role = pair ? 'meta' : 'button'
+  // The control cap, or less where the segment is shorter than the capped line (the line's 25 pt segment): a line taller
+  // than its segment was shrunk and pushed to the bottom edge on iOS, cut to nothing at the largest text (task 02 drive).
+  const cap = Math.min(CONTROL_FONT_CAP, segment / TYPE[role].lineHeight)
   const color = COLOR.textPrimary
   return (
     <View style={styles.labelRow}>
       <Text
-        style={[font(pair ? 'meta' : 'button', bold, family), styles.label, { color }]}
-        maxFontSizeMultiplier={CONTROL_FONT_CAP}
+        style={[font(role, bold, family), styles.label, { color }]}
+        maxFontSizeMultiplier={cap}
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={LABEL_MIN_SCALE}
@@ -283,7 +287,7 @@ export function SegmentedControl({
                 accessibilityState={radio ? { checked: on, disabled } : { selected: on, disabled }}
                 style={({ pressed }) => [styles.segment, !on && (pressed || previewPressed === i) && { opacity: PRESSED_SEGMENT }]}
               >
-                <SegmentLabel item={item} badge={badges?.[i] ?? null} ink={false} pair={pair} bold={bold} />
+                <SegmentLabel item={item} badge={badges?.[i] ?? null} ink={false} pair={pair} bold={bold} segment={height - SPACE.xs * 2} />
               </Pressable>
             )
           })}
@@ -301,7 +305,7 @@ export function SegmentedControl({
                 >
                   {items.map((item, i) => (
                     <View key={item} style={styles.segment}>
-                      <SegmentLabel item={item} badge={badges?.[i] ?? null} ink pair={pair} bold={bold} />
+                      <SegmentLabel item={item} badge={badges?.[i] ?? null} ink pair={pair} bold={bold} segment={height - SPACE.xs * 2} />
                     </View>
                   ))}
                 </Animated.View>

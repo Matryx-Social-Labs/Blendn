@@ -118,6 +118,17 @@ describe('<SegmentedControl>', () => {
     expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 9.5, bottom: 9.5 })
   })
 
+  it('at its cap a label’s line fits its segment at every size: the line’s 25 pt segment caps meta 14/20 at 1.25, not 1.3 (task 02 AX drive)', async () => {
+    for (const size of [undefined, 'compact', 'line'] as const) {
+      for (const pair of [false, true]) {
+        await draw({ ...(size ? { size } : {}), ...(pair ? { pair: true, selected: null } : {}) })
+        const label = screen.getByText('Sign in')
+        const segment = flat('s').height - SPACE.xs * 2
+        expect(text('Sign in').lineHeight * label.props.maxFontSizeMultiplier).toBeLessThanOrEqual(segment)
+      }
+    }
+  })
+
   it('each 40 pt segment reaches the 48 pt target', async () => {
     await draw()
     expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 4, bottom: 4 })
