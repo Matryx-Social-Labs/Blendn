@@ -772,13 +772,18 @@ export const HomeMap = memo(function HomeMap({
    */
   const zoomNow = view.current.zoom
   const more = mapShown && loaded.segment === segment && !reachHere ? moreLine(loaded.total, loaded.pins.length, zoomNow < MORE_ZOOM_MAX, segment === 'places' ? 'place' : 'event') : null
-  // One step in where you are looking: your ask, so the lap is over (as the edge marker).
+  // One step in where you are looking: your ask, so the lap is over (as the edge marker). Where you are looking is the
+  // middle of the map you can see, read off the screen: after a snap the camera's own middle is the old map's (task 02).
   const zoomIn = () => {
-    const centre = view.current.centre
-    if (!centre) return
+    const ref = map.current
+    if (!ref) return
     setTouched(true)
     onTouched?.()
-    moveTo({ to: centre, easeMs: MAP_THEME.camera.easeMs, at: { zoom: Math.min(MORE_ZOOM_MAX, zoomNow + 1), pitch: view.current.pitch } })
+    const at = { zoom: Math.min(MORE_ZOOM_MAX, zoomNow + 1), pitch: view.current.pitch }
+    ref
+      .unproject([width / 2, visibleCentreY(padding, mapHeight)])
+      .then((middle) => moveTo({ to: middle as [number, number], easeMs: MAP_THEME.camera.easeMs, at }))
+      .catch((error) => Logger.warn('events', 'Home map could not zoom in', { error: String(error) }))
   }
 
   return (

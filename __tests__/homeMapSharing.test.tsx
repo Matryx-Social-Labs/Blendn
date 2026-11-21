@@ -6,7 +6,7 @@
  * a viewport query means where they looked.
  */
 import React from 'react'
-import { act, render, screen } from '@testing-library/react-native'
+import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import { makeMutable } from 'react-native-reanimated'
 
 const mockStops: Array<{ center?: [number, number]; padding?: unknown; [k: string]: unknown }> = []
@@ -361,4 +361,25 @@ it('"+N more" is not drawn while the drawer is full; at half it is (the control)
   await view.rerender(map(FIX))
   await settle()
   expect(screen.getByTestId('map-more')).toBeTruthy()
+})
+
+/*
+ * Task 02 Android drive: after the drawer settled lower, "+N more · Zoom in" re-centred the camera's old middle (read in
+ * the padding the snap pan keeps) in the new, taller map, so the view jumped north before it zoomed and the pins left it.
+ * A step in is where you are looking: what sits in the middle of the map you can see stays there.
+ */
+it('"Zoom in" after a lower snap steps in on the middle of the map you can see, not the camera’s old middle', async () => {
+  mockGetEvents.mockResolvedValue({ success: true, data: { events: [], pagination: { totalCount: 130 } } } as never)
+  const view = await render(map(FIX))
+  await settle()
+  await view.rerender(map(FIX, null, 600))
+  await settle()
+  mockStops.length = 0
+  await act(async () => void fireEvent.press(screen.getByTestId('map-more')))
+  await settle()
+  const step = mockStops.at(-1)
+  expect(step?.zoom).toBe(16)
+  // The mock's projection: screen y 300 is the fix's latitude, 1e-5 degrees a point. The map you can see now runs from
+  // the top chrome (90) to the drawer (600), so its middle is y 345.
+  expect(step?.center?.[1]).toBeCloseTo(FIX.latitude - (345 - 300) / 1e5, 6)
 })
