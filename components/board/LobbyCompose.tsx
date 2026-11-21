@@ -122,7 +122,7 @@ export function LobbyCompose({
           />
       </View>
       <SegmentedControl
-        compact
+        size="compact"
         semantics="radio"
         items={COMPOSE_TYPES.map((t) => t.label)}
         selected={COMPOSE_TYPES.findIndex((t) => t.kind === kind)}

@@ -23,7 +23,8 @@ const DRAG_FAIL_Y = 10
 const BADGE_GAP = SPACE.xs + SPACE.xxs
 const DOT = 8
 const DIVIDER_HEIGHT = 20
-const COMPACT_HEIGHT = 44
+/** The smaller sizes, by the board that drew them; a segment is the height less the 4 pt track inset on each side. */
+const HEIGHT = { compact: 44, line: 33 } as const
 /** The thumb's rim in the hue's edge colour. */
 const RIM = 1
 
@@ -57,8 +58,12 @@ export type SegmentedControlProps = Choice & {
   draggable?: boolean
   /** Disabled while busy: 45% of the whole control. */
   disabled?: boolean
-  /** 44 pt, the Lobby compose sheet's type segment (`.lseg`): a 36 pt segment, its slop still the 44 target. */
-  compact?: boolean
+  /**
+   * Smaller than the 48 pt control. `compact`: 44 pt, the Lobby compose sheet's type segment (`.lseg`). `line`: 33 pt,
+   * a switch inside a one-line glass banner on the map (pulse-map sheet 07 `.seg`; advisor 2026-11-21). Either way each
+   * segment's slop makes the 44 pt target: drawn as the board, touched as the platform asks.
+   */
+  size?: keyof typeof HEIGHT
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'focused'
   /** The design gallery only: draws this segment pressed. */
@@ -133,12 +138,14 @@ export function SegmentedControl({
   semantics = 'tabs',
   draggable = true,
   disabled = false,
-  compact = false,
+  size,
   previewState,
   previewPressed,
   testID,
 }: SegmentedControlProps) {
-  const height = compact ? COMPACT_HEIGHT : SIZE.control
+  const height = size ? HEIGHT[size] : SIZE.control
+  // Up from the segment (the height less the track's inset) to the target: 4 pt at 48 and 44, 9.5 at the line's 33.
+  const slop = (Math.max(SIZE.targetIos, height) - (height - SPACE.xs * 2)) / 2
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -266,8 +273,8 @@ export function SegmentedControl({
                 onPressIn={() => on && squeezeTo(PRESS.scale)}
                 onPressOut={() => on && squeezeTo(1)}
                 disabled={disabled}
-                // A segment is 40 pt inside the 4 pt track; the slop makes it the control's 48.
-                hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
+                // A segment is 40 pt inside the 4 pt track; the slop makes it the control's 48 (or the smaller sizes' 44).
+                hitSlop={{ top: slop, bottom: slop }}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 accessibilityRole={radio ? 'radio' : 'tab'}

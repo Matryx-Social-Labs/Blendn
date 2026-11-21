@@ -106,9 +106,16 @@ describe('<SegmentedControl>', () => {
   })
 
   it('compact is the Lobby sheet’s 44 pt `.lseg`: a 36 pt segment whose slop still makes the 44 target', async () => {
-    await draw({ compact: true })
+    await draw({ size: 'compact' })
     expect(flat('s')).toMatchObject({ height: 44, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface })
     expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 4, bottom: 4 })
+  })
+
+  it('line is the map line’s 33 pt `.seg` (pulse-map sheet 07, advisor 2026-11-21): drawn 33, touched 44', async () => {
+    await draw({ size: 'line' })
+    expect(flat('s')).toMatchObject({ height: 33 })
+    // A 25 pt segment inside the 4 pt track; the slop takes it to 44.
+    expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 9.5, bottom: 9.5 })
   })
 
   it('each 40 pt segment reaches the 48 pt target', async () => {

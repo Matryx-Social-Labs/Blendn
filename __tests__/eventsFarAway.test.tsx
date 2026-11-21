@@ -34,7 +34,7 @@ jest.mock('expo-location', () => ({
 }))
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }))
 jest.mock('../lib/perf', () => ({ ScreenProfiler: ({ children }: { children: React.ReactNode }) => children }))
-let mockBrowse: { onLocate?: () => void } | null = null
+let mockBrowse: { onLocate?: () => void; city?: string | null } | null = null
 jest.mock('../components/home/HomeShell', () => ({
   HomeShell: ({ renderEvents }: { renderEvents: (b: (browse: object) => void, visible: boolean, full: boolean) => React.ReactNode }) => (
     <>
@@ -154,6 +154,7 @@ it('nothing within 25 km: the far line (In Bengaluru), no away notice, the lap w
   expect(mockPlace?.far).toEqual({ city: 'Bengaluru', km: 7518.4, side: 'city', through: false })
   expect(mockPlace?.away).toBeNull()
   expect(mockLapVisible).toBe(false)
+  expect(mockBrowse?.city).toBe('Bengaluru')
   expect(screen.queryByTestId('pulse-far-distance')).toBeNull()
   expect(screen.queryByText(/km away/)).toBeNull()
 })
@@ -164,6 +165,8 @@ it('"Near you": the honest empty, where Blend’n is on (nearest first), nothing
   await act(async () => mockPlace?.onFarSide?.('near'))
   await settle()
   expect(screen.getByText('Nothing within 25 km yet')).toBeTruthy()
+  // The city chip says the side (board op-near, advisor 2026-11-21): a label only, nothing chosen is written.
+  expect(mockBrowse?.city).toBe('Near you')
   expect(screen.getByText('Blend’n is on in Mysuru and Bengaluru. We’ll tell you the day it opens near you.')).toBeTruthy()
 })
 

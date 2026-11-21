@@ -70,7 +70,7 @@ export function InviteLinkCard({
   useAnnounced(failed && !url ? LINK_FAILED : null)
   const qr = side === 'qr' && !!url
   const flip = url && onSide ? (
-    <SegmentedControl compact items={SIDES} selected={side === 'qr' ? 1 : 0} onChange={(i) => onSide(i === 1 ? 'qr' : 'link')} testID="invite-side" />
+    <SegmentedControl size="compact" items={SIDES} selected={side === 'qr' ? 1 : 0} onChange={(i) => onSide(i === 1 ? 'qr' : 'link')} testID="invite-side" />
   ) : null
   if (qr) {
     return (

@@ -143,7 +143,7 @@ function NothingNearLine({ city, km, side, onSide, onMap }: { city: string; km: 
         </Text>
       </View>
       <View style={styles.farSwitch}>
-        <SegmentedControl compact draggable={false} items={['Near you', `In ${city}`]} selected={side === 'near' ? 0 : 1} onChange={(i) => onSide(i === 0 ? 'near' : 'city')} testID="pulse-far-side" />
+        <SegmentedControl size="line" draggable={false} items={['Near you', `In ${city}`]} selected={side === 'near' ? 0 : 1} onChange={(i) => onSide(i === 0 ? 'near' : 'city')} testID="pulse-far-side" />
       </View>
     </View>
   )

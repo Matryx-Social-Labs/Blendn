@@ -1751,7 +1751,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   useEffect(
     () =>
       onBrowse({
-        city: selectedCity,
+        // The chip says the drawer's side from far away (board op-near, advisor 2026-11-21): a label, never a choice.
+        city: nearSide ? 'Near you' : selectedCity,
         location: userLocation,
         withDistance,
         ready: cityResolved,
@@ -1767,7 +1768,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         reach,
         onLocate: leaveFarCity,
       }),
-    [leaveFarCity, onBrowse, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
+    [leaveFarCity, onBrowse, nearSide, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
   )
 
   const firstSection = sections[0]?.key ?? null
