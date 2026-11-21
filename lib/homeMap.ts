@@ -19,7 +19,7 @@ import { MAP_THEME } from './mapTheme'
 /** `[west, south, east, north]`, as the map reports its bounds. */
 export type Bounds = [number, number, number, number]
 
-/** What a map asks the server for: the box it shows (`bbox`, backend round 3). A box is no position: no distance comes back. */
+/** What a map asks the server for: the box it shows (`bbox`, backend round 3); venues add its centre for their order (`loadPins`). */
 export type PinQuery = { bbox: Bounds }
 
 /** ~110 m, the step every position leaving the phone is rounded to (`lib/coordinates.ts`). */
@@ -300,21 +300,28 @@ type Counted = { pagination?: { totalCount?: number } }
 export type PinsResult = { kind: 'pins'; pins: Pin[]; total: number; truncated: boolean } | { kind: 'rate_limited'; retryAfter?: number } | { kind: 'failed' }
 
 /**
- * The pins for one box and segment, read fresh (a venue an event has taken over must not linger), as the server answered.
- * The box alone: no position goes, so no distance comes back measured from wherever the camera happens to look.
+ * Venues beside their box: its centre and a distance sort, so a capped page is the venues nearest the middle of the view,
+ * not the box's first by name (the task 02 drive: Places and the onboarding map lit far fewer near the middle). The order
+ * only: a pin never reads the distance that comes back. Events keep the server's time order and send the box alone.
+ * ponytail: the server sorts at most 5,000 candidates; a country-wide box's "+N more" tops out there.
  */
+function nearestFirst([west, south, east, north]: Bounds): { lat: number; lon: number; sortBy: 'distance' } {
+  return { lat: (south + north) / 2, lon: (west + east) / 2, sortBy: 'distance' }
+}
+
+/** The pins for one box and segment, read fresh (a venue an event has taken over must not linger), as the server answered. */
 export async function loadPins(
   segment: 'events' | 'places',
   q: PinQuery,
   api: {
     getEvents: (q: PinQuery & { limit: number }) => Promise<Answer<{ events: EventLike[] } & Counted>>
-    getVenues: (q: PinQuery & { limit: number }) => Promise<Answer<{ venues: VenueLike[] } & Counted>>
+    getVenues: (q: PinQuery & { limit: number; lat: number; lon: number; sortBy: 'distance' }) => Promise<Answer<{ venues: VenueLike[] } & Counted>>
   },
   limit: number,
   now: number = Date.now()
 ): Promise<PinsResult> {
   try {
-    const res = segment === 'places' ? await api.getVenues({ ...q, limit }) : await api.getEvents({ ...q, limit })
+    const res = segment === 'places' ? await api.getVenues({ ...q, ...nearestFirst(q.bbox), limit }) : await api.getEvents({ ...q, limit })
     if (res.errorCode === 'RATE_LIMITED') return { kind: 'rate_limited', retryAfter: res.retryAfter }
     if (!res.success || !res.data) return { kind: 'failed' }
     const data = res.data as { events?: EventLike[]; venues?: VenueLike[] } & Counted

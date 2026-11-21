@@ -341,10 +341,13 @@ describe('asking for pins (step 2 review)', () => {
     const q = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
     const places = await loadPins('places', q, api, 50)
     expect(places).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'v', kind: 'venue', glow: 2 })], total: 1, truncated: false })
-    // The box alone: no position, so the server measures no distance from where the camera happens to look.
-    expect(api.getVenues).toHaveBeenCalledWith({ ...q, limit: 50 })
+    // A capped page is the venues nearest the middle of the view, not the box's first by name: its centre and a
+    // distance sort go beside the box (the order only; a pin never reads the distance that comes back).
+    expect(api.getVenues).toHaveBeenCalledWith({ ...q, lat: 12.97, lon: 77.59, sortBy: 'distance', limit: 50 })
     expect(api.getEvents).not.toHaveBeenCalled()
     const evts = await loadPins('events', q, api, 50)
+    // Events keep the server's time order: the box alone.
+    expect(api.getEvents).toHaveBeenCalledWith({ ...q, limit: 50 })
     expect(evts).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'e', kind: 'event', live: true })], total: 1, truncated: false })
   })
 

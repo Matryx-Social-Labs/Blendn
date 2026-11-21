@@ -110,7 +110,7 @@ export const pinApiFor = (viewport: boolean) => ({
     const res = await apiClient.getEvents(q, { force: true, viewport })
     return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi), pagination: res.data.pagination } : undefined }
   },
-  getVenues: (q: PinQuery & { limit: number }) => apiClient.getVenues(q, { force: true, viewport }),
+  getVenues: (q: PinQuery & { limit: number; lat: number; lon: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport }),
 })
 const pinApi = pinApiFor(true)
 
@@ -125,8 +125,8 @@ async function nearestEvents(fix: { latitude: number; longitude: number }): Prom
  * MapLibre over OpenFreeMap, dark, tilted, one map-anchored light.
  *
  * - **Pins follow the segment**: events on Events, venues on Places, for the
- *   part of the map on screen (its box, `bbox`: no position, so no distance
- *   measured from the camera). No request while the view
+ *   part of the map on screen (its box, `bbox`; venues nearest its middle
+ *   first). No request while the view
  *   stays inside a box fully answered; a refusal backs off, a segment switch
  *   included; read again when the screen or the app comes back. Which venues
  *   exist is the server's rule; the map draws what it is sent.
