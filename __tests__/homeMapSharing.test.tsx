@@ -6,6 +6,7 @@
  * a viewport query means where they looked.
  */
 import React from 'react'
+import { StyleSheet } from 'react-native'
 import { act, fireEvent, render, screen } from '@testing-library/react-native'
 import { makeMutable } from 'react-native-reanimated'
 
@@ -382,4 +383,16 @@ it('"Zoom in" after a lower snap steps in on the middle of the map you can see, 
   // The mock's projection: screen y 300 is the fix's latitude, 1e-5 degrees a point. The map you can see now runs from
   // the top chrome (90) to the drawer (600), so its middle is y 345.
   expect(step?.center?.[1]).toBeCloseTo(FIX.latitude - (345 - 300) / 1e5, 6)
+})
+
+/*
+ * Sheet 16 A puts the capsule 14 pt under the top bar's circles (board: the wordmark ends at 104, the capsule starts at
+ * 118). `topChrome` carries the bar's 10 pt foot as well, so measuring from it put the capsule 16 pt low on the sim.
+ */
+it('"+N more" sits 14 pt under the top bar\'s circles (sheet 16 A), not under topChrome', async () => {
+  mockGetEvents.mockResolvedValue({ success: true, data: { events: [], pagination: { totalCount: 130 } } } as never)
+  await render(map(FIX))
+  await settle()
+  const row = StyleSheet.flatten(screen.getByTestId('map-more-row').props.style)
+  expect(row.top).toBe(47 + 2 + 44 + 14) // inset 47 (mocked), BAR_TOP_GAP, the 44 pt iOS circle, then 14
 })

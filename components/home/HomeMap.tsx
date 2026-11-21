@@ -62,6 +62,8 @@ import { edgeGate, FRAME_NEAREST, frameOnYou, mapSummary, MORE_ZOOM_MAX, moreLin
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
+import { barCircleBottom } from '../../lib/barGeometry'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { tint } from '../../lib/theme'
 import { distanceText, fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
@@ -225,6 +227,7 @@ export const HomeMap = memo(function HomeMap({
   onLocate?: () => void
 }) {
   const { width, height } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
   /*
    * "Share location for nearby events" off: the map has no fix of its own. It opens on the city and follows only the camera the
    * person moves, so a viewport query means where they looked, never where they are (SCRUM-908). The same null as before a fix
@@ -886,7 +889,8 @@ export const HomeMap = memo(function HomeMap({
           />
       </View>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
-      <MoreLine line={more} top={topChrome + SPACE.md} onZoomIn={zoomIn} />
+      {/* Sheet 16 A: 14 pt under the bar's circles. topChrome also holds the bar's 10 pt foot, which put it 16 pt low. */}
+      <MoreLine line={more} top={barCircleBottom(insets.top, Platform.OS === 'android') + SPACE.md + SPACE.xxs} onZoomIn={zoomIn} />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}
       {you.kind === 'approximate' ? (
