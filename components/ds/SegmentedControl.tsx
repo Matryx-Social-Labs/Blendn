@@ -85,11 +85,14 @@ function SegmentLabel({ item, badge, ink, pair, bold, segment }: { item: string;
   // The control cap, or less where the segment is shorter than the capped line (the line's 25 pt segment): a line taller
   // than its segment was shrunk and pushed to the bottom edge on iOS, cut to nothing at the largest text (task 02 drive).
   const cap = Math.min(CONTROL_FONT_CAP, segment / TYPE[role].lineHeight)
+  // Such a label sets no line height, so its line follows the capped font: at font scale 2.0 Android scales a line height
+  // past maxFontSizeMultiplier, and the fit loop, which shrinks only the font, took the line's labels to 4 dp.
+  const short = cap < CONTROL_FONT_CAP
   const color = COLOR.textPrimary
   return (
     <View style={styles.labelRow}>
       <Text
-        style={[font(role, bold, family), styles.label, { color }]}
+        style={[font(role, bold, family), styles.label, { color }, short && styles.naturalLine]}
         maxFontSizeMultiplier={cap}
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -341,5 +344,6 @@ const styles = StyleSheet.create({
   segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.sm },
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: BADGE_GAP, maxWidth: '100%' },
   label: { textAlign: 'center', flexShrink: 1 },
+  naturalLine: { lineHeight: undefined },
   dot: { width: DOT, height: DOT, borderRadius: RADIUS.capsule, backgroundColor: COLOR.live },
 })

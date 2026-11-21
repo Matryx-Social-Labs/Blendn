@@ -13,7 +13,7 @@ import * as Reanimated from 'react-native-reanimated'
 
 import { GroundProvider, HueProvider } from '../components/ds/shared'
 import { landOn, rubberBand, SegmentedControl } from '../components/ds/SegmentedControl'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 import { clipped } from './helpers/ax'
@@ -124,7 +124,20 @@ describe('<SegmentedControl>', () => {
         await draw({ ...(size ? { size } : {}), ...(pair ? { pair: true, selected: null } : {}) })
         const label = screen.getByText('Sign in')
         const segment = flat('s').height - SPACE.xs * 2
-        expect(text('Sign in').lineHeight * label.props.maxFontSizeMultiplier).toBeLessThanOrEqual(segment)
+        expect(TYPE[pair ? 'meta' : 'button'].lineHeight * label.props.maxFontSizeMultiplier).toBeLessThanOrEqual(segment)
+      }
+    }
+  })
+
+  it('a label whose segment is shorter than its capped line sets no line height, so its line follows the capped font: at font scale 2.0 Android scales a line height past maxFontSizeMultiplier, and the fit loop shrank the 33 pt line’s labels to 4 dp (task 02 Android AX drive)', async () => {
+    for (const os of ['ios', 'android'] as const) {
+      on(os)
+      for (const pair of [false, true]) {
+        await draw({ size: 'line', ...(pair ? { pair: true, selected: null } : {}) })
+        expect(text('Sign in').lineHeight).toBeUndefined()
+        // The larger sizes keep the type role's line: their segment holds it at the 1.3 cap.
+        await draw({ size: 'compact', ...(pair ? { pair: true, selected: null } : {}) })
+        expect(text('Sign in').lineHeight).toBeGreaterThan(0)
       }
     }
   })
