@@ -819,8 +819,10 @@ describe('one list per ask kind, every surface at once (requests placement A)', 
     </View>
   )
   const crewsRead = { success: true, data: { crews: [], invites: [{ crewId: 'cr1', name: 'Night Owls' }], invitesPagination: { hasMore: false, nextCursor: null, totalCount: 1 } } }
+  // The server names the asker on its row (task 12): the list never rewrites it.
+  const named = { ...friend, display: { title: 'Asha wants to be friends', visual: { type: 'initial', name: 'Asha' } } }
   beforeEach(() => {
-    api.getNotifications.mockResolvedValue(feed([friend, invite, match]) as never)
+    api.getNotifications.mockResolvedValue(feed([named, invite, match]) as never)
     api.getFriendRequests.mockResolvedValue({ success: true, data: { incoming: [{ id: 'r1', person: { userId: 'u_r1', name: 'Asha' } }], outgoing: [] } } as never)
     ;(crewsApi.myCrews as jest.Mock).mockResolvedValue(crewsRead)
   })

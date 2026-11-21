@@ -123,6 +123,8 @@ function ChatInner() {
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
   const [muteFor, setMuteFor] = useState<string | null>(null)
+  /** The realtime banner's height while it shows (0 when it doesn't): the list starts under it, never beneath it. */
+  const [bannerHeight, setBannerHeight] = useState(0)
   const [openSwipe, setOpenSwipe] = useState<string | null>(null)
   const [scrolling, setScrolling] = useState(false)
   // Tapping Banter while already on it goes back to the top (the bar emits `tabPress`).
@@ -654,13 +656,16 @@ function ChatInner() {
         ListFooterComponent={
           <PageFooter loading={inbox.loadingMore} failed={!!inbox.moreFailed} onRetry={() => void inbox.loadMore(inbox.moreFailed ?? 'rooms')} what="chats" testID="banter-more-failed" />
         }
-        contentContainerStyle={[styles.content, { paddingTop: listTop, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
+        contentContainerStyle={[styles.content, { paddingTop: listTop + bannerHeight, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + SPACE.xl }]}
         showsVerticalScrollIndicator={false}
       />
       </BanterPressGuard.Provider>
       {pull.indicator}
 
-      <RealtimeStatusBanner status={inbox.socketStatus} withoutRetry={failedState} style={{ ...styles.banner, top: listTop - SPACE.sm }} />
+      {/* Pinned over the list, so the list makes room for it: the paused banner sat on the Message requests row (t13 drive). */}
+      <View style={[styles.banner, { top: listTop - SPACE.sm }]} onLayout={(e) => setBannerHeight(e.nativeEvent.layout.height)} testID="banter-banner-slot">
+        <RealtimeStatusBanner status={inbox.socketStatus} withoutRetry={failedState} />
+      </View>
       {newAbove ? (
         <NewPill
           label="New"

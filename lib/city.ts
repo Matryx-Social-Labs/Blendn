@@ -84,20 +84,20 @@ export interface CityOption {
   isDefault?: boolean
   /** `comingSoon`: listed, opens empty, says so. Absent (an older server) is `full`. */
   access?: 'full' | 'comingSoon'
-  /** The city's WhatsApp Channel (India, ruling 7). Not sent yet (ROADMAP § Backend later): absent, there is no row. */
-  whatsAppChannel?: string | null
+  /** The city's WhatsApp Channel (ruling 7; blendn-admin #996): an https `whatsapp.com/channel/…` link, or null where ops set none. */
+  whatsappChannelUrl?: string | null
 }
 
 /** WhatsApp's own channel links, and nothing else: the row opens what the server names, so the boundary checks it. */
 const WHATSAPP_CHANNEL = /^https:\/\/(?:www\.)?whatsapp\.com\/channel\/[A-Za-z0-9]+$/
 
 /**
- * "Blend'n {city} on WhatsApp" in Notification settings: an Indian city with a channel only (owner ruling 7, 2026-11-17). Canada
- * and every other country have none; a city whose channel the server has not sent yet has none either.
+ * "Blend'n {city} on WhatsApp" in Notification settings: a city whose channel the server sends (owner ruling 7, 2026-11-17).
+ * Which cities have one is data, not a country rule here: ops sets it for India first, so Canada has none.
  */
 export function cityChannel(city: CityOption | null | undefined): { city: string; url: string } | null {
-  const url = city?.whatsAppChannel?.trim()
-  if (!city || city.country !== 'IN' || !url || !WHATSAPP_CHANNEL.test(url)) return null
+  const url = city?.whatsappChannelUrl?.trim()
+  if (!city || !url || !WHATSAPP_CHANNEL.test(url)) return null
   return { city: city.city, url }
 }
 
