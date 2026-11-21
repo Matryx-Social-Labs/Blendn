@@ -222,6 +222,13 @@ describe('parseVisual', () => {
     })
   })
 
+  // SCRUM-1088: a photo keeps the name the server sends (drawn under it while it loads); today's server sends none.
+  it('a photo keeps its name when the server sends one, and is still a photo when it does not', () => {
+    expect(parseVisual({ type: 'photo', uri: 'https://x/a.jpg', name: ' Asha ' })).toEqual({ type: 'photo', uri: 'https://x/a.jpg', name: 'Asha' })
+    expect(parseVisual({ type: 'photo', uri: 'https://x/a.jpg' })).toEqual({ type: 'photo', uri: 'https://x/a.jpg' })
+    expect(parseVisual({ type: 'photo', uri: 'https://x/a.jpg', name: 7 })).toEqual({ type: 'photo', uri: 'https://x/a.jpg' })
+  })
+
   it('refuses anything else rather than drawing it', () => {
     for (const bad of [null, 'photo', [], { type: 'glyph', icon: 'bell' }, { type: 'event', badge: 'skull' }, { type: 'stack', people: [] }, { type: 'emblem', seed: '' }]) {
       expect(parseVisual(bad)).toBeNull()
@@ -416,7 +423,7 @@ describe('askItems and withAsks', () => {
 
   it('a photo the list has is the row’s face; a name it lacks is the push’s own words, never an invented one', () => {
     const [withPhoto, nameless] = askItems([{ ...request('a', 1), person: person('Ravi', 'https://x/p.jpg') }, { ...request('b', 1), person: person('') }], [])
-    expect(rowFor(withPhoto, NOW).visual).toEqual({ type: 'photo', uri: 'https://x/p.jpg' })
+    expect(rowFor(withPhoto, NOW).visual).toEqual({ type: 'photo', uri: 'https://x/p.jpg', name: 'Ravi' })
     expect(rowFor(nameless, NOW).title).toBe('New friend request')
     expect(rowFor(nameless, NOW).visual).toEqual({ type: 'glyph', icon: 'user-plus' })
   })

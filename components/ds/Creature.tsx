@@ -641,7 +641,20 @@ const INITIAL_SCALE = 0.44
  * glow their creature would have, seeded on the name, so they keep their colour and only the face goes. A creature means
  * anonymous; this never does. Decorative, as the creature is; it never scales with text.
  */
-export const Initial = memo(function Initial({ name, size = 48, ring, testID }: { name: string; size?: number; ring?: string; testID?: string }) {
+export const Initial = memo(function Initial({
+  name,
+  size = 48,
+  ring,
+  letter = true,
+  testID,
+}: {
+  name: string
+  size?: number
+  ring?: string
+  /** False: the disc alone, under a photo whose person has no name to show yet (`Avatar` photo). */
+  letter?: boolean
+  testID?: string
+}) {
   const id = `in${useId().replace(/[^A-Za-z0-9]/g, '')}`
   const c = HUES[hueIndex(creatureFor(name).hue)]
   return (
@@ -649,9 +662,11 @@ export const Initial = memo(function Initial({ name, size = 48, ring, testID }: 
       <View testID={testID && `${testID}-disc`} style={StyleSheet.absoluteFill}>
         <Face id={id} size={size} c={c} body="" />
       </View>
-      <Text allowFontScaling={false} style={{ fontFamily: FONT_FAMILY.brand[700], fontSize: Math.round(size * INITIAL_SCALE), color: c.g }}>
-        {initialOf(name)}
-      </Text>
+      {letter ? (
+        <Text allowFontScaling={false} style={{ fontFamily: FONT_FAMILY.brand[700], fontSize: Math.round(size * INITIAL_SCALE), color: c.g }}>
+          {initialOf(name)}
+        </Text>
+      ) : null}
       {ring ? <View style={[styles.ring, { borderColor: ring }]} /> : null}
     </View>
   )

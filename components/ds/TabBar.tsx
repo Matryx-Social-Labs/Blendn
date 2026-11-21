@@ -334,7 +334,7 @@ function TabCell({
       >
         <Animated.View style={[styles.column, drop]}>
           {photo ? (
-            <Avatar kind="photo" uri={photo} size={ICON.nav} ring={on ? COLOR.textPrimary : undefined} onError={onPhotoError} testID={`${testID}-me-avatar`} />
+            <Avatar kind="photo" uri={photo} name={who ?? ''} size={ICON.nav} ring={on ? COLOR.textPrimary : undefined} onError={onPhotoError} testID={`${testID}-me-avatar`} />
           ) : who ? (
             <Avatar {...personFace({ named: true, name: who })} size={ICON.nav} ring={on ? COLOR.textPrimary : undefined} testID={`${testID}-me-initial`} />
           ) : (

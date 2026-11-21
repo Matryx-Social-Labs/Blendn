@@ -66,7 +66,7 @@ describe('the DM says their name once, in one grammar', () => {
     expect(directHeaderAvatar(reveal, null, 'Cosmic Panda')).toEqual({ kind: 'creature', pseudonym: 'Cosmic Panda' })
     // A photo the server sent before a reveal is still not drawn.
     expect(directHeaderAvatar(reveal, 'https://cdn/them.jpg', 'Cosmic Panda')).toEqual({ kind: 'creature', pseudonym: 'Cosmic Panda' })
-    expect(directHeaderAvatar({ ...reveal, displayName: 'Mika Rao', theyRevealed: true }, 'https://cdn/them.jpg', 'x')).toEqual({ kind: 'photo', uri: 'https://cdn/them.jpg' })
+    expect(directHeaderAvatar({ ...reveal, displayName: 'Mika Rao', theyRevealed: true }, 'https://cdn/them.jpg', 'x')).toEqual({ kind: 'photo', uri: 'https://cdn/them.jpg', name: 'Mika Rao' })
   })
 
   it('a named person with no photo is their initial, never a creature (F1 B)', () => {

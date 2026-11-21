@@ -27,7 +27,8 @@ export type StackPerson = { pseudonym: string } | { uri: string }
  * for logistics; a stack with +N for merged rows.
  */
 export type NotificationVisualSpec =
-  | { type: 'photo'; uri: string }
+  /** A named person's photo, over their initial while it loads (`Avatar` photo); with no `name`, over their hue disc alone. */
+  | { type: 'photo'; uri: string; name?: string }
   | { type: 'creature'; pseudonym: string }
   /** A named person with no photo: their initial on their hue disc (`personFace`). */
   | { type: 'initial'; name: string }
@@ -94,7 +95,7 @@ export function NotificationVisual({
   const box = { width: size, height: size }
   return (
     <View testID={testID} style={box} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {visual.type === 'photo' ? <Avatar kind="photo" uri={visual.uri} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
+      {visual.type === 'photo' ? <Avatar kind="photo" uri={visual.uri} name={visual.name ?? ''} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
       {visual.type === 'creature' ? <Avatar kind="creature" pseudonym={visual.pseudonym} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
       {visual.type === 'initial' ? <Avatar kind="initial" name={visual.name} size={size} ring={faceRing} halo={halo} testID={testID && `${testID}-face`} /> : null}
       {visual.type === 'emblem' ? <CrewEmblem seed={visual.seed} size={size} /> : null}

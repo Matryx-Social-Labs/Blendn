@@ -22,10 +22,10 @@ const flat = (id: string) => StyleSheet.flatten(screen.getByTestId(id, { include
 const query = (id: string) => screen.queryByTestId(id, { includeHiddenElements: true })
 
 const FACES: Face[] = [
-  { kind: 'photo', uri: 'https://example.com/priya.jpg' },
+  { kind: 'photo', uri: 'https://example.com/priya.jpg', name: 'Priya' },
   { kind: 'creature', pseudonym: 'Cosmic Panda' },
   { kind: 'creature', pseudonym: 'Quiet Heron' },
-  { kind: 'photo', uri: 'https://example.com/sam.jpg' },
+  { kind: 'photo', uri: 'https://example.com/sam.jpg', name: 'Sam' },
   { kind: 'creature', pseudonym: 'Night Cat' },
   { kind: 'creature', pseudonym: 'Velvet Otter' },
 ]

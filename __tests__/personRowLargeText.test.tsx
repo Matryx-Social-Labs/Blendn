@@ -15,6 +15,7 @@ import { IncomingRequestRow } from '../components/friends/IncomingRequestRow'
 import { InviteLinkCard } from '../components/friends/InviteLinkCard'
 import { PersonRow, PERSON_ROW_HEIGHT, usePersonRowsFixed } from '../components/friends/PersonRow'
 import { ROW_ACTION_HEIGHT } from '../components/ds/Button'
+import { IconButton } from '../components/ds/IconButton'
 import { RevealBar } from '../components/ds/RevealBar'
 import { AX_FONT_SCALE, CONTROL_FONT_CAP } from '../components/ds/shared'
 import { FONT_FAMILY, MAX_FONT_SCALE, SIZE } from '../lib/design/tokens'
@@ -81,6 +82,31 @@ describe('PersonRow', () => {
     expect(underText()).toBeNull()
     expect(screen.getAllByTestId('trail', hidden)).toHaveLength(1)
     expect(StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style).alignSelf).toBe('center')
+  })
+
+  /*
+   * Friends list at AX (decided per advisor, 2026-11-20, option A): a lone icon-only action (an IconButton with no label,
+   * the friends list's Message disc) stacked under "Friends since …" read detached from its row. At every size it stays at
+   * the trailing edge, centred on the row as the avatar is; only labelled actions stack. Negative controls (2026-11-20):
+   * stacking every action (#595's row) fails the first; keeping every action beside the text fails the second.
+   */
+  const message = <IconButton size="sm" icon="message-circle" accessibilityLabel="Message Marc-André" onPress={jest.fn()} testID="trail" />
+  const friend = (trailing: React.ReactNode) => (
+    <PersonRow person={{ userId: 'u3', name: 'Marc-André Lefebvre-Desrosiers', photo: null }} detail="Friends since " detailMono="Nov 2026" trailing={trailing} />
+  )
+
+  it.each([AX_FONT_SCALE, AX_XXXL])('at %s an icon-only action stays beside the text, centred on the row', async (scale) => {
+    await at(402, scale)
+    await render(friend(message))
+    expect(underText()).toBeNull()
+    expect(StyleSheet.flatten(screen.getByTestId('person-trailing', hidden).props.style).alignSelf).toBe('center')
+    expect(clipped(screen.toJSON())).toEqual([])
+  })
+
+  it('at AX an IconButton with a label is a labelled action, so it goes under the text', async () => {
+    await at(402, AX_XXXL)
+    await render(friend(<IconButton size="sm" icon="message-circle" label="Message" accessibilityLabel="Message Marc-André" onPress={jest.fn()} testID="trail" />))
+    expect(underText()).not.toBeNull()
   })
 
   it('a row with no action draws no action slot at any size', async () => {
@@ -224,5 +250,30 @@ describe('the invite link’s short form (DS-16, A9: the raw URL broke mid-token
   it('a link that is not the expected shape is shown whole, still one line', async () => {
     await render(<InviteLinkCard url="https://example.com/x" />)
     expect(screen.getByTestId('invite-link-url', hidden).props.children).toBe('example.com/x')
+  })
+})
+
+/*
+ * SCRUM-1088: on Android a friend request's face was blank until its photo arrived, because PersonAvatar drew the photo as a
+ * bare OptimizedImage (nothing under it, and nothing at all until its URL effect ran). Every friend-surface photo now goes
+ * through the DS Avatar, which draws the person's initial under the photo while it loads.
+ * Negative control (2026-11-21): the old OptimizedImage branch fails both cases (no person-photo-initial-disc, no letter).
+ */
+describe('a friend-surface photo loads over the person’s initial (SCRUM-1088)', () => {
+  const withPhoto = { userId: 'u2', name: 'Meera Nair', photo: 'https://t3.storage.dev/p/meera.jpg' }
+
+  it('a request row draws Meera’s initial under her photo from the first frame', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={{ id: 'r2', person: withPhoto, createdAt: new Date().toISOString(), via: 'link' as const }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('person-photo-initial-disc', hidden)).toBeTruthy()
+    expect(screen.getByText('M', hidden)).toBeTruthy()
+    expect(screen.getByTestId('person-photo-photo', hidden).props.source).toEqual([{ uri: withPhoto.photo }])
+  })
+
+  it('a friends-list row does the same', async () => {
+    await at(402, 1)
+    await render(<PersonRow person={withPhoto} detail="Friends since " detailMono="Oct 2026" />)
+    expect(screen.getByTestId('person-photo-initial-disc', hidden)).toBeTruthy()
+    expect(screen.getByText('M', hidden)).toBeTruthy()
   })
 })

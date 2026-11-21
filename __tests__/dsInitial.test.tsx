@@ -36,7 +36,7 @@ describe('the initial on its hue disc', () => {
   it('a facepile mixes photos, initials and creatures, each drawn as its kind', async () => {
     await render(
       <Facepile
-        faces={[{ kind: 'photo', uri: 'https://x/a.jpg' }, { kind: 'initial', name: 'Kavya Raman' }, { kind: 'creature', pseudonym: 'Rustic Lark' }]}
+        faces={[{ kind: 'photo', uri: 'https://x/a.jpg', name: 'Asha' }, { kind: 'initial', name: 'Kavya Raman' }, { kind: 'creature', pseudonym: 'Rustic Lark' }]}
         size={24}
         testID="p"
       />

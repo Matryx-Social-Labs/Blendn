@@ -12,12 +12,12 @@ import { joinedTitle, type LobbySubKind } from './lobby'
  * `named` is the caller's to know, from the server: a revealed DM (`theyRevealed`), a message request (it carries the
  * sender's name by design). The server already withholds the name and photo of anyone anonymous; this decides the picture.
  */
-export type PersonFace = { kind: 'photo'; uri: string } | { kind: 'creature'; pseudonym: string } | { kind: 'initial'; name: string }
+export type PersonFace = { kind: 'photo'; uri: string; name: string } | { kind: 'creature'; pseudonym: string } | { kind: 'initial'; name: string }
 
 export function personFace({ named, name, photo, host = false }: { named: boolean; name: string; photo?: string | null; host?: boolean }): PersonFace {
   if (host || !named) return { kind: 'creature', pseudonym: name }
   const uri = photo?.trim()
-  return uri ? { kind: 'photo', uri } : { kind: 'initial', name }
+  return uri ? { kind: 'photo', uri, name } : { kind: 'initial', name }
 }
 
 /** The first letter or digit, upper-cased where the script has case; an emoji or symbol in front is skipped. */
