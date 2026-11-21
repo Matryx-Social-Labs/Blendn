@@ -8,9 +8,8 @@ import { useHomeCitySlug } from '../../lib/homeCity'
 import { Logger } from '../../lib/logger'
 
 /**
- * "Your city" in Notification settings (Flow 9 A · 6, owner ruling 7): the home city's WhatsApp Channel, India only. Canada and
- * every other country have no row. The server sends no channel URL yet (ROADMAP § Backend later), so until it does, no city has
- * one and nothing is drawn.
+ * "Your city" in Notification settings (Flow 9 A · 6, owner ruling 7): the home city's WhatsApp Channel, drawn only when the server
+ * sends one (`cities[].whatsappChannelUrl`, blendn-admin #996). Ops sets them for India first; a city with none has no row.
  */
 export function CityChannelRow({ userId }: { userId: string }) {
   const slug = useHomeCitySlug(userId)

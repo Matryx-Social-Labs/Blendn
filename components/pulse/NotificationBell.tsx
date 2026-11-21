@@ -32,7 +32,7 @@ const UNREAD_CAP = 1000
 export function NotificationBell({ onMap = false }: { onMap?: boolean } = {}) {
   const mapInk = useMapInk()
   // Unseen rows that are not talk-asks: a message request, a Lobby ask or a reveal ask lights the Banter dot instead (requests placement A).
-  const { bell: unread } = useInboxBadge()
+  const { unreadCount: unread } = useInboxBadge()
   const load = useRefreshInboxBadge()
 
   /*

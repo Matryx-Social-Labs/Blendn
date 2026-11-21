@@ -4,7 +4,7 @@ import type { CrewInvite } from './crews'
 import type { FriendRequest } from './friends'
 import type { NotificationItem, NotificationKind } from './notificationFormat'
 import { personFace } from './personFace'
-import { calendarDate, dayKeyIn, weekdayIn, WEEKDAYS } from './time'
+import { calendarDate, calendarDaysBetween, dayKeyIn, eventClock, weekdayIn, WEEKDAYS } from './time'
 
 /**
  * What a notification becomes on the Notifications screen (Flow 9 · 9.2, 9.3).
@@ -205,25 +205,48 @@ function fallbackVisual(item: NotificationItem): NotificationVisualSpec {
   return { type: 'glyph', icon: GLYPH[item.kind] ?? 'bell' }
 }
 
+/** A move this many days or more names the dates: weekdays a week apart would read the same. */
+const WEEK_DAYS = 7
+
+/** The two ends of a time move as the row says them, in the event's zone (no zone named): the clock, and the day when it moved. */
+function timeMove(from: string | null, to: string, timeZone: string | undefined): [string, string | null] {
+  const at = new Date(to)
+  const was = from === null ? null : new Date(from)
+  const clock = (d: Date) => eventClock(d, timeZone)
+  if (!was || Number.isNaN(was.getTime())) return [clock(at), null]
+  const days = Math.abs(calendarDaysBetween(was, at, timeZone))
+  if (days === 0) return [clock(at), clock(was)]
+  const day = (d: Date) =>
+    days < WEEK_DAYS ? calendarDate(d, { weekday: 'only', timeZone }) : `${calendarDate(d, { year: false, timeZone })},`
+  return [`${day(at)} ${clock(at)}`, `${day(was)} ${clock(was)}`]
+}
+
 /**
- * What an event change says (Flow 9 A): the new value, once the server sends `{field, from, to}` (ROADMAP § Backend later);
- * until then the honest words for what moved (`changed`, the server's `time` / `venue`); null where neither is honest
- * (cancelled, or nothing said), and the row keeps the push's own words.
+ * What an event change says (Flow 9 A, advisor 2026-11-21): the new value from the server's `{field, from, to}` (task 12):
+ * "New time: 9:30 PM, was 8 PM", the weekdays when it moved day ("Sat 9:30 PM, was Fri 8 PM"), the dates past a week; "New
+ * place: {to}", never "was" (two long names do not fit two lines). An older row has no `field`: the honest words for what moved
+ * (`changed`, the server's `time` / `venue`); null where neither is honest (cancelled, or nothing said), and the row keeps the
+ * push's own words.
  */
 function changeTitle(data: NotificationItem['data']): string | null {
   const to = text(data?.to)
-  if (to && data?.field === 'time') return text(data.from) ? `New time: ${to}, was ${text(data.from)}` : `New time: ${to}`
-  if (to && data?.field === 'venue') return `New place: ${to}`
+  if (data?.field === 'time') {
+    const at = to ? new Date(to) : null
+    if (!at || Number.isNaN(at.getTime())) return 'Time changed'
+    const [now, was] = timeMove(text(data.from), to!, text(data.timeZone) ?? undefined)
+    return was && was !== now ? `New time: ${now}, was ${was}` : `New time: ${now}`
+  }
+  if (data?.field === 'venue') return to ? `New place: ${to}` : 'Place changed'
   const moved = new Set((data?.changed ?? '').split(',').map((f) => f.trim()).filter(Boolean))
   if (!moved.size || [...moved].some((f) => f !== 'time' && f !== 'venue')) return null
   return moved.size === 2 ? 'Time and place changed' : moved.has('time') ? 'Time changed' : 'Place changed'
 }
 
-/** A crewmate's "We're here" push says "Asha is in." (blendn-admin `crewInBody`); a plan's says "… wants to go together". */
+/**
+ * A crewmate's "We're here" push says "Asha is in." (blendn-admin `crewInBody`); a plan's says "… wants to go together". Both
+ * are `crew_here`, and the server titles both as an arrival (SCRUM-1098): only an arrival takes its title.
+ */
 const isArrival = (item: NotificationItem) => item.kind === 'crew_here' && /\b(?:is|are) in\.(?:\s|$)/.test(item.body)
-
-/** The server's crew push is titled with the crew's name alone; the row adds the verb and names nobody (the push rule). */
-const crewHere = (crew: string, count: number) => (count > 1 ? `${count} from ${crew} are here` : `Someone from ${crew} is here`)
 
 /** No emoji in a title ("Message request accepted 🎉", research §0.7). */
 const withoutEmoji = (title: string) => title.replace(/\s*\p{Extended_Pictographic}[\p{Extended_Pictographic}\u{FE0F}\u{200D}]*\s*$/u, '')
@@ -241,8 +264,6 @@ function fallbackCopy(item: NotificationItem, when: string): { title: string; co
       return { title: 'You’re in: a place opened up', context: joinLine(WAITLIST_VENUE.exec(item.body)?.[1], when) }
     case 'rating_request':
       return { title: `How was ${item.title}?`, context: when }
-    case 'crew_here':
-      return { title: isArrival(item) ? crewHere(item.title, 1) : item.title, context: when }
     default:
       return { title: withoutEmoji(item.title), context: when }
   }
@@ -283,7 +304,7 @@ export function rowFor(item: NotificationItem, now: number = Date.now()): FeedRo
     id: item.id,
     item,
     visual: parseVisual(item.display?.visual) ?? fallbackVisual(item),
-    title: text(item.display?.title) ?? fallback.title,
+    title: (item.kind !== 'crew_here' || isArrival(item) ? text(item.display?.title) : null) ?? fallback.title,
     context: contextOf(item, when, fallback.context),
     actions: waiting ? (REQUEST_ACTIONS[item.kind] ?? []) : [],
     waiting,
@@ -332,13 +353,12 @@ const nightOf = (ms: number) => dayKeyIn(new Date(ms - NIGHT_ROLLOVER_MS))
 const FOLD_FACES = 2
 
 /**
- * The repeats that fold into one row (research §8.3, Flow 9 A): waves per night, a crew's arrivals per night, an
- * event's reminders (the latest only). Null for a row that stands alone: requests, changes, everything else.
+ * The repeats that fold into one row (research §8.3, Flow 9 A): waves per night, an event's reminders (the latest only). A
+ * crew's arrivals are one row a night on the server already (task 12). Null for a row that stands alone: requests, changes, everything else.
  */
 function foldKey(item: NotificationItem): string | null {
   const ms = new Date(item.createdAt).getTime()
   if (item.kind === 'match') return `match:${nightOf(ms)}`
-  if (isArrival(item) && item.data?.crewId) return `crew:${item.data.crewId}:${nightOf(ms)}`
   // A reminder is the event update with no `reason` and no `changed` (blendn-admin `notifyEventUpdate`).
   if (item.kind === 'event_update' && item.data?.eventId && !item.data.reason && !item.data.changed) return `reminder:${item.data.eventId}`
   return null
@@ -368,7 +388,6 @@ function foldedRow(rows: readonly FeedRow[], now: number): FeedRow {
       visual: shown.length ? { type: 'stack', people: shown, extra: rows.length - shown.length || undefined } : latest.visual,
     }
   }
-  if (latest.item.kind === 'crew_here') return { ...base, title: crewHere(latest.item.title, rows.length) }
   return base
 }
 
@@ -493,18 +512,10 @@ function faceVisual(name: string, photo: string | null | undefined): Notificatio
 }
 
 /**
- * The feed with the asks it has no row for, each once: a notification for the same ask is kept (its id is what a push lands on),
- * and takes the list's face where the server sent it none (a named person with no photo is their initial, not a glyph).
+ * The feed with the asks it has no row for, each once: a notification for the same ask is kept as the server wrote it (its id is
+ * what a push lands on; its `display` names the whole person and their face, task 12).
  */
 export function withAsks(items: readonly NotificationItem[], asks: readonly NotificationItem[]): NotificationItem[] {
-  const askOf = new Map(asks.map((a) => [askKeyOf(a), a]))
-  // The list names the whole person (board 01 A) where the server's row title has the first name only.
-  const faced = items.map((n) => {
-    const shown = askOf.get(askKeyOf(n))?.display
-    const visual = shown?.visual && !parseVisual(n.display?.visual) ? shown.visual : undefined
-    const title = text(shown?.title)
-    return visual || title ? { ...n, display: { ...n.display, ...(title ? { title } : {}), ...(visual ? { visual } : {}) } } : n
-  })
   const seen = new Set(items.map(askKeyOf).filter((k): k is string => k !== null))
   const added = asks.filter((a) => {
     const key = askKeyOf(a)
@@ -512,5 +523,5 @@ export function withAsks(items: readonly NotificationItem[], asks: readonly Noti
     seen.add(key)
     return true
   })
-  return [...faced, ...added]
+  return [...items, ...added]
 }
