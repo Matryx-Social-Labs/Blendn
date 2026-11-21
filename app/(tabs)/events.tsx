@@ -36,8 +36,6 @@ import { FriendsCard } from '../../components/pulse/FriendsCard'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
 import { NearEnd, NearYouEmpty, NothingNear, PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
-import ScalePress from '../../components/motion/ScalePress'
-import { Text as TypeText } from '../../components/ui/Text'
 import { PulsePeek, type Peek } from '../../components/pulse/PulsePeek'
 import { PullIndicator } from '../../components/pulse/PullIndicator'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
@@ -49,7 +47,7 @@ import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
 import { pinsFor } from '../../lib/homeMap'
 import { NEAR_KM, vibeOf, type Vibe } from '../../lib/pulseChips'
 import { groupByWhen, nearSpan, nothingNearCopy, SEE_ALL_KINDS, seeAllFilters, type Beyond, type SeeAllKind } from '../../lib/nearby'
-import { farCity, farDistanceLine, nearYouCopy, openCitiesNearest, type NearSignal } from '../../lib/nothingNear'
+import { farCity, nearYouCopy, openCitiesNearest, type NearSignal } from '../../lib/nothingNear'
 import { NearbyRow, WhenHeading } from '../../components/pulse/NearbyRow'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useLocationSharing } from '../../lib/shareLocation'
@@ -1398,10 +1396,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     setPickSeen(cityPick.n)
     if (!cityPick.here) setFarThrough(true)
   }
-  const goToFarCity = useCallback(() => {
-    setFarSide('city')
-    setCityPick((p) => ({ n: p.n + 1, here: false }))
-  }, [])
 
   /**
    * The selected city is somewhere we have no events at all.
@@ -1986,7 +1980,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           // From far away the far line says it all: never "We're not in X yet" under it (SCRUM-1087).
           away={far ? null : away}
           travel={far ? null : travel}
-          far={far ? { city: far.option.city, side: farSide, through: farThrough } : null}
+          far={far ? { city: far.option.city, km: far.km, side: farSide, through: farThrough } : null}
           onFarSide={setFarSide}
           onBackToYou={() => setCityPick((p) => ({ n: p.n + 1, here: true }))}
           onTravelBack={() => {
@@ -2003,7 +1997,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       ) : null,
     // `travel` is a new object every render: its words are what change it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, far?.option.city, farSide, farThrough, locationDenied, socketStatus, bannerActions]
+    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, far?.option.city, far?.km, farSide, farThrough, locationDenied, socketStatus, bannerActions]
   )
   /*
    * The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask.
@@ -2118,12 +2112,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * Under the chips, as a row of the list: the loading skeleton, the empty and failed states, the results count, the
    * lead card, Bring your friends, the sections and the "Everything else" header.
    */
-  // From far away (SCRUM-1087): the city's distance said once, over its content; never on a row.
-  const farLine = far && !nearSide ? (
-    <ScalePress onPress={goToFarCity} accessibilityRole="button" accessibilityHint={`Shows ${far.option.city} on the map`} style={styles.farLine} testID="pulse-far-distance">
-      <TypeText variant="meta">{farDistanceLine(far.option.city, far.km)}</TypeText>
-    </ScalePress>
-  ) : null
   const bodyNode = nearSide && far ? (
     <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
       <NearYouEmpty copy={nearYouCopy(near?.reachKm ?? 25, userLocation ? openCitiesNearest(cityOptions, userLocation) : [])} />
@@ -2192,7 +2180,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           </Text>
         </View>
       ) : null}
-      {farLine}
       {leadNode}
       {/* Bring your friends: one card after the lead, gone once shared or dismissed (ledger row 14). */}
       {!isNarrowed && user && events.length > 0 ? <FriendsCard userId={user.id} /> : null}
@@ -2340,7 +2327,6 @@ const styles = StyleSheet.create({
   rateLimitFoot: { paddingHorizontal: SPACE.gutter, paddingTop: SPACE.md },
   /** The lead card under the chips: Option C's 16 pt (`LEAD_GAP`), centred in the gutter. */
   lead: { marginTop: LEAD_GAP },
-  farLine: { marginTop: LEAD_GAP, paddingHorizontal: SPACE.gutter },
   container: { flex: 1 },
   /**
    * No horizontal padding of its own: every row carries its gutter (the rails and the Set list bleed to the edge), so a

@@ -4,7 +4,7 @@
  * in a plain node test.
  */
 
-import { SIZE, SPACE } from './design/tokens'
+import { MAX_FONT_SCALE, SIZE, SPACE, TYPE } from './design/tokens'
 
 export type DrawerSnap = 'full' | 'half' | 'peek'
 
@@ -24,8 +24,14 @@ const DRAWER_HEADER_GAP = 8
  */
 export const DRAWER_HEADER_HEIGHT = DRAWER_HANDLE_HEIGHT + DRAWER_SEGMENTED_HEIGHT + DRAWER_HEADER_GAP
 
-/** The one-line summary Places keeps at `peek` under the control ("3 places live · 31 open tonight"): a 20 pt line and its 8 pt margin. */
-export const DRAWER_PEEK_LINE = 28
+/**
+ * The room for the one-line summary kept at `peek` under the control ("3 places live · 31 open tonight"): a meta line and
+ * its 8 pt margin. The line grows with the phone's text size up to meta's cap, so the room does too (`fontScale`: the
+ * window's); a smaller text keeps the default room.
+ */
+export function drawerPeekLine(fontScale = 1) {
+  return 8 + Math.round(TYPE.meta.lineHeight * Math.min(Math.max(fontScale, 1), MAX_FONT_SCALE.meta))
+}
 
 /**
  * How far ahead a release is projected, in seconds of its velocity. A flick
@@ -46,7 +52,7 @@ export function drawerSnapPoints(screen: {
   topChrome: number
   /** Where the tab bar's top edge is (`tabBarTop`). */
   tabBarTop: number
-  /** Extra room at `peek` for a summary line under the control (`DRAWER_PEEK_LINE`); none for a pane without one. */
+  /** Extra room at `peek` for a summary line under the control (`drawerPeekLine`); none for a pane without one. */
   peekExtra?: number
   /** Where the drawer rests (`pulseRest`); the middle of the screen when not given. */
   half?: number

@@ -18,6 +18,7 @@ import {
   pinsFor,
   shadeOf,
   shouldFollowFix,
+  panSource,
   snapRecentre,
   tiltedZoom,
   viewportBox,
@@ -537,10 +538,22 @@ describe('your position sits in the middle of the map you can see (owner, TestFl
     expect(snapRecentre({ now: 1_400, inFlight: pick, following: false, fix: null })).toEqual({ kind: 'read' })
   })
 
-  it('re-centres once per settled snap, with a centre and the new padding, never per drag frame', () => {
-    expect(component).toMatch(/useEffect\(\(\) => \{\s*const before = shown\.current\s*shown\.current = \{ padding, mapHeight \}/)
+  it('pans: the camera takes what is now where the moved point must come from, by the same offset (SCRUM-1090)', () => {
+    // Camera centre at (200, 300); the middle moves 70 pt down: the camera reads its centre 70 pt up.
+    expect(panSource([200, 300], [200, 300], [200, 370])).toEqual([200, 230])
+    // A fix off the middle (180, 310) going to (200, 370): the offset is the fix's, not the middle's.
+    expect(panSource([200, 300], [180, 310], [200, 370])).toEqual([180, 240])
+    // Control: nothing to move, nothing read elsewhere.
+    expect(panSource([200, 300], [200, 370], [200, 370])).toEqual([200, 300])
+  })
+
+  it('re-centres once per settled snap, with a centre and the camera\'s own padding, never per drag frame', () => {
+    // Not at full (SCRUM-1090): the drawer covers the map, which stays as it was for when it comes back down.
+    expect(component).toMatch(/useEffect\(\(\) => \{\s*(\/\/[^\n]*\n\s*)*if \(!mapShown\) return\s*const before = shown\.current\s*shown\.current = \{ padding, mapHeight \}/)
     // The old centre is read with the padding AND the map height it was drawn with (review M3).
-    expect(component).toMatch(/unproject\(\[width \/ 2, visibleCentreY\(before\.padding, before\.mapHeight\)\]\)/)
+    expect(component).toMatch(/\[width \/ 2, visibleCentreY\(before\.padding, before\.mapHeight\)\]/)
+    // A pan in the camera's own padding (SCRUM-1090): never the new snap's.
+    expect(component).toMatch(/stop\(\{ center: centred as \[number, number\], padding: camPad\.current, duration: settle \}\)/)
     // A tick later, and dropped if a move started meanwhile: a pick in the same commit wins (review M1).
     expect(component).toMatch(/const startedAt = moves\.current[\s\S]*?setTimeout\(\(\) => \{\s*if \(moves\.current !== startedAt\) return/)
     expect(component).toMatch(/\.then\(\(centred\) => \{\s*if \(moves\.current !== startedAt\) return/)

@@ -150,10 +150,12 @@ beforeEach(() => {
 it('nothing within 25 km: the far line (In Bengaluru), no away notice, the lap waits, the distance said once', async () => {
   await render(<Events />)
   await settle()
-  expect(mockPlace?.far).toEqual({ city: 'Bengaluru', side: 'city', through: false })
+  // The distance rides on the far line itself (advisor, 2026-11-21): nothing under the chips says it again.
+  expect(mockPlace?.far).toEqual({ city: 'Bengaluru', km: 7518.4, side: 'city', through: false })
   expect(mockPlace?.away).toBeNull()
   expect(mockLapVisible).toBe(false)
-  expect(screen.getAllByText('Bengaluru is about 7,500 km away')).toHaveLength(1)
+  expect(screen.queryByTestId('pulse-far-distance')).toBeNull()
+  expect(screen.queryByText(/km away/)).toBeNull()
 })
 
 it('"Near you": the honest empty, where Blend’n is on (nearest first), nothing borrowed', async () => {
@@ -163,15 +165,14 @@ it('"Near you": the honest empty, where Blend’n is on (nearest first), nothing
   await settle()
   expect(screen.getByText('Nothing within 25 km yet')).toBeTruthy()
   expect(screen.getByText('Blend’n is on in Mysuru and Bengaluru. We’ll tell you the day it opens near you.')).toBeTruthy()
-  expect(screen.queryByText('Bengaluru is about 7,500 km away')).toBeNull()
 })
 
-it('tapping through (the distance line, or a swipe of the lead) is browsing the city: the lap runs; back on you ends it', async () => {
+it('tapping through (a swipe of the lead) is browsing the city: the lap runs; back on you ends it', async () => {
   await render(<Events />)
   await settle()
-  await fireEvent.press(screen.getByTestId('pulse-far-distance'))
+  await act(async () => mockSwipe?.(1))
   await settle()
-  expect(mockPlace?.far).toEqual({ city: 'Bengaluru', side: 'city', through: true })
+  expect(mockPlace?.far).toEqual({ city: 'Bengaluru', km: 7518.4, side: 'city', through: true })
   expect(mockLapVisible).toBe(true)
   await act(async () => mockBrowse?.onLocate?.())
   await settle()

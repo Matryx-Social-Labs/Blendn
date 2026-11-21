@@ -11,6 +11,7 @@ import { COLOR, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING } from '../../lib/de
 import type { AwayNotice } from '../../lib/city'
 import type { SocketConnectionStatus } from '../../lib/socketClient'
 import { useReducedMotion } from '../../lib/motion'
+import { farLine } from '../../lib/nothingNear'
 
 type BannersProps = {
   socketStatus: SocketConnectionStatus
@@ -29,7 +30,7 @@ type BannersProps = {
    * Outside every served city (sheet 07 f3–4, SCRUM-1087): "Nothing near you yet · Near you | In {city}", the drawer's
    * side chosen here; once the map has been taken to the city (`through`), "Browsing {city} · Back to you" instead.
    */
-  far?: { city: string; side: 'near' | 'city'; through: boolean } | null
+  far?: { city: string; km: number; side: 'near' | 'city'; through: boolean } | null
   onFarSide?: (side: 'near' | 'city') => void
   onBackToYou?: () => void
   /** Location is denied and Nearby is not already asking. */
@@ -90,7 +91,7 @@ export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch
       ) : null}
       {place && far && !far.through ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
-          <NothingNearLine city={far.city} side={far.side} onSide={onFarSide} onMap={onMap} />
+          <NothingNearLine city={far.city} km={far.km} side={far.side} onSide={onFarSide} onMap={onMap} />
         </Animated.View>
       ) : null}
       {place && away ? (
@@ -122,18 +123,25 @@ export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch
 }
 
 /**
- * Sheet 07 frames 3–4: "Nothing near you yet" with Near you | In {city} on the banner's glass, composed from the DS
- * (the banner's glass and metrics, the compact segmented control). The words and the switch share a row that wraps: a
- * long city or the largest text puts the switch under the words, never a cut name.
+ * Sheet 07 frames 3–4: "Nothing near you yet · {city}, about N km away" with Near you | In {city} on the banner's glass,
+ * composed from the DS (the banner's glass and metrics, the compact segmented control). The words are two pieces of a
+ * wrapping row, so they break only at the "·", and the switch goes under them when they need the width; never a cut name.
  */
-function NothingNearLine({ city, side, onSide, onMap }: { city: string; side: 'near' | 'city'; onSide: (side: 'near' | 'city') => void; onMap: boolean }) {
+function NothingNearLine({ city, km, side, onSide, onMap }: { city: string; km: number; side: 'near' | 'city'; onSide: (side: 'near' | 'city') => void; onMap: boolean }) {
   const bold = useBoldText()
+  const line = farLine(city, km)
+  const words = [font('meta', bold), styles.farText]
   return (
     <View style={[styles.far, !onMap && styles.farSolid]} testID="pulse-far">
       {onMap ? <MapGlass /> : null}
-      <Text style={[font('meta', bold), styles.farText]} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} accessibilityRole="header">
-        Nothing near you yet
-      </Text>
+      <View style={styles.farWords} accessible accessibilityRole="header" accessibilityLabel={`${line.status} ${line.where}`.replace(/\u00a0/g, ' ')}>
+        <Text style={words} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+          {line.status}
+        </Text>
+        <Text style={words} maxFontSizeMultiplier={MAX_FONT_SCALE.meta}>
+          {line.where}
+        </Text>
+      </View>
       <View style={styles.farSwitch}>
         <SegmentedControl compact draggable={false} items={['Near you', `In ${city}`]} selected={side === 'near' ? 0 : 1} onChange={(i) => onSide(i === 0 ? 'near' : 'city')} testID="pulse-far-side" />
       </View>
@@ -169,6 +177,8 @@ const styles = StyleSheet.create({
     rowGap: SPACE.xs,
   },
   farSolid: { backgroundColor: COLOR.surface },
+  // A row of its own pieces: "Nothing near you yet ·" and "{city}, about N km away", side by side or one under the other.
+  farWords: { flexShrink: 1, flexDirection: 'row', flexWrap: 'wrap', columnGap: SPACE.xxs },
   farText: { flexShrink: 1, color: COLOR.textPrimary },
   farSwitch: { flexGrow: 1, minWidth: FAR_SWITCH_MIN },
 })

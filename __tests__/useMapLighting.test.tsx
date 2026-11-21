@@ -244,3 +244,50 @@ describe('on our own tiles (stage 2, SCRUM-572)', () => {
     expect(result.current.lit.states).toEqual([])
   })
 })
+
+/*
+ * SCRUM-1090 (iOS drive, 2026-11-20): half (clean pass, no chip: it would sit under the top bar) → peek (a pass that
+ * could not finish cleanly, published) → half again. The view was the first pass's to the letter, so the pass stopped at
+ * "nothing changed" and the peek pass's chip stayed, now under the Blend'n mark. What is shown is what the last
+ * published pass drew, not what the last clean one did.
+ */
+it('places the chips again for a view it saw before, when an unclean pass was published since (SCRUM-1090)', async () => {
+  const pins = venues(1)
+  const m = fakeMap(async () => [buildingAt(pins[0].longitude, pins[0].latitude)])
+  const ok = m.project.getMockImplementation()!
+  const NONE = { top: 0, bottom: 1 } // a window nothing fits in: no chip
+  const ALL = { top: 0, bottom: SIZE.height }
+  let visible = NONE
+  const { result, rerender } = await renderHook(() =>
+    useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, visible })
+  )
+  await pass(result)
+  expect(result.current.lit.chips).toHaveLength(0)
+  // Peek: a larger window, and the chip's place could not be read (clean = false), so it is published unchecked.
+  visible = ALL
+  m.project.mockImplementation(async ([lng, lat]: [number, number]) => {
+    if (lng === pins[0].longitude && lat === pins[0].latitude) throw new Error('native busy')
+    return ok([lng, lat])
+  })
+  await act(async () => rerender({}))
+  await pass(result)
+  expect(result.current.lit.chips).toHaveLength(1)
+  // Half again: the very view of the first pass.
+  visible = NONE
+  m.project.mockImplementation(ok)
+  await act(async () => rerender({}))
+  await pass(result)
+  expect(result.current.lit.chips).toHaveLength(0)
+})
+
+it('control: a view seen before with only clean passes since is not read again', async () => {
+  const pins = venues(1)
+  const m = fakeMap(async () => [buildingAt(pins[0].longitude, pins[0].latitude)])
+  const { result } = await renderHook(() =>
+    useMapLighting({ map: { current: m as never }, view: view(), pins, segment: 'places', size: SIZE, visible: { top: 0, bottom: 1 } })
+  )
+  await pass(result)
+  const calls = m.project.mock.calls.length
+  await pass(result)
+  expect(m.project.mock.calls.length).toBe(calls)
+})

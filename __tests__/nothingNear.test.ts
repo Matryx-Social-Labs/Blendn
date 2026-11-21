@@ -2,7 +2,7 @@
  * "Nothing near you yet" (pulse-map sheet 07 frames 3–4; the advisor's rules on SCRUM-1087): outside every served city
  * the map stays on you, the drawer shows the nearest open city the server names, and its distance is said once.
  */
-import { farCity, farDistanceLine, nearYouCopy, openCitiesNearest } from '../lib/nothingNear'
+import { farCity, farLine, nearYouCopy, openCitiesNearest } from '../lib/nothingNear'
 import type { CityOption } from '../lib/city'
 
 const SAAR = { latitude: 49.2402, longitude: 6.9969 }
@@ -34,11 +34,16 @@ describe('farCity', () => {
   })
 })
 
-describe('farDistanceLine', () => {
-  it('says it once, rounded as a person would: about 7,500 km, 310 km, 48 km', () => {
-    expect(farDistanceLine('Bengaluru', 7518.4)).toBe('Bengaluru is about 7,500 km away')
-    expect(farDistanceLine('Mysuru', 312.6)).toBe('Mysuru is about 310 km away')
-    expect(farDistanceLine('Pune', 48.2)).toBe('Pune is about 48 km away')
+describe('farLine', () => {
+  const NBSP = '\u00a0'
+  it('folds the distance into the status line, in the shared distanceText grammar, with NBSP before km', () => {
+    expect(farLine('Bengaluru', 7518.4)).toEqual({ status: 'Nothing near you yet ·', where: `Bengaluru, about 7,518${NBSP}km away` })
+    expect(farLine('Mysuru', 312.6).where).toBe(`Mysuru, about 313${NBSP}km away`)
+    // A city centre is never closer than "about 1 km", and never metres.
+    expect(farLine('Pune', 0.3).where).toBe(`Pune, about 1${NBSP}km away`)
+  })
+  it('never shortens the city (the worst case keeps every letter)', () => {
+    expect(farLine('Saint-Jean-sur-Richelieu', 6012).where).toBe(`Saint-Jean-sur-Richelieu, about 6,012${NBSP}km away`)
   })
 })
 

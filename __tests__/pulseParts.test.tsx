@@ -166,8 +166,11 @@ describe('the banners', () => {
   })
   it('from far away: "Nothing near you yet" with Near you | In {city}; the side is the caller’s (sheet 07 f3–4)', async () => {
     const onFarSide = jest.fn()
-    await render(<PulseBanners {...base} only="place" far={{ city: 'Thiruvananthapuram', side: 'city', through: false }} onFarSide={onFarSide} />)
-    expect(screen.getByText('Nothing near you yet')).toBeTruthy()
+    await render(<PulseBanners {...base} only="place" far={{ city: 'Thiruvananthapuram', km: 8012.2, side: 'city', through: false }} onFarSide={onFarSide} />)
+    // One header, heard whole; on screen it breaks only at the "·" (two pieces in a wrapping row).
+    expect(screen.getByRole('header', { name: 'Nothing near you yet · Thiruvananthapuram, about 8,012 km away' })).toBeTruthy()
+    expect(screen.getByText('Nothing near you yet ·')).toBeTruthy()
+    expect(screen.getByText('Thiruvananthapuram, about 8,012\u00a0km away')).toBeTruthy()
     expect(screen.getByRole('tab', { name: /In Thiruvananthapuram/, selected: true })).toBeTruthy()
     await fireEvent.press(screen.getByRole('tab', { name: /Near you/ }))
     expect(onFarSide).toHaveBeenCalledWith('near')
@@ -176,9 +179,9 @@ describe('the banners', () => {
 
   it('from far away, taken to the city: "Browsing {city}" and Back to you (the locate)', async () => {
     const onBackToYou = jest.fn()
-    await render(<PulseBanners {...base} only="place" far={{ city: 'Bengaluru', side: 'city', through: true }} onBackToYou={onBackToYou} />)
+    await render(<PulseBanners {...base} only="place" far={{ city: 'Bengaluru', km: 7518.4, side: 'city', through: true }} onBackToYou={onBackToYou} />)
     expect(screen.getByText('Browsing Bengaluru')).toBeTruthy()
-    expect(screen.queryByText('Nothing near you yet')).toBeNull()
+    expect(screen.queryByText('Nothing near you yet ·')).toBeNull()
     await fireEvent.press(screen.getByRole('button', { name: 'Back to you' }))
     expect(onBackToYou).toHaveBeenCalled()
   })

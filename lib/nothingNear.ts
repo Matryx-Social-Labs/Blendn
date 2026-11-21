@@ -1,6 +1,7 @@
 import type { EventsListResponse } from './apiClient'
 import { cityBySlug, cityNamed, type CityOption, type StoredCity } from './city'
 import { getDistanceKm } from './geo'
+import { distanceText } from './placesPane'
 
 /**
  * "Nothing near you yet" (pulse-map sheet 07, frames 3–4; the advisor's rules on SCRUM-1087). The server answers
@@ -34,14 +35,17 @@ export function farCity({
   return option && near.nearestCity ? { option, km: near.nearestCity.distanceKm } : null
 }
 
-/** Rounded as a person says it: to the kilometre under 100, to ten under 1,000, to a hundred past it. */
-const roughKm = (km: number) => {
-  const step = km < 100 ? 1 : km < 1000 ? 10 : 100
-  return (Math.round(km / step) * step).toLocaleString('en-US')
-}
+const NBSP = '\u00a0'
 
-/** The one place the city's distance is said (the rows say none: it would be the same number on every one). */
-export const farDistanceLine = (city: string, km: number) => `${city} is about ${roughKm(km)} km away`
+/**
+ * The far line, distance folded in (advisor on SCRUM-1087, 2026-11-21): "Nothing near you yet · Bengaluru, about 7,518 km
+ * away". Two pieces so the line breaks only at the "·" (each piece is a wrapping row item); the distance is a guess at a
+ * city centre, so it is said as one (`distanceText` approximate), with a no-break space before "km". The city is never cut.
+ */
+export function farLine(city: string, km: number): { status: string; where: string } {
+  const distance = (distanceText(km, 'approximate') ?? '').replace(' km', `${NBSP}km`)
+  return { status: 'Nothing near you yet ·', where: `${city}, ${distance} away` }
+}
 
 /** Open cities with something on, nearest first from `point`: where "Blend’n is on". */
 export function openCitiesNearest(available: readonly CityOption[], point: { latitude: number; longitude: number }): string[] {

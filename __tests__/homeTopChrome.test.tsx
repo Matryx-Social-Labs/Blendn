@@ -45,3 +45,22 @@ describe('PulseTopBar', () => {
     expect(bar).toMatchObject({ position: 'absolute', top: 0, left: 0, right: 0 })
   })
 })
+
+// SCRUM-1090, sheet 17 pick A: at full the top bar sits on ink. The cover is drawn over the map and its banners and under
+// the top bar, reaches under the drawer's rounded corners, and the covered map takes no touches.
+describe('HomeShell at full', () => {
+  const src = () => require('fs').readFileSync(require('path').join(__dirname, '../components/home/HomeShell.tsx'), 'utf8') as string
+
+  it('draws the cover after the map and the banners, before the top bar', () => {
+    const s = src()
+    const at = (needle: string) => s.indexOf(needle)
+    expect(at('<DrawerCover')).toBeGreaterThan(at('<HomeMap'))
+    expect(at('<DrawerCover')).toBeGreaterThan(at('<MapBanners'))
+    expect(at('<DrawerCover')).toBeLessThan(at('<PulseTopBar'))
+    expect(s).toMatch(/<DrawerCover y={drawerTop} points={points} height={points\.full \+ RADIUS\.sheet} \/>/)
+  })
+
+  it('the covered map takes no touches at full', () => {
+    expect(src()).toMatch(/pointerEvents={snap === 'full' \? 'none' : 'auto'}/)
+  })
+})
