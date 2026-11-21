@@ -9,7 +9,6 @@ import { FitText } from '../ds/Title'
 import { MonoRun } from '../ds/MonoFamily'
 import { font, useBoldText, useIncreaseContrast, useLargeText } from '../ds/shared'
 import ScalePress from '../motion/ScalePress'
-import { OptimizedImage } from '../OptimizedImage'
 import { SkeletonCircle, SkeletonLine } from '../Skeleton'
 import { Icon } from '../ui/Icon'
 import { personFace } from '../../lib/personFace'
@@ -152,14 +151,13 @@ export function PersonAvatar({ person, size = AVATAR, named = true }: { person: 
   const face = personFace({ named, name: person.name, photo: person.photo })
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {face.kind === 'photo' ? (
-        <OptimizedImage source={face.uri} style={{ width: size, height: size, borderRadius: RADIUS.capsule }} width={size} height={size} contentFit="cover" />
-      ) : (
-        <Avatar {...face} size={size} testID={face.kind === 'creature' ? 'person-creature' : 'person-face'} />
-      )}
+      {/* A photo goes through Avatar too, so it loads over the person's initial, never a blank disc (SCRUM-1088). */}
+      <Avatar {...face} size={size} testID={FACE_TEST_ID[face.kind]} />
     </View>
   )
 }
+
+const FACE_TEST_ID = { photo: 'person-photo', creature: 'person-creature', initial: 'person-face' } as const
 
 /** A disc with no words: a DS IconButton without a label. */
 const isIconOnly = (node: ReactNode): boolean => isValidElement<{ label?: string }>(node) && node.type === IconButton && !node.props.label

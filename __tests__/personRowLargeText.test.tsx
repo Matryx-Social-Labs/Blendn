@@ -252,3 +252,28 @@ describe('the invite link’s short form (DS-16, A9: the raw URL broke mid-token
     expect(screen.getByTestId('invite-link-url', hidden).props.children).toBe('example.com/x')
   })
 })
+
+/*
+ * SCRUM-1088: on Android a friend request's face was blank until its photo arrived, because PersonAvatar drew the photo as a
+ * bare OptimizedImage (nothing under it, and nothing at all until its URL effect ran). Every friend-surface photo now goes
+ * through the DS Avatar, which draws the person's initial under the photo while it loads.
+ * Negative control (2026-11-21): the old OptimizedImage branch fails both cases (no person-photo-initial-disc, no letter).
+ */
+describe('a friend-surface photo loads over the person’s initial (SCRUM-1088)', () => {
+  const withPhoto = { userId: 'u2', name: 'Meera Nair', photo: 'https://t3.storage.dev/p/meera.jpg' }
+
+  it('a request row draws Meera’s initial under her photo from the first frame', async () => {
+    await at(402, 1)
+    await render(<IncomingRequestRow request={{ id: 'r2', person: withPhoto, createdAt: new Date().toISOString(), via: 'link' as const }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('person-photo-initial-disc', hidden)).toBeTruthy()
+    expect(screen.getByText('M', hidden)).toBeTruthy()
+    expect(screen.getByTestId('person-photo-photo', hidden).props.source).toEqual([{ uri: withPhoto.photo }])
+  })
+
+  it('a friends-list row does the same', async () => {
+    await at(402, 1)
+    await render(<PersonRow person={withPhoto} detail="Friends since " detailMono="Oct 2026" />)
+    expect(screen.getByTestId('person-photo-initial-disc', hidden)).toBeTruthy()
+    expect(screen.getByText('M', hidden)).toBeTruthy()
+  })
+})
