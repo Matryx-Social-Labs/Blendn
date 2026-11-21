@@ -1,3 +1,4 @@
+import { compactCount } from './format'
 import { getDistanceKm } from './geo'
 import type { DistanceReading } from './placesPane'
 import type { PreciseFix } from './roomButton'
@@ -87,10 +88,19 @@ export function splitFocus<T extends { id: string }>(pins: readonly T[], focusId
   return { piled: pins.filter((p) => p.id !== focusId), focus: pins.find((p) => p.id === focusId) ?? fallback ?? null }
 }
 
-/** "+130 more · zoom in" when the server says how many are in view; no total, no claim. */
-export function moreLine(total: number | null, loaded: number): string | null {
-  if (total === null || total <= loaded) return null
-  return `+${total - loaded} more · zoom in`
+/** The deepest "+N more" still offers to zoom in to (the map sets no maximum of its own; past this a street does not split). */
+export const MORE_ZOOM_MAX = 20
+
+/**
+ * "+130 more · Zoom in" (sheet 16, PICKED A): the server's total in the map's box over what it drew. No total, no claim.
+ * The count for the eye is `compactCount` (exact to 999, then 1.2k); the label says the whole number. `zoomIn` false at
+ * the map's deepest zoom: the count is plain text there, nothing to press.
+ */
+export function moreLine(total: number | null, drawn: number, zoomIn: boolean, noun: 'event' | 'place' = 'event'): { text: string; zoomIn: boolean; label: string } | null {
+  if (total === null || total <= drawn) return null
+  const extra = total - drawn
+  const label = `${extra.toLocaleString('en-US')} more ${noun}${extra === 1 ? '' : 's'} in this view${zoomIn ? '. Zoom in' : ''}`
+  return { text: `+${compactCount(extra)} more`, zoomIn, label }
 }
 
 /** Option 3 opens on you and this many nearest events (pulse-map 05). */

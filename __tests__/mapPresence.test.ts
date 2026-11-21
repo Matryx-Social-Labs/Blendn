@@ -121,10 +121,22 @@ describe('the piles, and the focus never inside one', () => {
     expect(splitFocus([{ id: 'a' }], 'far', { id: 'far' })).toEqual({ piled: [{ id: 'a' }], focus: { id: 'far' } })
   })
 
-  it('no total from the server: no count claim; with one, "+130 more · zoom in"', () => {
-    expect(moreLine(null, 50)).toBeNull()
-    expect(moreLine(50, 50)).toBeNull()
-    expect(moreLine(180, 50)).toBe('+130 more · zoom in')
+  it('no total from the server: no count claim; with one, "+130 more" and Zoom in (sheet 16, PICKED A)', () => {
+    expect(moreLine(null, 50, true)).toBeNull()
+    expect(moreLine(50, 50, true)).toBeNull()
+    expect(moreLine(180, 50, true)).toEqual({ text: '+130 more', zoomIn: true, label: '130 more events in this view. Zoom in' })
+  })
+
+  it('counts are exact to 999, then 1.2k / 12k; the label carries the full number', () => {
+    expect(moreLine(1049, 50, true)?.text).toBe('+999 more')
+    expect(moreLine(1050, 50, true)?.text).toBe('+1k more')
+    expect(moreLine(12_530, 50, true)).toEqual({ text: '+12k more', zoomIn: true, label: '12,480 more events in this view. Zoom in' })
+    expect(moreLine(51, 50, true)?.label).toBe('1 more event in this view. Zoom in')
+    expect(moreLine(52, 50, true, 'place')?.label).toBe('2 more places in this view. Zoom in')
+  })
+
+  it('at the map’s deepest zoom the count is plain text: no Zoom in', () => {
+    expect(moreLine(180, 50, false)).toEqual({ text: '+130 more', zoomIn: false, label: '130 more events in this view' })
   })
 })
 

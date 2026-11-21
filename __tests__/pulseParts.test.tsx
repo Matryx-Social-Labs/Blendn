@@ -164,6 +164,32 @@ describe('the banners', () => {
     expect(screen.getByText('We’re not in Saarbrücken yet. You’re browsing Bengaluru.')).toBeTruthy()
     expect(within(screen.getByTestId('pulse-away')).queryByRole('button')).toBeNull()
   })
+  it('from far away: "Nothing near you yet" with Near you | In {city}; the side is the caller’s (sheet 07 f3–4)', async () => {
+    const onFarSide = jest.fn()
+    await render(<PulseBanners {...base} only="place" far={{ city: 'Thiruvananthapuram', km: 8012.2, side: 'city', through: false }} onFarSide={onFarSide} />)
+    // One header, heard whole; on screen it breaks only at the "·" (two pieces in a wrapping row).
+    expect(screen.getByRole('header', { name: 'Nothing near you yet · Thiruvananthapuram, about 8,012 km away' })).toBeTruthy()
+    expect(screen.getByText('Nothing near you yet ·')).toBeTruthy()
+    expect(screen.getByText('Thiruvananthapuram, about 8,012\u00a0km away')).toBeTruthy()
+    // Each piece is one line that shrinks to fit, never wraps inside (AX5 drive: "\u20267,515 km / away" made three lines).
+    for (const piece of ['Nothing near you yet \u00b7', 'Thiruvananthapuram, about 8,012\u00a0km away']) {
+      expect(screen.getByText(piece).props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true })
+    }
+    expect(screen.getByRole('tab', { name: /In Thiruvananthapuram/, selected: true })).toBeTruthy()
+    await fireEvent.press(screen.getByRole('tab', { name: /Near you/ }))
+    expect(onFarSide).toHaveBeenCalledWith('near')
+    expect(screen.queryByText(/Browsing/)).toBeNull()
+  })
+
+  it('from far away, taken to the city: "Browsing {city}" and Back to you (the locate)', async () => {
+    const onBackToYou = jest.fn()
+    await render(<PulseBanners {...base} only="place" far={{ city: 'Bengaluru', km: 7518.4, side: 'city', through: true }} onBackToYou={onBackToYou} />)
+    expect(screen.getByText('Browsing Bengaluru')).toBeTruthy()
+    expect(screen.queryByText('Nothing near you yet ·')).toBeNull()
+    await fireEvent.press(screen.getByRole('button', { name: 'Back to you' }))
+    expect(onBackToYou).toHaveBeenCalled()
+  })
+
   it('location denied: one quiet line on the map, "See what’s near you", and Settings (pulse-map 06)', async () => {
     const onOpenSettings = jest.fn()
     await render(<PulseBanners {...base} only="place" locationDenied onOpenSettings={onOpenSettings} />)

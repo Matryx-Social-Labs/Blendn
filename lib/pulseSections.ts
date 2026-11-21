@@ -203,8 +203,10 @@ export function featuredLabel(e: SectionEvent): string | null {
  * when it sends one (a daily rotation computed there); until then a rotation
  * seeded by the date, which is fair and stable within the day. Capped.
  */
-export function featuredPick<E extends SectionEvent>(events: readonly E[], now: number, seedDate: string): E[] {
+export function featuredPick<E extends SectionEvent>(events: readonly E[], now: number, seedDate: string, asSent = false): E[] {
   const flagged = events.filter((e) => isFeaturedEvent(e) && !sessionOver(e, now))
+  // `asSent`: the featured request's own answer, already in the server's order (nearest first from a position, backend round 3).
+  if (asSent) return flagged.slice(0, FEATURED_CAP)
   const ranked = flagged.some((e) => e.featured)
   const order = (e: E) => (ranked ? (e.featured?.rank ?? Number.MAX_SAFE_INTEGER) : fnv1a(FEATURED_ROTATES_DAILY ? `${seedDate}${e.id}` : e.id) >>> 0)
   return [...flagged].sort((a, b) => order(a) - order(b) || a.id.localeCompare(b.id)).slice(0, FEATURED_CAP)
@@ -254,8 +256,10 @@ export function pulseSections<E extends SectionEvent>(input: PulseSectionsInput<
         .sort((a, b) => (b.here_count ?? 0) - (a.here_count ?? 0) || byStart(a, b))
       if (live.length) take('now', live, NOW_LIMIT)
     } else if (key === 'featured') {
-      // Featured events from their own request come first in the pool: an event outside the page's first 50 still shows.
-      const picked = featuredPick(fresh(unique([...(input.featured ?? []), ...page])), now, seedDate)
+      // Featured events from their own request come first, in the order the server sent them (nearest first when asked
+      // with a position): an event outside the page's first 50 still shows. The page's own featured after, by rank.
+      const asked = featuredPick(fresh(unique(input.featured ?? [])), now, seedDate, true)
+      const picked = [...asked, ...featuredPick(fresh(page).filter((e) => !asked.some((a) => a.id === e.id)), now, seedDate)]
       if (picked.length) take('featured', picked, FEATURED_CAP)
     } else if (key === 'tonight') {
       const tonight = fresh(page)

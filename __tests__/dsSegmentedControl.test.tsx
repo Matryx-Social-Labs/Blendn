@@ -13,7 +13,7 @@ import * as Reanimated from 'react-native-reanimated'
 
 import { GroundProvider, HueProvider } from '../components/ds/shared'
 import { landOn, rubberBand, SegmentedControl } from '../components/ds/SegmentedControl'
-import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING } from '../lib/design/tokens'
+import { COLOR, FONT_FAMILY, MATERIAL, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../lib/design/tokens'
 import { H } from '../lib/haptics'
 import { OPACITY } from '../lib/theme'
 import { clipped } from './helpers/ax'
@@ -106,9 +106,40 @@ describe('<SegmentedControl>', () => {
   })
 
   it('compact is the Lobby sheet’s 44 pt `.lseg`: a 36 pt segment whose slop still makes the 44 target', async () => {
-    await draw({ compact: true })
+    await draw({ size: 'compact' })
     expect(flat('s')).toMatchObject({ height: 44, borderRadius: RADIUS.capsule, backgroundColor: COLOR.surface })
     expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 4, bottom: 4 })
+  })
+
+  it('line is the map line’s 33 pt `.seg` (pulse-map sheet 07, advisor 2026-11-21): drawn 33, touched 44', async () => {
+    await draw({ size: 'line' })
+    expect(flat('s')).toMatchObject({ height: 33 })
+    // A 25 pt segment inside the 4 pt track; the slop takes it to 44.
+    expect(screen.getByTestId('s-0').props.hitSlop).toMatchObject({ top: 9.5, bottom: 9.5 })
+  })
+
+  it('at its cap a label’s line fits its segment at every size: the line’s 25 pt segment caps meta 14/20 at 1.25, not 1.3 (task 02 AX drive)', async () => {
+    for (const size of [undefined, 'compact', 'line'] as const) {
+      for (const pair of [false, true]) {
+        await draw({ ...(size ? { size } : {}), ...(pair ? { pair: true, selected: null } : {}) })
+        const label = screen.getByText('Sign in')
+        const segment = flat('s').height - SPACE.xs * 2
+        expect(TYPE[pair ? 'meta' : 'button'].lineHeight * label.props.maxFontSizeMultiplier).toBeLessThanOrEqual(segment)
+      }
+    }
+  })
+
+  it('a label whose segment is shorter than its capped line sets no line height, so its line follows the capped font: at font scale 2.0 Android scales a line height past maxFontSizeMultiplier, and the fit loop shrank the 33 pt line’s labels to 4 dp (task 02 Android AX drive)', async () => {
+    for (const os of ['ios', 'android'] as const) {
+      on(os)
+      for (const pair of [false, true]) {
+        await draw({ size: 'line', ...(pair ? { pair: true, selected: null } : {}) })
+        expect(text('Sign in').lineHeight).toBeUndefined()
+        // The larger sizes keep the type role's line: their segment holds it at the 1.3 cap.
+        await draw({ size: 'compact', ...(pair ? { pair: true, selected: null } : {}) })
+        expect(text('Sign in').lineHeight).toBeGreaterThan(0)
+      }
+    }
   })
 
   it('each 40 pt segment reaches the 48 pt target', async () => {

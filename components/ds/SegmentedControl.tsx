@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated'
 import { scheduleOnRN } from 'react-native-worklets'
 
-import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, DURATION, EASING, FONT_FAMILY, MATERIAL, PRESS, RADIUS, SIZE, SPACE, SPRING, TYPE } from '../../lib/design/tokens'
 import { H } from '../../lib/haptics'
 import { motionTokens, useReducedMotion } from '../../lib/motion'
 import { OPACITY } from '../../lib/theme'
@@ -23,7 +23,8 @@ const DRAG_FAIL_Y = 10
 const BADGE_GAP = SPACE.xs + SPACE.xxs
 const DOT = 8
 const DIVIDER_HEIGHT = 20
-const COMPACT_HEIGHT = 44
+/** The smaller sizes, by the board that drew them; a segment is the height less the 4 pt track inset on each side. */
+const HEIGHT = { compact: 44, line: 33 } as const
 /** The thumb's rim in the hue's edge colour. */
 const RIM = 1
 
@@ -57,8 +58,12 @@ export type SegmentedControlProps = Choice & {
   draggable?: boolean
   /** Disabled while busy: 45% of the whole control. */
   disabled?: boolean
-  /** 44 pt, the Lobby compose sheet's type segment (`.lseg`): a 36 pt segment, its slop still the 44 target. */
-  compact?: boolean
+  /**
+   * Smaller than the 48 pt control. `compact`: 44 pt, the Lobby compose sheet's type segment (`.lseg`). `line`: 33 pt,
+   * a switch inside a one-line glass banner on the map (pulse-map sheet 07 `.seg`; advisor 2026-11-21). Either way each
+   * segment's slop makes the 44 pt target: drawn as the board, touched as the platform asks.
+   */
+  size?: keyof typeof HEIGHT
   /** The design gallery only: draws a transient state with no finger or keyboard. */
   previewState?: 'focused'
   /** The design gallery only: draws this segment pressed. */
@@ -74,14 +79,21 @@ const LABEL_MIN_SCALE = 0.8
  * fit (to 80%) rather than wrapping: a second line in the fixed 48 capsule was sliced (A2, D-L10), and the capsule cannot
  * grow (the thumb and the ink row are laid out against it).
  */
-function SegmentLabel({ item, badge, ink, pair, bold }: { item: string; badge: SegmentBadge; ink: boolean; pair: boolean; bold: boolean }) {
+function SegmentLabel({ item, badge, ink, pair, bold, segment }: { item: string; badge: SegmentBadge; ink: boolean; pair: boolean; bold: boolean; segment: number }) {
   const family = ink ? FONT_FAMILY.brand[700] : FONT_FAMILY.brand[500]
+  const role = pair ? 'meta' : 'button'
+  // The control cap, or less where the segment is shorter than the capped line (the line's 25 pt segment): a line taller
+  // than its segment was shrunk and pushed to the bottom edge on iOS, cut to nothing at the largest text (task 02 drive).
+  const cap = Math.min(CONTROL_FONT_CAP, segment / TYPE[role].lineHeight)
+  // Such a label sets no line height, so its line follows the capped font: at font scale 2.0 Android scales a line height
+  // past maxFontSizeMultiplier, and the fit loop, which shrinks only the font, took the line's labels to 4 dp.
+  const short = cap < CONTROL_FONT_CAP
   const color = COLOR.textPrimary
   return (
     <View style={styles.labelRow}>
       <Text
-        style={[font(pair ? 'meta' : 'button', bold, family), styles.label, { color }]}
-        maxFontSizeMultiplier={CONTROL_FONT_CAP}
+        style={[font(role, bold, family), styles.label, { color }, short && styles.naturalLine]}
+        maxFontSizeMultiplier={cap}
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={LABEL_MIN_SCALE}
@@ -133,12 +145,14 @@ export function SegmentedControl({
   semantics = 'tabs',
   draggable = true,
   disabled = false,
-  compact = false,
+  size,
   previewState,
   previewPressed,
   testID,
 }: SegmentedControlProps) {
-  const height = compact ? COMPACT_HEIGHT : SIZE.control
+  const height = size ? HEIGHT[size] : SIZE.control
+  // Up from the segment (the height less the track's inset) to the target: 4 pt at 48 and 44, 9.5 at the line's 33.
+  const slop = (Math.max(SIZE.targetIos, height) - (height - SPACE.xs * 2)) / 2
   const reduceMotion = useReducedMotion()
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
@@ -266,8 +280,8 @@ export function SegmentedControl({
                 onPressIn={() => on && squeezeTo(PRESS.scale)}
                 onPressOut={() => on && squeezeTo(1)}
                 disabled={disabled}
-                // A segment is 40 pt inside the 4 pt track; the slop makes it the control's 48.
-                hitSlop={{ top: SPACE.xs, bottom: SPACE.xs }}
+                // A segment is 40 pt inside the 4 pt track; the slop makes it the control's 48 (or the smaller sizes' 44).
+                hitSlop={{ top: slop, bottom: slop }}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 accessibilityRole={radio ? 'radio' : 'tab'}
@@ -276,7 +290,7 @@ export function SegmentedControl({
                 accessibilityState={radio ? { checked: on, disabled } : { selected: on, disabled }}
                 style={({ pressed }) => [styles.segment, !on && (pressed || previewPressed === i) && { opacity: PRESSED_SEGMENT }]}
               >
-                <SegmentLabel item={item} badge={badges?.[i] ?? null} ink={false} pair={pair} bold={bold} />
+                <SegmentLabel item={item} badge={badges?.[i] ?? null} ink={false} pair={pair} bold={bold} segment={height - SPACE.xs * 2} />
               </Pressable>
             )
           })}
@@ -294,7 +308,7 @@ export function SegmentedControl({
                 >
                   {items.map((item, i) => (
                     <View key={item} style={styles.segment}>
-                      <SegmentLabel item={item} badge={badges?.[i] ?? null} ink pair={pair} bold={bold} />
+                      <SegmentLabel item={item} badge={badges?.[i] ?? null} ink pair={pair} bold={bold} segment={height - SPACE.xs * 2} />
                     </View>
                   ))}
                 </Animated.View>
@@ -330,5 +344,6 @@ const styles = StyleSheet.create({
   segment: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACE.sm },
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: BADGE_GAP, maxWidth: '100%' },
   label: { textAlign: 'center', flexShrink: 1 },
+  naturalLine: { lineHeight: undefined },
   dot: { width: DOT, height: DOT, borderRadius: RADIUS.capsule, backgroundColor: COLOR.live },
 })

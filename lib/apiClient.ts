@@ -284,7 +284,8 @@ function toQuery(params: object = {}, viewport = false): string {
     // A `search` the server would refuse (under 2 characters, admin #751) is no search: never sent (`searchTermOf`).
     const value = key === 'search' ? searchTermOf(typeof raw === 'string' ? raw : null) : raw
     if (value === undefined || value === null) continue
-    if (withheld && (key === 'lat' || key === 'lon' || key === 'radius' || (key === 'sortBy' && value === 'distance'))) continue
+    // A box is a position too (the map's, around you): it goes only as a viewport, or with sharing on.
+    if (withheld && (key === 'lat' || key === 'lon' || key === 'radius' || key === 'bbox' || (key === 'sortBy' && value === 'distance'))) continue
     // A position never leaves in a URL at more than ~110 m (`lib/coordinates.ts`): the server logs query strings.
     searchParams.append(key, (key === 'lat' || key === 'lon') && typeof value === 'number' ? String(roundCoordinate(value)) : String(value))
   }
@@ -1112,6 +1113,15 @@ export interface EventApiItem {
 export interface EventsListResponse {
   events: EventApiItem[]
   pagination: PaginationMeta
+  /**
+   * `include=near` with a fix (backend round 3): is anything you could go to within `reachKm`, and if not, the nearest
+   * open city with something on and how far its centre is. Absent without the include or a fix, or from an older server.
+   */
+  near?: {
+    reachKm: number
+    empty: boolean
+    nearestCity: { slug: string; name: string; country: string; distanceKm: number; centre: { latitude: number; longitude: number } } | null
+  }
   activeCheckins?: Array<{ id: string; eventId: string; status: string; [key: string]: unknown }>
   profile?: OwnProfileEnvelope
 }
@@ -2576,6 +2586,8 @@ class ApiClientClass {
      * without excluding anything, which is what a browse list wants.
      */
     radius?: number
+    /** The map's view, `[west, south, east, north]` (backend round 3): only events inside it, `pagination.totalCount` how many. Never with `radius`. */
+    bbox?: readonly [number, number, number, number]
     categoryId?: string
     categorySlug?: string
     startDate?: string
@@ -2606,7 +2618,7 @@ class ApiClientClass {
    * event's card names the venue instead.
    */
   async getVenues(
-    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live'; search?: string; radius?: number },
+    params: { page?: number; limit?: number; city?: string; lat?: number; lon?: number; bbox?: readonly [number, number, number, number]; sortBy?: 'name' | 'distance'; venueType?: string; order?: 'live'; search?: string; radius?: number },
     options?: { force?: boolean; viewport?: boolean }
   ): Promise<ApiResponse<VenuesListResponse>> {
     const endpoint = `/api/mobile/venues${toQuery(params, options?.viewport)}`

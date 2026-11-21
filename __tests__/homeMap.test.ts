@@ -6,7 +6,8 @@ import {
   buildingUnder,
   cameraMove,
   cityPickAction,
-  insideLastCircle,
+  boxAround,
+  insideLastBox,
   lightCandidates,
   lightSignature,
   liveAt,
@@ -14,15 +15,13 @@ import {
   locateRide,
   locateTarget,
   mapPadding,
-  MAX_QUERY_RADIUS_KM,
   pinsFor,
-  roundQuery,
   shadeOf,
   shouldFollowFix,
   panSource,
   snapRecentre,
   tiltedZoom,
-  viewportQuery,
+  viewportBox,
   visibleCentreY,
   compassBelow,
 } from '../lib/homeMap'
@@ -37,19 +36,21 @@ import { MAP_THEME } from '../lib/mapTheme'
  * somebody may check in.
  */
 
-describe('a viewport becomes the lists\' own query (HM-CU02)', () => {
-  it('asks for its centre and a radius reaching its corners', () => {
-    // About 2.2 km corner to corner around central Bengaluru.
-    const q = viewportQuery([77.59, 12.96, 77.6, 12.975])
-    expect(q.lat).toBeCloseTo(12.9675, 4)
-    expect(q.lon).toBeCloseTo(77.595, 4)
-    expect(q.radius).toBeGreaterThan(0.9)
-    expect(q.radius).toBeLessThan(1.1)
+describe('a viewport is asked as its box (backend round 3, SCRUM-1086)', () => {
+  it('asks for the view it shows, rounded outward to ~110 m so the whole screen is covered and a nudge is the same question', () => {
+    expect(viewportBox([77.59012, 12.96087, 77.60011, 12.97534])).toEqual({ bbox: [77.59, 12.96, 77.601, 12.976] })
   })
 
-  it("never asks past the server’s bound, and never for nothing", () => {
-    expect(viewportQuery([70, 5, 90, 25]).radius).toBe(MAX_QUERY_RADIUS_KM)
-    expect(viewportQuery([77.5946, 12.9716, 77.5946, 12.9716]).radius).toBe(0.1)
+  it('never asks past the edge of the world (the server refuses it)', () => {
+    expect(viewportBox([-181.2, -91, 181.5, 92]).bbox).toEqual([-180, -90, 180, 90])
+  })
+
+  it('a box around a point reaches the given distance each way', () => {
+    const [w, s, e, n] = boxAround([77.6, 12.98], 1.5).bbox
+    expect((n - s) * 110.574).toBeGreaterThanOrEqual(3)
+    expect((e - w) * 111.32 * Math.cos((12.98 * Math.PI) / 180)).toBeGreaterThanOrEqual(3)
+    expect((w + e) / 2).toBeCloseTo(77.6, 2)
+    expect((s + n) / 2).toBeCloseTo(12.98, 2)
   })
 })
 
@@ -314,16 +315,13 @@ describe('the check-in boundary is never drawn (HM-CU01, plan v2 §4)', () => {
 })
 
 describe('asking for pins (step 2 review)', () => {
-  it('rounds a view to ~100 m, so a nudge is the same question', () => {
-    expect(roundQuery({ lat: 12.971634, lon: 77.594612, radius: 1.23456 })).toEqual({ lat: 12.972, lon: 77.595, radius: 1.23 })
-  })
-
-  it('asks nothing for a view inside the circle already loaded, and asks for one that leaves it', () => {
-    const last = { lat: 12.97, lon: 77.59, radius: 2 }
-    expect(insideLastCircle(last, { lat: 12.971, lon: 77.591, radius: 1 })).toBe(true)
-    expect(insideLastCircle(last, { lat: 12.99, lon: 77.59, radius: 1 })).toBe(false)
-    expect(insideLastCircle(last, { lat: 12.97, lon: 77.59, radius: 3 })).toBe(false)
-    expect(insideLastCircle(null, last)).toBe(false)
+  it('asks nothing for a view inside the box already loaded, and asks for one that leaves it', () => {
+    const last = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
+    expect(insideLastBox(last, { bbox: [77.585, 12.965, 77.595, 12.975] })).toBe(true)
+    expect(insideLastBox(last, last)).toBe(true)
+    expect(insideLastBox(last, { bbox: [77.585, 12.965, 77.61, 12.975] })).toBe(false)
+    expect(insideLastBox(last, { bbox: [77.57, 12.95, 77.61, 12.99] })).toBe(false)
+    expect(insideLastBox(null, last)).toBe(false)
   })
 
   it("backs off on refusals, doubling to a minute, and never earlier than the server’s Retry-After", () => {
@@ -340,24 +338,34 @@ describe('asking for pins (step 2 review)', () => {
 
   it('asks the segment showing, and only it', async () => {
     const api = { getEvents: jest.fn(() => ok({ events })), getVenues: jest.fn(() => ok({ venues })) }
-    const q = { lat: 12.97, lon: 77.59, radius: 1 }
+    const q = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
     const places = await loadPins('places', q, api, 50)
-    expect(places).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'v', kind: 'venue', glow: 2 })], truncated: false })
-    expect(api.getVenues).toHaveBeenCalledWith({ ...q, limit: 50, sortBy: 'distance' })
+    expect(places).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'v', kind: 'venue', glow: 2 })], total: 1, truncated: false })
+    // A capped page is the venues nearest the middle of the view, not the box's first by name: its centre and a
+    // distance sort go beside the box (the order only; a pin never reads the distance that comes back).
+    expect(api.getVenues).toHaveBeenCalledWith({ ...q, lat: 12.97, lon: 77.59, sortBy: 'distance', limit: 50 })
     expect(api.getEvents).not.toHaveBeenCalled()
     const evts = await loadPins('events', q, api, 50)
-    expect(evts).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'e', kind: 'event', live: true })], truncated: false })
+    // Events keep the server's time order: the box alone.
+    expect(api.getEvents).toHaveBeenCalledWith({ ...q, limit: 50 })
+    expect(evts).toEqual({ kind: 'pins', pins: [expect.objectContaining({ id: 'e', kind: 'event', live: true })], total: 1, truncated: false })
   })
 
-  it('says a full page may not be all there is, so it never counts as covering the circle (review M2)', async () => {
-    const api = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: [...venues, { ...venues[0], id: 'w' }] })) }
-    const q = { lat: 12.97, lon: 77.59, radius: 1 }
-    expect(await loadPins('places', q, api, 2)).toMatchObject({ kind: 'pins', truncated: true })
-    expect(await loadPins('places', q, api, 3)).toMatchObject({ kind: 'pins', truncated: false })
+  it("takes the server's total in view, so a capped page says how many it left out and never counts as covering the box", async () => {
+    const two = [...venues, { ...venues[0], id: 'w' }]
+    const q = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
+    const counted = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: two, pagination: { totalCount: 130 } })) }
+    expect(await loadPins('places', q, counted, 50)).toMatchObject({ kind: 'pins', total: 130, truncated: true })
+    const all = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: two, pagination: { totalCount: 2 } })) }
+    expect(await loadPins('places', q, all, 2)).toMatchObject({ kind: 'pins', total: 2, truncated: false })
+    // An older server with no total: a full page may not be all there is (review M2).
+    const bare = { getEvents: jest.fn(), getVenues: jest.fn(() => ok({ venues: two })) }
+    expect(await loadPins('places', q, bare, 2)).toMatchObject({ kind: 'pins', total: 2, truncated: true })
+    expect(await loadPins('places', q, bare, 3)).toMatchObject({ kind: 'pins', total: 2, truncated: false })
   })
 
   it('reports a refusal as rate-limited (with its wait) and anything else as failed, never throwing', async () => {
-    const q = { lat: 12.97, lon: 77.59, radius: 1 }
+    const q = { bbox: [77.58, 12.96, 77.6, 12.98] as [number, number, number, number] }
     const refused = { getEvents: jest.fn(), getVenues: jest.fn(() => Promise.resolve({ success: false, errorCode: 'RATE_LIMITED', retryAfter: 12 })) }
     expect(await loadPins('places', q, refused, 50)).toEqual({ kind: 'rate_limited', retryAfter: 12 })
     const broken = { getEvents: jest.fn(() => Promise.reject(new Error('offline'))), getVenues: jest.fn() }

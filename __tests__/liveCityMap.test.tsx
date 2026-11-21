@@ -48,7 +48,13 @@ jest.mock('../components/home/useMapLighting', () => ({ useMapLighting: () => ({
 jest.mock('../components/home/HomeMap', () => ({ pinApiFor: (viewport: boolean) => ({ viewport }) }))
 let mockSharing = true
 jest.mock('../lib/shareLocation', () => ({ ...jest.requireActual('../lib/shareLocation'), locationSharingOn: () => mockSharing }))
-const mockPins = jest.fn(async (..._a: unknown[]) => ({ kind: 'pins', pins: [], truncated: false }))
+const mockPins = jest.fn(async (..._a: unknown[]) => ({ kind: 'pins', pins: [], total: 0, truncated: false }))
+// The reads whose box is centred on `lat` (to ~100 m).
+const askedAt = (lat: number) =>
+  mockPins.mock.calls.filter((c) => {
+    const [, s, , n] = (c[1] as { bbox: [number, number, number, number] }).bbox
+    return Math.abs((s + n) / 2 - lat) < 0.001
+  })
 jest.mock('../lib/homeMap', () => ({ ...jest.requireActual('../lib/homeMap'), loadPins: (...a: unknown[]) => mockPins(...a) }))
 const mockCities = jest.fn()
 jest.mock('../lib/apiClient', () => ({ apiClient: { getEventCities: (...a: unknown[]) => mockCities(...a) } }))
@@ -143,7 +149,7 @@ describe('LiveCityMap', () => {
     await settleAt([77.59, 12.97])
     await view.rerender(<LiveCityMap you={you} onShown={onShown} />)
     expect(mockStops[mockStops.length - 1]).toEqual(expect.objectContaining({ center: you, zoom: OPENING_VIEW.zoom, pitch: OPENING_VIEW.pitch, duration: expect.any(Number) }))
-    expect(mockPins).toHaveBeenLastCalledWith('places', expect.objectContaining({ lat: 12.98, lon: 77.6 }), expect.anything(), expect.any(Number))
+    expect(askedAt(12.98).length).toBeGreaterThan(0)
     await lightAll()
     await act(async () => jest.advanceTimersByTime(LIT_HOLD_MS))
     // Not landed yet: not shown.
@@ -175,7 +181,6 @@ describe('LiveCityMap', () => {
     expect(onShown).toHaveBeenCalled()
   })
 
-  const askedAt = (lat: number) => mockPins.mock.calls.filter((c) => (c[1] as { lat: number }).lat === lat)
 
   it("asks for the catalogue city's places as a camera point, and your own places through the sharing gate (never as a viewport)", async () => {
     const view = await render(<LiveCityMap you={null} />)

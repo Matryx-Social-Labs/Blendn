@@ -29,13 +29,13 @@ import { MoreRow } from '../../components/pulse/MoreRow'
 import { DayHeading } from '../../components/ds/DayHeading'
 import { CONTROL_FONT_CAP } from '../../components/ds/shared'
 import { LeadPager, type LeadCard } from '../../components/pulse/LeadPager'
-import { applyOrder, FIX_WAIT_MS, LAP_SEED, lapOrder, lapSeedOf, leadOrderMode, type LeadOrder } from '../../lib/featuredLap'
+import { applyOrder, FIX_WAIT_MS, LAP_SEED, lapSeedOf, leadOrderMode, type LeadOrder } from '../../lib/featuredLap'
 import { feedPlaylist } from '../../lib/feedMedia'
 import { QuickChips } from '../../components/pulse/QuickChips'
 import { FriendsCard } from '../../components/pulse/FriendsCard'
 import { PulseBanners } from '../../components/pulse/PulseBanners'
 import { CityPicker } from '../../components/pulse/CityPicker'
-import { NearEnd, NothingNear, PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
+import { NearEnd, NearYouEmpty, NothingNear, PulseEmpty, PulseLoadFailed, QuietWeekEnd } from '../../components/pulse/PulseEmpty'
 import { PulsePeek, type Peek } from '../../components/pulse/PulsePeek'
 import { PullIndicator } from '../../components/pulse/PullIndicator'
 import { StickyBar, STICKY_BAR_AFTER } from '../../components/pulse/StickyBar'
@@ -47,6 +47,7 @@ import { CHIP_ROW_HEIGHT, LEAD_CARD_HEIGHT, LEAD_GAP } from '../../lib/home'
 import { pinsFor } from '../../lib/homeMap'
 import { NEAR_KM, vibeOf, type Vibe } from '../../lib/pulseChips'
 import { groupByWhen, nearSpan, nothingNearCopy, SEE_ALL_KINDS, seeAllFilters, type Beyond, type SeeAllKind } from '../../lib/nearby'
+import { farCity, nearYouCopy, openCitiesNearest, type NearSignal } from '../../lib/nothingNear'
 import { NearbyRow, WhenHeading } from '../../components/pulse/NearbyRow'
 import { LOCATION_FIX_TIMEOUT_MS, withDeadline } from '../../lib/locationFix'
 import { useLocationSharing } from '../../lib/shareLocation'
@@ -1252,6 +1253,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'undetermined')
           // Location turned off in Settings while away: the fix from before goes, and every distance with it.
           setUserLocation((current) => fixAfterPermission(status, current))
+          // …and the last-known position that orders the lap: it is a position too, sent with the Featured read.
+          setLapSeed((seed) => (status === 'granted' ? seed : null))
           return status === 'granted' ? Location.getLastKnownPositionAsync({ maxAge: FIX_MAX_AGE_MS }) : null
         })
         .then((position) => {
@@ -1352,6 +1355,47 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   }, [selection])
 
   const browsingHere = isBrowsingHere(selectedCity, deviceCity)
+
+  /*
+   * "Nothing near you yet" (pulse-map sheet 07 f3–4; the advisor's rules on SCRUM-1087). The server's near signal for the
+   * fix (`include=near`, backend round 3), read once per ~1 km. Nothing within its reach: the drawer shows the nearest open
+   * city it names (a guess, so a choice is never overridden), the map stays on you and the lap waits. "Near you" is the
+   * honest empty. Taking the map there (a lead swipe, or the distance line) is browsing it: "Back to you" (the locate) ends
+   * it. All of it is this visit's: nothing here is stored, so the next launch asks again.
+   */
+  const nearKey = sharing && userLocation ? feedKey(null, userLocation) : null
+  const [nearState, setNearState] = useState<{ key: string; near: NearSignal | null } | null>(null)
+  useEffect(() => {
+    if (!nearKey || !user || authLoading || !userLocation) return
+    let cancelled = false
+    const at = { lat: roundCoord(userLocation.latitude), lon: roundCoord(userLocation.longitude) }
+    Promise.resolve()
+      .then(() => apiClient.getEvents({ page: 1, limit: 1, ...at, include: 'near' }))
+      .then((r) => {
+        if (!cancelled) setNearState({ key: nearKey, near: r.success ? (r.data?.near ?? null) : null })
+      })
+      .catch((error) => Logger.warn('events', 'Near signal did not load', { error: String(error) }))
+    return () => {
+      cancelled = true
+    }
+    // The fix only moves the key (~1 km); the read takes the live one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearKey, user, authLoading])
+  const near = nearState?.key === nearKey ? nearState.near : null
+  const far = useMemo(() => (userLocation ? farCity({ near, available: cityOptions, selection, from: userLocation }) : null), [near, cityOptions, selection, userLocation])
+  // The far city is the guess: an inferred (or no) selection moves to it during render, as the other guesses do.
+  if (far && selection?.source !== 'chosen' && selection?.slug !== far.option.slug) setSelection(storedAt(far.option, 'inferred'))
+  const [farSide, setFarSide] = useState<'near' | 'city'>('city')
+  const [farThrough, setFarThrough] = useState(false)
+  /** On you, far from everything: the lap waits and nothing moves the map but the person. */
+  const farHere = !!far && !farThrough
+  const nearSide = farHere && farSide === 'near'
+  // Every city pick takes the map there (`cityPickAction`): from far away that is browsing it, the picker's too.
+  const [pickSeen, setPickSeen] = useState(cityPick.n)
+  if (pickSeen !== cityPick.n) {
+    setPickSeen(cityPick.n)
+    if (!cityPick.here) setFarThrough(true)
+  }
 
   /**
    * The selected city is somewhere we have no events at all.
@@ -1468,7 +1512,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const placeKey = feedKey(selectedCity, userLocation)
   // The zone too: a stored city draws before the catalogue names its zone, and the weekend asked for then was the phone's.
-  const sectionsKey = `${placeKey}|${cityZone ?? '-'}|${seedDate}|${pulls}`
+  // Where the lap is ordered from: the fix, else a recent last-known position (SCRUM-1077); Featured is asked from it.
+  const orderFrom = userLocation ?? lapSeed
+  // A seed landing before the fix asks Featured again from it (the fix itself already moves `placeKey`).
+  const sectionsKey = `${placeKey}|${userLocation ? '' : feedKey(null, lapSeed)}|${cityZone ?? '-'}|${seedDate}|${pulls}`
   const [weekendState, setWeekendState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [featuredState, setFeaturedState] = useState<{ key: string; events: Event[] | null } | null>(null)
   const [forYouState, setForYouState] = useState<{ key: string; value: { interest: { name: string; slug: string }; events: Event[] } | null } | null>(null)
@@ -1514,8 +1561,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     void Promise.all([countFor('today'), countFor('weekend')]).then(([tonight, weekendCount]) => {
       if (!cancelled) setChipCountState({ key: sectionsKey, tonight, weekend: weekendCount })
     })
-    // Request D: the city's featured events, in the server's rank order, whatever page they would be on.
-    fetchEventsApi({ page: 0, limit: FEATURED_CAP, ...where, include: 'checkins', featured: true })
+    // Request D: the city's featured events, whatever page they would be on: nearest first from the fix, else from a recent
+    // last-known position (SCRUM-1077), else in the server's rotation. The lap runs in this order; the client sorts nothing.
+    const featuredAt = { lat: roundCoord(orderFrom?.latitude), lon: roundCoord(orderFrom?.longitude) }
+    fetchEventsApi({ page: 0, limit: FEATURED_CAP, ...where, ...featuredAt, include: 'checkins', featured: true })
       .then(({ data, error }) => {
         if (cancelled) return
         if (error || !data) Logger.warn('events', 'Featured did not load', { error: error?.message })
@@ -1590,8 +1639,6 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    */
   const [leadOrder, setLeadOrder] = useState<LeadOrder>('pending')
   const [fixWaitOver, setFixWaitOver] = useState(false)
-  // Where the lap is ordered from: the fix, else a recent last-known position (SCRUM-1077).
-  const orderFrom = userLocation ?? lapSeed
   const orderMode = leadOrderMode({ permission: locationStatus, sharing, hasFix: !!orderFrom, timedOut: fixWaitOver, current: leadOrder })
   if (orderMode !== leadOrder) setLeadOrder(orderMode)
   const hasPicks = leadPicks.length > 0
@@ -1602,8 +1649,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   }, [leadOrder, hasPicks])
   const picksKey = leadPicks.map((e) => e.id).sort().join('|')
   const [frozenLead, setFrozenLead] = useState<{ key: string; ids: string[] } | null>(null)
-  if (orderMode !== 'pending' && hasPicks && frozenLead?.key !== picksKey) {
-    setFrozenLead({ key: picksKey, ids: lapOrder(leadPicks, orderMode === 'near' ? orderFrom : null).map((e) => e.id) })
+  // Nearest first is the server's answer to a read with a position, which carries distances: never frozen from one before it.
+  const picksOrdered = orderMode === 'server' || leadPicks.some((e) => typeof e.distance === 'number')
+  if (orderMode !== 'pending' && hasPicks && picksOrdered && frozenLead?.key !== picksKey) {
+    setFrozenLead({ key: picksKey, ids: leadPicks.map((e) => e.id) })
   }
   const leadEvents = useMemo(
     () => applyOrder(leadPicks, frozenLead?.key === picksKey ? frozenLead.ids : null),
@@ -1628,7 +1677,14 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   // The page on screen, and a count of swipes: each one moves the map to that venue (`focus.n`).
   const [leadAt, setLeadAt] = useState({ key: '', page: 0, swipes: 0 })
   const leadPage = leadAt.key === leadKey ? Math.min(leadAt.page, Math.max(0, leadEvents.length - 1)) : 0
-  const onLeadPage = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.swipes + 1 })), [leadKey])
+  const onLeadPage = useCallback(
+    (page: number) => {
+      // A swipe takes the map to that venue: from far away, that is browsing the city (SCRUM-1087).
+      if (farHere) setFarThrough(true)
+      setLeadAt((at) => ({ key: leadKey, page, swipes: at.swipes + 1 }))
+    },
+    [leadKey, farHere]
+  )
   // The lap moved on by itself: the venue lights where it stands, and the camera stays (no new swipe, so `focus.n` holds).
   const onLeadLight = useCallback((page: number) => setLeadAt((at) => ({ key: leadKey, page, swipes: at.key === leadKey ? at.swipes : 0 })), [leadKey])
   const leadEvent = leadEvents[leadPage] ?? null
@@ -1689,11 +1745,14 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const beyond = beyondState?.key === beyondKey ? beyondState.value : null
   const seeCity = useCallback(() => setFilters((f) => ({ ...f, radiusKm: undefined })), [])
 
+  // Back on you: a city taken to from far away is left (the map's own locate, or "Back to you" through it).
+  const leaveFarCity = useCallback(() => setFarThrough(false), [])
   // Places browses the same city from the same spot, and the map follows it (components/home/HomeShell.tsx).
   useEffect(
     () =>
       onBrowse({
-        city: selectedCity,
+        // The chip says the drawer's side from far away (board op-near, advisor 2026-11-21): a label, never a choice.
+        city: nearSide ? 'Near you' : selectedCity,
         location: userLocation,
         withDistance,
         ready: cityResolved,
@@ -1707,8 +1766,9 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
         peekLine,
         focus,
         reach,
+        onLocate: leaveFarCity,
       }),
-    [onBrowse, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
+    [leaveFarCity, onBrowse, nearSide, selectedCity, selection?.centre, userLocation, withDistance, cityResolved, browseOption, travelling, cityOptions, phoneSlug, catalogue.defaultCitySlug, cityPick, requestLocationIfNeeded, peekLine, focus, reach]
   )
 
   const firstSection = sections[0]?.key ?? null
@@ -1910,7 +1970,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
   const locationDenied = locationStatus === 'denied' && !deniedDismissed
   const placeBanners = useMemo(
     () =>
-      switchSuggestion || travel || away || locationDenied ? (
+      switchSuggestion || travel || away || far || locationDenied ? (
         <PulseBanners
           only="place"
           socketStatus={socketStatus}
@@ -1918,8 +1978,12 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           switchTo={travel ? null : switchSuggestion}
           browsing={selectedCity}
           onSwitch={(city) => bannerActions.current.chooseCity({ city }, true)}
-          away={away}
-          travel={travel}
+          // From far away the far line says it all: never "We're not in X yet" under it (SCRUM-1087).
+          away={far ? null : away}
+          travel={far ? null : travel}
+          far={far ? { city: far.option.city, km: far.km, side: farSide, through: farThrough } : null}
+          onFarSide={setFarSide}
+          onBackToYou={() => setCityPick((p) => ({ n: p.n + 1, here: true }))}
           onTravelBack={() => {
             const { chooseCity: choose, home: back, deviceCity: here } = bannerActions.current
             if (back) choose(back, sameCity(back.city, here))
@@ -1934,7 +1998,7 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
       ) : null,
     // `travel` is a new object every render: its words are what change it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, locationDenied, socketStatus, bannerActions]
+    [switchSuggestion, travel?.kind, travel?.text, travel?.back, away, far?.option.city, far?.km, farSide, farThrough, locationDenied, socketStatus, bannerActions]
   )
   /*
    * The city picker: a Sheet of the server's list; the choice is written to storage on tap, so a restart does not re-ask.
@@ -2037,7 +2101,8 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
           onPage={onLeadPage}
           onLight={onLeadLight}
           // While the order waits on a fix: the first cover, the lap not started.
-          visible={visible && orderMode !== 'pending'}
+          // …and from far away, until the map is taken to the city (SCRUM-1087).
+          visible={visible && orderMode !== 'pending' && !farHere}
           screenReader={shell?.screenReader ?? false}
           tookOver={shell?.mapTouched ?? false}
         />
@@ -2048,7 +2113,11 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
    * Under the chips, as a row of the list: the loading skeleton, the empty and failed states, the results count, the
    * lead card, Bring your friends, the sections and the "Everything else" header.
    */
-  const bodyNode = showLoadingSkeleton ? (
+  const bodyNode = nearSide && far ? (
+    <FadeInUp delay={SECTION_MOTION_BASE_DELAY}>
+      <NearYouEmpty copy={nearYouCopy(near?.reachKm ?? 25, userLocation ? openCitiesNearest(cityOptions, userLocation) : [])} />
+    </FadeInUp>
+  ) : showLoadingSkeleton ? (
     <View>
       {/*
         Shaped like the screen it stands in for, and static: the lead card and a rail (`PulseSkeleton`); a search or filter
@@ -2138,9 +2207,10 @@ function EventsInner({ onBrowse, visible, full, shell }: { onBrowse: (browse: Ho
     </View>
   )
 
-  const listData = useMemo(() => (showLoadingSkeleton ? LEAD : [...LEAD, ...rows]), [showLoadingSkeleton, rows])
+  // "Near you" from far away borrows nothing: no rows under its empty.
+  const listData = useMemo(() => (showLoadingSkeleton || nearSide ? LEAD : [...LEAD, ...rows]), [showLoadingSkeleton, nearSide, rows])
   // Not memoised: the two nodes are new elements every render, so a memo here would never hold.
-  const slots = { chips: chipsNode, body: bodyNode, scrolled: searchBarOn }
+  const slots = { chips: nearSide ? null : chipsNode, body: bodyNode, scrolled: searchBarOn }
   // A quiet week's honest end, with a way on (Canada frame): only when it is true (`quietWeekEnd`).
   const quietEnd = !isNarrowed && !!selectedCity && quietWeekEnd(events, { hasMore, now })
 

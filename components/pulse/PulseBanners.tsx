@@ -1,14 +1,17 @@
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import Animated, { LinearTransition } from 'react-native-reanimated'
 
-import { Banner } from '../ds/Banner'
+import { Banner, MapGlass } from '../ds/Banner'
+import { SegmentedControl } from '../ds/SegmentedControl'
+import { font, useBoldText } from '../ds/shared'
 import { bannerFadeIn, bannerIn, bannerOut } from '../motion/presence'
 import { RateLimitedBanner } from '../system/RateLimitedBanner'
 import RealtimeStatusBanner from '../RealtimeStatusBanner'
-import { SPACE, SPRING } from '../../lib/design/tokens'
+import { COLOR, MAX_FONT_SCALE, RADIUS, SIZE, SPACE, SPRING } from '../../lib/design/tokens'
 import type { AwayNotice } from '../../lib/city'
 import type { SocketConnectionStatus } from '../../lib/socketClient'
 import { useReducedMotion } from '../../lib/motion'
+import { farLine } from '../../lib/nothingNear'
 
 type BannersProps = {
   socketStatus: SocketConnectionStatus
@@ -23,6 +26,13 @@ type BannersProps = {
   travel?: { kind: 'browsing' | 'visiting'; text: string; back: string } | null
   onTravelBack?: () => void
   onTravelDismiss?: () => void
+  /**
+   * Outside every served city (sheet 07 f3–4, SCRUM-1087): "Nothing near you yet · Near you | In {city}", the drawer's
+   * side chosen here; once the map has been taken to the city (`through`), "Browsing {city} · Back to you" instead.
+   */
+  far?: { city: string; km: number; side: 'near' | 'city'; through: boolean } | null
+  onFarSide?: (side: 'near' | 'city') => void
+  onBackToYou?: () => void
   /** Location is denied and Nearby is not already asking. */
   locationDenied: boolean
   /** Puts the denied line away (pulse-map 06, "dismissible"). */
@@ -53,7 +63,7 @@ type BannersProps = {
  * The first-run tip is not a banner any more (it is the one-off coach mark), and a switch offer and the away notice
  * are never both: `lib/city.ts` pins that across every combination.
  */
-export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch, away, travel = null, onTravelBack = () => {}, onTravelDismiss, locationDenied, onDeniedDismiss, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout, only }: BannersProps) {
+export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch, away, travel = null, onTravelBack = () => {}, onTravelDismiss, far = null, onFarSide = () => {}, onBackToYou = () => {}, locationDenied, onDeniedDismiss, onOpenSettings, refreshFailed, rateLimit = null, onRateLimitDone, onRetry, onLayout, only }: BannersProps) {
   const reduceMotion = useReducedMotion()
   const place = only !== 'system'
   // The place banners ride on the map (`MapBanners`): there they are glass, as the board's `.mbn`.
@@ -72,6 +82,16 @@ export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch
       {place && travel ? (
         <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
           <Banner kind="info" onMap={onMap} icon="plane" text={travel.text} action={{ label: `Back to ${travel.back}`, onPress: onTravelBack }} onDismiss={onTravelDismiss} testID="pulse-travel" />
+        </Animated.View>
+      ) : null}
+      {place && far?.through ? (
+        <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
+          <Banner kind="info" onMap={onMap} text={`Browsing ${far.city}`} action={{ label: 'Back to you', onPress: onBackToYou }} testID="pulse-far-browsing" />
+        </Animated.View>
+      ) : null}
+      {place && far && !far.through ? (
+        <Animated.View entering={enter} exiting={bannerOut} style={styles.item}>
+          <NothingNearLine city={far.city} km={far.km} side={far.side} onSide={onFarSide} onMap={onMap} />
         </Animated.View>
       ) : null}
       {place && away ? (
@@ -102,6 +122,34 @@ export function PulseBanners({ socketStatus, switchTo, browsing = null, onSwitch
   )
 }
 
+/**
+ * Sheet 07 frames 3–4: "Nothing near you yet · {city}, about N km away" with Near you | In {city} on the banner's glass,
+ * composed from the DS (the banner's glass and metrics, the compact segmented control). The words are two pieces of a
+ * wrapping row, so they break only at the "·", and the switch goes under them when they need the width; never a cut name.
+ */
+function NothingNearLine({ city, km, side, onSide, onMap }: { city: string; km: number; side: 'near' | 'city'; onSide: (side: 'near' | 'city') => void; onMap: boolean }) {
+  const bold = useBoldText()
+  const line = farLine(city, km)
+  const words = [font('meta', bold), styles.farText]
+  return (
+    <View style={[styles.far, !onMap && styles.farSolid]} testID="pulse-far">
+      {onMap ? <MapGlass /> : null}
+      <View style={styles.farWords} accessible accessibilityRole="header" accessibilityLabel={`${line.status} ${line.where}`.replace(/\u00a0/g, ' ')}>
+        {/* One line each, shrinking to fit: the row breaks between them, never inside one (at AX5 "km away" wrapped). */}
+        <Text style={words} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} adjustsFontSizeToFit>
+          {line.status}
+        </Text>
+        <Text style={words} maxFontSizeMultiplier={MAX_FONT_SCALE.meta} numberOfLines={1} adjustsFontSizeToFit>
+          {line.where}
+        </Text>
+      </View>
+      <View style={styles.farSwitch}>
+        <SegmentedControl size="line" draggable={false} items={['Near you', `In ${city}`]} selected={side === 'near' ? 0 : 1} onChange={(i) => onSide(i === 0 ? 'near' : 'city')} testID="pulse-far-side" />
+      </View>
+    </View>
+  )
+}
+
 /** Where the phone is, said plainly; never "near you" for a place we do not serve (travel plan §4.4). */
 export function awayText(away: AwayNotice): string {
   return away.kind === 'comingSoon'
@@ -109,8 +157,29 @@ export function awayText(away: AwayNotice): string {
     : `We’re not in ${away.deviceCity} yet. You’re browsing ${away.selected}.`
 }
 
+/** The narrowest Near you | In {city} sits at before it goes under the words (two short labels at the default size). */
+const FAR_SWITCH_MIN = 200
+
 const styles = StyleSheet.create({
   // Each banner carries its own 8 pt below, so with none showing the bar takes no room (the lead card's rest counts on it).
   bar: {},
   item: { paddingHorizontal: SPACE.gutter, marginBottom: SPACE.sm },
+  // The banner's own on-map metrics (`Banner` styles.onMap), wrapping instead of a fixed row.
+  far: {
+    minHeight: SIZE.targetIos + SPACE.xs,
+    borderRadius: RADIUS.rowInCard,
+    paddingVertical: SPACE.xs,
+    paddingLeft: SPACE.md + SPACE.xxs,
+    paddingRight: SPACE.xs,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: SPACE.sm,
+    rowGap: SPACE.xs,
+  },
+  farSolid: { backgroundColor: COLOR.surface },
+  // A row of its own pieces: "Nothing near you yet ·" and "{city}, about N km away", side by side or one under the other.
+  farWords: { flexShrink: 1, flexDirection: 'row', flexWrap: 'wrap', columnGap: SPACE.xxs },
+  farText: { flexShrink: 1, color: COLOR.textPrimary },
+  farSwitch: { flexGrow: 1, minWidth: FAR_SWITCH_MIN },
 })

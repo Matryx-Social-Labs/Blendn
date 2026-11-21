@@ -22,18 +22,17 @@ import {
   backoffMs,
   cameraMove,
   cityPickAction,
-  insideLastCircle,
+  insideLastBox,
   liveAt,
   loadPins,
   pinsFor,
   locateTarget,
   bearingOf,
   mapPadding,
-  roundQuery,
   shouldFollowFix,
   snapRecentre,
   tiltedZoom,
-  viewportQuery,
+  viewportBox,
   panSource,
   visibleCentreY,
   type Bounds,
@@ -59,14 +58,17 @@ import {
   parseOwnBuildingsUrl,
   styleHost,
 } from '../../lib/mapStyleEmber'
-import { edgeGate, FRAME_NEAREST, frameOnYou, mapSummary, readingOf, staleCalloutBelow, youMark } from '../../lib/mapPresence'
+import { edgeGate, FRAME_NEAREST, frameOnYou, mapSummary, MORE_ZOOM_MAX, moreLine, readingOf, staleCalloutBelow, youMark } from '../../lib/mapPresence'
 import { MAP_THEME } from '../../lib/mapTheme'
 import { useReducedMotion } from '../../lib/motion'
 import { COLOR, SPACE } from '../../lib/design/tokens'
+import { barCircleBottom } from '../../lib/barGeometry'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { tint } from '../../lib/theme'
 import { distanceText, fitBounds, type NearPin } from '../../lib/placesPane'
 import { LocateButton } from './LocateButton'
 import { MapCredit } from './MapCredit'
+import { MoreLine } from './MoreLine'
 import { useScreenReader } from '../ds/shared'
 import { EventPiles } from './EventPiles'
 import { PileSpeech } from './PileSpeech'
@@ -102,15 +104,15 @@ const LIGHT: LightSpecification = { ...MAP_THEME.light, position: [...MAP_THEME.
 
 /**
  * The pin source's reads, adapted to `loadPins`. Fresh, never a cached page: a taken-over venue must not linger.
- * `viewport`: the point is where a camera looks, so it goes even with sharing off. A person's own position is never a
+ * `viewport`: the box is where a camera looks, so it goes even with sharing off. A person's own position is never a
  * viewport: it goes through the sharing gate (`toQuery`).
  */
 export const pinApiFor = (viewport: boolean) => ({
   getEvents: async (q: PinQuery & { limit: number }) => {
     const res = await apiClient.getEvents(q, { force: true, viewport })
-    return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi) } : undefined }
+    return { ...res, data: res.data ? { events: res.data.events.map(eventFromApi), pagination: res.data.pagination } : undefined }
   },
-  getVenues: (q: PinQuery & { limit: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport }),
+  getVenues: (q: PinQuery & { limit: number; lat: number; lon: number; sortBy: 'distance' }) => apiClient.getVenues(q, { force: true, viewport }),
 })
 const pinApi = pinApiFor(true)
 
@@ -125,9 +127,9 @@ async function nearestEvents(fix: { latitude: number; longitude: number }): Prom
  * MapLibre over OpenFreeMap, dark, tilted, one map-anchored light.
  *
  * - **Pins follow the segment**: events on Events, venues on Places, for the
- *   part of the map on screen (its centre and a radius reaching its corners,
- *   the same `lat`/`lon`/`radius` the lists take). No request while the view
- *   stays inside a circle fully answered; a refusal backs off, a segment switch
+ *   part of the map on screen (its box, `bbox`; venues nearest its middle
+ *   first). No request while the view
+ *   stays inside a box fully answered; a refusal backs off, a segment switch
  *   included; read again when the screen or the app comes back. Which venues
  *   exist is the server's rule; the map draws what it is sent.
  * - **Below the buildings' zoom a pin is a dot**, a venue's glow stepping with
@@ -179,6 +181,7 @@ export const HomeMap = memo(function HomeMap({
   locateLift,
   reach = null,
   onTouched,
+  onLocate,
 }: {
   center: { latitude: number; longitude: number } | null
   /** The selected city's centre (`shouldFollowCity` says when the map goes there). */
@@ -220,8 +223,11 @@ export const HomeMap = memo(function HomeMap({
   reach?: { latitude: number; longitude: number } | null
   /** The person panned, pinched or tapped the map: Featured's lap is over for the visit (pulse-map, "your touch wins"). */
   onTouched?: () => void
+  /** "My location" (the glyph, or a "Back to you" routed through `cityPick` here): the map is back on you. */
+  onLocate?: () => void
 }) {
   const { width, height } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
   /*
    * "Share location for nearby events" off: the map has no fix of its own. It opens on the city and follows only the camera the
    * person moves, so a viewport query means where they looked, never where they are (SCRUM-908). The same null as before a fix
@@ -257,7 +263,7 @@ export const HomeMap = memo(function HomeMap({
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.get() }))
   const followedFix = useRef<{ latitude: number; longitude: number } | null>(null)
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The last circle fully answered, and for which segment: a switch asks again.
+  // The last box fully answered, and for which segment: a switch asks again.
   const lastQuery = useRef<{ segment: Segment; q: PinQuery } | null>(null)
   const failures = useRef(0)
   const blockedUntil = useRef(0)
@@ -395,7 +401,8 @@ export const HomeMap = memo(function HomeMap({
    * switch shows the other segment's at once, never the old ones, and the
    * query effect below asks again for the same view.
    */
-  const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[] }>({ segment, pins: NO_PINS })
+  // `total`: the server's count in the box the pins were read for (`loadPins`), for "+N more" (sheet 16).
+  const [loaded, setLoaded] = useState<{ segment: Segment; pins: Pin[]; total: number | null }>({ segment, pins: NO_PINS, total: null })
   const [now, setNow] = useState(() => Date.now())
   const focusPin = focus?.pin ?? null
   const pins = useMemo(() => {
@@ -526,6 +533,7 @@ export const HomeMap = memo(function HomeMap({
   // "My location": back to the fix and following it again, or ask for one (dimmed until the ask settles).
   const locate = () => {
     setTouched(false)
+    onLocate?.()
     const target = locateTarget(center)
     if (!target) {
       setAsking(true)
@@ -579,7 +587,7 @@ export const HomeMap = memo(function HomeMap({
     if (near(lastMove.current?.to)) lastMove.current = null
     if (near(pendingMove.current?.to)) pendingMove.current = null
     if (touched.current) return
-    // A read pending on a fix-centred view, the circle already answered around it, and the fix followed: none survives the switch.
+    // A read pending on a fix-centred view, the box already answered around it, and the fix followed: none survives the switch.
     if (debounce.current) clearTimeout(debounce.current)
     debounce.current = null
     setQuery(null)
@@ -609,11 +617,11 @@ export const HomeMap = memo(function HomeMap({
     return () => sub.remove()
   }, [])
 
-  /** Ask for this view's pins, unless a fully answered circle holds it or a refusal is still cooling off. */
+  /** Ask for this view's pins, unless a fully answered box holds it or a refusal is still cooling off. */
   const ask = (bounds: Bounds) => {
-    const next = roundQuery(viewportQuery(bounds))
+    const next = viewportBox(bounds)
     const last = lastQuery.current?.segment === segment ? lastQuery.current.q : null
-    if (insideLastCircle(last, next) || Date.now() < blockedUntil.current) return
+    if (insideLastBox(last, next) || Date.now() < blockedUntil.current) return
     setQuery(next)
   }
 
@@ -671,9 +679,9 @@ export const HomeMap = memo(function HomeMap({
           if (stale) return
           if (result.kind === 'pins') {
             failures.current = 0
-            // A full page may not be all there is: it does not count as covering the circle (review M2).
+            // More in the box than were sent: it does not count as covering it (review M2).
             lastQuery.current = result.truncated ? null : { segment, q: query }
-            setLoaded({ segment, pins: result.pins })
+            setLoaded({ segment, pins: result.pins, total: result.total })
           } else if (result.kind === 'rate_limited') {
             failures.current += 1
             blockedUntil.current = Date.now() + backoffMs(failures.current, result.retryAfter)
@@ -758,6 +766,27 @@ export const HomeMap = memo(function HomeMap({
     setTouched(true)
     onTouched?.()
     moveTo({ to: [focusPin.longitude, focusPin.latitude], easeMs: MAP_THEME.camera.easeMs })
+  }
+  /*
+   * "+N more · Zoom in" (sheet 16, PICKED A): the box's total over the pins drawn, from the last settled read (so it holds
+   * while you pan). Not under Near me: there the map draws only your reach, and the box's total counts past it. Not with
+   * the drawer full (task 01's rule): the map is covered, so nothing of it is read or pressed under the ink; the cover
+   * fades it on the way up, and it is back once the drawer rests at half.
+   */
+  const zoomNow = view.current.zoom
+  const more = mapShown && loaded.segment === segment && !reachHere ? moreLine(loaded.total, loaded.pins.length, zoomNow < MORE_ZOOM_MAX, segment === 'places' ? 'place' : 'event') : null
+  // One step in where you are looking: your ask, so the lap is over (as the edge marker). Where you are looking is the
+  // middle of the map you can see, read off the screen: after a snap the camera's own middle is the old map's (task 02).
+  const zoomIn = () => {
+    const ref = map.current
+    if (!ref) return
+    setTouched(true)
+    onTouched?.()
+    const at = { zoom: Math.min(MORE_ZOOM_MAX, zoomNow + 1), pitch: view.current.pitch }
+    ref
+      .unproject([width / 2, visibleCentreY(padding, mapHeight)])
+      .then((middle) => moveTo({ to: middle as [number, number], easeMs: MAP_THEME.camera.easeMs, at }))
+      .catch((error) => Logger.warn('events', 'Home map could not zoom in', { error: String(error) }))
   }
 
   return (
@@ -860,6 +889,8 @@ export const HomeMap = memo(function HomeMap({
           />
       </View>
       {mapUp ? <MapCredit text={mapCreditLine(ownTiles, typeof style !== 'string')} top={topChrome + SPACE.sm} gestures={gestures} /> : null}
+      {/* Sheet 16 A: 14 pt under the bar's circles. topChrome also holds the bar's 10 pt foot, which put it 16 pt low. */}
+      <MoreLine line={more} top={barCircleBottom(insets.top, Platform.OS === 'android') + SPACE.md + SPACE.xxs} onZoomIn={zoomIn} />
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       {/* Nothing to show, or ask for, while the switch is off: not drawn at all (it is faded by the drawer, not by `visible`). */}
       {you.kind === 'approximate' ? (

@@ -154,7 +154,7 @@ describe('the sticky chips (Option C: the chips are the header)', () => {
     expect(src).toContain('const STICKY_CHIPS = [1]')
     expect(src).toContain('stickyHeaderIndices={STICKY_CHIPS}')
     expect(src).toContain("const LEAD: PulseRow[] = [{ kind: 'chips', key: 'chips' }, { kind: 'body', key: 'body' }]")
-    expect(src).toContain('showLoadingSkeleton ? LEAD : [...LEAD, ...rows]')
+    expect(src).toContain('showLoadingSkeleton || nearSide ? LEAD : [...LEAD, ...rows]')
   })
 
   it('the search is the drawer header’s, opened from an icon beside the city, never in the list', () => {
