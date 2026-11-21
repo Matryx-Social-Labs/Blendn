@@ -6,7 +6,7 @@
  * a viewport query means where they looked.
  */
 import React from 'react'
-import { act, render } from '@testing-library/react-native'
+import { act, render, screen } from '@testing-library/react-native'
 import { makeMutable } from 'react-native-reanimated'
 
 const mockStops: Array<{ center?: [number, number]; padding?: unknown; [k: string]: unknown }> = []
@@ -344,4 +344,21 @@ describe('the drawer full covers the map (SCRUM-1090)', () => {
     const view = await render(map(STALE))
     expect(view.getByTestId('map-stale', { includeHiddenElements: true })).toBeTruthy()
   })
+})
+
+/*
+ * Task 01's full-drawer rule for "+N more" (sheet 16 A, LOOKBACK 2026-11-20): the full drawer covers the map, so the
+ * capsule is not there to read or press under the ink; it is back once the drawer rests at half again.
+ */
+it('"+N more" is not drawn while the drawer is full; at half it is (the control)', async () => {
+  mockGetEvents.mockResolvedValue({ success: true, data: { events: [], pagination: { totalCount: 130 } } } as never)
+  const view = await render(map(FIX))
+  await settle()
+  expect(screen.getByTestId('map-more')).toBeTruthy()
+  await view.rerender(map(FIX, null, 90)) // full rests at the top chrome
+  await settle()
+  expect(screen.queryByTestId('map-more')).toBeNull()
+  await view.rerender(map(FIX))
+  await settle()
+  expect(screen.getByTestId('map-more')).toBeTruthy()
 })

@@ -766,10 +766,12 @@ export const HomeMap = memo(function HomeMap({
   }
   /*
    * "+N more · Zoom in" (sheet 16, PICKED A): the box's total over the pins drawn, from the last settled read (so it holds
-   * while you pan). Not under Near me: there the map draws only your reach, and the box's total counts past it.
+   * while you pan). Not under Near me: there the map draws only your reach, and the box's total counts past it. Not with
+   * the drawer full (task 01's rule): the map is covered, so nothing of it is read or pressed under the ink; the cover
+   * fades it on the way up, and it is back once the drawer rests at half.
    */
   const zoomNow = view.current.zoom
-  const more = loaded.segment === segment && !reachHere ? moreLine(loaded.total, loaded.pins.length, zoomNow < MORE_ZOOM_MAX, segment === 'places' ? 'place' : 'event') : null
+  const more = mapShown && loaded.segment === segment && !reachHere ? moreLine(loaded.total, loaded.pins.length, zoomNow < MORE_ZOOM_MAX, segment === 'places' ? 'place' : 'event') : null
   // One step in where you are looking: your ask, so the lap is over (as the edge marker).
   const zoomIn = () => {
     const centre = view.current.centre
