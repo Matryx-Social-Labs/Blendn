@@ -76,7 +76,10 @@ jest.mock('../lib/useLiveSync', () => ({
 }))
 jest.mock('../lib/board', () => ({ ...jest.requireActual('../lib/board'), BOARD_ENABLED: false }))
 jest.mock('../components/pulse/NotificationBell', () => ({ NotificationBell: () => null }))
-jest.mock('../components/RealtimeStatusBanner', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/RealtimeStatusBanner', () => {
+  const { View } = require('react-native')
+  return { __esModule: true, default: () => <View testID="mock-realtime-banner" /> }
+})
 jest.mock('../components/board/BoardRequestsSection', () => ({ BoardRequestsSection: () => null }))
 jest.mock('../components/OptimizedImage', () => ({ preloadImages: jest.fn() }))
 jest.mock('../components/Toast', () => ({ useToast: () => ({ showToast: jest.fn() }) }))
@@ -838,4 +841,25 @@ it('draws Rooms for the Lobby rooms you are in: the post’s kind, who with and 
 it('draws no Rooms section when you are in no Lobby room (an older server lists none)', async () => {
   await open()
   expect(screen.queryByText('Rooms')).toBeNull()
+})
+
+describe('the realtime banner pinned over the list (t13 drive, Android: "Updates paused" sat on the Message requests row)', () => {
+  const paddingTop = () => StyleSheet.flatten(screen.getByTestId('banter-list').props.contentContainerStyle).paddingTop as number
+  const layout = (height: number) =>
+    fireEvent(screen.getByTestId('banter-banner-slot'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } })
+
+  it('pushes the first row down by its own height while it shows, so it never covers a row', async () => {
+    await open()
+    const rest = paddingTop()
+    await act(async () => layout(56))
+    expect(paddingTop()).toBe(rest + 56)
+  })
+
+  it('negative control: gone (no banner, no height), the list sits where it always did', async () => {
+    await open()
+    const rest = paddingTop()
+    await act(async () => layout(56))
+    await act(async () => layout(0))
+    expect(paddingTop()).toBe(rest)
+  })
 })

@@ -269,11 +269,11 @@ describe('Flow 9 A (SCRUM-1075)', () => {
 
   const home = (slug: string) => api.getProfile.mockResolvedValue({ success: true, data: { profile: { push_enabled: true, homeCitySlug: slug } } } as never)
   const cities = [
-    { city: 'Thiruvananthapuram', eventCount: 3, slug: 'tvm', country: 'IN', whatsAppChannel: 'https://whatsapp.com/channel/0029Va' },
-    { city: 'Saint-Jean-sur-Richelieu', eventCount: 1, slug: 'sjr', country: 'CA', whatsAppChannel: 'https://whatsapp.com/channel/0029Vb' },
+    { city: 'Thiruvananthapuram', eventCount: 3, slug: 'tvm', country: 'IN', whatsappChannelUrl: 'https://whatsapp.com/channel/0029Va' },
+    { city: 'Saint-Jean-sur-Richelieu', eventCount: 1, slug: 'sjr', country: 'CA', whatsappChannelUrl: null },
   ]
 
-  it('an Indian home city with a channel has its WhatsApp row, which opens the channel', async () => {
+  it('a home city the server sends a channel for has its WhatsApp row, which opens the channel', async () => {
     home('tvm')
     api.getEventCities.mockResolvedValue({ success: true, data: { cities } } as never)
     const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true)
@@ -282,7 +282,7 @@ describe('Flow 9 A (SCRUM-1075)', () => {
     expect(openURL).toHaveBeenCalledWith('https://whatsapp.com/channel/0029Va')
   })
 
-  it('negative controls: a Canadian city has none, and an Indian city with no channel yet has none', async () => {
+  it('negative controls: a city with a null channel (Canada, staging) has none, and neither has an Indian one with none set', async () => {
     home('sjr')
     api.getEventCities.mockResolvedValue({ success: true, data: { cities } } as never)
     const view = await render(<Screen />)
@@ -291,7 +291,7 @@ describe('Flow 9 A (SCRUM-1075)', () => {
     expect(screen.queryByTestId('notification-settings-city')).toBeNull()
     view.unmount()
     home('tvm')
-    api.getEventCities.mockResolvedValue({ success: true, data: { cities: [{ ...cities[0], whatsAppChannel: undefined }] } } as never)
+    api.getEventCities.mockResolvedValue({ success: true, data: { cities: [{ ...cities[0], whatsappChannelUrl: null }] } } as never)
     await render(<Screen />)
     await act(async () => {})
     expect(screen.queryByTestId('notification-settings-city')).toBeNull()

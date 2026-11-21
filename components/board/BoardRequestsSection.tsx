@@ -20,7 +20,7 @@ import {
   type BoardRequest,
   type BoardRequests,
 } from '../../lib/board'
-import { publishTalkAsks } from '../../lib/inboxBadge'
+import { refreshInboxBadge } from '../../lib/inboxBadge'
 import { Logger } from '../../lib/logger'
 import { boardSafetySheet } from '../../lib/safetyUtils'
 import { showSheet } from '../../lib/sheet'
@@ -77,22 +77,14 @@ export function BoardRequestsSection({
   const [restoredId, setRestoredId] = useState<string | null>(null)
   const reduceMotion = useReducedMotion()
 
-  /** A read has landed: before it, "no asks" is not known, and the dot is not told so. */
-  const read = useRef(false)
   const apply = useCallback((result: Awaited<ReturnType<typeof apiClient.getBoardRequests>>) => {
     // A failure keeps what was drawn: these are secondary to the conversations.
     if (!result.success || !result.data) {
       Logger.warn('board', 'requests load failed', { error: result.error })
       return
     }
-    read.current = true
     setRequests(inboxRequests(result.data))
   }, [])
-  // The Banter tab's dot counts the Lobby asks waiting on you (requests placement A): once read, and as each is answered.
-  const waitingOnYou = requests.incoming.length
-  useEffect(() => {
-    if (read.current) publishTalkAsks({ lobbyAsks: waitingOnYou })
-  }, [waitingOnYou])
   const load = useCallback(
     () =>
       apiClient
@@ -167,6 +159,8 @@ export function BoardRequestsSection({
     }
 
     if (result.success) {
+      // The Banter tab's dot holds the Lobby asks waiting on you (requests placement A): the server's count, read again now.
+      if (action !== 'withdraw') void refreshInboxBadge()
       if (action === 'accept') {
         setRequests((prev) => without(prev, request.id))
         if (result.data?.conversationId) {

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 
 import { preloadImages } from '../components/OptimizedImage'
 import { useToast } from '../components/Toast'
-import { publishTalkAsks } from './inboxBadge'
+import { refreshInboxBadge } from './inboxBadge'
 import { refreshAppIconBadge } from './appBadge'
 import { apiClient } from './apiClient'
 import { CONVERSATIONS_PAGE } from './conversationsPage'
@@ -291,10 +291,6 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
   const [moreFailed, setMoreFailed] = useState<'rooms' | 'people' | null>(null)
   /** Pending message requests on the server, when it says: the count is this, not the page held. */
   const [requestsTotal, setRequestsTotal] = useState<number | null>(null)
-  // The Banter tab's dot counts the message requests waiting (requests placement A): what this list knows, it says at once.
-  useEffect(() => {
-    if (requestsTotal !== null) publishTalkAsks({ messageRequests: requestsTotal })
-  }, [requestsTotal])
   const [requestsFailed, setRequestsFailed] = useState(false)
   const [requestsLoadingMore, setRequestsLoadingMore] = useState(false)
 
@@ -895,6 +891,8 @@ export function useBanterInbox({ requestsOnly = false }: { requestsOnly?: boolea
       }
 
       Logger.info('chat', `Message request ${action}ed`, { requestId, conversationId: result.data?.conversationId })
+      // The Banter tab's dot holds the requests waiting (requests placement A): the server's count, read again now.
+      void refreshInboxBadge()
       // H.success on the server's yes (Flow 5 #05, ROUND3 F6); a decline shows nobody anything.
       if (action === 'accept') H.success()
       if (action === 'accept' && result.data?.conversationId) {

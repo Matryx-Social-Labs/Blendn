@@ -30,7 +30,7 @@ const ANDROID_FOOT = 'Each row opens that channel in your phone’s settings. '
  *
  * The master switch is the account's `push_enabled`, which the server already honours. Under "Tell me about"
  * each kind says what it covers, and they dim when push cannot arrive (the master off, or the phone blocking it).
- * "Your city" is the home city's WhatsApp Channel, India only (`CityChannelRow`). iOS shows a switch per kind only once the server sends them
+ * "Your city" is the home city's WhatsApp Channel, where the server sends one (`CityChannelRow`). iOS shows a switch per kind only once the server sends them
  * (`useNotificationPrefs`: none until then, never a switch that cannot save); Android's rows open that
  * channel in the phone's settings, which needs no server. Offers are the server's already. The switches stop
  * the push only: the bell still fills.

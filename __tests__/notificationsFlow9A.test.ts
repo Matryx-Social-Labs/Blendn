@@ -88,41 +88,71 @@ describe('repeats fold into one row with a count', () => {
   })
 })
 
-describe('a crew arrival says who is here, with a verb', () => {
-  it('two from one crew tonight: “2 from {crew} are here”', () => {
-    const rows = fresh([arrival('a', 'k1', 60), arrival('b', 'k1', 70)])
-    expect(rows).toHaveLength(1)
-    expect(rows[0].title).toBe(`2 from ${CREW} are here`)
-    expect(rows[0].context).toBe('1 h ago')
+describe('a crew arrival says who is here (the server titles it, task 12)', () => {
+  const titled = (id: string, crewId: string, minutesAgo: number, body?: string) => ({
+    ...arrival(id, crewId, minutesAgo, body),
+    display: { title: `Someone from ${CREW} is here` },
   })
 
-  it('one: “Someone from {crew} is here”; the push’s names never reach the row', () => {
-    const [row] = fresh([arrival('a', 'k1', 60, 'Asha and Ravi are in.')])
+  it('the server’s title is the row’s: “Someone from {crew} is here”', () => {
+    const [row] = fresh([titled('a', 'k1', 60, 'Asha and Ravi are in.')])
     expect(row.title).toBe(`Someone from ${CREW} is here`)
+    expect(row.context).toBe('1 h ago')
   })
 
-  it('negative control: two crews are two rows, and a plan push keeps its own words', () => {
-    const plan = arrival('p', 'k1', 30, 'Asha wants to go together. Open the crew to see the night.')
-    const rows = fresh([plan, arrival('a', 'k1', 60), arrival('b', 'k2', 70)])
-    expect(rows.map((r) => r.title)).toEqual([CREW, `Someone from ${CREW} is here`, `Someone from ${CREW} is here`])
+  it('one row per crew a night is the server’s: the client folds nothing', () => {
+    const rows = fresh([titled('a', 'k1', 60), titled('b', 'k1', 70)])
+    expect(rows.map((r) => r.id)).toEqual(['a', 'b'])
+    expect(rows[0].folded).toBeUndefined()
   })
 
-  it('a title the server sends with its own verb wins', () => {
-    const [row] = fresh([{ ...arrival('a', 'k1', 60), display: { title: 'Asha is here with Night Owls' } }])
-    expect(row.title).toBe('Asha is here with Night Owls')
+  it('negative control: with no display (an ex-member, a crew gone), the bare crew name stands; the push’s names never reach the row', () => {
+    const [row] = fresh([arrival('a', 'k1', 60, 'Asha and Ravi are in.')])
+    expect(row.title).toBe(CREW)
+  })
+
+  it('a plan push keeps its own words, even if the server titles it as an arrival (SCRUM-1098)', () => {
+    const [row] = fresh([titled('p', 'k1', 30, 'Asha wants to go together. Open the crew to see the night.')])
+    expect(row.title).toBe(CREW)
   })
 })
 
 describe('an event change says what changed', () => {
   const change = (data: Record<string, string>) =>
     rowFor(item({ id: 'c', kind: 'event_changed', title: 'Kerala Design Festival 2026', body: 'Event updated: start time, venue', data: { eventId: 'e', ...data } }), NOW)
+  const IST = 'Asia/Kolkata'
+  const time = (from: string | undefined, to: string, timeZone = IST) =>
+    change({ field: 'time', changed: 'time', reason: 'time', to, timeZone, ...(from && { from }) }).title
 
-  it('names the new value and the old one once the server sends them', () => {
-    expect(change({ field: 'time', from: '8:00 PM', to: '9:30 PM', changed: 'time' }).title).toBe('New time: 9:30 PM, was 8:00 PM')
-    expect(change({ field: 'venue', from: 'BFlat', to: 'Toit', changed: 'venue' }).title).toBe('New place: Toit')
+  it('the new time and the old, in the event’s zone, in the app’s clock grammar, no zone named', () => {
+    // 14:30Z and 16:00Z are 8 PM and 9:30 PM in Kolkata; the phone is in UTC.
+    expect(time('2026-12-01T14:30:00.000Z', '2026-12-01T16:00:00.000Z')).toBe('New time: 9:30 PM, was 8 PM')
+    expect(time('2026-12-01T23:00:00.000Z', '2026-12-02T00:30:00.000Z', 'America/Toronto')).toBe('New time: 7:30 PM, was 6 PM')
   })
 
-  it('until then, the honest words for what moved', () => {
+  it('a move to another day says the weekdays; a week or more says the dates (advisor 2026-11-21)', () => {
+    // Fri 27 Nov 8 PM → Sat 28 Nov 9:30 PM in Kolkata.
+    expect(time('2026-11-27T14:30:00.000Z', '2026-11-28T16:00:00.000Z')).toBe('New time: Sat 9:30 PM, was Fri 8 PM')
+    expect(time('2026-11-20T14:30:00.000Z', '2026-11-28T16:00:00.000Z')).toBe('New time: 28 Nov, 9:30 PM, was 20 Nov, 8 PM')
+  })
+
+  it('the day is the event city’s, not the phone’s: 23:30 IST and 00:30 IST the next day differ in Kolkata, not in UTC', () => {
+    expect(time('2026-11-27T18:00:00.000Z', '2026-11-27T19:00:00.000Z')).toBe('New time: Sat 12:30 AM, was Fri 11:30 PM')
+  })
+
+  it('negative controls: no old time, an unreadable one, or the same clock says the new time alone; an unreadable new one says “Time changed”', () => {
+    expect(time(undefined, '2026-12-01T16:00:00.000Z')).toBe('New time: 9:30 PM')
+    expect(time('soon', '2026-12-01T16:00:00.000Z')).toBe('New time: 9:30 PM')
+    expect(time('2026-12-01T16:00:20.000Z', '2026-12-01T16:00:00.000Z')).toBe('New time: 9:30 PM')
+    expect(time('2026-12-01T14:30:00.000Z', 'later')).toBe('Time changed')
+  })
+
+  it('the new place by name, never “was” (advisor: two long names do not fit two lines)', () => {
+    expect(change({ field: 'venue', from: 'Old Hall', to: 'Saint-Jean-sur-Richelieu Hall', changed: 'venue' }).title).toBe('New place: Saint-Jean-sur-Richelieu Hall')
+    expect(change({ field: 'venue', to: 'Toit', changed: 'venue' }).title).toBe('New place: Toit')
+  })
+
+  it('older rows with no field: the honest words for what moved', () => {
     expect(change({ changed: 'time' }).title).toBe('Time changed')
     expect(change({ changed: 'venue' }).title).toBe('Place changed')
     expect(change({ changed: 'time,venue' }).title).toBe('Time and place changed')
@@ -159,29 +189,48 @@ describe('a named person with no photo is their initial (personFace)', () => {
     expect(rowFor(nameless, NOW).visual).toEqual({ type: 'glyph', icon: 'user-plus' })
   })
 
-  it('a notification row for the same request takes the list’s face where the server sent none', () => {
+  it('a notification row for the same request is kept once, as the server wrote it', () => {
     const bare = item({ id: 'n1', kind: 'friend_request', data: { requestId: 'r1' } })
     const withFace = item({ id: 'n2', kind: 'friend_request', data: { requestId: 'r2' }, display: { visual: { type: 'photo', uri: 'https://x/own.jpg' } } })
     const merged = withAsks([bare, withFace], askItems([request('r1', 'Marc-André'), request('r2', 'Ravi', 'https://x/list.jpg')], []))
-    expect(merged.map((n) => rowFor(n, NOW).visual)).toEqual([
-      { type: 'initial', name: 'Marc-André' },
-      { type: 'photo', uri: 'https://x/own.jpg' },
-    ])
     expect(merged.map((n) => n.id)).toEqual(['n1', 'n2'])
+    expect(rowFor(merged[1], NOW).visual).toEqual({ type: 'photo', uri: 'https://x/own.jpg' })
   })
 
-  it('a notification row for the same request says the whole name the list has (board 01 A), not the server’s first name', () => {
-    // Seen on the sim: the server titles the row "Marc-André wants to be friends"; the board draws the whole name.
+  it('the server’s title and face for a request are the row’s (task 12: the full name, the initial)', () => {
+    const n = item({ id: 'n1', kind: 'friend_request', data: { requestId: 'r1' }, display: { title: 'Venkata Subramanian Raghunathan Krishnamurthy wants to be friends', visual: { type: 'initial', name: 'Venkata Subramanian Raghunathan Krishnamurthy' } } })
+    const [merged] = withAsks([n], askItems([request('r1', 'Venkata')], []))
+    expect(rowFor(merged, NOW).title).toBe('Venkata Subramanian Raghunathan Krishnamurthy wants to be friends')
+    expect(rowFor(merged, NOW).visual).toEqual({ type: 'initial', name: 'Venkata Subramanian Raghunathan Krishnamurthy' })
+  })
+
+  it('negative control: the list never rewrites a row the server titled', () => {
     const firstOnly = item({ id: 'n1', kind: 'friend_request', data: { requestId: 'r1' }, display: { title: 'Marc-André wants to be friends' } })
     const [merged] = withAsks([firstOnly], askItems([request('r1', 'Marc-André Lefebvre-Desrosiers')], []))
-    expect(rowFor(merged, NOW).title).toBe('Marc-André Lefebvre-Desrosiers wants to be friends')
-    expect(merged.id).toBe('n1')
+    expect(rowFor(merged, NOW).title).toBe('Marc-André wants to be friends')
+  })
+})
+
+describe('named talk-asks and crew invites (task 12 display)', () => {
+  it('a pending message request: “{full name} wants to message you”, their face, the line to where it waits', () => {
+    const row = rowFor(item({ id: 'm', kind: 'message_request', open: true, display: { title: 'प्रियंका शर्मा wants to message you', visual: { type: 'initial', name: 'प्रियंका शर्मा' } } }), NOW)
+    expect(row.title).toBe('प्रियंका शर्मा wants to message you')
+    expect(row.visual).toEqual({ type: 'initial', name: 'प्रियंका शर्मा' })
+    expect(row.context).toBe('Message requests · 5 min ago')
+    expect(row.chevron).toBe(true)
+    expect(row.actions).toEqual([])
   })
 
-  it('negative control: with no list row for the request, the server’s title stands', () => {
-    const firstOnly = item({ id: 'n1', kind: 'friend_request', data: { requestId: 'r1' }, display: { title: 'Marc-André wants to be friends' } })
-    const [merged] = withAsks([firstOnly], askItems([request('r9', 'Someone Else')], []))
-    expect(rowFor(merged, NOW).title).toBe('Marc-André wants to be friends')
+  it('negative control: an answered one has no display, and reads as the push did, glyph and all', () => {
+    const row = rowFor(item({ id: 'm', kind: 'message_request', open: false, title: 'New message request' }), NOW)
+    expect(row.title).toBe('New message request')
+    expect(row.visual).toEqual({ type: 'glyph', icon: 'message-circle' })
+  })
+
+  it('a crew invite: “Crew invite: {crew}”, with Join and Decline', () => {
+    const row = rowFor(item({ id: 'i', kind: 'crew_invite', data: { crewId: 'k1' }, display: { title: `Crew invite: ${CREW}`, context: CREW } }), NOW)
+    expect(row.title).toBe(`Crew invite: ${CREW}`)
+    expect(row.actions.map((x) => x.key)).toEqual(['join', 'decline'])
   })
 })
 
@@ -227,18 +276,19 @@ describe('a cleared screen says so in one line', () => {
   })
 })
 
-describe('the city’s WhatsApp channel (ruling 7: India only)', () => {
-  const city = (over: Partial<CityOption>): CityOption => ({ city: 'Thiruvananthapuram', eventCount: 3, country: 'IN', whatsAppChannel: 'https://whatsapp.com/channel/0029Va', ...over })
+describe('the city’s WhatsApp channel (ruling 7: the server sends it where there is one)', () => {
+  const city = (over: Partial<CityOption>): CityOption => ({ city: 'Thiruvananthapuram', eventCount: 3, country: 'IN', whatsappChannelUrl: 'https://whatsapp.com/channel/0029Va', ...over })
 
-  it('an Indian city with a channel has the row', () => {
+  it('a city with a channel has the row, whatever its country: which cities have one is data (task 12)', () => {
     expect(cityChannel(city({}))).toEqual({ city: 'Thiruvananthapuram', url: 'https://whatsapp.com/channel/0029Va' })
+    expect(cityChannel(city({ city: 'Saint-Jean-sur-Richelieu', country: 'CA' }))).toEqual({ city: 'Saint-Jean-sur-Richelieu', url: 'https://whatsapp.com/channel/0029Va' })
   })
 
-  it('negative controls: Canada has none, a city with no channel yet has none, and a link that is not WhatsApp’s is refused', () => {
-    expect(cityChannel(city({ city: 'Saint-Jean-sur-Richelieu', country: 'CA' }))).toBeNull()
-    expect(cityChannel(city({ whatsAppChannel: undefined }))).toBeNull()
-    expect(cityChannel(city({ whatsAppChannel: 'https://evil.example/channel/x' }))).toBeNull()
-    expect(cityChannel(city({ whatsAppChannel: 'http://whatsapp.com/channel/x' }))).toBeNull()
+  it('negative controls: null (staging today, Canada), absent, and a link that is not WhatsApp’s have none', () => {
+    expect(cityChannel(city({ country: 'CA', whatsappChannelUrl: null }))).toBeNull()
+    expect(cityChannel(city({ whatsappChannelUrl: undefined }))).toBeNull()
+    expect(cityChannel(city({ whatsappChannelUrl: 'https://evil.example/channel/x' }))).toBeNull()
+    expect(cityChannel(city({ whatsappChannelUrl: 'http://whatsapp.com/channel/x' }))).toBeNull()
     expect(cityChannel(null)).toBeNull()
   })
 })
