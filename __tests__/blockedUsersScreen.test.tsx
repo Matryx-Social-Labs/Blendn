@@ -12,6 +12,8 @@ const mockFetch = jest.fn()
 jest.mock('../lib/blockedUsersPage', () => ({ ...jest.requireActual('../lib/blockedUsersPage'), fetchBlockedPage: (...a: unknown[]) => mockFetch(...a) }))
 jest.mock('../lib/safetyUtils', () => ({ unblockUser: jest.fn() }))
 jest.mock('../lib/apiClient', () => ({ apiClient: {} }))
+const mockHiddenCrews = jest.fn()
+jest.mock('../lib/crewsApi', () => ({ crewsApi: { hiddenCrews: (...a: unknown[]) => mockHiddenCrews(...a), unhideCrew: jest.fn() } }))
 const mockShowSheet = jest.fn()
 jest.mock('../lib/sheet', () => ({ ...jest.requireActual('../lib/sheet'), showSheet: (...a: unknown[]) => mockShowSheet(...a) }))
 
@@ -24,9 +26,37 @@ const user = (i: number) => ({ blocked_id: `u${i}`, blocked_user_name: `Person $
 const users = (from: number, n: number) => Array.from({ length: n }, (_, i) => user(from + i))
 const ok = (list: unknown[], nextCursor: string | null = null, total: number = list.length) => ({ ok: true, page: { users: list, nextCursor, total } })
 
+const crewsAnswer = (n: number) => ({
+  success: true,
+  data: {
+    crews: Array.from({ length: n }, (_, i) => ({ crewId: `c${i}`, name: `Crew ${i}`, emblemSeed: `c${i}`, hiddenAt: '2026-11-02T10:00:00Z' })),
+    pagination: { page: 1, limit: 3, totalCount: n, totalPages: 1, hasMore: false },
+  },
+})
+
 beforeEach(() => {
   mockFetch.mockReset()
   mockShowSheet.mockReset()
+  mockHiddenCrews.mockReset()
+  mockHiddenCrews.mockResolvedValue(crewsAnswer(0))
+})
+
+it('B-A: blocked crews go first; with people too, People gets its own heading', async () => {
+  mockHiddenCrews.mockResolvedValue(crewsAnswer(2))
+  mockFetch.mockResolvedValue(ok([user(1)]))
+  await render(<BlockedUsers />)
+  expect(await screen.findByText('Crew 0')).toBeTruthy()
+  expect(screen.getByText('Person 1')).toBeTruthy()
+  expect(screen.getByText('People')).toBeTruthy()
+})
+
+it('B-A: crews blocked and nobody else: no "Nobody blocked", no People heading', async () => {
+  mockHiddenCrews.mockResolvedValue(crewsAnswer(1))
+  mockFetch.mockResolvedValue(ok([]))
+  await render(<BlockedUsers />)
+  expect(await screen.findByText('Crew 0')).toBeTruthy()
+  expect(screen.queryByText('Nobody blocked')).toBeNull()
+  expect(screen.queryByText('People')).toBeNull()
 })
 
 it('nobody blocked says so, top-aligned as Muted rooms is (D-L11)', async () => {

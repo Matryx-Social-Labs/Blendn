@@ -9,6 +9,8 @@ import { font, HueProvider, useBoldText } from '../components/ds/shared'
 import { StateScreen } from '../components/ds/StateScreen'
 import { TopBar } from '../components/ds/TopBar'
 import { PersonRow } from '../components/friends/PersonRow'
+import { SectionHeader } from '../components/ds/SectionHeader'
+import { BlockedCrews } from '../components/settings/BlockedCrews'
 import { SkeletonCircle, SkeletonLine } from '../components/Skeleton'
 import { COLOR, SIZE, SPACE, MAX_FONT_SCALE } from '../lib/design/tokens'
 import { Logger } from '../lib/logger'
@@ -55,6 +57,8 @@ function BlockedUsersContent() {
   /** The server's count: of everybody (for the Search placeholder), and of what the search found. */
   const [total, setTotal] = useState(0)
   const [found, setFound] = useState(0)
+  /** The crews you blocked (advisor B-A): their group goes first; with any, People gets its own heading and no empty state. */
+  const [crewCount, setCrewCount] = useState(0)
   const bar = useTopBarState()
   const insets = useSafeAreaInsets()
   const reduceMotion = useReducedMotion()
@@ -256,30 +260,35 @@ function BlockedUsersContent() {
           itemLayoutAnimation={reduceMotion ? undefined : rowReflow}
           data={blockedUsers}
           ListHeaderComponent={
-            total > 0 ? (
-              <View style={styles.head}>
+            <View style={styles.head}>
+              {total > 0 || crewCount > 0 ? (
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.lede]}>
                   They can’t see you or message you. They aren’t told.
                 </Text>
-                {total > BLOCKED_SEARCH_FROM ? (
-                  <SearchField
-                    value={query}
-                    onChangeText={(text) => setQuery(text.slice(0, BLOCKED_SEARCH_MAX))}
-                    placeholder={`Search ${blockedCountLine(total)}`}
-                    resultsLabel={searched ? `${found.toLocaleString('en-US')} found` : undefined}
-                    testID="blocked-search"
-                  />
-                ) : null}
-              </View>
-            ) : null
+              ) : null}
+              {searched ? null : <BlockedCrews onCount={setCrewCount} />}
+              {crewCount > 0 && total > 0 ? <SectionHeader title="People" count={total} /> : null}
+              {total > BLOCKED_SEARCH_FROM ? (
+                <SearchField
+                  value={query}
+                  onChangeText={(text) => setQuery(text.slice(0, BLOCKED_SEARCH_MAX))}
+                  placeholder={`Search ${blockedCountLine(total)}`}
+                  resultsLabel={searched ? `${found.toLocaleString('en-US')} found` : undefined}
+                  testID="blocked-search"
+                />
+              ) : null}
+            </View>
           }
           keyboardShouldPersistTaps="handled"
           keyExtractor={(item) => item.blocked_id}
           renderItem={renderBlockedUser}
           // The foot is the list's own padding: a wrapper that insets the screen cuts the scroll on a line above the home indicator.
-          contentContainerStyle={[blockedUsers.length === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
+          contentContainerStyle={[blockedUsers.length === 0 && crewCount === 0 ? styles.emptyList : styles.listContent, { paddingBottom: insets.bottom + SPACE.xl }]}
           // After the last unblock it waits for the row's fade (emptyAfterRowOut).
-          ListEmptyComponent={<Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{renderEmptyState()}</Animated.View>}
+          ListEmptyComponent={
+            // With crews blocked and nobody else, the People group is simply not there (B-A: an empty group is hidden).
+            crewCount > 0 && !searched && !failed ? null : <Animated.View entering={reduceMotion ? undefined : emptyAfterRowOut}>{renderEmptyState()}</Animated.View>
+          }
           onEndReached={onEndReached}
           onEndReachedThreshold={0.5}
           ListFooterComponent={footer}

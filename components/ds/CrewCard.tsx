@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
 import Animated, { withSpring, withTiming } from 'react-native-reanimated'
 
@@ -218,12 +219,15 @@ export function CrewRow({
   sub,
   badge,
   onPress,
+  trailing,
   testID,
 }: {
   name: string
   emblemSeed: string
   size: number
   sub?: string
+  /** A control at the row's end in the chevron's place (Settings → Blocked's Unblock). */
+  trailing?: ReactNode
   /** The crew's tier badge, drawn and read in the chevron's place. */
   badge?: AchievementKind
   onPress?: () => void
@@ -256,6 +260,8 @@ export function CrewRow({
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <AchievementBadge kind={badge} />
         </View>
+      ) : trailing ? (
+        trailing
       ) : onPress ? (
         <Icon name="chevron-right" size={ICON.control} color={COLOR.textTertiary} />
       ) : null}
