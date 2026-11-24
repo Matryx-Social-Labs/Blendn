@@ -47,6 +47,8 @@ it('Unblock is its own element to a screen reader (drive: VoiceOver could not re
   const row = screen.getByTestId('blocked-crew-orbit')
   expect(row.props.accessible).toBe(false)
   expect(StyleSheet.flatten(row.props.style).paddingHorizontal).toBe(0)
+  // A 32-character name at 360 dp / 1.3 was cut to two lines beside Unblock (drive): it wraps as far as it needs.
+  expect(screen.getByText('Orbit').props.numberOfLines).toBeUndefined()
 })
 
 it('Unblock asks first; confirming unhides it and the row goes', async () => {

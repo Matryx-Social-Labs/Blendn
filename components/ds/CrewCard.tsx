@@ -252,8 +252,8 @@ export function CrewRow({
     >
       <CrewEmblem seed={emblemSeed} size={EMBLEM.row} />
       <View style={styles.text}>
-        {/* A 32-character name takes two lines rather than "The Midnight Vin…"; the row's height is a minimum. */}
-        <Text numberOfLines={2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
+        {/* A 32-character name takes two lines rather than "The Midnight Vin…"; the row's height is a minimum. Beside a control, as many as it needs. */}
+        <Text numberOfLines={trailing ? undefined : 2} maxFontSizeMultiplier={MAX_FONT_SCALE.bodyStrong} style={[font('bodyStrong', bold), styles.ink]}>
           {name}
         </Text>
         <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: contrast ? COLOR.textPrimary : COLOR.textSecondary }]}>
