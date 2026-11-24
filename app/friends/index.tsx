@@ -37,10 +37,10 @@ import { useSkeletonCrossfade } from '../../components/motion/useSkeletonCrossfa
 /** A section's head: one capped line on a fixed height, so the list keeps `getItemLayout`. */
 const SECTION_HEAD = SIZE.tag
 
-/** Each item's length and offset, for `getItemLayout`: heads are `SECTION_HEAD`, rows `PERSON_ROW_HEIGHT`. */
-export function itemOffsets(items: readonly FriendItem[]): number[] {
+/** Each item's offset, for `getItemLayout`: heads are `SECTION_HEAD`, rows `PERSON_ROW_HEIGHT`, under whatever stands `above` them. */
+export function itemOffsets(items: readonly FriendItem[], above: number): number[] {
   const offsets: number[] = []
-  let at = 0
+  let at = above
   for (const item of items) {
     offsets.push(at)
     at += item.kind === 'head' ? SECTION_HEAD : PERSON_ROW_HEIGHT
@@ -107,11 +107,15 @@ function FriendsScreenContent() {
   const naming = az && byName.status === 'loading'
   const failed = list.status === 'failed' || (az && byName.status === 'failed')
 
+  const hasHeader = !searched && (requests.incomingTotal > 0 || list.total > 0)
   const items = useMemo(
     () => (az ? (byName.status === 'ready' ? friendItems(byName.friends, 'az', list.friends) : []) : friendItems(list.friends, 'plain')),
     [az, byName.status, byName.friends, list.friends]
   )
-  const offsets = useMemo(() => itemOffsets(items), [items])
+  // The group above the first row scrolls with the list, and `getItemLayout` counts from the top of everything that scrolls.
+  const [aboveHeight, setAboveHeight] = useState(0)
+  const above = SPACE.sm + (hasHeader ? aboveHeight : 0)
+  const offsets = useMemo(() => itemOffsets(items, above), [items, above])
   // Rows are exactly 64 only at the default size; past it they grow (DS-05) and indexing by 64 would misplace them.
   const fixedRows = usePersonRowsFixed()
   // The index down the edge, past 12 letter heads, and only while rows have their fixed height (an exact jump needs `getItemLayout`;
@@ -160,8 +164,8 @@ function FriendsScreenContent() {
 
   // Flow 7 1-A: Friend requests and Make a crew in one group above the list (they were two cards pushing the first friend down).
   const header =
-    !searched && (requests.incomingTotal > 0 || list.total > 0) ? (
-      <View style={styles.rows}>
+    hasHeader ? (
+      <View testID="friends-above" onLayout={(e) => setAboveHeight(e.nativeEvent.layout.height)} style={styles.rows}>
         <SettingsGroup>
           {requests.incomingTotal > 0 ? <RequestsRow count={requests.incomingTotal} faces={requests.incoming.slice(0, 3).map((r) => r.person)} /> : null}
           {list.total > 0 ? <MakeCrewRow /> : null}

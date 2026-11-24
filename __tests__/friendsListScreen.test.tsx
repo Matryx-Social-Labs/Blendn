@@ -11,7 +11,7 @@ import FriendsScreen from '../app/friends'
 import { friendItems, letterOf, type FriendItem } from '../lib/friendsIndex'
 import type { Friend } from '../lib/friends'
 import { FlatList, StyleSheet } from 'react-native'
-import { COLOR, SIZE } from '../lib/design/tokens'
+import { COLOR, SIZE, SPACE } from '../lib/design/tokens'
 import { noteFriendGone } from '../lib/friendsGone'
 import { PERSON_ROW_HEIGHT } from '../components/friends/PersonRow'
 import { atScale, resetScale } from './helpers/ax'
@@ -194,7 +194,7 @@ describe('1,000 friends', () => {
     const data = list().props.data as FriendItem[]
     const last = data.length - 1
     const heads = data.filter((i) => i.kind === 'head').length
-    expect(list().props.getItemLayout(null, last)).toEqual({ length: PERSON_ROW_HEIGHT, offset: PERSON_ROW_HEIGHT * (last - heads) + SIZE.tag * heads, index: last })
+    expect(list().props.getItemLayout(null, last)).toEqual({ length: PERSON_ROW_HEIGHT, offset: SPACE.sm + PERSON_ROW_HEIGHT * (last - heads) + SIZE.tag * heads, index: last })
   })
 
   it('is a windowed FlatList: a small first render and a window of seven screens, never every row', async () => {
@@ -493,6 +493,19 @@ describe('A–Z (Flow 7 1-A)', () => {
     await act(async () => fireEvent(scrubber(), 'responderMove', { nativeEvent: { pageY: 28 + 3 } }))
     expect(scroll).toHaveBeenLastCalledWith({ index: headAt('C'), animated: false })
     scroll.mockRestore()
+  })
+
+  // Seen on the iPhone (SCRUM-1099): E landed 128 short of the top, under the rows of D. The list scrolls to exactly the offset it is
+  // given, so what stands above the first row (the group, and the list's own padding) is in it. Control: offsets from 0 fail this.
+  it('a row’s offset counts what stands above the first row, so a jump lands on its head', async () => {
+    await atScale(1)
+    mockGetFriends.mockResolvedValueOnce(page(sixtyFour(), 64))
+    mockByName.mockResolvedValueOnce(named(sixtyFourByName(), 64))
+    await open()
+    const at = () => list().props.getItemLayout(null, 0).offset
+    expect(at()).toBe(SPACE.sm)
+    await act(async () => fireEvent(screen.getByTestId('friends-above'), 'layout', { nativeEvent: { layout: { x: 0, y: 8, width: 342, height: 120 } } }))
+    expect(at()).toBe(SPACE.sm + 120)
   })
 
   it('a jump to a letter not read yet reads on, a page at a time, then lands on it', async () => {
