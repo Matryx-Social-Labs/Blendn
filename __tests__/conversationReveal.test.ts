@@ -40,12 +40,12 @@ describe('revealView: Swap names (identity model, task 17 a, advisor pick A)', (
   })
 
   it('they tapped: their ask leads, with Swap names', () => {
-    expect(revealView(state({ revealRequested: true }))).toEqual({ bar: 'theirs', line: { seen: false, text: 'They want to swap' } })
+    expect(revealView(state({ revealRequested: true }))).toEqual({ bar: 'theirs', line: { seen: false, text: 'Wants to swap' } })
   })
 
   it('both tapped: the strip folds, unless the server offers Add friend', () => {
     const both = state({ youRevealed: true, theyRevealed: true })
-    expect(revealView(both)).toEqual({ bar: null, line: { seen: true, text: 'You see each other' } })
+    expect(revealView(both)).toEqual({ bar: null, line: { seen: true, text: 'Names swapped' } })
     expect(revealView(both, true).bar).toBe('both')
   })
 
@@ -158,8 +158,8 @@ it('the anonymous header line fits one line at 1.3 text on a 360 dp phone', () =
   const base = { pseudonymous: true, youRevealed: false, theyRevealed: false, revealRequested: false, displayName: 'Plover' }
   const lead = revealView({ ...base }).line?.text ?? ''
   expect(lead.length).toBeLessThanOrEqual(ANON_LINE_MAX)
-  // The other states sit in the same slot, about as short (checked on device at 1.3 / 360, task 17 drive).
-  for (const over of [{ youRevealed: true }, { revealRequested: true }]) {
-    expect((revealView({ ...base, ...over }).line?.text ?? '').length).toBeLessThanOrEqual(ANON_LINE_MAX + 2)
+  // Every state sits in the same slot. Task 17 Android drive at 1.3 / 360: "They want to swap" (17) read "They want to swa…".
+  for (const over of [{ youRevealed: true }, { revealRequested: true }, { youRevealed: true, theyRevealed: true }]) {
+    expect((revealView({ ...base, ...over }).line?.text ?? '').length).toBeLessThanOrEqual(ANON_LINE_MAX)
   }
 })

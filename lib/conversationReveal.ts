@@ -61,9 +61,9 @@ export const ANON_LINE_MAX = 16
 export function revealView(state: ConversationRevealState, friendOffered = false): RevealView {
   if (!state.pseudonymous) return { bar: null, line: null }
   // `theyRevealed` is the server's "both": a one-sided tap never sets it.
-  if (state.theyRevealed) return { bar: friendOffered ? 'both' : null, line: { seen: true, text: 'You see each other' } }
+  if (state.theyRevealed) return { bar: friendOffered ? 'both' : null, line: { seen: true, text: 'Names swapped' } }
   if (state.youRevealed) return { bar: 'mine', line: { seen: false, text: 'Waiting for them' } }
-  if (state.revealRequested) return { bar: 'theirs', line: { seen: false, text: 'They want to swap' } }
+  if (state.revealRequested) return { bar: 'theirs', line: { seen: false, text: 'Wants to swap' } }
   return { bar: 'none', line: { seen: false, text: 'Both anonymous' } }
 }
 

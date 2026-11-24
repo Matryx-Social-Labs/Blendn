@@ -189,7 +189,7 @@ describe('Swap names (identity model; board swap-names/, advisor pick A)', () =>
     await act(async () => fireEvent.press(screen.getByLabelText('Swap names')))
     await flush()
     expect(success).toHaveBeenCalledTimes(1)
-    expect(screen.getByText('You see each other')).toBeTruthy()
+    expect(screen.getByText('Names swapped')).toBeTruthy()
     expect(screen.queryByLabelText('Swap names')).toBeNull()
   })
 
@@ -213,7 +213,7 @@ describe('Swap names (identity model; board swap-names/, advisor pick A)', () =>
     await act(async () => fireEvent.press(screen.getByLabelText('Cancel your swap')))
     await flush()
     expect(screen.queryByText('You have already swapped names')).toBeNull()
-    expect(screen.getByText('You see each other')).toBeTruthy()
+    expect(screen.getByText('Names swapped')).toBeTruthy()
   })
 
   it('no photo yet: the Not yet sheet in the server’s words, with Add a photo; any other refusal is said in the strip', async () => {
@@ -233,7 +233,7 @@ describe('Swap names (identity model; board swap-names/, advisor pick A)', () =>
   it('both swapped: no strip, the line says so, and the header is never their profile', async () => {
     api.getConversation.mockResolvedValue({ success: true, data: named } as never)
     await open()
-    expect(screen.getByText('You see each other')).toBeTruthy()
+    expect(screen.getByText('Names swapped')).toBeTruthy()
     expect(screen.queryByLabelText('Swap names')).toBeNull()
     // The name is a first name in this chat only: nothing to open.
     expect(screen.queryByRole('button', { name: 'Mika' })).toBeNull()
@@ -343,7 +343,7 @@ describe('the reveal panel folds away (drive: it stayed over the thread on Andro
     await touch()
     await flush()
     expect(screen.queryByLabelText('Swap names')).toBeNull()
-    expect(screen.getByText('You see each other')).toBeTruthy()
+    expect(screen.getByText('Names swapped')).toBeTruthy()
   })
 })
 
