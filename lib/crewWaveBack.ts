@@ -41,7 +41,7 @@ async function readHiddenCrewIds(): Promise<ReadonlySet<string> | null> {
   return null
 }
 
-/** The crews you blocked, for a crew chat (`enabled`): read each time the chat takes focus. Null until the whole list is known. */
+/** The crews you blocked, for a chat with a crew's wave in it (`enabled`): read each time it takes focus. Null unless the whole list is known. */
 export function useHiddenCrewIds(enabled: boolean): ReadonlySet<string> | null {
   const [ids, setIds] = useState<ReadonlySet<string> | null>(null)
   useFocusEffect(
@@ -49,11 +49,12 @@ export function useHiddenCrewIds(enabled: boolean): ReadonlySet<string> | null {
       if (!enabled) return
       let live = true
       void readHiddenCrewIds().then((next) => {
-        // A failed re-read keeps the last list that was read whole.
-        if (live && next) setIds(next)
+        if (live) setIds(next)
       })
       return () => {
         live = false
+        // Unknown again until the next focus reads it: a block made elsewhere must not miss this list.
+        setIds(null)
       }
     }, [enabled])
   )
@@ -64,6 +65,9 @@ export function useHiddenCrewIds(enabled: boolean): ReadonlySet<string> | null {
 const CREW_WAVED = /waved at (your|the) crew$/
 const isSystemLine = (m: Pick<RoomMessage, 'message_type' | 'message_text'>, pattern: RegExp) => m.message_type === 'system' && pattern.test(m.message_text.trim())
 export const isCrewWavedLine = (m: Pick<RoomMessage, 'message_type' | 'message_text' | 'crewWave'>): boolean => !!m.crewWave || isSystemLine(m, CREW_WAVED)
+
+/** A crew's wave (not a person's): the line a block hides. */
+export const isCrewsWave = (m: Pick<RoomMessage, 'crewWave'>): boolean => !!m.crewWave && 'fromCrewId' in m.crewWave
 
 /**
  * Advisor Q2: a blocked crew's `crew_waved` line is not drawn. Fails closed: with the list unknown (`null`), or the line

@@ -128,6 +128,16 @@ describe('a crew you blocked draws no notice (advisor Q2), and it fails closed',
     await waitFor(() => expect([...(result.current ?? [])]).toEqual(['c1', 'c2']))
     expect(api.hiddenCrews.mock.calls).toEqual([[1, 50], [2, 50]])
   })
+  it('a re-read that fails makes a known list unknown again, never yesterday’s', async () => {
+    api.hiddenCrews.mockResolvedValueOnce(pageOf(['c1'], false)).mockResolvedValue({ success: false, error: 'x' } as never)
+    const { result, rerender } = await renderHook(({ on }: { on: boolean }) => useHiddenCrewIds(on), { initialProps: { on: true } })
+    await waitFor(() => expect(result.current?.has('c1')).toBe(true))
+    await rerender({ on: false })
+    expect(result.current).toBeNull()
+    await rerender({ on: true })
+    await waitFor(() => expect(api.hiddenCrews).toHaveBeenCalledTimes(2))
+    expect(result.current).toBeNull()
+  })
   it('a later page that fails leaves it unknown', async () => {
     api.hiddenCrews.mockResolvedValueOnce(pageOf(['c1'], true)).mockResolvedValueOnce({ success: false, error: 'x' } as never)
     const { result } = await renderHook(() => useHiddenCrewIds(true))
