@@ -188,7 +188,7 @@ export function RevealBar({
           {state === 'mine' ? line('Waiting for them to swap too', 'waiting') : null}
           {state === 'theirs' ? line(`${them.name} wants to swap names`, 'theirs') : null}
           {state === 'mine' ? (
-            <Button kind="secondary" size="md" onGlass label="Cancel" loading={busy} onPress={onCancel} testID={testID && `${testID}-cancel`} />
+            <Button kind="secondary" size="md" onGlass label="Cancel" accessibilityLabel="Cancel your swap" loading={busy} onPress={onCancel} testID={testID && `${testID}-cancel`} />
           ) : (
             swap
           )}
