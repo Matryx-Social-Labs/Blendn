@@ -1372,6 +1372,8 @@ export interface PublicProfile {
   user_id?: string
   email?: string
   name?: string
+  /** Sent exactly when `name` is a room pseudonym (admin #998, SCRUM-1046); read through `roomNameFrom`. */
+  pseudonym?: string
   display_name?: string
   image?: string
   age?: number
@@ -4013,8 +4015,9 @@ class ApiClientClass {
    * list. `q` (1-40 characters) keeps the friends a word of whose name starts with it, and `count` is then the filtered total; a
    * server that does not know `q` ignores it (`localSearch`).
    */
-  async getFriends(cursor?: string | null, q?: string | null): Promise<ApiResponse<FriendsPayload>> {
-    const more = `${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+  /** `order: 'name'` is the A–Z (admin #998): the server's name order with `letters`, the whole list's heads, on every page. */
+  async getFriends(cursor?: string | null, q?: string | null, order?: 'name'): Promise<ApiResponse<FriendsPayload>> {
+    const more = `${order ? `&order=${order}` : ''}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}${q ? `&q=${encodeURIComponent(q)}` : ''}`
     return this.queuedRequest(`/api/mobile/friends?limit=${LIST_PAGE.friends}${more}`)
   }
 

@@ -78,18 +78,15 @@ export function profileIdentity(
 }
 
 /**
- * The person's pseudonym in the room a handle names, from `GET /users/:handle`'s own answer (`data`, null when that
- * read failed). Asked by a room handle, the server answers in that room's terms: for somebody still anonymous to you
- * its `name` is the pseudonym there (admin `users/[userId]/route.ts`, `roomPseudonymOf`). Only that field of that
- * answer: never `display_name`, never the `/profiles/:id` fallback, never a real id's answer (the flat "Attendee", or
- * whatever a buggy route sent). A placeholder ("Attendee": a DM's handle, an erased member) is no name.
+ * The person's pseudonym in the room a handle names, from `GET /users/:handle`'s own answer (`data`, null when that read
+ * failed): its `pseudonym`, which the server sends exactly when the card's name IS a room pseudonym (admin #998,
+ * SCRUM-1046) and leaves out for a named card, a crew card or somebody with none there. Never `name` or `display_name`,
+ * never the `/profiles/:id` fallback, never a real id's answer.
  */
-export function roomNameFrom(
-  ref: string,
-  data: { name?: unknown; display_name?: unknown; identityVisible?: unknown } | null | undefined
-): string | null {
-  if (!isHandle(ref) || !data || data.identityVisible === true || typeof data.name !== 'string') return null
-  return markSeed(data.name, '') || null
+export function roomNameFrom(ref: string, data: object | null | undefined): string | null {
+  const pseudonym = (data as { pseudonym?: unknown } | null | undefined)?.pseudonym
+  if (!isHandle(ref) || typeof pseudonym !== 'string') return null
+  return markSeed(pseudonym, '') || null
 }
 
 type WorkFieldList = { slug: string; label: string }[]

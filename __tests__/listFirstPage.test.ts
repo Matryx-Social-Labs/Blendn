@@ -54,20 +54,22 @@ describe('the first page of each paged list carries its limit', () => {
 
 describe('a block takes the person out of the pages Friends kept (M5)', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { takeFriendsGone } = require('../lib/friendsGone') as typeof import('../lib/friendsGone')
+  const { friendsGoneMark, friendsGoneSince } = require('../lib/friendsGone') as typeof import('../lib/friendsGone')
   afterEach(() => jest.restoreAllMocks())
 
   it('blockUser notes them once the server says yes, from whichever screen it was called', async () => {
-    takeFriendsGone()
+    const mark = friendsGoneMark()
     jest.spyOn(apiClient, 'queuedRequest').mockResolvedValue({ success: true, data: { blocked: true } } as never)
     await apiClient.blockUser('u_ana')
-    expect([...takeFriendsGone()]).toEqual(['u_ana'])
+    expect([...friendsGoneSince(mark).gone]).toEqual(['u_ana'])
+    // Every reader has its own mark: a second list reading from the same point sees them too (Friends' A–Z and its head).
+    expect([...friendsGoneSince(mark).gone]).toEqual(['u_ana'])
   })
 
   it('a block the server refused notes nobody', async () => {
-    takeFriendsGone()
+    const mark = friendsGoneMark()
     jest.spyOn(apiClient, 'queuedRequest').mockResolvedValue({ success: false, error: 'no' } as never)
     await apiClient.blockUser('u_ana')
-    expect(takeFriendsGone().size).toBe(0)
+    expect(friendsGoneSince(mark).gone.size).toBe(0)
   })
 })

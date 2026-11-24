@@ -21,8 +21,8 @@ export const REQUEST_ROW_HEIGHT = 68
 
 /**
  * Somebody asking to be your friend (Flow 7 4-A): a 68 pt row, the face, the name on one line, and under it where the request came
- * from and how long it has waited ("From your link · 2m"). The source is said only when the server says it (`via`, ROADMAP §
- * Backend later): until then the line is the age alone, never a guess ("Opened your link" was wrong for every match).
+ * from and how long it has waited ("From your link · 2m"). The source is said only when the server says it (`via`, admin #998):
+ * a request from before the source was recorded (`null`) has the age alone, never a guess ("Opened your link" was wrong for every match).
  *
  * On the right, Not now (the glass ×) and Accept (the lit button). The board draws Accept as an icon-only lit disc, which no DS
  * kind gives yet (the button audit is pending), so it is the board's small lit Accept. While this row's answer is in flight

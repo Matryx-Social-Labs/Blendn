@@ -156,7 +156,7 @@ function UserProfileInner() {
    * The params still title the page, so the name and the creature match the
    * card that opened it from the first paint, before the server answers.
    * Without them (a cold link, Room info) the handle's answer titles the page
-   * (SCRUM-1046), and only that read's own `name` (`roomNameFrom`): nothing
+   * (SCRUM-1046), and only that read's own `pseudonym` (`roomNameFrom`): nothing
    * else here trusts a name for somebody `identityVisible` withholds. Asked
    * by a real id with no room, the server still says "Attendee", which this
    * page never shows (`lib/profileIdentity.ts`).

@@ -166,26 +166,29 @@ describe('the attendee profile fails closed', () => {
    * failed read or a real id. With no trusted source the page fails closed to "Someone".
    */
   describe('the room pseudonym the server sends (SCRUM-1046)', () => {
-    const roomAnswer = { name: 'Cosmic Panda', age: 29, identityVisible: false }
+    // Admin #998: `pseudonym` is sent exactly when `name` IS a room pseudonym; the page reads that field, never `name`.
+    const roomAnswer = { name: 'Cosmic Panda', pseudonym: 'Cosmic Panda', age: 29, identityVisible: false }
 
-    it('is read from a successful handle read’s `name`', () => {
+    it('is read from the answer’s `pseudonym`', () => {
       expect(roomNameFrom('rh_abc', roomAnswer)).toBe('Cosmic Panda')
     })
 
-    it('is never read from `display_name`', () => {
+    it('is never read from `name` or `display_name`: a name with no `pseudonym` is no room name', () => {
+      // Negative control: the old rule read `name` off a handle's answer.
+      expect(roomNameFrom('rh_abc', { name: 'Cosmic Panda', identityVisible: false })).toBeNull()
       expect(roomNameFrom('rh_abc', { display_name: 'Ben Okafor', identityVisible: false })).toBeNull()
-      expect(roomNameFrom('rh_abc', { name: '', display_name: 'Ben Okafor', identityVisible: false })).toBeNull()
+      expect(roomNameFrom('rh_abc', { name: 'Attendee', identityVisible: false })).toBeNull()
     })
 
-    it('is nothing when the handle read failed', () => {
+    it('is nothing when the read failed or the pseudonym is blank or not a string', () => {
       expect(roomNameFrom('rh_abc', null)).toBeNull()
       expect(roomNameFrom('rh_abc', undefined)).toBeNull()
+      expect(roomNameFrom('rh_abc', { pseudonym: '  ' })).toBeNull()
+      expect(roomNameFrom('rh_abc', { pseudonym: 7 })).toBeNull()
     })
 
-    it('is nothing for a real id, a placeholder, or somebody already shown to you', () => {
-      expect(roomNameFrom('cmb0realid', { name: 'Ben', identityVisible: false })).toBeNull()
-      expect(roomNameFrom('rh_dm', { name: 'Attendee', identityVisible: false })).toBeNull()
-      expect(roomNameFrom('rh_abc', { name: 'Ben', identityVisible: true })).toBeNull()
+    it('is nothing for a real id, whatever it carries', () => {
+      expect(roomNameFrom('cmb0realid', { name: 'Ben', pseudonym: 'Cosmic Panda', identityVisible: false })).toBeNull()
     })
 
     it('titles the page, over the profile’s own name', () => {

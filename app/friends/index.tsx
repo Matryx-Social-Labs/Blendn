@@ -21,7 +21,7 @@ import { SettingsGroup } from '../../components/ds/SettingsRow'
 import { RequestsRow } from '../../components/friends/RequestsRow'
 import { friendsSinceParts, type Friend } from '../../lib/friends'
 import { CHAT_FAILED, openFriendChat } from '../../lib/friendChat'
-import { friendItems, indexForLetter, letterHeads, listMode, SCRUBBER_FROM, scrubberLetters, type FriendItem } from '../../lib/friendsIndex'
+import { friendItems, headFor, headIndex, listMode, SCRUBBER_FROM, scrubberLetters, type FriendItem } from '../../lib/friendsIndex'
 import { useAuth } from '../../lib/useAuth'
 import { useFriendInvite } from '../../lib/useFriendInvite'
 import { groupedCount } from '../../lib/friendsHere'
@@ -57,12 +57,15 @@ export function itemOffsets(items: readonly FriendItem[]): number[] {
  * crew from the list once there is anybody to make one with.
  *
  * Read a page at a time by the server's cursor and windowed (fixed 64 pt rows and 32 pt sticky heads, `getItemLayout`), so a
- * thousand friends cost a screenful. Past a screenful, up to `ALL_AT_ONCE`, every page is read and the list is Recently added, then A–Z
- * with an index down the edge (`lib/friendsIndex`); past that it stays newest first. The count under the title is the server's whole list, drawn once it is more than one page: a short
- * list is visibly all of itself.
+ * thousand friends cost a screenful. Past a screenful the list is Recently added (the newest page's first five), then the server's
+ * A–Z (`GET /friends?order=name`, admin #998) a page at a time, with an index down the edge from the whole list's `letters`
+ * (`lib/friendsIndex`). The count under the title is the server's whole list, drawn once it is more than one page: a short list
+ * is visibly all of itself.
  */
 function FriendsScreenContent() {
   const list = useFriendsList()
+  // The A–Z, read only once the list is long enough to have sections (`az`).
+  const byName = useFriendsList('name')
   const arrive = useSkeletonCrossfade(list.status === 'loading')
   const [refreshing, setRefreshing] = useState(false)
   const requests = useFriendRequests()
@@ -70,47 +73,77 @@ function FriendsScreenContent() {
   const insets = useSafeAreaInsets()
   const offline = useOffline()
 
+  const searched = list.searched !== null
+  const mode = listMode(list.allTotal, searched)
+  const az = mode === 'az'
+  const azNow = useRef(az)
+  useEffect(() => {
+    azNow.current = az
+  }, [az])
+
   // On focus: coming back from a profile you just unfriended should not show them. The head is read again, the pages read further stay.
   useFocusEffect(
     useCallback(() => {
       void list.refresh('merge')
-    }, [list.refresh]) // eslint-disable-line react-hooks/exhaustive-deps -- `refresh` is stable; `list` is a new object each render
+      if (azNow.current) void byName.refresh('merge')
+    }, [list.refresh, byName.refresh]) // eslint-disable-line react-hooks/exhaustive-deps -- `refresh` is stable; `list` is a new object each render
   )
+  // The list just grew long enough for sections (or opened that long): its A–Z is read for the first time.
+  useEffect(() => {
+    if (az && byName.status === 'loading') void byName.refresh('merge')
+  }, [az]) // eslint-disable-line react-hooks/exhaustive-deps -- only when the mode turns to A–Z
 
   const onRefresh = async () => {
     setRefreshing(true)
-    await Promise.all([list.refresh('replace'), requests.load()])
+    await Promise.all([list.refresh('replace'), azNow.current ? byName.refresh('replace') : null, requests.load()])
     setRefreshing(false)
   }
   // The branded pull (motion #18); the bar's own scroll handler rides inside it.
   const pull = usePullToRefresh({ refreshing, onRefresh: () => void onRefresh(), onScroll: bar.scrollProps.onScroll })
 
   const openAdd = () => router.push('/friends/add')
-  const failed = list.status === 'failed'
+  // What scrolls: the A–Z's pages, or the plain list (a short one, or a search).
+  const shown = az ? byName : list
+  const naming = az && byName.status === 'loading'
+  const failed = list.status === 'failed' || (az && byName.status === 'failed')
 
-  const searched = list.searched !== null
-  const mode = listMode(list.allTotal, searched)
-  // A–Z needs every page first (the server pages newest first): until the last lands the rows are the skeleton, never a list that
-  // would reshuffle under the finger as each page filed its names in (`ALL_AT_ONCE`).
-  const completing = mode === 'az' && list.hasMore
-  useEffect(() => {
-    if (completing && !list.loadingMore && !list.moreFailed) void list.loadMore()
-  }, [completing, list.loadingMore, list.moreFailed, list.friends.length]) // eslint-disable-line react-hooks/exhaustive-deps -- `loadMore` is stable; `list` is a new object each render
-  const items = useMemo(() => friendItems(list.friends, mode), [list.friends, mode])
+  const items = useMemo(
+    () => (az ? (byName.status === 'ready' ? friendItems(byName.friends, 'az', list.friends) : []) : friendItems(list.friends, 'plain')),
+    [az, byName.status, byName.friends, list.friends]
+  )
   const offsets = useMemo(() => itemOffsets(items), [items])
   // Rows are exactly 64 only at the default size; past it they grow (DS-05) and indexing by 64 would misplace them.
   const fixedRows = usePersonRowsFixed()
   // The index down the edge, past 12 letter heads, and only while rows have their fixed height (an exact jump needs `getItemLayout`;
   // at the large sizes the heads are still headers, which a screen reader's heading navigation walks).
-  const letters = useMemo(() => (mode === 'az' && fixedRows && letterHeads(items) > SCRUBBER_FROM ? scrubberLetters(items) : null), [mode, fixedRows, items])
+  const heads = byName.letters
+  const letters = useMemo(() => (az && fixedRows && heads && heads.length > SCRUBBER_FROM ? scrubberLetters(heads) : null), [az, fixedRows, heads])
   const listRef = useRef<FlatList<FriendItem>>(null)
-  const jumpTo = (letter: string) => {
-    if (!letters) return
-    const index = indexForLetter(items, letters, letter)
-    // `ListHeaderComponent` sits above index 0, so ★ (the top) scrolls to the very top rather than to Recently added under it.
-    if (index === 0) listRef.current?.scrollToOffset({ offset: 0, animated: false })
-    else listRef.current?.scrollToIndex({ index, animated: false })
+  // The head a scrubber letter asked for whose page has not been read yet.
+  const seeking = useRef<string | null>(null)
+  /** Jumps to the sought head, or reads the next page on the way to it. */
+  const seek = () => {
+    if (!seeking.current) return
+    const index = headIndex(items, seeking.current)
+    if (index >= 0) {
+      listRef.current?.scrollToIndex({ index, animated: false })
+      seeking.current = null
+    } else if (!byName.hasMore || byName.moreFailed) seeking.current = null
+    else if (!byName.loadingMore) void byName.loadMore()
   }
+  const jumpTo = (letter: string) => {
+    if (!letters || !heads) return
+    seeking.current = letter === '★' ? null : headFor(letters, letter, heads)
+    // `ListHeaderComponent` sits above index 0, so ★ (the top) scrolls to the very top rather than to Recently added under it.
+    if (letter === '★') listRef.current?.scrollToOffset({ offset: 0, animated: false })
+    else seek()
+  }
+  /*
+   * A head on a page not read yet: the pages before it are read, one at a time, until it lands; then the list jumps there.
+   * ponytail: a jump to the far end of thousands of friends reads every page on the way (100 a page).
+   * Upgrade path: read from the letter (`from=`) and fill the pages above it as they scroll into view.
+   */
+  useEffect(seek, [items, byName.hasMore, byName.loadingMore, byName.moreFailed]) // eslint-disable-line react-hooks/exhaustive-deps -- runs as each page lands; `seek` reads the render it is made in
   const empty = failed ? (
     <StateScreen
       icon="cloud-off"
@@ -169,11 +202,10 @@ function FriendsScreenContent() {
       ) : null}
       {/* No friends to scroll: the rows that stand above them stand above the empty state too. */}
       {list.friends.length ? null : header}
-      {list.status === 'loading' || completing ? (
+      {list.status === 'loading' || naming ? (
         <>
-          {completing ? header : null}
+          {naming ? header : null}
           <PersonRowSkeleton />
-          {completing && list.moreFailed ? <PagedFooter loading={false} failed onRetry={() => void list.loadMore()} testID="friends-more" /> : null}
         </>
       ) : (
         <Animated.View entering={arrive} style={styles.flex}>
@@ -187,14 +219,14 @@ function FriendsScreenContent() {
             // The heads stick under the bar; `ListHeaderComponent` (when drawn) is index 0 to the list, so they shift by one.
             stickyHeaderIndices={items.flatMap((item, i) => (item.kind === 'head' ? [i + (list.friends.length && header ? 1 : 0)] : []))}
             onEndReachedThreshold={1.5}
-            onEndReached={() => void list.loadMore()}
+            onEndReached={() => void shown.loadMore()}
             initialNumToRender={12}
             windowSize={7}
             removeClippedSubviews
             contentContainerStyle={[list.friends.length ? styles.list : searched || failed ? styles.emptyList : styles.emptyTop, { paddingBottom: insets.bottom + SPACE.xl }]}
             ListHeaderComponent={list.friends.length ? header : null}
             ListEmptyComponent={empty}
-            ListFooterComponent={<PagedFooter loading={list.loadingMore} failed={list.moreFailed} onRetry={() => void list.loadMore()} testID="friends-more" />}
+            ListFooterComponent={<PagedFooter loading={shown.loadingMore} failed={shown.moreFailed} onRetry={() => void shown.loadMore()} testID="friends-more" />}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}

@@ -138,13 +138,22 @@ describe('IncomingRequestRow (D-M5, D-LM2)', () => {
   })
 
   /*
-   * Flow 7 4-A: the source only when the server says it (`via`, ROADMAP § Backend later). Today's server sends none, and the old
+   * Flow 7 4-A: the source only when the server says it (`via`, admin #998). Requests from before it read `null`, and the old
    * line ("Opened your link") was wrong for every request from a match. Negative control: the old constant line fails the first.
    */
   it('says no source when the server sends none: the line is the age alone', async () => {
     await at(402, 1)
     await render(<IncomingRequestRow request={request} busy={false} onRespond={jest.fn()} />)
     expect(screen.queryByText(/From your link|From a match|Opened your link/)).toBeNull()
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^\S+$/)
+  })
+
+  it('says no source for a request older than the source (`via: null`) or a source this build does not know', async () => {
+    await at(402, 1)
+    // Admin #998: `null` = asked before the source was recorded. Never a guess.
+    await render(<IncomingRequestRow request={{ ...request, via: null }} busy={false} onRespond={jest.fn()} />)
+    expect(screen.getByTestId('request-line')).toHaveTextContent(/^\S+$/)
+    await render(<IncomingRequestRow request={{ ...request, via: 'qr' as unknown as 'link' }} busy={false} onRespond={jest.fn()} />)
     expect(screen.getByTestId('request-line')).toHaveTextContent(/^\S+$/)
   })
 
