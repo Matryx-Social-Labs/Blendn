@@ -261,7 +261,7 @@ function BlockedUsersContent() {
           data={blockedUsers}
           ListHeaderComponent={
             <View style={styles.head}>
-              {total > 0 || crewCount > 0 ? (
+              {total > 0 ? (
                 <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.lede]}>
                   They can’t see you or message you. They aren’t told.
                 </Text>

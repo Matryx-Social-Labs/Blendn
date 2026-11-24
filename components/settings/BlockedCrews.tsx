@@ -121,7 +121,7 @@ export function BlockedCrews({ onCount }: { onCount?: (count: number) => void })
           emblemSeed={crew.emblemSeed}
           size={0}
           sub={`Crew · blocked ${calendarDate(crew.hiddenAt)}`.trim()}
-          trailing={<Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${crew.name}`} onPress={() => unblock(crew)} />}
+          trailing={<Button kind="secondary" size="sm" label="Unblock" accessibilityLabel={`Unblock ${crew.name}`} onPress={() => unblock(crew)} style={styles.centred} />}
           testID={`blocked-crew-${crew.crewId}`}
         />
       ))}
@@ -133,6 +133,7 @@ export function BlockedCrews({ onCount }: { onCount?: (count: number) => void })
 }
 
 const styles = StyleSheet.create({
+  centred: { alignSelf: 'center' },
   group: { gap: SPACE.xs, paddingBottom: SPACE.md },
   quiet: { color: COLOR.textSecondary },
   pressed: { opacity: OPACITY.pressed },

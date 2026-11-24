@@ -1,5 +1,5 @@
 import { useRef, type ComponentRef } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 
 import { COLOR, FONT_FAMILY, MAX_FONT_SCALE, RADIUS, SPACE } from '../../lib/design/tokens'
 import { crewBadge, tagText, type CrewCard } from '../../lib/crews'
@@ -52,7 +52,7 @@ export function CrewSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} focusRef={head} testID="crew-sheet">
-      <ScrollView contentContainerStyle={styles.body}>
+      <View style={styles.body}>
         <View ref={head} accessible accessibilityRole="header" accessibilityLabel={`${card.name}, ${line}`} style={styles.head}>
           <CrewEmblem seed={card.emblemSeed} size={EMBLEM} />
           <Title style={[styles.ink, styles.center]}>{card.name}</Title>
@@ -82,7 +82,7 @@ export function CrewSheet({
             { key: 'report', label: 'Report this crew', onPress: onReport },
           ]}
         />
-      </ScrollView>
+      </View>
     </Sheet>
   )
 }
