@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { broadcastParts } from '../../lib/chatFeed'
 import { crewLikeLine } from '../../lib/crews'
-import type { WaveBackOutcome } from '../../lib/crewWaveBack'
+import { isCrewWavedLine, type WaveBackOutcome } from '../../lib/crewWaveBack'
 import { CrewWavedNotice } from './CrewWavedNotice'
 
 import { goneKindFor } from '../../lib/chatGone'
@@ -26,8 +26,6 @@ import { RoomPoll } from './RoomPoll'
 import { chatHeaderBottom } from './ChatHeader'
 import { opensInSpoken } from '../../lib/preEventRoom'
 
-/** A live `crew_waved` line: the socket sends no metadata, so it is known by its words and drawn without the action. */
-const CREW_WAVED = /waved at (your|the) crew$/
 
 /** The poll's host as the server names them; the client's own stand-ins for no name are not a name. */
 const pollHost = (name: string) => (name && name !== 'Attendee' && name !== 'You' && name !== 'System' ? name : undefined)
@@ -112,7 +110,7 @@ export const RoomMessageRow = memo(function RoomMessageRow({
   const runStart = afterChips ? styles.runStartAfterChips : styles.runStart
   if (item.sender_id === 'system') return <SystemLine text={item.message_text} />
   // Another crew (or a person) waved at this crew: a notice with Wave back, never a bubble (advisor L-A).
-  if (item.message_type === 'system' && (item.crewWave || CREW_WAVED.test(item.message_text.trim()))) {
+  if (isCrewWavedLine(item)) {
     const answer = item.crewWave ? handlers.crewWaveBack : undefined
     return (
       <View testID={`row-${item.message_id}`} style={runStart}>

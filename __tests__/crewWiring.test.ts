@@ -69,3 +69,11 @@ describe('the surfaces are wired', () => {
     expect(room).toContain('data={crewsView ? props.crewCards : people}')
   })
 })
+
+describe('a blocked crew’s wave never reaches the crew chat (task 17 b1)', () => {
+  const chat = require('fs').readFileSync(require('path').join(__dirname, '../components/chat/RoomChat.tsx'), 'utf8') as string
+  it('the feed is filtered for a crew’s room, and a live wave line reads the history for who it was', () => {
+    expect(chat).toContain("roomKind === 'crew' ? withoutBlockedCrews(shown, hiddenCrews) : shown")
+    expect(chat).toContain('if (fresh && isCrewWavedLine(incoming)) void loadMessagesRef.current(true)')
+  })
+})

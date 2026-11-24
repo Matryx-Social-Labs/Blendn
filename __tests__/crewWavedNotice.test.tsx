@@ -5,6 +5,7 @@
  */
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native'
 
+jest.mock('expo-router', () => ({ useFocusEffect: (effect: () => void) => { const { useEffect } = require('react'); useEffect(effect, [effect]) } }))
 jest.mock('../lib/crewsApi', () => ({ crewsApi: { waveCrew: jest.fn(), likePersonAsCrew: jest.fn(), hiddenCrews: jest.fn() } }))
 
 import { CrewWavedNotice } from '../components/chat/CrewWavedNotice'
@@ -102,21 +103,35 @@ describe('<CrewWavedNotice>', () => {
   })
 })
 
-describe('a crew you blocked draws no notice (advisor Q2)', () => {
-  const line = (id: string, from?: object) => ({ message_id: id, sender_id: 's', sender_name: 'x', message_text: 't', message_type: 'system', reply_to_message_id: null, created_at: '2026-11-25T10:00:00Z', ...(from ? { crewWave: from } : {}) }) as never
+describe('a crew you blocked draws no notice (advisor Q2), and it fails closed', () => {
+  const line = (id: string, extra: object = {}) => ({ message_id: id, sender_id: 's', sender_name: 'x', message_text: 'Orbit waved at your crew', message_type: 'system', reply_to_message_id: null, created_at: '2026-11-25T10:00:00Z', ...extra }) as never
+  const from = (fromCrewId: string) => ({ crewWave: { eventId: 'e', fromCrewId } })
+  const person = { crewWave: { eventId: 'e', fromUserId: 'rh' }, message_text: 'Lunar Fox waved at the crew' }
+  const ids = (list: { message_id: string }[]) => list.map((m) => m.message_id)
+  const pageOf = (crewIds: string[], hasMore: boolean) => ({ success: true, data: { crews: crewIds.map((crewId) => ({ crewId })), pagination: { hasMore } } }) as never
 
-  it('drops only that crew’s line; a person’s wave and everything else stay', () => {
-    const list = [line('a', { eventId: 'e', fromCrewId: 'blocked' }), line('b', { eventId: 'e', fromCrewId: 'ok' }), line('c', { eventId: 'e', fromUserId: 'rh' }), line('d')]
-    expect(withoutBlockedCrews(list, new Set(['blocked'])).map((m: { message_id: string }) => m.message_id)).toEqual(['b', 'c', 'd'])
-    expect(withoutBlockedCrews(list, new Set())).toBe(list)
+  it('drops only that crew’s line; a person’s wave, and everything else, stay', () => {
+    const list = [line('a', from('blocked')), line('b', from('ok')), line('c', person), line('d', { message_type: 'text' })]
+    expect(ids(withoutBlockedCrews(list, new Set(['blocked'])))).toEqual(['b', 'c', 'd'])
   })
-
-  it('reads the blocked crews once for a crew chat, and not for any other room', async () => {
-    api.hiddenCrews.mockResolvedValue({ success: true, data: { crews: [{ crewId: 'c1' }], pagination: {} } } as never)
+  it('not known yet, or the read failed: every crew’s line is withheld', () => {
+    expect(ids(withoutBlockedCrews([line('a', from('ok')), line('c', person)], null))).toEqual(['c'])
+  })
+  it('a live line with no metadata names no crew, so it waits for the history; a typed message with the same words does not', () => {
+    expect(ids(withoutBlockedCrews([line('live'), line('typed', { message_type: 'text' })], new Set()))).toEqual(['typed'])
+  })
+  it('reads every page, for a crew chat only', async () => {
+    api.hiddenCrews.mockResolvedValueOnce(pageOf(['c1'], true)).mockResolvedValueOnce(pageOf(['c2'], false))
     const { result, rerender } = await renderHook(({ on }: { on: boolean }) => useHiddenCrewIds(on), { initialProps: { on: false } })
     expect(api.hiddenCrews).not.toHaveBeenCalled()
     await rerender({ on: true })
-    await waitFor(() => expect(result.current.has('c1')).toBe(true))
-    expect(api.hiddenCrews).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect([...(result.current ?? [])]).toEqual(['c1', 'c2']))
+    expect(api.hiddenCrews.mock.calls).toEqual([[1, 50], [2, 50]])
+  })
+  it('a later page that fails leaves it unknown', async () => {
+    api.hiddenCrews.mockResolvedValueOnce(pageOf(['c1'], true)).mockResolvedValueOnce({ success: false, error: 'x' } as never)
+    const { result } = await renderHook(() => useHiddenCrewIds(true))
+    await waitFor(() => expect(api.hiddenCrews).toHaveBeenCalledTimes(2))
+    expect(result.current).toBeNull()
   })
 })
