@@ -134,11 +134,11 @@ export function useCrewsHere(eventId: string | null, hereCount?: number) {
     )
   }, [eventId, state, loadingMore])
 
-  /** A like landed: the card says so without a refetch. */
+  /** A wave landed: the card says so without a refetch. */
   const markLiked = useCallback((crewId: string) => {
     setState((prev) =>
       prev.status === 'ready'
-        ? { ...prev, data: { ...prev.data, crews: prev.data.crews.map((c) => (c.crewId === crewId ? { ...c, youLiked: true } : c)) } }
+        ? { ...prev, data: { ...prev.data, crews: prev.data.crews.map((c) => (c.crewId === crewId ? { ...c, youLiked: true, youWaved: true } : c)) } }
         : prev
     )
   }, [])
@@ -168,7 +168,7 @@ export function chooseCrew(myCrews: CrewsAtEvent['myCrews'], title: string): Pro
       kind: 'actions',
       hue: 'rose',
       title,
-      message: 'Your crew chat says who liked on its behalf.',
+      message: 'Your crew chat says who waved on its behalf.',
       onDismiss: () => resolve(null),
       actions: [
         ...myCrews.map((c) => ({ label: c.name, then: () => resolve(c.crewId) })),
@@ -196,7 +196,7 @@ export function useCrewActions(
   const { markLiked, reload } = crews
   const myCrewsHere = crews.state.status === 'ready' ? crews.state.data.myCrews : []
 
-  const like = async (card: CrewCard) => {
+  const wave = async (card: CrewCard) => {
     if (!eventId || likeInFlight.current) return
     likeInFlight.current = true
     try {
@@ -208,14 +208,14 @@ export function useCrewActions(
           : as.as === 'crew'
             ? as.crewId
             : as.as === 'choose'
-              ? await chooseCrew(myCrewsHere, `Like ${card.name} as…`)
+              ? await chooseCrew(myCrewsHere, `Wave at ${card.name} as…`)
               : undefined
       if (likeAsCrewId === undefined && as.as === 'choose' && !asCrewId) return
       setLiking(card.crewId)
-      const result = await crewsApi.likeCrew(eventId, card.crewId, asCrewId ?? undefined)
+      const result = await crewsApi.waveCrew(eventId, card.crewId, asCrewId ?? undefined)
       setLiking(null)
       if (!result.success || !result.data) {
-        showToast(crewMessage(result, 'card', 'Couldn’t send the like. Try again.'), 'error', { haptic: 'error' })
+        showToast(crewMessage(result, 'card', 'Couldn’t send the wave. Try again.'), 'error', { haptic: 'error' })
         if (result.errorCode === 'NOT_FOUND') void reload()
         return
       }
@@ -250,7 +250,7 @@ export function useCrewActions(
       },
     })
 
-  return { liking, like, report }
+  return { liking, wave, report }
 }
 
 export type CrewActions = ReturnType<typeof useCrewActions>

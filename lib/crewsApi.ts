@@ -8,6 +8,7 @@ import type {
   CrewInvite,
   CrewReportReason,
   CrewsAtEvent,
+  HiddenCrew,
 } from './crews'
 
 /*
@@ -112,14 +113,31 @@ export const crewsApi = {
     )
   },
 
-  /** As one of your crews here (`asCrewId`), or as yourself. */
-  likeCrew(eventId: string, crewId: string, asCrewId?: string): Promise<ApiResponse<{ liked: true; blend: BlendRef | null }>> {
+  /**
+   * Wave for your crew (board crews/05-room A; admin #1003): as one of your crews here (`asCrewId`), or as yourself. Shares
+   * the like's refusals and its 30 a day; waving twice is waving once; a crew you blocked is 404. `blend` when it was mutual.
+   */
+  waveCrew(eventId: string, crewId: string, asCrewId?: string): Promise<ApiResponse<{ liked: true; waved: true; blend: BlendRef | null }>> {
     return apiClient.queuedRequest(
-      `/api/mobile/events/${enc(eventId)}/crews/${enc(crewId)}/like`,
+      `/api/mobile/events/${enc(eventId)}/crews/${enc(crewId)}/wave`,
       post(asCrewId ? { asCrewId } : {}),
       true,
       2
     )
+  },
+
+  /** Block a crew for good (its card is gone from your rooms; its members aren't told). 404 your own, ended or not there. */
+  hideCrew(crewId: string): Promise<ApiResponse<{ hidden: true }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/hide`, post(), true, 2)
+  },
+
+  unhideCrew(crewId: string): Promise<ApiResponse<{ hidden: false }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/${enc(crewId)}/hide`, { method: 'DELETE' }, true, 2)
+  },
+
+  /** Settings → Blocked, the crews: newest first. */
+  hiddenCrews(page: number, limit: number): Promise<ApiResponse<{ crews: HiddenCrew[]; pagination: { page: number; limit: number; totalCount: number; totalPages: number; hasMore: boolean } }>> {
+    return apiClient.queuedRequest(`/api/mobile/crews/hidden?page=${page}&limit=${limit}`)
   },
 
   /**

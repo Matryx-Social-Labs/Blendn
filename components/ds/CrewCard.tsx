@@ -33,10 +33,13 @@ export type CrewCardCrew = {
   badge?: AchievementKind
 }
 
-export type CrewLike = {
-  /** Your side already liked them tonight. */
-  liked?: boolean
-  /** The crew you're liking as; absent for a solo person's plain Like. */
+export type CrewWave = {
+  /**
+   * `idle` Wave; `waved` your side waved (or liked) tonight; `waveBack` they waved at your side and you haven't answered:
+   * the card is lit and the button is Wave back (board crews/05-room A, advisor Q4 2026-11-25).
+   */
+  state: 'idle' | 'waved' | 'waveBack'
+  /** The crew you're waving as; absent (null) for a solo person's plain Wave. */
   as?: string | null
   onPress: () => void
 }
@@ -55,7 +58,7 @@ export type CrewLike = {
 export function CrewCard({
   crew,
   overlap,
-  like,
+  wave,
   compact = false,
   onSheet = false,
   onPress,
@@ -66,7 +69,7 @@ export function CrewCard({
   crew: CrewCardCrew
   /** Crew-held, from the server ("Both crews are into Techno"). */
   overlap?: string | null
-  like?: CrewLike
+  wave?: CrewWave
   compact?: boolean
   /**
    * A preview on a sheet (Make a crew, Flow 10 · 10.2): 8% white on iOS glass,
@@ -88,6 +91,7 @@ export function CrewCard({
   const label = [crew.name, `crew of ${crew.size}`, here ? `${here} here` : null, crew.bio, ...hashtags, crew.intent, crew.badge ? `Badge: ${ACHIEVEMENT[crew.badge].label}` : null].filter(Boolean).join(', ')
   const detail = contrast ? COLOR.textPrimary : COLOR.textSecondary
   const slop = (minTarget() - MORE) / 2
+  const lit = wave?.state === 'waveBack'
 
   return (
     <View
@@ -97,6 +101,7 @@ export function CrewCard({
         { borderRadius: compact ? RADIUS.sheet : RADIUS.card },
         onSheet && { backgroundColor: Platform.OS === 'android' ? COLOR.surfaceSunken : MATERIAL.fillOnGlass },
         contrast && IC_HAIRLINE,
+        lit && styles.lit,
       ]}
     >
       <Pressable
@@ -116,6 +121,11 @@ export function CrewCard({
             <Title variant={compact ? 'heading' : 'title'} style={[styles.ink, onMore ? styles.clearMore : null]}>
               {crew.name}
             </Title>
+            {lit ? (
+              <Text maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), styles.atYou]}>
+                {wave?.as ? `Waved at ${wave.as}` : 'Waved at you'}
+              </Text>
+            ) : null}
             {/* The hashtags ride the count's line: one line, cut at the end (board crews/tags/01 · Crew card), so five never wrap the card. */}
             <Text numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={MAX_FONT_SCALE.meta} style={[font('meta', bold), { color: detail }]}>
               {[`Crew of ${crew.size}`, here ? `${here} here now` : null, ...hashtags].filter(Boolean).join(' · ')}
@@ -144,7 +154,7 @@ export function CrewCard({
           </View>
         ) : null}
       </Pressable>
-      {like ? <LikeButton like={like} /> : null}
+      {wave ? <WaveButton wave={wave} /> : null}
       {onMore ? (
         <Pressable
           onPress={onMore}
@@ -176,26 +186,36 @@ export const popIn = (reduceMotion: boolean) => () => {
   }
 }
 
-function LikeButton({ like }: { like: CrewLike }) {
+function WaveButton({ wave }: { wave: CrewWave }) {
   const bold = useBoldText()
   const contrast = useIncreaseContrast()
   const reduceMotion = useReducedMotion()
-  if (!like.liked) return <Button kind="primary" label={like.as ? `Like for ${like.as}` : 'Like'} pressHaptic={H.like} onPress={like.onPress} />
-  const text = like.as ? `Liked for ${like.as}` : 'Liked'
-  // Settled: words in the button's place, not a button (a second like does nothing, §10.2).
+  if (wave.state !== 'waved') {
+    const back = wave.state === 'waveBack'
+    // As the person Wave (Wave dock A): Wave is lit, Wave back the filled one; the press is H.select.
+    return (
+      <Button
+        kind={back ? 'primary' : 'lit'}
+        label={back ? 'Wave back' : wave.as ? `Wave for ${wave.as}` : 'Wave'}
+        icon="hand"
+        pressHaptic={H.select}
+        onPress={wave.onPress}
+      />
+    )
+  }
+  // Settled: words in the button's place, not a button (a second wave does nothing, §10.2).
   return (
     <Animated.View
-      testID="crew-liked"
+      testID="crew-waved"
       entering={popIn(reduceMotion)}
       accessible
       accessibilityRole="text"
-      accessibilityLabel={text}
+      accessibilityLabel="Waved"
       style={[styles.liked, contrast && IC_HAIRLINE]}
     >
       <Icon name="check" size={ICON.control} active />
-      {/* A legal 32-character crew name at 1.3× wraps to a second line rather than clipping in the plate. */}
-      <Text numberOfLines={2} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink, styles.likedText]}>
-        {text}
+      <Text numberOfLines={1} maxFontSizeMultiplier={CONTROL_FONT_CAP} style={[font('button', bold), styles.ink, styles.likedText]}>
+        Waved
       </Text>
     </Animated.View>
   )
@@ -267,6 +287,8 @@ const styles = StyleSheet.create({
   emblem: { alignItems: 'center', gap: SPACE.sm },
   text: { flex: 1, gap: SPACE.xs },
   ink: { color: COLOR.textPrimary },
+  atYou: { color: COLOR.selectionRoseGlyph },
+  lit: { backgroundColor: COLOR.selectionRoseFill, borderWidth: 1, borderColor: COLOR.brandRose },
   clearMore: { paddingRight: MORE },
   meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.sm },
   liked: {
