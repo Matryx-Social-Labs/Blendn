@@ -8,7 +8,7 @@ import { H } from '../../lib/haptics'
 import { Avatar } from './Avatar'
 import { Button } from './Button'
 import type { Face } from './Facepile'
-import { CONTROL_FONT_CAP, font, IC_HAIRLINE, ROOMY_WIDTH, useBoldText, useIncreaseContrast } from './shared'
+import { CONTROL_FONT_CAP, font, IC_HAIRLINE, ROOMY_WIDTH, useAnnounced, useBoldText, useIncreaseContrast } from './shared'
 
 /** Swap names (`lib/conversationReveal.ts` `RevealBarState`): neither, you tapped, they tapped; at both the bar is gone, unless there is a friend to add. */
 export type RevealState = RevealBarState
@@ -67,6 +67,8 @@ export function RevealBar({
   testID?: string
 }) {
   const bold = useBoldText()
+  // The refusal line is said on iOS when it arrives; Android reads it through its live region.
+  useAnnounced(error)
   const contrast = useIncreaseContrast()
   // At 360 dp each side had about 90 dp: "You · Aarav" cut to "You · Aa…" (C26). Narrow, "You" stacks over your name.
   const narrow = useWindowDimensions().width <= ROOMY_WIDTH
