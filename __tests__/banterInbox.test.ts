@@ -200,10 +200,12 @@ describe('a match is anonymous until they reveal', () => {
     expect(INBOX() + SCREEN()).not.toContain("|| 'Unknown'")
   })
 
-  it('tells you someone asked to reveal, as a chip, until you open the thread', () => {
+  it('tells you they tapped Swap names, as a chip in the strip\'s words, until you open the thread', () => {
     const src = SCREEN()
     expect(src).toContain('c.reveal_requested && !revealSeen.has(c.conversation_id)')
-    expect(src).toContain("{ kind: 'chip', icon: 'eye', text: 'Asked to reveal names' }")
+    expect(src).toContain("{ kind: 'chip', icon: 'arrow-left-right', text: 'Wants to swap names' }")
+    // The one-sided reveal is gone (task 17 a): nothing says "reveal" to a person any more.
+    expect(src).not.toContain('Asked to reveal names')
   })
 })
 

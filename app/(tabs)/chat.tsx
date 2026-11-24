@@ -131,7 +131,7 @@ function ChatInner() {
   const listRef = useRef<FlatList<Item>>(null)
   useScrollToTop(listRef)
 
-  /* Threads whose "Asked to reveal names" you have opened this session (the server keeps the flag until you answer). */
+  /* Threads whose "Wants to swap names" you have opened this session (the server keeps the flag until you answer). */
   const [revealSeen, setRevealSeen] = useState<ReadonlySet<string>>(() => new Set())
   const roomMuted = useCallback((id: string) => isMuted(membership.mutes.get(id)), [membership.mutes])
 
@@ -290,7 +290,7 @@ function ChatInner() {
         const text = c.last_message?.trim()
           ? previewWithSender(c.last_message, { fromMe: c.last_message_from_me })
           : (matchRowPreview({ fromMatch: c.from_match }) ?? 'Start chatting')
-        const line: RowLine = asked ? { kind: 'chip', icon: 'eye', text: 'Asked to reveal names' } : { kind: 'text', text }
+        const line: RowLine = asked ? { kind: 'chip', icon: 'arrow-left-right', text: 'Wants to swap names' } : { kind: 'text', text }
         return {
           key: `p:${c.conversation_id}`,
           title: c.other_user_name,

@@ -20,7 +20,7 @@ Mix sides); its pure helpers `components/banter/inbox.ts`.
 | **Live now** | The room you're standing in as the hero: its cover under a scrim, a still Live badge, a rolling "N in the room", the last line — or "Locked by the organizer · read only". An open Mix under it: the two sides' emblems, "Open now · closes 4 AM". |
 | **Message requests** | One row (faces, the server's count) to the Message requests page: solid cards that need an answer: the asker, their note verbatim (two lines), the time, ⋯ (Block · Report · Cancel), then Decline and Accept at 48 — Decline first. Accept's `H.success` comes with the server's answer and opens the DM. Message requests only: crew invites and friend requests are answered in Notifications · Waiting on you and in their homes (Crews, Friends/Me), each one shared list (`lib/crewInvites.ts`, `lib/friendRequests.ts`). The Lobby's asks sit beside them. |
 | **Crews** | Crew chats, each its emblem in a rounded square. |
-| **People** | DMs, round: a photo once they're a name to you, else their creature. "Mark all read" on the heading. "Asked to reveal names" is a chip until you open the thread. |
+| **People** | DMs, round: a photo once they're a name to you, else their creature. "Mark all read" on the heading. "Wants to swap names" (they tapped Swap names) is a chip until you open the thread. |
 | **Past rooms** | Rooms you're not standing in, as their covers. A locked or muted room says so as a status chip, never as speech. |
 
 Rows are 64 tall with no hairlines. **Unread is three changes and a dot,
